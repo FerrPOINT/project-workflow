@@ -194,41 +194,14 @@ def phase(ctx: click.Context, jira_key: str, phase_name: str) -> None:
 
 @cli.command()
 @click.argument("jira_key")
+@click.option("--repo", help="Path к репозиторию (опционально)")
 @click.pass_context
-def next(ctx: click.Context, jira_key: str) -> None:
-    """Перейти к следующей фазе автоматически."""
+def next(ctx: click.Context, jira_key: str, repo: Optional[str]) -> None:
+    """Запустить wizard для текущей фазы (= 'hrflow wizard TASK-KEY')."""
     jmode = ctx.obj.get("json_mode", False)
-    repo = state.find_repo(jira_key)
-    if not repo:
-        if jmode:
-            out_json({"ok": False, "error": f"Репозиторий не найден для {jira_key}"})
-        console.print(f"{FAIL} Не найден репозиторий для {jira_key}")
-        raise click.Abort()
-
-    current = state.load_state(repo, jira_key)
-    if not current:
-        if jmode:
-            out_json({"ok": False, "error": "Задача не инициализирована"})
-        console.print(f"{FAIL} Задача {jira_key} не инициализирована")
-        raise click.Abort()
-
-    next_phase = phases.get_next_phase(current["current_phase"])
-    if not next_phase:
-        if jmode:
-            out_json({"ok": True, "complete": True, "message": "Все фазы выполнены"})
-        console.print("[green]✅ Все фазы выполнены. Задача завершена![/green]")
-        return
-
     if jmode:
-        out_json({
-            "ok": True,
-            "current_phase": current["current_phase"],
-            "next_phase": next_phase,
-            "next_command": f"wartz-workflow --json phase {jira_key} {next_phase}",
-        })
-
-    console.print(f"[bold]▶️ Следующая фаза: {next_phase}[/bold]")
-    ctx.invoke(phase, jira_key=jira_key, phase_name=next_phase)
+        out_json({"ok": True, "message": "Wizard запущен", "next_command": f"hrflow wizard {jira_key}"})
+    wizard.main(jira_key, repo)
 
 
 # ── wartz-workflow status ───────────────────────────────────────────────

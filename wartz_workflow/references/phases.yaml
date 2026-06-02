@@ -24,6 +24,19 @@ phases:
       - step: "Извлечь Acceptance Criteria → test-cases.md"
       - step: "Проверить assignee — должен быть назначен на тебя"
     next_recommendation: "Перейди к Phase 0.0a — verify-suite.sh"
+    questions:
+      - text: "Прочитал ли Jira тикет {jira_key}? Опиши в двух предложениях что нужно сделать."
+        required: true
+        expected_keywords: ["jira", "summary", "задач", "тикет"]
+        hint: "Открой wartz-jira issue {jira_key} и прочитай summary + description + AC"
+      - text: "Какие Acceptance Criteria есть в тикете? Перечисли основные."
+        required: true
+        expected_keywords: ["критерий", "acceptance", "condition", "given", "when", "then"]
+        min_evidence_lines: 2
+      - text: "Записаны ли требования в requirements.md?"
+        required: true
+        expected_keywords: ["requirements", "записал", "сохранил", "md"]
+        auto_command: "test -f info/*/requirements.md \u0026\u0026 echo EXISTS || echo MISSING"
 
   # ── Phase 0.0a: Suite Verification ────────────────────────────────
   - id: "0.0a"

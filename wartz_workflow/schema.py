@@ -38,6 +38,18 @@ class PhaseInstruction:
 
 
 @dataclass
+class PhaseQuestion:
+    """Вопрос для фазы — задаётся агентом, анализируется по keywords."""
+    text: str                          # текст вопроса
+    required: bool = True              # обязательный или можно ответить "не делал"
+    expected_keywords: List[str] = field(default_factory=list)  # ключевые слова для положительного ответа
+    min_evidence_lines: int = 1        # минимум строк evidence
+    hint: Optional[str] = None         # подсказка при неполном ответе
+    auto_command: Optional[str] = None # команда для автопроверки
+    validate_fn: Optional[str] = None # имя python-функции для валидации (опционально)
+
+
+@dataclass
 class PhaseDelegate:
     """Конфигурация delegate_task для делегированной фазы."""
     agent: str                         # имя агента (wartzresearcher, wartzreviewer, etc.)
@@ -67,6 +79,7 @@ class Phase:
     parallel_with: Optional[str] = None  # фаза, с которой можно параллельно
     gate_after: Optional[str] = None     # CriticGate после этой фазы
     rollback_target: Optional[str] = None  # куда откатиться при FAIL
+    questions: List[PhaseQuestion] = field(default_factory=list)  # вопросы для wizard
 
     def render_instructions(self, context: dict) -> List[str]:
         """Подставить переменные в инструкции."""
@@ -98,6 +111,7 @@ def load_phases(path: Optional[Path] = None) -> List[Phase]:
         checks = [PhaseCheck(**c) for c in item.get("checks", [])]
         evidence = [PhaseEvidence(**e) for e in item.get("evidence", [])]
         instructions = [PhaseInstruction(**i) for i in item.get("instructions", [])]
+        questions = [PhaseQuestion(**q) for q in item.get("questions", [])]
 
         delegate = None
         if "delegate" in item:
@@ -128,6 +142,7 @@ def load_phases(path: Optional[Path] = None) -> List[Phase]:
             parallel_with=item.get("parallel_with"),
             gate_after=item.get("gate_after"),
             rollback_target=item.get("rollback_target"),
+            questions=questions,
         ))
 
     return phases
