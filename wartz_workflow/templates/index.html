@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>wartz-workflow UI</title>
+{{ style | safe }}</head>
+<body>
+{{ header | safe }}
+<div class="container">
+  <div class="grid">
+    <div class="card">
+      <h2>Dashboard</h2>
+      <p><b>Фаз workflow:</b> {{ phase_count }}</p>
+      <p><b>Задач в истории:</b> {{ task_count }}</p>
+      <p><b>Blocker фаз:</b> {{ blocker_count }}</p>
+      <p><a href="/phases">Все фазы &rarr;</a></p>
+    </div>
+    <div class="card">
+      <h2>Последние задачи</h2>
+      {% for t in tasks_preview %}
+        <div class="msg-row">
+          <div><a href="/task/{{ t.task_id }}">{{ t.jira_key }}</a>
+            <span class="badge badge-warn">{{ t.message_count }} msgs</span></div>
+          <div class="msg-meta">Последнее: {{ t.last_message or '—' }}</div>
+        </div>
+      {% else %}
+        <p style="opacity:.6">История пуста. Используй <code>hrflow note TASK-123 ...</code></p>
+      {% endfor %}
+      <p><a href="/tasks">Все задачи &rarr;</a></p>
+    </div>
+    <div class="card">
+      <h2>Фазы workflow</h2>
+      <p><a href="/phases">Просмотр всех фаз</a></p>
+    </div>
+  </div>
+</div>
+</body></html>

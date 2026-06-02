@@ -917,8 +917,28 @@ def note(ctx: click.Context, jira_key: str, content: str, task_id: Optional[str]
         out_json({"ok": True, "msg_id": msg_id, "phase": phase, "content": content})
     console.print(f"{PASS} Записано в историю {jira_key} (фаза {phase})")
     console.print(f"[dim]{content[:80]}[/dim]")
-    # Показать что делать дальше
-    console.print("\n[cyan]▶️ Продолжи работу: hrflow wizard {jira_key}[/cyan]")
+
+
+# ── wartz-workflow ui (web dashboard) ───────────────────────────────────
+
+@cli.command("ui")
+@click.option("--port", default=7788, help="Порт (default 7788)")
+@click.option("--host", default="0.0.0.0", help="Хост (default 0.0.0.0)")
+@click.option("--daemon", is_flag=True, help="Запустить в background")
+def ui_cmd(port: int, host: str, daemon: bool) -> None:
+    """🌐 Web UI — просмотр фаз, задач, истории.
+
+    Usage: hrflow ui [--port 7788] [--daemon]
+    """
+    from .ui import ensure_templates, app
+    ensure_templates()
+    console.print(f"{PASS} Запуск wartz-workflow UI на http://{host}:{port}")
+    if daemon:
+        console.print(f"[dim]Background mode: http://{host}:{port}[/dim]")
+    else:
+        console.print("[dim]Press Ctrl+C to stop[/dim]")
+    import uvicorn
+    uvicorn.run(app, host=host, port=port, log_level="warning")
 
 
 # ── wartz-workflow wizard (conversational) ──────────────────────────────
@@ -929,7 +949,7 @@ def note(ctx: click.Context, jira_key: str, content: str, task_id: Optional[str]
 @click.pass_context
 def wizard_cmd(ctx: click.Context, jira_key: str, repo: Optional[str]) -> None:
     jira_key = _require_valid_key(jira_key)
-    """🧙 Interactive wizard — phase-by-phase workflow assistant.
+    """🧙 Interactive wizard -- phase-by-phase workflow assistant.
 
     Usage: hrflow wizard TASKNEIROKLYUCH-456
     """

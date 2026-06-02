@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phases — wartz-workflow</title>
+{{ style | safe }}</head>
+<body>
+{{ header | safe }}
+<div class="container">
+  <h2 style="margin-top:20px">Все фазы workflow ({{ phases|length }})</h2>
+  <table>
+    <tr><th>#</th><th>ID</th><th>Name</th><th>Gate</th><th>Checks</th><th>Evidence</th></tr>
+    {% for p in phases %}
+    <tr>
+      <td>{{ loop.index }}</td>
+      <td class="phase-id">{{ p.id }}</td>
+      <td class="phase-name">{{ p.name }}</td>
+      <td><span class="badge {% if p.gate_type == 'blocker' %}badge-block{% endif %}">{{ p.gate_type }}</span></td>
+      <td>{{ p.checks|length }}</td>
+      <td>{{ p.evidence|length }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+</body></html>
