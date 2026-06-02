@@ -54,7 +54,109 @@ def get_jira_status(issue_key: str) -> Optional[str]:
     if ok and isinstance(data, dict):
         status = data.get("fields", {}).get("status", {}).get("name")
         return status
+    # Fallback: читаем local requirements.md для статуса
+    return _local_status_fallback(issue_key)
+
+
+def _local_status_fallback(issue_key: str) -> Optional[str]:
+    """Если Jira недоступен -- попытаться определить статус из local files."""
+    import glob, json
+    from . import state, config
+
+    # 1. Проверить progress.json
+    repo = state.find_repo(issue_key) or "/opt/dev/hr-recruiter/recruiter-front"
+    progress_path = f"{repo}/progress.json"
+    try:
+        with open(progress_path, "r") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            # Ищем запись по ключу
+            for key, val in data.items():
+                if issue_key in str(key):
+                    return val.get("jira_status", "В работе") if isinstance(val, dict) else "В работе"
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+
+    # 2. Проверить info/ папку
+    info_pattern = f"{repo}/info/*/*{issue_key}*"
+    dirs = glob.glob(info_pattern)
+    if dirs:
+        # Найдена папка задачи -- считаем что статус "В работе"
+        return "В работе"
+
+    # 3. Проверить requirements.md в текущей папке
+    req_files = glob.glob(f"{repo}/info/**/requirements.md", recursive=True)
+    for req_file in req_files:
+        try:
+            with open(req_file, "r") as f:
+                text = f.read()
+            if issue_key in text:
+                # Jira AC найдены в requirements
+                return "В работе"
+                break
+        except (FileNotFoundError, PermissionError):
+            continue
+
     return None
+
+
+def get_jira_task_info(issue_key: str) -> dict:
+    """Получить информацию о задаче: сначала Jira, потом fallback на local files.
+
+    Returns:
+       dict с полями summary, description, status, assignee, source ('jira'|'local'|'empty')
+    """
+    import glob, json
+    from . import state
+
+    # Попытка 1: Jira API
+    ok, data = _jira_request(f"/issue/{issue_key}?fields=summary,description,status,assignee")
+    if ok and isinstance(data, dict):
+        fields = data.get("fields", {})
+        return {
+            "ok": True,
+            "source": "jira",
+            "summary": fields.get("summary", ""),
+            "description": fields.get("description", ""),
+            "status": fields.get("status", {}).get("name", ""),
+            "assignee": fields.get("assignee", {}).get("displayName", ""),
+            "key": issue_key,
+        }
+
+    # Попытка 2: Local requirements.md
+    repo = state.find_repo(issue_key) or "/opt/dev/hr-recruiter/recruiter-front"
+    req_files = glob.glob(f"{repo}/info/**/requirements.md", recursive=True)
+    for req_file in req_files:
+        try:
+            with open(req_file, "r") as f:
+                text = f.read()
+            # Match by issue key in content OR by directory name containing key
+            if issue_key in text or issue_key in req_file:
+                lines = text.strip().split("\n")
+                summary = lines[0].strip("# ") if lines else "Unknown"
+                return {
+                    "ok": True,
+                    "source": "local",
+                    "summary": summary,
+                    "description": text,
+                    "status": "В работе",
+                    "assignee": "",
+                    "key": issue_key,
+                }
+        except (FileNotFoundError, PermissionError):
+            continue
+
+    # Fallback 3: Пустой шаблон
+    return {
+        "ok": False,
+        "source": "empty",
+        "summary": "",
+        "description": "",
+        "status": "",
+        "assignee": "",
+        "key": issue_key,
+        "error": str(data) if not ok else "Jira API unavailable and no local files found",
+    }
 
 
 def get_jira_transitions(issue_key: str) -> list[Dict[str, Any]]:
