@@ -119,25 +119,3 @@ class JiraAdapter(JiraPort):
         return False, str(data)
 
 
-class FakeJiraAdapter(JiraPort):
-    """Fake Jira adapter for testing."""
-
-    def __init__(self, responses: Optional[dict] = None) -> None:
-        self.responses = responses or {}
-
-    def get_status(self, issue_key: str) -> Optional[str]:
-        return self.responses.get("status", "В работе")
-
-    def get_task_info(self, issue_key: str) -> dict:
-        return self.responses.get("task_info", {
-            "ok": True, "source": "fake", "summary": "Fake task", "status": "В работе", "key": issue_key,
-        })
-
-    def get_transitions(self, issue_key: str) -> list[Dict[str, Any]]:
-        return self.responses.get("transitions", [])
-
-    def transition(self, issue_key: str, transition_name: str) -> Tuple[bool, str]:
-        return True, f"Fake transition {issue_key} → {transition_name}"
-
-    def ping(self) -> Tuple[bool, str]:
-        return True, "Fake Jira OK"
