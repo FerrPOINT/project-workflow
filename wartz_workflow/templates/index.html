@@ -1,39 +1,26 @@
 <!DOCTYPE html>
 <html lang="ru">
-<head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>wartz-workflow UI</title>
-{{ style | safe }}</head>
-<body>
-{{ header | safe }}
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WARTZ Workflow</title>{{ style | safe }}</head>
+<body>{{ header | safe }}
 <div class="container">
-  <div class="grid">
-    <div class="card">
-      <h2>Dashboard</h2>
-      <p><b>Фаз workflow:</b> {{ phase_count }}</p>
-      <p><b>Задач в истории:</b> {{ task_count }}</p>
-      <p><b>Блокеров:</b> {{ blocker_count }}</p>
-      <p><a href="/phases">Все фазы &rarr;</a></p>
+  <div style="margin:40px 0">
+    <h2 style="font-size:32px;letter-spacing:-0.7px;margin-bottom:16px">Workflow CLI</h2>
+    <p style="color:var(--text-muted);font-size:16px;max-width:600px;line-height:1.6">Декларативный workflow для агентов. Каждая фаза определена в YAML — единый источник истины.</p>
+  </div>
+  <div class="detail-card">
+    <h3>Команды</h3>
+    <div class="instruction" style="border-bottom:none">
+      <div class="instruction-num">1</div>
+      <div class="instruction-text"><code>hrflow workflow TASK-123 "отчёт..."</code> — отправить отчёт по выполненной фазе</div>
+      <div class="instruction-tool"><span class="sync">sync</span></div>
     </div>
-    <div class="card">
-      <h2>Последние задачи</h2>
-      {% for t in tasks_preview %}
-        <div class="msg-row">
-          <div><a href="/task/{{ t.task_id }}">{{ t.jira_key }}</a>
-            <span class="badge badge-warn">{{ t.message_count }} msgs</span></div>
-          <div class="msg-meta">Последнее: {{ t.last_message or '—' }}</div>
-        </div>
-      {% else %}
-        <p style="opacity:.6">История пуста. Используй <code>hrflow note TASK-123 ...</code></p>
-      {% endfor %}
-      <p><a href="/tasks">Все задачи &rarr;</a></p>
-    </div>
-    <div class="card">
-      <h2>Команды CLI</h2>
-      <p><b>1.</b> <code>hrflow workflow TASK-123 "отчёт..."</code> — отчёт по работе</p>
-      <p><b>2.</b> <code>hrflow done-list TASK-123</code> — пройденные этапы</p>
-      <p><a href="/phases">→ Список фаз</a></p>
+    <div class="instruction" style="border-bottom:none">
+      <div class="instruction-num">2</div>
+      <div class="instruction-text"><code>hrflow done-list TASK-123</code> — показать пройденные этапы</div>
+      <div class="instruction-tool"><span class="sync">sync</span></div>
     </div>
   </div>
+  <p style="margin-top:24px"><a href="/phases">→ Все фазы</a></p>
 </div>
 </body></html>

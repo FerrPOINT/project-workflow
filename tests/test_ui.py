@@ -14,7 +14,8 @@ class TestIndexPage:
         response = client.get("/")
         assert response.status_code == 200
         assert response.headers["content-type"] == "text/html; charset=utf-8"
-        assert "wartz-workflow" in response.text
+        assert "wartz" in response.text
+        assert "workflow" in response.text
 
     def test_index_has_nav(self):
         response = client.get("/")
@@ -58,14 +59,6 @@ class TestPhaseDetail:
     def test_phase_detail_404_on_unknown(self):
         response = client.get("/phase/nonexistent")
         assert response.status_code == 404
-
-
-class TestTasksPage:
-    def test_tasks_returns_html(self):
-        response = client.get("/tasks")
-        assert response.status_code == 200
-        assert response.headers["content-type"] == "text/html; charset=utf-8"
-        assert "Задачи" in response.text
 
 
 class TestNotFound:
