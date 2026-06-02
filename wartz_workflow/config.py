@@ -73,3 +73,7 @@ GITLAB_PROJECT_ID = "73"  # hr-recruiter/recruiter-front
 # verify-suite.sh
 VERIFY_SUITE_SCRIPT = f"{SUITES_DIR}/hr-recruiter-workflow-suite/scripts/verify-suite.sh"
 TASK_INIT_SCRIPT = f"{SUITES_DIR}/hr-recruiter-workflow-suite/scripts/task-init.sh"
+
+# UI
+UI_PORT = 8811
+UI_HOST = "0.0.0.0"

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phase {{ phase.id }} — wartz-workflow</title>
+{{ style | safe }}</head>
+<body>
+{{ header | safe }}
+<div class="container">
+  <h2 style="margin-top:20px">Фаза {{ phase.id }} — {{ phase.name }}</h2>
+  <div class="card">
+    <p>{{ phase.description }}</p>
+    {% if phase.is_blocker %}<span class="badge badge-block">BLOCKER</span>{% endif %}
+    {% if phase.is_delegated %}<span class="badge badge-warn">DELEGATED</span>{% endif %}
+    {% if phase.is_critic %}<span class="badge badge-warn">CRITIC</span>{% endif %}
+    {% if phase.skills %}<p><b>Skills:</b> {{ phase.skills|join(', ') }}</p>{% endif %}
+    {% if phase.parallel_with %}<p><b>Parallel with:</b> {{ phase.parallel_with }}</p>{% endif %}
+    {% if phase.rollback_target %}<p><b>Rollback target:</b> {{ phase.rollback_target }}</p>{% endif %}
+    <p><b>Next:</b> {{ phase.next_recommendation or '—' }}</p>
+  </div>
+
+  {% if phase.instructions %}
+  <div class="card">
+    <h2>📋 Инструкции ({{ phase.instructions|length }})</h2>
+    <table>
+      <tr><th>#</th><th>Шаг</th><th>Tool</th><th>Пример</th></tr>
+      {% for i in phase.instructions %}
+      <tr><td>{{ loop.index }}</td><td>{{ i.step }}</td><td>{{ i.tool or '—' }}</td><td><code>{{ i.example or '—' }}</code></td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  {% if phase.checks %}
+  <div class="card">
+    <h2>🔍 Проверки ({{ phase.checks|length }})</h2>
+    <table>
+      <tr><th>#</th><th>Тип</th><th>Описание</th><th>Команда</th></tr>
+      {% for c in phase.checks %}
+      <tr><td>{{ loop.index }}</td><td><span class="badge">{{ c.type }}</span></td><td>{{ c.description }}</td><td><code>{{ c.command or '—' }}</code></td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  {% if phase.evidence %}
+  <div class="card">
+    <h2>📎 Evidence ({{ phase.evidence|length }})</h2>
+    <table>
+      <tr><th>#</th><th>Item</th><th>Валидатор</th></tr>
+      {% for e in phase.evidence %}
+      <tr><td>{{ loop.index }}</td><td>{{ e.item }}</td><td>{{ e.validator or '—' }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  {% if phase.questions %}
+  <div class="card">
+    <h2>❓ Вопросы wizard ({{ phase.questions|length }})</h2>
+    <table>
+      <tr><th>#</th><th>Вопрос</th><th>Required</th><th>Keywords</th><th>Hint</th></tr>
+      {% for q in phase.questions %}
+      <tr><td>{{ loop.index }}</td><td>{{ q.text }}</td><td>{{ 'Yes' if q.required else 'No' }}</td><td>{{ q.expected_keywords|join(', ') or '—' }}</td><td>{{ q.hint or '—' }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  {% if phase.delegate %}
+  <div class="card">
+    <h2>🤖 Делегирование</h2>
+    <p><b>Агент:</b> {{ phase.delegate.agent }}</p>
+    <p><b>Timeout:</b> {{ phase.delegate.timeout_min }} мин</p>
+    <p><b>Max cycles:</b> {{ phase.delegate.max_cycles }}</p>
+    {% if phase.delegate.toolsets %}<p><b>Toolsets:</b> {{ phase.delegate.toolsets|join(', ') }}</p>{% endif %}
+  </div>
+  {% endif %}
+
+  <p><br><a href="/phases">← Все фазы</a></p>
+</div>
+</body></html>

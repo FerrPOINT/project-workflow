@@ -14,6 +14,7 @@ class TestJiraAdapter:
 
     def test_ping_no_token(self, monkeypatch):
         monkeypatch.setenv("JIRA_TOKEN", "")
+        monkeypatch.setenv("JIRA_ACCESS_TOKEN", "")
         adapter = JiraAdapter()
         ok, msg = adapter.ping()
         assert ok is False
@@ -21,6 +22,7 @@ class TestJiraAdapter:
 
     def test_get_task_info_no_token(self, monkeypatch):
         monkeypatch.setenv("JIRA_TOKEN", "")
+        monkeypatch.setenv("JIRA_ACCESS_TOKEN", "")
         adapter = JiraAdapter()
         result = adapter.get_task_info("AAT-123")
         assert result["ok"] is False

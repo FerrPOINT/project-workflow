@@ -1,6 +1,6 @@
-"""Minimal Web UI for wartz-workflow — FastAPI + Jinja2.
+"""Minimal Web UI for wartz-workflow — FastAPI + inline Jinja2-like templates.
 
-Сервер на уникальном порту (default 7788):
+Сервер на уникальном порту (default 8811):
     python -m wartz_workflow.ui
     python -m wartz_workflow.ui --port 9000
 
@@ -14,30 +14,24 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
+import re
 import sys
 from pathlib import Path
 
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 import uvicorn
 
-from . import conversation, schema, config, state, phases
+from . import conversation, schema, config, state, phases, jobs
 
 # ── Constants ───────────────────────────────────────────────────────────
-DEFAULT_UI_PORT = 7788
+DEFAULT_UI_PORT = config.UI_PORT
 BASE_DIR = Path(__file__).parent
 TEMPLATES_DIR = BASE_DIR / "templates"
 DB_PATH = Path(config.WARTZ_DIR) / "conversation.db"
 
 # ── FastAPI App ─────────────────────────────────────────────────────────
-app = FastAPI(title="wartz-workflow UI", version="1.0.0")
-
-# Templates (inline if dir missing, else filesystem)
-if TEMPLATES_DIR.exists():
-    templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
-else:
-    templates = Jinja2Templates(directory=str(BASE_DIR))
+app = FastAPI(title="wartz-workflow UI", version="1.1.0")
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -47,7 +41,7 @@ else:
 def load_phases() -> list[dict]:
     """Загрузить фазы из YAML."""
     try:
-        phases = schema.load_phases()
+        plist = schema.load_phases()
         return [
             {
                 "id": p.id,
@@ -56,11 +50,15 @@ def load_phases() -> list[dict]:
                 "checks": [c.__dict__ for c in p.checks],
                 "evidence": [e.__dict__ for e in p.evidence],
                 "instructions": [i.__dict__ for i in p.instructions],
-                "gate_type": p.gate_type or "pass",
+                "is_blocker": p.is_blocker,
+                "is_delegated": p.is_delegated,
+                "is_critic": p.is_critic,
+                "gate_type": "blocker" if p.is_blocker else ("delegated" if p.is_delegated else "pass"),
                 "rollback_target": p.rollback_target,
-                "max_cycles": p.max_cycles,
+                "next_recommendation": p.next_recommendation,
+                "parallel_with": p.parallel_with,
             }
-            for p in phases
+            for p in plist
         ]
     except Exception:
         return []
@@ -70,9 +68,8 @@ def load_tasks() -> list[dict]:
     """Список задач из conversation.db."""
     if not DB_PATH.exists():
         return []
-    rows = conversation.get_messages(None, limit=1000)
-    # Group by task_id
-    tasks = {}
+    rows = _get_all_messages_raw(limit=2000)
+    tasks: dict[str, dict] = {}
     for row in rows:
         tid = row.get("task_id", "unknown")
         if tid not in tasks:
@@ -89,12 +86,18 @@ def load_tasks() -> list[dict]:
             tasks[tid]["phases"].add(row["phase_id"])
 
     return [
-        {
-            **t,
-            "phases": list(t["phases"]),
-        }
-        for t in tasks.values()
+        {**t, "phases": sorted(t["phases"])}
+        for t in sorted(tasks.values(), key=lambda x: x["last_message"] or "", reverse=True)
     ]
+
+
+def _get_all_messages_raw(limit: int = 2000) -> list[dict]:
+    import sqlite3
+    conn = sqlite3.connect(str(DB_PATH))
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute("SELECT * FROM conversation ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -103,7 +106,6 @@ def load_tasks() -> list[dict]:
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
-    """Dashboard / overview."""
     phases = load_phases()
     tasks = load_tasks()
     return templates.TemplateResponse(
@@ -121,7 +123,6 @@ def index(request: Request):
 
 @app.get("/phases", response_class=HTMLResponse)
 def phases_page(request: Request):
-    """Все фазы workflow."""
     phases = load_phases()
     return templates.TemplateResponse(
         "phases.html",
@@ -129,9 +130,39 @@ def phases_page(request: Request):
     )
 
 
+@app.get("/phase/{phase_id}", response_class=HTMLResponse)
+def phase_detail_page(request: Request, phase_id: str):
+    phase = schema.get_phase(phase_id)
+    if not phase:
+        return _render_404(request, f"Phase {phase_id} not found")
+    return templates.TemplateResponse(
+        "phase_detail.html",
+        {
+            "request": request,
+            "phase": {
+                "id": phase.id,
+                "name": phase.name,
+                "description": phase.description,
+                "is_blocker": phase.is_blocker,
+                "is_delegated": phase.is_delegated,
+                "is_critic": phase.is_critic,
+                "skills": phase.skills,
+                "checks": [c.__dict__ for c in phase.checks],
+                "evidence": [e.__dict__ for e in phase.evidence],
+                "instructions": [i.__dict__ for i in phase.instructions],
+                "questions": [q.__dict__ for q in phase.questions],
+                "delegate": phase.delegate.__dict__ if phase.delegate else None,
+                "next_recommendation": phase.next_recommendation,
+                "parallel_with": phase.parallel_with,
+                "rollback_target": phase.rollback_target,
+            },
+            "phase_order": config.PHASE_ORDER,
+        },
+    )
+
+
 @app.get("/tasks", response_class=HTMLResponse)
 def tasks_page(request: Request):
-    """Список задач."""
     tasks = load_tasks()
     return templates.TemplateResponse(
         "tasks.html",
@@ -141,17 +172,47 @@ def tasks_page(request: Request):
 
 @app.get("/task/{task_id}", response_class=HTMLResponse)
 def task_detail(request: Request, task_id: str):
-    """История сообщений по task_id."""
-    messages = conversation.get_messages(task_id, limit=500) if DB_PATH.exists() else []
+    msgs = conversation.get_messages(task_id, limit=500) if DB_PATH.exists() else []
     return templates.TemplateResponse(
         "task.html",
-        {"request": request, "task_id": task_id, "messages": messages},
+        {"request": request, "task_id": task_id, "messages": msgs},
+    )
+
+
+@app.get("/jobs", response_class=HTMLResponse)
+def jobs_page(request: Request):
+    job_list = jobs.list_jobs()
+    return templates.TemplateResponse(
+        "jobs.html",
+        {"request": request, "jobs": [j.__dict__ for j in job_list]},
+    )
+
+
+@app.get("/answers/{jira_key}", response_class=HTMLResponse)
+def answers_page(request: Request, jira_key: str):
+    msgs = conversation.get_messages(jira_key, limit=500) if DB_PATH.exists() else []
+    answers = []
+    for m in msgs:
+        if m.role == "user" and m.tags in ("pass", "fail"):
+            content = m.content
+            try:
+                data = json.loads(content)
+            except Exception:
+                data = {"raw": content}
+            answers.append({
+                "phase_id": m.phase_id or "-",
+                "created_at": m.created_at,
+                "ok": m.tags == "pass",
+                "data": data,
+            })
+    return templates.TemplateResponse(
+        "answers.html",
+        {"request": request, "jira_key": jira_key, "answers": answers},
     )
 
 
 @app.get("/config", response_class=HTMLResponse)
 def config_page(request: Request):
-    """Конфигурация приложения."""
     phases = load_phases()
     return templates.TemplateResponse(
         "config.html",
@@ -189,8 +250,42 @@ def api_tasks():
 
 @app.get("/api/task/{task_id}/messages")
 def api_task_messages(task_id: str):
-    messages = conversation.get_messages(task_id, limit=500) if DB_PATH.exists() else []
-    return {"ok": True, "task_id": task_id, "messages": messages}
+    msgs = conversation.get_messages(task_id, limit=500) if DB_PATH.exists() else []
+    return {"ok": True, "task_id": task_id, "messages": [m.__dict__ for m in msgs]}
+
+
+@app.get("/api/jobs")
+def api_jobs(jira_key: str = "", phase_id: str = ""):
+    job_list = jobs.list_jobs(jira_key=jira_key or None, phase_id=phase_id or None)
+    return {"ok": True, "jobs": [j.__dict__ for j in job_list]}
+
+
+@app.get("/api/jobs/{job_id}")
+def api_job_detail(job_id: str):
+    job = jobs.load_job(job_id)
+    if not job:
+        return {"ok": False, "error": "Job not found"}
+    return {"ok": True, "job": job.__dict__}
+
+
+@app.get("/api/answers/{jira_key}")
+def api_answers(jira_key: str):
+    msgs = conversation.get_messages(jira_key, limit=500) if DB_PATH.exists() else []
+    answers = []
+    for m in msgs:
+        if m.role == "user" and m.tags in ("pass", "fail"):
+            content = m.content
+            try:
+                data = json.loads(content)
+            except Exception:
+                data = {"raw": content}
+            answers.append({
+                "phase_id": m.phase_id or "-",
+                "created_at": m.created_at,
+                "ok": m.tags == "pass",
+                "data": data,
+            })
+    return {"ok": True, "jira_key": jira_key, "answers": answers}
 
 
 @app.get("/api/config")
@@ -204,55 +299,45 @@ def api_config():
     }
 
 
-
-
 # ═══════════════════════════════════════════════════════════════════════
 #  WIZARD
 # ═══════════════════════════════════════════════════════════════════════
 
 def get_task_current_phase(jira_key: str) -> str:
-    """Определить текущую фазу задачи из state или conversation."""
     ts = state.load_state(None, jira_key)
     if ts:
         return ts.get("current_phase", "-1")
     return conversation.get_last_phase(jira_key) or "-1"
 
+
 def build_ui_checklist(phase: schema.Phase) -> list[dict]:
-    """Собрать чеклист для фазы в формате для UI."""
     items: list[dict] = []
     seen: set[str] = set()
-
     for check in phase.checks:
         k = check.description.strip().lower()
         if k and k not in seen:
             seen.add(k)
             items.append({"id": f"c{len(items)}", "text": check.description, "type": "check", "command": check.command or ""})
-
     for inst in phase.instructions[:5]:
         k = inst.step.strip().lower()
         if k and k not in seen:
             seen.add(k)
             items.append({"id": f"i{len(items)}", "text": inst.step, "type": "instruction", "example": inst.example or "", "command": ""})
-
     for ev in phase.evidence:
         k = ev.item.strip().lower()
         if k and k not in seen:
             seen.add(k)
             items.append({"id": f"e{len(items)}", "text": ev.item, "type": "evidence", "command": ""})
-
     return items
 
 
 @app.get("/wizard/{jira_key}", response_class=HTMLResponse)
 def wizard_page(request: Request, jira_key: str):
-    """Интерактивный wizard для задачи."""
     current_phase = get_task_current_phase(jira_key)
     phase = schema.get_phase(current_phase)
     if not phase:
         phase = schema.Phase(id=current_phase, name="Unknown", description="Phase not found in schema")
-
     checklist = build_ui_checklist(phase)
-
     return templates.TemplateResponse(
         "wizard.html",
         {
@@ -276,21 +361,17 @@ def api_wizard_answer(
     done_items: list[str] = Form(default_factory=list),
     notes: str = Form(default=""),
 ):
-    """Принять ответ пользователя по wizard checklist."""
     current_phase = get_task_current_phase(jira_key)
-
     phase = schema.get_phase(current_phase)
     checklist = build_ui_checklist(phase) if phase else []
     total = len(checklist)
     done = len(done_items)
-
     ok = done > 0 or bool(notes.strip())
     conversation.add_wizard_answer(
         jira_key, jira_key, current_phase,
         json.dumps({"done": done_items, "notes": notes, "total": total, "date": datetime.datetime.now().isoformat()}, ensure_ascii=False),
         ok=ok,
     )
-
     if done >= total and total > 0:
         next_p = phases.get_next_phase(current_phase)
         if next_p:
@@ -298,8 +379,24 @@ def api_wizard_answer(
             repo = state.find_repo(jira_key) or ""
             state.save_state(repo, jira_key, jira_key, "", next_p)
         return {"ok": True, "status": "advanced", "next_phase": next_p, "done": done, "total": total}
-
     return {"ok": True, "status": "partial", "done": done, "total": total}
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  404 HELPER
+# ═══════════════════════════════════════════════════════════════════════
+
+def _render_404(request: Request, message: str):
+    html = f"""<!DOCTYPE html>
+<html lang="ru"><head><meta charset="UTF-8">
+<title>404</title>{PAGE_STYLE}</head><body>
+{HEADER_HTML}
+<div class="container"><div class="card">
+<h2>❌ {message}</h2>
+<p><a href="/">← Dashboard</a></p>
+</div></div></body></html>"""
+    return HTMLResponse(html)
+
 
 # ═══════════════════════════════════════════════════════════════════════
 #  CLI ENTRY
@@ -311,15 +408,11 @@ def main() -> int:
     parser.add_argument("--host", default="0.0.0.0", help="Хост (default 0.0.0.0)")
     parser.add_argument("--daemon", action="store_true", help="Запустить в background")
     args = parser.parse_args()
-
-    # Ensure templates dir
     ensure_templates()
-
     if args.daemon:
         print(f"Starting wartz-workflow UI on http://{args.host}:{args.port}")
         uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
         return 0
-
     print(f"Starting wartz-workflow UI on http://{args.host}:{args.port}")
     print("Press Ctrl+C to stop")
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
@@ -398,6 +491,7 @@ INDEX_HTML = """<!DOCTYPE html>
     <div class="card">
       <h2>Фазы workflow</h2>
       <p><a href="/phases">Просмотр всех фаз</a></p>
+      <p><a href="/jobs">Background Jobs</a></p>
     </div>
   </div>
 </div>
@@ -414,7 +508,7 @@ PHASES_HTML = """<!DOCTYPE html>
 <div class="container">
   <h2 style="margin-top:20px">Все фазы workflow ({{ phases|length }})</h2>
   <table>
-    <tr><th>#</th><th>ID</th><th>Name</th><th>Gate</th><th>Checks</th><th>Evidence</th></tr>
+    <tr><th>#</th><th>ID</th><th>Name</th><th>Gate</th><th>Checks</th><th>Evidence</th><th></th></tr>
     {% for p in phases %}
     <tr>
       <td>{{ loop.index }}</td>
@@ -423,9 +517,93 @@ PHASES_HTML = """<!DOCTYPE html>
       <td><span class="badge {% if p.gate_type == 'blocker' %}badge-block{% endif %}">{{ p.gate_type }}</span></td>
       <td>{{ p.checks|length }}</td>
       <td>{{ p.evidence|length }}</td>
+      <td><a href="/phase/{{ p.id }}">Детали &rarr;</a></td>
     </tr>
     {% endfor %}
   </table>
+</div>
+</body></html>"""
+
+PHASE_DETAIL_HTML = """<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phase {{ phase.id }} — wartz-workflow</title>
+{{ style | safe }}</head>
+<body>
+{{ header | safe }}
+<div class="container">
+  <h2 style="margin-top:20px">Фаза {{ phase.id }} — {{ phase.name }}</h2>
+  <div class="card">
+    <p>{{ phase.description }}</p>
+    {% if phase.is_blocker %}<span class="badge badge-block">BLOCKER</span>{% endif %}
+    {% if phase.is_delegated %}<span class="badge badge-warn">DELEGATED</span>{% endif %}
+    {% if phase.is_critic %}<span class="badge badge-warn">CRITIC</span>{% endif %}
+    {% if phase.skills %}<p><b>Skills:</b> {{ phase.skills|join(', ') }}</p>{% endif %}
+    {% if phase.parallel_with %}<p><b>Parallel with:</b> {{ phase.parallel_with }}</p>{% endif %}
+    {% if phase.rollback_target %}<p><b>Rollback target:</b> {{ phase.rollback_target }}</p>{% endif %}
+    <p><b>Next:</b> {{ phase.next_recommendation or '—' }}</p>
+  </div>
+
+  {% if phase.instructions %}
+  <div class="card">
+    <h2>📋 Инструкции ({{ phase.instructions|length }})</h2>
+    <table>
+      <tr><th>#</th><th>Шаг</th><th>Tool</th><th>Пример</th></tr>
+      {% for i in phase.instructions %}
+      <tr><td>{{ loop.index }}</td><td>{{ i.step }}</td><td>{{ i.tool or '—' }}</td><td><code>{{ i.example or '—' }}</code></td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  {% if phase.checks %}
+  <div class="card">
+    <h2>🔍 Проверки ({{ phase.checks|length }})</h2>
+    <table>
+      <tr><th>#</th><th>Тип</th><th>Описание</th><th>Команда</th></tr>
+      {% for c in phase.checks %}
+      <tr><td>{{ loop.index }}</td><td><span class="badge">{{ c.type }}</span></td><td>{{ c.description }}</td><td><code>{{ c.command or '—' }}</code></td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  {% if phase.evidence %}
+  <div class="card">
+    <h2>📎 Evidence ({{ phase.evidence|length }})</h2>
+    <table>
+      <tr><th>#</th><th>Item</th><th>Валидатор</th></tr>
+      {% for e in phase.evidence %}
+      <tr><td>{{ loop.index }}</td><td>{{ e.item }}</td><td>{{ e.validator or '—' }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  {% if phase.questions %}
+  <div class="card">
+    <h2>❓ Вопросы wizard ({{ phase.questions|length }})</h2>
+    <table>
+      <tr><th>#</th><th>Вопрос</th><th>Required</th><th>Keywords</th><th>Hint</th></tr>
+      {% for q in phase.questions %}
+      <tr><td>{{ loop.index }}</td><td>{{ q.text }}</td><td>{{ 'Yes' if q.required else 'No' }}</td><td>{{ q.expected_keywords|join(', ') or '—' }}</td><td>{{ q.hint or '—' }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  {% if phase.delegate %}
+  <div class="card">
+    <h2>🤖 Делегирование</h2>
+    <p><b>Агент:</b> {{ phase.delegate.agent }}</p>
+    <p><b>Timeout:</b> {{ phase.delegate.timeout_min }} мин</p>
+    <p><b>Max cycles:</b> {{ phase.delegate.max_cycles }}</p>
+    {% if phase.delegate.toolsets %}<p><b>Toolsets:</b> {{ phase.delegate.toolsets|join(', ') }}</p>{% endif %}
+  </div>
+  {% endif %}
+
+  <p><br><a href="/phases">← Все фазы</a></p>
 </div>
 </body></html>"""
 
@@ -447,7 +625,7 @@ TASKS_HTML = """<!DOCTYPE html>
       <td class="phase-id">{{ t.task_id }}</td>
       <td>{{ t.message_count }}</td>
       <td>{{ t.phases|length }}</td>
-      <td><a href="/wizard/{{ t.jira_key }}">Wizard &rarr;</a> <a href="/task/{{ t.task_id }}">История &rarr;</a></td>
+      <td><a href="/wizard/{{ t.jira_key }}">Wizard &rarr;</a> <a href="/answers/{{ t.jira_key }}">Ответы &rarr;</a> <a href="/task/{{ t.task_id }}">История &rarr;</a></td>
     </tr>
     {% endfor %}
   </table>
@@ -476,6 +654,92 @@ TASK_HTML = """<!DOCTYPE html>
 </div>
 </body></html>"""
 
+JOBS_HTML = """<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jobs — wartz-workflow</title>
+{{ style | safe }}</head>
+<body>
+{{ header | safe }}
+<div class="container">
+  <h2 style="margin-top:20px">Background Jobs ({{ jobs|length }})</h2>
+  <table>
+    <tr><th>Job ID</th><th>Jira Key</th><th>Phase</th><th>Agent</th><th>Status</th><th>Created</th></tr>
+    {% for j in jobs %}
+    <tr>
+      <td><b>{{ j.job_id }}</b></td>
+      <td>{{ j.jira_key }}</td>
+      <td class="phase-id">{{ j.phase_id }}</td>
+      <td>{{ j.agent }}</td>
+      <td><span class="badge {% if j.status == 'complete' %}badge-ok{% elif j.status == 'failed' %}badge-block{% elif j.status == 'running' %}badge-warn{% endif %}">{{ j.status }}</span></td>
+      <td>{{ j.created_at[:10] }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <div class="card" style="margin-top:16px">
+    <h2>API</h2>
+    <p><code>GET /api/jobs?jira_key=XXX&amp;phase_id=YYY</code></p>
+    <p><code>GET /api/jobs/&lt;job_id&gt;</code></p>
+  </div>
+</div>
+</body></html>"""
+
+ANSWERS_HTML = """<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Answers {{ jira_key }} — wartz-workflow</title>
+{{ style | safe }}</head>
+<body>
+{{ header | safe }}
+<div class="container">
+  <h2 style="margin-top:20px">Ответы wizard: {{ jira_key }}</h2>
+  {% for a in answers %}
+  <div class="card">
+    <h3>Фаза {{ a.phase_id }} — {{ a.created_at[:16] }}</h3>
+    <span class="badge {% if a.ok %}badge-ok{% else %}badge-block{% endif %}">{{ 'PASS' if a.ok else 'FAIL' }}</span>
+    <pre>{{ a.data | tojson(indent=2) }}</pre>
+  </div>
+  {% else %}
+  <p style="opacity:.6">Нет ответов. Используйте wizard или API.</p>
+  {% endfor %}
+  <p><br><a href="/tasks">← Все задачи</a></p>
+</div>
+</body></html>"""
+
+CONFIG_HTML = """<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Config — wartz-workflow</title>
+{{ style | safe }}</head>
+<body>
+{{ header | safe }}
+<div class="container">
+  <h2 style="margin-top:20px">Конфигурация</h2>
+  <div class="grid">
+    <div class="card"><h2>Пути</h2>
+      <p><b>WARTZ_DIR:</b> {{ wartz_dir }}</p>
+      <p><b>DB:</b> {{ db_path }}</p>
+    </div>
+    <div class="card"><h2>Валидация ключей</h2>
+      {% for kp in key_patterns %}
+        <p><span class="phase-id">{{ kp.name }}</span> — {{ kp.example }}</p>
+      {% endfor %}
+    </div>
+    <div class="card"><h2>Фазы</h2>
+      <p><b>Всего фаз:</b> {{ total_phases }}</p>
+      <p><b>Blockers:</b> {{ blockers|join(', ') }}</p>
+      <p><b>Delegated:</b> {{ delegated|join(', ') }}</p>
+    </div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <h2>Порядок фаз</h2>
+    <pre>{{ phase_order|join('\n') }}</pre>
+  </div>
+</div>
+</body></html>"""
 
 WIZARD_HTML = """<!DOCTYPE html>
 <html lang="ru">
@@ -523,7 +787,8 @@ WIZARD_HTML = """<!DOCTYPE html>
     <div id="result" style="margin-top:16px;padding:12px;border-radius:4px;display:none;"></div>
   </div>
 
-  <p><br><a href="/tasks">← Все задачи</a></p>
+  <p><br><a href="/answers/{{ jira_key }}">📊 Ответы по задаче &rarr;</a></p>
+  <p><a href="/tasks">← Все задачи</a></p>
 </div>
 
 <style>
@@ -590,39 +855,6 @@ function skipPhase() {
 </script>
 </body></html>"""
 
-CONFIG_HTML = """<!DOCTYPE html>
-<html lang="ru">
-<head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Config — wartz-workflow</title>
-{{ style | safe }}</head>
-<body>
-{{ header | safe }}
-<div class="container">
-  <h2 style="margin-top:20px">Конфигурация</h2>
-  <div class="grid">
-    <div class="card"><h2>Пути</h2>
-      <p><b>WARTZ_DIR:</b> {{ wartz_dir }}</p>
-      <p><b>DB:</b> {{ db_path }}</p>
-    </div>
-    <div class="card"><h2>Валидация ключей</h2>
-      {% for kp in key_patterns %}
-        <p><span class="phase-id">{{ kp.name }}</span> — {{ kp.example }}</p>
-      {% endfor %}
-    </div>
-    <div class="card"><h2>Фазы</h2>
-      <p><b>Всего фаз:</b> {{ total_phases }}</p>
-      <p><b>Blockers:</b> {{ blockers|join(', ') }}</p>
-      <p><b>Delegated:</b> {{ delegated|join(', ') }}</p>
-    </div>
-  </div>
-  <div class="card" style="margin-top:16px">
-    <h2>Порядок фаз</h2>
-    <pre>{{ phase_order|join('\n') }}</pre>
-  </div>
-</div>
-</body></html>"""
-
 HEADER_HTML = """
 <header>
   <h1>wartz-workflow UI</h1>
@@ -630,6 +862,7 @@ HEADER_HTML = """
     <a href="/">Dashboard</a>
     <a href="/phases">Фазы</a>
     <a href="/tasks">Задачи</a>
+    <a href="/jobs">Jobs</a>
     <a href="/config">Конфиг</a>
   </nav>
 </header>
@@ -637,7 +870,7 @@ HEADER_HTML = """
 
 
 class InlineTemplates:
-    """Fallback когда templates/ не существует — inline HTML."""
+    """Fallback рендер inline HTML."""
 
     def __init__(self):
         self.cache = {}
@@ -651,60 +884,123 @@ class InlineTemplates:
             "task.html": TASK_HTML,
             "config.html": CONFIG_HTML,
             "wizard.html": WIZARD_HTML,
+            "jobs.html": JOBS_HTML,
+            "phase_detail.html": PHASE_DETAIL_HTML,
+            "answers.html": ANSWERS_HTML,
         }
         tmpl = html_map.get(name, f"<!-- Template {name} not found -->")
-        # Simple variable substitution
         rendered = tmpl.replace("{{ style | safe }}", PAGE_STYLE)
         rendered = rendered.replace("{{ header | safe }}", HEADER_HTML)
 
-        # Jinja-like loops
         if "{% for" in rendered:
             return HTMLResponse(self._render_jinja_like(rendered, context))
 
-        # Simple {{ var }} substitution
-        for key, val in context.items():
-            if isinstance(val, (list, dict)):
-                val = json.dumps(val, ensure_ascii=False, indent=2)
-            rendered = rendered.replace(f"{{{{ {key} }}}}", str(val))
+        # Simple {{ var }} and {{ dict.key }} substitution
+        rendered = self._substitute_vars(rendered, context)
         return HTMLResponse(rendered)
 
-    def _render_jinja_like(self, template: str, context: dict) -> str:
-        """Минимальный Jinja-like рендер для inline шаблонов."""
+    def _substitute_vars(self, template: str, context: dict) -> str:
         result = template
-        # Simple variable substitution
+        # Find all {{ ... }} patterns
+        for match in re.finditer(r"\{\{\s*([^}]+)\s*\}\}", result):
+            expr = match.group(1).strip()
+            val = self._resolve_expr(expr, context)
+            result = result.replace(match.group(0), str(val))
+        return result
+
+    def _resolve_expr(self, expr: str, context: dict) -> str:
+        # Handle X or Y fallback
+        if " or " in expr:
+            parts = expr.split(" or ", 1)
+            left = self._resolve_expr(parts[0].strip(), context)
+            if left:
+                return left
+            right_raw = parts[1].strip()
+            # Remove quotes from string literal
+            if (right_raw.startswith("'") and right_raw.endswith("'")) or (right_raw.startswith('"') and right_raw.endswith('"')):
+                return right_raw[1:-1]
+            return self._resolve_expr(right_raw, context)
+
+        # Handle Jinja2 filters:  x|length, x|join(', ')
+        if "|" in expr:
+            parts = expr.split("|", 1)
+            base_expr = parts[0].strip()
+            filter_expr = parts[1].strip()
+            val = self._resolve_expr(base_expr, context)
+            if "length" in filter_expr or "len" in filter_expr or "size" in filter_expr:
+                try:
+                    if isinstance(val, list):
+                        return str(len(val))
+                except Exception:
+                    pass
+                return str(len(str(val)))
+            if "join" in filter_expr:
+                m = re.search(r"join\(['\"](.+?)['\"]\)", filter_expr)
+                sep = m.group(1) if m else ", "
+                if isinstance(val, list):
+                    return sep.join(str(v) for v in val)
+                return str(val)
+            if "tojson" in filter_expr or "json" in filter_expr:
+                return json.dumps(val, ensure_ascii=False, indent=2) if isinstance(val, (dict, list)) else str(val)
+            return str(val)
+
+        parts = expr.split(".")
+        val = context.get(parts[0], "")
+        for part in parts[1:]:
+            if isinstance(val, dict):
+                val = val.get(part, "")
+            elif isinstance(val, list) and part in ("length", "len", "size"):
+                val = len(val)
+            else:
+                val = ""
+        if isinstance(val, (list, dict)):
+            return json.dumps(val, ensure_ascii=False, indent=2)
+        if val is True:
+            return "true"
+        if val is False:
+            return "false"
+        if val is None:
+            return ""
+        return str(val)
+
+    def _render_jinja_like(self, template: str, context: dict) -> str:
+        result = template
         for key, val in context.items():
             if isinstance(val, str):
                 result = result.replace(f"{{{{ {key} }}}}", val)
 
-        # For loops with list-of-dicts
-        import re
         for match in re.finditer(r"\{% for (\w+) in (\w+) %\}(.*?)\{% endfor %\}", result, re.S):
             var_name, list_name, body = match.groups()
             items = context.get(list_name, [])
+            # Split body into main part and else part
+            else_match = re.search(r"\{% else %\}(.*)$", body, flags=re.S)
+            body_no_else = body[:else_match.start()] if else_match else body
+            else_block = else_match.group(1) if else_match else ""
+            if not items:
+                result = result.replace(match.group(0), else_block)
+                continue
             rendered_items = []
             for idx, item in enumerate(items):
-                item_html = body
-                # Replace loop variables
+                item_html = body_no_else
+                # Convert {{ p.id }} → {{ id }} for simple substitution
+                item_html = re.sub(r"\{\{\s*" + re.escape(var_name) + r"\.(\w+)\s*\}\}", r"{{ \1 }}", item_html)
+                # Convert {{ p.checks|length }} → {{ checks|length }}
+                item_html = re.sub(r"\{\{\s*" + re.escape(var_name) + r"\.(\w+)\|([^}]+)\s*\}\}", r"{{ \1|\2 }}", item_html)
                 if isinstance(item, dict):
-                    for k, v in item.items():
-                        item_html = item_html.replace(f"{{{{ {k} }}}}", str(v))
-                        item_html = item_html.replace(f"{{{{ t.{k} }}}}", str(v))
-                    item_html = item_html.replace("{{ loop.index }}", str(idx + 1))
+                    loop_ctx = dict(item)
+                    loop_ctx["loop.index"] = idx + 1
+                    item_html = self._substitute_vars(item_html, loop_ctx)
                 rendered_items.append(item_html)
-
-            # Handle else (remove unused parts variable)
             full_match = match.group(0)
             result = result.replace(full_match, "".join(rendered_items))
 
-        # strip remaining Jinja tags for else blocks
-        result = re.sub(r"\{% else %\}.*?\{% endfor %\}", "", result, flags=re.S)
         result = re.sub(r"\{% (if|for)[^%]*%\}", "", result)
         result = re.sub(r"\{% (endfor|endif) %\}", "", result)
-
+        result = self._substitute_vars(result, context)
         return result
 
 
-# ── Ensure templates ──────────────────────────────────────────────────
+# ── Templates init ────────────────────────────────────────────────────
 
 def ensure_templates():
     """Создать templates/ с inline шаблонами."""
@@ -716,6 +1012,9 @@ def ensure_templates():
         "task.html": TASK_HTML,
         "config.html": CONFIG_HTML,
         "wizard.html": WIZARD_HTML,
+        "jobs.html": JOBS_HTML,
+        "phase_detail.html": PHASE_DETAIL_HTML,
+        "answers.html": ANSWERS_HTML,
     }
     for name, content in files.items():
         path = TEMPLATES_DIR / name
@@ -723,21 +1022,10 @@ def ensure_templates():
             path.write_text(content, encoding="utf-8")
 
 
-# Override templates if inline mode
 if not TEMPLATES_DIR.exists():
     templates = InlineTemplates()
 else:
-    # Re-wrap filesystem templates with header/style injection
-    _fs = Jinja2Templates(directory=str(TEMPLATES_DIR))
-
-    class WrappedTemplates:
-        def TemplateResponse(self, name: str, context: dict):
-            # Inject global context
-            context["style"] = PAGE_STYLE
-            context["header"] = HEADER_HTML
-            return _fs.TemplateResponse(request=context["request"], name=name, context=context)
-
-    templates = WrappedTemplates()
+    templates = InlineTemplates()
 
 
 if __name__ == "__main__":
