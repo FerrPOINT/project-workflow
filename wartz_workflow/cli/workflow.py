@@ -12,9 +12,14 @@ from rich.console import Console
 from rich.table import Table
 from rich import box
 
-from .. import state, phases, verify, jira_gitlab, engine, schema
+from .. import state, phases, verify, engine, schema
+from ..adapters.http.jira import JiraAdapter
+from ..adapters.http.gitlab import GitLabAdapter
 from ..cli.core import cli, out_json, _require_valid_key
 from ..cli.core import console, PASS, FAIL, WARN, BLOCK
+
+_jira = JiraAdapter()
+_gitlab = GitLabAdapter()
 
 
 @cli.command()
@@ -157,7 +162,7 @@ def merge_check(ctx: click.Context, jira_key: str) -> None:
     current = state.load_state(repo, jira_key)
     task_id = current.get("task_id", "") if current else ""
 
-    mr_state = jira_gitlab.get_mr_state(task_id) if task_id else None
+    mr_state = _gitlab.search_merge_requests(task_id) if task_id else None
 
     result = subprocess.run(
         ["git", "log", "--oneline", "--grep", task_id, "develop"],
@@ -200,8 +205,8 @@ def check_env(ctx: click.Context) -> None:
         "gitignore": verify.check_gitignore("/opt/dev/hr-recruiter/recruiter-front"),
         "tokens": verify.check_tokens(),
         "git_identity": verify.check_git_identity(),
-        "jira_api": jira_gitlab.ping_jira(),
-        "gitlab_api": jira_gitlab.ping_gitlab(),
+        "jira_api": _jira.ping(),
+        "gitlab_api": _gitlab.ping(),
     }
 
     all_ok = all(r[0] for r in results.values())

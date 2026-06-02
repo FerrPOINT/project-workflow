@@ -6,8 +6,13 @@ import os
 import subprocess
 from typing import Any, Dict, List, Optional, Tuple
 
-from . import jira_gitlab, schema, state, profiles, jobs
+from .adapters.http.jira import JiraAdapter
+from .adapters.http.gitlab import GitLabAdapter
+from . import schema, state, profiles, jobs
 from .schema import Phase, PhaseCheck
+
+_jira = JiraAdapter()
+_gitlab = GitLabAdapter()
 
 
 def run_checks(repo: str, phase: Phase, context: Dict[str, Any]) -> Tuple[bool, List[Dict[str, Any]]]:
@@ -69,18 +74,17 @@ def _run_single_check(repo: str, check: PhaseCheck, context: Dict[str, Any]) -> 
         return ok, f"Missing: {missing}" if missing else "All present"
 
     if check.type == "jira_status":
-        from .jira_gitlab import get_jira_status
-        status = get_jira_status(context.get("jira_key", ""))
+        status = _jira.get_status(context.get("jira_key", ""))
         expected = check.expected or []
         ok = status in expected if status else False
         return ok, f"Status={status}, expected={expected}"
 
     if check.type == "api_ping":
         if "jira" in check.description.lower():
-            ok, detail = jira_gitlab.ping_jira()
+            ok, detail = _jira.ping()
             return ok, detail
         if "gitlab" in check.description.lower():
-            ok, detail = jira_gitlab.ping_gitlab()
+            ok, detail = _gitlab.ping()
             return ok, detail
         return False, "Unknown API"
 
@@ -119,7 +123,7 @@ def _run_single_check(repo: str, check: PhaseCheck, context: Dict[str, Any]) -> 
 
     if check.type == "gitlab_mr":
         task_id = context.get("task_id", "")
-        mr = jira_gitlab.get_mr_state(task_id) if task_id else None
+        mr = _gitlab.search_merge_requests(task_id) if task_id else None
         ok = mr is not None and mr.get("state") in ["opened", "merged"]
         return ok, f"MR: {mr}"
 

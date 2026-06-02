@@ -12,9 +12,14 @@ from rich.console import Console
 from rich.table import Table
 from rich import box
 
-from .. import state, phases, jira_gitlab, conversation
+from .. import state, phases, conversation
+from ..adapters.http.jira import JiraAdapter
+from ..adapters.http.gitlab import GitLabAdapter
 from ..cli.core import cli, out_json, _require_valid_key
 from ..cli.core import console, PASS, FAIL, WARN, BLOCK
+
+_jira = JiraAdapter()
+_gitlab = GitLabAdapter()
 
 
 @cli.command()
@@ -38,7 +43,7 @@ def status(ctx: click.Context, jira_key: str) -> None:
         console.print(f"{FAIL} Задача не инициализирована")
         return
 
-    jira_status = jira_gitlab.get_jira_status(jira_key)
+    jira_status = _jira.get_status(jira_key)
     next_p = phases.get_next_phase(current.get("current_phase", ""))
 
     if jmode:

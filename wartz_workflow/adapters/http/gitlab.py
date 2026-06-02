@@ -41,6 +41,24 @@ class GitLabAdapter(GitLabPort):
         ok, data = self._request(f"/projects/{project_id}")
         return data if ok else None
 
+    def search_merge_requests(self, task_id: str) -> Optional[dict]:
+        """Search MR by task_id in title/source_branch."""
+        ok, data = self._request(
+            f"/projects/{self.project_id}/merge_requests?state=all&search={task_id}"
+        )
+        if ok and isinstance(data, list) and data:
+            mr = data[0]
+            return {
+                "iid": mr.get("iid"),
+                "title": mr.get("title"),
+                "state": mr.get("state"),
+                "merged_by": mr.get("merged_by", {}).get("username") if mr.get("merged_by") else None,
+                "web_url": mr.get("web_url"),
+                "source_branch": mr.get("source_branch"),
+                "target_branch": mr.get("target_branch"),
+            }
+        return None
+
     def ping(self) -> Tuple[bool, str]:
         if not self._token:
             return False, "GLAB_TOKEN не задан"
