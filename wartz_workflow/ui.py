@@ -22,7 +22,7 @@ from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse
 import uvicorn
 
-from . import conversation, schema, config, state, phases, jobs
+from . import conversation, schema, config, state, phases, jobs, wizard
 
 # ── Constants ───────────────────────────────────────────────────────────
 DEFAULT_UI_PORT = config.UI_PORT
@@ -333,24 +333,14 @@ def build_ui_checklist(phase: schema.Phase) -> list[dict]:
 
 @app.get("/wizard/{jira_key}", response_class=HTMLResponse)
 def wizard_page(request: Request, jira_key: str):
-    current_phase = get_task_current_phase(jira_key)
-    phase = schema.get_phase(current_phase)
-    if not phase:
-        phase = schema.Phase(id=current_phase, name="Unknown", description="Phase not found in schema")
-    checklist = build_ui_checklist(phase)
+    """UI страница wizard — показывает текущую фазу и чеклист."""
+    prompt = wizard.get_phase_instructions(jira_key)
     return templates.TemplateResponse(
         "wizard.html",
         {
             "request": request,
             "jira_key": jira_key,
-            "phase": {
-                "id": phase.id,
-                "name": phase.name,
-                "description": phase.description,
-                "is_blocker": phase.is_blocker,
-                "is_delegated": phase.is_delegated,
-            },
-            "checklist": checklist,
+            "prompt": prompt,
         },
     )
 
@@ -361,25 +351,29 @@ def api_wizard_answer(
     done_items: list[str] = Form(default_factory=list),
     notes: str = Form(default=""),
 ):
-    current_phase = get_task_current_phase(jira_key)
-    phase = schema.get_phase(current_phase)
-    checklist = build_ui_checklist(phase) if phase else []
-    total = len(checklist)
-    done = len(done_items)
-    ok = done > 0 or bool(notes.strip())
+    """Агент прислал отчёт → вернуть verdict (PASS/FAIL) + инструкции."""
+    report = "\n".join(done_items + [notes])
+    result = wizard.evaluate_report(jira_key, report)
+
+    # Save to conversation history
     conversation.add_wizard_answer(
-        jira_key, jira_key, current_phase,
-        json.dumps({"done": done_items, "notes": notes, "total": total, "date": datetime.datetime.now().isoformat()}, ensure_ascii=False),
-        ok=ok,
+        jira_key, jira_key, result["phase"],
+        json.dumps(result, ensure_ascii=False),
+        ok=(result["verdict"] == "PASS"),
     )
-    if done >= total and total > 0:
-        next_p = phases.get_next_phase(current_phase)
-        if next_p:
-            conversation.add_phase_transition(jira_key, jira_key, current_phase, next_p)
-            repo = state.find_repo(jira_key) or ""
-            state.save_state(repo, jira_key, jira_key, "", next_p)
-        return {"ok": True, "status": "advanced", "next_phase": next_p, "done": done, "total": total}
-    return {"ok": True, "status": "partial", "done": done, "total": total}
+
+    return result
+
+
+@app.get("/api/wizard/{jira_key}/instructions")
+def api_wizard_instructions(jira_key: str):
+    """Получить инструкции для текущей фазы (первое обращение агента)."""
+    prompt = wizard.get_phase_instructions(jira_key)
+    return {
+        "ok": True,
+        "jira_key": jira_key,
+        "prompt": prompt,
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -750,54 +744,36 @@ WIZARD_HTML = """<!DOCTYPE html>
 <body>
 {{ header | safe }}
 <div class="container">
-  <h2 style="margin-top:20px">Wizard: {{ jira_key }}</h2>
+  <h2 style="margin-top:20px">🧙 Wizard: {{ jira_key }}</h2>
+
   <div class="card">
-    <h2>Фаза {{ phase.id }} — {{ phase.name }}</h2>
-    <p style="opacity:.7">{{ phase.description }}</p>
-    {% if phase.is_blocker %}<span class="badge badge-block">BLOCKER</span>{% endif %}
-    {% if phase.is_delegated %}<span class="badge badge-warn">DELEGATED</span>{% endif %}
+    <h3>📋 Инструкции по текущей фазе</h3>
+    <pre style="white-space:pre-wrap;font-size:.9rem;line-height:1.6;background:#0b1220;padding:16px;border-radius:4px;border:1px solid #334155">{{ prompt }}</pre>
   </div>
 
   <div class="card">
-    <h2>📋 Чеклист ({{ checklist|length }} пунктов)</h2>
+    <h3>📝 Отчёт агента</h3>
+    <p style="opacity:.7;font-size:.85rem">Опиши что выполнено по пунктам. Wizard проверит покрытие и вернёт verdict.</p>
     <form id="wizardForm">
-      {% for item in checklist %}
-      <div style="margin:8px 0">
-        <label>
-          <input type="checkbox" name="done_items" value="{{ item.id }}"
-                 data-type="{{ item.type }}">
-          <span style="font-size:.9rem">{{ item.text }}</span>
-        </label>
-        {% if item.example %}<div style="margin-left:24px;font-size:.8rem;color:#94a3b8">{{ item.example }}</div>{% endif %}
-        {% if item.command %}<div style="margin-left:24px;font-size:.8rem;color:#38bdf8;font-family:monospace">{{ item.command }}</div>{% endif %}
-      </div>
-      {% endfor %}
-
-      <div style="margin-top:16px">
-        <label style="display:block;margin-bottom:8px;font-size:.9rem">📝 Комментарий / заметки:</label>
-        <textarea name="notes" style="width:100%;min-height:80px;background:#0b1220;color:var(--text);border:1px solid #334155;border-radius:4px;padding:8px;font-size:.9rem;"></textarea>
-      </div>
+      <textarea name="notes" style="width:100%;min-height:120px;background:#0b1220;color:var(--text);border:1px solid #334155;border-radius:4px;padding:8px;font-size:.9rem;" placeholder="Например: проверил пуллреквесты, воспроизвёл 2 бага, залогировал фазу..."></textarea>
 
       <div style="margin-top:16px;display:flex;gap:12px">
-        <button type="submit" class="btn btn-primary">✅ Отправить</button>
-        <button type="button" onclick="skipPhase()" class="btn btn-secondary">⏭ Пропустить</button>
+        <button type="submit" class="btn btn-primary">✅ Отправить отчёт</button>
       </div>
     </form>
 
-    <div id="result" style="margin-top:16px;padding:12px;border-radius:4px;display:none;"></div>
+    <div id="result" style="margin-top:16px;padding:16px;border-radius:4px;display:none;white-space:pre-wrap;font-size:.9rem"></div>
   </div>
 
-  <p><br><a href="/answers/{{ jira_key }}">📊 Ответы по задаче &rarr;</a></p>
+  <p><br><a href="/answers/{{ jira_key }}">📊 История ответов &rarr;</a></p>
   <p><a href="/tasks">← Все задачи</a></p>
 </div>
 
 <style>
 .btn{padding:10px 20px;border:none;border-radius:4px;font-size:.9rem;font-weight:600;cursor:pointer}
 .btn-primary{background:var(--accent);color:#0f172a}
-.btn-secondary{background:#334155;color:var(--text)}
-#result.ok{background:rgba(34,197,94,.2);color:var(--ok)}
-#result.warn{background:rgba(245,158,11,.2);color:var(--warn)}
-input[type="checkbox"]{width:16px;height:16px;accent-color:var(--accent);margin-right:8px}
+#result.ok{background:rgba(34,197,94,.2);color:var(--ok);border:1px solid var(--ok)}
+#result.warn{background:rgba(245,158,11,.2);color:var(--warn);border:1px solid var(--warn)}
 </style>
 
 <script>
@@ -807,11 +783,10 @@ const result = document.getElementById('result');
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   const formData = new FormData(form);
-  const doneItems = formData.getAll('done_items');
   const notes = formData.get('notes') || '';
 
-  if (doneItems.length === 0 && !notes) {
-    result.textContent = '⚠️ Отметь хотя бы один пункт или оставь комментарий';
+  if (!notes.trim()) {
+    result.textContent = '⚠️ Опиши что выполнено';
     result.className = 'warn';
     result.style.display = 'block';
     return;
@@ -819,7 +794,6 @@ form.addEventListener('submit', async (e) => {
 
   const params = new URLSearchParams();
   params.append('notes', notes);
-  doneItems.forEach(v => params.append('done_items', v));
 
   try {
     const resp = await fetch('/api/wizard/{{ jira_key }}/answer', {
@@ -829,15 +803,12 @@ form.addEventListener('submit', async (e) => {
     });
     const data = await resp.json();
 
-    if (data.status === 'advanced') {
-      result.textContent = '✅ Все пункты выполнены! Переход к фазе ' + data.next_phase;
-      result.className = 'ok';
-      result.style.display = 'block';
-      setTimeout(() => location.reload(), 2000);
-    } else {
-      result.textContent = `📊 Отмечено ${data.done || 0} из ${data.total || 0} пунктов`;
-      result.className = 'warn';
-      result.style.display = 'block';
+    result.textContent = data.message || data.verdict;
+    result.className = data.verdict === 'PASS' ? 'ok' : 'warn';
+    result.style.display = 'block';
+
+    if (data.verdict === 'PASS' && data.next_phase) {
+      setTimeout(() => location.reload(), 3000);
     }
   } catch (err) {
     result.textContent = '❌ Ошибка: ' + err;
@@ -845,13 +816,6 @@ form.addEventListener('submit', async (e) => {
     result.style.display = 'block';
   }
 });
-
-function skipPhase() {
-  form.reset();
-  result.textContent = '⏭ Фаза пропущена — переход к следующей';
-  result.className = 'warn';
-  result.style.display = 'block';
-}
 </script>
 </body></html>"""
 

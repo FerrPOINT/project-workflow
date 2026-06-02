@@ -1,4 +1,5 @@
-"""Tests for Web UI wizard page."""
+"""Tests for Web UI wizard page v5.0 — conversational mode."""
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -7,7 +8,6 @@ from wartz_workflow import ui as server
 
 @pytest.fixture
 def client(monkeypatch):
-    # Ensure templates exist
     from wartz_workflow.ui import ensure_templates
     ensure_templates()
     return TestClient(server.app)
@@ -19,64 +19,72 @@ class TestWizardPage:
         assert resp.status_code == 200
         html = resp.text
         assert "<html" in html
-        assert "Wizard: TEST-123" in html
+        assert "🧙 Wizard: TEST-123" in html
 
-    def test_wizard_shows_phase_name(self, client):
+    def test_wizard_shows_phase_prompt(self, client):
         resp = client.get("/wizard/TEST-123")
         assert resp.status_code == 200
         html = resp.text
-        # Phase -1 should be shown initially
-        assert "Task Intake" in html
+        # Should show phase instructions prompt
+        assert "Фаза" in html
+        assert "Обязательно выполнить" in html or "Инструкции" in html
 
-    def test_wizard_checklist_present(self, client):
+    def test_wizard_has_textarea(self, client):
         resp = client.get("/wizard/TEST-123")
         assert resp.status_code == 200
         html = resp.text
-        # Should contain checklist checkboxes
-        assert '<input type="checkbox"' in html
-        assert 'name="done_items"' in html
+        assert "<textarea name=\"notes\"" in html
 
     def test_wizard_form_present(self, client):
         resp = client.get("/wizard/TEST-123")
         assert resp.status_code == 200
         html = resp.text
         assert '<form id="wizardForm"' in html
-        assert '<textarea name="notes"' in html
-        assert 'skipPhase()' in html
+        assert 'Отправить отчёт' in html
 
-    def test_wizard_api_answer_basic(self, client):
+    def test_wizard_api_answer_returns_verdict(self, client):
         resp = client.post(
             "/api/wizard/TEST-123/answer",
-            data={"done_items": ["c0"], "notes": "done"}
+            data={"notes": "Открыл Jira тикет, скопировал Summary, извлёк Acceptance Criteria"},
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert data["ok"] is True
-        assert data["status"] in ("partial", "advanced")
-        assert "done" in data
-        assert "total" in data
+        assert "verdict" in data
+        assert data["verdict"] in ("PASS", "FAIL")
+        assert "phase" in data
+        assert "covered" in data
+        assert "missing" in data
+        assert "message" in data
 
-    def test_wizard_api_answer_empty(self, client):
+    def test_wizard_api_answer_empty_report(self, client):
         resp = client.post(
             "/api/wizard/TEST-123/answer",
-            data={"notes": ""}
+            data={"notes": ""},
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert data["ok"] is True
+        assert data["verdict"] == "FAIL"
+        assert len(data["missing"]) > 0
 
     def test_wizard_api_answer_invalid_phase(self, client):
         resp = client.post(
             "/api/wizard/UNKNOWN-KEY/answer",
-            data={"done_items": ["c0"], "notes": "x"}
+            data={"notes": "Открыл Jira, скопировал Summary"},
         )
-        # Should still return (wizard creates phase or defaults to Phase -1)
         assert resp.status_code == 200
+        data = resp.json()
+        assert "verdict" in data
 
     def test_wizard_nav_link_from_tasks(self, client):
-        # Make sure there's at least one task
         from wartz_workflow.conversation import add_wizard_answer
         resp = client.get("/tasks")
         assert resp.status_code == 200
-        # Tasks table renders even empty; UI nav works
         assert "</th>" in resp.text
+
+    def test_wizard_instructions_api(self, client):
+        resp = client.get("/api/wizard/TEST-123/instructions")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert "prompt" in data
+        assert "Фаза" in data["prompt"]
