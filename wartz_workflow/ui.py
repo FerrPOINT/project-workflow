@@ -579,7 +579,6 @@ INDEX_HTML = """<!DOCTYPE html>
       <h2>Dashboard</h2>
       <p><b>Фаз workflow:</b> {{ phase_count }}</p>
       <p><b>Задач в истории:</b> {{ task_count }}</p>
-      <p><b>Блокеров:</b> {{ blocker_count }}</p>
       <p><a href="/phases">Все фазы &rarr;</a></p>
     </div>
     <div class="card">
@@ -615,25 +614,6 @@ PHASES_HTML = """<!DOCTYPE html>
 {{ header | safe }}
 <div class="container">
   <h2 style="margin-top:20px">Все фазы workflow ({{ phases|length }})</h2>
-  <div class="stats-bar">
-    <div class="stat-item"><div class="stat-value">{{ phases|length }}</div><div class="stat-label">Всего фаз</div></div>
-    <div class="stat-item"><div class="stat-value" style="color:var(--bad)">{{ blocker_count }}</div><div class="stat-label">Блокеры</div></div>
-    <div class="stat-item"><div class="stat-value" style="color:var(--warn)">{{ delegated_count }}</div><div class="stat-label">На агентах</div></div>
-    <div class="stat-item"><div class="stat-value" style="color:var(--accent)">{{ parallel_count }}</div><div class="stat-label">Параллельные</div></div>
-  </div>
-
-  <!-- Timeline -->
-  <div class="card card-compact">
-    <div class="card-header">
-      <span class="card-title">Pipeline timeline</span>
-      <span class="card-subtitle">Каждая точка = фаза. Цвет = тип gate.</span>
-    </div>
-    <div class="timeline">
-      {% for p in phases %}
-        <span class="timeline-dot {{ p.gate_type }}" title="{{ p.id }} — {{ p.name }}"></span>
-      {% endfor %}
-    </div>
-  </div>
 
   <!-- Flat phases with inline group headers (no nested loops) -->
   <div class="phase-grid">
