@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import click
 from rich.console import Console
@@ -13,6 +13,7 @@ from rich.table import Table
 from rich import box
 
 from . import state, phases, verify, jira_gitlab, engine, schema, profiles, jobs, rollback
+from . import wizard
 from .config import PHASE_ORDER
 
 console = Console()
@@ -901,6 +902,20 @@ def rollback_cmd(ctx: click.Context, jira_key: str, phase_name: str, reason: str
     console.print(f"Осталось циклов: {cycle_info['remaining'] - 1}")
     console.print(f"\n[bold cyan]▶️ Продолжай:[/bold cyan]")
     console.print(f"  hrflow phase {jira_key} {result['to_phase']}")
+
+
+# ── wartz-workflow wizard (conversational) ──────────────────────────────
+
+@cli.command()
+@click.argument("jira_key")
+@click.option("--repo", default=None, help="Repo path (auto-detected if omitted)")
+@click.pass_context
+def wizard_cmd(ctx: click.Context, jira_key: str, repo: Optional[str]) -> None:
+    """🧙 Interactive wizard — phase-by-phase workflow assistant.
+
+    Usage: hrflow wizard TASKNEIROKLYUCH-456
+    """
+    wizard.main(jira_key, repo)
 
 
 # ── main ────────────────────────────────────────────────────────────────
