@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wizard {{ jira_key }} — wartz-workflow</title>
+{{ style | safe }}</head>
+<body>
+{{ header | safe }}
+<div class="container">
+  <h2 style="margin-top:20px">Wizard: {{ jira_key }}</h2>
+  <div class="card">
+    <h2>Фаза {{ phase.id }} — {{ phase.name }}</h2>
+    <p style="opacity:.7">{{ phase.description }}</p>
+    {% if phase.is_blocker %}<span class="badge badge-block">BLOCKER</span>{% endif %}
+    {% if phase.is_delegated %}<span class="badge badge-warn">DELEGATED</span>{% endif %}
+  </div>
+
+  <div class="card">
+    <h2>📋 Чеклист ({{ checklist|length }} пунктов)</h2>
+    <form id="wizardForm">
+      {% for item in checklist %}
+      <div style="margin:8px 0">
+        <label>
+          <input type="checkbox" name="done_items" value="{{ item.id }}"
+                 data-type="{{ item.type }}">
+          <span style="font-size:.9rem">{{ item.text }}</span>
+        </label>
+        {% if item.example %}<div style="margin-left:24px;font-size:.8rem;color:#94a3b8">{{ item.example }}</div>{% endif %}
+        {% if item.command %}<div style="margin-left:24px;font-size:.8rem;color:#38bdf8;font-family:monospace">{{ item.command }}</div>{% endif %}
+      </div>
+      {% endfor %}
+
+      <div style="margin-top:16px">
+        <label style="display:block;margin-bottom:8px;font-size:.9rem">📝 Комментарий / заметки:</label>
+        <textarea name="notes" style="width:100%;min-height:80px;background:#0b1220;color:var(--text);border:1px solid #334155;border-radius:4px;padding:8px;font-size:.9rem;"></textarea>
+      </div>
+
+      <div style="margin-top:16px;display:flex;gap:12px">
+        <button type="submit" class="btn btn-primary">✅ Отправить</button>
+        <button type="button" onclick="skipPhase()" class="btn btn-secondary">⏭ Пропустить</button>
+      </div>
+    </form>
+
+    <div id="result" style="margin-top:16px;padding:12px;border-radius:4px;display:none;"></div>
+  </div>
+
+  <p><br><a href="/tasks">← Все задачи</a></p>
+</div>
+
+<style>
+.btn{padding:10px 20px;border:none;border-radius:4px;font-size:.9rem;font-weight:600;cursor:pointer}
+.btn-primary{background:var(--accent);color:#0f172a}
+.btn-secondary{background:#334155;color:var(--text)}
+#result.ok{background:rgba(34,197,94,.2);color:var(--ok)}
+#result.warn{background:rgba(245,158,11,.2);color:var(--warn)}
+input[type="checkbox"]{width:16px;height:16px;accent-color:var(--accent);margin-right:8px}
+</style>
+
+<script>
+const form = document.getElementById('wizardForm');
+const result = document.getElementById('result');
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const formData = new FormData(form);
+  const doneItems = formData.getAll('done_items');
+  const notes = formData.get('notes') || '';
+
+  if (doneItems.length === 0 && !notes) {
+    result.textContent = '⚠️ Отметь хотя бы один пункт или оставь комментарий';
+    result.className = 'warn';
+    result.style.display = 'block';
+    return;
+  }
+
+  const params = new URLSearchParams();
+  params.append('notes', notes);
+  doneItems.forEach(v => params.append('done_items', v));
+
+  try {
+    const resp = await fetch('/api/wizard/{{ jira_key }}/answer', {
+      method: 'POST',
+      body: params,
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'}
+    });
+    const data = await resp.json();
+
+    if (data.status === 'advanced') {
+      result.textContent = '✅ Все пункты выполнены! Переход к фазе ' + data.next_phase;
+      result.className = 'ok';
+      result.style.display = 'block';
+      setTimeout(() => location.reload(), 2000);
+    } else {
+      result.textContent = `📊 Отмечено ${data.done || 0} из ${data.total || 0} пунктов`;
+      result.className = 'warn';
+      result.style.display = 'block';
+    }
+  } catch (err) {
+    result.textContent = '❌ Ошибка: ' + err;
+    result.className = 'warn';
+    result.style.display = 'block';
+  }
+});
+
+function skipPhase() {
+  form.reset();
+  result.textContent = '⏭ Фаза пропущена — переход к следующей';
+  result.className = 'warn';
+  result.style.display = 'block';
+}
+</script>
+</body></html>

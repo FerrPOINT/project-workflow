@@ -12,16 +12,17 @@
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import sys
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 import uvicorn
 
-from . import conversation, schema, config
+from . import conversation, schema, config, state, phases
 
 # ── Constants ───────────────────────────────────────────────────────────
 DEFAULT_UI_PORT = 7788
@@ -203,6 +204,103 @@ def api_config():
     }
 
 
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  WIZARD
+# ═══════════════════════════════════════════════════════════════════════
+
+def get_task_current_phase(jira_key: str) -> str:
+    """Определить текущую фазу задачи из state или conversation."""
+    ts = state.load_state(None, jira_key)
+    if ts:
+        return ts.get("current_phase", "-1")
+    return conversation.get_last_phase(jira_key) or "-1"
+
+def build_ui_checklist(phase: schema.Phase) -> list[dict]:
+    """Собрать чеклист для фазы в формате для UI."""
+    items: list[dict] = []
+    seen: set[str] = set()
+
+    for check in phase.checks:
+        k = check.description.strip().lower()
+        if k and k not in seen:
+            seen.add(k)
+            items.append({"id": f"c{len(items)}", "text": check.description, "type": "check", "command": check.command or ""})
+
+    for inst in phase.instructions[:5]:
+        k = inst.step.strip().lower()
+        if k and k not in seen:
+            seen.add(k)
+            items.append({"id": f"i{len(items)}", "text": inst.step, "type": "instruction", "example": inst.example or "", "command": ""})
+
+    for ev in phase.evidence:
+        k = ev.item.strip().lower()
+        if k and k not in seen:
+            seen.add(k)
+            items.append({"id": f"e{len(items)}", "text": ev.item, "type": "evidence", "command": ""})
+
+    return items
+
+
+@app.get("/wizard/{jira_key}", response_class=HTMLResponse)
+def wizard_page(request: Request, jira_key: str):
+    """Интерактивный wizard для задачи."""
+    current_phase = get_task_current_phase(jira_key)
+    phase = schema.get_phase(current_phase)
+    if not phase:
+        phase = schema.Phase(id=current_phase, name="Unknown", description="Phase not found in schema")
+
+    checklist = build_ui_checklist(phase)
+
+    return templates.TemplateResponse(
+        "wizard.html",
+        {
+            "request": request,
+            "jira_key": jira_key,
+            "phase": {
+                "id": phase.id,
+                "name": phase.name,
+                "description": phase.description,
+                "is_blocker": phase.is_blocker,
+                "is_delegated": phase.is_delegated,
+            },
+            "checklist": checklist,
+        },
+    )
+
+
+@app.post("/api/wizard/{jira_key}/answer")
+def api_wizard_answer(
+    jira_key: str,
+    done_items: list[str] = Form(default_factory=list),
+    notes: str = Form(default=""),
+):
+    """Принять ответ пользователя по wizard checklist."""
+    current_phase = get_task_current_phase(jira_key)
+
+    phase = schema.get_phase(current_phase)
+    checklist = build_ui_checklist(phase) if phase else []
+    total = len(checklist)
+    done = len(done_items)
+
+    ok = done > 0 or bool(notes.strip())
+    conversation.add_wizard_answer(
+        jira_key, jira_key, current_phase,
+        json.dumps({"done": done_items, "notes": notes, "total": total, "date": datetime.datetime.now().isoformat()}, ensure_ascii=False),
+        ok=ok,
+    )
+
+    if done >= total and total > 0:
+        next_p = phases.get_next_phase(current_phase)
+        if next_p:
+            conversation.add_phase_transition(jira_key, jira_key, current_phase, next_p)
+            repo = state.find_repo(jira_key) or ""
+            state.save_state(repo, jira_key, jira_key, "", next_p)
+        return {"ok": True, "status": "advanced", "next_phase": next_p, "done": done, "total": total}
+
+    return {"ok": True, "status": "partial", "done": done, "total": total}
+
 # ═══════════════════════════════════════════════════════════════════════
 #  CLI ENTRY
 # ═══════════════════════════════════════════════════════════════════════
@@ -349,7 +447,7 @@ TASKS_HTML = """<!DOCTYPE html>
       <td class="phase-id">{{ t.task_id }}</td>
       <td>{{ t.message_count }}</td>
       <td>{{ t.phases|length }}</td>
-      <td><a href="/task/{{ t.task_id }}">История &rarr;</a></td>
+      <td><a href="/wizard/{{ t.jira_key }}">Wizard &rarr;</a> <a href="/task/{{ t.task_id }}">История &rarr;</a></td>
     </tr>
     {% endfor %}
   </table>
@@ -376,6 +474,120 @@ TASK_HTML = """<!DOCTYPE html>
   {% endfor %}
   <p><br><a href="/tasks">&larr; Все задачи</a></p>
 </div>
+</body></html>"""
+
+
+WIZARD_HTML = """<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wizard {{ jira_key }} — wartz-workflow</title>
+{{ style | safe }}</head>
+<body>
+{{ header | safe }}
+<div class="container">
+  <h2 style="margin-top:20px">Wizard: {{ jira_key }}</h2>
+  <div class="card">
+    <h2>Фаза {{ phase.id }} — {{ phase.name }}</h2>
+    <p style="opacity:.7">{{ phase.description }}</p>
+    {% if phase.is_blocker %}<span class="badge badge-block">BLOCKER</span>{% endif %}
+    {% if phase.is_delegated %}<span class="badge badge-warn">DELEGATED</span>{% endif %}
+  </div>
+
+  <div class="card">
+    <h2>📋 Чеклист ({{ checklist|length }} пунктов)</h2>
+    <form id="wizardForm">
+      {% for item in checklist %}
+      <div style="margin:8px 0">
+        <label>
+          <input type="checkbox" name="done_items" value="{{ item.id }}"
+                 data-type="{{ item.type }}">
+          <span style="font-size:.9rem">{{ item.text }}</span>
+        </label>
+        {% if item.example %}<div style="margin-left:24px;font-size:.8rem;color:#94a3b8">{{ item.example }}</div>{% endif %}
+        {% if item.command %}<div style="margin-left:24px;font-size:.8rem;color:#38bdf8;font-family:monospace">{{ item.command }}</div>{% endif %}
+      </div>
+      {% endfor %}
+
+      <div style="margin-top:16px">
+        <label style="display:block;margin-bottom:8px;font-size:.9rem">📝 Комментарий / заметки:</label>
+        <textarea name="notes" style="width:100%;min-height:80px;background:#0b1220;color:var(--text);border:1px solid #334155;border-radius:4px;padding:8px;font-size:.9rem;"></textarea>
+      </div>
+
+      <div style="margin-top:16px;display:flex;gap:12px">
+        <button type="submit" class="btn btn-primary">✅ Отправить</button>
+        <button type="button" onclick="skipPhase()" class="btn btn-secondary">⏭ Пропустить</button>
+      </div>
+    </form>
+
+    <div id="result" style="margin-top:16px;padding:12px;border-radius:4px;display:none;"></div>
+  </div>
+
+  <p><br><a href="/tasks">← Все задачи</a></p>
+</div>
+
+<style>
+.btn{padding:10px 20px;border:none;border-radius:4px;font-size:.9rem;font-weight:600;cursor:pointer}
+.btn-primary{background:var(--accent);color:#0f172a}
+.btn-secondary{background:#334155;color:var(--text)}
+#result.ok{background:rgba(34,197,94,.2);color:var(--ok)}
+#result.warn{background:rgba(245,158,11,.2);color:var(--warn)}
+input[type="checkbox"]{width:16px;height:16px;accent-color:var(--accent);margin-right:8px}
+</style>
+
+<script>
+const form = document.getElementById('wizardForm');
+const result = document.getElementById('result');
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const formData = new FormData(form);
+  const doneItems = formData.getAll('done_items');
+  const notes = formData.get('notes') || '';
+
+  if (doneItems.length === 0 && !notes) {
+    result.textContent = '⚠️ Отметь хотя бы один пункт или оставь комментарий';
+    result.className = 'warn';
+    result.style.display = 'block';
+    return;
+  }
+
+  const params = new URLSearchParams();
+  params.append('notes', notes);
+  doneItems.forEach(v => params.append('done_items', v));
+
+  try {
+    const resp = await fetch('/api/wizard/{{ jira_key }}/answer', {
+      method: 'POST',
+      body: params,
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'}
+    });
+    const data = await resp.json();
+
+    if (data.status === 'advanced') {
+      result.textContent = '✅ Все пункты выполнены! Переход к фазе ' + data.next_phase;
+      result.className = 'ok';
+      result.style.display = 'block';
+      setTimeout(() => location.reload(), 2000);
+    } else {
+      result.textContent = `📊 Отмечено ${data.done || 0} из ${data.total || 0} пунктов`;
+      result.className = 'warn';
+      result.style.display = 'block';
+    }
+  } catch (err) {
+    result.textContent = '❌ Ошибка: ' + err;
+    result.className = 'warn';
+    result.style.display = 'block';
+  }
+});
+
+function skipPhase() {
+  form.reset();
+  result.textContent = '⏭ Фаза пропущена — переход к следующей';
+  result.className = 'warn';
+  result.style.display = 'block';
+}
+</script>
 </body></html>"""
 
 CONFIG_HTML = """<!DOCTYPE html>
@@ -438,6 +650,7 @@ class InlineTemplates:
             "tasks.html": TASKS_HTML,
             "task.html": TASK_HTML,
             "config.html": CONFIG_HTML,
+            "wizard.html": WIZARD_HTML,
         }
         tmpl = html_map.get(name, f"<!-- Template {name} not found -->")
         # Simple variable substitution
@@ -502,6 +715,7 @@ def ensure_templates():
         "tasks.html": TASKS_HTML,
         "task.html": TASK_HTML,
         "config.html": CONFIG_HTML,
+        "wizard.html": WIZARD_HTML,
     }
     for name, content in files.items():
         path = TEMPLATES_DIR / name

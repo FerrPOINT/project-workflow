@@ -68,6 +68,10 @@ class WizardEngine:
             if result == "QUIT":
                 self._show_resume_hint()
                 break
+            elif result == "RETRY":
+                # Не переходим к следующей фазе, просто повторяем текущую
+                console.print(f"\n[dim]🔄 Перезапуск фазы {phase.id}...[/dim]")
+                continue
             elif result == "PASS":
                 if not self._advance_phase(phase):
                     break
@@ -196,6 +200,10 @@ class WizardEngine:
                     return "PASS"  # skip = pass but without evidence
                 console.print(f"{FAIL_ICON} Blocker фазу пропустить нельзя")
                 continue
+            if lower in ("retry", "r"):
+                console.print(f"{INFO_ICON} Перезапуск фазы {phase.id}...")
+                convo.add_wizard_answer(self.task_id, self.jira_key, phase.id, "retry", ok=False)
+                return "RETRY"
             if lower in ("auto", "a"):
                 outcome = self._run_auto_commands(phase)
                 if outcome:

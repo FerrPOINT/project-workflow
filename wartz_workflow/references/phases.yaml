@@ -202,6 +202,84 @@ phases:
       - step: "Если есть скриншоты из Jira — приложить к requirements.md"
     next_recommendation: "Перейди к Phase 0.5 — Jira Transition"
 
+  # ── Phase 0.00: Git Identity ─────────────────────────────────────────
+  - id: "0.00"
+    name: "Git Identity"
+    description: "Проверить git identity перед коммитами"
+    min_time_min: 1
+    checks:
+      - type: script_pass
+        description: "git config user.email и user.name заданы"
+        command: "git config user.email && git config user.name"
+        fail_msg: "Git identity не настроена — git config user.email '...'"
+    evidence:
+      - item: "git config user.email"
+      - item: "git config user.name"
+    instructions:
+      - step: "Проверить git config user.email"
+      - step: "Проверить git config user.name"
+      - step: "Если пусто — настроить"
+    next_recommendation: "Перейди к Phase 0.000 — Workspace"
+
+  # ── Phase 0.000: Workspace ───────────────────────────────────────────
+  - id: "0.000"
+    name: "Workspace"
+    description: "Проверить рабочее окружение"
+    min_time_min: 1
+    checks:
+      - type: script_pass
+        description: "hermes setup проверено"
+        command: "which wartz-jira || echo 'missing'"
+        optional: true
+    evidence:
+      - item: "Список доступных skills (hermes tools)"
+    instructions:
+      - step: "Проверить доступные skills: hermes tools"
+      - step: "Проверить подключение к WARTZ Jira"
+    next_recommendation: "Перейди к Phase 0.01 — Task Docs Setup"
+
+  # ── Phase 0.7: Repo Sync ────────────────────────────────────────────
+  - id: "0.7"
+    name: "Repo Sync"
+    description: "Синхронизировать репозиторий с origin"
+    min_time_min: 2
+    skills:
+      - workflow-gitlab-mr-workflow
+    checks:
+      - type: script_pass
+        description: "git fetch origin без ошибок"
+        command: "git fetch origin"
+        fail_msg: "Не удалось синхронизировать с origin"
+      - type: git_sync
+        description: "Ветка актуальна относительно develop"
+    evidence:
+      - item: "git log origin/develop..HEAD --oneline"
+    instructions:
+      - step: "git fetch origin"
+      - step: "git status показывает clean или expected changes"
+    next_recommendation: "Перейди к Phase 0.9 — CriticGate"
+
+  # ── Phase 0.9: CriticGate-PreFlight ─────────────────────────────────
+  - id: "0.9"
+    name: "CriticGate-PreFlight"
+    description: "Проверка перед стартом разработки"
+    min_time_min: 2
+    is_critic: true
+    rollback_target: "0.0a"
+    skills:
+      - workflow-team-critic
+    checks:
+      - type: gate_passed
+        description: "All checks passed"
+        fail_msg: "Есть FAILED checks — исправь перед продолжением"
+    evidence:
+      - item: "CriticGate report"
+    instructions:
+      - step: "Проверить что все обязаловки выполнены"
+      - step: "Оценить риски задачи"
+      - step: "Зафиксировать решение"
+    next_recommendation: "Перейди к Phase 1 — Preflight"
+
   # ── Phase 0.5: Jira Transition ─────────────────────────────────────
   - id: "0.5"
     name: "Jira Transition"
