@@ -16,7 +16,7 @@
       <td class="phase-id">{{ t.task_id }}</td>
       <td>{{ t.message_count }}</td>
       <td>{{ t.phases|length }}</td>
-      <td><a href="/task/{{ t.task_id }}">История &rarr;</a></td>
+      <td><a href="/wizard/{{ t.jira_key }}">Wizard &rarr;</a> <a href="/answers/{{ t.jira_key }}">Ответы &rarr;</a> <a href="/task/{{ t.task_id }}">История &rarr;</a></td>
     </tr>
     {% endfor %}
   </table>

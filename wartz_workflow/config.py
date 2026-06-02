@@ -10,17 +10,16 @@ SUITES_DIR = "/root/.hermes/skills/software-development"
 PHASE_ORDER = [
     "-1",      # Task Intake
     "0.0a",    # Suite Verification (BLOCKER)
-    "0.0",     # Tool Verification
-    "0.00",    # Git Identity
-    "0.000",   # Workspace
     "0.01",    # Task Docs Setup
     "0.01a",   # .gitignore Check (BLOCKER)
     "0.01b",   # Token Verification (BLOCKER)
     "0",       # Jira Init
-    "0.5",     # Jira Transition
-    "0.6",     # Researcher #1
+    "0.00",    # Git Identity
+    "0.000",   # Workspace
     "0.7",     # Repo Sync
     "0.9",     # CriticGate-0.9
+    "0.5",     # Jira Transition
+    "0.6",     # Researcher #1
     "1",       # Preflight
     "1.5",     # Deep Research
     "2",       # Research Synthesis
@@ -38,6 +37,7 @@ PHASE_ORDER = [
     "7.7",     # CriticGate-PostQA
     "8",       # Jira Done
     "9",       # Retro
+    "10",      # Auto-Improve
 ]
 
 # BLOCKER фазы — если FAIL, workflow останавливается

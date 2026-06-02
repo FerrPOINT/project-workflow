@@ -28,6 +28,18 @@ class Message:
     tags: Optional[str] = None   # comma-separated tags: done,fail,changelog,auto
     created_at: str = ""  # ISO UTC
 
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "task_id": self.task_id,
+            "jira_key": self.jira_key,
+            "role": self.role,
+            "content": self.content,
+            "phase_id": self.phase_id,
+            "tags": self.tags,
+            "created_at": self.created_at,
+        }
+
 
 # ── DB init ───────────────────────────────────────────────────────────
 
