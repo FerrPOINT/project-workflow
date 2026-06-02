@@ -1,0 +1,634 @@
+# WARTZ Workflow — Declarative Phase Schema v1.0.0
+# Этот файл = единый источник истины для всех фаз.
+# CLI читает его и генерирует чеклисты, инструкции, команды.
+
+phases:
+
+  # ── Phase -1: Task Intake ──────────────────────────────────────────
+  - id: "-1"
+    name: "Task Intake"
+    description: "Понять задачу из Jira до начала работы"
+    min_time_min: 1
+    skills:
+      - workflow-jira-operator
+    checks:
+      - type: jira_accessible
+        description: Jira тикет доступен
+        fail_msg: "Jira тикет недоступен — проверь ключ"
+    evidence:
+      - item: "Скриншот/копия Jira тикета (summary, description, AC)"
+      - item: "Записано в requirements.md"
+    instructions:
+      - step: "Открыть Jira тикет {jira_key}"
+      - step: "Скопировать Summary → requirements.md"
+      - step: "Извлечь Acceptance Criteria → test-cases.md"
+      - step: "Проверить assignee — должен быть назначен на тебя"
+    next_recommendation: "Перейди к Phase 0.0a — verify-suite.sh"
+
+  # ── Phase 0.0a: Suite Verification ────────────────────────────────
+  - id: "0.0a"
+    name: "Suite Verification"
+    description: "Проверить что все skills на месте перед началом"
+    min_time_min: 2
+    is_blocker: true
+    checks:
+      - type: script_pass
+        description: verify-suite.sh проходит
+        command: "bash {verify_suite_script}"
+        fail_msg: "verify-suite.sh FAILED — исправь перед продолжением"
+      - type: env_var
+        description: JIRA_ACCESS_TOKEN или JIRA_TOKEN задан
+        expected: ["JIRA_ACCESS_TOKEN", "JIRA_TOKEN"]
+        fail_msg: "Jira token отсутствует — экспортируй JIRA_ACCESS_TOKEN"
+      - type: env_var
+        description: GLAB_TOKEN задан
+        expected: ["GLAB_TOKEN"]
+        fail_msg: "GitLab token отсутствует — экспортируй GLAB_TOKEN"
+    evidence:
+      - item: "Вывод verify-suite.sh (последние 20 строк)"
+    instructions:
+      - step: "Запустить verify-suite.sh в репо"
+        example: "bash ~/.hermes/skills/software-development/hr-recruiter-workflow-suite/scripts/verify-suite.sh"
+      - step: "Если FAIL — читай ошибку, исправляй, повторяй"
+      - step: "Если WARNINGS — оцени критичность, большинство можно игнорировать"
+    next_recommendation: "Перейди к Phase 0.01 — создать task docs"
+
+  # ── Phase 0.01: Task Docs Setup ────────────────────────────────────
+  - id: "0.01"
+    name: "Task Docs Setup"
+    description: "Создать info/ папку задачи с mandatory файлами"
+    min_time_min: 2
+    checks:
+      - type: file_exists
+        description: "info/ есть в .gitignore"
+        path: ".gitignore"
+        fail_msg: "Добавь info/ в .gitignore"
+      - type: dir_exists
+        description: "Папка info/sprintN/NNN_task-* создана"
+    evidence:
+      - item: "Путь к task dir записан в state"
+      - item: "Все 5 mandatory файлов созданы: progress.json, requirements.md, current-stage.md, changelog.md, test-cases.md"
+    instructions:
+      - step: "Определить sprint (sprint4, sprint5...)"
+      - step: "Найти следующий номер в info/{sprint}/"
+        example: "ls info/sprint4/ | sort"
+      - step: "Создать папку {NNN}_{task_id}"
+      - step: "Создать progress.json с 30 фазами"
+      - step: "Заполнить requirements.md из Jira"
+      - step: "Заполнить test-cases.md (TDD — ДО кода)"
+    next_recommendation: "Перейди к Phase 0.01a — .gitignore check"
+
+  # ── Phase 0.01a: .gitignore Check ──────────────────────────────────
+  - id: "0.01a"
+    name: ".gitignore Check"
+    description: "Убедиться что info/ не попадёт в git"
+    min_time_min: 1
+    is_blocker: true
+    checks:
+      - type: file_exists
+        description: ".gitignore содержит info/"
+        path: ".gitignore"
+        fail_msg: "CRITICAL: info/ не в .gitignore — task docs утекут в репо"
+    evidence:
+      - item: "grep info/ .gitignore"
+    instructions:
+      - step: "Проверить grep info/ .gitignore"
+      - step: "Если нет — echo 'info/' >> .gitignore"
+    next_recommendation: "Перейди к Phase 0.01b — token verification"
+
+  # ── Phase 0.01b: Token Verification ────────────────────────────────
+  - id: "0.01b"
+    name: "Token Verification"
+    description: "Jira и GitLab токены рабочие"
+    min_time_min: 1
+    is_blocker: true
+    checks:
+      - type: api_ping
+        description: "Jira API отвечает"
+        fail_msg: "Jira API недоступен — проверь токен"
+      - type: api_ping
+        description: "GitLab API отвечает"
+        fail_msg: "GitLab API недоступен — проверь GLAB_TOKEN"
+    evidence:
+      - item: "Вывод whoami Jira"
+      - item: "Вывод whoami GitLab"
+    instructions:
+      - step: "Проверить Jira API: curl -u $JIRA_USER:$JIRA_ACCESS_TOKEN {jira_url}/rest/api/2/myself"
+      - step: "Проверить GitLab API: curl -H 'Authorization: Bearer $GLAB_TOKEN' {gitlab_url}/api/v4/user"
+    next_recommendation: "Перейди к Phase 0 — Jira Init"
+
+  # ── Phase 0: Jira Init ─────────────────────────────────────────────
+  - id: "0"
+    name: "Jira Init"
+    description: "Прочитать Jira тикет, зафиксировать в requirements.md"
+    min_time_min: 3
+    skills:
+      - workflow-jira-operator
+    checks:
+      - type: file_exists
+        description: "requirements.md содержит AC из Jira"
+        path: "info/{sprint}/{task_dir}/requirements.md"
+        fail_msg: "requirements.md пуст — скопируй AC из Jira"
+    evidence:
+      - item: "requirements.md с AC"
+    instructions:
+      - step: "Прочитать Jira тикет через wartz-jira или curl"
+      - step: "Записать в requirements.md: Summary, Description, AC"
+      - step: "Если есть скриншоты из Jira — приложить к requirements.md"
+    next_recommendation: "Перейди к Phase 0.5 — Jira Transition"
+
+  # ── Phase 0.5: Jira Transition ─────────────────────────────────────
+  - id: "0.5"
+    name: "Jira Transition"
+    description: "Перевести тикет в 'В работе'"
+    min_time_min: 1
+    skills:
+      - workflow-jira-operator
+    checks:
+      - type: jira_status
+        description: "Jira статус = 'В работе' или аналог"
+        expected: ["В работе", "In Progress"]
+        fail_msg: "Тикет не переведён в 'В работе'"
+    evidence:
+      - item: "Скриншот статуса Jira"
+      - item: "Запись в changelog.md"
+    instructions:
+      - step: "wartz-jira issue transition {jira_key} --no-arg чтобы увидеть transitions"
+      - step: "wartz-jira issue transition {jira_key} 'В работе'"
+      - step: "Зафиксировать в changelog.md"
+    next_recommendation: "Запускай Phase 0.6 (Researcher) ПАРАЛЛЕЛЬНО с Phase 1 (Preflight)"
+
+  # ── Phase 0.6: Researcher #1 ───────────────────────────────────────
+  - id: "0.6"
+    name: "Researcher #1"
+    description: "Dataflow исследование — что уже есть в коде"
+    min_time_min: 5
+    is_delegated: true
+    parallel_with: "1"
+    skills:
+      - workflow-code-intelligence
+      - workflow-java-frontend-contract-sync
+    delegate:
+      agent: wartzresearcher
+      prompt_template: |
+        Задача: {jira_key} / {task_id} — {title}
+        Разбей на значимые элементы (механизм, сущности, маппинги, UI).
+        По каждому найди в коде: где определено, dataflow, образцы аналогичных фич, проблемы.
+        Репозитории: business-back, recruiter-front, candidate-front, relevanter-back, ai-recruiter-back, messaging-back, shared.
+      toolsets: [search, file, terminal]
+      timeout_min: 15
+    evidence:
+      - item: "Research report (файл или summary)"
+      - item: "project-knowledge.md обновлён"
+    instructions:
+      - step: "delegate_task(goal='исследование контекста', context='задача: {title}')"
+      - step: "Дождаться COMPLETE"
+      - step: "Прочитать результаты — использовать как шаблон"
+    next_recommendation: "Когда Researcher #1 + Preflight готовы → Phase 2 (Synthesis)"
+
+  # ── Phase 1: Preflight ─────────────────────────────────────────────
+  - id: "1"
+    name: "Preflight"
+    description: "Определить репо, ветку, синхронизировать"
+    min_time_min: 10
+    skills:
+      - workflow-hr-recruiter-project
+      - workflow-gitlab-mr-workflow
+    checks:
+      - type: git_branch
+        description: "Ветка от develop, названа TASKNEIROKLYUCH-*"
+      - type: git_sync
+        description: "git pull origin develop без конфликтов"
+    evidence:
+      - item: "git branch показывает правильную ветку"
+      - item: "git log показывает что develop актуален"
+    instructions:
+      - step: "git checkout develop"
+      - step: "git pull origin develop"
+      - step: "git checkout -b {task_id}-short-desc"
+      - step: "git push -u origin {branch}"
+    next_recommendation: "Запускай Phase 1.5 (Deep Research) ПАРАЛЛЕЛЬНО"
+
+  # ── Phase 1.5: Deep Research ───────────────────────────────────────
+  - id: "1.5"
+    name: "Deep Research"
+    description: "Архитектура, API, types, existing реализации"
+    min_time_min: 5
+    is_delegated: true
+    parallel_with: "2"
+    skills:
+      - workflow-code-intelligence
+    delegate:
+      agent: wartzresearcher
+      prompt_template: |
+        Глубокое исследование для {jira_key}.
+        Найди: архитектуру, API endpoints, DTO/TypeScript types, бизнес-логику.
+        Проверь existing реализации аналогичных фич.
+        Не пиши код — только собери информацию.
+      toolsets: [search, file, terminal]
+      timeout_min: 20
+    evidence:
+      - item: "Architecture summary"
+      - item: "API contract references"
+      - item: "Existing feature samples"
+    next_recommendation: "Когда Deep Research + Synthesis готовы → Phase 3 (Plan)"
+
+  # ── Phase 2: Research Synthesis ────────────────────────────────────
+  - id: "2"
+    name: "Research Synthesis"
+    description: "Систематизировать findings из 0.6 и 1.5"
+    min_time_min: 10
+    checks:
+      - type: file_exists
+        description: "research.md или аналогичный документ с findings"
+    evidence:
+      - item: "Сводная таблица: механизм → файл → dataflow"
+    instructions:
+      - step: "Прочитать результаты Researcher #1"
+      - step: "Прочитать результаты Deep Research"
+      - step: "Систематизировать в таблицу или список"
+      - step: "Выявить потенциальные проблемы"
+    next_recommendation: "Перейди к Phase 3 — написать план"
+
+  # ── Phase 3: Plan ──────────────────────────────────────────────────
+  - id: "3"
+    name: "Plan"
+    description: "Написать детальный план реализации"
+    min_time_min: 15
+    skills:
+      - workflow-writing-plans
+    checks:
+      - type: file_exists
+        description: "PLAN.md или аналогичный документ с планом"
+        fail_msg: "План не написан — не начинай код"
+    evidence:
+      - item: "PLAN.md с чеклистом подзадач (минимум 5)"
+      - item: "Оценка времени по каждой подзадаче"
+    instructions:
+      - step: "Написать PLAN.md"
+      - step: "Минимум 5 подзадач с чекбоксами"
+      - step: "Указать файлы которые затронут"
+      - step: "Оценить время"
+    gate_after: "3.5"
+    next_recommendation: "Перейди к Phase 3.5 — CriticGate PrePlan"
+
+  # ── Phase 3.5: CriticGate-PrePlan ──────────────────────────────────
+  - id: "3.5"
+    name: "CriticGate-PrePlan"
+    description: "Ревью плана перед реализацией"
+    min_time_min: 5
+    is_delegated: true
+    is_critic: true
+    rollback_target: "3"
+    skills:
+      - workflow-team-critic
+    delegate:
+      agent: wartzcritic
+      prompt_template: |
+        Проверь PLAN.md для {jira_key}.
+        Критерии: полнота, риски, неочевидные зависимости, соответствие dataflow.
+        Severity: BLOCKER если критичный недостаток.
+      toolsets: [file, search]
+      timeout_min: 10
+    checks:
+      - type: gate_passed
+        description: "CriticGate дал PASS или FAIL с обоснованием"
+        fail_msg: "CriticGate BLOCKER — переделай план"
+    evidence:
+      - item: "CriticGate report (PASS/WARN/INFO)"
+    next_recommendation: "Если PASS → Phase 4 (Implement). Если FAIL → вернись к Phase 3."
+
+  # ── Phase 4: Implement ─────────────────────────────────────────────
+  - id: "4"
+    name: "Implement"
+    description: "Реализовать по плану"
+    min_time_min: 30
+    skills:
+      - workflow-java-spring-boot-development
+      - workflow-java-frontend-contract-sync
+    checks:
+      - type: file_modified
+        description: "Код написан по плану"
+    evidence:
+      - item: "current-stage.md обновлён после каждого checkpoint"
+      - item: "changelog.md — ревизия после значимого этапа"
+    instructions:
+      - step: "TDD: тесты ДО кода"
+      - step: "Реализовать по PLAN.md пошагово"
+      - step: "После каждого checkpoint — обновить current-stage.md"
+      - step: "Если план меняется — новая ревизия в changelog.md"
+    gate_after: "4.5"
+    next_recommendation: "Перейди к Phase 4.5 — CriticGate PreCommit"
+
+  # ── Phase 4.5: CriticGate-PreCommit ────────────────────────────────
+  - id: "4.5"
+    name: "CriticGate-PreCommit"
+    description: "Ревью кода перед коммитом"
+    min_time_min: 5
+    is_delegated: true
+    is_critic: true
+    rollback_target: "4"
+    skills:
+      - workflow-team-critic
+    delegate:
+      agent: wartzcritic
+      prompt_template: |
+        Проверь код для {jira_key} НЕ закоммиченный код.
+        Критерии: стиль, безопасность, логика, соответствие плану.
+        Severity: BLOCKER если критичный баг или утечка.
+      toolsets: [file, search]
+      timeout_min: 10
+    checks:
+      - type: gate_passed
+        description: "CriticGate дал PASS"
+        fail_msg: "CriticGate BLOCKER — исправь код"
+    evidence:
+      - item: "CriticGate report"
+    next_recommendation: "Если PASS → Phase 5 (Validate). Если FAIL → вернись к Phase 4."
+
+  # ── Phase 5: Validate ──────────────────────────────────────────────
+  - id: "5"
+    name: "Validate"
+    description: "Линтер, типы, unit тесты"
+    min_time_min: 10
+    checks:
+      - type: script_pass
+        description: "Линтер без ошибок"
+        command: "npm run lint || echo 'no lint'"
+        optional: true
+      - type: script_pass
+        description: "Типы проверены"
+        command: "npx tsc --noEmit || echo 'no tsc'"
+        optional: true
+      - type: script_pass
+        description: "Unit tests PASS"
+        command: "npm test"
+    evidence:
+      - item: "Вывод линтера (0 errors)"
+      - item: "Вывод тестов (all pass)"
+    instructions:
+      - step: "npm run lint или аналог"
+      - step: "npx tsc --noEmit или аналог"
+      - step: "npm test или аналог"
+      - step: "Исправить все FAIL перед продолжением"
+    next_recommendation: "Перейди к Phase 5.5 — Self-Test"
+
+  # ── Phase 5.5: Self-Test ───────────────────────────────────────────
+  - id: "5.5"
+    name: "Self-Test"
+    description: "E2E, скриншоты, ручное тестирование"
+    min_time_min: 15
+    skills:
+      - workflow-react-playwright-testing
+    checks:
+      - type: file_exists
+        description: "Скриншоты UI (если фронт)"
+        optional: true
+      - type: script_pass
+        description: "E2E тесты (если есть)"
+        command: "npm run e2e || echo 'no e2e'"
+        optional: true
+    evidence:
+      - item: "Скриншоты UI изменений"
+      - item: "Результаты ручного тестирования edge cases"
+    instructions:
+      - step: "Если фронт — сделать скриншоты до/после"
+      - step: "Протестировать edge cases вручную"
+      - step: "Запустить E2E если есть"
+    next_recommendation: "Перейди к Phase 6 — Commit"
+
+  # ── Phase 6: Commit ──────────────────────────────────────────────────
+  - id: "6"
+    name: "Commit"
+    description: "git commit, push"
+    min_time_min: 3
+    skills:
+      - workflow-gitlab-mr-workflow
+    checks:
+      - type: git_commit
+        description: "Commit содержит task_id в сообщении"
+      - type: git_remote
+        description: "Branch pushed to origin"
+    evidence:
+      - item: "git log --oneline (показывает commit)"
+      - item: "git status clean"
+    instructions:
+      - step: "git add только нужные файлы"
+      - step: "git commit -m '{task_id}: краткое описание'"
+      - step: "git push --set-upstream origin {branch}"
+    next_recommendation: "Перейди к Phase 7 — MR Draft"
+
+  # ── Phase 7: MR Draft ──────────────────────────────────────────────
+  - id: "7"
+    name: "MR Draft"
+    description: "Создать MR через GitLab UI"
+    min_time_min: 5
+    skills:
+      - workflow-gitlab-mr-workflow
+    checks:
+      - type: gitlab_mr
+        description: "MR создан и открыт"
+      - type: file_exists
+        description: "MR description содержит чеклист"
+    evidence:
+      - item: "URL MR записан в changelog.md"
+      - item: "Скриншот MR description с чеклистом"
+    instructions:
+      - step: "Создать MR через GitLab UI (НЕ автоматически)"
+      - step: "Заполнить description: What, Why, How, Checklist"
+      - step: "Прикрепить скриншоты к MR"
+      - step: "Назначить reviewer"
+    next_recommendation: "Запускай Phase 7.5 (Code Review) и 7.6 (QA) ПАРАЛЛЕЛЬНО"
+
+  # ── Phase 7.5: Code Review Gate ────────────────────────────────────
+  - id: "7.5"
+    name: "Code Review"
+    description: "Ревью кода другим агентом"
+    min_time_min: 10
+    is_delegated: true
+    parallel_with: "7.6"
+    rollback_target: "4"
+    skills:
+      - workflow-gitlab-code-review
+      - workflow-requesting-code-review
+    delegate:
+      agent: wartzreviewer
+      prompt_template: |
+        Ревью MR для {jira_key}.
+        Проверь: стиль, безопасность, логика, тесты, edge cases.
+        Дай APPROVED или список замечаний.
+      toolsets: [search, file, terminal]
+      timeout_min: 15
+      max_cycles: 3
+    evidence:
+      - item: "Review report (APPROVED / замечания)"
+    instructions:
+      - step: "delegate_task(goal='code review')"
+      - step: "Дождаться COMPLETE"
+      - step: "Если замечания — исправить и обновить MR"
+    next_recommendation: "Жди Phase 7.6 (QA) тоже"
+
+  # ── Phase 7.6: QA Testing Gate ─────────────────────────────────────
+  - id: "7.6"
+    name: "QA Testing"
+    description: "Функциональное тестирование"
+    min_time_min: 10
+    is_delegated: true
+    parallel_with: "7.5"
+    rollback_target: "4"
+    skills:
+      - workflow-react-playwright-testing
+    delegate:
+      agent: wartzreviewer
+      prompt_template: |
+        QA тестирование для {jira_key}.
+        Функциональное тестирование, проверка на тестовом стенде.
+        Зафиксировать результаты.
+      toolsets: [browser, terminal]
+      timeout_min: 15
+      max_cycles: 3
+    evidence:
+      - item: "QA report (PASS/FAIL с деталями)"
+    instructions:
+      - step: "delegate_task(goal='QA testing')"
+      - step: "Дождаться COMPLETE"
+    gate_after: "7.7"
+    next_recommendation: "Когда Code Review + QA готовы → Phase 7.7 (CriticGate PostQA)"
+
+  # ── Phase 7.6.R: DVR ───────────────────────────────────────────────
+  - id: "7.6.R"
+    name: "DVR"
+    description: "Dataflow Verification Report"
+    min_time_min: 5
+    is_delegated: true
+    parallel_with: "7.6"
+    skills:
+      - workflow-code-intelligence
+    delegate:
+      agent: wartzresearcher
+      prompt_template: |
+        DVR для {jira_key}: проверь что реализация соответствует изначальному dataflow.
+        Сравни: что было запланировано vs что реализовано.
+        Severity: WARN если discrepancies.
+      toolsets: [search, file]
+      timeout_min: 10
+    evidence:
+      - item: "DVR report (DATAFLOW_OK / discrepancies)"
+    instructions:
+      - step: "delegate_task(goal='dataflow verification')"
+      - step: "Дождаться COMPLETE"
+    next_recommendation: "Перейди к Phase 7.7 — CriticGate PostQA"
+
+  # ── Phase 7.7: CriticGate-PostQA ──────────────────────────────────
+  - id: "7.7"
+    name: "CriticGate-PostQA"
+    description: "Финальный gate перед merge"
+    min_time_min: 5
+    is_delegated: true
+    is_critic: true
+    skills:
+      - workflow-team-critic
+    delegate:
+      agent: wartzcritic
+      prompt_template: |
+        Финальный gate для {jira_key}.
+        Проверь: Code Review PASS, QA PASS, DVR DATAFLOW_OK.
+        Severity: BLOCKER если любой из трёх FAIL.
+      toolsets: [file]
+      timeout_min: 5
+    checks:
+      - type: gate_passed
+        description: "CriticGate дал PASS"
+        fail_msg: "CriticGate BLOCKER — задача не готова к merge"
+    evidence:
+      - item: "CriticGate report (PASS/WARN)"
+    next_recommendation: "Если PASS → Phase 8 (Merge Advisory). Если FAIL → вернись к Phase 4."
+
+  # ── Phase 8: Jira Done ─────────────────────────────────────────────
+  - id: "8"
+    name: "Jira Done"
+    description: "Перевести Jira в 'Выполнено', прикрепить MR"
+    min_time_min: 2
+    skills:
+      - workflow-jira-operator
+      - workflow-production-systems-reliability
+    delegate:
+      agent: "wartzops"
+      prompt_template: |
+        Закрытие задачи {jira_key}. Проверь что MR смержен, переведи Jira в 'Выполнено', 
+        прикрепи ссылку на MR. Зафиксируй в changelog.md.
+      toolsets: ["jira", "terminal"]
+      timeout_min: 10
+    checks:
+      - type: jira_status
+        description: "Jira статус = 'Выполнено' или аналог"
+        expected: ["Выполнено", "Done"]
+        fail_msg: "Тикет не переведён в 'Выполнено'"
+      - type: gitlab_mr
+        description: "MR смержен (код в develop)"
+        fail_msg: "MR не смержен — задача не завершена"
+    evidence:
+      - item: "Скриншот Jira 'Выполнено'"
+      - item: "git log develop --grep {task_id} показывает commit"
+    instructions:
+      - step: "Проверить что MR смержен через GitLab UI"
+      - step: "wartz-jira issue transition {jira_key} 'Выполнено'"
+      - step: "Добавить ссылку на MR в комментарий Jira"
+      - step: "Зафиксировать в changelog.md"
+    next_recommendation: "Перейди к Phase 9 — Retro"
+
+  # ── Phase 9: Retro ─────────────────────────────────────────────────
+  - id: "9"
+    name: "Retro"
+    description: "Ретроспектива, метрики, project-knowledge"
+    min_time_min: 10
+    is_delegated: true
+    skills:
+      - workflow-production-systems-reliability
+    delegate:
+      agent: wartzcoder
+      prompt_template: |
+        Ретро для {jira_key}.
+        Метрики: время, tool calls, токены, quality ratio.
+        Сравнение solo vs delegate.
+        Обнови project-knowledge.md.
+      toolsets: [file, search]
+      timeout_min: 10
+    evidence:
+      - item: "Retro report (что сработало, что нет)"
+      - item: "project-knowledge.md обновлён"
+    instructions:
+      - step: "delegate_task(goal='ретро')"
+      - step: "Собрать метрики из логов"
+      - step: "Сравнить solo vs delegate effectiveness"
+      - step: "Обновить project-knowledge.md"
+    next_recommendation: "Workflow завершён. Следующая задача: hrflow init ..."
+
+  # ── Phase 10: Auto-Improve ───────────────────────────────────────────
+  - id: "10"
+    name: "Auto-Improve"
+    description: "Сгенерировать Improvement Proposals из retro"
+    min_time_min: 5
+    checks:
+      - type: file_exists
+        description: "IP записан в wiki или task docs"
+        optional: true
+    evidence:
+      - item: "IP list (если есть)"
+    instructions:
+      - step: "Если retro выявил проблемы workflow — записать IP"
+      - step: "Если IP критичный — bump workflow version"
+    next_recommendation: "Конец workflow"
+
+# ── Schema metadata ────────────────────────────────────────────────────
+version: "1.0.0"
+workflow_version: "1.9.16"
+total_phases: 30
+blocker_phases: ["0.0a", "0.01a", "0.01b"]
+delegated_phases: ["0.6", "0.9", "1.5", "3.5", "4.5", "7.5", "7.6", "7.6.R", "7.7", "9"]
+critic_phases: ["0.9", "3.5", "4.5", "7.7"]
+parallel_pairs:
+  - ["0.6", "1"]
+  - ["1.5", "2"]
+  - ["7.5", "7.6"]
+  - ["7.6", "7.6.R"]
