@@ -50,9 +50,15 @@ class WizardEngine:
         self.all_phases = schema.load_phases()
         self.phase_map = {p.id: p for p in self.all_phases}
 
-    # ── Public API ──────────────────────────────────────────────────────
-
     def run(self) -> None:
+        # Проверка ключа перед запуском
+        from . import task_validator
+        validated = task_validator.validate(self.jira_key)
+        if not validated.is_valid:
+            console.print(f"[red]❌ Invalid task key '{self.jira_key}': {validated.error_message}[/red]")
+            console.print("[dim]Expected formats: PROJECT-NUMBER (e.g. AAT-123, TASKNEIROKLYUCH-42)[/dim]")
+            return
+
         self._show_banner()
 
         while True:

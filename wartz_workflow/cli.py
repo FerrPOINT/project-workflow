@@ -13,7 +13,7 @@ from rich.table import Table
 from rich import box
 
 from . import state, phases, verify, jira_gitlab, engine, schema, profiles, jobs, rollback
-from . import wizard, conversation
+from . import wizard, conversation, task_validator
 from .config import PHASE_ORDER
 
 console = Console()
@@ -27,6 +27,15 @@ BLOCK = "[red]🔴[/red]"
 def out_json(data: dict[str, Any]) -> None:
     click.echo(json.dumps(data, indent=2, ensure_ascii=False))
     sys.exit(0 if data.get("ok", True) else 1)
+
+def _require_valid_key(jira_key: str) -> str:
+    """Проверить валидность ключа задачи. Вернуть normalized или выбросить Abort."""
+    validated = task_validator.validate(jira_key)
+    if not validated.is_valid:
+        console.print(f"{FAIL} [bold red]Invalid task key:[/bold red] {validated.error_message}")
+        raise click.Abort()
+    return validated.normalized or jira_key
+
 
 
 # ── CLI root ────────────────────────────────────────────────────────────
@@ -51,6 +60,7 @@ def cli(ctx: click.Context, json_mode: bool) -> None:
 @click.option("--repo", default="/opt/dev/hr-recruiter/recruiter-front", help="Repo path")
 @click.pass_context
 def init(ctx: click.Context, jira_key: str, task_id: str, title: str, sprint: str, repo: str) -> None:
+    jira_key = _require_valid_key(jira_key)
     """Инициализация новой задачи."""
     jmode = ctx.obj.get("json_mode", False)
     result: Dict[str, Any] = {"ok": True, "jira_key": jira_key, "task_id": task_id, "checks": []}
@@ -108,6 +118,7 @@ def init(ctx: click.Context, jira_key: str, task_id: str, title: str, sprint: st
 @click.argument("phase_name")
 @click.pass_context
 def phase(ctx: click.Context, jira_key: str, phase_name: str) -> None:
+    jira_key = _require_valid_key(jira_key)
     """Выполнить конкретную фазу."""
     jmode = ctx.obj.get("json_mode", False)
     repo = state.find_repo(jira_key)
@@ -197,6 +208,7 @@ def phase(ctx: click.Context, jira_key: str, phase_name: str) -> None:
 @click.option("--repo", help="Path к репозиторию (опционально)")
 @click.pass_context
 def next(ctx: click.Context, jira_key: str, repo: Optional[str]) -> None:
+    jira_key = _require_valid_key(jira_key)
     """Запустить wizard для текущей фазы (= 'hrflow wizard TASK-KEY')."""
     jmode = ctx.obj.get("json_mode", False)
     if jmode:
@@ -210,6 +222,7 @@ def next(ctx: click.Context, jira_key: str, repo: Optional[str]) -> None:
 @click.argument("jira_key")
 @click.pass_context
 def status(ctx: click.Context, jira_key: str) -> None:
+    jira_key = _require_valid_key(jira_key)
     """Текущий статус задачи."""
     jmode = ctx.obj.get("json_mode", False)
     repo = state.find_repo(jira_key)
@@ -264,6 +277,7 @@ def status(ctx: click.Context, jira_key: str) -> None:
 @click.argument("phase_name")
 @click.pass_context
 def playbook(ctx: click.Context, jira_key: str, phase_name: str) -> None:
+    jira_key = _require_valid_key(jira_key)
     """Получить playbook для конкретной фазы."""
     jmode = ctx.obj.get("json_mode", False)
 
@@ -331,6 +345,7 @@ def playbook(ctx: click.Context, jira_key: str, phase_name: str) -> None:
 @click.argument("jira_key")
 @click.pass_context
 def verify_cmd(ctx: click.Context, jira_key: str) -> None:
+    jira_key = _require_valid_key(jira_key)
     """Запустить verify-suite.sh для задачи."""
     jmode = ctx.obj.get("json_mode", False)
     repo = state.find_repo(jira_key)
@@ -381,6 +396,7 @@ def list_phases(ctx: click.Context) -> None:
 @click.argument("jira_key")
 @click.pass_context
 def merge_check(ctx: click.Context, jira_key: str) -> None:
+    jira_key = _require_valid_key(jira_key)
     """Проверить что MR смержен и код в develop."""
     jmode = ctx.obj.get("json_mode", False)
     repo = state.find_repo(jira_key)
@@ -461,6 +477,7 @@ def check_env(ctx: click.Context) -> None:
 @click.argument("jira_key")
 @click.pass_context
 def next_step(ctx: click.Context, jira_key: str) -> None:
+    jira_key = _require_valid_key(jira_key)
     """Что агенту делать дальше (playbook следующей фазы)."""
     jmode = ctx.obj.get("json_mode", False)
     repo = state.find_repo(jira_key)
@@ -788,6 +805,7 @@ def jobs_cmd(ctx: click.Context, jira_key: str) -> None:
 @click.option("--reason", default="QA found bugs / Review rejected", show_default=True, help="Причина rollback")
 @click.pass_context
 def rollback_cmd(ctx: click.Context, jira_key: str, phase_name: str, reason: str) -> None:
+    jira_key = _require_valid_key(jira_key)
     """Откатить задачу с phase_name к rollback_target с очисткой checkpoints.
 
     Пример:
@@ -885,6 +903,7 @@ def rollback_cmd(ctx: click.Context, jira_key: str, phase_name: str, reason: str
 @click.option("--task-id", help="Task ID (default from state)")
 @click.pass_context
 def note(ctx: click.Context, jira_key: str, content: str, task_id: Optional[str]) -> None:
+    jira_key = _require_valid_key(jira_key)
     """Записать отчёт в историю задачи: hrflow note TASK-123 \"сделал X\""""
     jmode = ctx.obj.get("json_mode", False)
     repo = state.find_repo(jira_key)
@@ -909,6 +928,7 @@ def note(ctx: click.Context, jira_key: str, content: str, task_id: Optional[str]
 @click.option("--repo", default=None, help="Repo path (auto-detected if omitted)")
 @click.pass_context
 def wizard_cmd(ctx: click.Context, jira_key: str, repo: Optional[str]) -> None:
+    jira_key = _require_valid_key(jira_key)
     """🧙 Interactive wizard — phase-by-phase workflow assistant.
 
     Usage: hrflow wizard TASKNEIROKLYUCH-456

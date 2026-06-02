@@ -23,7 +23,7 @@ class TestListPhases:
 class TestStatus:
     def test_nonexistent_json(self):
         """Несуществующая задача возвращает JSON ошибку."""
-        result = runner.invoke(cli, ["--json", "status", "AAT-NONEXISTENT"])
+        result = runner.invoke(cli, ["--json", "status", "AAT-99999"])
         assert result.exit_code == 1
         assert '"ok": false' in result.output
 
@@ -38,7 +38,7 @@ class TestCheckEnv:
 
 class TestNextStep:
     def test_nonexistent_json(self):
-        result = runner.invoke(cli, ["--json", "next-step", "AAT-NONEXISTENT"])
+        result = runner.invoke(cli, ["--json", "next-step", "AAT-99999"])
         assert result.exit_code == 1
         assert '"ok": false' in result.output
         assert "error" in result.output
