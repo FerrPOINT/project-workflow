@@ -13,13 +13,8 @@ from rich.table import Table
 from rich import box
 
 from .. import state, phases, verify, engine, schema
-from ..adapters.http.jira import JiraAdapter
-from ..adapters.http.gitlab import GitLabAdapter
 from ..cli.core import cli, out_json, _require_valid_key
 from ..cli.core import console, PASS, FAIL, WARN, BLOCK
-
-_jira = JiraAdapter()
-_gitlab = GitLabAdapter()
 
 
 @cli.command()
@@ -162,8 +157,6 @@ def merge_check(ctx: click.Context, jira_key: str) -> None:
     current = state.load_state(repo, jira_key)
     task_id = current.get("task_id", "") if current else ""
 
-    mr_state = _gitlab.search_merge_requests(task_id) if task_id else None
-
     result = subprocess.run(
         ["git", "log", "--oneline", "--grep", task_id, "develop"],
         cwd=repo, capture_output=True, text=True,
@@ -174,16 +167,11 @@ def merge_check(ctx: click.Context, jira_key: str) -> None:
         out_json({
             "ok": True,
             "task_id": task_id,
-            "mr_state": mr_state,
             "commit_in_develop": commit_found,
             "commit_log": result.stdout.strip()[:200] if commit_found else None,
-            "merged": commit_found and (mr_state.get("state") == "merged" if mr_state else False),
         })
 
     console.print(f"[bold]🔍 Проверка merge для {task_id}[/bold]")
-    if mr_state:
-        console.print(f"MR статус: {mr_state.get('state', 'unknown')}")
-        console.print(f"Merged by: {mr_state.get('merged_by') or '❌ NOT MERGED'}")
     if commit_found:
         console.print(f"{PASS} Commit найден в develop:")
         console.print(result.stdout[:200])
@@ -205,8 +193,6 @@ def check_env(ctx: click.Context) -> None:
         "gitignore": verify.check_gitignore("/opt/dev/hr-recruiter/recruiter-front"),
         "tokens": verify.check_tokens(),
         "git_identity": verify.check_git_identity(),
-        "jira_api": _jira.ping(),
-        "gitlab_api": _gitlab.ping(),
     }
 
     all_ok = all(r[0] for r in results.values())

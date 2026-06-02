@@ -13,13 +13,8 @@ from rich.table import Table
 from rich import box
 
 from .. import state, phases, conversation
-from ..adapters.http.jira import JiraAdapter
-from ..adapters.http.gitlab import GitLabAdapter
 from ..cli.core import cli, out_json, _require_valid_key
 from ..cli.core import console, PASS, FAIL, WARN, BLOCK
-
-_jira = JiraAdapter()
-_gitlab = GitLabAdapter()
 
 
 @cli.command()
@@ -43,7 +38,6 @@ def status(ctx: click.Context, jira_key: str) -> None:
         console.print(f"{FAIL} Задача не инициализирована")
         return
 
-    jira_status = _jira.get_status(jira_key)
     next_p = phases.get_next_phase(current.get("current_phase", ""))
 
     if jmode:
@@ -54,7 +48,6 @@ def status(ctx: click.Context, jira_key: str) -> None:
             "sprint": current.get("sprint"),
             "current_phase": current.get("current_phase"),
             "phases_completed": current.get("phases_completed", []),
-            "jira_status": jira_status,
             "repo": repo,
             "next_phase": next_p,
         })
@@ -66,7 +59,6 @@ def status(ctx: click.Context, jira_key: str) -> None:
     table.add_row("Task ID", current.get("task_id", "N/A"))
     table.add_row("Sprint", current.get("sprint", "N/A"))
     table.add_row("Текущая фаза", current.get("current_phase", "N/A"))
-    table.add_row("Jira статус", jira_status or "❌ API error")
     table.add_row("Репозиторий", repo)
     table.add_row("Завершено фаз", str(len(current.get("phases_completed", []))))
     console.print(table)
