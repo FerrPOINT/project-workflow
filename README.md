@@ -1,10 +1,7 @@
-<!-- ============================================
-  project-workflow-cli README
-  AI-Enabled Full-Stack Engineer — FerrPOINT
-  ============================================ -->
+<!-- project-workflow-cli README — v2.0 2026 -->
 
 <p align="center">
-  <img src="https://capsule-render.vercel.app/api?type=waving&height=180&text=project-workflow-cli&fontAlign=50&fontAlignY=35&desc=Declarative%2042-Phase%20Engine%20for%20Multi-Agent%20Development%20Workflows&descAlign=50&descAlignY=60&color=gradient&customColorList=0,2,2,5,30" alt="Header banner" />
+  <img src="https://capsule-render.vercel.app/api?type=waving&height=180&text=project-workflow-cli&fontAlign=50&fontAlignY=35&desc=Declarative%2042-Phase%20Engine%20for%20Multi-Agent%20Development%20Workflows&descAlign=50&descAlignY=60&color=gradient&customColorList=0,2,2,5,30" />
 </p>
 
 <p align="center">
@@ -25,18 +22,26 @@
 
 ---
 
+## Позиционирование
+
+CLI-инструмент для **жёсткого пофазового управления задачами разработки**. Каждая задача проходит через 42 декларативно описанные фазы (YAML), с **mandatory evidence** на каждом шаге. Поддерживает rollback-циклы, параллельное делегирование sub-агентам и dual-mode вывод.
+
+**Фокус:** контролируемый AI-agent workflow · декларативные фазы · evidence tracking · gate taxonomy · production-ready CLI.
+
+---
+
 ## ✨ Features
 
 | Feature | Description |
 |---------|-------------|
-| **Declarative Phases** | 42-phase workflow defined in `references/phases.yaml` — single source of truth |
-| **Dual-Mode CLI** | Rich tables for humans, JSON for agents (`--json`) |
-| **Gate Taxonomy** | 4 gate types: Pre-flight (PF), Revision (RV), Escalation (ES), Abort (AB) |
-| **Rollback Engine** | Automatic rollback on gate failure with cycle tracking (max 3 retries) |
-| **Parallel Delegation** | `delegate` / `delegate-batch` / `jobs` commands for multi-agent orchestration |
-| **Evidence Tracking** | Mandatory evidence per phase: commands, screenshots, test output |
-| **Context Budget** | 4-tier context discipline for LLM token management |
-| **SQLite Ready** | Atomic state persistence planned (current: JSON with cleanup) |
+| **Declarative Phases** | 42-phase workflow в `references/phases.yaml` — единый источник истины |
+| **Dual-Mode CLI** | Rich tables для людей, JSON для агентов (`--json`) |
+| **Gate Taxonomy** | 4 типа: Pre-flight (PF), Revision (RV), Escalation (ES), Abort (AB) |
+| **Rollback Engine** | Автоматический откат при gate failure с cycle tracking (max 3 retries) |
+| **Parallel Delegation** | `delegate` / `delegate-batch` / `jobs` для multi-agent orchestration |
+| **Evidence Tracking** | Обязательное подтверждение на каждой фазе: команды, скриншоты, тесты |
+| **Context Budget** | 4-tier дисциплина для управления LLM контекстом |
+| **SQLite Ready** | Atomic state persistence (планируется) |
 
 ---
 
@@ -69,7 +74,6 @@ hrflow next-step TASK-123
 hrflow rollback TASK-123 4.0 --reason "CriticGate BLOCKER: missing tests"
 hrflow delegate TASK-123 reviewer
 hrflow delegate-batch TASK-123 reviewer,qa
-critics
 hrflow jobs
 ```
 
@@ -98,40 +102,82 @@ hrflow --json rollback TASK-123 5.5 --reason "QA FAIL"
 | **Done** | 8.0 | Jira transition, completion | — |
 | **Improve** | 9.0–10.9 | Cleanup, retro, IP generation | CG-10 (self) |
 
-**Key Rules:**
-- **Entry/Exit Ritual** — mandatory checklist before entering and after exiting each phase
-- **Evidence Required** — every phase must have concrete evidence (command output, screenshot, test result)
-- **No Skip Allowed** — sequential progression only, no shortcuts
-- **Max 3 Feedback Cycles** — cycle 4 escalates to CTO
+**Ключевые правила:**
+- **Entry/Exit Ritual** — обязательный чеклист перед входом и после выхода из каждой фазы
+- **Evidence Required** — каждая фаза требует concrete evidence (вывод команды, скриншот, результат теста)
+- **No Skip Allowed** — только последовательное прохождение, нет shortcuts
+- **Max 3 Feedback Cycles** — cycle 4 эскалирует к CTO
+
+```mermaid
+flowchart LR
+    subgraph Preflight["0. Preflight"]
+        P0[0.0 Tool Check] --> P06[0.6 Team Setup]
+        P06 --> P07[0.7 Repos Sync]
+        P07 --> P05[0.5 Jira In Progress]
+    end
+    subgraph Discovery["1. Discovery"]
+        D1[1.0 Preflight] --> D15[1.5 Deep Research]
+    end
+    subgraph Plan["2-3. Plan"]
+        PL2[2.0 Research] --> PL3[3.0 Plan]
+        PL3 --> PL35["3.5 CG-3 BLOCKER"]
+    end
+    subgraph Develop["4. Develop"]
+        DEV4[4.0 Implement] --> DEV45["4.5 CG-PreCommit"]
+    end
+    subgraph Validate["5. Validate"]
+        V5[5.0 Tests] --> V55["5.5 Self-Test"]
+    end
+    subgraph Review["7. Review"]
+        R7[7.0 MR Draft] --> R75["7.5 Code Review"]
+        R75 --> R76["7.6 QA Test"]
+        R76 --> R76R["7.6.R Dataflow"]
+        R76R --> R77["7.7 CG-PostQA"]
+    end
+    subgraph Done["8. Done"]
+        D8[8.0 Jira Выполнено]
+    end
+
+    Preflight --> Discovery
+    Discovery --> Plan
+    Plan --> Develop
+    Develop --> Validate
+    Validate --> Commit[6.0 Commit]
+    Commit --> Review
+    Review --> Done
+```
 
 ---
 
 ## 🏗️ Architecture
 
 ```mermaid
-graph LR
+flowchart TD
     subgraph CLI["🖥️ CLI Layer"]
-        A[Click + Rich]
-        B[--json Mode]
+        A[Human Mode / Rich]
+        B[Agent Mode / --json]
     end
-
     subgraph Engine["⚙️ Engine"]
         C[Phase Parser]
         D[State Machine]
         E[Gate Evaluator]
         F[Evidence Validator]
     end
-
     subgraph Agents["🤖 Agent Layer"]
         G[Profiles Registry]
         H[Job Tracker]
         I[Delegate Payload Generator]
     end
-
     subgraph Storage["💾 Storage"]
         J[(progress.json)]
-        K[(SQLite)]
+        K[(SQLite WAL)]
         L[(checkpoints/)]
+    end
+    subgraph External["🌐 Integrations"]
+        M[Jira REST]
+        N[GitLab REST]
+        O[Git CLI]
+        P[Env Vars]
     end
 
     A --> C
@@ -145,13 +191,17 @@ graph LR
     D --> J
     D --> K
     E --> L
+    D --> M
+    D --> N
+    D --> O
+    D --> P
 ```
 
 ### Module Structure
 
 ```
 wartz_workflow/
-├── cli.py              # Click CLI with dual output (Rich + JSON)
+├── cli.py              # Click CLI с dual output (Rich + JSON)
 ├── config.py           # Constants, paths, API endpoints
 ├── state.py            # Task state (JSON + atomic SQLite)
 ├── phases.py           # Phase management, checklists
@@ -160,8 +210,8 @@ wartz_workflow/
 ├── verify.py           # verify-suite, .gitignore, tokens
 ├── jira_gitlab.py      # Jira REST + GitLab API integration
 ├── profiles.py         # Agent profile registry
-├── jobs.py             # Job tracking for background tasks
-├── rollback.py         # Rollback engine with cycle tracking
+├── jobs.py             # Job tracking для background tasks
+├── rollback.py         # Rollback engine с cycle tracking
 └── references/
     └── phases.yaml     # Declarative 42-phase schema
 
@@ -200,17 +250,24 @@ mypy wartz_workflow/
 
 ## 🎯 Roadmap
 
-- [x] 26 → 42 phase transition
-- [x] Gate taxonomy (PF, RV, ES, AB)
-- [x] Rollback engine with cycle tracking
-- [x] Parallel agent delegation (delegate / delegate-batch / jobs)
-- [ ] SQLite atomic state persistence
-- [ ] Evidence validator with YAML rules
-- [ ] Jira transition integration
-- [ ] GitLab MR state checks
-- [ ] Auto-delegate payload generation
-- [ ] Audit report command (`hrflow audit`)
-- [ ] Coverage → 80%
+```mermaid
+mindmap
+  root((Roadmap))
+    Done
+      42 phases
+      Gate taxonomy
+      Rollback engine
+      Parallel delegation
+    In Progress
+      Test coverage 47% → 80%
+      Evidence validator YAML rules
+    Planned
+      SQLite atomic persistence
+      Jira transition integration
+      GitLab MR state checks
+      Auto-delegate payload generation
+      Audit report command
+```
 
 ---
 
@@ -225,3 +282,18 @@ mypy wartz_workflow/
 <p align="center">
   <img src="https://capsule-render.vercel.app/api?type=waving&height=100&section=footer&color=gradient&customColorList=0,2,2,5,30" />
 </p>
+
+---
+
+<details>
+<summary><b>Почему Python и такая архитектура</b></summary>
+
+- **Python 3.11** — выбран как практичный стандарт для CLI-инструментов и backend automation. Click + Rich дают production-ready интерфейс без overengineering.
+- **YAML как single source of truth** — 42 фазы описаны декларативно, что позволяет менять workflow без правки кода. Это отличает подход от hard-coded процессов.
+- **SQLite WAL в планах** — atomic state persistence без зависимостей от внешних сервисов. Сейчас JSON с очисткой, но WAL обеспечит надёжность.
+- **Dual-mode CLI** — одна команда работает и для человека (Rich таблицы), и для агента (JSON). Это критично для AI-agent workflow, где агенты читают JSON, а люди — Rich.
+- **Gate taxonomy** — вместо хаотичных "проверь это" введены 4 типа gate'ов с чёткими правилами: PF (проверка перед входом), RV (блокирующая проверка после), ES (эскалация к человеку), AB (остановка workflow).
+- **Evidence tracking** — любая фаза не считается завершённой без concrete evidence. Это предотвращает "кажется ок" и требует либо вывод команды, либо скриншот, либо результат теста.
+- **Не CrewAI/OpenAI Swarm** — нативная интеграция с Hermes `delegate_task`. Это даёт контроль над payload'ом и не привязывает к внешним фреймворкам.
+
+</details>
