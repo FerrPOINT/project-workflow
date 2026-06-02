@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from . import jobs, schema, state
+from . import schema, state
 
 
 class RollbackError(Exception):
@@ -70,12 +70,6 @@ def perform_rollback(repo: str, jira_key: str, from_phase: str, reason: str) -> 
 
     # Обновить progress.json в task dir
     _clear_progress_phases(repo, jira_key, phases_to_clear)
-
-    # Reset jobs for cleared phases
-    for ph_id in phases_to_clear:
-        for job in jobs.list_jobs(jira_key=jira_key, phase_id=ph_id):
-            if job.status in ("complete", "failed"):
-                jobs.update_job_status(job.job_id, "reset", f"Rollback from {from_phase}: {reason}")
 
     # Save new state
     st["current_phase"] = target

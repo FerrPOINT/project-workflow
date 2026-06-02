@@ -24,9 +24,9 @@ class TestIndexPage:
     def test_nav_links_present(self):
         response = client.get("/")
         assert "Dashboard" in response.text
-        assert "Фазы" in response.text
-        assert "Задачи" in response.text
-        assert "Конфиг" in response.text
+        assert "Phases" in response.text
+        assert "Tasks" in response.text
+        assert "Config" in response.text
 
 
 class TestPhasesPage:

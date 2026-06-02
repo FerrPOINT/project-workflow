@@ -22,7 +22,7 @@ from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse
 import uvicorn
 
-from . import conversation, schema, config, state, phases, jobs, wizard
+from . import conversation, schema, config, state, phases, wizard
 
 # ── Constants ───────────────────────────────────────────────────────────
 DEFAULT_UI_PORT = config.UI_PORT
@@ -101,31 +101,61 @@ def load_phases() -> list[dict]:
 
 
 def load_tasks() -> list[dict]:
-    """Список задач из conversation.db — дедупликация по jira_key."""
-    if not DB_PATH.exists():
-        return []
-    rows = _get_all_messages_raw(limit=2000)
+    """Список задач: из state.json (активные) + из conversation.db (история)."""
     tasks: dict[str, dict] = {}
-    for row in rows:
-        jk = row.get("jira_key") or row.get("task_id", "unknown")
-        if jk not in tasks:
-            tasks[jk] = {
-                "task_id": jk,
-                "jira_key": jk,
-                "message_count": 0,
-                "last_message": None,
-                "phases": set(),
-            }
-        tasks[jk]["message_count"] += 1
-        if row.get("created_at"):
-            tasks[jk]["last_message"] = max(tasks[jk]["last_message"] or row["created_at"], row["created_at"])
-        if row.get("phase_id"):
-            tasks[jk]["phases"].add(row["phase_id"])
-
-    return [
-        {**t, "phases": sorted(t["phases"])}
-        for t in sorted(tasks.values(), key=lambda x: x["last_message"] or "", reverse=True)
-    ]
+    
+    # 1. Загрузить активные задачи из state.json
+    state_dir = Path(config.WARTZ_DIR) / "state"
+    if state_dir.exists():
+        for state_file in state_dir.glob("*.json"):
+            jk = state_file.stem
+            try:
+                with open(state_file, "r") as f:
+                    st = json.load(f)
+                tasks[jk] = {
+                    "task_id": jk,
+                    "jira_key": jk,
+                    "message_count": 0,
+                    "last_message": None,
+                    "phases": st.get("phases_completed", []),
+                    "current_phase": st.get("current_phase", "-"),
+                    "status": "active",
+                }
+            except Exception:
+                pass
+    
+    # 2. Дополнить из conversation.db
+    if DB_PATH.exists():
+        rows = _get_all_messages_raw(limit=2000)
+        for row in rows:
+            jk = row.get("jira_key") or row.get("task_id", "unknown")
+            if jk not in tasks:
+                tasks[jk] = {
+                    "task_id": jk,
+                    "jira_key": jk,
+                    "message_count": 0,
+                    "last_message": None,
+                    "phases": set(),
+                    "status": "history",
+                }
+            tasks[jk]["message_count"] += 1
+            if row.get("created_at"):
+                tasks[jk]["last_message"] = max(tasks[jk]["last_message"] or row["created_at"], row["created_at"])
+            if row.get("phase_id"):
+                if isinstance(tasks[jk]["phases"], list):
+                    if row["phase_id"] not in tasks[jk]["phases"]:
+                        tasks[jk]["phases"].append(row["phase_id"])
+                else:
+                    tasks[jk]["phases"].add(row["phase_id"])
+    
+    # Привести phases к list
+    result = []
+    for t in tasks.values():
+        if isinstance(t["phases"], set):
+            t["phases"] = sorted(t["phases"])
+        result.append(t)
+    
+    return sorted(result, key=lambda x: x["last_message"] or "", reverse=True)
 
 
 def _get_all_messages_raw(limit: int = 2000) -> list[dict]:
@@ -235,10 +265,11 @@ def phase_detail_page(request: Request, phase_id: str):
 
 @app.get("/tasks", response_class=HTMLResponse)
 def tasks_page(request: Request):
-    tasks = load_tasks()
+    """Показать активные задачи из state.json с wizard-ссылками."""
+    task_list = load_tasks()
     return templates.TemplateResponse(
         "tasks.html",
-        {"request": request, "tasks": tasks},
+        {"request": request, "tasks": task_list},
     )
 
 
@@ -251,17 +282,9 @@ def task_detail(request: Request, task_id: str):
     )
 
 
-@app.get("/jobs", response_class=HTMLResponse)
-def jobs_page(request: Request):
-    job_list = jobs.list_jobs()
-    return templates.TemplateResponse(
-        "jobs.html",
-        {"request": request, "jobs": [j.__dict__ for j in job_list]},
-    )
-
-
-@app.get("/answers/{jira_key}", response_class=HTMLResponse)
-def answers_page(request: Request, jira_key: str):
+@app.get("/wizard/{jira_key}", response_class=HTMLResponse)
+def wizard_task_page(request: Request, jira_key: str):
+    """Показать wizard для задачи — отчёт по фазе."""
     msgs = conversation.get_messages(jira_key, limit=500) if DB_PATH.exists() else []
     answers = []
     for m in msgs:
@@ -278,9 +301,29 @@ def answers_page(request: Request, jira_key: str):
                 "data": data,
             })
     return templates.TemplateResponse(
-        "answers.html",
+        "wizard.html",
         {"request": request, "jira_key": jira_key, "answers": answers},
     )
+
+
+@app.get("/api/wizard/{jira_key}")
+def api_wizard_task(jira_key: str):
+    msgs = conversation.get_messages(jira_key, limit=500) if DB_PATH.exists() else []
+    answers = []
+    for m in msgs:
+        if m.role == "user" and m.tags in ("pass", "fail"):
+            content = m.content
+            try:
+                data = json.loads(content)
+            except Exception:
+                data = {"raw": content}
+            answers.append({
+                "phase_id": m.phase_id or "-",
+                "created_at": m.created_at,
+                "ok": m.tags == "pass",
+                "data": data,
+            })
+    return {"ok": True, "jira_key": jira_key, "answers": answers}
 
 
 @app.get("/config", response_class=HTMLResponse)
@@ -330,14 +373,6 @@ def api_task_messages(task_id: str):
 def api_jobs(jira_key: str = "", phase_id: str = ""):
     job_list = jobs.list_jobs(jira_key=jira_key or None, phase_id=phase_id or None)
     return {"ok": True, "jobs": [j.__dict__ for j in job_list]}
-
-
-@app.get("/api/jobs/{job_id}")
-def api_job_detail(job_id: str):
-    job = jobs.load_job(job_id)
-    if not job:
-        return {"ok": False, "error": "Job not found"}
-    return {"ok": True, "job": job.__dict__}
 
 
 @app.get("/api/answers/{jira_key}")
@@ -635,7 +670,7 @@ INDEX_HTML = """<!DOCTYPE html>
     <div class="card">
       <h2>Фазы workflow</h2>
       <p><a href="/phases">Просмотр всех фаз</a></p>
-      <p><a href="/jobs">Background Jobs</a></p>
+      <p><a href="/wizard">Wizard (запрос задачи)</a></p>
     </div>
   </div>
 </div>
@@ -1012,10 +1047,9 @@ HEADER_HTML = """
   <h1>wartz-workflow UI</h1>
   <nav>
     <a href="/">Dashboard</a>
-    <a href="/phases">Фазы</a>
-    <a href="/tasks">Задачи</a>
-    <a href="/jobs">Jobs</a>
-    <a href="/config">Конфиг</a>
+    <a href="/phases">Phases</a>
+    <a href="/tasks">Tasks</a>
+    <a href="/config">Config</a>
   </nav>
 </header>
 """

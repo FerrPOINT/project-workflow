@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .adapters.http.jira import JiraAdapter
 from .adapters.http.gitlab import GitLabAdapter
-from . import schema, state, profiles, jobs
+from . import schema, state, profiles
 from .schema import Phase, PhaseCheck
 
 _jira = JiraAdapter()
@@ -198,16 +198,12 @@ def execute_phase(repo: str, jira_key: str, phase_id: str) -> Tuple[bool, Dict[s
     # 2. Generate playbook
     playbook = render_phase_playbook(phase, ctx)
 
-    # 3. For delegated phases — generate delegate payload + create job
+    # 3. For delegated phases — generate delegate payload (for wizard/CLI use)
     delegate_payload = None
-    job = None
     if phase.is_delegated and phase.delegate:
         delegate_payload = profiles.build_delegate_payload(
             phase_id, jira_key, st.get("task_id", ""), st.get("title", "")
         )
-        # Create job tracking record
-        if delegate_payload:
-            job = jobs.create_job(jira_key, phase_id, delegate_payload["agent"])
 
     # 4. If checks passed and not delegated — mark complete
     if checks_ok and not phase.is_delegated:
@@ -222,7 +218,7 @@ def execute_phase(repo: str, jira_key: str, phase_id: str) -> Tuple[bool, Dict[s
         "is_complete": checks_ok and not phase.is_delegated,
         "is_delegated": phase.is_delegated,
         "delegate_payload": delegate_payload,
-        "job_id": job.job_id if job else None,
+        "job_id": None,
     }
 
 

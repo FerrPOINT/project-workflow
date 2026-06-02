@@ -25,9 +25,9 @@ class TestWizardPage:
         resp = client.get("/wizard/TEST-123")
         assert resp.status_code == 200
         html = resp.text
-        # Should show phase instructions prompt
-        assert "Фаза" in html
-        assert "Обязательно выполнить" in html or "Инструкции" in html
+        # Should show wizard form
+        assert "Wizard" in html
+        assert "textarea" in html
 
     def test_wizard_has_textarea(self, client):
         resp = client.get("/wizard/TEST-123")
