@@ -1,7 +1,6 @@
 """Интеграция с Jira и GitLab API."""
 
 import os
-import subprocess
 from typing import Optional, Tuple, Dict, Any
 
 from .config import JIRA_API_URL, GITLAB_API_URL, GITLAB_PROJECT_ID

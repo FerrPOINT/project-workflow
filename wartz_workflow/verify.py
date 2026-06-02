@@ -3,9 +3,9 @@
 import os
 import subprocess
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Tuple
 
-from .config import VERIFY_SUITE_SCRIPT, SUITES_DIR
+from .config import VERIFY_SUITE_SCRIPT
 
 
 def run_verify_suite(repo: str) -> Tuple[bool, str]:

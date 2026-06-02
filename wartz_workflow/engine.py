@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 from typing import Any, Dict, List, Optional, Tuple
@@ -208,7 +207,7 @@ def execute_phase(repo: str, jira_key: str, phase_id: str) -> Tuple[bool, Dict[s
 
     # 4. If checks passed and not delegated — mark complete
     if checks_ok and not phase.is_delegated:
-        state.mark_phase_complete(repo, jira_key, phase_id, f"checks passed, playbook executed")
+        state.mark_phase_complete(repo, jira_key, phase_id, "checks passed, playbook executed")
 
     return checks_ok, {
         "phase": phase_id,

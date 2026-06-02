@@ -1,12 +1,9 @@
 """Управление фазами workflow — проверки порядка, запуск, чеклисты."""
 
-import os
-import subprocess
-from pathlib import Path
 from typing import List, Tuple, Optional
 
 from . import state, verify
-from .config import PHASE_ORDER, BLOCKER_PHASES, DELEGATED_PHASES, CRITIC_PHASES
+from .config import PHASE_ORDER
 
 
 def get_next_phase(current_phase: str) -> Optional[str]:

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -45,40 +44,40 @@ def parse_soul_md(path: Path) -> Optional[AgentProfile]:
     in_must = False
 
     for line in lines[:150]:  # frontmatter + intro usually within 150 lines
-        l = line.strip()
-        if l.startswith("**Name:**"):
-            name = l.replace("**Name:**", "").strip()
-        elif l.startswith("**Role:**") or l.startswith("- **Role:**"):
-            role = l.split("**Role:**", 1)[1].strip() if "**Role:**" in l else ""
-        elif l.startswith("**Version:**") or l.startswith("- **Version:**"):
-            version = l.split("**Version:**", 1)[1].strip() if "**Version:**" in l else ""
-        elif "Oath:" in l or "манифест" in l.lower() or "клятва" in l.lower():
-            oath = l.split("«", 1)[1].split("»", 1)[0] if "«" in l else l
+        line_text = line.strip()
+        if line_text.startswith("**Name:**"):
+            name = line_text.replace("**Name:**", "").strip()
+        elif line_text.startswith("**Role:**") or line_text.startswith("- **Role:**"):
+            role = line_text.split("**Role:**", 1)[1].strip() if "**Role:**" in line_text else ""
+        elif line_text.startswith("**Version:**") or line_text.startswith("- **Version:**"):
+            version = line_text.split("**Version:**", 1)[1].strip() if "**Version:**" in line_text else ""
+        elif "Oath:" in line_text or "манифест" in line_text.lower() or "клятва" in line_text.lower():
+            oath = line_text.split("«", 1)[1].split("»", 1)[0] if "«" in line_text else line_text
 
         # Phase references
-        if "Phase " in l:
+        if "Phase " in line_text:
             import re
-            found = re.findall(r"Phase\s+(\d+(?:\.\d+)?[a-zA-Z.]?)", l)
+            found = re.findall(r"Phase\s+(\d+(?:\.\d+)?[a-zA-Z.]?)", line_text)
             phases.extend(found)
 
         # MUST / MUST NOT sections
-        if l.startswith("## What You MUST NOT") or l.startswith("### MUST NOT"):
+        if line_text.startswith("## What You MUST NOT") or line_text.startswith("### MUST NOT"):
             in_must_not = True
             in_must = False
             continue
-        if l.startswith("## What You MUST") or l.startswith("### MUST"):
+        if line_text.startswith("## What You MUST") or line_text.startswith("### MUST"):
             in_must = True
             in_must_not = False
             continue
-        if l.startswith("##") or l.startswith("# "):
+        if line_text.startswith("##") or line_text.startswith("# "):
             in_must_not = False
             in_must = False
             continue
 
-        if in_must_not and l.startswith("- ❌"):
-            must_not.append(l.replace("- ❌", "").strip())
-        if in_must and l.startswith("- ✅"):
-            must.append(l.replace("- ✅", "").strip())
+        if in_must_not and line_text.startswith("- ❌"):
+            must_not.append(line_text.replace("- ❌", "").strip())
+        if in_must and line_text.startswith("- ✅"):
+            must.append(line_text.replace("- ✅", "").strip())
 
     # Deduplicate phases
     phases = list(dict.fromkeys(phases))

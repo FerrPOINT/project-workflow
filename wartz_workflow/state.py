@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-from .config import WARTZ_DIR, SUITES_DIR
+from .config import WARTZ_DIR
 
 
 # Module-level known repos — can be overridden for testing

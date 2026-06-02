@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import uuid
 from dataclasses import dataclass, asdict
 from datetime import datetime

@@ -162,7 +162,7 @@ class WizardEngine:
             missing.append("📁 info/ -- нет папки задачи")
 
         if missing:
-            console.print(f"\n[bold yellow]Обязаловки (не найдены):[/bold yellow]")
+            console.print("\n[bold yellow]Обязаловки (не найдены):[/bold yellow]")
             for m in missing:
                 console.print(f"   {m}")
 
@@ -182,8 +182,10 @@ class WizardEngine:
             lower = answer.lower()
 
             # Meta commands
-            if lower in ("q", "quit"): return "QUIT"
-            if lower in ("r", "rollback"): return "ROLLBACK"
+            if lower in ("q", "quit"):
+                return "QUIT"
+            if lower in ("r", "rollback"):
+                return "ROLLBACK"
             if lower in ("h", "help", "?"):
                 self._print_help(checklist)
                 continue
@@ -265,7 +267,7 @@ class WizardEngine:
     # ── Helpers ─────────────────────────────────────────────────────────
 
     def _print_help(self, checklist: List[str]) -> None:
-        console.print(f"[bold]Команды:[/bold]")
+        console.print("[bold]Команды:[/bold]")
         console.print("  [cyan]done[/cyan] -- подтвердить, описав что сделал")
         console.print("  [cyan]skip[/cyan] -- пропустить (только для non-blocker)")
         console.print("  [cyan]auto[/cyan] -- запустить автопроверки из фазы")
@@ -326,7 +328,8 @@ class WizardEngine:
         except (EOFError, KeyboardInterrupt):
             return False
         c = choice.lower().strip()
-        if c in ("r", "retry"): return True
+        if c in ("r", "retry"):
+            return True
         if c in ("b", "rollback") and phase.rollback_target:
             convo.add_phase_transition(self.task_id, self.jira_key, phase.id, phase.rollback_target)
             self.current_phase = phase.rollback_target

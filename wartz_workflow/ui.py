@@ -13,19 +13,15 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
-import sqlite3
 import sys
-from datetime import datetime
 from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import uvicorn
 
-from . import conversation, schema, state, config
+from . import conversation, schema, config
 
 # ── Constants ───────────────────────────────────────────────────────────
 DEFAULT_UI_PORT = 7788
@@ -483,8 +479,7 @@ class InlineTemplates:
                     item_html = item_html.replace("{{ loop.index }}", str(idx + 1))
                 rendered_items.append(item_html)
 
-            # Handle else
-            parts = match.group(0).split("{% endfor %}")
+            # Handle else (remove unused parts variable)
             full_match = match.group(0)
             result = result.replace(full_match, "".join(rendered_items))
 

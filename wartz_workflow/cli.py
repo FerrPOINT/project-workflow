@@ -3,18 +3,17 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from typing import Any, Dict, Optional
 
 import click
 from rich.console import Console
-from rich.panel import Panel
 from rich.table import Table
 from rich import box
 
 from . import state, phases, verify, jira_gitlab, engine, schema, profiles, jobs, rollback
 from . import wizard, conversation, task_validator
-from .config import PHASE_ORDER
 
 console = Console()
 
@@ -167,7 +166,7 @@ def phase(ctx: click.Context, jira_key: str, phase_name: str) -> None:
     # Show playbook instructions
     if result.get("playbook"):
         pb = result["playbook"]
-        console.print(f"\n[bold]📋 Playbook:[/bold]")
+        console.print("\n[bold]📋 Playbook:[/bold]")
         for i, step in enumerate(pb["instructions"], 1):
             console.print(f"  {i}. {step}")
 
@@ -180,7 +179,7 @@ def phase(ctx: click.Context, jira_key: str, phase_name: str) -> None:
     # Delegate command for agent
     if result.get("delegate_payload"):
         dp = result["delegate_payload"]
-        console.print(f"\n[bold cyan]🤖 DELEGATE COMMAND (copy-paste для агента):[/bold cyan]")
+        console.print("\n[bold cyan]🤖 DELEGATE COMMAND (copy-paste для агента):[/bold cyan]")
         console.print(f"[dim]delegate_task(goal='{dp['goal']}', context='...', toolsets={dp['toolsets']})[/dim]")
         if result.get("job_id"):
             console.print(f"[dim]Job ID: {result['job_id']}[/dim]")
@@ -188,7 +187,7 @@ def phase(ctx: click.Context, jira_key: str, phase_name: str) -> None:
     # Parallel phases
     parallels = engine.get_parallel_phases(phase_name)
     if parallels:
-        console.print(f"\n[bold yellow]🔄 Можно запустить ПАРАЛЛЕЛЬНО:[/bold yellow]")
+        console.print("\n[bold yellow]🔄 Можно запустить ПАРАЛЛЕЛЬНО:[/bold yellow]")
         for p_id in parallels:
             p = schema.get_phase(p_id)
             if p:
@@ -307,9 +306,9 @@ def playbook(ctx: click.Context, jira_key: str, phase_name: str) -> None:
     if ph.is_blocker:
         console.print(f"{BLOCK} [red]BLOCKER PHASE — если FAIL, workflow останавливается[/red]")
     if ph.is_delegated:
-        console.print(f"[cyan]🤖 DELEGATED — запускается через delegate_task[/cyan]")
+        console.print("[cyan]🤖 DELEGATED — запускается через delegate_task[/cyan]")
     if ph.is_critic:
-        console.print(f"[yellow]🛡️ CRITIC GATE — требует review[/yellow]")
+        console.print("[yellow]🛡️ CRITIC GATE — требует review[/yellow]")
 
     console.print(f"\n[bold]⏱️ Минимальное время:[/bold] {ph.min_time_min} min")
     if ph.parallel_with:
@@ -318,18 +317,18 @@ def playbook(ctx: click.Context, jira_key: str, phase_name: str) -> None:
     if ph.skills:
         console.print(f"\n[bold]📚 Skills:[/bold] {', '.join(ph.skills)}")
 
-    console.print(f"\n[bold]📋 Instructions:[/bold]")
+    console.print("\n[bold]📋 Instructions:[/bold]")
     for i, step in enumerate(pb["instructions"], 1):
         console.print(f"  {i}. {step}")
 
     if pb.get("evidence_required"):
-        console.print(f"\n[bold]📎 Evidence required:[/bold]")
+        console.print("\n[bold]📎 Evidence required:[/bold]")
         for item in pb["evidence_required"]:
             console.print(f"  • {item}")
 
     if pb.get("delegate"):
         d = pb["delegate"]
-        console.print(f"\n[bold]🤖 Delegate config:[/bold]")
+        console.print("\n[bold]🤖 Delegate config:[/bold]")
         console.print(f"  Agent: {d['agent']}")
         console.print(f"  Toolsets: {', '.join(d['toolsets'])}")
         console.print(f"  Timeout: {d['timeout_min']} min")
@@ -359,7 +358,7 @@ def verify_cmd(ctx: click.Context, jira_key: str) -> None:
     if jmode:
         out_json({"ok": ok, "message": msg})
 
-    console.print(f"[bold]🔐 verify-suite.sh[/bold]")
+    console.print("[bold]🔐 verify-suite.sh[/bold]")
     console.print(f"{PASS if ok else BLOCK} {msg}")
     if not ok:
         raise click.Abort()
@@ -541,15 +540,15 @@ def next_step(ctx: click.Context, jira_key: str) -> None:
             if ph.is_delegated and ph.delegate:
                 console.print(f"[cyan]🤖 Делегируется: {ph.delegate.agent}[/cyan]")
                 if delegate_cmd:
-                    console.print(f"\n[bold cyan]🤖 DELEGATE COMMAND:[/bold cyan]")
+                    console.print("\n[bold cyan]🤖 DELEGATE COMMAND:[/bold cyan]")
                     console.print(f"[dim]delegate_task(role='{delegate_cmd['role']}', goal='{delegate_cmd['goal']}', context='...', toolsets={delegate_cmd['toolsets']})[/dim]")
             if ph.is_blocker:
-                console.print(f"[red]🔴 BLOCKER — проверки должны пройти[/red]")
+                console.print("[red]🔴 BLOCKER — проверки должны пройти[/red]")
 
             # Show parallel phases
             parallels = engine.get_parallel_phases(next_p)
             if parallels:
-                console.print(f"\n[bold yellow]🔄 Параллельно можно запустить:[/bold yellow]")
+                console.print("\n[bold yellow]🔄 Параллельно можно запустить:[/bold yellow]")
                 for p_id in parallels:
                     pp = schema.get_phase(p_id)
                     if pp:
@@ -619,22 +618,22 @@ def delegate(ctx: click.Context, jira_key: str, phase_name: str) -> None:
             "usage": "Copy delegate_call into your next tool call",
         })
 
-    console.print(f"[bold]🤖 Delegate Payload Ready[/bold]")
+    console.print("[bold]🤖 Delegate Payload Ready[/bold]")
     console.print(f"Job ID: {job.job_id}")
     console.print(f"Phase: {phase_name} → Agent: {payload['agent']}")
-    console.print(f"\n[bold cyan]📋 Скопируй delegate_task вызов ниже:[/bold cyan]")
-    console.print(f"[dim]Роль: leaf (делегированный агент не спавнит дальше)[/dim]")
+    console.print("\n[bold cyan]📋 Скопируй delegate_task вызов ниже:[/bold cyan]")
+    console.print("[dim]Роль: leaf (делегированный агент не спавнит дальше)[/dim]")
     console.print(f"[dim]Toolsets: {', '.join(delegate_call['toolsets'])}[/dim]\n")
 
     # Pretty-print the delegate call
     console.print("[yellow]delegate_task([/yellow]")
-    console.print(f"  [green]role[/green]=[white]\"leaf\"[/white],")
+    console.print("  [green]role[/green]=[white]\"leaf\"[/white],")
     console.print(f"  [green]goal[/green]=[white]\"{delegate_call['goal']}\"[/white],")
-    console.print(f"  [green]context[/green]=[white]\"...\"[/white],  [dim]# полный контекст в job файле[/dim]")
+    console.print("  [green]context[/green]=[white]\"...\"[/white],  [dim]# полный контекст в job файле[/dim]")
     console.print(f"  [green]toolsets[/green]={delegate_call['toolsets']},")
     console.print("[yellow])[/yellow]")
 
-    console.print(f"\n[dim]После завершения проверь статус:[/dim]")
+    console.print("\n[dim]После завершения проверь статус:[/dim]")
     console.print(f"  hrflow jobs {jira_key}")
 
 
@@ -724,19 +723,19 @@ def delegate_batch(ctx: click.Context, jira_key: str, phase_names: tuple) -> Non
     for t in tasks:
         console.print(f"  {t['phase']}: {t['agent']} (job {t['job_id']})")
 
-    console.print(f"\n[bold cyan]📋 Batch delegate_task:[/bold cyan]")
+    console.print("\n[bold cyan]📋 Batch delegate_task:[/bold cyan]")
     console.print("[yellow]delegate_task([/yellow]")
     console.print("  [green]tasks[/green]=[")
     for t in tasks:
         console.print("    {")
-        console.print(f"      [green]role[/green]: [white]\"leaf\"[/white],")
+        console.print("      [green]role[/green]: [white]\"leaf\"[/white],")
         console.print(f"      [green]goal[/green]: [white]\"{t['goal'][:60]}...\"[/white],")
         console.print(f"      [green]toolsets[/green]: {t['toolsets']},")
         console.print("    },")
     console.print("  ]")
     console.print("[yellow])[/yellow]")
 
-    console.print(f"\n[dim]После завершения:[/dim]")
+    console.print("\n[dim]После завершения:[/dim]")
     console.print(f"  hrflow jobs {jira_key}")
 
 
@@ -794,7 +793,7 @@ def jobs_cmd(ctx: click.Context, jira_key: str) -> None:
     if pending:
         console.print(f"\n[yellow]⏳ {len(pending)} job(s) в ожидании. Запусти delegate скрипты.[/yellow]")
     else:
-        console.print(f"\n[green]✅ Все jobs завершены. Продолжай workflow.[/green]")
+        console.print("\n[green]✅ Все jobs завершены. Продолжай workflow.[/green]")
 
 
 # ── wartz-workflow rollback ───────────────────────────────────────────────
@@ -863,7 +862,7 @@ def rollback_cmd(ctx: click.Context, jira_key: str, phase_name: str, reason: str
     console.print(f"[bold]🔄 ROLLBACK: {phase_name} → {target}[/bold]")
     console.print(f"Причина: {reason}")
     console.print(f"Цикл: {cycle_info['cycles'] + 1}/{cycle_info['max_cycles']}")
-    console.print(f"\n[yellow]Следующие фазы будут сброшены:[/yellow]")
+    console.print("\n[yellow]Следующие фазы будут сброшены:[/yellow]")
     for ph in phases_to_clear:
         p = schema.get_phase(ph)
         name = p.name if p else ph
@@ -888,10 +887,10 @@ def rollback_cmd(ctx: click.Context, jira_key: str, phase_name: str, reason: str
             "next_command": f"hrflow phase {jira_key} {result['to_phase']}",
         })
 
-    console.print(f"\n[green]✅ Rollback complete[/green]")
+    console.print("\n[green]✅ Rollback complete[/green]")
     console.print(f"Сброшено фаз: {len(result['cleared_phases'])}")
     console.print(f"Осталось циклов: {cycle_info['remaining'] - 1}")
-    console.print(f"\n[bold cyan]▶️ Продолжай:[/bold cyan]")
+    console.print("\n[bold cyan]▶️ Продолжай:[/bold cyan]")
     console.print(f"  hrflow phase {jira_key} {result['to_phase']}")
 
 
