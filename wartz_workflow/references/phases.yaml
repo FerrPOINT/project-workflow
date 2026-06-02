@@ -199,7 +199,7 @@ phases:
     instructions:
       - step: "Прочитать Jira тикет через wartz-jira или curl"
       - step: "Записать в requirements.md: Summary, Description, AC"
-      - step: "Если есть скриншоты из Jira — приложить к requirements.md"
+      - step: "Если есть изображения из Jira — приложить ссылки к requirements.md"
     next_recommendation: "Перейди к Phase 0.5 — Jira Transition"
 
   # ── Phase 0.00: Git Identity ─────────────────────────────────────────
@@ -519,23 +519,23 @@ phases:
   # ── Phase 5.5: Self-Test ───────────────────────────────────────────
   - id: "5.5"
     name: "Self-Test"
-    description: "E2E, скриншоты, ручное тестирование"
+    description: "E2E, UI-тесты, ручное тестирование"
     min_time_min: 15
     skills:
       - workflow-react-playwright-testing
     checks:
       - type: file_exists
-        description: "Скриншоты UI (если фронт)"
+        description: "Результаты UI-тестов (если фронт)"
         optional: true
       - type: script_pass
         description: "E2E тесты (если есть)"
         command: "npm run e2e || echo 'no e2e'"
         optional: true
     evidence:
-      - item: "Скриншоты UI изменений"
+      - item: "Результаты UI-тестов"
       - item: "Результаты ручного тестирования edge cases"
     instructions:
-      - step: "Если фронт — сделать скриншоты до/после"
+      - step: "Если фронт — зафиксировать результаты UI-тестов"
       - step: "Протестировать edge cases вручную"
       - step: "Запустить E2E если есть"
     next_recommendation: "Перейди к Phase 6 — Commit"
@@ -575,11 +575,11 @@ phases:
         description: "MR description содержит чеклист"
     evidence:
       - item: "URL MR записан в changelog.md"
-      - item: "Скриншот MR description с чеклистом"
+      - item: "Чеклист MR description"
     instructions:
       - step: "Создать MR через GitLab UI (НЕ автоматически)"
       - step: "Заполнить description: What, Why, How, Checklist"
-      - step: "Прикрепить скриншоты к MR"
+      - step: "Прикрепить результаты тестов к MR"
       - step: "Назначить reviewer"
     next_recommendation: "Запускай Phase 7.5 (Code Review) и 7.6 (QA) ПАРАЛЛЕЛЬНО"
 

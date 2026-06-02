@@ -32,7 +32,7 @@
 | **Gate Taxonomy** | 4 gate types: Pre-flight (PF), Revision (RV), Escalation (ES), Abort (AB) |
 | **Rollback Engine** | Automatic rollback on gate failure with cycle tracking (max 3 retries) |
 | **Parallel Delegation** | `delegate` / `delegate-batch` / `jobs` for multi-agent orchestration |
-| **Evidence Tracking** | Mandatory evidence per phase: commands, screenshots, test results |
+| **Evidence Tracking** | Mandatory evidence per phase: commands, test results, logs |
 | **Context Budget** | 4-tier discipline for LLM context window management |
 | **SQLite Migration** | Planned atomic state persistence with WAL mode |
 
@@ -107,7 +107,7 @@ hrflow --json rollback TASK-123 5.5 --reason "QA FAIL"
 
 **Core rules:**
 - **Entry/Exit Ritual** — mandatory checklist at each phase boundary
-- **Evidence Required** — concrete proof required (command output, screenshot, test result)
+- **Evidence Required** — concrete proof required (command output, test result, log file)
 - **No Skip Allowed** — sequential execution only, no shortcuts
 - **Max 3 Feedback Cycles** — cycle 4 escalates to human review
 
@@ -392,7 +392,7 @@ mypy wartz_workflow/
 - **YAML as single source of truth** — 42 phases defined declaratively, allowing workflow changes without code modifications.
 - **Dual-mode CLI** — one command works for humans (Rich tables) and agents (JSON). Critical for AI-agent workflows.
 - **Gate taxonomy** — four gate types with strict rules instead of arbitrary checkpoints: PF (pre-entry), RV (post-completion), ES (human escalation), AB (halt).
-- **Evidence tracking** — every phase requires concrete proof (command output, screenshot, or test result). Prevents "looks fine" assumptions.
+- **Evidence tracking** — every phase requires concrete proof (command output, test result, or log file). Prevents "looks fine" assumptions.
 - **Native Hermes integration** — uses `delegate_task` directly instead of external frameworks (CrewAI / OpenAI Swarm) for full payload control.
 
 </details>
