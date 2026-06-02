@@ -33,7 +33,6 @@ DB_PATH = Path(config.WARTZ_DIR) / "conversation.db"
 # ── FastAPI App ─────────────────────────────────────────────────────────
 app = FastAPI(title="wartz-workflow UI", version="1.1.0")
 
-
 # ═══════════════════════════════════════════════════════════════════════
 #  HELPERS
 # ═══════════════════════════════════════════════════════════════════════
@@ -99,12 +98,9 @@ def load_phases() -> list[dict]:
     except Exception:
         return []
 
-
 def load_tasks() -> list[dict]:
-    """Список задач: из state.json (активные) + из conversation.db (история)."""
+    """Список задач из state/*.json (единственный источник правды)."""
     tasks: dict[str, dict] = {}
-    
-    # 1. Загрузить активные задачи из state.json
     state_dir = Path(config.WARTZ_DIR) / "state"
     if state_dir.exists():
         for state_file in state_dir.glob("*.json"):
@@ -123,49 +119,7 @@ def load_tasks() -> list[dict]:
                 }
             except Exception:
                 pass
-    
-    # 2. Дополнить из conversation.db
-    if DB_PATH.exists():
-        rows = _get_all_messages_raw(limit=2000)
-        for row in rows:
-            jk = row.get("jira_key") or row.get("task_id", "unknown")
-            if jk not in tasks:
-                tasks[jk] = {
-                    "task_id": jk,
-                    "jira_key": jk,
-                    "message_count": 0,
-                    "last_message": None,
-                    "phases": set(),
-                    "status": "history",
-                }
-            tasks[jk]["message_count"] += 1
-            if row.get("created_at"):
-                tasks[jk]["last_message"] = max(tasks[jk]["last_message"] or row["created_at"], row["created_at"])
-            if row.get("phase_id"):
-                if isinstance(tasks[jk]["phases"], list):
-                    if row["phase_id"] not in tasks[jk]["phases"]:
-                        tasks[jk]["phases"].append(row["phase_id"])
-                else:
-                    tasks[jk]["phases"].add(row["phase_id"])
-    
-    # Привести phases к list
-    result = []
-    for t in tasks.values():
-        if isinstance(t["phases"], set):
-            t["phases"] = sorted(t["phases"])
-        result.append(t)
-    
-    return sorted(result, key=lambda x: x["last_message"] or "", reverse=True)
-
-
-def _get_all_messages_raw(limit: int = 2000) -> list[dict]:
-    import sqlite3
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    rows = conn.execute("SELECT * FROM conversation ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
+    return sorted(tasks.values(), key=lambda x: x["last_message"] or "", reverse=True)
 
 # ═══════════════════════════════════════════════════════════════════════
 #  PAGES
@@ -186,7 +140,6 @@ def index(request: Request):
             "tasks_preview": tasks[:5],
         },
     )
-
 
 @app.get("/phases", response_class=HTMLResponse)
 def phases_page(request: Request):
@@ -227,7 +180,6 @@ def phases_page(request: Request):
         },
     )
 
-
 @app.get("/phase/{phase_id}", response_class=HTMLResponse)
 def phase_detail_page(request: Request, phase_id: str):
     phase = schema.get_phase(phase_id)
@@ -262,7 +214,6 @@ def phase_detail_page(request: Request, phase_id: str):
         },
     )
 
-
 @app.get("/tasks", response_class=HTMLResponse)
 def tasks_page(request: Request):
     """Показать активные задачи из state.json с wizard-ссылками."""
@@ -272,7 +223,6 @@ def tasks_page(request: Request):
         {"request": request, "tasks": task_list},
     )
 
-
 @app.get("/task/{task_id}", response_class=HTMLResponse)
 def task_detail(request: Request, task_id: str):
     msgs = conversation.get_messages(task_id, limit=500) if DB_PATH.exists() else []
@@ -280,7 +230,6 @@ def task_detail(request: Request, task_id: str):
         "task.html",
         {"request": request, "task_id": task_id, "messages": [m.to_dict() for m in msgs]},
     )
-
 
 @app.get("/wizard/{jira_key}", response_class=HTMLResponse)
 def wizard_task_page(request: Request, jira_key: str):
@@ -305,7 +254,6 @@ def wizard_task_page(request: Request, jira_key: str):
         {"request": request, "jira_key": jira_key, "answers": answers},
     )
 
-
 @app.get("/api/wizard/{jira_key}")
 def api_wizard_task(jira_key: str):
     msgs = conversation.get_messages(jira_key, limit=500) if DB_PATH.exists() else []
@@ -324,7 +272,6 @@ def api_wizard_task(jira_key: str):
                 "data": data,
             })
     return {"ok": True, "jira_key": jira_key, "answers": answers}
-
 
 @app.get("/config", response_class=HTMLResponse)
 def config_page(request: Request):
@@ -348,7 +295,6 @@ def config_page(request: Request):
         },
     )
 
-
 # ═══════════════════════════════════════════════════════════════════════
 #  API (JSON)
 # ═══════════════════════════════════════════════════════════════════════
@@ -357,23 +303,14 @@ def config_page(request: Request):
 def api_phases():
     return {"ok": True, "phases": load_phases()}
 
-
 @app.get("/api/tasks")
 def api_tasks():
     return {"ok": True, "tasks": load_tasks()}
-
 
 @app.get("/api/task/{task_id}/messages")
 def api_task_messages(task_id: str):
     msgs = conversation.get_messages(task_id, limit=500) if DB_PATH.exists() else []
     return {"ok": True, "task_id": task_id, "messages": [m.to_dict() for m in msgs]}
-
-
-@app.get("/api/jobs")
-def api_jobs(jira_key: str = "", phase_id: str = ""):
-    job_list = jobs.list_jobs(jira_key=jira_key or None, phase_id=phase_id or None)
-    return {"ok": True, "jobs": [j.__dict__ for j in job_list]}
-
 
 @app.get("/api/answers/{jira_key}")
 def api_answers(jira_key: str):
@@ -394,7 +331,6 @@ def api_answers(jira_key: str):
             })
     return {"ok": True, "jira_key": jira_key, "answers": answers}
 
-
 @app.get("/api/config")
 def api_config():
     return {
@@ -405,7 +341,6 @@ def api_config():
         "phase_order": config.PHASE_ORDER,
     }
 
-
 # ═══════════════════════════════════════════════════════════════════════
 #  WIZARD
 # ═══════════════════════════════════════════════════════════════════════
@@ -415,7 +350,6 @@ def get_task_current_phase(jira_key: str) -> str:
     if ts:
         return ts.get("current_phase", "-1")
     return conversation.get_last_phase(jira_key) or "-1"
-
 
 def build_ui_checklist(phase: schema.Phase) -> list[dict]:
     items: list[dict] = []
@@ -437,7 +371,6 @@ def build_ui_checklist(phase: schema.Phase) -> list[dict]:
             items.append({"id": f"e{len(items)}", "text": ev.item, "type": "evidence", "command": ""})
     return items
 
-
 @app.get("/wizard/{jira_key}", response_class=HTMLResponse)
 def wizard_page(request: Request, jira_key: str):
     """UI страница wizard — показывает текущую фазу и чеклист."""
@@ -450,7 +383,6 @@ def wizard_page(request: Request, jira_key: str):
             "prompt": prompt,
         },
     )
-
 
 @app.post("/api/wizard/{jira_key}/answer")
 def api_wizard_answer(
@@ -471,7 +403,6 @@ def api_wizard_answer(
 
     return result
 
-
 @app.get("/api/wizard/{jira_key}/instructions")
 def api_wizard_instructions(jira_key: str):
     """Получить инструкции для текущей фазы (первое обращение агента)."""
@@ -481,7 +412,6 @@ def api_wizard_instructions(jira_key: str):
         "jira_key": jira_key,
         "prompt": prompt,
     }
-
 
 # ═══════════════════════════════════════════════════════════════════════
 #  404 HELPER
@@ -497,7 +427,6 @@ def _render_404(request: Request, message: str):
 <p><a href="/">← Dashboard</a></p>
 </div></div></body></html>"""
     return HTMLResponse(html)
-
 
 # ═══════════════════════════════════════════════════════════════════════
 #  CLI ENTRY
@@ -518,7 +447,6 @@ def main() -> int:
     print("Press Ctrl+C to stop")
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
     return 0
-
 
 # ═══════════════════════════════════════════════════════════════════════
 #  INLINE TEMPLATES
@@ -668,9 +596,10 @@ INDEX_HTML = """<!DOCTYPE html>
       <p><a href="/tasks">Все задачи &rarr;</a></p>
     </div>
     <div class="card">
-      <h2>Фазы workflow</h2>
-      <p><a href="/phases">Просмотр всех фаз</a></p>
-      <p><a href="/wizard">Wizard (запрос задачи)</a></p>
+      <h2>Команды CLI</h2>
+      <p><b>1.</b> <code>hrflow workflow TASK-123 "отчёт..."</code> — отчёт по работе</p>
+      <p><b>2.</b> <code>hrflow done-list TASK-123</code> — пройденные этапы</p>
+      <p><a href="/phases">→ Список фаз</a></p>
     </div>
   </div>
 </div>
@@ -871,37 +800,6 @@ TASK_HTML = """<!DOCTYPE html>
 </div>
 </body></html>"""
 
-JOBS_HTML = """<!DOCTYPE html>
-<html lang="ru">
-<head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Jobs — wartz-workflow</title>
-{{ style | safe }}</head>
-<body>
-{{ header | safe }}
-<div class="container">
-  <h2 style="margin-top:20px">Background Jobs ({{ jobs|length }})</h2>
-  <table>
-    <tr><th>Job ID</th><th>Jira Key</th><th>Phase</th><th>Agent</th><th>Status</th><th>Created</th></tr>
-    {% for j in jobs %}
-    <tr>
-      <td><b>{{ j.job_id }}</b></td>
-      <td>{{ j.jira_key }}</td>
-      <td class="phase-id">{{ j.phase_id }}</td>
-      <td>{{ j.agent }}</td>
-      <td><span class="badge {% if j.status == 'complete' %}badge-ok{% endif %}{% if j.status == 'failed' %}badge-block{% endif %}{% if j.status == 'running' %}badge-warn{% endif %}">{{ j.status }}</span></td>
-      <td>{{ j.created_at[:10] }}</td>
-    </tr>
-    {% endfor %}
-  </table>
-  <div class="card" style="margin-top:16px">
-    <h2>API</h2>
-    <p><code>GET /api/jobs?jira_key=XXX&amp;phase_id=YYY</code></p>
-    <p><code>GET /api/jobs/&lt;job_id&gt;</code></p>
-  </div>
-</div>
-</body></html>"""
-
 ANSWERS_HTML = """<!DOCTYPE html>
 <html lang="ru">
 <head><meta charset="UTF-8">
@@ -1054,7 +952,6 @@ HEADER_HTML = """
 </header>
 """
 
-
 class InlineTemplates:
     """Fallback рендер inline HTML."""
 
@@ -1070,7 +967,7 @@ class InlineTemplates:
             "task.html": TASK_HTML,
             "config.html": CONFIG_HTML,
             "wizard.html": WIZARD_HTML,
-            "jobs.html": JOBS_HTML,
+            
             "phase_detail.html": PHASE_DETAIL_HTML,
             "answers.html": ANSWERS_HTML,
         }
@@ -1319,7 +1216,6 @@ class InlineTemplates:
         result = self._substitute_vars(result, context)
         return result
 
-
 # ── Templates init ────────────────────────────────────────────────────
 
 def ensure_templates():
@@ -1332,7 +1228,7 @@ def ensure_templates():
         "task.html": TASK_HTML,
         "config.html": CONFIG_HTML,
         "wizard.html": WIZARD_HTML,
-        "jobs.html": JOBS_HTML,
+        
         "phase_detail.html": PHASE_DETAIL_HTML,
         "answers.html": ANSWERS_HTML,
     }
@@ -1341,12 +1237,10 @@ def ensure_templates():
         if not path.exists():
             path.write_text(content, encoding="utf-8")
 
-
 if not TEMPLATES_DIR.exists():
     templates = InlineTemplates()
 else:
     templates = InlineTemplates()
-
 
 if __name__ == "__main__":
     sys.exit(main())

@@ -11,7 +11,7 @@
   {% for a in answers %}
   <div class="card">
     <h3>Фаза {{ a.phase_id }} — {{ a.created_at[:16] }}</h3>
-    <span class="badge {% if a.ok %}badge-ok{% else %}badge-block{% endif %}">{{ 'PASS' if a.ok else 'FAIL' }}</span>
+    <span class="badge {% if a.ok %}badge-ok{% else %}badge-block{% endif %}">{% if a.ok %}PASS{% else %}FAIL{% endif %}</span>
     <pre>{{ a.data | tojson(indent=2) }}</pre>
   </div>
   {% else %}

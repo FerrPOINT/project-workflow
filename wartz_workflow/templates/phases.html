@@ -8,19 +8,57 @@
 {{ header | safe }}
 <div class="container">
   <h2 style="margin-top:20px">Все фазы workflow ({{ phases|length }})</h2>
-  <table>
-    <tr><th>#</th><th>ID</th><th>Name</th><th>Gate</th><th>Checks</th><th>Evidence</th><th></th></tr>
-    {% for p in phases %}
-    <tr>
-      <td>{{ loop.index }}</td>
-      <td class="phase-id">{{ p.id }}</td>
-      <td class="phase-name">{{ p.name }}</td>
-      <td><span class="badge {% if p.gate_type == 'blocker' %}badge-block{% endif %}">{{ p.gate_type }}</span></td>
-      <td>{{ p.checks|length }}</td>
-      <td>{{ p.evidence|length }}</td>
-      <td><a href="/phase/{{ p.id }}">Детали &rarr;</a></td>
-    </tr>
+  <div class="stats-bar">
+    <div class="stat-item"><div class="stat-value">{{ phases|length }}</div><div class="stat-label">Всего фаз</div></div>
+    <div class="stat-item"><div class="stat-value" style="color:var(--bad)">{{ blocker_count }}</div><div class="stat-label">Блокеры</div></div>
+    <div class="stat-item"><div class="stat-value" style="color:var(--warn)">{{ delegated_count }}</div><div class="stat-label">На агентах</div></div>
+    <div class="stat-item"><div class="stat-value" style="color:var(--accent)">{{ parallel_count }}</div><div class="stat-label">Параллельные</div></div>
+  </div>
+
+  <!-- Timeline -->
+  <div class="card card-compact">
+    <div class="card-header">
+      <span class="card-title">Pipeline timeline</span>
+      <span class="card-subtitle">Каждая точка = фаза. Цвет = тип gate.</span>
+    </div>
+    <div class="timeline">
+      {% for p in phases %}
+        <span class="timeline-dot {{ p.gate_type }}" title="{{ p.id }} — {{ p.name }}"></span>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Flat phases with inline group headers (no nested loops) -->
+  <div class="phase-grid">
+    {% for item in flat_phases %}
+      {% if item._is_header %}
+        <div class="phase-group" style="grid-column:1/-1">
+          <div class="phase-group-header">
+            <span class="phase-group-title">{{ item.group_name }}</span>
+            <span class="phase-group-count">{{ item.group_count }} {{ item.group_count_suffix }}</span>
+          </div>
+        </div>
+      {% endif %}
+      {% if item.id %}
+        <a class="phase-card {{ item.card_class }}" href="/phase/{{ item.id }}">
+          <div class="phase-card-header">
+            <span class="phase-card-id">{{ item.id }}</span>
+            <span class="phase-card-num">№{{ item.phase_num }}</span>
+            <span class="badge {{ item.gate_badge_class }}">{{ item.gate_label }}</span>
+          </div>
+          <div class="phase-card-name">{{ item.name }}</div>
+          <div class="phase-card-meta">
+            <span>🔍 {{ item.checks|length }}</span>
+            <span>📎 {{ item.evidence|length }}</span>
+            {{ item.meta_extra | safe }}
+          </div>
+        </a>
+      {% endif %}
     {% endfor %}
-  </table>
+  </div>
 </div>
+
+<script>
+  document.querySelector('nav a[href="/phases"]').classList.add('active');
+</script>
 </body></html>

@@ -61,7 +61,7 @@
     <table>
       <tr><th>#</th><th>Вопрос</th><th>Required</th><th>Keywords</th><th>Hint</th></tr>
       {% for q in phase.questions %}
-      <tr><td>{{ loop.index }}</td><td>{{ q.text }}</td><td>{{ 'Yes' if q.required else 'No' }}</td><td>{{ q.expected_keywords|join(', ') or '—' }}</td><td>{{ q.hint or '—' }}</td></tr>
+      <tr><td>{{ loop.index }}</td><td>{{ q.text }}</td><td>{% if q.required %}Yes{% else %}No{% endif %}</td><td>{{ q.expected_keywords|join(', ') or '—' }}</td><td>{{ q.hint or '—' }}</td></tr>
       {% endfor %}
     </table>
   </div>
@@ -70,10 +70,10 @@
   {% if phase.delegate %}
   <div class="card">
     <h2>🤖 Делегирование</h2>
-    <p><b>Агент:</b> {{ phase.delegate.agent }}</p>
-    <p><b>Timeout:</b> {{ phase.delegate.timeout_min }} мин</p>
-    <p><b>Max cycles:</b> {{ phase.delegate.max_cycles }}</p>
-    {% if phase.delegate.toolsets %}<p><b>Toolsets:</b> {{ phase.delegate.toolsets|join(', ') }}</p>{% endif %}
+    <p><b>Агент:</b> {{ phase.delegate_agent }}</p>
+    <p><b>Timeout:</b> {{ phase.delegate_timeout }} мин</p>
+    <p><b>Max cycles:</b> {{ phase.delegate_max_cycles }}</p>
+    {% if phase.delegate_toolsets %}<p><b>Toolsets:</b> {{ phase.delegate_toolsets|join(', ') }}</p>{% endif %}
   </div>
   {% endif %}
 
