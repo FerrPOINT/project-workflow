@@ -1,67 +1,51 @@
-"""Workflow Wizard — агент-супервизор для пофазового выполнения задач.
+"""Workflow Wizard v4.0 — история по номеру задачи, auto-progress от conversation.
 
-Принцип работы:
-    CLI задаёт вопросы пользователю по каждой фазе workflow.
-    Пользователь отвечает свободным текстом (или командой y/n/auto/skip).
-    Wizard анализирует ответ — ищет ключевые слова, проверяет достаточность evidence.
-    Если всё ОК — переходит к следующей фазе.
-    Если не ОК — указывает что не сделано, просит дополнить.
-    Не отпускает пользователя, пока он не перечислит что сделал и не подтвердит фазу.
-
-Usage:
-    hrflow wizard TASK-123           # запуск wizard с текущей фазы
-    hrflow wizard TASK-123 --repo /path/to/repo
-    hrflow next TASK-123             # алиас: тоже wizard для текущей фазы
+Принцип: пользователь пишет `hrflow note TASK-123 "сделал X"`.
+Wizard хранит историю в SQLite (conversation.db).
+При `hrflow wizard TASK-123` wizard:
+  1. Читает историю из conversation.db по task_id
+  2. Определяет текущую фазу (из последнего transition или progress.json)
+  3. Говорит: "Согласно истории, ты на фазе X. Вот что осталось: ..."
+  4. В каждой фазе напоминает про info/, changelog, progress.json
+  5. Принимает ответ → анализирует → сохраняет → advance/keep_asking
+  6. При advance записывает transition в историю
 """
 
 from __future__ import annotations
 
 import re
 import subprocess
-from dataclasses import dataclass, field
-from typing import Iterator, List, Optional
+from typing import List, Optional
 
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
-from rich import box
 
-from . import state, schema, phases, engine
+from . import state, schema, phases, conversation as convo
 
 console = Console()
 
 PASS_ICON = "[green]✅[/green]"
 FAIL_ICON = "[red]❌[/red]"
 WARN_ICON = "[yellow]⚠️[/yellow]"
-BLOCK_ICON = "[red]🔴[/red]"
 INFO_ICON = "[blue]ℹ️[/blue]"
 ASK_ICON = "[cyan]❓[/cyan]"
+MEMO_ICON = "[magenta]📝[/magenta]"
 
-# ── Answer Analysis Result ────────────────────────────────────────────
-
-@dataclass
-class AnswerAnalysis:
-    """Результат анализа ответа пользователя."""
-    sufficient: bool                  # достаточно ли evidence
-    missing: List[str] = field(default_factory=list)  # что не хватает
-    confidence: float = 0.0             # 0.0-1.0
-    action: str = "keep_asking"       # keep_asking | advance | rollback | escalate
-
-
-# ── Wizard Engine (Agent Supervisor) ────────────────────────────────────
 
 class WizardEngine:
-    """Агент-супервизор — не отпускает user до достаточного evidence."""
+    """История по номеру задачи + smart phase advisor."""
 
     def __init__(self, jira_key: str, repo: Optional[str] = None):
         self.jira_key = jira_key
         self.repo = repo or state.find_repo(jira_key) or "/opt/dev/hr-recruiter/recruiter-front"
-        self.task_state = state.load_state(self.repo, self.jira_key) or {}
-        self.current_phase = self.task_state.get("current_phase", "-1")
-        self.conversation_log: List[dict] = []
-        self.evidence_accumulator: dict[str, List[dict]] = {}
-        self.retry_count = 0
+        self.task_state: dict = state.load_state(self.repo, jira_key) or {}
+        self.task_id: str = self.task_state.get("task_id", jira_key)
+
+        # Загрузить фазу из истории (приоритет над progress.json)
+        history_phase = convo.get_last_phase(self.task_id)
+        self.current_phase = history_phase or self.task_state.get("current_phase", "-1")
 
         self.all_phases = schema.load_phases()
         self.phase_map = {p.id: p for p in self.all_phases}
@@ -69,7 +53,6 @@ class WizardEngine:
     # ── Public API ──────────────────────────────────────────────────────
 
     def run(self) -> None:
-        """Главный цикл: пока не закончатся фазы или user не выйдет."""
         self._show_banner()
 
         while True:
@@ -81,88 +64,96 @@ class WizardEngine:
                 break
 
             result = self._run_phase(phase)
-
             if result == "QUIT":
                 self._show_resume_hint()
                 break
             elif result == "PASS":
                 if not self._advance_phase(phase):
                     break
-                self.retry_count = 0  # сброс счётчика при успехе
             elif result == "FAIL":
-                if not self._handle_phase_fail(phase):
+                if not self._handle_fail(phase):
                     break
-            elif result == "ROLLBACK":
-                self._handle_rollback(phase)
 
-    # ── Display ─────────────────────────────────────────────────────────
+    # ── Banner ───────────────────────────────────────────────────────────
 
     def _show_banner(self) -> None:
-        task_id = self.task_state.get("task_id", "??")
-        sprint = self.task_state.get("sprint", "??")
-        repo_name = self.repo.split("/")[-1] if "/" in self.repo else self.repo
+        digest = convo.build_status_digest(self.task_id, self.jira_key, self.current_phase)
+        last = digest.get("last_phase", "??")
+        transitions = digest.get("transitions_count", 0)
+        total_notes = digest.get("total_messages", 0)
 
         console.print(Panel(
-            f"[bold]🧙 Workflow Wizard[/bold] — Агент-супервизор v3.1\n"
-            f"Task: [cyan]{self.jira_key}[/cyan] | Branch: [yellow]{task_id}[/yellow]\n"
-            f"Repo: [dim]{repo_name}[/dim] | Sprint: [dim]{sprint}[/dim]\n"
-            f"[dim]Отвечай свободным текстом. Команды: 'done' 'skip' 'help' 'auto' 'retry' 'rollback' 'escalate' 'quit'[/dim]",
-            title="WARTZ",
-            border_style="cyan",
+            f"[bold]🧙 Workflow Wizard[/bold] — task history v4.0\n"
+            f"Task: [cyan]{self.jira_key}[/cyan] | ID: [yellow]{self.task_id}[/yellow]\n"
+            f"[dim]История: {total_notes} сообщений | Переходов: {transitions}[/dim]\n"
+            f"[dim]Команды: done / skip / auto / help / rollback / escalate / quit[/dim]",
+            title="WARTZ", border_style="cyan",
         ))
+        console.print(f"\n[bold]Текущая фаза: {last}[/bold]")
+        if digest.get("latest_notes"):
+            console.print("[dim]Последние отчёты:[/dim]")
+            for n in digest["latest_notes"][-3:]:
+                console.print(f"   {MEMO_ICON} {n}")
 
-    def _show_resume_hint(self) -> None:
-        console.print(f"\n[dim]💾 Wizard сохранил состояние. Продолжи позже:[/dim]")
-        console.print(f"  [bold]hrflow wizard {self.jira_key}[/bold]\n")
+    # ── Phase Header + Todo Reminders ────────────────────────────────────
 
     def _show_phase_header(self, phase: schema.Phase) -> None:
+        icon = self._phase_icon(phase.id)
         console.print(f"\n{'━' * 56}")
-        console.print(f"{self._phase_icon(phase.id)} [bold]Фаза {phase.id} — {phase.name}[/bold]")
+        console.print(f"{icon} [bold]Фаза {phase.id} — {phase.name}[/bold]")
         console.print(f"[dim]{phase.description}[/dim]")
-        if phase.is_blocker:
-            console.print(f"{BLOCK_ICON} [red]BLOCKER — FAIL останавливает workflow[/red]")
-        if phase.is_delegated:
-            console.print("[cyan]🤖 Эта фаза делегируется (async)[/cyan]")
         console.print("━" * 56)
 
-    def _phase_icon(self, phase_id: str) -> str:
-        mapping = {
-            "-": "🚀", "0": "🚀",
-            "1": "🔍", "2": "📋", "3": "📋",
-            "4": "💻", "5": "✅",
-            "6": "💾", "7": "👁️",
-            "8": "🏁", "9": "📈", "10": "📈",
-        }
-        first = phase_id[0] if phase_id else "?"
-        return mapping.get(first, "📌")
+        # Автоматические напоминания на основе истории
+        self._show_missing_repeating_items()
 
-    # ── Core: Phase Execution ───────────────────────────────────────────
+        # Показать что ещё нужно по этой фазе
+        missing = self._detect_missing_items(phase)
+        if missing:
+            console.print(f"\n[yellow]⚠️ По этой фазе ещё не найдено в истории:[/yellow]")
+            for m in missing:
+                console.print(f"   • {m}")
+
+    def _show_missing_repeating_items(self) -> None:
+        """Повторяющиеся вещи: info/, changelog, progress. Проверяем по истории."""
+        missing: List[str] = []
+        if not convo.check_keyword_in_history(self.task_id, "changelog"):
+            missing.append("📝 changelog.md — не было записи")
+        if not convo.check_keyword_in_history(self.task_id, "progress"):
+            missing.append("📊 progress.json — не обновлялся")
+        if not convo.check_keyword_in_history(self.task_id, "info"):
+            missing.append("📁 info/ — не упоминалось")
+        if not convo.check_keyword_in_history(self.task_id, "requirements"):
+            missing.append("📋 requirements.md — не упоминалось")
+
+        if missing:
+            console.print("\n[bold yellow]Обязаловки (не найдены в истории):[/bold yellow]")
+            for m in missing:
+                console.print(f"   {m}")
+            console.print("[dim]   Когда выполнишь — отпиши об этом в ответе[/dim]")
+
+    def _phase_icon(self, phase_id: str) -> str:
+        mapping = {"-": "🚀", "0": "🚀", "1": "🔍", "2": "📋", "3": "📋",
+                   "4": "💻", "5": "✅", "6": "💾", "7": "👁️", "8": "🏁", "9": "📈", "10": "📈"}
+        return mapping.get(phase_id[0] if phase_id else "?", "📌")
+
+    # ── Core: Run Phase ──────────────────────────────────────────────────
 
     def _run_phase(self, phase: schema.Phase) -> str:
-        """Одна фаза: показываем заголовок → задаём вопросы → gate.
-        Возвращает: PASS | FAIL | ROLLBACK | QUIT
-        """
         self._show_phase_header(phase)
-        self.retry_count += 1
-
-        # Собираем вопросы: из questions.yaml > fallback из checks+instructions
         questions = self._build_questions(phase)
+
         if not questions:
-            console.print(f"{WARN_ICON} Нет вопросов для фазы {phase.id} — auto-PASS")
+            console.print(f"{WARN_ICON} Нет вопросов — auto-PASS")
             return "PASS"
 
         for q in questions:
-            outcome = self._ask_until_satisfactory(q, phase)
-            if outcome == "QUIT":
-                self._save_wizard_state(phase.id)
-                return "QUIT"
-            if outcome == "ROLLBACK":
-                return "ROLLBACK"
-            if outcome == "SKIP":
-                continue  # фаза пропущена
-            # outcome == "OK" → сохраняем evidence и идём дальше
+            outcome = self._ask_and_analyze(q, phase)
+            if outcome in ("QUIT", "ROLLBACK", "SKIP"):
+                return outcome
+            # outcome OK — продолжаем
 
-        # Gate: проверяем собрано ли достаточно evidence
+        # Gate
         if self._evaluate_gate(phase):
             return "PASS"
         return "FAIL"
@@ -170,66 +161,43 @@ class WizardEngine:
     # ── Question Builder ────────────────────────────────────────────────
 
     def _build_questions(self, phase: schema.Phase) -> List[schema.PhaseQuestion]:
-        """Собрать список вопросов для фазы."""
-        # Приоритет: явные questions в phases.yaml
         if phase.questions:
             return phase.questions
 
-        # Fallback: сгенерировать из checks + evidence + instructions
         questions: List[schema.PhaseQuestion] = []
-
-        # Из checks — для каждого делаем вопрос "сделал ли проверку?"
         for check in phase.checks:
-            q = schema.PhaseQuestion(
+            questions.append(schema.PhaseQuestion(
                 text=check.description,
                 required=not check.optional,
                 expected_keywords=self._extract_expected(check.description),
                 hint=f"Запусти: {check.command}" if check.command else None,
                 auto_command=check.command,
-            )
-            questions.append(q)
-
-        # Из instructions — вопрос "выполнил ли ключевые шаги?"
+            ))
         for inst in phase.instructions[:3]:
-            q = schema.PhaseQuestion(
+            questions.append(schema.PhaseQuestion(
                 text=f"Выполнено: {inst.step}",
                 required=True,
                 expected_keywords=self._extract_expected(inst.step),
                 hint=inst.example,
-            )
-            questions.append(q)
-
-        # Из evidence — вопрос "собрано ли evidence?"
+            ))
         for ev in phase.evidence:
-            q = schema.PhaseQuestion(
+            questions.append(schema.PhaseQuestion(
                 text=f"Evidence: {ev.item}",
                 required=True,
                 expected_keywords=self._extract_expected(ev.item),
                 min_evidence_lines=2,
-            )
-            questions.append(q)
-
+            ))
         return questions
 
     @staticmethod
     def _extract_expected(text: str) -> List[str]:
-        """Извлечь ключевые слова для проверки ответа."""
-        # Нормализация: убираем пунктуацию, нижний регистр
         clean = re.sub(r'[^\w\s]', ' ', text.lower())
         words = [w for w in clean.split() if len(w) > 3]
-        # Берём существительные и глаголы (heuristics)
-        keywords = words[:5]  # top 5 words
-        return keywords
+        return words[:5]
 
-    # ── Interactive Question Loop ────────────────────────────────────────
+    # ── Interactive Question ────────────────────────────────────────────
 
-    def _ask_until_satisfactory(
-        self, q: schema.PhaseQuestion, phase: schema.Phase
-    ) -> str:
-        """Задаём вопрос, анализируем ответ, повторяем пока не достаточно.
-        Возвращает: OK | SKIP | QUIT | ROLLBACK
-        """
-        # Подсказка по типу вопроса
+    def _ask_and_analyze(self, q: schema.PhaseQuestion, phase: schema.Phase) -> str:
         console.print(f"\n{ASK_ICON} [bold]{q.text}[/bold]")
         if q.hint:
             console.print(f"   [dim]💡 {q.hint}[/dim]")
@@ -237,7 +205,7 @@ class WizardEngine:
         while True:
             try:
                 raw = Prompt.ask(
-                    "[dim]Ответ (свободный текст, или: done/skip/help/auto/quit)[/dim]",
+                    "[dim]Ответ (свободный текст, или: done/skip/help/auto/rollback/escalate/quit)[/dim]",
                     default="",
                 )
             except (EOFError, KeyboardInterrupt):
@@ -246,278 +214,175 @@ class WizardEngine:
             answer = raw.strip()
             lower = answer.lower()
 
-            # Meta-команды
-            if lower in ("q", "quit", "exit"):
-                return "QUIT"
-            if lower in ("r", "rollback"):
-                return "ROLLBACK"
-            if lower in ("e", "escalate"):
-                return "QUIT"  # сохраняем для escalation
+            if lower in ("q", "quit"): return "QUIT"
+            if lower in ("r", "rollback"): return "ROLLBACK"
+            if lower in ("e", "escalate"): return "QUIT"
             if lower in ("s", "skip"):
                 if not q.required:
-                    console.print(f"{WARN_ICON} [yellow]Пропущено[/yellow]")
-                    self._accumulate_evidence(phase.id, q.text, "skipped", None)
+                    console.print(f"{WARN_ICON} Пропущено")
+                    convo.add_wizard_answer(self.task_id, self.jira_key, phase.id, answer, ok=False)
                     return "SKIP"
-                console.print(f"{BLOCK_ICON} Этот вопрос обязательный — skip нельзя")
+                console.print(f"{FAIL_ICON} Обязательный вопрос — skip нельзя")
                 continue
             if lower in ("h", "help", "?"):
                 self._print_help(q)
                 continue
             if lower in ("auto", "a"):
-                result = self._run_auto(q)
-                if result == "PASS":
-                    self._accumulate_evidence(phase.id, q.text, "auto-pass", q.auto_command)
+                if self._run_auto(q) == "PASS":
+                    convo.add_wizard_answer(self.task_id, self.jira_key, phase.id, "auto-pass", ok=True)
                     return "OK"
                 console.print(f"{FAIL_ICON} Auto-check не прошёл. Ответь вручную.")
                 continue
-            if lower in ("done", "yes", "y", "готово", "да"):
-                # даже "done" мы анализируем — user должен перечислить что сделал
-                pass
-
             if not answer:
-                console.print(f"{INFO_ICON} Нужен ответ. Перечисли что сделал по этому пункту.")
+                console.print(f"{INFO_ICON} Нужен ответ. Опиши что сделал.")
                 continue
 
-            # Анализ ответа
+            # Анализ
             analysis = self._analyze_answer(answer, q)
-
             if analysis.sufficient:
                 console.print(f"{PASS_ICON} [green]Принято[/green]")
-                self._accumulate_evidence(phase.id, q.text, answer, q.auto_command)
+                convo.add_wizard_answer(self.task_id, self.jira_key, phase.id, answer, ok=True)
                 return "OK"
             else:
-                # Недостаточно — говорим что не хватает
-                console.print(f"\n{WARN_ICON} [yellow]Ответ неполный:[/yellow]")
-                for miss in analysis.missing:
-                    console.print(f"   • {miss}")
-                console.print(f"[dim]Повтори и дополни ответ. Нужно больше деталей.[/dim]\n")
-                self._accumulate_evidence(phase.id, q.text, f"incomplete: {answer[:80]}", None)
+                console.print(f"\n{WARN_ICON} [yellow]Недостаточно:[/yellow]")
+                for m in analysis.missing:
+                    console.print(f"   • {m}")
+                console.print("[dim]Повтори — опиши подробнее что сделал и перечисли факты.[/dim]\n")
+                convo.add_wizard_answer(self.task_id, self.jira_key, phase.id, f"incomplete: {answer[:80]}", ok=False)
 
-    @staticmethod
-    def _analyze_answer(answer: str, q: schema.PhaseQuestion) -> AnswerAnalysis:
-        """Проанализировать ответ пользователя."""
+    def _analyze_answer(self, answer: str, q: schema.PhaseQuestion) -> "AnswerAnalysis":
+        """Возвращает namedtuple-like объект (inline для простоты)."""
         lower = answer.lower()
 
-        # 1. Negative patterns — ответ "не делал", "не знаю", "не получилось"
-        negative_patterns = [
-            r"не (делал|знаю|смог|получилось|наш[её]л)",
-            r"не удалось", r"ничего не", r"не применимо",
-            r"^skip$", r"^n/a$", r"not applicable",
-        ]
-        for pat in negative_patterns:
+        # 1. Negative patterns
+        neg_pats = [r"не (делал|знаю|смог|получилось)", r"не удалось", r"ничего не", r"не применимо"]
+        for pat in neg_pats:
             if re.search(pat, lower):
-                return AnswerAnalysis(
-                    sufficient=False,
-                    missing=["Ты ответил что не сделал/не знаешь. Нужно выполнить этот пункт."],
-                    confidence=0.0,
-                    action="keep_asking",
-                )
+                return _AA(False, ["Ты ответил что не сделал/не знаешь. Нужно выполнить этот пункт."], 0.0)
 
-        # 2. Длина — если expected_keywords заданы, нужен развёрнутый ответ
+        # 2. Min length
         min_len = max(q.min_evidence_lines * 15, 10)
         if len(answer) < min_len and q.expected_keywords:
-            return AnswerAnalysis(
-                sufficient=False,
-                missing=[f"Слишком короткий ответ ({len(answer)} симв). Опиши подробнее что сделал."],
-                confidence=0.1,
-                action="keep_asking",
-            )
+            return _AA(False, [f"Слишком коротко ({len(answer)} симв). Опиши подробнее."], 0.1)
 
-        # 3. Keywords check
-        found_keywords = []
-        missing_keywords = []
-        for kw in q.expected_keywords:
-            if kw.lower() in lower:
-                found_keywords.append(kw)
-            else:
-                missing_keywords.append(kw)
+        # 3. Keywords
+        found = [kw for kw in q.expected_keywords if kw.lower() in lower]
+        ratio = len(found) / max(len(q.expected_keywords), 1)
+        missing_kw = [kw for kw in q.expected_keywords if kw.lower() not in lower]
 
-        # Если_keywords заданы и найдено < 50% → недостаточно
-        keyword_ratio = len(found_keywords) / max(len(q.expected_keywords), 1)
-        confidence = keyword_ratio
+        miss = []
+        if missing_kw and ratio < 0.5:
+            miss.append(f"Не упомянуто: {', '.join(missing_kw[:3])}")
 
-        missing = []
-        if len(answer) < min_len and not q.expected_keywords:
-            missing.append("Ответ слишком короткий. Раскрой детали.")
-        if missing_keywords and keyword_ratio < 0.5:
-            missing.append(f"В ответе не упомянуто: {', '.join(missing_keywords[:3])}")
+        sufficient = ratio >= 0.5 and len(answer) >= min_len
+        return _AA(sufficient, miss, ratio)
 
-        # 4. Достаточно?
-        sufficient = confidence >= 0.5 and len(answer) >= min_len
-
-        return AnswerAnalysis(
-            sufficient=sufficient,
-            missing=missing if not sufficient else [],
-            confidence=confidence,
-            action="advance" if sufficient else "keep_asking",
-        )
-
-    def _print_help(self, q: schema.PhaseQuestion) -> None:
-        console.print("""[bold]Команды Wizard:[/bold]
-  [bold]done[/bold]    — Подтвердить выполнение (нужно описать что сделал)
-  [bold]skip[/bold]    — Пропустить (только для необязательных пунктов)
-  [bold]auto[/bold]    — Автоматически проверить (запустить команду)
-  [bold]help[/bold]    — Показать эту справку
-  [bold]retry[/bold]   — Перезапустить текущую фазу
-  [bold]rollback[/bold]— Откат к предыдущей фазе
-  [bold]escalate[/bold]— Эскалировать к человеку
-  [bold]quit[/bold]    — Сохранить и выйти (продолжишь позже)""")
-        if q.auto_command:
-            console.print(f"\n[dim]▶️ Auto-команда: {q.auto_command}[/dim]")
+    # ── Helpers ──────────────────────────────────────────────────────────
 
     def _run_auto(self, q: schema.PhaseQuestion) -> str:
-        """Выполнить auto-команду и вернуть PASS/FAIL."""
         if not q.auto_command:
             console.print(f"{WARN_ICON} Нет auto-команды")
             return "FAIL"
         cmd = q.auto_command.replace("{jira_key}", self.jira_key).replace("{repo}", self.repo)
         console.print(f"[dim]▶️ {cmd}[/dim]")
         try:
-            # NOTE: shell=True safe here — cmd from trusted YAML schema only.
-            # No user input interpolation into shell commands.
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
-            if result.returncode == 0:
-                stdout = result.stdout.strip()[:300]
+            res = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+            if res.returncode == 0:
+                out = res.stdout.strip()[:300]
                 console.print(f"{PASS_ICON} [green]PASSED[/green]")
-                if stdout:
-                    console.print(f"[dim]{stdout}[/dim]")
+                if out: console.print(f"[dim]{out}[/dim]")
                 return "PASS"
-            else:
-                stderr = result.stderr.strip()[:300]
-                console.print(f"{FAIL_ICON} [red]FAILED[/red]")
-                console.print(f"[dim]{stderr}[/dim]")
-                return "FAIL"
-        except subprocess.TimeoutExpired:
-            console.print(f"{FAIL_ICON} [red]Timeout (30s)[/red]")
+            console.print(f"{FAIL_ICON} [red]FAILED[/red]")
             return "FAIL"
-        except Exception as e:
-            console.print(f"{FAIL_ICON} [red]Error: {e}[/red]")
+        except Exception:
+            console.print(f"{FAIL_ICON} [red]Error[/red]")
             return "FAIL"
 
-    # ── Evidence & Gate ───────────────────────────────────────────────────
+    def _print_help(self, q: schema.PhaseQuestion) -> None:
+        console.print("""[bold]Команды:[/bold]
+  done — подтвердить, описав что сделал
+  skip — пропустить (только необязательное)
+  auto — автопроверка (командой из фазы)
+  rollback — откат к предыдущей фазе
+  escalate — эскалация к человеку
+  quit — сохранить и выйти""")
+        if q.auto_command:
+            console.print(f"\n[dim]▶️ Auto: {q.auto_command}[/dim]")
 
-    def _accumulate_evidence(
-        self, phase_id: str, question: str, answer: str, command: Optional[str]
-    ) -> None:
-        entry = {
-            "question": question,
-            "answer": answer,
-            "command": command,
-            "timestamp": _now(),
-        }
-        self.evidence_accumulator.setdefault(phase_id, []).append(entry)
-        evidence_text = f"{question}: {answer}"
-        if command:
-            evidence_text += f" (cmd: {command})"
-        state.mark_phase_complete(self.repo, self.jira_key, phase_id, evidence_text)
+    # ── Detect Missing Items from History ───────────────────────────────
+
+    def _detect_missing_items(self, phase: schema.Phase) -> List[str]:
+        """На основе истории — какие evidence/checks ещё не упоминались."""
+        missing: List[str] = []
+        for ev in phase.evidence:
+            kw = ev.item.split()[0].lower() if ev.item else ""
+            if not convo.check_keyword_in_history(self.task_id, kw):
+                missing.append(ev.item)
+        return missing[:3]
+
+    # ── Gate ────────────────────────────────────────────────────────────
 
     def _evaluate_gate(self, phase: schema.Phase) -> bool:
-        """Оценить достаточно ли evidence для перехода к следующей фазе."""
-        collected = self.evidence_accumulator.get(phase.id, [])
-
-        # Показать summary собранного evidence
-        console.print(f"\n{'─' * 56}")
-        console.print(f"[bold]📋 Gate Check — Фаза {phase.id}[/bold]")
-        if not collected:
-            console.print(f"{FAIL_ICON} [red]Нет evidence — фаза не может считаться выполненной[/red]")
+        msgs = convo.get_messages(self.task_id, phase_id=phase.id, tags="pass")
+        incomplete = convo.get_messages(self.task_id, phase_id=phase.id, tags="fail")
+        console.print(f"\n[bold]📋 Gate Check — Фаза {phase.id}[/bold]")
+        console.print(f"[dim]Прошло / Не прошло: {len(msgs)} / {len(incomplete)}[/dim]")
+        if not msgs:
+            console.print(f"{FAIL_ICON} [red]Нет прошедших вопросов[/red]")
             return False
-
-        ok_count = sum(1 for e in collected if "skipped" not in e["answer"] and "incomplete" not in e["answer"])
-        total = len(collected)
-        console.print(f"[dim]Evidence собрано: {ok_count}/{total}[/dim]")
-
-        for ev in collected:
-            ans = ev["answer"]
-            is_ok = "skipped" not in ans and "incomplete" not in ans
-            icon = PASS_ICON if is_ok else WARN_ICON
-            short = ans[:60] + "..." if len(ans) > 60 else ans
-            console.print(f"   {icon} {short}")
-
-        # Если хоть один required вопрос failed → FAIL
-        all_pass = ok_count == total and total > 0
+        # Упрощённый gate: достаточно чтобы все required questions имели pass
+        all_pass = len(incomplete) == 0 or phase.is_blocker is False
         if all_pass:
-            console.print(f"\n{PASS_ICON} [bold green]Gate PASSED — переходим к следующей фазе[/bold green]")
+            console.print(f"\n{PASS_ICON} [bold green]Gate PASSED[/bold green]")
         else:
-            console.print(f"\n{FAIL_ICON} [bold red]Gate FAILED — есть незавершённые пункты[/bold red]")
-        console.print("─" * 56)
+            console.print(f"\n{FAIL_ICON} [bold red]Gate FAILED[/bold red]")
         return all_pass
 
-    # ── Phase Transitions ───────────────────────────────────────────────
+    # ── Phase Transition ──────────────────────────────────────────────
 
     def _advance_phase(self, phase: schema.Phase) -> bool:
-        """Перейти к следующей фазе."""
         next_p = phases.get_next_phase(phase.id)
         if not next_p:
-            console.print(f"\n{PASS_ICON} [bold green]Все фазы выполнены! Workflow завершён.[/bold green]")
+            console.print(f"\n{PASS_ICON} [bold green]Все фазы выполнены![/bold green]")
             return False
 
+        # Записать transition в историю
+        convo.add_phase_transition(self.task_id, self.jira_key, phase.id, next_p)
         self.current_phase = next_p
         state.save_state(self.repo, self.jira_key, "", "", next_p)
 
-        next_phase_obj = self.phase_map.get(next_p)
-        if next_phase_obj:
-            console.print(f"\n[green]▶️ Следующая фаза: {next_p} — {next_phase_obj.name}[/green]")
-            if next_phase_obj.is_delegated and next_phase_obj.delegate:
-                d = next_phase_obj.delegate
-                console.print(f"[cyan]🤖 Делегируется: {d.agent} ({d.timeout_min}min)[/cyan]")
+        next_obj = self.phase_map.get(next_p)
+        if next_obj:
+            console.print(f"\n[green]▶️ Следующая фаза: {next_p} — {next_obj.name}[/green]")
 
-        # Пауза перед продолжением
         console.print("[dim]Нажми Enter чтобы продолжить, или 'q' чтобы выйти[/dim]")
         try:
             cont = input()
             if cont.strip().lower() == "q":
-                self._save_wizard_state(next_p)
                 self._show_resume_hint()
                 return False
         except (EOFError, KeyboardInterrupt):
             return False
         return True
 
-    def _handle_phase_fail(self, phase: schema.Phase) -> bool:
-        """Обработка FAIL — не хватает evidence, спрашиваем retry/escalate/quit."""
-        console.print(f"\n{BLOCK_ICON} [bold red]Фаза {phase.id} FAILED[/bold red]")
-        console.print("[dim]Что делаем?[/dim]")
-
-        # Показать что не сделано
-        collected = self.evidence_accumulator.get(phase.id, [])
-        incomplete = [e for e in collected if "incomplete" in e["answer"] or "skipped" in e["answer"]]
-        if incomplete:
-            console.print("[yellow]Незавершённые пункты:[/yellow]")
-            for e in incomplete:
-                console.print(f"   • {e['question']}")
-
-        console.print("  [bold]r[/bold] — Retry (переответить на вопросы)")
-        console.print("  [bold]b[/bold] — Rollback (откат к предыдущей фазе)")
-        console.print("  [bold]e[/bold] — Escalate (эскалация к человеку)")
-        console.print("  [bold]q[/bold] — Quit (сохранить и выйти)")
-
+    def _handle_fail(self, phase: schema.Phase) -> bool:
+        console.print(f"\n{FAIL_ICON} [bold red]Фаза {phase.id} FAILED[/bold red]")
+        console.print("  [bold]r[/bold] — Retry  [bold]b[/bold] — Rollback  [bold]e[/bold] — Escalate  [bold]q[/bold] — Quit")
         try:
             choice = Prompt.ask("[r/b/e/q]", default="r")
         except (EOFError, KeyboardInterrupt):
-            self._save_wizard_state(phase.id)
             return False
-
-        choice = choice.lower().strip()
-        if choice in ("r", "retry"):
-            return True  # перезапустить текущую фазу
-        if choice in ("b", "rollback") and phase.rollback_target:
-            self._handle_rollback(phase)
+        c = choice.lower().strip()
+        if c in ("r", "retry"): return True
+        if c in ("b", "rollback") and phase.rollback_target:
+            convo.add_phase_transition(self.task_id, self.jira_key, phase.id, phase.rollback_target)
+            self.current_phase = phase.rollback_target
+            state.save_state(self.repo, self.jira_key, "", "", phase.rollback_target)
             return True
-        if choice in ("e", "escalate"):
-            console.print("[purple]🆘 Эскалировано — остановка wizard[/purple]")
+        if c in ("e", "escalate"):
+            console.print("[purple]🆘 Эскалировано[/purple]")
             return False
-
-        self._save_wizard_state(phase.id)
         return False
-
-    def _handle_rollback(self, phase: schema.Phase) -> None:
-        target = phase.rollback_target
-        if not target:
-            console.print(f"{FAIL_ICON} [red]Нет rollback_target[/red]")
-            return
-        console.print(f"\n[yellow]🔄 Rollback: {phase.id} → {target}[/yellow]")
-        self.current_phase = target
-        state.save_state(self.repo, self.jira_key, "", "", target)
 
     def _resolve_phase(self, phase_id: str) -> Optional[schema.Phase]:
         for p in self.all_phases:
@@ -525,33 +390,17 @@ class WizardEngine:
                 return p
         return None
 
-    # ── State Persistence ───────────────────────────────────────────────
-
-    def _save_wizard_state(self, stopped_phase: str) -> None:
-        import json
-        from pathlib import Path
-        wizard_state = {
-            "jira_key": self.jira_key,
-            "repo": self.repo,
-            "current_phase": stopped_phase,
-            "retry_count": self.retry_count,
-            "conversation_log": self.conversation_log[-30:],
-            "evidence_accumulator": self.evidence_accumulator,
-            "updated_at": _now(),
-        }
-        state_dir = Path("~/.wartz-workflow/state").expanduser()
-        state_dir.mkdir(parents=True, exist_ok=True)
-        with open(state_dir / f"{self.jira_key}.wizard.json", "w") as f:
-            json.dump(wizard_state, f, indent=2, ensure_ascii=False)
+    def _show_resume_hint(self) -> None:
+        console.print(f"\n[dim]💾 История сохранена. Продолжи позже: hrflow wizard {self.jira_key}[/dim]")
 
 
-def _now() -> str:
-    import datetime
-    return datetime.datetime.utcnow().isoformat() + "Z"
+# ── Lightweight namedtuple для AnswerAnalysis (inline) ───────────────────
+
+from collections import namedtuple
+_AA = namedtuple("_AA", ["sufficient", "missing", "confidence"])
 
 
 # ── Entry Point ───────────────────────────────────────────────────────
 
 def main(jira_key: str, repo: Optional[str] = None) -> None:
-    engine = WizardEngine(jira_key, repo)
-    engine.run()
+    WizardEngine(jira_key, repo).run()

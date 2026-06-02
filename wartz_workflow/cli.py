@@ -13,7 +13,7 @@ from rich.table import Table
 from rich import box
 
 from . import state, phases, verify, jira_gitlab, engine, schema, profiles, jobs, rollback
-from . import wizard
+from . import wizard, conversation
 from .config import PHASE_ORDER
 
 console = Console()
@@ -875,6 +875,31 @@ def rollback_cmd(ctx: click.Context, jira_key: str, phase_name: str, reason: str
     console.print(f"Осталось циклов: {cycle_info['remaining'] - 1}")
     console.print(f"\n[bold cyan]▶️ Продолжай:[/bold cyan]")
     console.print(f"  hrflow phase {jira_key} {result['to_phase']}")
+
+
+# ── wartz-workflow note ─────────────────────────────────────────────────
+
+@cli.command()
+@click.argument("jira_key")
+@click.argument("content")
+@click.option("--task-id", help="Task ID (default from state)")
+@click.pass_context
+def note(ctx: click.Context, jira_key: str, content: str, task_id: Optional[str]) -> None:
+    """Записать отчёт в историю задачи: hrflow note TASK-123 \"сделал X\""""
+    jmode = ctx.obj.get("json_mode", False)
+    repo = state.find_repo(jira_key)
+    st = state.load_state(repo, jira_key) if repo else {}
+    tid = task_id or st.get("task_id", jira_key)
+
+    phase = conversation.get_last_phase(tid) or st.get("current_phase", "-1")
+    msg_id = conversation.add_user_note(tid, jira_key, content, phase_id=phase)
+
+    if jmode:
+        out_json({"ok": True, "msg_id": msg_id, "phase": phase, "content": content})
+    console.print(f"{PASS} Записано в историю {jira_key} (фаза {phase})")
+    console.print(f"[dim]{content[:80]}[/dim]")
+    # Показать что делать дальше
+    console.print("\n[cyan]▶️ Продолжи работу: hrflow wizard {jira_key}[/cyan]")
 
 
 # ── wartz-workflow wizard (conversational) ──────────────────────────────

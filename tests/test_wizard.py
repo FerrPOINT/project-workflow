@@ -15,7 +15,7 @@ class TestAnswerAnalysis:
             expected_keywords=["commit", "git", "hash"],
             required=True,
         )
-        analysis = wizard.WizardEngine._analyze_answer("", q)
+        analysis = wizard.WizardEngine("TEST-1", "/tmp")._analyze_answer("", q)
         assert not analysis.sufficient
         assert analysis.confidence < 0.5
 
@@ -25,7 +25,7 @@ class TestAnswerAnalysis:
             expected_keywords=["jira", "summary", "ac"],
             required=True,
         )
-        analysis = wizard.WizardEngine._analyze_answer("да", q)
+        analysis = wizard.WizardEngine("TEST-1", "/tmp")._analyze_answer("да", q)
         assert not analysis.sufficient
         assert analysis.confidence == 0.1  # short answer penalty
 
@@ -36,7 +36,7 @@ class TestAnswerAnalysis:
             required=True,
         )
         answer = "Да, прочитал jira тикет TASK-123. Summary: переписать wizard на keywords"
-        analysis = wizard.WizardEngine._analyze_answer(answer, q)
+        analysis = wizard.WizardEngine("TEST-1", "/tmp")._analyze_answer(answer, q)
         assert analysis.sufficient
         assert analysis.confidence >= 0.5
 
@@ -47,7 +47,7 @@ class TestAnswerAnalysis:
             required=True,
         )
         for neg in ["не делал ничего", "не получилось выполнить", "не знаю как делать", "не применимо"]:
-            analysis = wizard.WizardEngine._analyze_answer(neg, q)
+            analysis = wizard.WizardEngine("TEST-1", "/tmp")._analyze_answer(neg, q)
             assert not analysis.sufficient, f"Failed for: {neg}"
             # Negative matches should produce specific "не сделал" message
             assert any("не сделал" in m.lower() for m in analysis.missing)
@@ -58,7 +58,7 @@ class TestAnswerAnalysis:
             required=False,
             expected_keywords=["help", "ассист"],
         )
-        analysis = wizard.WizardEngine._analyze_answer("нет, спасибо", q)
+        analysis = wizard.WizardEngine("TEST-1", "/tmp")._analyze_answer("нет, спасибо", q)
         # Опциональный вопрос: не sufficient (нет keywords), но confidence=0.1 (short penalty)
         assert analysis.confidence == 0.1
         assert not analysis.sufficient
@@ -71,9 +71,9 @@ class TestAnswerAnalysis:
             required=True,
         )
         # 2 строки — недостаточно
-        analysis = wizard.WizardEngine._analyze_answer("Написал тесты", q)
+        analysis = wizard.WizardEngine("TEST-1", "/tmp")._analyze_answer("Написал тесты", q)
         assert not analysis.sufficient
-        assert "короткий" in analysis.missing[0].lower()
+        assert "коротко" in analysis.missing[0].lower()
 
     def test_keyword_ratio_above_threshold(self):
         q = schema.PhaseQuestion(
@@ -82,7 +82,7 @@ class TestAnswerAnalysis:
             required=True,
         )
         answer = "Да, написал pytest тесты с assert"
-        analysis = wizard.WizardEngine._analyze_answer(answer, q)
+        analysis = wizard.WizardEngine("TEST-1", "/tmp")._analyze_answer(answer, q)
         assert analysis.sufficient
         assert analysis.confidence >= 0.5
 
@@ -188,29 +188,22 @@ class TestWizardEngineLifecycle:
         result = engine._run_phase(phase)
         assert result == "PASS"
 
-    def test_evidence_accumulated(self, tmp_path):
+    def test_evidence_saved_to_conversation(self, tmp_path):
+        """Evidence сохраняется через conversation module."""
+        from wartz_workflow import conversation as convo_mod
         engine = wizard.WizardEngine("TEST-1", str(tmp_path))
-        engine._accumulate_evidence("1", "Q1", "ответ", None)
-        assert "1" in engine.evidence_accumulator
-        assert engine.evidence_accumulator["1"][0]["answer"] == "ответ"
+        convo_mod.add_user_note("TEST-1", "JIRA-1", "ответ", phase_id="1")
+        msgs = convo_mod.get_messages("TEST-1", tags="note")
+        assert any("ответ" in m.content for m in msgs)
 
-    def test_save_wizard_state_creates_file(self, tmp_path, monkeypatch):
-        engine = wizard.WizardEngine("TEST-1", str(tmp_path))
-        # Мокаем state_dir
-        import pathlib
-        monkeypatch.setattr(
-            pathlib.Path, "mkdir", lambda *a, **k: None
-        )
-        # Перехватим open
-        saved = {}
-        orig_open = open
-        def mock_open(path, *args, **kwargs):
-            if ".wizard.json" in str(path):
-                from io import StringIO
-                saved["path"] = str(path)
-                return StringIO()
-            return orig_open(path, *args, **kwargs)
-        monkeypatch.setattr("builtins.open", mock_open)
-
-        engine._save_wizard_state("3.0")
-        assert ".wizard.json" in saved.get("path", "")
+    def test_conversation_save_and_load(self, tmp_path):
+        """Сообщения сохраняются в SQLite и читаются обратно."""
+        from wartz_workflow import conversation as convo_mod
+        convo_mod.add_user_note("TEST-1", "JIRA-1", "первый отчёт", phase_id="2")
+        convo_mod.add_user_note("TEST-1", "JIRA-1", "второй отчёт", phase_id="2")
+        msgs = convo_mod.get_messages("TEST-1")
+        contents = [m.content for m in msgs]
+        assert "первый отчёт" in contents
+        assert "второй отчёт" in contents
+        # Последняя фаза
+        assert convo_mod.get_last_phase("TEST-1") == "2"
