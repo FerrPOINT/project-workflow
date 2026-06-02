@@ -101,6 +101,27 @@ def _render_instructions_html(instructions: list, is_delegated: bool) -> str:
     return "\n".join(lines)
 
 
+def _render_phases_html(phases: list) -> str:
+    lines = []
+    for p in phases:
+        badge = ""
+        if p.get("gate_label"):
+            cls = "badge-block" if p.get("is_blocker") else "badge-warn"
+            badge = f'<span class="badge {cls}">{p["gate_label"]}</span>'
+        desc = f'<div class="phase-desc">{p["description"]}</div>' if p.get("description") else ""
+        lines.append(
+            f'    <a class="phase-row" href="/phase/{p["id"]}">\n'
+            f'      <div class="phase-num">{p["phase_num"]}</div>\n'
+            f'      <div>\n'
+            f'        <div class="phase-name">{p["name"]}</div>\n'
+            f'        {desc}\n'
+            f'      </div>\n'
+            f'      <div class="phase-badges">{badge}</div>\n'
+            f'    </a>'
+        )
+    return "\n".join(lines)
+
+
 def _render_checks_html(checks: list) -> str:
     if not checks:
         return ""
@@ -119,6 +140,22 @@ def _render_evidence_html(evidence: list) -> str:
     for idx, e in enumerate(evidence, 1):
         rows.append(
             f"      <tr><td>{idx}</td><td>{e.get('item', '')}</td><td>{e.get('validator', '—')}</td></tr>"
+        )
+    return "\n".join(rows)
+
+
+def _render_tasks_html(tasks: list) -> str:
+    if not tasks:
+        return ""
+    rows = []
+    for t in tasks:
+        rows.append(
+            f'    <a class="phase-row" href="/task/{t["task_id"]}">'
+            f'<div class="phase-num">{t["task_id"]}</div>'
+            f'<div><div class="phase-name">Фаза: {t["current_phase"]}</div>'
+            f'<div class="phase-desc">{t["phases_completed"]}</div></div>'
+            f'<div class="phase-badges"><span class="badge badge-ok">active</span></div>'
+            f'</a>'
         )
     return "\n".join(rows)
 
@@ -234,7 +271,6 @@ HEADER_HTML = """
   <h1>wartz<span style="color:var(--accent)">workflow</span></h1>
   <nav>
     <a href="/phases">Фазы</a>
-    <a href="/tasks">Задачи</a>
   </nav>
 </header>
 """
@@ -265,7 +301,6 @@ INDEX_HTML = """<!DOCTYPE html>
   <div class="detail-card">
     <h3>Быстрые ссылки</h3>
     <p style="margin-top:8px"><a href="/phases" style="color:var(--accent);text-decoration:none;font-size:14px">→ Все фазы workflow</a></p>
-    <p><a href="/tasks" style="color:var(--accent);text-decoration:none;font-size:14px">→ Активные задачи</a></p>
   </div>
 </div>
 <footer>wartz-workflow UI v1.2.0</footer>
@@ -277,20 +312,9 @@ PHASES_HTML = """<!DOCTYPE html>
 <title>Фазы — wartz-workflow</title>{{ style | safe }}</head>
 <body>{{ header | safe }}
 <div class="container">
-  <h2>Все фазы workflow ({{ phases|length }})</h2>
+  <h2>Все фазы workflow ({{ count }})</h2>
   <div class="phase-list">
-    {% for p in phases %}
-    <a class="phase-row" href="/phase/{{ p.id }}">
-      <div class="phase-num">{{ p.phase_num }}</div>
-      <div>
-        <div class="phase-name">{{ p.name }}</div>
-        {% if p.description %}<div class="phase-desc">{{ p.description }}</div>{% endif %}
-      </div>
-      <div class="phase-badges">
-        {% if p.gate_label %}<span class="badge {{ p.is_blocker and 'badge-block' or 'badge-warn' }}">{{ p.gate_label }}</span>{% endif %}
-      </div>
-    </a>
-    {% endfor %}
+    {{ phases_html | safe }}
   </div>
 </div>
 <footer>wartz-workflow UI v1.2.0</footer>
@@ -361,19 +385,10 @@ TASKS_HTML = """<!DOCTYPE html>
 <title>Задачи — wartz-workflow</title>{{ style | safe }}</head>
 <body>{{ header | safe }}
 <div class="container">
-  <h2>Активные задачи ({{ tasks|length }})</h2>
-  {% if tasks %}
+  <h2>Активные задачи ({{ count }})</h2>
+  {% if tasks_html %}
   <div class="phase-list">
-    {% for t in tasks %}
-    <div class="phase-row" style="cursor:default">
-      <div class="phase-num" style="font-family:'JetBrains Mono',monospace">{{ t.jira_key }}</div>
-      <div>
-        <div class="phase-name">Текущая фаза: {{ t.current_phase }}</div>
-        <div class="phase-desc">Пройдено фаз: {{ t.phases_completed|length }}</div>
-      </div>
-      <div class="phase-badges"><span class="badge badge-ok">active</span></div>
-    </div>
-    {% endfor %}
+    {{ tasks_html | safe }}
   </div>
   {% else %}
   <div class="detail-card empty">Нет активных задач. Используйте <code>hrflow workflow TASK-KEY</code> чтобы начать.</div>
@@ -603,7 +618,11 @@ def phases_page(request: Request):
     phases = load_phases()
     return templates.TemplateResponse(
         "phases.html",
-        {"request": request, "phases": phases},
+        {
+            "request": request,
+            "count": len(phases),
+            "phases_html": _render_phases_html(phases),
+        },
     )
 
 
@@ -632,7 +651,11 @@ def tasks_page(request: Request):
     tasks = load_tasks()
     return templates.TemplateResponse(
         "tasks.html",
-        {"request": request, "tasks": tasks},
+        {
+            "request": request,
+            "count": len(tasks),
+            "tasks_html": _render_tasks_html(tasks),
+        },
     )
 
 

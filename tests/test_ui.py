@@ -20,7 +20,6 @@ class TestIndexPage:
         response = client.get("/")
         assert response.status_code == 200
         assert "Фазы" in response.text
-        assert "Задачи" in response.text
 
 
 class TestPhasesPage:
