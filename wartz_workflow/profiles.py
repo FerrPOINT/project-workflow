@@ -155,6 +155,8 @@ def build_delegate_payload(phase_id: str, jira_key: str, task_id: str, title: st
 
     # Render prompt
     prompt = ph.delegate.prompt_template
+    if not prompt:
+        prompt = f"Phase {phase_id} for {jira_key}: {title}"
     prompt = prompt.replace("{jira_key}", jira_key)
     prompt = prompt.replace("{task_id}", task_id)
     prompt = prompt.replace("{title}", title)

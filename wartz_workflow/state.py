@@ -91,6 +91,65 @@ def mark_phase_complete(repo: str, jira_key: str, phase: str, evidence: str):
     return True
 
 
+def unmark_phase(repo: str, jira_key: str, phase: str) -> bool:
+    """Снять отметку выполнения с фазы."""
+    state = load_state(repo, jira_key)
+    if not state:
+        return False
+    completed = state.get("phases_completed", [])
+    if phase in completed:
+        completed.remove(phase)
+    state["phases_completed"] = completed
+    state["updated_at"] = subprocess.check_output(["date", "-u", "+%Y-%m-%dT%H:%M:%SZ"]).decode().strip()
+
+    state_dir = Path(f"{WARTZ_DIR}/state")
+    with open(state_dir / f"{jira_key}.json", "w") as f:
+        json.dump(state, f, indent=2, ensure_ascii=False)
+
+    _set_phase_progress_status(repo, jira_key, phase, "pending")
+    return True
+
+
+def set_current_phase(repo: str, jira_key: str, phase: str) -> bool:
+    """Установить текущую фазу."""
+    state = load_state(repo, jira_key)
+    if not state:
+        return False
+    state["current_phase"] = phase
+    state["updated_at"] = subprocess.check_output(["date", "-u", "+%Y-%m-%dT%H:%M:%SZ"]).decode().strip()
+
+    state_dir = Path(f"{WARTZ_DIR}/state")
+    with open(state_dir / f"{jira_key}.json", "w") as f:
+        json.dump(state, f, indent=2, ensure_ascii=False)
+    return True
+
+
+def _set_phase_progress_status(repo: str, jira_key: str, phase: str, status: str) -> None:
+    """Обновить статус фазы в progress.json (pending / completed / skipped)."""
+    for sprint_dir in Path(f"{repo}/info").iterdir():
+        if sprint_dir.is_dir() and sprint_dir.name.startswith("sprint"):
+            for task_dir in sprint_dir.iterdir():
+                if task_dir.is_dir():
+                    progress_file = task_dir / "progress.json"
+                    if progress_file.exists():
+                        try:
+                            with open(progress_file) as f:
+                                data = json.load(f)
+                            if data.get("jira_key") == jira_key:
+                                for p in data.get("phases", []):
+                                    if p.get("phase") == phase:
+                                        p["status"] = status
+                                        if status == "pending":
+                                            p.pop("completed_at", None)
+                                            p.pop("evidence", None)
+                                            p.pop("gate_passed", None)
+                                with open(progress_file, "w") as f:
+                                    json.dump(data, f, indent=2, ensure_ascii=False)
+                                return
+                        except Exception:
+                            pass
+
+
 def update_task_progress(repo: str, jira_key: str, phase: str, evidence: str):
     """Обновить progress.json в директории задачи."""
     # Найти task dir

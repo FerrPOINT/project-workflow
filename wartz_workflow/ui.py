@@ -79,6 +79,7 @@ def _yaml_to_sqlite() -> None:
             "parallel_with": p.parallel_with,
             "rollback_target": p.rollback_target,
             "next_recommendation": p.next_recommendation,
+            "execution_mode": p.execution_mode if p.execution_mode else ("parallel" if p.is_delegated else "sync"),
         }
         batch.append(
             {
@@ -121,59 +122,91 @@ def _yaml_to_sqlite() -> None:
     _db.import_phases(batch)
 
 
+# Backward-compat alias
+_seed_to_sqlite = _yaml_to_sqlite
+
+
 def _build_execution_batches(phases: list[dict]) -> list[dict]:
     """Разбить фазы на sync/parallel batches для визуализации workflow.
 
-    Синхронные — последовательно, параллельные — объединены в группы по parallel_with.
+    Синхронные — последовательно, параллельные — объединены в группы по
+    parallel_with через connected-components (Union-Find).
+    Порядок берётся из DB (phase_order), не из config.PHASE_ORDER.
     """
+    if not phases:
+        return []
+
     phases_by_id = {p["id"]: p for p in phases}
-    
-    # Найти bidirectional parallel группы (по parallel_with)
-    parallel_targets = {}
+    order_map = {p["id"]: p["phase_num"] for p in phases}
+
+    # ── Union-Find для parallel групп ─────────────────────────────────
+    parent: dict[str, str] = {p["id"]: p["id"] for p in phases}
+
+    def _find(x: str) -> str:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]  # path compression
+            x = parent[x]
+        return x
+
+    def _union(a: str, b: str) -> None:
+        ra, rb = _find(a), _find(b)
+        if ra != rb:
+            # attach smaller order to larger (arbitrary, deterministic)
+            if order_map.get(ra, 0) < order_map.get(rb, 0):
+                parent[rb] = ra
+            else:
+                parent[ra] = rb
+
     for p in phases:
         target = p.get("parallel_with")
-        if target and target in phases_by_id:
-            key = tuple(sorted([p["id"], target]))
-            if key not in parallel_targets:
-                parallel_targets[key] = set()
-            parallel_targets[key].add(p["id"])
-            parallel_targets[key].add(target)
-    
+        if target and target in phases_by_id and target != p["id"]:
+            _union(p["id"], target)
+
+    # Собрать компоненты
+    groups: dict[str, list[str]] = {}
+    for pid in phases_by_id:
+        root = _find(pid)
+        groups.setdefault(root, []).append(pid)
+
+    # Отделить sync от parallel (group size > 1)
     parallel_groups = [
-        sorted(list(g), key=lambda x: config.PHASE_ORDER.index(x))
-        for g in parallel_targets.values()
+        sorted(g, key=lambda x: order_map.get(x, 0))
+        for g in groups.values()
+        if len(g) > 1
     ]
     all_parallel_ids = set()
     for g in parallel_groups:
         all_parallel_ids.update(g)
-    
-    batches = []
-    used = set()
-    
-    for pid in config.PHASE_ORDER:
+
+    # ── Сортировка по DB order ────────────────────────────────────────
+    sorted_ids = sorted(phases_by_id.keys(), key=lambda x: order_map.get(x, 0))
+
+    batches: list[dict] = []
+    used: set[str] = set()
+
+    for pid in sorted_ids:
         if pid in used:
             continue
         if pid in all_parallel_ids:
+            # Найти группу и добавить целиком
             for group in parallel_groups:
                 if pid in group:
-                    batch_phases = [phases_by_id[g] for g in group if g in phases_by_id]
-                    if batch_phases:
-                        batches.append({
-                            "type": "parallel",
-                            "phases": batch_phases,
-                            "title": " + ".join(p["name"] for p in batch_phases),
-                        })
+                    batch_phases = [phases_by_id[g] for g in group]
+                    batches.append({
+                        "type": "parallel",
+                        "phases": batch_phases,
+                        "title": " + ".join(p["name"] for p in batch_phases),
+                    })
                     used.update(group)
                     break
         else:
-            if pid in phases_by_id:
-                batches.append({
-                    "type": "sync",
-                    "phases": [phases_by_id[pid]],
-                    "title": phases_by_id[pid]["name"],
-                })
-                used.add(pid)
-    
+            batches.append({
+                "type": "sync",
+                "phases": [phases_by_id[pid]],
+                "title": phases_by_id[pid]["name"],
+            })
+            used.add(pid)
+
     return batches
 
 
@@ -549,11 +582,16 @@ def api_wizard_context(jira_key: str):
 @app.get("/settings", response_class=HTMLResponse)
 def settings_page(request: Request):
     """Страница настроек workflow."""
+    s = config.load_settings()
+    if "key_patterns" not in s:
+        s["key_patterns"] = config.DEFAULT_SETTINGS.get("key_patterns", [
+            r"^TASKNEIROKLYUCH-(?P<number>[0-9]+)$",
+            r"^(?P<prefix>[A-Z][A-Z0-9]*)-(?P<number>[0-9]+)$",
+        ])
     return templates.TemplateResponse(
         request=request, name="settings.html", context={
             "request": request,
-            "settings": config.load_settings(),
-            "phase_groups": config.load_settings().get("phase_groups", config.PHASE_ORDER),
+            "settings": s,
         },
     )
 
@@ -629,22 +667,29 @@ def api_update_parallel(body: dict[str, Any]):
 
     wdb = _get_db()
 
-    # Clear old parallel links
-    for phase_id in clear:
+    # Collect ALL phase IDs that will be in new groups → must have old links wiped
+    all_group_ids = set()
+    for group in groups:
+        if len(group) >= 2:
+            all_group_ids.update(group)
+
+    # Clear old parallel links for anyone entering a new group or explicitly cleared
+    to_clear = all_group_ids | set(clear)
+    for phase_id in to_clear:
         wdb.update_phase_parallel(phase_id, None)
 
-    # Set new bidirectional links
+    # Set new bidirectional links (cycle for groups >=2)
     group_map: dict[str, str] = {}
     for group in groups:
         if len(group) >= 2:
             for i, phase_id in enumerate(group):
-                target = group[(i + 1) % len(group)]  # cycle link
+                target = group[(i + 1) % len(group)]
                 group_map[phase_id] = target
 
     if group_map:
         wdb.batch_update_groups(group_map)
 
-    return {"ok": True, "groups_set": len(group_map), "cleared": len(clear)}
+    return {"ok": True, "groups_set": len(group_map), "cleared": len(to_clear)}
 
 
 @app.put("/api/phases/{phase_id}")

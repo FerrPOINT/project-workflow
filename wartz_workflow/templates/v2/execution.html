@@ -35,9 +35,9 @@
 .parallel-branches>::before{content:"";position:absolute;left:50%;top:-12px;width:2px;height:12px;background:var(--orange)}
 .parallel-branch{flex:1;min-width:0}
 .parallel-branch .flow-node{height:100%}
-.parallel-drop-zone{width:20px;border-radius:6px;background:transparent;transition:background .1s;cursor:col-resize}
-.parallel-drop-zone.active{background:var(--accent);opacity:.5}
-.parallel-drop-zone.show{background:var(--accent-soft);opacity:.4}
+.parallel-drop-zone{width:20px;border-radius:6px;background:transparent;transition:background .1s;cursor:col-resize;align-self:stretch;min-height:60px;border:1px dashed transparent}
+.parallel-drop-zone.active{background:var(--accent);opacity:.6;border-color:var(--accent)}
+.parallel-drop-zone.show{background:var(--accent-soft);opacity:.7;border-color:var(--accent)}
 
 /* Join point (synchronization) */
 .join-point{display:flex;align-items:center;justify-content:center;gap:8px;margin:8px auto;padding:8px 20px;border-radius:12px;background:var(--orange-soft);border:1px dashed var(--orange);color:var(--orange);font-size:13px;font-weight:600;max-width:fit-content}
@@ -48,11 +48,12 @@
 .flow-connector::after{content:"";position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid var(--text-dim)}
 
 /* Drop zones */
-.drop-zone{height:20px;margin:2px 0;position:relative;border-radius:4px;transition:background .1s}
-.drop-zone::before{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:40px;height:4px;background:var(--accent);border-radius:2px;opacity:0;transition:opacity .1s}
+.drop-zone{height:24px;margin:2px 0;position:relative;border-radius:6px;border:2px dashed var(--border);background:transparent;transition:all .15s}
+.drop-zone::before{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:48px;height:4px;background:var(--accent);border-radius:2px;opacity:.2;transition:opacity .1s}
+.drop-zone.active{border-color:var(--accent);background:var(--accent-soft)}
 .drop-zone.active::before{opacity:1}
-.drop-zone.show{background:var(--accent-soft);opacity:.6}
-.drop-zone.show::before{opacity:.3}
+.drop-zone.show{border-color:var(--accent);background:rgba(59,130,246,.15)}
+.drop-zone.show::before{opacity:.6}
 .drop-zone.merge::before{width:80%;background:var(--orange);opacity:0}
 .drop-zone.merge.active::before{opacity:1}
 
@@ -388,6 +389,25 @@
     recalcOrders();
   }
 
+  /* ── Turn a node into parallel (badge + type) ── */
+  function makeParallel(node, groupId){
+    node.dataset.type = 'parallel';
+    if(groupId) node.dataset.parentGroup = groupId;
+    const badge = node.querySelector('.flow-node-type');
+    if(badge){ badge.className = 'flow-node-type parallel'; badge.textContent = 'PARALLEL⚡'; }
+    if(!node.querySelector('.btn-extract')){
+      const header = node.querySelector('.flow-node-header');
+      if(header){
+        const btn = document.createElement('button');
+        btn.className = 'btn-extract';
+        btn.textContent = '⤴';
+        btn.title = 'Вытащить из группы';
+        btn.onclick = function(){ extractNode(this); };
+        header.appendChild(btn);
+      }
+    }
+  }
+
   /* ── Merge: drag one node onto another → create / extend parallel group ── */
   function nodeDragOver(e){
     e.preventDefault();
@@ -433,6 +453,7 @@
       newBranch.className = 'parallel-branch';
       newBranch.appendChild(draggedNode);
       branches.appendChild(newBranch);
+      makeParallel(draggedNode, targetGroup.dataset.groupId);
       fixParallelZones(targetGroup);
     } else {
       // Create new parallel group with target + dragged
@@ -450,12 +471,14 @@
           <button class="btn-control" onclick="ungroup(this)">Разъединить</button>
         </div>`;
       const branches = group.querySelectorAll('.parallel-branch');
+      // target is still in graph; move it to branch[0] first
       branches[0].appendChild(target);
       branches[1].appendChild(draggedNode);
-
-      // Insert group where target was
+      // Insert group where target was, then remove original target from graph
       graph.insertBefore(group, target);
       target.remove();
+      makeParallel(target, group.dataset.groupId);
+      makeParallel(draggedNode, group.dataset.groupId);
       fixParallelZones(group);
     }
 
@@ -481,7 +504,12 @@
     const draggedBranch = draggedNode.closest('.parallel-branch');
     if(!draggedBranch) return; // only nodes already inside a branch can reorder here
     const zone = e.currentTarget;
-    zone.parentNode.insertBefore(draggedBranch, zone.nextElementSibling);
+    const next = zone.nextElementSibling;
+    if(next === draggedBranch){
+      zone.parentNode.insertBefore(draggedBranch, zone);
+    } else {
+      zone.parentNode.insertBefore(draggedBranch, next);
+    }
   }
 
   /* ── Rebuild connectors & drop-zones after structural changes ── */
@@ -522,11 +550,26 @@
 
   function recalcOrders(){
     let order = 1;
-    document.querySelectorAll('.flow-node').forEach(node=>{
-      node.dataset.phaseOrder = order;
-      const num = node.querySelector('.flow-node-num');
-      if(num) num.textContent = '№'+order;
-      order++;
+    const graph = document.getElementById('flowgraph');
+    const items = [...graph.children].filter(el =>
+      el.classList.contains('flow-node') ||
+      el.classList.contains('parallel-group')
+    );
+    items.forEach(item => {
+      if(item.classList.contains('parallel-group')){
+        const nodes = item.querySelectorAll('.flow-node');
+        nodes.forEach(node => {
+          node.dataset.phaseOrder = order;
+          const num = node.querySelector('.flow-node-num');
+          if(num) num.textContent = '№'+order;
+        });
+        order++;
+      } else {
+        item.dataset.phaseOrder = order;
+        const num = item.querySelector('.flow-node-num');
+        if(num) num.textContent = '№'+order;
+        order++;
+      }
     });
   }
 
@@ -543,11 +586,24 @@
       if(!n.closest('.parallel-group')) clear.push(n.dataset.phaseId);
     });
 
-    // Collect orders
-    const orders = [...document.querySelectorAll('.flow-node')].map((n, idx)=>({
-      phase_id: n.dataset.phaseId,
-      phase_order: idx + 1,
-    }));
+    // Collect orders: one number per graph item (sync node OR parallel group)
+    const orders = [];
+    let order = 1;
+    const graph = document.getElementById('flowgraph');
+    const items = [...graph.children].filter(el =>
+      el.classList.contains('flow-node') ||
+      el.classList.contains('parallel-group')
+    );
+    items.forEach(item => {
+      if(item.classList.contains('parallel-group')){
+        const ids = [...item.querySelectorAll('.flow-node')].map(n=>n.dataset.phaseId);
+        ids.forEach(id => orders.push({phase_id: id, phase_order: order}));
+        order++;
+      } else {
+        orders.push({phase_id: item.dataset.phaseId, phase_order: order});
+        order++;
+      }
+    });
 
     Promise.all([
       fetch('/api/phases/order',{

@@ -243,3 +243,6 @@ def migrate_key(key: str) -> Optional[str]:
     if match:
         return f"TASKNEIROKLYUCH-{match.group('number')}"
     return None
+
+# Backward-compat alias
+ValidationResult = ValidatedTaskKey

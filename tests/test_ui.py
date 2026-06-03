@@ -11,11 +11,11 @@ client = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def setup_db():
-    """Populate DB with YAML phases before UI tests."""
-    from wartz_workflow.ui import _get_db, _yaml_to_sqlite
+    """Populate DB with seed.json before UI tests."""
+    from wartz_workflow.ui import _get_db, _seed_to_sqlite
     wdb = _get_db()
     if wdb.is_empty():
-        _yaml_to_sqlite()
+        _seed_to_sqlite()
 
 
 class TestIndexPage:
@@ -140,8 +140,8 @@ class TestDragDropAPI:
         assert resp.status_code == 200
         data = resp.json()
         assert data["ok"] is True
-        assert data["groups_set"] > 0
-        assert data["cleared"] == 1
+        assert data["groups_set"] == 4  # 2 cycle links per group
+        assert data["cleared"] == 5    # 4 group members + 1 explicit clear
 
 
 class TestKanbanHTML:
@@ -164,8 +164,52 @@ class TestKanbanHTML:
         assert 'data-phase-id=' in response.text
         assert 'data-phase-order=' in response.text
 
+    def test_kanban_card_has_click_handler(self):
+        response = client.get("/phases")
+        assert response.status_code == 200
+        assert 'onclick="cardClick(event)"' in response.text
+        assert 'function cardClick(e)' in response.text
 
-class TestExecutionHTML:
+
+class TestSettingsPage:
+    """Tests for settings page and API."""
+
+    def test_settings_page_returns_html(self):
+        response = client.get("/settings")
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "text/html; charset=utf-8"
+        assert "Настройки" in response.text
+        assert "Шаблоны ключей" in response.text
+
+    def test_api_settings_get_returns_json(self):
+        response = client.get("/api/settings")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ok"] is True
+        assert "settings" in data
+        assert "key_patterns" in data["settings"]
+
+    def test_api_settings_put_and_delete(self):
+        # PUT
+        put = client.put("/api/settings", json={"key_patterns": [r"TEST-\d+"]})
+        assert put.status_code == 200
+        # Verify GET
+        get = client.get("/api/settings")
+        data = get.json()["settings"]
+        assert data["key_patterns"] == ["TEST-\\d+"]
+        # DELETE (reset)
+        delete = client.delete("/api/settings")
+        assert delete.status_code == 200
+        # Verify reset
+        get2 = client.get("/api/settings")
+        data2 = get2.json()["settings"]
+        assert data2["key_patterns"] == [
+            "^TASKNEIROKLYUCH-(?P<number>[0-9]+)$",
+            "^(?P<prefix>[A-Z][A-Z0-9]*)-(?P<number>[0-9]+)$",
+        ]
+
+
+class TestExecutionPage:
     """Tests for drag-and-drop HTML attributes in execution graph."""
 
     def test_execution_nodes_are_draggable(self):

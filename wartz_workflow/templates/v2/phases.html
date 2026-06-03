@@ -16,8 +16,8 @@
 .kanban-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding:0 4px}
 .kanban-header .title{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted)}
 .kanban-header .count{font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px;background:var(--accent-soft);color:var(--accent)}
-.kanban-card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:8px;cursor:grab;transition:all .12s;text-decoration:none;color:inherit;display:block;user-select:none}
-.kanban-card:hover{background:var(--surface-hover);border-color:var(--border-strong);transform:translateY(-1px)}
+.kanban-card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:8px;cursor:grab;transition:all .12s;text-decoration:none;color:inherit;display:block;user-select:none;position:relative}
+.kanban-card:hover{background:var(--surface-hover);border-color:var(--border-strong);transform:translateY(-1px);cursor:pointer}
 .kanban-card.dragging{opacity:.5;cursor:grabbing;transform:rotate(2deg)}
 .kanban-card .card-title{font-size:13px;font-weight:500;color:var(--text);margin-bottom:4px;line-height:1.4}
 .kanban-card .card-desc{font-size:11px;color:var(--text-muted);line-height:1.4;margin-top:4px}
@@ -43,7 +43,8 @@
            data-phase-id="{{ p.id }}"
            data-phase-order="{{ p.phase_num }}"
            ondragstart="cardDragStart(event)"
-           ondragend="cardDragEnd(event)">
+           ondragend="cardDragEnd(event)"
+           onclick="cardClick(event)">
         <div class="card-title">{{ p.name }}</div>
         {% if p.description %}
         <div class="card-desc">{{ p.description[:80] }}{% if p.description|length > 80 %}...{% endif %}</div>
@@ -167,6 +168,14 @@ function updateCounts(){
     const badge = document.getElementById('count-'+gid);
     if(badge) badge.textContent = n;
   });
+}
+
+/* ── Click to phase detail ───────────────────────────────────────── */
+function cardClick(e){
+  if (draggedCard) return;          // during drag — ignore click
+  const card = e.currentTarget;
+  const phaseId = card.dataset.phaseId;
+  if (phaseId) window.location.href = '/phase/' + phaseId;
 }
 
 function showToast(msg, type='success'){

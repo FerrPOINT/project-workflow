@@ -76,6 +76,59 @@ def run_phase(repo: str, jira_key: str, phase_name: str) -> Tuple[bool, str]:
     return True, f"Фаза {phase_name} выполнена"
 
 
+def _evaluate_condition(condition: str, repo: str, jira_key: str, context: dict) -> bool:
+    """Evaluate a shell-style condition string. Supports {var} substitution."""
+    import subprocess, shlex
+    cmd = condition
+    for key, val in context.items():
+        cmd = cmd.replace(f"{{{key}}}", str(val))
+    try:
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+        # shell return code 0 = True, non-zero = False
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+def conditional_delegate_jump(
+    repo: str,
+    jira_key: str,
+    phase_id: str,
+    delegate_condition: Optional[str],
+    delegate_target_phase: Optional[str],
+    context: dict,
+) -> Tuple[bool, str, Optional[str]]:
+    """Evaluate delegate_condition and perform jump if True.
+
+    Returns:
+        (jumped, message, target_phase_id)
+    """
+    if not delegate_condition or not delegate_target_phase:
+        return False, "No delegate condition configured", None
+
+    condition_true = _evaluate_condition(delegate_condition, repo, jira_key, context)
+
+    if condition_true:
+        current_idx = PHASE_ORDER.index(phase_id)
+        target_idx = PHASE_ORDER.index(delegate_target_phase)
+
+        if target_idx > current_idx:
+            # Jump forward — mark all intermediate phases completed
+            for i in range(current_idx, target_idx + 1):
+                mid = PHASE_ORDER[i]
+                state.mark_phase_complete(repo, jira_key, mid, f"auto-completed via delegate jump {phase_id}→{delegate_target_phase}")
+        else:
+            # Jump backward — unmark phases from target+1 up to current
+            for i in range(target_idx + 1, current_idx + 1):
+                mid = PHASE_ORDER[i]
+                state.unmark_phase(repo, jira_key, mid)
+            state.set_current_phase(repo, jira_key, delegate_target_phase)
+
+        return True, f"Delegate jump {phase_id} → {delegate_target_phase}", delegate_target_phase
+    else:
+        return False, "Condition false — no jump", None
+
+
 def get_phase_checklist_raw(phase_name: str) -> List[str]:
     """Вернуть raw список чеклиста для фазы (для JSON output)."""
     checklists = {

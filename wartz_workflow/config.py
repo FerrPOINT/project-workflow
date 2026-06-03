@@ -86,12 +86,10 @@ import os
 SETTINGS_PATH = os.path.join(WARTZ_DIR, "settings.json")
 
 DEFAULT_SETTINGS = {
-    "jira_base_url": JIRA_BASE_URL,
-    "gitlab_base_url": GITLAB_BASE_URL,
-    "gitlab_project_id": GITLAB_PROJECT_ID,
-    "ui_port": UI_PORT,
-    "ui_host": UI_HOST,
-    "phase_groups": PHASE_ORDER,
+    "key_patterns": [
+        r"^TASKNEIROKLYUCH-(?P<number>[0-9]+)$",
+        r"^(?P<prefix>[A-Z][A-Z0-9]*)-(?P<number>[0-9]+)$",
+    ],
 }
 
 

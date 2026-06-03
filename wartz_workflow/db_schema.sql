@@ -17,7 +17,8 @@ CREATE TABLE IF NOT EXISTS phases (
     -- meta
     parallel_with      TEXT,
     rollback_target    TEXT,
-    next_recommendation TEXT
+    next_recommendation TEXT,
+    execution_mode   TEXT DEFAULT 'sync'  -- sync | parallel
 );
 
 -- ═══════════════════════════════════════════════════════════════════
@@ -108,6 +109,19 @@ CREATE TABLE IF NOT EXISTS task_phases (
     status      TEXT DEFAULT 'pending',  -- pending | done | skipped
     completed_at TEXT,
     UNIQUE(task_id, phase_id)
+);
+
+-- ═══════════════════════════════════════════════════════════════════
+--  agents — настраиваемые агенты для делегированных фаз
+-- ═══════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS agents (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL UNIQUE,
+    role        TEXT,
+    toolsets    TEXT,  -- JSON list
+    oath        TEXT,
+    is_default  INTEGER DEFAULT 0,
+    created_at  TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ═══════════════════════════════════════════════════════════════════

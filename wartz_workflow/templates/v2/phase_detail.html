@@ -99,6 +99,12 @@
 .inline-input:focus{background:var(--panel);border-color:var(--accent)}
 
 .empty-state{color:var(--text-dim);font-size:13px;padding:16px 0}
+
+/* Phase execution mode toggle */
+.execution-toggle{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:6px;border:1px solid var(--border);cursor:pointer;transition:all .12s;font-size:12px;user-select:none}
+.execution-toggle:hover{background:var(--panel);border-color:var(--accent)}
+.mode-sync{color:var(--green)}
+.mode-parallel{color:var(--orange)}
 {% endblock %}
 
 {% block content %}
@@ -111,6 +117,13 @@
 
     <div class="wiki-meta">
       <span>ID: {{ phase.id }} — №{{ phase.phase_num }}</span>
+      <span class="execution-toggle" data-mode="{{ phase.execution_mode or 'sync' }}" onclick="togglePhaseMode(this)">
+        {% if phase.execution_mode == 'parallel' %}
+        <b class="mode-parallel">⚡ parallel</b>
+        {% else %}
+        <b class="mode-sync">⏱ sync</b>
+        {% endif %}
+      </span>
       {% if phase.delegate_agent %}
       <span>Агент: {{ phase.delegate_agent }} {% if phase.delegate_timeout %}({{ phase.delegate_timeout }} мин){% endif %}</span>
       {% endif %}
@@ -252,6 +265,22 @@
 {% endblock %}
 
 {% block extra_script %}
+function togglePhaseMode(el) {
+  const isSync = (el.dataset.mode || 'sync') === 'sync';
+  const b = el.querySelector('b');
+  if (isSync) {
+    el.dataset.mode = 'parallel';
+    b.className = 'mode-parallel';
+    b.textContent = '⚡ parallel';
+  } else {
+    el.dataset.mode = 'sync';
+    b.className = 'mode-sync';
+    b.textContent = '⏱ sync';
+  }
+  // Save immediately
+  savePhase();
+}
+
 function rebuildFlow() {
   const list = document.getElementById('instructions-list');
   const cards = [...list.querySelectorAll('.flow-card')];
@@ -425,7 +454,8 @@ async function savePhase() {
     skills: [],
     instructions: [],
     checks: [],
-    evidence: []
+    evidence: [],
+    execution_mode: document.querySelector('.execution-toggle')?.dataset.mode || 'sync'
   };
 
   document.querySelectorAll('#instructions-list .flow-card').forEach((card, idx) => {
