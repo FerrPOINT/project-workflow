@@ -4,9 +4,27 @@
 {% block header_title %}Все фазы workflow{% endblock %}
 {% block header_actions %}
   <a href="/" class="btn btn-secondary">← Назад</a>
+  <button class="btn btn-primary" onclick="toggleGroupManager()">⚙️ Группы</button>
 {% endblock %}
 
 {% block extra_style %}
+/* Group manager panel */
+.group-manager{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:20px;display:none}
+.group-manager.active{display:block}
+.group-manager-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.group-manager-title{font-size:14px;font-weight:600;color:var(--text)}
+.group-list{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.group-chip{display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:12px;cursor:grab;user-select:none}
+.group-chip.dragging{opacity:.5}
+.group-chip .icon{font-size:14px}
+.group-chip .name{color:var(--text);font-weight:500}
+.group-chip .actions{display:flex;gap:4px;margin-left:4px}
+.group-chip .btn-icon{width:20px;height:20px;border-radius:3px;border:none;background:transparent;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px}
+.group-chip .btn-icon:hover{background:var(--surface-hover);color:var(--text)}
+.group-chip .btn-icon.delete:hover{background:var(--danger-soft);color:var(--danger)}
+.group-form{display:flex;gap:8px;align-items:center}
+.group-form input{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:6px 10px;color:var(--text);font-size:12px;width:140px}
+.group-form button{font-size:12px;padding:6px 12px}
 .kanban{display:grid;grid-template-columns:repeat(6,1fr);gap:16px;align-items:start}
 @media(max-width:1400px){.kanban{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:900px){.kanban{grid-template-columns:repeat(2,1fr)}}
@@ -30,6 +48,20 @@
 {% endblock %}
 
 {% block content %}
+<!-- Group Manager Panel -->
+<div class="group-manager" id="groupManager">
+  <div class="group-manager-header">
+    <span class="group-manager-title">Группы фаз</span>
+    <button class="btn btn-sm btn-secondary" onclick="loadGroups()">🔄 Обновить</button>
+  </div>
+  <div class="group-list" id="groupList"></div>
+  <div class="group-form">
+    <input type="text" id="newGroupName" placeholder="Название группы" maxlength="30">
+    <input type="text" id="newGroupIcon" placeholder="Иконка (emoji)" maxlength="4" style="width:80px">
+    <button class="btn btn-primary" onclick="createGroup()">+ Добавить</button>
+  </div>
+</div>
+
 <div class="kanban" id="kanban">
   {% for group_id, group_name in groups.items() %}
   <div class="kanban-col" data-group="{{ group_id }}" ondragover="colDragOver(event)" ondragleave="colDragLeave(event)" ondrop="colDrop(event)">

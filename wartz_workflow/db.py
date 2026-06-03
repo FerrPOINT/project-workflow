@@ -157,6 +157,7 @@ class WorkflowDB:
             ("parallel_with", "TEXT"),
             ("rollback_target", "TEXT"),
             ("next_recommendation", "TEXT"),
+            ("group_id", "TEXT DEFAULT 'setup'"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE phases ADD COLUMN {column} {ctype}")
@@ -614,3 +615,93 @@ class WorkflowDB:
                     (target, phase_id),
                 )
             conn.commit()
+
+    # ── Phase Group CRUD ───────────────────────────────────────────────
+
+    def get_phase_groups(self) -> list[dict]:
+        """Получить все группы фаз, отсортированные по sort_order."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM phase_groups ORDER BY sort_order, id"
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_phase_group(self, group_id: str) -> dict | None:
+        """Получить группу по id."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM phase_groups WHERE id = ?", (group_id,)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def create_phase_group(self, data: dict) -> str:
+        """Создать группу. Возвращает id."""
+        with self._conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO phase_groups (id, name, icon, sort_order)
+                VALUES (?, ?, ?, ?)
+                """,
+                (data["id"], data["name"], data.get("icon"), data.get("sort_order", 0)),
+            )
+            conn.commit()
+            return data["id"]
+
+    def update_phase_group(self, group_id: str, data: dict) -> None:
+        """Обновить группу."""
+        fields = []
+        vals = []
+        for k, v in data.items():
+            fields.append(f"{k} = ?")
+            vals.append(v)
+        vals.append(group_id)
+        sql = f"UPDATE phase_groups SET {', '.join(fields)} WHERE id = ?"
+        with self._conn() as conn:
+            conn.execute(sql, vals)
+            conn.commit()
+
+    def delete_phase_group(self, group_id: str) -> None:
+        """Удалить группу. Фазы в группе переходят в 'setup' (default)."""
+        with self._conn() as conn:
+            conn.execute("UPDATE phases SET group_id = 'setup' WHERE group_id = ?", (group_id,))
+            conn.execute("DELETE FROM phase_groups WHERE id = ?", (group_id,))
+            conn.commit()
+
+    def update_phase_group_assignment(self, phase_id: str, group_id: str) -> None:
+        """Назначить фазу в группу."""
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE phases SET group_id = ? WHERE id = ?",
+                (group_id, phase_id),
+            )
+            conn.commit()
+
+    def batch_update_group_orders(self, orders: list[tuple[str, int]]) -> None:
+        """Обновить sort_order групп (drag-and-drop колонок)."""
+        with self._conn() as conn:
+            for group_id, new_order in orders:
+                conn.execute(
+                    "UPDATE phase_groups SET sort_order = ? WHERE id = ?",
+                    (new_order, group_id),
+                )
+            conn.commit()
+
+    def seed_default_groups(self) -> None:
+        """Залить дефолтные группы если таблица пуста."""
+        defaults = [
+            {"id": "setup", "name": "🔧 Setup", "icon": "🔧", "sort_order": 1},
+            {"id": "research", "name": "🔬 Research", "icon": "🔬", "sort_order": 2},
+            {"id": "plan", "name": "📋 Plan", "icon": "📋", "sort_order": 3},
+            {"id": "dev", "name": "💻 Dev", "icon": "💻", "sort_order": 4},
+            {"id": "qa", "name": "🧪 QA", "icon": "🧪", "sort_order": 5},
+            {"id": "closure", "name": "🏁 Closure", "icon": "🏁", "sort_order": 6},
+        ]
+        with self._conn() as conn:
+            count = conn.execute("SELECT COUNT(*) FROM phase_groups").fetchone()[0]
+            if count == 0:
+                for g in defaults:
+                    conn.execute(
+                        "INSERT INTO phase_groups (id, name, icon, sort_order) VALUES (?, ?, ?, ?)",
+                        (g["id"], g["name"], g["icon"], g["sort_order"]),
+                    )
+                conn.commit()

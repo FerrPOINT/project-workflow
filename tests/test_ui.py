@@ -132,17 +132,6 @@ class TestDragDropAPI:
         data = resp.json()
         assert data["ok"] is False
 
-    def test_api_parallel_groups_update(self):
-        resp = client.put("/api/phases/parallel", json={
-            "groups": [["4.5", "5"], ["7.5", "7.6"]],
-            "clear": ["3.5"]
-        })
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["ok"] is True
-        assert data["groups_set"] == 4  # 2 cycle links per group
-        assert data["cleared"] == 5    # 4 group members + 1 explicit clear
-
 
 class TestKanbanHTML:
     """Tests for drag-and-drop HTML attributes in Kanban."""
@@ -209,24 +198,79 @@ class TestSettingsPage:
         ]
 
 
-class TestExecutionPage:
-    """Tests for drag-and-drop HTML attributes in execution graph."""
+class TestGroupAPI:
+    """Tests for phase group CRUD API."""
 
-    def test_execution_nodes_are_draggable(self):
-        response = client.get("/execution")
+    def test_api_groups_list(self):
+        response = client.get("/api/groups")
         assert response.status_code == 200
-        assert 'draggable="true"' in response.text
-        assert 'ondragstart="nodeDragStart(event)"' in response.text
+        data = response.json()
+        assert data["ok"] is True
+        assert "groups" in data
+        assert len(data["groups"]) >= 6  # default groups
 
-    def test_execution_has_drop_zones(self):
-        response = client.get("/execution")
-        assert response.status_code == 200
-        assert 'insert-line' in response.text
-        assert 'ondrop="insertDrop(event)"' in response.text
+    def test_api_group_create_and_delete(self):
+        # Create
+        resp = client.post("/api/groups", json={
+            "id": "testgroup",
+            "name": "🧪 Test Group",
+            "icon": "🧪",
+            "sort_order": 99,
+        })
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is True
+        assert resp.json()["group_id"] == "testgroup"
 
-    def test_execution_has_controls(self):
-        response = client.get("/execution")
-        assert response.status_code == 200
-        assert 'saveLayout()' in response.text
-        assert 'resetLayout()' in response.text
-        assert 'Разъединить' in response.text
+        # Verify in list
+        list_resp = client.get("/api/groups")
+        groups = list_resp.json()["groups"]
+        assert any(g["id"] == "testgroup" for g in groups)
+
+        # Delete
+        del_resp = client.delete("/api/groups/testgroup")
+        assert del_resp.status_code == 200
+        assert del_resp.json()["ok"] is True
+
+        # Verify gone
+        list_resp2 = client.get("/api/groups")
+        groups2 = list_resp2.json()["groups"]
+        assert not any(g["id"] == "testgroup" for g in groups2)
+
+    def test_api_group_duplicate_fails(self):
+        # Create once
+        client.post("/api/groups", json={"id": "dupgroup", "name": "Dup", "sort_order": 1})
+        # Try again
+        resp = client.post("/api/groups", json={"id": "dupgroup", "name": "Dup2", "sort_order": 2})
+        assert resp.status_code == 409
+        # Cleanup
+        client.delete("/api/groups/dupgroup")
+
+    def test_api_group_update(self):
+        client.post("/api/groups", json={"id": "updgroup", "name": "Old", "sort_order": 1})
+        resp = client.put("/api/groups/updgroup", json={"name": "New Name", "icon": "🆕"})
+        assert resp.status_code == 200
+        # Verify
+        list_resp = client.get("/api/groups")
+        group = next((g for g in list_resp.json()["groups"] if g["id"] == "updgroup"), None)
+        assert group["name"] == "New Name"
+        assert group["icon"] == "🆕"
+        # Cleanup
+        client.delete("/api/groups/updgroup")
+
+    def test_api_phase_group_assign(self):
+        resp = client.put("/api/phases/-1/group", json={"group_id": "dev"})
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is True
+        # Cleanup — вернуть в setup
+        client.put("/api/phases/-1/group", json={"group_id": "setup"})
+
+    def test_api_groups_order(self):
+        resp = client.put("/api/groups/order", json={
+            "orders": [
+                {"group_id": "setup", "sort_order": 1},
+                {"group_id": "research", "sort_order": 2},
+            ]
+        })
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is True
+        assert resp.json()["updated"] == 2

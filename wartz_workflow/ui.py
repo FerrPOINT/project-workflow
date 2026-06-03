@@ -636,6 +636,87 @@ def api_phase_detail(phase_id: str):
     return {"ok": True, "phase": phase}
 
 
+@app.get("/api/groups")
+def api_groups():
+    """Получить все группы фаз."""
+    wdb = _get_db()
+    wdb.seed_default_groups()
+    groups = wdb.get_phase_groups()
+    return {"ok": True, "groups": groups}
+
+
+@app.post("/api/groups")
+def api_group_create(body: dict[str, Any]):
+    """Создать группу фаз."""
+    group_id = body.get("id", "").strip().lower()
+    name = body.get("name", "").strip()
+    if not group_id or not name:
+        return JSONResponse({"ok": False, "error": "id and name required"}, status_code=400)
+    wdb = _get_db()
+    existing = wdb.get_phase_group(group_id)
+    if existing:
+        return JSONResponse({"ok": False, "error": f"Group {group_id} already exists"}, status_code=409)
+    wdb.create_phase_group({
+        "id": group_id, "name": name, "icon": body.get("icon"),
+        "sort_order": body.get("sort_order", 0),
+    })
+    return {"ok": True, "group_id": group_id}
+
+
+@app.put("/api/groups/order")
+def api_groups_order(body: dict[str, Any]):
+    """Обновить порядок групп (DND колонок)."""
+    orders = body.get("orders", [])
+    if not orders:
+        return JSONResponse({"ok": False, "error": "No orders provided"}, status_code=400)
+    wdb = _get_db()
+    batch = [(o["group_id"], o["sort_order"]) for o in orders]
+    wdb.batch_update_group_orders(batch)
+    return {"ok": True, "updated": len(batch)}
+
+
+@app.put("/api/groups/{group_id}")
+def api_group_update(group_id: str, body: dict[str, Any]):
+    """Обновить группу."""
+    wdb = _get_db()
+    existing = wdb.get_phase_group(group_id)
+    if not existing:
+        return JSONResponse({"ok": False, "error": "Group not found"}, status_code=404)
+    update_data = {}
+    if "name" in body: update_data["name"] = body["name"]
+    if "icon" in body: update_data["icon"] = body["icon"]
+    if "sort_order" in body: update_data["sort_order"] = body["sort_order"]
+    if update_data:
+        wdb.update_phase_group(group_id, update_data)
+    return {"ok": True}
+
+
+@app.delete("/api/groups/{group_id}")
+def api_group_delete(group_id: str):
+    """Удалить группу. Фазы переходят в setup."""
+    wdb = _get_db()
+    existing = wdb.get_phase_group(group_id)
+    if not existing:
+        return JSONResponse({"ok": False, "error": "Group not found"}, status_code=404)
+    wdb.delete_phase_group(group_id)
+    return {"ok": True}
+
+
+@app.put("/api/phases/{phase_id}/group")
+def api_phase_group_assign(phase_id: str, body: dict[str, Any]):
+    """Назначить фазу в группу."""
+    group_id = body.get("group_id")
+    if not group_id:
+        return JSONResponse({"ok": False, "error": "group_id required"}, status_code=400)
+    wdb = _get_db()
+    if not wdb.get_phase(phase_id):
+        return JSONResponse({"ok": False, "error": "Phase not found"}, status_code=404)
+    if not wdb.get_phase_group(group_id):
+        return JSONResponse({"ok": False, "error": "Group not found"}, status_code=404)
+    wdb.update_phase_group_assignment(phase_id, group_id)
+    return {"ok": True}
+
+
 @app.put("/api/phases/order")
 def api_update_order(body: dict[str, Any]):
     """Batch update phase_order после drag-and-drop на Kanban.

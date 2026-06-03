@@ -549,6 +549,7 @@ function branchZoneDragLeave(e){
 }
 function branchZoneDrop(e){
   e.preventDefault();
+  e.stopPropagation();
   e.currentTarget.classList.remove('merge-active');
   if(!draggedNode) return;
   const draggedBranch = draggedNode.closest('.parallel-branch');

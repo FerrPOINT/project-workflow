@@ -142,3 +142,14 @@ CREATE TABLE IF NOT EXISTS checkups (
     output      TEXT,
     ran_at      TEXT DEFAULT CURRENT_TIMESTAMP
 );
+
+-- ═══════════════════════════════════════════════════════════════════
+--  phase_groups — группы фаз (SETUP, RESEARCH, PLAN, DEV, QA, CLOSURE)
+-- ═══════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS phase_groups (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    icon        TEXT,
+    sort_order  INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT DEFAULT CURRENT_TIMESTAMP
+);
