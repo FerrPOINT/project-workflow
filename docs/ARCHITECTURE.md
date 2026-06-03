@@ -1,307 +1,231 @@
-# Анализ структуры проекта + Целевая архитектура
+# Архитектура wartz-workflow
 
-## Диагностика текущего состояния
-
-### Распределение кода
-
-| Файл | Строк | Зона ответственности | Проблема |
-|------|-------|----------------------|----------|
-| **cli.py** | **965** | CLI-парсинг + бизнес-логика + UI-команды + субпроцессы + состояние | **God Object** — 17 команд, 21 функций, импорты 12 модулей |
-| **ui.py** | 530 | FastAPI + HTML-шаблоны + Jinja-like fallback + CLI-entry | Смешаны слои: API, рендеринг, утилиты |
-| **wizard.py** | 353 | Интерактивный диалог + анализ ответов + чеклист + gate | Большой, но концентрированный |
-| **jira_gitlab.py** | 277 | Jira REST + GitLab API + fallback на файлы + 2 токена | Мешаны два API + локальные проверки |
-| **engine.py** | 256 | декларативный engine + проверки + subprocess | Мешан декларативный DSL и императивные проверки |
-| **state.py** | 205 | progress.json + git-операции + поиск репозитория | I/O с side-эффектами (git reset, git rebase) |
-| **conversation.py** | 192 | SQLite CRUD + digest + поиск фазы | OK, но singleton DB без сессий |
-| **rollback.py** | 151 | Git-откат | OK, отдельный модуль |
-| **profiles.py** | 188 | YAML-профили + GitLab merge settings | OK, но завязан на click.options |
-| **schema.py** | 162 | 6 dataclasses + YAML-парсинг | OK, но `PhaseQuestions` — устарел |
-| **task_validator.py** | 245 | Валидация ключей + key_patterns + config | OK, но `KeyStyle` enum — переусложнён |
-| **config.py** | 75 | Константы + BLOCKER_PHASES + WARTZ_DIR | OK, но `WARTZ_DIR` — глобальное состояние |
-| **phases.py** | 175 | `phase_map` + `get_next_phase` + `get_phase_by_id` | OK, тонкий слой над schema |
-| **verify.py** | 86 | внешние проверки через bash-команды | OK, но subprocess — скрытый side-effect |
-
-### Тестовое покрытие
-
-| Модуль | Тесты | Норма | Дефицит |
-|--------|-------|-------|---------|
-| verify.py | 1.1x строк теста | ОК | |
-| rollback.py | 0.9x | ОК | |
-| profiles.py | 0.8x | Почти OK | |
-| **cli.py** | **0.0x** (44 lines / 965) | **Критическая** | 921 строк untested |
-| **engine.py** | **0.0x** | **Критическая** | 256 строк untested |
-| **conversation.py** | **0.0x** | **Критическая** | 192 строк untested |
-| **schema.py** | **0.0x** | **Критическая** | 162 строк untested |
-
-### Side-effects (скрытые)
-
-| Side-effect | Где | Проблема |
-|-------------|-----|----------|
-| `subprocess.run(..., shell=True)` | cli.py(1), engine.py(4), state.py(5), verify.py(3), wizard.py(1) | Код нельзя тестировать без патча subprocess; shell=True — безопасность |
-| `sqlite3.connect(DB_PATH)` | conversation.py(глобально) | Singleton без сессий; гонки в параллельных тестах |
-| `os.makedirs(...)` | cli.py, state.py, verify.py | Файловые операции без абстракции |
-| `json.dump(..., state_file)` | state.py | Прямая запись на диск без rollback ошибки |
-| `requests.get(...)` | jira_gitlab.py | HTTP без retry, backoff, circuit breaker |
-| `git reset --hard`, `git rebase` | state.py | Деструктивные git-команды без подтверждения |
-
-### Устаревшее
-
-| Конструкт | Зачем был нужен | Почему устарел |
-|-----------|-----------------|----------------|
-| `PhaseQuestion` | Сложные вопросы с keywords | wizard v4.1 сразу берёт из checklist |
-| `AnswerAnalysis` namedtuple | Сложная эвристика покрытия | Заменён на простые списки |
-| `key_patterns` в validator | Гибкие regex-паттерны | База уже выросла; новые ключи — легаси |
-| `PhaseDelegate` | Делегаты для `delegate_task` | Используется, но YAML схема переусложнена |
+> Текущее состояние — flat modules, SQLite-first, CLI + Web UI.
 
 ---
 
-## Целевая архитектура (v2.0)
+## Принципы
 
-### Принципы
-
-1. **Clean Architecture** — зависимости направлены ВНУТРЬ (к центру)
-2. **Порт-Адаптер** — бизнес-логика независима от CLI / API / БД
-3. **Dependency Injection** — сервисы получают репозитории через конструктор
-4. **No God Objects** — cli.py < 200 строк; ui.py < 200 строк
-5. **Test Doubles** — каждый boundary-адаптер mockable
-
-### Структура директорий
-
-```
-wartz_workflow/
-├── __init__.py
-│
-├── # ═════════ DOMAIN (ядро, чистые классы) ═════════
-├── domain/
-│   ├── __init__.py
-│   ├── phase.py          ← Phase, PhaseCheck, PhaseEvidence, PhaseInstruction
-│   ├── task.py           ← Task, TaskKey, TaskStatus
-│   ├── checklist.py        ← Checklist, CheckItem, Coverage
-│   └── transition.py       ← Transition, Blocker, GateResult
-│
-├── # ════════ APPLICATION (юзкейсы, без I/O) ════════
-├── application/
-│   ├── __init__.py
-│   ├── wizard_usecase.py   ← WizardEngine (только логика, нет rich)
-│   ├── jira_usecase.py     ← Получить статус задачи (абстракция)
-│   └── state_usecase.py    ← Чтение/запись состояния (абстракция)
-│
-├── # ═════ ADAPTERS (внешний мир -- заменяемые) ══════
-├── adapters/
-│   ├── __init__.py
-│   ├── db/
-│   │   ├── __init__.py
-│   │   ├── conversation_repo.py   ← sqlite3 CRUD
-│   │   └── schema.yaml            ← сюда переехать phases.yaml
-│   ├── http/
-│   │   ├── __init__.py
-│   │   ├── jira_client.py         ← requests → Jira
-│   │   └── gitlab_client.py       ← requests → GitLab
-│   ├── file/
-│   │   ├── __init__.py
-│   │   ├── state_store.py          ← progress.json
-│   │   ├── info_store.py           ← info/ папки
-│   │   └── changelog_store.py      ← changelog.md
-│   └── shell/
-│       ├── __init__.py
-│       └── runner.py               ← subprocess.run (единственный файл)
-│
-├── # ══════ PORTS (интерфейсы для DI) ════════
-├── ports/
-│   ├── __init__.py
-│   ├── jira_port.py        ← JiraPort (abc)
-│   ├── state_port.py       ← StatePort (abc)
-│   ├── convo_port.py       ← ConversationPort (abc)
-│   └── shell_port.py       ← ShellRunnerPort (abc)
-│
-├── # ══════ API (FastAPI -- thin wrapper) ══════
-├── api/
-│   ├── __init__.py
-│   ├── app.py              ← FastAPI factory
-│   ├── routers/
-│   │   ├── __init__.py
-│   │   ├── phases.py       ← GET /phases
-│   │   ├── tasks.py        ← GET /tasks, /task/{id}
-│   │   ├── wizard.py       ← POST /wizard/{task_id}/answer
-│   │   └── config.py       ← GET /config
-│   └── templates/
-│       ├── index.html
-│       ├── ...
-│
-└── # ══════ CLI (thin wrapper над usecases) ══════
-    cli/
-    ├── __init__.py
-    ├── main.py             ← click.Group + общие opts
-    ├── commands/
-    │   ├── __init__.py
-    │   ├── init.py         ← hrflow init
-    │   ├── wizard.py       ← hrflow wizard
-    │   ├── note.py         ← hrflow note
-    │   ├── ui.py           ← hrflow ui
-    │   ├── status.py       ← hrflow status
-    │   └── rollback.py     ← hrflow rollback
-    └── renderers/
-        ├── __init__.py
-        ├── rich_renderer.py    ← Все rich console prints
-        └── json_renderer.py    ← --json output mode
-
-config/
-├── __init__.py
-└── settings.py             ← Pydantic Settings (env vars, defaults)
-
-tests/
-├── unit/
-│   ├── domain/
-│   ├── application/
-│   └── ports/
-├── integration/
-│   ├── adapters/
-│   └── api/
-└── e2e/
-    └── cli/
-```
-
-### Поток данных
-
-```
-Пользователь → CLI (click) → Application UseCase → Domain Model
-                                      ↓
-                                  Adapters (DB, HTTP, File, Shell)
-                                      ↓
-                              Внешний мир (Jira, GitLab, SQLite, bash)
-
-Пользователь → API (FastAPI) → Application UseCase → [то же ядро]
-```
-
-### Dependency Rule
-
-**Внутренние слои не знают о внешних.**
-
-- `domain/` → ничего не импортирует (чистые dataclasses)
-- `application/` → импортирует только `domain/`
-- `adapters/` → импортирует `application/ports` (интерфейсы)
-- `cli/`, `api/` → импортируют `application/` и инициализируют адаптеры
+1. **CLI-first** — всё основное через `hrflow` команду
+2. **State-driven** — не job queue, а phase transitions
+3. **Flat modules** — никаких `application/`, `domain/`, `infrastructure/`
+4. **SQLite canonical** — `seed.json` загружается в SQLite, всё читаем из DB
+5. **Controller → Service → Data Access** — layered внутри модуля, не между директориями
 
 ---
 
-## Чеклист миграции
+## Диаграмма
 
-### Phase 1: Выделить чистое ядро (domain/)
-- [ ] Перенести `schema.py` → `domain/phase.py` (6 dataclasses)
-- [ ] Удалить `PhaseQuestion`, `PhaseDelegate`
-- [ ] Создать `domain/checklist.py` (CoverItem, CheckResult)
-- [ ] Создать `domain/task.py` (TaskKey с валидацией)
-- [ ] **Тесты**: unit/domain/ с pytest-dataclasses assertion
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   CLI Layer     │     │   Web UI Layer  │     │   Agent Layer   │
+│  (cli/commands) │     │  (ui.py / Jinja2)│    │  (wizard.py)    │
+└────────┬────────┘     └────────┬────────┘     └────────┬────────┘
+         │                       │                       │
+         └───────────────────────┼───────────────────────┘
+                                 │
+                    ┌─────────────▼─────────────┐
+                    │      Service Layer        │
+                    │    (service.py:           │
+                    │     PhaseService)          │
+                    └─────────────┬─────────────┘
+                                  │
+                    ┌─────────────▼─────────────┐
+                    │      Data Access Layer    │
+                    │    (db.py: WorkflowDB)     │
+                    └─────────────┬─────────────┘
+                                  │
+                    ┌─────────────▼─────────────┐
+                    │        SQLite             │
+                    │   ~/.wartz-workflow/       │
+                    │      workflow.db           │
+                    └─────────────────────────────┘
+```
+
+---
+
+## Модули
+
+| Модуль | Ответственность | Строки | Тесты |
+|--------|-----------------|--------|-------|
+| `cli/commands.py` | CLI: init, wizard, wizard-context, status, verify | 269 | — |
+| `cli/ui.py` | CLI: `hrflow ui --port` | 57 | — |
+| `ui.py` | FastAPI routes, Jinja2 templates | 776 | test_ui.py |
+| `service.py` | PhaseService: bulk save, ID return | 120 | test_ui.py |
+| `db.py` | SQLite CRUD: phases, instructions, checks, evidence, agents | 600+ | test_db.py |
+| `db_schema.sql` | DDL | 80 | — |
+| `schema.py` | seed.json → SQLite loader, YAML fallback | 200 | — |
+| `models.py` | Domain dataclasses | 80 | — |
+| `wizard.py` | WizardEngine: evaluate, get_full_context, get_phase_prompt | 417 | test_wizard_context.py, test_wizard.py |
+| `conversation.py` | SQLite: transitions, questions, answers | 192 | — |
+| `phases.py` | phase_map, get_next_phase | 175 | test_phases.py |
+| `config.py` | settings.json, DEFAULT_SETTINGS | 120 | test_ui.py |
+| `task_validator.py` | Task key regex validation | 245 | test_task_validator.py |
+| `profiles.py` | Agent profiles | 188 | test_profiles.py |
+| `verify.py` | verify-suite.sh runner | 86 | test_verify.py |
+| `rollback.py` | Git rollback | 151 | test_rollback.py |
+| `engine.py` | Declarative engine | 256 | — |
+| `state.py` | progress.json + git ops | 205 | test_state.py |
+
+---
+
+## Данные
+
+### Canonical source: `references/seed.json`
+
+30 фаз с полным описанием:
+```json
+{
+  "phases": [
+    {
+      "id": "-1", "name": "Task Intake", "phase_num": 1,
+      "description": "...",
+      "skills": ["workflow-requesting-code-review"],
+      "instructions": [...],
+      "checks": [...],
+      "evidence": [...]
+    }
+  ]
+}
+```
+
+### DB Schema
+
+```sql
+phases          (id, name, description, phase_order, skills, ...)
+instructions    (id, phase_id, step_num, description, execution_type, tool)
+checks          (id, phase_id, description, optional)
+evidence        (id, phase_id, item, validator)
+questions       (id, phase_id, qtext, required, expected_keywords)
+agents          (id, name, description)
+conversations   (id, task_id, jira_key, role, phase_id, content, tags, created_at)
+```
+
+---
+
+## CLI Flow
+
+```
+hrflow init TASK-456 → создаёт info/ + progress.json
+     ↓
+hrflow wizard TASK-456 → показывает инструкции текущей фазы
+     ↓
+# агент работает...
+     ↓
+hrflow wizard TASK-456 --report "сделал X" → wizard.evaluate()
+     ↓
+PASS → next phase
+FAIL → retry
+```
+
+---
+
+## UI Flow
+
+```
+/ → dashboard
+/phases → Kanban (drag between columns)
+/phase/{id} → редактирование фазы (autosave)
+/execution → DND graph (reorder + merge parallel)
+/settings → конфигурация
+/wizard/{id} → прохождение фазы
+```
+
+---
+
+## Wizard Flow
+
+```
+agent report
+    ↓
+WizardEngine.evaluate(report)
+    ↓
+_build_checklist(phase)  ← instructions + checks + evidence
+    ↓
+_check_coverage(report, checklist)  ← keyword matching
+    ↓
+_check_repeatable(report)  ← 3 обязательных задания
+    ↓
+PASS / FAIL
+```
+
+---
+
+## State Machine
+
+```
+┌─────────┐     sync      ┌─────────┐     parallel    ┌─────────┐
+│  Phase  │ ─────────────→│  Phase  │ ─────────────→│  Phase  │
+│   -1    │               │   0.6   │               │   1     │
+│ Intake  │               │Researcher#1│               │ Context │
+└─────────┘               └────┬────┘               └─────────┘
+                               │
+                          ┌────┴────┐
+                          │  Phase  │
+                          │  0.6b   │
+                          │ Deep R  │
+                          └────┬────┘
+                               │
+                          ┌────┴────┐
+                          │  JOIN   │
+                          │ sync    │
+                          └─────────┘
+```
+
+- **sync** — ждём предыдущую
+- **parallel** — выполняются одновременно, JOIN ждёт всех
+- **blocker** — hard stop, нельзя пропустить
+- **delegated** — назначен агент
+- **critic** — review gate
+
+---
+
+## Anti-patterns (запрещено)
+
+| ❌ Запрещено | Почему |
+|-------------|--------|
+| `application/`, `domain/`, `infrastructure/` | Circular imports, сломалось |
+| `phases.yaml` | Устарело, canonical = `seed.json` |
+| Inline CSS в Python | ~20KB мусора, нет подсветки |
+| `subprocess(shell=True)` | Безопасность, тестируемость |
+| Singleton DB без сессий | Гонки в параллельных тестах |
+
+---
+
+## Тесты
 
 ```bash
-# Соотношение test/code: 1.5x для domain
-pytest tests/unit/domain/ -v
+pytest tests/ -q
+# 151 passed
 ```
 
-### Phase 2: Выделить порты (ports/)
-- [ ] Создать `ports/jira_port.py` (ABC)
-- [ ] Создать `ports/state_port.py` (ABC)
-- [ ] Создать `ports/convo_port.py` (ABC)
-- [ ] Создать `ports/shell_port.py` (ABC, без shell=True)
-- [ ] **Тесты**: проверить что порты — чистые ABC
-
-### Phase 3: Рефактор adapters/
-- [ ] `conversation.py` → `adapters/db/conversation_repo.py`
-- [ ] Добавить `session` параметр (не глобальный DB_PATH)
-- [ ] `jira_gitlab.py` → `adapters/http/jira_client.py` + `adapters/http/gitlab_client.py`
-- [ ] `state.py` → `adapters/file/state_store.py` + `adapters/file/info_store.py`
-- [ ] Выделить `shell/runner.py` — единственный файл с subprocess
-- [ ] Заменить `shell=True` на list-аргументы везде
-- [ ] **Тесты**: integration test каждого адаптера с fake/testdouble
-
-### Phase 4: Application usecases
-- [ ] `wizard.py` логика → `application/wizard_usecase.py` (без rich)
-- [ ] Добавить `WizardPresenter` port (интерфейс для вывода)
-- [ ] `engine.py` → `application/engine_usecase.py`
-- [ ] **Тесты**: unit/application/ без I/O
-
-### Phase 5: CLI refactor
-- [ ] Разбить `cli.py` (965 → ~150):
-  - `cli/main.py` — click.Group + entry point
-  - `cli/commands/init.py` — hrflow init
-  - `cli/commands/wizard.py` — hrflow wizard
-  - `cli/commands/note.py` — hrflow note
-  - `cli/commands/ui.py` — hrflow ui
-  - ... и т.д.
-- [ ] Перенести все `console.print` → `cli/renderers/rich_renderer.py`
-- [ ] Добавить `--json` renderer → `cli/renderers/json_renderer.py`
-- [ ] **Тесты**: e2e/cli/ через `click.testing.CliRunner`
-
-### Phase 6: API refactor
-- [ ] Разбить `ui.py` (530 → ~100):
-  - `api/app.py` — FastAPI factory
-  - `api/routers/phases.py` — endpoints
-  - `api/routers/tasks.py`
-  - `api/routers/wizard.py`
-  - `api/routers/config.py`
-- [ ] HTML templates остаются, но вынесены из Python-кода
-- [ ] **Тесты**: integration/api/ через TestClient
-
-### Phase 7: Config через Pydantic Settings
-- [ ] `config.py` → `config/settings.py`
-- [ ] Все `os.environ` + `os.getenv` → Pydantic BaseSettings
-- [ ] `.env` через `python-dotenv`
-- [ ] **Тесты**: unit/config/
-
-### Phase 8: Запуск + Cleanup
-- [ ] Удалить `__pycache__` references
-- [ ] Улучшить `.gitignore` для build artifacts
-- [ ] `pyproject.toml` — обновить packages
-- [ ] **E2E test**: полный happy-path через CLI
+| Модуль | Тесты |
+|--------|-------|
+| test_ui.py | Web UI endpoints |
+| test_graph.py | Execution batches + DND |
+| test_db.py | SQLite CRUD |
+| test_wizard_context.py | WizardEngine.get_full_context() |
+| test_wizard.py | wizard CLI |
+| test_phases.py | phase_map |
+| test_task_validator.py | key validation |
+| test_profiles.py | profiles |
+| test_rollback.py | rollback |
+| test_state.py | state |
+| test_verify.py | verify-suite |
+| test_adapters.py | adapters |
 
 ---
 
-## Критерий "готово"
+## Settings
 
-### Качество кода
+```json
+~/.wartz-workflow/settings.json
+{
+  "jira_base_url": "...",
+  "gitlab_base_url": "...",
+  "gitlab_project_id": "...",
+  "ui_port": 8811,
+  "ui_host": "0.0.0.0",
+  "key_patterns": ["^TASKNEIROKLYUCH-(?P<number>[0-9]+)$"]
+}
 ```
-Все файлы <= 300 строк:
-  ❌ cli.py 965 → ✅ split into 10 files
-  ❌ ui.py  530  → ✅ split into 5 routers + templates
-  ❌ jira_gitlab.py 277 → ✅ jira_client.py 120 + gitlab_client.py 120
-  ❌ engine.py 256 → ✅ engine_usecase.py 180 + shell/adapter.py 80
-```
-
-### Тесты
-```
-Каждый адаптер:
-  ✅ unit test с mock boundary
-  ✅ integration test с real boundary (отдельно с @pytest.mark.integration)
-
-Каждая команда CLI:
-  ✅ e2e через CliRunner
-  ✅ --json и --rich режимы
-
-Каждый endpoint API:
-  ✅ TestClient GET/POST
-  ✅ 404/422/500 error paths
-```
-
-### Метрики
-```
-Code coverage: 60% → 85%+
-Cyclomatic complexity: макс A (~5)
-Fan-out (число зависимостей): каждый модуль <= 5 imports
-Fan-in (использований): каждый порт >= 2 клиента
-```
-
----
-
-## Почему это важно
-
-**Сейчас:** Добавить фичу в cli.py → трогаешь 965 строк → ломаешь 12 модулей → тестируешь вручную.
-**После:** Добавить фичу → пишешь usecase (50 строк) → добавляешь endpoint + command (по 10 строк) → тесты проходят.
-
-**Сейчас:** wizard и ui.py импортируют одну логику, но нельзя переиспользовать.
-**После:** Один `WizardUseCase` → используется и в CLI, и в API, и в cron job.
-
-**Сейчас:** HTTP-вызовы без retry → падают на flaky wifi.
-**После:** `JiraClient` с `httpx` + `backoff` + circuit breaker, testable.
-
-**Сейчас:** Тесты запускают `subprocess.run("git reset --hard")` реальный.
-**После:** `ShellRunnerPort` → `FakeShellRunner` в тестах, `RealShellRunner` в проде.

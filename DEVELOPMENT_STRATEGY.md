@@ -18,13 +18,15 @@
 ### ✅ Что работает
 | Инструмент | Зачем |
 |------------|-------|
-| **Jinja2** (стандартный) | Шаблоны в отдельных файлах, полная мощь синтаксиса, наследование `base.html`, кэширование |
-| **FastAPI + `Jinja2Templates`** | Чистый API, type hints, авто-документация, правильная интеграция с Jinja2 |
-| **SQLite** | Единый источник истины для UI, атомарные операции, не требует отдельного сервера |
-| **CSS переменные + media queries** | Тёмная тема, адаптивность без отдельного "mobile скилла" |
-| **Playwright** | Скриншоты для визуальной регрессии, тестирование responsive design |
+| **Jinja2** (стандартный) | Шаблоны в отдельных файлах, наследование `base.html` |
+| **FastAPI + `Jinja2Templates`** | Чистый API, type hints, авто-документация |
+| **SQLite** | Единый источник истины, атомарные операции |
+| **seed.json** | Canonical source фаз — загружается в SQLite при старте |
+| **PhaseService** | Controller → Service → Data Access граница |
+| **CSS переменные + media queries** | Тёмная тема, адаптивность |
+| **Playwright** | Скриншоты для визуальной регрессии |
 
-**Правило:** Перед написанием кастомного решения — проверить, есть ли готовый инструмент в экосистеме Python/JS.
+**Правило:** Никаких `application/`, `domain/`, `infrastructure/` директорий — предыдущая попытка вызвала circular imports и `ModuleNotFoundError`.
 
 ---
 
@@ -208,3 +210,6 @@ phase["delegate_timeout"] = p.delegate.timeout_min if p.delegate else None
 4. **Отдельный mobile UI** — делать адаптив через CSS
 5. **JSON вместо SQLite для state** — SQLite для атомарных операций
 6. **Прямые API вызовы из UI** — UI state-driven, агент дергает CLI
+7. **`phases.yaml` как canonical** — `seed.json` в SQLite, YAML только fallback
+8. **`application/`, `domain/`, `infrastructure/` слои** — flat modules, PhaseService внутри одного файла
+9. **Нормализованная DB с join'ами** — flat таблицы (phases, instructions, checks, evidence), вычисляемые связи через config.py
