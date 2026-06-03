@@ -30,35 +30,40 @@
 .wiki-section-title{font-size:13px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
 .wiki-section-title .count{font-size:11px;font-weight:500;color:var(--text-dim);background:var(--panel);padding:1px 7px;border-radius:4px;text-transform:none;letter-spacing:0}
 
-/* Instruction layout — lanes like graph branches */
-.inst-lane{display:flex;gap:12px;margin-bottom:0;position:relative}
-.inst-lane-label{width:90px;flex-shrink:0;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;display:flex;align-items:flex-start;justify-content:flex-end;padding:18px 14px 18px 0;border-right:2px solid var(--text-dim);color:var(--text-dim)}
-.inst-lane-label.main{border-right-color:var(--green);color:var(--green)}
-.inst-lane-label.branch{border-right-color:var(--orange);color:var(--orange)}
-.inst-lane-content{flex:1;display:flex;gap:8px;padding:10px 0}
+/* ── Instruction flow: vertical serial + horizontal parallel ─────────── */
+.flow-list{display:flex;flex-direction:column;gap:0}
+
+/* One run = either single card or horizontal group */
+.flow-run{display:flex;gap:12px;width:100%}
+.flow-run.single .flow-card{flex:1}
+.flow-run.group .flow-card{flex:1}
+
 /* Card */
-.inst-card{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;display:flex;gap:10px;min-width:0;transition:all .12s}
-.inst-card:hover{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
-.inst-card.sync{border-left:3px solid var(--green)}
-.inst-card.parallel{background:var(--orange-soft);border-left:3px solid var(--orange)}
-.inst-card .step-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:6px}
-.inst-card .step-dot.sync{background:var(--green)}
-.inst-card .step-dot.parallel{background:var(--orange)}
-.inst-card .item-content{flex:1;min-width:0}
-.inst-card .item-meta{display:flex;gap:10px;margin-top:6px;font-size:12px;color:var(--text-dim);align-items:center;flex-wrap:wrap}
-.inst-card .item-meta .tag{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;background:var(--panel);font-weight:500;cursor:pointer;transition:all .12s;font-size:11px}
-.inst-card .item-meta .tag:hover{transform:scale(1.05)}
-.inst-card .item-meta .tag.type-sync{color:var(--green);background:var(--green-soft)}
-.inst-card .item-meta .tag.type-parallel{color:var(--orange);background:var(--orange-soft)}
-.inst-card .item-tool{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-dim);background:var(--panel);padding:2px 6px;border-radius:4px}
-.inst-card .item-delete{flex-shrink:0;opacity:0;transition:opacity .12s;background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:18px;padding:0 4px;border-radius:4px}
-.inst-card:hover .item-delete{opacity:1}
-.inst-card .item-delete:hover{color:var(--red)}
-/* Connector */
-.inst-connector{display:flex;justify-content:center;padding:6px 0;color:var(--text-dim);font-size:14px}
-/* JOIN bar */
-.inst-join{display:flex;justify-content:center;padding:4px 0}
-.inst-join .join-bar{display:inline-flex;align-items:center;gap:8px;padding:4px 14px;border-radius:6px;background:var(--orange-soft);border:1px dashed var(--orange);color:var(--orange);font-size:11px;font-weight:600}
+.flow-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;display:flex;gap:10px;min-width:0;transition:all .12s}
+.flow-card:hover{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.flow-card.sync{border-left:3px solid var(--green)}
+.flow-card.parallel{border-left:3px solid var(--orange);background:var(--orange-soft)}
+.flow-card .step-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:6px}
+.flow-card .step-dot.sync{background:var(--green)}
+.flow-card .step-dot.parallel{background:var(--orange)}
+.flow-card .item-content{flex:1;min-width:0}
+.flow-card .item-meta{display:flex;gap:10px;margin-top:6px;font-size:12px;color:var(--text-dim);align-items:center;flex-wrap:wrap}
+.flow-card .item-meta .tag{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;background:var(--panel);font-weight:500;cursor:pointer;transition:all .12s;font-size:11px}
+.flow-card .item-meta .tag:hover{transform:scale(1.05)}
+.flow-card .item-meta .tag.type-sync{color:var(--green);background:var(--green-soft)}
+.flow-card .item-meta .tag.type-parallel{color:var(--orange);background:var(--orange-soft)}
+.flow-card .item-tool{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-dim);background:var(--panel);padding:2px 6px;border-radius:4px}
+.flow-card .item-delete{flex-shrink:0;opacity:0;transition:opacity .12s;background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:18px;padding:0 4px;border-radius:4px}
+.flow-card:hover .item-delete{opacity:1}
+.flow-card .item-delete:hover{color:var(--red)}
+
+/* Arrow between serial runs */
+.flow-arrow{display:flex;justify-content:center;padding:6px 0;color:var(--text-dim);font-size:14px}
+
+/* JOIN after parallel group */
+.flow-join{display:flex;justify-content:center;padding:4px 0}
+.flow-join .join-bar{display:inline-flex;align-items:center;gap:8px;padding:4px 14px;border-radius:6px;background:var(--orange-soft);border:1px dashed var(--orange);color:var(--orange);font-size:11px;font-weight:600}
+
 /* Check list */
 .check-list{list-style:none;padding:0;margin:0}
 .check-list>li{padding:10px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
@@ -155,42 +160,39 @@
   </div>
   {% endif %}
 
-  <!-- Instructions — graph-style lanes (like phase graph) -->
+  <!-- Instructions — vertical flow with horizontal parallel groups -->
   <div class="wiki-section">
     <div class="wiki-section-title">
       📋 Инструкции
       <span class="count">{{ phase.instructions|length }}</span>
     </div>
-    <div id="instructions-list">
+    <div class="flow-list" id="instructions-list">
       {% set runs = phase.instructions|group_instructions %}
       {% for run in runs %}
-        <div class="inst-lane">
-          <div class="inst-lane-label {{ 'main' if run|length == 1 else 'branch' }}">{{ 'Main' if run|length == 1 else 'Branch' }}</div>
-          <div class="inst-lane-content">
-            {% for i in run %}
-            <div class="inst-card {{ i.execution_type }}" data-id="{{ i.id }}" data-type="{{ i.execution_type }}">
-              <div class="step-dot {{ i.execution_type }}"></div>
-              <div class="item-content">
-                <input type="text" class="inline-input" value="{{ i.description }}" data-field="description">
-                <div class="item-meta">
-                  <span class="tag type-{{ i.execution_type }}" onclick="toggleType(this)" data-field="execution_type">
-                    {% if i.execution_type == 'sync' %}⏱ sync{% else %}⚡ parallel{% endif %}
-                  </span>
-                  {% if i.tool %}
-                  <span class="item-tool">{{ i.tool }}</span>
-                  {% endif %}
-                </div>
+        <div class="flow-run {{ 'group' if run|length > 1 else 'single' }}">
+          {% for i in run %}
+          <div class="flow-card {{ i.execution_type }}" data-id="{{ i.id }}" data-type="{{ i.execution_type }}">
+            <div class="step-dot {{ i.execution_type }}"></div>
+            <div class="item-content">
+              <input type="text" class="inline-input" value="{{ i.description }}" data-field="description">
+              <div class="item-meta">
+                <span class="tag type-{{ i.execution_type }}" onclick="toggleType(this)" data-field="execution_type">
+                  {% if i.execution_type == 'sync' %}⏱ sync{% else %}⚡ parallel{% endif %}
+                </span>
+                {% if i.tool %}
+                <span class="item-tool">{{ i.tool }}</span>
+                {% endif %}
               </div>
-              <button class="item-delete" onclick="deleteItem(this)">×</button>
             </div>
-            {% endfor %}
+            <button class="item-delete" onclick="deleteItem(this)">×</button>
           </div>
+          {% endfor %}
         </div>
         {% if not loop.last %}
           {% if run|length > 1 %}
-          <div class="inst-join"><span class="join-bar">🔄 JOIN — ждём всех веток</span></div>
+          <div class="flow-join"><span class="join-bar">🔄 JOIN</span></div>
           {% else %}
-          <div class="inst-connector">↓</div>
+          <div class="flow-arrow">↓</div>
           {% endif %}
         {% endif %}
       {% else %}
@@ -247,16 +249,13 @@
 
 {% block extra_script %}
 function deleteItem(btn) {
-  const node = btn.closest('.run-node');
-  if (node) {
-    const run = node.closest('.wiki-run');
-    node.remove();
-    // если в run не осталось node — удаляем run + его connector
-    if (run && !run.querySelector('.run-node')) {
+  const card = btn.closest('.flow-card');
+  if (card) {
+    const run = card.closest('.flow-run');
+    card.remove();
+    if (run && !run.querySelector('.flow-card')) {
       const prev = run.previousElementSibling;
-      if (prev && prev.classList.contains('wiki-connector')) prev.remove();
-      const next = run.nextElementSibling;
-      if (next && next.classList.contains('wiki-connector')) next.remove();
+      if (prev && (prev.classList.contains('flow-arrow') || prev.classList.contains('flow-join'))) prev.remove();
       run.remove();
     }
   } else {
@@ -265,20 +264,20 @@ function deleteItem(btn) {
 }
 
 function toggleType(tag) {
-  const node = tag.closest('.run-node');
-  const dot = node.querySelector('.step-dot');
+  const card = tag.closest('.flow-card');
+  const dot = card.querySelector('.step-dot');
   const isSync = tag.classList.contains('type-sync');
   if (isSync) {
     tag.classList.remove('type-sync');
     tag.classList.add('type-parallel');
     tag.textContent = '⚡ parallel';
-    if (node) node.setAttribute('data-type', 'parallel');
+    if (card) { card.classList.remove('sync'); card.classList.add('parallel'); card.setAttribute('data-type', 'parallel'); }
     if (dot) dot.className = 'step-dot parallel';
   } else {
     tag.classList.remove('type-parallel');
     tag.classList.add('type-sync');
     tag.textContent = '⏱ sync';
-    if (node) node.setAttribute('data-type', 'sync');
+    if (card) { card.classList.remove('parallel'); card.classList.add('sync'); card.setAttribute('data-type', 'sync'); }
     if (dot) dot.className = 'step-dot sync';
   }
 }
@@ -288,11 +287,10 @@ function addInstruction() {
   const empty = list.querySelector('.empty-state');
   if (empty) empty.remove();
 
-  // Always add as new serial run
   const run = document.createElement('div');
-  run.className = 'wiki-run serial';
+  run.className = 'flow-run single';
   run.innerHTML = `
-    <div class="run-node" data-id="" data-type="sync">
+    <div class="flow-card sync" data-id="" data-type="sync">
       <div class="step-dot sync"></div>
       <div class="item-content">
         <input type="text" class="inline-input" value="" data-field="description">
@@ -304,10 +302,10 @@ function addInstruction() {
       <button class="item-delete" onclick="deleteItem(this)">×</button>
     </div>
   `;
-  const connector = document.createElement('div');
-  connector.className = 'wiki-connector';
-  connector.textContent = '↓';
-  list.appendChild(connector);
+  const arrow = document.createElement('div');
+  arrow.className = 'flow-arrow';
+  arrow.textContent = '↓';
+  list.appendChild(arrow);
   list.appendChild(run);
 }
 
@@ -348,14 +346,13 @@ async function savePhase() {
     evidence: []
   };
 
-  document.querySelectorAll('#instructions-list li').forEach(li => {
-    if (li.classList.contains('empty-state')) return;
-    const inp = li.querySelector('[data-field="description"]');
-    const tag = li.querySelector('.tag');
-    const tool = li.querySelector('.item-tool');
+  document.querySelectorAll('#instructions-list .flow-card').forEach(card => {
+    const inp = card.querySelector('[data-field="description"]');
+    const tag = card.querySelector('.tag');
+    const tool = card.querySelector('.item-tool');
     if (inp) {
       data.instructions.push({
-        id: li.dataset.id || null,
+        id: card.dataset.id || null,
         description: inp.value,
         execution_type: tag && tag.classList.contains('type-parallel') ? 'parallel' : 'sync',
         tool: tool ? tool.textContent.replace('🔧 ', '').trim() || null : null
