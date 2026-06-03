@@ -108,10 +108,8 @@
       {% if q.hint %}
       <div class="question-hint">💡 {{ q.hint }}</div>
       {% endif %}
-      <textarea class="question-input" id="q_{{ q.id }}" placeholder="Ваш ответ...">{{ answers.get(q.id, '') }}</textarea>
-      <div class="question-status" id="status_{{ q.id }}">
-        <span class="status-pending">⏳ Ожидает ответа</span>
-      </div>
+      <textarea class="question-input" id="q_{{ q.id }}">{{ answers.get(q.id, '') }}</textarea>
+      <div class="question-status" id="status_{{ q.id }}"></div>
     </div>
     {% endfor %}
   </div>

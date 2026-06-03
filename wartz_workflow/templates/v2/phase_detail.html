@@ -170,7 +170,7 @@
       <li data-id="{{ i.id }}">
         <div class="check" onclick="toggleCheck(this)"></div>
         <div class="item-content">
-          <input type="text" class="inline-input" value="{{ i.description }}" data-field="description" placeholder="Описание шага...">
+          <input type="text" class="inline-input" value="{{ i.description }}" data-field="description">
           <div class="item-meta">
             <span class="tag type-{{ i.execution_type }}" onclick="toggleType(this)" data-field="execution_type">
               {% if i.execution_type == 'sync' %}⏱ sync{% else %}⚡ parallel{% endif %}
@@ -199,8 +199,8 @@
       {% for c in phase.checks %}
       <li data-id="{{ c.id }}">
         <span class="status-icon wait">○</span>
-        <input type="text" class="inline-input check-text" value="{{ c.description }}" data-field="description" placeholder="Описание проверки...">
-        <span class="check-meta">{{ c.check_type }}{% if c.command %}: {{ c.command }}{% endif %}</span>
+        <input type="text" class="inline-input check-text" value="{{ c.description }}" data-field="description">
+        <span class="check-meta">{% if c.command %}{{ c.command }}{% endif %}</span>
         <button class="item-delete" onclick="deleteItem(this)">×</button>
       </li>
       {% else %}
@@ -220,8 +220,8 @@
       {% for e in phase.evidence %}
       <li data-id="{{ e.id }}">
         <span class="file-icon">📄</span>
-        <input type="text" class="inline-input file-name" value="{{ e.description }}" data-field="description" placeholder="Название файла...">
-        <span class="file-status">{{ e.validator or 'нет валидатора' }}</span>
+        <input type="text" class="inline-input file-name" value="{{ e.description }}" data-field="description">
+        <span class="file-status">{{ e.validator }}</span>
         <button class="item-delete" onclick="deleteItem(this)">×</button>
       </li>
       {% else %}
@@ -247,22 +247,19 @@
       </div>
       <div class="field">
         <label>Агент</label>
-        <input type="text" id="setting-agent" value="{{ phase.delegate_agent or '' }}" placeholder="имя агента">
-        <div class="hint">Агент для delegate_task</div>
+        <input type="text" id="setting-agent" value="{{ phase.delegate_agent or '' }}">
       </div>
       <div class="field">
         <label>Таймаут (мин)</label>
-        <input type="number" id="setting-timeout" value="{{ phase.delegate_timeout or '' }}" placeholder="30">
+        <input type="number" id="setting-timeout" value="{{ phase.delegate_timeout or '' }}">
       </div>
       <div class="field">
         <label>Параллельно с</label>
-        <input type="text" id="setting-parallel" value="{{ phase.parallel_with or '' }}" placeholder="phase_id">
-        <div class="hint">ID фазы для параллельного запуска</div>
+        <input type="text" id="setting-parallel" value="{{ phase.parallel_with or '' }}">
       </div>
       <div class="field">
         <label>Откат к</label>
-        <input type="text" id="setting-rollback" value="{{ phase.rollback_target or '' }}" placeholder="phase_id">
-        <div class="hint">ID фазы для rollback</div>
+        <input type="text" id="setting-rollback" value="{{ phase.rollback_target or '' }}">
       </div>
     </div>
   </div>
@@ -309,7 +306,7 @@ function addInstruction() {
   li.innerHTML = `
     <div class="check" onclick="toggleCheck(this)"></div>
     <div class="item-content">
-      <input type="text" class="inline-input" value="" data-field="description" placeholder="Новая инструкция...">
+      <input type="text" class="inline-input" value="" data-field="description">
       <div class="item-meta">
         <span class="tag type-sync">⏱ sync</span>
         <span class="item-tool"></span>
@@ -328,8 +325,8 @@ function addCheck() {
   const li = document.createElement('li');
   li.innerHTML = `
     <span class="status-icon wait">○</span>
-    <input type="text" class="inline-input check-text" value="" data-field="description" placeholder="Новая проверка...">
-    <span class="check-meta">jira_status</span>
+    <input type="text" class="inline-input check-text" value="" data-field="description">
+    <span class="check-meta">—</span>
     <button class="item-delete" onclick="deleteItem(this)">×</button>
   `;
   list.appendChild(li);
@@ -343,8 +340,8 @@ function addEvidence() {
   const li = document.createElement('li');
   li.innerHTML = `
     <span class="file-icon">📄</span>
-    <input type="text" class="inline-input file-name" value="" data-field="description" placeholder="Новое evidence...">
-    <span class="file-status">нет валидатора</span>
+    <input type="text" class="inline-input file-name" value="" data-field="description">
+    <span class="file-status">—</span>
     <button class="item-delete" onclick="deleteItem(this)">×</button>
   `;
   list.appendChild(li);
@@ -383,7 +380,6 @@ async function savePhase() {
       data.checks.push({
         id: li.dataset.id || null,
         description: inp.value,
-        check_type: 'jira_status',
         command: null
       });
     }

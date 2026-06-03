@@ -326,8 +326,6 @@ def index(request: Request):
             "page": "dashboard",
             "ui_port": config.UI_PORT,
             "task_count": len(tasks),
-            "job_count": 0,
-            "coverage": "87",
             "completed_phases": sum(t["completed"] for t in tasks),
             "tasks": tasks[:5],
         }
