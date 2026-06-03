@@ -25,6 +25,24 @@ BASE_DIR = Path(__file__).parent
 # ── Jinja2 templates (v2/ под base.html + extends) ──────────────────────
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates" / "v2"))
 
+def _group_instructions(instructions):
+    """Группирует инструкции по runs: sync-каждый отдельно, parallel-подряд в одной группе"""
+    if not instructions:
+        return []
+    groups = []
+    current = [instructions[0]]
+    for i in instructions[1:]:
+        if i.get('execution_type') == 'parallel' and current[-1].get('execution_type') == 'parallel':
+            current.append(i)
+        else:
+            groups.append(current)
+            current = [i]
+    groups.append(current)
+    return groups
+
+templates.env.filters['group_instructions'] = _group_instructions
+
+
 _db: db.WorkflowDB | None = None
 
 def _get_db() -> db.WorkflowDB:

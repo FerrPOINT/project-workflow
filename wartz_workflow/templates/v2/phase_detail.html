@@ -30,26 +30,35 @@
 .wiki-section-title{font-size:13px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
 .wiki-section-title .count{font-size:11px;font-weight:500;color:var(--text-dim);background:var(--panel);padding:1px 7px;border-radius:4px;text-transform:none;letter-spacing:0}
 
-/* Instruction list */
-.wiki-list{list-style:none;padding:0;margin:0}
-.wiki-list>li{padding:12px 0 12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:10px;border-left:3px solid transparent}
-.wiki-list>li:last-child{border-bottom:none}
-.wiki-list>li.sync-item{border-left-color:var(--green)}
-.wiki-list>li.parallel-item{border-left-color:var(--orange)}
-.wiki-list .step-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:6px}
-.wiki-list .step-dot.sync{background:var(--green)}
-.wiki-list .step-dot.parallel{background:var(--orange)}
-.wiki-list .item-content{flex:1;min-width:0}
-.wiki-list .item-meta{display:flex;gap:12px;margin-top:6px;font-size:12px;color:var(--text-dim);flex-wrap:wrap;align-items:center}
-.wiki-list .item-meta .tag{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;background:var(--panel);font-weight:500;cursor:pointer;transition:all .12s;font-size:11px}
-.wiki-list .item-meta .tag:hover{transform:scale(1.05)}
-.wiki-list .item-meta .tag.type-sync{color:var(--green);background:var(--green-soft)}
-.wiki-list .item-meta .tag.type-parallel{color:var(--orange);background:var(--orange-soft)}
-.wiki-list .item-tool{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-dim);background:var(--panel);padding:2px 6px;border-radius:4px}
-.wiki-list .item-delete{flex-shrink:0;opacity:0;transition:opacity .12s;background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:18px;padding:0 4px;border-radius:4px}
-.wiki-list>li:hover .item-delete{opacity:1}
-.wiki-list .item-delete:hover{color:var(--red)}
-
+/* Instruction layout — lanes like graph branches */
+.inst-lane{display:flex;gap:12px;margin-bottom:0;position:relative}
+.inst-lane-label{width:90px;flex-shrink:0;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;display:flex;align-items:flex-start;justify-content:flex-end;padding:18px 14px 18px 0;border-right:2px solid var(--text-dim);color:var(--text-dim)}
+.inst-lane-label.main{border-right-color:var(--green);color:var(--green)}
+.inst-lane-label.branch{border-right-color:var(--orange);color:var(--orange)}
+.inst-lane-content{flex:1;display:flex;gap:8px;padding:10px 0}
+/* Card */
+.inst-card{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;display:flex;gap:10px;min-width:0;transition:all .12s}
+.inst-card:hover{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.inst-card.sync{border-left:3px solid var(--green)}
+.inst-card.parallel{background:var(--orange-soft);border-left:3px solid var(--orange)}
+.inst-card .step-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:6px}
+.inst-card .step-dot.sync{background:var(--green)}
+.inst-card .step-dot.parallel{background:var(--orange)}
+.inst-card .item-content{flex:1;min-width:0}
+.inst-card .item-meta{display:flex;gap:10px;margin-top:6px;font-size:12px;color:var(--text-dim);align-items:center;flex-wrap:wrap}
+.inst-card .item-meta .tag{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;background:var(--panel);font-weight:500;cursor:pointer;transition:all .12s;font-size:11px}
+.inst-card .item-meta .tag:hover{transform:scale(1.05)}
+.inst-card .item-meta .tag.type-sync{color:var(--green);background:var(--green-soft)}
+.inst-card .item-meta .tag.type-parallel{color:var(--orange);background:var(--orange-soft)}
+.inst-card .item-tool{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-dim);background:var(--panel);padding:2px 6px;border-radius:4px}
+.inst-card .item-delete{flex-shrink:0;opacity:0;transition:opacity .12s;background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:18px;padding:0 4px;border-radius:4px}
+.inst-card:hover .item-delete{opacity:1}
+.inst-card .item-delete:hover{color:var(--red)}
+/* Connector */
+.inst-connector{display:flex;justify-content:center;padding:6px 0;color:var(--text-dim);font-size:14px}
+/* JOIN bar */
+.inst-join{display:flex;justify-content:center;padding:4px 0}
+.inst-join .join-bar{display:inline-flex;align-items:center;gap:8px;padding:4px 14px;border-radius:6px;background:var(--orange-soft);border:1px dashed var(--orange);color:var(--orange);font-size:11px;font-weight:600}
 /* Check list */
 .check-list{list-style:none;padding:0;margin:0}
 .check-list>li{padding:10px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
@@ -146,33 +155,48 @@
   </div>
   {% endif %}
 
-  <!-- Instructions -->
+  <!-- Instructions — graph-style lanes (like phase graph) -->
   <div class="wiki-section">
-  <div class="wiki-section-title">
-  📋 Инструкции
-  <span class="count">{{ phase.instructions|length }}</span>
-  </div>
-  <ul class="wiki-list" id="instructions-list">
-  {% for i in phase.instructions %}
-  <li data-id="{{ i.id }}" class="{{ i.execution_type }}-item">
-    <div class="step-dot {{ i.execution_type }}"></div>
-    <div class="item-content">
-      <input type="text" class="inline-input" value="{{ i.description }}" data-field="description">
-      <div class="item-meta">
-        <span class="tag type-{{ i.execution_type }}" onclick="toggleType(this)" data-field="execution_type">
-          {% if i.execution_type == 'sync' %}⏱ sync{% else %}⚡ parallel{% endif %}
-        </span>
-        {% if i.tool %}
-        <span class="item-tool">{{ i.tool }}</span>
-        {% endif %}
-      </div>
+    <div class="wiki-section-title">
+      📋 Инструкции
+      <span class="count">{{ phase.instructions|length }}</span>
     </div>
-    <button class="item-delete" onclick="deleteItem(this)">×</button>
-  </li>
+    <div id="instructions-list">
+      {% set runs = phase.instructions|group_instructions %}
+      {% for run in runs %}
+        <div class="inst-lane">
+          <div class="inst-lane-label {{ 'main' if run|length == 1 else 'branch' }}">{{ 'Main' if run|length == 1 else 'Branch' }}</div>
+          <div class="inst-lane-content">
+            {% for i in run %}
+            <div class="inst-card {{ i.execution_type }}" data-id="{{ i.id }}" data-type="{{ i.execution_type }}">
+              <div class="step-dot {{ i.execution_type }}"></div>
+              <div class="item-content">
+                <input type="text" class="inline-input" value="{{ i.description }}" data-field="description">
+                <div class="item-meta">
+                  <span class="tag type-{{ i.execution_type }}" onclick="toggleType(this)" data-field="execution_type">
+                    {% if i.execution_type == 'sync' %}⏱ sync{% else %}⚡ parallel{% endif %}
+                  </span>
+                  {% if i.tool %}
+                  <span class="item-tool">{{ i.tool }}</span>
+                  {% endif %}
+                </div>
+              </div>
+              <button class="item-delete" onclick="deleteItem(this)">×</button>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% if not loop.last %}
+          {% if run|length > 1 %}
+          <div class="inst-join"><span class="join-bar">🔄 JOIN — ждём всех веток</span></div>
+          {% else %}
+          <div class="inst-connector">↓</div>
+          {% endif %}
+        {% endif %}
       {% else %}
-      <li class="empty-state">Нет инструкций</li>
+      <div class="empty-state">Нет инструкций</div>
       {% endfor %}
-    </ul>
+    </div>
     <button class="wiki-add-btn" onclick="addInstruction()">+ Добавить шаг</button>
   </div>
 
@@ -223,24 +247,38 @@
 
 {% block extra_script %}
 function deleteItem(btn) {
-  btn.closest('li').remove();
+  const node = btn.closest('.run-node');
+  if (node) {
+    const run = node.closest('.wiki-run');
+    node.remove();
+    // если в run не осталось node — удаляем run + его connector
+    if (run && !run.querySelector('.run-node')) {
+      const prev = run.previousElementSibling;
+      if (prev && prev.classList.contains('wiki-connector')) prev.remove();
+      const next = run.nextElementSibling;
+      if (next && next.classList.contains('wiki-connector')) next.remove();
+      run.remove();
+    }
+  } else {
+    btn.closest('li').remove();
+  }
 }
 
 function toggleType(tag) {
-  const li = tag.closest('li');
-  const dot = li.querySelector('.step-dot');
+  const node = tag.closest('.run-node');
+  const dot = node.querySelector('.step-dot');
   const isSync = tag.classList.contains('type-sync');
   if (isSync) {
     tag.classList.remove('type-sync');
     tag.classList.add('type-parallel');
     tag.textContent = '⚡ parallel';
-    if (li) li.className = 'parallel-item';
+    if (node) node.setAttribute('data-type', 'parallel');
     if (dot) dot.className = 'step-dot parallel';
   } else {
     tag.classList.remove('type-parallel');
     tag.classList.add('type-sync');
     tag.textContent = '⏱ sync';
-    if (li) li.className = 'sync-item';
+    if (node) node.setAttribute('data-type', 'sync');
     if (dot) dot.className = 'step-dot sync';
   }
 }
@@ -250,20 +288,27 @@ function addInstruction() {
   const empty = list.querySelector('.empty-state');
   if (empty) empty.remove();
 
-  const li = document.createElement('li');
-  li.className = 'sync-item';
-  li.innerHTML = `
-    <div class="step-dot sync"></div>
-    <div class="item-content">
-      <input type="text" class="inline-input" value="" data-field="description">
-      <div class="item-meta">
-        <span class="tag type-sync" onclick="toggleType(this)" data-field="execution_type">⏱ sync</span>
-        <span class="item-tool"></span>
+  // Always add as new serial run
+  const run = document.createElement('div');
+  run.className = 'wiki-run serial';
+  run.innerHTML = `
+    <div class="run-node" data-id="" data-type="sync">
+      <div class="step-dot sync"></div>
+      <div class="item-content">
+        <input type="text" class="inline-input" value="" data-field="description">
+        <div class="item-meta">
+          <span class="tag type-sync" onclick="toggleType(this)" data-field="execution_type">⏱ sync</span>
+          <span class="item-tool"></span>
+        </div>
       </div>
+      <button class="item-delete" onclick="deleteItem(this)">×</button>
     </div>
-    <button class="item-delete" onclick="deleteItem(this)">×</button>
   `;
-  list.appendChild(li);
+  const connector = document.createElement('div');
+  connector.className = 'wiki-connector';
+  connector.textContent = '↓';
+  list.appendChild(connector);
+  list.appendChild(run);
 }
 
 function addCheck() {
