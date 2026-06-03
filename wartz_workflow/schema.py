@@ -73,12 +73,12 @@ class Phase:
     checks: List[PhaseCheck] = field(default_factory=list)
     evidence: List[PhaseEvidence] = field(default_factory=list)
     instructions: List[PhaseInstruction] = field(default_factory=list)
+    questions: List[PhaseQuestion] = field(default_factory=list)
     delegate: Optional[PhaseDelegate] = None
     next_recommendation: str = ""
     parallel_with: Optional[str] = None  # фаза, с которой можно параллельно
     gate_after: Optional[str] = None     # CriticGate после этой фазы
     rollback_target: Optional[str] = None  # куда откатиться при FAIL
-    questions: List[PhaseQuestion] = field(default_factory=list)  # вопросы для wizard
 
     def render_instructions(self, context: dict) -> List[str]:
         """Подставить переменные в инструкции."""

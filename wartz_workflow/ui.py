@@ -35,6 +35,7 @@ def _get_db() -> db.WorkflowDB:
         _db.init()
         if _db.is_empty():
             _yaml_to_sqlite()
+            _create_demo_tasks()
     return _db
 
 
@@ -279,36 +280,59 @@ def _load_phase_detail(phase_id: str) -> dict | None:
 
 
 def _load_tasks() -> list[dict]:
-    """Загрузить задачи из state/*.json"""
-    tasks = []
-    try:
-        state_dir = Path(f"{config.WARTZ_DIR}/state")
-        if not state_dir.exists():
-            return tasks
-        for f in sorted(state_dir.glob("*.json")):
-            try:
-                data = json.loads(f.read_text())
-                jira_key = data.get("jira_key", f.stem)
-                completed = data.get("phases_completed", [])
-                current_phase = data.get("current_phase", "-1")
-                phase_map = {p["id"]: p for p in _load_phases()}
-                current = phase_map.get(current_phase, {})
-                tasks.append(
-                    {
-                        "jira_key": jira_key,
-                        "phase_id": current_phase,
-                        "phase_num": current.get("phase_num", "?"),
-                        "phase_name": current.get("name", current_phase),
-                        "completed": len(completed),
-                        "status": "active" if data.get("status") != "done" else "done",
-                        "status_label": "В работе" if data.get("status") != "done" else "Завершена",
-                    }
-                )
-            except Exception:
-                pass
-    except Exception:
-        pass
-    return tasks
+    """Загрузить задачи из SQLite."""
+    wdb = _get_db()
+    tasks = wdb.get_tasks()
+    result = []
+    
+    for t in tasks:
+        # Count completed phases
+        task_phases = wdb.get_task_phases(t["id"])
+        completed = sum(1 for tp in task_phases if tp["status"] == "done")
+        
+        # Get current phase info
+        current_phase_id = t.get("current_phase", "-1")
+        phase_map = {p["id"]: p for p in _load_phases()}
+        current = phase_map.get(current_phase_id, {})
+        
+        result.append(
+            {
+                "id": t["id"],
+                "jira_key": t["jira_key"],
+                "title": t.get("title", ""),
+                "phase_id": current_phase_id,
+                "phase_num": current.get("phase_num", "?"),
+                "phase_name": current.get("name", current_phase_id),
+                "completed": completed,
+                "total_phases": len(config.PHASE_ORDER),
+                "status": t.get("status", "active"),
+                "status_label": "В работе" if t.get("status") != "done" else "Завершена",
+                "created_at": t.get("created_at", ""),
+            }
+        )
+    
+    return result
+
+
+def _create_demo_tasks() -> None:
+    """Создать демо-задачи если таблица пустая."""
+    wdb = _get_db()
+    existing = wdb.get_tasks()
+    if existing:
+        return
+    
+    demo_tasks = [
+        {"jira_key": "TASK-001", "title": "Добавить валидацию ключей", "description": "Валидация Jira ключей в CLI", "current_phase": "-1", "status": "active"},
+        {"jira_key": "TASK-002", "title": "Wizard для фаз", "description": "Интерактивный wizard с вопросами", "current_phase": "0.6", "status": "active"},
+        {"jira_key": "TASK-003", "title": "Рефакторинг UI", "description": "Переход на FastAPI + Jinja2", "current_phase": "7.5", "status": "done"},
+    ]
+    
+    for task_data in demo_tasks:
+        task_id = wdb.create_task(task_data)
+        # Add some completed phases for demo
+        if task_data["jira_key"] == "TASK-003":
+            for phase_id in ["-1", "0.0a", "0.01", "0.01a"]:
+                wdb.add_task_phase(task_id, phase_id, "done")
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -387,11 +411,159 @@ def jobs_page(request: Request):
 
 @app.get("/wizard", response_class=HTMLResponse)
 def wizard_page(request: Request):
+    phases = _load_phases()
     return templates.TemplateResponse(
-        request=request, name="wizard.html", context={
-            "request": request, "page": "tasks", "ui_port": config.UI_PORT, "tasks": _load_tasks(),
+        request=request, name="wizard_list.html", context={
+            "request": request, "page": "wizard", "ui_port": config.UI_PORT, "phases": phases,
         }
     )
+
+
+@app.get("/wizard/{phase_id}", response_class=HTMLResponse)
+def wizard_phase_page(request: Request, phase_id: str):
+    """Wizard для конкретной фазы — вопросы из phases.yaml + чеклист + evidence."""
+    wdb = _get_db()
+    
+    # Get phase from DB
+    phase_row = wdb.get_phase(phase_id)
+    if not phase_row:
+        return JSONResponse({"ok": False, "error": "Phase not found"}, status_code=404)
+    
+    phase = dict(phase_row)
+    phase["phase_num"] = config.PHASE_ORDER.index(phase_id) + 1 if phase_id in config.PHASE_ORDER else 0
+    phase["is_blocker"] = bool(phase.get("is_blocker"))
+    phase["is_delegated"] = bool(phase.get("delegate_agent"))
+    
+    # Load questions from DB (or YAML as fallback)
+    questions = wdb.get_questions(phase_id)
+    if not questions:
+        # Fallback: load from YAML
+        from . import schema
+        all_phases = schema.load_phases()
+        yaml_phase = next((p for p in all_phases if p.id == phase_id), None)
+        if yaml_phase and yaml_phase.questions:
+            questions = [
+                {
+                    "id": i,
+                    "qtext": q.text,
+                    "required": q.required,
+                    "expected_keywords": json.dumps(q.expected_keywords),
+                    "hint": q.hint,
+                    "auto_command": q.auto_command,
+                    "validate_fn": q.validate_fn,
+                    "step_num": i,
+                }
+                for i, q in enumerate(yaml_phase.questions, 1)
+            ]
+    
+    # Load checklist from instructions + checks
+    instructions = wdb.get_instructions(phase_id)
+    checks = wdb.get_checks(phase_id)
+    checklist = []
+    for inst in instructions:
+        checklist.append({"text": inst["description"], "checked": False, "type": "instruction"})
+    for c in checks:
+        checklist.append({"text": c["description"], "checked": False, "type": "check"})
+    
+    # Load evidence
+    evidence = wdb.get_evidence(phase_id)
+    
+    # Load saved answers (if any)
+    answers = {}  # qid -> answer_text
+    
+    return templates.TemplateResponse(
+        request=request, name="wizard.html",
+        context={
+            "request": request,
+            "page": "wizard",
+            "ui_port": config.UI_PORT,
+            "phase": phase,
+            "questions": questions,
+            "checklist": checklist,
+            "evidence": evidence,
+            "answers": answers,
+        }
+    )
+
+
+@app.post("/api/wizard/{phase_id}")
+def api_wizard_submit(phase_id: str, body: dict[str, Any]):
+    """Проверка ответов wizard: возвращает PASS/FAIL."""
+    wdb = _get_db()
+    
+    # Load phase questions
+    questions = wdb.get_questions(phase_id)
+    if not questions:
+        from . import schema
+        all_phases = schema.load_phases()
+        yaml_phase = next((p for p in all_phases if p.id == phase_id), None)
+        if yaml_phase:
+            questions = [
+                {"id": i, "qtext": q.text, "required": q.required, "expected_keywords": json.dumps(q.expected_keywords)}
+                for i, q in enumerate(yaml_phase.questions, 1)
+            ]
+    
+    # Get answers from body
+    user_answers = body.get("answers", {})
+    checks = body.get("checks", {})
+    
+    covered = []
+    missing = []
+    
+    # Check questions
+    for q in questions:
+        qid = f"q_{q['id']}"
+        answer = user_answers.get(qid, "").strip()
+        
+        if q.get("required") and not answer:
+            missing.append(q["qtext"])
+            continue
+        
+        # Check keywords
+        keywords = json.loads(q.get("expected_keywords", "[]")) if q.get("expected_keywords") else []
+        if keywords and answer:
+            ans_lower = answer.lower()
+            matched = any(k.lower() in ans_lower for k in keywords)
+            if not matched and q.get("required"):
+                missing.append(f"{q['qtext']} (keywords: {', '.join(keywords)})")
+            elif matched:
+                covered.append(q["qtext"])
+        elif answer:
+            covered.append(q["qtext"])
+    
+    # Check checklist items
+    checklist_items = body.get("checklist", {})
+    for key, checked in checklist_items.items():
+        if not checked:
+            missing.append(f"Чеклист: пункт {key}")
+    
+    # Evaluate verdict
+    if not missing:
+        from . import phases as phases_mod
+        next_phase = phases_mod.get_next_phase(phase_id)
+        from . import schema
+        all_phases = schema.load_phases()
+        next_name = next((p.name for p in all_phases if p.id == next_phase), None) if next_phase else None
+        
+        return {
+            "verdict": "PASS",
+            "phase": phase_id,
+            "covered": covered,
+            "missing": [],
+            "message": f"Фаза {phase_id} пройдена. Переходим к {next_phase} — {next_name}" if next_phase else "Все фазы выполнены!",
+            "next_phase": next_phase,
+            "next_phase_name": next_name,
+        }
+    else:
+        return {
+            "verdict": "FAIL",
+            "phase": phase_id,
+            "covered": covered,
+            "missing": missing,
+            "message": f"Не выполнено {len(missing)} пунктов. Доработай и пришли новый отчёт.",
+            "next_phase": None,
+            "next_phase_name": None,
+        }
 
 
 # ═══════════════════════════════════════════════════════════════════════

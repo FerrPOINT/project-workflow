@@ -9,6 +9,15 @@ from wartz_workflow.ui import app
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def setup_db():
+    """Populate DB with YAML phases before UI tests."""
+    from wartz_workflow.ui import _get_db, _yaml_to_sqlite
+    wdb = _get_db()
+    if wdb.is_empty():
+        _yaml_to_sqlite()
+
+
 class TestIndexPage:
     def test_index_returns_html(self):
         response = client.get("/")

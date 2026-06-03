@@ -107,10 +107,10 @@ class WorkflowDB:
                 for e in p.get("evidence", []):
                     conn.execute(
                         """
-                        INSERT INTO evidence (phase_id, description)
-                        VALUES (?, ?)
+                        INSERT INTO evidence (phase_id, description, validator)
+                        VALUES (?, ?, ?)
                         """,
-                        (p["id"], e["description"]),
+                        (p["id"], e.get("description", e.get("item", "")), e.get("validator")),
                     )
                 for cu in p.get("checkups", []):
                     conn.execute(
@@ -126,6 +126,23 @@ class WorkflowDB:
                             cu.get("interval_min", 0),
                             cu.get("last_status", "unknown"),
                             cu.get("fail_action", "warn"),
+                        ),
+                    )
+                for q in p.get("questions", []):
+                    conn.execute(
+                        """
+                        INSERT INTO questions (phase_id, qtext, required, expected_keywords, hint, auto_command, validate_fn, step_num)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            p["id"],
+                            q["text"],
+                            q.get("required", True),
+                            json.dumps(q.get("expected_keywords", [])),
+                            q.get("hint"),
+                            q.get("auto_command"),
+                            q.get("validate_fn"),
+                            q.get("step_num", 0),
                         ),
                     )
             conn.commit()
@@ -343,20 +360,149 @@ class WorkflowDB:
 
     def reorder_instructions(self, phase_id: str, ids: list[int]) -> None:
         """Переставить step_num по порядку ids."""
-        # Сброс уникальных значений
         with self._conn() as conn:
-            for inst_id in ids:
+            # Сначала сбросить в отрицательные значения (избежать UNIQUE конфликт)
+            for temp_num, inst_id in enumerate(ids, 1):
                 conn.execute(
                     "UPDATE instructions SET step_num = -? WHERE id = ? AND phase_id = ?",
-                    (inst_id, inst_id, phase_id),
+                    (temp_num, inst_id, phase_id),
                 )
-            # Установить правильный порядок
+            # Затем установить правильные значения
             for new_num, inst_id in enumerate(ids, 1):
                 conn.execute(
                     "UPDATE instructions SET step_num = ? WHERE id = ? AND phase_id = ?",
                     (new_num, inst_id, phase_id),
                 )
             conn.commit()
+
+    # ── Aliases for UI ─────────────────────────────────────────────────
+    get_instructions = get_phase_instructions
+    get_checks       = get_phase_checks
+    get_evidence     = get_phase_evidence
+
+    # ── Question CRUD (from phases.yaml) ──────────────────────────────
+
+    def get_questions(self, phase_id: str) -> list[dict]:
+        """Получить вопросы для фазы."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM questions WHERE phase_id = ? ORDER BY step_num",
+                (phase_id,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def create_question(self, data: dict) -> int:
+        """Добавить вопрос к фазе. Возвращает id."""
+        with self._conn() as conn:
+            c = conn.execute(
+                """
+                INSERT INTO questions (phase_id, qtext, required, expected_keywords, hint, auto_command, validate_fn, step_num)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    data["phase_id"],
+                    data["qtext"],
+                    data.get("required", True),
+                    data.get("expected_keywords"),
+                    data.get("hint"),
+                    data.get("auto_command"),
+                    data.get("validate_fn"),
+                    data.get("step_num", 0),
+                ),
+            )
+            conn.commit()
+            return c.lastrowid or 0
+
+    # ── Answer CRUD ───────────────────────────────────────────────────
+
+    def create_answer(self, data: dict) -> int:
+        """Сохранить ответ агента на вопрос."""
+        with self._conn() as conn:
+            c = conn.execute(
+                """
+                INSERT INTO answers (question_id, jira_key, answer_text, ok)
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    data["question_id"],
+                    data["jira_key"],
+                    data.get("answer_text", ""),
+                    1 if data.get("ok") else 0,
+                ),
+            )
+            conn.commit()
+            return c.lastrowid or 0
+
+    # ── Task CRUD ──────────────────────────────────────────────────────
+
+    def create_task(self, data: dict) -> int:
+        with self._conn() as conn:
+            c = conn.execute(
+                """
+                INSERT INTO tasks (jira_key, title, description, current_phase, status)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    data["jira_key"],
+                    data.get("title", ""),
+                    data.get("description", ""),
+                    data.get("current_phase", "-1"),
+                    data.get("status", "active"),
+                ),
+            )
+            conn.commit()
+            return c.lastrowid or 0
+
+    def get_tasks(self) -> list[dict]:
+        with self._conn() as conn:
+            rows = conn.execute("SELECT * FROM tasks ORDER BY updated_at DESC").fetchall()
+            return [dict(r) for r in rows]
+
+    def get_task(self, task_id: int) -> dict | None:
+        with self._conn() as conn:
+            row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+            return dict(row) if row else None
+
+    def get_task_by_jira(self, jira_key: str) -> dict | None:
+        with self._conn() as conn:
+            row = conn.execute("SELECT * FROM tasks WHERE jira_key = ?", (jira_key,)).fetchone()
+            return dict(row) if row else None
+
+    def update_task(self, task_id: int, data: dict) -> None:
+        fields = []
+        vals = []
+        for k, v in data.items():
+            fields.append(f"{k} = ?")
+            vals.append(v)
+        vals.append(task_id)
+        sql = f"UPDATE tasks SET {', '.join(fields)}, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+        with self._conn() as conn:
+            conn.execute(sql, vals)
+            conn.commit()
+
+    def delete_task(self, task_id: int) -> None:
+        with self._conn() as conn:
+            conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+            conn.commit()
+
+    def add_task_phase(self, task_id: int, phase_id: str, status: str = "pending") -> None:
+        with self._conn() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO task_phases (task_id, phase_id, status, completed_at)
+                VALUES (?, ?, ?, CASE WHEN ? = 'done' THEN CURRENT_TIMESTAMP ELSE NULL END)
+                """,
+                (task_id, phase_id, status, status),
+            )
+            conn.commit()
+
+    def get_task_phases(self, task_id: int) -> list[dict]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM task_phases WHERE task_id = ? ORDER BY id",
+                (task_id,),
+            ).fetchall()
+            return [dict(r) for r in rows]
 
     # ── Checkup CRUD ─────────────────────────────────────────────────
 
