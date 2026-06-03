@@ -30,16 +30,11 @@
 .wiki-section-title{font-size:13px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
 .wiki-section-title .count{font-size:11px;font-weight:500;color:var(--text-dim);background:var(--panel);padding:1px 7px;border-radius:4px;text-transform:none;letter-spacing:0}
 
-/* Instruction list — wiki checklist */
+/* Instruction list */
 .wiki-list{list-style:none;padding:0;margin:0}
 .wiki-list>li{padding:12px 0;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:12px}
 .wiki-list>li:last-child{border-bottom:none}
-.wiki-list .check{flex-shrink:0;width:20px;height:20px;border:2px solid var(--border-strong);border-radius:5px;margin-top:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--green);transition:all .12s}
-.wiki-list .check:hover{border-color:var(--accent)}
-.wiki-list .check.done{background:var(--green-soft);border-color:var(--green)}
 .wiki-list .item-content{flex:1;min-width:0}
-.wiki-list .item-text{font-size:14px;color:var(--text-secondary);line-height:1.5;word-break:break-word}
-.wiki-list .item-text.done{text-decoration:line-through;color:var(--text-dim)}
 .wiki-list .item-meta{display:flex;gap:12px;margin-top:8px;font-size:12px;color:var(--text-dim);flex-wrap:wrap}
 .wiki-list .item-meta .tag{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;background:var(--panel);font-weight:500;cursor:pointer;transition:all .12s}
 .wiki-list .item-meta .tag:hover{transform:scale(1.05)}
@@ -161,27 +156,26 @@
 
   <!-- Instructions -->
   <div class="wiki-section">
-    <div class="wiki-section-title">
-      📋 Инструкции
-      <span class="count">{{ phase.instructions|length }}</span>
+  <div class="wiki-section-title">
+  📋 Инструкции
+  <span class="count">{{ phase.instructions|length }}</span>
+  </div>
+  <ul class="wiki-list" id="instructions-list">
+  {% for i in phase.instructions %}
+  <li data-id="{{ i.id }}">
+    <div class="item-content">
+      <input type="text" class="inline-input" value="{{ i.description }}" data-field="description">
+      <div class="item-meta">
+        <span class="tag type-{{ i.execution_type }}" onclick="toggleType(this)" data-field="execution_type">
+          {% if i.execution_type == 'sync' %}⏱ sync{% else %}⚡ parallel{% endif %}
+        </span>
+        {% if i.tool %}
+        <span class="item-tool">{{ i.tool }}</span>
+        {% endif %}
+      </div>
     </div>
-    <ul class="wiki-list" id="instructions-list">
-      {% for i in phase.instructions %}
-      <li data-id="{{ i.id }}">
-        <div class="check" onclick="toggleCheck(this)"></div>
-        <div class="item-content">
-          <input type="text" class="inline-input" value="{{ i.description }}" data-field="description">
-          <div class="item-meta">
-            <span class="tag type-{{ i.execution_type }}" onclick="toggleType(this)" data-field="execution_type">
-              {% if i.execution_type == 'sync' %}⏱ sync{% else %}⚡ parallel{% endif %}
-            </span>
-            {% if i.tool %}
-            <span class="item-tool">{{ i.tool }}</span>
-            {% endif %}
-          </div>
-        </div>
-        <button class="item-delete" onclick="deleteItem(this)">×</button>
-      </li>
+    <button class="item-delete" onclick="deleteItem(this)">×</button>
+  </li>
       {% else %}
       <li class="empty-state">Нет инструкций</li>
       {% endfor %}
@@ -268,18 +262,6 @@
 {% endblock %}
 
 {% block extra_script %}
-function toggleCheck(el) {
-  el.classList.toggle('done');
-  const text = el.closest('li').querySelector('.inline-input');
-  if (el.classList.contains('done')) {
-    text.classList.add('done');
-    el.innerHTML = '✓';
-  } else {
-    text.classList.remove('done');
-    el.innerHTML = '';
-  }
-}
-
 function deleteItem(btn) {
   btn.closest('li').remove();
 }
@@ -304,7 +286,6 @@ function addInstruction() {
 
   const li = document.createElement('li');
   li.innerHTML = `
-    <div class="check" onclick="toggleCheck(this)"></div>
     <div class="item-content">
       <input type="text" class="inline-input" value="" data-field="description">
       <div class="item-meta">
