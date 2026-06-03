@@ -221,8 +221,8 @@ class TestExecutionPage:
     def test_execution_has_drop_zones(self):
         response = client.get("/execution")
         assert response.status_code == 200
-        assert 'class="drop-zone"' in response.text
-        assert 'ondrop="zoneDrop(event)"' in response.text
+        assert 'insert-line' in response.text
+        assert 'ondrop="insertDrop(event)"' in response.text
 
     def test_execution_has_controls(self):
         response = client.get("/execution")

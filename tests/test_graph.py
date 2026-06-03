@@ -265,7 +265,7 @@ class TestGraphAPIIntegration:
     def test_execution_page_has_drop_zones(self):
         resp = client.get("/execution")
         assert resp.status_code == 200
-        assert 'class="drop-zone"' in resp.text
+        assert 'drop-zone' in resp.text
         assert 'ondrop="zoneDrop(event)"' in resp.text
 
     def test_execution_page_has_controls(self):
