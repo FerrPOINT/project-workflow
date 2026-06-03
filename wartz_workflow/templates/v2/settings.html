@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}Настройки{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 800px; padding: 2rem;">
+  <h1>⚙️ Настройки</h1>
+  <p style="color: var(--text-2);">Конфигурация workflow, API интеграций и UI сервера.</p>
+
+  <form id="settings-form" style="margin-top: 2rem;">
+
+    <!-- API INTEGRATION -->
+    <section style="margin-bottom: 2.5rem;">
+      <h3 style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
+        API Integration
+      </h3>
+      <div class="form-group" style="margin-bottom: 1.2rem;">
+        <label for="jira-base-url" style="display:block; margin-bottom: 0.35rem; font-weight: 500;">Jira Base URL</label>
+        <input type="url" id="jira-base-url" name="jira_base_url" value="{{ settings.jira_base_url | default('https://task.wemakedev.ru') }}"
+               style="width: 100%; padding: 0.55rem 0.7rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 0.95rem;">
+        <small style="display:block; margin-top: 0.25rem; color: var(--text-3); font-size: 0.8rem;">Базовый URL Jira инстанса (без /rest/api/2)</small>
+      </div>
+      <div class="form-group" style="margin-bottom: 1.2rem;">
+        <label for="gitlab-base-url" style="display:block; margin-bottom: 0.35rem; font-weight: 500;">GitLab Base URL</label>
+        <input type="url" id="gitlab-base-url" name="gitlab_base_url" value="{{ settings.gitlab_base_url | default('https://gt.wmtgroup.ru') }}"
+               style="width: 100%; padding: 0.55rem 0.7rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 0.95rem;">
+        <small style="display:block; margin-top: 0.25rem; color: var(--text-3); font-size: 0.8rem;">Базовый URL GitLab инстанса</small>
+      </div>
+      <div class="form-group" style="margin-bottom: 1.2rem;">
+        <label for="gitlab-project-id" style="display:block; margin-bottom: 0.35rem; font-weight: 500;">GitLab Project ID</label>
+        <input type="text" id="gitlab-project-id" name="gitlab_project_id" value="{{ settings.gitlab_project_id | default('73') }}"
+               style="width: 100%; padding: 0.55rem 0.7rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 0.95rem;">
+        <small style="display:block; margin-top: 0.25rem; color: var(--text-3); font-size: 0.8rem;">ID проекта в GitLab (например, 73)</small>
+      </div>
+    </section>
+
+    <!-- UI SERVER -->
+    <section style="margin-bottom: 2.5rem;">
+      <h3 style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
+        UI Server
+      </h3>
+      <div class="form-group" style="margin-bottom: 1.2rem;">
+        <label for="ui-port" style="display:block; margin-bottom: 0.35rem; font-weight: 500;">UI Port</label>
+        <input type="number" id="ui-port" name="ui_port" value="{{ settings.ui_port | default(8811) }}" min="1024" max="65535"
+               style="width: 100%; padding: 0.55rem 0.7rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 0.95rem;">
+        <small style="display:block; margin-top: 0.25rem; color: var(--text-3); font-size: 0.8rem;">Порт UI сервера (по умолчанию 8811)</small>
+      </div>
+      <div class="form-group" style="margin-bottom: 1.2rem;">
+        <label for="ui-host" style="display:block; margin-bottom: 0.35rem; font-weight: 500;">UI Host</label>
+        <input type="text" id="ui-host" name="ui_host" value="{{ settings.ui_host | default('0.0.0.0') }}"
+               style="width: 100%; padding: 0.55rem 0.7rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 0.95rem;">
+        <small style="display:block; margin-top: 0.25rem; color: var(--text-3); font-size: 0.8rem;">Хост для binding (0.0.0.0 = все интерфейсы)</small>
+      </div>
+    </section>
+
+    <!-- ГРУППЫ ФАЗ -->
+    <section style="margin-bottom: 2.5rem;">
+      <h3 style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
+        Группы фаз
+      </h3>
+      <p style="color: var(--text-2); margin-bottom: 1rem; font-size: 0.9rem;">Идентификаторы фаз для отображения в UI. Каждая группа — один chip.</p>
+      <div id="phase-groups" style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem;">
+        {% for group in phase_groups %}
+        <span class="chip" data-group="{{ group }}" style="display:inline-flex; align-items:center; gap:0.35rem; padding:0.35rem 0.7rem; border-radius:4px; background:var(--accent-muted); color:var(--accent); font-size:0.85rem; font-weight:500; cursor:pointer;"
+              onclick="removeGroup(this)">
+          {{ group }}
+          <span style="font-size:0.75rem; opacity:0.6;">×</span>
+        </span>
+        {% endfor %}
+      </div>
+      <div style="display: flex; gap: 0.5rem;">
+        <input type="text" id="new-group" placeholder="Добавить фазу..."
+               style="flex:1; padding: 0.55rem 0.7rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 0.95rem;"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();addGroup();}">
+        <button type="button" onclick="addGroup()" style="padding: 0.55rem 1rem; border-radius: 6px; border: none; background: var(--accent); color: white; font-weight: 500; cursor: pointer;">
+          + добавить
+        </button>
+      </div>
+    </section>
+
+    <!-- Actions -->
+    <div style="display: flex; gap: 1rem; margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border);">
+      <button type="button" onclick="saveSettings()" id="save-btn"
+              style="padding: 0.65rem 1.5rem; border-radius: 6px; border: none; background: var(--accent); color: white; font-weight: 600; font-size: 1rem; cursor: pointer;">
+        🔒 Сохранить
+      </button>
+      <button type="button" onclick="resetSettings()" id="reset-btn"
+              style="padding: 0.65rem 1.5rem; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text-2); font-weight: 500; font-size: 1rem; cursor: pointer;">
+        ↺ Сбросить к defaults
+      </button>
+      <span id="save-status" style="align-self: center; color: var(--green); font-size: 0.9rem; opacity: 0; transition: opacity 0.3s;">Сохранено ✓</span>
+    </div>
+  </form>
+</div>
+
+<script>
+function removeGroup(el) {
+  el.remove();
+}
+function addGroup() {
+  const input = document.getElementById('new-group');
+  const val = input.value.trim();
+  if (!val) return;
+  const container = document.getElementById('phase-groups');
+  const span = document.createElement('span');
+  span.className = 'chip';
+  span.setAttribute('data-group', val);
+  span.style.cssText = 'display:inline-flex; align-items:center; gap:0.35rem; padding:0.35rem 0.7rem; border-radius:4px; background:var(--accent-muted); color:var(--accent); font-size:0.85rem; font-weight:500; cursor:pointer;';
+  span.innerHTML = val + ' <span style="font-size:0.75rem; opacity:0.6;">×</span>';
+  span.onclick = function() { removeGroup(this); };
+  container.appendChild(span);
+  input.value = '';
+}
+function collectSettings() {
+  const groups = [];
+  document.querySelectorAll('#phase-groups .chip').forEach(el => {
+    groups.push(el.getAttribute('data-group'));
+  });
+  return {
+    jira_base_url: document.getElementById('jira-base-url').value,
+    gitlab_base_url: document.getElementById('gitlab-base-url').value,
+    gitlab_project_id: document.getElementById('gitlab-project-id').value,
+    ui_port: parseInt(document.getElementById('ui-port').value),
+    ui_host: document.getElementById('ui-host').value,
+    phase_groups: groups,
+  };
+}
+function saveSettings() {
+  const btn = document.getElementById('save-btn');
+  const status = document.getElementById('save-status');
+  btn.disabled = true; btn.textContent = 'Сохранение...';
+  fetch('/api/settings', {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(collectSettings())
+  }).then(r => r.json()).then(data => {
+    btn.disabled = false; btn.textContent = '🔒 Сохранить';
+    status.style.opacity = '1';
+    setTimeout(() => status.style.opacity = '0', 2000);
+  }).catch(err => {
+    btn.disabled = false; btn.textContent = '🔒 Сохранить';
+    alert('Ошибка сохранения: ' + err);
+  });
+}
+function resetSettings() {
+  if (!confirm('Сбросить все настройки к значениям по умолчанию?')) return;
+  const btn = document.getElementById('reset-btn');
+  btn.disabled = true;
+  fetch('/api/settings', {method: 'DELETE'})
+    .then(r => r.json()).then(data => {
+      window.location.reload();
+    }).catch(err => {
+      btn.disabled = false;
+      alert('Ошибка сброса: ' + err);
+    });
+}
+</script>
+{% endblock %}

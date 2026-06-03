@@ -77,3 +77,40 @@ TASK_INIT_SCRIPT = f"{SUITES_DIR}/hr-recruiter-workflow-suite/scripts/task-init.
 # UI
 UI_PORT = 8811
 UI_HOST = "0.0.0.0"
+
+# ── Settings persistence ────────────────────────────────────────────────
+
+import json
+import os
+
+SETTINGS_PATH = os.path.join(WARTZ_DIR, "settings.json")
+
+DEFAULT_SETTINGS = {
+    "jira_base_url": JIRA_BASE_URL,
+    "gitlab_base_url": GITLAB_BASE_URL,
+    "gitlab_project_id": GITLAB_PROJECT_ID,
+    "ui_port": UI_PORT,
+    "ui_host": UI_HOST,
+    "phase_groups": PHASE_ORDER,
+}
+
+
+def load_settings() -> dict:
+    """Load settings from ~/.wartz-workflow/settings.json, merge with defaults."""
+    if os.path.exists(SETTINGS_PATH):
+        try:
+            with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
+                user = json.load(f)
+            merged = dict(DEFAULT_SETTINGS)
+            merged.update(user)
+            return merged
+        except Exception:
+            pass
+    return dict(DEFAULT_SETTINGS)
+
+
+def save_settings(data: dict) -> None:
+    """Save settings to ~/.wartz-workflow/settings.json."""
+    os.makedirs(WARTZ_DIR, exist_ok=True)
+    with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)

@@ -536,6 +536,50 @@ def api_wizard_submit(phase_id: str, body: dict[str, Any]):
             "next_phase_name": None,
         }
 
+@app.get("/api/wizard/{jira_key}/context")
+def api_wizard_context(jira_key: str):
+    """Полный контекст для агента-визарда."""
+    from . import wizard as wizard_mod
+    engine = wizard_mod.WizardEngine(jira_key)
+    return engine.get_full_context()
+
+
+# ── Settings ─────────────────────────────────────────────────────────────
+
+@app.get("/settings", response_class=HTMLResponse)
+def settings_page(request: Request):
+    """Страница настроек workflow."""
+    return templates.TemplateResponse(
+        request=request, name="settings.html", context={
+            "request": request,
+            "settings": config.load_settings(),
+            "phase_groups": config.load_settings().get("phase_groups", config.PHASE_ORDER),
+        },
+    )
+
+
+@app.get("/api/settings")
+def api_settings_get():
+    """Вернуть текущие настройки."""
+    return {"ok": True, "settings": config.load_settings()}
+
+
+@app.put("/api/settings")
+def api_settings_put(body: dict[str, Any]):
+    """Сохранить настройки."""
+    config.save_settings(body)
+    return {"ok": True}
+
+
+@app.delete("/api/settings")
+def api_settings_delete():
+    """Сбросить настройки к defaults."""
+    import json, os
+    settings_path = os.path.expanduser("~/.wartz-workflow/settings.json")
+    if os.path.exists(settings_path):
+        os.remove(settings_path)
+    return {"ok": True}
+
 
 # ═══════════════════════════════════════════════════════════════════════
 #  API

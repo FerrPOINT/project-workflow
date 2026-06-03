@@ -25,12 +25,19 @@
 .flow-node-meta{display:flex;gap:16px;margin-top:10px;font-size:12px;color:var(--text-dim);flex-wrap:wrap}
 .flow-node-meta span{display:flex;align-items:center;gap:4px}
 
+/* Extract button */
+.btn-extract{padding:2px 6px;border-radius:4px;background:var(--panel);border:1px solid var(--border);color:var(--text-secondary);font-size:12px;cursor:pointer;margin-left:auto;flex-shrink:0}
+.btn-extract:hover{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+
 /* Parallel group wrapper */
 .parallel-group{display:flex;flex-direction:column;gap:6px;margin:8px 0;position:relative}
-.parallel-branches{display:flex;gap:16px;position:relative}
+.parallel-branches{display:flex;gap:8px;position:relative}
 .parallel-branches>::before{content:"";position:absolute;left:50%;top:-12px;width:2px;height:12px;background:var(--orange)}
 .parallel-branch{flex:1;min-width:0}
 .parallel-branch .flow-node{height:100%}
+.parallel-drop-zone{width:20px;border-radius:6px;background:transparent;transition:background .1s;cursor:col-resize}
+.parallel-drop-zone.active{background:var(--accent);opacity:.5}
+.parallel-drop-zone.show{background:var(--accent-soft);opacity:.4}
 
 /* Join point (synchronization) */
 .join-point{display:flex;align-items:center;justify-content:center;gap:8px;margin:8px auto;padding:8px 20px;border-radius:12px;background:var(--orange-soft);border:1px dashed var(--orange);color:var(--orange);font-size:13px;font-weight:600;max-width:fit-content}
@@ -41,9 +48,11 @@
 .flow-connector::after{content:"";position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid var(--text-dim)}
 
 /* Drop zones */
-.drop-zone{height:12px;margin:4px 0;position:relative}
+.drop-zone{height:20px;margin:2px 0;position:relative;border-radius:4px;transition:background .1s}
 .drop-zone::before{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:40px;height:4px;background:var(--accent);border-radius:2px;opacity:0;transition:opacity .1s}
 .drop-zone.active::before{opacity:1}
+.drop-zone.show{background:var(--accent-soft);opacity:.6}
+.drop-zone.show::before{opacity:.3}
 .drop-zone.merge::before{width:80%;background:var(--orange);opacity:0}
 .drop-zone.merge.active::before{opacity:1}
 
@@ -67,6 +76,7 @@
 @media(max-width:768px){
   .parallel-branches{flex-direction:column}
   .parallel-branches>::before{display:none}
+  .parallel-drop-zone{display:none}
 }
 
 /* Mini flow inside graph node */
@@ -168,6 +178,9 @@
         <div class="parallel-group" data-group-id="{{ batch.phases[0].id }}">
           <div class="parallel-branches">
             {% for p in batch.phases %}
+            {% if not loop.first %}
+            <div class="parallel-drop-zone" ondragover="branchZoneDragOver(event)" ondragleave="branchZoneDragLeave(event)" ondrop="branchZoneDrop(event)"></div>
+            {% endif %}
             <div class="parallel-branch">
               <div class="flow-node" draggable="true"
                    data-phase-id="{{ p.id }}"
@@ -183,6 +196,7 @@
                   <span class="flow-node-num">№{{ p.phase_num }}</span>
                   <span class="flow-node-name">{{ p.name }}</span>
                   <span class="flow-node-type parallel">PARALLEL⚡</span>
+                  <button class="btn-extract" onclick="extractNode(this)" title="Вытащить из группы">⤴</button>
                 </div>
                 <div class="flow-node-body">{{ p.description or '' }}</div>
                 {% if p.instructions %}
@@ -244,14 +258,88 @@
     draggedNode.classList.add('dragging');
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', draggedId);
+    // Reveal drop zones so user sees where to drop
+    document.querySelectorAll('.drop-zone').forEach(z=>z.classList.add('show'));
+    document.querySelectorAll('.parallel-drop-zone').forEach(z=>z.classList.add('show'));
   }
 
   function nodeDragEnd(e){
     if(draggedNode) draggedNode.classList.remove('dragging');
-    document.querySelectorAll('.drop-zone').forEach(z=>z.classList.remove('active'));
+    document.querySelectorAll('.drop-zone').forEach(z=>z.classList.remove('active','show'));
+    document.querySelectorAll('.parallel-drop-zone').forEach(z=>z.classList.remove('active','show'));
     draggedNode = null; draggedId = null; draggedType = null;
   }
 
+  /* ── Turn a parallel node into a standalone sync node ── */
+  function makeSync(node){
+    node.dataset.type = 'sync';
+    node.removeAttribute('data-parent-group');
+    const badge = node.querySelector('.flow-node-type');
+    if(badge){ badge.className = 'flow-node-type sync'; badge.textContent = 'SYNC⏱'; }
+    const btn = node.querySelector('.btn-extract');
+    if(btn) btn.remove();
+  }
+
+  /* ── Extract a single node from its parallel group ── */
+  function extractNode(btn){
+    const node = btn.closest('.flow-node');
+    const branch = node.closest('.parallel-branch');
+    const group = node.closest('.parallel-group');
+    const graph = document.getElementById('flowgraph');
+    if(!node || !branch || !group) return;
+
+    branch.remove();
+    makeSync(node);
+    graph.insertBefore(node, group);
+
+    if(group.querySelectorAll('.flow-node').length < 2){
+      ungroupGroup(group);
+    } else {
+      fixParallelZones(group);
+      fixConnectors();
+      recalcOrders();
+    }
+  }
+
+  /* ── Ungroup an entire parallel group into standalone sync nodes ── */
+  function ungroupGroup(group){
+    const graph = document.getElementById('flowgraph');
+    const branches = [...group.querySelectorAll('.parallel-branch')];
+    branches.forEach(branch => {
+      const node = branch.querySelector('.flow-node');
+      if(!node) return;
+      makeSync(node);
+      graph.insertBefore(node, group);
+    });
+    group.remove();
+    fixConnectors();
+    recalcOrders();
+  }
+
+  function ungroup(btn){
+    const group = btn.closest('.parallel-group');
+    if(group) ungroupGroup(group);
+  }
+
+  /* ── Rebuild parallel drop-zones after branch count changes ── */
+  function fixParallelZones(group){
+    const branchesContainer = group.querySelector('.parallel-branches');
+    if(!branchesContainer) return;
+    const branches = [...branchesContainer.children].filter(el => el.classList.contains('parallel-branch'));
+    branchesContainer.querySelectorAll('.parallel-drop-zone').forEach(z => z.remove());
+    branches.forEach((branch, idx) => {
+      if(idx > 0){
+        const zone = document.createElement('div');
+        zone.className = 'parallel-drop-zone';
+        zone.ondragover = branchZoneDragOver;
+        zone.ondragleave = branchZoneDragLeave;
+        zone.ondrop = branchZoneDrop;
+        branchesContainer.insertBefore(zone, branch);
+      }
+    });
+  }
+
+  /* ── Top-level drop zones (reorder / extract to top-level) ── */
   function zoneDragOver(e){
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
@@ -270,32 +358,37 @@
     const zone = e.currentTarget;
     const graph = document.getElementById('flowgraph');
 
+    // Extract from parallel-branch if needed
+    const oldBranch = draggedNode.closest('.parallel-branch');
+    const oldGroup = draggedNode.closest('.parallel-group');
+    if(oldBranch){
+      oldBranch.remove();
+      if(oldGroup && oldGroup.querySelectorAll('.flow-node').length < 2){
+        ungroupGroup(oldGroup);
+      } else if(oldGroup){
+        fixParallelZones(oldGroup);
+      }
+      makeSync(draggedNode);
+    }
+
     // Find the node AFTER this drop zone
     let insertAfter = zone;
     while(insertAfter && insertAfter.nextElementSibling && insertAfter.nextElementSibling.classList.contains('drop-zone')){
       insertAfter = insertAfter.nextElementSibling;
     }
 
-    // Move the dragged node's container (parallel-group or just flow-node)
-    let container = draggedNode.closest('.parallel-group') || draggedNode;
-    if(insertAfter){
-      // Insert after the zone + connector chain
-      let target = insertAfter;
-      // If there is a connector right after zone, insert after it too
-      if(target.nextElementSibling && target.nextElementSibling.classList.contains('flow-connector')){
-        target = target.nextElementSibling;
-      }
-      graph.insertBefore(container, target.nextElementSibling);
-    } else {
-      graph.appendChild(container);
+    // Move the dragged node into top-level graph
+    let target = insertAfter;
+    if(target.nextElementSibling && target.nextElementSibling.classList.contains('flow-connector')){
+      target = target.nextElementSibling;
     }
+    graph.insertBefore(draggedNode, target.nextElementSibling);
 
-    // Reinsert connectors where missing
     fixConnectors();
     recalcOrders();
   }
 
-  // Merge: drag one node onto another → create parallel group
+  /* ── Merge: drag one node onto another → create / extend parallel group ── */
   function nodeDragOver(e){
     e.preventDefault();
     const target = e.currentTarget;
@@ -316,23 +409,31 @@
     target.style.boxShadow = '';
     if(!draggedNode || target === draggedNode) return;
 
-    const draggedContainer = draggedNode.closest('.parallel-group') || draggedNode;
-    const targetContainer = target.closest('.parallel-group') || target;
+    const draggedGroup = draggedNode.closest('.parallel-group');
+    const targetGroup = target.closest('.parallel-group');
 
-    // If both already in same parallel group → do nothing
-    if(draggedContainer === targetContainer && draggedContainer.classList.contains('parallel-group')) return;
+    // If both already in same parallel group → do nothing (use branch zones for reorder)
+    if(draggedGroup && draggedGroup === targetGroup) return;
 
-    // If target is inside a parallel group → add dragged to it
-    if(targetContainer.classList.contains('parallel-group')){
-      const branches = targetContainer.querySelector('.parallel-branches');
+    // Remove dragged from its old branch if inside a parallel group
+    const draggedBranch = draggedNode.closest('.parallel-branch');
+    if(draggedBranch){
+      draggedBranch.remove();
+      if(draggedGroup && draggedGroup.querySelectorAll('.flow-node').length < 2){
+        ungroupGroup(draggedGroup);
+      } else if(draggedGroup){
+        fixParallelZones(draggedGroup);
+      }
+    }
+
+    if(targetGroup){
+      // Add dragged to existing parallel group
+      const branches = targetGroup.querySelector('.parallel-branches');
       const newBranch = document.createElement('div');
       newBranch.className = 'parallel-branch';
       newBranch.appendChild(draggedNode);
       branches.appendChild(newBranch);
-      // Remove old container if empty parallel group
-      if(draggedContainer.classList.contains('parallel-group') && draggedContainer.querySelectorAll('.flow-node').length===0){
-        draggedContainer.remove();
-      }
+      fixParallelZones(targetGroup);
     } else {
       // Create new parallel group with target + dragged
       const graph = document.getElementById('flowgraph');
@@ -353,42 +454,37 @@
       branches[1].appendChild(draggedNode);
 
       // Insert group where target was
-      graph.insertBefore(group, targetContainer);
-      targetContainer.remove();
-      if(draggedContainer !== draggedNode && draggedContainer !== targetContainer) draggedContainer.remove();
+      graph.insertBefore(group, target);
+      target.remove();
+      fixParallelZones(group);
     }
 
     fixConnectors();
     recalcOrders();
   }
 
-  function ungroup(btn){
-    const group = btn.closest('.parallel-group');
-    const graph = document.getElementById('flowgraph');
-    const branches = group.querySelectorAll('.parallel-branch');
-
-    let prev = group.previousElementSibling;
-    branches.forEach((branch, idx)=>{
-      const node = branch.querySelector('.flow-node');
-      if(!node) return;
-      // Detach node from parallel group, insert as standalone sync node
-      const wrapper = document.createElement('div');
-      wrapper.className = 'flow-node-wrapper';
-      wrapper.appendChild(node);
-      // Insert after group (or before group for first)
-      if(idx===0 && prev){
-        graph.insertBefore(wrapper, prev.nextElementSibling);
-      } else {
-        if(prev) graph.insertBefore(wrapper, prev.nextElementSibling);
-        else graph.appendChild(wrapper);
-      }
-      prev = wrapper;
-    });
-    group.remove();
-    fixConnectors();
-    recalcOrders();
+  /* ── Reorder branches inside a parallel group ── */
+  function branchZoneDragOver(e){
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    e.currentTarget.classList.add('active');
   }
 
+  function branchZoneDragLeave(e){
+    e.currentTarget.classList.remove('active');
+  }
+
+  function branchZoneDrop(e){
+    e.preventDefault();
+    e.currentTarget.classList.remove('active');
+    if(!draggedNode) return;
+    const draggedBranch = draggedNode.closest('.parallel-branch');
+    if(!draggedBranch) return; // only nodes already inside a branch can reorder here
+    const zone = e.currentTarget;
+    zone.parentNode.insertBefore(draggedBranch, zone.nextElementSibling);
+  }
+
+  /* ── Rebuild connectors & drop-zones after structural changes ── */
   function fixConnectors(){
     const graph = document.getElementById('flowgraph');
     // Remove all old connectors
@@ -399,8 +495,7 @@
     // Rebuild: between each visible major element insert a drop-zone then a connector
     const items = [...graph.children].filter(el=>
       el.classList.contains('flow-node') ||
-      el.classList.contains('parallel-group') ||
-      el.classList.contains('flow-node-wrapper')
+      el.classList.contains('parallel-group')
     );
 
     // Clear graph
