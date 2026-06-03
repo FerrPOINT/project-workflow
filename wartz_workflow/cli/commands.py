@@ -202,3 +202,68 @@ def done_list(ctx: click.Context, jira_key: str) -> None:
             badges.append("[yellow]АГЕНТ[/yellow]")
         badge_str = f" ({', '.join(badges)})" if badges else ""
         console.print(f"  {PASS} {item['phase_id']} — {item['phase_name']}{badge_str}")
+
+
+# ── wartz-workflow wizard-context TASK-KEY ────────────────────────────
+
+@cli.command()
+@click.argument("jira_key")
+@click.pass_context
+def wizard_context(ctx: click.Context, jira_key: str) -> None:
+    """Показать полный контекст для агента-визарда (done + all phases + instructions)."""
+    jmode = ctx.obj.get("json_mode", False)
+    jira_key = _require_valid_key(jira_key)
+
+    from wartz_workflow import wizard as wizard_mod
+    engine = wizard_mod.WizardEngine(jira_key)
+    data = engine.get_full_context()
+
+    if jmode:
+        out_json({
+            "ok": True,
+            "jira_key": jira_key,
+            "current_phase": data["current_phase"],
+            "current_phase_name": data["current_phase_name"],
+            "completed_count": data["completed_count"],
+            "total_phases": data["total_phases"],
+            "completed_phases": data["completed_phases"],
+            "all_phases": data["all_phases"],
+            "repeatable_checks": data["repeatable_checks"],
+            "phase_history_count": len(data["phase_history"]),
+        })
+
+    console.print(f"[bold]🧙 Wizard Context: {jira_key}[/bold]")
+    console.print(f"Текущая фаза: {data['current_phase']} — {data['current_phase_name']}")
+    console.print(f"Пройдено: {data['completed_count']} / {data['total_phases']}\n")
+
+    if data["completed_phases"]:
+        console.print("[bold]✅ Выполненные фазы:[/bold]")
+        for pid in data["completed_phases"]:
+            console.print(f"  {PASS} {pid}")
+        console.print("")
+
+    console.print("[bold]📋 Все фазы с инструкциями:[/bold]")
+    for ph in data["all_phases"]:
+        status_icon = PASS if ph["id"] in data["completed_phases"] else "[dim]⏳[/dim]"
+        badges = []
+        if ph["is_blocker"]:
+            badges.append("[red]BLOCKER[/red]")
+        if ph["is_delegated"]:
+            badges.append("[yellow]DELEGATED[/yellow]")
+        if ph["is_critic"]:
+            badges.append("[magenta]CRITIC[/magenta]")
+        badge_str = f" ({', '.join(badges)})" if badges else ""
+        console.print(f"\n{status_icon} {ph['id']} — {ph['name']}{badge_str}")
+        if ph["instructions"]:
+            for inst in ph["instructions"]:
+                et = inst.get("execution_type", "sync")
+                et_icon = "[green]→[/green]" if et == "sync" else "[orange]⇄[/orange]"
+                console.print(f"   {et_icon} {inst['step']}")
+        if ph["checks"]:
+            for ck in ph["checks"]:
+                console.print(f"   [dim]✓ {ck['description']}[/dim]")
+
+    console.print("\n[bold]🔄 Repeatable задания (последний отчёт):[/bold]")
+    for rc in data["repeatable_checks"]:
+        icon = PASS if rc["ok"] else FAIL
+        console.print(f"   {icon} {rc['item']}")

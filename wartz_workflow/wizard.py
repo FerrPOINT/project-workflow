@@ -164,6 +164,92 @@ class WizardEngine:
 
         return "\n".join(lines)
 
+    def get_full_context(self) -> dict:
+        """Собрать полный контекст для агента-визарда.
+
+        Возвращает структуру с:
+        - выполненными фазами
+        - текущей фазой
+        - ВСЕМИ фазами + их инструкции / чеки / evidence
+        - историей переходов и отчётов
+        - статусом повторяющихся заданий
+        """
+        # Completed phases — из conversation history transitions
+        all_messages = convo.get_messages(self.task_id, limit=500)
+        transitions = [m for m in all_messages if m.tags == "transition"]
+        completed_phase_ids = list(dict.fromkeys(
+            m.phase_id for m in transitions if m.phase_id and m.phase_id != "COMPLETE"
+        ))
+
+        # Current phase
+        current = self.current_phase
+        # If current says COMPLETE → pick last real phase or "-1"
+        if current == "COMPLETE" or current not in self.phase_map:
+            if completed_phase_ids:
+                current = completed_phase_ids[-1]
+            else:
+                current = "-1"
+
+        # Build all phases summary
+        all_phases = []
+        for p in self.all_phases:
+            all_phases.append({
+                "id": p.id,
+                "name": p.name,
+                "description": p.description,
+                "min_time_min": p.min_time_min,
+                "is_blocker": p.is_blocker,
+                "is_delegated": p.is_delegated,
+                "is_critic": p.is_critic,
+                "execution_mode": getattr(p, "execution_mode", "sync"),
+                "parallel_with": getattr(p, "parallel_with", None),
+                "skills": p.skills,
+                "instructions": [{"step": i.step, "tool": getattr(i, "tool", None), "execution_type": getattr(i, "execution_type", "sync")} for i in p.instructions],
+                "checks": [{"type": c.type, "description": c.description, "optional": getattr(c, "optional", False)} for c in p.checks],
+                "evidence": [{"item": e.item, "validator": getattr(e, "validator", None)} for e in p.evidence],
+            })
+
+        # Phase history digest (lightweight)
+        phase_history = []
+        for m in all_messages[-50:]:
+            phase_history.append({
+                "role": m.role,
+                "phase_id": m.phase_id,
+                "tags": m.tags,
+                "content_preview": m.content[:200],
+                "created_at": m.created_at,
+            })
+
+        # Repeatable checks status against last user note
+        last_user_note = ""
+        for m in reversed(all_messages):
+            if m.role == "user":
+                last_user_note = m.content
+                break
+        repeatable_status = self._check_repeatable(last_user_note)
+
+        current_phase_name = ""
+        if current in self.phase_map:
+            current_phase_name = self.phase_map[current].name
+        else:
+            resolved = self._resolve_phase(current)
+            current_phase_name = resolved.name if resolved else current
+
+        return {
+            "jira_key": self.jira_key,
+            "repo": self.repo,
+            "current_phase": current,
+            "current_phase_name": current_phase_name,
+            "completed_phases": completed_phase_ids,
+            "all_phases": all_phases,
+            "phase_history": phase_history,
+            "repeatable_checks": [
+                {"item": r["item"], "ok": r["ok"]} for r in repeatable_status
+            ],
+            "total_phases": len(all_phases),
+            "completed_count": len(completed_phase_ids),
+        }
+
     # ═══════════════════════════════════════════════════════════════════
     #  INTERNAL
     # ═══════════════════════════════════════════════════════════════════
