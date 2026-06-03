@@ -27,15 +27,14 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates" / "v2"))
 
 _db: db.WorkflowDB | None = None
 
-
 def _get_db() -> db.WorkflowDB:
+    """Singleton + lazy init."""
     global _db
     if _db is None:
         _db = db.WorkflowDB()
         _db.init()
         if _db.is_empty():
             _yaml_to_sqlite()
-            _create_demo_tasks()
     return _db
 
 
@@ -312,27 +311,6 @@ def _load_tasks() -> list[dict]:
         )
     
     return result
-
-
-def _create_demo_tasks() -> None:
-    """Создать демо-задачи если таблица пустая."""
-    wdb = _get_db()
-    existing = wdb.get_tasks()
-    if existing:
-        return
-    
-    demo_tasks = [
-        {"jira_key": "TASK-001", "title": "Добавить валидацию ключей", "description": "Валидация Jira ключей в CLI", "current_phase": "-1", "status": "active"},
-        {"jira_key": "TASK-002", "title": "Wizard для фаз", "description": "Интерактивный wizard с вопросами", "current_phase": "0.6", "status": "active"},
-        {"jira_key": "TASK-003", "title": "Рефакторинг UI", "description": "Переход на FastAPI + Jinja2", "current_phase": "7.5", "status": "done"},
-    ]
-    
-    for task_data in demo_tasks:
-        task_id = wdb.create_task(task_data)
-        # Add some completed phases for demo
-        if task_data["jira_key"] == "TASK-003":
-            for phase_id in ["-1", "0.0a", "0.01", "0.01a"]:
-                wdb.add_task_phase(task_id, phase_id, "done")
 
 
 # ═══════════════════════════════════════════════════════════════════════

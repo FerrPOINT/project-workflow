@@ -41,7 +41,8 @@
 .wiki-list .item-text{font-size:14px;color:var(--text-secondary);line-height:1.5;word-break:break-word}
 .wiki-list .item-text.done{text-decoration:line-through;color:var(--text-dim)}
 .wiki-list .item-meta{display:flex;gap:12px;margin-top:8px;font-size:12px;color:var(--text-dim);flex-wrap:wrap}
-.wiki-list .item-meta .tag{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;background:var(--panel);font-weight:500}
+.wiki-list .item-meta .tag{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;background:var(--panel);font-weight:500;cursor:pointer;transition:all .12s}
+.wiki-list .item-meta .tag:hover{transform:scale(1.05)}
 .wiki-list .item-meta .tag.type-sync{color:var(--accent);background:var(--accent-soft)}
 .wiki-list .item-meta .tag.type-parallel{color:var(--orange);background:var(--orange-soft)}
 .wiki-list .item-tool{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-dim);background:var(--panel);padding:2px 6px;border-radius:4px}
@@ -171,7 +172,7 @@
         <div class="item-content">
           <input type="text" class="inline-input" value="{{ i.description }}" data-field="description" placeholder="Описание шага...">
           <div class="item-meta">
-            <span class="tag type-{{ i.execution_type }}">
+            <span class="tag type-{{ i.execution_type }}" onclick="toggleType(this)" data-field="execution_type">
               {% if i.execution_type == 'sync' %}⏱ sync{% else %}⚡ parallel{% endif %}
             </span>
             {% if i.tool %}
@@ -286,6 +287,19 @@ function deleteItem(btn) {
   btn.closest('li').remove();
 }
 
+function toggleType(tag) {
+  const isSync = tag.classList.contains('type-sync');
+  if (isSync) {
+    tag.classList.remove('type-sync');
+    tag.classList.add('type-parallel');
+    tag.textContent = '⚡ parallel';
+  } else {
+    tag.classList.remove('type-parallel');
+    tag.classList.add('type-sync');
+    tag.textContent = '⏱ sync';
+  }
+}
+
 function addInstruction() {
   const list = document.getElementById('instructions-list');
   const empty = list.querySelector('.empty-state');
@@ -347,7 +361,8 @@ async function savePhase() {
     instructions: [], checks: [], evidence: []
   };
 
-  document.querySelectorAll('#instructions-list li[data-id]').forEach(li => {
+  document.querySelectorAll('#instructions-list li').forEach(li => {
+    if (li.classList.contains('empty-state')) return;
     const inp = li.querySelector('[data-field="description"]');
     const tag = li.querySelector('.tag');
     const tool = li.querySelector('.item-tool');
@@ -361,7 +376,8 @@ async function savePhase() {
     }
   });
 
-  document.querySelectorAll('#checks-list li[data-id]').forEach(li => {
+  document.querySelectorAll('#checks-list li').forEach(li => {
+    if (li.classList.contains('empty-state')) return;
     const inp = li.querySelector('[data-field="description"]');
     if (inp) {
       data.checks.push({
@@ -373,7 +389,8 @@ async function savePhase() {
     }
   });
 
-  document.querySelectorAll('#evidence-list li[data-id]').forEach(li => {
+  document.querySelectorAll('#evidence-list li').forEach(li => {
+    if (li.classList.contains('empty-state')) return;
     const inp = li.querySelector('[data-field="description"]');
     if (inp) {
       data.evidence.push({
