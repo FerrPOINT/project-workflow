@@ -103,16 +103,15 @@
     <p class="wiki-subtitle">{{ phase.description or '' }}</p>
 
     <div class="wiki-meta">
-      <span><b>ID:</b> {{ phase.id }}</span>
-      <span><b>Номер:</b> №{{ phase.phase_num }}</span>
+      <span>ID: {{ phase.id }} — №{{ phase.phase_num }}</span>
       {% if phase.delegate_agent %}
-      <span><b>Агент:</b> {{ phase.delegate_agent }} {% if phase.delegate_timeout %}({{ phase.delegate_timeout }} мин){% endif %}</span>
+      <span>Агент: {{ phase.delegate_agent }} {% if phase.delegate_timeout %}({{ phase.delegate_timeout }} мин){% endif %}</span>
       {% endif %}
       {% if phase.rollback_target %}
-      <span><b>Откат:</b> {{ phase.rollback_target }}</span>
+      <span>Откат: {{ phase.rollback_target }}</span>
       {% endif %}
       {% if phase.next_recommendation %}
-      <span><b>Следующая:</b> {{ phase.next_recommendation }}</span>
+      <span>Следующая: {{ phase.next_recommendation }}</span>
       {% endif %}
     </div>
   </div>
