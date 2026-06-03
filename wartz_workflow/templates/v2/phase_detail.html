@@ -1,169 +1,253 @@
 {% extends "base.html" %}
 
 {% block title %}{{ phase.name }} — wartz-workflow{% endblock %}
-{% block header_title %}Редактирование фазы{% endblock %}
+{% block header_title %}Фаза №{{ phase.phase_num }}{% endblock %}
 {% block header_actions %}
   <button class="btn btn-primary" onclick="savePhase()">💾 Сохранить</button>
   <button class="btn btn-secondary">▶ Запустить</button>
 {% endblock %}
 
 {% block extra_style %}
-.phase-detail-header{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px 24px;margin-bottom:16px}
-.phase-detail-header h2{margin:0;font-size:20px;font-weight:500;letter-spacing:-0.25px;display:inline}
-.phase-detail-header .meta{display:flex;gap:12px;margin-top:12px;flex-wrap:wrap;font-size:12px;color:var(--text-muted)}
-.phase-detail-header .meta b{color:var(--text-secondary);font-weight:500}
+/* ── Wiki-style phase page ─────────────────────────────────────────── */
+.wiki-page{max-width:1100px;margin:0 auto;padding:0 24px}
 
-.tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:16px;padding-bottom:0}
-.tab{padding:8px 16px;font-size:13px;font-weight:500;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .12s}
-.tab:hover{color:var(--text-secondary)}
-.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+/* Phase header */
+.wiki-header{margin-bottom:28px;padding-bottom:16px;border-bottom:1px solid var(--border-strong)}
+.wiki-header h1{font-size:26px;font-weight:600;margin:0 0 10px;letter-spacing:-0.3px;word-break:break-word}
+.wiki-header .wiki-subtitle{color:var(--text-muted);font-size:15px;line-height:1.5;word-break:break-word}
+.wiki-header .wiki-meta{display:flex;gap:16px;margin-top:14px;flex-wrap:wrap;font-size:12px;color:var(--text-dim)}
+.wiki-header .wiki-meta span{display:flex;align-items:center;gap:6px}
+.wiki-header .wiki-meta b{color:var(--text-secondary);font-weight:500}
 
-.tab-panel{display:none}
-.tab-panel.active{display:block}
+/* Skills / Tools — card catalog */
+.catalog{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 24px}
+.catalog-card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:7px 14px;font-size:13px;font-weight:500;color:var(--text-secondary);display:flex;align-items:center;gap:8px;transition:all .12s;cursor:default;white-space:nowrap}
+.catalog-card:hover{background:var(--surface-hover);border-color:var(--accent);color:var(--text)}
+.catalog-card .card-icon{font-size:14px}
 
-/* Editable rows */
-.row{display:grid;grid-template-columns:28px 1fr 120px 80px 32px;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);align-items:center}
-.row:last-child{border-bottom:none}
-.row-num{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-dim)}
-.row-text input,.row-text textarea{width:100%;background:transparent;border:1px solid transparent;padding:4px 6px;border-radius:4px}
-.row-text input:hover,.row-text textarea:hover{background:var(--panel)}
-.row-text input:focus,.row-text textarea:focus{background:var(--panel);border-color:var(--accent);outline:none}
-.row-type select{width:100%;font-size:11px;padding:3px 6px}
-.row-action{text-align:center}
-.btn-icon{background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:16px;padding:4px;border-radius:4px}
-.btn-icon:hover{color:var(--red);background:var(--red-soft)}
-.btn-add{display:flex;align-items:center;gap:6px;padding:8px 14px;border:1px dashed var(--border);border-radius:6px;color:var(--text-muted);font-size:13px;font-weight:500;cursor:pointer;background:transparent;margin-top:8px;transition:all .12s}
-.btn-add:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+/* Wiki sections */
+.wiki-section{margin-bottom:36px}
+.wiki-section-title{font-size:13px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.wiki-section-title .count{font-size:11px;font-weight:500;color:var(--text-dim);background:var(--panel);padding:1px 7px;border-radius:4px;text-transform:none;letter-spacing:0}
 
-.empty-state{color:var(--text-dim);font-size:13px;padding:24px;text-align:center}
+/* Instruction list — wiki checklist */
+.wiki-list{list-style:none;padding:0;margin:0}
+.wiki-list>li{padding:12px 0;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:12px}
+.wiki-list>li:last-child{border-bottom:none}
+.wiki-list .check{flex-shrink:0;width:20px;height:20px;border:2px solid var(--border-strong);border-radius:5px;margin-top:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--green);transition:all .12s}
+.wiki-list .check:hover{border-color:var(--accent)}
+.wiki-list .check.done{background:var(--green-soft);border-color:var(--green)}
+.wiki-list .item-content{flex:1;min-width:0}
+.wiki-list .item-text{font-size:14px;color:var(--text-secondary);line-height:1.5;word-break:break-word}
+.wiki-list .item-text.done{text-decoration:line-through;color:var(--text-dim)}
+.wiki-list .item-meta{display:flex;gap:12px;margin-top:8px;font-size:12px;color:var(--text-dim);flex-wrap:wrap}
+.wiki-list .item-meta .tag{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;background:var(--panel);font-weight:500}
+.wiki-list .item-meta .tag.type-sync{color:var(--accent);background:var(--accent-soft)}
+.wiki-list .item-meta .tag.type-parallel{color:var(--orange);background:var(--orange-soft)}
+.wiki-list .item-tool{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-dim);background:var(--panel);padding:2px 6px;border-radius:4px}
+.wiki-list .item-delete{flex-shrink:0;opacity:0;transition:opacity .12s;background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:18px;padding:0 4px;border-radius:4px}
+.wiki-list>li:hover .item-delete{opacity:1}
+.wiki-list .item-delete:hover{color:var(--red)}
 
-.meta-editor{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
-.meta-editor .field{display:flex;flex-direction:column;gap:4px}
-.meta-editor .field label{font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em}
+/* Check list */
+.check-list{list-style:none;padding:0;margin:0}
+.check-list>li{padding:10px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
+.check-list>li:last-child{border-bottom:none}
+.check-list .status-icon{flex-shrink:0;font-size:18px;width:24px;text-align:center}
+.check-list .status-icon.ok{color:var(--green)}
+.check-list .status-icon.fail{color:var(--red)}
+.check-list .status-icon.wait{color:var(--text-dim)}
+.check-list .check-text{flex:1;font-size:14px;color:var(--text-secondary);word-break:break-word}
+.check-list .check-meta{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-dim);flex-shrink:0;white-space:nowrap}
+.check-list .item-delete{flex-shrink:0;opacity:0;transition:opacity .12s;background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:18px;padding:0 4px;border-radius:4px}
+.check-list>li:hover .item-delete{opacity:1}
+.check-list .item-delete:hover{color:var(--red)}
+
+/* Evidence */
+.evidence-list{list-style:none;padding:0;margin:0}
+.evidence-list>li{padding:10px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
+.evidence-list>li:last-child{border-bottom:none}
+.evidence-list .file-icon{flex-shrink:0;font-size:18px}
+.evidence-list .file-name{flex:1;font-size:14px;color:var(--text-secondary);word-break:break-word}
+.evidence-list .file-status{font-size:11px;color:var(--text-dim);flex-shrink:0;white-space:nowrap}
+.evidence-list .item-delete{flex-shrink:0;opacity:0;transition:opacity .12s;background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:18px;padding:0 4px;border-radius:4px}
+.evidence-list>li:hover .item-delete{opacity:1}
+.evidence-list .item-delete:hover{color:var(--red)}
+
+/* Settings */
+.settings-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
+@media(max-width:640px){.settings-grid{grid-template-columns:1fr}}
+.settings-grid .field{display:flex;flex-direction:column;gap:6px}
+.settings-grid .field label{font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em}
+.settings-grid .field input,
+.settings-grid .field textarea{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:6px;font-family:inherit;font-size:14px;outline:none;width:100%}
+.settings-grid .field input:focus,
+.settings-grid .field textarea:focus{border-color:var(--accent)}
+.settings-grid .field textarea{resize:vertical;min-height:80px}
+.settings-grid .field .hint{font-size:12px;color:var(--text-dim);margin-top:2px;line-height:1.4}
+
+/* Add buttons */
+.wiki-add-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:1px dashed var(--border);border-radius:6px;color:var(--text-muted);font-size:13px;font-weight:500;cursor:pointer;background:transparent;margin-top:10px;transition:all .12s}
+.wiki-add-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+
+/* Inline edit */
+.inline-input{background:transparent;border:1px solid transparent;padding:6px 10px;border-radius:4px;color:var(--text);font-size:14px;width:100%;font-family:inherit;outline:none;word-break:break-word}
+.inline-input:hover{background:var(--panel)}
+.inline-input:focus{background:var(--panel);border-color:var(--accent)}
+
+.empty-state{color:var(--text-dim);font-size:13px;padding:16px 0}
 {% endblock %}
 
 {% block content %}
-<!-- Phase Header -->
-<div class="phase-detail-header">
-  <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
-    <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-dim)">№{{ phase.phase_num }}</span>
-    <h2>{{ phase.name }}</h2>
-  </div>
-  <p style="color:var(--text-muted);font-size:14px;margin-top:4px">{{ phase.description or '' }}</p>
-  <div class="meta">
-    {% if phase.skills %}
-    <span><b>Skills:</b> {{ phase.skills|join(', ') }}</span>
-    {% endif %}
-    {% if phase.delegate_agent %}
-    <span><b>Агент:</b> {{ phase.delegate_agent }} ({{ phase.delegate_timeout or '—' }} мин)</span>
-    {% endif %}
-    {% if phase.parallel_with %}
-    <span><b>Параллельно с:</b> {{ phase.parallel_with }}</span>
-    {% endif %}
-    {% if phase.rollback_target %}
-    <span><b>Откат:</b> {{ phase.rollback_target }}</span>
-    {% endif %}
-    {% if phase.next_recommendation %}
-    <span><b>Следующая:</b> {{ phase.next_recommendation }}</span>
-    {% endif %}
-  </div>
-</div>
+<div class="wiki-page">
 
-<!-- Tabs -->
-<div class="tabs">
-  <div class="tab active" onclick="switchTab('instructions')">Инструкции ({{ phase.instructions|length }})</div>
-  <div class="tab" onclick="switchTab('checks')">Проверки ({{ phase.checks|length }})</div>
-  <div class="tab" onclick="switchTab('evidence')">Evidence ({{ phase.evidence|length }})</div>
-  <div class="tab" onclick="switchTab('settings')">Настройки</div>
-</div>
+  <!-- Header -->
+  <div class="wiki-header">
+    <h1>{{ phase.name }}</h1>
+    <p class="wiki-subtitle">{{ phase.description or '' }}</p>
 
-<!-- Tab: Instructions -->
-<div class="tab-panel active" id="panel-instructions">
-  <div class="card">
-    <div id="instructions-list">
+    <div class="wiki-meta">
+      <span><b>ID:</b> {{ phase.id }}</span>
+      <span><b>Номер:</b> №{{ phase.phase_num }}</span>
+      {% if phase.delegate_agent %}
+      <span><b>Агент:</b> {{ phase.delegate_agent }} {% if phase.delegate_timeout %}({{ phase.delegate_timeout }} мин){% endif %}</span>
+      {% endif %}
+      {% if phase.rollback_target %}
+      <span><b>Откат:</b> {{ phase.rollback_target }}</span>
+      {% endif %}
+      {% if phase.next_recommendation %}
+      <span><b>Следующая:</b> {{ phase.next_recommendation }}</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Skills -->
+  {% if phase.skills %}
+  <div class="wiki-section">
+    <div class="wiki-section-title">
+      🛠️ Требуемые скиллы
+      <span class="count">{{ phase.skills|length }}</span>
+    </div>
+    <div class="catalog">
+      {% for s in phase.skills %}
+      <div class="catalog-card">
+        <span class="card-icon">🔧</span>
+        <span>{{ s }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Tools -->
+  {% set tools = phase.instructions | map(attribute='tool') | select | unique | list %}
+  {% if tools %}
+  <div class="wiki-section">
+    <div class="wiki-section-title">
+      🧰 Инструменты
+      <span class="count">{{ tools|length }}</span>
+    </div>
+    <div class="catalog">
+      {% for t in tools %}
+      <div class="catalog-card">
+        <span class="card-icon">🛠️</span>
+        <span>{{ t }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Instructions -->
+  <div class="wiki-section">
+    <div class="wiki-section-title">
+      📋 Инструкции
+      <span class="count">{{ phase.instructions|length }}</span>
+    </div>
+    <ul class="wiki-list" id="instructions-list">
       {% for i in phase.instructions %}
-      <div class="row" data-id="{{ i.id }}">
-        <div class="row-num">{{ loop.index }}</div>
-        <div class="row-text"><input type="text" value="{{ i.description }}" data-field="description"></div>
-        <div class="row-type">
-          <select data-field="execution_type">
-            <option value="sync" {% if i.execution_type == 'sync' %}selected{% endif %}>sync</option>
-            <option value="parallel" {% if i.execution_type == 'parallel' %}selected{% endif %}>parallel</option>
-            <option value="async" {% if i.execution_type == 'async' %}selected{% endif %}>async</option>
-          </select>
+      <li data-id="{{ i.id }}">
+        <div class="check" onclick="toggleCheck(this)"></div>
+        <div class="item-content">
+          <input type="text" class="inline-input" value="{{ i.description }}" data-field="description" placeholder="Описание шага...">
+          <div class="item-meta">
+            <span class="tag type-{{ i.execution_type }}">
+              {% if i.execution_type == 'sync' %}⏱ sync{% else %}⚡ parallel{% endif %}
+            </span>
+            {% if i.tool %}
+            <span class="item-tool">{{ i.tool }}</span>
+            {% endif %}
+          </div>
         </div>
-        <div class="row-type"><input type="text" value="{{ i.tool or '' }}" data-field="tool" placeholder="tool"></div>
-        <div class="row-action"><button class="btn-icon" onclick="deleteRow(this)">×</button></div>
-      </div>
+        <button class="item-delete" onclick="deleteItem(this)">×</button>
+      </li>
       {% else %}
-      <div class="empty-state">Нет инструкций</div>
+      <li class="empty-state">Нет инструкций</li>
       {% endfor %}
-    </div>
-    <button class="btn-add" onclick="addInstruction()">+ Добавить шаг</button>
+    </ul>
+    <button class="wiki-add-btn" onclick="addInstruction()">+ Добавить шаг</button>
   </div>
-</div>
 
-<!-- Tab: Checks -->
-<div class="tab-panel" id="panel-checks">
-  <div class="card">
-    <div id="checks-list">
+  <!-- Checks -->
+  <div class="wiki-section">
+    <div class="wiki-section-title">
+      ✅ Проверки
+      <span class="count">{{ phase.checks|length }}</span>
+    </div>
+    <ul class="check-list" id="checks-list">
       {% for c in phase.checks %}
-      <div class="row" data-id="{{ c.id }}">
-        <div class="row-num">{{ loop.index }}</div>
-        <div class="row-text"><input type="text" value="{{ c.description }}" data-field="description"></div>
-        <div class="row-type">
-          <select data-field="check_type">
-            <option value="jira_status" {% if c.check_type == 'jira_status' %}selected{% endif %}>jira_status</option>
-            <option value="file_exists" {% if c.check_type == 'file_exists' %}selected{% endif %}>file_exists</option>
-            <option value="git_branch" {% if c.check_type == 'git_branch' %}selected{% endif %}>git_branch</option>
-            <option value="script_pass" {% if c.check_type == 'script_pass' %}selected{% endif %}>script_pass</option>
-          </select>
-        </div>
-        <div class="row-type"><input type="text" value="{{ c.command or '' }}" data-field="command" placeholder="команда"></div>
-        <div class="row-action"><button class="btn-icon" onclick="deleteRow(this)">×</button></div>
-      </div>
+      <li data-id="{{ c.id }}">
+        <span class="status-icon wait">○</span>
+        <input type="text" class="inline-input check-text" value="{{ c.description }}" data-field="description" placeholder="Описание проверки...">
+        <span class="check-meta">{{ c.check_type }}{% if c.command %}: {{ c.command }}{% endif %}</span>
+        <button class="item-delete" onclick="deleteItem(this)">×</button>
+      </li>
       {% else %}
-      <div class="empty-state">Нет проверок</div>
+      <li class="empty-state">Нет проверок</li>
       {% endfor %}
-    </div>
-    <button class="btn-add" onclick="addCheck()">+ Добавить проверку</button>
+    </ul>
+    <button class="wiki-add-btn" onclick="addCheck()">+ Добавить проверку</button>
   </div>
-</div>
 
-<!-- Tab: Evidence -->
-<div class="tab-panel" id="panel-evidence">
-  <div class="card">
-    <div id="evidence-list">
+  <!-- Evidence -->
+  <div class="wiki-section">
+    <div class="wiki-section-title">
+      📎 Evidence
+      <span class="count">{{ phase.evidence|length }}</span>
+    </div>
+    <ul class="evidence-list" id="evidence-list">
       {% for e in phase.evidence %}
-      <div class="row" data-id="{{ e.id }}">
-        <div class="row-num">{{ loop.index }}</div>
-        <div class="row-text"><input type="text" value="{{ e.description }}" data-field="description"></div>
-        <div class="row-type"><input type="text" value="{{ e.validator or '' }}" data-field="validator" placeholder="валидатор"></div>
-        <div class="row-action"><button class="btn-icon" onclick="deleteRow(this)">×</button></div>
-      </div>
+      <li data-id="{{ e.id }}">
+        <span class="file-icon">📄</span>
+        <input type="text" class="inline-input file-name" value="{{ e.description }}" data-field="description" placeholder="Название файла...">
+        <span class="file-status">{{ e.validator or 'нет валидатора' }}</span>
+        <button class="item-delete" onclick="deleteItem(this)">×</button>
+      </li>
       {% else %}
-      <div class="empty-state">Нет evidence</div>
+      <li class="empty-state">Нет evidence</li>
       {% endfor %}
-    </div>
-    <button class="btn-add" onclick="addEvidence()">+ Добавить evidence</button>
+    </ul>
+    <button class="wiki-add-btn" onclick="addEvidence()">+ Добавить evidence</button>
   </div>
-</div>
 
-<!-- Tab: Settings -->
-<div class="tab-panel" id="panel-settings">
-  <div class="card">
-    <div class="meta-editor">
+  <!-- Settings -->
+  <div class="wiki-section">
+    <div class="wiki-section-title">
+      ⚙️ Настройки
+    </div>
+    <div class="settings-grid">
       <div class="field">
-        <label>Название</label>
+        <label>Название фазы</label>
         <input type="text" id="setting-name" value="{{ phase.name }}">
       </div>
       <div class="field">
         <label>Описание</label>
-        <input type="text" id="setting-desc" value="{{ phase.description or '' }}">
+        <textarea id="setting-desc" rows="3">{{ phase.description or '' }}</textarea>
       </div>
       <div class="field">
         <label>Агент</label>
         <input type="text" id="setting-agent" value="{{ phase.delegate_agent or '' }}" placeholder="имя агента">
+        <div class="hint">Агент для delegate_task</div>
       </div>
       <div class="field">
         <label>Таймаут (мин)</label>
@@ -172,139 +256,134 @@
       <div class="field">
         <label>Параллельно с</label>
         <input type="text" id="setting-parallel" value="{{ phase.parallel_with or '' }}" placeholder="phase_id">
+        <div class="hint">ID фазы для параллельного запуска</div>
       </div>
       <div class="field">
         <label>Откат к</label>
         <input type="text" id="setting-rollback" value="{{ phase.rollback_target or '' }}" placeholder="phase_id">
+        <div class="hint">ID фазы для rollback</div>
       </div>
     </div>
   </div>
+
 </div>
 {% endblock %}
 
-{% block extra_js %}
-function switchTab(name) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  event.target.classList.add('active');
-  document.getElementById('panel-' + name).classList.add('active');
+{% block extra_script %}
+function toggleCheck(el) {
+  el.classList.toggle('done');
+  const text = el.closest('li').querySelector('.inline-input');
+  if (el.classList.contains('done')) {
+    text.classList.add('done');
+    el.innerHTML = '✓';
+  } else {
+    text.classList.remove('done');
+    el.innerHTML = '';
+  }
 }
 
-function deleteRow(btn) {
-  const row = btn.closest('.row');
-  row.remove();
-  renumber();
-}
-
-function renumber() {
-  document.querySelectorAll('.tab-panel.active .row').forEach((r, i) => {
-    r.querySelector('.row-num').textContent = i + 1;
-  });
+function deleteItem(btn) {
+  btn.closest('li').remove();
 }
 
 function addInstruction() {
   const list = document.getElementById('instructions-list');
   const empty = list.querySelector('.empty-state');
   if (empty) empty.remove();
-  
-  const n = list.querySelectorAll('.row').length + 1;
-  const div = document.createElement('div');
-  div.className = 'row';
-  div.innerHTML = `
-    <div class="row-num">${n}</div>
-    <div class="row-text"><input type="text" value="" data-field="description" placeholder="Новая инструкция..."></div>
-    <div class="row-type">
-      <select data-field="execution_type">
-        <option value="sync">sync</option>
-        <option value="parallel">parallel</option>
-        <option value="async">async</option>
-      </select>
+
+  const li = document.createElement('li');
+  li.innerHTML = `
+    <div class="check" onclick="toggleCheck(this)"></div>
+    <div class="item-content">
+      <input type="text" class="inline-input" value="" data-field="description" placeholder="Новая инструкция...">
+      <div class="item-meta">
+        <span class="tag type-sync">⏱ sync</span>
+        <span class="item-tool"></span>
+      </div>
     </div>
-    <div class="row-type"><input type="text" value="" data-field="tool" placeholder="tool"></div>
-    <div class="row-action"><button class="btn-icon" onclick="deleteRow(this)">×</button></div>
+    <button class="item-delete" onclick="deleteItem(this)">×</button>
   `;
-  list.appendChild(div);
+  list.appendChild(li);
 }
 
 function addCheck() {
   const list = document.getElementById('checks-list');
   const empty = list.querySelector('.empty-state');
   if (empty) empty.remove();
-  
-  const n = list.querySelectorAll('.row').length + 1;
-  const div = document.createElement('div');
-  div.className = 'row';
-  div.innerHTML = `
-    <div class="row-num">${n}</div>
-    <div class="row-text"><input type="text" value="" data-field="description" placeholder="Новая проверка..."></div>
-    <div class="row-type">
-      <select data-field="check_type">
-        <option value="jira_status">jira_status</option>
-        <option value="file_exists">file_exists</option>
-        <option value="git_branch">git_branch</option>
-        <option value="script_pass">script_pass</option>
-      </select>
-    </div>
-    <div class="row-type"><input type="text" value="" data-field="command" placeholder="команда"></div>
-    <div class="row-action"><button class="btn-icon" onclick="deleteRow(this)">×</button></div>
+
+  const li = document.createElement('li');
+  li.innerHTML = `
+    <span class="status-icon wait">○</span>
+    <input type="text" class="inline-input check-text" value="" data-field="description" placeholder="Новая проверка...">
+    <span class="check-meta">jira_status</span>
+    <button class="item-delete" onclick="deleteItem(this)">×</button>
   `;
-  list.appendChild(div);
+  list.appendChild(li);
 }
 
 function addEvidence() {
   const list = document.getElementById('evidence-list');
   const empty = list.querySelector('.empty-state');
   if (empty) empty.remove();
-  
-  const n = list.querySelectorAll('.row').length + 1;
-  const div = document.createElement('div');
-  div.className = 'row';
-  div.innerHTML = `
-    <div class="row-num">${n}</div>
-    <div class="row-text"><input type="text" value="" data-field="description" placeholder="Новое evidence..."></div>
-    <div class="row-type"><input type="text" value="" data-field="validator" placeholder="валидатор"></div>
-    <div class="row-action"><button class="btn-icon" onclick="deleteRow(this)">×</button></div>
+
+  const li = document.createElement('li');
+  li.innerHTML = `
+    <span class="file-icon">📄</span>
+    <input type="text" class="inline-input file-name" value="" data-field="description" placeholder="Новое evidence...">
+    <span class="file-status">нет валидатора</span>
+    <button class="item-delete" onclick="deleteItem(this)">×</button>
   `;
-  list.appendChild(div);
+  list.appendChild(li);
 }
 
 async function savePhase() {
   const data = {
     name: document.getElementById('setting-name').value,
     description: document.getElementById('setting-desc').value,
-    delegate_agent: document.getElementById('setting-agent').value,
+    delegate_agent: document.getElementById('setting-agent').value || null,
     delegate_timeout: parseInt(document.getElementById('setting-timeout').value) || null,
     parallel_with: document.getElementById('setting-parallel').value || null,
     rollback_target: document.getElementById('setting-rollback').value || null,
     instructions: [], checks: [], evidence: []
   };
-  
-  document.querySelectorAll('#instructions-list .row').forEach(r => {
-    data.instructions.push({
-      id: r.dataset.id || null,
-      description: r.querySelector('[data-field="description"]').value,
-      execution_type: r.querySelector('[data-field="execution_type"]').value,
-      tool: r.querySelector('[data-field="tool"]').value || null
-    });
+
+  document.querySelectorAll('#instructions-list li[data-id]').forEach(li => {
+    const inp = li.querySelector('[data-field="description"]');
+    const tag = li.querySelector('.tag');
+    const tool = li.querySelector('.item-tool');
+    if (inp) {
+      data.instructions.push({
+        id: li.dataset.id || null,
+        description: inp.value,
+        execution_type: tag && tag.classList.contains('type-parallel') ? 'parallel' : 'sync',
+        tool: tool ? tool.textContent.replace('🔧 ', '').trim() || null : null
+      });
+    }
   });
-  
-  document.querySelectorAll('#checks-list .row').forEach(r => {
-    data.checks.push({
-      id: r.dataset.id || null,
-      description: r.querySelector('[data-field="description"]').value,
-      check_type: r.querySelector('[data-field="check_type"]').value,
-      command: r.querySelector('[data-field="command"]').value || null
-    });
+
+  document.querySelectorAll('#checks-list li[data-id]').forEach(li => {
+    const inp = li.querySelector('[data-field="description"]');
+    if (inp) {
+      data.checks.push({
+        id: li.dataset.id || null,
+        description: inp.value,
+        check_type: 'jira_status',
+        command: null
+      });
+    }
   });
-  
-  document.querySelectorAll('#evidence-list .row').forEach(r => {
-    data.evidence.push({
-      id: r.dataset.id || null,
-      description: r.querySelector('[data-field="description"]').value,
-      validator: r.querySelector('[data-field="validator"]').value || null
-    });
+
+  document.querySelectorAll('#evidence-list li[data-id]').forEach(li => {
+    const inp = li.querySelector('[data-field="description"]');
+    if (inp) {
+      data.evidence.push({
+        id: li.dataset.id || null,
+        description: inp.value,
+        validator: null
+      });
+    }
   });
-  
+
   const resp = await fetch('/api/phases/{{ phase.id }}', {
     method: 'PUT',
     headers: {'Content-Type': 'application/json'},

@@ -179,31 +179,33 @@ def _load_phase_detail(phase_id: str) -> dict | None:
 def _load_tasks() -> list[dict]:
     """Загрузить задачи из state/*.json"""
     tasks = []
-    state_dir = Path(f"{config.WARTZ_DIR}/state")
-    if not state_dir.exists():
-        return tasks
-    for f in sorted(state_dir.glob("*.json")):
-        try:
-            data = json.loads(f.read_text())
-            jira_key = data.get("jira_key", f.stem)
-            completed = data.get("phases_completed", [])
-            current_phase = data.get("current_phase", "-1")
-            # Найти имя фазы
-            phase_map = {p["id"]: p for p in _load_phases()}
-            current = phase_map.get(current_phase, {})
-            tasks.append(
-                {
-                    "jira_key": jira_key,
-                    "phase_id": current_phase,
-                    "phase_num": current.get("phase_num", "?"),
-                    "phase_name": current.get("name", current_phase),
-                    "completed": len(completed),
-                    "status": "active" if data.get("status") != "done" else "done",
-                    "status_label": "В работе" if data.get("status") != "done" else "Завершена",
-                }
-            )
-        except Exception:
-            pass
+    try:
+        state_dir = Path(f"{config.WARTZ_DIR}/state")
+        if not state_dir.exists():
+            return tasks
+        for f in sorted(state_dir.glob("*.json")):
+            try:
+                data = json.loads(f.read_text())
+                jira_key = data.get("jira_key", f.stem)
+                completed = data.get("phases_completed", [])
+                current_phase = data.get("current_phase", "-1")
+                phase_map = {p["id"]: p for p in _load_phases()}
+                current = phase_map.get(current_phase, {})
+                tasks.append(
+                    {
+                        "jira_key": jira_key,
+                        "phase_id": current_phase,
+                        "phase_num": current.get("phase_num", "?"),
+                        "phase_name": current.get("name", current_phase),
+                        "completed": len(completed),
+                        "status": "active" if data.get("status") != "done" else "done",
+                        "status_label": "В работе" if data.get("status") != "done" else "Завершена",
+                    }
+                )
+            except Exception:
+                pass
+    except Exception:
+        pass
     return tasks
 
 
@@ -256,24 +258,27 @@ def phase_detail(request: Request, phase_id: str):
 def tasks_page(request: Request):
     tasks = _load_tasks()
     return templates.TemplateResponse(
-        "tasks.html",
-        {"request": request, "page": "tasks", "ui_port": config.UI_PORT, "tasks": tasks},
+        request=request, name="tasks.html", context={
+            "request": request, "page": "tasks", "ui_port": config.UI_PORT, "tasks": tasks,
+        }
     )
 
 
 @app.get("/jobs", response_class=HTMLResponse)
 def jobs_page(request: Request):
     return templates.TemplateResponse(
-        "jobs.html",
-        {"request": request, "page": "jobs", "ui_port": config.UI_PORT, "jobs": []},
+        request=request, name="jobs.html", context={
+            "request": request, "page": "jobs", "ui_port": config.UI_PORT, "jobs": [],
+        }
     )
 
 
 @app.get("/wizard", response_class=HTMLResponse)
 def wizard_page(request: Request):
     return templates.TemplateResponse(
-        "wizard.html",
-        {"request": request, "page": "tasks", "ui_port": config.UI_PORT, "tasks": _load_tasks()},
+        request=request, name="wizard.html", context={
+            "request": request, "page": "tasks", "ui_port": config.UI_PORT, "tasks": _load_tasks(),
+        }
     )
 
 
@@ -300,26 +305,42 @@ def api_phase_update(phase_id: str, body: dict[str, Any]):
     phase = wdb.get_phase(phase_id)
     if not phase:
         return JSONResponse({"ok": False, "error": "Phase not found"}, status_code=404)
-    # Update settings
-    wdb.update_phase(phase_id, body)
-    # Update instructions
+
+    # Phase settings — only valid fields
+    PHASE_FIELDS = {
+        "name", "description", "skills", "delegate_agent",
+        "delegate_timeout", "delegate_max_cycles", "delegate_toolsets",
+        "parallel_with", "rollback_target", "next_recommendation",
+    }
+    phase_data = {k: v for k, v in body.items() if k in PHASE_FIELDS}
+    if phase_data:
+        wdb.update_phase(phase_id, phase_data)
+
+    # Instructions
     for i in body.get("instructions", []):
+        # Only valid instruction fields
+        inst_data = {k: v for k, v in i.items() if k in {"step_num", "description", "execution_type", "tool"}}
         if i.get("id"):
-            wdb.update_instruction(i["id"], i)
+            wdb.update_instruction(i["id"], inst_data)
         else:
-            wdb.create_instruction(phase_id, i)
-    # Update checks
+            wdb.create_instruction({"phase_id": phase_id, **inst_data})
+
+    # Checks
     for c in body.get("checks", []):
+        check_data = {k: v for k, v in c.items() if k in {"description", "command"}}
         if c.get("id"):
-            wdb.update_check(c["id"], c)
+            wdb.update_check(c["id"], check_data)
         else:
-            wdb.create_check(phase_id, c)
-    # Update evidence
+            wdb.create_check({"phase_id": phase_id, **check_data})
+
+    # Evidence
     for e in body.get("evidence", []):
+        ev_data = {k: v for k, v in e.items() if k in {"description", "validator"}}
         if e.get("id"):
-            wdb.update_evidence(e["id"], e)
+            wdb.update_evidence(e["id"], ev_data)
         else:
-            wdb.create_evidence(phase_id, e)
+            wdb.create_evidence({"phase_id": phase_id, **ev_data})
+
     return {"ok": True}
 
 

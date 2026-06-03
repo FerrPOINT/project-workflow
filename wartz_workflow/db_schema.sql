@@ -9,7 +9,14 @@ CREATE TABLE IF NOT EXISTS phases (
     name        TEXT NOT NULL,
     description TEXT,
     phase_order INTEGER NOT NULL UNIQUE,
-    skills      TEXT                        -- JSON ["skill1","skill2"]
+    skills      TEXT,                       -- JSON ["skill1","skill2"]
+    delegate_agent TEXT,
+    delegate_timeout INTEGER DEFAULT 30,
+    delegate_max_cycles INTEGER DEFAULT 3,
+    delegate_toolsets TEXT,
+    parallel_with TEXT,
+    rollback_target TEXT,
+    next_recommendation TEXT
 );
 
 -- ═══════════════════════════════════════════════════════════════════

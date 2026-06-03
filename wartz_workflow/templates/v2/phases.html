@@ -7,9 +7,10 @@
 {% endblock %}
 
 {% block extra_style %}
-.kanban{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;align-items:start}
-@media(max-width:1200px){.kanban{grid-template-columns:repeat(3,1fr)}}
-@media(max-width:768px){.kanban{grid-template-columns:1fr}}
+.kanban{display:grid;grid-template-columns:repeat(6,1fr);gap:16px;align-items:start}
+@media(max-width:1400px){.kanban{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:900px){.kanban{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:480px){.kanban{grid-template-columns:1fr}}
 .kanban-col{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px;min-height:200px}
 .kanban-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding:0 4px}
 .kanban-header .title{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted)}

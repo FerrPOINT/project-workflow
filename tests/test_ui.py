@@ -54,7 +54,7 @@ class TestPhaseDetail:
     def test_phase_detail_has_instructions(self):
         response = client.get("/phase/-1")
         assert response.status_code == 200
-        assert 'class="row"' in response.text
+        assert 'class="wiki-list"' in response.text
 
     def test_phase_detail_404_on_unknown(self):
         response = client.get("/phase/nonexistent")

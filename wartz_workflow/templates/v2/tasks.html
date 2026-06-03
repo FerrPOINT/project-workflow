@@ -3,36 +3,75 @@
 {% block title %}Задачи — wartz-workflow{% endblock %}
 {% block header_title %}Задачи{% endblock %}
 
+{% block extra_style %}
+@media(max-width:640px){
+  .task-table{display:none}
+  .task-cards{display:flex;flex-direction:column;gap:10px}
+  .task-card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;display:flex;flex-direction:column;gap:8px}
+  .task-card .card-row{display:flex;justify-content:space-between;align-items:center;font-size:12px}
+  .task-card .card-row .label{color:var(--text-muted)}
+  .task-card .card-row .value{color:var(--text-secondary);font-weight:500}
+  .task-card .card-title{font-size:14px;font-weight:500;color:var(--text)}
+  .task-card .card-phase{font-size:12px;color:var(--text-muted)}
+}
+@media(min-width:641px){
+  .task-cards{display:none}
+}
+{% endblock %}
+
 {% block content %}
 <div class="card">
   <div class="card-header">
     <div class="card-title">Все задачи</div>
   </div>
-  <table>
-    <tr>
-      <th>Ключ</th>
-      <th>Текущая фаза</th>
-      <th>Прогресс</th>
-      <th>Статус</th>
-    </tr>
+
+  <!-- Desktop table -->
+  <div class="task-table">
+    <table>
+      <tr><th>Ключ</th><th>Текущая фаза</th><th>Прогресс</th><th>Статус</th></tr>
+      {% for t in tasks %}
+      <tr>
+        <td><strong><a href="/task/{{ t.jira_key }}">{{ t.jira_key }}</a></strong></td>
+        <td>№{{ t.phase_num }} {{ t.phase_name }}</td>
+        <td>{{ t.completed }}/30</td>
+        <td>
+          <span class="status status-{{ t.status }}">
+            <span class="status-dot"></span> {{ t.status_label }}
+          </span>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px">
+          Нет активных задач. Запустите: <code>hrflow workflow TASK-KEY</code>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+
+  <!-- Mobile cards -->
+  <div class="task-cards">
     {% for t in tasks %}
-    <tr>
-      <td><strong><a href="/task/{{ t.jira_key }}">{{ t.jira_key }}</a></strong></td>
-      <td>№{{ t.phase_num }} {{ t.phase_name }}</td>
-      <td>{{ t.completed }}/30</td>
-      <td>
+    <div class="task-card">
+      <div class="card-title"><a href="/task/{{ t.jira_key }}">{{ t.jira_key }}</a></div>
+      <div class="card-phase">№{{ t.phase_num }} {{ t.phase_name }}</div>
+      <div class="card-row">
+        <span class="label">Прогресс</span>
+        <span class="value">{{ t.completed }}/30</span>
+      </div>
+      <div class="card-row">
+        <span class="label">Статус</span>
         <span class="status status-{{ t.status }}">
           <span class="status-dot"></span> {{ t.status_label }}
         </span>
-      </td>
-    </tr>
+      </div>
+    </div>
     {% else %}
-    <tr>
-      <td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px">
-        Нет активных задач. Запустите: <code>hrflow workflow TASK-KEY</code>
-      </td>
-    </tr>
+    <div style="text-align:center;color:var(--text-dim);padding:24px;font-size:13px">
+      Нет активных задач. Запустите: <code>hrflow workflow TASK-KEY</code>
+    </div>
     {% endfor %}
-  </table>
+  </div>
 </div>
 {% endblock %}

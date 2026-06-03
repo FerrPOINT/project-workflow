@@ -3,88 +3,120 @@
 {% block title %}Dashboard — wartz-workflow{% endblock %}
 {% block header_title %}Dashboard{% endblock %}
 
+{% block extra_style %}
+@media(max-width:640px){
+  .kpi-grid{grid-template-columns:1fr}
+  .tasks-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .tasks-table{min-width:600px}
+}
+@media(max-width:480px){
+  .tasks-mobile{display:flex;flex-direction:column;gap:10px}
+  .task-mobile-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;display:grid;gap:8px}
+  .task-mobile-row{display:flex;justify-content:space-between;align-items:center}
+  .task-mobile-label{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em}
+  .task-mobile-val{font-size:13px;font-weight:500;color:var(--text)}
+}
+{% endblock %}
+
 {% block content %}
 <!-- KPI Cards -->
 <div class="kpi-grid">
   <div class="card">
-    <div class="card-header">
-      <div class="card-title">Фаз workflow</div>
-    </div>
+    <div class="card-header"><div class="card-title">ФАЗ WORKFLOW</div></div>
     <div class="card-value">30</div>
     <div class="card-delta">Все фазы определены в YAML</div>
   </div>
   <div class="card">
-    <div class="card-header">
-      <div class="card-title">Задач в работе</div>
-    </div>
+    <div class="card-header"><div class="card-title">ЗАДАЧ В РАБОТЕ</div></div>
     <div class="card-value" style="color:var(--accent)">{{ task_count }}</div>
     <div class="card-delta">Активные по state/</div>
   </div>
   <div class="card">
-    <div class="card-header">
-      <div class="card-title">Фоновых jobs</div>
-    </div>
+    <div class="card-header"><div class="card-title">ФОНОВЫХ JOBS</div></div>
     <div class="card-value" style="color:var(--orange)">{{ job_count }}</div>
     <div class="card-delta">delegate_task в процессе</div>
   </div>
   <div class="card">
-    <div class="card-header">
-      <div class="card-title">Покрытие тестами</div>
-    </div>
+    <div class="card-header"><div class="card-title">ПОКРЫТИЕ ТЕСТАМИ</div></div>
     <div class="card-value" style="color:var(--green)">{{ coverage }}%</div>
     <div class="card-delta">pytest + pytest-cov</div>
   </div>
 </div>
 
-<!-- Progress Bar -->
+<!-- Progress -->
 <div class="card" style="margin-bottom:24px">
   <div class="card-header">
-    <div class="card-title">Прогресс разработки</div>
-    <div style="font-size:12px;color:var(--text-muted)">{{ completed_phases }}/30 фаз</div>
+    <div class="card-title">ПРОГРЕСС РАЗРАБОТКИ</div>
+    <div style="font-size:13px;color:var(--text-muted)">{{ completed_phases }}/30 фаз</div>
   </div>
   <div class="progress-bg">
     <div class="progress-fill" style="width:{{ (completed_phases/30*100)|round }}%"></div>
   </div>
 </div>
 
-<!-- Recent Tasks -->
+<!-- Tasks: Desktop Table + Mobile Cards -->
 <div class="card">
   <div class="card-header">
-    <div class="card-title">Последние задачи</div>
-    <a href="/tasks" class="btn btn-secondary" style="padding:4px 10px;font-size:12px">Все задачи →</a>
+    <div class="card-title">ПОСЛЕДНИЕ ЗАДАЧИ</div>
+    <a href="/tasks" class="btn btn-secondary">Все задачи →</a>
   </div>
-  <table>
-    <tr>
-      <th>Ключ</th>
-      <th>Текущая фаза</th>
-      <th>Прогресс</th>
-      <th>Статус</th>
-    </tr>
+
+  <!-- Desktop table -->
+  <div class="tasks-table-wrap" style="display:block">
+    <table class="tasks-table">
+      <tr>
+        <th>КЛЮЧ</th>
+        <th>ТЕКУЩАЯ ФАЗА</th>
+        <th>ПРОГРЕСС</th>
+        <th>СТАТУС</th>
+      </tr>
+      {% for t in tasks %}
+      <tr>
+        <td><strong><a href="/wizard/{{ t.jira_key }}">{{ t.jira_key }}</a></strong></td>
+        <td>№{{ t.phase_num }} {{ t.phase_name }}</td>
+        <td>{{ t.completed }}/30</td>
+        <td>
+          <span class="status status-{{ t.status }}">
+            <span class="status-dot"></span> {{ t.status_label }}
+          </span>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+
+  <!-- Mobile cards (hidden on desktop) -->
+  <style>
+    @media(min-width:641px){.tasks-mobile{display:none!important}}
+    @media(max-width:640px){.tasks-table-wrap{display:none!important}}
+  </style>
+  <div class="tasks-mobile" style="display:none">
     {% for t in tasks %}
-    <tr>
-      <td><strong><a href="/task/{{ t.jira_key }}">{{ t.jira_key }}</a></strong></td>
-      <td>№{{ t.phase_num }} {{ t.phase_name }}</td>
-      <td>{{ t.completed }}/30</td>
-      <td>
-        <span class="status status-{{ t.status }}">
-          <span class="status-dot"></span>
-          {{ t.status_label }}
-        </span>
-      </td>
-    </tr>
-    {% else %}
-    <tr>
-      <td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px">
-        Нет активных задач. Запустите: <code>hrflow workflow TASK-KEY</code>
-      </td>
-    </tr>
+    <div class="task-mobile-card">
+      <div class="task-mobile-row">
+        <span class="task-mobile-label">Ключ</span>
+        <span class="task-mobile-val"><a href="/wizard/{{ t.jira_key }}">{{ t.jira_key }}</a></span>
+      </div>
+      <div class="task-mobile-row">
+        <span class="task-mobile-label">Фаза</span>
+        <span class="task-mobile-val">№{{ t.phase_num }} {{ t.phase_name }}</span>
+      </div>
+      <div class="task-mobile-row">
+        <span class="task-mobile-label">Прогресс</span>
+        <span class="task-mobile-val">{{ t.completed }}/30</span>
+      </div>
+      <div class="task-mobile-row">
+        <span class="task-mobile-label">Статус</span>
+        <span class="status status-{{ t.status }}"><span class="status-dot"></span> {{ t.status_label }}</span>
+      </div>
+    </div>
     {% endfor %}
-  </table>
+  </div>
 </div>
 
-<!-- Quick Actions -->
-<div style="margin-top:24px;display:flex;gap:12px">
-  <a href="/phases" class="btn btn-primary">📋 Все фазы</a>
-  <a href="/wizard" class="btn btn-secondary">🧙 Wizard</a>
+<!-- Bottom buttons -->
+<div class="btn-group" style="margin-top:16px">
+  <a href="/phases" class="btn btn-primary"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:6px"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Все фазы</a>
+  <a href="/wizard" class="btn btn-secondary"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:6px"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>Wizard</a>
 </div>
 {% endblock %}

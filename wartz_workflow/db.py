@@ -27,10 +27,11 @@ class WorkflowDB:
     # ── Init ───────────────────────────────────────────────────────────
 
     def init(self) -> None:
-        """Создать таблицы из schema.sql."""
+        """Создать таблицы из schema.sql с миграциями."""
         ddl = SCHEMA_PATH.read_text(encoding="utf-8")
         with self._conn() as conn:
             conn.executescript(ddl)
+            self._migrate(conn)
             conn.commit()
 
     def _list_tables(self) -> set[str]:
@@ -111,7 +112,21 @@ class WorkflowDB:
                     )
             conn.commit()
 
-    # ── Read ───────────────────────────────────────────────────────────
+    def _migrate(self, conn: sqlite3.Connection) -> None:
+        """Добавить колонки которых не хватает (idempotent)."""
+        for column, ctype in [
+            ("delegate_agent", "TEXT"),
+            ("delegate_timeout", "INTEGER DEFAULT 30"),
+            ("delegate_max_cycles", "INTEGER DEFAULT 3"),
+            ("delegate_toolsets", "TEXT"),
+            ("parallel_with", "TEXT"),
+            ("rollback_target", "TEXT"),
+            ("next_recommendation", "TEXT"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE phases ADD COLUMN {column} {ctype}")
+            except sqlite3.OperationalError:
+                pass  # already exists
 
     def get_phases(self) -> list[dict]:
         with self._conn() as conn:
@@ -297,45 +312,21 @@ class WorkflowDB:
         with self._conn() as conn:
             conn.execute("DELETE FROM evidence WHERE id = ?", (ev_id,))
             conn.commit()
+
+    # ── Aliases (backward compat) ─────────────────────────────────────
     def add_instruction(self, phase_id: str, data: dict) -> None:
-        with self._conn() as conn:
-            conn.execute(
-                """
-                INSERT INTO instructions (phase_id, step_num, description, execution_type, tool)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    phase_id,
-                    data["step_num"],
-                    data["description"],
-                    data.get("execution_type", "sync"),
-                    data.get("tool"),
-                ),
-            )
-            conn.commit()
+        return self.create_instruction({"phase_id": phase_id, **data})
 
-    def update_instruction(self, inst_id: int, data: dict) -> None:
-        fields = []
-        vals = []
-        for k, v in data.items():
-            fields.append(f"{k} = ?")
-            vals.append(v)
-        vals.append(inst_id)
-        sql = f"UPDATE instructions SET {', '.join(fields)} WHERE id = ?"
-        with self._conn() as conn:
-            conn.execute(sql, vals)
-            conn.commit()
+    def add_check(self, phase_id: str, data: dict) -> None:
+        return self.create_check({"phase_id": phase_id, **data})
 
-    def delete_instruction(self, inst_id: int) -> None:
-        with self._conn() as conn:
-            conn.execute("DELETE FROM instructions WHERE id = ?", (inst_id,))
-            conn.commit()
+    def add_evidence(self, phase_id: str, data: dict) -> None:
+        return self.create_evidence({"phase_id": phase_id, **data})
 
     def reorder_instructions(self, phase_id: str, ids: list[int]) -> None:
-        """Переставить step_num по порядку ids.
-        Избегаем UNIQUE conflict через промежуточные отрицательные значения."""
+        """Переставить step_num по порядку ids."""
+        # Сброс уникальных значений
         with self._conn() as conn:
-            # Сброс уникальных значений
             for inst_id in ids:
                 conn.execute(
                     "UPDATE instructions SET step_num = -? WHERE id = ? AND phase_id = ?",
@@ -347,60 +338,6 @@ class WorkflowDB:
                     "UPDATE instructions SET step_num = ? WHERE id = ? AND phase_id = ?",
                     (new_num, inst_id, phase_id),
                 )
-            conn.commit()
-
-    # ── Check CRUD ───────────────────────────────────────────────────
-
-    def add_check(self, phase_id: str, data: dict) -> None:
-        with self._conn() as conn:
-            conn.execute(
-                "INSERT INTO checks (phase_id, description, command) VALUES (?, ?, ?)",
-                (phase_id, data["description"], data.get("command")),
-            )
-            conn.commit()
-
-    def update_check(self, check_id: int, data: dict) -> None:
-        fields = []
-        vals = []
-        for k, v in data.items():
-            fields.append(f"{k} = ?")
-            vals.append(v)
-        vals.append(check_id)
-        sql = f"UPDATE checks SET {', '.join(fields)} WHERE id = ?"
-        with self._conn() as conn:
-            conn.execute(sql, vals)
-            conn.commit()
-
-    def delete_check(self, check_id: int) -> None:
-        with self._conn() as conn:
-            conn.execute("DELETE FROM checks WHERE id = ?", (check_id,))
-            conn.commit()
-
-    # ── Evidence CRUD ────────────────────────────────────────────────
-
-    def add_evidence(self, phase_id: str, data: dict) -> None:
-        with self._conn() as conn:
-            conn.execute(
-                "INSERT INTO evidence (phase_id, description) VALUES (?, ?)",
-                (phase_id, data["description"]),
-            )
-            conn.commit()
-
-    def update_evidence(self, ev_id: int, data: dict) -> None:
-        fields = []
-        vals = []
-        for k, v in data.items():
-            fields.append(f"{k} = ?")
-            vals.append(v)
-        vals.append(ev_id)
-        sql = f"UPDATE evidence SET {', '.join(fields)} WHERE id = ?"
-        with self._conn() as conn:
-            conn.execute(sql, vals)
-            conn.commit()
-
-    def delete_evidence(self, ev_id: int) -> None:
-        with self._conn() as conn:
-            conn.execute("DELETE FROM evidence WHERE id = ?", (ev_id,))
             conn.commit()
 
     # ── Checkup CRUD ─────────────────────────────────────────────────
@@ -459,9 +396,9 @@ class WorkflowDB:
                 """
                 SELECT * FROM checkups
                 WHERE last_status = 'unknown'
-                   OR last_run IS NULL
-                   OR (interval_min > 0
-                       AND datetime(last_run, '+' || interval_min || ' minutes') <= datetime('now'))
+                    OR last_run IS NULL
+                    OR (interval_min > 0
+                        AND datetime(last_run, '+' || interval_min || ' minutes') <= datetime('now'))
                 """
             ).fetchall()
             return [dict(r) for r in rows]
