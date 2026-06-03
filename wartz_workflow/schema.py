@@ -101,6 +101,21 @@ def _build_phase_from_db(row: dict, wdb: WorkflowDB) -> Phase:
     )
 
 
+def load_phases_from_db(wdb: WorkflowDB) -> List[Phase]:
+    """Load all phases from a WorkflowDB instance (already initialised)."""
+    rows = wdb.get_phases()
+    return [_build_phase_from_db(r, wdb) for r in rows]
+
+
+def get_phase_from_db(wdb: WorkflowDB, phase_id: str) -> Optional[Phase]:
+    """Find a single phase by ID in a WorkflowDB instance."""
+    rows = wdb.get_phases()
+    for r in rows:
+        if r["id"] == phase_id:
+            return _build_phase_from_db(r, wdb)
+    return None
+
+
 def load_phases() -> List[Phase]:
     """Load all phases from DB ordered by phase_order, with YAML fallback."""
     wdb = WorkflowDB()

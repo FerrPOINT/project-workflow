@@ -438,28 +438,9 @@ def wizard_phase_page(request: Request, phase_id: str):
     phase["is_blocker"] = bool(phase.get("is_blocker"))
     phase["is_delegated"] = bool(phase.get("delegate_agent"))
     
-    # Load questions from DB (or YAML as fallback)
+    # Load questions from DB only
     questions = wdb.get_questions(phase_id)
-    if not questions:
-        # Fallback: load from YAML
-        from . import schema
-        all_phases = schema.load_phases()
-        yaml_phase = next((p for p in all_phases if p.id == phase_id), None)
-        if yaml_phase and yaml_phase.questions:
-            questions = [
-                {
-                    "id": i,
-                    "qtext": q.text,
-                    "required": q.required,
-                    "expected_keywords": json.dumps(q.expected_keywords),
-                    "hint": q.hint,
-                    "auto_command": q.auto_command,
-                    "validate_fn": q.validate_fn,
-                    "step_num": i,
-                }
-                for i, q in enumerate(yaml_phase.questions, 1)
-            ]
-    
+
     # Load checklist from instructions + checks
     instructions = wdb.get_instructions(phase_id)
     checks = wdb.get_checks(phase_id)
@@ -495,18 +476,9 @@ def api_wizard_submit(phase_id: str, body: dict[str, Any]):
     """Проверка ответов wizard: возвращает PASS/FAIL."""
     wdb = _get_db()
     
-    # Load phase questions
+    # Load phase questions from DB only
     questions = wdb.get_questions(phase_id)
-    if not questions:
-        from . import schema
-        all_phases = schema.load_phases()
-        yaml_phase = next((p for p in all_phases if p.id == phase_id), None)
-        if yaml_phase:
-            questions = [
-                {"id": i, "qtext": q.text, "required": q.required, "expected_keywords": json.dumps(q.expected_keywords)}
-                for i, q in enumerate(yaml_phase.questions, 1)
-            ]
-    
+
     # Get answers from body
     user_answers = body.get("answers", {})
     checks = body.get("checks", {})
@@ -545,10 +517,9 @@ def api_wizard_submit(phase_id: str, body: dict[str, Any]):
     if not missing:
         from . import phases as phases_mod
         next_phase = phases_mod.get_next_phase(phase_id)
-        from . import schema
-        all_phases = schema.load_phases()
-        next_name = next((p.name for p in all_phases if p.id == next_phase), None) if next_phase else None
-        
+        next_phase_row = wdb.get_phase(next_phase) if next_phase else None
+        next_name = next_phase_row["name"] if next_phase_row else None
+
         return {
             "verdict": "PASS",
             "phase": phase_id,

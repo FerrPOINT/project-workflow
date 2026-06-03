@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Form
 from typing import List
 
-from ... import conversation, schema, state, phases as phases_mod
+from ... import conversation, schema, state, phases as phases_mod, db
 
 router = APIRouter(prefix="/wizard", tags=["wizard"])
 
@@ -20,7 +20,9 @@ def _current_phase(jira_key: str) -> str:
 @router.post("/{jira_key}/answer")
 def wizard_answer(jira_key: str, done_items: List[str] = Form(default_factory=list), notes: str = Form(default="")):
     current_phase = _current_phase(jira_key)
-    phase = schema.get_phase(current_phase)
+    wdb = db.WorkflowDB()
+    wdb.init()
+    phase = schema.get_phase_from_db(wdb, current_phase)
     checklist = []
     if phase:
         for check in phase.checks:
@@ -48,5 +50,4 @@ def wizard_answer(jira_key: str, done_items: List[str] = Form(default_factory=li
             repo = state.find_repo(jira_key) or ""
             state.save_state(repo, jira_key, jira_key, "", next_p)
         return {"ok": True, "status": "advanced", "next_phase": next_p, "done": done, "total": total}
-
-    return {"ok": True, "status": "partial", "done": done, "total": total}
+    return {"ok": True, "status": "answered", "done": done, "total": total}

@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from ... import schema
+from ... import schema, db
 
 router = APIRouter(prefix="/phases", tags=["phases"])
 
 @router.get("/")
 def list_phases():
-    phases = schema.load_phases()
+    wdb = db.WorkflowDB()
+    wdb.init()
+    phases = schema.load_phases_from_db(wdb)
     return {
         "ok": True,
         "phases": [
@@ -21,7 +23,9 @@ def list_phases():
 
 @router.get("/{phase_id}")
 def get_phase(phase_id: str):
-    phase = schema.get_phase(phase_id)
+    wdb = db.WorkflowDB()
+    wdb.init()
+    phase = schema.get_phase_from_db(wdb, phase_id)
     if not phase:
         return {"ok": False, "error": f"Phase {phase_id} not found"}
     return {

@@ -224,7 +224,10 @@ def execute_phase(repo: str, jira_key: str, phase_id: str) -> Tuple[bool, Dict[s
 
 def get_parallel_phases(phase_id: str) -> List[str]:
     """Найти фазы которые можно запускать параллельно с данной."""
-    phase = schema.get_phase(phase_id)
+    from .db import WorkflowDB
+    wdb = WorkflowDB()
+    wdb.init()
+    phase = schema.get_phase_from_db(wdb, phase_id)
     if not phase:
         return []
 
@@ -233,7 +236,10 @@ def get_parallel_phases(phase_id: str) -> List[str]:
         result.append(phase.parallel_with)
 
     # Reverse: кто параллелен мне
-    for p in schema.load_phases():
+    from .db import WorkflowDB
+    wdb = WorkflowDB()
+    wdb.init()
+    for p in schema.load_phases_from_db(wdb):
         if p.parallel_with == phase_id:
             result.append(p.id)
 

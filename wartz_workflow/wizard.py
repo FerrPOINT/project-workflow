@@ -17,7 +17,9 @@ import re
 import subprocess
 from typing import List, Optional, Tuple, Dict, Any
 
+from .db import WorkflowDB
 from . import schema, conversation as convo
+from .schema import load_phases_from_db, get_phase_from_db
 
 
 # ── Icons ─────────────────────────────────────────────────────────────
@@ -47,7 +49,10 @@ class WizardEngine:
         history_phase = convo.get_last_phase(self.task_id)
         self.current_phase = history_phase or "-1"
 
-        self.all_phases = schema.load_phases()
+        # Load phases from SQLite DB instead of YAML/seed.json
+        self._wdb = WorkflowDB()
+        self._wdb.init()
+        self.all_phases = load_phases_from_db(self._wdb)
         self.phase_map = {p.id: p for p in self.all_phases}
 
     # ═══════════════════════════════════════════════════════════════════

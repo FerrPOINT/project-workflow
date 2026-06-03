@@ -218,5 +218,172 @@ function showToast(msg, type='success'){
   requestAnimationFrame(()=>t.classList.add('show'));
   setTimeout(()=>{t.classList.remove('show');setTimeout(()=>t.remove(),300);},2000);
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   GROUP MANAGER
+   ═══════════════════════════════════════════════════════════════════ */
+
+function toggleGroupManager(){
+  const panel = document.getElementById('groupManager');
+  panel.classList.toggle('active');
+  if(panel.classList.contains('active')) loadGroups();
+}
+
+let groupDragged = null;
+
+function loadGroups(){
+  fetch('/api/groups').then(r=>r.json()).then(data=>{
+    if(!data.ok) return;
+    const list = document.getElementById('groupList');
+    list.innerHTML = '';
+    data.groups.forEach(g=>{
+      const chip = document.createElement('div');
+      chip.className = 'group-chip';
+      chip.draggable = true;
+      chip.dataset.groupId = g.id;
+      chip.innerHTML = `
+        <span class="icon">${g.icon || ''}</span>
+        <span class="name" onclick="editGroupName(this,'${g.id}')">${g.name}</span>
+        <span class="actions">
+          <button class="btn-icon" onclick="event.stopPropagation();editGroupName(this.previousElementSibling,'${g.id}')">✏️</button>
+          <button class="btn-icon delete" onclick="event.stopPropagation();deleteGroup('${g.id}')">🗑️</button>
+        </span>
+      `;
+      chip.ondragstart = groupDragStart;
+      chip.ondragend = groupDragEnd;
+      chip.ondrop = groupDrop;
+      chip.ondragover = e=>e.preventDefault();
+      list.appendChild(chip);
+    });
+  });
+}
+
+function groupDragStart(e){
+  groupDragged = e.currentTarget;
+  e.currentTarget.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+}
+function groupDragEnd(e){
+  e.currentTarget.classList.remove('dragging');
+  groupDragged = null;
+}
+function groupDrop(e){
+  e.preventDefault();
+  if(!groupDragged || groupDragged === e.currentTarget) return;
+  const list = document.getElementById('groupList');
+  const after = [...list.children].indexOf(e.currentTarget) > [...list.children].indexOf(groupDragged);
+  if(after) list.insertBefore(groupDragged, e.currentTarget.nextSibling);
+  else list.insertBefore(groupDragged, e.currentTarget);
+  saveGroupOrder();
+}
+
+function saveGroupOrder(){
+  const chips = document.querySelectorAll('.group-chip');
+  const orders = [];
+  chips.forEach((chip, idx)=>{
+    orders.push({group_id: chip.dataset.groupId, sort_order: idx + 1});
+  });
+  fetch('/api/groups/order',{
+    method:'PUT',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({orders})
+  }).then(r=>r.json()).then(res=>{
+    if(res.ok) showToast('Порядок групп сохранён');
+    else showToast('Ошибка сохранения порядка','error');
+  });
+}
+
+function createGroup(){
+  const nameInput = document.getElementById('newGroupName');
+  const iconInput = document.getElementById('newGroupIcon');
+  const name = nameInput.value.trim();
+  const icon = iconInput.value.trim();
+  if(!name) return showToast('Введите название группы','error');
+  const id = name.toLowerCase().replace(/[^a-z0-9]/g,'').substring(0,20);
+  if(!id) return showToast('Недопустимое название','error');
+
+  fetch('/api/groups',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({id, name, icon, sort_order: 999})
+  }).then(r=>r.json()).then(res=>{
+    if(res.ok){
+      showToast('Группа создана');
+      nameInput.value = '';
+      iconInput.value = '';
+      loadGroups();
+    } else {
+      showToast(res.error || 'Ошибка создания','error');
+    }
+  });
+}
+
+function editGroupName(el, groupId){
+  const currentName = el.textContent;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = currentName;
+  input.style.cssText = 'background:var(--surface);border:1px solid var(--accent);border-radius:4px;padding:2px 6px;color:var(--text);font-size:12px;width:120px;';
+  el.replaceWith(input);
+  input.focus();
+  input.select();
+
+  function save(){
+    const newName = input.value.trim();
+    if(!newName) return;
+    fetch(`/api/groups/${groupId}`,{
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({name: newName})
+    }).then(r=>r.json()).then(res=>{
+      if(res.ok){
+        const span = document.createElement('span');
+        span.className = 'name';
+        span.textContent = newName;
+        span.onclick = function(){editGroupName(this, groupId);};
+        input.replaceWith(span);
+        showToast('Название обновлено');
+      } else {
+        showToast('Ошибка обновления','error');
+      }
+    });
+  }
+
+  input.onblur = save;
+  input.onkeydown = e=>{ if(e.key==='Enter'){e.preventDefault();save();} };
+}
+
+function deleteGroup(groupId){
+  if(!confirm('Удалить группу? Фазы перейдут в SETUP.')) return;
+  fetch(`/api/groups/${groupId}`,{method:'DELETE'})
+    .then(r=>r.json()).then(res=>{
+      if(res.ok){ showToast('Группа удалена'); loadGroups(); }
+      else showToast('Ошибка удаления','error');
+    });
+}
+
+/* ── Intercept colDrop to update group assignment ─────────────────── */
+const originalColDrop = colDrop;
+colDrop = function(e){
+  const col = e.currentTarget;
+  const newGroup = col.dataset.group;
+  if(draggedCard){
+    const oldCol = draggedCard.closest('.kanban-col');
+    const oldGroup = oldCol ? oldCol.dataset.group : null;
+    if(oldGroup && newGroup && oldGroup !== newGroup){
+      // Перемещение между колонками — обновить группу фазы
+      const phaseId = draggedCard.dataset.phaseId;
+      fetch(`/api/phases/${phaseId}/group`,{
+        method:'PUT',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({group_id: newGroup})
+      }).then(r=>r.json()).then(res=>{
+        if(!res.ok) showToast('Ошибка сохранения группы','error');
+      });
+    }
+  }
+  // Call original
+  originalColDrop(e);
+};
 </script>
 {% endblock %}
