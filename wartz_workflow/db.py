@@ -571,3 +571,46 @@ class WorkflowDB:
         with self._conn() as conn:
             conn.execute("DELETE FROM checkups WHERE id = ?", (cu_id,))
             conn.commit()
+
+    # ── Phase Order / Parallel CRUD ────────────────────────────────────
+
+    def update_phase_order(self, phase_id: str, new_order: int) -> None:
+        """Обновить порядок фазы."""
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE phases SET phase_order = ? WHERE id = ?",
+                (new_order, phase_id),
+            )
+            conn.commit()
+
+    def update_phase_parallel(self, phase_id: str, parallel_with: str | None) -> None:
+        """Установить или очистить связь parallel_with."""
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE phases SET parallel_with = ? WHERE id = ?",
+                (parallel_with, phase_id),
+            )
+            conn.commit()
+
+    def batch_update_orders(self, orders: list[tuple[str, int]]) -> None:
+        """Batch update phase_order для нескольких фаз (drag-and-drop)."""
+        with self._conn() as conn:
+            for phase_id, new_order in orders:
+                conn.execute(
+                    "UPDATE phases SET phase_order = ? WHERE id = ?",
+                    (new_order, phase_id),
+                )
+            conn.commit()
+
+    def batch_update_groups(self, group_map: dict[str, str]) -> None:
+        """Обновить parallel_with связи для нескольких фаз.
+
+        group_map: {phase_id -> parallel_with_phase_id}.
+        """
+        with self._conn() as conn:
+            for phase_id, target in group_map.items():
+                conn.execute(
+                    "UPDATE phases SET parallel_with = ? WHERE id = ?",
+                    (target, phase_id),
+                )
+            conn.commit()

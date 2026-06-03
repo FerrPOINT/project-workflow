@@ -123,23 +123,27 @@
     </div>
   </div>
 
-  <!-- Skills -->
-  {% if phase.skills %}
+  <!-- Skills — editable flow cards -->
   <div class="wiki-section">
     <div class="wiki-section-title">
       🛠️ Требуемые скиллы
-      <span class="count">{{ phase.skills|length }}</span>
+      <span class="count" id="skills-count">{{ phase.skills|length }}</span>
     </div>
-    <div class="catalog">
+    <div class="flow-list" id="skills-list">
       {% for s in phase.skills %}
-      <div class="catalog-card">
-        <span class="card-icon">🔧</span>
-        <span>{{ s }}</span>
+      <div class="flow-card skill-card" data-id="">
+        <div class="step-dot" style="background:var(--accent)"></div>
+        <div class="item-content">
+          <input type="text" class="inline-input" value="{{ s }}" data-field="skill" onblur="scheduleSave()">
+        </div>
+        <button class="item-delete" onclick="deleteSkill(this)">×</button>
       </div>
+      {% else %}
+      <div class="empty-state" id="skills-empty">Нет скиллов</div>
       {% endfor %}
     </div>
+    <button class="wiki-add-btn" onclick="addSkill()">+ Добавить скилл</button>
   </div>
-  {% endif %}
 
   <!-- Tools -->
   {% set tools = phase.instructions | map(attribute='tool') | select | unique | list %}
@@ -174,7 +178,7 @@
           <div class="flow-card {{ i.execution_type }}" data-id="{{ i.id }}" data-type="{{ i.execution_type }}">
             <div class="step-dot {{ i.execution_type }}"></div>
             <div class="item-content">
-              <input type="text" class="inline-input" value="{{ i.description }}" data-field="description" onblur="savePhase()">
+              <input type="text" class="inline-input" value="{{ i.description }}" data-field="description" onblur="scheduleSave()">
               <div class="item-meta">
                 <span class="tag type-{{ i.execution_type }}" onclick="toggleType(this)" data-field="execution_type">
                   {% if i.execution_type == 'sync' %}⏱ sync{% else %}⚡ parallel{% endif %}
@@ -212,7 +216,7 @@
       {% for c in phase.checks %}
       <li data-id="{{ c.id }}">
         <span class="status-icon wait">○</span>
-        <input type="text" class="inline-input check-text" value="{{ c.description }}" data-field="description" onblur="savePhase()">
+        <input type="text" class="inline-input check-text" value="{{ c.description }}" data-field="description" onblur="scheduleSave()">
         <span class="check-meta">{% if c.command %}{{ c.command }}{% endif %}</span>
         <button class="item-delete" onclick="deleteItem(this)">×</button>
       </li>
@@ -224,28 +228,28 @@
   </div>
 
   <!-- Evidence -->
-    <div class="wiki-section">
-      <div class="wiki-section-title">
-        📎 Evidence
-        <span class="count">{{ phase.evidence|length }}</span>
-      </div>
-      <ul class="file-list" id="evidence-list">
-        {% for e in phase.evidence %}
-        <li data-id="{{ e.id }}">
-          <span class="file-icon">📄</span>
-          <input type="text" class="inline-input file-name" value="{{ e.description }}" data-field="description" onblur="savePhase()">
-          <span class="file-status">{{ e.validator }}</span>
-          <button class="item-delete" onclick="deleteItem(this)">×</button>
-        </li>
-        {% else %}
-        <li class="empty-state">Нет evidence</li>
-        {% endfor %}
-      </ul>
-      <button class="wiki-add-btn" onclick="addEvidence()">+ Добавить evidence</button>
+  <div class="wiki-section">
+    <div class="wiki-section-title">
+      📎 Evidence
+      <span class="count">{{ phase.evidence|length }}</span>
     </div>
-
+    <ul class="evidence-list" id="evidence-list">
+      {% for e in phase.evidence %}
+      <li data-id="{{ e.id }}">
+        <span class="file-icon">📄</span>
+        <input type="text" class="inline-input file-name" value="{{ e.description }}" data-field="description" onblur="scheduleSave()">
+        <span class="file-status">{% if e.validator %}{{ e.validator }}{% else %}—{% endif %}</span>
+        <button class="item-delete" onclick="deleteItem(this)">×</button>
+      </li>
+      {% else %}
+      <li class="empty-state">Нет evidence</li>
+      {% endfor %}
+    </ul>
+    <button class="wiki-add-btn" onclick="addEvidence()">+ Добавить evidence</button>
   </div>
-  {% endblock %}
+
+</div>
+{% endblock %}
 
 {% block extra_script %}
 function rebuildFlow() {
@@ -332,7 +336,7 @@ function addInstruction() {
   card.innerHTML = `
     <div class="step-dot sync"></div>
     <div class="item-content">
-      <input type="text" class="inline-input" value="" data-field="description" onblur="savePhase()">
+      <input type="text" class="inline-input" value="" data-field="description" onblur="scheduleSave()">
       <div class="item-meta">
         <span class="tag type-sync" onclick="toggleType(this)" data-field="execution_type">⏱ sync</span>
         <span class="item-tool"></span>
@@ -353,7 +357,7 @@ function addCheck() {
   const li = document.createElement('li');
   li.innerHTML = `
     <span class="status-icon wait">○</span>
-    <input type="text" class="inline-input check-text" value="" data-field="description" onblur="savePhase()">
+    <input type="text" class="inline-input check-text" value="" data-field="description" onblur="scheduleSave()">
     <span class="check-meta">—</span>
     <button class="item-delete" onclick="deleteItem(this)">×</button>
   `;
@@ -369,7 +373,7 @@ function addEvidence() {
   const li = document.createElement('li');
   li.innerHTML = `
     <span class="file-icon">📄</span>
-    <input type="text" class="inline-input file-name" value="" data-field="description" onblur="savePhase()">
+    <input type="text" class="inline-input file-name" value="" data-field="description" onblur="scheduleSave()">
     <span class="file-status">—</span>
     <button class="item-delete" onclick="deleteItem(this)">×</button>
   `;
@@ -377,24 +381,72 @@ function addEvidence() {
   savePhase();
 }
 
+/* ---------- Skills ---------- */
+function addSkill() {
+  const list = document.getElementById('skills-list');
+  const empty = list.querySelector('#skills-empty');
+  if (empty) empty.remove();
+
+  const card = document.createElement('div');
+  card.className = 'flow-card skill-card';
+  card.setAttribute('data-id', '');
+  card.innerHTML = `
+    <div class="step-dot" style="background:var(--accent)"></div>
+    <div class="item-content">
+      <input type="text" class="inline-input" value="" data-field="skill" onblur="scheduleSave()">
+    </div>
+    <button class="item-delete" onclick="deleteSkill(this)">×</button>
+  `;
+  list.appendChild(card);
+  savePhase();
+  card.querySelector('.inline-input').focus();
+}
+
+function deleteSkill(btn) {
+  btn.closest('.skill-card').remove();
+  const list = document.getElementById('skills-list');
+  const count = list.querySelectorAll('.skill-card').length;
+  document.getElementById('skills-count').textContent = count;
+  if (count === 0 && !list.querySelector('.empty-state')) {
+    list.innerHTML = '<div class="empty-state" id="skills-empty">Нет скиллов</div>';
+  }
+  savePhase();
+}
+
+/* ---------- Debounced save ---------- */
+let _saveTimer = null;
+function scheduleSave() {
+  if (_saveTimer) clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(savePhase, 400);
+}
+
 async function savePhase() {
   const data = {
+    skills: [],
     instructions: [],
     checks: [],
     evidence: []
   };
 
-  document.querySelectorAll('#instructions-list .flow-card').forEach(card => {
+  document.querySelectorAll('#instructions-list .flow-card').forEach((card, idx) => {
     const inp = card.querySelector('[data-field="description"]');
     const tag = card.querySelector('.tag');
     const tool = card.querySelector('.item-tool');
     if (inp) {
       data.instructions.push({
-        id: card.dataset.id || null,
+        step_num: idx + 1,
         description: inp.value,
         execution_type: tag && tag.classList.contains('type-parallel') ? 'parallel' : 'sync',
         tool: tool ? tool.textContent.replace('🔧 ', '').trim() || null : null
       });
+    }
+  });
+
+  // Collect skills
+  document.querySelectorAll('#skills-list .skill-card').forEach(card => {
+    const inp = card.querySelector('[data-field="skill"]');
+    if (inp) {
+      data.skills.push(inp.value);
     }
   });
 
@@ -403,7 +455,6 @@ async function savePhase() {
     const inp = li.querySelector('[data-field="description"]');
     if (inp) {
       data.checks.push({
-        id: li.dataset.id || null,
         description: inp.value,
         command: null
       });
@@ -415,7 +466,6 @@ async function savePhase() {
     const inp = li.querySelector('[data-field="description"]');
     if (inp) {
       data.evidence.push({
-        id: li.dataset.id || null,
         description: inp.value,
         validator: null
       });
@@ -427,7 +477,23 @@ async function savePhase() {
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(data)
   });
-  if (resp.ok) showToast('Сохранено');
-  else showToast('Ошибка сохранения', 'error');
+  if (!resp.ok) { showToast('Ошибка сохранения', 'error'); return; }
+  const result = await resp.json();
+  showToast('Сохранено');
+  // Update data-id from server so subsequent saves match right rows
+  if (result.ids) {
+    const cards = document.querySelectorAll('#instructions-list .flow-card');
+    (result.ids.instructions || []).forEach((id, i) => {
+      if (cards[i]) cards[i].setAttribute('data-id', String(id));
+    });
+    const checks = document.querySelectorAll('#checks-list li:not(.empty-state)');
+    (result.ids.checks || []).forEach((id, i) => {
+      if (checks[i]) checks[i].setAttribute('data-id', String(id));
+    });
+    const evs = document.querySelectorAll('#evidence-list li:not(.empty-state)');
+    (result.ids.evidence || []).forEach((id, i) => {
+      if (evs[i]) evs[i].setAttribute('data-id', String(id));
+    });
+  }
 }
 {% endblock %}

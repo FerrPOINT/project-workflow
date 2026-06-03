@@ -9,11 +9,12 @@
 {% block extra_style %}
 .execution-page{max-width:1100px;margin:0 auto;padding:0 24px}
 
-.flowgraph{display:flex;flex-direction:column;gap:24px;margin:24px 0;position:relative}
+.flowgraph{display:flex;flex-direction:column;gap:0;margin:24px 0;position:relative}
 
 /* Sync node */
-.flow-node{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 20px;position:relative;transition:all .1s}
+.flow-node{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 20px;position:relative;transition:all .1s;cursor:grab;user-select:none}
 .flow-node:hover{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.flow-node.dragging{opacity:.5;cursor:grabbing;transform:rotate(1deg)}
 .flow-node-header{display:flex;align-items:center;gap:12px;margin-bottom:8px}
 .flow-node-num{font-size:12px;font-weight:600;color:var(--text-muted);font-family:'Fira Code',monospace;background:var(--panel);padding:2px 8px;border-radius:4px}
 .flow-node-name{font-size:16px;font-weight:600;color:var(--text);flex:1}
@@ -24,8 +25,8 @@
 .flow-node-meta{display:flex;gap:16px;margin-top:10px;font-size:12px;color:var(--text-dim);flex-wrap:wrap}
 .flow-node-meta span{display:flex;align-items:center;gap:4px}
 
-/* Parallel group */
-.parallel-group{display:flex;flex-direction:column;gap:6px}
+/* Parallel group wrapper */
+.parallel-group{display:flex;flex-direction:column;gap:6px;margin:8px 0;position:relative}
 .parallel-branches{display:flex;gap:16px;position:relative}
 .parallel-branches>::before{content:"";position:absolute;left:50%;top:-12px;width:2px;height:12px;background:var(--orange)}
 .parallel-branch{flex:1;min-width:0}
@@ -39,6 +40,13 @@
 .flow-connector{height:32px;position:relative;margin:0 auto;width:2px;background:var(--border-strong)}
 .flow-connector::after{content:"";position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid var(--text-dim)}
 
+/* Drop zones */
+.drop-zone{height:12px;margin:4px 0;position:relative}
+.drop-zone::before{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:40px;height:4px;background:var(--accent);border-radius:2px;opacity:0;transition:opacity .1s}
+.drop-zone.active::before{opacity:1}
+.drop-zone.merge::before{width:80%;background:var(--orange);opacity:0}
+.drop-zone.merge.active::before{opacity:1}
+
 /* Legend */
 .legend-bar{display:flex;gap:20px;margin:24px 0;padding:12px 16px;border-radius:8px;background:var(--panel);font-size:13px;color:var(--text-muted)}
 .legend-item{display:flex;align-items:center;gap:6px}
@@ -46,6 +54,11 @@
 .legend-box.sync{background:var(--green-soft);border:1px solid var(--green)}
 .legend-box.parallel{background:var(--orange-soft);border:1px solid var(--orange)}
 .legend-box.join{background:var(--orange-soft);border:1px dashed var(--orange)}
+
+/* Controls bar */
+.controls-bar{display:flex;gap:12px;margin:16px 0;padding:12px 16px;border-radius:8px;background:var(--panel);font-size:13px;color:var(--text-muted);align-items:center;flex-wrap:wrap}
+.controls-bar .btn-control{padding:4px 12px;border-radius:4px;background:var(--surface);border:1px solid var(--border);color:var(--text-secondary);font-size:12px;cursor:pointer;transition:all .1s;font-family:inherit}
+.controls-bar .btn-control:hover{background:var(--surface-hover);color:var(--text)}
 
 /* Mermaid fallback */
 .mermaid-wrap{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;margin:24px 0}
@@ -55,10 +68,46 @@
   .parallel-branches{flex-direction:column}
   .parallel-branches>::before{display:none}
 }
+
+/* Mini flow inside graph node */
+.mini-flow{display:flex;flex-direction:column;gap:3px;margin-top:10px;padding:10px;border-radius:8px;background:var(--panel);font-size:11px}
+.mini-run{display:flex;gap:8px}
+.mini-run.mini-group{display:flex;flex-wrap:nowrap;gap:8px}
+.mini-card{display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:4px;background:var(--surface);border:1px solid var(--border);flex:1;min-width:0}
+.mini-card.sync{border-left:2px solid var(--green)}
+.mini-card.parallel{border-left:2px solid var(--orange);background:var(--orange-soft)}
+.mini-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.mini-dot.sync{background:var(--green)}
+.mini-dot.parallel{background:var(--orange)}
+.mini-desc{color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px}
+.mini-arrow{display:flex;justify-content:center;padding:2px 0;color:var(--text-dim);font-size:10px}
+.mini-arrow.mini-join{color:var(--orange);font-size:9px;font-weight:600}
 {% endblock %}
 
 {% block content %}
+{% macro mini_flow(instructions) -%}
+  {%- set runs = instructions|group_instructions -%}
+  {%- for run in runs -%}
+    <div class="mini-run {{ 'mini-group' if run|length > 1 else '' }}">
+      {%- for i in run -%}
+      <div class="mini-card {{ i.execution_type }}">
+        <div class="mini-dot {{ i.execution_type }}"></div>
+        <span class="mini-desc">{{ i.description[:30] }}{% if i.description|length > 30 %}…{% endif %}</span>
+      </div>
+      {%- endfor -%}
+    </div>
+    {%- if not loop.last -%}
+      <div class="mini-arrow {{ 'mini-join' if run|length > 1 else '' }}">{{ 'J' if run|length > 1 else '↓' }}</div>
+    {%- endif -%}
+  {%- endfor -%}
+{%- endmacro %}
 <div class="execution-page">
+
+  <div class="controls-bar">
+    <span>🖱 Перетащите фазы для изменения порядка. Накладывайте для объединения в parallel.</span>
+    <button class="btn-control" onclick="resetLayout()">↺ Сбросить layout</button>
+    <button class="btn-control" onclick="saveLayout()">💾 Сохранить</button>
+  </div>
 
   <div class="legend-bar">
     <div class="legend-item">
@@ -75,18 +124,34 @@
     </div>
   </div>
 
-  <div class="flowgraph">
+  <div class="flowgraph" id="flowgraph">
     {% for batch in batches %}
+      {% if not loop.first %}
+      <div class="drop-zone" data-pos="{{ loop.index0 }}" ondragover="zoneDragOver(event)" ondragleave="zoneDragLeave(event)" ondrop="zoneDrop(event)"></div>
+      {% endif %}
 
       {% if batch.type == 'sync' %}
         {% set p = batch.phases[0] %}
-        <div class="flow-node">
+        <div class="flow-node" draggable="true"
+             data-phase-id="{{ p.id }}"
+             data-phase-order="{{ p.phase_num }}"
+             data-type="sync"
+             ondragstart="nodeDragStart(event)"
+             ondragend="nodeDragEnd(event)"
+             ondragover="nodeDragOver(event)"
+             ondragleave="nodeDragLeave(event)"
+             ondrop="nodeDrop(event)">
           <div class="flow-node-header">
             <span class="flow-node-num">№{{ p.phase_num }}</span>
             <span class="flow-node-name">{{ p.name }}</span>
             <span class="flow-node-type sync">SYNC⏱</span>
           </div>
           <div class="flow-node-body">{{ p.description or '' }}</div>
+          {% if p.instructions %}
+          <div class="mini-flow">
+            {{ mini_flow(p.instructions) }}
+          </div>
+          {% endif %}
           {% if p.skills %}
           <div class="flow-node-meta">
             <span>🔧 {{ p.skills|join(', ') }}</span>
@@ -100,17 +165,31 @@
 
       {% else %}
         <!-- Parallel group -->
-        <div class="parallel-group">
+        <div class="parallel-group" data-group-id="{{ batch.phases[0].id }}">
           <div class="parallel-branches">
             {% for p in batch.phases %}
             <div class="parallel-branch">
-              <div class="flow-node">
+              <div class="flow-node" draggable="true"
+                   data-phase-id="{{ p.id }}"
+                   data-phase-order="{{ p.phase_num }}"
+                   data-type="parallel"
+                   data-parent-group="{{ batch.phases[0].id }}"
+                   ondragstart="nodeDragStart(event)"
+                   ondragend="nodeDragEnd(event)"
+                   ondragover="nodeDragOver(event)"
+                   ondragleave="nodeDragLeave(event)"
+                   ondrop="nodeDrop(event)">
                 <div class="flow-node-header">
                   <span class="flow-node-num">№{{ p.phase_num }}</span>
                   <span class="flow-node-name">{{ p.name }}</span>
                   <span class="flow-node-type parallel">PARALLEL⚡</span>
                 </div>
                 <div class="flow-node-body">{{ p.description or '' }}</div>
+                {% if p.instructions %}
+                <div class="mini-flow">
+                  {{ mini_flow(p.instructions) }}
+                </div>
+                {% endif %}
                 {% if p.delegate_agent %}
                 <div class="flow-node-meta">
                   <span>🤖 {{ p.delegate_agent }} ({% if p.delegate_timeout %}{{ p.delegate_timeout }} мин{% else %}30 мин{% endif %})</span>
@@ -126,7 +205,10 @@
             {% endfor %}
           </div>
 
-          <div class="join-point">SYNC — ждём всех</div>
+          <div class="join-point">
+            <span>SYNC — ждём всех</span>
+            <button class="btn-control" onclick="ungroup(this)">Разъединить</button>
+          </div>
         </div>
 
         {% if not loop.last %}
@@ -149,5 +231,258 @@
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <script>
   mermaid.initialize({startOnLoad: true});
+
+  /* ── Graph drag-and-drop ──────────────────────────────────────── */
+  let draggedNode = null;
+  let draggedId = null;
+  let draggedType = null;
+
+  function nodeDragStart(e){
+    draggedNode = e.currentTarget;
+    draggedId = draggedNode.dataset.phaseId;
+    draggedType = draggedNode.dataset.type;
+    draggedNode.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', draggedId);
+  }
+
+  function nodeDragEnd(e){
+    if(draggedNode) draggedNode.classList.remove('dragging');
+    document.querySelectorAll('.drop-zone').forEach(z=>z.classList.remove('active'));
+    draggedNode = null; draggedId = null; draggedType = null;
+  }
+
+  function zoneDragOver(e){
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    e.currentTarget.classList.add('active');
+  }
+
+  function zoneDragLeave(e){
+    e.currentTarget.classList.remove('active');
+  }
+
+  function zoneDrop(e){
+    e.preventDefault();
+    e.currentTarget.classList.remove('active');
+    if(!draggedNode) return;
+
+    const zone = e.currentTarget;
+    const graph = document.getElementById('flowgraph');
+
+    // Find the node AFTER this drop zone
+    let insertAfter = zone;
+    while(insertAfter && insertAfter.nextElementSibling && insertAfter.nextElementSibling.classList.contains('drop-zone')){
+      insertAfter = insertAfter.nextElementSibling;
+    }
+
+    // Move the dragged node's container (parallel-group or just flow-node)
+    let container = draggedNode.closest('.parallel-group') || draggedNode;
+    if(insertAfter){
+      // Insert after the zone + connector chain
+      let target = insertAfter;
+      // If there is a connector right after zone, insert after it too
+      if(target.nextElementSibling && target.nextElementSibling.classList.contains('flow-connector')){
+        target = target.nextElementSibling;
+      }
+      graph.insertBefore(container, target.nextElementSibling);
+    } else {
+      graph.appendChild(container);
+    }
+
+    // Reinsert connectors where missing
+    fixConnectors();
+    recalcOrders();
+  }
+
+  // Merge: drag one node onto another → create parallel group
+  function nodeDragOver(e){
+    e.preventDefault();
+    const target = e.currentTarget;
+    if(target === draggedNode) return;
+    target.style.borderColor = 'var(--orange)';
+    target.style.boxShadow = '0 0 0 4px var(--orange-soft)';
+  }
+
+  function nodeDragLeave(e){
+    e.currentTarget.style.borderColor = '';
+    e.currentTarget.style.boxShadow = '';
+  }
+
+  function nodeDrop(e){
+    e.preventDefault();
+    const target = e.currentTarget;
+    target.style.borderColor = '';
+    target.style.boxShadow = '';
+    if(!draggedNode || target === draggedNode) return;
+
+    const draggedContainer = draggedNode.closest('.parallel-group') || draggedNode;
+    const targetContainer = target.closest('.parallel-group') || target;
+
+    // If both already in same parallel group → do nothing
+    if(draggedContainer === targetContainer && draggedContainer.classList.contains('parallel-group')) return;
+
+    // If target is inside a parallel group → add dragged to it
+    if(targetContainer.classList.contains('parallel-group')){
+      const branches = targetContainer.querySelector('.parallel-branches');
+      const newBranch = document.createElement('div');
+      newBranch.className = 'parallel-branch';
+      newBranch.appendChild(draggedNode);
+      branches.appendChild(newBranch);
+      // Remove old container if empty parallel group
+      if(draggedContainer.classList.contains('parallel-group') && draggedContainer.querySelectorAll('.flow-node').length===0){
+        draggedContainer.remove();
+      }
+    } else {
+      // Create new parallel group with target + dragged
+      const graph = document.getElementById('flowgraph');
+      const group = document.createElement('div');
+      group.className = 'parallel-group';
+      group.dataset.groupId = target.dataset.phaseId;
+      group.innerHTML = `
+        <div class="parallel-branches">
+          <div class="parallel-branch"></div>
+          <div class="parallel-branch"></div>
+        </div>
+        <div class="join-point">
+          <span>SYNC — ждём всех</span>
+          <button class="btn-control" onclick="ungroup(this)">Разъединить</button>
+        </div>`;
+      const branches = group.querySelectorAll('.parallel-branch');
+      branches[0].appendChild(target);
+      branches[1].appendChild(draggedNode);
+
+      // Insert group where target was
+      graph.insertBefore(group, targetContainer);
+      targetContainer.remove();
+      if(draggedContainer !== draggedNode && draggedContainer !== targetContainer) draggedContainer.remove();
+    }
+
+    fixConnectors();
+    recalcOrders();
+  }
+
+  function ungroup(btn){
+    const group = btn.closest('.parallel-group');
+    const graph = document.getElementById('flowgraph');
+    const branches = group.querySelectorAll('.parallel-branch');
+
+    let prev = group.previousElementSibling;
+    branches.forEach((branch, idx)=>{
+      const node = branch.querySelector('.flow-node');
+      if(!node) return;
+      // Detach node from parallel group, insert as standalone sync node
+      const wrapper = document.createElement('div');
+      wrapper.className = 'flow-node-wrapper';
+      wrapper.appendChild(node);
+      // Insert after group (or before group for first)
+      if(idx===0 && prev){
+        graph.insertBefore(wrapper, prev.nextElementSibling);
+      } else {
+        if(prev) graph.insertBefore(wrapper, prev.nextElementSibling);
+        else graph.appendChild(wrapper);
+      }
+      prev = wrapper;
+    });
+    group.remove();
+    fixConnectors();
+    recalcOrders();
+  }
+
+  function fixConnectors(){
+    const graph = document.getElementById('flowgraph');
+    // Remove all old connectors
+    graph.querySelectorAll('.flow-connector').forEach(el=>el.remove());
+    // Remove all old drop zones
+    graph.querySelectorAll('.drop-zone').forEach(el=>el.remove());
+
+    // Rebuild: between each visible major element insert a drop-zone then a connector
+    const items = [...graph.children].filter(el=>
+      el.classList.contains('flow-node') ||
+      el.classList.contains('parallel-group') ||
+      el.classList.contains('flow-node-wrapper')
+    );
+
+    // Clear graph
+    while(graph.firstChild) graph.removeChild(graph.firstChild);
+
+    items.forEach((item, idx)=>{
+      if(idx > 0){
+        const zone = document.createElement('div');
+        zone.className = 'drop-zone';
+        zone.dataset.pos = idx;
+        zone.ondragover = zoneDragOver;
+        zone.ondragleave = zoneDragLeave;
+        zone.ondrop = zoneDrop;
+        graph.appendChild(zone);
+      }
+      graph.appendChild(item);
+      if(idx < items.length - 1){
+        const conn = document.createElement('div');
+        conn.className = 'flow-connector';
+        graph.appendChild(conn);
+      }
+    });
+  }
+
+  function recalcOrders(){
+    let order = 1;
+    document.querySelectorAll('.flow-node').forEach(node=>{
+      node.dataset.phaseOrder = order;
+      const num = node.querySelector('.flow-node-num');
+      if(num) num.textContent = '№'+order;
+      order++;
+    });
+  }
+
+  function saveLayout(){
+    // Collect parallel groups
+    const groups = [];
+    const clear = [];
+    document.querySelectorAll('.parallel-group').forEach(g=>{
+      const ids = [...g.querySelectorAll('.flow-node')].map(n=>n.dataset.phaseId);
+      if(ids.length >= 2) groups.push(ids);
+    });
+    // Single nodes that were previously in groups get cleared
+    document.querySelectorAll('.flow-node[data-type="parallel"]').forEach(n=>{
+      if(!n.closest('.parallel-group')) clear.push(n.dataset.phaseId);
+    });
+
+    // Collect orders
+    const orders = [...document.querySelectorAll('.flow-node')].map((n, idx)=>({
+      phase_id: n.dataset.phaseId,
+      phase_order: idx + 1,
+    }));
+
+    Promise.all([
+      fetch('/api/phases/order',{
+        method:'PUT', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({orders})
+      }),
+      fetch('/api/phases/parallel',{
+        method:'PUT', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({groups, clear})
+      })
+    ]).then(()=>{
+      showToast('Layout сохранён','success');
+    }).catch(err=>{
+      showToast('Ошибка сохранения: '+err.message,'error');
+    });
+  }
+
+  function resetLayout(){
+    if(confirm('Сбросить layout к изначальному?')){
+      window.location.reload();
+    }
+  }
+
+  function showToast(msg, type){
+    const t = document.createElement('div');
+    t.className = 'toast toast-'+type;
+    t.textContent = msg;
+    document.body.appendChild(t);
+    requestAnimationFrame(()=>t.classList.add('show'));
+    setTimeout(()=>{t.classList.remove('show');setTimeout(()=>t.remove(),300);},2000);
+  }
 </script>
 {% endblock %}

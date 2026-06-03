@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 import uvicorn
 
-from . import schema, config, db
+from . import schema, config, db, service
 
 # ── Constants ───────────────────────────────────────────────────────────
 DEFAULT_UI_PORT = config.UI_PORT
@@ -44,6 +44,7 @@ templates.env.filters['group_instructions'] = _group_instructions
 
 
 _db: db.WorkflowDB | None = None
+_srv: service.PhaseService | None = None
 
 def _get_db() -> db.WorkflowDB:
     """Singleton + lazy init."""
@@ -54,6 +55,13 @@ def _get_db() -> db.WorkflowDB:
         if _db.is_empty():
             _yaml_to_sqlite()
     return _db
+
+def _get_service() -> service.PhaseService:
+    """Service singleton."""
+    global _srv
+    if _srv is None:
+        _srv = service.PhaseService(_get_db())
+    return _srv
 
 
 def _yaml_to_sqlite() -> None:
@@ -276,24 +284,7 @@ def _load_phases() -> list[dict]:
 
 
 def _load_phase_detail(phase_id: str) -> dict | None:
-    wdb = _get_db()
-    phase = wdb.get_phase(phase_id)
-    if not phase:
-        return None
-    phase["phase_num"] = phase["phase_order"]
-    phase["skills"] = json.loads(phase["skills"]) if phase["skills"] else []
-    # Доп поля из БД
-    for key in (
-        "delegate_agent", "delegate_timeout", "delegate_max_cycles",
-        "delegate_toolsets", "parallel_with", "rollback_target", "next_recommendation",
-    ):
-        if key not in phase:
-            phase[key] = None
-    phase["instructions"] = wdb.get_phase_instructions(phase_id)
-    phase["checks"] = wdb.get_phase_checks(phase_id)
-    phase["evidence"] = wdb.get_phase_evidence(phase_id)
-    phase["checkups"] = wdb.get_phase_checkups(phase_id)
-    return phase
+    return _get_service().get_phase_detail(phase_id)
 
 
 def _load_tasks() -> list[dict]:
@@ -363,7 +354,11 @@ def phases_page(request: Request):
 @app.get("/execution", response_class=HTMLResponse)
 def execution_page(request: Request):
     """Визуальный граф выполнения фаз: sync = последовательно, parallel = ветвления."""
+    wdb = _get_db()
     phases = _load_phases()
+    # enrich phases with instructions for mini-flow inside each node
+    for p in phases:
+        p["instructions"] = wdb.get_phase_instructions(p["id"])
     batches = _build_execution_batches(phases)
     mermaid = _mermaid_from_batches(batches)
     return templates.TemplateResponse(
@@ -383,24 +378,6 @@ def phase_detail(request: Request, phase_id: str):
         }
     )
 
-
-@app.get("/tasks", response_class=HTMLResponse)
-def tasks_page(request: Request):
-    tasks = _load_tasks()
-    return templates.TemplateResponse(
-        request=request, name="tasks.html", context={
-            "request": request, "page": "tasks", "ui_port": config.UI_PORT, "tasks": tasks,
-        }
-    )
-
-
-@app.get("/jobs", response_class=HTMLResponse)
-def jobs_page(request: Request):
-    return templates.TemplateResponse(
-        request=request, name="jobs.html", context={
-            "request": request, "page": "jobs", "ui_port": config.UI_PORT, "jobs": [],
-        }
-    )
 
 
 @app.get("/wizard", response_class=HTMLResponse)
@@ -577,14 +554,62 @@ def api_phase_detail(phase_id: str):
     return {"ok": True, "phase": phase}
 
 
+@app.put("/api/phases/order")
+def api_update_order(body: dict[str, Any]):
+    """Batch update phase_order после drag-and-drop на Kanban.
+
+    Body: {"orders": [{"phase_id": "4", "phase_order": 8}, ...]}
+    """
+    orders = body.get("orders", [])
+    if not orders:
+        return JSONResponse({"ok": False, "error": "No orders provided"}, status_code=400)
+
+    wdb = _get_db()
+    batch = [(o["phase_id"], o["phase_order"]) for o in orders]
+    wdb.batch_update_orders(batch)
+
+    # Rebuild PHASE_ORDER in config (volatile for this process)
+    _update_config_phase_order()
+
+    return {"ok": True, "updated": len(batch)}
+
+
+@app.put("/api/phases/parallel")
+def api_update_parallel(body: dict[str, Any]):
+    """Batch update parallel_with связей после drag в графе.
+
+    Body: {"groups": [["4.5", "5"], ["7.5", "7.6"]], "clear": ["3.5"]}
+    """
+    groups = body.get("groups", [])
+    clear = body.get("clear", [])
+
+    wdb = _get_db()
+
+    # Clear old parallel links
+    for phase_id in clear:
+        wdb.update_phase_parallel(phase_id, None)
+
+    # Set new bidirectional links
+    group_map: dict[str, str] = {}
+    for group in groups:
+        if len(group) >= 2:
+            for i, phase_id in enumerate(group):
+                target = group[(i + 1) % len(group)]  # cycle link
+                group_map[phase_id] = target
+
+    if group_map:
+        wdb.batch_update_groups(group_map)
+
+    return {"ok": True, "groups_set": len(group_map), "cleared": len(clear)}
+
+
 @app.put("/api/phases/{phase_id}")
 def api_phase_update(phase_id: str, body: dict[str, Any]):
-    wdb = _get_db()
-    phase = wdb.get_phase(phase_id)
-    if not phase:
+    srv = _get_service()
+    if not srv.get_phase_detail(phase_id):
         return JSONResponse({"ok": False, "error": "Phase not found"}, status_code=404)
 
-    # Phase settings — only valid fields
+    # Phase metadata
     PHASE_FIELDS = {
         "name", "description", "skills", "delegate_agent",
         "delegate_timeout", "delegate_max_cycles", "delegate_toolsets",
@@ -592,34 +617,14 @@ def api_phase_update(phase_id: str, body: dict[str, Any]):
     }
     phase_data = {k: v for k, v in body.items() if k in PHASE_FIELDS}
     if phase_data:
-        wdb.update_phase(phase_id, phase_data)
+        srv.update_phase(phase_id, phase_data)
 
-    # Instructions
-    for i in body.get("instructions", []):
-        # Only valid instruction fields
-        inst_data = {k: v for k, v in i.items() if k in {"step_num", "description", "execution_type", "tool"}}
-        if i.get("id"):
-            wdb.update_instruction(i["id"], inst_data)
-        else:
-            wdb.create_instruction({"phase_id": phase_id, **inst_data})
+    # Bulk replace instructions / checks / evidence
+    inst_ids = srv.save_instructions(phase_id, body.get("instructions", []))
+    check_ids = srv.save_checks(phase_id, body.get("checks", []))
+    ev_ids = srv.save_evidence(phase_id, body.get("evidence", []))
 
-    # Checks
-    for c in body.get("checks", []):
-        check_data = {k: v for k, v in c.items() if k in {"description", "command"}}
-        if c.get("id"):
-            wdb.update_check(c["id"], check_data)
-        else:
-            wdb.create_check({"phase_id": phase_id, **check_data})
-
-    # Evidence
-    for e in body.get("evidence", []):
-        ev_data = {k: v for k, v in e.items() if k in {"description", "validator"}}
-        if e.get("id"):
-            wdb.update_evidence(e["id"], ev_data)
-        else:
-            wdb.create_evidence({"phase_id": phase_id, **ev_data})
-
-    return {"ok": True}
+    return {"ok": True, "ids": {"instructions": inst_ids, "checks": check_ids, "evidence": ev_ids}}
 
 
 @app.delete("/api/instructions/{inst_id}")
@@ -641,6 +646,29 @@ def api_delete_evidence(ev_id: int):
     wdb = _get_db()
     wdb.delete_evidence(ev_id)
     return {"ok": True}
+
+
+@app.put("/api/phases/{phase_id}/order")
+def api_single_phase_order(phase_id: str, body: dict[str, Any]):
+    """Обновить порядок одной фазы (перетаскивание в графе)."""
+    new_order = body.get("phase_order")
+    if new_order is None:
+        return JSONResponse({"ok": False, "error": "phase_order required"}, status_code=400)
+
+    wdb = _get_db()
+    wdb.update_phase_order(phase_id, int(new_order))
+
+    # Rebuild config order
+    _update_config_phase_order()
+
+    return {"ok": True, "phase_id": phase_id, "phase_order": new_order}
+
+
+def _update_config_phase_order():
+    """Пересобрать PHASE_ORDER из актуального DB state."""
+    phases = _load_phases()
+    sorted_phases = sorted(phases, key=lambda p: p["phase_num"])
+    config.PHASE_ORDER[:] = [p["id"] for p in sorted_phases]
 
 
 # ═══════════════════════════════════════════════════════════════════════

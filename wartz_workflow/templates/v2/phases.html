@@ -12,39 +12,170 @@
 @media(max-width:900px){.kanban{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:480px){.kanban{grid-template-columns:1fr}}
 .kanban-col{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px;min-height:200px}
+.kanban-col.drag-over{border-color:var(--accent);background:var(--accent-soft)}
 .kanban-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding:0 4px}
 .kanban-header .title{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted)}
 .kanban-header .count{font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px;background:var(--accent-soft);color:var(--accent)}
-.kanban-card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:8px;cursor:pointer;transition:all .12s;text-decoration:none;color:inherit;display:block}
+.kanban-card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:8px;cursor:grab;transition:all .12s;text-decoration:none;color:inherit;display:block;user-select:none}
 .kanban-card:hover{background:var(--surface-hover);border-color:var(--border-strong);transform:translateY(-1px)}
+.kanban-card.dragging{opacity:.5;cursor:grabbing;transform:rotate(2deg)}
 .kanban-card .card-title{font-size:13px;font-weight:500;color:var(--text);margin-bottom:4px;line-height:1.4}
 .kanban-card .card-desc{font-size:11px;color:var(--text-muted);line-height:1.4;margin-top:4px}
 .kanban-card .card-meta{display:flex;gap:8px;margin-top:8px;font-size:11px;color:var(--text-dim);align-items:center}
 .kanban-card .card-meta .phase-num{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-dim)}
 .kanban-card .card-meta .badge-count{font-size:10px;padding:1px 5px;border-radius:3px;background:rgba(255,255,255,.06);color:var(--text-muted)}
+/* Drop indicator line between cards */
+.drop-indicator{height:2px;background:var(--accent);border-radius:1px;margin:4px 0;opacity:0;transition:opacity .1s}
+.drop-indicator.active{opacity:1}
 {% endblock %}
 
 {% block content %}
-<div class="kanban">
+<div class="kanban" id="kanban">
   {% for group_id, group_name in groups.items() %}
-  <div class="kanban-col">
+  <div class="kanban-col" data-group="{{ group_id }}" ondragover="colDragOver(event)" ondragleave="colDragLeave(event)" ondrop="colDrop(event)">
     <div class="kanban-header">
       <div class="title">{{ group_name }}</div>
-      <div class="count">{{ grouped_phases[group_id]|length }}</div>
+      <div class="count" id="count-{{ group_id }}">{{ grouped_phases[group_id]|length }}</div>
     </div>
-    {% for p in grouped_phases[group_id] %}
-    <a class="kanban-card" href="/phase/{{ p.id }}">
-      <div class="card-title">{{ p.name }}</div>
-      {% if p.description %}
-      <div class="card-desc">{{ p.description[:80] }}{% if p.description|length > 80 %}...{% endif %}</div>
-      {% endif %}
-      <div class="card-meta">
-        <span class="phase-num">№{{ p.phase_num }}</span>
-        <span class="badge-count">{{ p.instruction_count }} шагов</span>
+    <div class="card-list" id="list-{{ group_id }}" data-group="{{ group_id }}">
+      {% for p in grouped_phases[group_id] %}
+      <div class="kanban-card" draggable="true"
+           data-phase-id="{{ p.id }}"
+           data-phase-order="{{ p.phase_num }}"
+           ondragstart="cardDragStart(event)"
+           ondragend="cardDragEnd(event)">
+        <div class="card-title">{{ p.name }}</div>
+        {% if p.description %}
+        <div class="card-desc">{{ p.description[:80] }}{% if p.description|length > 80 %}...{% endif %}</div>
+        {% endif %}
+        <div class="card-meta">
+          <span class="phase-num">№{{ p.phase_num }}</span>
+          <span class="badge-count">{{ p.instruction_count }} шагов</span>
+        </div>
       </div>
-    </a>
-    {% endfor %}
+      {% endfor %}
+    </div>
   </div>
   {% endfor %}
 </div>
+
+<script>
+/* ── Kanban drag-and-drop ────────────────────────────────────────── */
+let draggedCard = null;
+let draggedId = null;
+let draggedOrder = null;
+let sourceGroup = null;
+
+function cardDragStart(e){
+  draggedCard = e.target;
+  draggedId = e.target.dataset.phaseId;
+  draggedOrder = parseInt(e.target.dataset.phaseOrder,10);
+  sourceGroup = e.target.closest('.kanban-col').dataset.group;
+  e.target.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', draggedId);
+}
+
+function cardDragEnd(e){
+  e.target.classList.remove('dragging');
+  document.querySelectorAll('.drop-indicator').forEach(el=>el.remove());
+  draggedCard = null; draggedId = null; draggedOrder = null; sourceGroup = null;
+}
+
+function colDragOver(e){
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const col = e.currentTarget;
+  col.classList.add('drag-over');
+
+  const list = col.querySelector('.card-list');
+  const after = getDragAfterElement(list, e.clientY);
+  let indicator = list.querySelector('.drop-indicator');
+  if(!indicator){
+    indicator = document.createElement('div');
+    indicator.className = 'drop-indicator';
+  }
+  indicator.classList.add('active');
+  if(after) list.insertBefore(indicator, after);
+  else list.appendChild(indicator);
+}
+
+function colDragLeave(e){
+  if(!e.currentTarget.contains(e.relatedTarget)){
+    e.currentTarget.classList.remove('drag-over');
+  }
+}
+
+function colDrop(e){
+  e.preventDefault();
+  const col = e.currentTarget;
+  col.classList.remove('drag-over');
+
+  const list = col.querySelector('.card-list');
+  const after = getDragAfterElement(list, e.clientY);
+
+  // Move DOM
+  if(after) list.insertBefore(draggedCard, after);
+  else list.appendChild(draggedCard);
+
+  // Update counts
+  updateCounts();
+
+  // Compute new orders for ALL phases (recalculate sequentially per column)
+  const orders = [];
+  let orderCounter = 1;
+  document.querySelectorAll('.kanban-col').forEach(c=>{
+    const gid = c.dataset.group;
+    c.querySelectorAll('.kanban-card').forEach(card=>{
+      const pid = card.dataset.phaseId;
+      orders.push({phase_id:pid, phase_order:orderCounter, group:gid});
+      card.dataset.phaseOrder = orderCounter;
+      card.querySelector('.phase-num').textContent = '№'+orderCounter;
+      orderCounter++;
+    });
+  });
+
+  // Persist
+  fetch('/api/phases/order',{
+    method:'PUT',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({orders: orders})
+  }).then(r=>r.json()).then(res=>{
+    if(!res.ok) showToast('Ошибка сохранения порядка','error');
+    else showToast('Порядок фаз обновлён','success');
+  }).catch(err=>{
+    showToast('Ошибка сети: '+err.message,'error');
+  });
+
+  document.querySelectorAll('.drop-indicator').forEach(el=>el.remove());
+}
+
+function getDragAfterElement(container, y){
+  const cards = [...container.querySelectorAll('.kanban-card:not(.dragging)')];
+  return cards.reduce((closest, child)=>{
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height/2;
+    if(offset < 0 && offset > closest.offset) return {offset:offset, element:child};
+    return closest;
+  },{offset:-Infinity}).element;
+}
+
+function updateCounts(){
+  document.querySelectorAll('.kanban-col').forEach(col=>{
+    const gid = col.dataset.group;
+    const n = col.querySelectorAll('.kanban-card').length;
+    const badge = document.getElementById('count-'+gid);
+    if(badge) badge.textContent = n;
+  });
+}
+
+function showToast(msg, type='success'){
+  const t = document.createElement('div');
+  t.className = 'toast toast-'+type;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  requestAnimationFrame(()=>t.classList.add('show'));
+  setTimeout(()=>{t.classList.remove('show');setTimeout(()=>t.remove(),300);},2000);
+}
+</script>
 {% endblock %}

@@ -26,10 +26,6 @@
     <div class="card-value">30</div>
     <div class="card-delta">Все фазы определены</div>
   </div>
-  <div class="card">
-    <div class="card-header"><div class="card-title">ЗАДАЧ В РАБОТЕ</div></div>
-    <div class="card-value" style="color:var(--accent)">{{ task_count }}</div>
-  </div>
 </div>
 
 <!-- Progress -->
@@ -40,66 +36,6 @@
   </div>
   <div class="progress-bg">
     <div class="progress-fill" style="width:{{ (completed_phases/30*100)|round }}%"></div>
-  </div>
-</div>
-
-<!-- Tasks: Desktop Table + Mobile Cards -->
-<div class="card">
-  <div class="card-header">
-    <div class="card-title">ПОСЛЕДНИЕ ЗАДАЧИ</div>
-    <a href="/tasks" class="btn btn-secondary">Все задачи →</a>
-  </div>
-
-  <!-- Desktop table -->
-  <div class="tasks-table-wrap" style="display:block">
-    <table class="tasks-table">
-      <tr>
-        <th>КЛЮЧ</th>
-        <th>ТЕКУЩАЯ ФАЗА</th>
-        <th>ПРОГРЕСС</th>
-        <th>СТАТУС</th>
-      </tr>
-      {% for t in tasks %}
-      <tr>
-        <td><strong><a href="/wizard/{{ t.jira_key }}">{{ t.jira_key }}</a></strong></td>
-        <td>№{{ t.phase_num }} {{ t.phase_name }}</td>
-        <td>{{ t.completed }}/30</td>
-        <td>
-          <span class="status status-{{ t.status }}">
-            <span class="status-dot"></span> {{ t.status_label }}
-          </span>
-        </td>
-      </tr>
-      {% endfor %}
-    </table>
-  </div>
-
-  <!-- Mobile cards (hidden on desktop) -->
-  <style>
-    @media(min-width:641px){.tasks-mobile{display:none!important}}
-    @media(max-width:640px){.tasks-table-wrap{display:none!important}}
-  </style>
-  <div class="tasks-mobile" style="display:none">
-    {% for t in tasks %}
-    <div class="task-mobile-card">
-      <div class="task-mobile-row">
-        <span class="task-mobile-label">Ключ</span>
-        <span class="task-mobile-val"><a href="/wizard/{{ t.jira_key }}">{{ t.jira_key }}</a></span>
-      </div>
-      <div class="task-mobile-row">
-        <span class="task-mobile-label">Фаза</span>
-        <span class="task-mobile-val">№{{ t.phase_num }} {{ t.phase_name }}</span>
-      </div>
-      <div class="task-mobile-row">
-        <span class="task-mobile-label">Прогресс</span>
-        <span class="task-mobile-val">{{ t.completed }}/30</span>
-      </div>
-      <div class="task-mobile-row">
-        <span class="task-mobile-label">Статус</span>
-        <span class="status status-{{ t.status }}"><span class="status-dot"></span> {{ t.status_label }}</span>
-      </div>
-    </div>
-    {% endfor %}
   </div>
 </div>
 
