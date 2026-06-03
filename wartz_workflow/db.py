@@ -51,10 +51,21 @@ class WorkflowDB:
         """Залить фазы из YAML → SQLite (разово, при инициализации)."""
         with self._conn() as conn:
             for p in phases:
+                # Extract flattened delegate fields
+                delegate = p.get("delegate", {})
+                delegate_agent = delegate.get("agent") if delegate else p.get("delegate_agent")
+                delegate_timeout = delegate.get("timeout_min") if delegate else p.get("delegate_timeout")
+                delegate_max_cycles = delegate.get("max_cycles") if delegate else p.get("delegate_max_cycles")
+                delegate_toolsets = json.dumps(delegate.get("toolsets", [])) if delegate else p.get("delegate_toolsets")
+                
                 conn.execute(
                     """
-                    INSERT OR REPLACE INTO phases (id, name, description, phase_order, skills)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT OR REPLACE INTO phases (
+                        id, name, description, phase_order, skills,
+                        delegate_agent, delegate_timeout, delegate_max_cycles, delegate_toolsets,
+                        parallel_with, rollback_target, next_recommendation
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         p["id"],
@@ -62,6 +73,13 @@ class WorkflowDB:
                         p.get("description") or "",
                         p["phase_order"],
                         p.get("skills"),
+                        delegate_agent,
+                        delegate_timeout,
+                        delegate_max_cycles,
+                        delegate_toolsets,
+                        p.get("parallel_with"),
+                        p.get("rollback_target"),
+                        p.get("next_recommendation"),
                     ),
                 )
                 for inst in p.get("instructions", []):

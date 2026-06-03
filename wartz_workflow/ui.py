@@ -95,6 +95,101 @@ def _yaml_to_sqlite() -> None:
     _db.import_phases(batch)
 
 
+def _build_execution_batches(phases: list[dict]) -> list[dict]:
+    """Разбить фазы на sync/parallel batches для визуализации workflow.
+
+    Синхронные — последовательно, параллельные — объединены в группы по parallel_with.
+    """
+    phases_by_id = {p["id"]: p for p in phases}
+    
+    # Найти bidirectional parallel группы (по parallel_with)
+    parallel_targets = {}
+    for p in phases:
+        target = p.get("parallel_with")
+        if target and target in phases_by_id:
+            key = tuple(sorted([p["id"], target]))
+            if key not in parallel_targets:
+                parallel_targets[key] = set()
+            parallel_targets[key].add(p["id"])
+            parallel_targets[key].add(target)
+    
+    parallel_groups = [
+        sorted(list(g), key=lambda x: config.PHASE_ORDER.index(x))
+        for g in parallel_targets.values()
+    ]
+    all_parallel_ids = set()
+    for g in parallel_groups:
+        all_parallel_ids.update(g)
+    
+    batches = []
+    used = set()
+    
+    for pid in config.PHASE_ORDER:
+        if pid in used:
+            continue
+        if pid in all_parallel_ids:
+            for group in parallel_groups:
+                if pid in group:
+                    batch_phases = [phases_by_id[g] for g in group if g in phases_by_id]
+                    if batch_phases:
+                        batches.append({
+                            "type": "parallel",
+                            "phases": batch_phases,
+                            "title": " + ".join(p["name"] for p in batch_phases),
+                        })
+                    used.update(group)
+                    break
+        else:
+            if pid in phases_by_id:
+                batches.append({
+                    "type": "sync",
+                    "phases": [phases_by_id[pid]],
+                    "title": phases_by_id[pid]["name"],
+                })
+                used.add(pid)
+    
+    return batches
+
+
+def _mermaid_from_batches(batches: list[dict]) -> str:
+    """Генерация Mermaid flowchart из batches."""
+    lines = ["flowchart TD"]
+    nodes = []
+    edges = []
+    prev_node = None
+    
+    for batch in batches:
+        if len(batch["phases"]) == 1:
+            p = batch["phases"][0]
+            node = f"{p['id']}".replace(".", "_").replace("-", "neg")
+            label = f"P{p['phase_num']}:{p['name'][:20]}"
+            nodes.append(f"    {node}[{label}]")
+            if prev_node:
+                edges.append(f"    {prev_node} --> {node}")
+            prev_node = node
+        else:
+            # Parallel group
+            first = batch["phases"][0]
+            join_node = f"JOIN_{first['id']}".replace(".", "_").replace("-", "neg")
+            parallel_nodes = []
+            for p in batch["phases"]:
+                node = f"{p['id']}".replace(".", "_").replace("-", "neg")
+                label = f"P{p['phase_num']}:{p['name'][:20]}"
+                nodes.append(f"    {node}[{label}]")
+                parallel_nodes.append(node)
+            
+            # Join node
+            nodes.append(f"    {join_node}{{🔄}}")
+            
+            if prev_node:
+                edges.append(f"    {prev_node} --> {parallel_nodes[0]}")
+            for node in parallel_nodes:
+                edges.append(f"    {node} --> {join_node}")
+            prev_node = join_node
+    
+    return "\n".join(lines + nodes + edges)
+
+
 app = FastAPI(title="wartz-workflow UI", version="2.0.0")
 
 
@@ -143,13 +238,20 @@ def _load_phases() -> list[dict]:
     rows = wdb.get_phases()
     result = []
     for p in rows:
+        skills = json.loads(p["skills"]) if p["skills"] else []
+        delegate_agent = p.get("delegate_agent")
         result.append(
             {
                 "id": p["id"],
                 "phase_num": p["phase_order"],
                 "name": p["name"],
                 "description": p["description"],
-                "skills": json.loads(p["skills"]) if p["skills"] else [],
+                "skills": skills,
+                "delegate_agent": delegate_agent,
+                "is_delegated": bool(delegate_agent),
+                "parallel_with": p.get("parallel_with"),
+                "rollback_target": p.get("rollback_target"),
+                "delegate_timeout": p.get("delegate_timeout"),
             }
         )
     return result
@@ -235,10 +337,20 @@ def phases_page(request: Request):
     phases = _load_phases()
     grouped = _group_phases(phases)
     return templates.TemplateResponse(
-        request=request, name="phases.html", context={
-            "request": request, "page": "phases", "ui_port": config.UI_PORT,
-            "groups": PHASE_GROUP_NAMES, "grouped_phases": grouped,
-        }
+        request=request, name="phases.html",
+        context={"request": request, "grouped": grouped, "groups": PHASE_GROUP_NAMES, "grouped_phases": grouped, "page": "phases", "ui_port": config.UI_PORT}
+    )
+
+
+@app.get("/execution", response_class=HTMLResponse)
+def execution_page(request: Request):
+    """Визуальный граф выполнения фаз: sync = последовательно, parallel = ветвления."""
+    phases = _load_phases()
+    batches = _build_execution_batches(phases)
+    mermaid = _mermaid_from_batches(batches)
+    return templates.TemplateResponse(
+        request=request, name="execution.html",
+        context={"request": request, "batches": batches, "mermaid": mermaid, "page": "execution", "ui_port": config.UI_PORT}
     )
 
 
