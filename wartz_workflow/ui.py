@@ -26,16 +26,16 @@ BASE_DIR = Path(__file__).parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates" / "v2"))
 
 def _group_instructions(instructions):
-    """Группирует инструкции по runs: sync-каждый отдельно, parallel-подряд в одной группе"""
+    """Группирует инструкции по runs: parallel примыкает к предыдущей sync и идёт с ней рядом."""
     if not instructions:
         return []
     groups = []
     current = [instructions[0]]
     for i in instructions[1:]:
-        if i.get('execution_type') == 'parallel' and current[-1].get('execution_type') == 'parallel':
-            current.append(i)
+        if i.get('execution_type') == 'parallel':
+            current.append(i)          # parallel → в ту же группу (параллельно предыдущей)
         else:
-            groups.append(current)
+            groups.append(current)      # sync → новый run
             current = [i]
     groups.append(current)
     return groups

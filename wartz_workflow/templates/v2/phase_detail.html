@@ -3,7 +3,6 @@
 {% block title %}{{ phase.name }} — wartz-workflow{% endblock %}
 {% block header_title %}Фаза №{{ phase.phase_num }}{% endblock %}
 {% block header_actions %}
-  <button class="btn btn-primary" onclick="savePhase()">💾 Сохранить</button>
   <button class="btn btn-secondary">▶ Запустить</button>
 {% endblock %}
 
@@ -36,7 +35,8 @@
 /* One run = either single card or horizontal group */
 .flow-run{display:flex;gap:12px;width:100%}
 .flow-run.single .flow-card{flex:1}
-.flow-run.group .flow-card{flex:1}
+.flow-run.group{flex-wrap:nowrap}
+.flow-run.group .flow-card{flex:1;min-width:0;overflow:hidden}
 
 /* Card */
 .flow-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;display:flex;gap:10px;min-width:0;transition:all .12s}
@@ -174,7 +174,7 @@
           <div class="flow-card {{ i.execution_type }}" data-id="{{ i.id }}" data-type="{{ i.execution_type }}">
             <div class="step-dot {{ i.execution_type }}"></div>
             <div class="item-content">
-              <input type="text" class="inline-input" value="{{ i.description }}" data-field="description">
+              <input type="text" class="inline-input" value="{{ i.description }}" data-field="description" onblur="savePhase()">
               <div class="item-meta">
                 <span class="tag type-{{ i.execution_type }}" onclick="toggleType(this)" data-field="execution_type">
                   {% if i.execution_type == 'sync' %}⏱ sync{% else %}⚡ parallel{% endif %}
@@ -212,7 +212,7 @@
       {% for c in phase.checks %}
       <li data-id="{{ c.id }}">
         <span class="status-icon wait">○</span>
-        <input type="text" class="inline-input check-text" value="{{ c.description }}" data-field="description">
+        <input type="text" class="inline-input check-text" value="{{ c.description }}" data-field="description" onblur="savePhase()">
         <span class="check-meta">{% if c.command %}{{ c.command }}{% endif %}</span>
         <button class="item-delete" onclick="deleteItem(this)">×</button>
       </li>
@@ -233,7 +233,7 @@
         {% for e in phase.evidence %}
         <li data-id="{{ e.id }}">
           <span class="file-icon">📄</span>
-          <input type="text" class="inline-input file-name" value="{{ e.description }}" data-field="description">
+          <input type="text" class="inline-input file-name" value="{{ e.description }}" data-field="description" onblur="savePhase()">
           <span class="file-status">{{ e.validator }}</span>
           <button class="item-delete" onclick="deleteItem(this)">×</button>
         </li>
@@ -248,19 +248,51 @@
   {% endblock %}
 
 {% block extra_script %}
+function rebuildFlow() {
+  const list = document.getElementById('instructions-list');
+  const cards = [...list.querySelectorAll('.flow-card')];
+  list.innerHTML = '';
+  if (cards.length === 0) {
+    list.innerHTML = '<div class="empty-state">Нет инструкций</div>';
+    return;
+  }
+  let i = 0;
+  while (i < cards.length) {
+    const group = [cards[i]];
+    i++;
+    while (i < cards.length && cards[i].dataset.type === 'parallel') {
+      group.push(cards[i]);
+      i++;
+    }
+    const run = document.createElement('div');
+    run.className = 'flow-run ' + (group.length > 1 ? 'group' : 'single');
+    group.forEach(c => run.appendChild(c));
+    list.appendChild(run);
+    if (i < cards.length) {
+      if (group.length > 1) {
+        const join = document.createElement('div');
+        join.className = 'flow-join';
+        join.innerHTML = '<span class="join-bar">🔄 JOIN</span>';
+        list.appendChild(join);
+      } else {
+        const arrow = document.createElement('div');
+        arrow.className = 'flow-arrow';
+        arrow.textContent = '↓';
+        list.appendChild(arrow);
+      }
+    }
+  }
+}
+
 function deleteItem(btn) {
   const card = btn.closest('.flow-card');
   if (card) {
-    const run = card.closest('.flow-run');
     card.remove();
-    if (run && !run.querySelector('.flow-card')) {
-      const prev = run.previousElementSibling;
-      if (prev && (prev.classList.contains('flow-arrow') || prev.classList.contains('flow-join'))) prev.remove();
-      run.remove();
-    }
+    rebuildFlow();
   } else {
     btn.closest('li').remove();
   }
+  savePhase();
 }
 
 function toggleType(tag) {
@@ -271,15 +303,21 @@ function toggleType(tag) {
     tag.classList.remove('type-sync');
     tag.classList.add('type-parallel');
     tag.textContent = '⚡ parallel';
-    if (card) { card.classList.remove('sync'); card.classList.add('parallel'); card.setAttribute('data-type', 'parallel'); }
+    card.classList.remove('sync');
+    card.classList.add('parallel');
+    card.setAttribute('data-type', 'parallel');
     if (dot) dot.className = 'step-dot parallel';
   } else {
     tag.classList.remove('type-parallel');
     tag.classList.add('type-sync');
     tag.textContent = '⏱ sync';
-    if (card) { card.classList.remove('parallel'); card.classList.add('sync'); card.setAttribute('data-type', 'sync'); }
+    card.classList.remove('parallel');
+    card.classList.add('sync');
+    card.setAttribute('data-type', 'sync');
     if (dot) dot.className = 'step-dot sync';
   }
+  rebuildFlow();
+  savePhase();
 }
 
 function addInstruction() {
@@ -287,26 +325,24 @@ function addInstruction() {
   const empty = list.querySelector('.empty-state');
   if (empty) empty.remove();
 
-  const run = document.createElement('div');
-  run.className = 'flow-run single';
-  run.innerHTML = `
-    <div class="flow-card sync" data-id="" data-type="sync">
-      <div class="step-dot sync"></div>
-      <div class="item-content">
-        <input type="text" class="inline-input" value="" data-field="description">
-        <div class="item-meta">
-          <span class="tag type-sync" onclick="toggleType(this)" data-field="execution_type">⏱ sync</span>
-          <span class="item-tool"></span>
-        </div>
+  const card = document.createElement('div');
+  card.className = 'flow-card sync';
+  card.setAttribute('data-id', '');
+  card.setAttribute('data-type', 'sync');
+  card.innerHTML = `
+    <div class="step-dot sync"></div>
+    <div class="item-content">
+      <input type="text" class="inline-input" value="" data-field="description" onblur="savePhase()">
+      <div class="item-meta">
+        <span class="tag type-sync" onclick="toggleType(this)" data-field="execution_type">⏱ sync</span>
+        <span class="item-tool"></span>
       </div>
-      <button class="item-delete" onclick="deleteItem(this)">×</button>
     </div>
+    <button class="item-delete" onclick="deleteItem(this)">×</button>
   `;
-  const arrow = document.createElement('div');
-  arrow.className = 'flow-arrow';
-  arrow.textContent = '↓';
-  list.appendChild(arrow);
-  list.appendChild(run);
+  list.appendChild(card);
+  rebuildFlow();
+  savePhase();
 }
 
 function addCheck() {
@@ -317,11 +353,12 @@ function addCheck() {
   const li = document.createElement('li');
   li.innerHTML = `
     <span class="status-icon wait">○</span>
-    <input type="text" class="inline-input check-text" value="" data-field="description">
+    <input type="text" class="inline-input check-text" value="" data-field="description" onblur="savePhase()">
     <span class="check-meta">—</span>
     <button class="item-delete" onclick="deleteItem(this)">×</button>
   `;
   list.appendChild(li);
+  savePhase();
 }
 
 function addEvidence() {
@@ -332,11 +369,12 @@ function addEvidence() {
   const li = document.createElement('li');
   li.innerHTML = `
     <span class="file-icon">📄</span>
-    <input type="text" class="inline-input file-name" value="" data-field="description">
+    <input type="text" class="inline-input file-name" value="" data-field="description" onblur="savePhase()">
     <span class="file-status">—</span>
     <button class="item-delete" onclick="deleteItem(this)">×</button>
   `;
   list.appendChild(li);
+  savePhase();
 }
 
 async function savePhase() {
