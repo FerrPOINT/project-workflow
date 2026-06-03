@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}WARTZ Workflow{% endblock %}</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+:root{
+  --bg:#08090a;--panel:#0f1011;--surface:#191a1b;--surface-hover:#1f2022;--surface-active:#25262a;
+  --text:#f7f8f8;--text-secondary:#d0d6e0;--text-muted:#8a8f98;--text-dim:#62666d;
+  --accent:#5e6ad2;--accent-hover:#828fff;--accent-soft:rgba(94,106,210,.15);
+  --border:rgba(255,255,255,.06);--border-strong:rgba(255,255,255,.10);
+  --green:#22c55e;--green-soft:rgba(34,197,94,.12);--red:#ef4444;--red-soft:rgba(239,68,68,.12);
+  --orange:#f59e0b;--orange-soft:rgba(245,158,11,.12);--blue:#3b82f6;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{font-feature-settings:"cv01","ss03"}
+body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,-apple-system,sans-serif;line-height:1.5;font-size:14px;min-height:100vh;display:flex}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+
+/* Sidebar */
+.sidebar{width:240px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;height:100vh}
+.sidebar-header{padding:20px 24px;border-bottom:1px solid var(--border)}
+.sidebar-logo{font-size:15px;font-weight:600;letter-spacing:-0.2px;color:var(--text)}
+.sidebar-logo span{color:var(--accent);font-weight:700}
+.sidebar-nav{flex:1;padding:12px 0}
+.sidebar-section{padding:8px 20px;font-size:10px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-top:8px}
+.sidebar-link{display:flex;align-items:center;gap:10px;padding:8px 20px;color:var(--text-muted);font-size:13px;font-weight:500;transition:all .12s;text-decoration:none;border-left:2px solid transparent}
+.sidebar-link:hover{color:var(--text);background:var(--surface)}
+.sidebar-link.active{color:var(--text);background:var(--surface-active);border-left-color:var(--accent)}
+.sidebar-link .badge{margin-left:auto;font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px;background:var(--accent-soft);color:var(--accent)}
+.sidebar-footer{padding:12px 20px;border-top:1px solid var(--border);font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:8px}
+.dot{width:6px;height:6px;border-radius:50%}
+.dot.green{background:var(--green)}.dot.yellow{background:var(--orange)}.dot.red{background:var(--red)}
+
+/* Main */
+.main{flex:1;margin-left:240px;min-height:100vh}
+.header{height:52px;background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px;position:sticky;top:0;z-index:50}
+.header-title{font-size:15px;font-weight:600}
+.header-actions{display:flex;gap:10px}
+.btn{padding:6px 14px;border-radius:6px;font-size:13px;font-weight:500;border:1px solid transparent;cursor:pointer;transition:all .12s;font-family:inherit}
+.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn-primary:hover{background:var(--accent-hover)}
+.btn-secondary{background:var(--surface);color:var(--text-secondary);border-color:var(--border)}
+.btn-secondary:hover{background:var(--surface-hover);color:var(--text)}
+.container{max-width:1200px;margin:0 auto;padding:24px}
+
+/* Cards */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.card-title{font-size:14px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.06em}
+.card-value{font-size:28px;font-weight:600;color:var(--text);letter-spacing:-0.4px}
+.card-delta{font-size:12px;color:var(--text-muted);margin-top:4px}
+
+/* KPI Grid */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+@media(max-width:900px){.kpi-grid{grid-template-columns:repeat(2,1fr)}}
+
+/* Progress bar */
+.progress-bg{height:6px;background:var(--panel);border-radius:3px;overflow:hidden;margin-top:8px}
+.progress-fill{height:100%;background:var(--accent);border-radius:3px;transition:width .3s}
+
+/* Tables */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:8px 12px;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid var(--border-strong);background:var(--panel)}
+td{padding:8px 12px;border-bottom:1px solid var(--border);color:var(--text-secondary);vertical-align:top}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.02)}
+
+/* Form elements */
+input,textarea,select{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-family:inherit;font-size:13px;outline:none}
+input:focus,textarea:focus,select:focus{border-color:var(--accent)}
+textarea{resize:vertical;min-height:60px;width:100%}
+
+/* Toast */
+.toast{position:fixed;bottom:20px;right:20px;padding:10px 16px;border-radius:6px;font-size:13px;font-weight:500;box-shadow:0 4px 12px rgba(0,0,0,.4);transform:translateY(80px);transition:transform .3s;z-index:200}
+.toast.show{transform:translateY(0)}
+.toast-success{background:var(--green-soft);color:var(--green);border:1px solid rgba(34,197,94,.25)}
+
+/* Status badges */
+.status{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500}
+.status-dot{width:6px;height:6px;border-radius:50%}
+.status-done .status-dot{background:var(--green)}
+.status-active .status-dot{background:var(--accent)}
+.status-wait .status-dot{background:var(--text-dim)}
+.status-block .status-dot{background:var(--red)}
+
+/* Phase detail */
+.phase-detail-header{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px 24px;margin-bottom:16px}
+.phase-detail-header h2{margin:0;font-size:20px;font-weight:500}
+.phase-detail-header .meta{display:flex;gap:12px;margin-top:12px;flex-wrap:wrap;font-size:12px;color:var(--text-muted)}
+.phase-detail-header .meta b{color:var(--text-secondary);font-weight:500}
+
+/* Back link */
+.back-link{display:inline-flex;align-items:center;gap:6px;color:var(--text-muted);font-size:13px;font-weight:500;margin-bottom:16px}
+.back-link:hover{color:var(--text)}
+
+/* Instructions editable */
+.instruction-row{display:grid;grid-template-columns:28px 1fr 120px 80px 32px;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);align-items:center}
+.instruction-row:last-child{border-bottom:none}
+.instruction-num{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-dim)}
+.instruction-text input{width:100%}
+.instruction-type select{width:100%}
+.btn-icon{background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:16px;padding:4px}
+.btn-icon:hover{color:var(--red)}
+
+/* Kanban */
+.kanban{display:grid;grid-template-columns:repeat(5,1fr);gap:16px}
+.kanban-col{display:flex;flex-direction:column;gap:10px}
+.kanban-header{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);padding:0 4px}
+.kanban-card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;cursor:pointer;transition:all .12s}
+.kanban-card:hover{background:var(--surface-hover);border-color:var(--border-strong)}
+.kanban-card .card-title{font-size:13px;font-weight:500;color:var(--text);text-transform:none;letter-spacing:0;margin-bottom:4px}
+.kanban-card .card-meta{font-size:11px;color:var(--text-muted);margin-top:6px;display:flex;gap:8px}
+
+{% block extra_style %}{% endblock %}
+</style>
+</head>
+<body>
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <div class="sidebar-logo">wartz<span>workflow</span></div>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="sidebar-section">Обзор</div>
+    <a class="sidebar-link {% if page == 'dashboard' %}active{% endif %}" href="/">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      Дашборд
+    </a>
+    <a class="sidebar-link {% if page == 'phases' %}active{% endif %}" href="/phases">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+      Фазы <span class="badge">30</span>
+    </a>
+    <a class="sidebar-link {% if page == 'tasks' %}active{% endif %}" href="/tasks">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+      Задачи <span class="badge">0</span>
+    </a>
+    <a class="sidebar-link {% if page == 'jobs' %}active{% endif %}" href="/jobs">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+      Jobs <span class="badge">0</span>
+    </a>
+    <div class="sidebar-section">Управление</div>
+    <a class="sidebar-link {% if page == 'config' %}active{% endif %}" href="/config">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      Настройки
+    </a>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="dot green"></div>
+    <span>UI: {{ ui_port }}</span>
+  </div>
+</aside>
+
+<main class="main">
+  <div class="header">
+    <div class="header-title">{% block header_title %}{% endblock %}</div>
+    <div class="header-actions">{% block header_actions %}{% endblock %}</div>
+  </div>
+  <div class="container">
+    {% block content %}{% endblock %}
+  </div>
+</main>
+
+<div id="toast" class="toast toast-success">Сохранено</div>
+<script>
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast toast-' + type + ' show';
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+{% block extra_js %}{% endblock %}
+</script>
+</body>
+</html>

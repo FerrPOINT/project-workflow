@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+
+{% block title %}{{ phase.name }} — wartz-workflow{% endblock %}
+{% block header_title %}Редактирование фазы{% endblock %}
+{% block header_actions %}
+  <button class="btn btn-primary" onclick="savePhase()">💾 Сохранить</button>
+  <button class="btn btn-secondary">▶ Запустить</button>
+{% endblock %}
+
+{% block extra_style %}
+.phase-detail-header{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px 24px;margin-bottom:16px}
+.phase-detail-header h2{margin:0;font-size:20px;font-weight:500;letter-spacing:-0.25px;display:inline}
+.phase-detail-header .meta{display:flex;gap:12px;margin-top:12px;flex-wrap:wrap;font-size:12px;color:var(--text-muted)}
+.phase-detail-header .meta b{color:var(--text-secondary);font-weight:500}
+
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:16px;padding-bottom:0}
+.tab{padding:8px 16px;font-size:13px;font-weight:500;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .12s}
+.tab:hover{color:var(--text-secondary)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+
+/* Editable rows */
+.row{display:grid;grid-template-columns:28px 1fr 120px 80px 32px;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);align-items:center}
+.row:last-child{border-bottom:none}
+.row-num{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-dim)}
+.row-text input,.row-text textarea{width:100%;background:transparent;border:1px solid transparent;padding:4px 6px;border-radius:4px}
+.row-text input:hover,.row-text textarea:hover{background:var(--panel)}
+.row-text input:focus,.row-text textarea:focus{background:var(--panel);border-color:var(--accent);outline:none}
+.row-type select{width:100%;font-size:11px;padding:3px 6px}
+.row-action{text-align:center}
+.btn-icon{background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:16px;padding:4px;border-radius:4px}
+.btn-icon:hover{color:var(--red);background:var(--red-soft)}
+.btn-add{display:flex;align-items:center;gap:6px;padding:8px 14px;border:1px dashed var(--border);border-radius:6px;color:var(--text-muted);font-size:13px;font-weight:500;cursor:pointer;background:transparent;margin-top:8px;transition:all .12s}
+.btn-add:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+
+.empty-state{color:var(--text-dim);font-size:13px;padding:24px;text-align:center}
+
+.meta-editor{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.meta-editor .field{display:flex;flex-direction:column;gap:4px}
+.meta-editor .field label{font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em}
+{% endblock %}
+
+{% block content %}
+<!-- Phase Header -->
+<div class="phase-detail-header">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+    <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-dim)">№{{ phase.phase_num }}</span>
+    <h2>{{ phase.name }}</h2>
+  </div>
+  <p style="color:var(--text-muted);font-size:14px;margin-top:4px">{{ phase.description or '' }}</p>
+  <div class="meta">
+    {% if phase.skills %}
+    <span><b>Skills:</b> {{ phase.skills|join(', ') }}</span>
+    {% endif %}
+    {% if phase.delegate_agent %}
+    <span><b>Агент:</b> {{ phase.delegate_agent }} ({{ phase.delegate_timeout or '—' }} мин)</span>
+    {% endif %}
+    {% if phase.parallel_with %}
+    <span><b>Параллельно с:</b> {{ phase.parallel_with }}</span>
+    {% endif %}
+    {% if phase.rollback_target %}
+    <span><b>Откат:</b> {{ phase.rollback_target }}</span>
+    {% endif %}
+    {% if phase.next_recommendation %}
+    <span><b>Следующая:</b> {{ phase.next_recommendation }}</span>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('instructions')">Инструкции ({{ phase.instructions|length }})</div>
+  <div class="tab" onclick="switchTab('checks')">Проверки ({{ phase.checks|length }})</div>
+  <div class="tab" onclick="switchTab('evidence')">Evidence ({{ phase.evidence|length }})</div>
+  <div class="tab" onclick="switchTab('settings')">Настройки</div>
+</div>
+
+<!-- Tab: Instructions -->
+<div class="tab-panel active" id="panel-instructions">
+  <div class="card">
+    <div id="instructions-list">
+      {% for i in phase.instructions %}
+      <div class="row" data-id="{{ i.id }}">
+        <div class="row-num">{{ loop.index }}</div>
+        <div class="row-text"><input type="text" value="{{ i.description }}" data-field="description"></div>
+        <div class="row-type">
+          <select data-field="execution_type">
+            <option value="sync" {% if i.execution_type == 'sync' %}selected{% endif %}>sync</option>
+            <option value="parallel" {% if i.execution_type == 'parallel' %}selected{% endif %}>parallel</option>
+            <option value="async" {% if i.execution_type == 'async' %}selected{% endif %}>async</option>
+          </select>
+        </div>
+        <div class="row-type"><input type="text" value="{{ i.tool or '' }}" data-field="tool" placeholder="tool"></div>
+        <div class="row-action"><button class="btn-icon" onclick="deleteRow(this)">×</button></div>
+      </div>
+      {% else %}
+      <div class="empty-state">Нет инструкций</div>
+      {% endfor %}
+    </div>
+    <button class="btn-add" onclick="addInstruction()">+ Добавить шаг</button>
+  </div>
+</div>
+
+<!-- Tab: Checks -->
+<div class="tab-panel" id="panel-checks">
+  <div class="card">
+    <div id="checks-list">
+      {% for c in phase.checks %}
+      <div class="row" data-id="{{ c.id }}">
+        <div class="row-num">{{ loop.index }}</div>
+        <div class="row-text"><input type="text" value="{{ c.description }}" data-field="description"></div>
+        <div class="row-type">
+          <select data-field="check_type">
+            <option value="jira_status" {% if c.check_type == 'jira_status' %}selected{% endif %}>jira_status</option>
+            <option value="file_exists" {% if c.check_type == 'file_exists' %}selected{% endif %}>file_exists</option>
+            <option value="git_branch" {% if c.check_type == 'git_branch' %}selected{% endif %}>git_branch</option>
+            <option value="script_pass" {% if c.check_type == 'script_pass' %}selected{% endif %}>script_pass</option>
+          </select>
+        </div>
+        <div class="row-type"><input type="text" value="{{ c.command or '' }}" data-field="command" placeholder="команда"></div>
+        <div class="row-action"><button class="btn-icon" onclick="deleteRow(this)">×</button></div>
+      </div>
+      {% else %}
+      <div class="empty-state">Нет проверок</div>
+      {% endfor %}
+    </div>
+    <button class="btn-add" onclick="addCheck()">+ Добавить проверку</button>
+  </div>
+</div>
+
+<!-- Tab: Evidence -->
+<div class="tab-panel" id="panel-evidence">
+  <div class="card">
+    <div id="evidence-list">
+      {% for e in phase.evidence %}
+      <div class="row" data-id="{{ e.id }}">
+        <div class="row-num">{{ loop.index }}</div>
+        <div class="row-text"><input type="text" value="{{ e.description }}" data-field="description"></div>
+        <div class="row-type"><input type="text" value="{{ e.validator or '' }}" data-field="validator" placeholder="валидатор"></div>
+        <div class="row-action"><button class="btn-icon" onclick="deleteRow(this)">×</button></div>
+      </div>
+      {% else %}
+      <div class="empty-state">Нет evidence</div>
+      {% endfor %}
+    </div>
+    <button class="btn-add" onclick="addEvidence()">+ Добавить evidence</button>
+  </div>
+</div>
+
+<!-- Tab: Settings -->
+<div class="tab-panel" id="panel-settings">
+  <div class="card">
+    <div class="meta-editor">
+      <div class="field">
+        <label>Название</label>
+        <input type="text" id="setting-name" value="{{ phase.name }}">
+      </div>
+      <div class="field">
+        <label>Описание</label>
+        <input type="text" id="setting-desc" value="{{ phase.description or '' }}">
+      </div>
+      <div class="field">
+        <label>Агент</label>
+        <input type="text" id="setting-agent" value="{{ phase.delegate_agent or '' }}" placeholder="имя агента">
+      </div>
+      <div class="field">
+        <label>Таймаут (мин)</label>
+        <input type="number" id="setting-timeout" value="{{ phase.delegate_timeout or '' }}" placeholder="30">
+      </div>
+      <div class="field">
+        <label>Параллельно с</label>
+        <input type="text" id="setting-parallel" value="{{ phase.parallel_with or '' }}" placeholder="phase_id">
+      </div>
+      <div class="field">
+        <label>Откат к</label>
+        <input type="text" id="setting-rollback" value="{{ phase.rollback_target or '' }}" placeholder="phase_id">
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('panel-' + name).classList.add('active');
+}
+
+function deleteRow(btn) {
+  const row = btn.closest('.row');
+  row.remove();
+  renumber();
+}
+
+function renumber() {
+  document.querySelectorAll('.tab-panel.active .row').forEach((r, i) => {
+    r.querySelector('.row-num').textContent = i + 1;
+  });
+}
+
+function addInstruction() {
+  const list = document.getElementById('instructions-list');
+  const empty = list.querySelector('.empty-state');
+  if (empty) empty.remove();
+  
+  const n = list.querySelectorAll('.row').length + 1;
+  const div = document.createElement('div');
+  div.className = 'row';
+  div.innerHTML = `
+    <div class="row-num">${n}</div>
+    <div class="row-text"><input type="text" value="" data-field="description" placeholder="Новая инструкция..."></div>
+    <div class="row-type">
+      <select data-field="execution_type">
+        <option value="sync">sync</option>
+        <option value="parallel">parallel</option>
+        <option value="async">async</option>
+      </select>
+    </div>
+    <div class="row-type"><input type="text" value="" data-field="tool" placeholder="tool"></div>
+    <div class="row-action"><button class="btn-icon" onclick="deleteRow(this)">×</button></div>
+  `;
+  list.appendChild(div);
+}
+
+function addCheck() {
+  const list = document.getElementById('checks-list');
+  const empty = list.querySelector('.empty-state');
+  if (empty) empty.remove();
+  
+  const n = list.querySelectorAll('.row').length + 1;
+  const div = document.createElement('div');
+  div.className = 'row';
+  div.innerHTML = `
+    <div class="row-num">${n}</div>
+    <div class="row-text"><input type="text" value="" data-field="description" placeholder="Новая проверка..."></div>
+    <div class="row-type">
+      <select data-field="check_type">
+        <option value="jira_status">jira_status</option>
+        <option value="file_exists">file_exists</option>
+        <option value="git_branch">git_branch</option>
+        <option value="script_pass">script_pass</option>
+      </select>
+    </div>
+    <div class="row-type"><input type="text" value="" data-field="command" placeholder="команда"></div>
+    <div class="row-action"><button class="btn-icon" onclick="deleteRow(this)">×</button></div>
+  `;
+  list.appendChild(div);
+}
+
+function addEvidence() {
+  const list = document.getElementById('evidence-list');
+  const empty = list.querySelector('.empty-state');
+  if (empty) empty.remove();
+  
+  const n = list.querySelectorAll('.row').length + 1;
+  const div = document.createElement('div');
+  div.className = 'row';
+  div.innerHTML = `
+    <div class="row-num">${n}</div>
+    <div class="row-text"><input type="text" value="" data-field="description" placeholder="Новое evidence..."></div>
+    <div class="row-type"><input type="text" value="" data-field="validator" placeholder="валидатор"></div>
+    <div class="row-action"><button class="btn-icon" onclick="deleteRow(this)">×</button></div>
+  `;
+  list.appendChild(div);
+}
+
+async function savePhase() {
+  const data = {
+    name: document.getElementById('setting-name').value,
+    description: document.getElementById('setting-desc').value,
+    delegate_agent: document.getElementById('setting-agent').value,
+    delegate_timeout: parseInt(document.getElementById('setting-timeout').value) || null,
+    parallel_with: document.getElementById('setting-parallel').value || null,
+    rollback_target: document.getElementById('setting-rollback').value || null,
+    instructions: [], checks: [], evidence: []
+  };
+  
+  document.querySelectorAll('#instructions-list .row').forEach(r => {
+    data.instructions.push({
+      id: r.dataset.id || null,
+      description: r.querySelector('[data-field="description"]').value,
+      execution_type: r.querySelector('[data-field="execution_type"]').value,
+      tool: r.querySelector('[data-field="tool"]').value || null
+    });
+  });
+  
+  document.querySelectorAll('#checks-list .row').forEach(r => {
+    data.checks.push({
+      id: r.dataset.id || null,
+      description: r.querySelector('[data-field="description"]').value,
+      check_type: r.querySelector('[data-field="check_type"]').value,
+      command: r.querySelector('[data-field="command"]').value || null
+    });
+  });
+  
+  document.querySelectorAll('#evidence-list .row').forEach(r => {
+    data.evidence.push({
+      id: r.dataset.id || null,
+      description: r.querySelector('[data-field="description"]').value,
+      validator: r.querySelector('[data-field="validator"]').value || null
+    });
+  });
+  
+  const resp = await fetch('/api/phases/{{ phase.id }}', {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(data)
+  });
+  if (resp.ok) showToast('Сохранено');
+  else showToast('Ошибка сохранения', 'error');
+}
+{% endblock %}

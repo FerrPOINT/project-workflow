@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — wartz-workflow{% endblock %}
+{% block header_title %}Dashboard{% endblock %}
+
+{% block content %}
+<!-- KPI Cards -->
+<div class="kpi-grid">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Фаз workflow</div>
+    </div>
+    <div class="card-value">30</div>
+    <div class="card-delta">Все фазы определены в YAML</div>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Задач в работе</div>
+    </div>
+    <div class="card-value" style="color:var(--accent)">{{ task_count }}</div>
+    <div class="card-delta">Активные по state/</div>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Фоновых jobs</div>
+    </div>
+    <div class="card-value" style="color:var(--orange)">{{ job_count }}</div>
+    <div class="card-delta">delegate_task в процессе</div>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Покрытие тестами</div>
+    </div>
+    <div class="card-value" style="color:var(--green)">{{ coverage }}%</div>
+    <div class="card-delta">pytest + pytest-cov</div>
+  </div>
+</div>
+
+<!-- Progress Bar -->
+<div class="card" style="margin-bottom:24px">
+  <div class="card-header">
+    <div class="card-title">Прогресс разработки</div>
+    <div style="font-size:12px;color:var(--text-muted)">{{ completed_phases }}/30 фаз</div>
+  </div>
+  <div class="progress-bg">
+    <div class="progress-fill" style="width:{{ (completed_phases/30*100)|round }}%"></div>
+  </div>
+</div>
+
+<!-- Recent Tasks -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Последние задачи</div>
+    <a href="/tasks" class="btn btn-secondary" style="padding:4px 10px;font-size:12px">Все задачи →</a>
+  </div>
+  <table>
+    <tr>
+      <th>Ключ</th>
+      <th>Текущая фаза</th>
+      <th>Прогресс</th>
+      <th>Статус</th>
+    </tr>
+    {% for t in tasks %}
+    <tr>
+      <td><strong><a href="/task/{{ t.jira_key }}">{{ t.jira_key }}</a></strong></td>
+      <td>№{{ t.phase_num }} {{ t.phase_name }}</td>
+      <td>{{ t.completed }}/30</td>
+      <td>
+        <span class="status status-{{ t.status }}">
+          <span class="status-dot"></span>
+          {{ t.status_label }}
+        </span>
+      </td>
+    </tr>
+    {% else %}
+    <tr>
+      <td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px">
+        Нет активных задач. Запустите: <code>hrflow workflow TASK-KEY</code>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<!-- Quick Actions -->
+<div style="margin-top:24px;display:flex;gap:12px">
+  <a href="/phases" class="btn btn-primary">📋 Все фазы</a>
+  <a href="/wizard" class="btn btn-secondary">🧙 Wizard</a>
+</div>
+{% endblock %}

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Фазы — wartz-workflow{% endblock %}
+{% block header_title %}Все фазы workflow{% endblock %}
+{% block header_actions %}
+  <a href="/" class="btn btn-secondary">← Назад</a>
+{% endblock %}
+
+{% block extra_style %}
+.kanban{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;align-items:start}
+@media(max-width:1200px){.kanban{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:768px){.kanban{grid-template-columns:1fr}}
+.kanban-col{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px;min-height:200px}
+.kanban-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding:0 4px}
+.kanban-header .title{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted)}
+.kanban-header .count{font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px;background:var(--accent-soft);color:var(--accent)}
+.kanban-card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:8px;cursor:pointer;transition:all .12s;text-decoration:none;color:inherit;display:block}
+.kanban-card:hover{background:var(--surface-hover);border-color:var(--border-strong);transform:translateY(-1px)}
+.kanban-card .card-title{font-size:13px;font-weight:500;color:var(--text);margin-bottom:4px;line-height:1.4}
+.kanban-card .card-desc{font-size:11px;color:var(--text-muted);line-height:1.4;margin-top:4px}
+.kanban-card .card-meta{display:flex;gap:8px;margin-top:8px;font-size:11px;color:var(--text-dim);align-items:center}
+.kanban-card .card-meta .phase-num{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-dim)}
+.kanban-card .card-meta .badge-count{font-size:10px;padding:1px 5px;border-radius:3px;background:rgba(255,255,255,.06);color:var(--text-muted)}
+{% endblock %}
+
+{% block content %}
+<div class="kanban">
+  {% for group_id, group_name in groups.items() %}
+  <div class="kanban-col">
+    <div class="kanban-header">
+      <div class="title">{{ group_name }}</div>
+      <div class="count">{{ grouped_phases[group_id]|length }}</div>
+    </div>
+    {% for p in grouped_phases[group_id] %}
+    <a class="kanban-card" href="/phase/{{ p.id }}">
+      <div class="card-title">{{ p.name }}</div>
+      {% if p.description %}
+      <div class="card-desc">{{ p.description[:80] }}{% if p.description|length > 80 %}...{% endif %}</div>
+      {% endif %}
+      <div class="card-meta">
+        <span class="phase-num">№{{ p.phase_num }}</span>
+        <span class="badge-count">{{ p.instruction_count }} шагов</span>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

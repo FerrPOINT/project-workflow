@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Задачи — wartz-workflow{% endblock %}
+{% block header_title %}Задачи{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Все задачи</div>
+  </div>
+  <table>
+    <tr>
+      <th>Ключ</th>
+      <th>Текущая фаза</th>
+      <th>Прогресс</th>
+      <th>Статус</th>
+    </tr>
+    {% for t in tasks %}
+    <tr>
+      <td><strong><a href="/task/{{ t.jira_key }}">{{ t.jira_key }}</a></strong></td>
+      <td>№{{ t.phase_num }} {{ t.phase_name }}</td>
+      <td>{{ t.completed }}/30</td>
+      <td>
+        <span class="status status-{{ t.status }}">
+          <span class="status-dot"></span> {{ t.status_label }}
+        </span>
+      </td>
+    </tr>
+    {% else %}
+    <tr>
+      <td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px">
+        Нет активных задач. Запустите: <code>hrflow workflow TASK-KEY</code>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

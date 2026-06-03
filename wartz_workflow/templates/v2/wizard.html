@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}Wizard — wartz-workflow{% endblock %}
+{% block header_title %}Wizard{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:600px;margin:0 auto">
+  <div class="card-header">
+    <div class="card-title">Запуск wizard</div>
+  </div>
+  <p style="color:var(--text-muted);margin-bottom:16px">
+    Выберите задачу для запуска пошагового ассистента:
+  </p>
+  <div style="display:flex;flex-direction:column;gap:8px">
+    {% for t in tasks %}
+    <a href="/wizard/{{ t.jira_key }}" class="phase-row" style="grid-template-columns:1fr auto;border-radius:6px">
+      <div class="phase-name">{{ t.jira_key }}</div>
+      <div style="font-size:12px;color:var(--text-muted)">№{{ t.phase_num }} {{ t.phase_name }}</div>
+    </a>
+    {% else %}
+    <div class="empty-state">
+      Нет задач. Создайте через CLI: <code>hrflow workflow TASK-KEY</code>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

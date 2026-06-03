@@ -33,7 +33,7 @@ class TestPhasesPage:
     def test_phases_has_phase_rows(self):
         response = client.get("/phases")
         assert response.status_code == 200
-        assert 'class="phase-row"' in response.text
+        assert 'class="kanban-card"' in response.text
 
     def test_phases_api_returns_json(self):
         response = client.get("/api/phases")
@@ -54,7 +54,7 @@ class TestPhaseDetail:
     def test_phase_detail_has_instructions(self):
         response = client.get("/phase/-1")
         assert response.status_code == 200
-        assert 'class="instruction"' in response.text
+        assert 'class="row"' in response.text
 
     def test_phase_detail_404_on_unknown(self):
         response = client.get("/phase/nonexistent")
