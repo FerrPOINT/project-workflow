@@ -32,13 +32,18 @@
 
 /* Instruction list */
 .wiki-list{list-style:none;padding:0;margin:0}
-.wiki-list>li{padding:12px 0;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:12px}
+.wiki-list>li{padding:12px 0 12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:10px;border-left:3px solid transparent}
 .wiki-list>li:last-child{border-bottom:none}
+.wiki-list>li.sync-item{border-left-color:var(--green)}
+.wiki-list>li.parallel-item{border-left-color:var(--orange)}
+.wiki-list .step-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:6px}
+.wiki-list .step-dot.sync{background:var(--green)}
+.wiki-list .step-dot.parallel{background:var(--orange)}
 .wiki-list .item-content{flex:1;min-width:0}
-.wiki-list .item-meta{display:flex;gap:12px;margin-top:8px;font-size:12px;color:var(--text-dim);flex-wrap:wrap}
-.wiki-list .item-meta .tag{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;background:var(--panel);font-weight:500;cursor:pointer;transition:all .12s}
+.wiki-list .item-meta{display:flex;gap:12px;margin-top:6px;font-size:12px;color:var(--text-dim);flex-wrap:wrap;align-items:center}
+.wiki-list .item-meta .tag{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;background:var(--panel);font-weight:500;cursor:pointer;transition:all .12s;font-size:11px}
 .wiki-list .item-meta .tag:hover{transform:scale(1.05)}
-.wiki-list .item-meta .tag.type-sync{color:var(--accent);background:var(--accent-soft)}
+.wiki-list .item-meta .tag.type-sync{color:var(--green);background:var(--green-soft)}
 .wiki-list .item-meta .tag.type-parallel{color:var(--orange);background:var(--orange-soft)}
 .wiki-list .item-tool{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-dim);background:var(--panel);padding:2px 6px;border-radius:4px}
 .wiki-list .item-delete{flex-shrink:0;opacity:0;transition:opacity .12s;background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:18px;padding:0 4px;border-radius:4px}
@@ -149,7 +154,8 @@
   </div>
   <ul class="wiki-list" id="instructions-list">
   {% for i in phase.instructions %}
-  <li data-id="{{ i.id }}">
+  <li data-id="{{ i.id }}" class="{{ i.execution_type }}-item">
+    <div class="step-dot {{ i.execution_type }}"></div>
     <div class="item-content">
       <input type="text" class="inline-input" value="{{ i.description }}" data-field="description">
       <div class="item-meta">
@@ -221,15 +227,21 @@ function deleteItem(btn) {
 }
 
 function toggleType(tag) {
+  const li = tag.closest('li');
+  const dot = li.querySelector('.step-dot');
   const isSync = tag.classList.contains('type-sync');
   if (isSync) {
     tag.classList.remove('type-sync');
     tag.classList.add('type-parallel');
     tag.textContent = '⚡ parallel';
+    if (li) li.className = 'parallel-item';
+    if (dot) dot.className = 'step-dot parallel';
   } else {
     tag.classList.remove('type-parallel');
     tag.classList.add('type-sync');
     tag.textContent = '⏱ sync';
+    if (li) li.className = 'sync-item';
+    if (dot) dot.className = 'step-dot sync';
   }
 }
 
@@ -239,11 +251,13 @@ function addInstruction() {
   if (empty) empty.remove();
 
   const li = document.createElement('li');
+  li.className = 'sync-item';
   li.innerHTML = `
+    <div class="step-dot sync"></div>
     <div class="item-content">
       <input type="text" class="inline-input" value="" data-field="description">
       <div class="item-meta">
-        <span class="tag type-sync">⏱ sync</span>
+        <span class="tag type-sync" onclick="toggleType(this)" data-field="execution_type">⏱ sync</span>
         <span class="item-tool"></span>
       </div>
     </div>
