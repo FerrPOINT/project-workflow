@@ -27,12 +27,14 @@ from wartz_workflow.db import WorkflowDB
 def _build_phase_from_db(row: dict, wdb: WorkflowDB) -> Phase:
     """Assemble a Phase dataclass from DB rows."""
     phase_id = row["id"]
-
     inst_rows = wdb.get_phase_instructions(phase_id)
+
     instructions = [
         PhaseInstruction(
             step=ir["description"],
+            example=ir.get("example"),
             execution_type=ir.get("execution_type", "sync"),
+            skills=json.loads(ir["skills"]) if ir.get("skills") else [],
         )
         for ir in inst_rows
     ]
@@ -52,8 +54,6 @@ def _build_phase_from_db(row: dict, wdb: WorkflowDB) -> Phase:
         )
         for er in ev_rows
     ]
-
-    skills = json.loads(row["skills"]) if row.get("skills") else []
 
     delegate = None
     if row.get("agent_id"):
@@ -75,7 +75,6 @@ def _build_phase_from_db(row: dict, wdb: WorkflowDB) -> Phase:
         is_blocker=phase_id in config.BLOCKER_PHASES,
         is_delegated=bool(delegate),
         is_critic=phase_id in config.CRITIC_PHASES,
-        skills=skills,
         checks=checks,
         evidence=evidence,
         instructions=instructions,
@@ -127,7 +126,7 @@ def _load_phases_yaml() -> List[Phase]:
 
     _check_keys = {"description", "path", "expected", "fail_msg", "optional"}
     _evidence_keys = {"item", "validator"}
-    _inst_keys = {"step", "example", "execution_type"}
+    _inst_keys = {"step", "example", "execution_type", "skills"}
 
     phases: List[Phase] = []
     for item in raw.get("phases", []):
@@ -162,7 +161,6 @@ def _load_phases_yaml() -> List[Phase]:
             is_blocker=item.get("is_blocker", False),
             is_delegated=item.get("is_delegated", False),
             is_critic=item.get("is_critic", False),
-            skills=item.get("skills", []),
             checks=checks,
             evidence=evidence,
             instructions=instructions,

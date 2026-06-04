@@ -28,6 +28,7 @@ class PhaseInstruction:
     step: str = ""
     example: Optional[str] = None
     execution_type: str = "sync"
+    skills: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -51,7 +52,6 @@ class Phase:
     is_blocker: bool = False
     is_delegated: bool = False
     is_critic: bool = False
-    skills: List[str] = field(default_factory=list)
     checks: List[PhaseCheck] = field(default_factory=list)
     evidence: List[PhaseEvidence] = field(default_factory=list)
     instructions: List[PhaseInstruction] = field(default_factory=list)

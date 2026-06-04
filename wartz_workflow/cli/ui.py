@@ -55,38 +55,38 @@ def step_cmd(
       wartz-workflow step --task TASK-KEY --skip         → форсировать переход без отчёта
     """
     import time
-    jira_key = _require_valid_key(task)
+    task_key = _require_valid_key(task)
     jmode = ctx.obj.get("json_mode", False)
 
     from .. import state, config
     from ..db import WorkflowDB
     from ..schema import load_phases_from_db
 
-    found_repo = state.find_repo(jira_key)
+    found_repo = state.find_repo(task_key)
     repo_path = repo or found_repo or "/opt/dev/hr-recruiter/recruiter-front"
 
     # Auto-init if task not initialized
-    current = state.load_state(found_repo, jira_key) if found_repo else None
+    current = state.load_state(found_repo, task_key) if found_repo else None
     if not current:
-        console.print(f"{WARN} Задача {jira_key} не инициализирована.")
+        console.print(f"{WARN} Задача {task_key} не инициализирована.")
         console.print("[bold]Создаём задачу?[/bold] Автоматически создаём info/, progress.json, changelog.md")
         # Create minimal task structure
         sprint = "sprint-auto"
-        task_id = jira_key.split("-")[-1] if "-" in jira_key else jira_key
-        title = f"Auto-init {jira_key}"
-        success, task_dir = state.create_task_dir(repo_path, sprint, task_id, jira_key, title)
+        task_id = task_key.split("-")[-1] if "-" in task_key else task_key
+        title = f"Auto-init {task_key}"
+        success, task_dir = state.create_task_dir(repo_path, sprint, task_id, task_key, title)
         if success:
             console.print(f"{PASS} Задача создана: {task_dir}")
-            current = state.load_state(repo_path, jira_key)
+            current = state.load_state(repo_path, task_key)
         else:
             console.print(f"{FAIL} Не удалось создать задачу")
             raise click.Abort()
 
-    engine = wizard.WizardEngine(jira_key, repo_path)
+    engine = wizard.WizardEngine(task_key, repo_path)
 
     # --report : evaluate report
     if report:
-        result = wizard.evaluate_report(jira_key, report, repo_path)
+        result = wizard.evaluate_report(task_key, report, repo_path)
         if jmode:
             out_json(result)
         print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -94,14 +94,14 @@ def step_cmd(
 
     # --skip : force advance
     if skip:
-        _force_advance(engine, jira_key, repo_path, jmode)
+        _force_advance(engine, task_key, repo_path, jmode)
         sys.exit(0)
 
     # default: show phase instructions
-    wizard.main(jira_key, repo_path)
+    wizard.main(task_key, repo_path)
 
 
-def _force_advance(engine: wizard.WizardEngine, jira_key: str, repo: str, jmode: bool) -> None:
+def _force_advance(engine: wizard.WizardEngine, task_key: str, repo: str, jmode: bool) -> None:
     """Force transition to next phase without report."""
     from .core import out_json
     from .. import config
@@ -156,16 +156,16 @@ def history_cmd(ctx: click.Context, task: str, repo: Optional[str], n: int) -> N
       wartz-workflow history --task TASK-KEY           → последние 20 записей
       wartz-workflow history --task TASK-KEY --n 50     → последние 50 записей
     """
-    jira_key = _require_valid_key(task)
+    task_key = _require_valid_key(task)
     jmode = ctx.obj.get("json_mode", False)
 
-    task_id = jira_key.split("-")[-1] if "-" in jira_key else jira_key
+    task_id = task_key.split("-")[-1] if "-" in task_key else task_key
     records = convo.get_messages(task_id, limit=n)
 
     if jmode:
         out_json({
             "ok": True,
-            "jira_key": jira_key,
+            "task_key": task_key,
             "count": len(records),
             "records": [
                 {
@@ -180,10 +180,10 @@ def history_cmd(ctx: click.Context, task: str, repo: Optional[str], n: int) -> N
         })
 
     if not records:
-        console.print(f"{WARN} История для {jira_key} пуста.")
+        console.print(f"{WARN} История для {task_key} пуста.")
         return
 
-    console.print(f"[bold]📜 History: {jira_key}[/bold] (последние {len(records)} записей)\n")
+    console.print(f"[bold]📜 History: {task_key}[/bold] (последние {len(records)} записей)\n")
     for r in records:
         tag_icon = "🔄" if r.tags == "transition" else "📝" if r.role == "user" else "🤖"
         phase_str = f" [phase {r.phase_id}]" if r.phase_id else ""

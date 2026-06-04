@@ -141,7 +141,7 @@ def get_agent_for_phase(phase_id: str, profiles: Optional[Dict[str, AgentProfile
     return profs.get(agent_name)
 
 
-def build_delegate_payload(phase_id: str, jira_key: str, task_id: str, title: str) -> Optional[Dict[str, any]]:
+def build_delegate_payload(phase_id: str, task_key: str, task_id: str, title: str) -> Optional[Dict[str, any]]:
     """Собрать полный payload для delegate_task из профиля + YAML-схемы."""
     from .schema import get_phase
 
@@ -156,8 +156,8 @@ def build_delegate_payload(phase_id: str, jira_key: str, task_id: str, title: st
     # Render prompt
     prompt = ph.delegate.prompt_template
     if not prompt:
-        prompt = f"Phase {phase_id} for {jira_key}: {title}"
-    prompt = prompt.replace("{jira_key}", jira_key)
+        prompt = f"Phase {phase_id} for {task_key}: {title}"
+    prompt = prompt.replace("{task_key}", task_key)
     prompt = prompt.replace("{task_id}", task_id)
     prompt = prompt.replace("{title}", title)
 

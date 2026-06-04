@@ -12,15 +12,15 @@ class TestWizardFullContext:
         ctx = engine.get_full_context()
 
         # Required top-level keys
-        for key in ("jira_key", "repo", "current_phase", "current_phase_name",
+        for key in ("task_key", "repo", "current_phase", "current_phase_name",
                     "completed_phases", "all_phases", "phase_history",
                     "total_phases", "completed_count"):
             assert key in ctx, f"Missing key: {key}"
 
-    def test_jira_key_passed_through(self):
+    def test_task_key_passed_through(self):
         engine = wizard.WizardEngine("TASKNEIROKLYUCH-42", "/tmp")
         ctx = engine.get_full_context()
-        assert ctx["jira_key"] == "TASKNEIROKLYUCH-42"
+        assert ctx["task_key"] == "TASKNEIROKLYUCH-42"
 
     def test_repo_passed_through(self):
         engine = wizard.WizardEngine("TASKNEIROKLYUCH-42", "/opt/dev/repo")

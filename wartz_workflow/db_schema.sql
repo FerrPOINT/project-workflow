@@ -27,7 +27,6 @@ CREATE TABLE IF NOT EXISTS phases (
     description    TEXT,
     phase_order    INTEGER NOT NULL,
     group_id       TEXT REFERENCES phase_groups(id),
-    skills         TEXT,           -- JSON list
     agent_id       INTEGER REFERENCES agents(id),
     execution_type TEXT DEFAULT 'sync'   -- sync | parallel
 );
@@ -41,6 +40,7 @@ CREATE TABLE IF NOT EXISTS instructions (
     step_num       INTEGER NOT NULL,
     description    TEXT NOT NULL,
     execution_type TEXT DEFAULT 'sync',   -- sync | parallel
+    skills         TEXT,                  -- JSON list
     UNIQUE(phase_id, step_num)
 );
 
@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS evidence (
 -- ═══════════════════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS tasks (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    jira_key      TEXT NOT NULL UNIQUE,
+    task_key      TEXT NOT NULL UNIQUE,
     title         TEXT,
     description   TEXT,
     current_phase TEXT DEFAULT '-1',

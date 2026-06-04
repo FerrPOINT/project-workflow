@@ -74,7 +74,7 @@ def _run_single_check(repo: str, check: PhaseCheck, context: Dict[str, Any]) -> 
         return ok, f"Missing: {missing}" if missing else "All present"
 
     if check.type == "jira_status":
-        status = _jira.get_status(context.get("jira_key", ""))
+        status = _jira.get_status(context.get("task_key", ""))
         expected = check.expected or []
         ok = status in expected if status else False
         return ok, f"Status={status}, expected={expected}"
@@ -114,9 +114,9 @@ def _run_single_check(repo: str, check: PhaseCheck, context: Dict[str, Any]) -> 
 
     if check.type == "gate_passed":
         # Проверяем state на наличие evidence от CriticGate
-        jira_key = context.get("jira_key", "")
+        task_key = context.get("task_key", "")
         repo_path = context.get("repo", "")
-        st = state.load_state(repo_path, jira_key) if repo_path else None
+        st = state.load_state(repo_path, task_key) if repo_path else None
         last_ev = st.get("last_evidence", "") if st else ""
         ok = "PASS" in last_ev.upper()
         return ok, f"Last evidence: {last_ev}"
@@ -130,11 +130,11 @@ def _run_single_check(repo: str, check: PhaseCheck, context: Dict[str, Any]) -> 
     return True, f"Unknown check type: {check.type}"
 
 
-def build_context(repo: str, jira_key: str, task_id: str, sprint: str) -> Dict[str, Any]:
+def build_context(repo: str, task_key: str, task_id: str, sprint: str) -> Dict[str, Any]:
     """Собрать контекст для подстановки в шаблоны."""
     return {
         "repo": repo,
-        "jira_key": jira_key,
+        "task_key": task_key,
         "task_id": task_id,
         "sprint": sprint,
         "jira_url": "https://task.wemakedev.ru",
@@ -174,23 +174,22 @@ def render_phase_playbook(phase: Phase, context: Dict[str, Any]) -> Dict[str, An
             "toolsets": phase.delegate.toolsets,
             "timeout_min": phase.delegate.timeout_min,
         } if phase.delegate else None,
-        "skills": phase.skills,
         "next_recommendation": phase.next_recommendation,
         "parallel_with": phase.parallel_with,
     }
 
 
-def execute_phase(repo: str, jira_key: str, phase_id: str) -> Tuple[bool, Dict[str, Any]]:
+def execute_phase(repo: str, task_key: str, phase_id: str) -> Tuple[bool, Dict[str, Any]]:
     """Полный цикл выполнения фазы: checks → playbook → delegate payload → job tracking."""
     phase = schema.get_phase(phase_id)
     if not phase:
         return False, {"error": f"Unknown phase: {phase_id}"}
 
-    st = state.load_state(repo, jira_key)
+    st = state.load_state(repo, task_key)
     if not st:
         return False, {"error": "Task not initialized"}
 
-    ctx = build_context(repo, jira_key, st.get("task_id", ""), st.get("sprint", ""))
+    ctx = build_context(repo, task_key, st.get("task_id", ""), st.get("sprint", ""))
 
     # 1. Run checks
     checks_ok, check_results = run_checks(repo, phase, ctx)
@@ -202,12 +201,12 @@ def execute_phase(repo: str, jira_key: str, phase_id: str) -> Tuple[bool, Dict[s
     delegate_payload = None
     if phase.is_delegated and phase.delegate:
         delegate_payload = profiles.build_delegate_payload(
-            phase_id, jira_key, st.get("task_id", ""), st.get("title", "")
+            phase_id, task_key, st.get("task_id", ""), st.get("title", "")
         )
 
     # 4. If checks passed and not delegated — mark complete
     if checks_ok and not phase.is_delegated:
-        state.mark_phase_complete(repo, jira_key, phase_id, "checks passed, playbook executed")
+        state.mark_phase_complete(repo, task_key, phase_id, "checks passed, playbook executed")
 
     return checks_ok, {
         "phase": phase_id,
@@ -246,9 +245,9 @@ def get_parallel_phases(phase_id: str) -> List[str]:
     return list(dict.fromkeys(result))
 
 
-def get_delegate_command(phase_id: str, jira_key: str, task_id: str, title: str) -> Optional[Dict[str, Any]]:
+def get_delegate_command(phase_id: str, task_key: str, task_id: str, title: str) -> Optional[Dict[str, Any]]:
     """Сгенерировать готовую команду delegate_task для агента."""
-    payload = profiles.build_delegate_payload(phase_id, jira_key, task_id, title)
+    payload = profiles.build_delegate_payload(phase_id, task_key, task_id, title)
     if not payload:
         return None
 

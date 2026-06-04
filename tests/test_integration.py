@@ -43,8 +43,8 @@ class TestEndToEndWorkflow:
         db_path = tmp_path / "test2.db"
         wdb = WorkflowDB(str(db_path))
         wdb.init()
-        wdb.create_task({"jira_key": "AAT-99", "title": "Integ Test"})
-        task = wdb.get_task_by_jira("AAT-99")
+        wdb.create_task({"task_key": "AAT-99", "title": "Integ Test"})
+        task = wdb.get_task_by_key("AAT-99")
         assert task is not None
         assert task["current_phase"] == "-1"
         wdb.create_phase({"id": "0", "name": "Setup", "phase_order": 0})
@@ -136,8 +136,8 @@ class TestEdgeCases:
         db_path = tmp_path / "test8.db"
         wdb = WorkflowDB(str(db_path))
         wdb.init()
-        wdb.create_task({"jira_key": "AAT-SK", "title": "Skip Test"})
-        task = wdb.get_task_by_jira("AAT-SK")
+        wdb.create_task({"task_key": "AAT-SK", "title": "Skip Test"})
+        task = wdb.get_task_by_key("AAT-SK")
         assert task is not None
         wdb.add_task_history(task["id"], "0", "pending")
         # Re-adding with done status should update via ON CONFLICT

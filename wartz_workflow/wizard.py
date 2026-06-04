@@ -22,10 +22,10 @@ INFO_ICON = "ℹ️"
 class WizardEngine:
     """Conversational gate: агент присылает отчёт → wizard возвращает verdict."""
 
-    def __init__(self, jira_key: str, repo: Optional[str] = None):
-        self.jira_key = jira_key
+    def __init__(self, task_key: str, repo: Optional[str] = None):
+        self.task_key = task_key
         self.repo = repo
-        self.task_id = jira_key
+        self.task_id = task_key
 
         history_phase = convo.get_last_phase(self.task_id)
         self.current_phase = history_phase or "-1"
@@ -74,7 +74,7 @@ class WizardEngine:
             }
         else:
             msg = self._build_fail_message(phase, missing)
-            convo.add_wizard_answer(self.task_id, self.jira_key, phase.id, f"fail: {missing}", ok=False)
+            convo.add_wizard_answer(self.task_id, self.task_key, phase.id, f"fail: {missing}", ok=False)
             return {
                 "verdict": "FAIL",
                 "phase": phase.id,
@@ -112,7 +112,7 @@ class WizardEngine:
 
         lines.extend([
             "",
-            f"Когда выполнишь — пришли отчёт: 'wartz-workflow step --task {self.jira_key} --report \"...\"'",
+            f"Когда выполнишь — пришли отчёт: 'wartz-workflow step --task {self.task_key} --report \"...\"'",
         ])
 
         return "\n".join(lines)
@@ -141,7 +141,6 @@ class WizardEngine:
                 "is_critic": p.is_critic,
                 "execution_type": getattr(p, "execution_type", "sync"),
                 "parallel_with": getattr(p, "parallel_with", None),
-                "skills": p.skills,
                 "instructions": [{"step": i.step, "tool": getattr(i, "tool", None), "execution_type": getattr(i, "execution_type", "sync")} for i in p.instructions],
                 "checks": [{"description": c.description, "optional": getattr(c, "optional", False)} for c in p.checks],
                 "evidence": [{"item": e.item} for e in p.evidence],
@@ -165,7 +164,7 @@ class WizardEngine:
             current_phase_name = resolved.name if resolved else current
 
         return {
-            "jira_key": self.jira_key,
+            "task_key": self.task_key,
             "repo": self.repo,
             "current_phase": self.current_phase,
             "current_phase_name": current_phase_name,
@@ -227,7 +226,7 @@ class WizardEngine:
 
     def _record_transition(self, from_phase: str, to_phase: str) -> None:
         """Сохранить переход в историю."""
-        convo.add_phase_transition(self.task_id, self.jira_key, from_phase, to_phase)
+        convo.add_phase_transition(self.task_id, self.task_key, from_phase, to_phase)
         self.current_phase = to_phase
 
     def _build_pass_message(
@@ -259,7 +258,7 @@ class WizardEngine:
             lines.append(f"   ... и ещё {len(missing) - 5}")
         lines.extend([
             "",
-            f"Доработай и пришли новый отчёт: 'wartz-workflow step --task {self.jira_key} --report \"...\"'",
+            f"Доработай и пришли новый отчёт: 'wartz-workflow step --task {self.task_key} --report \"...\"'",
         ])
         return "\n".join(lines)
 
@@ -274,19 +273,19 @@ class WizardEngine:
 #  CLI ENTRY POINTS
 # ═══════════════════════════════════════════════════════════════════════
 
-def evaluate_report(jira_key: str, report: str, repo: Optional[str] = None) -> dict:
+def evaluate_report(task_key: str, report: str, repo: Optional[str] = None) -> dict:
     """CLI/API entry: агент прислал отчёт → получить verdict."""
-    engine = WizardEngine(jira_key, repo)
+    engine = WizardEngine(task_key, repo)
     return engine.evaluate(report)
 
 
-def get_phase_instructions(jira_key: str, phase_id: Optional[str] = None, repo: Optional[str] = None) -> str:
+def get_phase_instructions(task_key: str, phase_id: Optional[str] = None, repo: Optional[str] = None) -> str:
     """CLI/API entry: получить инструкции для текущей (или указанной) фазы."""
-    engine = WizardEngine(jira_key, repo)
+    engine = WizardEngine(task_key, repo)
     return engine.get_phase_prompt(phase_id)
 
 
-def main(jira_key: str, report: Optional[str] = None, repo: Optional[str] = None) -> None:
+def main(task_key: str, report: Optional[str] = None, repo: Optional[str] = None) -> None:
     """CLI entry: wartz-workflow step --task TASK-123 [--report "..."].
 
     Без --report: показать инструкции текущей фазы.
@@ -294,8 +293,8 @@ def main(jira_key: str, report: Optional[str] = None, repo: Optional[str] = None
     """
     import json, sys
     if report:
-        result = evaluate_report(jira_key, report, repo)
+        result = evaluate_report(task_key, report, repo)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         sys.exit(0 if result["verdict"] == "PASS" else 1)
     else:
-        print(get_phase_instructions(jira_key, repo=repo))
+        print(get_phase_instructions(task_key, repo=repo))

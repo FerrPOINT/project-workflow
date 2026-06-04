@@ -50,13 +50,13 @@ class StatePort(ABC):
     """Port for workflow state persistence."""
 
     @abstractmethod
-    def save(self, repo: str, jira_key: str, task_id: str, sprint: str, current_phase: str) -> None:
+    def save(self, repo: str, task_key: str, task_id: str, sprint: str, current_phase: str) -> None:
         ...
 
     @abstractmethod
-    def load(self, repo: Optional[str], jira_key: str) -> Optional[dict]:
+    def load(self, repo: Optional[str], task_key: str) -> Optional[dict]:
         ...
 
     @abstractmethod
-    def mark_phase_complete(self, repo: str, jira_key: str, phase: str, evidence: str) -> bool:
+    def mark_phase_complete(self, repo: str, task_key: str, phase: str, evidence: str) -> bool:
         ...

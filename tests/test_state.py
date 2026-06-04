@@ -12,13 +12,13 @@ from wartz_workflow.config import WARTZ_DIR
 
 class TestFindRepo:
     def test_finds_by_progress_json(self, tmp_path: Path):
-        """Ищет репозиторий по progress.json с jira_key."""
+        """Ищет репозиторий по progress.json с task_key."""
         repo = tmp_path / "repo"
         sprint = repo / "info" / "sprint1"
         task = sprint / "001_task-foo"
         task.mkdir(parents=True)
         (task / "progress.json").write_text(
-            json.dumps({"jira_key": "AAT-999"}, ensure_ascii=False)
+            json.dumps({"task_key": "AAT-999"}, ensure_ascii=False)
         )
 
         with patch("wartz_workflow.state.known_repos", [str(repo)]):

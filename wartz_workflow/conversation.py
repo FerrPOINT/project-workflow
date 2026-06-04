@@ -21,7 +21,7 @@ DB_PATH = DB_DIR / "conversation.db"
 class Message:
     id: int
     task_id: str          # internal task_id (e.g. "TASKNEIROKLYUCH-42")
-    jira_key: str         # e.g. "AAT-123"
+    task_key: str         # e.g. "AAT-123"
     role: str             # user | system | wizard | agent
     content: str
     phase_id: Optional[str] = None
@@ -32,7 +32,7 @@ class Message:
         return {
             "id": self.id,
             "task_id": self.task_id,
-            "jira_key": self.jira_key,
+            "task_key": self.task_key,
             "role": self.role,
             "content": self.content,
             "phase_id": self.phase_id,
@@ -47,7 +47,7 @@ SQL_INIT = """
 CREATE TABLE IF NOT EXISTS conversation (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     task_id     TEXT NOT NULL,
-    jira_key    TEXT NOT NULL,
+    task_key    TEXT NOT NULL,
     role        TEXT NOT NULL,
     content     TEXT NOT NULL,
     phase_id    TEXT,
@@ -71,7 +71,7 @@ def _ensure_db() -> sqlite3.Connection:
 
 def add_message(
     task_id: str,
-    jira_key: str,
+    task_key: str,
     role: str,
     content: str,
     phase_id: Optional[str] = None,
@@ -83,10 +83,10 @@ def add_message(
     try:
         cur = conn.execute(
             """
-            INSERT INTO conversation (task_id, jira_key, role, content, phase_id, tags, created_at)
+            INSERT INTO conversation (task_id, task_key, role, content, phase_id, tags, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (task_id, jira_key, role, content, phase_id, tags, now),
+            (task_id, task_key, role, content, phase_id, tags, now),
         )
         conn.commit()
         return cur.lastrowid or 0
@@ -94,28 +94,28 @@ def add_message(
         conn.close()
 
 
-def add_user_note(task_id: str, jira_key: str, content: str, phase_id: Optional[str] = None) -> int:
+def add_user_note(task_id: str, task_key: str, content: str, phase_id: Optional[str] = None) -> int:
     """Быстрый entrypoint для пользовательского отчёта."""
-    return add_message(task_id, jira_key, "user", content, phase_id, tags="note")
+    return add_message(task_id, task_key, "user", content, phase_id, tags="note")
 
 
-def add_phase_transition(task_id: str, jira_key: str, from_phase: str, to_phase: str) -> None:
+def add_phase_transition(task_id: str, task_key: str, from_phase: str, to_phase: str) -> None:
     """Записать переход фазы в историю."""
     add_message(
-        task_id, jira_key, "system",
+        task_id, task_key, "system",
         f"Phase transition: {from_phase} → {to_phase}",
         phase_id=to_phase,
         tags="transition",
     )
 
 
-def add_wizard_question(task_id: str, jira_key: str, phase_id: str, question: str) -> None:
-    add_message(task_id, jira_key, "wizard", question, phase_id, tags="question")
+def add_wizard_question(task_id: str, task_key: str, phase_id: str, question: str) -> None:
+    add_message(task_id, task_key, "wizard", question, phase_id, tags="question")
 
 
-def add_wizard_answer(task_id: str, jira_key: str, phase_id: str, answer: str, ok: bool) -> None:
+def add_wizard_answer(task_id: str, task_key: str, phase_id: str, answer: str, ok: bool) -> None:
     tag = "pass" if ok else "fail"
-    add_message(task_id, jira_key, "user", answer, phase_id, tags=tag)
+    add_message(task_id, task_key, "user", answer, phase_id, tags=tag)
 
 
 # ── Read ──────────────────────────────────────────────────────────────
@@ -179,7 +179,7 @@ def check_keyword_in_history(task_id: str, keyword: str, limit: int = 100) -> bo
 
 # ── Summary / Digest ──────────────────────────────────────────────────
 
-def build_status_digest(task_id: str, jira_key: str, current_phase: Optional[str] = None) -> dict:
+def build_status_digest(task_id: str, task_key: str, current_phase: Optional[str] = None) -> dict:
     """Собрать краткий дайджест статуса из истории."""
     notes = get_messages(task_id, limit=50)
     phase_transitions = [m for m in notes if m.tags == "transition"]
@@ -193,7 +193,7 @@ def build_status_digest(task_id: str, jira_key: str, current_phase: Optional[str
 
     return {
         "task_id": task_id,
-        "jira_key": jira_key,
+        "task_key": task_key,
         "last_phase": last_phase,
         "total_messages": len(notes),
         "transitions_count": len(phase_transitions),

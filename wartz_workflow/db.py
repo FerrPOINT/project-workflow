@@ -129,8 +129,8 @@ class WorkflowDB:
             for p in phases:
                 conn.execute(
                     """
-                    INSERT OR REPLACE INTO phases (id, name, description, phase_order, group_id, skills, agent_id, execution_type)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT OR REPLACE INTO phases (id, name, description, phase_order, group_id, agent_id, execution_type)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         p["id"],
@@ -138,7 +138,6 @@ class WorkflowDB:
                         p.get("description") or "",
                         p["phase_order"],
                         p.get("group_id"),
-                        p.get("skills"),
                         p.get("agent_id"),
                         p.get("execution_type", "sync"),
                     ),
@@ -146,14 +145,15 @@ class WorkflowDB:
                 for inst in p.get("instructions", []):
                     conn.execute(
                         """
-                        INSERT INTO instructions (phase_id, step_num, description, execution_type)
-                        VALUES (?, ?, ?, ?)
+                        INSERT INTO instructions (phase_id, step_num, description, execution_type, skills)
+                        VALUES (?, ?, ?, ?, ?)
                         """,
                         (
                             p["id"],
                             inst["step_num"],
                             inst["description"],
                             inst.get("execution_type", "sync"),
+                            inst.get("skills"),
                         ),
                     )
                 for c in p.get("checks", []):
@@ -205,8 +205,8 @@ class WorkflowDB:
         with self._conn() as conn:
             conn.execute(
                 """
-                INSERT INTO phases (id, name, description, phase_order, group_id, skills, agent_id, execution_type)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO phases (id, name, description, phase_order, group_id, agent_id, execution_type)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     data["id"],
@@ -214,7 +214,6 @@ class WorkflowDB:
                     data.get("description") or "",
                     data["phase_order"],
                     data.get("group_id"),
-                    data.get("skills"),
                     data.get("agent_id"),
                     data.get("execution_type", "sync"),
                 ),
@@ -245,14 +244,15 @@ class WorkflowDB:
         with self._conn() as conn:
             c = conn.execute(
                 """
-                INSERT INTO instructions (phase_id, step_num, description, execution_type)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO instructions (phase_id, step_num, description, execution_type, skills)
+                VALUES (?, ?, ?, ?, ?)
                 """,
                 (
                     data["phase_id"],
                     data["step_num"],
                     data["description"],
                     data.get("execution_type", "sync"),
+                    data.get("skills"),
                 ),
             )
             conn.commit()
@@ -354,11 +354,11 @@ class WorkflowDB:
         with self._conn() as conn:
             c = conn.execute(
                 """
-                INSERT INTO tasks (jira_key, title, description, current_phase, status)
+                INSERT INTO tasks (task_key, title, description, current_phase, status)
                 VALUES (?, ?, ?, ?, ?)
                 """,
                 (
-                    data["jira_key"],
+                    data["task_key"],
                     data.get("title", ""),
                     data.get("description", ""),
                     data.get("current_phase", "-1"),
@@ -378,9 +378,9 @@ class WorkflowDB:
             row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
             return dict(row) if row else None
 
-    def get_task_by_jira(self, jira_key: str) -> dict | None:
+    def get_task_by_key(self, task_key: str) -> dict | None:
         with self._conn() as conn:
-            row = conn.execute("SELECT * FROM tasks WHERE jira_key = ?", (jira_key,)).fetchone()
+            row = conn.execute("SELECT * FROM tasks WHERE task_key = ?", (task_key,)).fetchone()
             return dict(row) if row else None
 
     def update_task(self, task_id: int, data: dict) -> None:
@@ -468,19 +468,6 @@ class WorkflowDB:
     def update_phase_group_assignment(self, phase_id: str, group_id: str | None) -> None:
         with self._conn() as conn:
             conn.execute("UPDATE phases SET group_id = ? WHERE id = ?", (group_id, phase_id))
-            conn.commit()
-
-    def update_phase_parallel(self, phase_id: str, parallel_with: str | None) -> None:
-        with self._conn() as conn:
-            conn.execute("UPDATE phases SET parallel_with = ? WHERE id = ?", (parallel_with, phase_id))
-            conn.commit()
-
-    def batch_update_groups(self, group_map: dict[str, str]) -> None:
-        with self._conn() as conn:
-            conn.executemany(
-                "UPDATE phases SET parallel_with = ? WHERE id = ?",
-                list(group_map.items()),
-            )
             conn.commit()
 
     # ── Group Order Batch ─────────────────────────────────────────────

@@ -87,7 +87,6 @@ def _yaml_to_sqlite() -> None:
                 "name": p.name,
                 "description": p.description or "",
                 "phase_order": _phase_order.index(p.id) + 1 if p.id in _phase_order else 0,
-                "skills": srv.serialize_skills(p.skills),
                 "instructions": [
                     {
                         "step_num": idx + 1,
@@ -297,7 +296,6 @@ def _load_phases() -> list[dict]:
     rows = wdb.get_phases()
     result = []
     for p in rows:
-        skills = srv.parse_skills(p["skills"])
         delegate_agent = p.get("delegate_agent")
         result.append(
             {
@@ -305,10 +303,8 @@ def _load_phases() -> list[dict]:
                 "phase_num": p["phase_order"],
                 "name": p["name"],
                 "description": p["description"],
-                "skills": skills,
                 "delegate_agent": delegate_agent,
                 "is_delegated": bool(delegate_agent),
-                "parallel_with": p.get("parallel_with"),
                 "rollback_target": p.get("rollback_target"),
                 "delegate_timeout": p.get("delegate_timeout"),
                 "execution_type": p.get("execution_type", "sync"),
@@ -340,7 +336,7 @@ def _load_tasks() -> list[dict]:
         result.append(
             {
                 "id": t["id"],
-                "jira_key": t["jira_key"],
+                "task_key": t["task_key"],
                 "title": t.get("title", ""),
                 "phase_id": current_phase_id,
                 "phase_num": current.get("phase_num", "?"),
@@ -542,11 +538,11 @@ def api_wizard_submit(phase_id: str, body: dict[str, Any]):
             "next_phase_name": None,
         }
 
-@app.get("/api/wizard/{jira_key}/context")
-def api_wizard_context(jira_key: str):
+@app.get("/api/wizard/{task_key}/context")
+def api_wizard_context(task_key: str):
     """Полный контекст для агента-визарда."""
     from . import wizard as wizard_mod
-    engine = wizard_mod.WizardEngine(jira_key)
+    engine = wizard_mod.WizardEngine(task_key)
     return engine.get_full_context()
 
 

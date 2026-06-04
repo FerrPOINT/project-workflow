@@ -47,7 +47,7 @@ def get_rollback_plan(phase_id: str) -> Tuple[Optional[str], List[str]]:
     return target, phases_to_clear
 
 
-def perform_rollback(repo: str, jira_key: str, from_phase: str, reason: str) -> Dict[str, any]:
+def perform_rollback(repo: str, task_key: str, from_phase: str, reason: str) -> Dict[str, any]:
     """Выполнить rollback от from_phase к rollback_target.
 
     Чистит:
@@ -60,7 +60,7 @@ def perform_rollback(repo: str, jira_key: str, from_phase: str, reason: str) -> 
     if not target:
         raise RollbackError(f"Фаза {from_phase} не имеет rollback_target")
 
-    st = state.load_state(repo, jira_key)
+    st = state.load_state(repo, task_key)
     if not st:
         raise RollbackError("Задача не инициализирована")
 
@@ -69,7 +69,7 @@ def perform_rollback(repo: str, jira_key: str, from_phase: str, reason: str) -> 
     new_completed = [p for p in completed if p not in phases_to_clear]
 
     # Обновить progress.json в task dir
-    _clear_progress_phases(repo, jira_key, phases_to_clear)
+    _clear_progress_phases(repo, task_key, phases_to_clear)
 
     # Save new state
     st["current_phase"] = target
@@ -83,7 +83,7 @@ def perform_rollback(repo: str, jira_key: str, from_phase: str, reason: str) -> 
     }
 
     state_dir = Path(f"{state.WARTZ_DIR}/state")
-    with open(state_dir / f"{jira_key}.json", "w") as f:
+    with open(state_dir / f"{task_key}.json", "w") as f:
         json.dump(st, f, indent=2, ensure_ascii=False)
 
     return {
@@ -95,7 +95,7 @@ def perform_rollback(repo: str, jira_key: str, from_phase: str, reason: str) -> 
     }
 
 
-def _clear_progress_phases(repo: str, jira_key: str, phases_to_clear: List[str]) -> None:
+def _clear_progress_phases(repo: str, task_key: str, phases_to_clear: List[str]) -> None:
     """Очистить фазы в progress.json task dir."""
     info_dir = Path(f"{repo}/info")
     if not info_dir.exists():
@@ -109,7 +109,7 @@ def _clear_progress_phases(repo: str, jira_key: str, phases_to_clear: List[str])
                         try:
                             with open(progress_file) as f:
                                 data = json.load(f)
-                            if data.get("jira_key") == jira_key:
+                            if data.get("task_key") == task_key:
                                 for p in data.get("phases", []):
                                     if p.get("phase") in phases_to_clear:
                                         p["status"] = "pending"
@@ -129,9 +129,9 @@ def can_rollback(phase_id: str) -> bool:
     return bool(phase and phase.rollback_target)
 
 
-def get_cycle_info(jira_key: str) -> Dict[str, any]:
+def get_cycle_info(task_key: str) -> Dict[str, any]:
     """Получить информацию о текущем цикле retry."""
-    st = state.load_state(None, jira_key)  # repo не нужен, state по jira_key
+    st = state.load_state(None, task_key)  # repo не нужен, state по task_key
     if not st:
         return {"cycles": 0, "max_cycles": 3, "remaining": 3, "last_rollback": None}
 

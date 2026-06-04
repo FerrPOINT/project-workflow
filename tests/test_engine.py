@@ -36,7 +36,6 @@ def _make_phase(**overrides):
         "instructions": [],
         "evidence": [],
         "checks": [],
-        "skills": [],
         "is_blocker": False,
         "is_delegated": False,
         "is_critic": False,
@@ -56,7 +55,7 @@ class TestBuildContext:
     def test_keys_present(self):
         ctx = build_context("/repo", "AAT-1", "TASK-001", "sprint42")
         assert ctx["repo"] == "/repo"
-        assert ctx["jira_key"] == "AAT-1"
+        assert ctx["task_key"] == "AAT-1"
         assert ctx["task_id"] == "TASK-001"
         assert ctx["sprint"] == "sprint42"
         assert "jira_url" in ctx
@@ -135,14 +134,12 @@ class TestRenderPhasePlaybook:
             id="0.01",
             name="Info",
             instructions=[],
-            skills=["file"],
         )
-        ctx = {"repo": "/repo", "jira_key": "AAT-1"}
+        ctx = {"repo": "/repo", "task_key": "AAT-1"}
         pb = render_phase_playbook(phase, ctx)
         assert pb["phase_id"] == "0.01"
         assert pb["is_delegated"] is False
         assert pb["delegate"] is None
-        assert pb["skills"] == ["file"]
 
     def test_delegated(self):
         phase = _make_phase(
@@ -151,12 +148,12 @@ class TestRenderPhasePlaybook:
             is_delegated=True,
             delegate=SimpleNamespace(
                 agent="wartzresearcher",
-                prompt_template="Research {{jira_key}}",
+                prompt_template="Research {{task_key}}",
                 toolsets=["web"],
                 timeout_min=30,
             ),
         )
-        ctx = {"jira_key": "AAT-1"}
+        ctx = {"task_key": "AAT-1"}
         pb = render_phase_playbook(phase, ctx)
         assert pb["is_delegated"] is True
         assert pb["delegate"]["agent"] == "wartzresearcher"

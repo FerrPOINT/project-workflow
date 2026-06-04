@@ -71,16 +71,16 @@ phases:
       - item: "Скриншот/копия Jira тикета (summary, description, AC)"
       - item: "Записано в requirements.md"
     instructions:
-      - step: "Открыть Jira тикет {jira_key}"
+      - step: "Открыть Jira тикет {task_key}"
       - step: "Скопировать Summary → requirements.md"
       - step: "Извлечь Acceptance Criteria → test-cases.md"
       - step: "Проверить assignee — должен быть назначен на тебя"
     next_recommendation: "Перейди к Phase 0.0a — verify-suite.sh"
     questions:
-      - text: "Прочитал ли Jira тикет {jira_key}? Опиши в двух предложениях что нужно сделать."
+      - text: "Прочитал ли Jira тикет {task_key}? Опиши в двух предложениях что нужно сделать."
         required: true
         expected_keywords: ["jira", "summary", "задач", "тикет"]
-        hint: "Открой wartz-jira issue {jira_key} и прочитай summary + description + AC"
+        hint: "Открой wartz-jira issue {task_key} и прочитай summary + description + AC"
       - text: "Какие Acceptance Criteria есть в тикете? Перечисли основные."
         required: true
         expected_keywords: ["критерий", "acceptance", "condition", "given", "when", "then"]
@@ -296,8 +296,8 @@ phases:
       - item: "Скриншот статуса Jira"
       - item: "Запись в changelog.md"
     instructions:
-      - step: "wartz-jira issue transition {jira_key} --no-arg чтобы увидеть transitions"
-      - step: "wartz-jira issue transition {jira_key} 'В работе'"
+      - step: "wartz-jira issue transition {task_key} --no-arg чтобы увидеть transitions"
+      - step: "wartz-jira issue transition {task_key} 'В работе'"
       - step: "Зафиксировать в changelog.md"
     next_recommendation: "Запускай Phase 0.6 (Researcher) ПАРАЛЛЕЛЬНО с Phase 1 (Preflight)"
 
@@ -314,7 +314,7 @@ phases:
     delegate:
       agent: wartzresearcher
       prompt_template: |
-        Задача: {jira_key} / {task_id} — {title}
+        Задача: {task_key} / {task_id} — {title}
         Разбей на значимые элементы (механизм, сущности, маппинги, UI).
         По каждому найди в коде: где определено, dataflow, образцы аналогичных фич, проблемы.
         Репозитории: business-back, recruiter-front, candidate-front, relevanter-back, ai-recruiter-back, messaging-back, shared.
@@ -364,7 +364,7 @@ phases:
     delegate:
       agent: wartzresearcher
       prompt_template: |
-        Глубокое исследование для {jira_key}.
+        Глубокое исследование для {task_key}.
         Найди: архитектуру, API endpoints, DTO/TypeScript types, бизнес-логику.
         Проверь existing реализации аналогичных фич.
         Не пиши код — только собери информацию.
@@ -428,7 +428,7 @@ phases:
     delegate:
       agent: wartzcritic
       prompt_template: |
-        Проверь PLAN.md для {jira_key}.
+        Проверь PLAN.md для {task_key}.
         Критерии: полнота, риски, неочевидные зависимости, соответствие dataflow.
         Severity: BLOCKER если критичный недостаток.
       toolsets: [file, search]
@@ -476,7 +476,7 @@ phases:
     delegate:
       agent: wartzcritic
       prompt_template: |
-        Проверь код для {jira_key} НЕ закоммиченный код.
+        Проверь код для {task_key} НЕ закоммиченный код.
         Критерии: стиль, безопасность, логика, соответствие плану.
         Severity: BLOCKER если критичный баг или утечка.
       toolsets: [file, search]
@@ -597,7 +597,7 @@ phases:
     delegate:
       agent: wartzreviewer
       prompt_template: |
-        Ревью MR для {jira_key}.
+        Ревью MR для {task_key}.
         Проверь: стиль, безопасность, логика, тесты, edge cases.
         Дай APPROVED или список замечаний.
       toolsets: [search, file, terminal]
@@ -624,7 +624,7 @@ phases:
     delegate:
       agent: wartzreviewer
       prompt_template: |
-        QA тестирование для {jira_key}.
+        QA тестирование для {task_key}.
         Функциональное тестирование, проверка на тестовом стенде.
         Зафиксировать результаты.
       toolsets: [browser, terminal]
@@ -650,7 +650,7 @@ phases:
     delegate:
       agent: wartzresearcher
       prompt_template: |
-        DVR для {jira_key}: проверь что реализация соответствует изначальному dataflow.
+        DVR для {task_key}: проверь что реализация соответствует изначальному dataflow.
         Сравни: что было запланировано vs что реализовано.
         Severity: WARN если discrepancies.
       toolsets: [search, file]
@@ -674,7 +674,7 @@ phases:
     delegate:
       agent: wartzcritic
       prompt_template: |
-        Финальный gate для {jira_key}.
+        Финальный gate для {task_key}.
         Проверь: Code Review PASS, QA PASS, DVR DATAFLOW_OK.
         Severity: BLOCKER если любой из трёх FAIL.
       toolsets: [file]
@@ -698,7 +698,7 @@ phases:
     delegate:
       agent: "wartzops"
       prompt_template: |
-        Закрытие задачи {jira_key}. Проверь что MR смержен, переведи Jira в 'Выполнено', 
+        Закрытие задачи {task_key}. Проверь что MR смержен, переведи Jira в 'Выполнено', 
         прикрепи ссылку на MR. Зафиксируй в changelog.md.
       toolsets: ["jira", "terminal"]
       timeout_min: 10
@@ -715,7 +715,7 @@ phases:
       - item: "git log develop --grep {task_id} показывает commit"
     instructions:
       - step: "Проверить что MR смержен через GitLab UI"
-      - step: "wartz-jira issue transition {jira_key} 'Выполнено'"
+      - step: "wartz-jira issue transition {task_key} 'Выполнено'"
       - step: "Добавить ссылку на MR в комментарий Jira"
       - step: "Зафиксировать в changelog.md"
     next_recommendation: "Перейди к Phase 9 — Retro"
@@ -731,7 +731,7 @@ phases:
     delegate:
       agent: wartzcoder
       prompt_template: |
-        Ретро для {jira_key}.
+        Ретро для {task_key}.
         Метрики: время, tool calls, токены, quality ratio.
         Сравнение solo vs delegate.
         Обнови project-knowledge.md.

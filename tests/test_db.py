@@ -47,7 +47,7 @@ class TestImportPhases:
                 "phase_order": 1,
                 "skills": json.dumps(["skill-a", "skill-b"]),
                 "instructions": [
-                    {"step_num": 1, "description": "Do this", "execution_type": "sync"},
+                    {"step_num": 1, "description": "Do this", "execution_type": "sync", "skills": json.dumps(["skill-a", "skill-b"])},
                     {"step_num": 2, "description": "Do that", "execution_type": "parallel"},
                 ],
                 "checks": [
@@ -62,19 +62,16 @@ class TestImportPhases:
                 "name": "Test Phase Two",
                 "description": "Second test phase",
                 "phase_order": 2,
-                "skills": None,
-                "instructions": [],
-                "checks": [],
-                "evidence": [],
+                "instructions": [
+                    {"step_num": 1, "description": "Finish it", "execution_type": "sync"}
+                ],
             },
         ]
         db.import_phases(phases)
-
         rows = db.get_phases()
         assert len(rows) == 2
         assert rows[0]["id"] == "test-1"
         assert rows[0]["phase_order"] == 1
-        assert json.loads(rows[0]["skills"]) == ["skill-a", "skill-b"]
 
     def test_get_phase_detail(self, db):
         """Деталь фазы включает инструкции, checks, evidence."""
@@ -84,7 +81,6 @@ class TestImportPhases:
                 "name": "Detail Phase",
                 "description": "Desc",
                 "phase_order": 10,
-                "skills": None,
                 "instructions": [
                     {"step_num": 1, "description": "Step 1", "execution_type": "sync"},
                 ],
@@ -117,33 +113,30 @@ class TestImportPhases:
 
 class TestPhaseCRUD:
     def test_create_phase(self, db):
-        db.create_phase({"id": "p-1", "name": "P1", "description": "D1", "phase_order": 1, "skills": None})
+        db.create_phase({"id": "p-1", "name": "P1", "description": "D1", "phase_order": 1})
         row = db.get_phase("p-1")
         assert row["name"] == "P1"
 
     def test_update_phase(self, db):
-        db.create_phase({"id": "p-2", "name": "Old", "description": "", "phase_order": 2, "skills": None})
-        db.update_phase("p-2", {"name": "New"})
+        db.create_phase({"id": "p-2", "name": "Old", "description": "", "phase_order": 2})
+        db.update_phase("p-2", {"name": "New", "description": "Updated"})
         row = db.get_phase("p-2")
         assert row["name"] == "New"
+        assert row["description"] == "Updated"
 
     def test_delete_phase_cascades(self, db):
-        db.create_phase({"id": "p-3", "name": "P3", "description": "", "phase_order": 3, "skills": None})
-        db.add_instruction("p-3", {"step_num": 1, "description": "I1", "execution_type": "sync"})
+        db.create_phase({"id": "p-3", "name": "P3", "description": "", "phase_order": 3})
+        iid = db.create_instruction({"phase_id": "p-3", "step_num": 1, "description": "I1", "execution_type": "sync"})
         db.delete_phase("p-3")
         assert db.get_phase("p-3") is None
-        # инструкции тоже должны быть удалены
         assert db.get_phase_instructions("p-3") == []
 
 
 class TestInstructionCRUD:
     def test_reorder_instructions(self, db):
-        """Поменять порядок инструкций."""
-        db.create_phase({"id": "p-i", "name": "I", "description": "", "phase_order": 1, "skills": None})
-        db.add_instruction("p-i", {"step_num": 1, "description": "First", "execution_type": "sync"})
-        db.add_instruction("p-i", {"step_num": 2, "description": "Second", "execution_type": "parallel"})
-
-        # reorder: Second → первый, First → второй
+        db.create_phase({"id": "p-i", "name": "I", "description": "", "phase_order": 1})
+        db.create_instruction({"phase_id": "p-i", "step_num": 1, "description": "First", "execution_type": "sync"})
+        db.create_instruction({"phase_id": "p-i", "step_num": 2, "description": "Second", "execution_type": "parallel"})
         rows = db.get_phase_instructions("p-i")
         ids = [r["id"] for r in rows]
         db.reorder_instructions("p-i", ids[::-1])
@@ -154,30 +147,29 @@ class TestInstructionCRUD:
         assert rows[1]["step_num"] == 2
 
     def test_delete_instruction(self, db):
-        db.create_phase({"id": "p-d", "name": "D", "description": "", "phase_order": 1, "skills": None})
-        db.add_instruction("p-d", {"step_num": 1, "description": "To delete", "execution_type": "sync"})
-        rows = db.get_phase_instructions("p-d")
-        db.delete_instruction(rows[0]["id"])
+        db.create_phase({"id": "p-d", "name": "D", "description": "", "phase_order": 1})
+        iid = db.create_instruction({"phase_id": "p-d", "step_num": 1, "description": "To delete", "execution_type": "sync"})
+        db.delete_instruction(iid)
         assert len(db.get_phase_instructions("p-d")) == 0
 
 
 class TestTaskCRUD:
     def test_create_and_get_task(self, db):
-        db.create_task({"jira_key": "AAT-1", "title": "T1", "current_phase": "-1"})
-        t = db.get_task_by_jira("AAT-1")
+        db.create_task({"task_key": "AAT-1", "title": "T1", "current_phase": "-1"})
+        t = db.get_task_by_key("AAT-1")
         assert t is not None
-        assert t["jira_key"] == "AAT-1"
+        assert t["task_key"] == "AAT-1"
 
     def test_update_task(self, db):
-        db.create_task({"jira_key": "AAT-2", "title": "Old", "current_phase": "-1"})
-        t = db.get_task_by_jira("AAT-2")
+        db.create_task({"task_key": "AAT-2", "title": "Old", "current_phase": "-1"})
+        t = db.get_task_by_key("AAT-2")
         db.update_task(t["id"], {"title": "New"})
-        t2 = db.get_task_by_jira("AAT-2")
+        t2 = db.get_task_by_key("AAT-2")
         assert t2["title"] == "New"
 
     def test_task_history(self, db):
-        db.create_task({"jira_key": "AAT-3", "title": "T3", "current_phase": "-1"})
-        t = db.get_task_by_jira("AAT-3")
+        db.create_task({"task_key": "AAT-3", "title": "T3", "current_phase": "-1"})
+        t = db.get_task_by_key("AAT-3")
         db.add_task_history(t["id"], "0", "done")
         db.add_task_history(t["id"], "1", "pending")
         history = db.get_task_history(t["id"])

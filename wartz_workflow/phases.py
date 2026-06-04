@@ -18,9 +18,9 @@ def get_next_phase(current_phase: str) -> Optional[str]:
     return None
 
 
-def check_previous_phase(repo: str, jira_key: str, phase_name: str) -> Tuple[bool, str]:
+def check_previous_phase(repo: str, task_key: str, phase_name: str) -> Tuple[bool, str]:
     """Проверить что все предыдущие фазы выполнены."""
-    current = state.load_state(repo, jira_key)
+    current = state.load_state(repo, task_key)
     if not current:
         return False, "Состояние задачи не найдено"
 
@@ -42,7 +42,7 @@ def check_previous_phase(repo: str, jira_key: str, phase_name: str) -> Tuple[boo
     return True, "Все предыдущие фазы выполнены"
 
 
-def run_phase(repo: str, jira_key: str, phase_name: str) -> Tuple[bool, str]:
+def run_phase(repo: str, task_key: str, phase_name: str) -> Tuple[bool, str]:
     """Запустить фазу и отметить выполненной."""
     if phase_name not in PHASE_ORDER:
         return False, f"Неизвестная фаза: {phase_name}"
@@ -50,33 +50,33 @@ def run_phase(repo: str, jira_key: str, phase_name: str) -> Tuple[bool, str]:
     if phase_name == "0.0a":
         ok, msg = verify.run_verify_suite(repo)
         if ok:
-            state.mark_phase_complete(repo, jira_key, phase_name, "verify-suite.sh passed")
+            state.mark_phase_complete(repo, task_key, phase_name, "verify-suite.sh passed")
         return ok, msg
 
     if phase_name == "0.01a":
         ok, msg = verify.check_gitignore(repo)
         if ok:
-            state.mark_phase_complete(repo, jira_key, phase_name, ".gitignore correct")
+            state.mark_phase_complete(repo, task_key, phase_name, ".gitignore correct")
         return ok, msg
 
     if phase_name == "0.01b":
         ok, msg = verify.check_tokens()
         if ok:
-            state.mark_phase_complete(repo, jira_key, phase_name, "tokens verified")
+            state.mark_phase_complete(repo, task_key, phase_name, "tokens verified")
         return ok, msg
 
     if phase_name == "0.00":
         ok, msg = verify.check_git_identity()
         if ok:
-            state.mark_phase_complete(repo, jira_key, phase_name, msg)
+            state.mark_phase_complete(repo, task_key, phase_name, msg)
         return ok, msg
 
     # Generic: just mark complete
-    state.mark_phase_complete(repo, jira_key, phase_name, f"Phase {phase_name} executed")
+    state.mark_phase_complete(repo, task_key, phase_name, f"Phase {phase_name} executed")
     return True, f"Фаза {phase_name} выполнена"
 
 
-def _evaluate_condition(condition: str, repo: str, jira_key: str, context: dict) -> bool:
+def _evaluate_condition(condition: str, repo: str, task_key: str, context: dict) -> bool:
     """Evaluate a shell-style condition string. Supports {var} substitution."""
     import subprocess, shlex
     cmd = condition
@@ -92,7 +92,7 @@ def _evaluate_condition(condition: str, repo: str, jira_key: str, context: dict)
 
 def conditional_delegate_jump(
     repo: str,
-    jira_key: str,
+    task_key: str,
     phase_id: str,
     delegate_condition: Optional[str],
     delegate_target_phase: Optional[str],
@@ -106,7 +106,7 @@ def conditional_delegate_jump(
     if not delegate_condition or not delegate_target_phase:
         return False, "No delegate condition configured", None
 
-    condition_true = _evaluate_condition(delegate_condition, repo, jira_key, context)
+    condition_true = _evaluate_condition(delegate_condition, repo, task_key, context)
 
     if condition_true:
         current_idx = PHASE_ORDER.index(phase_id)
@@ -116,13 +116,13 @@ def conditional_delegate_jump(
             # Jump forward — mark all intermediate phases completed
             for i in range(current_idx, target_idx + 1):
                 mid = PHASE_ORDER[i]
-                state.mark_phase_complete(repo, jira_key, mid, f"auto-completed via delegate jump {phase_id}→{delegate_target_phase}")
+                state.mark_phase_complete(repo, task_key, mid, f"auto-completed via delegate jump {phase_id}→{delegate_target_phase}")
         else:
             # Jump backward — unmark phases from target+1 up to current
             for i in range(target_idx + 1, current_idx + 1):
                 mid = PHASE_ORDER[i]
-                state.unmark_phase(repo, jira_key, mid)
-            state.set_current_phase(repo, jira_key, delegate_target_phase)
+                state.unmark_phase(repo, task_key, mid)
+            state.set_current_phase(repo, task_key, delegate_target_phase)
 
         return True, f"Delegate jump {phase_id} → {delegate_target_phase}", delegate_target_phase
     else:

@@ -24,13 +24,13 @@ def out_json(data: dict[str, Any]) -> None:
     sys.exit(0 if data.get("ok", True) else 1)
 
 
-def _require_valid_key(jira_key: str) -> str:
+def _require_valid_key(task_key: str) -> str:
     """Проверить валидность ключа задачи. Вернуть normalized или выбросить Abort."""
-    validated = task_validator.validate(jira_key)
+    validated = task_validator.validate(task_key)
     if not validated.is_valid:
         console.print(f"{FAIL} [bold red]Invalid task key:[/bold red] {validated.error_message}")
         raise click.Abort()
-    return validated.normalized or jira_key
+    return validated.normalized or task_key
 
 
 @click.group()
