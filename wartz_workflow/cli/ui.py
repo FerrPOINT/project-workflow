@@ -1,4 +1,4 @@
-"""CLI commands: ui + wizard (consolidated)."""
+"""CLI commands: ui + step (consolidated)."""
 
 from __future__ import annotations
 
@@ -14,56 +14,34 @@ from rich.console import Console
 from rich.table import Table
 from rich import box
 
-from .. import wizard
+from .. import wizard, conversation as convo
 from ..cli.core import cli, out_json, _require_valid_key
 from ..cli.core import console, PASS, FAIL, WARN, BLOCK
 
 
-@cli.command("ui")
-@click.option("--port", default=7788, help="Порт (default 7788)")
-@click.option("--host", default="0.0.0.0", help="Хост (default 0.0.0.0)")
-@click.option("--daemon", is_flag=True, help="Запустить в background")
-def ui_cmd(port: int, host: str, daemon: bool) -> None:
-    """🌐 Web UI — просмотр фаз, задач, истории.
-
-    Usage: wartz-workflow ui [--port 7788] [--daemon]
-    """
-    from .ui import ensure_templates, app
-    ensure_templates()
-    console.print(f"{PASS} Запуск wartz-workflow UI на http://{host}:{port}")
-    if daemon:
-        console.print(f"[dim]Background mode: http://{host}:{port}[/dim]")
-    else:
-        console.print("[dim]Press Ctrl+C to stop[/dim]")
-    import uvicorn
-    uvicorn.run(app, host=host, port=port, log_level="warning")
-
-
-# ── wartz-workflow wizard TASK-KEY [--report] [--context] [--list] ──────
-
+# ═══════════════════════════════════════════════════════════════════════
+#  COMMAND: step
+# ═══════════════════════════════════════════════════════════════════════
 
 @cli.command()
 @click.argument("jira_key")
 @click.option("--repo", default=None, help="Repo path (auto-detected if omitted)")
 @click.option("--report", default=None, help="Отчёт агента (оценить и перейти)")
-@click.option("--context", is_flag=True, help="Показать полный контекст (вместо инструкций)")
-@click.option("--list", "list_flag", is_flag=True, help="Показать список пройденных этапов")
+@click.option("--skip", is_flag=True, help="Форсировать переход к следующей фазе без отчёта")
 @click.pass_context
-def wizard_cmd(
+def step_cmd(
     ctx: click.Context,
     jira_key: str,
     repo: Optional[str],
     report: Optional[str],
-    context: bool,
-    list_flag: bool,
+    skip: bool,
 ) -> None:
-    """🧙 Wizard — инструкции, отчёт, контекст, список этапов.
+    """🚶 Step — движение по workflow: показать текущую фазу или отчитаться и перейти.
 
     Usage:
-      wartz-workflow wizard TASK-KEY              → текущие инструкции
-      wartz-workflow wizard TASK-KEY --report "..." → оценить отчёт
-      wartz-workflow wizard TASK-KEY --context    → полный контекст
-      wartz-workflow wizard TASK-KEY --list       → список пройденных фаз
+      wartz-workflow step TASK-KEY                → текущие инструкции
+      wartz-workflow step TASK-KEY --report "..."  → оценить отчёт и перейти
+      wartz-workflow step TASK-KEY --skip         → форсировать переход без отчёта
     """
     import time
     jira_key = _require_valid_key(jira_key)
@@ -95,100 +73,6 @@ def wizard_cmd(
 
     engine = wizard.WizardEngine(jira_key, repo_path)
 
-    # --list : show done-list
-    if list_flag:
-        data = engine.get_full_context()
-        completed = data.get("completed_phases", [])
-        current_phase = data.get("current_phase", "-1")
-
-        wdb = WorkflowDB()
-        wdb.init()
-        all_phases = load_phases_from_db(wdb)
-        phase_map = {p.id: p for p in all_phases}
-        current_ph = phase_map.get(current_phase)
-
-        if jmode:
-            out_json({
-                "ok": True,
-                "jira_key": jira_key,
-                "current_phase": current_phase,
-                "current_phase_name": current_ph.name if current_ph else current_phase,
-                "completed_count": len(completed),
-                "total_phases": len(all_phases),
-                "done_list": completed,
-            })
-
-        console.print(f"[bold]📋 Done-list: {jira_key}[/bold]")
-        console.print(f"Текущая фаза: {current_phase} — {current_ph.name if current_ph else '?'}")
-        console.print(f"Пройдено: {len(completed)} / {len(all_phases)}\n")
-        if not completed:
-            console.print("  Нет завершённых фаз")
-        else:
-            for pid in completed:
-                ph = phase_map.get(pid)
-                badges = []
-                if ph and ph.is_blocker:
-                    badges.append("[red]БЛОКЕР[/red]")
-                if ph and ph.is_delegated:
-                    badges.append("[yellow]АГЕНТ[/yellow]")
-                badge_str = f" ({', '.join(badges)})" if badges else ""
-                console.print(f"  {PASS} {pid} — {ph.name if ph else pid}{badge_str}")
-        return
-
-    # --context : full wizard context
-    if context:
-        data = engine.get_full_context()
-        if jmode:
-            out_json({
-                "ok": True,
-                "jira_key": jira_key,
-                "current_phase": data["current_phase"],
-                "current_phase_name": data["current_phase_name"],
-                "completed_count": data["completed_count"],
-                "total_phases": data["total_phases"],
-                "completed_phases": data["completed_phases"],
-                "all_phases": data["all_phases"],
-                "repeatable_checks": data["repeatable_checks"],
-                "phase_history_count": len(data["phase_history"]),
-            })
-
-        console.print(f"[bold]🧙 Wizard Context: {jira_key}[/bold]")
-        console.print(f"Текущая фаза: {data['current_phase']} — {data['current_phase_name']}")
-        console.print(f"Пройдено: {data['completed_count']} / {data['total_phases']}\n")
-
-        if data["completed_phases"]:
-            console.print("[bold]✅ Выполненные фазы:[/bold]")
-            for pid in data["completed_phases"]:
-                console.print(f"  {PASS} {pid}")
-            console.print("")
-
-        console.print("[bold]📋 Все фазы с инструкциями:[/bold]")
-        for ph in data["all_phases"]:
-            status_icon = PASS if ph["id"] in data["completed_phases"] else "[dim]⏳[/dim]"
-            badges = []
-            if ph["is_blocker"]:
-                badges.append("[red]BLOCKER[/red]")
-            if ph["is_delegated"]:
-                badges.append("[yellow]DELEGATED[/yellow]")
-            if ph["is_critic"]:
-                badges.append("[magenta]CRITIC[/magenta]")
-            badge_str = f" ({', '.join(badges)})" if badges else ""
-            console.print(f"\n{status_icon} {ph['id']} — {ph['name']}{badge_str}")
-            if ph["instructions"]:
-                for inst in ph["instructions"]:
-                    et = inst.get("execution_type", "sync")
-                    et_icon = "[green]→[/green]" if et == "sync" else "[orange]⇄[/orange]"
-                    console.print(f"   {et_icon} {inst['step']}")
-            if ph["checks"]:
-                for ck in ph["checks"]:
-                    console.print(f"   [dim]✓ {ck['description']}[/dim]")
-
-        console.print("\n[bold]🔄 Repeatable задания (последний отчёт):[/bold]")
-        for rc in data["repeatable_checks"]:
-            icon = PASS if rc["ok"] else FAIL
-            console.print(f"   {icon} {rc['item']}")
-        return
-
     # --report : evaluate report
     if report:
         result = wizard.evaluate_report(jira_key, report, repo_path)
@@ -197,9 +81,129 @@ def wizard_cmd(
         print(json.dumps(result, ensure_ascii=False, indent=2))
         sys.exit(0 if result["verdict"] == "PASS" else 1)
 
+    # --skip : force advance
+    if skip:
+        _force_advance(engine, jira_key, repo_path, jmode)
+        sys.exit(0)
+
     # default: show phase instructions
     wizard.main(jira_key, repo_path)
 
 
-# ── main ────────────────────────────────────────────────────────────────
+def _force_advance(engine: wizard.WizardEngine, jira_key: str, repo: str, jmode: bool) -> None:
+    """Force transition to next phase without report."""
+    from .core import out_json
+    from .. import config
 
+    current = engine.current_phase
+    phase = engine.phase_map.get(current)
+    if phase is None:
+        phase = engine._resolve_phase(current)
+
+    if phase is None or current == "COMPLETE":
+        msg = "Все фазы выполнены. Некуда переходить."
+        if jmode:
+            out_json({"ok": True, "message": msg})
+        console.print(f"{PASS} {msg}")
+        return
+
+    next_phase, next_name = engine._get_next_phase(phase)
+    engine._record_transition(phase.id, next_phase or "COMPLETE")
+
+    msg = f"Форсированный переход: {phase.id} ({phase.name}) → {next_phase or 'COMPLETE'}"
+    if jmode:
+        out_json({
+            "ok": True,
+            "verdict": "SKIP",
+            "phase": phase.id,
+            "phase_name": phase.name,
+            "next_phase": next_phase,
+            "next_phase_name": next_name,
+            "message": msg,
+        })
+    console.print(f"{WARN} {msg}")
+    if next_phase and next_name:
+        console.print(f"[bold]▶️ Следующая фаза: {next_phase} — {next_name}[/bold]")
+        # Show instructions for next phase
+        prompt = engine.get_phase_prompt(next_phase)
+        console.print(f"\n{prompt}")
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  COMMAND: history
+# ═══════════════════════════════════════════════════════════════════════
+
+@cli.command()
+@click.argument("jira_key")
+@click.option("--repo", default=None, help="Repo path")
+@click.option("--n", default=20, help="Количество записей (default 20)")
+@click.pass_context
+def history_cmd(ctx: click.Context, jira_key: str, repo: Optional[str], n: int) -> None:
+    """📜 History — история отчётов, переходов и статусов по задаче.
+
+    Usage:
+      wartz-workflow history TASK-KEY           → последние 20 записей
+      wartz-workflow history TASK-KEY --n 50     → последние 50 записей
+    """
+    jira_key = _require_valid_key(jira_key)
+    jmode = ctx.obj.get("json_mode", False)
+
+    task_id = jira_key.split("-")[-1] if "-" in jira_key else jira_key
+    records = convo.get_messages(task_id, limit=n)
+
+    if jmode:
+        out_json({
+            "ok": True,
+            "jira_key": jira_key,
+            "count": len(records),
+            "records": [
+                {
+                    "role": r.role,
+                    "phase_id": r.phase_id,
+                    "tags": r.tags,
+                    "content": r.content,
+                    "created_at": r.created_at,
+                }
+                for r in records
+            ],
+        })
+
+    if not records:
+        console.print(f"{WARN} История для {jira_key} пуста.")
+        return
+
+    console.print(f"[bold]📜 History: {jira_key}[/bold] (последние {len(records)} записей)\n")
+    for r in records:
+        tag_icon = "🔄" if r.tags == "transition" else "📝" if r.role == "user" else "🤖"
+        phase_str = f" [phase {r.phase_id}]" if r.phase_id else ""
+        console.print(f"{tag_icon} [{r.created_at}]{phase_str}")
+        lines = r.content.split("\n")
+        for line in lines[:5]:
+            console.print(f"   {line}")
+        if len(lines) > 5:
+            console.print(f"   ... и ещё {len(lines) - 5} строк")
+        console.print("")
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  COMMAND: ui
+# ═══════════════════════════════════════════════════════════════════════
+
+@cli.command("ui")
+@click.option("--port", default=7788, help="Порт (default 7788)")
+@click.option("--host", default="0.0.0.0", help="Хост (default 0.0.0.0)")
+@click.option("--daemon", is_flag=True, help="Запустить в background")
+def ui_cmd(port: int, host: str, daemon: bool) -> None:
+    """🌐 Web UI — просмотр фаз, задач, истории.
+
+    Usage: wartz-workflow ui [--port 7788] [--daemon]
+    """
+    from .ui import ensure_templates, app
+    ensure_templates()
+    console.print(f"{PASS} Запуск wartz-workflow UI на http://{host}:{port}")
+    if daemon:
+        console.print(f"[dim]Background mode: http://{host}:{port}[/dim]")
+    else:
+        console.print("[dim]Press Ctrl+C to stop[/dim]")
+    import uvicorn
+    uvicorn.run(app, host=host, port=port, log_level="warning")
