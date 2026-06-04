@@ -1,15 +1,13 @@
-"""WorkflowDB — SQLite persistence for phases, instructions, checks, evidence.
+"""WorkflowDB — SQLite persistence for workflow entities.
 
-Схема: 4 таблицы + tasks/task_history. Всё остальное удалено.
+Схема: 8 таблиц (phase_groups, agents, phases, instructions, checks, evidence, tasks, task_history, cli_history)
+Плоская структура, связи через FOREIGN KEY. Legacy-таблицы удалены.
 """
 
-import json
 import sqlite3
 from pathlib import Path
-from datetime import datetime, timezone
 
 DB_PATH = Path.home() / ".wartz-workflow" / "workflow.db"
-
 SCHEMA_PATH = Path(__file__).parent / "db_schema.sql"
 
 
@@ -33,7 +31,6 @@ class WorkflowDB:
         ddl = SCHEMA_PATH.read_text(encoding="utf-8")
         with self._conn() as conn:
             conn.executescript(ddl)
-            self._migrate(conn)
             conn.commit()
 
     def _list_tables(self) -> set[str]:
@@ -48,81 +45,127 @@ class WorkflowDB:
             count = conn.execute("SELECT COUNT(*) FROM phases").fetchone()[0]
             return count == 0
 
+    # ── Phase Groups ───────────────────────────────────────────────────
+
+    def create_phase_group(self, data: dict) -> None:
+        with self._conn() as conn:
+            conn.execute(
+                "INSERT INTO phase_groups (id, name, sort_order) VALUES (?, ?, ?)",
+                (data["id"], data["name"], data.get("sort_order", 0)),
+            )
+            conn.commit()
+
+    def get_phase_groups(self) -> list[dict]:
+        with self._conn() as conn:
+            rows = conn.execute("SELECT * FROM phase_groups ORDER BY sort_order").fetchall()
+            return [dict(r) for r in rows]
+
+    def get_phase_group(self, group_id: str) -> dict | None:
+        with self._conn() as conn:
+            row = conn.execute("SELECT * FROM phase_groups WHERE id = ?", (group_id,)).fetchone()
+            return dict(row) if row else None
+
+    def update_phase_group(self, group_id: str, data: dict) -> None:
+        fields = []
+        vals = []
+        for k, v in data.items():
+            if k != "id":
+                fields.append(f"{k} = ?")
+                vals.append(v)
+        vals.append(group_id)
+        sql = f"UPDATE phase_groups SET {', '.join(fields)} WHERE id = ?"
+        with self._conn() as conn:
+            conn.execute(sql, vals)
+            conn.commit()
+
+    def delete_phase_group(self, group_id: str) -> None:
+        with self._conn() as conn:
+            conn.execute("DELETE FROM phase_groups WHERE id = ?", (group_id,))
+            conn.commit()
+
+    # ── Agents ─────────────────────────────────────────────────────────
+
+    def create_agent(self, data: dict) -> int:
+        with self._conn() as conn:
+            c = conn.execute(
+                "INSERT INTO agents (name) VALUES (?)",
+                (data["name"],),
+            )
+            conn.commit()
+            return c.lastrowid or 0
+
+    def get_agents(self) -> list[dict]:
+        with self._conn() as conn:
+            rows = conn.execute("SELECT * FROM agents ORDER BY id").fetchall()
+            return [dict(r) for r in rows]
+
+    def get_agent(self, agent_id: int) -> dict | None:
+        with self._conn() as conn:
+            row = conn.execute("SELECT * FROM agents WHERE id = ?", (agent_id,)).fetchone()
+            return dict(row) if row else None
+
+    def update_agent(self, agent_id: int, data: dict) -> None:
+        fields = []
+        vals = []
+        for k, v in data.items():
+            if k != "id":
+                fields.append(f"{k} = ?")
+                vals.append(v)
+        vals.append(agent_id)
+        sql = f"UPDATE agents SET {', '.join(fields)} WHERE id = ?"
+        with self._conn() as conn:
+            conn.execute(sql, vals)
+            conn.commit()
+
+    def delete_agent(self, agent_id: int) -> None:
+        with self._conn() as conn:
+            conn.execute("DELETE FROM agents WHERE id = ?", (agent_id,))
+            conn.commit()
+
+    # ── Import Phases (from YAML/JSON) ─────────────────────────────────
+
     def import_phases(self, phases: list[dict]) -> None:
         with self._conn() as conn:
             for p in phases:
                 conn.execute(
                     """
-                    INSERT OR REPLACE INTO phases (
-                        id, name, description, phase_order, skills,
-                        delegate_agent, delegate_timeout, delegate_max_cycles, delegate_toolsets,
-                        parallel_with, rollback_target, next_recommendation
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT OR REPLACE INTO phases (id, name, description, phase_order, group_id, skills, agent_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         p["id"],
                         p["name"],
                         p.get("description") or "",
                         p["phase_order"],
+                        p.get("group_id"),
                         p.get("skills"),
-                        p.get("delegate_agent"),
-                        p.get("delegate_timeout"),
-                        p.get("delegate_max_cycles"),
-                        p.get("delegate_toolsets"),
-                        p.get("parallel_with"),
-                        p.get("rollback_target"),
-                        p.get("next_recommendation"),
+                        p.get("agent_id"),
                     ),
                 )
                 for inst in p.get("instructions", []):
                     conn.execute(
                         """
-                        INSERT INTO instructions (phase_id, step_num, description, execution_type, tool)
-                        VALUES (?, ?, ?, ?, ?)
+                        INSERT INTO instructions (phase_id, step_num, description, execution_type)
+                        VALUES (?, ?, ?, ?)
                         """,
                         (
                             p["id"],
                             inst["step_num"],
                             inst["description"],
                             inst.get("execution_type", "sync"),
-                            inst.get("tool"),
                         ),
                     )
                 for c in p.get("checks", []):
                     conn.execute(
-                        """
-                        INSERT INTO checks (phase_id, description, command)
-                        VALUES (?, ?, ?)
-                        """,
-                        (p["id"], c["description"], c.get("command")),
+                        "INSERT INTO checks (phase_id, description) VALUES (?, ?)",
+                        (p["id"], c["description"]),
                     )
                 for e in p.get("evidence", []):
                     conn.execute(
-                        """
-                        INSERT INTO evidence (phase_id, description, validator)
-                        VALUES (?, ?, ?)
-                        """,
-                        (p["id"], e.get("description", e.get("item", "")), e.get("validator")),
+                        "INSERT INTO evidence (phase_id, description) VALUES (?, ?)",
+                        (p["id"], e.get("description", e.get("item", ""))),
                     )
             conn.commit()
-
-    def _migrate(self, conn: sqlite3.Connection) -> None:
-        """Добавить колонки которых не хватает (idempotent)."""
-        for column, ctype in [
-            ("delegate_agent", "TEXT"),
-            ("delegate_timeout", "INTEGER DEFAULT 30"),
-            ("delegate_max_cycles", "INTEGER DEFAULT 3"),
-            ("delegate_toolsets", "TEXT"),
-            ("parallel_with", "TEXT"),
-            ("rollback_target", "TEXT"),
-            ("next_recommendation", "TEXT"),
-            ("group_id", "TEXT DEFAULT 'setup'"),
-        ]:
-            try:
-                conn.execute(f"ALTER TABLE phases ADD COLUMN {column} {ctype}")
-            except sqlite3.OperationalError:
-                pass
 
     # ── Read ───────────────────────────────────────────────────────────
 
@@ -160,15 +203,17 @@ class WorkflowDB:
         with self._conn() as conn:
             conn.execute(
                 """
-                INSERT INTO phases (id, name, description, phase_order, skills)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO phases (id, name, description, phase_order, group_id, skills, agent_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     data["id"],
                     data["name"],
                     data.get("description") or "",
                     data["phase_order"],
+                    data.get("group_id"),
                     data.get("skills"),
+                    data.get("agent_id"),
                 ),
             )
             conn.commit()
@@ -177,8 +222,9 @@ class WorkflowDB:
         fields = []
         vals = []
         for k, v in data.items():
-            fields.append(f"{k} = ?")
-            vals.append(v)
+            if k != "id":
+                fields.append(f"{k} = ?")
+                vals.append(v)
         vals.append(phase_id)
         sql = f"UPDATE phases SET {', '.join(fields)} WHERE id = ?"
         with self._conn() as conn:
@@ -196,15 +242,14 @@ class WorkflowDB:
         with self._conn() as conn:
             c = conn.execute(
                 """
-                INSERT INTO instructions (phase_id, step_num, description, execution_type, tool)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO instructions (phase_id, step_num, description, execution_type)
+                VALUES (?, ?, ?, ?)
                 """,
                 (
                     data["phase_id"],
                     data["step_num"],
                     data["description"],
                     data.get("execution_type", "sync"),
-                    data.get("tool"),
                 ),
             )
             conn.commit()
@@ -215,8 +260,9 @@ class WorkflowDB:
             fields = []
             vals = []
             for k, v in data.items():
-                fields.append(f"{k} = ?")
-                vals.append(v)
+                if k != "id":
+                    fields.append(f"{k} = ?")
+                    vals.append(v)
             vals.append(inst_id)
             sql = f"UPDATE instructions SET {', '.join(fields)} WHERE id = ?"
             conn.execute(sql, vals)
@@ -246,11 +292,8 @@ class WorkflowDB:
     def create_check(self, data: dict) -> int:
         with self._conn() as conn:
             c = conn.execute(
-                """
-                INSERT INTO checks (phase_id, description, command)
-                VALUES (?, ?, ?)
-                """,
-                (data["phase_id"], data["description"], data.get("command")),
+                "INSERT INTO checks (phase_id, description) VALUES (?, ?)",
+                (data["phase_id"], data["description"]),
             )
             conn.commit()
             return c.lastrowid
@@ -260,8 +303,9 @@ class WorkflowDB:
             fields = []
             vals = []
             for k, v in data.items():
-                fields.append(f"{k} = ?")
-                vals.append(v)
+                if k != "id":
+                    fields.append(f"{k} = ?")
+                    vals.append(v)
             vals.append(check_id)
             sql = f"UPDATE checks SET {', '.join(fields)} WHERE id = ?"
             conn.execute(sql, vals)
@@ -277,10 +321,7 @@ class WorkflowDB:
     def create_evidence(self, data: dict) -> int:
         with self._conn() as conn:
             c = conn.execute(
-                """
-                INSERT INTO evidence (phase_id, description)
-                VALUES (?, ?)
-                """,
+                "INSERT INTO evidence (phase_id, description) VALUES (?, ?)",
                 (data["phase_id"], data["description"]),
             )
             conn.commit()
@@ -291,8 +332,9 @@ class WorkflowDB:
             fields = []
             vals = []
             for k, v in data.items():
-                fields.append(f"{k} = ?")
-                vals.append(v)
+                if k != "id":
+                    fields.append(f"{k} = ?")
+                    vals.append(v)
             vals.append(ev_id)
             sql = f"UPDATE evidence SET {', '.join(fields)} WHERE id = ?"
             conn.execute(sql, vals)
@@ -303,21 +345,7 @@ class WorkflowDB:
             conn.execute("DELETE FROM evidence WHERE id = ?", (ev_id,))
             conn.commit()
 
-    # ── Aliases (backward compat) ─────────────────────────────────────
-    def add_instruction(self, phase_id: str, data: dict) -> None:
-        return self.create_instruction({"phase_id": phase_id, **data})
-
-    def add_check(self, phase_id: str, data: dict) -> None:
-        return self.create_check({"phase_id": phase_id, **data})
-
-    def add_evidence(self, phase_id: str, data: dict) -> None:
-        return self.create_evidence({"phase_id": phase_id, **data})
-
-    get_instructions = get_phase_instructions
-    get_checks       = get_phase_checks
-    get_evidence     = get_phase_evidence
-
-    # ── Task CRUD ──────────────────────────────────────────────────────
+    # ── Task CRUD ────────────────────────────────────────────────────
 
     def create_task(self, data: dict) -> int:
         with self._conn() as conn:
@@ -369,6 +397,8 @@ class WorkflowDB:
             conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
             conn.commit()
 
+    # ── Task History ─────────────────────────────────────────────────
+
     def add_task_history(self, task_id: int, phase_id: str, status: str = "pending") -> None:
         with self._conn() as conn:
             conn.execute(
@@ -381,7 +411,6 @@ class WorkflowDB:
             conn.commit()
 
     def get_task_history(self, task_id: int) -> list[dict]:
-        """История выполнения фаз по задаче (task_history)."""
         with self._conn() as conn:
             rows = conn.execute(
                 "SELECT * FROM task_history WHERE task_id = ? ORDER BY completed_at",
@@ -390,14 +419,37 @@ class WorkflowDB:
             return [dict(r) for r in rows]
 
     # Legacy aliases
+    add_instruction = lambda self, phase_id, data: self.create_instruction({"phase_id": phase_id, **data})
+    add_check       = lambda self, phase_id, data: self.create_check({"phase_id": phase_id, **data})
+    add_evidence    = lambda self, phase_id, data: self.create_evidence({"phase_id": phase_id, **data})
+
     def add_task_phase(self, task_id: int, phase_id: str, status: str = "pending") -> None:
         return self.add_task_history(task_id, phase_id, status)
 
     def get_task_phases(self, task_id: int) -> list[dict]:
         return self.get_task_history(task_id)
 
+    # ── CLI History ──────────────────────────────────────────────────
+
+    def log_cli_call(self, command: str, task_key: str | None, request: str | None, response: str | None) -> None:
+        with self._conn() as conn:
+            conn.execute(
+                "INSERT INTO cli_history (command, task_key, request, response) VALUES (?, ?, ?, ?)",
+                (command, task_key, request, response),
+            )
+            conn.commit()
+
+    def get_cli_history(self, limit: int = 100) -> list[dict]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM cli_history ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    # ── Batch Operations ─────────────────────────────────────────────
+
     def batch_update_orders(self, batch: list[tuple[str, int]]) -> None:
-        """Массовое обновление phase_order (drag-and-drop Kanban)."""
         with self._conn() as conn:
             conn.executemany(
                 "UPDATE phases SET phase_order = ? WHERE id = ?",
@@ -406,75 +458,6 @@ class WorkflowDB:
             conn.commit()
 
     def update_phase_order(self, phase_id: str, new_order: int) -> None:
-        """Обновить порядок одной фазы."""
         with self._conn() as conn:
             conn.execute("UPDATE phases SET phase_order = ? WHERE id = ?", (new_order, phase_id))
             conn.commit()
-
-    def get_questions(self, phase_id: str) -> list[dict]:
-        """Legacy stub — questions удалены из БД."""
-        return []
-
-    def get_checkups(self, phase_id: str) -> list[dict]:
-        """Legacy stub — checkups удалены из БД."""
-        return []
-
-    def run_checkup(self, checkup_id: int, status: str = "") -> None:
-        pass
-
-    def get_checkup(self, checkup_id: int) -> dict | None:
-        return None
-
-    def get_pending_checkups(self) -> list[dict]:
-        return []
-
-    def seed_default_groups(self) -> None:
-        """Seed default phase groups if table existed. Legacy stub."""
-        pass
-
-    def get_phase_groups(self) -> list[dict]:
-        """Legacy stub — phase_groups удалены из БД."""
-        return []
-
-    def get_phase_group(self, group_id: str) -> dict | None:
-        return None
-
-    def create_group(self, data: dict) -> int:
-        return 0
-
-    def create_phase_group(self, data: dict) -> None:
-        pass
-
-    def delete_group(self, group_id: str) -> None:
-        pass
-
-    def delete_group_by_id(self, group_id: str) -> None:
-        pass
-
-    def delete_phase_group(self, group_id: str) -> None:
-        pass
-
-    def update_group(self, group_id: str, data: dict) -> None:
-        pass
-
-    def update_phase_group(self, group_id: str, data: dict) -> None:
-        pass
-
-    def batch_update_group_orders(self, batch: list[tuple[str, int]]) -> None:
-        pass
-
-    def assign_phase_group(self, phase_id: str, group_id: str) -> None:
-        pass
-
-    def update_phase_group_assignment(self, phase_id: str, group_id: str) -> None:
-        pass
-
-    def update_groups_order(self, ordered_ids: list[str]) -> None:
-        pass
-
-    def batch_update_groups(self, group_map: dict[str, str]) -> None:
-        pass
-
-    def update_phase_parallel(self, phase_id: str, target: str | None) -> None:
-        pass
-

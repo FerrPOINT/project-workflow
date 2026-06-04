@@ -143,8 +143,8 @@ class WizardEngine:
                 "parallel_with": getattr(p, "parallel_with", None),
                 "skills": p.skills,
                 "instructions": [{"step": i.step, "tool": getattr(i, "tool", None), "execution_type": getattr(i, "execution_type", "sync")} for i in p.instructions],
-                "checks": [{"type": c.type, "description": c.description, "optional": getattr(c, "optional", False)} for c in p.checks],
-                "evidence": [{"item": e.item, "validator": getattr(e, "validator", None)} for e in p.evidence],
+                "checks": [{"description": c.description, "optional": getattr(c, "optional", False)} for c in p.checks],
+                "evidence": [{"item": e.item} for e in p.evidence],
             })
 
         phase_history = []

@@ -24,7 +24,10 @@ class TestInit:
     def test_creates_all_tables(self, db):
         """После init должны быть все таблицы."""
         tables = db._list_tables()
-        assert {"phases", "instructions", "checks", "evidence", "tasks", "task_history"}.issubset(tables)
+        assert {
+            "phases", "instructions", "checks", "evidence",
+            "tasks", "task_history", "phase_groups", "agents", "cli_history"
+        }.issubset(tables)
 
     def test_init_idempotent(self, db):
         """Повторный init не падает."""
@@ -44,11 +47,11 @@ class TestImportPhases:
                 "phase_order": 1,
                 "skills": json.dumps(["skill-a", "skill-b"]),
                 "instructions": [
-                    {"step_num": 1, "description": "Do this", "execution_type": "sync", "tool": "shell"},
-                    {"step_num": 2, "description": "Do that", "execution_type": "parallel", "tool": None},
+                    {"step_num": 1, "description": "Do this", "execution_type": "sync"},
+                    {"step_num": 2, "description": "Do that", "execution_type": "parallel"},
                 ],
                 "checks": [
-                    {"description": "File exists", "command": "ls file.txt"},
+                    {"description": "File exists"},
                 ],
                 "evidence": [
                     {"description": "Screenshot of UI"},
@@ -83,10 +86,10 @@ class TestImportPhases:
                 "phase_order": 10,
                 "skills": None,
                 "instructions": [
-                    {"step_num": 1, "description": "Step 1", "execution_type": "sync", "tool": None},
+                    {"step_num": 1, "description": "Step 1", "execution_type": "sync"},
                 ],
                 "checks": [
-                    {"description": "Check 1", "command": None},
+                    {"description": "Check 1"},
                 ],
                 "evidence": [
                     {"description": "Evidence 1"},
@@ -126,7 +129,7 @@ class TestPhaseCRUD:
 
     def test_delete_phase_cascades(self, db):
         db.create_phase({"id": "p-3", "name": "P3", "description": "", "phase_order": 3, "skills": None})
-        db.add_instruction("p-3", {"step_num": 1, "description": "I1", "execution_type": "sync", "tool": None})
+        db.add_instruction("p-3", {"step_num": 1, "description": "I1", "execution_type": "sync"})
         db.delete_phase("p-3")
         assert db.get_phase("p-3") is None
         # инструкции тоже должны быть удалены
@@ -137,8 +140,8 @@ class TestInstructionCRUD:
     def test_reorder_instructions(self, db):
         """Поменять порядок инструкций."""
         db.create_phase({"id": "p-i", "name": "I", "description": "", "phase_order": 1, "skills": None})
-        db.add_instruction("p-i", {"step_num": 1, "description": "First", "execution_type": "sync", "tool": None})
-        db.add_instruction("p-i", {"step_num": 2, "description": "Second", "execution_type": "parallel", "tool": None})
+        db.add_instruction("p-i", {"step_num": 1, "description": "First", "execution_type": "sync"})
+        db.add_instruction("p-i", {"step_num": 2, "description": "Second", "execution_type": "parallel"})
 
         # reorder: Second → первый, First → второй
         rows = db.get_phase_instructions("p-i")
@@ -152,7 +155,7 @@ class TestInstructionCRUD:
 
     def test_delete_instruction(self, db):
         db.create_phase({"id": "p-d", "name": "D", "description": "", "phase_order": 1, "skills": None})
-        db.add_instruction("p-d", {"step_num": 1, "description": "To delete", "execution_type": "sync", "tool": None})
+        db.add_instruction("p-d", {"step_num": 1, "description": "To delete", "execution_type": "sync"})
         rows = db.get_phase_instructions("p-d")
         db.delete_instruction(rows[0]["id"])
         assert len(db.get_phase_instructions("p-d")) == 0
@@ -182,3 +185,54 @@ class TestTaskCRUD:
         pmap = {p["phase_id"]: p["status"] for p in history}
         assert pmap["0"] == "done"
         assert pmap["1"] == "pending"
+
+
+class TestPhaseGroupCRUD:
+    def test_create_and_get(self, db):
+        db.create_phase_group({"id": "prep", "name": "Подготовка", "sort_order": 1})
+        g = db.get_phase_group("prep")
+        assert g["name"] == "Подготовка"
+        assert g["sort_order"] == 1
+
+    def test_list_ordered(self, db):
+        db.create_phase_group({"id": "z", "name": "ZZ", "sort_order": 2})
+        db.create_phase_group({"id": "a", "name": "AA", "sort_order": 1})
+        groups = db.get_phase_groups()
+        assert [g["id"] for g in groups] == ["a", "z"]
+
+    def test_update_and_delete(self, db):
+        db.create_phase_group({"id": "upd", "name": "Old", "sort_order": 1})
+        db.update_phase_group("upd", {"name": "New"})
+        assert db.get_phase_group("upd")["name"] == "New"
+        db.delete_phase_group("upd")
+        assert db.get_phase_group("upd") is None
+
+
+class TestAgentCRUD:
+    def test_create_and_get(self, db):
+        aid = db.create_agent({"name": "coder"})
+        a = db.get_agent(aid)
+        assert a["name"] == "coder"
+
+    def test_list(self, db):
+        db.create_agent({"name": "critic"})
+        db.create_agent({"name": "coder"})
+        agents = db.get_agents()
+        assert len(agents) == 2
+
+    def test_update_and_delete(self, db):
+        aid = db.create_agent({"name": "Old"})
+        db.update_agent(aid, {"name": "New"})
+        assert db.get_agent(aid)["name"] == "New"
+        db.delete_agent(aid)
+        assert db.get_agent(aid) is None
+
+
+class TestCliHistory:
+    def test_log_and_get(self, db):
+        db.log_cli_call("step", "AAT-5", '{"report": "done"}', '{"next_phase": "1"}')
+        db.log_cli_call("history", "AAT-5", None, None)
+        rows = db.get_cli_history()
+        assert len(rows) == 2
+        cmds = {r["command"] for r in rows}
+        assert cmds == {"step", "history"}

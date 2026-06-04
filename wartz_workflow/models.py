@@ -9,40 +9,36 @@ from typing import List, Optional
 @dataclass
 class PhaseCheck:
     """Проверка которую CLI выполняет для фазы."""
-    type: str = ""                          # file_exists, jira_status, git_commit, etc.
     description: str = ""
-    path: Optional[str] = None             # для file_exists
-    expected: Optional[List[str]] = None  # для jira_status
-    command: Optional[str] = None        # shell-команда
+    path: Optional[str] = None
+    expected: Optional[List[str]] = None
     fail_msg: str = "Check failed"
-    optional: bool = False                # если True — warning, не blocker
+    optional: bool = False
 
 
 @dataclass
 class PhaseEvidence:
     """Evidence который агент должен собрать."""
-    item: str = ""                         # описание evidence
-    validator: Optional[str] = None        # тип валидации (grep, file_size, etc.)
+    item: str = ""
 
 
 @dataclass
 class PhaseInstruction:
     """Инструкция для агента."""
-    step: str = ""                         # текст инструкции
-    tool: Optional[str] = None             # рекомендуемый инструмент (skill, browser, etc.)
-    example: Optional[str] = None          # пример команды
-    execution_type: str = "sync"           # sync | parallel
+    step: str = ""
+    example: Optional[str] = None
+    execution_type: str = "sync"
 
 
 @dataclass
 class PhaseDelegate:
     """Конфигурация delegate_task для делегированной фазы."""
-    agent: str = ""                        # имя агента (wartzresearcher, wartzreviewer, etc.)
-    prompt_template: str = ""              # шаблон промпта
-    context: List[str] = field(default_factory=list)  # доп. контекст
-    toolsets: List[str] = field(default_factory=list)   # toolsets агента
+    agent: str = ""
+    prompt_template: str = ""
+    context: List[str] = field(default_factory=list)
+    toolsets: List[str] = field(default_factory=list)
     timeout_min: int = 10
-    max_cycles: int = 3                    # максимум retry cycles при FAIL
+    max_cycles: int = 3
 
 
 @dataclass
@@ -61,10 +57,10 @@ class Phase:
     instructions: List[PhaseInstruction] = field(default_factory=list)
     delegate: Optional[PhaseDelegate] = None
     next_recommendation: str = ""
-    parallel_with: Optional[str] = None   # фаза, с которой можно параллельно
-    gate_after: Optional[str] = None      # CriticGate после этой фазы
-    rollback_target: Optional[str] = None # куда откатиться при FAIL
-    execution_mode: str = "sync"          # sync | parallel — режим выполнения фазы
+    parallel_with: Optional[str] = None
+    gate_after: Optional[str] = None
+    rollback_target: Optional[str] = None
+    execution_mode: str = "sync"
 
     def render_instructions(self, context: dict) -> List[str]:
         """Подставить переменные в инструкции."""

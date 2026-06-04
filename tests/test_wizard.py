@@ -52,8 +52,8 @@ class TestBuildChecklist:
             id="0.01",
             name="Docs Setup",
             checks=[
-                schema.PhaseCheck(type="file_exists", description="создать README"),
-                schema.PhaseCheck(type="file_exists", description="создать README"),  # dup
+                schema.PhaseCheck(description="создать README"),
+                schema.PhaseCheck(description="создать README"),  # dup
             ],
             instructions=[
                 schema.PhaseInstruction(step="написать требования"),
@@ -74,8 +74,8 @@ class TestBuildChecklist:
             id="0.01",
             name="Docs",
             checks=[
-                schema.PhaseCheck(type="run", description="одинаковый текст"),
-                schema.PhaseCheck(type="run", description="одинаковый текст"),
+                schema.PhaseCheck(description="одинаковый текст"),
+                schema.PhaseCheck(description="одинаковый текст"),
             ],
         )
         engine = wizard.WizardEngine("D-1", "/tmp")

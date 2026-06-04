@@ -30,7 +30,6 @@ def _build_phase_from_db(row: dict, wdb: WorkflowDB) -> Phase:
     instructions = [
         PhaseInstruction(
             step=ir["description"],
-            tool=ir.get("tool"),
             execution_type=ir.get("execution_type", "sync"),
         )
         for ir in inst_rows
@@ -39,9 +38,7 @@ def _build_phase_from_db(row: dict, wdb: WorkflowDB) -> Phase:
     check_rows = wdb.get_phase_checks(phase_id)
     checks = [
         PhaseCheck(
-            type=cr.get("check_type") or "script_pass",
             description=cr["description"],
-            command=cr.get("command"),
         )
         for cr in check_rows
     ]
@@ -50,13 +47,25 @@ def _build_phase_from_db(row: dict, wdb: WorkflowDB) -> Phase:
     evidence = [
         PhaseEvidence(
             item=er["description"],
-            validator=er.get("validator"),
         )
         for er in ev_rows
     ]
 
+    skills = json.loads(row["skills"]) if row.get("skills") else []
+
     delegate = None
-    if row.get("delegate_agent"):
+    if row.get("agent_id"):
+        agent = wdb.get_agent(row["agent_id"])
+        if agent:
+            delegate = PhaseDelegate(
+                agent=agent["name"],
+                prompt_template=f"Phase {phase_id}",
+                toolsets=json.loads(agent["toolsets"]) if agent.get("toolsets") else [],
+                timeout_min=agent.get("timeout") or 10,
+                max_cycles=agent.get("max_cycles") or 3,
+            )
+    # Legacy fallback для существующих БД (старые колонки delegate_*)
+    elif row.get("delegate_agent"):
         delegate = PhaseDelegate(
             agent=row["delegate_agent"],
             prompt_template="",
@@ -65,15 +74,13 @@ def _build_phase_from_db(row: dict, wdb: WorkflowDB) -> Phase:
             max_cycles=row.get("delegate_max_cycles") or 3,
         )
 
-    skills = json.loads(row["skills"]) if row.get("skills") else []
-
     return Phase(
         id=phase_id,
         name=row["name"],
         description=row.get("description") or "",
         min_time_min=row.get("min_time_min") or 0,
         is_blocker=phase_id in config.BLOCKER_PHASES,
-        is_delegated=bool(row.get("delegate_agent")),
+        is_delegated=bool(delegate),
         is_critic=phase_id in config.CRITIC_PHASES,
         skills=skills,
         checks=checks,
@@ -129,17 +136,6 @@ def _load_phases_yaml() -> List[Phase]:
         checks = [PhaseCheck(**c) for c in item.get("checks", [])]
         evidence = [PhaseEvidence(**e) for e in item.get("evidence", [])]
         instructions = [PhaseInstruction(**i) for i in item.get("instructions", [])]
-        delegate = None
-        if "delegate" in item:
-            d = item["delegate"]
-            delegate = PhaseDelegate(
-                agent=d["agent"],
-                prompt_template=d.get("prompt_template", ""),
-                context=d.get("context", []),
-                toolsets=d.get("toolsets", []),
-                timeout_min=d.get("timeout_min", 10),
-                max_cycles=d.get("max_cycles", 3),
-            )
         phases.append(Phase(
             id=item["id"],
             name=item["name"],
@@ -152,7 +148,6 @@ def _load_phases_yaml() -> List[Phase]:
             checks=checks,
             evidence=evidence,
             instructions=instructions,
-            delegate=delegate,
             next_recommendation=item.get("next_recommendation", ""),
             parallel_with=item.get("parallel_with"),
             gate_after=item.get("gate_after"),
