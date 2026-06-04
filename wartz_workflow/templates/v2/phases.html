@@ -72,7 +72,7 @@
     <div class="card-list" id="list-{{ group_id }}" data-group="{{ group_id }}">
       {% for p in grouped_phases[group_id] %}
       <div class="kanban-card" draggable="true"
-           data-phase-id="{{ p.id }}"
+           data-phase-id="{{ p.code }}"
            data-phase-order="{{ p.phase_num }}"
            ondragstart="cardDragStart(event)"
            ondragend="cardDragEnd(event)"
@@ -161,7 +161,7 @@ function colDrop(e){
     const gid = c.dataset.group;
     c.querySelectorAll('.kanban-card').forEach(card=>{
       const pid = card.dataset.phaseId;
-      orders.push({phase_id:pid, phase_order:orderCounter, group:gid});
+      orders.push({phase_code:pid, phase_order:orderCounter, group:gid});
       card.dataset.phaseOrder = orderCounter;
       card.querySelector('.phase-num').textContent = '№'+orderCounter;
       orderCounter++;

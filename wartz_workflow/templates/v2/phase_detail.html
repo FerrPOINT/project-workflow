@@ -116,7 +116,7 @@
     <p class="wiki-subtitle">{{ phase.description or '' }}</p>
 
     <div class="wiki-meta">
-      <span>ID: {{ phase.id }} — №{{ phase.phase_num }}</span>
+      <span>Code: {{ phase.code }} — №{{ phase.phase_num }}</span>
       <span class="execution-toggle" data-mode="{{ phase.execution_type or 'sync' }}" onclick="togglePhaseMode(this)">
         {% if phase.execution_type == 'parallel' %}
         <b class="mode-parallel">⚡ parallel</b>
@@ -439,7 +439,7 @@ async function savePhase() {
     }
   });
 
-  const resp = await fetch('/api/phases/{{ phase.id }}', {
+  const resp = await fetch('/api/phases/{{ phase.code }}', {
     method: 'PUT',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(data)

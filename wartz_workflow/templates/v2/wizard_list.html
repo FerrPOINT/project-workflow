@@ -49,7 +49,7 @@
 
   <div class="phase-list">
     {% for phase in phases %}
-    <a href="/wizard/{{ phase.id }}" class="phase-item">
+    <a href="/wizard/{{ phase.code }}" class="phase-item">
       <div class="phase-item-header">
         <span class="phase-item-num">№{{ loop.index }}</span>
         <span class="phase-item-name">{{ phase.name }}</span>
@@ -63,7 +63,7 @@
       </div>
       <div class="phase-item-desc">{{ phase.description or '' }}</div>
       <div class="phase-item-meta">
-        <span>ID: {{ phase.id }}</span>
+        <span>Code: {{ phase.code }}</span>
       </div>
     </a>
     {% endfor %}

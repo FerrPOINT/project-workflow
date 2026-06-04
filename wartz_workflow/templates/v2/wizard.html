@@ -3,7 +3,7 @@
 {% block title %}Wizard — {{ phase.name }}{% endblock %}
 {% block header_title %}Wizard: Фаза №{{ phase.phase_num }}{% endblock %}
 {% block header_actions %}
-  <a href="/phase/{{ phase.id }}" class="btn btn-secondary">⬅ К фазе</a>
+  <a href="/phase/{{ phase.code }}" class="btn btn-secondary">⬅ К фазе</a>
 {% endblock %}
 
 {% block extra_style %}
@@ -185,7 +185,7 @@ function handleFile(input, itemName){
 
 function saveDraft(){
   const data = collectData();
-  localStorage.setItem('wizard_draft_{{ phase.id }}', JSON.stringify(data));
+  localStorage.setItem('wizard_draft_{{ phase.code }}', JSON.stringify(data));
   showToast('💾 Черновик сохранён', 'success');
 }
 
@@ -201,14 +201,14 @@ function collectData(){
     checkboxes[el.id] = el.checked;
   });
   
-  return {answers: answers, checks: checkboxes, phase_id: '{{ phase.id }}'};
+  return {answers: answers, checks: checkboxes, phase_id: '{{ phase.code }}'};
 }
 
 async function submitWizard(){
   const data = collectData();
   
   try{
-    const resp = await fetch('/api/wizard/{{ phase.id }}', {
+    const resp = await fetch('/api/wizard/{{ phase.code }}', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(data)
@@ -255,7 +255,7 @@ async function submitWizard(){
 }
 
 // Load draft
-const draft = localStorage.getItem('wizard_draft_{{ phase.id }}');
+const draft = localStorage.getItem('wizard_draft_{{ phase.code }}');
 if(draft){
   const data = JSON.parse(draft);
   Object.keys(data.answers || {}).forEach(function(key){
