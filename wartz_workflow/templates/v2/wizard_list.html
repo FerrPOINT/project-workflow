@@ -64,9 +64,6 @@
       <div class="phase-item-desc">{{ phase.description or '' }}</div>
       <div class="phase-item-meta">
         <span>ID: {{ phase.id }}</span>
-        {% if phase.skills %}
-        <span>🔧 {{ phase.skills|length }} skills</span>
-        {% endif %}
       </div>
     </a>
     {% endfor %}

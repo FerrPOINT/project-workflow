@@ -23,9 +23,6 @@ hrflow --help
 ### CLI
 
 ```bash
-# Инициализация задачи
-hrflow init TASKNEIROKLYUCH-456 "Auth system"
-
 # Показать текущую фазу + инструкции
 hrflow wizard TASKNEIROKLYUCH-456
 
@@ -46,8 +43,7 @@ hrflow ui --port 8811
 |----------|------------|
 | `/` | Dashboard |
 | `/phases` | Kanban: фазы в колонках |
-| `/phase/{id}` | Детальная карточка фазы: инструкции, чеки, evidence, skills |
-| `/execution` | Граф выполнения: drag-and-drop reorder + merge parallel |
+| `/phase/{id}` | Детальная карточка фазы: инструкции, чеки, evidence |
 | `/settings` | Настройки: key_patterns, Jira/GitLab URLs, UI port |
 | `/wizard` | Список фаз для wizard |
 | `/wizard/{phase_id}` | Форма прохождения фазы |
@@ -77,6 +73,12 @@ wartz_workflow/
 ├── rollback.py          # Git rollback engine
 ├── engine.py            # Declarative engine
 ├── state.py             # progress.json + git ops
+├── adapters/
+│   ├── db/
+│   ├── http/
+│   └── ports.py
+├── api/
+│   └── routers/
 ├── references/
 │   └── seed.json        # 30-phase seed data (canonical source)
 └── templates/v2/
@@ -84,15 +86,15 @@ wartz_workflow/
     ├── dashboard.html
     ├── phases.html
     ├── phase_detail.html
-    ├── execution.html
     ├── settings.html
     ├── wizard.html
     └── wizard_list.html
 
 tests/
-├── test_ui.py           # 30+ тестов Web UI
-├── test_graph.py        # execution batches + DND API
+├── test_ui.py           # Web UI
+├── test_integration.py  # End-to-end
 ├── test_db.py           # SQLite CRUD
+├── test_db_constraints.py # DB CHECK constraints
 ├── test_wizard_context.py # WizardEngine.get_full_context()
 ├── test_wizard.py       # wizard CLI
 ├── test_phases.py
@@ -101,7 +103,9 @@ tests/
 ├── test_rollback.py
 ├── test_state.py
 ├── test_verify.py
-└── test_adapters.py
+├── test_adapters.py
+├── test_cli_core.py
+└── test_cli_ui.py
 ```
 
 ---
