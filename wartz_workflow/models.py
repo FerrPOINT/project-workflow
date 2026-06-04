@@ -35,18 +35,6 @@ class PhaseInstruction:
 
 
 @dataclass
-class PhaseQuestion:
-    """Вопрос для фазы — задаётся агентом, анализируется по keywords."""
-    text: str = ""                         # текст вопроса
-    required: bool = True                  # обязательный или можно ответить "не делал"
-    expected_keywords: List[str] = field(default_factory=list)  # ключевые слова для положительного ответа
-    min_evidence_lines: int = 1            # минимум строк evidence
-    hint: Optional[str] = None             # подсказка при неполном ответе
-    auto_command: Optional[str] = None     # команда для автопроверки
-    validate_fn: Optional[str] = None      # имя python-функции для валидации (опционально)
-
-
-@dataclass
 class PhaseDelegate:
     """Конфигурация delegate_task для делегированной фазы."""
     agent: str = ""                        # имя агента (wartzresearcher, wartzreviewer, etc.)
@@ -71,7 +59,6 @@ class Phase:
     checks: List[PhaseCheck] = field(default_factory=list)
     evidence: List[PhaseEvidence] = field(default_factory=list)
     instructions: List[PhaseInstruction] = field(default_factory=list)
-    questions: List[PhaseQuestion] = field(default_factory=list)
     delegate: Optional[PhaseDelegate] = None
     next_recommendation: str = ""
     parallel_with: Optional[str] = None   # фаза, с которой можно параллельно

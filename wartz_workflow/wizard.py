@@ -1,40 +1,22 @@
-"""Workflow Wizard v5.0 — conversational gate evaluator.
+"""Workflow Wizard — conversational gate evaluator.
 
-Принцип работы:
-  1. Агент присылает отчёт: "я сделал X, Y, Z"
-  2. Wizard проверяет покрытие по чеклисту текущей фазы
-  3. Возвращает verdict:
-     - PASS → переход на след фазу + новые инструкции + repeatable задания
-     - FAIL → список что не сделано + требование доработать
-  4. Повторяющиеся задания (repeatable_checks) — выполняются каждый ход
-
-No интерактивных Prompt. Только evaluate(report) → verdict.
+Все данные из БД (phases, instructions, checks, evidence). Нет хардкода.
 """
 
 from __future__ import annotations
 
 import re
-import subprocess
 from typing import List, Optional, Tuple, Dict, Any
 
 from .db import WorkflowDB
-from . import schema, conversation as convo
+from . import models, conversation as convo
 from .schema import load_phases_from_db, get_phase_from_db
 
 
-# ── Icons ─────────────────────────────────────────────────────────────
 PASS_ICON = "✅"
 FAIL_ICON = "❌"
 WARN_ICON = "⚠️"
 INFO_ICON = "ℹ️"
-
-
-# ── Repeatable checks (каждый ход) ───────────────────────────────────
-REPEATABLE_CHECKS = [
-    "Залогировать работу по фазе в файл info/",
-    "Обновить progress.json текущей фазой",
-    "Добавить запись в changelog.md",
-]
 
 
 class WizardEngine:
@@ -43,13 +25,11 @@ class WizardEngine:
     def __init__(self, jira_key: str, repo: Optional[str] = None):
         self.jira_key = jira_key
         self.repo = repo
-        self.task_id = jira_key  # Simplified; could be resolved from state
+        self.task_id = jira_key
 
-        # Load current phase from history or default to -1
         history_phase = convo.get_last_phase(self.task_id)
         self.current_phase = history_phase or "-1"
 
-        # Load phases from SQLite DB instead of YAML/seed.json
         self._wdb = WorkflowDB()
         self._wdb.init()
         self.all_phases = load_phases_from_db(self._wdb)
@@ -60,21 +40,7 @@ class WizardEngine:
     # ═══════════════════════════════════════════════════════════════════
 
     def evaluate(self, report: str) -> dict:
-        """Основной метод: принять отчёт агента, вернуть verdict.
-
-        Returns:
-            {
-                "verdict": "PASS" | "FAIL",
-                "phase": "0.6",
-                "phase_name": "Researcher #1",
-                "covered": ["проверил пуллреквесты", "воспроизвёл баги"],
-                "missing": ["запустить параллельного агента"],
-                "repeatable": ["залогировать фазу"],
-                "next_phase": "1" | None,   # только при PASS
-                "next_phase_name": "Preflight",
-                "message": "Отлично, переходим... / Не хватает...",
-            }
-        """
+        """Основной метод: принять отчёт агента, вернуть verdict."""
         phase = self.phase_map.get(self.current_phase)
         if phase is None:
             phase = self._resolve_phase(self.current_phase)
@@ -84,37 +50,30 @@ class WizardEngine:
                 "phase": self.current_phase,
                 "phase_name": "Complete",
                 "message": "Все фазы выполнены.",
-                "covered": [], "missing": [], "repeatable": [],
+                "covered": [], "missing": [],
                 "next_phase": None, "next_phase_name": None,
             }
 
-        # Build checklist from phase requirements
         checklist = self._build_checklist(phase)
         covered, missing = self._check_coverage(report, checklist)
 
-        # Evaluate repeatable checks (always present)
-        repeatable_status = self._check_repeatable(report)
-
-        if not missing and all(r["ok"] for r in repeatable_status):
-            # PASS — advance to next phase
+        if not missing:
             next_phase, next_name = self._get_next_phase(phase)
             self._record_transition(phase.id, next_phase or "COMPLETE")
 
-            msg = self._build_pass_message(phase, covered, repeatable_status, next_phase, next_name)
+            msg = self._build_pass_message(phase, covered, next_phase, next_name)
             return {
                 "verdict": "PASS",
                 "phase": phase.id,
                 "phase_name": phase.name,
                 "covered": covered,
                 "missing": [],
-                "repeatable": [r["item"] for r in repeatable_status],
                 "next_phase": next_phase,
                 "next_phase_name": next_name,
                 "message": msg,
             }
         else:
-            # FAIL — return missing items + repeatable failures
-            msg = self._build_fail_message(phase, missing, repeatable_status)
+            msg = self._build_fail_message(phase, missing)
             convo.add_wizard_answer(self.task_id, self.jira_key, phase.id, f"fail: {missing}", ok=False)
             return {
                 "verdict": "FAIL",
@@ -122,17 +81,13 @@ class WizardEngine:
                 "phase_name": phase.name,
                 "covered": covered,
                 "missing": missing,
-                "repeatable": [r["item"] for r in repeatable_status if not r["ok"]],
                 "next_phase": None,
                 "next_phase_name": None,
                 "message": msg,
             }
 
     def get_phase_prompt(self, phase_id: Optional[str] = None) -> str:
-        """Сформировать промпт для агента: инструкции фазы + repeatable задания.
-
-        Используется когда агент впервые обращается к фазе.
-        """
+        """Сформировать промпт для агента: инструкции фазы."""
         pid = phase_id or self.current_phase
         phase = self.phase_map.get(pid)
         if phase is None:
@@ -150,13 +105,6 @@ class WizardEngine:
         for idx, item in enumerate(checklist, 1):
             lines.append(f"   {idx}. {item}")
 
-        lines.extend([
-            "",
-            "🔄 Повторяющиеся задания (каждый ход):",
-        ])
-        for idx, item in enumerate(REPEATABLE_CHECKS, 1):
-            lines.append(f"   {idx}. {item}")
-
         if phase.is_blocker:
             lines.extend(["", "🔴 Это BLOCKER фаза — пропустить нельзя."])
         if phase.is_delegated:
@@ -164,38 +112,23 @@ class WizardEngine:
 
         lines.extend([
             "",
-            f"Когда выполнишь — пришли отчёт: 'hrflow wizard {self.jira_key}' с описанием что сделал.",
+            f"Когда выполнишь — пришли отчёт: 'wartz-workflow step --task {self.jira_key} --report \"...\"'",
         ])
 
         return "\n".join(lines)
 
     def get_full_context(self) -> dict:
-        """Собрать полный контекст для агента-визарда.
-
-        Возвращает структуру с:
-        - выполненными фазами
-        - текущей фазой
-        - ВСЕМИ фазами + их инструкции / чеки / evidence
-        - историей переходов и отчётов
-        - статусом повторяющихся заданий
-        """
-        # Completed phases — из conversation history transitions
+        """Собрать полный контекст для агента."""
         all_messages = convo.get_messages(self.task_id, limit=500)
         transitions = [m for m in all_messages if m.tags == "transition"]
         completed_phase_ids = list(dict.fromkeys(
             m.phase_id for m in transitions if m.phase_id and m.phase_id != "COMPLETE"
         ))
 
-        # Current phase
         current = self.current_phase
-        # If current says COMPLETE → pick last real phase or "-1"
         if current == "COMPLETE" or current not in self.phase_map:
-            if completed_phase_ids:
-                current = completed_phase_ids[-1]
-            else:
-                current = "-1"
+            current = completed_phase_ids[-1] if completed_phase_ids else "-1"
 
-        # Build all phases summary
         all_phases = []
         for p in self.all_phases:
             all_phases.append({
@@ -214,7 +147,6 @@ class WizardEngine:
                 "evidence": [{"item": e.item, "validator": getattr(e, "validator", None)} for e in p.evidence],
             })
 
-        # Phase history digest (lightweight)
         phase_history = []
         for m in all_messages[-50:]:
             phase_history.append({
@@ -224,14 +156,6 @@ class WizardEngine:
                 "content_preview": m.content[:200],
                 "created_at": m.created_at,
             })
-
-        # Repeatable checks status against last user note
-        last_user_note = ""
-        for m in reversed(all_messages):
-            if m.role == "user":
-                last_user_note = m.content
-                break
-        repeatable_status = self._check_repeatable(last_user_note)
 
         current_phase_name = ""
         if current in self.phase_map:
@@ -243,24 +167,20 @@ class WizardEngine:
         return {
             "jira_key": self.jira_key,
             "repo": self.repo,
-            "current_phase": current,
+            "current_phase": self.current_phase,
             "current_phase_name": current_phase_name,
             "completed_phases": completed_phase_ids,
             "all_phases": all_phases,
             "phase_history": phase_history,
-            "repeatable_checks": [
-                {"item": r["item"], "ok": r["ok"]} for r in repeatable_status
-            ],
             "total_phases": len(all_phases),
             "completed_count": len(completed_phase_ids),
         }
-
     # ═══════════════════════════════════════════════════════════════════
     #  INTERNAL
     # ═══════════════════════════════════════════════════════════════════
 
-    def _build_checklist(self, phase: schema.Phase) -> List[str]:
-        """Собрать уникальные проверки фазы (без повторяющихся)."""
+    def _build_checklist(self, phase: models.Phase) -> List[str]:
+        """Собрать уникальные проверки фазы из БД (checks + instructions + evidence)."""
         items: List[str] = []
         for check in phase.checks:
             items.append(check.description)
@@ -268,7 +188,6 @@ class WizardEngine:
             items.append(inst.step)
         for ev in phase.evidence:
             items.append(ev.item)
-        # Deduplicate
         seen = set()
         result = []
         for i in items:
@@ -297,31 +216,7 @@ class WizardEngine:
         words = re.findall(r'[a-zа-яё0-9]+', text.lower())
         return [w for w in words if len(w) > 3][:4]
 
-    def _check_repeatable(self, report: str) -> List[Dict[str, Any]]:
-        """Проверить повторяющиеся задания с гибким matching (стемминг)."""
-        ans_lower = report.lower()
-        results = []
-        for item in REPEATABLE_CHECKS:
-            ok = self._match_repeatable(item, ans_lower)
-            results.append({"item": item, "ok": ok})
-        return results
-
-    def _match_repeatable(self, item: str, text_lower: str) -> bool:
-        """Гибкое сопоставление с учётом русских окончаний."""
-        # Core concepts for each repeatable item
-        concepts = {
-            "логир": ["логир", "log"],           # залогировать, залогировал
-            "progress": ["progress", "прогресс"],
-            "changelog": ["changelog", "чейнджлог"],
-        }
-        for key, variants in concepts.items():
-            if key in item.lower():
-                return any(v in text_lower for v in variants)
-        # Fallback to keyword matching
-        words = self._extract_keywords(item)
-        return any(w in text_lower for w in words)
-
-    def _get_next_phase(self, current_phase: schema.Phase) -> Tuple[Optional[str], Optional[str]]:
+    def _get_next_phase(self, current_phase: models.Phase) -> Tuple[Optional[str], Optional[str]]:
         """Получить след фазу."""
         from . import phases as phases_mod
         next_p = phases_mod.get_next_phase(current_phase.id)
@@ -337,9 +232,8 @@ class WizardEngine:
 
     def _build_pass_message(
         self,
-        phase: schema.Phase,
+        phase: models.Phase,
         covered: List[str],
-        repeatable: List[Dict[str, Any]],
         next_phase: Optional[str],
         next_name: Optional[str],
     ) -> str:
@@ -348,20 +242,12 @@ class WizardEngine:
             f"   Покрыто пунктов: {len(covered)}",
         ]
         if next_phase and next_name:
-            lines.extend([
-                "",
-                f"▶️ Переходим к фазе {next_phase} — {next_name}",
-            ])
+            lines.extend(["", f"▶️ Переходим к фазе {next_phase} — {next_name}"])
         else:
             lines.extend(["", f"{PASS_ICON} Все фазы выполнены!"])
         return "\n".join(lines)
 
-    def _build_fail_message(
-        self,
-        phase: schema.Phase,
-        missing: List[str],
-        repeatable: List[Dict[str, Any]],
-    ) -> str:
+    def _build_fail_message(self, phase: models.Phase, missing: List[str]) -> str:
         lines = [
             f"{FAIL_ICON} Фаза {phase.id} ({phase.name}) — требуются доработки.",
             "",
@@ -371,20 +257,13 @@ class WizardEngine:
             lines.append(f"   • {item}")
         if len(missing) > 5:
             lines.append(f"   ... и ещё {len(missing) - 5}")
-
-        failed_repeatable = [r["item"] for r in repeatable if not r["ok"]]
-        if failed_repeatable:
-            lines.extend(["", "Пропущены повторяющиеся задания:"])
-            for item in failed_repeatable:
-                lines.append(f"   • {item}")
-
         lines.extend([
             "",
-            f"Доработай и пришли новый отчёт: 'hrflow wizard {self.jira_key}'",
+            f"Доработай и пришли новый отчёт: 'wartz-workflow step --task {self.jira_key} --report \"...\"'",
         ])
         return "\n".join(lines)
 
-    def _resolve_phase(self, phase_id: str) -> Optional[schema.Phase]:
+    def _resolve_phase(self, phase_id: str) -> Optional[models.Phase]:
         for p in self.all_phases:
             if p.id == phase_id or p.id.startswith(phase_id + "."):
                 return p
@@ -408,7 +287,7 @@ def get_phase_instructions(jira_key: str, phase_id: Optional[str] = None, repo: 
 
 
 def main(jira_key: str, report: Optional[str] = None, repo: Optional[str] = None) -> None:
-    """CLI entry: hrflow wizard TASK-123 [--report "я сделал ..."].
+    """CLI entry: wartz-workflow step --task TASK-123 [--report "..."].
 
     Без --report: показать инструкции текущей фазы.
     С --report: оценить отчёт.

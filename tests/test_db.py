@@ -22,9 +22,9 @@ def db(tmp_path, monkeypatch):
 
 class TestInit:
     def test_creates_all_tables(self, db):
-        """После init должны быть все 5 таблиц."""
+        """После init должны быть все таблицы."""
         tables = db._list_tables()
-        assert {"phases", "instructions", "checks", "evidence", "checkups"}.issubset(tables)
+        assert {"phases", "instructions", "checks", "evidence", "tasks", "task_phases"}.issubset(tables)
 
     def test_init_idempotent(self, db):
         """Повторный init не падает."""
@@ -53,16 +53,6 @@ class TestImportPhases:
                 "evidence": [
                     {"description": "Screenshot of UI"},
                 ],
-                "checkups": [
-                    {
-                        "name": "Jira check",
-                        "check_type": "jira_status",
-                        "target": "TASK-123",
-                        "interval_min": 0,
-                        "last_status": "unknown",
-                        "fail_action": "warn",
-                    },
-                ],
             },
             {
                 "id": "test-2",
@@ -73,7 +63,6 @@ class TestImportPhases:
                 "instructions": [],
                 "checks": [],
                 "evidence": [],
-                "checkups": [],
             },
         ]
         db.import_phases(phases)
@@ -85,7 +74,7 @@ class TestImportPhases:
         assert json.loads(rows[0]["skills"]) == ["skill-a", "skill-b"]
 
     def test_get_phase_detail(self, db):
-        """Деталь фазы включает инструкции, checks, evidence, checkups."""
+        """Деталь фазы включает инструкции, checks, evidence."""
         phases = [
             {
                 "id": "test-d",
@@ -102,7 +91,6 @@ class TestImportPhases:
                 "evidence": [
                     {"description": "Evidence 1"},
                 ],
-                "checkups": [],
             }
         ]
         db.import_phases(phases)
@@ -170,38 +158,27 @@ class TestInstructionCRUD:
         assert len(db.get_phase_instructions("p-d")) == 0
 
 
-class TestCheckupCRUD:
-    def test_run_checkup(self, db):
-        db.create_phase({"id": "p-c", "name": "C", "description": "", "phase_order": 1, "skills": None})
-        db.add_checkup("p-c", {
-            "name": "Jira check",
-            "check_type": "jira_status",
-            "target": "TASK-42",
-            "interval_min": 0,
-            "last_status": "unknown",
-            "fail_action": "warn",
-        })
-        checkups = db.get_phase_checkups("p-c")
-        assert len(checkups) == 1
+class TestTaskCRUD:
+    def test_create_and_get_task(self, db):
+        db.create_task({"jira_key": "AAT-1", "title": "T1", "current_phase": "-1"})
+        t = db.get_task_by_jira("AAT-1")
+        assert t is not None
+        assert t["jira_key"] == "AAT-1"
 
-        # run → обновляет статус
-        db.run_checkup(checkups[0]["id"], status="ok")
-        row = db.get_checkup(checkups[0]["id"])
-        assert row["last_status"] == "ok"
-        assert row["last_run"] is not None
+    def test_update_task(self, db):
+        db.create_task({"jira_key": "AAT-2", "title": "Old", "current_phase": "-1"})
+        t = db.get_task_by_jira("AAT-2")
+        db.update_task(t["id"], {"title": "New"})
+        t2 = db.get_task_by_jira("AAT-2")
+        assert t2["title"] == "New"
 
-    def test_get_pending(self, db):
-        db.create_phase({"id": "p-p", "name": "P", "description": "", "phase_order": 2, "skills": None})
-        db.add_checkup("p-p", {
-            "name": "Old check",
-            "check_type": "test_passed",
-            "target": "pytest",
-            "interval_min": 60,
-            "last_status": "unknown",
-            "fail_action": "warn",
-        })
-        # пометим как давно запущенное
-        pending = db.get_pending_checkups()
-        # unknown + interval_min 60 → должно вернуться
-        names = [p["name"] for p in pending]
-        assert "Old check" in names
+    def test_task_phases(self, db):
+        db.create_task({"jira_key": "AAT-3", "title": "T3", "current_phase": "-1"})
+        t = db.get_task_by_jira("AAT-3")
+        db.add_task_phase(t["id"], "0", "done")
+        db.add_task_phase(t["id"], "1", "pending")
+        phases = db.get_task_phases(t["id"])
+        assert len(phases) == 2
+        pmap = {p["phase_id"]: p["status"] for p in phases}
+        assert pmap["0"] == "done"
+        assert pmap["1"] == "pending"

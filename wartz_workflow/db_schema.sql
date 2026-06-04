@@ -1,4 +1,5 @@
--- WARTZ Workflow DB — минимальная схема
+-- WARTZ Workflow DB — минимальная схема (4 таблицы)
+-- Убрано: questions, answers, checkups, agents, phase_groups — всё в плоских таблицах.
 
 -- ═══════════════════════════════════════════════════════════════════
 --  phases — карточки workflow
@@ -42,7 +43,6 @@ CREATE TABLE IF NOT EXISTS checks (
     phase_id    TEXT NOT NULL REFERENCES phases(id) ON DELETE CASCADE,
     description TEXT NOT NULL,
     command     TEXT,
-    optional    INTEGER DEFAULT 0,
     UNIQUE(phase_id, description)
 );
 
@@ -56,33 +56,6 @@ CREATE TABLE IF NOT EXISTS evidence (
     validator   TEXT,
     collected   INTEGER DEFAULT 0,
     UNIQUE(phase_id, description)
-);
-
--- ═══════════════════════════════════════════════════════════════════
---  questions — вопросы для wizard (проверка понимания)
--- ═══════════════════════════════════════════════════════════════════
-CREATE TABLE IF NOT EXISTS questions (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    phase_id     TEXT NOT NULL REFERENCES phases(id) ON DELETE CASCADE,
-    qtext        TEXT NOT NULL,
-    required     INTEGER DEFAULT 1,
-    expected_keywords TEXT,  -- JSON list
-    hint         TEXT,
-    auto_command TEXT,
-    validate_fn  TEXT,
-    step_num     INTEGER DEFAULT 0
-);
-
--- ═══════════════════════════════════════════════════════════════════
---  answers — ответы агента на вопросы
--- ═══════════════════════════════════════════════════════════════════
-CREATE TABLE IF NOT EXISTS answers (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    question_id  INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
-    jira_key     TEXT NOT NULL,
-    answer_text  TEXT,
-    ok           INTEGER DEFAULT 0,
-    created_at   TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ═══════════════════════════════════════════════════════════════════
@@ -109,47 +82,4 @@ CREATE TABLE IF NOT EXISTS task_phases (
     status      TEXT DEFAULT 'pending',  -- pending | done | skipped
     completed_at TEXT,
     UNIQUE(task_id, phase_id)
-);
-
--- ═══════════════════════════════════════════════════════════════════
---  agents — настраиваемые агенты для делегированных фаз
--- ═══════════════════════════════════════════════════════════════════
-CREATE TABLE IF NOT EXISTS agents (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    name        TEXT NOT NULL UNIQUE,
-    role        TEXT,
-    toolsets    TEXT,  -- JSON list
-    oath        TEXT,
-    is_default  INTEGER DEFAULT 0,
-    created_at  TEXT DEFAULT CURRENT_TIMESTAMP
-);
-
--- ═══════════════════════════════════════════════════════════════════
---  checkups — результаты выполнения checks
--- ═══════════════════════════════════════════════════════════════════
-CREATE TABLE IF NOT EXISTS checkups (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    phase_id    TEXT NOT NULL REFERENCES phases(id) ON DELETE CASCADE,
-    name        TEXT,
-    check_type  TEXT,
-    target      TEXT,
-    interval_min INTEGER DEFAULT 0,
-    last_status TEXT DEFAULT 'unknown',
-    last_run    TEXT,
-    fail_action TEXT DEFAULT 'warn',
-    check_id    INTEGER REFERENCES checks(id),
-    passed      INTEGER DEFAULT 0,
-    output      TEXT,
-    ran_at      TEXT DEFAULT CURRENT_TIMESTAMP
-);
-
--- ═══════════════════════════════════════════════════════════════════
---  phase_groups — группы фаз (SETUP, RESEARCH, PLAN, DEV, QA, CLOSURE)
--- ═══════════════════════════════════════════════════════════════════
-CREATE TABLE IF NOT EXISTS phase_groups (
-    id          TEXT PRIMARY KEY,
-    name        TEXT NOT NULL,
-    icon        TEXT,
-    sort_order  INTEGER NOT NULL DEFAULT 0,
-    created_at  TEXT DEFAULT CURRENT_TIMESTAMP
 );

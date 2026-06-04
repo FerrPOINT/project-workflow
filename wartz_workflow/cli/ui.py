@@ -1,4 +1,11 @@
-"""CLI commands: ui + step (consolidated)."""
+"""CLI commands — 2 команды: step, history. UI отдельно.
+
+ВНИМАНИЕ: Этот файл содержит РОВНО 2 команды. Не добавлять новые.
+- step     --task TASK-KEY [--report TEXT] [--skip] [--repo PATH]
+- history  --task TASK-KEY [--n N] [--repo PATH]
+
+ui.py содержит: `ui` (отдельно).
+"""
 
 from __future__ import annotations
 
@@ -18,20 +25,24 @@ from .. import wizard, conversation as convo
 from ..cli.core import cli, out_json, _require_valid_key
 from ..cli.core import console, PASS, FAIL, WARN, BLOCK
 
+# ── Guard: новые команды запрещены ──────────────────────────────────────
+# Если кто-то добавит @cli.command() сюда — тесты поймают.
+# См. test_ui.py::test_only_two_commands_allowed
+
 
 # ═══════════════════════════════════════════════════════════════════════
 #  COMMAND: step
 # ═══════════════════════════════════════════════════════════════════════
 
 @cli.command()
-@click.argument("jira_key")
-@click.option("--repo", default=None, help="Repo path (auto-detected if omitted)")
+@click.option("--task", required=True, help="Task key (e.g. TASKNEIROKLYUCH-42)")
 @click.option("--report", default=None, help="Отчёт агента (оценить и перейти)")
+@click.option("--repo", default=None, help="Repo path (auto-detected if omitted)")
 @click.option("--skip", is_flag=True, help="Форсировать переход к следующей фазе без отчёта")
 @click.pass_context
 def step_cmd(
     ctx: click.Context,
-    jira_key: str,
+    task: str,
     repo: Optional[str],
     report: Optional[str],
     skip: bool,
@@ -39,12 +50,12 @@ def step_cmd(
     """🚶 Step — движение по workflow: показать текущую фазу или отчитаться и перейти.
 
     Usage:
-      wartz-workflow step TASK-KEY                → текущие инструкции
-      wartz-workflow step TASK-KEY --report "..."  → оценить отчёт и перейти
-      wartz-workflow step TASK-KEY --skip         → форсировать переход без отчёта
+      wartz-workflow step --task TASK-KEY                → текущие инструкции
+      wartz-workflow step --task TASK-KEY --report "..."  → оценить отчёт и перейти
+      wartz-workflow step --task TASK-KEY --skip         → форсировать переход без отчёта
     """
     import time
-    jira_key = _require_valid_key(jira_key)
+    jira_key = _require_valid_key(task)
     jmode = ctx.obj.get("json_mode", False)
 
     from .. import state, config
@@ -134,18 +145,18 @@ def _force_advance(engine: wizard.WizardEngine, jira_key: str, repo: str, jmode:
 # ═══════════════════════════════════════════════════════════════════════
 
 @cli.command()
-@click.argument("jira_key")
+@click.option("--task", required=True, help="Task key")
 @click.option("--repo", default=None, help="Repo path")
 @click.option("--n", default=20, help="Количество записей (default 20)")
 @click.pass_context
-def history_cmd(ctx: click.Context, jira_key: str, repo: Optional[str], n: int) -> None:
+def history_cmd(ctx: click.Context, task: str, repo: Optional[str], n: int) -> None:
     """📜 History — история отчётов, переходов и статусов по задаче.
 
     Usage:
-      wartz-workflow history TASK-KEY           → последние 20 записей
-      wartz-workflow history TASK-KEY --n 50     → последние 50 записей
+      wartz-workflow history --task TASK-KEY           → последние 20 записей
+      wartz-workflow history --task TASK-KEY --n 50     → последние 50 записей
     """
-    jira_key = _require_valid_key(jira_key)
+    jira_key = _require_valid_key(task)
     jmode = ctx.obj.get("json_mode", False)
 
     task_id = jira_key.split("-")[-1] if "-" in jira_key else jira_key
@@ -186,7 +197,7 @@ def history_cmd(ctx: click.Context, jira_key: str, repo: Optional[str], n: int) 
 
 
 # ═══════════════════════════════════════════════════════════════════════
-#  COMMAND: ui
+#  UI — отдельно (не считается одной из 2 команд)
 # ═══════════════════════════════════════════════════════════════════════
 
 @cli.command("ui")
@@ -198,7 +209,7 @@ def ui_cmd(port: int, host: str, daemon: bool) -> None:
 
     Usage: wartz-workflow ui [--port 7788] [--daemon]
     """
-    from .ui import ensure_templates, app
+    from ..ui import ensure_templates, app
     ensure_templates()
     console.print(f"{PASS} Запуск wartz-workflow UI на http://{host}:{port}")
     if daemon:

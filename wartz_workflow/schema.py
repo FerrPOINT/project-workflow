@@ -1,4 +1,7 @@
-"""Schema loader — reads Phase models from SQLite DB with YAML fallback."""
+"""Schema loader — reads Phase models from SQLite DB with YAML fallback.
+
+Все данные — только из БД (phases, instructions, checks, evidence).
+"""
 
 from __future__ import annotations
 
@@ -15,7 +18,6 @@ from wartz_workflow.models import (
     PhaseDelegate,
     PhaseEvidence,
     PhaseInstruction,
-    PhaseQuestion,
 )
 from wartz_workflow.db import WorkflowDB
 
@@ -53,20 +55,6 @@ def _build_phase_from_db(row: dict, wdb: WorkflowDB) -> Phase:
         for er in ev_rows
     ]
 
-    q_rows = wdb.get_questions(phase_id)
-    questions = [
-        PhaseQuestion(
-            text=qr["qtext"],
-            required=bool(qr.get("required", 1)),
-            expected_keywords=json.loads(qr["expected_keywords"]) if qr.get("expected_keywords") else [],
-            hint=qr.get("hint"),
-            auto_command=qr.get("auto_command"),
-            validate_fn=qr.get("validate_fn"),
-            min_evidence_lines=1,
-        )
-        for qr in q_rows
-    ]
-
     delegate = None
     if row.get("delegate_agent"):
         delegate = PhaseDelegate(
@@ -91,7 +79,6 @@ def _build_phase_from_db(row: dict, wdb: WorkflowDB) -> Phase:
         checks=checks,
         evidence=evidence,
         instructions=instructions,
-        questions=questions,
         delegate=delegate,
         next_recommendation=row.get("next_recommendation") or "",
         parallel_with=row.get("parallel_with"),
@@ -117,7 +104,7 @@ def get_phase_from_db(wdb: WorkflowDB, phase_id: str) -> Optional[Phase]:
 
 
 def load_phases() -> List[Phase]:
-    """Load all phases from DB ordered by phase_order, with YAML fallback."""
+    """Load all phases from DB ordered by phase_order."""
     wdb = WorkflowDB()
     wdb.init()
     if wdb.is_empty():
@@ -126,7 +113,7 @@ def load_phases() -> List[Phase]:
     return [_build_phase_from_db(r, wdb) for r in rows]
 
 
-# ── YAML fallback (kept for backward compatibility) ────────────────────
+# ── YAML fallback (legacy, kept for initial import only) ───────────
 
 _YAML_PATH = Path(__file__).parent / "references" / "phases.yaml"
 
@@ -142,7 +129,6 @@ def _load_phases_yaml() -> List[Phase]:
         checks = [PhaseCheck(**c) for c in item.get("checks", [])]
         evidence = [PhaseEvidence(**e) for e in item.get("evidence", [])]
         instructions = [PhaseInstruction(**i) for i in item.get("instructions", [])]
-        questions = [PhaseQuestion(**q) for q in item.get("questions", [])]
         delegate = None
         if "delegate" in item:
             d = item["delegate"]
@@ -171,7 +157,6 @@ def _load_phases_yaml() -> List[Phase]:
             parallel_with=item.get("parallel_with"),
             gate_after=item.get("gate_after"),
             rollback_target=item.get("rollback_target"),
-            questions=questions,
         ))
     return phases
 

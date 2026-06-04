@@ -124,7 +124,6 @@ class PhaseService:
         phase["instructions"] = self._db.get_phase_instructions(phase_id)
         phase["checks"] = self._db.get_phase_checks(phase_id)
         phase["evidence"] = self._db.get_phase_evidence(phase_id)
-        phase["checkups"] = self._db.get_phase_checkups(phase_id)
         return phase
 
     # ── Singleton helpers ───────────────────────────────────────────────

@@ -14,7 +14,7 @@ class TestWizardFullContext:
         # Required top-level keys
         for key in ("jira_key", "repo", "current_phase", "current_phase_name",
                     "completed_phases", "all_phases", "phase_history",
-                    "repeatable_checks", "total_phases", "completed_count"):
+                    "total_phases", "completed_count"):
             assert key in ctx, f"Missing key: {key}"
 
     def test_jira_key_passed_through(self):
@@ -53,16 +53,6 @@ class TestWizardFullContext:
         ctx = engine.get_full_context()
         assert ctx["completed_phases"] == []
         assert ctx["completed_count"] == 0
-
-    def test_repeatable_checks_structure(self):
-        engine = wizard.WizardEngine("TASKNEIROKLYUCH-1", "/tmp")
-        ctx = engine.get_full_context()
-        rc = ctx["repeatable_checks"]
-        assert len(rc) == 3
-        for item in rc:
-            assert "item" in item
-            assert "ok" in item
-            assert isinstance(item["ok"], bool)
 
     def test_phase_history_is_list(self):
         engine = wizard.WizardEngine("TASKNEIROKLYUCH-1", "/tmp")
