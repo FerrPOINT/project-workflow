@@ -16,6 +16,13 @@ from wartz_workflow.profiles import (
 )
 
 
+def setup_module():
+    """Remove shared DB so schema falls back to YAML."""
+    db = Path.home() / ".wartz-workflow" / "workflow.db"
+    if db.exists():
+        db.unlink()
+
+
 class TestParseSoulMd:
     def test_researcher_profile(self, tmp_path):
         prof_dir = tmp_path / "wartzresearcher"

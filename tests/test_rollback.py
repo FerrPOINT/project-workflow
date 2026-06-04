@@ -2,7 +2,15 @@
 
 import pytest
 
+from pathlib import Path
 from wartz_workflow import rollback, schema, state
+
+
+def setup_module():
+    """Remove shared DB so schema falls back to YAML."""
+    db = Path.home() / ".wartz-workflow" / "workflow.db"
+    if db.exists():
+        db.unlink()
 
 
 class TestGetPhasesBetween:
