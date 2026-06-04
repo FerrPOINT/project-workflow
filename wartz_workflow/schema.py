@@ -148,7 +148,7 @@ def _load_phases_seed() -> List[Phase]:
 
 
 def _parse_old_yaml(item: dict) -> Phase:
-    """Parse a legacy YAML phase item."""
+    """Parse a seed JSON phase item."""
     _check_keys = {"description", "path", "expected", "fail_msg", "optional"}
     _evidence_keys = {"item", "validator"}
     _inst_keys = {"step", "example", "execution_type", "skills"}

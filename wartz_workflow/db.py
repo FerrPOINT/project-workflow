@@ -488,11 +488,6 @@ class WorkflowDB:
             ).fetchall()
             return [dict(r) for r in rows]
 
-    # Legacy aliases
-    add_instruction = lambda self, phase_id, data: self.create_instruction({"phase_id": phase_id, **data})
-    add_check       = lambda self, phase_id, data: self.create_check({"phase_id": phase_id, **data})
-    add_evidence    = lambda self, phase_id, data: self.create_evidence({"phase_id": phase_id, **data})
-
     def add_task_phase(self, task_id: int, phase_id: int | str, status: str = "pending") -> None:
         return self.add_task_history(task_id, phase_id, status)
 

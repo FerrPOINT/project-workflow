@@ -107,7 +107,6 @@ def _seed_to_sqlite() -> None:
     _db.import_phases(batch)
 
 
-# ── Backward-compat alias removed (legacy _yaml_to_sqlite)
 
 
 app = FastAPI(title="wartz-workflow UI", version="2.0.0")
