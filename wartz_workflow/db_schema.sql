@@ -73,9 +73,9 @@ CREATE TABLE IF NOT EXISTS tasks (
 );
 
 -- ═══════════════════════════════════════════════════════════════════
---  task_phases — история выполнения фаз по задаче
+--  task_history — история выполнения фаз по задаче
 -- ═══════════════════════════════════════════════════════════════════
-CREATE TABLE IF NOT EXISTS task_phases (
+CREATE TABLE IF NOT EXISTS task_history (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     task_id     INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
     phase_id    TEXT NOT NULL,

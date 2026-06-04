@@ -24,7 +24,7 @@ class TestInit:
     def test_creates_all_tables(self, db):
         """После init должны быть все таблицы."""
         tables = db._list_tables()
-        assert {"phases", "instructions", "checks", "evidence", "tasks", "task_phases"}.issubset(tables)
+        assert {"phases", "instructions", "checks", "evidence", "tasks", "task_history"}.issubset(tables)
 
     def test_init_idempotent(self, db):
         """Повторный init не падает."""
@@ -172,13 +172,13 @@ class TestTaskCRUD:
         t2 = db.get_task_by_jira("AAT-2")
         assert t2["title"] == "New"
 
-    def test_task_phases(self, db):
+    def test_task_history(self, db):
         db.create_task({"jira_key": "AAT-3", "title": "T3", "current_phase": "-1"})
         t = db.get_task_by_jira("AAT-3")
-        db.add_task_phase(t["id"], "0", "done")
-        db.add_task_phase(t["id"], "1", "pending")
-        phases = db.get_task_phases(t["id"])
-        assert len(phases) == 2
-        pmap = {p["phase_id"]: p["status"] for p in phases}
+        db.add_task_history(t["id"], "0", "done")
+        db.add_task_history(t["id"], "1", "pending")
+        history = db.get_task_history(t["id"])
+        assert len(history) == 2
+        pmap = {p["phase_id"]: p["status"] for p in history}
         assert pmap["0"] == "done"
         assert pmap["1"] == "pending"

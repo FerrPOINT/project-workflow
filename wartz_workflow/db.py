@@ -1,6 +1,6 @@
 """WorkflowDB — SQLite persistence for phases, instructions, checks, evidence.
 
-Схема: 4 таблицы + tasks/task_phases. Всё остальное удалено.
+Схема: 4 таблицы + tasks/task_history. Всё остальное удалено.
 """
 
 import json
@@ -369,24 +369,32 @@ class WorkflowDB:
             conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
             conn.commit()
 
-    def add_task_phase(self, task_id: int, phase_id: str, status: str = "pending") -> None:
+    def add_task_history(self, task_id: int, phase_id: str, status: str = "pending") -> None:
         with self._conn() as conn:
             conn.execute(
                 """
-                INSERT OR REPLACE INTO task_phases (task_id, phase_id, status, completed_at)
+                INSERT OR REPLACE INTO task_history (task_id, phase_id, status, completed_at)
                 VALUES (?, ?, ?, CASE WHEN ? = 'done' THEN CURRENT_TIMESTAMP ELSE NULL END)
                 """,
                 (task_id, phase_id, status, status),
             )
             conn.commit()
 
-    def get_task_phases(self, task_id: int) -> list[dict]:
+    def get_task_history(self, task_id: int) -> list[dict]:
+        """История выполнения фаз по задаче (task_history)."""
         with self._conn() as conn:
             rows = conn.execute(
-                "SELECT * FROM task_phases WHERE task_id = ? ORDER BY completed_at",
+                "SELECT * FROM task_history WHERE task_id = ? ORDER BY completed_at",
                 (task_id,),
             ).fetchall()
             return [dict(r) for r in rows]
+
+    # Legacy aliases
+    def add_task_phase(self, task_id: int, phase_id: str, status: str = "pending") -> None:
+        return self.add_task_history(task_id, phase_id, status)
+
+    def get_task_phases(self, task_id: int) -> list[dict]:
+        return self.get_task_history(task_id)
 
     def batch_update_orders(self, batch: list[tuple[str, int]]) -> None:
         """Массовое обновление phase_order (drag-and-drop Kanban)."""

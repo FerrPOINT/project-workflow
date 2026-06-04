@@ -328,8 +328,8 @@ def _load_tasks() -> list[dict]:
     
     for t in tasks:
         # Count completed phases
-        task_phases = wdb.get_task_phases(t["id"])
-        completed = sum(1 for tp in task_phases if tp["status"] == "done")
+        task_history = wdb.get_task_history(t["id"])
+        completed = sum(1 for tp in task_history if tp["status"] == "done")
         
         # Get current phase info
         current_phase_id = t.get("current_phase", "-1")
