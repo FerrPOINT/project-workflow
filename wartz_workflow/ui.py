@@ -52,7 +52,7 @@ def _get_db() -> db.WorkflowDB:
         _db = db.WorkflowDB()
         _db.init()
         if _db.is_empty():
-            _yaml_to_sqlite()
+            _seed_to_sqlite()
     return _db
 
 def _get_service() -> service.PhaseService:
@@ -63,13 +63,13 @@ def _get_service() -> service.PhaseService:
     return _srv
 
 
-def _yaml_to_sqlite() -> None:
-    """Разовый импорт phases.yaml → SQLite."""
-    yaml_phases = schema.load_phases()
+def _seed_to_sqlite() -> None:
+    """Разовый импорт seed.json → SQLite."""
+    seed_phases = schema.load_phases()
     _phase_order = config.PHASE_ORDER
     batch = []
     srv = service.PhaseService(_db)
-    for p in yaml_phases:
+    for p in seed_phases:
         # Полные данные фазы для шаблона
         extra = {
             "delegate_agent": p.delegate.agent if p.delegate else None,
@@ -107,8 +107,7 @@ def _yaml_to_sqlite() -> None:
     _db.import_phases(batch)
 
 
-# Backward-compat alias
-_seed_to_sqlite = _yaml_to_sqlite
+# ── Backward-compat alias removed (legacy _yaml_to_sqlite)
 
 
 app = FastAPI(title="wartz-workflow UI", version="2.0.0")

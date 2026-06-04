@@ -153,7 +153,7 @@ def build_delegate_payload(phase_code: str, task_key: str, task_id: str, title: 
     if not agent:
         return None
 
-    # Determine toolsets per agent type (hardcoded from legacy phases.yaml)
+    # Determine toolsets per agent type
     toolsets_map = {
         "wartzresearcher": ["search", "browser"],
         "wartzcritic":       ["review"],
