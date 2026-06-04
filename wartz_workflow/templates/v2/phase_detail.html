@@ -117,8 +117,8 @@
 
     <div class="wiki-meta">
       <span>ID: {{ phase.id }} — №{{ phase.phase_num }}</span>
-      <span class="execution-toggle" data-mode="{{ phase.execution_mode or 'sync' }}" onclick="togglePhaseMode(this)">
-        {% if phase.execution_mode == 'parallel' %}
+      <span class="execution-toggle" data-mode="{{ phase.execution_type or 'sync' }}" onclick="togglePhaseMode(this)">
+        {% if phase.execution_type == 'parallel' %}
         <b class="mode-parallel">⚡ parallel</b>
         {% else %}
         <b class="mode-sync">⏱ sync</b>
@@ -455,7 +455,7 @@ async function savePhase() {
     instructions: [],
     checks: [],
     evidence: [],
-    execution_mode: document.querySelector('.execution-toggle')?.dataset.mode || 'sync'
+    execution_type: document.querySelector('.execution-toggle')?.dataset.mode || 'sync'
   };
 
   document.querySelectorAll('#instructions-list .flow-card').forEach((card, idx) => {

@@ -129,8 +129,8 @@ class WorkflowDB:
             for p in phases:
                 conn.execute(
                     """
-                    INSERT OR REPLACE INTO phases (id, name, description, phase_order, group_id, skills, agent_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT OR REPLACE INTO phases (id, name, description, phase_order, group_id, skills, agent_id, execution_type)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         p["id"],
@@ -140,6 +140,7 @@ class WorkflowDB:
                         p.get("group_id"),
                         p.get("skills"),
                         p.get("agent_id"),
+                        p.get("execution_type", "sync"),
                     ),
                 )
                 for inst in p.get("instructions", []):
@@ -203,8 +204,8 @@ class WorkflowDB:
         with self._conn() as conn:
             conn.execute(
                 """
-                INSERT INTO phases (id, name, description, phase_order, group_id, skills, agent_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO phases (id, name, description, phase_order, group_id, skills, agent_id, execution_type)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     data["id"],
@@ -214,6 +215,7 @@ class WorkflowDB:
                     data.get("group_id"),
                     data.get("skills"),
                     data.get("agent_id"),
+                    data.get("execution_type", "sync"),
                 ),
             )
             conn.commit()

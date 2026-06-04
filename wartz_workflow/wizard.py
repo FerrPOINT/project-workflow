@@ -139,7 +139,7 @@ class WizardEngine:
                 "is_blocker": p.is_blocker,
                 "is_delegated": p.is_delegated,
                 "is_critic": p.is_critic,
-                "execution_mode": getattr(p, "execution_mode", "sync"),
+                "execution_type": getattr(p, "execution_type", "sync"),
                 "parallel_with": getattr(p, "parallel_with", None),
                 "skills": p.skills,
                 "instructions": [{"step": i.step, "tool": getattr(i, "tool", None), "execution_type": getattr(i, "execution_type", "sync")} for i in p.instructions],

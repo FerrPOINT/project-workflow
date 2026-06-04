@@ -91,7 +91,7 @@ def _build_phase_from_db(row: dict, wdb: WorkflowDB) -> Phase:
         parallel_with=row.get("parallel_with"),
         gate_after=None,
         rollback_target=row.get("rollback_target"),
-        execution_mode=row.get("execution_mode", "sync"),
+        execution_type=row.get("execution_type", "sync"),
     )
 
 

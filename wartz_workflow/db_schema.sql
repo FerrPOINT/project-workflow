@@ -22,13 +22,14 @@ CREATE TABLE IF NOT EXISTS agents (
 -- 3. phases — карточки workflow
 -- ═══════════════════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS phases (
-    id          TEXT PRIMARY KEY,
-    name        TEXT NOT NULL,
-    description TEXT,
-    phase_order INTEGER NOT NULL,
-    group_id    TEXT REFERENCES phase_groups(id),
-    skills      TEXT,                      -- JSON list
-    agent_id    INTEGER REFERENCES agents(id)
+    id             TEXT PRIMARY KEY,
+    name           TEXT NOT NULL,
+    description    TEXT,
+    phase_order    INTEGER NOT NULL,
+    group_id       TEXT REFERENCES phase_groups(id),
+    skills         TEXT,           -- JSON list
+    agent_id       INTEGER REFERENCES agents(id),
+    execution_type TEXT DEFAULT 'sync'   -- sync | parallel
 );
 
 -- ═══════════════════════════════════════════════════════════════════

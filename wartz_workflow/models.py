@@ -60,7 +60,7 @@ class Phase:
     parallel_with: Optional[str] = None
     gate_after: Optional[str] = None
     rollback_target: Optional[str] = None
-    execution_mode: str = "sync"
+    execution_type: str = "sync"
 
     def render_instructions(self, context: dict) -> List[str]:
         """Подставить переменные в инструкции."""

@@ -12,7 +12,7 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Перейди к Phase 0.0a — verify-suite.sh",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [
       {
         "id": 179,
@@ -65,7 +65,7 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Перейди к Phase 0.01 — создать task docs",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [
       {
         "id": 106,
@@ -186,7 +186,7 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Перейди к Phase 0.5 — Jira Transition",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [
       {
         "id": 18,
@@ -263,7 +263,7 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Перейди к Phase 0.01a — .gitignore check",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [
       {
         "id": 8,
@@ -393,7 +393,7 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Перейди к Phase 0.01b — token verification",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [
       {
         "id": 14,
@@ -462,7 +462,7 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Запускай Phase 1.5 (Deep Research) ПАРАЛЛЕЛЬНО",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [
       {
         "id": 37,
@@ -576,7 +576,7 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Перейди к Phase 0 — Jira Init",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [
       {
         "id": 16,
@@ -674,7 +674,7 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Перейди к Phase 0.000 — Workspace",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [
       {
         "id": 21,
@@ -758,7 +758,7 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Перейди к Phase 0.01 — Task Docs Setup",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [
       {
         "id": 24,
@@ -827,7 +827,7 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Перейди к Phase 0.9 — CriticGate",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [
       {
         "id": 26,
@@ -918,7 +918,7 @@
     "parallel_with": null,
     "rollback_target": "0.0a",
     "next_recommendation": "Перейди к Phase 1 — Preflight",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [
       {
         "id": 28,
@@ -995,7 +995,7 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Запускай Phase 0.6 (Researcher) ПАРАЛЛЕЛЬНО с Phase 1 (Preflight)",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [
       {
         "id": 31,
@@ -1079,7 +1079,7 @@
     "parallel_with": "1",
     "rollback_target": null,
     "next_recommendation": "Когда Researcher #1 + Preflight готовы → Phase 2 (Synthesis)",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [
       {
         "id": 34,
@@ -1139,7 +1139,7 @@
     "parallel_with": "2",
     "rollback_target": null,
     "next_recommendation": "Когда Deep Research + Synthesis готовы → Phase 3 (Plan)",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [],
     "checks": [],
     "evidence": [
@@ -1181,7 +1181,7 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Перейди к Phase 3 — написать план",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [
       {
         "id": 41,
@@ -1266,7 +1266,7 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Перейди к Phase 3.5 — CriticGate PrePlan",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [
       {
         "id": 45,
@@ -1358,7 +1358,7 @@
     "parallel_with": null,
     "rollback_target": "3",
     "next_recommendation": "Если PASS → Phase 4 (Implement). Если FAIL → вернись к Phase 3.",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [],
     "checks": [
       {
@@ -1410,7 +1410,7 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Перейди к Phase 4.5 — CriticGate PreCommit",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [
       {
         "id": 49,
@@ -1502,7 +1502,7 @@
     "parallel_with": "5",
     "rollback_target": "4",
     "next_recommendation": "Если PASS → Phase 5 (Validate). Если FAIL → вернись к Phase 4.",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [],
     "checks": [
       {
@@ -1554,7 +1554,7 @@
     "parallel_with": "4.5",
     "rollback_target": null,
     "next_recommendation": "Перейди к Phase 5.5 — Self-Test",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [
       {
         "id": 53,
@@ -1690,7 +1690,7 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Перейди к Phase 6 — Commit",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [
       {
         "id": 57,
@@ -1796,7 +1796,7 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Запускай Phase 7.5 (Code Review) и 7.6 (QA) ПАРАЛЛЕЛЬНО",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [
       {
         "id": 63,
@@ -1910,7 +1910,7 @@
     "parallel_with": "7.6",
     "rollback_target": "4",
     "next_recommendation": "Жди Phase 7.6 (QA) тоже",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [
       {
         "id": 67,
@@ -1963,7 +1963,7 @@
     "parallel_with": "7.5",
     "rollback_target": "4",
     "next_recommendation": "Когда Code Review + QA готовы → Phase 7.7 (CriticGate PostQA)",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [
       {
         "id": 70,
@@ -2008,7 +2008,7 @@
     "parallel_with": "7.6",
     "rollback_target": null,
     "next_recommendation": "Перейди к Phase 7.7 — CriticGate PostQA",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [
       {
         "id": 72,
@@ -2053,7 +2053,7 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Если PASS → Phase 8 (Merge Advisory). Если FAIL → вернись к Phase 4.",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [],
     "checks": [
       {
@@ -2105,7 +2105,7 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Перейди к Phase 7 — MR Draft",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [
       {
         "id": 60,
@@ -2211,7 +2211,7 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Перейди к Phase 9 — Retro",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [
       {
         "id": 74,
@@ -2325,7 +2325,7 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Workflow завершён. Следующая задача: hrflow init ...",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [
       {
         "id": 78,
@@ -2393,7 +2393,7 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Конец workflow",
-    "execution_mode": "sync",
+    "execution_type": "sync",
     "instructions": [
       {
         "id": 82,

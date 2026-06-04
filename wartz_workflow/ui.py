@@ -79,7 +79,7 @@ def _yaml_to_sqlite() -> None:
             "parallel_with": p.parallel_with,
             "rollback_target": p.rollback_target,
             "next_recommendation": p.next_recommendation,
-            "execution_mode": p.execution_mode if p.execution_mode else ("parallel" if p.is_delegated else "sync"),
+            "execution_type": p.execution_type if p.execution_type else ("parallel" if p.is_delegated else "sync"),
         }
         batch.append(
             {
