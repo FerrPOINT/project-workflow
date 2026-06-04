@@ -92,17 +92,16 @@ def _yaml_to_sqlite() -> None:
                     {
                         "step_num": idx + 1,
                         "description": instr.step,
-                        "execution_type": "parallel" if p.is_delegated else "sync",
-                        "tool": instr.tool,
+                        "execution_type": instr.execution_type,
                     }
                     for idx, instr in enumerate(p.instructions)
                 ],
                 "checks": [
-                    {"description": c.description, "command": c.command}
+                    {"description": c.description}
                     for c in p.checks
                 ],
                 "evidence": [
-                    {"description": e.item, "validator": e.validator}
+                    {"description": e.item}
                     for e in p.evidence
                 ],
                 "checkups": [

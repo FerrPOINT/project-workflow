@@ -1,30 +1,23 @@
-"""Service layer — бизнес-логика workflow.
+"""PhaseService — бизнес-логика для работы с фазами.
 
-Тонкие контроллеры (ui.py) → Service (service.py) → Data Access (db.py)
+Удалены: questions, answers, checkups. Только CRUD для фаз/инструкций/checks/evidence.
 """
 
-from __future__ import annotations
-
-import json
 from typing import Any
 
-from . import db
+from .db import WorkflowDB
 
 
 class PhaseService:
-    """Бизнес-логика фаз: bulk сохранение, порядок step_num, compose деталей."""
+    """CRUD operations for phases, instructions, checks, evidence."""
 
-    def __init__(self, wdb: db.WorkflowDB):
-        self._db = wdb
+    def __init__(self, db: WorkflowDB):
+        self._db = db
 
     # ── Bulk сохранение инструкций (atomic) ─────────────────────────────
 
     def save_instructions(self, phase_id: str, items: list[dict[str, Any]]) -> list[int]:
-        """Полностью перезаписать инструкции фазы. Возвращает новые id в порядке items.
-
-        items: [{description, execution_type?, tool?}, ...]
-        step_num = индекс (1-based).
-        """
+        """Полностью перезаписать инструкции фазы. Возвращает новые id в порядке items."""
         conn = self._db._conn()
         try:
             conn.execute("BEGIN")
@@ -33,15 +26,14 @@ class PhaseService:
             for idx, item in enumerate(items, 1):
                 c = conn.execute(
                     """
-                    INSERT INTO instructions (phase_id, step_num, description, execution_type, tool)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO instructions (phase_id, step_num, description, execution_type)
+                    VALUES (?, ?, ?, ?)
                     """,
                     (
                         phase_id,
                         idx,
                         item["description"],
                         item.get("execution_type", "sync"),
-                        item.get("tool"),
                     ),
                 )
                 ids.append(c.lastrowid)
@@ -62,11 +54,8 @@ class PhaseService:
             ids = []
             for item in items:
                 c = conn.execute(
-                    """
-                    INSERT INTO checks (phase_id, description, command)
-                    VALUES (?, ?, ?)
-                    """,
-                    (phase_id, item["description"], item.get("command")),
+                    "INSERT INTO checks (phase_id, description) VALUES (?, ?)",
+                    (phase_id, item["description"]),
                 )
                 ids.append(c.lastrowid)
             conn.commit()
@@ -86,11 +75,8 @@ class PhaseService:
             ids = []
             for item in items:
                 c = conn.execute(
-                    """
-                    INSERT INTO evidence (phase_id, description, validator)
-                    VALUES (?, ?, ?)
-                    """,
-                    (phase_id, item["description"], item.get("validator")),
+                    "INSERT INTO evidence (phase_id, description) VALUES (?, ?)",
+                    (phase_id, item["description"]),
                 )
                 ids.append(c.lastrowid)
             conn.commit()
@@ -101,43 +87,21 @@ class PhaseService:
         finally:
             conn.close()
 
-    # ── Составные данные ────────────────────────────────────────────────
+    # ── Read helpers ──────────────────────────────────────────────────
 
-    def get_phase_detail(self, phase_id: str) -> dict[str, Any] | None:
-        """Полная деталь фазы с инструкциями, checks, evidence, checkups."""
+    def get_phase_detail(self, phase_id: str) -> dict:
+        """Вернуть фазу со всем вложенным контентом."""
         phase = self._db.get_phase(phase_id)
         if not phase:
-            return None
+            return {}
+        return {
+            **phase,
+            "instructions": self._db.get_phase_instructions(phase_id),
+            "checks": self._db.get_phase_checks(phase_id),
+            "evidence": self._db.get_phase_evidence(phase_id),
+        }
 
-        phase["phase_num"] = phase["phase_order"]
-        phase["skills"] = json.loads(phase["skills"]) if phase["skills"] else []
-
-        # Доп поля из БД (defaults)
-        for key in (
-            "delegate_agent", "delegate_timeout", "delegate_max_cycles",
-            "delegate_toolsets", "parallel_with", "rollback_target",
-            "next_recommendation",
-        ):
-            if key not in phase:
-                phase[key] = None
-
-        phase["instructions"] = self._db.get_phase_instructions(phase_id)
-        phase["checks"] = self._db.get_phase_checks(phase_id)
-        phase["evidence"] = self._db.get_phase_evidence(phase_id)
-        return phase
-
-    # ── Singleton helpers ───────────────────────────────────────────────
-
-    def delete_instruction(self, inst_id: int) -> None:
-        self._db.delete_instruction(inst_id)
-
-    def delete_check(self, check_id: int) -> None:
-        self._db.delete_check(check_id)
-
-    def delete_evidence(self, ev_id: int) -> None:
-        self._db.delete_evidence(ev_id)
-
-    def update_phase(self, phase_id: str, data: dict[str, Any]) -> None:
-        """Обновить фазу. skills сериализуется в JSON-строку."""
-        clean = {k: (json.dumps(v) if k == "skills" and isinstance(v, list) else v) for k, v in data.items()}
-        self._db.update_phase(phase_id, clean)
+    def get_all_phases(self) -> list[dict]:
+        """Все фазы с контентом (для API)."""
+        rows = self._db.get_phases()
+        return [self.get_phase_detail(r["id"]) for r in rows]

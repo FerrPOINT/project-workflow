@@ -22,6 +22,8 @@ from wartz_workflow.models import (
 from wartz_workflow.db import WorkflowDB
 
 
+# ── DB Load ─────────────────────────────────────────────────────
+
 def _build_phase_from_db(row: dict, wdb: WorkflowDB) -> Phase:
     """Assemble a Phase dataclass from DB rows."""
     phase_id = row["id"]
@@ -64,15 +66,6 @@ def _build_phase_from_db(row: dict, wdb: WorkflowDB) -> Phase:
                 timeout_min=agent.get("timeout") or 10,
                 max_cycles=agent.get("max_cycles") or 3,
             )
-    # Legacy fallback для существующих БД (старые колонки delegate_*)
-    elif row.get("delegate_agent"):
-        delegate = PhaseDelegate(
-            agent=row["delegate_agent"],
-            prompt_template="",
-            toolsets=json.loads(row["delegate_toolsets"]) if row.get("delegate_toolsets") else [],
-            timeout_min=row.get("delegate_timeout") or 10,
-            max_cycles=row.get("delegate_max_cycles") or 3,
-        )
 
     return Phase(
         id=phase_id,
@@ -131,11 +124,36 @@ def _load_phases_yaml() -> List[Phase]:
         return []
     with open(_YAML_PATH, encoding="utf-8") as f:
         raw = yaml.safe_load(f)
+
+    _check_keys = {"description", "path", "expected", "fail_msg", "optional"}
+    _evidence_keys = {"item", "validator"}
+    _inst_keys = {"step", "example", "execution_type"}
+
     phases: List[Phase] = []
     for item in raw.get("phases", []):
-        checks = [PhaseCheck(**c) for c in item.get("checks", [])]
-        evidence = [PhaseEvidence(**e) for e in item.get("evidence", [])]
-        instructions = [PhaseInstruction(**i) for i in item.get("instructions", [])]
+        checks = [
+            PhaseCheck(**{k: v for k, v in c.items() if k in _check_keys})
+            for c in item.get("checks", [])
+        ]
+        evidence = [
+            PhaseEvidence(**{k: v for k, v in e.items() if k in _evidence_keys})
+            for e in item.get("evidence", [])
+        ]
+        instructions = [
+            PhaseInstruction(**{k: v for k, v in i.items() if k in _inst_keys})
+            for i in item.get("instructions", [])
+        ]
+        delegate = None
+        if "delegate" in item:
+            d = item["delegate"]
+            delegate = PhaseDelegate(
+                agent=d["agent"],
+                prompt_template=d.get("prompt_template", ""),
+                context=d.get("context", []),
+                toolsets=d.get("toolsets", []),
+                timeout_min=d.get("timeout_min", 10),
+                max_cycles=d.get("max_cycles", 3),
+            )
         phases.append(Phase(
             id=item["id"],
             name=item["name"],
@@ -148,10 +166,12 @@ def _load_phases_yaml() -> List[Phase]:
             checks=checks,
             evidence=evidence,
             instructions=instructions,
+            delegate=delegate,
             next_recommendation=item.get("next_recommendation", ""),
             parallel_with=item.get("parallel_with"),
             gate_after=item.get("gate_after"),
             rollback_target=item.get("rollback_target"),
+            execution_type=item.get("execution_type", "sync"),
         ))
     return phases
 
