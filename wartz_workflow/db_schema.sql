@@ -1,13 +1,11 @@
 -- WARTZ Workflow DB — финальная схема
--- 9 таблиц, плоская структура, связи через FOREIGN KEY
---
--- Оптимизация типов (по запросу):
---   execution_type → CHECK IN ('sync','parallel')
---   status         → CHECK IN ('active','done','blocked') / ('pending','done')
+-- PK: INTEGER AUTOINCREMENT для runtime-сущностей
+-- code TEXT UNIQUE для семантических идентификаторов фаз/групп
 
 CREATE TABLE IF NOT EXISTS phase_groups (
-    id          TEXT PRIMARY KEY,         -- "prep", "dev", "review"
-    name        TEXT NOT NULL,            -- "Подготовка"
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    code        TEXT NOT NULL UNIQUE,
+    name        TEXT NOT NULL,
     sort_order  INTEGER NOT NULL DEFAULT 0
 );
 
@@ -17,37 +15,42 @@ CREATE TABLE IF NOT EXISTS agents (
 );
 
 CREATE TABLE IF NOT EXISTS phases (
-    id             TEXT PRIMARY KEY,
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    code           TEXT NOT NULL UNIQUE,
     name           TEXT NOT NULL,
     description    TEXT,
+    min_time_min   INTEGER DEFAULT 0,
     phase_order    INTEGER NOT NULL,
-    group_id       TEXT REFERENCES phase_groups(id),
+    group_id       INTEGER REFERENCES phase_groups(id),
     agent_id       INTEGER REFERENCES agents(id),
+    next_recommendation TEXT,
+    parallel_with  TEXT,
+    rollback_target TEXT,
     execution_type TEXT DEFAULT 'sync'
         CHECK(execution_type IN ('sync', 'parallel'))
 );
 
 CREATE TABLE IF NOT EXISTS instructions (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
-    phase_id       TEXT NOT NULL REFERENCES phases(id) ON DELETE CASCADE,
+    phase_id       INTEGER NOT NULL REFERENCES phases(id) ON DELETE CASCADE,
     step_num       INTEGER NOT NULL,
     description    TEXT NOT NULL,
     execution_type TEXT DEFAULT 'sync'
         CHECK(execution_type IN ('sync', 'parallel')),
-    skills         TEXT,                  -- JSON list
+    skills         TEXT,
     UNIQUE(phase_id, step_num)
 );
 
 CREATE TABLE IF NOT EXISTS checks (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    phase_id    TEXT NOT NULL REFERENCES phases(id) ON DELETE CASCADE,
+    phase_id    INTEGER NOT NULL REFERENCES phases(id) ON DELETE CASCADE,
     description TEXT NOT NULL,
     UNIQUE(phase_id, description)
 );
 
 CREATE TABLE IF NOT EXISTS evidence (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    phase_id    TEXT NOT NULL REFERENCES phases(id) ON DELETE CASCADE,
+    phase_id    INTEGER NOT NULL REFERENCES phases(id) ON DELETE CASCADE,
     description TEXT NOT NULL,
     UNIQUE(phase_id, description)
 );
@@ -57,7 +60,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     task_key      TEXT NOT NULL UNIQUE,
     title         TEXT,
     description   TEXT,
-    current_phase TEXT DEFAULT '-1',
+    current_phase INTEGER NOT NULL DEFAULT -1,
     status        TEXT DEFAULT 'active'
         CHECK(status IN ('active', 'done', 'blocked')),
     created_at    TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -67,7 +70,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE TABLE IF NOT EXISTS task_history (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     task_id      INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-    phase_id     TEXT NOT NULL,
+    phase_id     INTEGER NOT NULL REFERENCES phases(id),
     status       TEXT DEFAULT 'pending'
         CHECK(status IN ('pending', 'done')),
     completed_at TEXT,
@@ -75,10 +78,10 @@ CREATE TABLE IF NOT EXISTS task_history (
 );
 
 CREATE TABLE IF NOT EXISTS cli_history (
-    id        INTEGER PRIMARY KEY AUTOINCREMENT,
-    command   TEXT NOT NULL,
-    task_key  TEXT,
-    request   TEXT,                       -- JSON аргументы запроса
-    response  TEXT,                       -- JSON ответ
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    command    TEXT NOT NULL,
+    task_key   TEXT,
+    request    TEXT,
+    response   TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );

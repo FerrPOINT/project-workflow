@@ -70,7 +70,7 @@ class TestImportPhases:
         db.import_phases(phases)
         rows = db.get_phases()
         assert len(rows) == 2
-        assert rows[0]["id"] == "test-1"
+        assert rows[0]["code"] == "test-1"
         assert rows[0]["phase_order"] == 1
 
     def test_get_phase_detail(self, db):
@@ -95,7 +95,7 @@ class TestImportPhases:
         db.import_phases(phases)
 
         phase = db.get_phase("test-d")
-        assert phase["id"] == "test-d"
+        assert phase["code"] == "test-d"
         assert phase["name"] == "Detail Phase"
         instructions = db.get_phase_instructions("test-d")
         assert len(instructions) == 1
@@ -168,6 +168,9 @@ class TestTaskCRUD:
         assert t2["title"] == "New"
 
     def test_task_history(self, db):
+        # Seed phases so that task_history FK resolves
+        db.create_phase({"id": "0", "name": "P0", "description": "", "phase_order": 1})
+        db.create_phase({"id": "1", "name": "P1", "description": "", "phase_order": 2})
         db.create_task({"task_key": "AAT-3", "title": "T3", "current_phase": "-1"})
         t = db.get_task_by_key("AAT-3")
         db.add_task_history(t["id"], "0", "done")
@@ -175,29 +178,32 @@ class TestTaskCRUD:
         history = db.get_task_history(t["id"])
         assert len(history) == 2
         pmap = {p["phase_id"]: p["status"] for p in history}
-        assert pmap["0"] == "done"
-        assert pmap["1"] == "pending"
+        # phase_id is now int, so lookup int IDs from created phases
+        p0 = db.get_phase_by_code("0")
+        p1 = db.get_phase_by_code("1")
+        assert pmap[p0["id"]] == "done"
+        assert pmap[p1["id"]] == "pending"
 
 
 class TestPhaseGroupCRUD:
     def test_create_and_get(self, db):
-        db.create_phase_group({"id": "prep", "name": "Подготовка", "sort_order": 1})
-        g = db.get_phase_group("prep")
+        gid = db.create_phase_group({"code": "prep", "name": "Подготовка", "sort_order": 1})
+        g = db.get_phase_group(gid)
         assert g["name"] == "Подготовка"
         assert g["sort_order"] == 1
 
     def test_list_ordered(self, db):
-        db.create_phase_group({"id": "z", "name": "ZZ", "sort_order": 2})
-        db.create_phase_group({"id": "a", "name": "AA", "sort_order": 1})
+        db.create_phase_group({"code": "z", "name": "ZZ", "sort_order": 2})
+        db.create_phase_group({"code": "a", "name": "AA", "sort_order": 1})
         groups = db.get_phase_groups()
-        assert [g["id"] for g in groups] == ["a", "z"]
+        assert [g["code"] for g in groups] == ["a", "z"]
 
     def test_update_and_delete(self, db):
-        db.create_phase_group({"id": "upd", "name": "Old", "sort_order": 1})
-        db.update_phase_group("upd", {"name": "New"})
-        assert db.get_phase_group("upd")["name"] == "New"
-        db.delete_phase_group("upd")
-        assert db.get_phase_group("upd") is None
+        gid = db.create_phase_group({"code": "upd", "name": "Old", "sort_order": 1})
+        db.update_phase_group(gid, {"name": "New"})
+        assert db.get_phase_group(gid)["name"] == "New"
+        db.delete_phase_group(gid)
+        assert db.get_phase_group(gid) is None
 
 
 class TestAgentCRUD:

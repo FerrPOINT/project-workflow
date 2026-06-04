@@ -27,6 +27,7 @@ from wartz_workflow.db import WorkflowDB
 def _build_phase_from_db(row: dict, wdb: WorkflowDB) -> Phase:
     """Assemble a Phase dataclass from DB rows."""
     phase_id = row["id"]
+    phase_code = row.get("code", "")
     inst_rows = wdb.get_phase_instructions(phase_id)
 
     instructions = [
@@ -61,7 +62,7 @@ def _build_phase_from_db(row: dict, wdb: WorkflowDB) -> Phase:
         if agent:
             delegate = PhaseDelegate(
                 agent=agent["name"],
-                prompt_template=f"Phase {phase_id}",
+                prompt_template=f"Phase {phase_code}",
                 toolsets=json.loads(agent["toolsets"]) if agent.get("toolsets") else [],
                 timeout_min=agent.get("timeout") or 10,
                 max_cycles=agent.get("max_cycles") or 3,
@@ -69,12 +70,13 @@ def _build_phase_from_db(row: dict, wdb: WorkflowDB) -> Phase:
 
     return Phase(
         id=phase_id,
+        code=phase_code,
         name=row["name"],
         description=row.get("description") or "",
         min_time_min=row.get("min_time_min") or 0,
-        is_blocker=phase_id in config.BLOCKER_PHASES,
+        is_blocker=phase_code in config.BLOCKER_PHASES,
         is_delegated=bool(delegate),
-        is_critic=phase_id in config.CRITIC_PHASES,
+        is_critic=phase_code in config.CRITIC_PHASES,
         checks=checks,
         evidence=evidence,
         instructions=instructions,
@@ -93,11 +95,11 @@ def load_phases_from_db(wdb: WorkflowDB) -> List[Phase]:
     return [_build_phase_from_db(r, wdb) for r in rows]
 
 
-def get_phase_from_db(wdb: WorkflowDB, phase_id: str) -> Optional[Phase]:
-    """Find a single phase by ID in a WorkflowDB instance."""
+def get_phase_from_db(wdb: WorkflowDB, phase_code: str) -> Optional[Phase]:
+    """Find a single phase by code in a WorkflowDB instance."""
     rows = wdb.get_phases()
     for r in rows:
-        if r["id"] == phase_id:
+        if r.get("code", r["id"]) == phase_code:
             return _build_phase_from_db(r, wdb)
     return None
 
@@ -107,83 +109,105 @@ def load_phases() -> List[Phase]:
     wdb = WorkflowDB()
     wdb.init()
     if wdb.is_empty():
-        return _load_phases_yaml()
+        return _load_phases_seed()
     rows = wdb.get_phases()
     return [_build_phase_from_db(r, wdb) for r in rows]
 
 
-# ── YAML fallback (legacy, kept for initial import only) ───────────
+# ── JSON Seed fallback ───────────
 
-_YAML_PATH = Path(__file__).parent / "references" / "phases.yaml"
+_SEED_PATH = Path(__file__).parent / "references" / "seed.json"
 
 
-def _load_phases_yaml() -> List[Phase]:
-    """Fallback YAML loader (returns empty list if YAML missing)."""
-    if not _YAML_PATH.exists():
+def _load_phases_seed() -> List[Phase]:
+    """Load phases from JSON seed and import into DB if empty."""
+    if not _SEED_PATH.exists():
         return []
-    with open(_YAML_PATH, encoding="utf-8") as f:
-        raw = yaml.safe_load(f)
+    import json
+    with open(_SEED_PATH, encoding="utf-8") as f:
+        raw = json.load(f)
 
     _check_keys = {"description", "path", "expected", "fail_msg", "optional"}
     _evidence_keys = {"item", "validator"}
     _inst_keys = {"step", "example", "execution_type", "skills"}
 
-    phases: List[Phase] = []
-    for item in raw.get("phases", []):
-        checks = [
-            PhaseCheck(**{k: v for k, v in c.items() if k in _check_keys})
-            for c in item.get("checks", [])
-        ]
-        evidence = [
-            PhaseEvidence(**{k: v for k, v in e.items() if k in _evidence_keys})
-            for e in item.get("evidence", [])
-        ]
-        instructions = [
-            PhaseInstruction(**{k: v for k, v in i.items() if k in _inst_keys})
-            for i in item.get("instructions", [])
-        ]
-        delegate = None
-        if "delegate" in item:
-            d = item["delegate"]
-            delegate = PhaseDelegate(
-                agent=d["agent"],
-                prompt_template=d.get("prompt_template", ""),
-                context=d.get("context", []),
-                toolsets=d.get("toolsets", []),
-                timeout_min=d.get("timeout_min", 10),
-                max_cycles=d.get("max_cycles", 3),
-            )
-        phases.append(Phase(
-            id=item["id"],
-            name=item["name"],
-            description=item.get("description", ""),
-            min_time_min=item.get("min_time_min", 0),
-            is_blocker=item.get("is_blocker", False),
-            is_delegated=item.get("is_delegated", False),
-            is_critic=item.get("is_critic", False),
-            checks=checks,
-            evidence=evidence,
-            instructions=instructions,
-            delegate=delegate,
-            next_recommendation=item.get("next_recommendation", ""),
-            parallel_with=item.get("parallel_with"),
-            gate_after=item.get("gate_after"),
-            rollback_target=item.get("rollback_target"),
-            execution_type=item.get("execution_type", "sync"),
-        ))
-    return phases
+    # Ensure phases have code
+    for item in raw:
+        if "code" not in item:
+            item["code"] = item.get("id", "")
+
+    wdb = WorkflowDB()
+    wdb.init()
+    rows = wdb.get_phases()
+    if not rows:
+        # Import into DB so they get integer IDs and code
+        wdb.import_phases(raw)
+        rows = wdb.get_phases()
+
+    return [_build_phase_from_db(r, wdb) for r in rows]
 
 
-def get_phase(phase_id: str, phases: Optional[List[Phase]] = None) -> Optional[Phase]:
-    """Найти фазу по ID."""
+def _parse_old_yaml(item: dict) -> Phase:
+    """Parse a legacy YAML phase item."""
+    _check_keys = {"description", "path", "expected", "fail_msg", "optional"}
+    _evidence_keys = {"item", "validator"}
+    _inst_keys = {"step", "example", "execution_type", "skills"}
+
+    checks = [
+        PhaseCheck(**{k: v for k, v in c.items() if k in _check_keys})
+        for c in item.get("checks", [])
+    ]
+    evidence = [
+        PhaseEvidence(**{k: v for k, v in e.items() if k in _evidence_keys})
+        for e in item.get("evidence", [])
+    ]
+    instructions = [
+        PhaseInstruction(**{k: v for k, v in i.items() if k in _inst_keys})
+        for i in item.get("instructions", [])
+    ]
+    delegate = None
+    if "delegate" in item:
+        d = item["delegate"]
+        delegate = PhaseDelegate(
+            agent=d["agent"],
+            prompt_template=d.get("prompt_template", ""),
+            context=d.get("context", []),
+            toolsets=d.get("toolsets", []),
+            timeout_min=d.get("timeout_min", 10),
+            max_cycles=d.get("max_cycles", 3),
+        )
+    code = item.get("code", item.get("id", ""))
+    return Phase(
+        id=0,
+        code=code,
+        name=item["name"],
+        description=item.get("description", ""),
+        min_time_min=item.get("min_time_min", 0),
+        is_blocker=code in config.BLOCKER_PHASES,
+        is_delegated=bool(delegate),
+        is_critic=code in config.CRITIC_PHASES,
+        checks=checks,
+        evidence=evidence,
+        instructions=instructions,
+        delegate=delegate,
+        next_recommendation=item.get("next_recommendation", ""),
+        parallel_with=item.get("parallel_with"),
+        gate_after=item.get("gate_after"),
+        rollback_target=item.get("rollback_target"),
+        execution_type=item.get("execution_type", "sync"),
+    )
+
+
+def get_phase(phase_code: str, phases: Optional[List[Phase]] = None) -> Optional[Phase]:
+    """Найти фазу по code."""
     plist = phases or load_phases()
     for ph in plist:
-        if ph.id == phase_id:
+        if ph.code == phase_code:
             return ph
     return None
 
 
 def get_phase_order(phases: Optional[List[Phase]] = None) -> List[str]:
-    """Вернуть список ID фаз в порядке следования."""
+    """Вернуть список code фаз в порядке следования."""
     plist = phases or load_phases()
-    return [p.id for p in plist]
+    return [p.code for p in plist]

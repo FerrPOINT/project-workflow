@@ -33,7 +33,7 @@ class WizardEngine:
         self._wdb = WorkflowDB()
         self._wdb.init()
         self.all_phases = load_phases_from_db(self._wdb)
-        self.phase_map = {p.id: p for p in self.all_phases}
+        self.phase_map = {p.code: p for p in self.all_phases}
 
     # ═══════════════════════════════════════════════════════════════════
     #  PUBLIC API
@@ -59,12 +59,12 @@ class WizardEngine:
 
         if not missing:
             next_phase, next_name = self._get_next_phase(phase)
-            self._record_transition(phase.id, next_phase or "COMPLETE")
+            self._record_transition(phase.code, next_phase or "COMPLETE")
 
             msg = self._build_pass_message(phase, covered, next_phase, next_name)
             return {
                 "verdict": "PASS",
-                "phase": phase.id,
+                "phase": phase.code,
                 "phase_name": phase.name,
                 "covered": covered,
                 "missing": [],
@@ -74,10 +74,10 @@ class WizardEngine:
             }
         else:
             msg = self._build_fail_message(phase, missing)
-            convo.add_wizard_answer(self.task_id, self.task_key, phase.id, f"fail: {missing}", ok=False)
+            convo.add_wizard_answer(self.task_id, self.task_key, phase.code, f"fail: {missing}", ok=False)
             return {
                 "verdict": "FAIL",
-                "phase": phase.id,
+                "phase": phase.code,
                 "phase_name": phase.name,
                 "covered": covered,
                 "missing": missing,
@@ -96,7 +96,7 @@ class WizardEngine:
             return "Все фазы выполнены. Задача завершена."
 
         lines = [
-            f"🎯 Фаза {phase.id} — {phase.name}",
+            f"🎯 Фаза {phase.code} — {phase.name}",
             f"📋 {phase.description}",
             "",
             "❗ Обязательно выполнить:",
@@ -133,6 +133,7 @@ class WizardEngine:
         for p in self.all_phases:
             all_phases.append({
                 "id": p.id,
+                "code": p.code,
                 "name": p.name,
                 "description": p.description,
                 "min_time_min": p.min_time_min,
@@ -218,7 +219,7 @@ class WizardEngine:
     def _get_next_phase(self, current_phase: models.Phase) -> Tuple[Optional[str], Optional[str]]:
         """Получить след фазу."""
         from . import phases as phases_mod
-        next_p = phases_mod.get_next_phase(current_phase.id)
+        next_p = phases_mod.get_next_phase(current_phase.code)
         if next_p:
             next_obj = self.phase_map.get(next_p)
             return next_p, next_obj.name if next_obj else next_p
@@ -237,7 +238,7 @@ class WizardEngine:
         next_name: Optional[str],
     ) -> str:
         lines = [
-            f"{PASS_ICON} Отлично! Фаза {phase.id} ({phase.name}) пройдена.",
+            f"{PASS_ICON} Отлично! Фаза {phase.code} ({phase.name}) пройдена.",
             f"   Покрыто пунктов: {len(covered)}",
         ]
         if next_phase and next_name:
@@ -248,7 +249,7 @@ class WizardEngine:
 
     def _build_fail_message(self, phase: models.Phase, missing: List[str]) -> str:
         lines = [
-            f"{FAIL_ICON} Фаза {phase.id} ({phase.name}) — требуются доработки.",
+            f"{FAIL_ICON} Фаза {phase.code} ({phase.name}) — требуются доработки.",
             "",
             f"Не выполнено пунктов: {len(missing)}",
         ]
@@ -262,9 +263,10 @@ class WizardEngine:
         ])
         return "\n".join(lines)
 
-    def _resolve_phase(self, phase_id: str) -> Optional[models.Phase]:
+    def _resolve_phase(self, phase_code: str) -> Optional[models.Phase]:
+        """Find phase by code (exact or prefix)."""
         for p in self.all_phases:
-            if p.id == phase_id or p.id.startswith(phase_id + "."):
+            if p.code == phase_code or p.code.startswith(phase_code + "."):
                 return p
         return None
 

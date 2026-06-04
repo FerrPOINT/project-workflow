@@ -1,6 +1,5 @@
 [
   {
-    "id": "-1",
     "name": "Task Intake",
     "description": "Понять задачу из Jira до начала работы",
     "phase_order": 1,
@@ -49,10 +48,10 @@
         "ran_at": "2026-06-03 11:10:13"
       }
     ],
-    "questions": []
+    "questions": [],
+    "code": "-1"
   },
   {
-    "id": "0.0a",
     "name": "Suite Verification",
     "description": "Проверить что все skills на месте перед началом",
     "phase_order": 2,
@@ -169,10 +168,10 @@
         "ran_at": "2026-06-03 11:10:13"
       }
     ],
-    "questions": []
+    "questions": [],
+    "code": "0.0a"
   },
   {
-    "id": "0",
     "name": "Jira Init",
     "description": "Прочитать Jira тикет, зафиксировать в requirements.md",
     "phase_order": 6,
@@ -245,10 +244,10 @@
         "ran_at": "2026-06-03 11:10:13"
       }
     ],
-    "questions": []
+    "questions": [],
+    "code": "0"
   },
   {
-    "id": "0.01",
     "name": "Task Docs Setup",
     "description": "Создать info/ папку задачи с mandatory файлами",
     "phase_order": 3,
@@ -374,10 +373,10 @@
         "ran_at": "2026-06-03 11:10:13"
       }
     ],
-    "questions": []
+    "questions": [],
+    "code": "0.01"
   },
   {
-    "id": "0.01a",
     "name": ".gitignore Check",
     "description": "Убедиться что info/ не попадёт в git",
     "phase_order": 4,
@@ -442,10 +441,10 @@
         "ran_at": "2026-06-03 11:10:13"
       }
     ],
-    "questions": []
+    "questions": [],
+    "code": "0.01a"
   },
   {
-    "id": "1",
     "name": "Preflight",
     "description": "Определить репо, ветку, синхронизировать",
     "phase_order": 13,
@@ -555,10 +554,10 @@
         "ran_at": "2026-06-03 11:10:13"
       }
     ],
-    "questions": []
+    "questions": [],
+    "code": "1"
   },
   {
-    "id": "0.01b",
     "name": "Token Verification",
     "description": "Jira и GitLab токены рабочие",
     "phase_order": 5,
@@ -652,10 +651,10 @@
         "ran_at": "2026-06-03 11:10:13"
       }
     ],
-    "questions": []
+    "questions": [],
+    "code": "0.01b"
   },
   {
-    "id": "0.00",
     "name": "Git Identity",
     "description": "Проверить git identity перед коммитами",
     "phase_order": 7,
@@ -735,10 +734,10 @@
         "ran_at": "2026-06-03 11:10:13"
       }
     ],
-    "questions": []
+    "questions": [],
+    "code": "0.00"
   },
   {
-    "id": "0.000",
     "name": "Workspace",
     "description": "Проверить рабочее окружение",
     "phase_order": 8,
@@ -803,10 +802,10 @@
         "ran_at": "2026-06-03 11:10:13"
       }
     ],
-    "questions": []
+    "questions": [],
+    "code": "0.000"
   },
   {
-    "id": "0.7",
     "name": "Repo Sync",
     "description": "Синхронизировать репозиторий с origin",
     "phase_order": 9,
@@ -893,10 +892,10 @@
         "ran_at": "2026-06-03 11:10:13"
       }
     ],
-    "questions": []
+    "questions": [],
+    "code": "0.7"
   },
   {
-    "id": "0.9",
     "name": "CriticGate-PreFlight",
     "description": "Проверка перед стартом разработки",
     "phase_order": 10,
@@ -969,10 +968,10 @@
         "ran_at": "2026-06-03 11:10:13"
       }
     ],
-    "questions": []
+    "questions": [],
+    "code": "0.9"
   },
   {
-    "id": "0.5",
     "name": "Jira Transition",
     "description": "Перевести тикет в 'В работе'",
     "phase_order": 11,
@@ -1052,10 +1051,10 @@
         "ran_at": "2026-06-03 11:10:13"
       }
     ],
-    "questions": []
+    "questions": [],
+    "code": "0.5"
   },
   {
-    "id": "0.6",
     "name": "Researcher #1",
     "description": "Dataflow исследование — что уже есть в коде",
     "phase_order": 12,
@@ -1111,10 +1110,10 @@
       }
     ],
     "checkups": [],
-    "questions": []
+    "questions": [],
+    "code": "0.6"
   },
   {
-    "id": "1.5",
     "name": "Deep Research",
     "description": "Архитектура, API, types, existing реализации",
     "phase_order": 14,
@@ -1152,10 +1151,10 @@
       }
     ],
     "checkups": [],
-    "questions": []
+    "questions": [],
+    "code": "1.5"
   },
   {
-    "id": "2",
     "name": "Research Synthesis",
     "description": "Систематизировать findings из 0.6 и 1.5",
     "phase_order": 15,
@@ -1236,10 +1235,10 @@
         "ran_at": "2026-06-03 11:10:13"
       }
     ],
-    "questions": []
+    "questions": [],
+    "code": "2"
   },
   {
-    "id": "3",
     "name": "Plan",
     "description": "Написать детальный план реализации",
     "phase_order": 16,
@@ -1327,10 +1326,10 @@
         "ran_at": "2026-06-03 11:10:13"
       }
     ],
-    "questions": []
+    "questions": [],
+    "code": "3"
   },
   {
-    "id": "3.5",
     "name": "CriticGate-PrePlan",
     "description": "Ревью плана перед реализацией",
     "phase_order": 17,
@@ -1378,10 +1377,10 @@
         "ran_at": "2026-06-03 11:10:13"
       }
     ],
-    "questions": []
+    "questions": [],
+    "code": "3.5"
   },
   {
-    "id": "4",
     "name": "Implement",
     "description": "Реализовать по плану",
     "phase_order": 18,
@@ -1469,10 +1468,10 @@
         "ran_at": "2026-06-03 11:10:13"
       }
     ],
-    "questions": []
+    "questions": [],
+    "code": "4"
   },
   {
-    "id": "4.5",
     "name": "CriticGate-PreCommit",
     "description": "Ревью кода перед коммитом",
     "phase_order": 19,
@@ -1520,10 +1519,10 @@
         "ran_at": "2026-06-03 11:10:13"
       }
     ],
-    "questions": []
+    "questions": [],
+    "code": "4.5"
   },
   {
-    "id": "5",
     "name": "Validate",
     "description": "Линтер, типы, unit тесты",
     "phase_order": 20,
@@ -1655,10 +1654,10 @@
         "ran_at": "2026-06-03 11:10:13"
       }
     ],
-    "questions": []
+    "questions": [],
+    "code": "5"
   },
   {
-    "id": "5.5",
     "name": "Self-Test",
     "description": "E2E, UI-тесты, ручное тестирование",
     "phase_order": 21,
@@ -1760,10 +1759,10 @@
         "ran_at": "2026-06-03 11:10:13"
       }
     ],
-    "questions": []
+    "questions": [],
+    "code": "5.5"
   },
   {
-    "id": "7",
     "name": "MR Draft",
     "description": "Создать MR через GitLab UI",
     "phase_order": 23,
@@ -1873,10 +1872,10 @@
         "ran_at": "2026-06-03 11:10:13"
       }
     ],
-    "questions": []
+    "questions": [],
+    "code": "7"
   },
   {
-    "id": "7.5",
     "name": "Code Review",
     "description": "Ревью кода другим агентом",
     "phase_order": 24,
@@ -1925,10 +1924,10 @@
       }
     ],
     "checkups": [],
-    "questions": []
+    "questions": [],
+    "code": "7.5"
   },
   {
-    "id": "7.6",
     "name": "QA Testing",
     "description": "Функциональное тестирование",
     "phase_order": 25,
@@ -1969,10 +1968,10 @@
       }
     ],
     "checkups": [],
-    "questions": []
+    "questions": [],
+    "code": "7.6"
   },
   {
-    "id": "7.6.R",
     "name": "DVR",
     "description": "Dataflow Verification Report",
     "phase_order": 26,
@@ -2013,10 +2012,10 @@
       }
     ],
     "checkups": [],
-    "questions": []
+    "questions": [],
+    "code": "7.6.R"
   },
   {
-    "id": "7.7",
     "name": "CriticGate-PostQA",
     "description": "Финальный gate перед merge",
     "phase_order": 27,
@@ -2064,10 +2063,10 @@
         "ran_at": "2026-06-03 11:10:13"
       }
     ],
-    "questions": []
+    "questions": [],
+    "code": "7.7"
   },
   {
-    "id": "6",
     "name": "Commit",
     "description": "git commit, push",
     "phase_order": 22,
@@ -2169,10 +2168,10 @@
         "ran_at": "2026-06-03 11:10:13"
       }
     ],
-    "questions": []
+    "questions": [],
+    "code": "6"
   },
   {
-    "id": "8",
     "name": "Jira Done",
     "description": "Перевести Jira в 'Выполнено', прикрепить MR",
     "phase_order": 28,
@@ -2282,10 +2281,10 @@
         "ran_at": "2026-06-03 11:10:13"
       }
     ],
-    "questions": []
+    "questions": [],
+    "code": "8"
   },
   {
-    "id": "9",
     "name": "Retro",
     "description": "Ретроспектива, метрики, project-knowledge",
     "phase_order": 29,
@@ -2349,10 +2348,10 @@
       }
     ],
     "checkups": [],
-    "questions": []
+    "questions": [],
+    "code": "9"
   },
   {
-    "id": "10",
     "name": "Auto-Improve",
     "description": "Сгенерировать Improvement Proposals из retro",
     "phase_order": 30,
@@ -2417,6 +2416,7 @@
         "ran_at": "2026-06-03 11:10:13"
       }
     ],
-    "questions": []
+    "questions": [],
+    "code": "10"
   }
 ]

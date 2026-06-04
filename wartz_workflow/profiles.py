@@ -141,25 +141,34 @@ def get_agent_for_phase(phase_id: str, profiles: Optional[Dict[str, AgentProfile
     return profs.get(agent_name)
 
 
-def build_delegate_payload(phase_id: str, task_key: str, task_id: str, title: str) -> Optional[Dict[str, any]]:
-    """Собрать полный payload для delegate_task из профиля + YAML-схемы."""
+def build_delegate_payload(phase_code: str, task_key: str, task_id: str, title: str) -> Optional[Dict[str, any]]:
+    """Собрать полный payload для delegate_task из профиля агента."""
     from .schema import get_phase
 
-    ph = get_phase(phase_id)
-    if not ph or not ph.delegate:
+    ph = get_phase(phase_code)
+    if not ph:
         return None
 
-    agent = get_agent_for_phase(phase_id)
+    agent = get_agent_for_phase(phase_code)
     if not agent:
         return None
 
-    # Render prompt
-    prompt = ph.delegate.prompt_template
-    if not prompt:
-        prompt = f"Phase {phase_id} for {task_key}: {title}"
+    # Determine toolsets per agent type (hardcoded from legacy phases.yaml)
+    toolsets_map = {
+        "wartzresearcher": ["search", "browser"],
+        "wartzcritic":       ["review"],
+        "wartzreviewer":     ["review"],
+        "wartzops":          ["jira", "gitlab"],
+        "wartzcoder":        ["terminal", "file"],
+    }
+
+    toolsets = toolsets_map.get(agent.name, [])
+
+    prompt = f"Phase {phase_code} for {task_key}: {title}"
     prompt = prompt.replace("{task_key}", task_key)
     prompt = prompt.replace("{task_id}", task_id)
     prompt = prompt.replace("{title}", title)
+    prompt = prompt.replace("{phase_code}", phase_code)
 
     # Build context with agent identity
     context = f"""## Agent Identity
@@ -182,9 +191,9 @@ Version: {agent.version}
 
     return {
         "agent": agent.name,
-        "role": "leaf",  # delegated agents don't spawn further
-        "goal": ph.delegate.prompt_template[:80],
+        "role": "leaf",
+        "goal": prompt[:80],
         "context": context,
-        "toolsets": ph.delegate.toolsets,
-        "timeout_min": ph.delegate.timeout_min,
+        "toolsets": toolsets,
+        "timeout_min": ph.delegate.timeout_min if ph.delegate else 10,
     }

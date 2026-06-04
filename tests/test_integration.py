@@ -46,7 +46,7 @@ class TestEndToEndWorkflow:
         wdb.create_task({"task_key": "AAT-99", "title": "Integ Test"})
         task = wdb.get_task_by_key("AAT-99")
         assert task is not None
-        assert task["current_phase"] == "-1"
+        assert int(task["current_phase"]) == -1
         wdb.create_phase({"id": "0", "name": "Setup", "phase_order": 0})
         wdb.add_task_history(task["id"], "0", "done")
         hist = wdb.get_task_history(task["id"])
@@ -77,7 +77,7 @@ class TestEndToEndWorkflow:
         wdb.log_cli_call("history", "AAT-10", None, None)
         rows = wdb.get_cli_history()
         assert len(rows) == 2
-        assert rows[0]["command"] == "step"
+        assert {rows[0]["command"], rows[1]["command"]} == {"step", "history"}
         assert rows[1]["command"] == "history"
 
     def test_phase_with_group_and_agent(self, tmp_path: Path):
@@ -97,7 +97,8 @@ class TestEndToEndWorkflow:
         })
         rows = wdb.get_phases()
         assert len(rows) == 1
-        assert rows[0]["group_id"] == "g1"
+        g1_info = wdb.get_phase_group_by_code("g1")
+        assert rows[0]["group_id"] == g1_info["id"]
         assert rows[0]["agent_id"] == agent_id
         assert rows[0]["execution_type"] == "parallel"
 
@@ -136,6 +137,7 @@ class TestEdgeCases:
         db_path = tmp_path / "test8.db"
         wdb = WorkflowDB(str(db_path))
         wdb.init()
+        wdb.create_phase({"id": "0", "name": "Phase 0", "phase_order": 1})
         wdb.create_task({"task_key": "AAT-SK", "title": "Skip Test"})
         task = wdb.get_task_by_key("AAT-SK")
         assert task is not None

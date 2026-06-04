@@ -9,6 +9,8 @@ from typing import List, Optional
 @dataclass
 class PhaseCheck:
     """Проверка которую CLI выполняет для фазы."""
+    type: str = ""
+    command: Optional[str] = None
     description: str = ""
     path: Optional[str] = None
     expected: Optional[List[str]] = None
@@ -45,7 +47,8 @@ class PhaseDelegate:
 @dataclass
 class Phase:
     """Полное описание фазы workflow."""
-    id: str = ""
+    id: int = 0
+    code: str = ""
     name: str = ""
     description: str = ""
     min_time_min: int = 0

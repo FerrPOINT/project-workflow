@@ -16,12 +16,17 @@ class PhaseService:
 
     # ── Bulk сохранение инструкций (atomic) ─────────────────────────────
 
-    def save_instructions(self, phase_id: str, items: list[dict[str, Any]]) -> list[int]:
+    def save_instructions(self, phase_id: int | str, items: list[dict[str, Any]]) -> list[int]:
         """Полностью перезаписать инструкции фазы. Возвращает новые id в порядке items."""
+        # Resolve phase_id (code or int) to integer DB id
+        phase_row = self._db.get_phase(phase_id)
+        if not phase_row:
+            raise ValueError(f"Phase not found: {phase_id}")
+        resolved = phase_row["id"]
         conn = self._db._conn()
         try:
             conn.execute("BEGIN")
-            conn.execute("DELETE FROM instructions WHERE phase_id = ?", (phase_id,))
+            conn.execute("DELETE FROM instructions WHERE phase_id = ?", (resolved,))
             ids = []
             for idx, item in enumerate(items, 1):
                 c = conn.execute(
@@ -30,7 +35,7 @@ class PhaseService:
                     VALUES (?, ?, ?, ?)
                     """,
                     (
-                        phase_id,
+                        resolved,
                         idx,
                         item["description"],
                         item.get("execution_type", "sync"),
@@ -45,17 +50,21 @@ class PhaseService:
         finally:
             conn.close()
 
-    def save_checks(self, phase_id: str, items: list[dict[str, Any]]) -> list[int]:
+    def save_checks(self, phase_id: int | str, items: list[dict[str, Any]]) -> list[int]:
         """Перезаписать checks фазы. Возвращает новые id."""
+        phase_row = self._db.get_phase(phase_id)
+        if not phase_row:
+            raise ValueError(f"Phase not found: {phase_id}")
+        resolved = phase_row["id"]
         conn = self._db._conn()
         try:
             conn.execute("BEGIN")
-            conn.execute("DELETE FROM checks WHERE phase_id = ?", (phase_id,))
+            conn.execute("DELETE FROM checks WHERE phase_id = ?", (resolved,))
             ids = []
             for item in items:
                 c = conn.execute(
                     "INSERT INTO checks (phase_id, description) VALUES (?, ?)",
-                    (phase_id, item["description"]),
+                    (resolved, item["description"]),
                 )
                 ids.append(c.lastrowid)
             conn.commit()
@@ -66,17 +75,21 @@ class PhaseService:
         finally:
             conn.close()
 
-    def save_evidence(self, phase_id: str, items: list[dict[str, Any]]) -> list[int]:
-        """Перезаписать evidence фазы. Возвращает новые id."""
+    def save_evidence(self, phase_id: int | str, items: list[dict[str, Any]]) -> list[int]:
+        """Сохранить evidence фазы."""
+        phase_row = self._db.get_phase(phase_id)
+        if not phase_row:
+            raise ValueError(f"Phase not found: {phase_id}")
+        resolved = phase_row["id"]
         conn = self._db._conn()
         try:
             conn.execute("BEGIN")
-            conn.execute("DELETE FROM evidence WHERE phase_id = ?", (phase_id,))
+            conn.execute("DELETE FROM evidence WHERE phase_id = ?", (resolved,))
             ids = []
             for item in items:
                 c = conn.execute(
                     "INSERT INTO evidence (phase_id, description) VALUES (?, ?)",
-                    (phase_id, item["description"]),
+                    (resolved, item["description"]),
                 )
                 ids.append(c.lastrowid)
             conn.commit()
@@ -89,7 +102,7 @@ class PhaseService:
 
     # ── Read helpers ──────────────────────────────────────────────────
 
-    def get_phase_detail(self, phase_id: str) -> dict:
+    def get_phase_detail(self, phase_id: int) -> dict:
         """Вернуть фазу со всем вложенным контентом."""
         phase = self._db.get_phase(phase_id)
         if not phase:
@@ -103,7 +116,7 @@ class PhaseService:
 
     # ── Update phase (metadata) ──────────────────────────────────────
 
-    def update_phase(self, phase_id: str, data: dict) -> None:
+    def update_phase(self, phase_id: int, data: dict) -> None:
         self._db.update_phase(phase_id, data)
 
     # ── Helpers ────────────────────────────────────────────────────────

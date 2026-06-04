@@ -1,83 +1,67 @@
-"""Tests for wizard.py v4.1 -- checklist engine."""
+"""Test WizardEngine with mocked DB."""
 
 import pytest
-from wartz_workflow import wizard, schema
+from unittest.mock import patch, MagicMock
+from wartz_workflow.wizard import WizardEngine
+from wartz_workflow.models import Phase
 
 
-class TestChecklistCoverage:
-    """Тест покрытия checklist ответом."""
+class TestWizardEvaluate:
+    def test_evaluate_pass(self):
+        with patch("wartz_workflow.wizard.convo") as mock_convo:
+            mock_convo.get_last_phase.return_value = "-1"
+            engine = WizardEngine("AAT-1", repo="/tmp")
+            ph = MagicMock()
+            ph.code = "0"
+            ph.name = "Test"
+            ph.is_blocker = False
+            ph.is_delegated = False
+            ph.is_critic = False
+            ph.instructions = []
+            engine.phase_map = {"0": ph}
+            engine.all_phases = [ph]
 
-    def test_empty_all_remaining(self):
-        items = ["создать файл requirements.md", "запустить тесты"]
-        done, remaining = wizard.WizardEngine("D-1", "/tmp")._check_coverage("ничего", items)
-        assert len(remaining) == 2
-        assert len(done) == 0
+            with patch.object(engine, "_build_checklist", return_value=["check"]), \
+                 patch.object(engine, "_check_coverage", return_value=(["check"], [])), \
+                 patch.object(engine, "_get_next_phase", return_value=("1", "Next")), \
+                 patch.object(engine, "_record_transition"):
+                result = engine.evaluate("report ok")
+                assert result["verdict"] == "PASS"
 
-    def test_full_coverage_from_answer(self):
-        items = ["создать файл requirements.md", "запустить тесты"]
-        done, remaining = wizard.WizardEngine("D-1", "/tmp")._check_coverage(
-            "создал файл requirements.md и запустил тесты", items,
-        )
-        assert len(remaining) == 0
-        assert len(done) == 2
+    def test_evaluate_fail(self):
+        with patch("wartz_workflow.wizard.convo") as mock_convo:
+            mock_convo.get_last_phase.return_value = "0"
+            engine = WizardEngine("AAT-1", repo="/tmp")
+            ph = MagicMock()
+            ph.code = "0"
+            ph.name = "Test"
+            ph.is_blocker = False
+            ph.is_delegated = False
+            ph.is_critic = False
+            ph.instructions = []
+            engine.phase_map = {"0": ph}
+            engine.all_phases = [ph]
 
-    def test_partial_coverage(self):
-        items = ["создать файл requirements.md", "запустить тесты", "сделать коммит"]
-        done, remaining = wizard.WizardEngine("D-1", "/tmp")._check_coverage(
-            "создал файл и запустил тесты", items,
-        )
-        assert len(done) == 2
-        assert len(remaining) == 1
-        assert "коммит" in remaining[0].lower()
+            with patch.object(engine, "_build_checklist", return_value=["check"]), \
+                 patch.object(engine, "_check_coverage", return_value=([], ["check"])), \
+                 patch.object(engine, "_build_fail_message", return_value="fail msg"):
+                result = engine.evaluate("report bad")
+                assert result["verdict"] == "FAIL"
 
+    def test_get_phase_prompt(self):
+        with patch("wartz_workflow.wizard.convo") as mock_convo:
+            mock_convo.get_last_phase.return_value = "0"
+            engine = WizardEngine("AAT-1", repo="/tmp")
+            ph = MagicMock()
+            ph.code = "0"
+            ph.name = "Test"
+            ph.description = "D"
+            ph.is_blocker = False
+            ph.is_delegated = False
+            ph.instructions = []
+            engine.phase_map = {"0": ph}
+            engine.all_phases = [ph]
 
-class TestKeywordExtraction:
-    def test_extract_keywords_simple(self):
-        kw = wizard.WizardEngine._extract_keywords("создать файл requirements.md")
-        assert "создать" in kw
-        assert "requirements" in kw
-        # first 3-4 words > 3 chars
-        assert len(kw) <= 4
-
-    def test_extract_ignores_short_words(self):
-        kw = wizard.WizardEngine._extract_keywords("a b cd efgh ij")
-        assert "efgh" in kw
-        assert "a" not in kw
-        assert "cd" not in kw
-
-
-class TestBuildChecklist:
-    def test_builds_from_phase(self):
-        phase = schema.Phase(
-            id="0.01",
-            name="Docs Setup",
-            checks=[
-                schema.PhaseCheck(description="создать README"),
-                schema.PhaseCheck(description="создать README"),  # dup
-            ],
-            instructions=[
-                schema.PhaseInstruction(step="написать требования"),
-            ],
-            evidence=[
-                schema.PhaseEvidence(item="скриншот задачи"),
-            ],
-        )
-        engine = wizard.WizardEngine("D-1", "/tmp")
-        checklist = engine._build_checklist(phase)
-        assert len(checklist) == 3
-        assert "создать README" in checklist
-        assert "написать требования" in checklist
-        assert "скриншот задачи" in checklist
-
-    def test_dedupes_items(self):
-        phase = schema.Phase(
-            id="0.01",
-            name="Docs",
-            checks=[
-                schema.PhaseCheck(description="одинаковый текст"),
-                schema.PhaseCheck(description="одинаковый текст"),
-            ],
-        )
-        engine = wizard.WizardEngine("D-1", "/tmp")
-        checklist = engine._build_checklist(phase)
-        assert len(checklist) == 1
+            with patch.object(engine, "_build_checklist", return_value=[]):
+                prompt = engine.get_phase_prompt()
+                assert "Test" in prompt

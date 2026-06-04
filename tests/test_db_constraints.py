@@ -17,7 +17,7 @@ def conn(tmp_path):
     c.executescript(schema_sql.read_text())
     c.execute("PRAGMA foreign_keys = ON")
     # base phase
-    c.execute("INSERT INTO phases (id, name, phase_order) VALUES (?, ?, ?)", ("0", "Base", 0))
+    c.execute("INSERT INTO phases (code, name, phase_order) VALUES (?, ?, ?)", ("0", "Base", 0))
     c.commit()
     return c
 
@@ -26,7 +26,7 @@ class TestCheckConstraints:
     def test_phase_bad_execution_type_blocked(self, conn):
         with pytest.raises(sqlite3.IntegrityError):
             conn.execute(
-                "INSERT INTO phases (id,name,phase_order,execution_type) VALUES (?,?,?,?)",
+                "INSERT INTO phases (code,name,phase_order,execution_type) VALUES (?,?,?,?)",
                 ("bad", "Bad", 1, "invalid")
             )
 
@@ -43,14 +43,14 @@ class TestCheckConstraints:
         with pytest.raises(sqlite3.IntegrityError):
             conn.execute(
                 "INSERT INTO task_history (task_id,phase_id,status) VALUES (?,?,?)",
-                (tid, "0", "garbage")
+                (tid, 1, "garbage")
             )
 
     def test_instr_bad_execution_type_blocked(self, conn):
         with pytest.raises(sqlite3.IntegrityError):
             conn.execute(
                 "INSERT INTO instructions (phase_id,step_num,description,execution_type) VALUES (?,?,?,?)",
-                ("0", 1, "S", "garbage")
+                (1, 1, "S", "garbage")
             )
 
     def test_null_task_key_blocked(self, conn):
@@ -61,27 +61,29 @@ class TestCheckConstraints:
             )
 
     def test_valid_execution_types_accepted(self, conn):
-        conn.execute("INSERT INTO phases (id,name,phase_order,execution_type) VALUES (?,?,?,?)",
+        conn.execute("INSERT INTO phases (code,name,phase_order,execution_type) VALUES (?,?,?,?)",
                      ("ok1", "Ok", 1, "sync"))
-        conn.execute("INSERT INTO phases (id,name,phase_order,execution_type) VALUES (?,?,?,?)",
+        conn.execute("INSERT INTO phases (code,name,phase_order,execution_type) VALUES (?,?,?,?)",
                      ("ok2", "Ok2", 2, "parallel"))
 
     def test_valid_status_accepted(self, conn):
         for st in ("active", "done", "blocked"):
             conn.execute("INSERT INTO tasks (task_key,status) VALUES (?,?)", (f"TK-{st}", st))
-        # task_history uses pending|done
+        # task_history uses pending|done — use separate phases for each status (UNIQUE on task_id+phase_id)
         conn.execute("INSERT INTO tasks (task_key,status) VALUES (?,?)", ("T-history", "active"))
         tid = conn.execute("SELECT id FROM tasks WHERE task_key=?", ("T-history",)).fetchone()[0]
-        for st in ("pending", "done"):
+        for i, st in enumerate(("pending", "done")):
+            conn.execute("INSERT INTO phases (code,name,phase_order) VALUES (?,?,?)", (f"ph-{i}", "H", i+10))
+            pid = conn.execute("SELECT id FROM phases WHERE code=?", (f"ph-{i}",)).fetchone()[0]
             conn.execute(
                 "INSERT INTO task_history (task_id,phase_id,status) VALUES (?,?,?)",
-                (tid, str(st) or "0", st)
+                (tid, pid, st)
             )
 
     def test_null_skills_accepted(self, conn):
         conn.execute(
             "INSERT INTO instructions (phase_id,step_num,description,execution_type,skills) VALUES (?,?,?,?,?)",
-            ("0", 99, "S", "sync", None)
+            (1, 99, "S", "sync", None)
         )
         row = conn.execute("SELECT skills FROM instructions WHERE step_num=?", (99,)).fetchone()
         assert row[0] is None
@@ -89,7 +91,7 @@ class TestCheckConstraints:
     def test_json_skills_accepted(self, conn):
         conn.execute(
             "INSERT INTO instructions (phase_id,step_num,description,execution_type,skills) VALUES (?,?,?,?,?)",
-            ("0", 100, "S", "sync", '["python", "git"]')
+            (1, 100, "S", "sync", '["python", "git"]')
         )
         row = conn.execute("SELECT skills FROM instructions WHERE step_num=?", (100,)).fetchone()
         assert row[0] == '["python", "git"]'
@@ -101,15 +103,15 @@ class TestCheckConstraints:
 
     def test_cascade_delete_phase_clears_instructions(self, conn):
         conn.execute("INSERT INTO instructions (phase_id,step_num,description) VALUES (?,?,?)",
-                     ("0", 1, "I1"))
-        conn.execute("DELETE FROM phases WHERE id=?", ("0",))
-        rows = conn.execute("SELECT * FROM instructions WHERE phase_id=?", ("0",)).fetchall()
+                     (1, 1, "I1"))
+        conn.execute("DELETE FROM phases WHERE id=?", (1,))
+        rows = conn.execute("SELECT * FROM instructions WHERE phase_id=?", (1,)).fetchall()
         assert len(rows) == 0
 
     def test_cascade_delete_task_clears_history(self, conn):
         conn.execute("INSERT INTO tasks (task_key) VALUES (?)", ("DDD-1",))
         tid = conn.execute("SELECT id FROM tasks WHERE task_key=?", ("DDD-1",)).fetchone()[0]
-        conn.execute("INSERT INTO task_history (task_id,phase_id) VALUES (?,?)", (tid, "0"))
+        conn.execute("INSERT INTO task_history (task_id,phase_id) VALUES (?,?)", (tid, 1))
         conn.execute("DELETE FROM tasks WHERE id=?", (tid,))
         rows = conn.execute("SELECT * FROM task_history WHERE task_id=?", (tid,)).fetchall()
         assert len(rows) == 0

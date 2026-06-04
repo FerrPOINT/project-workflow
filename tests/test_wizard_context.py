@@ -32,15 +32,16 @@ class TestWizardFullContext:
         ctx = engine.get_full_context()
         all_ph = ctx["all_phases"]
         assert len(all_ph) > 0
-        ids = [p["id"] for p in all_ph]
-        assert "-1" in ids
-        assert "8" in ids  # Jira Done
+        # Semantic codes (string identifiers used in URL/config)
+        codes = [p["code"] for p in all_ph]
+        assert "-1" in codes
+        assert "8" in codes  # Jira Done
 
     def test_phase_items_have_required_keys(self):
         engine = wizard.WizardEngine("TASKNEIROKLYUCH-1", "/tmp")
         ctx = engine.get_full_context()
         for ph in ctx["all_phases"]:
-            for key in ("id", "name", "description", "instructions", "checks", "evidence"):
+            for key in ("id", "code", "name", "description", "instructions", "checks", "evidence"):
                 assert key in ph, f"Phase {ph.get('id')} missing {key}"
 
     def test_current_phase_when_no_history(self):
