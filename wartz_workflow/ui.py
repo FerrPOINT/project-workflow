@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 from typing import Any
 
@@ -69,13 +68,14 @@ def _yaml_to_sqlite() -> None:
     yaml_phases = schema.load_phases()
     _phase_order = config.PHASE_ORDER
     batch = []
+    srv = service.PhaseService(_db)
     for p in yaml_phases:
         # Полные данные фазы для шаблона
         extra = {
             "delegate_agent": p.delegate.agent if p.delegate else None,
             "delegate_timeout": p.delegate.timeout_min if p.delegate else None,
             "delegate_max_cycles": p.delegate.max_cycles if p.delegate else None,
-            "delegate_toolsets": json.dumps(p.delegate.toolsets) if p.delegate and p.delegate.toolsets else None,
+            "delegate_toolsets": srv.serialize_skills(p.delegate.toolsets) if p.delegate and p.delegate.toolsets else None,
             "parallel_with": p.parallel_with,
             "rollback_target": p.rollback_target,
             "next_recommendation": p.next_recommendation,
@@ -87,7 +87,7 @@ def _yaml_to_sqlite() -> None:
                 "name": p.name,
                 "description": p.description or "",
                 "phase_order": _phase_order.index(p.id) + 1 if p.id in _phase_order else 0,
-                "skills": json.dumps(p.skills) if p.skills else None,
+                "skills": srv.serialize_skills(p.skills),
                 "instructions": [
                     {
                         "step_num": idx + 1,
@@ -293,10 +293,11 @@ def _group_phases(phases: list[dict]) -> dict[str, list[dict]]:
 
 def _load_phases() -> list[dict]:
     wdb = _get_db()
+    srv = _get_service()
     rows = wdb.get_phases()
     result = []
     for p in rows:
-        skills = json.loads(p["skills"]) if p["skills"] else []
+        skills = srv.parse_skills(p["skills"])
         delegate_agent = p.get("delegate_agent")
         result.append(
             {
@@ -310,6 +311,7 @@ def _load_phases() -> list[dict]:
                 "parallel_with": p.get("parallel_with"),
                 "rollback_target": p.get("rollback_target"),
                 "delegate_timeout": p.get("delegate_timeout"),
+                "execution_type": p.get("execution_type", "sync"),
             }
         )
     return result
@@ -489,12 +491,13 @@ def api_wizard_submit(phase_id: str, body: dict[str, Any]):
     for q in questions:
         qid = f"q_{q['id']}"
         answer = user_answers.get(qid, "").strip()
-        
+
         if q.get("required") and not answer:
             missing.append(q["qtext"])
             continue
-        
+
         # Check keywords
+        import json
         keywords = json.loads(q.get("expected_keywords", "[]")) if q.get("expected_keywords") else []
         if keywords and answer:
             ans_lower = answer.lower()

@@ -1,6 +1,6 @@
 """WorkflowDB — SQLite persistence for workflow entities.
 
-Схема: 8 таблиц (phase_groups, agents, phases, instructions, checks, evidence, tasks, task_history, cli_history)
+Схема: 9 таблиц (phase_groups, agents, phases, instructions, checks, evidence, tasks, task_history, cli_history)
 Плоская структура, связи через FOREIGN KEY. Legacy-таблицы удалены.
 """
 
@@ -201,6 +201,7 @@ class WorkflowDB:
     # ── Phase CRUD ───────────────────────────────────────────────────
 
     def create_phase(self, data: dict) -> None:
+        """Insert a new phase row (string values only)."""
         with self._conn() as conn:
             conn.execute(
                 """
@@ -463,3 +464,65 @@ class WorkflowDB:
         with self._conn() as conn:
             conn.execute("UPDATE phases SET phase_order = ? WHERE id = ?", (new_order, phase_id))
             conn.commit()
+
+    def update_phase_group_assignment(self, phase_id: str, group_id: str | None) -> None:
+        with self._conn() as conn:
+            conn.execute("UPDATE phases SET group_id = ? WHERE id = ?", (group_id, phase_id))
+            conn.commit()
+
+    def update_phase_parallel(self, phase_id: str, parallel_with: str | None) -> None:
+        with self._conn() as conn:
+            conn.execute("UPDATE phases SET parallel_with = ? WHERE id = ?", (parallel_with, phase_id))
+            conn.commit()
+
+    def batch_update_groups(self, group_map: dict[str, str]) -> None:
+        with self._conn() as conn:
+            conn.executemany(
+                "UPDATE phases SET parallel_with = ? WHERE id = ?",
+                list(group_map.items()),
+            )
+            conn.commit()
+
+    # ── Group Order Batch ─────────────────────────────────────────────
+
+    def batch_update_group_orders(self, batch: list[tuple[str, int]]) -> None:
+        with self._conn() as conn:
+            conn.executemany(
+                "UPDATE phase_groups SET sort_order = ? WHERE id = ?",
+                [(order, gid) for gid, order in batch],
+            )
+            conn.commit()
+
+    # ── Seed Defaults ──────────────────────────────────────────────────
+
+    def seed_default_groups(self) -> None:
+        defaults = [
+            ("setup", "🔧 Setup", 1),
+            ("research", "🔬 Research", 2),
+            ("plan", "📋 Plan", 3),
+            ("dev", "💻 Dev", 4),
+            ("qa", "🧪 QA", 5),
+            ("closure", "🏁 Closure", 6),
+        ]
+        with self._conn() as conn:
+            for gid, name, order in defaults:
+                conn.execute(
+                    "INSERT OR IGNORE INTO phase_groups (id, name, sort_order) VALUES (?, ?, ?)",
+                    (gid, name, order),
+                )
+            conn.commit()
+
+    # ── Alias helpers for UI back-compat ──────────────────────────────
+
+    def get_questions(self, phase_id: str) -> list[dict]:
+        """Return empty list (questions removed from schema)."""
+        return []
+
+    def get_instructions(self, phase_id: str) -> list[dict]:
+        return self.get_phase_instructions(phase_id)
+
+    def get_checks(self, phase_id: str) -> list[dict]:
+        return self.get_phase_checks(phase_id)
+
+    def get_evidence(self, phase_id: str) -> list[dict]:
+        return self.get_phase_evidence(phase_id)

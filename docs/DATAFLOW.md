@@ -171,7 +171,7 @@ JSON: {verdict, covered, missing, next_phase, message}
 
 | Таблица | Что хранит | Кто пишет | Кто читает |
 |---------|-----------|-----------|------------|
-| `phases` | Фазы (id, name, description, order, skills, execution_mode, delegate_agent, rollback_target) | `_seed_to_sqlite()` на старте, `PhaseService.save_phase()` | Все страницы |
+| `phases` | Фазы (id, name, description, order, skills, execution_type, delegate_agent, rollback_target) | `_seed_to_sqlite()` на старте, `PhaseService.save_phase()` | Все страницы |
 | `instructions` | Инструкции фазы (step_num, description, execution_type, tool) | `save_phase()` | `phase_detail.html`, wizard |
 | `checks` | Чеки (description, optional) | `save_phase()` | wizard, `phase_detail.html` |
 | `evidence` | Evidence (item, validator) | `save_phase()` | wizard, `phase_detail.html` |

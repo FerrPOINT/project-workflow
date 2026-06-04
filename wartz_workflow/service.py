@@ -101,6 +101,30 @@ class PhaseService:
             "evidence": self._db.get_phase_evidence(phase_id),
         }
 
+    # ── Update phase (metadata) ──────────────────────────────────────
+
+    def update_phase(self, phase_id: str, data: dict) -> None:
+        self._db.update_phase(phase_id, data)
+
+    # ── Helpers ────────────────────────────────────────────────────────
+
+    @staticmethod
+    def parse_skills(raw: str | None) -> list[str]:
+        if not raw:
+            return []
+        import json
+        try:
+            return json.loads(raw)
+        except Exception:
+            return []
+
+    @staticmethod
+    def serialize_skills(skills: list[str] | None) -> str | None:
+        if not skills:
+            return None
+        import json
+        return json.dumps(skills, ensure_ascii=False)
+
     def get_all_phases(self) -> list[dict]:
         """Все фазы с контентом (для API)."""
         rows = self._db.get_phases()

@@ -33,7 +33,7 @@ Open http://localhost:8811
 
 **Редактируемые поля:**
 - name, description, skills, delegate_agent, delegate_timeout
-- execution_mode (sync/parallel toggle)
+- execution_type (sync/parallel toggle)
 - rollback_target, next_recommendation
 
 **Секции:**
