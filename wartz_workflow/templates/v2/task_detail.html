@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}{{ task.task_key }} — {{ task.title }} — wartz-workflow{% endblock %}
+{% block header_title %}{{ task.task_key }}{% endblock %}
+{% block header_actions %}
+  <a href="/tasks" class="btn btn-secondary">← Назад к списку</a>
+{% endblock %}
+
+{% block extra_style %}
+.dropdown-menu a.danger:hover{background:var(--red-soft)}
+
+/* ── Detail header ──────────────────────────────────────────────────── */
+.detail-header{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:24px;margin-bottom:20px}
+.detail-header h1{font-size:22px;font-weight:600;margin:0 0 4px;letter-spacing:-0.2px;word-break:break-word}
+.detail-header .subtitle{color:var(--text-muted);font-size:14px;line-height:1.5;margin-bottom:14px}
+.detail-header .meta{display:flex;gap:16px;margin-top:14px;flex-wrap:wrap;font-size:13px;color:var(--text-dim)}
+.detail-header .meta span{display:flex;align-items:center;gap:6px}
+.detail-header .meta b{color:var(--text-secondary);font-weight:500}
+
+/* ── Big status badge ───────────────────────────────────────────────── */
+.status-big{display:inline-flex;align-items:center;gap:8px;padding:6px 16px;border-radius:8px;font-size:14px;font-weight:600}
+.status-big.done{background:var(--green-soft);color:var(--green);border:1px solid rgba(34,197,94,.20)}
+.status-big.active{background:var(--accent-soft);color:var(--accent);border:1px solid rgba(94,106,210,.20)}
+.status-big.blocked{background:var(--red-soft);color:var(--red);border:1px solid rgba(239,68,68,.20)}
+
+/* ── Summary bar ────────────────────────────────────────────────────── */
+.summary-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px}
+.summary-item{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px}
+.summary-item .label{font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px}
+.summary-item .value{font-size:18px;font-weight:600;color:var(--text)}
+.summary-item .value small{font-size:12px;color:var(--text-muted);font-weight:500}
+
+/* ── Phase history — strict linear vertical list ──────────────────── */
+.phase-history{display:flex;flex-direction:column;gap:0;position:relative;padding-left:28px}
+.phase-history::before{content:'';position:absolute;left:10px;top:8px;bottom:8px;width:2px;background:var(--border-strong);border-radius:1px}
+
+.phase-history-item{position:relative;padding:14px 18px;margin-bottom:12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;transition:all .12s}
+.phase-history-item:last-child{margin-bottom:0}
+.phase-history-item:hover{background:var(--surface-hover)}
+
+/* Left colored indicator */
+.phase-history-item .indicator{position:absolute;left:-22px;top:50%;transform:translateY(-50%);width:10px;height:10px;border-radius:50%;border:2px solid var(--bg)}
+.phase-history-item.done .indicator{background:var(--green)}
+.phase-history-item.current .indicator{background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.phase-history-item.wait .indicator{background:var(--text-dim)}
+
+.phase-history-item.done{border-left:3px solid var(--green)}
+.phase-history-item.current{border-left:3px solid var(--accent);background:rgba(94,106,210,.08)}
+.phase-history-item.wait{border-left:3px solid var(--text-dim)}
+
+/* Content */
+.ph-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px}
+.ph-order{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-dim);background:var(--panel);padding:2px 8px;border-radius:4px}
+.ph-name{font-size:15px;font-weight:600;color:var(--text)}
+.ph-status{font-size:12px;font-weight:500;padding:2px 8px;border-radius:4px;margin-left:auto}
+.ph-status.done{background:var(--green-soft);color:var(--green)}
+.ph-status.current{background:var(--accent-soft);color:var(--accent)}
+.ph-status.wait{background:var(--panel);color:var(--text-dim)}
+.ph-desc{font-size:13px;color:var(--text-muted);margin-top:6px;line-height:1.5}
+
+/* ── Modal ──────────────────────────────────────────────────────────── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:none;align-items:center;justify-content:center}
+.modal-overlay.show{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border-strong);border-radius:10px;padding:24px;width:90%;max-width:400px;box-shadow:0 12px 32px rgba(0,0,0,.5)}
+.modal h3{margin:0 0 4px;font-size:16px;font-weight:600}
+.modal p{margin:0 0 16px;color:var(--text-muted);font-size:13px}
+.modal select{margin-bottom:16px}
+.modal .modal-actions{display:flex;gap:10px;justify-content:flex-end}
+
+/* ── Responsive ────────────────────────────────────────────────────── */
+@media(max-width:640px){
+  .summary-bar{grid-template-columns:1fr}
+  .detail-header{padding:16px}
+}
+{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="detail-header">
+  <h1>{{ task.task_key }}</h1>
+  <p class="subtitle">{{ task.title or '—' }}</p>
+
+  <div class="meta">
+    <span><b>Проект:</b> {{ task.project_code }}{% if task.project_name and task.project_name != task.project_code %} — {{ task.project_name }}{% endif %}</span>
+    <span><b>Создана:</b> {{ task.created_at[:16] if task.created_at else '—' }}</span>
+    <span><b>Обновлена:</b> {{ task.updated_at[:16] if task.updated_at else '—' }}</span>
+    <span>
+      {% if task.status == 'done' %}
+      <span class="status-big done">🟢 Завершена</span>
+      {% elif task.status == 'blocked' %}
+      <span class="status-big blocked">🔴 Заблокирована</span>
+      {% else %}
+      <span class="status-big active">🔵 В работе</span>
+      {% endif %}
+    </span>
+  </div>
+</div>
+
+<!-- Summary bar -->
+<div class="summary-bar">
+  <div class="summary-item">
+    <div class="label">Текущая фаза</div>
+    <div class="value">{{ current_phase_name or '—' }}</div>
+  </div>
+  <div class="summary-item">
+    <div class="label">Прогресс</div>
+    <div class="value">{{ progress_done }} / {{ progress_total }} <small>({{ (progress_done / progress_total * 100) | round(0)|int if progress_total else 0 }}%)</small></div>
+  </div>
+  <div class="summary-item">
+    <div class="label">Время в работе</div>
+    <div class="value">{{ work_time or '—' }}</div>
+  </div>
+</div>
+
+<!-- Phase history — strictly linear, no fork/join -->
+<div class="card">
+  <div class="card-header" style="margin-bottom:12px">
+    <div class="card-title">История фаз</div>
+  </div>
+
+  <div class="phase-history">
+    {% for ph in phase_history %}
+    <div class="phase-history-item {{ ph.status }}">
+      <div class="indicator"></div>
+      <div class="ph-top">
+        <span class="ph-order">№{{ ph.phase_order }}</span>
+        <span class="ph-name">{{ ph.phase_name }}</span>
+        {% if ph.status == 'done' %}
+        <span class="ph-status done">✅ Завершена</span>
+        {% elif ph.status == 'current' %}
+        <span class="ph-status current">🔵 Текущая</span>
+        {% else %}
+        <span class="ph-status wait">⏳ Ожидает</span>
+        {% endif %}
+      </div>
+      {% if ph.phase_description %}
+      <div class="ph-desc">{{ ph.phase_description }}</div>
+      {% endif %}
+    </div>
+    {% else %}
+    <div style="color:var(--text-dim);font-size:13px;padding:8px 0">Нет записей в истории</div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+{% endblock %}

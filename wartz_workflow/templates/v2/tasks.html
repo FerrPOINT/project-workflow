@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+
+{% block title %}Задачи workflow — wartz-workflow{% endblock %}
+{% block header_title %}Задачи workflow{% endblock %}
+{% block header_actions %}
+  <a href="/phases" class="btn btn-secondary">← Назад к фазам</a>
+{% endblock %}
+
+{% block extra_style %}
+/* ── KPI badge cards ─────────────────────────────────────────────────── */
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 20px;cursor:pointer;transition:all .12s}
+.stat-card:hover{background:var(--surface-hover);border-color:var(--border-strong)}
+.stat-card .label{font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em}
+.stat-card .value{font-size:24px;font-weight:700;color:var(--text);letter-spacing:-0.3px;margin-top:6px}
+.stat-card.active{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.stat-card.done{border-color:var(--green);box-shadow:0 0 0 2px var(--green-soft)}
+
+/* ── Filters ────────────────────────────────────────────────────────── */
+.filter-bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.filter-btn{padding:6px 14px;border-radius:6px;font-size:13px;font-weight:500;border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);cursor:pointer;transition:all .12s;font-family:inherit}
+.filter-btn:hover{background:var(--surface-hover);color:var(--text)}
+.filter-btn.active{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+
+/* ── Search ─────────────────────────────────────────────────────────── */
+.search-box{position:relative;flex:1;max-width:280px}
+.search-box input{padding-left:34px;background:var(--panel)}
+.search-box svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-dim)}
+
+/* ── Table enhancements ────────────────────────────────────────────── */
+.tasks-table th,.tasks-table td{white-space:nowrap}
+.tasks-table td:nth-child(2),.tasks-table td:nth-child(3){white-space:normal;max-width:320px}
+.tasks-table .task-key{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent)}
+.tasks-table .task-title{color:var(--text);font-weight:500}
+
+/* ── Status badge (colored) ───────────────────────────────────────── */
+.status-badge{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:6px;font-size:12px;font-weight:500}
+.status-done{background:var(--green-soft);color:var(--green)}
+.status-active{background:var(--accent-soft);color:var(--accent)}
+.status-blocked{background:var(--red-soft);color:var(--red)}
+
+/* ── Pagination ──────────────────────────────────────────────────────── */
+.pagination{display:flex;gap:6px;justify-content:center;margin-top:20px;align-items:center}
+.pagination a,.pagination span{padding:6px 12px;border-radius:6px;font-size:13px;font-weight:500;border:1px solid var(--border)}
+.pagination a{background:var(--surface);color:var(--text-secondary);text-decoration:none}
+.pagination a:hover{background:var(--surface-hover);color:var(--text)}
+.pagination span.current{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+.pagination .disabled{color:var(--text-dim);background:var(--panel);cursor:not-allowed}
+
+/* ── Progress inline ──────────────────────────────────────────────── */
+.progress-inline{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--text-muted)}
+.progress-inline .bar{width:60px;height:5px;border-radius:3px;background:var(--panel);overflow:hidden}
+.progress-inline .bar-fill{height:100%;border-radius:3px;background:var(--accent)}
+.progress-inline .bar-fill.done{background:var(--green)}
+
+/* ── Mobile cards ──────────────────────────────────────────────────── */
+.task-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:10px}
+.task-card .row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px}
+.task-card .row:last-child{margin-bottom:0}
+.task-card .task-key{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent)}
+.task-card .label{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em}
+.task-card .value{font-size:13px;color:var(--text-secondary);font-weight:500}
+{% endblock %}
+
+{% block content %}
+<!-- Stat cards -->
+<div class="kpi-grid">
+  <div class="stat-card {% if filter_status == 'all' %}active{% endif %}" onclick="setFilter('all')">
+    <div class="label">Всего</div>
+    <div class="value">{{ total_count }}</div>
+  </div>
+  <div class="stat-card {% if filter_status == 'active' %}active{% endif %}" onclick="setFilter('active')">
+    <div class="label">Активные</div>
+    <div class="value">{{ active_count }}</div>
+  </div>
+  <div class="stat-card {% if filter_status == 'done' %}done{% endif %}" onclick="setFilter('done')">
+    <div class="label">Завершены</div>
+    <div class="value">{{ done_count }}</div>
+  </div>
+</div>
+
+<!-- Filters & Search -->
+<div class="filter-bar">
+  <button class="filter-btn {% if filter_status == 'all' %}active{% endif %}" onclick="setFilter('all')">Все</button>
+  <button class="filter-btn {% if filter_status == 'active' %}active{% endif %}" onclick="setFilter('active')">Активные</button>
+  <button class="filter-btn {% if filter_status == 'done' %}active{% endif %}" onclick="setFilter('done')">Завершены</button>
+  <div class="search-box">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+    <input type="text" id="searchInput" placeholder="Поиск по ключу или названию…" value="{{ search or '' }}" oninput="debounceSearch()">
+  </div>
+</div>
+
+<!-- Desktop table -->
+<div class="card" style="padding:0;overflow-x:auto">
+  <table class="tasks-table">
+    <thead>
+      <tr>
+        <th>Ключ</th>
+        <th>Проект</th>
+        <th>Название</th>
+        <th>Фаза</th>
+        <th>Прогресс</th>
+        <th>Статус</th>
+        <th>Создана</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in tasks %}
+      <tr>
+        <td><a href="/task/{{ t.task_key }}" class="task-key">{{ t.task_key }}</a></td>
+        <td>{{ t.project_code }}</td>
+        <td><span class="task-title">{{ t.title }}</span></td>
+        <td>{{ t.current_phase_name or '—' }}</td>
+        <td>
+          <span class="progress-inline">
+            <span class="bar"><span class="bar-fill {% if t.completed >= t.total_phases %}done{% endif %}" style="width:{{ (t.completed / t.total_phases * 100) if t.total_phases else 0 }}%"></span></span>
+            {{ t.completed }}/{{ t.total_phases }}
+          </span>
+        </td>
+        <td>
+          {% if t.status == 'done' %}
+          <span class="status-badge status-done">🟢 Завершена</span>
+          {% elif t.status == 'blocked' %}
+          <span class="status-badge status-blocked">🔴 Заблокирована</span>
+          {% else %}
+          <span class="status-badge status-active">🔵 В работе</span>
+          {% endif %}
+        </td>
+        <td>{{ t.created_at[:16] if t.created_at else '—' }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="7" style="text-align:center;color:var(--text-dim);padding:32px">Нет задач</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Pagination -->
+{% if total_pages > 1 %}
+<div class="pagination">
+  {% if page_num > 1 %}
+  <a href="?page={{ page_num - 1 }}{% if filter_status %}&status={{ filter_status }}{% endif %}{% if search %}&search={{ search | urlencode }}{% endif %}">←</a>
+  {% else %}
+  <span class="disabled">←</span>
+  {% endif %}
+
+  {% for p in range(1, total_pages + 1) %}
+    {% if p == page_num %}
+    <span class="current">{{ p }}</span>
+    {% else %}
+    <a href="?page={{ p }}{% if filter_status %}&status={{ filter_status }}{% endif %}{% if search %}&search={{ search | urlencode }}{% endif %}">{{ p }}</a>
+    {% endif %}
+  {% endfor %}
+
+  {% if page_num < total_pages %}
+  <a href="?page={{ page_num + 1 }}{% if filter_status %}&status={{ filter_status }}{% endif %}{% if search %}&search={{ search | urlencode }}{% endif %}">→</a>
+  {% else %}
+  <span class="disabled">→</span>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- Mobile cards (shown on small screens) -->
+<div class="table-card-list" style="margin-top:16px;display:none">
+  {% for t in tasks %}
+  <div class="task-card">
+    <div class="row">
+      <a href="/task/{{ t.task_key }}" class="task-key">{{ t.task_key }}</a>
+      {% if t.status == 'done' %}
+      <span class="status-badge status-done">🟢</span>
+      {% elif t.status == 'blocked' %}
+      <span class="status-badge status-blocked">🔴</span>
+      {% else %}
+      <span class="status-badge status-active">🔵</span>
+      {% endif %}
+    </div>
+    <div class="row" style="margin-bottom:10px">
+      <span class="task-title" style="font-size:14px">{{ t.title }}</span>
+    </div>
+    <div class="row">
+      <div><span class="label">Проект</span><div class="value">{{ t.project_code }}</div></div>
+      <div><span class="label">Фаза</span><div class="value">{{ t.current_phase_name or '—' }}</div></div>
+      <div><span class="label">Прогресс</span><div class="value">{{ t.completed }}/{{ t.total_phases }}</div></div>
+      <div><span class="label">Создана</span><div class="value">{{ t.created_at[:10] if t.created_at else '—' }}</div></div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}
+
+{% block extra_script %}
+let _searchTimer = null;
+function debounceSearch() {
+  if (_searchTimer) clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(doSearch, 350);
+}
+function doSearch() {
+  const q = document.getElementById('searchInput').value.trim();
+  const url = new URL(window.location.href);
+  if (q) url.searchParams.set('search', q);
+  else url.searchParams.delete('search');
+  url.searchParams.delete('page');
+  window.location.href = url.toString();
+}
+function setFilter(status) {
+  const url = new URL(window.location.href);
+  if (status === 'all') url.searchParams.delete('status');
+  else url.searchParams.set('status', status);
+  url.searchParams.delete('page');
+  window.location.href = url.toString();
+}
+/* Show mobile cards on narrow screens */
+(function(){
+  function update(){
+    const isMobile = window.innerWidth <= 640;
+    document.querySelector('.table-card-list').style.display = isMobile ? 'flex' : 'none';
+    const tbl = document.querySelector('.tasks-table');
+    if (tbl) tbl.closest('.card').style.display = isMobile ? 'none' : 'block';
+  }
+  update();
+  window.addEventListener('resize', update);
+})();
+{% endblock %}

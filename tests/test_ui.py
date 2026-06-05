@@ -1,9 +1,11 @@
 """Tests for UI (FastAPI endpoints)."""
 
+import click
 import pytest
 from fastapi.testclient import TestClient
 
-from wartz_workflow.ui import app
+from wartz_workflow.cli.core import cli
+from wartz_workflow.ui import _load_cli_reference, app
 
 
 client = TestClient(app)
@@ -11,11 +13,42 @@ client = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def setup_db():
-    """Populate DB with seed.json before UI tests."""
+    """Populate DB with seed.json + sample task before UI tests."""
     from wartz_workflow.ui import _get_db, _seed_to_sqlite
     wdb = _get_db()
     if wdb.is_empty():
         _seed_to_sqlite()
+    # Ensure sample task exists for task detail tests
+    if not wdb.get_task_by_key("TASKNEIROKLYUCH-247"):
+        wdb.create_task({
+            "task_key": "TASKNEIROKLYUCH-247",
+            "title": "Добавить E2E тесты для workflow",
+            "status": "active",
+            "current_phase": "5",
+        })
+    project = wdb.get_project_by_code("UITEST")
+    if not project:
+        project_id = wdb.create_project({
+            "code": "UITEST",
+            "name": "UI Test Project",
+            "key_patterns": [r"^(?P<prefix>UITEST)-(?P<number>[0-9]+)$"],
+        })
+    else:
+        project_id = project["id"]
+    if not wdb.get_task_by_key("UITEST-401"):
+        wdb.create_task({
+            "project_id": project_id,
+            "task_key": "UITEST-401",
+            "title": "Проверка project-aware UI",
+            "status": "active",
+            "current_phase": "-1",
+        })
+    if not any(agent.get("name") == "reviewer" for agent in wdb.get_agents()):
+        wdb.create_agent({
+            "name": "reviewer",
+            "description": "Проверяет качество решения и фиксирует замечания",
+        })
+
 
 
 class TestIndexPage:
@@ -23,13 +56,20 @@ class TestIndexPage:
         response = client.get("/")
         assert response.status_code == 200
         assert response.headers["content-type"] == "text/html; charset=utf-8"
-        assert "wartz" in response.text
-        assert "workflow" in response.text
+        assert "Дашборд" in response.text
+        assert "Активные задачи" in response.text
+        assert "Проекты" in response.text
 
     def test_index_has_nav(self):
         response = client.get("/")
         assert response.status_code == 200
         assert "Фазы" in response.text
+
+    def test_index_shows_real_task_and_project_data(self):
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "UITEST-401" in response.text
+        assert "UI Test Project" in response.text
 
 
 class TestPhasesPage:
@@ -37,12 +77,22 @@ class TestPhasesPage:
         response = client.get("/phases")
         assert response.status_code == 200
         assert response.headers["content-type"] == "text/html; charset=utf-8"
-        assert "Все фазы" in response.text
+        assert "Фазы" in response.text
 
     def test_phases_has_phase_rows(self):
         response = client.get("/phases")
         assert response.status_code == 200
-        assert 'class="kanban-card"' in response.text
+        assert 'timeline-card' in response.text
+
+    def test_phases_timeline_has_arrows(self):
+        response = client.get("/phases")
+        assert response.status_code == 200
+        assert 'timeline-arrow' in response.text
+
+    def test_phases_timeline_cards_clickable(self):
+        response = client.get("/phases")
+        assert response.status_code == 200
+        assert 'href="/phase/' in response.text
 
     def test_phases_api_returns_json(self):
         response = client.get("/api/phases")
@@ -51,6 +101,21 @@ class TestPhasesPage:
         assert data["ok"] is True
         assert "phases" in data
         assert len(data["phases"]) > 0
+
+    def test_sidebar_has_projects_link(self):
+        response = client.get("/phases")
+        assert response.status_code == 200
+        assert 'href="/projects"' in response.text
+        assert "Проекты" in response.text
+
+    def test_phases_page_has_reorder_controls_and_batch_order_api_hook(self):
+        response = client.get("/phases")
+        assert response.status_code == 200
+        assert 'phase-order-controls' in response.text
+        assert 'data-phase-id="' in response.text
+        assert "movePhase(this, -1)" in response.text
+        assert "movePhase(this, 1)" in response.text
+        assert "fetch('/api/phases/order'" in response.text
 
 
 class TestPhaseDetail:
@@ -64,6 +129,35 @@ class TestPhaseDetail:
         response = client.get("/phase/-1")
         assert response.status_code == 200
         assert 'flow-card' in response.text
+
+    def test_phase_detail_wraps_parallel_batch_in_gold_frame(self):
+        response = client.get("/phase/0.0a")
+        assert response.status_code == 200
+        assert 'class="flow-run group flow-batch"' in response.text
+        assert '.flow-run.group.flow-batch{' in response.text
+        assert 'border:1px solid var(--batch-gold)' in response.text
+
+    def test_phase_detail_rebuild_flow_keeps_gold_batch_wrapper(self):
+        response = client.get("/phase/0.0a")
+        assert response.status_code == 200
+        assert "run.className = 'flow-run ' + (group.length > 1 ? 'group flow-batch' : 'single');" in response.text
+
+    def test_phase_detail_hides_code_and_order_meta(self):
+        response = client.get("/phase/1")
+        assert response.status_code == 200
+        assert 'Code:' not in response.text
+        assert 'data-field="code"' not in response.text
+        assert 'data-field="phase_num"' not in response.text
+        assert 'href="/phases"' in response.text
+        assert 'Порядок меняется на странице фаз' in response.text
+
+    def test_phases_page_hides_code_and_number_visual_noise(self):
+        response = client.get("/phases")
+        assert response.status_code == 200
+        assert 'timeline-code' not in response.text
+        assert 'phase-order-badge' not in response.text
+        assert 'move-up-btn' in response.text
+        assert 'move-down-btn' in response.text
 
     def test_phase_detail_404_on_unknown(self):
         response = client.get("/phase/nonexistent")
@@ -95,22 +189,66 @@ class TestPhaseUpdate:
         # IDs must be positive integers
         assert all(isinstance(i, int) and i > 0 for i in data["ids"]["instructions"])
 
+    def test_api_phase_update_persists_execution_type(self):
+        from wartz_workflow.ui import _get_db
+
+        wdb = _get_db()
+        original = wdb.get_phase("1")
+        assert original is not None
+        assert original["execution_type"] == "sync"
+
+        try:
+            resp = client.put("/api/phases/1", json={"execution_type": "parallel"})
+            assert resp.status_code == 200
+
+            updated = wdb.get_phase("1")
+            assert updated is not None
+            assert updated["execution_type"] == "parallel"
+        finally:
+            client.put("/api/phases/1", json={"execution_type": "sync"})
+
+    def test_api_phase_update_rejects_phase_num_from_detail_editor(self):
+        local_client = TestClient(app, raise_server_exceptions=False)
+
+        resp = local_client.put("/api/phases/1", json={
+            "phase_num": 1,
+            "execution_type": "parallel",
+        })
+        assert resp.status_code == 400
+        data = resp.json()
+        assert data["ok"] is False
+        assert "phase_num" in data["error"]
+
 
 class TestDragDropAPI:
     """Tests for drag-and-drop backend APIs."""
 
     def test_api_batch_order_update(self):
-        resp = client.put("/api/phases/order", json={
-            "orders": [
-                {"phase_id": "-1", "phase_order": 1},
-                {"phase_id": "0", "phase_order": 2},
-                {"phase_id": "1", "phase_order": 3},
-            ]
-        })
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["ok"] is True
-        assert data["updated"] == 3
+        from wartz_workflow import config, phases as phases_mod
+        from wartz_workflow.ui import _get_db, _update_config_phase_order
+
+        wdb = _get_db()
+        original_rows = [(phase["code"], phase["phase_order"]) for phase in wdb.get_phases()]
+        original_phase_order = list(config.PHASE_ORDER)
+
+        try:
+            resp = client.put("/api/phases/order", json={
+                "orders": [
+                    {"phase_id": "-1", "phase_order": 1},
+                    {"phase_id": "0", "phase_order": 2},
+                    {"phase_id": "1", "phase_order": 3},
+                ]
+            })
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["ok"] is True
+            assert data["updated"] == 3
+            assert all(isinstance(phase_code, str) for phase_code in config.PHASE_ORDER)
+            assert phases_mod.get_next_phase("0") is not None
+        finally:
+            wdb.batch_update_orders(original_rows)
+            config.PHASE_ORDER[:] = original_phase_order
+            _update_config_phase_order()
 
     def test_api_batch_order_empty_error(self):
         resp = client.put("/api/phases/order", json={"orders": []})
@@ -133,31 +271,183 @@ class TestDragDropAPI:
         assert data["ok"] is False
 
 
-class TestKanbanHTML:
-    """Tests for drag-and-drop HTML attributes in Kanban."""
+class TestTimelineHTML:
+    """Tests for timeline HTML attributes (no Kanban drag-and-drop)."""
 
-    def test_kanban_cards_are_draggable(self):
+    def test_timeline_cards_exist(self):
         response = client.get("/phases")
         assert response.status_code == 200
-        assert 'draggable="true"' in response.text
-        assert 'ondragstart="cardDragStart(event)"' in response.text
+        assert 'timeline-card' in response.text
 
-    def test_kanban_has_drop_zones(self):
+    def test_timeline_has_arrows(self):
         response = client.get("/phases")
         assert response.status_code == 200
-        assert 'ondrop="colDrop(event)"' in response.text
+        assert 'timeline-arrow' in response.text
 
-    def test_kanban_has_data_attrs(self):
+    def test_timeline_card_clickable(self):
         response = client.get("/phases")
         assert response.status_code == 200
-        assert 'data-phase-id=' in response.text
-        assert 'data-phase-order=' in response.text
+        assert 'href="/phase/' in response.text
 
-    def test_kanban_card_has_click_handler(self):
-        response = client.get("/phases")
+
+class TestTasksPage:
+    """Tests for tasks page."""
+
+    def test_tasks_returns_html(self):
+        response = client.get("/tasks")
         assert response.status_code == 200
-        assert 'onclick="cardClick(event)"' in response.text
-        assert 'function cardClick(e)' in response.text
+        assert "Задачи" in response.text
+
+    def test_tasks_has_task_rows(self):
+        response = client.get("/tasks")
+        assert response.status_code == 200
+        # With empty DB after seed, page shows "Нет задач"
+        assert "Нет задач" in response.text or 'class="row"' in response.text or "TASKNEIROKLYUCH" in response.text
+
+    def test_tasks_api_returns_json(self):
+        response = client.get("/api/tasks")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ok"] is True
+        assert "tasks" in data
+
+    def test_tasks_page_shows_project_column_and_value(self):
+        response = client.get("/tasks")
+        assert response.status_code == 200
+        assert "Проект" in response.text
+        assert "UITEST" in response.text
+
+
+class TestTaskDetail:
+    """Tests for task detail page."""
+
+    def test_task_detail_returns_html(self):
+        response = client.get("/task/TASKNEIROKLYUCH-247")
+        assert response.status_code == 200
+        assert "История фаз" in response.text
+
+    def test_task_detail_shows_current_phase_and_progress(self):
+        response = client.get("/task/TASKNEIROKLYUCH-247")
+        assert response.status_code == 200
+        assert ".gitignore Check" in response.text
+        assert "0 / 30" in response.text or "0/30" in response.text
+
+    def test_task_detail_renders_phase_history_from_db(self):
+        from wartz_workflow.ui import _get_db
+
+        wdb = _get_db()
+        task_key = "TASKNEIROKLYUCH-300"
+        task = wdb.get_task_by_key(task_key)
+        if not task:
+            task_id = wdb.create_task({
+                "task_key": task_key,
+                "title": "Проверка истории фаз",
+                "status": "active",
+                "current_phase": "0.01b",
+            })
+            task = wdb.get_task(task_id)
+        assert task is not None
+        wdb.add_task_history(task["id"], "-1", "done")
+        wdb.add_task_history(task["id"], "0.01b", "pending")
+
+        response = client.get(f"/task/{task_key}")
+        assert response.status_code == 200
+        assert "Task Intake" in response.text
+
+    def test_task_detail_has_phase_history(self):
+        response = client.get("/task/TASKNEIROKLYUCH-247")
+        assert response.status_code == 200
+        assert "История фаз" in response.text
+
+    def test_task_detail_shows_project_context(self):
+        response = client.get("/task/UITEST-401")
+        assert response.status_code == 200
+        assert "Проект" in response.text
+        assert "UITEST" in response.text
+        assert "UI Test Project" in response.text
+
+
+class TestProjectsPage:
+    def test_projects_page_returns_html(self):
+        response = client.get("/projects")
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "text/html; charset=utf-8"
+        assert "Проекты" in response.text
+
+    def test_projects_page_shows_project_rows_and_key_patterns(self):
+        response = client.get("/projects")
+        assert response.status_code == 200
+        assert "UI Test Project" in response.text
+        assert "UITEST" in response.text
+        assert "Регекспы" in response.text
+
+    def test_projects_page_uses_single_editor_with_top_create_button(self):
+        response = client.get("/projects")
+        assert response.status_code == 200
+        assert 'id="projectNav"' in response.text
+        assert 'id="projectForm"' in response.text
+        assert 'id="newProjectButton"' in response.text
+        assert 'id="projectFormMode"' in response.text
+        assert 'id="createProjectForm"' not in response.text
+
+    def test_projects_api_create_update_and_delete(self):
+        create = client.post("/api/projects", json={
+            "code": "APICRUD",
+            "name": "API CRUD Project",
+            "key_patterns": [r"^(?P<prefix>APICRUD)-(?P<number>[0-9]+)$"],
+        })
+        assert create.status_code == 200
+        project_id = create.json()["project_id"]
+
+        update = client.put(f"/api/projects/{project_id}", json={
+            "name": "API CRUD Project Updated",
+            "key_patterns": r"^(?P<prefix>APICRUD)-(?P<number>[0-9]{2,})$",
+        })
+        assert update.status_code == 200
+
+        projects = client.get("/api/projects").json()["projects"]
+        project = next(project for project in projects if project["id"] == project_id)
+        assert project["name"] == "API CRUD Project Updated"
+        assert project["key_patterns"] == [r"^(?P<prefix>APICRUD)-(?P<number>[0-9]{2,})$"]
+
+        delete = client.delete(f"/api/projects/{project_id}")
+        assert delete.status_code == 200
+
+    def test_projects_api_prevents_deleting_project_with_tasks(self):
+        projects = client.get("/api/projects").json()["projects"]
+        ui_project = next(project for project in projects if project["code"] == "UITEST")
+        delete = client.delete(f"/api/projects/{ui_project['id']}")
+        assert delete.status_code == 409
+
+
+class TestAgentsPage:
+    def test_agents_page_shows_name_and_description_without_sort_field(self):
+        response = client.get("/agents")
+        assert response.status_code == 200
+        assert "Описание" in response.text
+        assert "reviewer" in response.text
+        assert "Проверяет качество решения" in response.text
+        assert "Sort" not in response.text
+        assert 'type="number"' not in response.text
+        assert 'placeholder=' not in response.text
+
+    def test_agents_api_create_and_update_description(self):
+        create = client.post("/api/agents", json={
+            "name": "architect",
+            "description": "Проектирует решение",
+        })
+        assert create.status_code == 200
+        payload = create.json()
+        assert payload["ok"] is True
+
+        update = client.put(f"/api/agents/{payload['agent_id']}", json={
+            "description": "Проектирует и уточняет контракты",
+        })
+        assert update.status_code == 200
+
+        agents = client.get("/api/agents").json()["agents"]
+        architect = next(agent for agent in agents if agent["id"] == payload["agent_id"])
+        assert architect["description"] == "Проектирует и уточняет контракты"
 
 
 class TestSettingsPage:
@@ -168,31 +458,60 @@ class TestSettingsPage:
         assert response.status_code == 200
         assert response.headers["content-type"] == "text/html; charset=utf-8"
         assert "Настройки" in response.text
-        assert "Шаблоны ключей" in response.text
+        assert "CLI" in response.text
+        assert "wartz-workflow step" in response.text
+        assert "wartz-workflow history" in response.text
+        assert "wartz-workflow ui" not in response.text
+        assert "Web UI запускается отдельно" not in response.text
+        assert "--report" in response.text
+        assert "--n" in response.text
+        assert ">--repo<" not in response.text
+        assert ">--skip<" not in response.text
+        assert "по умолчанию: все" in response.text
+        assert "default:" not in response.text
 
     def test_api_settings_get_returns_json(self):
         response = client.get("/api/settings")
         assert response.status_code == 200
         data = response.json()
         assert data["ok"] is True
-        assert "settings" in data
-        assert "key_patterns" in data["settings"]
+        assert "commands" in data
+        names = {cmd["name"] for cmd in data["commands"]}
+        assert {"step", "history"}.issubset(names)
+        assert "ui" not in names
 
-    def test_api_settings_put_and_delete(self):
-        # PUT
-        put = client.put("/api/settings", json={"key_patterns": [r"TEST-\d+"]})
-        assert put.status_code == 200
-        # Verify GET
-        get = client.get("/api/settings")
-        data = get.json()["settings"]
-        assert data["key_patterns"] == ["TEST-\\d+"]
-        # DELETE (reset)
+    def test_api_settings_put_and_delete_are_not_supported(self):
+        put = client.put("/api/settings", json={"example_flag": True})
+        assert put.status_code == 405
         delete = client.delete("/api/settings")
-        assert delete.status_code == 200
-        # Verify reset
-        get2 = client.get("/api/settings")
-        data2 = get2.json()["settings"]
-        assert data2["key_patterns"] == [
-            "^TASKNEIROKLYUCH-(?P<number>[0-9]+)$",
-            "^(?P<prefix>[A-Z][A-Z0-9]*)-(?P<number>[0-9]+)$",
-        ]
+        assert delete.status_code == 405
+
+    def test_settings_helper_auto_discovers_runtime_cli_commands(self):
+        @click.command(name="temp-auto")
+        def temp_auto():
+            """Temporary auto discovered command."""
+
+        cli.add_command(temp_auto)
+        try:
+            commands = _load_cli_reference()
+        finally:
+            cli.commands.pop("temp-auto", None)
+
+        discovered = next(cmd for cmd in commands if cmd["name"] == "temp-auto")
+        assert discovered["summary"] == "Temporary auto discovered command."
+
+    def test_settings_helper_exposes_only_meaningful_defaults(self):
+        commands = _load_cli_reference()
+
+        step = next(cmd for cmd in commands if cmd["name"] == "step")
+        history = next(cmd for cmd in commands if cmd["name"] == "history")
+
+        step_options = {option["flags"]: option for option in step["options"]}
+        history_options = {option["flags"]: option for option in history["options"]}
+
+        assert set(step_options) == {"--task", "--report"}
+        assert set(history_options) == {"--task", "--n"}
+        assert "default" not in step_options["--task"]
+        assert "default" not in step_options["--report"]
+        assert "default" not in history_options["--n"]
+        assert "по умолчанию: все" in history_options["--n"]["help"]

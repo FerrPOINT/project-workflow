@@ -18,6 +18,10 @@ def conn(tmp_path):
     c.execute("PRAGMA foreign_keys = ON")
     # base phase
     c.execute("INSERT INTO phases (code, name, phase_order) VALUES (?, ?, ?)", ("0", "Base", 0))
+    c.execute(
+        "INSERT INTO projects (code, name, key_patterns) VALUES (?, ?, ?)",
+        ("TEST", "Test Project", '["^(?P<prefix>TEST)-(?P<number>[0-9]+)$"]')
+    )
     c.commit()
     return c
 
@@ -33,12 +37,12 @@ class TestCheckConstraints:
     def test_task_bad_status_blocked(self, conn):
         with pytest.raises(sqlite3.IntegrityError):
             conn.execute(
-                "INSERT INTO tasks (task_key,status) VALUES (?,?)",
-                ("T-1", "garbage")
+                "INSERT INTO tasks (project_id, task_key, status) VALUES (?,?,?)",
+                (1, "T-1", "garbage")
             )
 
     def test_history_bad_status_blocked(self, conn):
-        conn.execute("INSERT INTO tasks (task_key,status) VALUES (?,?)", ("T-ok", "active"))
+        conn.execute("INSERT INTO tasks (project_id, task_key, status) VALUES (?,?,?)", (1, "T-ok", "active"))
         tid = conn.execute("SELECT id FROM tasks WHERE task_key=?", ("T-ok",)).fetchone()[0]
         with pytest.raises(sqlite3.IntegrityError):
             conn.execute(
@@ -56,8 +60,22 @@ class TestCheckConstraints:
     def test_null_task_key_blocked(self, conn):
         with pytest.raises(sqlite3.IntegrityError):
             conn.execute(
-                "INSERT INTO tasks (task_key) VALUES (?)",
-                (None,)
+                "INSERT INTO tasks (project_id, task_key) VALUES (?, ?)",
+                (1, None)
+            )
+
+    def test_null_project_id_blocked(self, conn):
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO tasks (project_id, task_key) VALUES (?, ?)",
+                (None, "TEST-1")
+            )
+
+    def test_unknown_project_id_blocked(self, conn):
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO tasks (project_id, task_key) VALUES (?, ?)",
+                (999, "TEST-2")
             )
 
     def test_valid_execution_types_accepted(self, conn):
@@ -68,9 +86,9 @@ class TestCheckConstraints:
 
     def test_valid_status_accepted(self, conn):
         for st in ("active", "done", "blocked"):
-            conn.execute("INSERT INTO tasks (task_key,status) VALUES (?,?)", (f"TK-{st}", st))
+            conn.execute("INSERT INTO tasks (project_id, task_key, status) VALUES (?,?,?)", (1, f"TK-{st}", st))
         # task_history uses pending|done — use separate phases for each status (UNIQUE on task_id+phase_id)
-        conn.execute("INSERT INTO tasks (task_key,status) VALUES (?,?)", ("T-history", "active"))
+        conn.execute("INSERT INTO tasks (project_id, task_key, status) VALUES (?,?,?)", (1, "T-history", "active"))
         tid = conn.execute("SELECT id FROM tasks WHERE task_key=?", ("T-history",)).fetchone()[0]
         for i, st in enumerate(("pending", "done")):
             conn.execute("INSERT INTO phases (code,name,phase_order) VALUES (?,?,?)", (f"ph-{i}", "H", i+10))
@@ -97,9 +115,9 @@ class TestCheckConstraints:
         assert row[0] == '["python", "git"]'
 
     def test_unique_task_key_blocked(self, conn):
-        conn.execute("INSERT INTO tasks (task_key) VALUES (?)", ("ABC-1",))
+        conn.execute("INSERT INTO tasks (project_id, task_key) VALUES (?, ?) ", (1, "ABC-1"))
         with pytest.raises(sqlite3.IntegrityError):
-            conn.execute("INSERT INTO tasks (task_key) VALUES (?)", ("ABC-1",))
+            conn.execute("INSERT INTO tasks (project_id, task_key) VALUES (?, ?)", (1, "ABC-1"))
 
     def test_cascade_delete_phase_clears_instructions(self, conn):
         conn.execute("INSERT INTO instructions (phase_id,step_num,description) VALUES (?,?,?)",
@@ -109,7 +127,7 @@ class TestCheckConstraints:
         assert len(rows) == 0
 
     def test_cascade_delete_task_clears_history(self, conn):
-        conn.execute("INSERT INTO tasks (task_key) VALUES (?)", ("DDD-1",))
+        conn.execute("INSERT INTO tasks (project_id, task_key) VALUES (?, ?)", (1, "DDD-1"))
         tid = conn.execute("SELECT id FROM tasks WHERE task_key=?", ("DDD-1",)).fetchone()[0]
         conn.execute("INSERT INTO task_history (task_id,phase_id) VALUES (?,?)", (tid, 1))
         conn.execute("DELETE FROM tasks WHERE id=?", (tid,))

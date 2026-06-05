@@ -11,6 +11,7 @@ from click.testing import CliRunner
 import pytest
 
 from wartz_workflow.cli.core import cli, out_json, _require_valid_key
+from wartz_workflow.task_validator import TaskKeyValidator
 
 
 class TestCliGroup:
@@ -29,8 +30,7 @@ class TestCliGroup:
         assert result.exit_code == 0
         assert "step" in result.output
         assert "history" in result.output
-        # ui is a third command but not counted as one of the 2 main ones
-        assert "ui" in result.output
+        assert "ui" not in result.output
 
     def test_json_mode_in_context(self):
         """--json should set json_mode=True in ctx.obj."""
@@ -52,25 +52,43 @@ class TestCliGroup:
 class TestRequireValidKey:
     """Test _require_valid_key with valid / invalid patterns."""
 
+    @staticmethod
+    def _validator():
+        return TaskKeyValidator.from_projects([
+            {
+                "code": "TASK",
+                "name": "TASK",
+                "key_patterns": [
+                    r"^(?P<prefix>TASK)-(?P<number>[0-9]+)$",
+                    r"^(?P<prefix>TASKNEIROKLYUCH)-(?P<number>[0-9]+)$",
+                ],
+            }
+        ])
+
     def test_valid_returns_normalized(self):
-        key = _require_valid_key("TASK-42")
-        assert key == "TASK-42"
+        with patch("wartz_workflow.cli.core._get_task_key_validator", return_value=self._validator()):
+            key = _require_valid_key("TASK-42")
+            assert key == "TASK-42"
 
     def test_valid_with_prefix(self):
-        key = _require_valid_key("TASKNEIROKLYUCH-123")
-        assert key == "TASKNEIROKLYUCH-123"
+        with patch("wartz_workflow.cli.core._get_task_key_validator", return_value=self._validator()):
+            key = _require_valid_key("TASKNEIROKLYUCH-123")
+            assert key == "TASKNEIROKLYUCH-123"
 
     def test_invalid_raises_abort(self):
-        with pytest.raises(click.Abort):
-            _require_valid_key("lowercase")
+        with patch("wartz_workflow.cli.core._get_task_key_validator", return_value=self._validator()):
+            with pytest.raises(click.Abort):
+                _require_valid_key("lowercase")
 
     def test_invalid_with_spaces(self):
-        with pytest.raises(click.Abort):
-            _require_valid_key("TASK 42")
+        with patch("wartz_workflow.cli.core._get_task_key_validator", return_value=self._validator()):
+            with pytest.raises(click.Abort):
+                _require_valid_key("TASK 42")
 
     def test_invalid_digits_only(self):
-        with pytest.raises(click.Abort):
-            _require_valid_key("12345")
+        with patch("wartz_workflow.cli.core._get_task_key_validator", return_value=self._validator()):
+            with pytest.raises(click.Abort):
+                _require_valid_key("12345")
 
 
 class TestOutJson:

@@ -10,7 +10,7 @@ from typing import List, Optional, Tuple, Dict, Any
 
 from .db import WorkflowDB
 from . import models, conversation as convo
-from .schema import load_phases_from_db, get_phase_from_db
+from .schema import load_phases
 
 
 PASS_ICON = "✅"
@@ -32,7 +32,7 @@ class WizardEngine:
 
         self._wdb = WorkflowDB()
         self._wdb.init()
-        self.all_phases = load_phases_from_db(self._wdb)
+        self.all_phases = load_phases()
         self.phase_map = {p.code: p for p in self.all_phases}
 
     # ═══════════════════════════════════════════════════════════════════

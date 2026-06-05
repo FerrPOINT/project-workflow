@@ -1,47 +1,86 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard — wartz-workflow{% endblock %}
-{% block header_title %}Dashboard{% endblock %}
+{% block title %}Дашборд — wartz-workflow{% endblock %}
+{% block header_title %}Дашборд{% endblock %}
+{% block header_actions %}
+  <a href="/tasks" class="btn btn-secondary">Задачи</a>
+  <a href="/projects" class="btn btn-secondary">Проекты</a>
+{% endblock %}
 
 {% block extra_style %}
-@media(max-width:640px){
-  .kpi-grid{grid-template-columns:1fr}
-  .tasks-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
-  .tasks-table{min-width:600px}
-}
-@media(max-width:480px){
-  .tasks-mobile{display:flex;flex-direction:column;gap:10px}
-  .task-mobile-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;display:grid;gap:8px}
-  .task-mobile-row{display:flex;justify-content:space-between;align-items:center}
-  .task-mobile-label{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em}
-  .task-mobile-val{font-size:13px;font-weight:500;color:var(--text)}
-}
+.dashboard-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:20px}
+.metric-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px}
+.metric-label{font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.metric-value{font-size:28px;font-weight:700;color:var(--text)}
+.dashboard-panels{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
+.list-stack{display:flex;flex-direction:column;gap:12px}
+.list-item{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px}
+.list-title{font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px}
+.list-meta{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--text-dim)}
+.code{font-family:'JetBrains Mono',monospace;color:var(--accent)}
 {% endblock %}
 
 {% block content %}
-<!-- KPI Cards -->
-<div class="kpi-grid">
-  <div class="card">
-    <div class="card-header"><div class="card-title">ФАЗ WORKFLOW</div></div>
-    <div class="card-value">30</div>
-    <div class="card-delta">Все фазы определены</div>
-  </div>
+<div class="dashboard-grid">
+  <section class="metric-card"><div class="metric-label">Проекты</div><div class="metric-value">{{ stats.projects }}</div></section>
+  <section class="metric-card"><div class="metric-label">Задачи</div><div class="metric-value">{{ stats.tasks }}</div></section>
+  <section class="metric-card"><div class="metric-label">Активные</div><div class="metric-value">{{ stats.active }}</div></section>
+  <section class="metric-card"><div class="metric-label">Завершённые</div><div class="metric-value">{{ stats.done }}</div></section>
+  <section class="metric-card"><div class="metric-label">Фазы</div><div class="metric-value">{{ stats.phases }}</div></section>
 </div>
 
-<!-- Progress -->
-<div class="card" style="margin-bottom:24px">
-  <div class="card-header">
-    <div class="card-title">ПРОГРЕСС РАЗРАБОТКИ</div>
-    <div style="font-size:13px;color:var(--text-muted)">{{ completed_phases }}/30 фаз</div>
-  </div>
-  <div class="progress-bg">
-    <div class="progress-fill" style="width:{{ (completed_phases/30*100)|round }}%"></div>
-  </div>
-</div>
+<div class="dashboard-panels">
+  {% if active_tasks %}
+  <section class="card">
+    <div class="card-title" style="margin-bottom:14px">Активные задачи</div>
+    <div class="list-stack">
+      {% for task in active_tasks %}
+      <a href="/task/{{ task.task_key }}" class="list-item">
+        <div class="list-title"><span class="code">{{ task.task_key }}</span>{% if task.title %} — {{ task.title }}{% endif %}</div>
+        <div class="list-meta">
+          <span>{{ task.project_name }}</span>
+          <span>{{ task.phase_name }}</span>
+          <span>{{ task.status_label }}</span>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
 
-<!-- Bottom buttons -->
-<div class="btn-group" style="margin-top:16px">
-  <a href="/phases" class="btn btn-primary"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:6px"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Все фазы</a>
-  <a href="/wizard" class="btn btn-secondary"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:6px"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>Wizard</a>
+  {% if projects %}
+  <section class="card">
+    <div class="card-title" style="margin-bottom:14px">Проекты</div>
+    <div class="list-stack">
+      {% for project in projects %}
+      <a href="/projects" class="list-item">
+        <div class="list-title"><span class="code">{{ project.code }}</span> — {{ project.name }}</div>
+        <div class="list-meta">
+          <span>{{ project.task_count }} задач</span>
+          <span>{{ project.patterns_count }} regex</span>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if recent_cli %}
+  <section class="card">
+    <div class="card-title" style="margin-bottom:14px">Последние CLI вызовы</div>
+    <div class="list-stack">
+      {% for item in recent_cli %}
+      <div class="list-item">
+        <div class="list-title">{{ item.command }}</div>
+        <div class="list-meta">
+          {% if item.task_key %}<span>{{ item.task_key }}</span>{% endif %}
+          {% if item.status %}<span>{{ item.status }}</span>{% endif %}
+          {% if item.created_at %}<span>{{ item.created_at }}</span>{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
 </div>
 {% endblock %}

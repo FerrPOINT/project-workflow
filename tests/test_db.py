@@ -26,7 +26,7 @@ class TestInit:
         tables = db._list_tables()
         assert {
             "phases", "instructions", "checks", "evidence",
-            "tasks", "task_history", "phase_groups", "agents", "cli_history"
+            "tasks", "task_history", "phase_groups", "agents", "cli_history", "projects"
         }.issubset(tables)
 
     def test_init_idempotent(self, db):
@@ -34,6 +34,21 @@ class TestInit:
         db.init()  # второй раз
         tables = db._list_tables()
         assert {"phases", "instructions"}.issubset(tables)
+
+    def test_init_migrates_agents_table_with_description(self, tmp_path):
+        test_db = tmp_path / "legacy_agents.db"
+        conn = sqlite3.connect(test_db)
+        conn.execute("CREATE TABLE agents (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)")
+        conn.commit()
+        conn.close()
+
+        db = WorkflowDB(str(test_db))
+        db.init()
+
+        agent_id = db.create_agent({"name": "legacy-bot", "description": "Migrated description"})
+        agent = db.get_agent(agent_id)
+        assert agent is not None
+        assert agent["description"] == "Migrated description"
 
 
 class TestImportPhases:
@@ -155,12 +170,23 @@ class TestInstructionCRUD:
 
 class TestTaskCRUD:
     def test_create_and_get_task(self, db):
+        pid = db.create_project({
+            "code": "AAT",
+            "name": "AAT",
+            "key_patterns": [r"^(?P<prefix>AAT)-(?P<number>[0-9]+)$"],
+        })
         db.create_task({"task_key": "AAT-1", "title": "T1", "current_phase": "-1"})
         t = db.get_task_by_key("AAT-1")
         assert t is not None
         assert t["task_key"] == "AAT-1"
+        assert t["project_id"] == pid
 
     def test_update_task(self, db):
+        db.create_project({
+            "code": "AAT",
+            "name": "AAT",
+            "key_patterns": [r"^(?P<prefix>AAT)-(?P<number>[0-9]+)$"],
+        })
         db.create_task({"task_key": "AAT-2", "title": "Old", "current_phase": "-1"})
         t = db.get_task_by_key("AAT-2")
         db.update_task(t["id"], {"title": "New"})
@@ -171,6 +197,11 @@ class TestTaskCRUD:
         # Seed phases so that task_history FK resolves
         db.create_phase({"id": "0", "name": "P0", "description": "", "phase_order": 1})
         db.create_phase({"id": "1", "name": "P1", "description": "", "phase_order": 2})
+        db.create_project({
+            "code": "AAT",
+            "name": "AAT",
+            "key_patterns": [r"^(?P<prefix>AAT)-(?P<number>[0-9]+)$"],
+        })
         db.create_task({"task_key": "AAT-3", "title": "T3", "current_phase": "-1"})
         t = db.get_task_by_key("AAT-3")
         db.add_task_history(t["id"], "0", "done")
@@ -183,6 +214,29 @@ class TestTaskCRUD:
         p1 = db.get_phase_by_code("1")
         assert pmap[p0["id"]] == "done"
         assert pmap[p1["id"]] == "pending"
+
+
+class TestProjectCRUD:
+    def test_create_and_get_project(self, db):
+        pid = db.create_project({
+            "code": "AAT",
+            "name": "AAT",
+            "key_patterns": [r"^(?P<prefix>AAT)-(?P<number>[0-9]+)$"],
+        })
+        project = db.get_project(pid)
+        assert project["code"] == "AAT"
+        assert project["key_patterns"] == [r"^(?P<prefix>AAT)-(?P<number>[0-9]+)$"]
+
+    def test_update_and_delete_project(self, db):
+        pid = db.create_project({
+            "code": "AAT",
+            "name": "AAT",
+            "key_patterns": [r"^(?P<prefix>AAT)-(?P<number>[0-9]+)$"],
+        })
+        db.update_project(pid, {"name": "AAT Updated"})
+        assert db.get_project(pid)["name"] == "AAT Updated"
+        db.delete_project(pid)
+        assert db.get_project(pid) is None
 
 
 class TestPhaseGroupCRUD:
@@ -208,20 +262,24 @@ class TestPhaseGroupCRUD:
 
 class TestAgentCRUD:
     def test_create_and_get(self, db):
-        aid = db.create_agent({"name": "coder"})
+        aid = db.create_agent({"name": "coder", "description": "Пишет код"})
         a = db.get_agent(aid)
         assert a["name"] == "coder"
+        assert a["description"] == "Пишет код"
 
     def test_list(self, db):
-        db.create_agent({"name": "critic"})
-        db.create_agent({"name": "coder"})
+        db.create_agent({"name": "critic", "description": "Критикует"})
+        db.create_agent({"name": "coder", "description": "Пишет код"})
         agents = db.get_agents()
         assert len(agents) == 2
+        assert agents[0]["description"]
+        assert agents[1]["description"]
 
     def test_update_and_delete(self, db):
-        aid = db.create_agent({"name": "Old"})
-        db.update_agent(aid, {"name": "New"})
+        aid = db.create_agent({"name": "Old", "description": "Old desc"})
+        db.update_agent(aid, {"name": "New", "description": "New desc"})
         assert db.get_agent(aid)["name"] == "New"
+        assert db.get_agent(aid)["description"] == "New desc"
         db.delete_agent(aid)
         assert db.get_agent(aid) is None
 

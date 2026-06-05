@@ -14,6 +14,8 @@ class TestIndex:
         resp = client.get("/")
         assert resp.status_code == 200
         assert "html" in resp.headers.get("content-type", "")
+        assert "Дашборд" in resp.text
+        assert "Активные задачи" in resp.text
 
     def test_phases_list_page(self):
         resp = client.get("/phases")
@@ -23,13 +25,30 @@ class TestIndex:
         resp = client.get("/phase/0")
         assert resp.status_code == 200
 
-    def test_wizard_page(self):
-        resp = client.get("/wizard")
-        assert resp.status_code == 200
-
     def test_settings_page(self):
         resp = client.get("/settings")
         assert resp.status_code == 200
+
+    def test_projects_page(self):
+        resp = client.get("/projects")
+        assert resp.status_code == 200
+        assert "Проекты" in resp.text
+
+    def test_tasks_page_has_project_column(self):
+        resp = client.get("/tasks")
+        assert resp.status_code == 200
+        assert "Проект" in resp.text
+
+    def test_settings_page_describes_cli_commands(self):
+        resp = client.get("/settings")
+        assert resp.status_code == 200
+        assert "wartz-workflow step" in resp.text
+        assert "wartz-workflow history" in resp.text
+        assert "wartz-workflow ui" not in resp.text
+        assert "--report" in resp.text
+        assert "--n" in resp.text
+        assert ">--repo<" not in resp.text
+        assert ">--skip<" not in resp.text
 
 
 class TestApiPhases:
@@ -59,7 +78,11 @@ class TestApiPhases:
         resp = client.get("/api/settings")
         assert resp.status_code == 200
         data = resp.json()
-        assert isinstance(data, dict)
+        assert data["ok"] is True
+        assert "commands" in data
+        names = {cmd["name"] for cmd in data["commands"]}
+        assert {"step", "history"}.issubset(names)
+        assert "ui" not in names
 
 
 class TestApiWizard:

@@ -8,6 +8,7 @@ Features:
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from typing import List, Optional, Pattern
@@ -29,6 +30,7 @@ class ValidatedTaskKey:
     raw: str
     is_valid: bool
     project: Optional[str] = None
+    prefix: Optional[str] = None
     issue_number: Optional[str] = None
     matched_pattern: Optional[str] = None
     normalized: Optional[str] = None
@@ -76,14 +78,32 @@ class TaskKeyValidator:
     def __init__(
         self,
         patterns: Optional[List[str]] = None,
+        project_patterns: Optional[List[dict]] = None,
         strict: bool = True,
         min_prefix_len: int = MIN_PREFIX_LEN,
         min_number_len: int = MIN_NUMBER_LEN,
         reject_patterns: Optional[List[tuple]] = None,
         migrations: Optional[dict] = None,
     ):
-        self.raw_patterns = patterns or DEFAULT_PATTERNS
-        self._patterns: List[Pattern] = [re.compile(p) for p in self.raw_patterns]
+        self.project_patterns = project_patterns or []
+        if self.project_patterns:
+            self.pattern_sources: List[tuple[Optional[str], str, Pattern]] = []
+            for project in self.project_patterns:
+                project_code = project.get("code")
+                raw_project_patterns = project.get("key_patterns") or project.get("patterns") or []
+                if isinstance(raw_project_patterns, str):
+                    try:
+                        parsed = json.loads(raw_project_patterns)
+                        raw_project_patterns = parsed if isinstance(parsed, list) else [raw_project_patterns]
+                    except Exception:
+                        raw_project_patterns = [raw_project_patterns]
+                for raw_pattern in raw_project_patterns:
+                    pattern_text = str(raw_pattern)
+                    self.pattern_sources.append((project_code, pattern_text, re.compile(pattern_text)))
+            self.raw_patterns = [raw for _, raw, _ in self.pattern_sources]
+        else:
+            self.raw_patterns = patterns or DEFAULT_PATTERNS
+            self.pattern_sources = [(None, raw, re.compile(raw)) for raw in self.raw_patterns]
         self.strict = strict
         self.min_prefix_len = min_prefix_len
         self.min_number_len = min_number_len
@@ -135,7 +155,7 @@ class TaskKeyValidator:
                 return result
 
         # 3. Try each allowed pattern (with migration)
-        for raw_pat, compiled_pat in zip(self.raw_patterns, self._patterns):
+        for project_code, raw_pat, compiled_pat in self.pattern_sources:
             match = compiled_pat.match(stripped)
             if match:
                 prefix = match.group("prefix")
@@ -157,7 +177,8 @@ class TaskKeyValidator:
                 result = ValidatedTaskKey(
                     raw=key,
                     is_valid=True,
-                    project=prefix,
+                    project=project_code or prefix,
+                    prefix=prefix,
                     issue_number=number,
                     matched_pattern=raw_pat,
                     normalized=normalized,
@@ -192,6 +213,11 @@ class TaskKeyValidator:
     def from_patterns(cls, patterns: List[str]) -> "TaskKeyValidator":
         """Создать валидатор из списка regex patterns (для UI конфигурации)."""
         return cls(patterns=patterns)
+
+    @classmethod
+    def from_projects(cls, projects: List[dict]) -> "TaskKeyValidator":
+        """Создать валидатор из project rows с key_patterns."""
+        return cls(project_patterns=projects)
 
     @classmethod
     def jira_only(cls) -> "TaskKeyValidator":

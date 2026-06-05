@@ -81,34 +81,30 @@ UI_HOST = "0.0.0.0"
 # ── Settings persistence ────────────────────────────────────────────────
 
 import json
-import os
 
 SETTINGS_PATH = os.path.join(WARTZ_DIR, "settings.json")
 
-DEFAULT_SETTINGS = {
-    "key_patterns": [
-        r"^TASKNEIROKLYUCH-(?P<number>[0-9]+)$",
-        r"^(?P<prefix>[A-Z][A-Z0-9]*)-(?P<number>[0-9]+)$",
-    ],
-}
+# Legacy bootstrap source only. Runtime source of truth now lives in DB.projects.key_patterns.
+DEFAULT_TASK_KEY_PATTERNS = [
+    r"^(?P<prefix>TASKNEIROKLYUCH)-(?P<number>[0-9]+)$",
+    r"^(?P<prefix>HRRECRUITER)-(?P<number>[0-9]+)$",
+]
 
-
-def load_settings() -> dict:
-    """Load settings from ~/.wartz-workflow/settings.json, merge with defaults."""
+def _read_raw_settings() -> dict:
     if os.path.exists(SETTINGS_PATH):
         try:
             with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
-                user = json.load(f)
-            merged = dict(DEFAULT_SETTINGS)
-            merged.update(user)
-            return merged
+                data = json.load(f)
+            return data if isinstance(data, dict) else {}
         except Exception:
-            pass
-    return dict(DEFAULT_SETTINGS)
+            return {}
+    return {}
 
 
-def save_settings(data: dict) -> None:
-    """Save settings to ~/.wartz-workflow/settings.json."""
-    os.makedirs(WARTZ_DIR, exist_ok=True)
-    with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+def load_legacy_key_patterns() -> list[str] | None:
+    """Return pre-project key_patterns from settings.json, if present."""
+    raw = _read_raw_settings()
+    patterns = raw.get("key_patterns")
+    if isinstance(patterns, list) and patterns:
+        return [str(p) for p in patterns]
+    return None

@@ -1,389 +1,133 @@
 {% extends "base.html" %}
 
-{% block title %}Фазы — wartz-workflow{% endblock %}
-{% block header_title %}Все фазы workflow{% endblock %}
+{% block title %}Фазы workflow — wartz-workflow{% endblock %}
+{% block header_title %}Фазы workflow{% endblock %}
 {% block header_actions %}
-  <a href="/" class="btn btn-secondary">← Назад</a>
-  <button class="btn btn-primary" onclick="toggleGroupManager()">⚙️ Группы</button>
+  {# Главная страница — кнопка "Назад" не нужна #}
 {% endblock %}
 
 {% block extra_style %}
-/* Group manager panel */
-.group-manager{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:20px;display:none}
-.group-manager.active{display:block}
-.group-manager-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-.group-manager-title{font-size:14px;font-weight:600;color:var(--text)}
-.group-list{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
-.group-chip{display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:12px;cursor:grab;user-select:none}
-.group-chip.dragging{opacity:.5}
-.group-chip .icon{font-size:14px}
-.group-chip .name{color:var(--text);font-weight:500}
-.group-chip .actions{display:flex;gap:4px;margin-left:4px}
-.group-chip .btn-icon{width:20px;height:20px;border-radius:3px;border:none;background:transparent;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px}
-.group-chip .btn-icon:hover{background:var(--surface-hover);color:var(--text)}
-.group-chip .btn-icon.delete:hover{background:var(--danger-soft);color:var(--danger)}
-.group-form{display:flex;gap:8px;align-items:center}
-.group-form input{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:6px 10px;color:var(--text);font-size:12px;width:140px}
-.group-form button{font-size:12px;padding:6px 12px}
-.kanban{display:grid;grid-template-columns:repeat(6,1fr);gap:16px;align-items:start}
-@media(max-width:1400px){.kanban{grid-template-columns:repeat(3,1fr)}}
-@media(max-width:900px){.kanban{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:480px){.kanban{grid-template-columns:1fr}}
-.kanban-col{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px;min-height:200px}
-.kanban-col.drag-over{border-color:var(--accent);background:var(--accent-soft)}
-.kanban-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding:0 4px}
-.kanban-header .title{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted)}
-.kanban-header .count{font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px;background:var(--accent-soft);color:var(--accent)}
-.kanban-card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:8px;cursor:grab;transition:all .12s;text-decoration:none;color:inherit;display:block;user-select:none;position:relative}
-.kanban-card:hover{background:var(--surface-hover);border-color:var(--border-strong);transform:translateY(-1px);cursor:pointer}
-.kanban-card.dragging{opacity:.5;cursor:grabbing;transform:rotate(2deg)}
-.kanban-card .card-title{font-size:13px;font-weight:500;color:var(--text);margin-bottom:4px;line-height:1.4}
-.kanban-card .card-desc{font-size:11px;color:var(--text-muted);line-height:1.4;margin-top:4px}
-.kanban-card .card-meta{display:flex;gap:8px;margin-top:8px;font-size:11px;color:var(--text-dim);align-items:center}
-.kanban-card .card-meta .phase-num{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-dim)}
-.kanban-card .card-meta .badge-count{font-size:10px;padding:1px 5px;border-radius:3px;background:rgba(255,255,255,.06);color:var(--text-muted)}
-/* Drop indicator line between cards */
-.drop-indicator{height:2px;background:var(--accent);border-radius:1px;margin:4px 0;opacity:0;transition:opacity .1s}
-.drop-indicator.active{opacity:1}
+.timeline{display:flex;flex-direction:column;align-items:center;max-width:860px;margin:0 auto}
+.timeline-item{width:100%}
+.timeline-row{display:grid;grid-template-columns:84px minmax(0,1fr);gap:12px;align-items:stretch}
+.phase-order-controls{display:flex;flex-direction:column;align-items:center;gap:8px;padding-top:8px}
+.phase-move-btn{width:36px;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;transition:all .12s;font-size:16px;font-weight:700}
+.phase-move-btn:hover:not(:disabled){background:var(--surface-hover);border-color:var(--accent)}
+.phase-move-btn:disabled{opacity:.35;cursor:not-allowed}
+.phase-order-hint{font-size:11px;color:var(--text-dim);text-align:center;line-height:1.3}
+.timeline-card{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 18px;cursor:pointer;transition:all .12s;text-decoration:none;color:inherit;display:block;position:relative}
+.timeline-card:hover{background:var(--surface-hover);border-color:var(--border-strong);transform:translateY(-1px)}
+.timeline-card.parallel-border{border:1px dashed var(--orange);background:rgba(245,158,11,.08)}
+.timeline-card.parallel-border:hover{border-color:var(--orange)}
+.timeline-arrow{text-align:center;padding:8px 0;color:var(--text-dim);font-size:18px}
+.timeline-name{font-size:14px;font-weight:500;color:var(--text);line-height:1.4}
+.timeline-badges{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;align-items:center}
+.badge{font-size:11px;font-weight:500;padding:2px 8px;border-radius:4px;display:inline-flex;align-items:center;gap:3px}
+.badge-blocker{background:var(--red-soft);color:var(--red)}
+.badge-critic{background:rgba(59,130,246,.12);color:var(--blue)}
+.badge-delegate{background:var(--accent-soft);color:var(--accent)}
+.badge-parallel{background:var(--orange-soft);color:var(--orange)}
+.badge-link{background:var(--panel);color:var(--text-muted);border:1px solid var(--border)}
+.timeline-desc{font-size:12px;color:var(--text-muted);margin-top:4px}
+@media (max-width: 720px){.timeline-row{grid-template-columns:1fr}.phase-order-controls{flex-direction:row;justify-content:flex-start;padding-top:0}.phase-order-hint{text-align:left}}
 {% endblock %}
 
 {% block content %}
-<!-- Group Manager Panel -->
-<div class="group-manager" id="groupManager">
-  <div class="group-manager-header">
-    <span class="group-manager-title">Группы фаз</span>
-    <button class="btn btn-sm btn-secondary" onclick="loadGroups()">🔄 Обновить</button>
-  </div>
-  <div class="group-list" id="groupList"></div>
-  <div class="group-form">
-    <input type="text" id="newGroupName" placeholder="Название группы" maxlength="30">
-    <input type="text" id="newGroupIcon" placeholder="Иконка (emoji)" maxlength="4" style="width:80px">
-    <button class="btn btn-primary" onclick="createGroup()">+ Добавить</button>
-  </div>
-</div>
-
-<div class="kanban" id="kanban">
-  {% for group_id, group_name in groups.items() %}
-  <div class="kanban-col" data-group="{{ group_id }}" ondragover="colDragOver(event)" ondragleave="colDragLeave(event)" ondrop="colDrop(event)">
-    <div class="kanban-header">
-      <div class="title">{{ group_name }}</div>
-      <div class="count" id="count-{{ group_id }}">{{ grouped_phases[group_id]|length }}</div>
-    </div>
-    <div class="card-list" id="list-{{ group_id }}" data-group="{{ group_id }}">
-      {% for p in grouped_phases[group_id] %}
-      <div class="kanban-card" draggable="true"
-           data-phase-id="{{ p.code }}"
-           data-phase-order="{{ p.phase_num }}"
-           ondragstart="cardDragStart(event)"
-           ondragend="cardDragEnd(event)"
-           onclick="cardClick(event)">
-        <div class="card-title">{{ p.name }}</div>
-        {% if p.description %}
-        <div class="card-desc">{{ p.description[:80] }}{% if p.description|length > 80 %}...{% endif %}</div>
-        {% endif %}
-        <div class="card-meta">
-          <span class="phase-num">№{{ p.phase_num }}</span>
-          <span class="badge-count">{{ p.instruction_count }} шагов</span>
+<div class="timeline" id="phasesTimeline">
+  {% for p in phases %}
+    <div class="timeline-item" data-phase-id="{{ p.code }}" data-phase-order="{{ p.phase_num }}">
+      <div class="timeline-row">
+        <div class="phase-order-controls">
+          <button type="button" class="phase-move-btn move-up-btn" onclick="movePhase(this, -1)" aria-label="Поднять фазу выше">↑</button>
+          <button type="button" class="phase-move-btn move-down-btn" onclick="movePhase(this, 1)" aria-label="Опустить фазу ниже">↓</button>
+          <div class="phase-order-hint">Порядок<br>меняется тут</div>
         </div>
+        <a href="/phase/{{ p.code }}" class="timeline-card {% if p.has_parallel_instructions %}parallel-border{% endif %}">
+          <div class="timeline-name">{{ p.name }}</div>
+          {% set d = p.description | default('') %}
+          {% if d %}
+          <div class="timeline-desc">{{ d[:120] }}{% if d|length > 120 %}...{% endif %}</div>
+          {% endif %}
+          <div class="timeline-badges">
+            {% if p.is_blocker %}<span class="badge badge-blocker">🔴 blocker</span>{% endif %}
+            {% if p.is_critic %}<span class="badge badge-critic">🛡️ critic</span>{% endif %}
+            {% if p.is_delegated %}<span class="badge badge-delegate">👤 delegate</span>{% endif %}
+            {% if p.has_parallel_instructions %}<span class="badge badge-parallel">⚡ parallel</span>{% endif %}
+            {% if p.parallel_with %}<span class="badge badge-link">↔ {{ p.parallel_with }}</span>{% endif %}
+          </div>
+        </a>
       </div>
-      {% endfor %}
+      <div class="timeline-arrow"{% if loop.last %} hidden{% endif %}>↓</div>
     </div>
-  </div>
   {% endfor %}
 </div>
 
 <script>
-/* ── Kanban drag-and-drop ────────────────────────────────────────── */
-let draggedCard = null;
-let draggedId = null;
-let draggedOrder = null;
-let sourceGroup = null;
-
-function cardDragStart(e){
-  draggedCard = e.target;
-  draggedId = e.target.dataset.phaseId;
-  draggedOrder = parseInt(e.target.dataset.phaseOrder,10);
-  sourceGroup = e.target.closest('.kanban-col').dataset.group;
-  e.target.classList.add('dragging');
-  e.dataTransfer.effectAllowed = 'move';
-  e.dataTransfer.setData('text/plain', draggedId);
+function getPhaseTimelineItems() {
+  return Array.from(document.querySelectorAll('#phasesTimeline .timeline-item'));
 }
 
-function cardDragEnd(e){
-  e.target.classList.remove('dragging');
-  document.querySelectorAll('.drop-indicator').forEach(el=>el.remove());
-  draggedCard = null; draggedId = null; draggedOrder = null; sourceGroup = null;
-}
-
-function colDragOver(e){
-  e.preventDefault();
-  e.dataTransfer.dropEffect = 'move';
-  const col = e.currentTarget;
-  col.classList.add('drag-over');
-
-  const list = col.querySelector('.card-list');
-  const after = getDragAfterElement(list, e.clientY);
-  let indicator = list.querySelector('.drop-indicator');
-  if(!indicator){
-    indicator = document.createElement('div');
-    indicator.className = 'drop-indicator';
-  }
-  indicator.classList.add('active');
-  if(after) list.insertBefore(indicator, after);
-  else list.appendChild(indicator);
-}
-
-function colDragLeave(e){
-  if(!e.currentTarget.contains(e.relatedTarget)){
-    e.currentTarget.classList.remove('drag-over');
-  }
-}
-
-function colDrop(e){
-  e.preventDefault();
-  const col = e.currentTarget;
-  col.classList.remove('drag-over');
-
-  const list = col.querySelector('.card-list');
-  const after = getDragAfterElement(list, e.clientY);
-
-  // Move DOM
-  if(after) list.insertBefore(draggedCard, after);
-  else list.appendChild(draggedCard);
-
-  // Update counts
-  updateCounts();
-
-  // Compute new orders for ALL phases (recalculate sequentially per column)
-  const orders = [];
-  let orderCounter = 1;
-  document.querySelectorAll('.kanban-col').forEach(c=>{
-    const gid = c.dataset.group;
-    c.querySelectorAll('.kanban-card').forEach(card=>{
-      const pid = card.dataset.phaseId;
-      orders.push({phase_code:pid, phase_order:orderCounter, group:gid});
-      card.dataset.phaseOrder = orderCounter;
-      card.querySelector('.phase-num').textContent = '№'+orderCounter;
-      orderCounter++;
-    });
-  });
-
-  // Persist
-  fetch('/api/phases/order',{
-    method:'PUT',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({orders: orders})
-  }).then(r=>r.json()).then(res=>{
-    if(!res.ok) showToast('Ошибка сохранения порядка','error');
-    else showToast('Порядок фаз обновлён','success');
-  }).catch(err=>{
-    showToast('Ошибка сети: '+err.message,'error');
-  });
-
-  document.querySelectorAll('.drop-indicator').forEach(el=>el.remove());
-}
-
-function getDragAfterElement(container, y){
-  const cards = [...container.querySelectorAll('.kanban-card:not(.dragging)')];
-  return cards.reduce((closest, child)=>{
-    const box = child.getBoundingClientRect();
-    const offset = y - box.top - box.height/2;
-    if(offset < 0 && offset > closest.offset) return {offset:offset, element:child};
-    return closest;
-  },{offset:-Infinity}).element;
-}
-
-function updateCounts(){
-  document.querySelectorAll('.kanban-col').forEach(col=>{
-    const gid = col.dataset.group;
-    const n = col.querySelectorAll('.kanban-card').length;
-    const badge = document.getElementById('count-'+gid);
-    if(badge) badge.textContent = n;
+function updateTimelineControls() {
+  const items = getPhaseTimelineItems();
+  items.forEach((item, idx) => {
+    const up = item.querySelector('.move-up-btn');
+    const down = item.querySelector('.move-down-btn');
+    const arrow = item.querySelector('.timeline-arrow');
+    if (up) up.disabled = idx === 0;
+    if (down) down.disabled = idx === items.length - 1;
+    if (arrow) arrow.hidden = idx === items.length - 1;
   });
 }
 
-/* ── Click to phase detail ───────────────────────────────────────── */
-function cardClick(e){
-  if (draggedCard) return;          // during drag — ignore click
-  const card = e.currentTarget;
-  const phaseId = card.dataset.phaseId;
-  if (phaseId) window.location.href = '/phase/' + phaseId;
-}
-
-function showToast(msg, type='success'){
-  const t = document.createElement('div');
-  t.className = 'toast toast-'+type;
-  t.textContent = msg;
-  document.body.appendChild(t);
-  requestAnimationFrame(()=>t.classList.add('show'));
-  setTimeout(()=>{t.classList.remove('show');setTimeout(()=>t.remove(),300);},2000);
-}
-
-/* ═══════════════════════════════════════════════════════════════════
-   GROUP MANAGER
-   ═══════════════════════════════════════════════════════════════════ */
-
-function toggleGroupManager(){
-  const panel = document.getElementById('groupManager');
-  panel.classList.toggle('active');
-  if(panel.classList.contains('active')) loadGroups();
-}
-
-let groupDragged = null;
-
-function loadGroups(){
-  fetch('/api/groups').then(r=>r.json()).then(data=>{
-    if(!data.ok) return;
-    const list = document.getElementById('groupList');
-    list.innerHTML = '';
-    data.groups.forEach(g=>{
-      const chip = document.createElement('div');
-      chip.className = 'group-chip';
-      chip.draggable = true;
-      chip.dataset.groupId = g.id;
-      chip.innerHTML = `
-        <span class="icon">${g.icon || ''}</span>
-        <span class="name" onclick="editGroupName(this,'${g.id}')">${g.name}</span>
-        <span class="actions">
-          <button class="btn-icon" onclick="event.stopPropagation();editGroupName(this.previousElementSibling,'${g.id}')">✏️</button>
-          <button class="btn-icon delete" onclick="event.stopPropagation();deleteGroup('${g.id}')">🗑️</button>
-        </span>
-      `;
-      chip.ondragstart = groupDragStart;
-      chip.ondragend = groupDragEnd;
-      chip.ondrop = groupDrop;
-      chip.ondragover = e=>e.preventDefault();
-      list.appendChild(chip);
-    });
+function applySequentialPhaseBadges() {
+  getPhaseTimelineItems().forEach((item, idx) => {
+    item.dataset.phaseOrder = String(idx + 1);
   });
 }
 
-function groupDragStart(e){
-  groupDragged = e.currentTarget;
-  e.currentTarget.classList.add('dragging');
-  e.dataTransfer.effectAllowed = 'move';
-}
-function groupDragEnd(e){
-  e.currentTarget.classList.remove('dragging');
-  groupDragged = null;
-}
-function groupDrop(e){
-  e.preventDefault();
-  if(!groupDragged || groupDragged === e.currentTarget) return;
-  const list = document.getElementById('groupList');
-  const after = [...list.children].indexOf(e.currentTarget) > [...list.children].indexOf(groupDragged);
-  if(after) list.insertBefore(groupDragged, e.currentTarget.nextSibling);
-  else list.insertBefore(groupDragged, e.currentTarget);
-  saveGroupOrder();
-}
+async function persistPhaseOrder() {
+  const orders = getPhaseTimelineItems().map((item, idx) => ({
+    phase_id: item.dataset.phaseId,
+    phase_order: idx + 1,
+  }));
 
-function saveGroupOrder(){
-  const chips = document.querySelectorAll('.group-chip');
-  const orders = [];
-  chips.forEach((chip, idx)=>{
-    orders.push({group_id: chip.dataset.groupId, sort_order: idx + 1});
+  const resp = await fetch('/api/phases/order', {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({orders}),
   });
-  fetch('/api/groups/order',{
-    method:'PUT',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({orders})
-  }).then(r=>r.json()).then(res=>{
-    if(res.ok) showToast('Порядок групп сохранён');
-    else showToast('Ошибка сохранения порядка','error');
-  });
-}
 
-function createGroup(){
-  const nameInput = document.getElementById('newGroupName');
-  const iconInput = document.getElementById('newGroupIcon');
-  const name = nameInput.value.trim();
-  const icon = iconInput.value.trim();
-  if(!name) return showToast('Введите название группы','error');
-  const id = name.toLowerCase().replace(/[^a-z0-9]/g,'').substring(0,20);
-  if(!id) return showToast('Недопустимое название','error');
-
-  fetch('/api/groups',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({id, name, icon, sort_order: 999})
-  }).then(r=>r.json()).then(res=>{
-    if(res.ok){
-      showToast('Группа создана');
-      nameInput.value = '';
-      iconInput.value = '';
-      loadGroups();
-    } else {
-      showToast(res.error || 'Ошибка создания','error');
-    }
-  });
-}
-
-function editGroupName(el, groupId){
-  const currentName = el.textContent;
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.value = currentName;
-  input.style.cssText = 'background:var(--surface);border:1px solid var(--accent);border-radius:4px;padding:2px 6px;color:var(--text);font-size:12px;width:120px;';
-  el.replaceWith(input);
-  input.focus();
-  input.select();
-
-  function save(){
-    const newName = input.value.trim();
-    if(!newName) return;
-    fetch(`/api/groups/${groupId}`,{
-      method:'PUT',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({name: newName})
-    }).then(r=>r.json()).then(res=>{
-      if(res.ok){
-        const span = document.createElement('span');
-        span.className = 'name';
-        span.textContent = newName;
-        span.onclick = function(){editGroupName(this, groupId);};
-        input.replaceWith(span);
-        showToast('Название обновлено');
-      } else {
-        showToast('Ошибка обновления','error');
-      }
-    });
+  if (!resp.ok) {
+    showToast('Не удалось сохранить порядок фаз', 'error');
+    return false;
   }
 
-  input.onblur = save;
-  input.onkeydown = e=>{ if(e.key==='Enter'){e.preventDefault();save();} };
+  showToast('Порядок фаз сохранён');
+  return true;
 }
 
-function deleteGroup(groupId){
-  if(!confirm('Удалить группу? Фазы перейдут в SETUP.')) return;
-  fetch(`/api/groups/${groupId}`,{method:'DELETE'})
-    .then(r=>r.json()).then(res=>{
-      if(res.ok){ showToast('Группа удалена'); loadGroups(); }
-      else showToast('Ошибка удаления','error');
-    });
-}
+async function movePhase(button, direction) {
+  const item = button.closest('.timeline-item');
+  if (!item) return;
 
-/* ── Intercept colDrop to update group assignment ─────────────────── */
-const originalColDrop = colDrop;
-colDrop = function(e){
-  const col = e.currentTarget;
-  const newGroup = col.dataset.group;
-  if(draggedCard){
-    const oldCol = draggedCard.closest('.kanban-col');
-    const oldGroup = oldCol ? oldCol.dataset.group : null;
-    if(oldGroup && newGroup && oldGroup !== newGroup){
-      // Перемещение между колонками — обновить группу фазы
-      const phaseId = draggedCard.dataset.phaseId;
-      fetch(`/api/phases/${phaseId}/group`,{
-        method:'PUT',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({group_id: newGroup})
-      }).then(r=>r.json()).then(res=>{
-        if(!res.ok) showToast('Ошибка сохранения группы','error');
-      });
-    }
+  const timeline = document.getElementById('phasesTimeline');
+  const items = getPhaseTimelineItems();
+  const currentIndex = items.indexOf(item);
+  const targetIndex = currentIndex + direction;
+  if (currentIndex < 0 || targetIndex < 0 || targetIndex >= items.length) return;
+
+  const target = items[targetIndex];
+  if (direction < 0) {
+    timeline.insertBefore(item, target);
+  } else {
+    timeline.insertBefore(target, item);
   }
-  // Call original
-  originalColDrop(e);
-};
+
+  applySequentialPhaseBadges();
+  updateTimelineControls();
+  await persistPhaseOrder();
+}
+
+document.addEventListener('DOMContentLoaded', updateTimelineControls);
 </script>
 {% endblock %}

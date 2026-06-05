@@ -10,6 +10,7 @@ import pytest
 
 from fastapi.testclient import TestClient
 
+from wartz_workflow import conversation as convo
 from wartz_workflow.db import WorkflowDB
 from wartz_workflow.ui import app
 
@@ -43,6 +44,11 @@ class TestEndToEndWorkflow:
         db_path = tmp_path / "test2.db"
         wdb = WorkflowDB(str(db_path))
         wdb.init()
+        wdb.create_project({
+            "code": "AAT",
+            "name": "AAT",
+            "key_patterns": [r"^(?P<prefix>AAT)-(?P<number>[0-9]+)$"],
+        })
         wdb.create_task({"task_key": "AAT-99", "title": "Integ Test"})
         task = wdb.get_task_by_key("AAT-99")
         assert task is not None
@@ -62,11 +68,12 @@ class TestEndToEndWorkflow:
         groups = wdb.get_phase_groups()
         assert len(groups) == 1
         assert groups[0]["name"] == "Подготовка"
-        wdb.create_agent({"name": "coder"})
+        wdb.create_agent({"name": "coder", "description": "Пишет код"})
         agents = wdb.get_agents()
         assert len(agents) == 1
         assert agents[0]["id"] is not None
         assert agents[0]["name"] == "coder"
+        assert agents[0]["description"] == "Пишет код"
 
     def test_cli_history_logs_and_reads(self, tmp_path: Path):
         """Лог CLI вызовов."""
@@ -86,7 +93,7 @@ class TestEndToEndWorkflow:
         wdb = WorkflowDB(str(db_path))
         wdb.init()
         wdb.create_phase_group({"id": "g1", "name": "Group 1", "sort_order": 1})
-        agent_id = wdb.create_agent({"name": "test-bot"})
+        agent_id = wdb.create_agent({"name": "test-bot", "description": "Executes delegated work"})
         wdb.create_phase({
             "id": "p2",
             "name": "P2",
@@ -109,6 +116,22 @@ class TestEndToEndWorkflow:
         data = resp.json()
         assert isinstance(data, dict)
         assert "phases" in data
+
+
+class TestConversationHistory:
+    def test_get_messages_without_limit_returns_all_records(self, tmp_path: Path, monkeypatch):
+        db_dir = tmp_path / ".wartz-workflow"
+        db_path = db_dir / "conversation.db"
+        monkeypatch.setattr("wartz_workflow.conversation.DB_DIR", db_dir)
+        monkeypatch.setattr("wartz_workflow.conversation.DB_PATH", db_path)
+
+        convo.add_message("99", "TASK-99", "user", "first")
+        convo.add_message("99", "TASK-99", "agent", "second")
+        convo.add_message("99", "TASK-99", "system", "third")
+
+        rows = convo.get_messages("99", limit=None)
+
+        assert [row.content for row in rows] == ["first", "second", "third"]
 
 
 class TestEdgeCases:
@@ -138,6 +161,11 @@ class TestEdgeCases:
         wdb = WorkflowDB(str(db_path))
         wdb.init()
         wdb.create_phase({"id": "0", "name": "Phase 0", "phase_order": 1})
+        wdb.create_project({
+            "code": "AATSK",
+            "name": "AATSK",
+            "key_patterns": [r"^(?P<prefix>AAT)-(?P<number>[A-Z0-9]+)$"],
+        })
         wdb.create_task({"task_key": "AAT-SK", "title": "Skip Test"})
         task = wdb.get_task_by_key("AAT-SK")
         assert task is not None

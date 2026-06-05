@@ -1,196 +1,145 @@
 # wartz-workflow
 
-> **State-driven 30-phase engine for agent development workflows**
-> CLI-first, UI-assisted, SQLite-backed.
+State-driven workflow CLI with a small FastAPI web UI for viewing and editing workflow data.
 
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-151%20passing-brightgreen.svg)]()
+## Что есть сейчас
 
----
+- CLI: **ровно 2 команды**
+  - `step`
+  - `history`
+- Web UI запускается **отдельно**, не через CLI-команду
+- SQLite хранит:
+  - фазы
+  - задачи
+  - проекты
+  - группы фаз
+  - агентов
+- `projects.key_patterns` — source of truth для regex ключей задач
+- `/settings` — это **read-only реестр реальных CLI-команд**, а не редактор runtime-конфига
 
-## Quick Start
+## Установка
 
 ```bash
-cd /opt/dev/wartz-workflow-cli
+cd /opt/dev/hermes-workspace/wartz-workflow-cli
 python -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
-hrflow --help
+pip install -e ".[dev,ui]"
 ```
 
-## Основные команды
+## CLI
 
-### CLI
+Показать help:
 
 ```bash
-# Показать текущую фазу + инструкции
-hrflow wizard TASKNEIROKLYUCH-456
-
-# Агент шлёт отчёт → wizard оценивает
-hrflow wizard TASKNEIROKLYUCH-456 --report "сделал X, проверил Y"
-# exit 0 = PASS, exit 1 = FAIL
-
-# Полный контекст для агента
-hrflow wizard-context TASKNEIROKLYUCH-456
-
-# Запустить Web UI
-hrflow ui --port 8811
+wartz-workflow --help
 ```
 
-### Web UI (http://localhost:8811)
+Доступны только две команды.
 
-| Страница | Что делает |
-|----------|------------|
-| `/` | Dashboard |
-| `/phases` | Kanban: фазы в колонках |
-| `/phase/{id}` | Детальная карточка фазы: инструкции, чеки, evidence |
-| `/settings` | Настройки: key_patterns, Jira/GitLab URLs, UI port |
-| `/wizard` | Список фаз для wizard |
-| `/wizard/{phase_id}` | Форма прохождения фазы |
+### 1) step
 
----
+Показать текущую фазу / перейти по отчёту:
 
-## Архитектура
-
+```bash
+wartz-workflow step --task TASKNEIROKLYUCH-456
+wartz-workflow step --task TASKNEIROKLYUCH-456 --report "сделал X, проверил Y"
 ```
+
+Параметры:
+- `--task` — ключ задачи, обязателен
+- `--report` — отчёт агента
+
+### 2) history
+
+История сообщений/переходов по задаче:
+
+```bash
+wartz-workflow history --task TASKNEIROKLYUCH-456
+wartz-workflow history --task TASKNEIROKLYUCH-456 --n 50
+```
+
+Параметры:
+- `--task` — ключ задачи, обязателен
+- `--n` — количество записей; без параметра выводится вся история
+
+## Web UI
+
+Запуск:
+
+```bash
+python -m wartz_workflow.ui --host 0.0.0.0 --port 8811
+```
+
+Основные страницы:
+- `/` — dashboard
+- `/phases` — список фаз
+- `/phase/{id}` — детальная карточка фазы
+- `/tasks` — список задач
+- `/task/{task_key}` — детальная карточка задачи
+- `/projects` — CRUD проектов и regex ключей
+- `/groups` — CRUD групп фаз
+- `/agents` — CRUD агентов
+- `/settings` — авто-собранная справка по реальным CLI-командам
+
+## API
+
+Основные JSON endpoints:
+- `/api/phases`
+- `/api/tasks`
+- `/api/projects`
+- `/api/groups`
+- `/api/agents`
+- `/api/settings`
+
+## Структура проекта
+
+```text
 wartz_workflow/
+├── __init__.py
+├── config.py
+├── conversation.py
+├── db.py
+├── db_schema.sql
+├── engine.py
+├── models.py
+├── phases.py
+├── profiles.py
+├── rollback.py
+├── schema.py
+├── service.py
+├── state.py
+├── task_validator.py
+├── ui.py
+├── verify.py
+├── wizard.py
 ├── cli/
-│   ├── commands.py      # CLI: init, wizard, wizard-context, status...
-│   └── ui.py            # CLI: ui --port
-├── config.py            # settings.json, DEFAULT_SETTINGS
-├── db.py                # SQLite CRUD (phases, instructions, checks, evidence, agents)
-├── db_schema.sql        # DDL
-├── models.py            # Domain dataclasses (Phase, Instruction, Check, Evidence)
-├── schema.py            # seed.json → SQLite loader, YAML fallback
-├── service.py           # PhaseService: Controller → Service → Data Access
-├── ui.py                # FastAPI: routes + Jinja2 templates
-├── wizard.py            # WizardEngine: evaluate(report), get_full_context()
-├── conversation.py      # SQLite: transitions, questions, answers
-├── phases.py            # phase_map, get_next_phase
-├── profiles.py          # Agent profiles
-├── task_validator.py    # Task key regex validation
-├── verify.py            # verify-suite.sh runner
-├── rollback.py          # Git rollback engine
-├── engine.py            # Declarative engine
-├── state.py             # progress.json + git ops
-├── adapters/
-│   ├── db/
-│   ├── http/
-│   └── ports.py
-├── api/
-│   └── routers/
+│   ├── __init__.py
+│   ├── core.py
+│   └── ui.py
 ├── references/
-│   └── seed.json        # 30-phase seed data (canonical source)
+│   └── seed.json
 └── templates/v2/
+    ├── agents.html
     ├── base.html
     ├── dashboard.html
-    ├── phases.html
+    ├── groups.html
     ├── phase_detail.html
+    ├── phases.html
+    ├── projects.html
     ├── settings.html
-    ├── wizard.html
-    └── wizard_list.html
-
-tests/
-├── test_ui.py           # Web UI
-├── test_integration.py  # End-to-end
-├── test_db.py           # SQLite CRUD
-├── test_db_constraints.py # DB CHECK constraints
-├── test_wizard_context.py # WizardEngine.get_full_context()
-├── test_wizard.py       # wizard CLI
-├── test_phases.py
-├── test_task_validator.py
-├── test_profiles.py
-├── test_rollback.py
-├── test_state.py
-├── test_verify.py
-├── test_adapters.py
-├── test_cli_core.py
-└── test_cli_ui.py
+    ├── task_detail.html
+    └── tasks.html
 ```
-
----
-
-## State Machine
-
-```
-Agent работает → шлёт отчёт → wizard.evaluate()
-                      ↓
-              PASS / FAIL
-              ↓         ↓
-        next phase    доработай
-        (auto)        (retry)
-```
-
-- **Sync** — фаза выполняется последовательно, ждёт предыдущую
-- **Parallel** — несколько фаз в одном batch, выполняются одновременно, JOIN ждёт всех
-- **Blocker** — нельзя пропустить, FAIL → rollback
-- **Delegated** — назначен агент, agent_id в поле `delegate_agent`
-- **Critic** — review gate перед commit
-
----
-
-## Wizard: как агент проходит фазу
-
-1. **Получить инструкции**
-   ```bash
-   hrflow wizard TASKNEIROKLYUCH-456
-   ```
-   Wizard возвращает:
-   - название фазы
-   - description
-   - checklist (instructions + checks + evidence)
-   - repeatable checks (лог, progress, changelog)
-
-2. **Выполнить и отчитаться**
-   ```bash
-   hrflow wizard TASKNEIROKLYUCH-456 --report "создал task-файл, заполнил секции"
-   ```
-   Wizard оценивает:
-   - keyword matching по checklist
-   - repeatable checks
-   - возвращает JSON: `{verdict: PASS|FAIL, covered: [...], missing: [...]}`
-
-3. **Полный контекст (для LLM-агента)**
-   ```bash
-   hrflow wizard-context TASKNEIROKLYUCH-456 --json
-   ```
-   Возвращает:
-   - текущую фазу
-   - выполненные фазы
-   - все 30 фаз с инструкциями/чеками/evidence
-   - историю переходов
-   - статус repeatable checks
-
----
 
 ## Тесты
 
 ```bash
-pytest tests/ -q
-# 151 passed
+pytest -q
 ```
 
----
+## Примечания
 
-## Настройки
-
-Хранятся в `~/.wartz-workflow/settings.json`:
-
-```json
-{
-  "jira_base_url": "https://jira.company.com",
-  "gitlab_base_url": "https://gitlab.company.com",
-  "gitlab_project_id": "42",
-  "ui_port": 8811,
-  "ui_host": "0.0.0.0",
-  "key_patterns": [
-    "^TASKNEIROKLYUCH-(?P<number>[0-9]+)$"
-  ]
-}
-```
-
----
-
-## License
-
-MIT
+- Web UI не должен попадать в CLI как отдельная команда.
+- Если в Click CLI появится новая команда, `/settings` подхватит её автоматически.
+- Пустые/синтетические badge'и и placeholder-текст в UI считаются мусором и должны удаляться.
+- После выполнения задачи и прохождения проверок изменения должны быть закоммичены; завершённую работу нельзя оставлять в dirty working tree.

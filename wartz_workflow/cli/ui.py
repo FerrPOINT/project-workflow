@@ -1,29 +1,22 @@
-"""CLI commands — 2 команды: step, history. UI отдельно.
+"""CLI commands — 2 команды: step, history.
 
 ВНИМАНИЕ: Этот файл содержит РОВНО 2 команды. Не добавлять новые.
-- step     --task TASK-KEY [--report TEXT] [--skip] [--repo PATH]
-- history  --task TASK-KEY [--n N] [--repo PATH]
-
-ui.py содержит: `ui` (отдельно).
+- step     --task TASK-KEY [--report TEXT]
+- history  --task TASK-KEY [--n N]
 """
 
 from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
-from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Optional
 
 import click
-from rich.console import Console
-from rich.table import Table
-from rich import box
 
 from .. import wizard, conversation as convo
 from ..cli.core import cli, out_json, _require_valid_key
-from ..cli.core import console, PASS, FAIL, WARN, BLOCK
+from ..cli.core import console, PASS, FAIL, WARN
 
 # ── Guard: новые команды запрещены ──────────────────────────────────────
 # Если кто-то добавит @cli.command() сюда — тесты поймают.
@@ -37,33 +30,25 @@ from ..cli.core import console, PASS, FAIL, WARN, BLOCK
 @cli.command()
 @click.option("--task", required=True, help="Task key (e.g. TASKNEIROKLYUCH-42)")
 @click.option("--report", default=None, help="Отчёт агента (оценить и перейти)")
-@click.option("--repo", default=None, help="Repo path (auto-detected if omitted)")
-@click.option("--skip", is_flag=True, help="Форсировать переход к следующей фазе без отчёта")
 @click.pass_context
 def step_cmd(
     ctx: click.Context,
     task: str,
-    repo: Optional[str],
     report: Optional[str],
-    skip: bool,
 ) -> None:
     """🚶 Step — движение по workflow: показать текущую фазу или отчитаться и перейти.
 
     Usage:
       wartz-workflow step --task TASK-KEY                → текущие инструкции
       wartz-workflow step --task TASK-KEY --report "..."  → оценить отчёт и перейти
-      wartz-workflow step --task TASK-KEY --skip         → форсировать переход без отчёта
     """
-    import time
     task_key = _require_valid_key(task)
     jmode = ctx.obj.get("json_mode", False)
 
-    from .. import state, config
-    from ..db import WorkflowDB
-    from ..schema import load_phases_from_db
+    from .. import state
 
     found_repo = state.find_repo(task_key)
-    repo_path = repo or found_repo or "/opt/dev/hr-recruiter/recruiter-front"
+    repo_path = found_repo or os.getcwd()
 
     # Auto-init if task not initialized
     current = state.load_state(found_repo, task_key) if found_repo else None
@@ -92,52 +77,8 @@ def step_cmd(
         print(json.dumps(result, ensure_ascii=False, indent=2))
         sys.exit(0 if result["verdict"] == "PASS" else 1)
 
-    # --skip : force advance
-    if skip:
-        _force_advance(engine, task_key, repo_path, jmode)
-        sys.exit(0)
-
     # default: show phase instructions
     wizard.main(task_key, repo_path)
-
-
-def _force_advance(engine: wizard.WizardEngine, task_key: str, repo: str, jmode: bool) -> None:
-    """Force transition to next phase without report."""
-    from .core import out_json
-    from .. import config
-
-    current = engine.current_phase
-    phase = engine.phase_map.get(current)
-    if phase is None:
-        phase = engine._resolve_phase(current)
-
-    if phase is None or current == "COMPLETE":
-        msg = "Все фазы выполнены. Некуда переходить."
-        if jmode:
-            out_json({"ok": True, "message": msg})
-        console.print(f"{PASS} {msg}")
-        return
-
-    next_phase, next_name = engine._get_next_phase(phase)
-    engine._record_transition(phase.id, next_phase or "COMPLETE")
-
-    msg = f"Форсированный переход: {phase.id} ({phase.name}) → {next_phase or 'COMPLETE'}"
-    if jmode:
-        out_json({
-            "ok": True,
-            "verdict": "SKIP",
-            "phase": phase.id,
-            "phase_name": phase.name,
-            "next_phase": next_phase,
-            "next_phase_name": next_name,
-            "message": msg,
-        })
-    console.print(f"{WARN} {msg}")
-    if next_phase and next_name:
-        console.print(f"[bold]▶️ Следующая фаза: {next_phase} — {next_name}[/bold]")
-        # Show instructions for next phase
-        prompt = engine.get_phase_prompt(next_phase)
-        console.print(f"\n{prompt}")
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -146,14 +87,13 @@ def _force_advance(engine: wizard.WizardEngine, task_key: str, repo: str, jmode:
 
 @cli.command()
 @click.option("--task", required=True, help="Task key")
-@click.option("--repo", default=None, help="Repo path")
-@click.option("--n", default=20, help="Количество записей (default 20)")
+@click.option("--n", type=int, default=None, help="Количество записей (по умолчанию: все)")
 @click.pass_context
-def history_cmd(ctx: click.Context, task: str, repo: Optional[str], n: int) -> None:
+def history_cmd(ctx: click.Context, task: str, n: Optional[int]) -> None:
     """📜 History — история отчётов, переходов и статусов по задаче.
 
     Usage:
-      wartz-workflow history --task TASK-KEY           → последние 20 записей
+      wartz-workflow history --task TASK-KEY            → все записи
       wartz-workflow history --task TASK-KEY --n 50     → последние 50 записей
     """
     task_key = _require_valid_key(task)
@@ -194,27 +134,3 @@ def history_cmd(ctx: click.Context, task: str, repo: Optional[str], n: int) -> N
         if len(lines) > 5:
             console.print(f"   ... и ещё {len(lines) - 5} строк")
         console.print("")
-
-
-# ═══════════════════════════════════════════════════════════════════════
-#  UI — отдельно (не считается одной из 2 команд)
-# ═══════════════════════════════════════════════════════════════════════
-
-@cli.command("ui")
-@click.option("--port", default=7788, help="Порт (default 7788)")
-@click.option("--host", default="0.0.0.0", help="Хост (default 0.0.0.0)")
-@click.option("--daemon", is_flag=True, help="Запустить в background")
-def ui_cmd(port: int, host: str, daemon: bool) -> None:
-    """🌐 Web UI — просмотр фаз, задач, истории.
-
-    Usage: wartz-workflow ui [--port 7788] [--daemon]
-    """
-    from ..ui import ensure_templates, app
-    ensure_templates()
-    console.print(f"{PASS} Запуск wartz-workflow UI на http://{host}:{port}")
-    if daemon:
-        console.print(f"[dim]Background mode: http://{host}:{port}[/dim]")
-    else:
-        console.print("[dim]Press Ctrl+C to stop[/dim]")
-    import uvicorn
-    uvicorn.run(app, host=host, port=port, log_level="warning")

@@ -104,3 +104,37 @@ class TestUiFactory:
         result = v.validate("OLD-5")
         assert result.was_migrated
         assert result.normalized == "NEW-5"
+
+
+class TestProjectScopedFactory:
+    def test_from_projects_matches_specific_project(self):
+        v = TaskKeyValidator.from_projects([
+            {
+                "code": "AAT",
+                "name": "AAT",
+                "key_patterns": [r"^(?P<prefix>AAT)-(?P<number>[0-9]+)$"],
+            }
+        ])
+        result = v.validate("AAT-42")
+        assert result.is_valid
+        assert result.project == "AAT"
+        assert result.prefix == "AAT"
+        assert result.normalized == "AAT-42"
+
+    def test_from_projects_uses_project_legacy_pattern(self):
+        v = TaskKeyValidator.from_projects([
+            {
+                "code": "TASKNEIROKLYUCH",
+                "name": "TASKNEIROKLYUCH",
+                "key_patterns": [
+                    r"^(?P<prefix>TASKNEIROKLYUCH)-(?P<number>[0-9]+)$",
+                    r"^(?P<prefix>HRRECRUITER)-(?P<number>[0-9]+)$",
+                ],
+            }
+        ])
+        result = v.validate("HRRECRUITER-7")
+        assert result.is_valid
+        assert result.project == "TASKNEIROKLYUCH"
+        assert result.prefix == "TASKNEIROKLYUCH"
+        assert result.was_migrated is True
+        assert result.normalized == "TASKNEIROKLYUCH-7"

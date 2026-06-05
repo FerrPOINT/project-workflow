@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block title %}{{ phase.name }} — wartz-workflow{% endblock %}
-{% block header_title %}Фаза №{{ phase.phase_num }}{% endblock %}
+{% block header_title %}Детали фазы{% endblock %}
 {% block header_actions %}
   <button class="btn btn-secondary">▶ Запустить</button>
 {% endblock %}
@@ -36,6 +36,7 @@
 .flow-run{display:flex;gap:12px;width:100%}
 .flow-run.single .flow-card{flex:1}
 .flow-run.group{flex-wrap:nowrap}
+.flow-run.group.flow-batch{--batch-gold:#d4af37;--batch-gold-soft:rgba(212,175,55,.08);border:1px solid var(--batch-gold);border-radius:12px;padding:10px;background:var(--batch-gold-soft);box-shadow:inset 0 0 0 1px rgba(212,175,55,.14)}
 .flow-run.group .flow-card{flex:1;min-width:0;overflow:hidden}
 
 /* Card */
@@ -112,11 +113,23 @@
 
   <!-- Header -->
   <div class="wiki-header">
-    <h1>{{ phase.name }}</h1>
-    <p class="wiki-subtitle">{{ phase.description or '' }}</p>
+    <input type="text" class="inline-input" value="{{ phase.name }}" data-field="name" onblur="scheduleSave()" style="font-size:26px;font-weight:600;margin:0 0 10px;width:100%">
+    <input type="text" class="inline-input wiki-subtitle" value="{{ phase.description or '' }}" data-field="description" onblur="scheduleSave()" style="width:100%">
 
     <div class="wiki-meta">
-      <span>Code: {{ phase.code }} — №{{ phase.phase_num }}</span>
+      <span><a href="/phases">Порядок меняется на странице фаз</a></span>
+      <span>Группа: <select id="groupSelect" class="inline-input" style="width:140px;display:inline" onchange="scheduleSave()">
+        <option value="">—</option>
+        {% for g in groups %}
+        <option value="{{ g.id }}" {% if phase.group_id == g.id %}selected{% endif %}>{{ g.name or g.code }}</option>
+        {% endfor %}
+      </select></span>
+      <span>Агент: <select id="agentSelect" class="inline-input" style="width:140px;display:inline" onchange="scheduleSave()">
+        <option value="">—</option>
+        {% for a in agents %}
+        <option value="{{ a.id }}" {% if phase.agent_id == a.id %}selected{% endif %}>{{ a.name }}</option>
+        {% endfor %}
+      </select></span>
       <span class="execution-toggle" data-mode="{{ phase.execution_type or 'sync' }}" onclick="togglePhaseMode(this)">
         {% if phase.execution_type == 'parallel' %}
         <b class="mode-parallel">⚡ parallel</b>
@@ -131,7 +144,7 @@
       <span>Откат: {{ phase.rollback_target }}</span>
       {% endif %}
       {% if phase.next_recommendation %}
-      <span>Следующая: {{ phase.next_recommendation }}</span>
+      <span>Следующая: <input type="text" class="inline-input" value="{{ phase.next_recommendation }}" data-field="next_recommendation" onblur="scheduleSave()" style="width:300px;display:inline"></span>
       {% endif %}
     </div>
   </div>
@@ -164,7 +177,7 @@
     <div class="flow-list" id="instructions-list">
       {% set runs = phase.instructions|group_instructions %}
       {% for run in runs %}
-        <div class="flow-run {{ 'group' if run|length > 1 else 'single' }}">
+        <div class="flow-run {{ 'group flow-batch' if run|length > 1 else 'single' }}">
           {% for i in run %}
           <div class="flow-card {{ i.execution_type }}" data-id="{{ i.id }}" data-type="{{ i.execution_type }}">
             <div class="step-dot {{ i.execution_type }}"></div>
@@ -276,7 +289,7 @@ function rebuildFlow() {
       i++;
     }
     const run = document.createElement('div');
-    run.className = 'flow-run ' + (group.length > 1 ? 'group' : 'single');
+    run.className = 'flow-run ' + (group.length > 1 ? 'group flow-batch' : 'single');
     group.forEach(c => run.appendChild(c));
     list.appendChild(run);
     if (i < cards.length) {
@@ -396,11 +409,23 @@ function scheduleSave() {
 }
 
 async function savePhase() {
+  // ── Meta fields from header ──
+  const header = document.querySelector('.wiki-header');
+  const meta = {};
+  header.querySelectorAll('[data-field]').forEach(inp => {
+    meta[inp.dataset.field] = inp.value;
+  });
+
   const data = {
+    name: meta.name || '{{ phase.name }}',
+    description: meta.description || '',
+    next_recommendation: meta.next_recommendation || '',
     instructions: [],
     checks: [],
     evidence: [],
-    execution_type: document.querySelector('.execution-toggle')?.dataset.mode || 'sync'
+    execution_type: document.querySelector('.execution-toggle')?.dataset.mode || 'sync',
+    group_id: document.getElementById('groupSelect')?.value || null,
+    agent_id: document.getElementById('agentSelect')?.value || null,
   };
 
   document.querySelectorAll('#instructions-list .flow-card').forEach((card, idx) => {

@@ -122,7 +122,7 @@ def add_wizard_answer(task_id: str, task_key: str, phase_id: str, answer: str, o
 
 def get_messages(
     task_id: str,
-    limit: int = 200,
+    limit: Optional[int] = 200,
     phase_id: Optional[str] = None,
     tags: Optional[str] = None,
 ) -> List[Message]:
@@ -137,8 +137,10 @@ def get_messages(
         if tags:
             sql += " AND tags LIKE ?"
             params.append(f"%{tags}%")
-        sql += " ORDER BY id DESC LIMIT ?"
-        params.append(limit)
+        sql += " ORDER BY id DESC"
+        if limit is not None:
+            sql += " LIMIT ?"
+            params.append(limit)
 
         rows = conn.execute(sql, params).fetchall()
         return [Message(**dict(r)) for r in reversed(rows)]  # chron order

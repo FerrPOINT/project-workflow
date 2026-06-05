@@ -9,12 +9,9 @@ from typing import Optional
 from .config import WARTZ_DIR
 
 
-# Module-level known repos — can be overridden for testing
-known_repos = [
-    "/opt/dev/hr-recruiter/recruiter-front",
-    "/opt/dev/hr-recruiter/business-back",
-    "/opt/dev/hr-recruiter/messaging-back",
-]
+# Module-level known repos — can be overridden for testing.
+# Default to the current working tree instead of hardcoded foreign projects.
+known_repos = [str(Path.cwd())]
 
 
 def find_repo(task_key: str) -> Optional[str]:

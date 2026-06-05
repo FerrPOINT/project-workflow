@@ -10,8 +10,9 @@ CREATE TABLE IF NOT EXISTS phase_groups (
 );
 
 CREATE TABLE IF NOT EXISTS agents (
-    id   INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS phases (
@@ -55,8 +56,16 @@ CREATE TABLE IF NOT EXISTS evidence (
     UNIQUE(phase_id, description)
 );
 
+CREATE TABLE IF NOT EXISTS projects (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    code         TEXT NOT NULL UNIQUE,
+    name         TEXT NOT NULL,
+    key_patterns TEXT NOT NULL DEFAULT '[]'
+);
+
 CREATE TABLE IF NOT EXISTS tasks (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id    INTEGER NOT NULL REFERENCES projects(id),
     task_key      TEXT NOT NULL UNIQUE,
     title         TEXT,
     description   TEXT,

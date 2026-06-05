@@ -102,7 +102,7 @@ class PhaseService:
 
     # ── Read helpers ──────────────────────────────────────────────────
 
-    def get_phase_detail(self, phase_id: int) -> dict:
+    def get_phase_detail(self, phase_id: int | str) -> dict:
         """Вернуть фазу со всем вложенным контентом."""
         phase = self._db.get_phase(phase_id)
         if not phase:
@@ -116,7 +116,7 @@ class PhaseService:
 
     # ── Update phase (metadata) ──────────────────────────────────────
 
-    def update_phase(self, phase_id: int, data: dict) -> None:
+    def update_phase(self, phase_id: int | str, data: dict) -> None:
         self._db.update_phase(phase_id, data)
 
     # ── Helpers ────────────────────────────────────────────────────────

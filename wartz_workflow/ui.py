@@ -7,9 +7,11 @@
 from __future__ import annotations
 
 import argparse
+import sqlite3
 from pathlib import Path
 from typing import Any
 
+import click
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
@@ -61,6 +63,55 @@ def _get_service() -> service.PhaseService:
     if _srv is None:
         _srv = service.PhaseService(_get_db())
     return _srv
+
+
+def _load_cli_reference() -> list[dict[str, Any]]:
+    """Авто-обнаружение пользовательских CLI-команд для справки UI."""
+    from .cli.core import cli as workflow_cli
+
+    commands: list[dict[str, Any]] = []
+    for name, command in workflow_cli.commands.items():
+        if name == "ui" or getattr(command, "hidden", False):
+            continue
+
+        help_text = (command.help or command.short_help or "").strip()
+        summary = help_text.splitlines()[0].strip() if help_text else ""
+        options = []
+        for param in command.params:
+            if not isinstance(param, click.Option):
+                continue
+            flags = [flag for flag in [*param.opts, *param.secondary_opts] if flag]
+            if not flags:
+                continue
+
+            option_payload = {
+                "flags": ", ".join(flags),
+                "help": (param.help or "").strip(),
+                "required": bool(param.required),
+            }
+            default_value = param.default
+            has_meaningful_default = (
+                default_value is not None
+                and default_value != ""
+                and not (isinstance(default_value, bool) and default_value is False)
+                and not param.required
+            )
+            if has_meaningful_default:
+                option_payload["default"] = default_value
+
+            options.append(option_payload)
+
+        commands.append(
+            {
+                "name": name,
+                "summary": summary,
+                "usage": f"wartz-workflow {name}",
+                "help": help_text,
+                "options": options,
+            }
+        )
+
+    return commands
 
 
 def _seed_to_sqlite() -> None:
@@ -159,9 +210,12 @@ def _load_phases() -> list[dict]:
     result = []
     for p in rows:
         delegate_agent = p.get("delegate_agent")
+        instructions = wdb.get_phase_instructions(p["code"])
+        has_parallel = any(i.get("execution_type") == "parallel" for i in instructions)
         result.append(
             {
                 "id": p["id"],
+                "code": p["code"],
                 "phase_num": p["phase_order"],
                 "name": p["name"],
                 "description": p["description"],
@@ -170,13 +224,22 @@ def _load_phases() -> list[dict]:
                 "rollback_target": p.get("rollback_target"),
                 "delegate_timeout": p.get("delegate_timeout"),
                 "execution_type": p.get("execution_type", "sync"),
+                "parallel_with": p.get("parallel_with"),
+                "has_parallel_instructions": has_parallel,
+                "is_blocker": p["code"] in config.BLOCKER_PHASES,
+                "is_critic": p["code"] in config.CRITIC_PHASES,
             }
         )
     return result
 
 
 def _load_phase_detail(phase_id: str) -> dict | None:
-    return _get_service().get_phase_detail(phase_id)
+    phase = _get_service().get_phase_detail(phase_id)
+    if not phase:
+        return None
+    phase = dict(phase)
+    phase["phase_num"] = phase.get("phase_num", phase.get("phase_order"))
+    return phase
 
 
 def _load_tasks() -> list[dict]:
@@ -194,15 +257,22 @@ def _load_tasks() -> list[dict]:
         current_phase_id = t.get("current_phase", "-1")
         phase_map = {p["id"]: p for p in _load_phases()}
         current = phase_map.get(current_phase_id, {})
+        project_code = t.get("project_code") or "—"
+        project_name = t.get("project_name") or project_code
         
         result.append(
             {
                 "id": t["id"],
                 "task_key": t["task_key"],
                 "title": t.get("title", ""),
+                "project_id": t.get("project_id"),
+                "project_code": project_code,
+                "project_name": project_name,
+                "project_label": project_name if project_name == project_code else f"{project_code} — {project_name}",
                 "phase_id": current_phase_id,
                 "phase_num": current.get("phase_num", "?"),
                 "phase_name": current.get("name", current_phase_id),
+                "current_phase_name": current.get("name", current_phase_id),
                 "completed": completed,
                 "total_phases": len(config.PHASE_ORDER),
                 "status": t.get("status", "active"),
@@ -214,32 +284,147 @@ def _load_tasks() -> list[dict]:
     return result
 
 
+def _load_projects() -> list[dict]:
+    """Список проектов для UI."""
+    wdb = _get_db()
+    projects = wdb.get_projects()
+    tasks = wdb.get_tasks()
+    task_counts: dict[int, int] = {}
+    for task in tasks:
+        pid = task.get("project_id")
+        if isinstance(pid, int):
+            task_counts[pid] = task_counts.get(pid, 0) + 1
+
+    result = []
+    for project in projects:
+        patterns = project.get("key_patterns") or []
+        result.append(
+            {
+                **project,
+                "task_count": task_counts.get(project["id"], 0),
+                "patterns_count": len(patterns),
+            }
+        )
+    return result
+
+
+def _parse_key_patterns(raw: Any) -> list[str]:
+    if isinstance(raw, list):
+        return [str(item).strip() for item in raw if str(item).strip()]
+    if isinstance(raw, str):
+        return [line.strip() for line in raw.splitlines() if line.strip()]
+    return []
+
+
+def _project_form_payload(body: dict[str, Any]) -> dict[str, Any]:
+    code = str(body.get("code", "")).strip()
+    name = str(body.get("name", "")).strip()
+    return {
+        "code": code,
+        "name": name or code,
+        "key_patterns": _parse_key_patterns(body.get("key_patterns", [])),
+    }
+
+
+def _load_dashboard() -> dict[str, Any]:
+    tasks = _load_tasks()
+    projects = _load_projects()
+    phases = _load_phases()
+    history = _get_db().get_cli_history(limit=8)
+
+    active_tasks = [task for task in tasks if task.get("status") == "active"]
+    done_tasks = [task for task in tasks if task.get("status") == "done"]
+
+    return {
+        "stats": {
+            "projects": len(projects),
+            "tasks": len(tasks),
+            "active": len(active_tasks),
+            "done": len(done_tasks),
+            "phases": len(phases),
+        },
+        "active_tasks": active_tasks[:8],
+        "projects": sorted(projects, key=lambda item: (-item.get("task_count", 0), item.get("name", "")))[:8],
+        "recent_cli": history,
+    }
+
+
+def _get_task_detail(task_key: str) -> dict | None:
+    """Загрузить деталку задачи: метаданные + история фаз (линейно, без FORK/JOIN)."""
+    wdb = _get_db()
+    task = wdb.get_task_by_key(task_key)
+    if not task:
+        return None
+
+    task = dict(task)
+    task["project_code"] = task.get("project_code") or "—"
+    task["project_name"] = task.get("project_name") or task["project_code"]
+    task["project_label"] = (
+        task["project_name"] if task["project_name"] == task["project_code"]
+        else f"{task['project_code']} — {task['project_name']}"
+    )
+
+    current_phase_id = task.get("current_phase", "-1")
+    current_phase = wdb.get_phase(current_phase_id)
+    task["current_phase_name"] = current_phase["name"] if current_phase else task.get("current_phase", "")
+    task["current_phase_order"] = current_phase["phase_order"] if current_phase else 0
+
+    task["status_label"] = {"active": "В работе", "done": "Завершена", "blocked": "Заблокирована"}.get(task.get("status", ""), "—")
+    task["status_class"] = {"active": "active", "done": "done", "blocked": "blocked"}.get(task.get("status", ""), "wait")
+
+    history = wdb.get_task_history(task["id"])
+    phase_history = []
+    for h in history:
+        phase = wdb.get_phase(h["phase_id"])
+        if not phase:
+            continue
+        history_status = h.get("status", "pending")
+        phase_history.append(
+            {
+                "phase_order": phase["phase_order"],
+                "phase_name": phase["name"],
+                "phase_description": phase.get("description", ""),
+                "status": "done" if history_status == "done" else ("current" if phase["id"] == current_phase_id else "wait"),
+                "completed_at": h.get("completed_at", ""),
+            }
+        )
+
+    task["phase_history"] = phase_history
+    task["completed"] = sum(1 for h in phase_history if h.get("status") == "done")
+    task["total_phases"] = len(config.PHASE_ORDER)
+    task["progress_done"] = task["completed"]
+    task["progress_total"] = task["total_phases"]
+    task["work_time"] = None
+
+    return task
+
+
 # ═══════════════════════════════════════════════════════════════════════
 #  ROUTES — Pages
 # ═══════════════════════════════════════════════════════════════════════
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
-    tasks = _load_tasks()
+    """Минимальный dashboard без заглушек."""
+    dashboard = _load_dashboard()
     return templates.TemplateResponse(
-        request=request, name="dashboard.html", context={
+        request=request,
+        name="dashboard.html",
+        context={
             "request": request,
             "page": "dashboard",
             "ui_port": config.UI_PORT,
-            "task_count": len(tasks),
-            "completed_phases": sum(t["completed"] for t in tasks),
-            "tasks": tasks[:5],
-        }
+            **dashboard,
+        },
     )
 
 
 @app.get("/phases", response_class=HTMLResponse)
 def phases_page(request: Request):
     phases = _load_phases()
-    grouped = _group_phases(phases)
     return templates.TemplateResponse(
         request=request, name="phases.html",
-        context={"request": request, "grouped": grouped, "groups": PHASE_GROUP_NAMES, "grouped_phases": grouped, "page": "phases", "ui_port": config.UI_PORT}
+        context={"request": request, "phases": phases, "page": "phases", "ui_port": config.UI_PORT}
     )
 
 
@@ -248,69 +433,78 @@ def phase_detail(request: Request, phase_id: str):
     phase = _load_phase_detail(phase_id)
     if not phase:
         return HTMLResponse("<h1>Phase not found</h1>", status_code=404)
+    wdb = _get_db()
+    groups = wdb.get_phase_groups()
+    agents = wdb.get_agents()
     return templates.TemplateResponse(
         request=request, name="phase_detail.html", context={
-            "request": request, "page": "phases", "ui_port": config.UI_PORT, "phase": phase
+            "request": request, "page": "phases", "ui_port": config.UI_PORT, "phase": phase,
+            "groups": groups, "agents": agents,
         }
     )
 
 
 
-@app.get("/wizard", response_class=HTMLResponse)
-def wizard_page(request: Request):
-    phases = _load_phases()
+@app.get("/tasks", response_class=HTMLResponse)
+def tasks_page(request: Request):
+    """Список задач workflow."""
+    tasks = _load_tasks()
+    page_num = 1
+    per_page = 20
+    filter_status = ""
+    search = ""
+    total_count = len(tasks)
+    active_count = sum(1 for t in tasks if t.get("status") == "active")
+    done_count = sum(1 for t in tasks if t.get("status") == "done")
+    total_pages = max(1, (len(tasks) + per_page - 1) // per_page) if tasks else 1
     return templates.TemplateResponse(
-        request=request, name="wizard_list.html", context={
-            "request": request, "page": "wizard", "ui_port": config.UI_PORT, "phases": phases,
+        request=request, name="tasks.html",
+        context={
+            "request": request, "tasks": tasks, "page": "tasks", "ui_port": config.UI_PORT,
+            "page_num": page_num, "total_pages": total_pages, "filter_status": filter_status,
+            "search": search, "per_page": per_page,
+            "total_count": total_count, "active_count": active_count, "done_count": done_count,
         }
     )
 
 
-@app.get("/wizard/{phase_id}", response_class=HTMLResponse)
-def wizard_phase_page(request: Request, phase_id: str):
-    """Wizard для конкретной фазы — вопросы из phases.yaml + чеклист + evidence."""
-    wdb = _get_db()
-    
-    # Get phase from DB
-    phase_row = wdb.get_phase(phase_id)
-    if not phase_row:
-        return JSONResponse({"ok": False, "error": "Phase not found"}, status_code=404)
-    
-    phase = dict(phase_row)
-    phase["phase_num"] = config.PHASE_ORDER.index(phase_id) + 1 if phase_id in config.PHASE_ORDER else 0
-    phase["is_blocker"] = bool(phase.get("is_blocker"))
-    phase["is_delegated"] = bool(phase.get("delegate_agent"))
-    
-    # Load questions from DB only
-    questions = wdb.get_questions(phase_id)
-
-    # Load checklist from instructions + checks
-    instructions = wdb.get_instructions(phase_id)
-    checks = wdb.get_checks(phase_id)
-    checklist = []
-    for inst in instructions:
-        checklist.append({"text": inst["description"], "checked": False, "type": "instruction"})
-    for c in checks:
-        checklist.append({"text": c["description"], "checked": False, "type": "check"})
-    
-    # Load evidence
-    evidence = wdb.get_evidence(phase_id)
-    
-    # Load saved answers (if any)
-    answers = {}  # qid -> answer_text
-    
+@app.get("/projects", response_class=HTMLResponse)
+def projects_page(request: Request):
+    """CRUD-страница проектов и их regex-правил."""
+    projects = _load_projects()
     return templates.TemplateResponse(
-        request=request, name="wizard.html",
+        request=request,
+        name="projects.html",
         context={
             "request": request,
-            "page": "wizard",
+            "page": "projects",
             "ui_port": config.UI_PORT,
-            "phase": phase,
-            "questions": questions,
-            "checklist": checklist,
-            "evidence": evidence,
-            "answers": answers,
-        }
+            "projects": projects,
+            "selected_project": projects[0] if projects else None,
+        },
+    )
+
+
+@app.get("/task/{task_key}", response_class=HTMLResponse)
+def task_detail_page(request: Request, task_key: str):
+    """Деталка задачи — линейная история фаз."""
+    task = _get_task_detail(task_key)
+    if not task:
+        return HTMLResponse("<h1>Task not found</h1>", status_code=404)
+    return templates.TemplateResponse(
+        request=request,
+        name="task_detail.html",
+        context={
+            "request": request,
+            "task": task,
+            "page": "tasks",
+            "ui_port": config.UI_PORT,
+            "current_phase_name": task.get("current_phase_name"),
+            "progress_done": task.get("progress_done", 0),
+            "progress_total": task.get("progress_total", 0),
+            "work_time": task.get("work_time"),
+            "phase_history": task.get("phase_history", []),
+        },
     )
 
 
@@ -396,42 +590,47 @@ def api_wizard_context(task_key: str):
 
 @app.get("/settings", response_class=HTMLResponse)
 def settings_page(request: Request):
-    """Страница настроек workflow."""
-    s = config.load_settings()
-    if "key_patterns" not in s:
-        s["key_patterns"] = config.DEFAULT_SETTINGS.get("key_patterns", [
-            r"^TASKNEIROKLYUCH-(?P<number>[0-9]+)$",
-            r"^(?P<prefix>[A-Z][A-Z0-9]*)-(?P<number>[0-9]+)$",
-        ])
+    """Read-only справка по реальным CLI-командам workflow."""
     return templates.TemplateResponse(
-        request=request, name="settings.html", context={
+        request=request,
+        name="settings.html",
+        context={
             "request": request,
-            "settings": s,
+            "page": "settings",
+            "ui_port": config.UI_PORT,
+            "commands": _load_cli_reference(),
         },
     )
 
 
 @app.get("/api/settings")
 def api_settings_get():
-    """Вернуть текущие настройки."""
-    return {"ok": True, "settings": config.load_settings()}
+    """Вернуть реестр CLI-команд для UI/интеграций."""
+    return {"ok": True, "commands": _load_cli_reference()}
 
 
-@app.put("/api/settings")
-def api_settings_put(body: dict[str, Any]):
-    """Сохранить настройки."""
-    config.save_settings(body)
-    return {"ok": True}
+# ── Groups ─────────────────────────────────────────────────────────────
+
+@app.get("/groups", response_class=HTMLResponse)
+def groups_page(request: Request):
+    """Список групп фаз."""
+    wdb = _get_db()
+    groups = wdb.get_phase_groups()
+    return templates.TemplateResponse(
+        request=request, name="groups.html",
+        context={"request": request, "groups": groups, "page": "groups", "ui_port": config.UI_PORT}
+    )
 
 
-@app.delete("/api/settings")
-def api_settings_delete():
-    """Сбросить настройки к defaults."""
-    import json, os
-    settings_path = os.path.expanduser("~/.wartz-workflow/settings.json")
-    if os.path.exists(settings_path):
-        os.remove(settings_path)
-    return {"ok": True}
+@app.get("/agents", response_class=HTMLResponse)
+def agents_page(request: Request):
+    """Список агентов."""
+    wdb = _get_db()
+    agents = wdb.get_agents()
+    return templates.TemplateResponse(
+        request=request, name="agents.html",
+        context={"request": request, "agents": agents, "page": "agents", "ui_port": config.UI_PORT}
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -449,6 +648,80 @@ def api_phase_detail(phase_id: str):
     if not phase:
         return JSONResponse({"ok": False, "error": "Phase not found"}, status_code=404)
     return {"ok": True, "phase": phase}
+
+
+@app.get("/api/tasks")
+def api_tasks():
+    """Все задачи."""
+    return {"ok": True, "tasks": _load_tasks()}
+
+
+@app.get("/api/tasks/{task_key}")
+def api_task_detail(task_key: str):
+    """Детали одной задачи."""
+    task = _get_task_detail(task_key)
+    if not task:
+        return JSONResponse({"ok": False, "error": "Task not found"}, status_code=404)
+    return {"ok": True, "task": task}
+
+
+@app.get("/api/projects")
+def api_projects():
+    return {"ok": True, "projects": _load_projects()}
+
+
+@app.post("/api/projects")
+def api_project_create(body: dict[str, Any]):
+    payload = _project_form_payload(body)
+    if not payload["code"]:
+        return JSONResponse({"ok": False, "error": "code required"}, status_code=400)
+    wdb = _get_db()
+    if wdb.get_project_by_code(payload["code"]):
+        return JSONResponse({"ok": False, "error": "Project already exists"}, status_code=409)
+    try:
+        project_id = wdb.create_project(payload)
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    return {"ok": True, "project_id": project_id}
+
+
+@app.put("/api/projects/{project_id}")
+def api_project_update(project_id: int, body: dict[str, Any]):
+    wdb = _get_db()
+    existing = wdb.get_project(project_id)
+    if not existing:
+        return JSONResponse({"ok": False, "error": "Project not found"}, status_code=404)
+
+    update_data: dict[str, Any] = {}
+    if "code" in body:
+        code = str(body.get("code", "")).strip()
+        if not code:
+            return JSONResponse({"ok": False, "error": "code required"}, status_code=400)
+        conflict = wdb.get_project_by_code(code)
+        if conflict and conflict["id"] != project_id:
+            return JSONResponse({"ok": False, "error": "Project code already exists"}, status_code=409)
+        update_data["code"] = code
+    if "name" in body:
+        update_data["name"] = str(body.get("name", "")).strip() or update_data.get("code") or existing["name"]
+    if "key_patterns" in body:
+        update_data["key_patterns"] = _parse_key_patterns(body.get("key_patterns", []))
+
+    if update_data:
+        wdb.update_project(project_id, update_data)
+    return {"ok": True}
+
+
+@app.delete("/api/projects/{project_id}")
+def api_project_delete(project_id: int):
+    wdb = _get_db()
+    existing = wdb.get_project(project_id)
+    if not existing:
+        return JSONResponse({"ok": False, "error": "Project not found"}, status_code=404)
+    try:
+        wdb.delete_project(project_id)
+    except sqlite3.IntegrityError:
+        return JSONResponse({"ok": False, "error": "Project has linked tasks and cannot be deleted"}, status_code=409)
+    return {"ok": True}
 
 
 @app.get("/api/groups")
@@ -514,6 +787,56 @@ def api_group_delete(group_id: str):
     if not existing:
         return JSONResponse({"ok": False, "error": "Group not found"}, status_code=404)
     wdb.delete_phase_group(group_id)
+    return {"ok": True}
+
+
+@app.get("/api/agents")
+def api_agents():
+    """Получить всех агентов."""
+    wdb = _get_db()
+    agents = wdb.get_agents()
+    return {"ok": True, "agents": agents}
+
+
+@app.post("/api/agents")
+def api_agent_create(body: dict[str, Any]):
+    """Создать агента."""
+    name = body.get("name", "").strip()
+    if not name:
+        return JSONResponse({"ok": False, "error": "name required"}, status_code=400)
+    wdb = _get_db()
+    agent_id = wdb.create_agent({
+        "name": name,
+        "description": str(body.get("description", "")).strip(),
+    })
+    return {"ok": True, "agent_id": agent_id}
+
+
+@app.put("/api/agents/{agent_id}")
+def api_agent_update(agent_id: int, body: dict[str, Any]):
+    """Обновить агента."""
+    wdb = _get_db()
+    existing = wdb.get_agent(agent_id)
+    if not existing:
+        return JSONResponse({"ok": False, "error": "Agent not found"}, status_code=404)
+    update_data = {}
+    if "name" in body:
+        update_data["name"] = str(body["name"]).strip()
+    if "description" in body:
+        update_data["description"] = str(body["description"]).strip()
+    if update_data:
+        wdb.update_agent(agent_id, update_data)
+    return {"ok": True}
+
+
+@app.delete("/api/agents/{agent_id}")
+def api_agent_delete(agent_id: int):
+    """Удалить агента."""
+    wdb = _get_db()
+    existing = wdb.get_agent(agent_id)
+    if not existing:
+        return JSONResponse({"ok": False, "error": "Agent not found"}, status_code=404)
+    wdb.delete_agent(agent_id)
     return {"ok": True}
 
 
@@ -594,10 +917,22 @@ def api_phase_update(phase_id: str, body: dict[str, Any]):
     if not srv.get_phase_detail(phase_id):
         return JSONResponse({"ok": False, "error": "Phase not found"}, status_code=404)
 
+    forbidden_fields = [field for field in ("code", "phase_num", "phase_order") if field in body]
+    if forbidden_fields:
+        fields = ", ".join(forbidden_fields)
+        return JSONResponse(
+            {
+                "ok": False,
+                "error": f"{fields} cannot be updated from phase detail; manage phase identity/order on /phases",
+            },
+            status_code=400,
+        )
+
     # Phase metadata
     PHASE_FIELDS = {
-        "name", "description", "delegate_agent",
-        "delegate_timeout", "parallel_with", "rollback_target", "next_recommendation",
+        "name", "description",
+        "delegate_agent", "delegate_timeout", "parallel_with", "rollback_target", "next_recommendation",
+        "group_id", "agent_id", "execution_type",
     }
     phase_data = {k: v for k, v in body.items() if k in PHASE_FIELDS}
     if phase_data:
@@ -652,7 +987,7 @@ def _update_config_phase_order():
     """Пересобрать PHASE_ORDER из актуального DB state."""
     phases = _load_phases()
     sorted_phases = sorted(phases, key=lambda p: p["phase_num"])
-    config.PHASE_ORDER[:] = [p["id"] for p in sorted_phases]
+    config.PHASE_ORDER[:] = [p["code"] for p in sorted_phases]
 
 
 # ═══════════════════════════════════════════════════════════════════════

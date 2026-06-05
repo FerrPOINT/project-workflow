@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block title %}Проекты workflow — wartz-workflow{% endblock %}
+{% block header_title %}Проекты{% endblock %}
+{% block header_actions %}
+  <button type="button" class="btn btn-primary" id="newProjectButton" onclick="startCreateProject()">+ Новый проект</button>
+  <a href="/tasks" class="btn btn-secondary">← К задачам</a>
+{% endblock %}
+
+{% block extra_style %}
+.project-crud{display:grid;grid-template-columns:320px minmax(0,1fr);gap:16px;align-items:start}
+.project-nav{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 190px);overflow:auto}
+.project-nav-item{width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;cursor:pointer;color:var(--text)}
+.project-nav-item.active{border-color:var(--accent);box-shadow:0 0 0 1px rgba(88,166,255,.25)}
+.project-code{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent);margin-bottom:6px}
+.project-name{font-size:15px;font-weight:600;color:var(--text)}
+.project-meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--text-dim)}
+.project-panel{display:flex;flex-direction:column;gap:16px}
+.form-stack{display:flex;flex-direction:column;gap:12px}
+.label{font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}
+textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:140px;resize:vertical}
+.panel-actions{display:flex;gap:10px;flex-wrap:wrap}
+.empty-note{color:var(--text-dim);font-size:13px;line-height:1.6}
+@media (max-width: 980px){.project-crud{grid-template-columns:1fr}.project-nav{max-height:none}}
+{% endblock %}
+
+{% block content %}
+<div class="card" style="margin-bottom:16px">
+  <div class="card-title" style="margin-bottom:10px">CRUD проектов</div>
+  <div class="empty-note">
+    Здесь живёт source of truth для проектных regex-паттернов ключей задач. Редактирование глобальных settings для этого больше не используется.
+  </div>
+</div>
+
+<div class="project-crud">
+  <section class="project-nav" id="projectNav">
+    {% for project in projects %}
+    <button type="button" class="project-nav-item {% if selected_project and selected_project.id == project.id %}active{% endif %}" data-project-id="{{ project.id }}" onclick="selectProject({{ project.id }})">
+      <div class="project-code">{{ project.code }}</div>
+      <div class="project-name">{{ project.name }}</div>
+      <div class="project-meta">
+        <span>{{ project.task_count }} задач</span>
+        <span>{{ project.patterns_count }} regex</span>
+      </div>
+    </button>
+    {% else %}
+    <div class="card empty-note">Проектов пока нет.</div>
+    {% endfor %}
+  </section>
+
+  <section class="project-panel">
+    <form id="projectForm" class="card form-stack" onsubmit="event.preventDefault(); submitProject();">
+      <div class="card-title" id="projectFormMode">Редактирование проекта</div>
+      <div>
+        <div class="label">Код</div>
+        <input type="text" id="projectCode" value="{{ selected_project.code if selected_project else '' }}">
+      </div>
+      <div>
+        <div class="label">Название</div>
+        <input type="text" id="projectName" value="{{ selected_project.name if selected_project else '' }}">
+      </div>
+      <div>
+        <div class="label">Регекспы</div>
+        <textarea id="projectPatterns" class="code-area" spellcheck="false">{% if selected_project %}{{ selected_project.key_patterns | join('\n') }}{% endif %}</textarea>
+      </div>
+      <div class="panel-actions">
+        <button class="btn btn-primary" type="submit" id="projectSubmitButton">Сохранить</button>
+        <button class="btn btn-secondary" type="button" id="cancelCreateButton" onclick="cancelCreateProject()" style="display:none">Отмена</button>
+        <button class="btn btn-secondary" type="button" id="deleteProjectButton" onclick="deleteProject()">Удалить</button>
+      </div>
+      <div class="empty-note">Один regex на строку. Используются для auto-match task key → project.</div>
+    </form>
+  </section>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+const projectStore = {{ projects | tojson }};
+let selectedProjectId = {{ selected_project.id if selected_project else 'null' }};
+let previousProjectId = selectedProjectId;
+let projectFormMode = selectedProjectId == null ? 'create' : 'edit';
+
+function byId(id){ return projectStore.find(function(project){ return project.id === id; }); }
+function patternsToText(patterns){ return (patterns || []).join('\n'); }
+function currentPayload(){
+  return {
+    code: document.getElementById('projectCode').value.trim(),
+    name: document.getElementById('projectName').value.trim(),
+    key_patterns: document.getElementById('projectPatterns').value,
+  };
+}
+function syncNav(){
+  document.querySelectorAll('#projectNav [data-project-id]').forEach(function(node){
+    node.classList.toggle('active', Number(node.dataset.projectId) === selectedProjectId);
+  });
+}
+function fillProjectForm(project){
+  document.getElementById('projectCode').value = project ? project.code : '';
+  document.getElementById('projectName').value = project ? project.name : '';
+  document.getElementById('projectPatterns').value = project ? patternsToText(project.key_patterns) : '';
+}
+function setProjectFormMode(mode){
+  projectFormMode = mode;
+  var createMode = mode === 'create';
+  document.getElementById('projectFormMode').textContent = createMode ? 'Новый проект' : 'Редактирование проекта';
+  document.getElementById('projectSubmitButton').textContent = createMode ? 'Создать проект' : 'Сохранить';
+  document.getElementById('deleteProjectButton').style.display = createMode ? 'none' : '';
+  document.getElementById('cancelCreateButton').style.display = createMode && projectStore.length ? '' : 'none';
+}
+function startCreateProject(){
+  if(selectedProjectId != null){
+    previousProjectId = selectedProjectId;
+  }
+  selectedProjectId = null;
+  fillProjectForm(null);
+  setProjectFormMode('create');
+  syncNav();
+}
+function cancelCreateProject(){
+  if(projectStore.length === 0){
+    startCreateProject();
+    return;
+  }
+  var fallbackId = previousProjectId || projectStore[0].id;
+  if(!byId(fallbackId)){
+    fallbackId = projectStore[0].id;
+  }
+  selectProject(fallbackId);
+}
+function selectProject(id){
+  selectedProjectId = id;
+  previousProjectId = id;
+  fillProjectForm(byId(id));
+  setProjectFormMode('edit');
+  syncNav();
+}
+function reloadProjects(nextId){
+  fetch('/api/projects')
+    .then(function(r){return r.json()})
+    .then(function(d){
+      if(!d.ok){showToast(d.error || 'Ошибка загрузки проектов','error');return;}
+      projectStore.length = 0;
+      d.projects.forEach(function(project){ projectStore.push(project); });
+      if(projectStore.length === 0){
+        selectedProjectId = null;
+        previousProjectId = null;
+        fillProjectForm(null);
+        setProjectFormMode('create');
+        var nav = document.getElementById('projectNav');
+        nav.replaceChildren();
+        var empty = document.createElement('div');
+        empty.className = 'card empty-note';
+        empty.textContent = 'Проектов пока нет.';
+        nav.appendChild(empty);
+        syncNav();
+        return;
+      }
+      selectedProjectId = nextId || selectedProjectId || previousProjectId || projectStore[0].id;
+      if(!byId(selectedProjectId)){ selectedProjectId = projectStore[0].id; }
+      previousProjectId = selectedProjectId;
+      renderProjectNav();
+      fillProjectForm(byId(selectedProjectId));
+      setProjectFormMode('edit');
+      syncNav();
+    });
+}
+function renderProjectNav(){
+  var nav = document.getElementById('projectNav');
+  nav.replaceChildren();
+  projectStore.forEach(function(project){
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'project-nav-item';
+    button.dataset.projectId = String(project.id);
+    button.onclick = function(){ selectProject(project.id); };
+
+    var code = document.createElement('div');
+    code.className = 'project-code';
+    code.textContent = project.code;
+
+    var name = document.createElement('div');
+    name.className = 'project-name';
+    name.textContent = project.name;
+
+    var meta = document.createElement('div');
+    meta.className = 'project-meta';
+
+    var tasks = document.createElement('span');
+    tasks.textContent = project.task_count + ' задач';
+    var patterns = document.createElement('span');
+    patterns.textContent = project.patterns_count + ' regex';
+
+    meta.appendChild(tasks);
+    meta.appendChild(patterns);
+    button.appendChild(code);
+    button.appendChild(name);
+    button.appendChild(meta);
+    nav.appendChild(button);
+  });
+}
+function saveProject(){
+  if(selectedProjectId == null){ showToast('Нет выбранного проекта','error'); return; }
+  var payload = currentPayload();
+  if(!payload.code){ showToast('Код проекта обязателен','error'); return; }
+  fetch('/api/projects/' + selectedProjectId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+    .then(function(r){return r.json()})
+    .then(function(d){ if(d.ok){ showToast('Проект сохранён','success'); reloadProjects(selectedProjectId); } else { showToast(d.error || 'Ошибка','error'); } });
+}
+function deleteProject(){
+  if(selectedProjectId == null){ showToast('Нет выбранного проекта','error'); return; }
+  if(!confirm('Удалить проект?')) return;
+  fetch('/api/projects/' + selectedProjectId,{method:'DELETE'})
+    .then(function(r){return r.json()})
+    .then(function(d){ if(d.ok){ showToast('Проект удалён','success'); reloadProjects(null); } else { showToast(d.error || 'Ошибка','error'); } });
+}
+function createProject(){
+  var payload = currentPayload();
+  if(!payload.code){ showToast('Код проекта обязателен','error'); return; }
+  fetch('/api/projects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+    .then(function(r){return r.json()})
+    .then(function(d){
+      if(d.ok){
+        showToast('Проект создан','success');
+        reloadProjects(d.project_id);
+      } else {
+        showToast(d.error || 'Ошибка','error');
+      }
+    });
+}
+function submitProject(){
+  if(projectFormMode === 'create'){
+    createProject();
+    return;
+  }
+  saveProject();
+}
+renderProjectNav();
+if(selectedProjectId == null){
+  fillProjectForm(null);
+  setProjectFormMode('create');
+} else {
+  setProjectFormMode('edit');
+}
+syncNav();
+{% endblock %}

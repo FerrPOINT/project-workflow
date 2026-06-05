@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Агенты — wartz-workflow{% endblock %}
+{% block header_title %}Агенты{% endblock %}
+
+{% block extra_style %}
+.agent-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+.agent-table{width:100%}
+.agent-table th{white-space:nowrap}
+.inline-edit,.inline-textarea{background:transparent;border:1px solid transparent;padding:8px 10px;border-radius:6px;color:var(--text);font-size:13px;width:100%;font-family:inherit}
+.inline-edit:hover,.inline-textarea:hover{background:var(--panel)}
+.inline-edit:focus,.inline-textarea:focus{background:var(--panel);border-color:var(--accent);outline:none}
+.inline-textarea{min-height:72px;resize:vertical}
+.form-grid{display:grid;grid-template-columns:220px 1fr auto;gap:12px;align-items:start}
+@media (max-width: 820px){.form-grid{grid-template-columns:1fr}.agent-table thead{display:none}.agent-table tr{display:block;border-top:1px solid var(--border)}.agent-table td{display:block;padding:10px 0}}
+{% endblock %}
+
+{% block content %}
+<div class="agent-layout">
+  <section class="card">
+    <div class="card-title" style="margin-bottom:12px">Список агентов</div>
+    <table class="agent-table">
+      <thead>
+        <tr>
+          <th>Имя</th>
+          <th>Описание</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="agentsTable">
+        {% for a in agents %}
+        <tr data-id="{{ a.id }}">
+          <td style="width:220px">
+            <input type="text" class="inline-edit" value="{{ a.name }}" data-field="name" onblur="saveRow(this)">
+          </td>
+          <td>
+            <textarea class="inline-textarea" data-field="description" onblur="saveRow(this)">{{ a.description or '' }}</textarea>
+          </td>
+          <td style="width:60px;text-align:right">
+            <button class="icon-btn" onclick="deleteRow({{ a.id }})">×</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <div class="card-title" style="margin-bottom:12px">Добавить агента</div>
+    <div class="form-grid">
+      <input type="text" id="newName">
+      <textarea id="newDescription"></textarea>
+      <button class="btn btn-primary" onclick="addAgent()">Добавить</button>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+function payloadFromRow(row){
+  var data={};
+  row.querySelectorAll('[data-field]').forEach(function(field){data[field.dataset.field]=field.value.trim()});
+  return data;
+}
+function saveRow(el){
+  var row=el.closest('tr');
+  var id=row.dataset.id;
+  var data=payloadFromRow(row);
+  if(!data.name){showToast('Имя агента обязательно','error');return;}
+  fetch('/api/agents/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
+    .then(function(r){return r.json()})
+    .then(function(d){if(d.ok)showToast('Сохранено','success');else showToast(d.error||'Ошибка','error')});
+}
+function deleteRow(id){
+  if(!confirm('Удалить агента?'))return;
+  fetch('/api/agents/'+id,{method:'DELETE'})
+    .then(function(r){return r.json()})
+    .then(function(d){if(d.ok){showToast('Удалено','success');location.reload()}else showToast(d.error||'Ошибка','error')});
+}
+function addAgent(){
+  var name=document.getElementById('newName').value.trim();
+  var description=document.getElementById('newDescription').value.trim();
+  if(!name){showToast('Имя агента обязательно','error');return;}
+  fetch('/api/agents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,description:description})})
+    .then(function(r){return r.json()})
+    .then(function(d){if(d.ok){showToast('Добавлено','success');location.reload()}else showToast(d.error||'Ошибка','error')});
+}
+{% endblock %}

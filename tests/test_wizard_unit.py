@@ -12,6 +12,17 @@ class TestWizard:
             engine = WizardEngine("AAT-1")
             assert engine.task_key == "AAT-1"
 
+    def test_init_bootstraps_phases_when_workflow_db_is_empty(self, tmp_path, monkeypatch):
+        test_db = tmp_path / "workflow.db"
+        monkeypatch.setattr("wartz_workflow.db.DB_PATH", test_db)
+
+        with patch("wartz_workflow.wizard.convo") as mock_convo:
+            mock_convo.get_last_phase.return_value = None
+            engine = WizardEngine("AAT-1")
+
+        assert engine.all_phases
+        assert any(phase.code == "-1" for phase in engine.all_phases)
+
     def test_get_phase_prompt(self):
         ph = MagicMock()
         ph.code = "0"

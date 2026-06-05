@@ -1,12 +1,15 @@
 """WorkflowDB — SQLite persistence for workflow entities.
 
-Схема: 9 таблиц (phase_groups, agents, phases, instructions, checks, evidence, tasks, task_history, cli_history)
+Схема: groups, agents, phases, instructions, checks, evidence, projects, tasks, task_history, cli_history.
 Плоская структура, связи через FOREIGN KEY.
 PK: INTEGER AUTOINCREMENT, семантические code TEXT UNIQUE.
 """
 
+import json
 import sqlite3
 from pathlib import Path
+
+from . import config
 
 DB_PATH = Path.home() / ".wartz-workflow" / "workflow.db"
 SCHEMA_PATH = Path(__file__).parent / "db_schema.sql"
@@ -44,12 +47,176 @@ class WorkflowDB:
             raise ValueError(f"Unknown group code: {val}")
         return row["id"]
 
+    def _resolve_project_id(self, val: int | str) -> int:
+        if isinstance(val, int):
+            return val
+        row = self.get_project_by_code(val)
+        if not row:
+            raise ValueError(f"Unknown project code: {val}")
+        return row["id"]
+
+    @staticmethod
+    def _serialize_key_patterns(patterns: list[str] | str | None) -> str:
+        if patterns is None:
+            return "[]"
+        if isinstance(patterns, str):
+            return patterns
+        return json.dumps([str(p) for p in patterns], ensure_ascii=False)
+
+    @staticmethod
+    def _deserialize_key_patterns(raw: list[str] | str | None) -> list[str]:
+        if raw is None:
+            return []
+        if isinstance(raw, list):
+            return [str(p) for p in raw]
+        if isinstance(raw, str):
+            try:
+                parsed = json.loads(raw)
+                if isinstance(parsed, list):
+                    return [str(p) for p in parsed]
+            except Exception:
+                pass
+        return []
+
+    def _hydrate_project_row(self, row: sqlite3.Row | dict | None) -> dict | None:
+        if not row:
+            return None
+        data = dict(row)
+        data["key_patterns"] = self._deserialize_key_patterns(data.get("key_patterns"))
+        return data
+
+    def _bootstrap_projects(self) -> list[dict]:
+        legacy_patterns = config.load_legacy_key_patterns()
+        if legacy_patterns:
+            return [{
+                "code": "default",
+                "name": "Migrated Default Project",
+                "key_patterns": legacy_patterns,
+            }]
+        return [{
+            "code": "TASKNEIROKLYUCH",
+            "name": "TASKNEIROKLYUCH",
+            "key_patterns": config.DEFAULT_TASK_KEY_PATTERNS,
+        }]
+
+    def _table_columns(self, conn: sqlite3.Connection, table_name: str) -> list[str]:
+        rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+        return [row[1] for row in rows]
+
+    def _ensure_default_projects(self, conn: sqlite3.Connection) -> None:
+        count = conn.execute("SELECT COUNT(*) FROM projects").fetchone()[0]
+        if count:
+            return
+        for project in self._bootstrap_projects():
+            conn.execute(
+                "INSERT INTO projects (code, name, key_patterns) VALUES (?, ?, ?)",
+                (
+                    project["code"],
+                    project["name"],
+                    self._serialize_key_patterns(project.get("key_patterns")),
+                ),
+            )
+
+    def _project_rows(self, conn: sqlite3.Connection) -> list[dict]:
+        rows = conn.execute("SELECT * FROM projects ORDER BY id").fetchall()
+        return [self._hydrate_project_row(row) for row in rows if row]
+
+    def _match_project_for_task_key(
+        self,
+        task_key: str,
+        conn: sqlite3.Connection,
+        *,
+        strict: bool = True,
+    ) -> dict | None:
+        from .task_validator import TaskKeyValidator
+
+        projects = self._project_rows(conn)
+        if not projects:
+            return None
+        validator = TaskKeyValidator.from_projects(projects)
+        validated = validator.validate(task_key)
+        if validated.is_valid and validated.project:
+            for project in projects:
+                if project["code"] == validated.project:
+                    return project
+        if strict:
+            return None
+        return projects[0]
+
+    def _migrate_tasks_add_project(self, conn: sqlite3.Connection) -> None:
+        rows = conn.execute("SELECT * FROM tasks ORDER BY id").fetchall()
+        conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute(
+            """
+            CREATE TABLE tasks_new (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id    INTEGER NOT NULL REFERENCES projects(id),
+                task_key      TEXT NOT NULL UNIQUE,
+                title         TEXT,
+                description   TEXT,
+                current_phase INTEGER NOT NULL DEFAULT -1,
+                status        TEXT DEFAULT 'active'
+                    CHECK(status IN ('active', 'done', 'blocked')),
+                created_at    TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at    TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        for row in rows:
+            project = self._match_project_for_task_key(row["task_key"], conn, strict=False)
+            if not project:
+                raise ValueError(f"Cannot migrate task without project match: {row['task_key']}")
+            conn.execute(
+                """
+                INSERT INTO tasks_new (id, project_id, task_key, title, description, current_phase, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row["id"],
+                    project["id"],
+                    row["task_key"],
+                    row["title"],
+                    row["description"],
+                    row["current_phase"],
+                    row["status"],
+                    row["created_at"],
+                    row["updated_at"],
+                ),
+            )
+        conn.execute("DROP TABLE tasks")
+        conn.execute("ALTER TABLE tasks_new RENAME TO tasks")
+        conn.execute("PRAGMA foreign_keys = ON")
+
+    def _backfill_task_projects(self, conn: sqlite3.Connection) -> None:
+        if "project_id" not in self._table_columns(conn, "tasks"):
+            return
+        rows = conn.execute("SELECT id, task_key FROM tasks WHERE project_id IS NULL OR project_id = ''").fetchall()
+        for row in rows:
+            project = self._match_project_for_task_key(row["task_key"], conn, strict=False)
+            if project:
+                conn.execute("UPDATE tasks SET project_id = ? WHERE id = ?", (project["id"], row["id"]))
+
+    def _migrate_agents_add_description(self, conn: sqlite3.Connection) -> None:
+        agent_columns = self._table_columns(conn, "agents")
+        if "description" in agent_columns:
+            return
+        conn.execute("ALTER TABLE agents ADD COLUMN description TEXT NOT NULL DEFAULT ''")
+
+    def _migrate_schema(self, conn: sqlite3.Connection) -> None:
+        task_columns = self._table_columns(conn, "tasks")
+        self._migrate_agents_add_description(conn)
+        if "project_id" not in task_columns:
+            self._migrate_tasks_add_project(conn)
+        self._backfill_task_projects(conn)
+
     # ── Init ───────────────────────────────────────────────────────────
 
     def init(self) -> None:
         ddl = SCHEMA_PATH.read_text(encoding="utf-8")
         with self._conn() as conn:
             conn.executescript(ddl)
+            self._ensure_default_projects(conn)
+            self._migrate_schema(conn)
             conn.commit()
 
     def _list_tables(self) -> set[str]:
@@ -115,8 +282,11 @@ class WorkflowDB:
     def create_agent(self, data: dict) -> int:
         with self._conn() as conn:
             c = conn.execute(
-                "INSERT INTO agents (name) VALUES (?)",
-                (data["name"],),
+                "INSERT INTO agents (name, description) VALUES (?, ?)",
+                (
+                    data["name"],
+                    str(data.get("description", "")).strip(),
+                ),
             )
             conn.commit()
             return c.lastrowid or 0
@@ -147,6 +317,66 @@ class WorkflowDB:
     def delete_agent(self, agent_id: int) -> None:
         with self._conn() as conn:
             conn.execute("DELETE FROM agents WHERE id = ?", (agent_id,))
+            conn.commit()
+
+    # ── Projects ────────────────────────────────────────────────────────
+
+    def create_project(self, data: dict) -> int:
+        code = str(data.get("code", data.get("id", ""))).strip()
+        if not code:
+            raise ValueError("Project code is required")
+        with self._conn() as conn:
+            c = conn.execute(
+                "INSERT INTO projects (code, name, key_patterns) VALUES (?, ?, ?)",
+                (
+                    code,
+                    data.get("name", code),
+                    self._serialize_key_patterns(data.get("key_patterns")),
+                ),
+            )
+            conn.commit()
+            return c.lastrowid or 0
+
+    def get_projects(self) -> list[dict]:
+        with self._conn() as conn:
+            rows = conn.execute("SELECT * FROM projects ORDER BY id").fetchall()
+            return [self._hydrate_project_row(r) for r in rows if r]
+
+    def get_project(self, project_id: int) -> dict | None:
+        with self._conn() as conn:
+            row = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+            return self._hydrate_project_row(row)
+
+    def get_project_by_code(self, code: str) -> dict | None:
+        with self._conn() as conn:
+            row = conn.execute("SELECT * FROM projects WHERE code = ?", (code,)).fetchone()
+            return self._hydrate_project_row(row)
+
+    def update_project(self, project_id: int | str, data: dict) -> None:
+        resolved = self._resolve_project_id(project_id)
+        fields = []
+        vals = []
+        for k, v in data.items():
+            if k == "id":
+                continue
+            if k == "key_patterns":
+                fields.append("key_patterns = ?")
+                vals.append(self._serialize_key_patterns(v))
+            else:
+                fields.append(f"{k} = ?")
+                vals.append(v)
+        if not fields:
+            return
+        vals.append(resolved)
+        sql = f"UPDATE projects SET {', '.join(fields)} WHERE id = ?"
+        with self._conn() as conn:
+            conn.execute(sql, vals)
+            conn.commit()
+
+    def delete_project(self, project_id: int | str) -> None:
+        resolved = self._resolve_project_id(project_id)
+        with self._conn() as conn:
+            conn.execute("DELETE FROM projects WHERE id = ?", (resolved,))
             conn.commit()
 
     # ── Import Phases (from YAML/JSON) ─────────────────────────────────
@@ -418,12 +648,23 @@ class WorkflowDB:
 
     def create_task(self, data: dict) -> int:
         with self._conn() as conn:
+            project_id = data.get("project_id")
+            if project_id is None and data.get("project") is not None:
+                project_id = self._resolve_project_id(data["project"])
+            if project_id is None and data.get("project_code") is not None:
+                project_id = self._resolve_project_id(data["project_code"])
+            if project_id is None:
+                project = self._match_project_for_task_key(data["task_key"], conn)
+                if not project:
+                    raise ValueError(f"No project regex matched task key: {data['task_key']}")
+                project_id = project["id"]
             c = conn.execute(
                 """
-                INSERT INTO tasks (task_key, title, description, current_phase, status)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO tasks (project_id, task_key, title, description, current_phase, status)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
+                    project_id,
                     data["task_key"],
                     data.get("title", ""),
                     data.get("description", ""),
@@ -436,25 +677,55 @@ class WorkflowDB:
 
     def get_tasks(self) -> list[dict]:
         with self._conn() as conn:
-            rows = conn.execute("SELECT * FROM tasks ORDER BY updated_at DESC").fetchall()
+            rows = conn.execute(
+                """
+                SELECT tasks.*, projects.code AS project_code, projects.name AS project_name
+                FROM tasks
+                JOIN projects ON projects.id = tasks.project_id
+                ORDER BY tasks.updated_at DESC
+                """
+            ).fetchall()
             return [dict(r) for r in rows]
 
     def get_task(self, task_id: int) -> dict | None:
         with self._conn() as conn:
-            row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+            row = conn.execute(
+                """
+                SELECT tasks.*, projects.code AS project_code, projects.name AS project_name
+                FROM tasks
+                JOIN projects ON projects.id = tasks.project_id
+                WHERE tasks.id = ?
+                """,
+                (task_id,),
+            ).fetchone()
             return dict(row) if row else None
 
     def get_task_by_key(self, task_key: str) -> dict | None:
         with self._conn() as conn:
-            row = conn.execute("SELECT * FROM tasks WHERE task_key = ?", (task_key,)).fetchone()
+            row = conn.execute(
+                """
+                SELECT tasks.*, projects.code AS project_code, projects.name AS project_name
+                FROM tasks
+                JOIN projects ON projects.id = tasks.project_id
+                WHERE tasks.task_key = ?
+                """,
+                (task_key,),
+            ).fetchone()
             return dict(row) if row else None
 
     def update_task(self, task_id: int, data: dict) -> None:
         fields = []
         vals = []
         for k, v in data.items():
-            fields.append(f"{k} = ?")
-            vals.append(v)
+            if k == "project":
+                fields.append("project_id = ?")
+                vals.append(self._resolve_project_id(v))
+            elif k == "project_code":
+                fields.append("project_id = ?")
+                vals.append(self._resolve_project_id(v))
+            else:
+                fields.append(f"{k} = ?")
+                vals.append(v)
         vals.append(task_id)
         sql = f"UPDATE tasks SET {', '.join(fields)}, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
         with self._conn() as conn:

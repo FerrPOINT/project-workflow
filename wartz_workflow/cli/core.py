@@ -24,9 +24,20 @@ def out_json(data: dict[str, Any]) -> None:
     sys.exit(0 if data.get("ok", True) else 1)
 
 
+def _get_task_key_validator() -> task_validator.TaskKeyValidator:
+    from ..db import WorkflowDB
+
+    wdb = WorkflowDB()
+    wdb.init()
+    projects = wdb.get_projects()
+    if projects:
+        return task_validator.TaskKeyValidator.from_projects(projects)
+    return task_validator.TaskKeyValidator.with_migration()
+
+
 def _require_valid_key(task_key: str) -> str:
     """Проверить валидность ключа задачи. Вернуть normalized или выбросить Abort."""
-    validated = task_validator.validate(task_key)
+    validated = _get_task_key_validator().validate(task_key)
     if not validated.is_valid:
         console.print(f"{FAIL} [bold red]Invalid task key:[/bold red] {validated.error_message}")
         raise click.Abort()
