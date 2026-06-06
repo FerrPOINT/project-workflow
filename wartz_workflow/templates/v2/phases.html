@@ -24,7 +24,7 @@
 .timeline-badges{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;align-items:center}
 .badge{font-size:11px;font-weight:500;padding:2px 8px;border-radius:4px;display:inline-flex;align-items:center;gap:3px}
 .badge-blocker{background:var(--red-soft);color:var(--red)}
-.badge-critic{background:rgba(59,130,246,.12);color:var(--blue)}
+.badge-agent{background:rgba(59,130,246,.12);color:var(--blue)}
 .badge-delegate{background:var(--accent-soft);color:var(--accent)}
 .badge-parallel{background:var(--orange-soft);color:var(--orange)}
 .badge-link{background:var(--panel);color:var(--text-muted);border:1px solid var(--border)}
@@ -50,7 +50,7 @@
           {% endif %}
           <div class="timeline-badges">
             {% if p.is_blocker %}<span class="badge badge-blocker">🔴 blocker</span>{% endif %}
-            {% if p.is_critic %}<span class="badge badge-critic">🛡️ critic</span>{% endif %}
+            {% if p.agent_name %}<span class="badge badge-agent">🤖 {{ p.agent_name }}</span>{% endif %}
             {% if p.is_delegated %}<span class="badge badge-delegate">👤 delegate</span>{% endif %}
             {% if p.has_parallel_instructions %}<span class="badge badge-parallel">⚡ parallel</span>{% endif %}
             {% if p.parallel_with %}<span class="badge badge-link">↔ {{ p.parallel_with }}</span>{% endif %}

@@ -129,6 +129,35 @@ class TestPhasesPage:
         assert "movePhase(this, 1)" in response.text
         assert "fetch('/api/phases/order'" in response.text
 
+    def test_phases_page_shows_selected_agent_instead_of_hardcoded_critic(self):
+        from wartz_workflow.ui import _get_db
+
+        wdb = _get_db()
+        reviewer = next(agent for agent in wdb.get_agents() if agent["name"] == "reviewer")
+        tracked_codes = ["0.9", "3.5", "4.5", "7.7"]
+        original_agent_ids = {
+            code: (wdb.get_phase(code) or {}).get("agent_id")
+            for code in tracked_codes
+        }
+
+        try:
+            for code in tracked_codes:
+                wdb.update_phase(code, {"agent_id": None})
+            wdb.update_phase("0.9", {"agent_id": reviewer["id"]})
+
+            response = client.get("/phases")
+            assert response.status_code == 200
+
+            phase_09_html = response.text.split('href="/phase/0.9"', 1)[1].split('</a>', 1)[0]
+            phase_35_html = response.text.split('href="/phase/3.5"', 1)[1].split('</a>', 1)[0]
+
+            assert "reviewer" in phase_09_html
+            assert "🛡️ critic" not in response.text
+            assert "reviewer" not in phase_35_html
+        finally:
+            for code, agent_id in original_agent_ids.items():
+                wdb.update_phase(code, {"agent_id": agent_id})
+
 
 class TestPhaseDetail:
     def test_phase_detail_returns_html(self):

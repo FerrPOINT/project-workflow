@@ -207,9 +207,11 @@ def _load_phases() -> list[dict]:
     wdb = _get_db()
     srv = _get_service()
     rows = wdb.get_phases()
+    agents_by_id = {agent["id"]: agent for agent in wdb.get_agents()}
     result = []
     for p in rows:
         delegate_agent = p.get("delegate_agent")
+        selected_agent = agents_by_id.get(p.get("agent_id")) if p.get("agent_id") else None
         instructions = wdb.get_phase_instructions(p["code"])
         has_parallel = any(i.get("execution_type") == "parallel" for i in instructions)
         result.append(
@@ -221,13 +223,14 @@ def _load_phases() -> list[dict]:
                 "description": p["description"],
                 "delegate_agent": delegate_agent,
                 "is_delegated": bool(delegate_agent),
+                "agent_id": p.get("agent_id"),
+                "agent_name": selected_agent.get("name") if selected_agent else None,
                 "rollback_target": p.get("rollback_target"),
                 "delegate_timeout": p.get("delegate_timeout"),
                 "execution_type": p.get("execution_type", "sync"),
                 "parallel_with": p.get("parallel_with"),
                 "has_parallel_instructions": has_parallel,
                 "is_blocker": p["code"] in config.BLOCKER_PHASES,
-                "is_critic": p["code"] in config.CRITIC_PHASES,
             }
         )
     return result
