@@ -446,19 +446,21 @@ class TestPhaseDetail:
         assert response.status_code == 200
         assert 'flow-card' in response.text
 
-    def test_phase_detail_wraps_parallel_batch_in_gold_frame(self):
+    def test_phase_detail_wraps_parallel_batch_in_vertical_frame_like_phase_list(self):
         response = client.get(_phase_detail_path("0.0a"))
         assert response.status_code == 200
-        assert 'class="flow-run group flow-batch"' in response.text
-        assert '.flow-run.group.flow-batch{' in response.text
-        assert 'border:1px solid var(--batch-gold)' in response.text
+        assert 'class="flow-batch-shell"' in response.text
+        assert '.flow-batch-shell{width:100%;display:flex;flex-direction:column;gap:10px;border:1px solid var(--orange);' in response.text
+        assert '.flow-run.group{flex-direction:column;gap:10px}' in response.text
         assert 'class="flow-batch-label">⚡ parallel</div>' in response.text
+        assert 'class="flow-arrow flow-batch-arrow">↓</div>' in response.text
 
-    def test_phase_detail_rebuild_flow_keeps_gold_batch_wrapper(self):
+    def test_phase_detail_rebuild_flow_keeps_vertical_parallel_batch_shell(self):
         response = client.get(_phase_detail_path("0.0a"))
         assert response.status_code == 200
         assert "run.className = 'flow-run ' + (group.length > 1 ? 'group flow-batch' : 'single');" in response.text
-        assert "label.className = 'flow-batch-label';" in response.text
+        assert "shell.className = 'flow-batch-shell';" in response.text
+        assert "arrow.className = 'flow-arrow flow-batch-arrow';" in response.text
 
     def test_phase_detail_hides_code_and_order_meta(self):
         response = client.get(_phase_detail_path("1"))

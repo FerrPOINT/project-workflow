@@ -29,17 +29,16 @@
 .wiki-section-title{font-size:13px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
 .wiki-section-title .count{font-size:11px;font-weight:500;color:var(--text-dim);background:var(--panel);padding:1px 7px;border-radius:4px;text-transform:none;letter-spacing:0}
 
-/* ── Instruction flow: vertical serial + horizontal parallel ─────────── */
+/* ── Instruction flow: vertical serial + framed vertical parallel groups ── */
 .flow-list{display:flex;flex-direction:column;gap:0}
 
-/* One run = either single card or horizontal group */
-.flow-batch-shell{display:flex;flex-direction:column;gap:6px;width:100%}
-.flow-batch-label{display:inline-flex;align-items:center;align-self:flex-start;gap:6px;padding:3px 10px;border-radius:999px;border:1px solid var(--batch-gold);background:rgba(212,175,55,.14);color:var(--batch-gold);font-size:11px;font-weight:700;letter-spacing:.04em}
+/* One run = either single card or framed vertical group */
+.flow-batch-shell{width:100%;display:flex;flex-direction:column;gap:10px;border:1px solid var(--orange);border-radius:12px;padding:12px;background:rgba(245,158,11,.08);box-shadow:inset 0 0 0 1px rgba(245,158,11,.18)}
+.flow-batch-label{display:inline-flex;align-items:center;align-self:flex-start;gap:6px;padding:3px 10px;border-radius:999px;border:1px solid var(--orange);background:var(--orange-soft);color:var(--orange);font-size:11px;font-weight:700;letter-spacing:.04em}
 .flow-run{display:flex;gap:12px;width:100%}
 .flow-run.single .flow-card{flex:1}
-.flow-run.group{flex-wrap:nowrap}
-.flow-run.group.flow-batch{--batch-gold:#d4af37;--batch-gold-soft:rgba(212,175,55,.08);border:1px solid var(--batch-gold);border-radius:12px;padding:10px;background:var(--batch-gold-soft);box-shadow:inset 0 0 0 1px rgba(212,175,55,.14)}
-.flow-run.group .flow-card{flex:1;min-width:0;overflow:hidden}
+.flow-run.group{flex-direction:column;gap:10px}
+.flow-run.group .flow-card{width:100%;min-width:0;overflow:hidden}
 
 /* Card */
 .flow-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;display:flex;gap:10px;min-width:0;transition:all .12s}
@@ -62,6 +61,7 @@
 
 /* Arrow between serial runs */
 .flow-arrow{display:flex;justify-content:center;padding:6px 0;color:var(--text-dim);font-size:14px}
+.flow-batch-arrow{padding:0;color:var(--orange);font-size:18px}
 
 /* JOIN after parallel group */
 .flow-join{display:flex;justify-content:center;padding:4px 0}
@@ -161,7 +161,7 @@
   </div>
   {% endif %}
 
-  <!-- Instructions — vertical flow with horizontal parallel groups -->
+  <!-- Instructions — vertical flow with framed vertical parallel groups -->
   <div class="wiki-section">
     <div class="wiki-section-title">
       📋 Инструкции
@@ -191,6 +191,9 @@
             </div>
             <button class="item-delete" onclick="deleteItem(this)">×</button>
           </div>
+          {% if run|length > 1 and not loop.last %}
+          <div class="flow-arrow flow-batch-arrow">↓</div>
+          {% endif %}
           {% endfor %}
         </div>
         {% if run|length > 1 %}
@@ -290,7 +293,15 @@ function rebuildFlow() {
     }
     const run = document.createElement('div');
     run.className = 'flow-run ' + (group.length > 1 ? 'group flow-batch' : 'single');
-    group.forEach(c => run.appendChild(c));
+    group.forEach((c, index) => {
+      run.appendChild(c);
+      if (group.length > 1 && index < group.length - 1) {
+        const arrow = document.createElement('div');
+        arrow.className = 'flow-arrow flow-batch-arrow';
+        arrow.textContent = '↓';
+        run.appendChild(arrow);
+      }
+    });
     if (group.length > 1) {
       const shell = document.createElement('div');
       shell.className = 'flow-batch-shell';
