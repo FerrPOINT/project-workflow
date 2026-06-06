@@ -816,8 +816,8 @@ def api_update_order(body: dict[str, Any]):
         ordered_phase_ids.append(resolved_phase_id)
     wdb.batch_update_orders(batch)
 
-    # Keep runtime phase order aligned with the DB before the next seed sync.
-    _update_config_phase_order()
+    # Keep runtime phase order aligned with the just-updated DB before the next seed sync.
+    _update_config_phase_order(wdb)
     schema.persist_phase_order_to_seed(wdb, ordered_phase_ids)
 
     return {"ok": True, "updated": len(batch)}
@@ -867,11 +867,12 @@ def api_phase_update(phase_id: str, body: dict[str, Any]):
     return {"ok": True, "ids": {"instructions": inst_ids, "checks": check_ids, "evidence": ev_ids}}
 
 
-def _update_config_phase_order():
+def _update_config_phase_order(wdb: db.WorkflowDB | None = None):
     """Пересобрать runtime PHASE_ORDER из default workflow без повторного seed-sync."""
+    source_db = wdb or _get_db()
     rows = [
         phase
-        for phase in _get_db().get_phases()
+        for phase in source_db.get_phases()
         if phase.get("workflow_code") == "default" and phase.get("is_seed_managed")
     ]
     if not rows:

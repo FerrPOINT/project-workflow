@@ -1,5 +1,6 @@
 """Tests for UI (FastAPI endpoints)."""
 
+import json
 import re
 
 import click
@@ -280,6 +281,69 @@ class TestPhasesPage:
 
         assert f'data-phase-id="{phase["id"]}"' in response.text
         assert 'data-phase-id="0.7"' not in response.text
+
+    def test_phases_page_rebuilds_parallel_groups_from_execution_sequence(self):
+        response = client.get("/phases")
+        assert response.status_code == 200
+
+        assert 'data-execution-type="parallel"' in response.text
+        assert 'data-execution-type="sync"' in response.text
+        assert 'dataset.executionType' in response.text
+        assert 'dataset.parallelKey' not in response.text
+
+    def test_phases_order_api_persists_reordered_default_workflow_sequence(self, monkeypatch, tmp_path):
+        from wartz_workflow import config, schema
+        from wartz_workflow.ui import _get_db
+
+        wdb = _get_db()
+        default_phases = [phase for phase in wdb.get_phases() if phase.get("workflow_code") == "default"]
+        original_codes = [phase["code"] for phase in default_phases]
+        original_batch = [(phase["id"], phase["phase_order"]) for phase in default_phases]
+
+        seed_copy = tmp_path / "seed.json"
+        seed_copy.write_text(schema._SEED_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+        monkeypatch.setattr(schema, "_SEED_PATH", seed_copy)
+        monkeypatch.setattr(config, "PHASE_ORDER", original_codes.copy())
+
+        reordered_codes = original_codes.copy()
+        moved_code = "0.000"
+        target_code = "0.00"
+        moved_index = reordered_codes.index(moved_code)
+        target_index = reordered_codes.index(target_code)
+        moved = reordered_codes.pop(moved_index)
+        reordered_codes.insert(target_index, moved)
+
+        phases_by_code = {phase["code"]: phase for phase in default_phases}
+        orders = [
+            {"phase_id": phases_by_code[code]["id"], "phase_order": idx + 1}
+            for idx, code in enumerate(reordered_codes)
+        ]
+
+        try:
+            response = client.put("/api/phases/order", json={"orders": orders})
+            assert response.status_code == 200
+            assert response.json()["ok"] is True
+
+            page = client.get("/phases")
+            assert page.status_code == 200
+            assert page.text.index(_phase_href("0.000")) < page.text.index(_phase_href("0.00"))
+
+            refreshed_codes = [
+                phase["code"]
+                for phase in wdb.get_phases()
+                if phase.get("workflow_code") == "default"
+            ]
+            assert refreshed_codes[:6] == reordered_codes[:6]
+
+            persisted_seed = json.loads(seed_copy.read_text(encoding="utf-8"))
+            persisted_codes = [item.get("code", item.get("id")) for item in persisted_seed]
+            assert persisted_codes[:6] == reordered_codes[:6]
+            assert config.PHASE_ORDER[:6] == reordered_codes[:6]
+        finally:
+            wdb.batch_update_orders(original_batch)
+            config.PHASE_ORDER[:] = original_codes
+            from wartz_workflow.ui import _update_config_phase_order
+            _update_config_phase_order()
 
     def test_phases_page_shows_selected_agent_instead_of_hardcoded_critic(self):
         from wartz_workflow.ui import _get_db
