@@ -2,10 +2,27 @@
 
 Uses TestClient to hit GET/POST/PUT endpoints.
 """
+import pytest
 from fastapi.testclient import TestClient
 from wartz_workflow.ui import app
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def setup_db():
+    from wartz_workflow.ui import _get_db, _seed_to_sqlite
+
+    wdb = _get_db()
+    if wdb.is_empty():
+        _seed_to_sqlite()
+    if not wdb.get_task_by_key("TASKNEIROKLYUCH-1"):
+        wdb.create_task({
+            "task_key": "TASKNEIROKLYUCH-1",
+            "title": "Smoke task for dashboard",
+            "status": "active",
+            "current_phase": "-1",
+        })
 
 
 def _phase_id(code: str) -> int:

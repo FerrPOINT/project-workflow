@@ -88,7 +88,6 @@ SETTINGS_PATH = os.path.join(WARTZ_DIR, "settings.json")
 # Legacy bootstrap source only. Runtime source of truth now lives in DB.projects.key_patterns.
 DEFAULT_TASK_KEY_PATTERNS = [
     r"^(?P<prefix>TASKNEIROKLYUCH)-(?P<number>[0-9]+)$",
-    r"^(?P<prefix>HRRECRUITER)-(?P<number>[0-9]+)$",
 ]
 
 def _read_raw_settings() -> dict:

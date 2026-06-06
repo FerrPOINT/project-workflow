@@ -1,7 +1,7 @@
 [
   {
     "name": "Task Intake",
-    "description": "Понять задачу из Jira до начала работы",
+    "description": "Понять задачу, scope и ограничения до начала работы",
     "phase_order": 1,
     "delegate_agent": null,
     "delegate_timeout": null,
@@ -14,18 +14,37 @@
     "instructions": [
       {
         "step_num": 1,
-        "description": "X",
+        "description": "Прочитать карточку задачи и кратко сформулировать цель ожидаемого результата.",
+        "execution_type": "sync"
+      },
+      {
+        "step_num": 2,
+        "description": "Выделить ограничения, зависимости, входные данные и всё, что может заблокировать работу дальше.",
+        "execution_type": "sync"
+      },
+      {
+        "step_num": 3,
+        "description": "Зафиксировать следующий обязательный шаг и перейти к проверке окружения перед началом изменений.",
         "execution_type": "sync"
       }
     ],
     "checks": [
       {
-        "description": "Check 1"
+        "description": "Карточка задачи доступна и ключ распознан корректно"
+      },
+      {
+        "description": "Цель и ожидаемый результат сформулированы без двусмысленности"
+      },
+      {
+        "description": "Ограничения и зависимости для старта зафиксированы"
       }
     ],
     "evidence": [
       {
-        "description": "Evidence 1"
+        "description": "Ключ задачи и краткое описание цели"
+      },
+      {
+        "description": "Список ограничений, зависимостей или открытых вопросов для старта"
       }
     ],
     "checkups": [
@@ -75,6 +94,11 @@
         "step_num": 3,
         "description": "Если WARNINGS — оцени критичность, большинство можно игнорировать",
         "execution_type": "parallel"
+      },
+      {
+        "step_num": 4,
+        "description": "Зафиксировать итог проверки и переходить дальше только после зелёного verify-suite.sh или явной фиксации блокера.",
+        "execution_type": "sync"
       }
     ],
     "checks": [
@@ -239,132 +263,6 @@
     "code": "0.01"
   },
   {
-    "name": "Preflight",
-    "description": "Определить репо, ветку, синхронизировать",
-    "phase_order": 13,
-    "delegate_agent": null,
-    "delegate_timeout": null,
-    "delegate_max_cycles": null,
-    "delegate_toolsets": null,
-    "parallel_with": null,
-    "rollback_target": null,
-    "next_recommendation": "Запускай Phase 1.5 (Deep Research) ПАРАЛЛЕЛЬНО",
-    "execution_type": "sync",
-    "instructions": [
-      {
-        "step_num": 1,
-        "description": "X",
-        "execution_type": "sync"
-      }
-    ],
-    "checks": [
-      {
-        "description": "Check 1"
-      }
-    ],
-    "evidence": [
-      {
-        "description": "Evidence 1"
-      }
-    ],
-    "checkups": [
-      {
-        "id": 17,
-        "phase_id": "1",
-        "name": "Check PhaseCheck(type='git_branch', description='Ветка от develop, названа TASKNEIROKLYUCH-*', path=None, expected=None, command=None, fail_msg='Check failed', optional=False)",
-        "check_type": "jira_status",
-        "target": "",
-        "interval_min": 0,
-        "last_status": "unknown",
-        "last_run": null,
-        "fail_action": "warn",
-        "check_id": null,
-        "passed": 0,
-        "output": null,
-        "ran_at": "2026-06-03 11:10:13"
-      },
-      {
-        "id": 18,
-        "phase_id": "1",
-        "name": "Check PhaseCheck(type='git_sync', description='git pull origin develop без конфликтов', path=None, expected=None, command=None, fail_msg='Check failed', optional=False)",
-        "check_type": "jira_status",
-        "target": "",
-        "interval_min": 0,
-        "last_status": "unknown",
-        "last_run": null,
-        "fail_action": "warn",
-        "check_id": null,
-        "passed": 0,
-        "output": null,
-        "ran_at": "2026-06-03 11:10:13"
-      }
-    ],
-    "questions": [],
-    "code": "1"
-  },
-  {
-    "name": "Git Identity",
-    "description": "Проверить git identity перед коммитами",
-    "phase_order": 7,
-    "delegate_agent": null,
-    "delegate_timeout": null,
-    "delegate_max_cycles": null,
-    "delegate_toolsets": null,
-    "parallel_with": null,
-    "rollback_target": null,
-    "next_recommendation": "Перейди к Phase 0.000 — Workspace",
-    "execution_type": "parallel",
-    "instructions": [
-      {
-        "step_num": 1,
-        "description": "Проверить git config user.email",
-        "execution_type": "sync"
-      },
-      {
-        "step_num": 2,
-        "description": "Проверить git config user.name",
-        "execution_type": "sync"
-      },
-      {
-        "step_num": 3,
-        "description": "Если пусто — настроить",
-        "execution_type": "sync"
-      }
-    ],
-    "checks": [
-      {
-        "description": "git config user.email и user.name заданы"
-      }
-    ],
-    "evidence": [
-      {
-        "description": "git config user.email"
-      },
-      {
-        "description": "git config user.name"
-      }
-    ],
-    "checkups": [
-      {
-        "id": 11,
-        "phase_id": "0.00",
-        "name": "Check PhaseCheck(type='script_pass', description='git config user.email и user.name заданы', path=None, expected=None, command='git config user.email && git config user.name', fail_msg=\"Git identity не настроена — git config user.email '...'\", optional=False)",
-        "check_type": "jira_status",
-        "target": "",
-        "interval_min": 0,
-        "last_status": "unknown",
-        "last_run": null,
-        "fail_action": "warn",
-        "check_id": null,
-        "passed": 0,
-        "output": null,
-        "ran_at": "2026-06-03 11:10:13"
-      }
-    ],
-    "questions": [],
-    "code": "0.00"
-  },
-  {
     "name": "Workspace",
     "description": "Проверить рабочее окружение",
     "phase_order": 8,
@@ -431,6 +329,68 @@
     ],
     "questions": [],
     "code": "0.000"
+  },
+  {
+    "name": "Git Identity",
+    "description": "Проверить git identity перед коммитами",
+    "phase_order": 7,
+    "delegate_agent": null,
+    "delegate_timeout": null,
+    "delegate_max_cycles": null,
+    "delegate_toolsets": null,
+    "parallel_with": null,
+    "rollback_target": null,
+    "next_recommendation": "Перейди к Phase 0.000 — Workspace",
+    "execution_type": "parallel",
+    "instructions": [
+      {
+        "step_num": 1,
+        "description": "Проверить git config user.email",
+        "execution_type": "sync"
+      },
+      {
+        "step_num": 2,
+        "description": "Проверить git config user.name",
+        "execution_type": "sync"
+      },
+      {
+        "step_num": 3,
+        "description": "Если пусто — настроить",
+        "execution_type": "sync"
+      }
+    ],
+    "checks": [
+      {
+        "description": "git config user.email и user.name заданы"
+      }
+    ],
+    "evidence": [
+      {
+        "description": "git config user.email"
+      },
+      {
+        "description": "git config user.name"
+      }
+    ],
+    "checkups": [
+      {
+        "id": 11,
+        "phase_id": "0.00",
+        "name": "Check PhaseCheck(type='script_pass', description='git config user.email и user.name заданы', path=None, expected=None, command='git config user.email && git config user.name', fail_msg=\"Git identity не настроена — git config user.email '...'\", optional=False)",
+        "check_type": "jira_status",
+        "target": "",
+        "interval_min": 0,
+        "last_status": "unknown",
+        "last_run": null,
+        "fail_action": "warn",
+        "check_id": null,
+        "passed": 0,
+        "output": null,
+        "ran_at": "2026-06-03 11:10:13"
+      }
+    ],
+    "questions": [],
+    "code": "0.00"
   },
   {
     "name": "Repo Sync",
@@ -739,6 +699,89 @@
     "checkups": [],
     "questions": [],
     "code": "0.6"
+  },
+  {
+    "name": "Preflight",
+    "description": "Определить рабочий repo, ветку и стартовое состояние перед разработкой",
+    "phase_order": 13,
+    "delegate_agent": null,
+    "delegate_timeout": null,
+    "delegate_max_cycles": null,
+    "delegate_toolsets": null,
+    "parallel_with": null,
+    "rollback_target": null,
+    "next_recommendation": "Запускай Phase 1.5 (Deep Research) ПАРАЛЛЕЛЬНО",
+    "execution_type": "sync",
+    "instructions": [
+      {
+        "step_num": 1,
+        "description": "Определить нужный репозиторий или подпроект и открыть локальные инструкции проекта.",
+        "execution_type": "sync"
+      },
+      {
+        "step_num": 2,
+        "description": "Проверить текущее состояние git: активную ветку, локальные изменения и риск затереть чужую работу.",
+        "execution_type": "sync"
+      },
+      {
+        "step_num": 3,
+        "description": "Свериться с базовой веткой и подтвердить, что рабочее дерево готово к безопасному продолжению workflow.",
+        "execution_type": "sync"
+      }
+    ],
+    "checks": [
+      {
+        "description": "Выбран правильный репозиторий или подпроект для задачи"
+      },
+      {
+        "description": "Состояние git проверено и неожиданные локальные изменения учтены"
+      },
+      {
+        "description": "Ветка синхронизирована с базовой веткой или задокументирован блокер"
+      }
+    ],
+    "evidence": [
+      {
+        "description": "Вывод git status --short --branch"
+      },
+      {
+        "description": "Подтверждение активной ветки и результата синхронизации с базовой веткой"
+      }
+    ],
+    "checkups": [
+      {
+        "id": 17,
+        "phase_id": "1",
+        "name": "Check PhaseCheck(type='git_branch', description='Ветка от develop, названа TASKNEIROKLYUCH-*', path=None, expected=None, command=None, fail_msg='Check failed', optional=False)",
+        "check_type": "jira_status",
+        "target": "",
+        "interval_min": 0,
+        "last_status": "unknown",
+        "last_run": null,
+        "fail_action": "warn",
+        "check_id": null,
+        "passed": 0,
+        "output": null,
+        "ran_at": "2026-06-03 11:10:13"
+      },
+      {
+        "id": 18,
+        "phase_id": "1",
+        "name": "Check PhaseCheck(type='git_sync', description='git pull origin develop без конфликтов', path=None, expected=None, command=None, fail_msg='Check failed', optional=False)",
+        "check_type": "jira_status",
+        "target": "",
+        "interval_min": 0,
+        "last_status": "unknown",
+        "last_run": null,
+        "fail_action": "warn",
+        "check_id": null,
+        "passed": 0,
+        "output": null,
+        "ran_at": "2026-06-03 11:10:13"
+      }
+    ],
+    "questions": [],
+    "code": "1"
   },
   {
     "name": "Deep Research",
@@ -1390,6 +1433,111 @@
     "code": "5.5"
   },
   {
+    "name": "Commit",
+    "description": "git commit, push",
+    "phase_order": 22,
+    "delegate_agent": null,
+    "delegate_timeout": null,
+    "delegate_max_cycles": null,
+    "delegate_toolsets": null,
+    "parallel_with": null,
+    "rollback_target": null,
+    "next_recommendation": "Перейди к Phase 7 — MR Draft",
+    "execution_type": "sync",
+    "instructions": [
+      {
+        "id": 60,
+        "phase_id": "6",
+        "step_num": 1,
+        "description": "git add только нужные файлы",
+        "execution_type": "sync",
+        "tool": null
+      },
+      {
+        "id": 61,
+        "phase_id": "6",
+        "step_num": 2,
+        "description": "git commit -m '{task_id}: краткое описание'",
+        "execution_type": "sync",
+        "tool": null
+      },
+      {
+        "id": 62,
+        "phase_id": "6",
+        "step_num": 3,
+        "description": "git push --set-upstream origin {branch}",
+        "execution_type": "sync",
+        "tool": null
+      }
+    ],
+    "checks": [
+      {
+        "id": 30,
+        "phase_id": "6",
+        "description": "Branch pushed to origin",
+        "command": null,
+        "optional": 0
+      },
+      {
+        "id": 29,
+        "phase_id": "6",
+        "description": "Commit содержит task_id в сообщении",
+        "command": null,
+        "optional": 0
+      }
+    ],
+    "evidence": [
+      {
+        "id": 35,
+        "phase_id": "6",
+        "description": "git log --oneline (показывает commit)",
+        "validator": null,
+        "collected": 0
+      },
+      {
+        "id": 36,
+        "phase_id": "6",
+        "description": "git status clean",
+        "validator": null,
+        "collected": 0
+      }
+    ],
+    "checkups": [
+      {
+        "id": 29,
+        "phase_id": "6",
+        "name": "Check PhaseCheck(type='git_commit', description='Commit содержит task_id в сообщении', path=None, expected=None, command=None, fail_msg='Check failed', optional=False)",
+        "check_type": "jira_status",
+        "target": "",
+        "interval_min": 0,
+        "last_status": "unknown",
+        "last_run": null,
+        "fail_action": "warn",
+        "check_id": null,
+        "passed": 0,
+        "output": null,
+        "ran_at": "2026-06-03 11:10:13"
+      },
+      {
+        "id": 30,
+        "phase_id": "6",
+        "name": "Check PhaseCheck(type='git_remote', description='Branch pushed to origin', path=None, expected=None, command=None, fail_msg='Check failed', optional=False)",
+        "check_type": "jira_status",
+        "target": "",
+        "interval_min": 0,
+        "last_status": "unknown",
+        "last_run": null,
+        "fail_action": "warn",
+        "check_id": null,
+        "passed": 0,
+        "output": null,
+        "ran_at": "2026-06-03 11:10:13"
+      }
+    ],
+    "questions": [],
+    "code": "6"
+  },
+  {
     "name": "MR Draft",
     "description": "Создать MR через GitLab UI",
     "phase_order": 23,
@@ -1692,111 +1840,6 @@
     ],
     "questions": [],
     "code": "7.7"
-  },
-  {
-    "name": "Commit",
-    "description": "git commit, push",
-    "phase_order": 22,
-    "delegate_agent": null,
-    "delegate_timeout": null,
-    "delegate_max_cycles": null,
-    "delegate_toolsets": null,
-    "parallel_with": null,
-    "rollback_target": null,
-    "next_recommendation": "Перейди к Phase 7 — MR Draft",
-    "execution_type": "sync",
-    "instructions": [
-      {
-        "id": 60,
-        "phase_id": "6",
-        "step_num": 1,
-        "description": "git add только нужные файлы",
-        "execution_type": "sync",
-        "tool": null
-      },
-      {
-        "id": 61,
-        "phase_id": "6",
-        "step_num": 2,
-        "description": "git commit -m '{task_id}: краткое описание'",
-        "execution_type": "sync",
-        "tool": null
-      },
-      {
-        "id": 62,
-        "phase_id": "6",
-        "step_num": 3,
-        "description": "git push --set-upstream origin {branch}",
-        "execution_type": "sync",
-        "tool": null
-      }
-    ],
-    "checks": [
-      {
-        "id": 30,
-        "phase_id": "6",
-        "description": "Branch pushed to origin",
-        "command": null,
-        "optional": 0
-      },
-      {
-        "id": 29,
-        "phase_id": "6",
-        "description": "Commit содержит task_id в сообщении",
-        "command": null,
-        "optional": 0
-      }
-    ],
-    "evidence": [
-      {
-        "id": 35,
-        "phase_id": "6",
-        "description": "git log --oneline (показывает commit)",
-        "validator": null,
-        "collected": 0
-      },
-      {
-        "id": 36,
-        "phase_id": "6",
-        "description": "git status clean",
-        "validator": null,
-        "collected": 0
-      }
-    ],
-    "checkups": [
-      {
-        "id": 29,
-        "phase_id": "6",
-        "name": "Check PhaseCheck(type='git_commit', description='Commit содержит task_id в сообщении', path=None, expected=None, command=None, fail_msg='Check failed', optional=False)",
-        "check_type": "jira_status",
-        "target": "",
-        "interval_min": 0,
-        "last_status": "unknown",
-        "last_run": null,
-        "fail_action": "warn",
-        "check_id": null,
-        "passed": 0,
-        "output": null,
-        "ran_at": "2026-06-03 11:10:13"
-      },
-      {
-        "id": 30,
-        "phase_id": "6",
-        "name": "Check PhaseCheck(type='git_remote', description='Branch pushed to origin', path=None, expected=None, command=None, fail_msg='Check failed', optional=False)",
-        "check_type": "jira_status",
-        "target": "",
-        "interval_min": 0,
-        "last_status": "unknown",
-        "last_run": null,
-        "fail_action": "warn",
-        "check_id": null,
-        "passed": 0,
-        "output": null,
-        "ran_at": "2026-06-03 11:10:13"
-      }
-    ],
-    "questions": [],
-    "code": "6"
   },
   {
     "name": "Jira Done",

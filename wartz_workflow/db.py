@@ -117,6 +117,69 @@ class WorkflowDB:
             "key_patterns": config.DEFAULT_TASK_KEY_PATTERNS,
         }]
 
+    def _sanitize_default_project_patterns(self, conn: sqlite3.Connection) -> None:
+        row = conn.execute(
+            "SELECT id, key_patterns FROM projects WHERE code = ?",
+            ("TASKNEIROKLYUCH",),
+        ).fetchone()
+        if not row:
+            return
+
+        patterns = self._deserialize_key_patterns(row["key_patterns"])
+        cleaned = [pattern for pattern in patterns if "HRRECRUITER" not in str(pattern)]
+        if not cleaned:
+            cleaned = list(config.DEFAULT_TASK_KEY_PATTERNS)
+        if cleaned == patterns:
+            return
+
+        conn.execute(
+            "UPDATE projects SET key_patterns = ? WHERE id = ?",
+            (self._serialize_key_patterns(cleaned), row["id"]),
+        )
+
+    def _prune_known_fixture_data(self, conn: sqlite3.Connection) -> None:
+        fixture_project = conn.execute(
+            "SELECT id FROM projects WHERE code = ? AND name = ?",
+            ("UITEST", "UI Test Project"),
+        ).fetchone()
+        if fixture_project:
+            conn.execute("DELETE FROM tasks WHERE project_id = ?", (fixture_project["id"],))
+            conn.execute("DELETE FROM projects WHERE id = ?", (fixture_project["id"],))
+
+        conn.execute(
+            "DELETE FROM tasks WHERE task_key = ? AND title = ?",
+            ("TASKNEIROKLYUCH-247", "Добавить E2E тесты для workflow"),
+        )
+
+    def _dedupe_agents(self, conn: sqlite3.Connection) -> None:
+        seen: dict[tuple[str, str], int] = {}
+        rows = conn.execute("SELECT id, name, description FROM agents ORDER BY id").fetchall()
+        for row in rows:
+            key = (
+                str(row["name"] or "").strip().casefold(),
+                str(row["description"] or "").strip(),
+            )
+            if not key[0]:
+                continue
+
+            keeper_id = seen.get(key)
+            if keeper_id is None:
+                seen[key] = row["id"]
+                continue
+
+            conn.execute("UPDATE phases SET agent_id = ? WHERE agent_id = ?", (keeper_id, row["id"]))
+            conn.execute("DELETE FROM agents WHERE id = ?", (row["id"],))
+
+    def _sanitize_runtime_state(self, conn: sqlite3.Connection) -> None:
+        self._sanitize_default_project_patterns(conn)
+        self._prune_known_fixture_data(conn)
+        self._dedupe_agents(conn)
+
+    def sanitize_runtime_state(self) -> None:
+        with self._conn() as conn:
+            self._sanitize_runtime_state(conn)
+            conn.commit()
+
     def _table_columns(self, conn: sqlite3.Connection, table_name: str) -> list[str]:
         rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
         return [row[1] for row in rows]
@@ -283,6 +346,7 @@ class WorkflowDB:
             self._ensure_default_workflows(conn)
             self._migrate_schema(conn)
             self._ensure_default_projects(conn)
+            self._sanitize_runtime_state(conn)
             conn.commit()
 
     def _list_tables(self) -> set[str]:
