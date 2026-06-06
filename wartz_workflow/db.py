@@ -807,6 +807,24 @@ class WorkflowDB:
             conn.execute("UPDATE phases SET group_id = ? WHERE id = ?", (resolved_group, resolved_phase))
             conn.commit()
 
+    def update_phase_parallel(self, phase_id: int | str, parallel_with: str | None) -> None:
+        resolved_phase = self._resolve_phase_id(phase_id)
+        with self._conn() as conn:
+            conn.execute("UPDATE phases SET parallel_with = ? WHERE id = ?", (parallel_with, resolved_phase))
+            conn.commit()
+
+    def batch_update_groups(self, group_map: dict[str, str]) -> None:
+        resolved_batch = [
+            (parallel_with, self._resolve_phase_id(phase_id))
+            for phase_id, parallel_with in group_map.items()
+        ]
+        with self._conn() as conn:
+            conn.executemany(
+                "UPDATE phases SET parallel_with = ? WHERE id = ?",
+                resolved_batch,
+            )
+            conn.commit()
+
     # ── Group Order Batch ─────────────────────────────────────────────
 
     def batch_update_group_orders(self, batch: list[tuple[int | str, int]]) -> None:

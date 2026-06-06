@@ -242,6 +242,18 @@ def _load_phase_detail(phase_id: str) -> dict | None:
     return phase
 
 
+def _resolve_task_phase(current_phase: Any, wdb: db.WorkflowDB) -> tuple[str, dict | None]:
+    token = str(current_phase if current_phase is not None else "-1")
+    phase = wdb.get_phase(token)
+    if phase:
+        return token, phase
+    try:
+        numeric = int(token)
+    except (TypeError, ValueError):
+        return token, None
+    return token, wdb.get_phase(numeric)
+
+
 def _load_tasks() -> list[dict]:
     """Загрузить задачи из SQLite."""
     wdb = _get_db()
@@ -254,9 +266,8 @@ def _load_tasks() -> list[dict]:
         completed = sum(1 for tp in task_history if tp["status"] == "done")
         
         # Get current phase info
-        current_phase_id = t.get("current_phase", "-1")
-        phase_map = {p["id"]: p for p in _load_phases()}
-        current = phase_map.get(current_phase_id, {})
+        current_phase_id, current = _resolve_task_phase(t.get("current_phase", "-1"), wdb)
+        current = current or {}
         project_code = t.get("project_code") or "—"
         project_name = t.get("project_name") or project_code
         
@@ -269,7 +280,7 @@ def _load_tasks() -> list[dict]:
                 "project_code": project_code,
                 "project_name": project_name,
                 "project_label": project_name if project_name == project_code else f"{project_code} — {project_name}",
-                "phase_id": current_phase_id,
+                "phase_id": current.get("code", current_phase_id),
                 "phase_num": current.get("phase_num", "?"),
                 "phase_name": current.get("name", current_phase_id),
                 "current_phase_name": current.get("name", current_phase_id),
@@ -329,8 +340,6 @@ def _project_form_payload(body: dict[str, Any]) -> dict[str, Any]:
 def _load_dashboard() -> dict[str, Any]:
     tasks = _load_tasks()
     projects = _load_projects()
-    phases = _load_phases()
-    history = _get_db().get_cli_history(limit=8)
 
     active_tasks = [task for task in tasks if task.get("status") == "active"]
     done_tasks = [task for task in tasks if task.get("status") == "done"]
@@ -341,11 +350,9 @@ def _load_dashboard() -> dict[str, Any]:
             "tasks": len(tasks),
             "active": len(active_tasks),
             "done": len(done_tasks),
-            "phases": len(phases),
         },
         "active_tasks": active_tasks[:8],
         "projects": sorted(projects, key=lambda item: (-item.get("task_count", 0), item.get("name", "")))[:8],
-        "recent_cli": history,
     }
 
 
@@ -364,8 +371,7 @@ def _get_task_detail(task_key: str) -> dict | None:
         else f"{task['project_code']} — {task['project_name']}"
     )
 
-    current_phase_id = task.get("current_phase", "-1")
-    current_phase = wdb.get_phase(current_phase_id)
+    current_phase_id, current_phase = _resolve_task_phase(task.get("current_phase", "-1"), wdb)
     task["current_phase_name"] = current_phase["name"] if current_phase else task.get("current_phase", "")
     task["current_phase_order"] = current_phase["phase_order"] if current_phase else 0
 
@@ -384,7 +390,7 @@ def _get_task_detail(task_key: str) -> dict | None:
                 "phase_order": phase["phase_order"],
                 "phase_name": phase["name"],
                 "phase_description": phase.get("description", ""),
-                "status": "done" if history_status == "done" else ("current" if phase["id"] == current_phase_id else "wait"),
+                "status": "done" if history_status == "done" else ("current" if current_phase and phase["id"] == current_phase["id"] else "wait"),
                 "completed_at": h.get("completed_at", ""),
             }
         )
@@ -741,13 +747,16 @@ def api_group_create(body: dict[str, Any]):
     if not group_id or not name:
         return JSONResponse({"ok": False, "error": "id and name required"}, status_code=400)
     wdb = _get_db()
-    existing = wdb.get_phase_group(group_id)
+    existing = wdb.get_phase_group_by_code(group_id)
     if existing:
         return JSONResponse({"ok": False, "error": f"Group {group_id} already exists"}, status_code=409)
-    wdb.create_phase_group({
-        "id": group_id, "name": name, "icon": body.get("icon"),
-        "sort_order": body.get("sort_order", 0),
-    })
+    try:
+        wdb.create_phase_group({
+            "id": group_id, "name": name, "icon": body.get("icon"),
+            "sort_order": body.get("sort_order", 0),
+        })
+    except sqlite3.IntegrityError:
+        return JSONResponse({"ok": False, "error": f"Group {group_id} already exists"}, status_code=409)
     return {"ok": True, "group_id": group_id}
 
 
@@ -767,7 +776,7 @@ def api_groups_order(body: dict[str, Any]):
 def api_group_update(group_id: str, body: dict[str, Any]):
     """Обновить группу."""
     wdb = _get_db()
-    existing = wdb.get_phase_group(group_id)
+    existing = wdb.get_phase_group_by_code(group_id)
     if not existing:
         return JSONResponse({"ok": False, "error": "Group not found"}, status_code=404)
     update_data = {}
@@ -783,10 +792,13 @@ def api_group_update(group_id: str, body: dict[str, Any]):
 def api_group_delete(group_id: str):
     """Удалить группу. Фазы переходят в setup."""
     wdb = _get_db()
-    existing = wdb.get_phase_group(group_id)
+    existing = wdb.get_phase_group_by_code(group_id)
     if not existing:
         return JSONResponse({"ok": False, "error": "Group not found"}, status_code=404)
-    wdb.delete_phase_group(group_id)
+    try:
+        wdb.delete_phase_group(group_id)
+    except sqlite3.IntegrityError:
+        return JSONResponse({"ok": False, "error": "Group has linked phases and cannot be deleted"}, status_code=409)
     return {"ok": True}
 
 
@@ -849,7 +861,7 @@ def api_phase_group_assign(phase_id: str, body: dict[str, Any]):
     wdb = _get_db()
     if not wdb.get_phase(phase_id):
         return JSONResponse({"ok": False, "error": "Phase not found"}, status_code=404)
-    if not wdb.get_phase_group(group_id):
+    if not wdb.get_phase_group_by_code(group_id):
         return JSONResponse({"ok": False, "error": "Group not found"}, status_code=404)
     wdb.update_phase_group_assignment(phase_id, group_id)
     return {"ok": True}

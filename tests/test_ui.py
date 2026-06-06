@@ -71,6 +71,18 @@ class TestIndexPage:
         assert "UITEST-401" in response.text
         assert "UI Test Project" in response.text
 
+    def test_index_stays_minimal_and_hides_dashboard_technical_noise(self):
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "В работе" in response.text
+        assert "Task Intake" not in response.text
+        assert "Token Verification" not in response.text
+        assert "Validate" not in response.text
+        assert "regex" not in response.text
+        assert '<div class="metric-label">Фазы</div>' not in response.text
+        assert "TASKNEIROKLYUCH — TASKNEIROKLYUCH" not in response.text
+        assert "UITEST — UI Test Project" not in response.text
+
 
 class TestPhasesPage:
     def test_phases_returns_html(self):
@@ -329,7 +341,8 @@ class TestTaskDetail:
     def test_task_detail_shows_current_phase_and_progress(self):
         response = client.get("/task/TASKNEIROKLYUCH-247")
         assert response.status_code == 200
-        assert ".gitignore Check" in response.text
+        assert "Validate" in response.text
+        assert ".gitignore Check" not in response.text
         assert "0 / 30" in response.text or "0/30" in response.text
 
     def test_task_detail_renders_phase_history_from_db(self):
@@ -365,6 +378,41 @@ class TestTaskDetail:
         assert "Проект" in response.text
         assert "UITEST" in response.text
         assert "UI Test Project" in response.text
+
+    def test_tasks_api_resolves_negative_phase_code_to_phase_name(self):
+        response = client.get("/api/tasks")
+        assert response.status_code == 200
+        task = next(task for task in response.json()["tasks"] if task["task_key"] == "UITEST-401")
+        assert task["current_phase_name"] == "Task Intake"
+
+    def test_api_task_detail_marks_text_phase_code_as_current(self):
+        from wartz_workflow.ui import _get_db
+
+        wdb = _get_db()
+        task_key = "UITEST-402"
+        task = wdb.get_task_by_key(task_key)
+        if not task:
+            task_id = wdb.create_task(
+                {
+                    "project_code": "UITEST",
+                    "task_key": task_key,
+                    "title": "Проверка текстового кода фазы",
+                    "status": "active",
+                    "current_phase": "0.01b",
+                }
+            )
+            task = wdb.get_task(task_id)
+        assert task is not None
+        wdb.update_task(task["id"], {"current_phase": "0.01b"})
+        wdb.add_task_history(task["id"], "-1", "done")
+        wdb.add_task_history(task["id"], "0.01b", "pending")
+
+        response = client.get(f"/api/tasks/{task_key}")
+        assert response.status_code == 200
+        payload = response.json()["task"]
+        assert payload["current_phase_name"] == "Token Verification"
+        current = next(item for item in payload["phase_history"] if item["phase_name"] == "Token Verification")
+        assert current["status"] == "current"
 
 
 class TestProjectsPage:
@@ -448,6 +496,116 @@ class TestAgentsPage:
         agents = client.get("/api/agents").json()["agents"]
         architect = next(agent for agent in agents if agent["id"] == payload["agent_id"])
         assert architect["description"] == "Проектирует и уточняет контракты"
+
+
+class TestGroupsApi:
+    def test_groups_api_rejects_duplicate_group_code(self):
+        from wartz_workflow.ui import _get_db
+
+        wdb = _get_db()
+        group_code = "test-duplicate-group"
+        existing = wdb.get_phase_group_by_code(group_code)
+        if existing:
+            wdb.delete_phase_group(group_code)
+
+        local_client = TestClient(app, raise_server_exceptions=False)
+        try:
+            create = client.post("/api/groups", json={"id": group_code, "name": "Duplicate Probe"})
+            assert create.status_code == 200
+
+            duplicate = local_client.post("/api/groups", json={"id": group_code, "name": "Duplicate Probe"})
+            assert duplicate.status_code == 409
+            assert duplicate.json()["ok"] is False
+        finally:
+            if wdb.get_phase_group_by_code(group_code):
+                wdb.delete_phase_group(group_code)
+
+    def test_groups_api_updates_and_deletes_by_group_code(self):
+        from wartz_workflow.ui import _get_db
+
+        wdb = _get_db()
+        group_code = "test-update-group"
+        existing = wdb.get_phase_group_by_code(group_code)
+        if existing:
+            wdb.delete_phase_group(group_code)
+
+        try:
+            create = client.post("/api/groups", json={"id": group_code, "name": "Old Name", "sort_order": 3})
+            assert create.status_code == 200
+
+            update = client.put(f"/api/groups/{group_code}", json={"name": "New Name", "sort_order": 7})
+            assert update.status_code == 200
+
+            group = wdb.get_phase_group_by_code(group_code)
+            assert group is not None
+            assert group["name"] == "New Name"
+            assert group["sort_order"] == 7
+
+            delete = client.delete(f"/api/groups/{group_code}")
+            assert delete.status_code == 200
+            assert wdb.get_phase_group_by_code(group_code) is None
+        finally:
+            if wdb.get_phase_group_by_code(group_code):
+                wdb.delete_phase_group(group_code)
+
+    def test_phase_group_assign_accepts_group_code(self):
+        from wartz_workflow.ui import _get_db
+
+        wdb = _get_db()
+        phase_code = "-1"
+        group_code = "assign-by-code"
+        original_group_id = wdb.get_phase(phase_code)["group_id"]
+        existing = wdb.get_phase_group_by_code(group_code)
+        if existing:
+            if original_group_id == existing["id"]:
+                wdb.update_phase_group_assignment(phase_code, None)
+                original_group_id = None
+            wdb.delete_phase_group(group_code)
+
+        try:
+            create = client.post("/api/groups", json={"id": group_code, "name": "Assign Group"})
+            assert create.status_code == 200
+
+            assign = client.put(f"/api/phases/{phase_code}/group", json={"group_id": group_code})
+            assert assign.status_code == 200
+
+            phase = wdb.get_phase(phase_code)
+            group = wdb.get_phase_group_by_code(group_code)
+            assert group is not None
+            assert phase["group_id"] == group["id"]
+        finally:
+            wdb.update_phase_group_assignment(phase_code, original_group_id)
+            if wdb.get_phase_group_by_code(group_code):
+                wdb.delete_phase_group(group_code)
+
+
+class TestParallelApi:
+    def test_api_parallel_update_sets_bidirectional_links_and_clears_requested_phases(self):
+        from wartz_workflow.ui import _get_db
+
+        wdb = _get_db()
+        tracked_codes = ("-1", "0", "1")
+        originals = {code: wdb.get_phase(code)["parallel_with"] for code in tracked_codes}
+        local_client = TestClient(app, raise_server_exceptions=False)
+
+        try:
+            response = local_client.put(
+                "/api/phases/parallel",
+                json={"groups": [["-1", "0"]], "clear": ["1"]},
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["ok"] is True
+            assert data["groups_set"] == 2
+            assert data["cleared"] == 3
+            assert wdb.get_phase("-1")["parallel_with"] == "0"
+            assert wdb.get_phase("0")["parallel_with"] == "-1"
+            assert wdb.get_phase("1")["parallel_with"] is None
+        finally:
+            with wdb._conn() as conn:
+                for code, value in originals.items():
+                    conn.execute("UPDATE phases SET parallel_with = ? WHERE code = ?", (value, code))
+                conn.commit()
 
 
 class TestSettingsPage:

@@ -26,7 +26,6 @@
   <section class="metric-card"><div class="metric-label">Задачи</div><div class="metric-value">{{ stats.tasks }}</div></section>
   <section class="metric-card"><div class="metric-label">Активные</div><div class="metric-value">{{ stats.active }}</div></section>
   <section class="metric-card"><div class="metric-label">Завершённые</div><div class="metric-value">{{ stats.done }}</div></section>
-  <section class="metric-card"><div class="metric-label">Фазы</div><div class="metric-value">{{ stats.phases }}</div></section>
 </div>
 
 <div class="dashboard-panels">
@@ -39,7 +38,6 @@
         <div class="list-title"><span class="code">{{ task.task_key }}</span>{% if task.title %} — {{ task.title }}{% endif %}</div>
         <div class="list-meta">
           <span>{{ task.project_name }}</span>
-          <span>{{ task.phase_name }}</span>
           <span>{{ task.status_label }}</span>
         </div>
       </a>
@@ -54,10 +52,9 @@
     <div class="list-stack">
       {% for project in projects %}
       <a href="/projects" class="list-item">
-        <div class="list-title"><span class="code">{{ project.code }}</span> — {{ project.name }}</div>
+        <div class="list-title">{{ project.name or project.code }}</div>
         <div class="list-meta">
           <span>{{ project.task_count }} задач</span>
-          <span>{{ project.patterns_count }} regex</span>
         </div>
       </a>
       {% endfor %}
@@ -65,22 +62,5 @@
   </section>
   {% endif %}
 
-  {% if recent_cli %}
-  <section class="card">
-    <div class="card-title" style="margin-bottom:14px">Последние CLI вызовы</div>
-    <div class="list-stack">
-      {% for item in recent_cli %}
-      <div class="list-item">
-        <div class="list-title">{{ item.command }}</div>
-        <div class="list-meta">
-          {% if item.task_key %}<span>{{ item.task_key }}</span>{% endif %}
-          {% if item.status %}<span>{{ item.status }}</span>{% endif %}
-          {% if item.created_at %}<span>{{ item.created_at }}</span>{% endif %}
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-  </section>
-  {% endif %}
 </div>
 {% endblock %}
