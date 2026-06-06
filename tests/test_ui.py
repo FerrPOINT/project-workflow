@@ -1,5 +1,7 @@
 """Tests for UI (FastAPI endpoints)."""
 
+import re
+
 import click
 import pytest
 from fastapi.testclient import TestClient
@@ -114,6 +116,22 @@ class TestPhasesPage:
         assert "phases" in data
         assert len(data["phases"]) > 0
 
+    def test_phases_page_hides_legacy_blocker_badge_and_removed_setup_phases(self):
+        response = client.get("/phases")
+        assert response.status_code == 200
+        assert "🔴 blocker" not in response.text
+        assert ".gitignore Check" not in response.text
+        assert "Token Verification" not in response.text
+        assert "Jira Init" not in response.text
+
+    def test_phases_api_excludes_removed_setup_phases(self):
+        response = client.get("/api/phases")
+        assert response.status_code == 200
+        codes = {phase["code"] for phase in response.json()["phases"]}
+        assert "0.01a" not in codes
+        assert "0.01b" not in codes
+        assert "0" not in codes
+
     def test_sidebar_has_projects_link(self):
         response = client.get("/phases")
         assert response.status_code == 200
@@ -158,6 +176,41 @@ class TestPhasesPage:
             for code, agent_id in original_agent_ids.items():
                 wdb.update_phase(code, {"agent_id": agent_id})
 
+    def test_phases_page_wraps_linked_parallel_phases_in_shared_frame(self):
+        from wartz_workflow.ui import _get_db
+
+        wdb = _get_db()
+        tracked_codes = ["4.5", "5", "5.5"]
+        original_links = {
+            code: (wdb.get_phase(code) or {}).get("parallel_with")
+            for code in tracked_codes
+        }
+
+        try:
+            wdb.update_phase_parallel("4.5", "5")
+            wdb.update_phase_parallel("5", "4.5")
+            wdb.update_phase_parallel("5.5", None)
+
+            response = client.get("/phases")
+            assert response.status_code == 200
+            assert 'timeline-parallel-group' in response.text
+            assert 'class="timeline-parallel-label">⚡ parallel</div>' in response.text
+
+            group_match = re.search(
+                r'<div class="timeline-block timeline-parallel-group">.*?href="/phase/4.5".*?href="/phase/5".*?</div>\s*<div class="timeline-arrow timeline-arrow-block"',
+                response.text,
+                re.S,
+            )
+            assert group_match is not None
+
+            phase_45_html = response.text.split('href="/phase/4.5"', 1)[1].split('</a>', 1)[0]
+            phase_5_html = response.text.split('href="/phase/5"', 1)[1].split('</a>', 1)[0]
+            assert 'badge-link' not in phase_45_html
+            assert 'badge-link' not in phase_5_html
+        finally:
+            for code, parallel_with in original_links.items():
+                wdb.update_phase_parallel(code, parallel_with)
+
 
 class TestPhaseDetail:
     def test_phase_detail_returns_html(self):
@@ -177,11 +230,13 @@ class TestPhaseDetail:
         assert 'class="flow-run group flow-batch"' in response.text
         assert '.flow-run.group.flow-batch{' in response.text
         assert 'border:1px solid var(--batch-gold)' in response.text
+        assert 'class="flow-batch-label">⚡ parallel</div>' in response.text
 
     def test_phase_detail_rebuild_flow_keeps_gold_batch_wrapper(self):
         response = client.get("/phase/0.0a")
         assert response.status_code == 200
         assert "run.className = 'flow-run ' + (group.length > 1 ? 'group flow-batch' : 'single');" in response.text
+        assert "label.className = 'flow-batch-label';" in response.text
 
     def test_phase_detail_hides_code_and_order_meta(self):
         response = client.get("/phase/1")
@@ -276,7 +331,7 @@ class TestDragDropAPI:
             resp = client.put("/api/phases/order", json={
                 "orders": [
                     {"phase_id": "-1", "phase_order": 1},
-                    {"phase_id": "0", "phase_order": 2},
+                    {"phase_id": "0.0a", "phase_order": 2},
                     {"phase_id": "1", "phase_order": 3},
                 ]
             })
@@ -285,7 +340,7 @@ class TestDragDropAPI:
             assert data["ok"] is True
             assert data["updated"] == 3
             assert all(isinstance(phase_code, str) for phase_code in config.PHASE_ORDER)
-            assert phases_mod.get_next_phase("0") is not None
+            assert phases_mod.get_next_phase("0.0a") is not None
         finally:
             wdb.batch_update_orders(original_rows)
             config.PHASE_ORDER[:] = original_phase_order
@@ -372,7 +427,9 @@ class TestTaskDetail:
         assert response.status_code == 200
         assert "Validate" in response.text
         assert ".gitignore Check" not in response.text
-        assert "0 / 30" in response.text or "0/30" in response.text
+        total_phases = len(client.get("/api/phases").json()["phases"])
+        assert total_phases == 27
+        assert f"0 / {total_phases}" in response.text or f"0/{total_phases}" in response.text
 
     def test_task_detail_renders_phase_history_from_db(self):
         from wartz_workflow.ui import _get_db
@@ -385,12 +442,12 @@ class TestTaskDetail:
                 "task_key": task_key,
                 "title": "Проверка истории фаз",
                 "status": "active",
-                "current_phase": "0.01b",
+                "current_phase": "0.7",
             })
             task = wdb.get_task(task_id)
         assert task is not None
         wdb.add_task_history(task["id"], "-1", "done")
-        wdb.add_task_history(task["id"], "0.01b", "pending")
+        wdb.add_task_history(task["id"], "0.7", "pending")
 
         response = client.get(f"/task/{task_key}")
         assert response.status_code == 200
@@ -427,20 +484,20 @@ class TestTaskDetail:
                     "task_key": task_key,
                     "title": "Проверка текстового кода фазы",
                     "status": "active",
-                    "current_phase": "0.01b",
+                    "current_phase": "0.7",
                 }
             )
             task = wdb.get_task(task_id)
         assert task is not None
-        wdb.update_task(task["id"], {"current_phase": "0.01b"})
+        wdb.update_task(task["id"], {"current_phase": "0.7"})
         wdb.add_task_history(task["id"], "-1", "done")
-        wdb.add_task_history(task["id"], "0.01b", "pending")
+        wdb.add_task_history(task["id"], "0.7", "pending")
 
         response = client.get(f"/api/tasks/{task_key}")
         assert response.status_code == 200
         payload = response.json()["task"]
-        assert payload["current_phase_name"] == "Token Verification"
-        current = next(item for item in payload["phase_history"] if item["phase_name"] == "Token Verification")
+        assert payload["current_phase_name"] == "Repo Sync"
+        current = next(item for item in payload["phase_history"] if item["phase_name"] == "Repo Sync")
         assert current["status"] == "current"
 
 
@@ -613,22 +670,22 @@ class TestParallelApi:
         from wartz_workflow.ui import _get_db
 
         wdb = _get_db()
-        tracked_codes = ("-1", "0", "1")
+        tracked_codes = ("-1", "0.0a", "1")
         originals = {code: wdb.get_phase(code)["parallel_with"] for code in tracked_codes}
         local_client = TestClient(app, raise_server_exceptions=False)
 
         try:
             response = local_client.put(
                 "/api/phases/parallel",
-                json={"groups": [["-1", "0"]], "clear": ["1"]},
+                json={"groups": [["-1", "0.0a"]], "clear": ["1"]},
             )
             assert response.status_code == 200
             data = response.json()
             assert data["ok"] is True
             assert data["groups_set"] == 2
             assert data["cleared"] == 3
-            assert wdb.get_phase("-1")["parallel_with"] == "0"
-            assert wdb.get_phase("0")["parallel_with"] == "-1"
+            assert wdb.get_phase("-1")["parallel_with"] == "0.0a"
+            assert wdb.get_phase("0.0a")["parallel_with"] == "-1"
             assert wdb.get_phase("1")["parallel_with"] is None
         finally:
             with wdb._conn() as conn:

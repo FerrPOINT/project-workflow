@@ -44,6 +44,73 @@ def _group_instructions(instructions):
 templates.env.filters['group_instructions'] = _group_instructions
 
 
+def _build_parallel_phase_blocks(phases: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Группирует соседние связанные через parallel_with фазы в общие UI-блоки."""
+    if not phases:
+        return []
+
+    index_by_code = {phase["code"]: idx for idx, phase in enumerate(phases)}
+    adjacency: dict[str, set[str]] = {phase["code"]: set() for phase in phases}
+
+    for phase in phases:
+        target = phase.get("parallel_with")
+        if target and target in adjacency:
+            adjacency[phase["code"]].add(target)
+            adjacency[target].add(phase["code"])
+
+    component_key_by_code: dict[str, str] = {}
+    visited: set[str] = set()
+    for phase in phases:
+        code = phase["code"]
+        if code in visited or not adjacency[code]:
+            continue
+
+        stack = [code]
+        component: list[str] = []
+        while stack:
+            current = stack.pop()
+            if current in visited:
+                continue
+            visited.add(current)
+            component.append(current)
+            stack.extend(neighbor for neighbor in adjacency[current] if neighbor not in visited)
+
+        if len(component) < 2:
+            continue
+
+        component_key = min(component, key=lambda item: index_by_code.get(item, len(phases)))
+        for component_code in component:
+            component_key_by_code[component_code] = component_key
+
+    blocks: list[dict[str, Any]] = []
+    idx = 0
+    while idx < len(phases):
+        phase = phases[idx]
+        component_key = component_key_by_code.get(phase["code"])
+
+        if not component_key:
+            phase["parallel_group"] = None
+            blocks.append({"kind": "single", "phases": [phase]})
+            idx += 1
+            continue
+
+        group_phases = [phase]
+        idx += 1
+        while idx < len(phases) and component_key_by_code.get(phases[idx]["code"]) == component_key:
+            group_phases.append(phases[idx])
+            idx += 1
+
+        if len(group_phases) > 1:
+            for group_phase in group_phases:
+                group_phase["parallel_group"] = component_key
+            blocks.append({"kind": "parallel", "phases": group_phases})
+        else:
+            group_phases[0]["parallel_group"] = component_key
+            blocks.append({"kind": "single", "phases": group_phases})
+
+    return blocks
+
+
 _db: db.WorkflowDB | None = None
 _srv: service.PhaseService | None = None
 
@@ -53,8 +120,7 @@ def _get_db() -> db.WorkflowDB:
     if _db is None:
         _db = db.WorkflowDB()
         _db.init()
-        if _db.is_empty():
-            _seed_to_sqlite()
+    schema.ensure_phase_catalog(_db)
     return _db
 
 def _get_service() -> service.PhaseService:
@@ -116,46 +182,8 @@ def _load_cli_reference() -> list[dict[str, Any]]:
 
 def _seed_to_sqlite() -> None:
     """Разовый импорт seed.json → SQLite."""
-    seed_phases = schema.load_phases()
-    _phase_order = config.PHASE_ORDER
-    batch = []
-    srv = service.PhaseService(_db)
-    for p in seed_phases:
-        # Полные данные фазы для шаблона
-        extra = {
-            "delegate_agent": p.delegate.agent if p.delegate else None,
-            "delegate_timeout": p.delegate.timeout_min if p.delegate else None,
-            "parallel_with": p.parallel_with,
-            "rollback_target": p.rollback_target,
-            "next_recommendation": p.next_recommendation,
-            "execution_type": p.execution_type if p.execution_type else ("parallel" if p.is_delegated else "sync"),
-        }
-        batch.append(
-            {
-                "id": p.id,
-                "name": p.name,
-                "description": p.description or "",
-                "phase_order": _phase_order.index(p.id) + 1 if p.id in _phase_order else 0,
-                "instructions": [
-                    {
-                        "step_num": idx + 1,
-                        "description": instr.step,
-                        "execution_type": instr.execution_type,
-                    }
-                    for idx, instr in enumerate(p.instructions)
-                ],
-                "checks": [
-                    {"description": c.description}
-                    for c in p.checks
-                ],
-                "evidence": [
-                    {"description": e.item}
-                    for e in p.evidence
-                ],
-                **extra,
-            }
-        )
-    _db.import_phases(batch)
+    if _db is not None:
+        schema.ensure_phase_catalog(_db)
 
 
 
@@ -177,8 +205,7 @@ PHASE_GROUP_NAMES = {
 }
 
 PHASE_TO_GROUP = {
-    "-1": "setup", "0.0a": "setup", "0.01": "setup", "0.01a": "setup", "0.01b": "setup",
-    "0": "setup", "0.00": "setup", "0.000": "setup", "0.7": "setup",
+    "-1": "setup", "0.0a": "setup", "0.01": "setup", "0.00": "setup", "0.000": "setup", "0.7": "setup",
     "0.5": "research", "0.6": "research", "0.9": "research", "1": "research", "1.5": "research", "2": "research",
     "3": "plan", "3.5": "plan",
     "4": "dev", "4.5": "dev", "5": "dev", "5.5": "dev",
@@ -230,7 +257,6 @@ def _load_phases() -> list[dict]:
                 "execution_type": p.get("execution_type", "sync"),
                 "parallel_with": p.get("parallel_with"),
                 "has_parallel_instructions": has_parallel,
-                "is_blocker": p["code"] in config.BLOCKER_PHASES,
             }
         )
     return result
@@ -431,9 +457,16 @@ def index(request: Request):
 @app.get("/phases", response_class=HTMLResponse)
 def phases_page(request: Request):
     phases = _load_phases()
+    phase_blocks = _build_parallel_phase_blocks(phases)
     return templates.TemplateResponse(
         request=request, name="phases.html",
-        context={"request": request, "phases": phases, "page": "phases", "ui_port": config.UI_PORT}
+        context={
+            "request": request,
+            "phases": phases,
+            "phase_blocks": phase_blocks,
+            "page": "phases",
+            "ui_port": config.UI_PORT,
+        }
     )
 
 

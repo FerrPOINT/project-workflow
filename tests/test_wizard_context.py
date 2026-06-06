@@ -36,6 +36,9 @@ class TestWizardFullContext:
         codes = [p["code"] for p in all_ph]
         assert "-1" in codes
         assert "8" in codes  # Jira Done
+        assert "0.01a" not in codes
+        assert "0.01b" not in codes
+        assert "0" not in codes
 
     def test_phase_items_have_required_keys(self):
         engine = wizard.WizardEngine("TASKNEIROKLYUCH-1", "/tmp")

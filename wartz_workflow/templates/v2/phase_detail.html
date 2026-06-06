@@ -33,6 +33,8 @@
 .flow-list{display:flex;flex-direction:column;gap:0}
 
 /* One run = either single card or horizontal group */
+.flow-batch-shell{display:flex;flex-direction:column;gap:6px;width:100%}
+.flow-batch-label{display:inline-flex;align-items:center;align-self:flex-start;gap:6px;padding:3px 10px;border-radius:999px;border:1px solid var(--batch-gold);background:rgba(212,175,55,.14);color:var(--batch-gold);font-size:11px;font-weight:700;letter-spacing:.04em}
 .flow-run{display:flex;gap:12px;width:100%}
 .flow-run.single .flow-card{flex:1}
 .flow-run.group{flex-wrap:nowrap}
@@ -177,6 +179,10 @@
     <div class="flow-list" id="instructions-list">
       {% set runs = phase.instructions|group_instructions %}
       {% for run in runs %}
+        {% if run|length > 1 %}
+        <div class="flow-batch-shell">
+          <div class="flow-batch-label">⚡ parallel</div>
+        {% endif %}
         <div class="flow-run {{ 'group flow-batch' if run|length > 1 else 'single' }}">
           {% for i in run %}
           <div class="flow-card {{ i.execution_type }}" data-id="{{ i.id }}" data-type="{{ i.execution_type }}">
@@ -196,6 +202,9 @@
           </div>
           {% endfor %}
         </div>
+        {% if run|length > 1 %}
+        </div>
+        {% endif %}
         {% if not loop.last %}
           {% if run|length > 1 %}
           <div class="flow-join"><span class="join-bar">🔄 JOIN</span></div>
@@ -291,7 +300,18 @@ function rebuildFlow() {
     const run = document.createElement('div');
     run.className = 'flow-run ' + (group.length > 1 ? 'group flow-batch' : 'single');
     group.forEach(c => run.appendChild(c));
-    list.appendChild(run);
+    if (group.length > 1) {
+      const shell = document.createElement('div');
+      shell.className = 'flow-batch-shell';
+      const label = document.createElement('div');
+      label.className = 'flow-batch-label';
+      label.textContent = '⚡ parallel';
+      shell.appendChild(label);
+      shell.appendChild(run);
+      list.appendChild(shell);
+    } else {
+      list.appendChild(run);
+    }
     if (i < cards.length) {
       if (group.length > 1) {
         const join = document.createElement('div');
