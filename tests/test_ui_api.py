@@ -2,7 +2,6 @@
 
 Uses TestClient to hit GET/POST/PUT endpoints.
 """
-import pytest
 from fastapi.testclient import TestClient
 from wartz_workflow.ui import app
 
@@ -95,33 +94,35 @@ class TestApiPhases:
         assert "ui" not in names
 
 
-class TestApiWizard:
-    def test_wizard_evaluate(self):
+class TestRemovedLegacyApi:
+    def test_wizard_evaluate_removed(self):
         resp = client.post("/api/wizard/evaluate", json={"task_key": "AAT-999", "report": "test"})
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "verdict" in data
+        assert resp.status_code == 404
 
-    def test_wizard_context(self):
+    def test_wizard_context_removed(self):
         resp = client.get("/api/wizard/AAT-999/context")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert isinstance(data, dict)
+        assert resp.status_code == 404
 
-    def test_wizard_phase_post(self):
+    def test_wizard_phase_post_removed(self):
         resp = client.post("/api/wizard/0", json={"report": "done"})
-        assert resp.status_code in (200, 404)
+        assert resp.status_code == 404
 
-
-class TestDeleteResources:
-    def test_delete_instruction_not_found(self):
+    def test_delete_instruction_route_removed(self):
         resp = client.delete("/api/instructions/99999")
-        assert resp.status_code == 200  # current implementation returns ok even if missing
+        assert resp.status_code == 404
 
-    def test_delete_check_not_found(self):
+    def test_delete_check_route_removed(self):
         resp = client.delete("/api/checks/99999")
-        assert resp.status_code == 200
+        assert resp.status_code == 404
 
-    def test_delete_evidence_not_found(self):
+    def test_delete_evidence_route_removed(self):
         resp = client.delete("/api/evidence/99999")
-        assert resp.status_code == 200
+        assert resp.status_code == 404
+
+    def test_single_phase_order_route_removed(self):
+        resp = client.put(f"/api/phases/{_phase_id('1')}/order", json={"phase_order": 5})
+        assert resp.status_code == 404
+
+    def test_parallel_route_removed(self):
+        resp = client.put("/api/phases/parallel", json={"groups": [["-1", "0.0a"]]})
+        assert resp.status_code == 404

@@ -896,11 +896,6 @@ class WorkflowDB:
             conn.execute(sql, vals)
             conn.commit()
 
-    def delete_instruction(self, inst_id: int) -> None:
-        with self._conn() as conn:
-            conn.execute("DELETE FROM instructions WHERE id = ?", (inst_id,))
-            conn.commit()
-
     def reorder_instructions(self, phase_id: int | str, ids: list[int]) -> None:
         resolved = self._resolve_phase_id(phase_id)
         with self._conn() as conn:
@@ -941,11 +936,6 @@ class WorkflowDB:
             conn.execute(sql, vals)
             conn.commit()
 
-    def delete_check(self, check_id: int) -> None:
-        with self._conn() as conn:
-            conn.execute("DELETE FROM checks WHERE id = ?", (check_id,))
-            conn.commit()
-
     # ── Evidence CRUD ────────────────────────────────────────────────
 
     def create_evidence(self, data: dict) -> int:
@@ -969,11 +959,6 @@ class WorkflowDB:
             vals.append(ev_id)
             sql = f"UPDATE evidence SET {', '.join(fields)} WHERE id = ?"
             conn.execute(sql, vals)
-            conn.commit()
-
-    def delete_evidence(self, ev_id: int) -> None:
-        with self._conn() as conn:
-            conn.execute("DELETE FROM evidence WHERE id = ?", (ev_id,))
             conn.commit()
 
     # ── Task CRUD ────────────────────────────────────────────────────
@@ -1125,42 +1110,3 @@ class WorkflowDB:
                 resolved_batch,
             )
             conn.commit()
-
-    def update_phase_order(self, phase_id: int | str, new_order: int) -> None:
-        resolved = self._resolve_phase_id(phase_id)
-        with self._conn() as conn:
-            conn.execute("UPDATE phases SET phase_order = ? WHERE id = ?", (new_order, resolved))
-            conn.commit()
-
-    def update_phase_parallel(self, phase_id: int | str, parallel_with: str | None) -> None:
-        resolved_phase = self._resolve_phase_id(phase_id)
-        with self._conn() as conn:
-            conn.execute("UPDATE phases SET parallel_with = ? WHERE id = ?", (parallel_with, resolved_phase))
-            conn.commit()
-
-    def batch_update_groups(self, group_map: dict[str, str]) -> None:
-        resolved_batch = [
-            (parallel_with, self._resolve_phase_id(phase_id))
-            for phase_id, parallel_with in group_map.items()
-        ]
-        with self._conn() as conn:
-            conn.executemany(
-                "UPDATE phases SET parallel_with = ? WHERE id = ?",
-                resolved_batch,
-            )
-            conn.commit()
-
-    # ── Alias helpers for UI back-compat ──────────────────────────────
-
-    def get_questions(self, phase_id: int | str) -> list[dict]:
-        """Return empty list (questions removed from schema)."""
-        return []
-
-    def get_instructions(self, phase_id: int | str) -> list[dict]:
-        return self.get_phase_instructions(phase_id)
-
-    def get_checks(self, phase_id: int | str) -> list[dict]:
-        return self.get_phase_checks(phase_id)
-
-    def get_evidence(self, phase_id: int | str) -> list[dict]:
-        return self.get_phase_evidence(phase_id)

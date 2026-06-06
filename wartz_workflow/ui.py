@@ -496,22 +496,15 @@ def phase_detail(request: Request, phase_id: str):
 def tasks_page(request: Request):
     """Список задач workflow."""
     tasks = _load_tasks()
-    page_num = 1
-    per_page = 20
-    filter_status = ""
-    search = ""
-    total_count = len(tasks)
-    active_count = sum(1 for t in tasks if t.get("status") == "active")
-    done_count = sum(1 for t in tasks if t.get("status") == "done")
-    total_pages = max(1, (len(tasks) + per_page - 1) // per_page) if tasks else 1
     return templates.TemplateResponse(
-        request=request, name="tasks.html",
+        request=request,
+        name="tasks.html",
         context={
-            "request": request, "tasks": tasks, "page": "tasks", "ui_port": config.UI_PORT,
-            "page_num": page_num, "total_pages": total_pages, "filter_status": filter_status,
-            "search": search, "per_page": per_page,
-            "total_count": total_count, "active_count": active_count, "done_count": done_count,
-        }
+            "request": request,
+            "tasks": tasks,
+            "page": "tasks",
+            "ui_port": config.UI_PORT,
+        },
     )
 
 
@@ -573,84 +566,6 @@ def task_detail_page(request: Request, task_key: str):
     )
 
 
-@app.post("/api/wizard/{phase_id}")
-def api_wizard_submit(phase_id: str, body: dict[str, Any]):
-    """Проверка ответов wizard: возвращает PASS/FAIL."""
-    wdb = _get_db()
-    
-    # Load phase questions from DB only
-    questions = wdb.get_questions(phase_id)
-
-    # Get answers from body
-    user_answers = body.get("answers", {})
-    checks = body.get("checks", {})
-    
-    covered = []
-    missing = []
-    
-    # Check questions
-    for q in questions:
-        qid = f"q_{q['id']}"
-        answer = user_answers.get(qid, "").strip()
-
-        if q.get("required") and not answer:
-            missing.append(q["qtext"])
-            continue
-
-        # Check keywords
-        import json
-        keywords = json.loads(q.get("expected_keywords", "[]")) if q.get("expected_keywords") else []
-        if keywords and answer:
-            ans_lower = answer.lower()
-            matched = any(k.lower() in ans_lower for k in keywords)
-            if not matched and q.get("required"):
-                missing.append(f"{q['qtext']} (keywords: {', '.join(keywords)})")
-            elif matched:
-                covered.append(q["qtext"])
-        elif answer:
-            covered.append(q["qtext"])
-    
-    # Check checklist items
-    checklist_items = body.get("checklist", {})
-    for key, checked in checklist_items.items():
-        if not checked:
-            missing.append(f"Чеклист: пункт {key}")
-    
-    # Evaluate verdict
-    if not missing:
-        from . import phases as phases_mod
-        next_phase = phases_mod.get_next_phase(phase_id)
-        next_phase_row = wdb.get_phase(next_phase) if next_phase else None
-        next_name = next_phase_row["name"] if next_phase_row else None
-
-        return {
-            "verdict": "PASS",
-            "phase": phase_id,
-            "covered": covered,
-            "missing": [],
-            "message": f"Фаза {phase_id} пройдена. Переходим к {next_phase} — {next_name}" if next_phase else "Все фазы выполнены!",
-            "next_phase": next_phase,
-            "next_phase_name": next_name,
-        }
-    else:
-        return {
-            "verdict": "FAIL",
-            "phase": phase_id,
-            "covered": covered,
-            "missing": missing,
-            "message": f"Не выполнено {len(missing)} пунктов. Доработай и пришли новый отчёт.",
-            "next_phase": None,
-            "next_phase_name": None,
-        }
-
-@app.get("/api/wizard/{task_key}/context")
-def api_wizard_context(task_key: str):
-    """Полный контекст для агента-визарда."""
-    from . import wizard as wizard_mod
-    engine = wizard_mod.WizardEngine(task_key)
-    return engine.get_full_context()
-
-
 # ── Settings ─────────────────────────────────────────────────────────────
 
 @app.get("/settings", response_class=HTMLResponse)
@@ -710,15 +625,6 @@ def api_phase_detail(phase_id: str):
 def api_tasks():
     """Все задачи."""
     return {"ok": True, "tasks": _load_tasks()}
-
-
-@app.get("/api/tasks/{task_key}")
-def api_task_detail(task_key: str):
-    """Детали одной задачи."""
-    task = _get_task_detail(task_key)
-    if not task:
-        return JSONResponse({"ok": False, "error": "Task not found"}, status_code=404)
-    return {"ok": True, "task": task}
 
 
 @app.get("/api/workflows")
@@ -914,42 +820,6 @@ def api_update_order(body: dict[str, Any]):
     return {"ok": True, "updated": len(batch)}
 
 
-@app.put("/api/phases/parallel")
-def api_update_parallel(body: dict[str, Any]):
-    """Batch update parallel_with связей после drag в графе.
-
-    Body: {"groups": [["4.5", "5"], ["7.5", "7.6"]], "clear": ["3.5"]}
-    """
-    groups = body.get("groups", [])
-    clear = body.get("clear", [])
-
-    wdb = _get_db()
-
-    # Collect ALL phase IDs that will be in new groups → must have old links wiped
-    all_group_ids = set()
-    for group in groups:
-        if len(group) >= 2:
-            all_group_ids.update(group)
-
-    # Clear old parallel links for anyone entering a new group or explicitly cleared
-    to_clear = all_group_ids | set(clear)
-    for phase_id in to_clear:
-        wdb.update_phase_parallel(phase_id, None)
-
-    # Set new bidirectional links (cycle for groups >=2)
-    group_map: dict[str, str] = {}
-    for group in groups:
-        if len(group) >= 2:
-            for i, phase_id in enumerate(group):
-                target = group[(i + 1) % len(group)]
-                group_map[phase_id] = target
-
-    if group_map:
-        wdb.batch_update_groups(group_map)
-
-    return {"ok": True, "groups_set": len(group_map), "cleared": len(to_clear)}
-
-
 @app.put("/api/phases/{phase_id}")
 def api_phase_update(phase_id: str, body: dict[str, Any]):
     srv = _get_service()
@@ -992,47 +862,6 @@ def api_phase_update(phase_id: str, body: dict[str, Any]):
     schema.persist_phase_update_to_seed(srv._db, resolved_phase_id, body)
 
     return {"ok": True, "ids": {"instructions": inst_ids, "checks": check_ids, "evidence": ev_ids}}
-
-
-@app.delete("/api/instructions/{inst_id}")
-def api_delete_instruction(inst_id: int):
-    wdb = _get_db()
-    wdb.delete_instruction(inst_id)
-    return {"ok": True}
-
-
-@app.delete("/api/checks/{check_id}")
-def api_delete_check(check_id: int):
-    wdb = _get_db()
-    wdb.delete_check(check_id)
-    return {"ok": True}
-
-
-@app.delete("/api/evidence/{ev_id}")
-def api_delete_evidence(ev_id: int):
-    wdb = _get_db()
-    wdb.delete_evidence(ev_id)
-    return {"ok": True}
-
-
-@app.put("/api/phases/{phase_id}/order")
-def api_single_phase_order(phase_id: str, body: dict[str, Any]):
-    """Обновить порядок одной фазы (перетаскивание в графе)."""
-    new_order = body.get("phase_order")
-    if new_order is None:
-        return JSONResponse({"ok": False, "error": "phase_order required"}, status_code=400)
-
-    wdb = _get_db()
-    resolved_phase_id = _coerce_phase_db_id(phase_id)
-    if resolved_phase_id is None or not wdb.get_phase(resolved_phase_id):
-        return JSONResponse({"ok": False, "error": "Phase not found"}, status_code=404)
-    new_order = int(new_order)
-    wdb.update_phase_order(resolved_phase_id, new_order)
-
-    # Rebuild config order
-    _update_config_phase_order()
-
-    return {"ok": True, "phase_id": resolved_phase_id, "phase_order": new_order}
 
 
 def _update_config_phase_order():

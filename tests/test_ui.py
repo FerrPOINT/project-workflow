@@ -544,21 +544,10 @@ class TestDragDropAPI:
         data = resp.json()
         assert data["ok"] is False
 
-    def test_api_single_phase_order(self):
+    def test_api_single_phase_order_route_removed(self):
         phase_id = _phase_id("1")
         resp = client.put(f"/api/phases/{phase_id}/order", json={"phase_order": 5})
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["ok"] is True
-        assert data["phase_id"] == phase_id
-        assert data["phase_order"] == 5
-
-    def test_api_single_phase_order_missing(self):
-        phase_id = _phase_id("1")
-        resp = client.put(f"/api/phases/{phase_id}/order", json={})
-        assert resp.status_code == 400
-        data = resp.json()
-        assert data["ok"] is False
+        assert resp.status_code == 404
 
 
 class TestTimelineHTML:
@@ -606,6 +595,15 @@ class TestTasksPage:
         assert response.status_code == 200
         assert "Проект" in response.text
         assert "UITEST" in response.text
+
+    def test_tasks_page_hides_dead_filters_search_and_pagination(self):
+        response = client.get("/tasks?search=NO_SUCH_TASK_999&page=2&status=done")
+        assert response.status_code == 200
+        assert 'id="searchInput"' not in response.text
+        assert 'onclick="setFilter(' not in response.text
+        assert '?page=' not in response.text
+        assert '?status=' not in response.text
+        assert '?search=' not in response.text
 
 
 class TestTaskDetail:
@@ -665,7 +663,7 @@ class TestTaskDetail:
         task = next(task for task in response.json()["tasks"] if task["task_key"] == "UITEST-401")
         assert task["current_phase_name"] == "Task Intake"
 
-    def test_api_task_detail_marks_text_phase_code_as_current(self):
+    def test_task_detail_marks_text_phase_code_as_current(self):
         from wartz_workflow.ui import _get_db
 
         wdb = _get_db()
@@ -687,12 +685,11 @@ class TestTaskDetail:
         wdb.add_task_history(task["id"], "-1", "done")
         wdb.add_task_history(task["id"], "0.7", "pending")
 
-        response = client.get(f"/api/tasks/{task_key}")
+        response = client.get(f"/task/{task_key}")
         assert response.status_code == 200
-        payload = response.json()["task"]
-        assert payload["current_phase_name"] == "Repo Sync"
-        current = next(item for item in payload["phase_history"] if item["phase_name"] == "Repo Sync")
-        assert current["status"] == "current"
+        assert "Текущая фаза" in response.text
+        assert "Repo Sync" in response.text
+        assert "🔵 Текущая" in response.text
 
 
 class TestProjectsPage:
@@ -887,33 +884,17 @@ class TestGroupsRemoved:
         assert assign.status_code == 404
 
 
-class TestParallelApi:
-    def test_api_parallel_update_sets_bidirectional_links_and_clears_requested_phases(self):
-        from wartz_workflow.ui import _get_db
+class TestLegacyApiRemoved:
+    def test_parallel_api_removed(self):
+        response = client.put(
+            "/api/phases/parallel",
+            json={"groups": [["-1", "0.0a"]], "clear": ["1"]},
+        )
+        assert response.status_code == 404
 
-        wdb = _get_db()
-        tracked_codes = ("-1", "0.0a", "1")
-        originals = {code: wdb.get_phase(code)["parallel_with"] for code in tracked_codes}
-        local_client = TestClient(app, raise_server_exceptions=False)
-
-        try:
-            response = local_client.put(
-                "/api/phases/parallel",
-                json={"groups": [["-1", "0.0a"]], "clear": ["1"]},
-            )
-            assert response.status_code == 200
-            data = response.json()
-            assert data["ok"] is True
-            assert data["groups_set"] == 2
-            assert data["cleared"] == 3
-            assert wdb.get_phase("-1")["parallel_with"] == "0.0a"
-            assert wdb.get_phase("0.0a")["parallel_with"] == "-1"
-            assert wdb.get_phase("1")["parallel_with"] is None
-        finally:
-            with wdb._conn() as conn:
-                for code, value in originals.items():
-                    conn.execute("UPDATE phases SET parallel_with = ? WHERE code = ?", (value, code))
-                conn.commit()
+    def test_task_detail_json_api_removed(self):
+        response = client.get("/api/tasks/UITEST-402")
+        assert response.status_code == 404
 
 
 class TestSettingsPage:

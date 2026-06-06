@@ -163,12 +163,6 @@ class TestInstructionCRUD:
         assert rows[1]["description"] == "First"
         assert rows[1]["step_num"] == 2
 
-    def test_delete_instruction(self, db):
-        db.create_phase({"id": "p-d", "name": "D", "description": "", "phase_order": 1})
-        iid = db.create_instruction({"phase_id": "p-d", "step_num": 1, "description": "To delete", "execution_type": "sync"})
-        db.delete_instruction(iid)
-        assert len(db.get_phase_instructions("p-d")) == 0
-
 
 class TestTaskCRUD:
     def test_create_and_get_task(self, db):

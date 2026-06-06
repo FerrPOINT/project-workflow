@@ -86,7 +86,6 @@ python -m wartz_workflow.ui --host 0.0.0.0 --port 8811
 - `/api/phases`
 - `/api/tasks`
 - `/api/projects`
-- `/api/groups`
 - `/api/agents`
 - `/api/settings`
 
@@ -99,11 +98,8 @@ wartz_workflow/
 ├── conversation.py
 ├── db.py
 ├── db_schema.sql
-├── engine.py
 ├── models.py
 ├── phases.py
-├── profiles.py
-├── rollback.py
 ├── schema.py
 ├── service.py
 ├── state.py
@@ -121,7 +117,6 @@ wartz_workflow/
     ├── agents.html
     ├── base.html
     ├── dashboard.html
-    ├── groups.html
     ├── phase_detail.html
     ├── phases.html
     ├── projects.html
