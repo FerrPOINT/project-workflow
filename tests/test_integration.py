@@ -21,8 +21,8 @@ client = TestClient(app)
 class TestEndToEndWorkflow:
     """Full cycle via direct DB + API checks."""
 
-    def test_seeded_db_has_phase_groups_and_agents(self, tmp_path: Path):
-        """Seed импорт + проверка phase_groups и agents."""
+    def test_seeded_db_has_workflows_and_agents(self, tmp_path: Path):
+        """Seed импорт + проверка workflow-aware фаз и agents."""
         db_path = tmp_path / "test.db"
         wdb = WorkflowDB(str(db_path))
         wdb.init()
@@ -59,15 +59,11 @@ class TestEndToEndWorkflow:
         assert len(hist) == 1
         assert hist[0]["status"] == "done"
 
-    def test_phase_groups_and_agents_crud(self, tmp_path: Path):
-        """Полный CRUD групп и агентов."""
+    def test_agents_crud(self, tmp_path: Path):
+        """Полный CRUD агентов."""
         db_path = tmp_path / "test3.db"
         wdb = WorkflowDB(str(db_path))
         wdb.init()
-        wdb.create_phase_group({"id": "prep", "name": "Подготовка", "sort_order": 0})
-        groups = wdb.get_phase_groups()
-        assert len(groups) == 1
-        assert groups[0]["name"] == "Подготовка"
         wdb.create_agent({"name": "coder", "description": "Пишет код"})
         agents = wdb.get_agents()
         assert len(agents) == 1
@@ -87,25 +83,22 @@ class TestEndToEndWorkflow:
         assert {rows[0]["command"], rows[1]["command"]} == {"step", "history"}
         assert rows[1]["command"] == "history"
 
-    def test_phase_with_group_and_agent(self, tmp_path: Path):
-        """Фаза с group_id и agent_id."""
+    def test_phase_with_agent(self, tmp_path: Path):
+        """Фаза с agent_id без legacy group_id."""
         db_path = tmp_path / "test5.db"
         wdb = WorkflowDB(str(db_path))
         wdb.init()
-        wdb.create_phase_group({"id": "g1", "name": "Group 1", "sort_order": 1})
         agent_id = wdb.create_agent({"name": "test-bot", "description": "Executes delegated work"})
         wdb.create_phase({
             "id": "p2",
             "name": "P2",
             "phase_order": 0,
-            "group_id": "g1",
             "agent_id": agent_id,
             "execution_type": "parallel",
         })
         rows = wdb.get_phases()
         assert len(rows) == 1
-        g1_info = wdb.get_phase_group_by_code("g1")
-        assert rows[0]["group_id"] == g1_info["id"]
+        assert "group_id" not in rows[0]
         assert rows[0]["agent_id"] == agent_id
         assert rows[0]["execution_type"] == "parallel"
 

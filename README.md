@@ -77,9 +77,8 @@ python -m wartz_workflow.ui --host 0.0.0.0 --port 8811
 - `/tasks` — список задач
 - `/task/{task_key}` — детальная карточка задачи
 - `/projects` — CRUD проектов и regex ключей
-- `/groups` — CRUD групп фаз
 - `/agents` — CRUD агентов
-- `/settings` — авто-собранная справка по реальным CLI-командам
+- `/settings` — read-only реестр CLI-команд
 
 ## API
 

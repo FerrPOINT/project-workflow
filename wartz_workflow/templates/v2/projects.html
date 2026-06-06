@@ -25,13 +25,6 @@ textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:140px;resiz
 {% endblock %}
 
 {% block content %}
-<div class="card" style="margin-bottom:16px">
-  <div class="card-title" style="margin-bottom:10px">CRUD проектов</div>
-  <div class="empty-note">
-    Здесь живёт source of truth для проектных regex-паттернов ключей задач. Редактирование глобальных settings для этого больше не используется.
-  </div>
-</div>
-
 <div class="project-crud">
   <section class="project-nav" id="projectNav">
     {% for project in projects %}

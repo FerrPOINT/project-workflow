@@ -1,13 +1,6 @@
 -- WARTZ Workflow DB — финальная схема
 -- PK: INTEGER AUTOINCREMENT для runtime-сущностей
--- code TEXT UNIQUE для семантических идентификаторов фаз/групп
-
-CREATE TABLE IF NOT EXISTS phase_groups (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    code        TEXT NOT NULL UNIQUE,
-    name        TEXT NOT NULL,
-    sort_order  INTEGER NOT NULL DEFAULT 0
-);
+-- code TEXT UNIQUE для семантических идентификаторов фаз/workflow/project
 
 CREATE TABLE IF NOT EXISTS agents (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,7 +23,6 @@ CREATE TABLE IF NOT EXISTS phases (
     description    TEXT,
     min_time_min   INTEGER DEFAULT 0,
     phase_order    INTEGER NOT NULL,
-    group_id       INTEGER REFERENCES phase_groups(id),
     agent_id       INTEGER REFERENCES agents(id),
     next_recommendation TEXT,
     parallel_with  TEXT,

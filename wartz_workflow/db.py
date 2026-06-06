@@ -1,6 +1,6 @@
 """WorkflowDB — SQLite persistence for workflow entities.
 
-Схема: groups, agents, phases, instructions, checks, evidence, projects, tasks, task_history, cli_history.
+Схема: workflows, agents, phases, instructions, checks, evidence, projects, tasks, task_history, cli_history.
 Плоская структура, связи через FOREIGN KEY.
 PK: INTEGER AUTOINCREMENT, семантические code TEXT UNIQUE.
 """
@@ -38,14 +38,6 @@ class WorkflowDB:
         row = self.get_phase_by_code(val)
         if not row:
             raise ValueError(f"Unknown phase code: {val}")
-        return row["id"]
-
-    def _resolve_group_id(self, val: int | str) -> int:
-        if isinstance(val, int):
-            return val
-        row = self.get_phase_group_by_code(val)
-        if not row:
-            raise ValueError(f"Unknown group code: {val}")
         return row["id"]
 
     def _resolve_project_id(self, val: int | str) -> int:
@@ -481,52 +473,6 @@ class WorkflowDB:
 
             conn.commit()
 
-    # ── Phase Groups ───────────────────────────────────────────────────
-
-    def create_phase_group(self, data: dict) -> int:
-        with self._conn() as conn:
-            c = conn.execute(
-                "INSERT INTO phase_groups (code, name, sort_order) VALUES (?, ?, ?)",
-                (data.get("code", data.get("id", "")), data["name"], data.get("sort_order", 0)),
-            )
-            conn.commit()
-            return c.lastrowid or 0
-
-    def get_phase_groups(self) -> list[dict]:
-        with self._conn() as conn:
-            rows = conn.execute("SELECT * FROM phase_groups ORDER BY sort_order").fetchall()
-            return [dict(r) for r in rows]
-
-    def get_phase_group(self, group_id: int) -> dict | None:
-        with self._conn() as conn:
-            row = conn.execute("SELECT * FROM phase_groups WHERE id = ?", (group_id,)).fetchone()
-            return dict(row) if row else None
-
-    def get_phase_group_by_code(self, code: str) -> dict | None:
-        with self._conn() as conn:
-            row = conn.execute("SELECT * FROM phase_groups WHERE code = ?", (code,)).fetchone()
-            return dict(row) if row else None
-
-    def update_phase_group(self, group_id: int | str, data: dict) -> None:
-        resolved = self._resolve_group_id(group_id)
-        fields = []
-        vals = []
-        for k, v in data.items():
-            if k != "id":
-                fields.append(f"{k} = ?")
-                vals.append(v)
-        vals.append(resolved)
-        sql = f"UPDATE phase_groups SET {', '.join(fields)} WHERE id = ?"
-        with self._conn() as conn:
-            conn.execute(sql, vals)
-            conn.commit()
-
-    def delete_phase_group(self, group_id: int | str) -> None:
-        resolved = self._resolve_group_id(group_id)
-        with self._conn() as conn:
-            conn.execute("DELETE FROM phase_groups WHERE id = ?", (resolved,))
-            conn.commit()
-
     # ── Agents ─────────────────────────────────────────────────────────
 
     def create_agent(self, data: dict) -> int:
@@ -726,8 +672,8 @@ class WorkflowDB:
                 workflow_id = self._resolve_workflow_id(p.get("workflow_id", default_workflow_id))
                 conn.execute(
                     """
-                    INSERT OR REPLACE INTO phases (workflow_id, code, name, description, min_time_min, phase_order, group_id, agent_id, next_recommendation, parallel_with, rollback_target, execution_type, is_seed_managed)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT OR REPLACE INTO phases (workflow_id, code, name, description, min_time_min, phase_order, agent_id, next_recommendation, parallel_with, rollback_target, execution_type, is_seed_managed)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         workflow_id,
@@ -736,7 +682,6 @@ class WorkflowDB:
                         p.get("description") or "",
                         p.get("min_time_min", 0),
                         p["phase_order"],
-                        p.get("group_id"),
                         p.get("agent_id"),
                         p.get("next_recommendation"),
                         p.get("parallel_with"),
@@ -865,13 +810,12 @@ class WorkflowDB:
     def create_phase(self, data: dict) -> int:
         """Insert a new phase row (code-based lookup)."""
         with self._conn() as conn:
-            group_id = self._resolve_group_id(data["group_id"]) if data.get("group_id") else None
             workflow_id = self._resolve_workflow_id(data.get("workflow_id", data.get("workflow", data.get("workflow_code"))))
             c = conn.execute(
                 """
-                INSERT INTO phases (workflow_id, code, name, description, min_time_min, phase_order, group_id, agent_id,
+                INSERT INTO phases (workflow_id, code, name, description, min_time_min, phase_order, agent_id,
                                     next_recommendation, parallel_with, rollback_target, execution_type, is_seed_managed)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     workflow_id,
@@ -880,7 +824,6 @@ class WorkflowDB:
                     data.get("description") or "",
                     data.get("min_time_min", 0),
                     data["phase_order"],
-                    group_id,
                     data.get("agent_id"),
                     data.get("next_recommendation"),
                     data.get("parallel_with"),
@@ -899,10 +842,7 @@ class WorkflowDB:
         for k, v in data.items():
             if k == "id":
                 continue
-            if k == "group_id":
-                fields.append("group_id = ?")
-                vals.append(self._resolve_group_id(v) if v else None)
-            elif k in {"workflow_id", "workflow", "workflow_code"}:
+            if k in {"workflow_id", "workflow", "workflow_code"}:
                 fields.append("workflow_id = ?")
                 vals.append(self._resolve_workflow_id(v))
             else:
@@ -1192,13 +1132,6 @@ class WorkflowDB:
             conn.execute("UPDATE phases SET phase_order = ? WHERE id = ?", (new_order, resolved))
             conn.commit()
 
-    def update_phase_group_assignment(self, phase_id: int | str, group_id: int | str | None) -> None:
-        resolved_phase = self._resolve_phase_id(phase_id)
-        resolved_group = self._resolve_group_id(group_id) if group_id is not None else None
-        with self._conn() as conn:
-            conn.execute("UPDATE phases SET group_id = ? WHERE id = ?", (resolved_group, resolved_phase))
-            conn.commit()
-
     def update_phase_parallel(self, phase_id: int | str, parallel_with: str | None) -> None:
         resolved_phase = self._resolve_phase_id(phase_id)
         with self._conn() as conn:
@@ -1215,36 +1148,6 @@ class WorkflowDB:
                 "UPDATE phases SET parallel_with = ? WHERE id = ?",
                 resolved_batch,
             )
-            conn.commit()
-
-    # ── Group Order Batch ─────────────────────────────────────────────
-
-    def batch_update_group_orders(self, batch: list[tuple[int | str, int]]) -> None:
-        resolved_batch = [(order, self._resolve_group_id(gid)) for gid, order in batch]
-        with self._conn() as conn:
-            conn.executemany(
-                "UPDATE phase_groups SET sort_order = ? WHERE id = ?",
-                resolved_batch,
-            )
-            conn.commit()
-
-    # ── Seed Defaults ──────────────────────────────────────────────────
-
-    def seed_default_groups(self) -> None:
-        defaults = [
-            ("setup", "🔧 Setup", 1),
-            ("research", "🔬 Research", 2),
-            ("plan", "📋 Plan", 3),
-            ("dev", "💻 Dev", 4),
-            ("qa", "🧪 QA", 5),
-            ("closure", "🏁 Closure", 6),
-        ]
-        with self._conn() as conn:
-            for code, name, order in defaults:
-                conn.execute(
-                    "INSERT OR IGNORE INTO phase_groups (code, name, sort_order) VALUES (?, ?, ?)",
-                    (code, name, order),
-                )
             conn.commit()
 
     # ── Alias helpers for UI back-compat ──────────────────────────────

@@ -120,13 +120,7 @@
 
     <div class="wiki-meta">
       <span><a href="/phases">Порядок меняется на странице фаз</a></span>
-      <span>Группа: <select id="groupSelect" class="inline-input" style="width:140px;display:inline" onchange="scheduleSave()">
-        <option value="">—</option>
-        {% for g in groups %}
-        <option value="{{ g.id }}" {% if phase.group_id == g.id %}selected{% endif %}>{{ g.name or g.code }}</option>
-        {% endfor %}
-      </select></span>
-      <span>Агент: <select id="agentSelect" class="inline-input" style="width:140px;display:inline" onchange="scheduleSave()">
+      <span>Агент: <select id="agentSelect" class="inline-input" style="width:180px;display:inline" onchange="scheduleSave()">
         <option value="">—</option>
         {% for a in agents %}
         <option value="{{ a.id }}" {% if phase.agent_id == a.id %}selected{% endif %}>{{ a.name }}</option>
@@ -444,7 +438,6 @@ async function savePhase() {
     checks: [],
     evidence: [],
     execution_type: document.querySelector('.execution-toggle')?.dataset.mode || 'sync',
-    group_id: document.getElementById('groupSelect')?.value || null,
     agent_id: document.getElementById('agentSelect')?.value || null,
   };
 

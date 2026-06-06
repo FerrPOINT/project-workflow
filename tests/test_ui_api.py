@@ -80,11 +80,9 @@ class TestApiPhases:
         resp = client.put("/api/phases/-9999", json={"body": {}})
         assert resp.status_code in (404, 422)
 
-    def test_api_groups(self):
+    def test_api_groups_removed(self):
         resp = client.get("/api/groups")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert isinstance(data, dict)
+        assert resp.status_code == 404
 
     def test_api_settings(self):
         resp = client.get("/api/settings")

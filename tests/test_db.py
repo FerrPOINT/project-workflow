@@ -26,8 +26,9 @@ class TestInit:
         tables = db._list_tables()
         assert {
             "phases", "instructions", "checks", "evidence",
-            "tasks", "task_history", "phase_groups", "agents", "cli_history", "projects"
+            "tasks", "task_history", "agents", "cli_history", "projects", "workflows"
         }.issubset(tables)
+        assert "phase_groups" not in tables
 
     def test_init_idempotent(self, db):
         """Повторный init не падает."""
@@ -131,6 +132,7 @@ class TestPhaseCRUD:
         db.create_phase({"id": "p-1", "name": "P1", "description": "D1", "phase_order": 1})
         row = db.get_phase("p-1")
         assert row["name"] == "P1"
+        assert "group_id" not in row
 
     def test_update_phase(self, db):
         db.create_phase({"id": "p-2", "name": "Old", "description": "", "phase_order": 2})
@@ -239,25 +241,10 @@ class TestProjectCRUD:
         assert db.get_project(pid) is None
 
 
-class TestPhaseGroupCRUD:
-    def test_create_and_get(self, db):
-        gid = db.create_phase_group({"code": "prep", "name": "Подготовка", "sort_order": 1})
-        g = db.get_phase_group(gid)
-        assert g["name"] == "Подготовка"
-        assert g["sort_order"] == 1
-
-    def test_list_ordered(self, db):
-        db.create_phase_group({"code": "z", "name": "ZZ", "sort_order": 2})
-        db.create_phase_group({"code": "a", "name": "AA", "sort_order": 1})
-        groups = db.get_phase_groups()
-        assert [g["code"] for g in groups] == ["a", "z"]
-
-    def test_update_and_delete(self, db):
-        gid = db.create_phase_group({"code": "upd", "name": "Old", "sort_order": 1})
-        db.update_phase_group(gid, {"name": "New"})
-        assert db.get_phase_group(gid)["name"] == "New"
-        db.delete_phase_group(gid)
-        assert db.get_phase_group(gid) is None
+class TestGroupsRemoval:
+    def test_schema_does_not_create_phase_groups_table(self, db):
+        tables = db._list_tables()
+        assert "phase_groups" not in tables
 
 
 class TestAgentCRUD:

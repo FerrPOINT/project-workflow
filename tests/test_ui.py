@@ -724,6 +724,12 @@ class TestProjectsPage:
         assert 'id="projectWorkflowId"' in response.text
         assert "Воркфлоу" in response.text
 
+    def test_projects_page_hides_removed_intro_cleanup_block(self):
+        response = client.get("/projects")
+        assert response.status_code == 200
+        assert "CRUD проектов" not in response.text
+        assert "source of truth для проектных regex-паттернов" not in response.text
+
     def test_projects_api_create_update_and_delete(self):
         create = client.post("/api/projects", json={
             "code": "APICRUD",
@@ -791,6 +797,12 @@ class TestWorkflowsPage:
         assert 'id="newWorkflowButton"' in response.text
         assert 'id="workflowFormMode"' in response.text
 
+    def test_workflows_page_hides_removed_intro_cleanup_block(self):
+        response = client.get("/workflows")
+        assert response.status_code == 200
+        assert "CRUD workflow" not in response.text
+        assert "именованные workflow-контейнеры" not in response.text
+
     def test_workflows_api_create_update_and_delete(self):
         create = client.post("/api/workflows", json={
             "code": "APIWF",
@@ -850,85 +862,29 @@ class TestAgentsPage:
         assert architect["description"] == "Проектирует и уточняет контракты"
 
 
-class TestGroupsApi:
-    def test_groups_api_rejects_duplicate_group_code(self):
-        from wartz_workflow.ui import _get_db
+class TestGroupsRemoved:
+    def test_sidebar_has_no_groups_link(self):
+        response = client.get("/phases")
+        assert response.status_code == 200
+        assert 'href="/groups"' not in response.text
+        assert ">Группы<" not in response.text
 
-        wdb = _get_db()
-        group_code = "test-duplicate-group"
-        existing = wdb.get_phase_group_by_code(group_code)
-        if existing:
-            wdb.delete_phase_group(group_code)
+    def test_groups_page_and_api_are_removed(self):
+        page = client.get("/groups")
+        assert page.status_code == 404
 
-        local_client = TestClient(app, raise_server_exceptions=False)
-        try:
-            create = client.post("/api/groups", json={"id": group_code, "name": "Duplicate Probe"})
-            assert create.status_code == 200
+        listing = client.get("/api/groups")
+        assert listing.status_code == 404
 
-            duplicate = local_client.post("/api/groups", json={"id": group_code, "name": "Duplicate Probe"})
-            assert duplicate.status_code == 409
-            assert duplicate.json()["ok"] is False
-        finally:
-            if wdb.get_phase_group_by_code(group_code):
-                wdb.delete_phase_group(group_code)
+    def test_phase_detail_hides_group_selector_and_group_assignment_api(self):
+        phase_id = _phase_id("0.0a")
+        response = client.get(f"/phase/{phase_id}")
+        assert response.status_code == 200
+        assert 'id="groupSelect"' not in response.text
+        assert "Группа:" not in response.text
 
-    def test_groups_api_updates_and_deletes_by_group_code(self):
-        from wartz_workflow.ui import _get_db
-
-        wdb = _get_db()
-        group_code = "test-update-group"
-        existing = wdb.get_phase_group_by_code(group_code)
-        if existing:
-            wdb.delete_phase_group(group_code)
-
-        try:
-            create = client.post("/api/groups", json={"id": group_code, "name": "Old Name", "sort_order": 3})
-            assert create.status_code == 200
-
-            update = client.put(f"/api/groups/{group_code}", json={"name": "New Name", "sort_order": 7})
-            assert update.status_code == 200
-
-            group = wdb.get_phase_group_by_code(group_code)
-            assert group is not None
-            assert group["name"] == "New Name"
-            assert group["sort_order"] == 7
-
-            delete = client.delete(f"/api/groups/{group_code}")
-            assert delete.status_code == 200
-            assert wdb.get_phase_group_by_code(group_code) is None
-        finally:
-            if wdb.get_phase_group_by_code(group_code):
-                wdb.delete_phase_group(group_code)
-
-    def test_phase_group_assign_accepts_group_code(self):
-        from wartz_workflow.ui import _get_db
-
-        wdb = _get_db()
-        phase_code = "-1"
-        group_code = "assign-by-code"
-        original_group_id = wdb.get_phase(phase_code)["group_id"]
-        existing = wdb.get_phase_group_by_code(group_code)
-        if existing:
-            if original_group_id == existing["id"]:
-                wdb.update_phase_group_assignment(phase_code, None)
-                original_group_id = None
-            wdb.delete_phase_group(group_code)
-
-        try:
-            create = client.post("/api/groups", json={"id": group_code, "name": "Assign Group"})
-            assert create.status_code == 200
-
-            assign = client.put(f"/api/phases/{_phase_id(phase_code)}/group", json={"group_id": group_code})
-            assert assign.status_code == 200
-
-            phase = wdb.get_phase(phase_code)
-            group = wdb.get_phase_group_by_code(group_code)
-            assert group is not None
-            assert phase["group_id"] == group["id"]
-        finally:
-            wdb.update_phase_group_assignment(phase_code, original_group_id)
-            if wdb.get_phase_group_by_code(group_code):
-                wdb.delete_phase_group(group_code)
+        assign = client.put(f"/api/phases/{phase_id}/group", json={"group_id": "legacy"})
+        assert assign.status_code == 404
 
 
 class TestParallelApi:

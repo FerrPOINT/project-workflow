@@ -155,41 +155,6 @@ app = FastAPI(title="wartz-workflow UI", version="2.0.0")
 
 
 # ═══════════════════════════════════════════════════════════════════════
-#  PHASE GROUPS (for Kanban)
-# ═══════════════════════════════════════════════════════════════════════
-
-PHASE_GROUP_NAMES = {
-    "setup": "🔧 Setup",
-    "research": "🔬 Research",
-    "plan": "📋 Plan",
-    "dev": "💻 Dev",
-    "qa": "🧪 QA",
-    "closure": "🏁 Closure",
-}
-
-PHASE_TO_GROUP = {
-    "-1": "setup", "0.0a": "setup", "0.01": "setup", "0.00": "setup", "0.000": "setup", "0.7": "setup",
-    "0.5": "research", "0.6": "research", "0.9": "research", "1": "research", "1.5": "research", "2": "research",
-    "3": "plan", "3.5": "plan",
-    "4": "dev", "4.5": "dev", "5": "dev", "5.5": "dev",
-    "7": "qa", "7.5": "qa", "7.6": "qa", "7.6.R": "qa", "7.7": "qa",
-    "6": "closure", "8": "closure", "9": "closure", "10": "closure",
-}
-
-
-def _group_phases(phases: list[dict]) -> dict[str, list[dict]]:
-    groups = {k: [] for k in PHASE_GROUP_NAMES}
-    for p in phases:
-        group = PHASE_TO_GROUP.get(p["id"], "setup")
-        # Add instruction count from DB
-        wdb = _get_db()
-        insts = wdb.get_phase_instructions(p["id"])
-        p["instruction_count"] = len(insts)
-        groups[group].append(p)
-    return groups
-
-
-# ═══════════════════════════════════════════════════════════════════════
 #  DATA
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -517,12 +482,11 @@ def phase_detail(request: Request, phase_id: str):
     if not phase:
         return HTMLResponse("<h1>Phase not found</h1>", status_code=404)
     wdb = _get_db()
-    groups = wdb.get_phase_groups()
     agents = wdb.get_agents()
     return templates.TemplateResponse(
         request=request, name="phase_detail.html", context={
             "request": request, "page": "phases", "ui_port": config.UI_PORT, "phase": phase,
-            "groups": groups, "agents": agents,
+            "agents": agents,
         }
     )
 
@@ -710,19 +674,6 @@ def api_settings_get():
     return {"ok": True, "commands": _load_cli_reference()}
 
 
-# ── Groups ─────────────────────────────────────────────────────────────
-
-@app.get("/groups", response_class=HTMLResponse)
-def groups_page(request: Request):
-    """Список групп фаз."""
-    wdb = _get_db()
-    groups = wdb.get_phase_groups()
-    return templates.TemplateResponse(
-        request=request, name="groups.html",
-        context={"request": request, "groups": groups, "page": "groups", "ui_port": config.UI_PORT}
-    )
-
-
 @app.get("/agents", response_class=HTMLResponse)
 def agents_page(request: Request):
     """Список агентов."""
@@ -888,78 +839,6 @@ def api_project_delete(project_id: int):
     return {"ok": True}
 
 
-@app.get("/api/groups")
-def api_groups():
-    """Получить все группы фаз."""
-    wdb = _get_db()
-    wdb.seed_default_groups()
-    groups = wdb.get_phase_groups()
-    return {"ok": True, "groups": groups}
-
-
-@app.post("/api/groups")
-def api_group_create(body: dict[str, Any]):
-    """Создать группу фаз."""
-    group_id = body.get("id", "").strip().lower()
-    name = body.get("name", "").strip()
-    if not group_id or not name:
-        return JSONResponse({"ok": False, "error": "id and name required"}, status_code=400)
-    wdb = _get_db()
-    existing = wdb.get_phase_group_by_code(group_id)
-    if existing:
-        return JSONResponse({"ok": False, "error": f"Group {group_id} already exists"}, status_code=409)
-    try:
-        wdb.create_phase_group({
-            "id": group_id, "name": name, "icon": body.get("icon"),
-            "sort_order": body.get("sort_order", 0),
-        })
-    except sqlite3.IntegrityError:
-        return JSONResponse({"ok": False, "error": f"Group {group_id} already exists"}, status_code=409)
-    return {"ok": True, "group_id": group_id}
-
-
-@app.put("/api/groups/order")
-def api_groups_order(body: dict[str, Any]):
-    """Обновить порядок групп (DND колонок)."""
-    orders = body.get("orders", [])
-    if not orders:
-        return JSONResponse({"ok": False, "error": "No orders provided"}, status_code=400)
-    wdb = _get_db()
-    batch = [(o["group_id"], o["sort_order"]) for o in orders]
-    wdb.batch_update_group_orders(batch)
-    return {"ok": True, "updated": len(batch)}
-
-
-@app.put("/api/groups/{group_id}")
-def api_group_update(group_id: str, body: dict[str, Any]):
-    """Обновить группу."""
-    wdb = _get_db()
-    existing = wdb.get_phase_group_by_code(group_id)
-    if not existing:
-        return JSONResponse({"ok": False, "error": "Group not found"}, status_code=404)
-    update_data = {}
-    if "name" in body: update_data["name"] = body["name"]
-    if "icon" in body: update_data["icon"] = body["icon"]
-    if "sort_order" in body: update_data["sort_order"] = body["sort_order"]
-    if update_data:
-        wdb.update_phase_group(group_id, update_data)
-    return {"ok": True}
-
-
-@app.delete("/api/groups/{group_id}")
-def api_group_delete(group_id: str):
-    """Удалить группу. Фазы переходят в setup."""
-    wdb = _get_db()
-    existing = wdb.get_phase_group_by_code(group_id)
-    if not existing:
-        return JSONResponse({"ok": False, "error": "Group not found"}, status_code=404)
-    try:
-        wdb.delete_phase_group(group_id)
-    except sqlite3.IntegrityError:
-        return JSONResponse({"ok": False, "error": "Group has linked phases and cannot be deleted"}, status_code=409)
-    return {"ok": True}
-
-
 @app.get("/api/agents")
 def api_agents():
     """Получить всех агентов."""
@@ -1007,22 +886,6 @@ def api_agent_delete(agent_id: int):
     if not existing:
         return JSONResponse({"ok": False, "error": "Agent not found"}, status_code=404)
     wdb.delete_agent(agent_id)
-    return {"ok": True}
-
-
-@app.put("/api/phases/{phase_id}/group")
-def api_phase_group_assign(phase_id: str, body: dict[str, Any]):
-    """Назначить фазу в группу."""
-    group_id = body.get("group_id")
-    if not group_id:
-        return JSONResponse({"ok": False, "error": "group_id required"}, status_code=400)
-    wdb = _get_db()
-    resolved_phase_id = _coerce_phase_db_id(phase_id)
-    if resolved_phase_id is None or not wdb.get_phase(resolved_phase_id):
-        return JSONResponse({"ok": False, "error": "Phase not found"}, status_code=404)
-    if not wdb.get_phase_group_by_code(group_id):
-        return JSONResponse({"ok": False, "error": "Group not found"}, status_code=404)
-    wdb.update_phase_group_assignment(resolved_phase_id, group_id)
     return {"ok": True}
 
 
@@ -1109,7 +972,7 @@ def api_phase_update(phase_id: str, body: dict[str, Any]):
     PHASE_FIELDS = {
         "name", "description",
         "delegate_agent", "delegate_timeout", "parallel_with", "rollback_target", "next_recommendation",
-        "group_id", "agent_id", "execution_type",
+        "agent_id", "execution_type",
     }
     phase_data = {k: v for k, v in body.items() if k in PHASE_FIELDS}
     if phase_data:

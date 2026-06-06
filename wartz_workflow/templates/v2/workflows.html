@@ -25,11 +25,6 @@ textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:160px;resiz
 {% endblock %}
 
 {% block content %}
-<div class="card" style="margin-bottom:16px">
-  <div class="card-title" style="margin-bottom:10px">CRUD workflow</div>
-  <div class="empty-note">Здесь задаются именованные workflow-контейнеры для проектов и фаз.</div>
-</div>
-
 <div class="workflow-crud">
   <section class="workflow-nav" id="workflowNav">
     {% for workflow in workflows %}
