@@ -1,0 +1,26 @@
+"""Regression tests for phase detail page metadata."""
+
+import pytest
+from fastapi.testclient import TestClient
+
+from wartz_workflow.ui import _get_db, _seed_to_sqlite, app
+
+
+client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def setup_db():
+    """Ensure seed data exists for phase detail page tests."""
+    wdb = _get_db()
+    if wdb.is_empty():
+        _seed_to_sqlite()
+
+
+def test_phase_detail_hides_next_recommendation_label_but_keeps_value():
+    response = client.get("/phase/1")
+
+    assert response.status_code == 200
+    assert "Следующая:" not in response.text
+    assert 'data-field="next_recommendation"' in response.text
+    assert 'aria-label="Рекомендация следующего шага"' in response.text

@@ -144,7 +144,7 @@
       <span>Откат: {{ phase.rollback_target }}</span>
       {% endif %}
       {% if phase.next_recommendation %}
-      <span>Следующая: <input type="text" class="inline-input" value="{{ phase.next_recommendation }}" data-field="next_recommendation" onblur="scheduleSave()" style="width:300px;display:inline"></span>
+      <span><input type="text" class="inline-input" value="{{ phase.next_recommendation }}" data-field="next_recommendation" onblur="scheduleSave()" style="width:300px;display:inline" aria-label="Рекомендация следующего шага"></span>
       {% endif %}
     </div>
   </div>
