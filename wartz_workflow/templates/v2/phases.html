@@ -99,7 +99,7 @@
           <div class="timeline-block timeline-parallel-group">
             <div class="timeline-parallel-label">⚡ parallel</div>
             {% for p in block.phases %}
-              <div class="timeline-item" data-phase-id="{{ p.id }}" data-phase-order="{{ p.phase_num }}" data-parallel-key="{{ p.parallel_group or '' }}">
+              <div class="timeline-item" data-phase-id="{{ p.id }}" data-phase-order="{{ p.phase_num }}" data-execution-type="{{ p.execution_type }}">
                 {{ phase_body(p) }}
                 <div class="timeline-arrow"{% if loop.last %} hidden{% endif %}>↓</div>
               </div>
@@ -108,7 +108,7 @@
         {% else %}
           {% set p = block.phases[0] %}
           <div class="timeline-block">
-            <div class="timeline-item" data-phase-id="{{ p.id }}" data-phase-order="{{ p.phase_num }}" data-parallel-key="{{ p.parallel_group or '' }}">
+            <div class="timeline-item" data-phase-id="{{ p.id }}" data-phase-order="{{ p.phase_num }}" data-execution-type="{{ p.execution_type }}">
               {{ phase_body(p) }}
               <div class="timeline-arrow" hidden>↓</div>
             </div>
@@ -143,18 +143,15 @@ function renderPhaseTimeline(items) {
   let idx = 0;
 
   while (idx < items.length) {
-    const groupKey = items[idx].dataset.parallelKey || '';
     const group = [items[idx]];
     idx++;
 
-    if (groupKey) {
-      while (idx < items.length && (items[idx].dataset.parallelKey || '') === groupKey) {
-        group.push(items[idx]);
-        idx++;
-      }
+    while (idx < items.length && (items[idx].dataset.executionType || 'sync') === 'parallel') {
+      group.push(items[idx]);
+      idx++;
     }
 
-    const isParallelGroup = Boolean(groupKey) && group.length > 1;
+    const isParallelGroup = group.length > 1;
     const block = document.createElement('div');
     block.className = 'timeline-block' + (isParallelGroup ? ' timeline-parallel-group' : '');
 

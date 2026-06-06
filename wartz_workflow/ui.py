@@ -807,15 +807,18 @@ def api_update_order(body: dict[str, Any]):
 
     wdb = _get_db()
     batch: list[tuple[int, int]] = []
+    ordered_phase_ids: list[int] = []
     for item in orders:
         resolved_phase_id = _coerce_phase_db_id(item.get("phase_id"))
         if resolved_phase_id is None:
             return JSONResponse({"ok": False, "error": "Invalid phase_id in orders"}, status_code=400)
         batch.append((resolved_phase_id, int(item["phase_order"])))
+        ordered_phase_ids.append(resolved_phase_id)
     wdb.batch_update_orders(batch)
 
-    # Rebuild PHASE_ORDER in config (volatile for this process)
+    # Keep runtime phase order aligned with the DB before the next seed sync.
     _update_config_phase_order()
+    schema.persist_phase_order_to_seed(wdb, ordered_phase_ids)
 
     return {"ok": True, "updated": len(batch)}
 
@@ -865,10 +868,16 @@ def api_phase_update(phase_id: str, body: dict[str, Any]):
 
 
 def _update_config_phase_order():
-    """Пересобрать PHASE_ORDER из актуального DB state."""
-    phases = _load_phases()
-    sorted_phases = sorted(phases, key=lambda p: p["phase_num"])
-    config.PHASE_ORDER[:] = [p["code"] for p in sorted_phases]
+    """Пересобрать runtime PHASE_ORDER из default workflow без повторного seed-sync."""
+    rows = [
+        phase
+        for phase in _get_db().get_phases()
+        if phase.get("workflow_code") == "default" and phase.get("is_seed_managed")
+    ]
+    if not rows:
+        return
+    sorted_rows = sorted(rows, key=lambda phase: phase["phase_order"])
+    config.PHASE_ORDER[:] = [phase["code"] for phase in sorted_rows]
 
 
 # ═══════════════════════════════════════════════════════════════════════

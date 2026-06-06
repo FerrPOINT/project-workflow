@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 import yaml
 
@@ -225,6 +225,47 @@ def persist_phase_update_to_seed(wdb: WorkflowDB, phase_id: int | str, body: dic
         seed_item["evidence"] = _serialize_seed_evidence(body.get("evidence") or [])
 
     raw[item_index] = seed_item
+    _write_seed_document(raw)
+
+
+def persist_phase_order_to_seed(wdb: WorkflowDB, ordered_phase_ids: Sequence[int | str]) -> None:
+    if not ordered_phase_ids:
+        return
+    if not _SEED_PATH.exists():
+        return
+
+    with open(_SEED_PATH, encoding="utf-8") as f:
+        raw = json.load(f)
+
+    seed_codes = [
+        str(item.get("code", item.get("id", ""))).strip()
+        for item in raw
+        if str(item.get("code", item.get("id", ""))).strip()
+    ]
+    if not seed_codes:
+        return
+
+    ordered_seed_codes: list[str] = []
+    for phase_id in ordered_phase_ids:
+        phase = wdb.get_phase(phase_id)
+        if not phase:
+            return
+        if phase.get("workflow_code") != "default" or not phase.get("is_seed_managed"):
+            continue
+        code = str(phase.get("code", phase_id)).strip()
+        if code in seed_codes:
+            ordered_seed_codes.append(code)
+
+    if set(ordered_seed_codes) != set(seed_codes):
+        return
+
+    order_index = {code: idx for idx, code in enumerate(ordered_seed_codes)}
+    raw.sort(
+        key=lambda item: order_index.get(
+            str(item.get("code", item.get("id", ""))).strip(),
+            len(order_index),
+        )
+    )
     _write_seed_document(raw)
 
 
