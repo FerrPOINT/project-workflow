@@ -195,15 +195,12 @@ def _group_phases(phases: list[dict]) -> dict[str, list[dict]]:
 
 def _load_phases() -> list[dict]:
     wdb = _get_db()
-    srv = _get_service()
     rows = wdb.get_phases()
     agents_by_id = {agent["id"]: agent for agent in wdb.get_agents()}
     result = []
     for p in rows:
         delegate_agent = p.get("delegate_agent")
         selected_agent = agents_by_id.get(p.get("agent_id")) if p.get("agent_id") else None
-        instructions = wdb.get_phase_instructions(p["code"])
-        has_parallel = any(i.get("execution_type") == "parallel" for i in instructions)
         result.append(
             {
                 "id": p["id"],
@@ -219,14 +216,28 @@ def _load_phases() -> list[dict]:
                 "delegate_timeout": p.get("delegate_timeout"),
                 "execution_type": p.get("execution_type", "sync"),
                 "parallel_with": p.get("parallel_with"),
-                "has_parallel_instructions": has_parallel,
             }
         )
     return result
 
 
-def _load_phase_detail(phase_id: str) -> dict | None:
-    phase = _get_service().get_phase_detail(phase_id)
+def _coerce_phase_db_id(raw_phase_id: int | str | None) -> int | None:
+    if isinstance(raw_phase_id, int):
+        return raw_phase_id if raw_phase_id > 0 else None
+    if raw_phase_id is None:
+        return None
+    token = str(raw_phase_id).strip()
+    if not token.isdigit():
+        return None
+    phase_id = int(token)
+    return phase_id if phase_id > 0 else None
+
+
+def _load_phase_detail(phase_id: int | str) -> dict | None:
+    resolved_phase_id = _coerce_phase_db_id(phase_id)
+    if resolved_phase_id is None:
+        return None
+    phase = _get_service().get_phase_detail(resolved_phase_id)
     if not phase:
         return None
     phase = dict(phase)
@@ -239,6 +250,11 @@ def _resolve_task_phase(current_phase: Any, wdb: db.WorkflowDB) -> tuple[str, di
     phase = wdb.get_phase(token)
     if phase:
         return token, phase
+    redirected = config.LEGACY_PHASE_REDIRECTS.get(token)
+    if redirected:
+        redirected_phase = wdb.get_phase(redirected)
+        if redirected_phase:
+            return redirected, redirected_phase
     try:
         numeric = int(token)
     except (TypeError, ValueError):
@@ -858,11 +874,12 @@ def api_phase_group_assign(phase_id: str, body: dict[str, Any]):
     if not group_id:
         return JSONResponse({"ok": False, "error": "group_id required"}, status_code=400)
     wdb = _get_db()
-    if not wdb.get_phase(phase_id):
+    resolved_phase_id = _coerce_phase_db_id(phase_id)
+    if resolved_phase_id is None or not wdb.get_phase(resolved_phase_id):
         return JSONResponse({"ok": False, "error": "Phase not found"}, status_code=404)
     if not wdb.get_phase_group_by_code(group_id):
         return JSONResponse({"ok": False, "error": "Group not found"}, status_code=404)
-    wdb.update_phase_group_assignment(phase_id, group_id)
+    wdb.update_phase_group_assignment(resolved_phase_id, group_id)
     return {"ok": True}
 
 
@@ -877,7 +894,12 @@ def api_update_order(body: dict[str, Any]):
         return JSONResponse({"ok": False, "error": "No orders provided"}, status_code=400)
 
     wdb = _get_db()
-    batch = [(o["phase_id"], o["phase_order"]) for o in orders]
+    batch: list[tuple[int, int]] = []
+    for item in orders:
+        resolved_phase_id = _coerce_phase_db_id(item.get("phase_id"))
+        if resolved_phase_id is None:
+            return JSONResponse({"ok": False, "error": "Invalid phase_id in orders"}, status_code=400)
+        batch.append((resolved_phase_id, int(item["phase_order"])))
     wdb.batch_update_orders(batch)
 
     # Rebuild PHASE_ORDER in config (volatile for this process)
@@ -925,7 +947,8 @@ def api_update_parallel(body: dict[str, Any]):
 @app.put("/api/phases/{phase_id}")
 def api_phase_update(phase_id: str, body: dict[str, Any]):
     srv = _get_service()
-    if not srv.get_phase_detail(phase_id):
+    resolved_phase_id = _coerce_phase_db_id(phase_id)
+    if resolved_phase_id is None or not srv.get_phase_detail(resolved_phase_id):
         return JSONResponse({"ok": False, "error": "Phase not found"}, status_code=404)
 
     forbidden_fields = [field for field in ("code", "phase_num", "phase_order") if field in body]
@@ -947,12 +970,20 @@ def api_phase_update(phase_id: str, body: dict[str, Any]):
     }
     phase_data = {k: v for k, v in body.items() if k in PHASE_FIELDS}
     if phase_data:
-        srv.update_phase(phase_id, phase_data)
+        srv.update_phase(resolved_phase_id, phase_data)
 
-    # Bulk replace instructions / checks / evidence
-    inst_ids = srv.save_instructions(phase_id, body.get("instructions", []))
-    check_ids = srv.save_checks(phase_id, body.get("checks", []))
-    ev_ids = srv.save_evidence(phase_id, body.get("evidence", []))
+    # Bulk replace instructions / checks / evidence only when explicitly provided
+    inst_ids: list[int] = []
+    check_ids: list[int] = []
+    ev_ids: list[int] = []
+    if "instructions" in body:
+        inst_ids = srv.save_instructions(resolved_phase_id, body.get("instructions", []))
+    if "checks" in body:
+        check_ids = srv.save_checks(resolved_phase_id, body.get("checks", []))
+    if "evidence" in body:
+        ev_ids = srv.save_evidence(resolved_phase_id, body.get("evidence", []))
+
+    schema.persist_phase_update_to_seed(srv._db, resolved_phase_id, body)
 
     return {"ok": True, "ids": {"instructions": inst_ids, "checks": check_ids, "evidence": ev_ids}}
 
@@ -986,12 +1017,16 @@ def api_single_phase_order(phase_id: str, body: dict[str, Any]):
         return JSONResponse({"ok": False, "error": "phase_order required"}, status_code=400)
 
     wdb = _get_db()
-    wdb.update_phase_order(phase_id, int(new_order))
+    resolved_phase_id = _coerce_phase_db_id(phase_id)
+    if resolved_phase_id is None or not wdb.get_phase(resolved_phase_id):
+        return JSONResponse({"ok": False, "error": "Phase not found"}, status_code=404)
+    new_order = int(new_order)
+    wdb.update_phase_order(resolved_phase_id, new_order)
 
     # Rebuild config order
     _update_config_phase_order()
 
-    return {"ok": True, "phase_id": phase_id, "phase_order": new_order}
+    return {"ok": True, "phase_id": resolved_phase_id, "phase_order": new_order}
 
 
 def _update_config_phase_order():

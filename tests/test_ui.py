@@ -13,6 +13,30 @@ from wartz_workflow.ui import _load_cli_reference, app
 client = TestClient(app)
 
 
+def _phase_row(code: str) -> dict:
+    from wartz_workflow.ui import _get_db
+
+    phase = _get_db().get_phase(code)
+    assert phase is not None
+    return phase
+
+
+def _phase_id(code: str) -> int:
+    return int(_phase_row(code)["id"])
+
+
+def _phase_detail_path(code: str) -> str:
+    return f"/phase/{_phase_id(code)}"
+
+
+def _phase_api_path(code: str) -> str:
+    return f"/api/phases/{_phase_id(code)}"
+
+
+def _phase_href(code: str) -> str:
+    return f'href="/phase/{_phase_id(code)}"'
+
+
 @pytest.fixture(autouse=True)
 def setup_db():
     """Populate DB with seed.json + sample task before UI tests."""
@@ -24,6 +48,14 @@ def setup_db():
     if not wdb.get_task_by_key("TASKNEIROKLYUCH-247"):
         wdb.create_task({
             "task_key": "TASKNEIROKLYUCH-247",
+            "title": "Добавить E2E тесты для workflow",
+            "status": "active",
+            "current_phase": "5",
+        })
+    else:
+        sample_task = wdb.get_task_by_key("TASKNEIROKLYUCH-247")
+        assert sample_task is not None
+        wdb.update_task(sample_task["id"], {
             "title": "Добавить E2E тесты для workflow",
             "status": "active",
             "current_phase": "5",
@@ -41,6 +73,15 @@ def setup_db():
         wdb.create_task({
             "project_id": project_id,
             "task_key": "UITEST-401",
+            "title": "Проверка project-aware UI",
+            "status": "active",
+            "current_phase": "-1",
+        })
+    else:
+        ui_task = wdb.get_task_by_key("UITEST-401")
+        assert ui_task is not None
+        wdb.update_task(ui_task["id"], {
+            "project_id": project_id,
             "title": "Проверка project-aware UI",
             "status": "active",
             "current_phase": "-1",
@@ -84,6 +125,15 @@ class TestIndexPage:
         assert '<div class="metric-label">Фазы</div>' not in response.text
         assert "TASKNEIROKLYUCH — TASKNEIROKLYUCH" not in response.text
         assert "UITEST — UI Test Project" not in response.text
+
+    def test_global_toast_is_hidden_by_default_until_action(self):
+        response = client.get("/")
+        assert response.status_code == 200
+        assert 'id="toast"' in response.text
+        assert 'aria-hidden="true"' in response.text
+        assert 'visibility:hidden' in response.text
+        assert 'opacity:0' in response.text
+        assert 'pointer-events:none' in response.text
 
 
 class TestPhasesPage:
@@ -147,6 +197,24 @@ class TestPhasesPage:
         assert "movePhase(this, 1)" in response.text
         assert "fetch('/api/phases/order'" in response.text
 
+    def test_phases_page_links_phase_detail_by_db_id_not_legacy_code(self):
+        response = client.get("/phases")
+        assert response.status_code == 200
+
+        phase = _phase_row("0.7")
+
+        assert f'href="/phase/{phase["id"]}"' in response.text
+        assert 'href="/phase/0.7"' not in response.text
+
+    def test_phases_page_reorder_payload_uses_db_id_not_legacy_code(self):
+        response = client.get("/phases")
+        assert response.status_code == 200
+
+        phase = _phase_row("0.7")
+
+        assert f'data-phase-id="{phase["id"]}"' in response.text
+        assert 'data-phase-id="0.7"' not in response.text
+
     def test_phases_page_shows_selected_agent_instead_of_hardcoded_critic(self):
         from wartz_workflow.ui import _get_db
 
@@ -166,8 +234,8 @@ class TestPhasesPage:
             response = client.get("/phases")
             assert response.status_code == 200
 
-            phase_09_html = response.text.split('href="/phase/0.9"', 1)[1].split('</a>', 1)[0]
-            phase_35_html = response.text.split('href="/phase/3.5"', 1)[1].split('</a>', 1)[0]
+            phase_09_html = response.text.split(_phase_href("0.9"), 1)[1].split('</a>', 1)[0]
+            phase_35_html = response.text.split(_phase_href("3.5"), 1)[1].split('</a>', 1)[0]
 
             assert "reviewer" in phase_09_html
             assert "🛡️ critic" not in response.text
@@ -175,6 +243,24 @@ class TestPhasesPage:
         finally:
             for code, agent_id in original_agent_ids.items():
                 wdb.update_phase(code, {"agent_id": agent_id})
+
+    def test_phases_page_uses_real_phase_execution_type_for_parallel_badge(self):
+        response = client.get("/phases")
+        assert response.status_code == 200
+
+        phase_html = response.text.split(_phase_href("7.5"), 1)[1].split('</a>', 1)[0]
+
+        assert "Code Review" in phase_html
+        assert "⚡ parallel" not in phase_html
+
+    def test_phases_api_exposes_real_execution_type_without_fake_instruction_parallel_flag(self):
+        response = client.get("/api/phases")
+        assert response.status_code == 200
+
+        phase = next(item for item in response.json()["phases"] if item["code"] == "7.5")
+
+        assert phase["execution_type"] == "sync"
+        assert "has_parallel_instructions" not in phase
 
     def test_build_parallel_phase_blocks_uses_execution_type_runs(self):
         from wartz_workflow.ui import _build_parallel_phase_blocks
@@ -210,18 +296,18 @@ class TestPhasesPage:
 
 class TestPhaseDetail:
     def test_phase_detail_returns_html(self):
-        response = client.get("/phase/-1")
+        response = client.get(_phase_detail_path("-1"))
         assert response.status_code == 200
         assert response.headers["content-type"] == "text/html; charset=utf-8"
         assert "Инструкции" in response.text
 
     def test_phase_detail_has_instructions(self):
-        response = client.get("/phase/-1")
+        response = client.get(_phase_detail_path("-1"))
         assert response.status_code == 200
         assert 'flow-card' in response.text
 
     def test_phase_detail_wraps_parallel_batch_in_gold_frame(self):
-        response = client.get("/phase/0.0a")
+        response = client.get(_phase_detail_path("0.0a"))
         assert response.status_code == 200
         assert 'class="flow-run group flow-batch"' in response.text
         assert '.flow-run.group.flow-batch{' in response.text
@@ -229,19 +315,32 @@ class TestPhaseDetail:
         assert 'class="flow-batch-label">⚡ parallel</div>' in response.text
 
     def test_phase_detail_rebuild_flow_keeps_gold_batch_wrapper(self):
-        response = client.get("/phase/0.0a")
+        response = client.get(_phase_detail_path("0.0a"))
         assert response.status_code == 200
         assert "run.className = 'flow-run ' + (group.length > 1 ? 'group flow-batch' : 'single');" in response.text
         assert "label.className = 'flow-batch-label';" in response.text
 
     def test_phase_detail_hides_code_and_order_meta(self):
-        response = client.get("/phase/1")
+        response = client.get(_phase_detail_path("1"))
         assert response.status_code == 200
         assert 'Code:' not in response.text
         assert 'data-field="code"' not in response.text
         assert 'data-field="phase_num"' not in response.text
         assert 'href="/phases"' in response.text
         assert 'Порядок меняется на странице фаз' in response.text
+
+    def test_phase_detail_404_on_legacy_code_route(self):
+        response = client.get("/phase/0.7")
+        assert response.status_code == 404
+
+    def test_phase_detail_save_uses_db_id_not_legacy_code(self):
+        response = client.get(_phase_detail_path("0.7"))
+        assert response.status_code == 200
+
+        phase = _phase_row("0.7")
+
+        assert f"fetch('/api/phases/{phase['id']}'" in response.text
+        assert "fetch('/api/phases/0.7'" not in response.text
 
     def test_phases_page_hides_code_and_number_visual_noise(self):
         response = client.get("/phases")
@@ -258,7 +357,7 @@ class TestPhaseDetail:
 
 class TestPhaseUpdate:
     def test_api_phase_update_bulk(self):
-        resp = client.put("/api/phases/-1", json={
+        resp = client.put(_phase_api_path("-1"), json={
             "instructions": [
                 {"description": "Test 1", "execution_type": "sync"},
                 {"description": "Test 2", "execution_type": "parallel"}
@@ -274,7 +373,7 @@ class TestPhaseUpdate:
         assert len(data["ids"]["evidence"]) == 1
 
     def test_api_phase_update_returns_ids(self):
-        resp = client.put("/api/phases/-1", json={
+        resp = client.put(_phase_api_path("-1"), json={
             "instructions": [{"description": "X", "execution_type": "sync"}]
         })
         data = resp.json()
@@ -288,21 +387,52 @@ class TestPhaseUpdate:
         original = wdb.get_phase("1")
         assert original is not None
         assert original["execution_type"] == "sync"
+        phase_api_path = _phase_api_path("1")
 
         try:
-            resp = client.put("/api/phases/1", json={"execution_type": "parallel"})
+            resp = client.put(phase_api_path, json={"execution_type": "parallel"})
             assert resp.status_code == 200
 
             updated = wdb.get_phase("1")
             assert updated is not None
             assert updated["execution_type"] == "parallel"
+
+            phases_resp = client.get("/api/phases")
+            assert phases_resp.status_code == 200
+            updated_phase = next(item for item in phases_resp.json()["phases"] if item["code"] == "1")
+            assert updated_phase["execution_type"] == "parallel"
         finally:
-            client.put("/api/phases/1", json={"execution_type": "sync"})
+            client.put(phase_api_path, json={"execution_type": "sync"})
+
+    def test_api_phase_update_metadata_only_keeps_existing_phase_content(self):
+        from wartz_workflow.ui import _get_db
+
+        wdb = _get_db()
+        before_counts = {
+            "instructions": len(wdb.get_phase_instructions("1")),
+            "checks": len(wdb.get_phase_checks("1")),
+            "evidence": len(wdb.get_phase_evidence("1")),
+        }
+        assert all(count > 0 for count in before_counts.values())
+        phase_api_path = _phase_api_path("1")
+
+        try:
+            resp = client.put(phase_api_path, json={"execution_type": "parallel"})
+            assert resp.status_code == 200
+
+            after_counts = {
+                "instructions": len(wdb.get_phase_instructions("1")),
+                "checks": len(wdb.get_phase_checks("1")),
+                "evidence": len(wdb.get_phase_evidence("1")),
+            }
+            assert after_counts == before_counts
+        finally:
+            client.put(phase_api_path, json={"execution_type": "sync"})
 
     def test_api_phase_update_rejects_phase_num_from_detail_editor(self):
         local_client = TestClient(app, raise_server_exceptions=False)
 
-        resp = local_client.put("/api/phases/1", json={
+        resp = local_client.put(_phase_api_path("1"), json={
             "phase_num": 1,
             "execution_type": "parallel",
         })
@@ -326,9 +456,9 @@ class TestDragDropAPI:
         try:
             resp = client.put("/api/phases/order", json={
                 "orders": [
-                    {"phase_id": "-1", "phase_order": 1},
-                    {"phase_id": "0.0a", "phase_order": 2},
-                    {"phase_id": "1", "phase_order": 3},
+                    {"phase_id": _phase_id("-1"), "phase_order": 1},
+                    {"phase_id": _phase_id("0.0a"), "phase_order": 2},
+                    {"phase_id": _phase_id("1"), "phase_order": 3},
                 ]
             })
             assert resp.status_code == 200
@@ -349,15 +479,17 @@ class TestDragDropAPI:
         assert data["ok"] is False
 
     def test_api_single_phase_order(self):
-        resp = client.put("/api/phases/1/order", json={"phase_order": 5})
+        phase_id = _phase_id("1")
+        resp = client.put(f"/api/phases/{phase_id}/order", json={"phase_order": 5})
         assert resp.status_code == 200
         data = resp.json()
         assert data["ok"] is True
-        assert data["phase_id"] == "1"
+        assert data["phase_id"] == phase_id
         assert data["phase_order"] == 5
 
     def test_api_single_phase_order_missing(self):
-        resp = client.put("/api/phases/1/order", json={})
+        phase_id = _phase_id("1")
+        resp = client.put(f"/api/phases/{phase_id}/order", json={})
         assert resp.status_code == 400
         data = resp.json()
         assert data["ok"] is False
@@ -648,7 +780,7 @@ class TestGroupsApi:
             create = client.post("/api/groups", json={"id": group_code, "name": "Assign Group"})
             assert create.status_code == 200
 
-            assign = client.put(f"/api/phases/{phase_code}/group", json={"group_id": group_code})
+            assign = client.put(f"/api/phases/{_phase_id(phase_code)}/group", json={"group_id": group_code})
             assert assign.status_code == 200
 
             phase = wdb.get_phase(phase_code)

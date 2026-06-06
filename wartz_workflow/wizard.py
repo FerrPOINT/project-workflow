@@ -105,8 +105,6 @@ class WizardEngine:
         for idx, item in enumerate(checklist, 1):
             lines.append(f"   {idx}. {item}")
 
-        if phase.is_blocker:
-            lines.extend(["", "🔴 Это BLOCKER фаза — пропустить нельзя."])
         if phase.is_delegated:
             lines.extend(["", f"🤖 Делегировано агенту: {phase.delegate.agent if phase.delegate else '—'}"])
 
@@ -137,7 +135,6 @@ class WizardEngine:
                 "name": p.name,
                 "description": p.description,
                 "min_time_min": p.min_time_min,
-                "is_blocker": p.is_blocker,
                 "is_delegated": p.is_delegated,
                 "is_critic": p.is_critic,
                 "execution_type": getattr(p, "execution_type", "sync"),

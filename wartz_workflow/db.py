@@ -231,6 +231,175 @@ class WorkflowDB:
             count = conn.execute("SELECT COUNT(*) FROM phases").fetchone()[0]
             return count == 0
 
+    def sync_phase_catalog(
+        self,
+        phases: list[dict],
+        phase_order: list[str],
+        phase_redirects: dict[str, str] | None = None,
+    ) -> None:
+        """Синхронизировать SQLite-каталог фаз с seed и мигрировать legacy-коды."""
+        phase_redirects = phase_redirects or {}
+
+        seed_by_code: dict[str, dict] = {}
+        for fallback_order, phase in enumerate(phases, start=1):
+            code = str(phase.get("code", phase.get("id", ""))).strip()
+            if not code:
+                continue
+            normalized = dict(phase)
+            normalized["code"] = code
+            normalized["phase_order"] = phase_order.index(code) + 1 if code in phase_order else fallback_order
+            seed_by_code[code] = normalized
+
+        desired_codes = set(seed_by_code)
+        removed_codes = [code for code in phase_redirects if code not in desired_codes]
+
+        with self._conn() as conn:
+            for code in phase_order:
+                phase = seed_by_code.get(code)
+                if not phase:
+                    continue
+
+                existing = conn.execute("SELECT id FROM phases WHERE code = ?", (code,)).fetchone()
+                payload = (
+                    phase["name"],
+                    phase.get("description") or "",
+                    phase.get("min_time_min", 0),
+                    phase["phase_order"],
+                    phase.get("next_recommendation"),
+                    phase.get("parallel_with"),
+                    phase.get("rollback_target"),
+                    phase.get("execution_type", "sync"),
+                )
+                if existing:
+                    conn.execute(
+                        """
+                        UPDATE phases
+                        SET name = ?,
+                            description = ?,
+                            min_time_min = ?,
+                            phase_order = ?,
+                            next_recommendation = ?,
+                            parallel_with = ?,
+                            rollback_target = ?,
+                            execution_type = ?
+                        WHERE id = ?
+                        """,
+                        (*payload, existing["id"]),
+                    )
+                else:
+                    conn.execute(
+                        """
+                        INSERT INTO phases (
+                            code, name, description, min_time_min, phase_order,
+                            next_recommendation, parallel_with, rollback_target, execution_type
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            code,
+                            *payload,
+                        ),
+                    )
+
+            phase_rows = {
+                row["code"]: dict(row)
+                for row in conn.execute("SELECT * FROM phases").fetchall()
+            }
+
+            for legacy_code, target_code in phase_redirects.items():
+                legacy_phase = phase_rows.get(legacy_code)
+                target_phase = phase_rows.get(target_code)
+                if not target_phase:
+                    continue
+
+                if not legacy_phase:
+                    continue
+
+                history_rows = conn.execute(
+                    "SELECT id, task_id, status, completed_at FROM task_history WHERE phase_id = ?",
+                    (legacy_phase["id"],),
+                ).fetchall()
+                for history_row in history_rows:
+                    target_history = conn.execute(
+                        "SELECT id, status, completed_at FROM task_history WHERE task_id = ? AND phase_id = ?",
+                        (history_row["task_id"], target_phase["id"]),
+                    ).fetchone()
+
+                    if target_history:
+                        merged_status = "done" if (
+                            history_row["status"] == "done" or target_history["status"] == "done"
+                        ) else target_history["status"]
+                        merged_completed_at = target_history["completed_at"] or history_row["completed_at"]
+                        conn.execute(
+                            "UPDATE task_history SET status = ?, completed_at = ? WHERE id = ?",
+                            (merged_status, merged_completed_at, target_history["id"]),
+                        )
+                        conn.execute("DELETE FROM task_history WHERE id = ?", (history_row["id"],))
+                    else:
+                        conn.execute(
+                            "UPDATE task_history SET phase_id = ? WHERE id = ?",
+                            (target_phase["id"], history_row["id"]),
+                        )
+
+            if removed_codes:
+                placeholders = ", ".join("?" for _ in removed_codes)
+                conn.execute(
+                    f"UPDATE phases SET parallel_with = NULL WHERE parallel_with IN ({placeholders})",
+                    removed_codes,
+                )
+
+            desired_ids = [phase_rows[code]["id"] for code in phase_order if code in phase_rows]
+            if desired_ids:
+                placeholders = ", ".join("?" for _ in desired_ids)
+                for table_name in ("instructions", "checks", "evidence"):
+                    conn.execute(
+                        f"DELETE FROM {table_name} WHERE phase_id IN ({placeholders})",
+                        desired_ids,
+                    )
+
+            for code in phase_order:
+                phase = seed_by_code.get(code)
+                if not phase or code not in phase_rows:
+                    continue
+                phase_id = phase_rows[code]["id"]
+
+                for fallback_step_num, inst in enumerate(phase.get("instructions", []), start=1):
+                    raw_skills = inst.get("skills")
+                    skills_payload = json.dumps(raw_skills, ensure_ascii=False) if isinstance(raw_skills, list) else raw_skills
+                    conn.execute(
+                        """
+                        INSERT INTO instructions (phase_id, step_num, description, execution_type, skills)
+                        VALUES (?, ?, ?, ?, ?)
+                        """,
+                        (
+                            phase_id,
+                            inst.get("step_num", fallback_step_num),
+                            inst["description"],
+                            inst.get("execution_type", "sync"),
+                            skills_payload,
+                        ),
+                    )
+
+                for check in phase.get("checks", []):
+                    conn.execute(
+                        "INSERT INTO checks (phase_id, description) VALUES (?, ?)",
+                        (phase_id, check["description"]),
+                    )
+
+                for evidence in phase.get("evidence", []):
+                    conn.execute(
+                        "INSERT INTO evidence (phase_id, description) VALUES (?, ?)",
+                        (phase_id, evidence.get("description", evidence.get("item", ""))),
+                    )
+
+            stale_rows = conn.execute("SELECT id, code FROM phases").fetchall()
+            for stale_row in stale_rows:
+                if stale_row["code"] in desired_codes:
+                    continue
+                conn.execute("DELETE FROM phases WHERE id = ?", (stale_row["id"],))
+
+            conn.commit()
+
     # ── Phase Groups ───────────────────────────────────────────────────
 
     def create_phase_group(self, data: dict) -> int:

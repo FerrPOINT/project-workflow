@@ -9,6 +9,14 @@ from wartz_workflow.ui import app
 client = TestClient(app)
 
 
+def _phase_id(code: str) -> int:
+    from wartz_workflow.ui import _get_db
+
+    phase = _get_db().get_phase(code)
+    assert phase is not None
+    return int(phase["id"])
+
+
 class TestIndex:
     def test_index(self):
         resp = client.get("/")
@@ -22,7 +30,7 @@ class TestIndex:
         assert resp.status_code == 200
 
     def test_phase_detail_page(self):
-        resp = client.get("/phase/0")
+        resp = client.get(f"/phase/{_phase_id('0.0a')}")
         assert resp.status_code == 200
 
     def test_settings_page(self):
@@ -59,10 +67,14 @@ class TestApiPhases:
         assert "phases" in data
 
     def test_get_phase(self):
-        resp = client.get("/api/phases/0")
+        resp = client.get(f"/api/phases/{_phase_id('0.0a')}")
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, dict)
+
+    def test_legacy_phase_code_route_removed_from_api(self):
+        resp = client.get("/api/phases/0.7")
+        assert resp.status_code == 404
 
     def test_update_phase_missing(self):
         resp = client.put("/api/phases/-9999", json={"body": {}})

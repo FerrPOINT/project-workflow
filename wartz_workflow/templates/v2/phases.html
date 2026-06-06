@@ -38,7 +38,7 @@
     <button type="button" class="phase-move-btn move-down-btn" onclick="movePhase(this, 1)" aria-label="Опустить фазу ниже">↓</button>
     <div class="phase-order-hint">Порядок<br>меняется тут</div>
   </div>
-  <a href="/phase/{{ p.code }}" class="timeline-card">
+  <a href="/phase/{{ p.id }}" class="timeline-card">
     <div class="timeline-name">{{ p.name }}</div>
     {% set d = p.description | default('') %}
     {% if d %}
@@ -47,7 +47,7 @@
     <div class="timeline-badges">
       {% if p.agent_name %}<span class="badge badge-agent">🤖 {{ p.agent_name }}</span>{% endif %}
       {% if p.is_delegated %}<span class="badge badge-delegate">👤 delegate</span>{% endif %}
-      {% if p.has_parallel_instructions %}<span class="badge badge-parallel">⚡ parallel</span>{% endif %}
+      {% if p.execution_type == 'parallel' %}<span class="badge badge-parallel">⚡ parallel</span>{% endif %}
     </div>
   </a>
 </div>
@@ -60,7 +60,7 @@
       <div class="timeline-block timeline-parallel-group">
         <div class="timeline-parallel-label">⚡ parallel</div>
         {% for p in block.phases %}
-          <div class="timeline-item" data-phase-id="{{ p.code }}" data-phase-order="{{ p.phase_num }}" data-parallel-key="{{ p.parallel_group or '' }}">
+          <div class="timeline-item" data-phase-id="{{ p.id }}" data-phase-order="{{ p.phase_num }}" data-parallel-key="{{ p.parallel_group or '' }}">
             {{ phase_body(p) }}
             <div class="timeline-arrow"{% if loop.last %} hidden{% endif %}>↓</div>
           </div>
@@ -69,7 +69,7 @@
     {% else %}
       {% set p = block.phases[0] %}
       <div class="timeline-block">
-        <div class="timeline-item" data-phase-id="{{ p.code }}" data-phase-order="{{ p.phase_num }}" data-parallel-key="{{ p.parallel_group or '' }}">
+        <div class="timeline-item" data-phase-id="{{ p.id }}" data-phase-order="{{ p.phase_num }}" data-parallel-key="{{ p.parallel_group or '' }}">
           {{ phase_body(p) }}
           <div class="timeline-arrow" hidden>↓</div>
         </div>

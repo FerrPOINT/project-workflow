@@ -9,11 +9,8 @@ SUITES_DIR = "/root/.hermes/skills/software-development"
 # Фазы workflow (порядок важен!)
 PHASE_ORDER = [
     "-1",      # Task Intake
-    "0.0a",    # Suite Verification (BLOCKER)
+    "0.0a",    # Suite Verification
     "0.01",    # Task Docs Setup
-    "0.01a",   # .gitignore Check (BLOCKER)
-    "0.01b",   # Token Verification (BLOCKER)
-    "0",       # Jira Init
     "0.00",    # Git Identity
     "0.000",   # Workspace
     "0.7",     # Repo Sync
@@ -40,8 +37,12 @@ PHASE_ORDER = [
     "10",      # Auto-Improve
 ]
 
-# BLOCKER фазы — если FAIL, workflow останавливается
-BLOCKER_PHASES = ["0.0a", "0.01a", "0.01b"]
+# Удалённые legacy-фазы перенаправляем на ближайшую живую setup-фазу
+LEGACY_PHASE_REDIRECTS = {
+    "0.01a": "0.00",
+    "0.01b": "0.00",
+    "0": "0.00",
+}
 
 # Делегируемые фазы (требуют delegate_task)
 DELEGATED_PHASES = [
@@ -59,7 +60,7 @@ RESEARCHER_PHASES = ["0.6", "1.5", "2", "7.6.R"]
 REVIEWER_PHASES = ["7.5", "7.6"]
 
 # Фазы с обязательными токенами
-TOKEN_REQUIRED_PHASES = ["0.01b", "0", "0.5", "8"]
+TOKEN_REQUIRED_PHASES = ["0.5", "8"]
 
 # Jira API
 JIRA_BASE_URL = "https://task.wemakedev.ru"

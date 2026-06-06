@@ -161,7 +161,6 @@ def render_phase_playbook(phase: Phase, context: Dict[str, Any]) -> Dict[str, An
         "phase_id": phase.id,
         "phase_name": phase.name,
         "description": phase.description,
-        "is_blocker": phase.is_blocker,
         "is_delegated": phase.is_delegated,
         "is_critic": phase.is_critic,
         "min_time_min": phase.min_time_min,

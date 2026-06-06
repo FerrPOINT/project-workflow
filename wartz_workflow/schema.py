@@ -74,7 +74,7 @@ def _build_phase_from_db(row: dict, wdb: WorkflowDB) -> Phase:
         name=row["name"],
         description=row.get("description") or "",
         min_time_min=row.get("min_time_min") or 0,
-        is_blocker=phase_code in config.BLOCKER_PHASES,
+        is_blocker=False,
         is_delegated=bool(delegate),
         is_critic=phase_code in config.CRITIC_PHASES,
         checks=checks,
@@ -108,8 +108,7 @@ def load_phases() -> List[Phase]:
     """Load all phases from DB ordered by phase_order."""
     wdb = WorkflowDB()
     wdb.init()
-    if wdb.is_empty():
-        return _load_phases_seed()
+    ensure_phase_catalog(wdb)
     rows = wdb.get_phases()
     return [_build_phase_from_db(r, wdb) for r in rows]
 
@@ -119,30 +118,132 @@ def load_phases() -> List[Phase]:
 _SEED_PATH = Path(__file__).parent / "references" / "seed.json"
 
 
-def _load_phases_seed() -> List[Phase]:
-    """Load phases from JSON seed and import into DB if empty."""
+def _read_seed_items() -> List[dict]:
     if not _SEED_PATH.exists():
         return []
-    import json
+
     with open(_SEED_PATH, encoding="utf-8") as f:
         raw = json.load(f)
 
-    _check_keys = {"description", "path", "expected", "fail_msg", "optional"}
-    _evidence_keys = {"item", "validator"}
-    _inst_keys = {"step", "example", "execution_type", "skills"}
-
-    # Ensure phases have code
+    allowed_codes = set(config.PHASE_ORDER)
+    filtered: list[dict] = []
     for item in raw:
-        if "code" not in item:
-            item["code"] = item.get("id", "")
+        code = item.get("code", item.get("id", ""))
+        if not code:
+            continue
+        if code not in allowed_codes:
+            continue
+        normalized = dict(item)
+        normalized["code"] = code
+        filtered.append(normalized)
 
+    filtered.sort(key=lambda item: config.PHASE_ORDER.index(item["code"]))
+    return filtered
+
+
+def _write_seed_document(items: List[dict]) -> None:
+    _SEED_PATH.write_text(
+        json.dumps(items, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _serialize_seed_instructions(items: list[dict]) -> List[dict]:
+    serialized: list[dict] = []
+    for idx, item in enumerate(items, start=1):
+        payload = {
+            "step_num": item.get("step_num", idx),
+            "description": item["description"],
+            "execution_type": item.get("execution_type", "sync"),
+        }
+        skills = item.get("skills")
+        if skills not in (None, [], ""):
+            payload["skills"] = skills
+        tool = item.get("tool")
+        if tool is not None:
+            payload["tool"] = tool
+        serialized.append(payload)
+    return serialized
+
+
+def _serialize_seed_checks(items: list[dict]) -> List[dict]:
+    return [{"description": item["description"]} for item in items]
+
+
+def _serialize_seed_evidence(items: list[dict]) -> List[dict]:
+    return [{"description": item.get("description", item.get("item", ""))} for item in items]
+
+
+def persist_phase_update_to_seed(wdb: WorkflowDB, phase_id: int | str, body: dict) -> None:
+    relevant_top_level_fields = {
+        "name",
+        "description",
+        "delegate_agent",
+        "delegate_timeout",
+        "parallel_with",
+        "rollback_target",
+        "next_recommendation",
+        "execution_type",
+    }
+    relevant_collection_fields = {"instructions", "checks", "evidence"}
+    if not (relevant_top_level_fields.intersection(body) or relevant_collection_fields.intersection(body)):
+        return
+    if not _SEED_PATH.exists():
+        return
+
+    with open(_SEED_PATH, encoding="utf-8") as f:
+        raw = json.load(f)
+
+    phase = wdb.get_phase(phase_id)
+    if not phase:
+        return
+    code = str(phase.get("code", phase_id))
+
+    item_index = next(
+        (
+            idx
+            for idx, item in enumerate(raw)
+            if str(item.get("code", item.get("id", ""))).strip() == code
+        ),
+        None,
+    )
+    if item_index is None:
+        return
+
+    seed_item = dict(raw[item_index])
+    seed_item["code"] = code
+
+    for field in relevant_top_level_fields:
+        if field in body:
+            seed_item[field] = phase.get(field)
+
+    if "instructions" in body:
+        seed_item["instructions"] = _serialize_seed_instructions(body.get("instructions") or [])
+    if "checks" in body:
+        seed_item["checks"] = _serialize_seed_checks(body.get("checks") or [])
+    if "evidence" in body:
+        seed_item["evidence"] = _serialize_seed_evidence(body.get("evidence") or [])
+
+    raw[item_index] = seed_item
+    _write_seed_document(raw)
+
+
+def ensure_phase_catalog(wdb: WorkflowDB) -> None:
+    seed_items = _read_seed_items()
+    if not seed_items:
+        return
+    wdb.sync_phase_catalog(seed_items, config.PHASE_ORDER, config.LEGACY_PHASE_REDIRECTS)
+
+
+def _load_phases_seed() -> List[Phase]:
+    """Load phases from JSON seed and import into DB if empty."""
+    raw = _read_seed_items()
+    if not raw:
+        return []
     wdb = WorkflowDB()
     wdb.init()
+    ensure_phase_catalog(wdb)
     rows = wdb.get_phases()
-    if not rows:
-        # Import into DB so they get integer IDs and code
-        wdb.import_phases(raw)
-        rows = wdb.get_phases()
 
     return [_build_phase_from_db(r, wdb) for r in rows]
 
@@ -183,7 +284,7 @@ def _parse_old_yaml(item: dict) -> Phase:
         name=item["name"],
         description=item.get("description", ""),
         min_time_min=item.get("min_time_min", 0),
-        is_blocker=code in config.BLOCKER_PHASES,
+        is_blocker=False,
         is_delegated=bool(delegate),
         is_critic=code in config.CRITIC_PHASES,
         checks=checks,

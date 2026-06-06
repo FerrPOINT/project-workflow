@@ -53,18 +53,6 @@ def run_phase(repo: str, task_key: str, phase_name: str) -> Tuple[bool, str]:
             state.mark_phase_complete(repo, task_key, phase_name, "verify-suite.sh passed")
         return ok, msg
 
-    if phase_name == "0.01a":
-        ok, msg = verify.check_gitignore(repo)
-        if ok:
-            state.mark_phase_complete(repo, task_key, phase_name, ".gitignore correct")
-        return ok, msg
-
-    if phase_name == "0.01b":
-        ok, msg = verify.check_tokens()
-        if ok:
-            state.mark_phase_complete(repo, task_key, phase_name, "tokens verified")
-        return ok, msg
-
     if phase_name == "0.00":
         ok, msg = verify.check_git_identity()
         if ok:
@@ -133,7 +121,7 @@ def get_phase_checklist_raw(phase_name: str) -> List[str]:
     """Вернуть raw список чеклиста для фазы (для JSON output)."""
     checklists = {
         "-1": ["Прочитать Jira тикет", "Извлечь acceptance criteria", "Зафиксировать в requirements.md", "Проверить assignee"],
-        "0": ["Прочитать Jira тикет", "Извлечь acceptance criteria", "Зафиксировать в requirements.md", "Проверить assignee"],
+        "0.00": ["Проверить git config user.name", "Проверить git config user.email", "Убедиться что identity выставлен корректно"],
         "0.5": ["Перевести Jira в статус 'В работе'", "Зафиксировать transition в changelog.md"],
         "0.6": ["Запустить wartzresearcher (delegate_task)", "Получить отчёт по dataflow", "Зафиксировать findings", "Дождаться COMPLETE"],
         "1": ["Определить репозиторий(и)", "Проверить target branch", "Синхронизировать ветку", "Проверить окружение"],
@@ -187,14 +175,10 @@ def show_all_phases() -> None:
 
     phase_meta = {
         "-1": ("Task Intake", "", 1),
-        "0.0a": ("Suite Verification", "🔴 BLOCKER", 2),
-        "0.0": ("Tool Verification", "", 2),
+        "0.0a": ("Suite Verification", "", 2),
+        "0.01": ("Task Docs Setup", "", 2),
         "0.00": ("Git Identity", "", 1),
         "0.000": ("Workspace", "", 1),
-        "0.01": ("Task Docs Setup", "", 2),
-        "0.01a": (".gitignore Check", "🔴 BLOCKER", 1),
-        "0.01b": ("Token Verification", "🔴 BLOCKER", 1),
-        "0": ("Jira Init", "", 3),
         "0.5": ("Jira Transition", "", 1),
         "0.6": ("Researcher #1", "🤖 delegate", 5),
         "0.7": ("Repo Sync", "", 2),

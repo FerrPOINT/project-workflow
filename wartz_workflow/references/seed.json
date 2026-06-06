@@ -10,27 +10,24 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Перейди к Phase 0.0a — verify-suite.sh",
-    "execution_type": "sync",
+    "execution_type": "parallel",
     "instructions": [
       {
-        "id": 179,
-        "phase_id": "-1",
         "step_num": 1,
-        "description": "",
-        "execution_type": "sync",
-        "tool": null
-      },
-      {
-        "id": 180,
-        "phase_id": "-1",
-        "step_num": 2,
-        "description": "",
-        "execution_type": "sync",
-        "tool": null
+        "description": "X",
+        "execution_type": "sync"
       }
     ],
-    "checks": [],
-    "evidence": [],
+    "checks": [
+      {
+        "description": "Check 1"
+      }
+    ],
+    "evidence": [
+      {
+        "description": "Evidence 1"
+      }
+    ],
     "checkups": [
       {
         "id": 1,
@@ -62,63 +59,38 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Перейди к Phase 0.01 — создать task docs",
-    "execution_type": "sync",
+    "execution_type": "parallel",
     "instructions": [
       {
-        "id": 106,
-        "phase_id": "0.0a",
         "step_num": 1,
         "description": "Запустить verify-suite.sh в репо",
-        "execution_type": "parallel",
-        "tool": null
+        "execution_type": "parallel"
       },
       {
-        "id": 107,
-        "phase_id": "0.0a",
         "step_num": 2,
         "description": "Если FAIL — читай ошибку, исправляй, повторяй",
-        "execution_type": "parallel",
-        "tool": null
+        "execution_type": "parallel"
       },
       {
-        "id": 108,
-        "phase_id": "0.0a",
         "step_num": 3,
         "description": "Если WARNINGS — оцени критичность, большинство можно игнорировать",
-        "execution_type": "parallel",
-        "tool": null
+        "execution_type": "parallel"
       }
     ],
     "checks": [
       {
-        "id": 51,
-        "phase_id": "0.0a",
-        "description": "GLAB_TOKEN задан",
-        "command": null,
-        "optional": 0
+        "description": "GLAB_TOKEN задан"
       },
       {
-        "id": 52,
-        "phase_id": "0.0a",
-        "description": "JIRA_ACCESS_TOKEN или JIRA_TOKEN задан",
-        "command": null,
-        "optional": 0
+        "description": "JIRA_ACCESS_TOKEN или JIRA_TOKEN задан"
       },
       {
-        "id": 53,
-        "phase_id": "0.0a",
-        "description": "verify-suite.sh проходит",
-        "command": null,
-        "optional": 0
+        "description": "verify-suite.sh проходит"
       }
     ],
     "evidence": [
       {
-        "id": 56,
-        "phase_id": "0.0a",
-        "description": "Вывод verify-suite.sh (последние 20 строк)",
-        "validator": null,
-        "collected": 0
+        "description": "Вывод verify-suite.sh (последние 20 строк)"
       }
     ],
     "checkups": [
@@ -172,82 +144,6 @@
     "code": "0.0a"
   },
   {
-    "name": "Jira Init",
-    "description": "Прочитать Jira тикет, зафиксировать в requirements.md",
-    "phase_order": 6,
-    "delegate_agent": null,
-    "delegate_timeout": null,
-    "delegate_max_cycles": null,
-    "delegate_toolsets": null,
-    "parallel_with": null,
-    "rollback_target": null,
-    "next_recommendation": "Перейди к Phase 0.5 — Jira Transition",
-    "execution_type": "sync",
-    "instructions": [
-      {
-        "id": 18,
-        "phase_id": "0",
-        "step_num": 1,
-        "description": "Прочитать Jira тикет через wartz-jira или curl",
-        "execution_type": "sync",
-        "tool": null
-      },
-      {
-        "id": 19,
-        "phase_id": "0",
-        "step_num": 2,
-        "description": "Записать в requirements.md: Summary, Description, AC",
-        "execution_type": "sync",
-        "tool": null
-      },
-      {
-        "id": 20,
-        "phase_id": "0",
-        "step_num": 3,
-        "description": "Если есть изображения из Jira — приложить ссылки к requirements.md",
-        "execution_type": "sync",
-        "tool": null
-      }
-    ],
-    "checks": [
-      {
-        "id": 10,
-        "phase_id": "0",
-        "description": "requirements.md содержит AC из Jira",
-        "command": null,
-        "optional": 0
-      }
-    ],
-    "evidence": [
-      {
-        "id": 9,
-        "phase_id": "0",
-        "description": "requirements.md с AC",
-        "validator": null,
-        "collected": 0
-      }
-    ],
-    "checkups": [
-      {
-        "id": 10,
-        "phase_id": "0",
-        "name": "Check PhaseCheck(type='file_exists', description='requirements.md содержит AC из Jira', path='info/{sprint}/{task_dir}/requirements.md', expected=None, command=None, fail_msg='requirements.md пуст — скопируй AC из Jira', optional=False)",
-        "check_type": "jira_status",
-        "target": "",
-        "interval_min": 0,
-        "last_status": "unknown",
-        "last_run": null,
-        "fail_action": "warn",
-        "check_id": null,
-        "passed": 0,
-        "output": null,
-        "ran_at": "2026-06-03 11:10:13"
-      }
-    ],
-    "questions": [],
-    "code": "0"
-  },
-  {
     "name": "Task Docs Setup",
     "description": "Создать info/ папку задачи с mandatory файлами",
     "phase_order": 3,
@@ -257,88 +153,54 @@
     "delegate_toolsets": null,
     "parallel_with": null,
     "rollback_target": null,
-    "next_recommendation": "Перейди к Phase 0.01a — .gitignore check",
+    "next_recommendation": "Перейди к Phase 0.00 — Git Identity",
     "execution_type": "sync",
     "instructions": [
       {
-        "id": 8,
-        "phase_id": "0.01",
         "step_num": 1,
         "description": "Определить sprint (sprint4, sprint5...)",
-        "execution_type": "sync",
-        "tool": null
+        "execution_type": "sync"
       },
       {
-        "id": 9,
-        "phase_id": "0.01",
         "step_num": 2,
         "description": "Найти следующий номер в info/{sprint}/",
-        "execution_type": "sync",
-        "tool": null
+        "execution_type": "sync"
       },
       {
-        "id": 10,
-        "phase_id": "0.01",
         "step_num": 3,
         "description": "Создать папку {NNN}_{task_id}",
-        "execution_type": "sync",
-        "tool": null
+        "execution_type": "sync"
       },
       {
-        "id": 11,
-        "phase_id": "0.01",
         "step_num": 4,
         "description": "Создать progress.json с 30 фазами",
-        "execution_type": "sync",
-        "tool": null
+        "execution_type": "sync"
       },
       {
-        "id": 12,
-        "phase_id": "0.01",
         "step_num": 5,
         "description": "Заполнить requirements.md из Jira",
-        "execution_type": "sync",
-        "tool": null
+        "execution_type": "sync"
       },
       {
-        "id": 13,
-        "phase_id": "0.01",
         "step_num": 6,
         "description": "Заполнить test-cases.md (TDD — ДО кода)",
-        "execution_type": "sync",
-        "tool": null
+        "execution_type": "sync"
       }
     ],
     "checks": [
       {
-        "id": 5,
-        "phase_id": "0.01",
-        "description": "info/ есть в .gitignore",
-        "command": null,
-        "optional": 0
+        "description": "info/ есть в .gitignore"
       },
       {
-        "id": 6,
-        "phase_id": "0.01",
-        "description": "Папка info/sprintN/NNN_task-* создана",
-        "command": null,
-        "optional": 0
+        "description": "Папка info/sprintN/NNN_task-* создана"
       }
     ],
     "evidence": [
       {
-        "id": 5,
-        "phase_id": "0.01",
-        "description": "Все 5 mandatory файлов созданы: progress.json, requirements.md, current-stage.md, changelog.md, test-cases.md",
-        "validator": null,
-        "collected": 0
+        "description": "Все 5 mandatory файлов созданы: progress.json, requirements.md, current-stage.md, changelog.md, test-cases.md"
       },
       {
-        "id": 4,
-        "phase_id": "0.01",
-        "description": "Путь к task dir записан в state",
-        "validator": null,
-        "collected": 0
+        "description": "Путь к task dir записан в state"
       }
     ],
     "checkups": [
@@ -377,74 +239,6 @@
     "code": "0.01"
   },
   {
-    "name": ".gitignore Check",
-    "description": "Убедиться что info/ не попадёт в git",
-    "phase_order": 4,
-    "delegate_agent": null,
-    "delegate_timeout": null,
-    "delegate_max_cycles": null,
-    "delegate_toolsets": null,
-    "parallel_with": null,
-    "rollback_target": null,
-    "next_recommendation": "Перейди к Phase 0.01b — token verification",
-    "execution_type": "sync",
-    "instructions": [
-      {
-        "id": 14,
-        "phase_id": "0.01a",
-        "step_num": 1,
-        "description": "Проверить grep info/ .gitignore",
-        "execution_type": "sync",
-        "tool": null
-      },
-      {
-        "id": 15,
-        "phase_id": "0.01a",
-        "step_num": 2,
-        "description": "Если нет — echo 'info/' >> .gitignore",
-        "execution_type": "sync",
-        "tool": null
-      }
-    ],
-    "checks": [
-      {
-        "id": 7,
-        "phase_id": "0.01a",
-        "description": ".gitignore содержит info/",
-        "command": null,
-        "optional": 0
-      }
-    ],
-    "evidence": [
-      {
-        "id": 6,
-        "phase_id": "0.01a",
-        "description": "grep info/ .gitignore",
-        "validator": null,
-        "collected": 0
-      }
-    ],
-    "checkups": [
-      {
-        "id": 7,
-        "phase_id": "0.01a",
-        "name": "Check PhaseCheck(type='file_exists', description='.gitignore содержит info/', path='.gitignore', expected=None, command=None, fail_msg='CRITICAL: info/ не в .gitignore — task docs утекут в репо', optional=False)",
-        "check_type": "jira_status",
-        "target": "",
-        "interval_min": 0,
-        "last_status": "unknown",
-        "last_run": null,
-        "fail_action": "warn",
-        "check_id": null,
-        "passed": 0,
-        "output": null,
-        "ran_at": "2026-06-03 11:10:13"
-      }
-    ],
-    "questions": [],
-    "code": "0.01a"
-  },
-  {
     "name": "Preflight",
     "description": "Определить репо, ветку, синхронизировать",
     "phase_order": 13,
@@ -458,68 +252,19 @@
     "execution_type": "sync",
     "instructions": [
       {
-        "id": 37,
-        "phase_id": "1",
         "step_num": 1,
-        "description": "git checkout develop",
-        "execution_type": "sync",
-        "tool": null
-      },
-      {
-        "id": 38,
-        "phase_id": "1",
-        "step_num": 2,
-        "description": "git pull origin develop",
-        "execution_type": "sync",
-        "tool": null
-      },
-      {
-        "id": 39,
-        "phase_id": "1",
-        "step_num": 3,
-        "description": "git checkout -b {task_id}-short-desc",
-        "execution_type": "sync",
-        "tool": null
-      },
-      {
-        "id": 40,
-        "phase_id": "1",
-        "step_num": 4,
-        "description": "git push -u origin {branch}",
-        "execution_type": "sync",
-        "tool": null
+        "description": "X",
+        "execution_type": "sync"
       }
     ],
     "checks": [
       {
-        "id": 18,
-        "phase_id": "1",
-        "description": "git pull origin develop без конфликтов",
-        "command": null,
-        "optional": 0
-      },
-      {
-        "id": 17,
-        "phase_id": "1",
-        "description": "Ветка от develop, названа TASKNEIROKLYUCH-*",
-        "command": null,
-        "optional": 0
+        "description": "Check 1"
       }
     ],
     "evidence": [
       {
-        "id": 19,
-        "phase_id": "1",
-        "description": "git branch показывает правильную ветку",
-        "validator": null,
-        "collected": 0
-      },
-      {
-        "id": 20,
-        "phase_id": "1",
-        "description": "git log показывает что develop актуален",
-        "validator": null,
-        "collected": 0
+        "description": "Evidence 1"
       }
     ],
     "checkups": [
@@ -558,103 +303,6 @@
     "code": "1"
   },
   {
-    "name": "Token Verification",
-    "description": "Jira и GitLab токены рабочие",
-    "phase_order": 5,
-    "delegate_agent": null,
-    "delegate_timeout": null,
-    "delegate_max_cycles": null,
-    "delegate_toolsets": null,
-    "parallel_with": null,
-    "rollback_target": null,
-    "next_recommendation": "Перейди к Phase 0 — Jira Init",
-    "execution_type": "sync",
-    "instructions": [
-      {
-        "id": 16,
-        "phase_id": "0.01b",
-        "step_num": 1,
-        "description": "Проверить Jira API: curl -u $JIRA_USER:$JIRA_ACCESS_TOKEN {jira_url}/rest/api/2/myself",
-        "execution_type": "sync",
-        "tool": null
-      },
-      {
-        "id": 17,
-        "phase_id": "0.01b",
-        "step_num": 2,
-        "description": "Проверить GitLab API: curl -H 'Authorization: Bearer $GLAB_TOKEN' {gitlab_url}/api/v4/user",
-        "execution_type": "sync",
-        "tool": null
-      }
-    ],
-    "checks": [
-      {
-        "id": 9,
-        "phase_id": "0.01b",
-        "description": "GitLab API отвечает",
-        "command": null,
-        "optional": 0
-      },
-      {
-        "id": 8,
-        "phase_id": "0.01b",
-        "description": "Jira API отвечает",
-        "command": null,
-        "optional": 0
-      }
-    ],
-    "evidence": [
-      {
-        "id": 8,
-        "phase_id": "0.01b",
-        "description": "Вывод whoami GitLab",
-        "validator": null,
-        "collected": 0
-      },
-      {
-        "id": 7,
-        "phase_id": "0.01b",
-        "description": "Вывод whoami Jira",
-        "validator": null,
-        "collected": 0
-      }
-    ],
-    "checkups": [
-      {
-        "id": 8,
-        "phase_id": "0.01b",
-        "name": "Check PhaseCheck(type='api_ping', description='Jira API отвечает', path=None, expected=None, command=None, fail_msg='Jira API недоступен — проверь токен', optional=False)",
-        "check_type": "jira_status",
-        "target": "",
-        "interval_min": 0,
-        "last_status": "unknown",
-        "last_run": null,
-        "fail_action": "warn",
-        "check_id": null,
-        "passed": 0,
-        "output": null,
-        "ran_at": "2026-06-03 11:10:13"
-      },
-      {
-        "id": 9,
-        "phase_id": "0.01b",
-        "name": "Check PhaseCheck(type='api_ping', description='GitLab API отвечает', path=None, expected=None, command=None, fail_msg='GitLab API недоступен — проверь GLAB_TOKEN', optional=False)",
-        "check_type": "jira_status",
-        "target": "",
-        "interval_min": 0,
-        "last_status": "unknown",
-        "last_run": null,
-        "fail_action": "warn",
-        "check_id": null,
-        "passed": 0,
-        "output": null,
-        "ran_at": "2026-06-03 11:10:13"
-      }
-    ],
-    "questions": [],
-    "code": "0.01b"
-  },
-  {
     "name": "Git Identity",
     "description": "Проверить git identity перед коммитами",
     "phase_order": 7,
@@ -665,56 +313,35 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Перейди к Phase 0.000 — Workspace",
-    "execution_type": "sync",
+    "execution_type": "parallel",
     "instructions": [
       {
-        "id": 21,
-        "phase_id": "0.00",
         "step_num": 1,
         "description": "Проверить git config user.email",
-        "execution_type": "sync",
-        "tool": null
+        "execution_type": "sync"
       },
       {
-        "id": 22,
-        "phase_id": "0.00",
         "step_num": 2,
         "description": "Проверить git config user.name",
-        "execution_type": "sync",
-        "tool": null
+        "execution_type": "sync"
       },
       {
-        "id": 23,
-        "phase_id": "0.00",
         "step_num": 3,
         "description": "Если пусто — настроить",
-        "execution_type": "sync",
-        "tool": null
+        "execution_type": "sync"
       }
     ],
     "checks": [
       {
-        "id": 11,
-        "phase_id": "0.00",
-        "description": "git config user.email и user.name заданы",
-        "command": "git config user.email && git config user.name",
-        "optional": 0
+        "description": "git config user.email и user.name заданы"
       }
     ],
     "evidence": [
       {
-        "id": 10,
-        "phase_id": "0.00",
-        "description": "git config user.email",
-        "validator": null,
-        "collected": 0
+        "description": "git config user.email"
       },
       {
-        "id": 11,
-        "phase_id": "0.00",
-        "description": "git config user.name",
-        "validator": null,
-        "collected": 0
+        "description": "git config user.name"
       }
     ],
     "checkups": [

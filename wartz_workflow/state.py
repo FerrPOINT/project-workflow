@@ -218,17 +218,13 @@ def generate_progress_json(task_key: str, task_id: str, title: str, sprint: str)
     phases_data = [
         {"phase": "-1", "name": "Task Intake", "status": "pending", "min_time_min": 1},
         {"phase": "0.0a", "name": "Suite Verification", "status": "pending", "min_time_min": 2},
-        {"phase": "0.0", "name": "Tool Verification", "status": "pending", "min_time_min": 2},
+        {"phase": "0.01", "name": "Task Docs Setup", "status": "pending", "min_time_min": 2},
         {"phase": "0.00", "name": "Git Identity", "status": "pending", "min_time_min": 1},
         {"phase": "0.000", "name": "Workspace", "status": "pending", "min_time_min": 1},
-        {"phase": "0.01", "name": "Task Docs Setup", "status": "pending", "min_time_min": 2},
-        {"phase": "0.01a", "name": ".gitignore Check", "status": "pending", "min_time_min": 1},
-        {"phase": "0.01b", "name": "Token Verification", "status": "pending", "min_time_min": 1},
-        {"phase": "0", "name": "Jira Init", "status": "pending", "min_time_min": 3},
-        {"phase": "0.5", "name": "Jira Transition", "status": "pending", "min_time_min": 1},
-        {"phase": "0.6", "name": "Researcher #1", "status": "pending", "min_time_min": 5},
         {"phase": "0.7", "name": "Repo Sync", "status": "pending", "min_time_min": 2},
         {"phase": "0.9", "name": "CriticGate-0.9", "status": "pending", "min_time_min": 2},
+        {"phase": "0.5", "name": "Jira Transition", "status": "pending", "min_time_min": 1},
+        {"phase": "0.6", "name": "Researcher #1", "status": "pending", "min_time_min": 5},
         {"phase": "1", "name": "Preflight", "status": "pending", "min_time_min": 10},
         {"phase": "1.5", "name": "Deep Research", "status": "pending", "min_time_min": 5},
         {"phase": "2", "name": "Research Synthesis", "status": "pending", "min_time_min": 10},
@@ -246,6 +242,7 @@ def generate_progress_json(task_key: str, task_id: str, title: str, sprint: str)
         {"phase": "7.7", "name": "CriticGate-PostQA", "status": "pending", "min_time_min": 5},
         {"phase": "8", "name": "Jira Done", "status": "pending", "min_time_min": 2},
         {"phase": "9", "name": "Retro", "status": "pending", "min_time_min": 10},
+        {"phase": "10", "name": "Auto-Improve", "status": "pending", "min_time_min": 10},
     ]
 
     data = {
