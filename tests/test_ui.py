@@ -176,40 +176,36 @@ class TestPhasesPage:
             for code, agent_id in original_agent_ids.items():
                 wdb.update_phase(code, {"agent_id": agent_id})
 
-    def test_phases_page_wraps_linked_parallel_phases_in_shared_frame(self):
-        from wartz_workflow.ui import _get_db
+    def test_build_parallel_phase_blocks_uses_execution_type_runs(self):
+        from wartz_workflow.ui import _build_parallel_phase_blocks
 
-        wdb = _get_db()
-        tracked_codes = ["4.5", "5", "5.5"]
-        original_links = {
-            code: (wdb.get_phase(code) or {}).get("parallel_with")
-            for code in tracked_codes
-        }
+        phases = [
+            {"code": "4.5", "execution_type": "sync", "parallel_with": None, "phase_num": 16},
+            {"code": "5", "execution_type": "parallel", "parallel_with": None, "phase_num": 17},
+            {"code": "5.5", "execution_type": "sync", "parallel_with": None, "phase_num": 18},
+        ]
 
-        try:
-            wdb.update_phase_parallel("4.5", "5")
-            wdb.update_phase_parallel("5", "4.5")
-            wdb.update_phase_parallel("5.5", None)
+        blocks = _build_parallel_phase_blocks(phases)
 
-            response = client.get("/phases")
-            assert response.status_code == 200
-            assert 'timeline-parallel-group' in response.text
-            assert 'class="timeline-parallel-label">⚡ parallel</div>' in response.text
+        assert [block["kind"] for block in blocks] == ["parallel", "single"]
+        assert [[phase["code"] for phase in block["phases"]] for block in blocks] == [["4.5", "5"], ["5.5"]]
+        assert [phase.get("parallel_group") for phase in blocks[0]["phases"]] == ["4.5", "4.5"]
+        assert blocks[1]["phases"][0].get("parallel_group") is None
 
-            group_match = re.search(
-                r'<div class="timeline-block timeline-parallel-group">.*?href="/phase/4.5".*?href="/phase/5".*?</div>\s*<div class="timeline-arrow timeline-arrow-block"',
-                response.text,
-                re.S,
-            )
-            assert group_match is not None
+    def test_build_parallel_phase_blocks_ignores_parallel_with_when_types_are_sync(self):
+        from wartz_workflow.ui import _build_parallel_phase_blocks
 
-            phase_45_html = response.text.split('href="/phase/4.5"', 1)[1].split('</a>', 1)[0]
-            phase_5_html = response.text.split('href="/phase/5"', 1)[1].split('</a>', 1)[0]
-            assert 'badge-link' not in phase_45_html
-            assert 'badge-link' not in phase_5_html
-        finally:
-            for code, parallel_with in original_links.items():
-                wdb.update_phase_parallel(code, parallel_with)
+        phases = [
+            {"code": "4.5", "execution_type": "sync", "parallel_with": "5", "phase_num": 16},
+            {"code": "5", "execution_type": "sync", "parallel_with": "4.5", "phase_num": 17},
+            {"code": "5.5", "execution_type": "sync", "parallel_with": None, "phase_num": 18},
+        ]
+
+        blocks = _build_parallel_phase_blocks(phases)
+
+        assert [block["kind"] for block in blocks] == ["single", "single", "single"]
+        assert [[phase["code"] for phase in block["phases"]] for block in blocks] == [["4.5"], ["5"], ["5.5"]]
+        assert all(block["phases"][0].get("parallel_group") is None for block in blocks)
 
 
 class TestPhaseDetail:

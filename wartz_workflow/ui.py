@@ -45,68 +45,31 @@ templates.env.filters['group_instructions'] = _group_instructions
 
 
 def _build_parallel_phase_blocks(phases: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Группирует соседние связанные через parallel_with фазы в общие UI-блоки."""
+    """Группирует фазы по execution_type-run: parallel примыкает к текущему sync-run."""
     if not phases:
         return []
 
-    index_by_code = {phase["code"]: idx for idx, phase in enumerate(phases)}
-    adjacency: dict[str, set[str]] = {phase["code"]: set() for phase in phases}
+    runs: list[list[dict[str, Any]]] = []
+    current_run: list[dict[str, Any]] = [phases[0]]
 
-    for phase in phases:
-        target = phase.get("parallel_with")
-        if target and target in adjacency:
-            adjacency[phase["code"]].add(target)
-            adjacency[target].add(phase["code"])
-
-    component_key_by_code: dict[str, str] = {}
-    visited: set[str] = set()
-    for phase in phases:
-        code = phase["code"]
-        if code in visited or not adjacency[code]:
-            continue
-
-        stack = [code]
-        component: list[str] = []
-        while stack:
-            current = stack.pop()
-            if current in visited:
-                continue
-            visited.add(current)
-            component.append(current)
-            stack.extend(neighbor for neighbor in adjacency[current] if neighbor not in visited)
-
-        if len(component) < 2:
-            continue
-
-        component_key = min(component, key=lambda item: index_by_code.get(item, len(phases)))
-        for component_code in component:
-            component_key_by_code[component_code] = component_key
+    for phase in phases[1:]:
+        if phase.get("execution_type") == "parallel":
+            current_run.append(phase)
+        else:
+            runs.append(current_run)
+            current_run = [phase]
+    runs.append(current_run)
 
     blocks: list[dict[str, Any]] = []
-    idx = 0
-    while idx < len(phases):
-        phase = phases[idx]
-        component_key = component_key_by_code.get(phase["code"])
-
-        if not component_key:
-            phase["parallel_group"] = None
-            blocks.append({"kind": "single", "phases": [phase]})
-            idx += 1
-            continue
-
-        group_phases = [phase]
-        idx += 1
-        while idx < len(phases) and component_key_by_code.get(phases[idx]["code"]) == component_key:
-            group_phases.append(phases[idx])
-            idx += 1
-
-        if len(group_phases) > 1:
-            for group_phase in group_phases:
-                group_phase["parallel_group"] = component_key
-            blocks.append({"kind": "parallel", "phases": group_phases})
+    for run in runs:
+        if len(run) > 1:
+            group_key = run[0]["code"]
+            for phase in run:
+                phase["parallel_group"] = group_key
+            blocks.append({"kind": "parallel", "phases": run})
         else:
-            group_phases[0]["parallel_group"] = component_key
-            blocks.append({"kind": "single", "phases": group_phases})
+            run[0]["parallel_group"] = None
+            blocks.append({"kind": "single", "phases": run})
 
     return blocks
 
