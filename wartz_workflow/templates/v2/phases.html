@@ -3,11 +3,20 @@
 {% block title %}Фазы workflow — wartz-workflow{% endblock %}
 {% block header_title %}Фазы workflow{% endblock %}
 {% block header_actions %}
-  {# Главная страница — кнопка "Назад" не нужна #}
+  <a href="/workflows" class="btn btn-secondary">← К workflow</a>
 {% endblock %}
 
 {% block extra_style %}
-.timeline{display:flex;flex-direction:column;align-items:center;max-width:860px;margin:0 auto}
+.phases-layout{display:grid;grid-template-columns:320px minmax(0,1fr);gap:16px;align-items:start}
+.workflow-nav{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 190px);overflow:auto}
+.workflow-nav-item{display:block;width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;color:var(--text);text-decoration:none}
+.workflow-nav-item.active{border-color:var(--accent);box-shadow:0 0 0 1px rgba(88,166,255,.25)}
+.workflow-code{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent);margin-bottom:6px}
+.workflow-name{font-size:15px;font-weight:600;color:var(--text)}
+.workflow-meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--text-dim)}
+.workflow-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:rgba(148,163,184,.12);color:var(--text-dim)}
+.timeline-panel{display:flex;flex-direction:column;gap:16px}
+.timeline{display:flex;flex-direction:column;align-items:center;max-width:860px;margin:0 auto;width:100%}
 .timeline-block{width:100%}
 .timeline-item{width:100%}
 .timeline-row{display:grid;grid-template-columns:84px minmax(0,1fr);gap:12px;align-items:stretch}
@@ -28,6 +37,8 @@
 .badge-delegate{background:var(--accent-soft);color:var(--accent)}
 .badge-parallel{background:var(--orange-soft);color:var(--orange)}
 .timeline-desc{font-size:12px;color:var(--text-muted);margin-top:4px}
+.empty-note{color:var(--text-dim);font-size:13px;line-height:1.6}
+@media (max-width: 980px){.phases-layout{grid-template-columns:1fr}.workflow-nav{max-height:none}}
 @media (max-width: 720px){.timeline-row{grid-template-columns:1fr}.phase-order-controls{flex-direction:row;justify-content:flex-start;padding-top:0}.phase-order-hint{text-align:left}}
 {% endblock %}
 
@@ -54,29 +65,61 @@
 {%- endmacro %}
 
 {% block content %}
-<div class="timeline" id="phasesTimeline">
-  {% for block in phase_blocks %}
-    {% if block.kind == 'parallel' %}
-      <div class="timeline-block timeline-parallel-group">
-        <div class="timeline-parallel-label">⚡ parallel</div>
-        {% for p in block.phases %}
-          <div class="timeline-item" data-phase-id="{{ p.id }}" data-phase-order="{{ p.phase_num }}" data-parallel-key="{{ p.parallel_group or '' }}">
-            {{ phase_body(p) }}
-            <div class="timeline-arrow"{% if loop.last %} hidden{% endif %}>↓</div>
-          </div>
-        {% endfor %}
+<div class="phases-layout">
+  <section class="workflow-nav" id="workflowNav">
+    {% for workflow in workflows %}
+    <a class="workflow-nav-item {% if selected_workflow_id == workflow.id %}active{% endif %}" href="/phases?workflow_id={{ workflow.id }}" data-workflow-id="{{ workflow.id }}">
+      <div class="workflow-code">{{ workflow.code }}</div>
+      <div class="workflow-name">{{ workflow.name }}</div>
+      <div class="workflow-meta">
+        <span class="workflow-chip">{{ workflow.project_count }} проектов</span>
+        <span class="workflow-chip">{{ workflow.phase_count }} фаз</span>
       </div>
+    </a>
     {% else %}
-      {% set p = block.phases[0] %}
-      <div class="timeline-block">
-        <div class="timeline-item" data-phase-id="{{ p.id }}" data-phase-order="{{ p.phase_num }}" data-parallel-key="{{ p.parallel_group or '' }}">
-          {{ phase_body(p) }}
-          <div class="timeline-arrow" hidden>↓</div>
-        </div>
-      </div>
-    {% endif %}
-    <div class="timeline-arrow timeline-arrow-block"{% if loop.last %} hidden{% endif %}>↓</div>
-  {% endfor %}
+    <div class="card empty-note">Workflow пока нет.</div>
+    {% endfor %}
+  </section>
+
+  <section class="timeline-panel">
+    <div class="card">
+      <div class="card-title">{{ selected_workflow.name if selected_workflow else 'Фазы' }}</div>
+      {% if selected_workflow and selected_workflow.description %}
+      <div class="empty-note">{{ selected_workflow.description }}</div>
+      {% elif selected_workflow %}
+      <div class="empty-note">Показаны только фазы выбранного workflow.</div>
+      {% else %}
+      <div class="empty-note">Сначала создайте workflow.</div>
+      {% endif %}
+    </div>
+
+    <div class="timeline" id="phasesTimeline">
+      {% for block in phase_blocks %}
+        {% if block.kind == 'parallel' %}
+          <div class="timeline-block timeline-parallel-group">
+            <div class="timeline-parallel-label">⚡ parallel</div>
+            {% for p in block.phases %}
+              <div class="timeline-item" data-phase-id="{{ p.id }}" data-phase-order="{{ p.phase_num }}" data-parallel-key="{{ p.parallel_group or '' }}">
+                {{ phase_body(p) }}
+                <div class="timeline-arrow"{% if loop.last %} hidden{% endif %}>↓</div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          {% set p = block.phases[0] %}
+          <div class="timeline-block">
+            <div class="timeline-item" data-phase-id="{{ p.id }}" data-phase-order="{{ p.phase_num }}" data-parallel-key="{{ p.parallel_group or '' }}">
+              {{ phase_body(p) }}
+              <div class="timeline-arrow" hidden>↓</div>
+            </div>
+          </div>
+        {% endif %}
+        <div class="timeline-arrow timeline-arrow-block"{% if loop.last %} hidden{% endif %}>↓</div>
+      {% else %}
+        <div class="card empty-note" style="width:100%">Для этого workflow фаз пока нет.</div>
+      {% endfor %}
+    </div>
+  </section>
 </div>
 
 <script>
@@ -87,6 +130,14 @@ function getPhaseTimelineItems() {
 function renderPhaseTimeline(items) {
   const timeline = document.getElementById('phasesTimeline');
   if (!timeline) return;
+
+  const emptyNode = timeline.querySelector('.empty-note');
+  if (items.length === 0) {
+    if (emptyNode) {
+      timeline.replaceChildren(emptyNode);
+    }
+    return;
+  }
 
   timeline.innerHTML = '';
   let idx = 0;

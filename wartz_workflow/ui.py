@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import click
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 import uvicorn
@@ -193,9 +193,47 @@ def _group_phases(phases: list[dict]) -> dict[str, list[dict]]:
 #  DATA
 # ═══════════════════════════════════════════════════════════════════════
 
-def _load_phases() -> list[dict]:
+def _parse_optional_int(raw: Any) -> int | None:
+    if raw is None or raw == "":
+        return None
+    try:
+        value = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
+def _load_workflows() -> list[dict]:
     wdb = _get_db()
-    rows = wdb.get_phases()
+    workflows = wdb.get_workflows()
+    phases = wdb.get_phases()
+    projects = wdb.get_projects()
+    phase_counts: dict[int, int] = {}
+    project_counts: dict[int, int] = {}
+    for phase in phases:
+        wid = phase.get("workflow_id")
+        if isinstance(wid, int):
+            phase_counts[wid] = phase_counts.get(wid, 0) + 1
+    for project in projects:
+        wid = project.get("workflow_id")
+        if isinstance(wid, int):
+            project_counts[wid] = project_counts.get(wid, 0) + 1
+
+    result = []
+    for workflow in workflows:
+        result.append(
+            {
+                **workflow,
+                "phase_count": phase_counts.get(workflow["id"], 0),
+                "project_count": project_counts.get(workflow["id"], 0),
+            }
+        )
+    return result
+
+
+def _load_phases(workflow_id: int | None = None) -> list[dict]:
+    wdb = _get_db()
+    rows = wdb.get_phases(workflow_id=workflow_id)
     agents_by_id = {agent["id"]: agent for agent in wdb.get_agents()}
     result = []
     for p in rows:
@@ -205,6 +243,9 @@ def _load_phases() -> list[dict]:
             {
                 "id": p["id"],
                 "code": p["code"],
+                "workflow_id": p.get("workflow_id"),
+                "workflow_code": p.get("workflow_code"),
+                "workflow_name": p.get("workflow_name"),
                 "phase_num": p["phase_order"],
                 "name": p["name"],
                 "description": p["description"],
@@ -338,10 +379,23 @@ def _parse_key_patterns(raw: Any) -> list[str]:
 def _project_form_payload(body: dict[str, Any]) -> dict[str, Any]:
     code = str(body.get("code", "")).strip()
     name = str(body.get("name", "")).strip()
+    workflow_id = _parse_optional_int(body.get("workflow_id"))
     return {
         "code": code,
         "name": name or code,
+        "workflow_id": workflow_id,
         "key_patterns": _parse_key_patterns(body.get("key_patterns", [])),
+    }
+
+
+def _workflow_form_payload(body: dict[str, Any]) -> dict[str, Any]:
+    code = str(body.get("code", body.get("id", ""))).strip()
+    name = str(body.get("name", "")).strip()
+    description = str(body.get("description", "")).strip()
+    return {
+        "code": code,
+        "name": name or code,
+        "description": description,
     }
 
 
@@ -434,8 +488,13 @@ def index(request: Request):
 
 
 @app.get("/phases", response_class=HTMLResponse)
-def phases_page(request: Request):
-    phases = _load_phases()
+def phases_page(request: Request, workflow_id: int | None = Query(default=None)):
+    workflows = _load_workflows()
+    selected_workflow = next((item for item in workflows if item["id"] == workflow_id), None)
+    if selected_workflow is None and workflows:
+        selected_workflow = workflows[0]
+    selected_workflow_id = selected_workflow["id"] if selected_workflow else None
+    phases = _load_phases(selected_workflow_id)
     phase_blocks = _build_parallel_phase_blocks(phases)
     return templates.TemplateResponse(
         request=request, name="phases.html",
@@ -443,6 +502,9 @@ def phases_page(request: Request):
             "request": request,
             "phases": phases,
             "phase_blocks": phase_blocks,
+            "workflows": workflows,
+            "selected_workflow": selected_workflow,
+            "selected_workflow_id": selected_workflow_id,
             "page": "phases",
             "ui_port": config.UI_PORT,
         }
@@ -493,6 +555,7 @@ def tasks_page(request: Request):
 def projects_page(request: Request):
     """CRUD-страница проектов и их regex-правил."""
     projects = _load_projects()
+    workflows = _load_workflows()
     return templates.TemplateResponse(
         request=request,
         name="projects.html",
@@ -501,7 +564,24 @@ def projects_page(request: Request):
             "page": "projects",
             "ui_port": config.UI_PORT,
             "projects": projects,
+            "workflows": workflows,
             "selected_project": projects[0] if projects else None,
+        },
+    )
+
+
+@app.get("/workflows", response_class=HTMLResponse)
+def workflows_page(request: Request):
+    workflows = _load_workflows()
+    return templates.TemplateResponse(
+        request=request,
+        name="workflows.html",
+        context={
+            "request": request,
+            "page": "workflows",
+            "ui_port": config.UI_PORT,
+            "workflows": workflows,
+            "selected_workflow": workflows[0] if workflows else None,
         },
     )
 
@@ -659,8 +739,12 @@ def agents_page(request: Request):
 # ═══════════════════════════════════════════════════════════════════════
 
 @app.get("/api/phases")
-def api_phases():
-    return {"ok": True, "phases": _load_phases()}
+def api_phases(workflow_id: int | None = Query(default=None)):
+    workflows = _load_workflows()
+    selected_workflow = next((item for item in workflows if item["id"] == workflow_id), None)
+    if selected_workflow is None and workflow_id is None and workflows:
+        selected_workflow = workflows[0]
+    return {"ok": True, "workflow": selected_workflow, "phases": _load_phases(workflow_id)}
 
 
 @app.get("/api/phases/{phase_id}")
@@ -684,6 +768,65 @@ def api_task_detail(task_key: str):
     if not task:
         return JSONResponse({"ok": False, "error": "Task not found"}, status_code=404)
     return {"ok": True, "task": task}
+
+
+@app.get("/api/workflows")
+def api_workflows():
+    return {"ok": True, "workflows": _load_workflows()}
+
+
+@app.post("/api/workflows")
+def api_workflow_create(body: dict[str, Any]):
+    payload = _workflow_form_payload(body)
+    if not payload["code"]:
+        return JSONResponse({"ok": False, "error": "code required"}, status_code=400)
+    wdb = _get_db()
+    if wdb.get_workflow_by_code(payload["code"]):
+        return JSONResponse({"ok": False, "error": "Workflow already exists"}, status_code=409)
+    try:
+        workflow_id = wdb.create_workflow(payload)
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    return {"ok": True, "workflow_id": workflow_id}
+
+
+@app.put("/api/workflows/{workflow_id}")
+def api_workflow_update(workflow_id: int, body: dict[str, Any]):
+    wdb = _get_db()
+    existing = wdb.get_workflow(workflow_id)
+    if not existing:
+        return JSONResponse({"ok": False, "error": "Workflow not found"}, status_code=404)
+
+    update_data: dict[str, Any] = {}
+    if "code" in body:
+        code = str(body.get("code", "")).strip()
+        if not code:
+            return JSONResponse({"ok": False, "error": "code required"}, status_code=400)
+        conflict = wdb.get_workflow_by_code(code)
+        if conflict and conflict["id"] != workflow_id:
+            return JSONResponse({"ok": False, "error": "Workflow code already exists"}, status_code=409)
+        update_data["code"] = code
+    if "name" in body:
+        update_data["name"] = str(body.get("name", "")).strip() or update_data.get("code") or existing["name"]
+    if "description" in body:
+        update_data["description"] = str(body.get("description", "")).strip()
+
+    if update_data:
+        wdb.update_workflow(workflow_id, update_data)
+    return {"ok": True}
+
+
+@app.delete("/api/workflows/{workflow_id}")
+def api_workflow_delete(workflow_id: int):
+    wdb = _get_db()
+    existing = wdb.get_workflow(workflow_id)
+    if not existing:
+        return JSONResponse({"ok": False, "error": "Workflow not found"}, status_code=404)
+    try:
+        wdb.delete_workflow(workflow_id)
+    except sqlite3.IntegrityError:
+        return JSONResponse({"ok": False, "error": "Workflow has linked projects or phases and cannot be deleted"}, status_code=409)
+    return {"ok": True}
 
 
 @app.get("/api/projects")

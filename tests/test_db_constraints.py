@@ -16,11 +16,18 @@ def conn(tmp_path):
     schema_sql = Path(__file__).parent.parent / "wartz_workflow" / "db_schema.sql"
     c.executescript(schema_sql.read_text())
     c.execute("PRAGMA foreign_keys = ON")
-    # base phase
-    c.execute("INSERT INTO phases (code, name, phase_order) VALUES (?, ?, ?)", ("0", "Base", 0))
     c.execute(
-        "INSERT INTO projects (code, name, key_patterns) VALUES (?, ?, ?)",
-        ("TEST", "Test Project", '["^(?P<prefix>TEST)-(?P<number>[0-9]+)$"]')
+        "INSERT INTO workflows (code, name, description) VALUES (?, ?, ?)",
+        ("default", "Default Workflow", "Constraint test workflow"),
+    )
+    # base phase
+    c.execute(
+        "INSERT INTO phases (workflow_id, code, name, phase_order) VALUES (?, ?, ?, ?)",
+        (1, "0", "Base", 0),
+    )
+    c.execute(
+        "INSERT INTO projects (workflow_id, code, name, key_patterns) VALUES (?, ?, ?, ?)",
+        (1, "TEST", "Test Project", '["^(?P<prefix>TEST)-(?P<number>[0-9]+)$"]')
     )
     c.commit()
     return c
@@ -30,8 +37,8 @@ class TestCheckConstraints:
     def test_phase_bad_execution_type_blocked(self, conn):
         with pytest.raises(sqlite3.IntegrityError):
             conn.execute(
-                "INSERT INTO phases (code,name,phase_order,execution_type) VALUES (?,?,?,?)",
-                ("bad", "Bad", 1, "invalid")
+                "INSERT INTO phases (workflow_id,code,name,phase_order,execution_type) VALUES (?,?,?,?,?)",
+                (1, "bad", "Bad", 1, "invalid")
             )
 
     def test_task_bad_status_blocked(self, conn):
@@ -79,10 +86,10 @@ class TestCheckConstraints:
             )
 
     def test_valid_execution_types_accepted(self, conn):
-        conn.execute("INSERT INTO phases (code,name,phase_order,execution_type) VALUES (?,?,?,?)",
-                     ("ok1", "Ok", 1, "sync"))
-        conn.execute("INSERT INTO phases (code,name,phase_order,execution_type) VALUES (?,?,?,?)",
-                     ("ok2", "Ok2", 2, "parallel"))
+        conn.execute("INSERT INTO phases (workflow_id,code,name,phase_order,execution_type) VALUES (?,?,?,?,?)",
+                     (1, "ok1", "Ok", 1, "sync"))
+        conn.execute("INSERT INTO phases (workflow_id,code,name,phase_order,execution_type) VALUES (?,?,?,?,?)",
+                     (1, "ok2", "Ok2", 2, "parallel"))
 
     def test_valid_status_accepted(self, conn):
         for st in ("active", "done", "blocked"):
@@ -91,7 +98,7 @@ class TestCheckConstraints:
         conn.execute("INSERT INTO tasks (project_id, task_key, status) VALUES (?,?,?)", (1, "T-history", "active"))
         tid = conn.execute("SELECT id FROM tasks WHERE task_key=?", ("T-history",)).fetchone()[0]
         for i, st in enumerate(("pending", "done")):
-            conn.execute("INSERT INTO phases (code,name,phase_order) VALUES (?,?,?)", (f"ph-{i}", "H", i+10))
+            conn.execute("INSERT INTO phases (workflow_id,code,name,phase_order) VALUES (?,?,?,?)", (1, f"ph-{i}", "H", i+10))
             pid = conn.execute("SELECT id FROM phases WHERE code=?", (f"ph-{i}",)).fetchone()[0]
             conn.execute(
                 "INSERT INTO task_history (task_id,phase_id,status) VALUES (?,?,?)",

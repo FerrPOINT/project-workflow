@@ -21,6 +21,14 @@ def _phase_row(code: str) -> dict:
     return phase
 
 
+def _workflow_row(code: str) -> dict:
+    from wartz_workflow.ui import _get_db
+
+    workflow = _get_db().get_workflow_by_code(code)
+    assert workflow is not None
+    return workflow
+
+
 def _phase_id(code: str) -> int:
     return int(_phase_row(code)["id"])
 
@@ -187,6 +195,64 @@ class TestPhasesPage:
         assert response.status_code == 200
         assert 'href="/projects"' in response.text
         assert "Проекты" in response.text
+
+    def test_sidebar_has_workflows_link(self):
+        response = client.get("/phases")
+        assert response.status_code == 200
+        assert 'href="/workflows"' in response.text
+        assert "Воркфлоу" in response.text
+
+    def test_phases_page_has_workflow_nav_like_projects(self):
+        response = client.get("/phases")
+        assert response.status_code == 200
+        assert 'id="workflowNav"' in response.text
+        assert 'workflow-nav-item' in response.text
+        assert 'workflow-chip' in response.text
+
+    def test_phases_page_filters_by_selected_workflow(self):
+        from wartz_workflow.ui import _get_db
+
+        wdb = _get_db()
+        workflow = wdb.get_workflow_by_code("ui-phases-workflow")
+        if workflow:
+            workflow_id = workflow["id"]
+        else:
+            workflow_id = wdb.create_workflow({
+                "code": "ui-phases-workflow",
+                "name": "UI Phases Workflow",
+                "description": "Workflow filter probe for phases page",
+            })
+
+        try:
+            if not wdb.get_phase("WF-PHASE-901"):
+                wdb.create_phase({
+                    "code": "WF-PHASE-901",
+                    "name": "Workflow Scoped Phase",
+                    "description": "Phase visible only inside selected workflow",
+                    "phase_order": 901,
+                    "workflow_id": workflow_id,
+                })
+
+            response = client.get(f"/phases?workflow_id={workflow_id}")
+            assert response.status_code == 200
+            assert "Workflow Scoped Phase" in response.text
+            assert "Task Intake" not in response.text
+            assert f'href="/phases?workflow_id={workflow_id}"' in response.text
+        finally:
+            if wdb.get_phase("WF-PHASE-901"):
+                wdb.delete_phase("WF-PHASE-901")
+            if wdb.get_workflow_by_code("ui-phases-workflow"):
+                wdb.delete_workflow("ui-phases-workflow")
+
+    def test_phases_api_can_filter_by_workflow(self):
+        workflow = _workflow_row("default")
+
+        response = client.get(f"/api/phases?workflow_id={workflow['id']}")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ok"] is True
+        assert data["workflow"]["id"] == workflow["id"]
+        assert all(phase["workflow_id"] == workflow["id"] for phase in data["phases"])
 
     def test_phases_page_has_reorder_controls_and_batch_order_api_hook(self):
         response = client.get("/phases")
@@ -652,6 +718,12 @@ class TestProjectsPage:
         assert 'id="projectFormMode"' in response.text
         assert 'id="createProjectForm"' not in response.text
 
+    def test_projects_page_exposes_workflow_selector(self):
+        response = client.get("/projects")
+        assert response.status_code == 200
+        assert 'id="projectWorkflowId"' in response.text
+        assert "Воркфлоу" in response.text
+
     def test_projects_api_create_update_and_delete(self):
         create = client.post("/api/projects", json={
             "code": "APICRUD",
@@ -675,10 +747,76 @@ class TestProjectsPage:
         delete = client.delete(f"/api/projects/{project_id}")
         assert delete.status_code == 200
 
+    def test_projects_api_persists_workflow_id(self):
+        workflow = _workflow_row("default")
+
+        create = client.post("/api/projects", json={
+            "code": "WFPROJ",
+            "name": "Workflow Bound Project",
+            "workflow_id": workflow["id"],
+            "key_patterns": [r"^(?P<prefix>WFPROJ)-(?P<number>[0-9]+)$"],
+        })
+        assert create.status_code == 200
+        project_id = create.json()["project_id"]
+
+        try:
+            projects = client.get("/api/projects").json()["projects"]
+            project = next(project for project in projects if project["id"] == project_id)
+            assert project["workflow_id"] == workflow["id"]
+            assert project["workflow_code"] == workflow["code"]
+            assert project["workflow_name"] == workflow["name"]
+        finally:
+            delete = client.delete(f"/api/projects/{project_id}")
+            assert delete.status_code == 200
+
     def test_projects_api_prevents_deleting_project_with_tasks(self):
         projects = client.get("/api/projects").json()["projects"]
         ui_project = next(project for project in projects if project["code"] == "UITEST")
         delete = client.delete(f"/api/projects/{ui_project['id']}")
+        assert delete.status_code == 409
+
+
+class TestWorkflowsPage:
+    def test_workflows_page_returns_html(self):
+        response = client.get("/workflows")
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "text/html; charset=utf-8"
+        assert "Воркфлоу" in response.text
+
+    def test_workflows_page_uses_single_editor_with_left_nav(self):
+        response = client.get("/workflows")
+        assert response.status_code == 200
+        assert 'id="workflowNav"' in response.text
+        assert 'id="workflowForm"' in response.text
+        assert 'id="newWorkflowButton"' in response.text
+        assert 'id="workflowFormMode"' in response.text
+
+    def test_workflows_api_create_update_and_delete(self):
+        create = client.post("/api/workflows", json={
+            "code": "APIWF",
+            "name": "API Workflow",
+            "description": "Workflow CRUD from API test",
+        })
+        assert create.status_code == 200
+        workflow_id = create.json()["workflow_id"]
+
+        update = client.put(f"/api/workflows/{workflow_id}", json={
+            "name": "API Workflow Updated",
+            "description": "Updated workflow description",
+        })
+        assert update.status_code == 200
+
+        workflows = client.get("/api/workflows").json()["workflows"]
+        workflow = next(workflow for workflow in workflows if workflow["id"] == workflow_id)
+        assert workflow["name"] == "API Workflow Updated"
+        assert workflow["description"] == "Updated workflow description"
+
+        delete = client.delete(f"/api/workflows/{workflow_id}")
+        assert delete.status_code == 200
+
+    def test_workflows_api_prevents_deleting_workflow_with_projects_or_phases(self):
+        workflow = _workflow_row("default")
+        delete = client.delete(f"/api/workflows/{workflow['id']}")
         assert delete.status_code == 409
 
 

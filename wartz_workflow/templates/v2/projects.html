@@ -39,6 +39,7 @@ textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:140px;resiz
       <div class="project-code">{{ project.code }}</div>
       <div class="project-name">{{ project.name }}</div>
       <div class="project-meta">
+        <span>{{ project.workflow_name }}</span>
         <span>{{ project.task_count }} задач</span>
         <span>{{ project.patterns_count }} regex</span>
       </div>
@@ -60,6 +61,14 @@ textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:140px;resiz
         <input type="text" id="projectName" value="{{ selected_project.name if selected_project else '' }}">
       </div>
       <div>
+        <div class="label">Воркфлоу</div>
+        <select id="projectWorkflowId">
+          {% for workflow in workflows %}
+          <option value="{{ workflow.id }}" {% if selected_project and selected_project.workflow_id == workflow.id %}selected{% endif %}>{{ workflow.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
         <div class="label">Регекспы</div>
         <textarea id="projectPatterns" class="code-area" spellcheck="false">{% if selected_project %}{{ selected_project.key_patterns | join('\n') }}{% endif %}</textarea>
       </div>
@@ -76,16 +85,19 @@ textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:140px;resiz
 
 {% block extra_script %}
 const projectStore = {{ projects | tojson }};
+const workflowStore = {{ workflows | tojson }};
 let selectedProjectId = {{ selected_project.id if selected_project else 'null' }};
 let previousProjectId = selectedProjectId;
 let projectFormMode = selectedProjectId == null ? 'create' : 'edit';
 
 function byId(id){ return projectStore.find(function(project){ return project.id === id; }); }
+function workflowNameById(id){ var workflow = workflowStore.find(function(item){ return item.id === id; }); return workflow ? workflow.name : '—'; }
 function patternsToText(patterns){ return (patterns || []).join('\n'); }
 function currentPayload(){
   return {
     code: document.getElementById('projectCode').value.trim(),
     name: document.getElementById('projectName').value.trim(),
+    workflow_id: Number(document.getElementById('projectWorkflowId').value || 0) || null,
     key_patterns: document.getElementById('projectPatterns').value,
   };
 }
@@ -97,6 +109,7 @@ function syncNav(){
 function fillProjectForm(project){
   document.getElementById('projectCode').value = project ? project.code : '';
   document.getElementById('projectName').value = project ? project.name : '';
+  document.getElementById('projectWorkflowId').value = project && project.workflow_id ? String(project.workflow_id) : (workflowStore[0] ? String(workflowStore[0].id) : '');
   document.getElementById('projectPatterns').value = project ? patternsToText(project.key_patterns) : '';
 }
 function setProjectFormMode(mode){
@@ -185,11 +198,14 @@ function renderProjectNav(){
     var meta = document.createElement('div');
     meta.className = 'project-meta';
 
+    var workflow = document.createElement('span');
+    workflow.textContent = project.workflow_name || workflowNameById(project.workflow_id);
     var tasks = document.createElement('span');
     tasks.textContent = project.task_count + ' задач';
     var patterns = document.createElement('span');
     patterns.textContent = project.patterns_count + ' regex';
 
+    meta.appendChild(workflow);
     meta.appendChild(tasks);
     meta.appendChild(patterns);
     button.appendChild(code);

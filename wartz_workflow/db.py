@@ -8,6 +8,7 @@ PK: INTEGER AUTOINCREMENT, семантические code TEXT UNIQUE.
 import json
 import sqlite3
 from pathlib import Path
+from typing import Any
 
 from . import config
 
@@ -55,6 +56,19 @@ class WorkflowDB:
             raise ValueError(f"Unknown project code: {val}")
         return row["id"]
 
+    def _resolve_workflow_id(self, val: int | str | None) -> int:
+        if isinstance(val, int):
+            return val
+        if val is None:
+            workflow = self.get_default_workflow()
+            if not workflow:
+                raise ValueError("Default workflow is not initialized")
+            return workflow["id"]
+        row = self.get_workflow_by_code(str(val))
+        if not row:
+            raise ValueError(f"Unknown workflow code: {val}")
+        return row["id"]
+
     @staticmethod
     def _serialize_key_patterns(patterns: list[str] | str | None) -> str:
         if patterns is None:
@@ -78,12 +92,24 @@ class WorkflowDB:
                 pass
         return []
 
+    def _hydrate_workflow_row(self, row: sqlite3.Row | dict | None) -> dict | None:
+        if not row:
+            return None
+        return dict(row)
+
     def _hydrate_project_row(self, row: sqlite3.Row | dict | None) -> dict | None:
         if not row:
             return None
         data = dict(row)
         data["key_patterns"] = self._deserialize_key_patterns(data.get("key_patterns"))
         return data
+
+    def _bootstrap_workflows(self) -> list[dict]:
+        return [{
+            "code": "default",
+            "name": "Default Workflow",
+            "description": "Базовый workflow каталога фаз",
+        }]
 
     def _bootstrap_projects(self) -> list[dict]:
         legacy_patterns = config.load_legacy_key_patterns()
@@ -103,14 +129,36 @@ class WorkflowDB:
         rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
         return [row[1] for row in rows]
 
+    def _ensure_default_workflows(self, conn: sqlite3.Connection) -> None:
+        count = conn.execute("SELECT COUNT(*) FROM workflows").fetchone()[0]
+        if count:
+            return
+        for workflow in self._bootstrap_workflows():
+            conn.execute(
+                "INSERT INTO workflows (code, name, description) VALUES (?, ?, ?)",
+                (
+                    workflow["code"],
+                    workflow["name"],
+                    workflow.get("description", ""),
+                ),
+            )
+
+    def _default_workflow_id(self, conn: sqlite3.Connection) -> int:
+        row = conn.execute("SELECT id FROM workflows WHERE code = ?", ("default",)).fetchone()
+        if not row:
+            raise ValueError("Default workflow is not initialized")
+        return int(row["id"])
+
     def _ensure_default_projects(self, conn: sqlite3.Connection) -> None:
         count = conn.execute("SELECT COUNT(*) FROM projects").fetchone()[0]
         if count:
             return
+        default_workflow_id = self._default_workflow_id(conn)
         for project in self._bootstrap_projects():
             conn.execute(
-                "INSERT INTO projects (code, name, key_patterns) VALUES (?, ?, ?)",
+                "INSERT INTO projects (workflow_id, code, name, key_patterns) VALUES (?, ?, ?, ?)",
                 (
+                    default_workflow_id,
                     project["code"],
                     project["name"],
                     self._serialize_key_patterns(project.get("key_patterns")),
@@ -202,9 +250,34 @@ class WorkflowDB:
             return
         conn.execute("ALTER TABLE agents ADD COLUMN description TEXT NOT NULL DEFAULT ''")
 
+    def _migrate_projects_add_workflow(self, conn: sqlite3.Connection) -> None:
+        project_columns = self._table_columns(conn, "projects")
+        if "workflow_id" not in project_columns:
+            conn.execute("ALTER TABLE projects ADD COLUMN workflow_id INTEGER REFERENCES workflows(id)")
+        default_workflow_id = self._default_workflow_id(conn)
+        conn.execute(
+            "UPDATE projects SET workflow_id = ? WHERE workflow_id IS NULL OR workflow_id = ''",
+            (default_workflow_id,),
+        )
+
+    def _migrate_phases_add_workflow(self, conn: sqlite3.Connection) -> None:
+        phase_columns = self._table_columns(conn, "phases")
+        default_workflow_id = self._default_workflow_id(conn)
+        if "workflow_id" not in phase_columns:
+            conn.execute("ALTER TABLE phases ADD COLUMN workflow_id INTEGER REFERENCES workflows(id)")
+        conn.execute(
+            "UPDATE phases SET workflow_id = ? WHERE workflow_id IS NULL OR workflow_id = ''",
+            (default_workflow_id,),
+        )
+        if "is_seed_managed" not in phase_columns:
+            conn.execute("ALTER TABLE phases ADD COLUMN is_seed_managed INTEGER NOT NULL DEFAULT 1")
+        conn.execute("UPDATE phases SET is_seed_managed = 1 WHERE is_seed_managed IS NULL")
+
     def _migrate_schema(self, conn: sqlite3.Connection) -> None:
         task_columns = self._table_columns(conn, "tasks")
         self._migrate_agents_add_description(conn)
+        self._migrate_projects_add_workflow(conn)
+        self._migrate_phases_add_workflow(conn)
         if "project_id" not in task_columns:
             self._migrate_tasks_add_project(conn)
         self._backfill_task_projects(conn)
@@ -215,8 +288,9 @@ class WorkflowDB:
         ddl = SCHEMA_PATH.read_text(encoding="utf-8")
         with self._conn() as conn:
             conn.executescript(ddl)
-            self._ensure_default_projects(conn)
+            self._ensure_default_workflows(conn)
             self._migrate_schema(conn)
+            self._ensure_default_projects(conn)
             conn.commit()
 
     def _list_tables(self) -> set[str]:
@@ -254,6 +328,7 @@ class WorkflowDB:
         removed_codes = [code for code in phase_redirects if code not in desired_codes]
 
         with self._conn() as conn:
+            default_workflow_id = self._default_workflow_id(conn)
             for code in phase_order:
                 phase = seed_by_code.get(code)
                 if not phase:
@@ -261,6 +336,7 @@ class WorkflowDB:
 
                 existing = conn.execute("SELECT id FROM phases WHERE code = ?", (code,)).fetchone()
                 payload = (
+                    default_workflow_id,
                     phase["name"],
                     phase.get("description") or "",
                     phase.get("min_time_min", 0),
@@ -269,19 +345,22 @@ class WorkflowDB:
                     phase.get("parallel_with"),
                     phase.get("rollback_target"),
                     phase.get("execution_type", "sync"),
+                    1,
                 )
                 if existing:
                     conn.execute(
                         """
                         UPDATE phases
-                        SET name = ?,
+                        SET workflow_id = ?,
+                            name = ?,
                             description = ?,
                             min_time_min = ?,
                             phase_order = ?,
                             next_recommendation = ?,
                             parallel_with = ?,
                             rollback_target = ?,
-                            execution_type = ?
+                            execution_type = ?,
+                            is_seed_managed = ?
                         WHERE id = ?
                         """,
                         (*payload, existing["id"]),
@@ -290,10 +369,10 @@ class WorkflowDB:
                     conn.execute(
                         """
                         INSERT INTO phases (
-                            code, name, description, min_time_min, phase_order,
-                            next_recommendation, parallel_with, rollback_target, execution_type
+                            code, workflow_id, name, description, min_time_min, phase_order,
+                            next_recommendation, parallel_with, rollback_target, execution_type, is_seed_managed
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             code,
@@ -392,9 +471,11 @@ class WorkflowDB:
                         (phase_id, evidence.get("description", evidence.get("item", ""))),
                     )
 
-            stale_rows = conn.execute("SELECT id, code FROM phases").fetchall()
+            stale_rows = conn.execute("SELECT id, code, is_seed_managed FROM phases").fetchall()
             for stale_row in stale_rows:
                 if stale_row["code"] in desired_codes:
+                    continue
+                if not stale_row["is_seed_managed"]:
                     continue
                 conn.execute("DELETE FROM phases WHERE id = ?", (stale_row["id"],))
 
@@ -488,16 +569,77 @@ class WorkflowDB:
             conn.execute("DELETE FROM agents WHERE id = ?", (agent_id,))
             conn.commit()
 
+    # ── Workflows ───────────────────────────────────────────────────────
+
+    def create_workflow(self, data: dict) -> int:
+        code = str(data.get("code", data.get("id", ""))).strip()
+        if not code:
+            raise ValueError("Workflow code is required")
+        with self._conn() as conn:
+            c = conn.execute(
+                "INSERT INTO workflows (code, name, description) VALUES (?, ?, ?)",
+                (
+                    code,
+                    str(data.get("name", code)).strip() or code,
+                    str(data.get("description", "")).strip(),
+                ),
+            )
+            conn.commit()
+            return c.lastrowid or 0
+
+    def get_workflows(self) -> list[dict]:
+        with self._conn() as conn:
+            rows = conn.execute("SELECT * FROM workflows ORDER BY id").fetchall()
+            return [self._hydrate_workflow_row(r) for r in rows if r]
+
+    def get_workflow(self, workflow_id: int) -> dict | None:
+        with self._conn() as conn:
+            row = conn.execute("SELECT * FROM workflows WHERE id = ?", (workflow_id,)).fetchone()
+            return self._hydrate_workflow_row(row)
+
+    def get_workflow_by_code(self, code: str) -> dict | None:
+        with self._conn() as conn:
+            row = conn.execute("SELECT * FROM workflows WHERE code = ?", (code,)).fetchone()
+            return self._hydrate_workflow_row(row)
+
+    def get_default_workflow(self) -> dict | None:
+        return self.get_workflow_by_code("default")
+
+    def update_workflow(self, workflow_id: int | str, data: dict) -> None:
+        resolved = self._resolve_workflow_id(workflow_id)
+        fields = []
+        vals = []
+        for k, v in data.items():
+            if k == "id":
+                continue
+            fields.append(f"{k} = ?")
+            vals.append(v)
+        if not fields:
+            return
+        vals.append(resolved)
+        sql = f"UPDATE workflows SET {', '.join(fields)} WHERE id = ?"
+        with self._conn() as conn:
+            conn.execute(sql, vals)
+            conn.commit()
+
+    def delete_workflow(self, workflow_id: int | str) -> None:
+        resolved = self._resolve_workflow_id(workflow_id)
+        with self._conn() as conn:
+            conn.execute("DELETE FROM workflows WHERE id = ?", (resolved,))
+            conn.commit()
+
     # ── Projects ────────────────────────────────────────────────────────
 
     def create_project(self, data: dict) -> int:
         code = str(data.get("code", data.get("id", ""))).strip()
         if not code:
             raise ValueError("Project code is required")
+        workflow_id = self._resolve_workflow_id(data.get("workflow_id", data.get("workflow", data.get("workflow_code"))))
         with self._conn() as conn:
             c = conn.execute(
-                "INSERT INTO projects (code, name, key_patterns) VALUES (?, ?, ?)",
+                "INSERT INTO projects (workflow_id, code, name, key_patterns) VALUES (?, ?, ?, ?)",
                 (
+                    workflow_id,
                     code,
                     data.get("name", code),
                     self._serialize_key_patterns(data.get("key_patterns")),
@@ -508,17 +650,40 @@ class WorkflowDB:
 
     def get_projects(self) -> list[dict]:
         with self._conn() as conn:
-            rows = conn.execute("SELECT * FROM projects ORDER BY id").fetchall()
+            rows = conn.execute(
+                """
+                SELECT projects.*, workflows.code AS workflow_code, workflows.name AS workflow_name, workflows.description AS workflow_description
+                FROM projects
+                JOIN workflows ON workflows.id = projects.workflow_id
+                ORDER BY projects.id
+                """
+            ).fetchall()
             return [self._hydrate_project_row(r) for r in rows if r]
 
     def get_project(self, project_id: int) -> dict | None:
         with self._conn() as conn:
-            row = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+            row = conn.execute(
+                """
+                SELECT projects.*, workflows.code AS workflow_code, workflows.name AS workflow_name, workflows.description AS workflow_description
+                FROM projects
+                JOIN workflows ON workflows.id = projects.workflow_id
+                WHERE projects.id = ?
+                """,
+                (project_id,),
+            ).fetchone()
             return self._hydrate_project_row(row)
 
     def get_project_by_code(self, code: str) -> dict | None:
         with self._conn() as conn:
-            row = conn.execute("SELECT * FROM projects WHERE code = ?", (code,)).fetchone()
+            row = conn.execute(
+                """
+                SELECT projects.*, workflows.code AS workflow_code, workflows.name AS workflow_name, workflows.description AS workflow_description
+                FROM projects
+                JOIN workflows ON workflows.id = projects.workflow_id
+                WHERE projects.code = ?
+                """,
+                (code,),
+            ).fetchone()
             return self._hydrate_project_row(row)
 
     def update_project(self, project_id: int | str, data: dict) -> None:
@@ -531,6 +696,9 @@ class WorkflowDB:
             if k == "key_patterns":
                 fields.append("key_patterns = ?")
                 vals.append(self._serialize_key_patterns(v))
+            elif k in {"workflow_id", "workflow", "workflow_code"}:
+                fields.append("workflow_id = ?")
+                vals.append(self._resolve_workflow_id(v))
             else:
                 fields.append(f"{k} = ?")
                 vals.append(v)
@@ -552,14 +720,17 @@ class WorkflowDB:
 
     def import_phases(self, phases: list[dict]) -> None:
         with self._conn() as conn:
+            default_workflow_id = self._default_workflow_id(conn)
             for p in phases:
                 code = p.get("code", p.get("id", ""))
+                workflow_id = self._resolve_workflow_id(p.get("workflow_id", default_workflow_id))
                 conn.execute(
                     """
-                    INSERT OR REPLACE INTO phases (code, name, description, min_time_min, phase_order, group_id, agent_id, next_recommendation, parallel_with, rollback_target, execution_type)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT OR REPLACE INTO phases (workflow_id, code, name, description, min_time_min, phase_order, group_id, agent_id, next_recommendation, parallel_with, rollback_target, execution_type, is_seed_managed)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
+                        workflow_id,
                         code,
                         p["name"],
                         p.get("description") or "",
@@ -571,6 +742,7 @@ class WorkflowDB:
                         p.get("parallel_with"),
                         p.get("rollback_target"),
                         p.get("execution_type", "sync"),
+                        1,
                     ),
                 )
                 phase_int_id = conn.execute("SELECT id FROM phases WHERE code = ?", (code,)).fetchone()[0]
@@ -602,22 +774,60 @@ class WorkflowDB:
 
     # ── Read ───────────────────────────────────────────────────────────
 
-    def get_phases(self) -> list[dict]:
+    def get_phases(self, workflow_id: int | str | None = None) -> list[dict]:
         with self._conn() as conn:
-            rows = conn.execute("SELECT * FROM phases ORDER BY phase_order").fetchall()
+            params: tuple[Any, ...] = ()
+            where_clause = ""
+            if workflow_id is not None:
+                where_clause = "WHERE phases.workflow_id = ?"
+                params = (self._resolve_workflow_id(workflow_id),)
+            rows = conn.execute(
+                f"""
+                SELECT phases.*, workflows.code AS workflow_code, workflows.name AS workflow_name, workflows.description AS workflow_description
+                FROM phases
+                JOIN workflows ON workflows.id = phases.workflow_id
+                {where_clause}
+                ORDER BY phases.phase_order
+                """,
+                params,
+            ).fetchall()
             return [dict(r) for r in rows]
 
     def get_phase(self, phase_id: int | str) -> dict | None:
         with self._conn() as conn:
             if isinstance(phase_id, int):
-                row = conn.execute("SELECT * FROM phases WHERE id = ?", (phase_id,)).fetchone()
+                row = conn.execute(
+                    """
+                    SELECT phases.*, workflows.code AS workflow_code, workflows.name AS workflow_name, workflows.description AS workflow_description
+                    FROM phases
+                    JOIN workflows ON workflows.id = phases.workflow_id
+                    WHERE phases.id = ?
+                    """,
+                    (phase_id,),
+                ).fetchone()
             else:
-                row = conn.execute("SELECT * FROM phases WHERE code = ?", (phase_id,)).fetchone()
+                row = conn.execute(
+                    """
+                    SELECT phases.*, workflows.code AS workflow_code, workflows.name AS workflow_name, workflows.description AS workflow_description
+                    FROM phases
+                    JOIN workflows ON workflows.id = phases.workflow_id
+                    WHERE phases.code = ?
+                    """,
+                    (phase_id,),
+                ).fetchone()
             return dict(row) if row else None
 
     def get_phase_by_code(self, code: str) -> dict | None:
         with self._conn() as conn:
-            row = conn.execute("SELECT * FROM phases WHERE code = ?", (code,)).fetchone()
+            row = conn.execute(
+                """
+                SELECT phases.*, workflows.code AS workflow_code, workflows.name AS workflow_name, workflows.description AS workflow_description
+                FROM phases
+                JOIN workflows ON workflows.id = phases.workflow_id
+                WHERE phases.code = ?
+                """,
+                (code,),
+            ).fetchone()
             return dict(row) if row else None
 
     def get_phase_instructions(self, phase_id: int | str) -> list[dict]:
@@ -656,13 +866,15 @@ class WorkflowDB:
         """Insert a new phase row (code-based lookup)."""
         with self._conn() as conn:
             group_id = self._resolve_group_id(data["group_id"]) if data.get("group_id") else None
+            workflow_id = self._resolve_workflow_id(data.get("workflow_id", data.get("workflow", data.get("workflow_code"))))
             c = conn.execute(
                 """
-                INSERT INTO phases (code, name, description, min_time_min, phase_order, group_id, agent_id,
-                                    next_recommendation, parallel_with, rollback_target, execution_type)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO phases (workflow_id, code, name, description, min_time_min, phase_order, group_id, agent_id,
+                                    next_recommendation, parallel_with, rollback_target, execution_type, is_seed_managed)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
+                    workflow_id,
                     data.get("code", data.get("id", "")),
                     data["name"],
                     data.get("description") or "",
@@ -674,6 +886,7 @@ class WorkflowDB:
                     data.get("parallel_with"),
                     data.get("rollback_target"),
                     data.get("execution_type", "sync"),
+                    int(bool(data.get("is_seed_managed", 0))),
                 ),
             )
             conn.commit()
@@ -684,9 +897,19 @@ class WorkflowDB:
         fields = []
         vals = []
         for k, v in data.items():
-            if k != "id":
+            if k == "id":
+                continue
+            if k == "group_id":
+                fields.append("group_id = ?")
+                vals.append(self._resolve_group_id(v) if v else None)
+            elif k in {"workflow_id", "workflow", "workflow_code"}:
+                fields.append("workflow_id = ?")
+                vals.append(self._resolve_workflow_id(v))
+            else:
                 fields.append(f"{k} = ?")
                 vals.append(v)
+        if not fields:
+            return
         vals.append(resolved)
         sql = f"UPDATE phases SET {', '.join(fields)} WHERE id = ?"
         with self._conn() as conn:

@@ -15,8 +15,16 @@ CREATE TABLE IF NOT EXISTS agents (
     description TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS workflows (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    code        TEXT NOT NULL UNIQUE,
+    name        TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT ''
+);
+
 CREATE TABLE IF NOT EXISTS phases (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    workflow_id    INTEGER NOT NULL REFERENCES workflows(id),
     code           TEXT NOT NULL UNIQUE,
     name           TEXT NOT NULL,
     description    TEXT,
@@ -28,7 +36,8 @@ CREATE TABLE IF NOT EXISTS phases (
     parallel_with  TEXT,
     rollback_target TEXT,
     execution_type TEXT DEFAULT 'sync'
-        CHECK(execution_type IN ('sync', 'parallel'))
+        CHECK(execution_type IN ('sync', 'parallel')),
+    is_seed_managed INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS instructions (
@@ -58,6 +67,7 @@ CREATE TABLE IF NOT EXISTS evidence (
 
 CREATE TABLE IF NOT EXISTS projects (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    workflow_id  INTEGER NOT NULL REFERENCES workflows(id),
     code         TEXT NOT NULL UNIQUE,
     name         TEXT NOT NULL,
     key_patterns TEXT NOT NULL DEFAULT '[]'
