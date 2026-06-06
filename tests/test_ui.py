@@ -203,6 +203,16 @@ class TestPhasesPage:
         assert 'href="/workflows"' in response.text
         assert "Воркфлоу" in response.text
 
+    def test_sidebar_places_workflows_second_after_dashboard(self):
+        response = client.get("/phases")
+        assert response.status_code == 200
+
+        sidebar_nav = re.search(r'<nav class="sidebar-nav">(.*?)</nav>', response.text, re.S)
+        assert sidebar_nav is not None
+
+        hrefs = re.findall(r'href="([^"]+)"', sidebar_nav.group(1))
+        assert hrefs[:5] == ["/", "/workflows", "/phases", "/tasks", "/projects"]
+
     def test_phases_page_has_workflow_nav_like_projects(self):
         response = client.get("/phases")
         assert response.status_code == 200
@@ -458,6 +468,14 @@ class TestPhaseDetail:
         assert 'data-field="phase_num"' not in response.text
         assert 'href="/phases"' in response.text
         assert 'Порядок меняется на странице фаз' in response.text
+
+    def test_phase_detail_hides_next_recommendation_inline_input(self):
+        response = client.get(_phase_detail_path("0.00"))
+        assert response.status_code == 200
+        assert 'data-field="next_recommendation"' not in response.text
+        assert 'Рекомендация следующего шага' not in response.text
+        assert 'Перейди к Phase 0.00 -- Git Identity' not in response.text
+        assert 'next_recommendation:' not in response.text
 
     def test_phase_detail_404_on_legacy_code_route(self):
         response = client.get("/phase/0.7")

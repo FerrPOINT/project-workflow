@@ -17,10 +17,10 @@ def setup_db():
         _seed_to_sqlite()
 
 
-def test_phase_detail_hides_next_recommendation_label_but_keeps_value():
+def test_phase_detail_hides_next_recommendation_meta_entirely():
     response = client.get("/phase/1")
 
     assert response.status_code == 200
     assert "Следующая:" not in response.text
-    assert 'data-field="next_recommendation"' in response.text
-    assert 'aria-label="Рекомендация следующего шага"' in response.text
+    assert 'data-field="next_recommendation"' not in response.text
+    assert 'aria-label="Рекомендация следующего шага"' not in response.text

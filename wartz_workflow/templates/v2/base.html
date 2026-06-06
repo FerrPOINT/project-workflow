@@ -172,6 +172,10 @@ textarea{resize:vertical;min-height:60px}
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
       Дашборд
     </a>
+    <a class="sidebar-link {% if page == 'workflows' %}active{% endif %}" href="/workflows">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 10v4"/><path d="M17 10v4"/></svg>
+      Воркфлоу
+    </a>
     <a class="sidebar-link {% if page == 'phases' %}active{% endif %}" href="/phases">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
       Фазы
@@ -183,10 +187,6 @@ textarea{resize:vertical;min-height:60px}
     <a class="sidebar-link {% if page == 'projects' %}active{% endif %}" href="/projects">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18"/><path d="M5 7V5a2 2 0 0 1 2-2h3"/><path d="M19 7v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7"/><path d="M9 12h6"/><path d="M9 16h4"/></svg>
       Проекты
-    </a>
-    <a class="sidebar-link {% if page == 'workflows' %}active{% endif %}" href="/workflows">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 10v4"/><path d="M17 10v4"/></svg>
-      Воркфлоу
     </a>
     <div class="sidebar-section">УПРАВЛЕНИЕ</div>
     <a class="sidebar-link {% if page == 'agents' %}active{% endif %}" href="/agents">
