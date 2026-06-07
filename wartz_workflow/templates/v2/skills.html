@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Skills — wartz-workflow{% endblock %}
+{% block header_title %}Skills{% endblock %}
+{% block header_actions %}
+  <a class="btn btn-secondary" href="/skills?refresh=1">↻ Обновить</a>
+{% endblock %}
+
+{% block extra_style %}
+.skills-page{max-width:1200px;margin:0 auto;padding:0 24px}
+.skills-hero{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:24px}
+.skills-title{display:grid;gap:8px}
+.skills-title h2{margin:0;font-size:28px;letter-spacing:-0.03em}
+.skills-title p{margin:0;color:var(--text-muted);line-height:1.5}
+.skills-count{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--text-secondary);font-size:13px;font-weight:600;white-space:nowrap}
+.skills-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.skill-card{display:grid;gap:10px;padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--surface);box-shadow:var(--shadow-sm)}
+.skill-card:hover{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.skill-card-header{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.skill-name{margin:0;font-size:16px;font-weight:700;line-height:1.35;word-break:break-word}
+.skill-category{display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;background:var(--panel);color:var(--text-dim);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.skill-description{margin:0;color:var(--text-secondary);line-height:1.55}
+.empty-state-card{padding:20px;border:1px dashed var(--border);border-radius:12px;color:var(--text-muted);background:var(--surface)}
+@media (max-width: 720px){
+  .skills-page{padding:0 12px}
+  .skills-hero{flex-direction:column}
+}
+{% endblock %}
+
+{% block content %}
+<div class="skills-page">
+  <section class="skills-hero">
+    <div class="skills-title">
+      <h2>Hermes skills catalog</h2>
+      <p>Read-only каталог загружается из реального Hermes skill registry. Новые skills попадут сюда автоматически после refresh.</p>
+    </div>
+    <div class="skills-count">{{ skills|length }} skills</div>
+  </section>
+
+  {% if skills %}
+  <section class="skills-grid">
+    {% for skill in skills %}
+    <article class="skill-card">
+      <div class="skill-card-header">
+        <h3 class="skill-name">{{ skill.name }}</h3>
+        {% if skill.category %}<span class="skill-category">{{ skill.category }}</span>{% endif %}
+      </div>
+      {% if skill.description %}
+      <p class="skill-description">{{ skill.description }}</p>
+      {% endif %}
+    </article>
+    {% endfor %}
+  </section>
+  {% else %}
+  <div class="empty-state-card">Hermes skill registry не вернул ни одного skill.</div>
+  {% endif %}
+</div>
+{% endblock %}

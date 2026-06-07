@@ -62,6 +62,70 @@ def _phase_href(code: str) -> str:
     return f'href="/phase/{_phase_id(code)}"'
 
 
+def _sample_hermes_skills() -> list[dict[str, str]]:
+    return [
+        {
+            "name": "test-driven-development",
+            "description": "Red-green-refactor discipline.",
+            "category": "software-development",
+        },
+        {
+            "name": "python-web-integration-tdd",
+            "description": "FastAPI integration tests first.",
+            "category": "software-development",
+        },
+        {
+            "name": "workflow-app-ui-delivery",
+            "description": "UI delivery and screenshot proof.",
+            "category": "software-development",
+        },
+    ]
+
+
+def _prime_skills_cache(monkeypatch: pytest.MonkeyPatch, skills: list[dict[str, str]]) -> None:
+    from wartz_workflow import ui as ui_module
+
+    monkeypatch.setattr(ui_module, "_scan_hermes_skills", lambda: skills, raising=False)
+    response = client.get("/api/skills?refresh=1")
+    assert response.status_code == 200
+    assert response.json()["skills"] == skills
+
+
+def _normalize_skills(raw: object) -> list[str]:
+    if raw in (None, "", []):
+        return []
+    if isinstance(raw, list):
+        return [str(item) for item in raw]
+    if isinstance(raw, str):
+        return json.loads(raw)
+    raise TypeError(f"Unsupported skills payload: {raw!r}")
+
+
+def _phase_restore_payload(phase: dict) -> dict:
+    return {
+        "name": phase.get("name", ""),
+        "description": phase.get("description", ""),
+        "agent_id": phase.get("agent_id"),
+        "execution_type": phase.get("execution_type", "sync"),
+        "instructions": [
+            {
+                "description": item["description"],
+                "execution_type": item.get("execution_type", "sync"),
+                "skills": _normalize_skills(item.get("skills")),
+            }
+            for item in phase.get("instructions", [])
+        ],
+        "checks": [
+            {"description": item["description"]}
+            for item in phase.get("checks", [])
+        ],
+        "evidence": [
+            {"description": item.get("description", item.get("item", ""))}
+            for item in phase.get("evidence", [])
+        ],
+    }
+
+
 @pytest.fixture(autouse=True)
 def setup_db():
     """Populate DB with seed.json + sample task before UI tests."""
@@ -247,6 +311,16 @@ class TestPhasesPage:
 
         hrefs = re.findall(r'href="([^"]+)"', sidebar_nav.group(1))
         assert hrefs[:5] == ["/", "/workflows", "/phases", "/tasks", "/projects"]
+
+    def test_sidebar_has_skills_link_between_agents_and_settings(self):
+        response = client.get("/phases")
+        assert response.status_code == 200
+
+        sidebar_nav = re.search(r'<nav class="sidebar-nav">(.*?)</nav>', response.text, re.S)
+        assert sidebar_nav is not None
+
+        hrefs = re.findall(r'href="([^"]+)"', sidebar_nav.group(1))
+        assert hrefs[-3:] == ["/agents", "/skills", "/settings"]
 
     def test_phases_page_has_workflow_nav_like_projects(self):
         response = client.get("/phases")
@@ -533,6 +607,51 @@ class TestPhaseDetail:
         assert f"fetch('/api/phases/{phase['id']}'" in response.text
         assert "fetch('/api/phases/0.7'" not in response.text
 
+    def test_phase_detail_renders_selected_instruction_skills_list_and_only_remaining_add_options(self, monkeypatch):
+        skills = _sample_hermes_skills()
+        _prime_skills_cache(monkeypatch, skills)
+
+        phase_response = client.get(_phase_api_path("-1"))
+        assert phase_response.status_code == 200
+        phase = phase_response.json()["phase"]
+        restore_payload = _phase_restore_payload(phase)
+        update_payload = _phase_restore_payload(phase)
+        update_payload["instructions"][0]["skills"] = [skills[0]["name"], skills[2]["name"]]
+
+        try:
+            update = client.put(_phase_api_path("-1"), json=update_payload)
+            assert update.status_code == 200
+
+            response = client.get(_phase_detail_path("-1"))
+            assert response.status_code == 200
+            assert 'data-role="selected-skills"' in response.text
+            assert f'data-skill-name="{skills[0]["name"]}"' in response.text
+            assert f'data-skill-name="{skills[2]["name"]}"' in response.text
+
+            add_select_match = re.search(
+                r'<select class="inline-input" data-field="skill-candidate"[^>]*>(.*?)</select>',
+                response.text,
+                re.S,
+            )
+            assert add_select_match is not None
+            add_options_html = add_select_match.group(1)
+            assert f'value="{skills[1]["name"]}"' in add_options_html
+            assert f'value="{skills[0]["name"]}"' not in add_options_html
+            assert f'value="{skills[2]["name"]}"' not in add_options_html
+        finally:
+            client.put(_phase_api_path("-1"), json=restore_payload)
+
+    def test_phase_detail_javascript_uses_selected_skill_list_instead_of_multiselect(self, monkeypatch):
+        _prime_skills_cache(monkeypatch, _sample_hermes_skills())
+
+        response = client.get(_phase_detail_path("-1"))
+        assert response.status_code == 200
+        assert 'function addSkill(selectEl)' in response.text
+        assert 'function removeSkill(btn)' in response.text
+        assert 'function getSelectedSkillsFromPicker(picker)' in response.text
+        assert 'data-field="skill-candidate"' in response.text
+        assert 'selectedOptions' not in response.text
+
     def test_phases_page_hides_code_and_number_visual_noise(self):
         response = client.get("/phases")
         assert response.status_code == 200
@@ -570,6 +689,32 @@ class TestPhaseUpdate:
         data = resp.json()
         # IDs must be positive integers
         assert all(isinstance(i, int) and i > 0 for i in data["ids"]["instructions"])
+
+    def test_api_phase_update_round_trips_instruction_skills_as_string_list(self):
+        from wartz_workflow.ui import _get_db
+
+        phase_response = client.get(_phase_api_path("-1"))
+        assert phase_response.status_code == 200
+        phase = phase_response.json()["phase"]
+        restore_payload = _phase_restore_payload(phase)
+        update_payload = _phase_restore_payload(phase)
+        expected_skills = ["test-driven-development", "workflow-app-ui-delivery"]
+        update_payload["instructions"][0]["skills"] = expected_skills
+
+        try:
+            update = client.put(_phase_api_path("-1"), json=update_payload)
+            assert update.status_code == 200
+
+            detail = client.get(_phase_api_path("-1"))
+            assert detail.status_code == 200
+            instructions = detail.json()["phase"]["instructions"]
+            assert instructions[0]["skills"] == expected_skills
+            assert all(isinstance(item, str) for item in instructions[0]["skills"])
+
+            raw_db = _get_db().get_phase_instructions(_phase_id("-1"))
+            assert json.loads(raw_db[0]["skills"]) == expected_skills
+        finally:
+            client.put(_phase_api_path("-1"), json=restore_payload)
 
     def test_api_phase_update_persists_execution_type(self):
         from wartz_workflow.ui import _get_db
@@ -1080,6 +1225,36 @@ class TestAgentsPage:
         agents = client.get("/api/agents").json()["agents"]
         architect = next(agent for agent in agents if agent["id"] == payload["agent_id"])
         assert architect["description"] == "Проектирует и уточняет контракты"
+
+
+class TestSkillsPage:
+    def test_api_skills_uses_shared_cached_hermes_catalog(self, monkeypatch):
+        from wartz_workflow import ui as ui_module
+
+        sample = _sample_hermes_skills()
+        calls = {"count": 0}
+
+        def fake_scan():
+            calls["count"] += 1
+            return sample
+
+        monkeypatch.setattr(ui_module, "_scan_hermes_skills", fake_scan, raising=False)
+
+        refresh = client.get("/api/skills?refresh=1")
+        assert refresh.status_code == 200
+        assert refresh.json()["ok"] is True
+        assert refresh.json()["skills"] == sample
+
+        cached = client.get("/api/skills")
+        assert cached.status_code == 200
+        assert cached.json()["skills"] == sample
+
+        page = client.get("/skills")
+        assert page.status_code == 200
+        assert sample[0]["name"] in page.text
+        assert sample[0]["description"] in page.text
+        assert sample[0]["category"] in page.text
+        assert calls["count"] == 1
 
 
 class TestGroupsRemoved:

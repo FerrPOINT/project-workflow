@@ -31,14 +31,15 @@ class PhaseService:
             for idx, item in enumerate(items, 1):
                 c = conn.execute(
                     """
-                    INSERT INTO instructions (phase_id, step_num, description, execution_type)
-                    VALUES (?, ?, ?, ?)
+                    INSERT INTO instructions (phase_id, step_num, description, execution_type, skills)
+                    VALUES (?, ?, ?, ?, ?)
                     """,
                     (
                         resolved,
                         idx,
                         item["description"],
                         item.get("execution_type", "sync"),
+                        self.serialize_skills(self.normalize_skills(item.get("skills"))),
                     ),
                 )
                 ids.append(c.lastrowid)
@@ -107,9 +108,16 @@ class PhaseService:
         phase = self._db.get_phase(phase_id)
         if not phase:
             return {}
+
+        instructions = []
+        for item in self._db.get_phase_instructions(phase_id):
+            normalized = dict(item)
+            normalized["skills"] = self.normalize_skills(item.get("skills"))
+            instructions.append(normalized)
+
         return {
             **phase,
-            "instructions": self._db.get_phase_instructions(phase_id),
+            "instructions": instructions,
             "checks": self._db.get_phase_checks(phase_id),
             "evidence": self._db.get_phase_evidence(phase_id),
         }
@@ -122,21 +130,34 @@ class PhaseService:
     # ── Helpers ────────────────────────────────────────────────────────
 
     @staticmethod
+    def normalize_skills(raw: Any) -> list[str]:
+        if raw in (None, "", []):
+            return []
+        if isinstance(raw, list):
+            return [str(item).strip() for item in raw if str(item).strip()]
+        if isinstance(raw, str):
+            parsed = PhaseService.parse_skills(raw)
+            return [str(item).strip() for item in parsed if str(item).strip()]
+        return []
+
+    @staticmethod
     def parse_skills(raw: str | None) -> list[str]:
         if not raw:
             return []
         import json
         try:
-            return json.loads(raw)
+            parsed = json.loads(raw)
         except Exception:
             return []
+        return parsed if isinstance(parsed, list) else []
 
     @staticmethod
     def serialize_skills(skills: list[str] | None) -> str | None:
-        if not skills:
+        normalized = PhaseService.normalize_skills(skills)
+        if not normalized:
             return None
         import json
-        return json.dumps(skills, ensure_ascii=False)
+        return json.dumps(normalized, ensure_ascii=False)
 
     def get_all_phases(self) -> list[dict]:
         """Все фазы с контентом (для API)."""

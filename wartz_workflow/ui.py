@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import sqlite3
+import time
 from pathlib import Path
 from typing import Any
 
@@ -141,6 +142,60 @@ def _load_cli_reference() -> list[dict[str, Any]]:
         )
 
     return commands
+
+
+_SKILLS_CACHE_TTL_SECONDS = 60.0
+_skills_catalog_cache: list[dict[str, str | None]] | None = None
+_skills_catalog_cached_at = 0.0
+
+
+def _scan_hermes_skills() -> list[dict[str, str | None]]:
+    try:
+        import importlib
+
+        skills_tool = importlib.import_module("tools.skills_tool")
+        find_all_skills = getattr(skills_tool, "_find_all_skills")
+    except Exception:
+        return []
+
+    try:
+        found = find_all_skills()
+    except Exception:
+        return []
+
+    skills: list[dict[str, str | None]] = []
+    for item in found or []:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip()
+        if not name:
+            continue
+        description = str(item.get("description") or "").strip() or None
+        category = str(item.get("category") or "").strip() or None
+        skills.append({
+            "name": name,
+            "description": description,
+            "category": category,
+        })
+
+    skills.sort(key=lambda item: ((item.get("category") or ""), item["name"]))
+    return skills
+
+
+def _load_skills_catalog(*, refresh: bool = False) -> list[dict[str, str | None]]:
+    global _skills_catalog_cache, _skills_catalog_cached_at
+
+    now = time.monotonic()
+    if (
+        not refresh
+        and _skills_catalog_cache is not None
+        and now - _skills_catalog_cached_at < _SKILLS_CACHE_TTL_SECONDS
+    ):
+        return [dict(item) for item in _skills_catalog_cache]
+
+    _skills_catalog_cache = _scan_hermes_skills()
+    _skills_catalog_cached_at = now
+    return [dict(item) for item in _skills_catalog_cache]
 
 
 def _seed_to_sqlite() -> None:
@@ -481,10 +536,21 @@ def phase_detail(request: Request, phase_id: str):
         return HTMLResponse("<h1>Phase not found</h1>", status_code=404)
     wdb = _get_db()
     agents = wdb.get_agents()
+    skills_catalog = _load_skills_catalog()
+    for instruction in phase.get("instructions", []):
+        selected_skills = service.PhaseService.normalize_skills(instruction.get("skills"))
+        instruction["skills"] = selected_skills
+        selected_names = set(selected_skills)
+        instruction["available_skills"] = [
+            dict(skill)
+            for skill in skills_catalog
+            if str(skill.get("name") or "") not in selected_names
+        ]
     return templates.TemplateResponse(
         request=request, name="phase_detail.html", context={
             "request": request, "page": "phases", "ui_port": config.UI_PORT, "phase": phase,
             "agents": agents,
+            "skills_catalog": skills_catalog,
         }
     )
 
@@ -581,10 +647,29 @@ def settings_page(request: Request):
     )
 
 
+@app.get("/skills", response_class=HTMLResponse)
+def skills_page(request: Request, refresh: int = Query(default=0)):
+    return templates.TemplateResponse(
+        request=request,
+        name="skills.html",
+        context={
+            "request": request,
+            "page": "skills",
+            "ui_port": config.UI_PORT,
+            "skills": _load_skills_catalog(refresh=bool(refresh)),
+        },
+    )
+
+
 @app.get("/api/settings")
 def api_settings_get():
     """Вернуть реестр CLI-команд для UI/интеграций."""
     return {"ok": True, "commands": _load_cli_reference()}
+
+
+@app.get("/api/skills")
+def api_skills(refresh: int = Query(default=0)):
+    return {"ok": True, "skills": _load_skills_catalog(refresh=bool(refresh))}
 
 
 @app.get("/agents", response_class=HTMLResponse)

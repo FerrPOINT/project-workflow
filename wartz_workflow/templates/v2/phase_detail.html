@@ -55,6 +55,17 @@
 .flow-card .item-meta .tag.type-sync{color:var(--green);background:var(--green-soft)}
 .flow-card .item-meta .tag.type-parallel{color:var(--orange);background:var(--orange-soft)}
 .flow-card .item-tool{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-dim);background:var(--panel);padding:2px 6px;border-radius:4px}
+.flow-card .skill-picker{display:grid;gap:8px;margin-top:10px}
+.flow-card .skill-picker-label{font-size:11px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em}
+.flow-card .skill-selected-list{display:flex;flex-wrap:wrap;gap:8px;min-height:40px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--panel)}
+.flow-card .skill-selected-item{display:inline-flex;align-items:center;gap:8px;max-width:100%;padding:5px 10px;border-radius:999px;background:var(--accent-soft);color:var(--text-secondary);border:1px solid rgba(96,165,250,.18)}
+.flow-card .skill-selected-name{font-size:12px;line-height:1.3;word-break:break-word}
+.flow-card .skill-remove-btn{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border:none;border-radius:999px;background:transparent;color:var(--text-dim);cursor:pointer;font-size:14px;line-height:1;padding:0}
+.flow-card .skill-remove-btn:hover{color:var(--red);background:rgba(239,68,68,.12)}
+.flow-card .skill-picker-add-row{display:grid;gap:6px}
+.flow-card .skill-picker select[data-field="skill-candidate"]{background:var(--panel);border:1px solid var(--border)}
+.flow-card .skill-picker select[data-field="skill-candidate"]:disabled{opacity:.72;cursor:not-allowed}
+.flow-card .skill-empty{font-size:12px;color:var(--text-dim)}
 .flow-card .item-delete{flex-shrink:0;opacity:0;transition:opacity .12s;background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:18px;padding:0 4px;border-radius:4px}
 .flow-card:hover .item-delete{opacity:1}
 .flow-card .item-delete:hover{color:var(--red)}
@@ -188,6 +199,36 @@
                 <span class="item-tool">{{ i.tool }}</span>
                 {% endif %}
               </div>
+              <div class="skill-picker">
+                <div class="skill-picker-label">Skills</div>
+                <div class="skill-selected-list" data-role="selected-skills">
+                  {% if i.skills %}
+                    {% for selected_skill in i.skills %}
+                    <div class="skill-selected-item" data-role="selected-skill" data-skill-name="{{ selected_skill }}">
+                      <span class="skill-selected-name">{{ selected_skill }}</span>
+                      <button type="button" class="skill-remove-btn" onclick="removeSkill(this)" aria-label="Убрать {{ selected_skill }}">×</button>
+                    </div>
+                    {% endfor %}
+                  {% else %}
+                  <div class="skill-empty" data-role="selected-empty">Нет выбранных skills</div>
+                  {% endif %}
+                </div>
+                <div class="skill-picker-add-row">
+                  <div class="skill-picker-label">Добавить skill</div>
+                  <select class="inline-input" data-field="skill-candidate" onchange="addSkill(this)" {% if not i.available_skills %}disabled{% endif %}>
+                    {% if i.available_skills %}
+                    <option value="">Выбери skill…</option>
+                      {% for skill in i.available_skills %}
+                      <option value="{{ skill.name }}">{{ skill.name }}{% if skill.category %} — {{ skill.category }}{% endif %}</option>
+                      {% endfor %}
+                    {% elif skills_catalog %}
+                    <option value="">Все skills уже выбраны</option>
+                    {% else %}
+                    <option value="">Каталог skills пуст</option>
+                    {% endif %}
+                  </select>
+                </div>
+              </div>
             </div>
             <button class="item-delete" onclick="deleteItem(this)">×</button>
           </div>
@@ -259,6 +300,120 @@
 {% endblock %}
 
 {% block extra_script %}
+const skillCatalog = {{ skills_catalog | tojson }};
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function normalizeSkillNames(raw = []) {
+  const seen = new Set();
+  const normalized = [];
+  for (const item of raw || []) {
+    const name = String(item || '').trim();
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    normalized.push(name);
+  }
+  return normalized;
+}
+
+function getRemainingCatalogSkills(selected = []) {
+  const selectedSet = new Set(normalizeSkillNames(selected));
+  return skillCatalog.filter((skill) => {
+    const name = String(skill.name || '').trim();
+    return name && !selectedSet.has(name);
+  });
+}
+
+function renderSelectedSkillsMarkup(selected = []) {
+  const normalized = normalizeSkillNames(selected);
+  if (!normalized.length) {
+    return '<div class="skill-empty" data-role="selected-empty">Нет выбранных skills</div>';
+  }
+  return normalized.map((name) => `
+    <div class="skill-selected-item" data-role="selected-skill" data-skill-name="${escapeHtml(name)}">
+      <span class="skill-selected-name">${escapeHtml(name)}</span>
+      <button type="button" class="skill-remove-btn" onclick="removeSkill(this)" aria-label="Убрать ${escapeHtml(name)}">×</button>
+    </div>
+  `).join('');
+}
+
+function renderSkillCandidateOptions(selected = []) {
+  const remaining = getRemainingCatalogSkills(selected);
+  if (!skillCatalog.length) {
+    return '<option value="">Каталог skills пуст</option>';
+  }
+  const prefix = remaining.length
+    ? '<option value="">Выбери skill…</option>'
+    : '<option value="">Все skills уже выбраны</option>';
+  return prefix + remaining.map((skill) => {
+    const name = String(skill.name || '');
+    const categorySuffix = skill.category ? ` — ${skill.category}` : '';
+    return `<option value="${escapeHtml(name)}">${escapeHtml(name + categorySuffix)}</option>`;
+  }).join('');
+}
+
+function buildSkillPickerMarkup(selected = []) {
+  const normalized = normalizeSkillNames(selected);
+  const remaining = getRemainingCatalogSkills(normalized);
+  const disabledAttr = remaining.length ? '' : ' disabled';
+  return `
+    <div class="skill-picker">
+      <div class="skill-picker-label">Skills</div>
+      <div class="skill-selected-list" data-role="selected-skills">
+        ${renderSelectedSkillsMarkup(normalized)}
+      </div>
+      <div class="skill-picker-add-row">
+        <div class="skill-picker-label">Добавить skill</div>
+        <select class="inline-input" data-field="skill-candidate" onchange="addSkill(this)"${disabledAttr}>
+          ${renderSkillCandidateOptions(normalized)}
+        </select>
+      </div>
+    </div>
+  `;
+}
+
+function getSelectedSkillsFromPicker(picker) {
+  if (!picker) return [];
+  return normalizeSkillNames(
+    [...picker.querySelectorAll('[data-role="selected-skill"]')].map((item) => item.dataset.skillName || '')
+  );
+}
+
+function rerenderSkillPicker(picker, selected = []) {
+  if (!picker) return;
+  picker.outerHTML = buildSkillPickerMarkup(selected);
+}
+
+function addSkill(selectEl) {
+  const picker = selectEl.closest('.skill-picker');
+  if (!picker) return;
+  const nextSkill = String(selectEl.value || '').trim();
+  if (!nextSkill) return;
+  const selected = getSelectedSkillsFromPicker(picker);
+  if (!selected.includes(nextSkill)) {
+    selected.push(nextSkill);
+  }
+  rerenderSkillPicker(picker, selected);
+  scheduleSave();
+}
+
+function removeSkill(btn) {
+  const picker = btn.closest('.skill-picker');
+  const item = btn.closest('[data-role="selected-skill"]');
+  if (!picker || !item) return;
+  const skillName = String(item.dataset.skillName || '').trim();
+  const selected = getSelectedSkillsFromPicker(picker).filter((name) => name !== skillName);
+  rerenderSkillPicker(picker, selected);
+  scheduleSave();
+}
+
 function togglePhaseMode(el) {
   const isSync = (el.dataset.mode || 'sync') === 'sync';
   const b = el.querySelector('b');
@@ -383,6 +538,7 @@ function addInstruction() {
         <span class="tag type-sync" onclick="toggleType(this)" data-field="execution_type">⏱ sync</span>
         <span class="item-tool"></span>
       </div>
+      ${buildSkillPickerMarkup([])}
     </div>
     <button class="item-delete" onclick="deleteItem(this)">×</button>
   `;
@@ -452,12 +608,14 @@ async function savePhase() {
     const inp = card.querySelector('[data-field="description"]');
     const tag = card.querySelector('.tag');
     const tool = card.querySelector('.item-tool');
+    const skillPicker = card.querySelector('.skill-picker');
     if (inp) {
       data.instructions.push({
         step_num: idx + 1,
         description: inp.value,
         execution_type: tag && tag.classList.contains('type-parallel') ? 'parallel' : 'sync',
-        tool: tool ? tool.textContent.replace('🔧 ', '').trim() || null : null
+        tool: tool ? tool.textContent.replace('🔧 ', '').trim() || null : null,
+        skills: skillPicker ? getSelectedSkillsFromPicker(skillPicker) : []
       });
     }
   });

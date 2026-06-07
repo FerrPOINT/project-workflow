@@ -15,7 +15,10 @@
       {
         "step_num": 1,
         "description": "Прочитать карточку задачи и кратко сформулировать цель ожидаемого результата.",
-        "execution_type": "sync"
+        "execution_type": "sync",
+        "skills": [
+          "workflow-skill-routing"
+        ]
       },
       {
         "step_num": 2,
