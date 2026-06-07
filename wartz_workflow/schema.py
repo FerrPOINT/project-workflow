@@ -262,7 +262,7 @@ def persist_phase_order_to_seed(wdb: WorkflowDB, ordered_phase_ids: Sequence[int
         phase = wdb.get_phase(phase_id)
         if not phase:
             return
-        if phase.get("workflow_code") != "default" or not phase.get("is_seed_managed"):
+        if not phase.get("workflow_is_default") or not phase.get("is_seed_managed"):
             continue
         code = str(phase.get("code", phase_id)).strip()
         if code in seed_codes:

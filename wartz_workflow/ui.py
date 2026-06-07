@@ -209,8 +209,8 @@ def _load_phases(workflow_id: int | None = None) -> list[dict]:
                 "id": p["id"],
                 "code": p["code"],
                 "workflow_id": p.get("workflow_id"),
-                "workflow_code": p.get("workflow_code"),
                 "workflow_name": p.get("workflow_name"),
+                "workflow_is_default": bool(p.get("workflow_is_default")),
                 "phase_num": p["phase_order"],
                 "name": p["name"],
                 "description": p["description"],
@@ -354,12 +354,10 @@ def _project_form_payload(body: dict[str, Any]) -> dict[str, Any]:
 
 
 def _workflow_form_payload(body: dict[str, Any]) -> dict[str, Any]:
-    code = str(body.get("code", body.get("id", ""))).strip()
     name = str(body.get("name", "")).strip()
     description = str(body.get("description", "")).strip()
     return {
-        "code": code,
-        "name": name or code,
+        "name": name,
         "description": description,
     }
 
@@ -634,14 +632,13 @@ def api_workflows():
 
 @app.post("/api/workflows")
 def api_workflow_create(body: dict[str, Any]):
+    if "code" in body:
+        return JSONResponse({"ok": False, "error": "Workflow code field is no longer supported"}, status_code=400)
     payload = _workflow_form_payload(body)
-    if not payload["code"]:
-        return JSONResponse({"ok": False, "error": "code required"}, status_code=400)
-    wdb = _get_db()
-    if wdb.get_workflow_by_code(payload["code"]):
-        return JSONResponse({"ok": False, "error": "Workflow already exists"}, status_code=409)
+    if not payload["name"]:
+        return JSONResponse({"ok": False, "error": "name required"}, status_code=400)
     try:
-        workflow_id = wdb.create_workflow(payload)
+        workflow_id = _get_db().create_workflow(payload)
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     return {"ok": True, "workflow_id": workflow_id}
@@ -656,14 +653,10 @@ def api_workflow_update(workflow_id: int, body: dict[str, Any]):
 
     update_data: dict[str, Any] = {}
     if "code" in body:
-        code = str(body.get("code", "")).strip()
-        if not code:
-            return JSONResponse({"ok": False, "error": "code required"}, status_code=400)
-        if code != existing["code"]:
-            return JSONResponse(
-                {"ok": False, "error": "Workflow code is immutable; use DB id as workflow identity"},
-                status_code=400,
-            )
+        return JSONResponse(
+            {"ok": False, "error": "Workflow code field is no longer supported"},
+            status_code=400,
+        )
     if "name" in body:
         update_data["name"] = str(body.get("name", "")).strip() or existing["name"]
     if "description" in body:
@@ -876,7 +869,7 @@ def _update_config_phase_order(wdb: db.WorkflowDB | None = None):
     rows = [
         phase
         for phase in source_db.get_phases()
-        if phase.get("workflow_code") == "default" and phase.get("is_seed_managed")
+        if phase.get("workflow_is_default") and phase.get("is_seed_managed")
     ]
     if not rows:
         return

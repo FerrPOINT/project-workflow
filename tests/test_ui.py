@@ -23,12 +23,27 @@ def _phase_row(code: str) -> dict:
     return phase
 
 
-def _workflow_row(code: str) -> dict:
+def _workflow_row(lookup: str | None = None, *, workflow_id: int | None = None, name: str | None = None, is_default: bool | None = None) -> dict:
     from wartz_workflow.ui import _get_db
 
-    workflow = _get_db().get_workflow_by_code(code)
-    assert workflow is not None
-    return workflow
+    workflows = _get_db().get_workflows()
+    for workflow in workflows:
+        if lookup is not None:
+            lookup_token = str(lookup)
+            if lookup_token == "default" and bool(workflow.get("is_default")):
+                pass
+            elif str(workflow.get("code", "")) != lookup_token and str(workflow.get("name", "")) != lookup_token:
+                continue
+        if workflow_id is not None and workflow.get("id") != workflow_id:
+            continue
+        if name is not None and workflow.get("name") != name:
+            continue
+        if is_default is not None and bool(workflow.get("is_default")) != is_default:
+            continue
+        return workflow
+    raise AssertionError(
+        f"Workflow not found: lookup={lookup!r} id={workflow_id!r} name={name!r} is_default={is_default!r}"
+    )
 
 
 def _phase_id(code: str) -> int:
@@ -119,8 +134,8 @@ class TestIndexPage:
         ui_module._get_db()
         with sqlite3.connect(db_module.DB_PATH) as conn:
             conn.execute(
-                "UPDATE workflows SET code = ?, name = ?, description = ? WHERE code = ?",
-                ("legacy-singleton", "Legacy Workflow", "Old bootstrap workflow", "default"),
+                "UPDATE workflows SET name = ?, description = ?, is_default = 0 WHERE id = (SELECT id FROM workflows ORDER BY id LIMIT 1)",
+                ("Legacy Workflow", "Old bootstrap workflow"),
             )
             conn.commit()
 
@@ -130,6 +145,7 @@ class TestIndexPage:
         response = client.get("/")
         assert response.status_code == 200
         assert "Дашборд" in response.text
+        assert any(workflow["is_default"] for workflow in ui_module._get_db().get_workflows())
 
     def test_index_has_nav(self):
         response = client.get("/")
@@ -243,12 +259,11 @@ class TestPhasesPage:
         from wartz_workflow.ui import _get_db
 
         wdb = _get_db()
-        workflow = wdb.get_workflow_by_code("ui-phases-workflow")
+        workflow = next((item for item in wdb.get_workflows() if item.get("name") == "UI Phases Workflow"), None)
         if workflow:
             workflow_id = workflow["id"]
         else:
             workflow_id = wdb.create_workflow({
-                "code": "ui-phases-workflow",
                 "name": "UI Phases Workflow",
                 "description": "Workflow filter probe for phases page",
             })
@@ -271,8 +286,9 @@ class TestPhasesPage:
         finally:
             if wdb.get_phase("WF-PHASE-901"):
                 wdb.delete_phase("WF-PHASE-901")
-            if wdb.get_workflow_by_code("ui-phases-workflow"):
-                wdb.delete_workflow("ui-phases-workflow")
+            workflow = next((item for item in wdb.get_workflows() if item.get("name") == "UI Phases Workflow"), None)
+            if workflow:
+                wdb.delete_workflow(workflow["id"])
 
     def test_phases_api_can_filter_by_workflow(self):
         workflow = _workflow_row("default")
@@ -325,7 +341,7 @@ class TestPhasesPage:
         from wartz_workflow.ui import _get_db
 
         wdb = _get_db()
-        default_phases = [phase for phase in wdb.get_phases() if phase.get("workflow_code") == "default"]
+        default_phases = [phase for phase in wdb.get_phases() if phase.get("workflow_is_default")]
         original_codes = [phase["code"] for phase in default_phases]
         original_batch = [(phase["id"], phase["phase_order"]) for phase in default_phases]
 
@@ -368,7 +384,7 @@ class TestPhasesPage:
             refreshed_codes = [
                 phase["code"]
                 for phase in wdb.get_phases()
-                if phase.get("workflow_code") == "default"
+                if phase.get("workflow_is_default")
             ]
             assert refreshed_codes[:6] == reordered_codes[:6]
 
@@ -875,8 +891,8 @@ class TestProjectsPage:
             projects = client.get("/api/projects").json()["projects"]
             project = next(project for project in projects if project["id"] == project_id)
             assert project["workflow_id"] == workflow["id"]
-            assert project["workflow_code"] == workflow["code"]
             assert project["workflow_name"] == workflow["name"]
+            assert "workflow_code" not in project
         finally:
             delete = client.delete(f"/api/projects/{project_id}")
             assert delete.status_code == 200
@@ -884,7 +900,6 @@ class TestProjectsPage:
     def test_projects_api_update_can_switch_workflow(self):
         default_workflow = _workflow_row("default")
         workflow_create = client.post("/api/workflows", json={
-            "code": "WFSWITCH",
             "name": "Workflow switch target",
             "description": "Temporary workflow for project reassignment test",
         })
@@ -912,8 +927,8 @@ class TestProjectsPage:
             projects = client.get("/api/projects").json()["projects"]
             project = next(project for project in projects if project["id"] == project_id)
             assert project["workflow_id"] == workflow_id
-            assert project["workflow_code"] == "WFSWITCH"
             assert project["workflow_name"] == "Workflow switch target"
+            assert "workflow_code" not in project
         finally:
             delete_project = client.delete(f"/api/projects/{project_id}")
             assert delete_project.status_code == 200
@@ -942,6 +957,12 @@ class TestWorkflowsPage:
         assert 'id="newWorkflowButton"' in response.text
         assert 'id="workflowFormMode"' in response.text
 
+    def test_workflows_page_has_no_code_field_in_editor_or_create_form(self):
+        response = client.get("/workflows")
+        assert response.status_code == 200
+        assert 'workflowCode' not in response.text
+        assert '>Код<' not in response.text
+
     def test_workflows_page_hides_removed_intro_cleanup_block(self):
         response = client.get("/workflows")
         assert response.status_code == 200
@@ -950,7 +971,6 @@ class TestWorkflowsPage:
 
     def test_workflows_api_create_update_and_delete(self):
         create = client.post("/api/workflows", json={
-            "code": "APIWF",
             "name": "API Workflow",
             "description": "Workflow CRUD from API test",
         })
@@ -967,6 +987,7 @@ class TestWorkflowsPage:
         workflow = next(workflow for workflow in workflows if workflow["id"] == workflow_id)
         assert workflow["name"] == "API Workflow Updated"
         assert workflow["description"] == "Updated workflow description"
+        assert "code" not in workflow
 
         delete = client.delete(f"/api/workflows/{workflow_id}")
         assert delete.status_code == 200
@@ -980,11 +1001,12 @@ class TestWorkflowsPage:
             "description": workflow["description"],
         })
         assert update.status_code == 400
-        assert update.json()["error"] == "Workflow code is immutable; use DB id as workflow identity"
+        assert update.json()["error"] == "Workflow code field is no longer supported"
 
         workflows = client.get("/api/workflows").json()["workflows"]
         default_workflow = next(item for item in workflows if item["id"] == workflow["id"])
-        assert default_workflow["code"] == "default"
+        assert "code" not in default_workflow
+        assert default_workflow["is_default"] is True
 
     def test_workflows_api_recovers_from_arbitrary_singleton_workflow_code_in_runtime_db(self):
         from wartz_workflow import db as db_module, ui as ui_module
@@ -992,8 +1014,8 @@ class TestWorkflowsPage:
         ui_module._get_db()
         with sqlite3.connect(db_module.DB_PATH) as conn:
             conn.execute(
-                "UPDATE workflows SET code = ?, name = ?, description = ? WHERE code = ?",
-                ("user-renamed-workflow", "Renamed Workflow", "Broken runtime workflow", "default"),
+                "UPDATE workflows SET name = ?, description = ?, is_default = 0 WHERE id = (SELECT id FROM workflows ORDER BY id LIMIT 1)",
+                ("Renamed Workflow", "Broken runtime workflow"),
             )
             conn.commit()
 
@@ -1004,7 +1026,8 @@ class TestWorkflowsPage:
         assert response.status_code == 200
         payload = response.json()
         assert payload["ok"] is True
-        assert any(workflow["code"] == "default" for workflow in payload["workflows"])
+        assert any(workflow["is_default"] for workflow in payload["workflows"])
+        assert all("code" not in workflow for workflow in payload["workflows"])
 
     def test_workflows_api_recovers_without_resetting_ui_singletons_after_runtime_code_mutation(self):
         from wartz_workflow import db as db_module, ui as ui_module
@@ -1012,8 +1035,8 @@ class TestWorkflowsPage:
         ui_module._get_db()
         with sqlite3.connect(db_module.DB_PATH) as conn:
             conn.execute(
-                "UPDATE workflows SET code = ?, name = ?, description = ? WHERE code = ?",
-                ("singleton-renamed-workflow", "Singleton Workflow", "Broken live singleton workflow", "default"),
+                "UPDATE workflows SET name = ?, description = ?, is_default = 0 WHERE id = (SELECT id FROM workflows ORDER BY id LIMIT 1)",
+                ("Singleton Workflow", "Broken live singleton workflow"),
             )
             conn.commit()
 
@@ -1021,7 +1044,8 @@ class TestWorkflowsPage:
         assert response.status_code == 200
         payload = response.json()
         assert payload["ok"] is True
-        assert any(workflow["code"] == "default" for workflow in payload["workflows"])
+        assert any(workflow["is_default"] for workflow in payload["workflows"])
+        assert all("code" not in workflow for workflow in payload["workflows"])
 
     def test_workflows_api_prevents_deleting_workflow_with_projects_or_phases(self):
         workflow = _workflow_row("default")

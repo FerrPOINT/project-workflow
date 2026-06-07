@@ -17,8 +17,8 @@ def conn(tmp_path):
     c.executescript(schema_sql.read_text())
     c.execute("PRAGMA foreign_keys = ON")
     c.execute(
-        "INSERT INTO workflows (code, name, description) VALUES (?, ?, ?)",
-        ("default", "Default Workflow", "Constraint test workflow"),
+        "INSERT INTO workflows (name, description, is_default) VALUES (?, ?, 1)",
+        ("Default Workflow", "Constraint test workflow"),
     )
     # base phase
     c.execute(

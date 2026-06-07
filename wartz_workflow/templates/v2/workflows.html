@@ -12,7 +12,6 @@
 .workflow-nav{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 190px);overflow:auto}
 .workflow-nav-item{width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;cursor:pointer;color:var(--text)}
 .workflow-nav-item.active{border-color:var(--accent);box-shadow:0 0 0 1px rgba(88,166,255,.25)}
-.workflow-code{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent);margin-bottom:6px}
 .workflow-name{font-size:15px;font-weight:600;color:var(--text)}
 .workflow-meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--text-dim)}
 .workflow-panel{display:flex;flex-direction:column;gap:16px}
@@ -29,7 +28,6 @@ textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:160px;resiz
   <section class="workflow-nav" id="workflowNav">
     {% for workflow in workflows %}
     <button type="button" class="workflow-nav-item {% if selected_workflow and selected_workflow.id == workflow.id %}active{% endif %}" data-workflow-id="{{ workflow.id }}" onclick="selectWorkflow({{ workflow.id }})">
-      <div class="workflow-code">{{ workflow.code }}</div>
       <div class="workflow-name">{{ workflow.name }}</div>
       <div class="workflow-meta">
         <span>{{ workflow.project_count }} проектов</span>
@@ -44,10 +42,6 @@ textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:160px;resiz
   <section class="workflow-panel">
     <form id="workflowForm" class="card form-stack" onsubmit="event.preventDefault(); submitWorkflow();">
       <div class="card-title" id="workflowFormMode">Редактирование workflow</div>
-      <div>
-        <div class="label">Код</div>
-        <input type="text" id="workflowCode" value="{{ selected_workflow.code if selected_workflow else '' }}">
-      </div>
       <div>
         <div class="label">Название</div>
         <input type="text" id="workflowName" value="{{ selected_workflow.name if selected_workflow else '' }}">
@@ -75,7 +69,6 @@ let workflowFormMode = selectedWorkflowId == null ? 'create' : 'edit';
 function workflowById(id){ return workflowStore.find(function(workflow){ return workflow.id === id; }); }
 function currentWorkflowPayload(){
   return {
-    code: document.getElementById('workflowCode').value.trim(),
     name: document.getElementById('workflowName').value.trim(),
     description: document.getElementById('workflowDescription').value.trim(),
   };
@@ -86,7 +79,6 @@ function syncWorkflowNav(){
   });
 }
 function fillWorkflowForm(workflow){
-  document.getElementById('workflowCode').value = workflow ? workflow.code : '';
   document.getElementById('workflowName').value = workflow ? workflow.name : '';
   document.getElementById('workflowDescription').value = workflow ? (workflow.description || '') : '';
 }
@@ -135,10 +127,6 @@ function renderWorkflowNav(){
     button.dataset.workflowId = String(workflow.id);
     button.onclick = function(){ selectWorkflow(workflow.id); };
 
-    var code = document.createElement('div');
-    code.className = 'workflow-code';
-    code.textContent = workflow.code;
-
     var name = document.createElement('div');
     name.className = 'workflow-name';
     name.textContent = workflow.name;
@@ -153,7 +141,6 @@ function renderWorkflowNav(){
 
     meta.appendChild(projects);
     meta.appendChild(phases);
-    button.appendChild(code);
     button.appendChild(name);
     button.appendChild(meta);
     nav.appendChild(button);
@@ -192,14 +179,12 @@ function reloadWorkflows(nextId){
 function saveWorkflow(){
   if(selectedWorkflowId == null){ showToast('Нет выбранного workflow','error'); return; }
   var payload = currentWorkflowPayload();
-  if(!payload.code){ showToast('Код workflow обязателен','error'); return; }
   fetch('/api/workflows/' + selectedWorkflowId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json()})
     .then(function(d){ if(d.ok){ showToast('Workflow сохранён','success'); reloadWorkflows(selectedWorkflowId); } else { showToast(d.error || 'Ошибка','error'); } });
 }
 function createWorkflow(){
   var payload = currentWorkflowPayload();
-  if(!payload.code){ showToast('Код workflow обязателен','error'); return; }
   fetch('/api/workflows',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json()})
     .then(function(d){

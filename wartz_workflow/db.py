@@ -2,7 +2,7 @@
 
 Схема: workflows, agents, phases, instructions, checks, evidence, projects, tasks, task_history, cli_history.
 Плоская структура, связи через FOREIGN KEY.
-PK: INTEGER AUTOINCREMENT, семантические code TEXT UNIQUE.
+PK: INTEGER AUTOINCREMENT, семантические code TEXT UNIQUE для фаз и проектов.
 """
 
 import json
@@ -56,10 +56,10 @@ class WorkflowDB:
             if not workflow:
                 raise ValueError("Default workflow is not initialized")
             return workflow["id"]
-        row = self.get_workflow_by_code(str(val))
-        if not row:
-            raise ValueError(f"Unknown workflow code: {val}")
-        return row["id"]
+        token = str(val).strip()
+        if token.isdigit():
+            return int(token)
+        raise ValueError(f"Unknown workflow id: {val}")
 
     @staticmethod
     def _serialize_key_patterns(patterns: list[str] | str | None) -> str:
@@ -87,20 +87,25 @@ class WorkflowDB:
     def _hydrate_workflow_row(self, row: sqlite3.Row | dict | None) -> dict | None:
         if not row:
             return None
-        return dict(row)
+        data = dict(row)
+        if "is_default" in data:
+            data["is_default"] = bool(data.get("is_default"))
+        return data
 
     def _hydrate_project_row(self, row: sqlite3.Row | dict | None) -> dict | None:
         if not row:
             return None
         data = dict(row)
         data["key_patterns"] = self._deserialize_key_patterns(data.get("key_patterns"))
+        if "workflow_is_default" in data:
+            data["workflow_is_default"] = bool(data.get("workflow_is_default"))
         return data
 
     def _bootstrap_workflows(self) -> list[dict]:
         return [{
-            "code": "default",
             "name": "Default Workflow",
             "description": "Базовый workflow каталога фаз",
+            "is_default": 1,
         }]
 
     def _bootstrap_projects(self) -> list[dict]:
@@ -279,43 +284,90 @@ class WorkflowDB:
         rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
         return [row[1] for row in rows]
 
-    def _ensure_default_workflows(self, conn: sqlite3.Connection) -> None:
-        bootstrap = self._bootstrap_workflows()
-        bootstrap_codes = {str(workflow.get("code", "")).strip() for workflow in bootstrap if str(workflow.get("code", "")).strip()}
-        rows = conn.execute("SELECT id, code, name, description FROM workflows ORDER BY id").fetchall()
-        existing_by_code = {
-            str(row["code"] or "").strip(): dict(row)
-            for row in rows
-            if str(row["code"] or "").strip()
-        }
-        missing = [workflow for workflow in bootstrap if str(workflow.get("code", "")).strip() not in existing_by_code]
-        if not missing:
+    def _migrate_workflows_drop_code(self, conn: sqlite3.Connection) -> None:
+        workflow_columns = self._table_columns(conn, "workflows")
+        if "code" not in workflow_columns and "is_default" in workflow_columns:
             return
 
-        if len(rows) == 1 and len(missing) == 1 and missing[0].get("code") == "default":
-            legacy = dict(rows[0])
-            legacy_code = str(legacy.get("code") or "").strip()
-            if legacy_code and legacy_code not in bootstrap_codes:
-                conn.execute(
-                    "UPDATE workflows SET code = ?, name = ?, description = ? WHERE id = ?",
-                    (
-                        missing[0]["code"],
-                        missing[0]["name"],
-                        missing[0].get("description", ""),
-                        legacy["id"],
-                    ),
-                )
-                return
+        rows = conn.execute("SELECT * FROM workflows ORDER BY id").fetchall()
+        default_workflow_id: int | None = None
+        if rows:
+            if "is_default" in workflow_columns:
+                for row in rows:
+                    if int(row["is_default"] or 0) == 1:
+                        default_workflow_id = int(row["id"])
+                        break
+            if default_workflow_id is None and "code" in workflow_columns:
+                for row in rows:
+                    if str(row["code"] or "").strip() == "default":
+                        default_workflow_id = int(row["id"])
+                        break
+            if default_workflow_id is None:
+                bootstrap_name = str(self._bootstrap_workflows()[0].get("name", "")).strip()
+                for row in rows:
+                    if str(row["name"] or "").strip() == bootstrap_name:
+                        default_workflow_id = int(row["id"])
+                        break
+            if default_workflow_id is None:
+                default_workflow_id = int(rows[0]["id"])
 
-        for workflow in missing:
+        conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute(
+            """
+            CREATE TABLE workflows_new (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                is_default  INTEGER NOT NULL DEFAULT 0 CHECK(is_default IN (0, 1))
+            )
+            """
+        )
+        for row in rows:
             conn.execute(
-                "INSERT INTO workflows (code, name, description) VALUES (?, ?, ?)",
+                "INSERT INTO workflows_new (id, name, description, is_default) VALUES (?, ?, ?, ?)",
                 (
-                    workflow["code"],
-                    workflow["name"],
-                    workflow.get("description", ""),
+                    row["id"],
+                    str(row["name"] or "").strip(),
+                    str(row["description"] or "").strip(),
+                    1 if default_workflow_id is not None and int(row["id"]) == default_workflow_id else 0,
                 ),
             )
+        conn.execute("DROP TABLE workflows")
+        conn.execute("ALTER TABLE workflows_new RENAME TO workflows")
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_workflows_single_default ON workflows(is_default) WHERE is_default = 1"
+        )
+        conn.execute("PRAGMA foreign_keys = ON")
+
+    def _ensure_default_workflows(self, conn: sqlite3.Connection) -> None:
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_workflows_single_default ON workflows(is_default) WHERE is_default = 1"
+        )
+        bootstrap = self._bootstrap_workflows()[0]
+        rows = conn.execute("SELECT id, name, description, is_default FROM workflows ORDER BY id").fetchall()
+        if not rows:
+            conn.execute(
+                "INSERT INTO workflows (name, description, is_default) VALUES (?, ?, 1)",
+                (
+                    bootstrap["name"],
+                    bootstrap.get("description", ""),
+                ),
+            )
+            return
+
+        default_rows = [row for row in rows if int(row["is_default"] or 0) == 1]
+        if not default_rows:
+            bootstrap_name = str(bootstrap.get("name", "")).strip()
+            selected = next(
+                (row for row in rows if str(row["name"] or "").strip() == bootstrap_name),
+                rows[0],
+            )
+            conn.execute("UPDATE workflows SET is_default = 0")
+            conn.execute("UPDATE workflows SET is_default = 1 WHERE id = ?", (selected["id"],))
+            return
+
+        keeper_id = int(default_rows[0]["id"])
+        conn.execute("UPDATE workflows SET is_default = 0 WHERE id != ? AND is_default = 1", (keeper_id,))
 
     def _align_bootstrap_catalog_to_default_workflow(self, conn: sqlite3.Connection) -> None:
         default_workflow_id = self._default_workflow_id(conn)
@@ -344,7 +396,7 @@ class WorkflowDB:
             )
 
     def _default_workflow_id(self, conn: sqlite3.Connection) -> int:
-        row = conn.execute("SELECT id FROM workflows WHERE code = ?", ("default",)).fetchone()
+        row = conn.execute("SELECT id FROM workflows WHERE is_default = 1 ORDER BY id LIMIT 1").fetchone()
         if not row:
             raise ValueError("Default workflow is not initialized")
         return int(row["id"])
@@ -475,6 +527,8 @@ class WorkflowDB:
 
     def _migrate_schema(self, conn: sqlite3.Connection) -> None:
         task_columns = self._table_columns(conn, "tasks")
+        self._migrate_workflows_drop_code(conn)
+        self._ensure_default_workflows(conn)
         self._migrate_agents_add_description(conn)
         self._migrate_projects_add_workflow(conn)
         self._migrate_phases_add_workflow(conn)
@@ -488,8 +542,8 @@ class WorkflowDB:
         ddl = SCHEMA_PATH.read_text(encoding="utf-8")
         with self._conn() as conn:
             conn.executescript(ddl)
-            self._ensure_default_workflows(conn)
             self._migrate_schema(conn)
+            self._ensure_default_workflows(conn)
             self._align_bootstrap_catalog_to_default_workflow(conn)
             self._ensure_default_projects(conn)
             self._ensure_default_agents(conn)
@@ -737,16 +791,16 @@ class WorkflowDB:
     # ── Workflows ───────────────────────────────────────────────────────
 
     def create_workflow(self, data: dict) -> int:
-        code = str(data.get("code", data.get("id", ""))).strip()
-        if not code:
-            raise ValueError("Workflow code is required")
+        name = str(data.get("name", "")).strip()
+        if not name:
+            raise ValueError("Workflow name is required")
         with self._conn() as conn:
             c = conn.execute(
-                "INSERT INTO workflows (code, name, description) VALUES (?, ?, ?)",
+                "INSERT INTO workflows (name, description, is_default) VALUES (?, ?, ?)",
                 (
-                    code,
-                    str(data.get("name", code)).strip() or code,
+                    name,
                     str(data.get("description", "")).strip(),
+                    1 if bool(data.get("is_default")) else 0,
                 ),
             )
             conn.commit()
@@ -762,13 +816,10 @@ class WorkflowDB:
             row = conn.execute("SELECT * FROM workflows WHERE id = ?", (workflow_id,)).fetchone()
             return self._hydrate_workflow_row(row)
 
-    def get_workflow_by_code(self, code: str) -> dict | None:
-        with self._conn() as conn:
-            row = conn.execute("SELECT * FROM workflows WHERE code = ?", (code,)).fetchone()
-            return self._hydrate_workflow_row(row)
-
     def get_default_workflow(self) -> dict | None:
-        return self.get_workflow_by_code("default")
+        with self._conn() as conn:
+            row = conn.execute("SELECT * FROM workflows WHERE is_default = 1 ORDER BY id LIMIT 1").fetchone()
+            return self._hydrate_workflow_row(row)
 
     def update_workflow(self, workflow_id: int | str, data: dict) -> None:
         resolved = self._resolve_workflow_id(workflow_id)
@@ -817,7 +868,7 @@ class WorkflowDB:
         with self._conn() as conn:
             rows = conn.execute(
                 """
-                SELECT projects.*, workflows.code AS workflow_code, workflows.name AS workflow_name, workflows.description AS workflow_description
+                SELECT projects.*, workflows.name AS workflow_name, workflows.description AS workflow_description, workflows.is_default AS workflow_is_default
                 FROM projects
                 JOIN workflows ON workflows.id = projects.workflow_id
                 ORDER BY projects.id
@@ -829,7 +880,7 @@ class WorkflowDB:
         with self._conn() as conn:
             row = conn.execute(
                 """
-                SELECT projects.*, workflows.code AS workflow_code, workflows.name AS workflow_name, workflows.description AS workflow_description
+                SELECT projects.*, workflows.name AS workflow_name, workflows.description AS workflow_description, workflows.is_default AS workflow_is_default
                 FROM projects
                 JOIN workflows ON workflows.id = projects.workflow_id
                 WHERE projects.id = ?
@@ -842,7 +893,7 @@ class WorkflowDB:
         with self._conn() as conn:
             row = conn.execute(
                 """
-                SELECT projects.*, workflows.code AS workflow_code, workflows.name AS workflow_name, workflows.description AS workflow_description
+                SELECT projects.*, workflows.name AS workflow_name, workflows.description AS workflow_description, workflows.is_default AS workflow_is_default
                 FROM projects
                 JOIN workflows ON workflows.id = projects.workflow_id
                 WHERE projects.code = ?
@@ -950,7 +1001,7 @@ class WorkflowDB:
                 params = (self._resolve_workflow_id(workflow_id),)
             rows = conn.execute(
                 f"""
-                SELECT phases.*, workflows.code AS workflow_code, workflows.name AS workflow_name, workflows.description AS workflow_description
+                SELECT phases.*, workflows.name AS workflow_name, workflows.description AS workflow_description, workflows.is_default AS workflow_is_default
                 FROM phases
                 JOIN workflows ON workflows.id = phases.workflow_id
                 {where_clause}
@@ -965,7 +1016,7 @@ class WorkflowDB:
             if isinstance(phase_id, int):
                 row = conn.execute(
                     """
-                    SELECT phases.*, workflows.code AS workflow_code, workflows.name AS workflow_name, workflows.description AS workflow_description
+                    SELECT phases.*, workflows.name AS workflow_name, workflows.description AS workflow_description, workflows.is_default AS workflow_is_default
                     FROM phases
                     JOIN workflows ON workflows.id = phases.workflow_id
                     WHERE phases.id = ?
@@ -975,7 +1026,7 @@ class WorkflowDB:
             else:
                 row = conn.execute(
                     """
-                    SELECT phases.*, workflows.code AS workflow_code, workflows.name AS workflow_name, workflows.description AS workflow_description
+                    SELECT phases.*, workflows.name AS workflow_name, workflows.description AS workflow_description, workflows.is_default AS workflow_is_default
                     FROM phases
                     JOIN workflows ON workflows.id = phases.workflow_id
                     WHERE phases.code = ?
@@ -988,7 +1039,7 @@ class WorkflowDB:
         with self._conn() as conn:
             row = conn.execute(
                 """
-                SELECT phases.*, workflows.code AS workflow_code, workflows.name AS workflow_name, workflows.description AS workflow_description
+                SELECT phases.*, workflows.name AS workflow_name, workflows.description AS workflow_description, workflows.is_default AS workflow_is_default
                 FROM phases
                 JOIN workflows ON workflows.id = phases.workflow_id
                 WHERE phases.code = ?

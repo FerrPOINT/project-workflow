@@ -30,6 +30,12 @@ class TestInit:
         }.issubset(tables)
         assert "phase_groups" not in tables
 
+    def test_workflows_table_drops_code_and_uses_default_flag(self, db):
+        with sqlite3.connect(db.db_path) as conn:
+            columns = [row[1] for row in conn.execute("PRAGMA table_info(workflows)").fetchall()]
+        assert "code" not in columns
+        assert "is_default" in columns
+
     def test_init_idempotent(self, db):
         """Повторный init не падает."""
         db.init()  # второй раз

@@ -199,8 +199,8 @@ def test_db_init_recovers_legacy_singleton_workflow_row_back_to_default(tmp_path
 
     with sqlite3.connect(db_path) as conn:
         conn.execute(
-            "UPDATE workflows SET code = ?, name = ?, description = ? WHERE code = ?",
-            ("legacy-singleton", "Legacy Workflow", "Old bootstrap workflow", "default"),
+            "UPDATE workflows SET name = ?, description = ?, is_default = 0 WHERE id = (SELECT id FROM workflows ORDER BY id LIMIT 1)",
+            ("Legacy Workflow", "Old bootstrap workflow"),
         )
         conn.commit()
 
@@ -209,12 +209,13 @@ def test_db_init_recovers_legacy_singleton_workflow_row_back_to_default(tmp_path
 
     workflows = db.get_workflows()
     assert len(workflows) == 1
-    assert workflows[0]["code"] == "default"
+    assert workflows[0]["name"] == "Legacy Workflow"
+    assert workflows[0]["is_default"] == 1
 
     default_project = db.get_project_by_code("TASKNEIROKLYUCH")
     assert default_project is not None
-    assert default_project["workflow_code"] == "default"
+    assert default_project["workflow_is_default"] == 1
 
     intake_phase = db.get_phase("-1")
     assert intake_phase is not None
-    assert intake_phase["workflow_code"] == "default"
+    assert intake_phase["workflow_is_default"] == 1
