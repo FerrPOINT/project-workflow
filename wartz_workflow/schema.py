@@ -186,7 +186,11 @@ def persist_phase_update_to_seed(wdb: WorkflowDB, phase_id: int | str, body: dic
         "execution_type",
     }
     relevant_collection_fields = {"instructions", "checks", "evidence"}
-    if not (relevant_top_level_fields.intersection(body) or relevant_collection_fields.intersection(body)):
+    if not (
+        relevant_top_level_fields.intersection(body)
+        or relevant_collection_fields.intersection(body)
+        or "agent_id" in body
+    ):
         return
     if not _SEED_PATH.exists():
         return
@@ -216,6 +220,14 @@ def persist_phase_update_to_seed(wdb: WorkflowDB, phase_id: int | str, body: dic
     for field in relevant_top_level_fields:
         if field in body:
             seed_item[field] = phase.get(field)
+
+    if "agent_id" in body:
+        agent_name = None
+        if phase.get("agent_id"):
+            agent = wdb.get_agent(phase["agent_id"])
+            if agent:
+                agent_name = str(agent.get("name") or "").strip() or None
+        seed_item["selected_agent"] = agent_name
 
     if "instructions" in body:
         seed_item["instructions"] = _serialize_seed_instructions(body.get("instructions") or [])

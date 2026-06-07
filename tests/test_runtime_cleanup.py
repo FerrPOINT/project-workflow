@@ -3,14 +3,39 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 
-from wartz_workflow import config, state
+from wartz_workflow import config, schema, state
 from wartz_workflow.db import WorkflowDB
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SEED_PATH = REPO_ROOT / "wartz_workflow" / "references" / "seed.json"
+
+VALID_WORKFLOW_SKILLS = {
+    "agent-workflow-patterns",
+    "llm-wiki",
+    "repo-workflow",
+    "test-driven-development",
+    "workflow-code-intelligence",
+    "workflow-systematic-debugging",
+    "workflow-writing-plans",
+}
+
+EXPECTED_ROLE_AGENTS = {
+    "0.6": "researcher",
+    "0.9": "critic",
+    "1.5": "researcher",
+    "3.5": "critic",
+    "4.5": "critic",
+    "7.5": "reviewer",
+    "7.6": "reviewer",
+    "7.6.R": "researcher",
+    "7.7": "critic",
+    "8": "ops",
+    "9": "coder",
+}
 
 
 def _phase_by_code(code: str) -> dict:
@@ -120,3 +145,76 @@ def test_seed_catalog_has_no_blank_instruction_descriptions():
                 blanks.append(f"{phase_code}#{instruction.get('step_num', '?')}")
 
     assert blanks == []
+
+
+def test_seed_catalog_parallelism_uses_phase_runs_instead_of_fake_instruction_batches():
+    expected_parallel_phase_codes = {"-1", "0.0a", "0.00", "1", "2", "5", "7.6", "7.6.R"}
+    for code in expected_parallel_phase_codes:
+        phase = _phase_by_code(code)
+        assert phase["execution_type"] == "parallel", f"Phase {code} must be marked parallel at phase level"
+
+    for code in ("0.0a", "0.6", "7.5", "7.6", "7.6.R", "9"):
+        phase = _phase_by_code(code)
+        instruction_types = [item.get("execution_type", "sync") for item in phase.get("instructions", [])]
+        assert instruction_types, f"Phase {code} must keep instructions"
+        assert all(item == "sync" for item in instruction_types), (
+            f"Phase {code} instructions must stay sequential; parallel belongs on the phase run"
+        )
+
+
+def test_seed_catalog_role_bound_phases_are_fully_filled_with_agents_skills_and_checks():
+    for code, agent_name in EXPECTED_ROLE_AGENTS.items():
+        phase = _phase_by_code(code)
+        assert phase.get("selected_agent") == agent_name, f"Phase {code} must pick agent {agent_name}"
+        assert phase.get("instructions"), f"Phase {code} must keep instructions"
+        assert phase.get("checks"), f"Phase {code} must keep checks"
+        assert phase.get("evidence"), f"Phase {code} must keep evidence"
+
+        for instruction in phase["instructions"]:
+            skills = instruction.get("skills")
+            assert isinstance(skills, list) and skills, f"Phase {code} instruction {instruction.get('step_num')} must declare skills"
+            assert set(skills).issubset(VALID_WORKFLOW_SKILLS), (
+                f"Phase {code} instruction {instruction.get('step_num')} uses unknown skills: {skills}"
+            )
+
+
+def test_db_init_assigns_selected_agents_to_role_bound_default_phases(tmp_path):
+    db = WorkflowDB(str(tmp_path / "workflow.db"))
+    db.init()
+    schema.ensure_phase_catalog(db)
+
+    agents_by_id = {agent["id"]: agent["name"] for agent in db.get_agents()}
+    for code, expected_agent_name in EXPECTED_ROLE_AGENTS.items():
+        phase = db.get_phase(code)
+        assert phase is not None
+        assert phase.get("agent_id") is not None, f"Phase {code} must resolve selected agent"
+        assert agents_by_id[phase["agent_id"]] == expected_agent_name
+
+
+def test_db_init_recovers_legacy_singleton_workflow_row_back_to_default(tmp_path):
+    db_path = tmp_path / "workflow.db"
+    db = WorkflowDB(str(db_path))
+    db.init()
+    schema.ensure_phase_catalog(db)
+
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "UPDATE workflows SET code = ?, name = ?, description = ? WHERE code = ?",
+            ("legacy-singleton", "Legacy Workflow", "Old bootstrap workflow", "default"),
+        )
+        conn.commit()
+
+    db.init()
+    schema.ensure_phase_catalog(db)
+
+    workflows = db.get_workflows()
+    assert len(workflows) == 1
+    assert workflows[0]["code"] == "default"
+
+    default_project = db.get_project_by_code("TASKNEIROKLYUCH")
+    assert default_project is not None
+    assert default_project["workflow_code"] == "default"
+
+    intake_phase = db.get_phase("-1")
+    assert intake_phase is not None
+    assert intake_phase["workflow_code"] == "default"

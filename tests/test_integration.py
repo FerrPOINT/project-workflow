@@ -66,10 +66,9 @@ class TestEndToEndWorkflow:
         wdb.init()
         wdb.create_agent({"name": "coder", "description": "Пишет код"})
         agents = wdb.get_agents()
-        assert len(agents) == 1
-        assert agents[0]["id"] is not None
-        assert agents[0]["name"] == "coder"
-        assert agents[0]["description"] == "Пишет код"
+        created = [agent for agent in agents if agent["name"] == "coder" and agent["description"] == "Пишет код"]
+        assert len(created) == 1
+        assert created[0]["id"] is not None
 
     def test_cli_history_logs_and_reads(self, tmp_path: Path):
         """Лог CLI вызовов."""

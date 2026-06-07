@@ -33,10 +33,10 @@
         "description": "Карточка задачи доступна и ключ распознан корректно"
       },
       {
-        "description": "Цель и ожидаемый результат сформулированы без двусмысленности"
+        "description": "Ограничения и зависимости для старта зафиксированы"
       },
       {
-        "description": "Ограничения и зависимости для старта зафиксированы"
+        "description": "Цель и ожидаемый результат сформулированы без двусмысленности"
       }
     ],
     "evidence": [
@@ -65,7 +65,8 @@
       }
     ],
     "questions": [],
-    "code": "-1"
+    "code": "-1",
+    "selected_agent": null
   },
   {
     "name": "Suite Verification",
@@ -82,23 +83,35 @@
     "instructions": [
       {
         "step_num": 1,
-        "description": "Запустить verify-suite.sh в репо",
-        "execution_type": "parallel"
+        "description": "Запустить verify-suite.sh в рабочем репозитории и дождаться итогового статуса",
+        "execution_type": "sync",
+        "skills": [
+          "repo-workflow"
+        ]
       },
       {
         "step_num": 2,
-        "description": "Если FAIL — читай ошибку, исправляй, повторяй",
-        "execution_type": "parallel"
+        "description": "Если verify-suite.sh вернул FAIL — разобрать причину и исправить блокер до продолжения",
+        "execution_type": "sync",
+        "skills": [
+          "workflow-systematic-debugging"
+        ]
       },
       {
         "step_num": 3,
-        "description": "Если WARNINGS — оцени критичность, большинство можно игнорировать",
-        "execution_type": "parallel"
+        "description": "Если появились WARNINGS — зафиксировать их и явно решить, блокируют ли они дальнейшую работу",
+        "execution_type": "sync",
+        "skills": [
+          "agent-workflow-patterns"
+        ]
       },
       {
         "step_num": 4,
-        "description": "Зафиксировать итог проверки и переходить дальше только после зелёного verify-suite.sh или явной фиксации блокера.",
-        "execution_type": "sync"
+        "description": "Зафиксировать итог проверки и переходить дальше только после зелёного verify-suite.sh или явного решения по блокеру",
+        "execution_type": "sync",
+        "skills": [
+          "repo-workflow"
+        ]
       }
     ],
     "checks": [
@@ -496,46 +509,42 @@
     "execution_type": "sync",
     "instructions": [
       {
-        "id": 28,
-        "phase_id": "0.9",
         "step_num": 1,
-        "description": "Проверить что все обязаловки выполнены",
+        "description": "Проверить, что обязательные входные условия и подготовительные артефакты действительно готовы",
         "execution_type": "sync",
-        "tool": null
+        "skills": [
+          "agent-workflow-patterns",
+          "workflow-systematic-debugging"
+        ]
       },
       {
-        "id": 29,
-        "phase_id": "0.9",
         "step_num": 2,
-        "description": "Оценить риски задачи",
+        "description": "Оценить риски задачи и отметить, что может сломать разработку или верификацию",
         "execution_type": "sync",
-        "tool": null
+        "skills": [
+          "workflow-systematic-debugging"
+        ]
       },
       {
-        "id": 30,
-        "phase_id": "0.9",
         "step_num": 3,
-        "description": "Зафиксировать решение",
+        "description": "Зафиксировать решение critic gate: можно продолжать, нужно уточнение или нужен откат к setup",
         "execution_type": "sync",
-        "tool": null
+        "skills": [
+          "agent-workflow-patterns"
+        ]
       }
     ],
     "checks": [
       {
-        "id": 15,
-        "phase_id": "0.9",
-        "description": "All checks passed",
-        "command": null,
-        "optional": 0
+        "description": "Критик явно подтвердил готовность к старту или вернул задачу в setup с причиной"
+      },
+      {
+        "description": "Все найденные блокеры и риски задокументированы до перехода к Preflight"
       }
     ],
     "evidence": [
       {
-        "id": 14,
-        "phase_id": "0.9",
-        "description": "CriticGate report",
-        "validator": null,
-        "collected": 0
+        "description": "Отчёт CriticGate PreFlight с решением и списком рисков"
       }
     ],
     "checkups": [
@@ -556,7 +565,8 @@
       }
     ],
     "questions": [],
-    "code": "0.9"
+    "code": "0.9",
+    "selected_agent": "critic"
   },
   {
     "name": "Jira Transition",
@@ -655,50 +665,52 @@
     "execution_type": "sync",
     "instructions": [
       {
-        "id": 34,
-        "phase_id": "0.6",
         "step_num": 1,
-        "description": "delegate_task(goal='исследование контекста', context='задача: {title}')",
-        "execution_type": "parallel",
-        "tool": null
+        "description": "Запустить исследование контекста по задаче и затронутым модулям",
+        "execution_type": "sync",
+        "skills": [
+          "workflow-code-intelligence"
+        ]
       },
       {
-        "id": 35,
-        "phase_id": "0.6",
         "step_num": 2,
-        "description": "Дождаться COMPLETE",
-        "execution_type": "parallel",
-        "tool": null
+        "description": "Дождаться отчёта и извлечь зависимости, dataflow и риски изменений",
+        "execution_type": "sync",
+        "skills": [
+          "workflow-code-intelligence",
+          "workflow-systematic-debugging"
+        ]
       },
       {
-        "id": 36,
-        "phase_id": "0.6",
         "step_num": 3,
-        "description": "Прочитать результаты — использовать как шаблон",
-        "execution_type": "parallel",
-        "tool": null
+        "description": "Зафиксировать findings так, чтобы их можно было использовать в Phase 1 и Phase 2 без повторного обхода кода",
+        "execution_type": "sync",
+        "skills": [
+          "workflow-code-intelligence",
+          "agent-workflow-patterns"
+        ]
       }
     ],
-    "checks": [],
-    "evidence": [
+    "checks": [
       {
-        "id": 17,
-        "phase_id": "0.6",
-        "description": "Research report (файл или summary)",
-        "validator": null,
-        "collected": 0
+        "description": "Отчёт исследователя перечисляет реальные затронутые модули и точки входа"
       },
       {
-        "id": 18,
-        "phase_id": "0.6",
-        "description": "project-knowledge.md обновлён",
-        "validator": null,
-        "collected": 0
+        "description": "Зафиксированы риски, неизвестные и вопросы, которые могут заблокировать реализацию"
+      }
+    ],
+    "evidence": [
+      {
+        "description": "Отчёт исследователя с модулями, зависимостями и рисками"
+      },
+      {
+        "description": "Список точек входа, dataflow и мест для безопасного переиспользования"
       }
     ],
     "checkups": [],
     "questions": [],
-    "code": "0.6"
+    "code": "0.6",
+    "selected_agent": "researcher"
   },
   {
     "name": "Preflight",
@@ -711,7 +723,7 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Запускай Phase 1.5 (Deep Research) ПАРАЛЛЕЛЬНО",
-    "execution_type": "sync",
+    "execution_type": "parallel",
     "instructions": [
       {
         "step_num": 1,
@@ -795,34 +807,54 @@
     "rollback_target": null,
     "next_recommendation": "Когда Deep Research + Synthesis готовы → Phase 3 (Plan)",
     "execution_type": "sync",
-    "instructions": [],
-    "checks": [],
+    "instructions": [
+      {
+        "step_num": 1,
+        "description": "Запустить углублённое исследование архитектуры, контрактов и зависимостей задачи",
+        "execution_type": "sync",
+        "skills": [
+          "workflow-code-intelligence"
+        ]
+      },
+      {
+        "step_num": 2,
+        "description": "Собрать реальные API, типы, точки расширения и ограничения текущей реализации",
+        "execution_type": "sync",
+        "skills": [
+          "workflow-code-intelligence",
+          "workflow-systematic-debugging"
+        ]
+      },
+      {
+        "step_num": 3,
+        "description": "Сверить findings с существующими реализациями и отметить, что можно переиспользовать без регрессий",
+        "execution_type": "sync",
+        "skills": [
+          "workflow-code-intelligence",
+          "agent-workflow-patterns"
+        ]
+      }
+    ],
+    "checks": [
+      {
+        "description": "Исследование покрывает реальные контракты, типы и интеграционные точки задачи"
+      },
+      {
+        "description": "Отмечены части кода, которые нужно переиспользовать, изолировать или не трогать"
+      }
+    ],
     "evidence": [
       {
-        "id": 22,
-        "phase_id": "1.5",
-        "description": "API contract references",
-        "validator": null,
-        "collected": 0
+        "description": "Deep research отчёт по архитектуре, контрактам и ограничениям"
       },
       {
-        "id": 21,
-        "phase_id": "1.5",
-        "description": "Architecture summary",
-        "validator": null,
-        "collected": 0
-      },
-      {
-        "id": 23,
-        "phase_id": "1.5",
-        "description": "Existing feature samples",
-        "validator": null,
-        "collected": 0
+        "description": "Список существующих реализаций и safe-to-reuse компонентов"
       }
     ],
     "checkups": [],
     "questions": [],
-    "code": "1.5"
+    "code": "1.5",
+    "selected_agent": "researcher"
   },
   {
     "name": "Research Synthesis",
@@ -835,7 +867,7 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Перейди к Phase 3 — написать план",
-    "execution_type": "sync",
+    "execution_type": "parallel",
     "instructions": [
       {
         "id": 41,
@@ -1011,23 +1043,49 @@
     "rollback_target": "3",
     "next_recommendation": "Если PASS → Phase 4 (Implement). Если FAIL → вернись к Phase 3.",
     "execution_type": "sync",
-    "instructions": [],
+    "instructions": [
+      {
+        "step_num": 1,
+        "description": "Передать план и контекст задачи на critic review до старта реализации",
+        "execution_type": "sync",
+        "skills": [
+          "workflow-writing-plans",
+          "agent-workflow-patterns"
+        ]
+      },
+      {
+        "step_num": 2,
+        "description": "Проверить полноту шагов, rollback, критерии готовности и покрытие рисков в плане",
+        "execution_type": "sync",
+        "skills": [
+          "workflow-writing-plans",
+          "workflow-systematic-debugging"
+        ]
+      },
+      {
+        "step_num": 3,
+        "description": "Зафиксировать замечания критика и обновить план до зелёного gate",
+        "execution_type": "sync",
+        "skills": [
+          "workflow-writing-plans",
+          "agent-workflow-patterns"
+        ]
+      }
+    ],
     "checks": [
       {
-        "id": 21,
-        "phase_id": "3.5",
-        "description": "CriticGate дал PASS или FAIL с обоснованием",
-        "command": null,
-        "optional": 0
+        "description": "План покрывает все обязательные шаги, проверки и rollback без дыр"
+      },
+      {
+        "description": "Критик снял возражения или они явно перенесены в action items до реализации"
       }
     ],
     "evidence": [
       {
-        "id": 27,
-        "phase_id": "3.5",
-        "description": "CriticGate report (PASS/WARN/INFO)",
-        "validator": null,
-        "collected": 0
+        "description": "Отчёт CriticGate PrePlan с замечаниями и решением"
+      },
+      {
+        "description": "Обновлённый план после прохождения critic review"
       }
     ],
     "checkups": [
@@ -1048,7 +1106,8 @@
       }
     ],
     "questions": [],
-    "code": "3.5"
+    "code": "3.5",
+    "selected_agent": "critic"
   },
   {
     "name": "Implement",
@@ -1153,23 +1212,46 @@
     "rollback_target": "4",
     "next_recommendation": "Если PASS → Phase 5 (Validate). Если FAIL → вернись к Phase 4.",
     "execution_type": "sync",
-    "instructions": [],
+    "instructions": [
+      {
+        "step_num": 1,
+        "description": "Перед коммитом отдать diff и список проверок на critic review",
+        "execution_type": "sync",
+        "skills": [
+          "test-driven-development",
+          "agent-workflow-patterns"
+        ]
+      },
+      {
+        "step_num": 2,
+        "description": "Проверить незакрытые риски, недостающие тесты и нарушения договорённостей workflow",
+        "execution_type": "sync",
+        "skills": [
+          "test-driven-development",
+          "workflow-systematic-debugging"
+        ]
+      },
+      {
+        "step_num": 3,
+        "description": "Исправить обязательные замечания до перехода к Validate и Commit",
+        "execution_type": "sync",
+        "skills": [
+          "test-driven-development",
+          "agent-workflow-patterns"
+        ]
+      }
+    ],
     "checks": [
       {
-        "id": 23,
-        "phase_id": "4.5",
-        "description": "CriticGate дал PASS",
-        "command": null,
-        "optional": 0
+        "description": "Критик подтвердил, что diff можно отправлять на валидацию без известных блокеров"
+      },
+      {
+        "description": "Все обязательные тесты и доказательства по изменению уже подготовлены или явно запланированы"
       }
     ],
     "evidence": [
       {
-        "id": 30,
-        "phase_id": "4.5",
-        "description": "CriticGate report",
-        "validator": null,
-        "collected": 0
+        "description": "Отчёт CriticGate PreCommit с критичными замечаниями и итоговым решением"
       }
     ],
     "checkups": [
@@ -1190,7 +1272,8 @@
       }
     ],
     "questions": [],
-    "code": "4.5"
+    "code": "4.5",
+    "selected_agent": "critic"
   },
   {
     "name": "Validate",
@@ -1203,7 +1286,7 @@
     "parallel_with": "4.5",
     "rollback_target": null,
     "next_recommendation": "Перейди к Phase 5.5 — Self-Test",
-    "execution_type": "sync",
+    "execution_type": "parallel",
     "instructions": [
       {
         "id": 53,
@@ -1664,43 +1747,50 @@
     "execution_type": "sync",
     "instructions": [
       {
-        "id": 67,
-        "phase_id": "7.5",
         "step_num": 1,
-        "description": "delegate_task(goal='code review')",
-        "execution_type": "parallel",
-        "tool": null
+        "description": "Запустить review изменённых файлов, архитектурных решений и рисков регрессии",
+        "execution_type": "sync",
+        "skills": [
+          "repo-workflow",
+          "agent-workflow-patterns"
+        ]
       },
       {
-        "id": 68,
-        "phase_id": "7.5",
         "step_num": 2,
-        "description": "Дождаться COMPLETE",
-        "execution_type": "parallel",
-        "tool": null
+        "description": "Дождаться замечаний и разделить must-fix от необязательных улучшений",
+        "execution_type": "sync",
+        "skills": [
+          "repo-workflow",
+          "workflow-systematic-debugging"
+        ]
       },
       {
-        "id": 69,
-        "phase_id": "7.5",
         "step_num": 3,
-        "description": "Если замечания — исправить и обновить MR",
-        "execution_type": "parallel",
-        "tool": null
+        "description": "Внести обязательные правки и обновить описание изменений перед следующими gate",
+        "execution_type": "sync",
+        "skills": [
+          "repo-workflow",
+          "test-driven-development"
+        ]
       }
     ],
-    "checks": [],
+    "checks": [
+      {
+        "description": "Code review завершён с явным списком обязательных правок или подтверждением их отсутствия"
+      },
+      {
+        "description": "После правок не осталось незакрытых замечаний, блокирующих QA или финальный gate"
+      }
+    ],
     "evidence": [
       {
-        "id": 39,
-        "phase_id": "7.5",
-        "description": "Review report (APPROVED / замечания)",
-        "validator": null,
-        "collected": 0
+        "description": "Отчёт code review с must-fix замечаниями и статусом их закрытия"
       }
     ],
     "checkups": [],
     "questions": [],
-    "code": "7.5"
+    "code": "7.5",
+    "selected_agent": "reviewer"
   },
   {
     "name": "QA Testing",
@@ -1713,38 +1803,47 @@
     "parallel_with": "7.5",
     "rollback_target": "4",
     "next_recommendation": "Когда Code Review + QA готовы → Phase 7.7 (CriticGate PostQA)",
-    "execution_type": "sync",
+    "execution_type": "parallel",
     "instructions": [
       {
-        "id": 70,
-        "phase_id": "7.6",
         "step_num": 1,
-        "description": "delegate_task(goal='QA testing')",
-        "execution_type": "parallel",
-        "tool": null
+        "description": "Запустить QA-проверку по acceptance criteria, regression scope и пользовательским сценариям",
+        "execution_type": "sync",
+        "skills": [
+          "test-driven-development",
+          "agent-workflow-patterns"
+        ]
       },
       {
-        "id": 71,
-        "phase_id": "7.6",
         "step_num": 2,
-        "description": "Дождаться COMPLETE",
-        "execution_type": "parallel",
-        "tool": null
+        "description": "Дождаться результатов и зафиксировать PASS или FAIL с воспроизводимыми шагами",
+        "execution_type": "sync",
+        "skills": [
+          "test-driven-development",
+          "workflow-systematic-debugging"
+        ]
       }
     ],
-    "checks": [],
+    "checks": [
+      {
+        "description": "QA явно зафиксировал PASS или FAIL по ключевым сценариям задачи"
+      },
+      {
+        "description": "Любой найденный дефект либо исправлен, либо оформлен как блокер с доказательством"
+      }
+    ],
     "evidence": [
       {
-        "id": 40,
-        "phase_id": "7.6",
-        "description": "QA report (PASS/FAIL с деталями)",
-        "validator": null,
-        "collected": 0
+        "description": "QA отчёт с проверенными сценариями и итоговым статусом"
+      },
+      {
+        "description": "Скриншоты или шаги воспроизведения для найденных дефектов"
       }
     ],
     "checkups": [],
     "questions": [],
-    "code": "7.6"
+    "code": "7.6",
+    "selected_agent": "reviewer"
   },
   {
     "name": "DVR",
@@ -1757,38 +1856,44 @@
     "parallel_with": "7.6",
     "rollback_target": null,
     "next_recommendation": "Перейди к Phase 7.7 — CriticGate PostQA",
-    "execution_type": "sync",
+    "execution_type": "parallel",
     "instructions": [
       {
-        "id": 72,
-        "phase_id": "7.6.R",
         "step_num": 1,
-        "description": "delegate_task(goal='dataflow verification')",
-        "execution_type": "parallel",
-        "tool": null
+        "description": "Запустить проверку dataflow и согласованности интеграций после изменений",
+        "execution_type": "sync",
+        "skills": [
+          "workflow-code-intelligence",
+          "workflow-systematic-debugging"
+        ]
       },
       {
-        "id": 73,
-        "phase_id": "7.6.R",
         "step_num": 2,
-        "description": "Дождаться COMPLETE",
-        "execution_type": "parallel",
-        "tool": null
+        "description": "Дождаться результата и зафиксировать, где подтверждена корректность, а где есть расхождения",
+        "execution_type": "sync",
+        "skills": [
+          "workflow-code-intelligence",
+          "workflow-systematic-debugging"
+        ]
       }
     ],
-    "checks": [],
+    "checks": [
+      {
+        "description": "DVR подтверждает, что ключевые dataflow и интеграции не сломаны изменением"
+      },
+      {
+        "description": "Все расхождения описаны с конкретными точками в коде или логике процесса"
+      }
+    ],
     "evidence": [
       {
-        "id": 41,
-        "phase_id": "7.6.R",
-        "description": "DVR report (DATAFLOW_OK / discrepancies)",
-        "validator": null,
-        "collected": 0
+        "description": "DVR отчёт с подтверждёнными и проблемными участками dataflow"
       }
     ],
     "checkups": [],
     "questions": [],
-    "code": "7.6.R"
+    "code": "7.6.R",
+    "selected_agent": "researcher"
   },
   {
     "name": "CriticGate-PostQA",
@@ -1802,23 +1907,46 @@
     "rollback_target": null,
     "next_recommendation": "Если PASS → Phase 8 (Merge Advisory). Если FAIL → вернись к Phase 4.",
     "execution_type": "sync",
-    "instructions": [],
+    "instructions": [
+      {
+        "step_num": 1,
+        "description": "Перед финальным закрытием отдать результаты review, QA и DVR на post-QA critic gate",
+        "execution_type": "sync",
+        "skills": [
+          "test-driven-development",
+          "agent-workflow-patterns"
+        ]
+      },
+      {
+        "step_num": 2,
+        "description": "Проверить, что обязательные замечания закрыты, а доказательства качества приложены",
+        "execution_type": "sync",
+        "skills": [
+          "test-driven-development",
+          "workflow-systematic-debugging"
+        ]
+      },
+      {
+        "step_num": 3,
+        "description": "Зафиксировать финальное решение: можно закрывать задачу или нужно вернуть в предыдущую фазу",
+        "execution_type": "sync",
+        "skills": [
+          "agent-workflow-patterns",
+          "workflow-systematic-debugging"
+        ]
+      }
+    ],
     "checks": [
       {
-        "id": 33,
-        "phase_id": "7.7",
-        "description": "CriticGate дал PASS",
-        "command": null,
-        "optional": 0
+        "description": "Финальный critic gate подтверждает отсутствие незакрытых quality blockers"
+      },
+      {
+        "description": "Есть достаточные доказательства по review, QA и dataflow verification для закрытия задачи"
       }
     ],
     "evidence": [
       {
-        "id": 42,
-        "phase_id": "7.7",
-        "description": "CriticGate report (PASS/WARN)",
-        "validator": null,
-        "collected": 0
+        "description": "Отчёт CriticGate PostQA с финальным решением"
       }
     ],
     "checkups": [
@@ -1839,7 +1967,8 @@
       }
     ],
     "questions": [],
-    "code": "7.7"
+    "code": "7.7",
+    "selected_agent": "critic"
   },
   {
     "name": "Jira Done",
@@ -1855,68 +1984,52 @@
     "execution_type": "sync",
     "instructions": [
       {
-        "id": 74,
-        "phase_id": "8",
         "step_num": 1,
-        "description": "Проверить что MR смержен через GitLab UI",
+        "description": "Перевести задачу в завершённый статус и убедиться, что финальное состояние отражает реальный результат",
         "execution_type": "sync",
-        "tool": null
+        "skills": [
+          "repo-workflow",
+          "agent-workflow-patterns"
+        ]
       },
       {
-        "id": 75,
-        "phase_id": "8",
         "step_num": 2,
-        "description": "wartz-jira issue transition {jira_key} 'Выполнено'",
+        "description": "Привязать итоговые ссылки и артефакты к задаче или MR без пропусков",
         "execution_type": "sync",
-        "tool": null
+        "skills": [
+          "repo-workflow",
+          "agent-workflow-patterns"
+        ]
       },
       {
-        "id": 76,
-        "phase_id": "8",
         "step_num": 3,
-        "description": "Добавить ссылку на MR в комментарий Jira",
+        "description": "Обновить changelog и hand-off заметки так, чтобы следующий участник увидел итог без догадок",
         "execution_type": "sync",
-        "tool": null
+        "skills": [
+          "repo-workflow",
+          "llm-wiki"
+        ]
       },
       {
-        "id": 77,
-        "phase_id": "8",
         "step_num": 4,
-        "description": "Зафиксировать в changelog.md",
+        "description": "Подготовить финальный статус-апдейт или голосовой отчёт, если он требуется процессом",
         "execution_type": "sync",
-        "tool": null
+        "skills": [
+          "agent-workflow-patterns"
+        ]
       }
     ],
     "checks": [
       {
-        "id": 34,
-        "phase_id": "8",
-        "description": "Jira статус = 'Выполнено' или аналог",
-        "command": null,
-        "optional": 0
+        "description": "Финальный статус задачи и ссылки на артефакты согласованы с фактическим результатом"
       },
       {
-        "id": 35,
-        "phase_id": "8",
-        "description": "MR смержен (код в develop)",
-        "command": null,
-        "optional": 0
+        "description": "Changelog и hand-off заметки обновлены без пропусков по важным изменениям"
       }
     ],
     "evidence": [
       {
-        "id": 44,
-        "phase_id": "8",
-        "description": "git log develop --grep {task_id} показывает commit",
-        "validator": null,
-        "collected": 0
-      },
-      {
-        "id": 43,
-        "phase_id": "8",
-        "description": "Скриншот Jira 'Выполнено'",
-        "validator": null,
-        "collected": 0
+        "description": "Финальный hand-off с ссылками на MR, changelog и подтверждающие артефакты"
       }
     ],
     "checkups": [
@@ -1952,7 +2065,8 @@
       }
     ],
     "questions": [],
-    "code": "8"
+    "code": "8",
+    "selected_agent": "ops"
   },
   {
     "name": "Retro",
@@ -1968,58 +2082,59 @@
     "execution_type": "sync",
     "instructions": [
       {
-        "id": 78,
-        "phase_id": "9",
         "step_num": 1,
-        "description": "delegate_task(goal='ретро')",
-        "execution_type": "parallel",
-        "tool": null
+        "description": "Запустить ретроспективу по задаче и истории решений",
+        "execution_type": "sync",
+        "skills": [
+          "agent-workflow-patterns",
+          "llm-wiki"
+        ]
       },
       {
-        "id": 79,
-        "phase_id": "9",
         "step_num": 2,
-        "description": "Собрать метрики из логов",
-        "execution_type": "parallel",
-        "tool": null
+        "description": "Собрать реальные метрики из логов, тестов и истории workflow",
+        "execution_type": "sync",
+        "skills": [
+          "llm-wiki",
+          "workflow-code-intelligence"
+        ]
       },
       {
-        "id": 80,
-        "phase_id": "9",
         "step_num": 3,
-        "description": "Сравнить solo vs delegate effectiveness",
-        "execution_type": "parallel",
-        "tool": null
+        "description": "Сравнить эффективность solo и delegate подходов по фактическим сигналам задачи",
+        "execution_type": "sync",
+        "skills": [
+          "llm-wiki",
+          "agent-workflow-patterns"
+        ]
       },
       {
-        "id": 81,
-        "phase_id": "9",
         "step_num": 4,
-        "description": "Обновить project-knowledge.md",
-        "execution_type": "parallel",
-        "tool": null
+        "description": "Обновить project-knowledge.md конкретными выводами и следующими улучшениями процесса",
+        "execution_type": "sync",
+        "skills": [
+          "llm-wiki",
+          "agent-workflow-patterns"
+        ]
       }
     ],
-    "checks": [],
-    "evidence": [
+    "checks": [
       {
-        "id": 45,
-        "phase_id": "9",
-        "description": "Retro report (что сработало, что нет)",
-        "validator": null,
-        "collected": 0
+        "description": "Ретро содержит конкретные выводы, а не общие фразы без действия"
       },
       {
-        "id": 46,
-        "phase_id": "9",
-        "description": "project-knowledge.md обновлён",
-        "validator": null,
-        "collected": 0
+        "description": "Метрики и предложения по улучшению опираются на реальные данные задачи"
+      }
+    ],
+    "evidence": [
+      {
+        "description": "Retro summary с метриками, выводами и следующими улучшениями"
       }
     ],
     "checkups": [],
     "questions": [],
-    "code": "9"
+    "code": "9",
+    "selected_agent": "coder"
   },
   {
     "name": "Auto-Improve",
@@ -2087,6 +2202,7 @@
       }
     ],
     "questions": [],
-    "code": "10"
+    "code": "10",
+    "selected_agent": null
   }
 ]

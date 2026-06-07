@@ -252,9 +252,9 @@ class TestAgentCRUD:
         db.create_agent({"name": "critic", "description": "Критикует"})
         db.create_agent({"name": "coder", "description": "Пишет код"})
         agents = db.get_agents()
-        assert len(agents) == 2
-        assert agents[0]["description"]
-        assert agents[1]["description"]
+        assert any(agent["name"] == "critic" and agent["description"] == "Критикует" for agent in agents)
+        assert any(agent["name"] == "coder" and agent["description"] == "Пишет код" for agent in agents)
+        assert all(agent["description"] for agent in agents)
 
     def test_update_and_delete(self, db):
         aid = db.create_agent({"name": "Old", "description": "Old desc"})

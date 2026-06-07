@@ -117,6 +117,101 @@ class WorkflowDB:
             "key_patterns": config.DEFAULT_TASK_KEY_PATTERNS,
         }]
 
+    def _bootstrap_agents(self) -> list[dict]:
+        return [
+            {
+                "name": "researcher",
+                "description": "Исследует кодовую базу, зависимости и dataflow; собирает контекст перед изменениями.",
+            },
+            {
+                "name": "critic",
+                "description": "Проводит gate-review планов и результатов, ищет риски и незакрытые обязательные проверки.",
+            },
+            {
+                "name": "reviewer",
+                "description": "Проверяет качество решения, тесты и безопасность; фиксирует замечания по результату review.",
+            },
+            {
+                "name": "ops",
+                "description": "Ведёт операционные шаги workflow: статусы, артефакты, hand-off и финальное закрытие.",
+            },
+            {
+                "name": "coder",
+                "description": "Готовит реализацию, итоговые выводы и улучшения процесса после завершения задачи.",
+            },
+        ]
+
+    @staticmethod
+    def _normalize_agent_name(value: str | None) -> str:
+        return str(value or "").strip().casefold()
+
+    def _ensure_default_agents(self, conn: sqlite3.Connection) -> None:
+        existing = conn.execute("SELECT id, name, description FROM agents ORDER BY id").fetchall()
+        existing_by_name = {
+            self._normalize_agent_name(row["name"]): dict(row)
+            for row in existing
+            if self._normalize_agent_name(row["name"])
+        }
+        for agent in self._bootstrap_agents():
+            normalized_name = self._normalize_agent_name(agent["name"])
+            row = existing_by_name.get(normalized_name)
+            if row is None:
+                conn.execute(
+                    "INSERT INTO agents (name, description) VALUES (?, ?)",
+                    (agent["name"], agent["description"]),
+                )
+                continue
+            if str(row.get("description") or "").strip():
+                continue
+            conn.execute(
+                "UPDATE agents SET description = ? WHERE id = ?",
+                (agent["description"], row["id"]),
+            )
+
+    def _resolve_seed_agent_id(self, conn: sqlite3.Connection, phase: dict) -> int | None:
+        if "selected_agent" not in phase:
+            raw_agent_id = phase.get("agent_id")
+            return int(raw_agent_id) if isinstance(raw_agent_id, int) else None
+
+        requested_name = str(phase.get("selected_agent") or "").strip()
+        normalized_name = self._normalize_agent_name(requested_name)
+        if not normalized_name:
+            return None
+
+        rows = conn.execute("SELECT id, name, description FROM agents ORDER BY id").fetchall()
+        for row in rows:
+            if self._normalize_agent_name(row["name"]) == normalized_name:
+                if str(row["description"] or "").strip():
+                    return int(row["id"])
+                default_description = next(
+                    (
+                        item["description"]
+                        for item in self._bootstrap_agents()
+                        if self._normalize_agent_name(item["name"]) == normalized_name
+                    ),
+                    "",
+                )
+                if default_description:
+                    conn.execute(
+                        "UPDATE agents SET description = ? WHERE id = ?",
+                        (default_description, row["id"]),
+                    )
+                return int(row["id"])
+
+        default_name, default_description = next(
+            (
+                (item["name"], item["description"])
+                for item in self._bootstrap_agents()
+                if self._normalize_agent_name(item["name"]) == normalized_name
+            ),
+            (requested_name, ""),
+        )
+        created = conn.execute(
+            "INSERT INTO agents (name, description) VALUES (?, ?)",
+            (default_name, default_description),
+        )
+        return int(created.lastrowid or 0)
+
     def _sanitize_default_project_patterns(self, conn: sqlite3.Connection) -> None:
         row = conn.execute(
             "SELECT id, key_patterns FROM projects WHERE code = ?",
@@ -185,10 +280,34 @@ class WorkflowDB:
         return [row[1] for row in rows]
 
     def _ensure_default_workflows(self, conn: sqlite3.Connection) -> None:
-        count = conn.execute("SELECT COUNT(*) FROM workflows").fetchone()[0]
-        if count:
+        bootstrap = self._bootstrap_workflows()
+        bootstrap_codes = {str(workflow.get("code", "")).strip() for workflow in bootstrap if str(workflow.get("code", "")).strip()}
+        rows = conn.execute("SELECT id, code, name, description FROM workflows ORDER BY id").fetchall()
+        existing_by_code = {
+            str(row["code"] or "").strip(): dict(row)
+            for row in rows
+            if str(row["code"] or "").strip()
+        }
+        missing = [workflow for workflow in bootstrap if str(workflow.get("code", "")).strip() not in existing_by_code]
+        if not missing:
             return
-        for workflow in self._bootstrap_workflows():
+
+        if len(rows) == 1 and len(missing) == 1 and missing[0].get("code") == "default":
+            legacy = dict(rows[0])
+            legacy_code = str(legacy.get("code") or "").strip()
+            if legacy_code and legacy_code not in bootstrap_codes:
+                conn.execute(
+                    "UPDATE workflows SET code = ?, name = ?, description = ? WHERE id = ?",
+                    (
+                        missing[0]["code"],
+                        missing[0]["name"],
+                        missing[0].get("description", ""),
+                        legacy["id"],
+                    ),
+                )
+                return
+
+        for workflow in missing:
             conn.execute(
                 "INSERT INTO workflows (code, name, description) VALUES (?, ?, ?)",
                 (
@@ -196,6 +315,32 @@ class WorkflowDB:
                     workflow["name"],
                     workflow.get("description", ""),
                 ),
+            )
+
+    def _align_bootstrap_catalog_to_default_workflow(self, conn: sqlite3.Connection) -> None:
+        default_workflow_id = self._default_workflow_id(conn)
+
+        bootstrap_project_codes = [
+            str(project.get("code", "")).strip()
+            for project in self._bootstrap_projects()
+            if str(project.get("code", "")).strip()
+        ]
+        if bootstrap_project_codes:
+            placeholders = ", ".join("?" for _ in bootstrap_project_codes)
+            conn.execute(
+                f"UPDATE projects SET workflow_id = ? WHERE code IN ({placeholders}) AND workflow_id != ?",
+                (default_workflow_id, *bootstrap_project_codes, default_workflow_id),
+            )
+
+        phase_codes = [code for code in config.PHASE_ORDER if str(code).strip()]
+        if phase_codes:
+            placeholders = ", ".join("?" for _ in phase_codes)
+            seed_filter = ""
+            if "is_seed_managed" in self._table_columns(conn, "phases"):
+                seed_filter = " AND (is_seed_managed = 1 OR is_seed_managed IS NULL)"
+            conn.execute(
+                f"UPDATE phases SET workflow_id = ? WHERE code IN ({placeholders}) AND workflow_id != ?{seed_filter}",
+                (default_workflow_id, *phase_codes, default_workflow_id),
             )
 
     def _default_workflow_id(self, conn: sqlite3.Connection) -> int:
@@ -345,7 +490,9 @@ class WorkflowDB:
             conn.executescript(ddl)
             self._ensure_default_workflows(conn)
             self._migrate_schema(conn)
+            self._align_bootstrap_catalog_to_default_workflow(conn)
             self._ensure_default_projects(conn)
+            self._ensure_default_agents(conn)
             self._sanitize_runtime_state(conn)
             conn.commit()
 
@@ -390,13 +537,19 @@ class WorkflowDB:
                 if not phase:
                     continue
 
-                existing = conn.execute("SELECT id FROM phases WHERE code = ?", (code,)).fetchone()
+                existing = conn.execute("SELECT id, agent_id FROM phases WHERE code = ?", (code,)).fetchone()
+                seed_agent_id = (
+                    self._resolve_seed_agent_id(conn, phase)
+                    if ("selected_agent" in phase or "agent_id" in phase)
+                    else (existing["agent_id"] if existing else None)
+                )
                 payload = (
                     default_workflow_id,
                     phase["name"],
                     phase.get("description") or "",
                     phase.get("min_time_min", 0),
                     phase["phase_order"],
+                    seed_agent_id,
                     phase.get("next_recommendation"),
                     phase.get("parallel_with"),
                     phase.get("rollback_target"),
@@ -412,6 +565,7 @@ class WorkflowDB:
                             description = ?,
                             min_time_min = ?,
                             phase_order = ?,
+                            agent_id = ?,
                             next_recommendation = ?,
                             parallel_with = ?,
                             rollback_target = ?,
@@ -426,9 +580,9 @@ class WorkflowDB:
                         """
                         INSERT INTO phases (
                             code, workflow_id, name, description, min_time_min, phase_order,
-                            next_recommendation, parallel_with, rollback_target, execution_type, is_seed_managed
+                            agent_id, next_recommendation, parallel_with, rollback_target, execution_type, is_seed_managed
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             code,
@@ -734,6 +888,7 @@ class WorkflowDB:
             for p in phases:
                 code = p.get("code", p.get("id", ""))
                 workflow_id = self._resolve_workflow_id(p.get("workflow_id", default_workflow_id))
+                seed_agent_id = self._resolve_seed_agent_id(conn, p) if ("selected_agent" in p or "agent_id" in p) else None
                 conn.execute(
                     """
                     INSERT OR REPLACE INTO phases (workflow_id, code, name, description, min_time_min, phase_order, agent_id, next_recommendation, parallel_with, rollback_target, execution_type, is_seed_managed)
@@ -746,7 +901,7 @@ class WorkflowDB:
                         p.get("description") or "",
                         p.get("min_time_min", 0),
                         p["phase_order"],
-                        p.get("agent_id"),
+                        seed_agent_id,
                         p.get("next_recommendation"),
                         p.get("parallel_with"),
                         p.get("rollback_target"),
@@ -756,6 +911,8 @@ class WorkflowDB:
                 )
                 phase_int_id = conn.execute("SELECT id FROM phases WHERE code = ?", (code,)).fetchone()[0]
                 for inst in p.get("instructions", []):
+                    raw_skills = inst.get("skills")
+                    skills_payload = json.dumps(raw_skills, ensure_ascii=False) if isinstance(raw_skills, list) else raw_skills
                     conn.execute(
                         """
                         INSERT INTO instructions (phase_id, step_num, description, execution_type, skills)
@@ -766,7 +923,7 @@ class WorkflowDB:
                             inst["step_num"],
                             inst["description"],
                             inst.get("execution_type", "sync"),
-                            inst.get("skills"),
+                            skills_payload,
                         ),
                     )
                 for c in p.get("checks", []):
