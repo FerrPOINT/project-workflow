@@ -677,7 +677,7 @@
       },
       {
         "step_num": 2,
-        "description": "Дождаться отчёта и извлечь зависимости, dataflow и риски изменений",
+        "description": "Разобрать отчёт исследователя и выписать зависимости, потоки данных и риски изменений",
         "execution_type": "sync",
         "skills": [
           "workflow-code-intelligence",
@@ -686,7 +686,7 @@
       },
       {
         "step_num": 3,
-        "description": "Зафиксировать findings так, чтобы их можно было использовать в Phase 1 и Phase 2 без повторного обхода кода",
+        "description": "Сохранить результаты исследования: затронутые модули, точки входа, риски и места для безопасного переиспользования",
         "execution_type": "sync",
         "skills": [
           "workflow-code-intelligence",
@@ -696,10 +696,10 @@
     ],
     "checks": [
       {
-        "description": "Отчёт исследователя перечисляет реальные затронутые модули и точки входа"
+        "description": "Зафиксированы риски, неизвестные и вопросы, которые могут заблокировать реализацию"
       },
       {
-        "description": "Зафиксированы риски, неизвестные и вопросы, которые могут заблокировать реализацию"
+        "description": "Отчёт исследователя перечисляет реальные затронутые модули и точки входа"
       }
     ],
     "evidence": [
@@ -740,7 +740,7 @@
       },
       {
         "step_num": 3,
-        "description": "Свериться с базовой веткой и подтвердить, что рабочее дерево готово к безопасному продолжению workflow.",
+        "description": "Свериться с базовой веткой и подтвердить, что рабочее дерево готово к безопасному продолжению работы.",
         "execution_type": "sync"
       }
     ],
@@ -800,7 +800,7 @@
   },
   {
     "name": "Deep Research",
-    "description": "Архитектура, API, types, existing реализации",
+    "description": "Архитектура, API, типы и существующие реализации",
     "phase_order": 14,
     "delegate_agent": "wartzresearcher",
     "delegate_timeout": 20,
@@ -830,7 +830,7 @@
       },
       {
         "step_num": 3,
-        "description": "Сверить findings с существующими реализациями и отметить, что можно переиспользовать без регрессий",
+        "description": "Сопоставить результаты исследования с существующими реализациями и отметить код для безопасного переиспользования",
         "execution_type": "sync",
         "skills": [
           "workflow-code-intelligence",
@@ -848,10 +848,10 @@
     ],
     "evidence": [
       {
-        "description": "Deep research отчёт по архитектуре, контрактам и ограничениям"
+        "description": "Отчёт по архитектуре, контрактам и ограничениям"
       },
       {
-        "description": "Список существующих реализаций и safe-to-reuse компонентов"
+        "description": "Список существующих реализаций и компонентов для безопасного переиспользования"
       }
     ],
     "checkups": [],
@@ -861,7 +861,7 @@
   },
   {
     "name": "Research Synthesis",
-    "description": "Систематизировать findings из 0.6 и 1.5",
+    "description": "Собрать единый вывод по результатам исследований 0.6 и 1.5",
     "phase_order": 15,
     "delegate_agent": null,
     "delegate_timeout": null,
@@ -876,7 +876,7 @@
         "id": 41,
         "phase_id": "2",
         "step_num": 1,
-        "description": "Прочитать результаты Researcher #1",
+        "description": "Собрать из отчёта Researcher #1 ключевые модули, риски и ограничения",
         "execution_type": "sync",
         "tool": null
       },
@@ -884,7 +884,7 @@
         "id": 42,
         "phase_id": "2",
         "step_num": 2,
-        "description": "Прочитать результаты Deep Research",
+        "description": "Собрать из Deep Research ключевые контракты, типы и точки расширения",
         "execution_type": "sync",
         "tool": null
       },
@@ -892,7 +892,7 @@
         "id": 43,
         "phase_id": "2",
         "step_num": 3,
-        "description": "Систематизировать в таблицу или список",
+        "description": "Свести результаты в единый список модулей, контрактов, рисков и открытых вопросов",
         "execution_type": "sync",
         "tool": null
       },
@@ -900,7 +900,7 @@
         "id": 44,
         "phase_id": "2",
         "step_num": 4,
-        "description": "Выявить потенциальные проблемы",
+        "description": "Отдельно отметить блокеры, спорные решения и проверки, которые должны попасть в план",
         "execution_type": "sync",
         "tool": null
       }
@@ -909,7 +909,7 @@
       {
         "id": 19,
         "phase_id": "2",
-        "description": "research.md или аналогичный документ с findings",
+        "description": "Есть сводный документ исследования с модулями, рисками и решениями",
         "command": null,
         "optional": 0
       }
@@ -927,7 +927,7 @@
       {
         "id": 19,
         "phase_id": "2",
-        "name": "Check PhaseCheck(type='file_exists', description='research.md или аналогичный документ с findings', path=None, expected=None, command=None, fail_msg='Check failed', optional=False)",
+        "name": "Check PhaseCheck(type='file_exists', description='Есть сводный документ исследования с модулями, рисками и решениями', path=None, expected=None, command=None, fail_msg='Check failed', optional=False)",
         "check_type": "jira_status",
         "target": "",
         "interval_min": 0,
@@ -984,7 +984,7 @@
         "id": 48,
         "phase_id": "3",
         "step_num": 4,
-        "description": "Оценить время",
+        "description": "Оценить объём работ и ожидаемую длительность по подзадачам",
         "execution_type": "sync",
         "tool": null
       }
@@ -1049,7 +1049,7 @@
     "instructions": [
       {
         "step_num": 1,
-        "description": "Передать план и контекст задачи на critic review до старта реализации",
+        "description": "Передать план и контекст задачи на критическое ревью до старта реализации",
         "execution_type": "sync",
         "skills": [
           "workflow-writing-plans",
@@ -1058,7 +1058,7 @@
       },
       {
         "step_num": 2,
-        "description": "Проверить полноту шагов, rollback, критерии готовности и покрытие рисков в плане",
+        "description": "Проверить полноту шагов, варианты отката, критерии готовности и покрытие рисков в плане",
         "execution_type": "sync",
         "skills": [
           "workflow-writing-plans",
@@ -1067,7 +1067,7 @@
       },
       {
         "step_num": 3,
-        "description": "Зафиксировать замечания критика и обновить план до зелёного gate",
+        "description": "Зафиксировать замечания критика и обновить план до явного разрешения на старт",
         "execution_type": "sync",
         "skills": [
           "workflow-writing-plans",
@@ -1145,7 +1145,7 @@
         "id": 51,
         "phase_id": "4",
         "step_num": 3,
-        "description": "После каждого checkpoint — обновить current-stage.md",
+        "description": "После каждой контрольной точки — обновить current-stage.md",
         "execution_type": "sync",
         "tool": null
       },
@@ -1218,7 +1218,7 @@
     "instructions": [
       {
         "step_num": 1,
-        "description": "Перед коммитом отдать diff и список проверок на critic review",
+        "description": "Перед коммитом отдать дифф и список проверок на критическое ревью",
         "execution_type": "sync",
         "skills": [
           "test-driven-development",
@@ -1227,7 +1227,7 @@
       },
       {
         "step_num": 2,
-        "description": "Проверить незакрытые риски, недостающие тесты и нарушения договорённостей workflow",
+        "description": "Проверить незакрытые риски, недостающие тесты и нарушения договорённостей процесса",
         "execution_type": "sync",
         "skills": [
           "test-driven-development",
@@ -1295,7 +1295,7 @@
         "id": 53,
         "phase_id": "5",
         "step_num": 1,
-        "description": "npm run lint или аналог",
+        "description": "Запустить обязательные статические проверки проекта из локальных инструкций и сохранить точные команды",
         "execution_type": "sync",
         "tool": null
       },
@@ -1303,7 +1303,7 @@
         "id": 54,
         "phase_id": "5",
         "step_num": 2,
-        "description": "npx tsc --noEmit или аналог",
+        "description": "Запустить обязательную проверку типов, схем или контрактов проекта и сохранить точные команды",
         "execution_type": "sync",
         "tool": null
       },
@@ -1311,7 +1311,7 @@
         "id": 55,
         "phase_id": "5",
         "step_num": 3,
-        "description": "npm test или аналог",
+        "description": "Запустить основной автоматизированный набор тестов проекта и сохранить точные команды",
         "execution_type": "sync",
         "tool": null
       },
@@ -1438,7 +1438,7 @@
         "id": 58,
         "phase_id": "5.5",
         "step_num": 2,
-        "description": "Протестировать edge cases вручную",
+        "description": "Проверить вручную граничные случаи и негативные сценарии",
         "execution_type": "sync",
         "tool": null
       },
@@ -1648,7 +1648,7 @@
         "id": 64,
         "phase_id": "7",
         "step_num": 2,
-        "description": "Заполнить description: What, Why, How, Checklist",
+        "description": "Заполнить описание MR: что сделано, зачем, как проверено и какой чеклист закрыт",
         "execution_type": "sync",
         "tool": null
       },
@@ -1664,7 +1664,7 @@
         "id": 66,
         "phase_id": "7",
         "step_num": 4,
-        "description": "Назначить reviewer",
+        "description": "Назначить ревьюера",
         "execution_type": "sync",
         "tool": null
       }
@@ -1751,7 +1751,7 @@
     "instructions": [
       {
         "step_num": 1,
-        "description": "Запустить review изменённых файлов, архитектурных решений и рисков регрессии",
+        "description": "Провести ревью изменённых файлов, архитектурных решений и рисков регрессии",
         "execution_type": "sync",
         "skills": [
           "repo-workflow",
@@ -1760,7 +1760,7 @@
       },
       {
         "step_num": 2,
-        "description": "Дождаться замечаний и разделить must-fix от необязательных улучшений",
+        "description": "Получить замечания и разделить обязательные правки от необязательных улучшений",
         "execution_type": "sync",
         "skills": [
           "repo-workflow",
@@ -1769,7 +1769,7 @@
       },
       {
         "step_num": 3,
-        "description": "Внести обязательные правки и обновить описание изменений перед следующими gate",
+        "description": "Внести обязательные правки и обновить описание изменений перед следующими этапами контроля",
         "execution_type": "sync",
         "skills": [
           "repo-workflow",
@@ -1810,7 +1810,7 @@
     "instructions": [
       {
         "step_num": 1,
-        "description": "Запустить QA-проверку по acceptance criteria, regression scope и пользовательским сценариям",
+        "description": "Запустить QA-проверку по критериям приёмки, регрессионному охвату и пользовательским сценариям",
         "execution_type": "sync",
         "skills": [
           "test-driven-development",
@@ -1819,7 +1819,7 @@
       },
       {
         "step_num": 2,
-        "description": "Дождаться результатов и зафиксировать PASS или FAIL с воспроизводимыми шагами",
+        "description": "Получить итог QA и зафиксировать PASS или FAIL с воспроизводимыми шагами",
         "execution_type": "sync",
         "skills": [
           "test-driven-development",
@@ -1850,7 +1850,7 @@
   },
   {
     "name": "DVR",
-    "description": "Dataflow Verification Report",
+    "description": "Проверка потоков данных и согласованности интеграций",
     "phase_order": 26,
     "delegate_agent": "wartzresearcher",
     "delegate_timeout": 10,
@@ -1863,7 +1863,7 @@
     "instructions": [
       {
         "step_num": 1,
-        "description": "Запустить проверку dataflow и согласованности интеграций после изменений",
+        "description": "Проверить потоки данных и согласованность интеграций после изменений",
         "execution_type": "sync",
         "skills": [
           "workflow-code-intelligence",
@@ -1872,7 +1872,7 @@
       },
       {
         "step_num": 2,
-        "description": "Дождаться результата и зафиксировать, где подтверждена корректность, а где есть расхождения",
+        "description": "Зафиксировать, где корректность подтверждена, а где остались расхождения",
         "execution_type": "sync",
         "skills": [
           "workflow-code-intelligence",
@@ -1890,7 +1890,7 @@
     ],
     "evidence": [
       {
-        "description": "DVR отчёт с подтверждёнными и проблемными участками dataflow"
+        "description": "DVR-отчёт с подтверждёнными и проблемными участками потоков данных"
       }
     ],
     "checkups": [],
@@ -2006,7 +2006,7 @@
       },
       {
         "step_num": 3,
-        "description": "Обновить changelog и hand-off заметки так, чтобы следующий участник увидел итог без догадок",
+        "description": "Обновить changelog и заметки для передачи так, чтобы следующий участник увидел итог без догадок",
         "execution_type": "sync",
         "skills": [
           "repo-workflow",
@@ -2095,7 +2095,7 @@
       },
       {
         "step_num": 2,
-        "description": "Собрать реальные метрики из логов, тестов и истории workflow",
+        "description": "Собрать реальные метрики из логов, тестов и истории процесса",
         "execution_type": "sync",
         "skills": [
           "llm-wiki",
@@ -2104,7 +2104,7 @@
       },
       {
         "step_num": 3,
-        "description": "Сравнить эффективность solo и delegate подходов по фактическим сигналам задачи",
+        "description": "Сравнить эффективность работы одним агентом и с делегированием по фактическим сигналам задачи",
         "execution_type": "sync",
         "skills": [
           "llm-wiki",
@@ -2156,7 +2156,7 @@
         "id": 82,
         "phase_id": "10",
         "step_num": 1,
-        "description": "Если retro выявил проблемы workflow — записать IP",
+        "description": "Если ретроспектива выявила проблемы процесса — записать инициативу по улучшению",
         "execution_type": "sync",
         "tool": null
       },
@@ -2164,7 +2164,7 @@
         "id": 83,
         "phase_id": "10",
         "step_num": 2,
-        "description": "Если IP критичный — bump workflow version",
+        "description": "Если инициатива критична — повысить версию workflow",
         "execution_type": "sync",
         "tool": null
       }

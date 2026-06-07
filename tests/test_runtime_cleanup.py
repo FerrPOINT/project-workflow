@@ -147,6 +147,35 @@ def test_seed_catalog_has_no_blank_instruction_descriptions():
     assert blanks == []
 
 
+def test_seed_catalog_instruction_descriptions_avoid_cross_phase_findings_meta_language():
+    phases = json.loads(SEED_PATH.read_text(encoding="utf-8"))
+
+    bad: list[str] = []
+    for phase in phases:
+        phase_code = str(phase.get("code", phase.get("id", "?"))).strip()
+        for instruction in phase.get("instructions", []):
+            description = str(instruction.get("description", "")).strip()
+            lowered = description.lower()
+            if "findings" in lowered or "phase 1" in lowered or "phase 2" in lowered:
+                bad.append(f"{phase_code}#{instruction.get('step_num', '?')}: {description}")
+
+    assert bad == []
+
+
+def test_seed_catalog_instruction_descriptions_do_not_use_or_analog_placeholders():
+    phases = json.loads(SEED_PATH.read_text(encoding="utf-8"))
+
+    bad: list[str] = []
+    for phase in phases:
+        phase_code = str(phase.get("code", phase.get("id", "?"))).strip()
+        for instruction in phase.get("instructions", []):
+            description = str(instruction.get("description", "")).strip()
+            if "или аналог" in description.lower():
+                bad.append(f"{phase_code}#{instruction.get('step_num', '?')}: {description}")
+
+    assert bad == []
+
+
 def test_seed_catalog_parallelism_uses_phase_runs_instead_of_fake_instruction_batches():
     expected_parallel_phase_codes = {"-1", "0.0a", "0.00", "1", "2", "5", "7.6", "7.6.R"}
     for code in expected_parallel_phase_codes:
