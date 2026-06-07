@@ -120,8 +120,10 @@ def _load_cli_reference() -> list[dict[str, Any]]:
                 "required": bool(param.required),
             }
             default_value = param.default
+            unset_default = getattr(click.core, "UNSET", None)
             has_meaningful_default = (
-                default_value is not None
+                default_value is not unset_default
+                and default_value is not None
                 and default_value != ""
                 and not (isinstance(default_value, bool) and default_value is False)
                 and not param.required

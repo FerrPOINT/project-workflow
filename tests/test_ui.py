@@ -1360,3 +1360,20 @@ class TestSettingsPage:
         assert "default" not in step_options["--report"]
         assert "default" not in history_options["--n"]
         assert "по умолчанию: все" in history_options["--n"]["help"]
+
+    def test_settings_helper_ignores_click_unset_default_sentinel(self):
+        @click.command(name="temp-unset-default")
+        @click.option("--flag", help="Probe flag")
+        def temp_unset_default(flag: str | None = None):
+            """Temporary command with implicit Click default."""
+
+        cli.add_command(temp_unset_default)
+        try:
+            commands = _load_cli_reference()
+        finally:
+            cli.commands.pop("temp-unset-default", None)
+
+        discovered = next(cmd for cmd in commands if cmd["name"] == "temp-unset-default")
+        flag_option = next(option for option in discovered["options"] if option["flags"] == "--flag")
+        assert flag_option["help"] == "Probe flag"
+        assert "default" not in flag_option
