@@ -659,12 +659,13 @@ def api_workflow_update(workflow_id: int, body: dict[str, Any]):
         code = str(body.get("code", "")).strip()
         if not code:
             return JSONResponse({"ok": False, "error": "code required"}, status_code=400)
-        conflict = wdb.get_workflow_by_code(code)
-        if conflict and conflict["id"] != workflow_id:
-            return JSONResponse({"ok": False, "error": "Workflow code already exists"}, status_code=409)
-        update_data["code"] = code
+        if code != existing["code"]:
+            return JSONResponse(
+                {"ok": False, "error": "Workflow code is immutable; use DB id as workflow identity"},
+                status_code=400,
+            )
     if "name" in body:
-        update_data["name"] = str(body.get("name", "")).strip() or update_data.get("code") or existing["name"]
+        update_data["name"] = str(body.get("name", "")).strip() or existing["name"]
     if "description" in body:
         update_data["description"] = str(body.get("description", "")).strip()
 
@@ -724,6 +725,8 @@ def api_project_update(project_id: int, body: dict[str, Any]):
         update_data["code"] = code
     if "name" in body:
         update_data["name"] = str(body.get("name", "")).strip() or update_data.get("code") or existing["name"]
+    if "workflow_id" in body:
+        update_data["workflow_id"] = _parse_optional_int(body.get("workflow_id"))
     if "key_patterns" in body:
         update_data["key_patterns"] = _parse_key_patterns(body.get("key_patterns", []))
 

@@ -531,6 +531,7 @@ class WorkflowDB:
         removed_codes = [code for code in phase_redirects if code not in desired_codes]
 
         with self._conn() as conn:
+            self._ensure_default_workflows(conn)
             default_workflow_id = self._default_workflow_id(conn)
             for code in phase_order:
                 phase = seed_by_code.get(code)

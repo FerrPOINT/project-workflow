@@ -881,6 +881,45 @@ class TestProjectsPage:
             delete = client.delete(f"/api/projects/{project_id}")
             assert delete.status_code == 200
 
+    def test_projects_api_update_can_switch_workflow(self):
+        default_workflow = _workflow_row("default")
+        workflow_create = client.post("/api/workflows", json={
+            "code": "WFSWITCH",
+            "name": "Workflow switch target",
+            "description": "Temporary workflow for project reassignment test",
+        })
+        assert workflow_create.status_code == 200
+        workflow_id = workflow_create.json()["workflow_id"]
+
+        create = client.post("/api/projects", json={
+            "code": "WFMOVE",
+            "name": "Workflow move project",
+            "workflow_id": default_workflow["id"],
+            "key_patterns": [r"^(?P<prefix>WFMOVE)-(?P<number>[0-9]+)$"],
+        })
+        assert create.status_code == 200
+        project_id = create.json()["project_id"]
+
+        try:
+            update = client.put(f"/api/projects/{project_id}", json={
+                "code": "WFMOVE",
+                "name": "Workflow move project",
+                "workflow_id": workflow_id,
+                "key_patterns": [r"^(?P<prefix>WFMOVE)-(?P<number>[0-9]+)$"],
+            })
+            assert update.status_code == 200
+
+            projects = client.get("/api/projects").json()["projects"]
+            project = next(project for project in projects if project["id"] == project_id)
+            assert project["workflow_id"] == workflow_id
+            assert project["workflow_code"] == "WFSWITCH"
+            assert project["workflow_name"] == "Workflow switch target"
+        finally:
+            delete_project = client.delete(f"/api/projects/{project_id}")
+            assert delete_project.status_code == 200
+            delete_workflow = client.delete(f"/api/workflows/{workflow_id}")
+            assert delete_workflow.status_code == 200
+
     def test_projects_api_prevents_deleting_project_with_tasks(self):
         projects = client.get("/api/projects").json()["projects"]
         ui_project = next(project for project in projects if project["code"] == "UITEST")
@@ -931,6 +970,58 @@ class TestWorkflowsPage:
 
         delete = client.delete(f"/api/workflows/{workflow_id}")
         assert delete.status_code == 200
+
+    def test_workflows_api_rejects_code_change_for_existing_workflow(self):
+        workflow = _workflow_row("default")
+
+        update = client.put(f"/api/workflows/{workflow['id']}", json={
+            "code": "user-renamed-workflow",
+            "name": workflow["name"],
+            "description": workflow["description"],
+        })
+        assert update.status_code == 400
+        assert update.json()["error"] == "Workflow code is immutable; use DB id as workflow identity"
+
+        workflows = client.get("/api/workflows").json()["workflows"]
+        default_workflow = next(item for item in workflows if item["id"] == workflow["id"])
+        assert default_workflow["code"] == "default"
+
+    def test_workflows_api_recovers_from_arbitrary_singleton_workflow_code_in_runtime_db(self):
+        from wartz_workflow import db as db_module, ui as ui_module
+
+        ui_module._get_db()
+        with sqlite3.connect(db_module.DB_PATH) as conn:
+            conn.execute(
+                "UPDATE workflows SET code = ?, name = ?, description = ? WHERE code = ?",
+                ("user-renamed-workflow", "Renamed Workflow", "Broken runtime workflow", "default"),
+            )
+            conn.commit()
+
+        ui_module._db = None
+        ui_module._srv = None
+
+        response = client.get("/api/workflows")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["ok"] is True
+        assert any(workflow["code"] == "default" for workflow in payload["workflows"])
+
+    def test_workflows_api_recovers_without_resetting_ui_singletons_after_runtime_code_mutation(self):
+        from wartz_workflow import db as db_module, ui as ui_module
+
+        ui_module._get_db()
+        with sqlite3.connect(db_module.DB_PATH) as conn:
+            conn.execute(
+                "UPDATE workflows SET code = ?, name = ?, description = ? WHERE code = ?",
+                ("singleton-renamed-workflow", "Singleton Workflow", "Broken live singleton workflow", "default"),
+            )
+            conn.commit()
+
+        response = client.get("/api/workflows")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["ok"] is True
+        assert any(workflow["code"] == "default" for workflow in payload["workflows"])
 
     def test_workflows_api_prevents_deleting_workflow_with_projects_or_phases(self):
         workflow = _workflow_row("default")
