@@ -336,7 +336,15 @@ class TestPhasesPage:
 
             page = client.get("/phases")
             assert page.status_code == 200
-            assert page.text.index(_phase_href("0.000")) < page.text.index(_phase_href("0.00"))
+            rendered_pair_order = sorted(
+                (moved_code, target_code),
+                key=lambda code: page.text.index(_phase_href(code)),
+            )
+            expected_pair_order = sorted(
+                (moved_code, target_code),
+                key=reordered_codes.index,
+            )
+            assert rendered_pair_order == expected_pair_order
 
             refreshed_codes = [
                 phase["code"]

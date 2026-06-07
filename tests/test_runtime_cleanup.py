@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from wartz_workflow import config
+from wartz_workflow import config, state
 from wartz_workflow.db import WorkflowDB
 
 
@@ -82,6 +82,30 @@ def test_seed_catalog_task_intake_and_preflight_have_real_content():
         assert "X" not in instruction_descriptions
         assert "Check 1" not in check_descriptions
         assert "Evidence 1" not in evidence_descriptions
+
+
+def test_seed_catalog_order_matches_config_phase_order():
+    phases = json.loads(SEED_PATH.read_text(encoding="utf-8"))
+    codes = [str(phase.get("code", phase.get("id", ""))).strip() for phase in phases]
+    assert codes == config.PHASE_ORDER
+
+
+
+def test_seed_catalog_names_match_runtime_progress_template():
+    phases = json.loads(SEED_PATH.read_text(encoding="utf-8"))
+    seed_names = {
+        str(phase.get("code", phase.get("id", ""))).strip(): str(phase.get("name", "")).strip()
+        for phase in phases
+    }
+
+    progress = json.loads(state.generate_progress_json("TASKNEIROKLYUCH-1", "1", "title", "sprint1"))
+    progress_names = {
+        str(phase.get("phase", "")).strip(): str(phase.get("name", "")).strip()
+        for phase in progress.get("phases", [])
+    }
+
+    assert seed_names == progress_names
+
 
 
 def test_seed_catalog_has_no_blank_instruction_descriptions():

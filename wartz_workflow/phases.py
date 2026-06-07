@@ -182,7 +182,7 @@ def show_all_phases() -> None:
         "0.5": ("Jira Transition", "", 1),
         "0.6": ("Researcher #1", "🤖 delegate", 5),
         "0.7": ("Repo Sync", "", 2),
-        "0.9": ("CriticGate-0.9", "🛡️ Critic", 2),
+        "0.9": ("CriticGate-PreFlight", "🛡️ Critic", 2),
         "1": ("Preflight", "", 10),
         "1.5": ("Deep Research", "🤖 delegate", 5),
         "2": ("Research Synthesis", "", 10),

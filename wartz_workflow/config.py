@@ -11,10 +11,10 @@ PHASE_ORDER = [
     "-1",      # Task Intake
     "0.0a",    # Suite Verification
     "0.01",    # Task Docs Setup
-    "0.00",    # Git Identity
     "0.000",   # Workspace
+    "0.00",    # Git Identity
     "0.7",     # Repo Sync
-    "0.9",     # CriticGate-0.9
+    "0.9",     # CriticGate-PreFlight
     "0.5",     # Jira Transition
     "0.6",     # Researcher #1
     "1",       # Preflight
