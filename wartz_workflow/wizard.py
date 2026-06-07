@@ -10,7 +10,7 @@ from typing import List, Optional, Tuple, Dict, Any
 
 from .db import WorkflowDB
 from . import models, conversation as convo
-from .schema import load_phases
+from .schema import ensure_phase_catalog, load_phases_from_db
 
 
 PASS_ICON = "✅"
@@ -27,13 +27,26 @@ class WizardEngine:
         self.repo = repo
         self.task_id = task_key
 
-        history_phase = convo.get_last_phase(self.task_id)
-        self.current_phase = history_phase or "-1"
-
         self._wdb = WorkflowDB()
         self._wdb.init()
-        self.all_phases = load_phases()
+        ensure_phase_catalog(self._wdb)
+
+        task = self._wdb.get_task_by_key(task_key)
+        if task and task.get("project_code"):
+            self.project = self._wdb.get_project_by_code(str(task["project_code"]))
+        else:
+            self.project = self._wdb.match_project_for_task_key(task_key, strict=False)
+
+        self.project_code = self.project.get("code") if self.project else None
+        self.project_name = self.project.get("name") if self.project else None
+        self.workflow_id = self.project.get("workflow_id") if self.project else None
+        self.workflow_name = self.project.get("workflow_name") if self.project else None
+
+        self.all_phases = load_phases_from_db(self._wdb, workflow_id=self.workflow_id)
         self.phase_map = {p.code: p for p in self.all_phases}
+
+        history_phase = convo.get_last_phase(self.task_id)
+        self.current_phase = history_phase or (self.all_phases[0].code if self.all_phases else "-1")
 
     # ═══════════════════════════════════════════════════════════════════
     #  PUBLIC API
@@ -98,15 +111,25 @@ class WizardEngine:
         lines = [
             f"🎯 Фаза {phase.code} — {phase.name}",
             f"📋 {phase.description}",
+        ]
+
+        metadata: List[str] = [f"⚙️ Тип выполнения: {getattr(phase, 'execution_type', 'sync')}"]
+        if getattr(phase, "parallel_with", None):
+            metadata.append(f"↔️ Параллельно с: {phase.parallel_with}")
+        if getattr(phase, "rollback_target", None):
+            metadata.append(f"↩️ Rollback target: {phase.rollback_target}")
+        if phase.is_delegated:
+            metadata.append(f"🤖 Делегировано агенту: {phase.delegate.agent if phase.delegate else '—'}")
+        if metadata:
+            lines.extend(["", *metadata])
+
+        lines.extend([
             "",
             "❗ Обязательно выполнить:",
-        ]
+        ])
         checklist = self._build_checklist(phase)
         for idx, item in enumerate(checklist, 1):
             lines.append(f"   {idx}. {item}")
-
-        if phase.is_delegated:
-            lines.extend(["", f"🤖 Делегировано агенту: {phase.delegate.agent if phase.delegate else '—'}"])
 
         lines.extend([
             "",
@@ -125,7 +148,7 @@ class WizardEngine:
 
         current = self.current_phase
         if current == "COMPLETE" or current not in self.phase_map:
-            current = completed_phase_ids[-1] if completed_phase_ids else "-1"
+            current = completed_phase_ids[-1] if completed_phase_ids else (self.all_phases[0].code if self.all_phases else "-1")
 
         all_phases = []
         for p in self.all_phases:
@@ -136,9 +159,11 @@ class WizardEngine:
                 "description": p.description,
                 "min_time_min": p.min_time_min,
                 "is_delegated": p.is_delegated,
+                "delegate_agent": p.delegate.agent if p.delegate else None,
                 "is_critic": p.is_critic,
                 "execution_type": getattr(p, "execution_type", "sync"),
                 "parallel_with": getattr(p, "parallel_with", None),
+                "rollback_target": getattr(p, "rollback_target", None),
                 "instructions": [{"step": i.step, "tool": getattr(i, "tool", None), "execution_type": getattr(i, "execution_type", "sync")} for i in p.instructions],
                 "checks": [{"description": c.description, "optional": getattr(c, "optional", False)} for c in p.checks],
                 "evidence": [{"item": e.item} for e in p.evidence],
@@ -164,6 +189,10 @@ class WizardEngine:
         return {
             "task_key": self.task_key,
             "repo": self.repo,
+            "project_code": self.project_code,
+            "project_name": self.project_name,
+            "workflow_id": self.workflow_id,
+            "workflow_name": self.workflow_name,
             "current_phase": self.current_phase,
             "current_phase_name": current_phase_name,
             "completed_phases": completed_phase_ids,
@@ -214,13 +243,17 @@ class WizardEngine:
         return [w for w in words if len(w) > 3][:4]
 
     def _get_next_phase(self, current_phase: models.Phase) -> Tuple[Optional[str], Optional[str]]:
-        """Получить след фазу."""
-        from . import phases as phases_mod
-        next_p = phases_mod.get_next_phase(current_phase.code)
-        if next_p:
-            next_obj = self.phase_map.get(next_p)
-            return next_p, next_obj.name if next_obj else next_p
-        return None, None
+        """Получить след фазу в рамках текущего workflow."""
+        phase_codes = [phase.code for phase in self.all_phases]
+        try:
+            current_index = phase_codes.index(current_phase.code)
+        except ValueError:
+            return None, None
+        next_index = current_index + 1
+        if next_index >= len(self.all_phases):
+            return None, None
+        next_obj = self.all_phases[next_index]
+        return next_obj.code, next_obj.name
 
     def _record_transition(self, from_phase: str, to_phase: str) -> None:
         """Сохранить переход в историю."""

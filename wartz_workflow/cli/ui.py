@@ -78,7 +78,7 @@ def step_cmd(
         sys.exit(0 if result["verdict"] == "PASS" else 1)
 
     # default: show phase instructions
-    wizard.main(task_key, repo_path)
+    wizard.main(task_key, repo=repo_path)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -99,7 +99,7 @@ def history_cmd(ctx: click.Context, task: str, n: Optional[int]) -> None:
     task_key = _require_valid_key(task)
     jmode = ctx.obj.get("json_mode", False)
 
-    task_id = task_key.split("-")[-1] if "-" in task_key else task_key
+    task_id = task_key
     records = convo.get_messages(task_id, limit=n)
 
     if jmode:

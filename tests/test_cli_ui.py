@@ -50,6 +50,7 @@ class TestStepCommand:
             result = runner.invoke(cli, ["step", "--task", "TASK-1"])
         assert result.exit_code == 0
         mock_create.assert_called_once()
+        mock_main.assert_called_once_with("TASK-1", repo="/repo")
 
     @patch("wartz_workflow.state.find_repo", return_value="/repo")
     @patch("wartz_workflow.state.load_state", return_value=_mock_state())
@@ -59,7 +60,7 @@ class TestStepCommand:
         with patch("wartz_workflow.cli.core._get_task_key_validator", return_value=_validator()):
             result = runner.invoke(cli, ["step", "--task", "TASK-1"])
         assert result.exit_code == 0
-        mock_main.assert_called_once()
+        mock_main.assert_called_once_with("TASK-1", repo="/repo")
 
     @patch("wartz_workflow.state.find_repo", return_value="/repo")
     @patch("wartz_workflow.state.load_state", return_value=_mock_state())
@@ -111,7 +112,7 @@ class TestHistoryCommand:
         assert result.exit_code == 0
         assert "TASK-1" in result.output
         assert "Done" in result.output
-        mock_get.assert_called_once_with("1", limit=None)
+        mock_get.assert_called_once_with("TASK-1", limit=None)
 
     @patch("wartz_workflow.cli.ui.convo.get_messages", return_value=[])
     def test_history_empty(self, mock_get):
@@ -120,7 +121,7 @@ class TestHistoryCommand:
             result = runner.invoke(cli, ["history", "--task", "TASK-1"])
         assert result.exit_code == 0
         assert "пуста" in result.output
-        mock_get.assert_called_once_with("1", limit=None)
+        mock_get.assert_called_once_with("TASK-1", limit=None)
 
     @patch("wartz_workflow.cli.ui.convo.get_messages", return_value=[])
     def test_history_json_mode(self, mock_get):
@@ -132,7 +133,7 @@ class TestHistoryCommand:
         assert parsed["ok"] is True
         assert parsed["task_key"] == "TASK-1"
         assert parsed["count"] == 0
-        mock_get.assert_called_once_with("1", limit=10)
+        mock_get.assert_called_once_with("TASK-1", limit=10)
 
     def test_history_repo_is_rejected(self):
         runner = CliRunner()

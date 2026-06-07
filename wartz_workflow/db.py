@@ -59,6 +59,9 @@ class WorkflowDB:
         token = str(val).strip()
         if token.isdigit():
             return int(token)
+        workflow = self.get_workflow_by_name(token)
+        if workflow:
+            return int(workflow["id"])
         raise ValueError(f"Unknown workflow id: {val}")
 
     @staticmethod
@@ -102,25 +105,43 @@ class WorkflowDB:
         return data
 
     def _bootstrap_workflows(self) -> list[dict]:
-        return [{
-            "name": "Default Workflow",
-            "description": "Базовый workflow каталога фаз",
-            "is_default": 1,
-        }]
+        return [
+            {
+                "name": config.DEFAULT_WORKFLOW_NAME,
+                "description": "Базовый workflow каталога фаз",
+                "is_default": 1,
+            },
+            {
+                "name": config.SMOKE_WORKFLOW_NAME,
+                "description": "Короткий боевой workflow для CLI smoke/regression тестирования parallel, agents, rollback и history.",
+                "is_default": 0,
+            },
+        ]
 
     def _bootstrap_projects(self) -> list[dict]:
         legacy_patterns = config.load_legacy_key_patterns()
-        if legacy_patterns:
-            return [{
-                "code": "default",
-                "name": "Migrated Default Project",
-                "key_patterns": legacy_patterns,
-            }]
-        return [{
+        default_project = {
+            "workflow_name": config.DEFAULT_WORKFLOW_NAME,
             "code": "TASKNEIROKLYUCH",
             "name": "TASKNEIROKLYUCH",
             "key_patterns": config.DEFAULT_TASK_KEY_PATTERNS,
-        }]
+        }
+        if legacy_patterns:
+            default_project = {
+                "workflow_name": config.DEFAULT_WORKFLOW_NAME,
+                "code": "default",
+                "name": "Migrated Default Project",
+                "key_patterns": legacy_patterns,
+            }
+        return [
+            default_project,
+            {
+                "workflow_name": config.SMOKE_WORKFLOW_NAME,
+                "code": config.SMOKE_PROJECT_CODE,
+                "name": config.SMOKE_PROJECT_NAME,
+                "key_patterns": config.SMOKE_TASK_KEY_PATTERNS,
+            },
+        ]
 
     def _bootstrap_agents(self) -> list[dict]:
         return [
@@ -343,21 +364,47 @@ class WorkflowDB:
         conn.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_workflows_single_default ON workflows(is_default) WHERE is_default = 1"
         )
-        bootstrap = self._bootstrap_workflows()[0]
-        rows = conn.execute("SELECT id, name, description, is_default FROM workflows ORDER BY id").fetchall()
-        if not rows:
-            conn.execute(
-                "INSERT INTO workflows (name, description, is_default) VALUES (?, ?, 1)",
-                (
-                    bootstrap["name"],
-                    bootstrap.get("description", ""),
-                ),
-            )
-            return
+        existing_rows = conn.execute("SELECT id, name, description, is_default FROM workflows ORDER BY id").fetchall()
+        existing_by_name = {
+            str(row["name"] or "").strip(): row
+            for row in existing_rows
+            if str(row["name"] or "").strip()
+        }
+        bootstrap_workflows = self._bootstrap_workflows()
+        bootstrap_default_name = str(bootstrap_workflows[0].get("name", "")).strip() if bootstrap_workflows else ""
 
+        for workflow in bootstrap_workflows:
+            workflow_name = str(workflow.get("name", "")).strip()
+            if not workflow_name:
+                continue
+            if (
+                bool(existing_rows)
+                and bool(workflow.get("is_default"))
+                and workflow_name == bootstrap_default_name
+                and workflow_name not in existing_by_name
+            ):
+                continue
+            row = existing_by_name.get(workflow_name)
+            if row is None:
+                conn.execute(
+                    "INSERT INTO workflows (name, description, is_default) VALUES (?, ?, ?)",
+                    (
+                        workflow_name,
+                        str(workflow.get("description", "") or "").strip(),
+                        0,
+                    ),
+                )
+                continue
+            if not str(row["description"] or "").strip() and str(workflow.get("description", "") or "").strip():
+                conn.execute(
+                    "UPDATE workflows SET description = ? WHERE id = ?",
+                    (str(workflow.get("description", "") or "").strip(), row["id"]),
+                )
+
+        rows = conn.execute("SELECT id, name, description, is_default FROM workflows ORDER BY id").fetchall()
         default_rows = [row for row in rows if int(row["is_default"] or 0) == 1]
         if not default_rows:
-            bootstrap_name = str(bootstrap.get("name", "")).strip()
+            bootstrap_name = str(self._bootstrap_workflows()[0].get("name", "")).strip()
             selected = next(
                 (row for row in rows if str(row["name"] or "").strip() == bootstrap_name),
                 rows[0],
@@ -375,6 +422,7 @@ class WorkflowDB:
         bootstrap_project_codes = [
             str(project.get("code", "")).strip()
             for project in self._bootstrap_projects()
+            if str(project.get("workflow_name", config.DEFAULT_WORKFLOW_NAME)).strip() == config.DEFAULT_WORKFLOW_NAME
             if str(project.get("code", "")).strip()
         ]
         if bootstrap_project_codes:
@@ -402,15 +450,28 @@ class WorkflowDB:
         return int(row["id"])
 
     def _ensure_default_projects(self, conn: sqlite3.Connection) -> None:
-        count = conn.execute("SELECT COUNT(*) FROM projects").fetchone()[0]
-        if count:
-            return
+        workflows = conn.execute("SELECT id, name FROM workflows ORDER BY id").fetchall()
+        workflow_ids_by_name = {
+            str(row["name"] or "").strip(): int(row["id"])
+            for row in workflows
+            if str(row["name"] or "").strip()
+        }
         default_workflow_id = self._default_workflow_id(conn)
+        existing_rows = conn.execute("SELECT id, code FROM projects ORDER BY id").fetchall()
+        existing_codes = {
+            str(row["code"] or "").strip()
+            for row in existing_rows
+            if str(row["code"] or "").strip()
+        }
         for project in self._bootstrap_projects():
+            if project["code"] in existing_codes:
+                continue
+            workflow_name = str(project.get("workflow_name", config.DEFAULT_WORKFLOW_NAME)).strip()
+            workflow_id = workflow_ids_by_name.get(workflow_name, default_workflow_id)
             conn.execute(
                 "INSERT INTO projects (workflow_id, code, name, key_patterns) VALUES (?, ?, ?, ?)",
                 (
-                    default_workflow_id,
+                    workflow_id,
                     project["code"],
                     project["name"],
                     self._serialize_key_patterns(project.get("key_patterns")),
@@ -442,6 +503,10 @@ class WorkflowDB:
         if strict:
             return None
         return projects[0]
+
+    def match_project_for_task_key(self, task_key: str, *, strict: bool = True) -> dict | None:
+        with self._conn() as conn:
+            return self._match_project_for_task_key(task_key, conn, strict=strict)
 
     def _migrate_tasks_add_project(self, conn: sqlite3.Connection) -> None:
         rows = conn.execute("SELECT * FROM tasks ORDER BY id").fetchall()
@@ -567,6 +632,7 @@ class WorkflowDB:
         phases: list[dict],
         phase_order: list[str],
         phase_redirects: dict[str, str] | None = None,
+        workflow_id: int | str | None = None,
     ) -> None:
         """Синхронизировать SQLite-каталог фаз с seed и мигрировать legacy-коды."""
         phase_redirects = phase_redirects or {}
@@ -586,7 +652,7 @@ class WorkflowDB:
 
         with self._conn() as conn:
             self._ensure_default_workflows(conn)
-            default_workflow_id = self._default_workflow_id(conn)
+            catalog_workflow_id = self._resolve_workflow_id(workflow_id) if workflow_id is not None else self._default_workflow_id(conn)
             for code in phase_order:
                 phase = seed_by_code.get(code)
                 if not phase:
@@ -599,7 +665,7 @@ class WorkflowDB:
                     else (existing["agent_id"] if existing else None)
                 )
                 payload = (
-                    default_workflow_id,
+                    catalog_workflow_id,
                     phase["name"],
                     phase.get("description") or "",
                     phase.get("min_time_min", 0),
@@ -736,7 +802,10 @@ class WorkflowDB:
                         (phase_id, evidence.get("description", evidence.get("item", ""))),
                     )
 
-            stale_rows = conn.execute("SELECT id, code, is_seed_managed FROM phases").fetchall()
+            stale_rows = conn.execute(
+                "SELECT id, code, is_seed_managed, workflow_id FROM phases WHERE workflow_id = ?",
+                (catalog_workflow_id,),
+            ).fetchall()
             for stale_row in stale_rows:
                 if stale_row["code"] in desired_codes:
                     continue
@@ -810,6 +879,14 @@ class WorkflowDB:
         with self._conn() as conn:
             rows = conn.execute("SELECT * FROM workflows ORDER BY id").fetchall()
             return [self._hydrate_workflow_row(r) for r in rows if r]
+
+    def get_workflow_by_name(self, name: str) -> dict | None:
+        normalized = str(name or "").strip()
+        if not normalized:
+            return None
+        with self._conn() as conn:
+            row = conn.execute("SELECT * FROM workflows WHERE name = ? ORDER BY id LIMIT 1", (normalized,)).fetchone()
+            return self._hydrate_workflow_row(row)
 
     def get_workflow(self, workflow_id: int) -> dict | None:
         with self._conn() as conn:
@@ -1269,9 +1346,11 @@ class WorkflowDB:
         with self._conn() as conn:
             rows = conn.execute(
                 """
-                SELECT tasks.*, projects.code AS project_code, projects.name AS project_name
+                SELECT tasks.*, projects.code AS project_code, projects.name AS project_name,
+                       projects.workflow_id AS workflow_id, workflows.name AS workflow_name
                 FROM tasks
                 JOIN projects ON projects.id = tasks.project_id
+                LEFT JOIN workflows ON workflows.id = projects.workflow_id
                 ORDER BY tasks.updated_at DESC
                 """
             ).fetchall()
@@ -1281,9 +1360,11 @@ class WorkflowDB:
         with self._conn() as conn:
             row = conn.execute(
                 """
-                SELECT tasks.*, projects.code AS project_code, projects.name AS project_name
+                SELECT tasks.*, projects.code AS project_code, projects.name AS project_name,
+                       projects.workflow_id AS workflow_id, workflows.name AS workflow_name
                 FROM tasks
                 JOIN projects ON projects.id = tasks.project_id
+                LEFT JOIN workflows ON workflows.id = projects.workflow_id
                 WHERE tasks.id = ?
                 """,
                 (task_id,),
@@ -1294,9 +1375,11 @@ class WorkflowDB:
         with self._conn() as conn:
             row = conn.execute(
                 """
-                SELECT tasks.*, projects.code AS project_code, projects.name AS project_name
+                SELECT tasks.*, projects.code AS project_code, projects.name AS project_name,
+                       projects.workflow_id AS workflow_id, workflows.name AS workflow_name
                 FROM tasks
                 JOIN projects ON projects.id = tasks.project_id
+                LEFT JOIN workflows ON workflows.id = projects.workflow_id
                 WHERE tasks.task_key = ?
                 """,
                 (task_key,),

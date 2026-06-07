@@ -237,13 +237,21 @@ def test_db_init_recovers_legacy_singleton_workflow_row_back_to_default(tmp_path
     schema.ensure_phase_catalog(db)
 
     workflows = db.get_workflows()
-    assert len(workflows) == 1
-    assert workflows[0]["name"] == "Legacy Workflow"
-    assert workflows[0]["is_default"] == 1
+    assert len(workflows) == 2
+    names = {workflow["name"] for workflow in workflows}
+    assert names == {"Legacy Workflow", "Smoke Test Workflow"}
+    legacy_workflow = next(workflow for workflow in workflows if workflow["name"] == "Legacy Workflow")
+    smoke_workflow = next(workflow for workflow in workflows if workflow["name"] == "Smoke Test Workflow")
+    assert legacy_workflow["is_default"] == 1
+    assert smoke_workflow["is_default"] == 0
 
     default_project = db.get_project_by_code("TASKNEIROKLYUCH")
     assert default_project is not None
     assert default_project["workflow_is_default"] == 1
+
+    smoke_project = db.get_project_by_code("SMOKE")
+    assert smoke_project is not None
+    assert smoke_project["workflow_name"] == "Smoke Test Workflow"
 
     intake_phase = db.get_phase("-1")
     assert intake_phase is not None

@@ -1,0 +1,198 @@
+[
+  {
+    "code": "smoke.intake",
+    "name": "Smoke Intake",
+    "description": "Быстрый старт короткого CLI workflow для боевого smoke-прогона тестовой задачи.",
+    "phase_order": 1,
+    "parallel_with": null,
+    "rollback_target": null,
+    "next_recommendation": "Перейди к smoke.plan — выбрать parallel strategy и agent selection.",
+    "execution_type": "sync",
+    "instructions": [
+      {
+        "step_num": 1,
+        "description": "Зафиксировать smoke brief и цель тестового CLI прогона.",
+        "execution_type": "sync"
+      },
+      {
+        "step_num": 2,
+        "description": "Подтвердить что short workflow проекта SMOKE выбран для текущей задачи.",
+        "execution_type": "sync"
+      }
+    ],
+    "checks": [
+      {
+        "description": "smoke brief recorded"
+      },
+      {
+        "description": "short workflow selected"
+      }
+    ],
+    "evidence": [
+      {
+        "description": "smoke brief"
+      },
+      {
+        "description": "workflow selected"
+      }
+    ],
+    "selected_agent": null
+  },
+  {
+    "code": "smoke.plan",
+    "name": "Smoke Plan",
+    "description": "Подтвердить схему прогона и выбрать параллельность и агентов для короткого теста.",
+    "phase_order": 2,
+    "parallel_with": null,
+    "rollback_target": null,
+    "next_recommendation": "Перейди к smoke.parallel-a и smoke.parallel-b — ветки идут как parallel pair.",
+    "execution_type": "sync",
+    "instructions": [
+      {
+        "step_num": 1,
+        "description": "Определить parallel strategy для следующего шага.",
+        "execution_type": "sync"
+      },
+      {
+        "step_num": 2,
+        "description": "Зафиксировать agent selection для обеих parallel веток.",
+        "execution_type": "sync"
+      }
+    ],
+    "checks": [
+      {
+        "description": "parallel strategy selected"
+      },
+      {
+        "description": "agent selection recorded"
+      }
+    ],
+    "evidence": [
+      {
+        "description": "parallel strategy"
+      },
+      {
+        "description": "agent selection"
+      }
+    ],
+    "selected_agent": null
+  },
+  {
+    "code": "smoke.parallel-a",
+    "name": "Smoke Parallel A",
+    "description": "Первая параллельная ветка: подготовить backend-oriented smoke proof.",
+    "phase_order": 3,
+    "parallel_with": "smoke.parallel-b",
+    "rollback_target": null,
+    "next_recommendation": "После backend check переходи к smoke.parallel-b или к review, если пара уже собрана.",
+    "execution_type": "parallel",
+    "instructions": [
+      {
+        "step_num": 1,
+        "description": "Подготовить backend check для короткого smoke workflow.",
+        "execution_type": "parallel"
+      }
+    ],
+    "checks": [
+      {
+        "description": "backend check prepared"
+      }
+    ],
+    "evidence": [
+      {
+        "description": "backend check"
+      }
+    ],
+    "selected_agent": "researcher"
+  },
+  {
+    "code": "smoke.parallel-b",
+    "name": "Smoke Parallel B",
+    "description": "Вторая параллельная ветка: подготовить UI-oriented smoke proof.",
+    "phase_order": 4,
+    "parallel_with": "smoke.parallel-a",
+    "rollback_target": null,
+    "next_recommendation": "После ui check переходи к smoke.review для итогового gate.",
+    "execution_type": "parallel",
+    "instructions": [
+      {
+        "step_num": 1,
+        "description": "Подготовить ui check для короткого smoke workflow.",
+        "execution_type": "parallel"
+      }
+    ],
+    "checks": [
+      {
+        "description": "ui check prepared"
+      }
+    ],
+    "evidence": [
+      {
+        "description": "ui check"
+      }
+    ],
+    "selected_agent": "coder"
+  },
+  {
+    "code": "smoke.review",
+    "name": "Smoke Review Gate",
+    "description": "Короткий critic gate с возможностью rollback к плану перед повторным прогоном.",
+    "phase_order": 5,
+    "parallel_with": null,
+    "rollback_target": "smoke.plan",
+    "next_recommendation": "Если smoke review green — перейти к smoke.done; если нет — вернуться к smoke.plan.",
+    "execution_type": "sync",
+    "instructions": [
+      {
+        "step_num": 1,
+        "description": "Проверить rollback path и целостность short workflow history.",
+        "execution_type": "sync"
+      }
+    ],
+    "checks": [
+      {
+        "description": "rollback path reviewed"
+      },
+      {
+        "description": "history reviewed"
+      }
+    ],
+    "evidence": [
+      {
+        "description": "rollback path"
+      },
+      {
+        "description": "history"
+      }
+    ],
+    "selected_agent": "critic"
+  },
+  {
+    "code": "smoke.done",
+    "name": "Smoke Done",
+    "description": "Финальная короткая фаза фиксации успешного smoke-прогона CLI.",
+    "phase_order": 6,
+    "parallel_with": null,
+    "rollback_target": null,
+    "next_recommendation": "Smoke workflow завершён; можно запускать history и повторные прогоны.",
+    "execution_type": "sync",
+    "instructions": [
+      {
+        "step_num": 1,
+        "description": "Зафиксировать что cli smoke completed и история доступна через history.",
+        "execution_type": "sync"
+      }
+    ],
+    "checks": [
+      {
+        "description": "cli smoke completed"
+      }
+    ],
+    "evidence": [
+      {
+        "description": "cli smoke"
+      }
+    ],
+    "selected_agent": "ops"
+  }
+]

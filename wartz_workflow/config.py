@@ -79,6 +79,15 @@ TASK_INIT_SCRIPT = f"{SUITES_DIR}/hr-recruiter-workflow-suite/scripts/task-init.
 UI_PORT = 8811
 UI_HOST = "0.0.0.0"
 
+# Bootstrap workflows / projects
+DEFAULT_WORKFLOW_NAME = "Default Workflow"
+SMOKE_WORKFLOW_NAME = "Smoke Test Workflow"
+SMOKE_PROJECT_CODE = "SMOKE"
+SMOKE_PROJECT_NAME = "Smoke CLI Test Project"
+SMOKE_TASK_KEY_PATTERNS = [
+    r"^(?P<prefix>SMOKE)-(?P<number>[0-9]+)$",
+]
+
 # ── Settings persistence ────────────────────────────────────────────────
 
 import json

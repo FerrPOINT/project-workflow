@@ -89,56 +89,63 @@ def _build_phase_from_db(row: dict, wdb: WorkflowDB) -> Phase:
     )
 
 
-def load_phases_from_db(wdb: WorkflowDB) -> List[Phase]:
+def load_phases_from_db(wdb: WorkflowDB, workflow_id: int | str | None = None) -> List[Phase]:
     """Load all phases from a WorkflowDB instance (already initialised)."""
-    rows = wdb.get_phases()
+    rows = wdb.get_phases(workflow_id=workflow_id)
     return [_build_phase_from_db(r, wdb) for r in rows]
 
 
-def get_phase_from_db(wdb: WorkflowDB, phase_code: str) -> Optional[Phase]:
+def get_phase_from_db(wdb: WorkflowDB, phase_code: str, workflow_id: int | str | None = None) -> Optional[Phase]:
     """Find a single phase by code in a WorkflowDB instance."""
-    rows = wdb.get_phases()
+    rows = wdb.get_phases(workflow_id=workflow_id)
     for r in rows:
         if r.get("code", r["id"]) == phase_code:
             return _build_phase_from_db(r, wdb)
     return None
 
 
-def load_phases() -> List[Phase]:
+def load_phases(workflow_id: int | str | None = None) -> List[Phase]:
     """Load all phases from DB ordered by phase_order."""
     wdb = WorkflowDB()
     wdb.init()
     ensure_phase_catalog(wdb)
-    rows = wdb.get_phases()
+    rows = wdb.get_phases(workflow_id=workflow_id)
     return [_build_phase_from_db(r, wdb) for r in rows]
 
 
 # ── JSON Seed fallback ───────────
 
 _SEED_PATH = Path(__file__).parent / "references" / "seed.json"
+_SMOKE_SEED_PATH = Path(__file__).parent / "references" / "smoke_seed.json"
 
 
-def _read_seed_items() -> List[dict]:
-    if not _SEED_PATH.exists():
+def _read_seed_items_from_path(seed_path: Path, allowed_codes: Sequence[str] | None = None) -> List[dict]:
+    if not seed_path.exists():
         return []
 
-    with open(_SEED_PATH, encoding="utf-8") as f:
+    with open(seed_path, encoding="utf-8") as f:
         raw = json.load(f)
 
-    allowed_codes = set(config.PHASE_ORDER)
     filtered: list[dict] = []
+    allowed_lookup = list(allowed_codes) if allowed_codes is not None else None
+    allowed_set = set(allowed_lookup) if allowed_lookup is not None else None
     for item in raw:
         code = item.get("code", item.get("id", ""))
         if not code:
             continue
-        if code not in allowed_codes:
+        if allowed_set is not None and code not in allowed_set:
             continue
         normalized = dict(item)
         normalized["code"] = code
         filtered.append(normalized)
 
-    filtered.sort(key=lambda item: config.PHASE_ORDER.index(item["code"]))
+    if allowed_lookup is not None:
+        filtered.sort(key=lambda item: allowed_lookup.index(item["code"]))
     return filtered
+
+
+def _read_seed_items() -> List[dict]:
+    return _read_seed_items_from_path(_SEED_PATH, config.PHASE_ORDER)
 
 
 def _write_seed_document(items: List[dict]) -> None:
@@ -282,10 +289,26 @@ def persist_phase_order_to_seed(wdb: WorkflowDB, ordered_phase_ids: Sequence[int
 
 
 def ensure_phase_catalog(wdb: WorkflowDB) -> None:
-    seed_items = _read_seed_items()
-    if not seed_items:
-        return
-    wdb.sync_phase_catalog(seed_items, config.PHASE_ORDER, config.LEGACY_PHASE_REDIRECTS)
+    default_seed_items = _read_seed_items()
+    default_workflow = wdb.get_default_workflow()
+    if default_seed_items and default_workflow:
+        wdb.sync_phase_catalog(
+            default_seed_items,
+            config.PHASE_ORDER,
+            config.LEGACY_PHASE_REDIRECTS,
+            workflow_id=default_workflow["id"],
+        )
+
+    smoke_seed_items = _read_seed_items_from_path(_SMOKE_SEED_PATH)
+    smoke_workflow = wdb.get_workflow_by_name(config.SMOKE_WORKFLOW_NAME)
+    if smoke_seed_items and smoke_workflow:
+        smoke_phase_order = [item["code"] for item in smoke_seed_items]
+        wdb.sync_phase_catalog(
+            smoke_seed_items,
+            smoke_phase_order,
+            {},
+            workflow_id=smoke_workflow["id"],
+        )
 
 
 def _load_phases_seed() -> List[Phase]:

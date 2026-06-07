@@ -308,13 +308,25 @@ def _load_phase_detail(phase_id: int | str) -> dict | None:
     return phase
 
 
-def _resolve_task_phase(current_phase: Any, wdb: db.WorkflowDB) -> tuple[str, dict | None]:
+def _resolve_task_phase(current_phase: Any, wdb: db.WorkflowDB, workflow_id: int | None = None) -> tuple[str, dict | None]:
     token = str(current_phase if current_phase is not None else "-1")
+    if workflow_id is not None:
+        workflow_phases = wdb.get_phases(workflow_id=workflow_id)
+        for phase in workflow_phases:
+            if str(phase.get("code", phase.get("id"))) == token:
+                return token, phase
+        for phase in workflow_phases:
+            if str(phase.get("id")) == token:
+                return token, phase
     phase = wdb.get_phase(token)
     if phase:
         return token, phase
     redirected = config.LEGACY_PHASE_REDIRECTS.get(token)
     if redirected:
+        if workflow_id is not None:
+            for phase in wdb.get_phases(workflow_id=workflow_id):
+                if str(phase.get("code", phase.get("id"))) == redirected:
+                    return redirected, phase
         redirected_phase = wdb.get_phase(redirected)
         if redirected_phase:
             return redirected, redirected_phase
@@ -329,15 +341,23 @@ def _load_tasks() -> list[dict]:
     """Загрузить задачи из SQLite."""
     wdb = _get_db()
     tasks = wdb.get_tasks()
+    workflows = wdb.get_workflows()
+    phase_counts_by_workflow = {
+        workflow["id"]: len(wdb.get_phases(workflow_id=workflow["id"]))
+        for workflow in workflows
+    }
+    default_phase_count = len(config.PHASE_ORDER)
     result = []
     
     for t in tasks:
         # Count completed phases
         task_history = wdb.get_task_history(t["id"])
         completed = sum(1 for tp in task_history if tp["status"] == "done")
+        workflow_id = t.get("workflow_id")
+        total_phases = phase_counts_by_workflow.get(workflow_id, default_phase_count)
         
         # Get current phase info
-        current_phase_id, current = _resolve_task_phase(t.get("current_phase", "-1"), wdb)
+        current_phase_id, current = _resolve_task_phase(t.get("current_phase", "-1"), wdb, workflow_id=workflow_id)
         current = current or {}
         project_code = t.get("project_code") or "—"
         project_name = t.get("project_name") or project_code
@@ -356,7 +376,7 @@ def _load_tasks() -> list[dict]:
                 "phase_name": current.get("name", current_phase_id),
                 "current_phase_name": current.get("name", current_phase_id),
                 "completed": completed,
-                "total_phases": len(config.PHASE_ORDER),
+                "total_phases": total_phases,
                 "status": t.get("status", "active"),
                 "status_label": "В работе" if t.get("status") != "done" else "Завершена",
                 "created_at": t.get("created_at", ""),
@@ -453,12 +473,16 @@ def _get_task_detail(task_key: str) -> dict | None:
         else f"{task['project_code']} — {task['project_name']}"
     )
 
-    current_phase_id, current_phase = _resolve_task_phase(task.get("current_phase", "-1"), wdb)
+    current_phase_id, current_phase = _resolve_task_phase(task.get("current_phase", "-1"), wdb, workflow_id=task.get("workflow_id"))
     task["current_phase_name"] = current_phase["name"] if current_phase else task.get("current_phase", "")
     task["current_phase_order"] = current_phase["phase_order"] if current_phase else 0
 
     task["status_label"] = {"active": "В работе", "done": "Завершена", "blocked": "Заблокирована"}.get(task.get("status", ""), "—")
     task["status_class"] = {"active": "active", "done": "done", "blocked": "blocked"}.get(task.get("status", ""), "wait")
+
+    workflow_id = task.get("workflow_id")
+    workflow_phases = wdb.get_phases(workflow_id=workflow_id) if workflow_id is not None else wdb.get_phases()
+    task["workflow_phase_count"] = len(workflow_phases)
 
     history = wdb.get_task_history(task["id"])
     phase_history = []
@@ -479,7 +503,7 @@ def _get_task_detail(task_key: str) -> dict | None:
 
     task["phase_history"] = phase_history
     task["completed"] = sum(1 for h in phase_history if h.get("status") == "done")
-    task["total_phases"] = len(config.PHASE_ORDER)
+    task["total_phases"] = task.get("workflow_phase_count", len(config.PHASE_ORDER))
     task["progress_done"] = task["completed"]
     task["progress_total"] = task["total_phases"]
     task["work_time"] = None
@@ -695,7 +719,8 @@ def api_phases(workflow_id: int | None = Query(default=None)):
     selected_workflow = next((item for item in workflows if item["id"] == workflow_id), None)
     if selected_workflow is None and workflow_id is None and workflows:
         selected_workflow = workflows[0]
-    return {"ok": True, "workflow": selected_workflow, "phases": _load_phases(workflow_id)}
+    selected_workflow_id = selected_workflow["id"] if selected_workflow else workflow_id
+    return {"ok": True, "workflow": selected_workflow, "phases": _load_phases(selected_workflow_id)}
 
 
 @app.get("/api/phases/{phase_id}")

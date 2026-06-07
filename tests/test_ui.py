@@ -130,6 +130,7 @@ def _phase_restore_payload(phase: dict) -> dict:
 def setup_db():
     """Populate DB with seed.json + sample task before UI tests."""
     from wartz_workflow.ui import _get_db, _seed_to_sqlite
+    from wartz_workflow import db as db_module
     wdb = _get_db()
     if wdb.is_empty():
         _seed_to_sqlite()
@@ -149,6 +150,11 @@ def setup_db():
             "status": "active",
             "current_phase": "5",
         })
+    sample_task = wdb.get_task_by_key("TASKNEIROKLYUCH-247")
+    assert sample_task is not None
+    with sqlite3.connect(db_module.DB_PATH) as conn:
+        conn.execute("DELETE FROM task_history WHERE task_id = ?", (sample_task["id"],))
+        conn.commit()
     project = wdb.get_project_by_code("UITEST")
     if not project:
         project_id = wdb.create_project({
