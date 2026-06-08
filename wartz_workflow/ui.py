@@ -19,6 +19,7 @@ from fastapi.templating import Jinja2Templates
 import uvicorn
 
 from . import schema, config, db, service
+from .wizard import VERDICT_LABELS
 
 # ── Constants ───────────────────────────────────────────────────────────
 DEFAULT_UI_PORT = config.UI_PORT
@@ -508,6 +509,12 @@ def _get_task_detail(task_key: str) -> dict | None:
     task["progress_total"] = task["total_phases"]
     task["work_time"] = None
 
+    # Supervisor runs — full Q/A history from WizardEngine evaluations
+    supervisor_runs = wdb.get_supervisor_runs(task_key=task_key, limit=200)
+    for run in supervisor_runs:
+        run["verdict_label"] = VERDICT_LABELS.get(run.get("verdict", ""), run.get("verdict", "").upper())
+    task["supervisor_runs"] = supervisor_runs
+
     return task
 
 
@@ -652,6 +659,7 @@ def task_detail_page(request: Request, task_key: str):
             "progress_total": task.get("progress_total", 0),
             "work_time": task.get("work_time"),
             "phase_history": task.get("phase_history", []),
+            "supervisor_runs": task.get("supervisor_runs", []),
         },
     )
 

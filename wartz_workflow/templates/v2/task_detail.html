@@ -72,6 +72,26 @@
   .summary-bar{grid-template-columns:1fr}
   .detail-header{padding:16px}
 }
+
+/* ── Supervisor Q/A history ─────────────────────────────────────────── */
+.supervisor-history{display:flex;flex-direction:column;gap:12px}
+.supervisor-run{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px}
+.supervisor-run:hover{background:var(--surface-hover)}
+.sr-header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.sr-phase{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-dim);background:var(--panel);padding:2px 8px;border-radius:4px}
+.sr-verdict{font-size:12px;font-weight:600;padding:2px 10px;border-radius:4px;text-transform:uppercase;letter-spacing:0.04em}
+.sr-verdict.verdict-pass{background:var(--green-soft);color:var(--green)}
+.sr-verdict.verdict-partial{background:var(--yellow-soft);color:var(--yellow)}
+.sr-verdict.verdict-blocked{background:var(--red-soft);color:var(--red)}
+.sr-verdict.verdict-rollback{background:var(--orange-soft);color:var(--orange)}
+.sr-verdict.verdict-delegate{background:var(--accent-soft);color:var(--accent)}
+.sr-time{font-size:12px;color:var(--text-muted);margin-left:auto}
+.sr-body{display:flex;flex-direction:column;gap:6px}
+.sr-row{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.sr-label{font-size:12px;font-weight:600;color:var(--text-muted);white-space:nowrap}
+.sr-report,.sr-response,.sr-tags{font-size:13px;color:var(--text-secondary);line-height:1.5}
+.sr-tags.missing{color:var(--yellow)}
+.sr-tags.blockers{color:var(--red)}
 {% endblock %}
 
 {% block content %}
@@ -139,6 +159,57 @@
     </div>
     {% else %}
     <div style="color:var(--text-dim);font-size:13px;padding:8px 0">Нет записей в истории</div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Supervisor Q/A History — full WizardEngine evaluation records -->
+<div class="card" style="margin-top:20px">
+  <div class="card-header" style="margin-bottom:12px">
+    <div class="card-title">📜 История отчётов supervisor</div>
+  </div>
+
+  <div class="supervisor-history">
+    {% for run in supervisor_runs %}
+    <div class="supervisor-run">
+      <div class="sr-header">
+        <span class="sr-phase">{{ run.phase_code }}</span>
+        <span class="sr-verdict verdict-{{ run.verdict }}">{{ run.verdict_label }}</span>
+        <span class="sr-time">{{ run.created_at[:16] if run.created_at else '—' }}</span>
+      </div>
+      <div class="sr-body">
+        <div class="sr-row">
+          <span class="sr-label">📝 Отчёт (вход):</span>
+          <span class="sr-report">{{ run.report }}</span>
+        </div>
+        {% if run.response and run.response.get('message') %}
+        <div class="sr-row">
+          <span class="sr-label">💬 Ответ supervisor:</span>
+          <span class="sr-response">{{ run.response.get('message') }}</span>
+        </div>
+        {% endif %}
+        {% if run.covered %}
+        <div class="sr-row">
+          <span class="sr-label">✅ Покрыто:</span>
+          <span class="sr-tags">{{ '; '.join(run.covered) }}</span>
+        </div>
+        {% endif %}
+        {% if run.missing %}
+        <div class="sr-row">
+          <span class="sr-label">⚠️ Пропущено:</span>
+          <span class="sr-tags missing">{{ '; '.join(run.missing) }}</span>
+        </div>
+        {% endif %}
+        {% if run.blockers %}
+        <div class="sr-row">
+          <span class="sr-label">🚫 Блокеры:</span>
+          <span class="sr-tags blockers">{{ '; '.join(run.blockers) }}</span>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% else %}
+    <div style="color:var(--text-dim);font-size:13px;padding:8px 0">Нет записей supervisor</div>
     {% endfor %}
   </div>
 </div>
