@@ -26,7 +26,7 @@ class TestInit:
         tables = db._list_tables()
         assert {
             "phases", "instructions", "checks", "evidence",
-            "tasks", "task_history", "agents", "cli_history", "projects", "workflows"
+            "tasks", "task_history", "supervisor_runs", "agents", "cli_history", "projects", "workflows"
         }.issubset(tables)
         assert "phase_groups" not in tables
 
@@ -35,6 +35,12 @@ class TestInit:
             columns = [row[1] for row in conn.execute("PRAGMA table_info(workflows)").fetchall()]
         assert "code" not in columns
         assert "is_default" in columns
+
+    def test_tasks_current_phase_column_uses_text_type(self, db):
+        with sqlite3.connect(db.db_path) as conn:
+            rows = conn.execute("PRAGMA table_info(tasks)").fetchall()
+        current_phase = next(row for row in rows if row[1] == "current_phase")
+        assert current_phase[2] == "TEXT"
 
     def test_init_idempotent(self, db):
         """Повторный init не падает."""
@@ -56,6 +62,68 @@ class TestInit:
         agent = db.get_agent(agent_id)
         assert agent is not None
         assert agent["description"] == "Migrated description"
+
+    def test_init_migrates_tasks_current_phase_from_integer_to_text(self, tmp_path):
+        test_db = tmp_path / "legacy_tasks.db"
+        conn = sqlite3.connect(test_db)
+        conn.execute(
+            """
+            CREATE TABLE workflows (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                is_default INTEGER NOT NULL DEFAULT 1 CHECK(is_default IN (0, 1))
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE projects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workflow_id INTEGER NOT NULL REFERENCES workflows(id),
+                code TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                key_patterns TEXT NOT NULL DEFAULT '[]'
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id INTEGER NOT NULL REFERENCES projects(id),
+                task_key TEXT NOT NULL UNIQUE,
+                title TEXT,
+                description TEXT,
+                current_phase INTEGER NOT NULL DEFAULT -1,
+                status TEXT DEFAULT 'active' CHECK(status IN ('active', 'done', 'blocked')),
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        conn.execute("INSERT INTO workflows (name, description, is_default) VALUES (?, ?, 1)", ("Legacy Workflow", "Legacy"))
+        conn.execute(
+            "INSERT INTO projects (workflow_id, code, name, key_patterns) VALUES (?, ?, ?, ?)",
+            (1, "LEG", "Legacy", '["^(?P<prefix>LEG)-(?P<number>[0-9]+)$"]'),
+        )
+        conn.execute(
+            "INSERT INTO tasks (project_id, task_key, title, current_phase, status) VALUES (?, ?, ?, ?, ?)",
+            (1, "LEG-7", "Legacy task", 7, "active"),
+        )
+        conn.commit()
+        conn.close()
+
+        db = WorkflowDB(str(test_db))
+        db.init()
+
+        with sqlite3.connect(test_db) as migrated:
+            columns = migrated.execute("PRAGMA table_info(tasks)").fetchall()
+            current_phase = next(row for row in columns if row[1] == "current_phase")
+            row = migrated.execute("SELECT current_phase, typeof(current_phase) FROM tasks WHERE task_key = ?", ("LEG-7",)).fetchone()
+
+        assert current_phase[2] == "TEXT"
+        assert row == ("7", "text")
 
 
 class TestImportPhases:
@@ -216,6 +284,33 @@ class TestTaskCRUD:
         p1 = db.get_phase_by_code("1")
         assert pmap[p0["id"]] == "done"
         assert pmap[p1["id"]] == "pending"
+
+    def test_supervisor_run_round_trip(self, db):
+        db.create_phase({"id": "0", "name": "P0", "description": "", "phase_order": 1})
+        db.create_phase({"id": "1", "name": "P1", "description": "", "phase_order": 2})
+        db.create_project({
+            "code": "AAT",
+            "name": "AAT",
+            "key_patterns": [r"^(?P<prefix>AAT)-(?P<number>[0-9]+)$"],
+        })
+        db.create_task({"task_key": "AAT-4", "title": "T4", "current_phase": "0"})
+        run_id = db.create_supervisor_run({
+            "task_key": "AAT-4",
+            "phase_id": "0",
+            "verdict": "pass",
+            "covered": ["done"],
+            "missing": [],
+            "blockers": [],
+            "next_phase_id": "1",
+            "context_snapshot": {"current_contract": {"phase_code": "0"}},
+            "response": {"verdict": "PASS", "next_phase": "1"},
+        })
+
+        runs = db.get_supervisor_runs(task_key="AAT-4")
+        assert runs[0]["id"] == run_id
+        assert runs[0]["verdict"] == "pass"
+        assert runs[0]["response"]["next_phase"] == "1"
+        assert runs[0]["context_snapshot"]["current_contract"]["phase_code"] == "0"
 
 
 class TestProjectCRUD:

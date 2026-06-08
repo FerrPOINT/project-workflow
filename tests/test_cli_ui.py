@@ -5,7 +5,6 @@ Uses click.testing.CliRunner with heavy mocking to avoid FS/DB side effects.
 
 import json
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import click
@@ -64,20 +63,24 @@ class TestStepCommand:
 
     @patch("wartz_workflow.state.find_repo", return_value="/repo")
     @patch("wartz_workflow.state.load_state", return_value=_mock_state())
-    @patch("wartz_workflow.wizard.evaluate_report", return_value={"verdict": "PASS", "next_phase": "1"})
-    def test_step_report_pass(self, mock_eval, mock_load, mock_find):
+    @patch("wartz_workflow.wizard.WizardEngine")
+    def test_step_report_pass(self, mock_engine_cls, mock_load, mock_find):
+        mock_engine = mock_engine_cls.return_value
+        mock_engine.evaluate.return_value = {"verdict": "PASS", "next_phase": "1"}
         runner = CliRunner()
         with patch("wartz_workflow.cli.core._get_task_key_validator", return_value=_validator()):
             result = runner.invoke(cli, ["step", "--task", "TASK-1", "--report", "Done"])
         assert result.exit_code == 0
-        mock_eval.assert_called_once_with("TASK-1", "Done", "/repo")
+        mock_engine.evaluate.assert_called_once_with("Done")
         parsed = json.loads(result.output)
         assert parsed["verdict"] == "PASS"
 
     @patch("wartz_workflow.state.find_repo", return_value="/repo")
     @patch("wartz_workflow.state.load_state", return_value=_mock_state())
-    @patch("wartz_workflow.wizard.evaluate_report", return_value={"verdict": "FAIL", "next_phase": None})
-    def test_step_report_fail_exits_one(self, mock_eval, mock_load, mock_find):
+    @patch("wartz_workflow.wizard.WizardEngine")
+    def test_step_report_fail_exits_one(self, mock_engine_cls, mock_load, mock_find):
+        mock_engine = mock_engine_cls.return_value
+        mock_engine.evaluate.return_value = {"verdict": "FAIL", "next_phase": None}
         runner = CliRunner()
         with patch("wartz_workflow.cli.core._get_task_key_validator", return_value=_validator()):
             result = runner.invoke(cli, ["step", "--task", "TASK-1", "--report", "Bad"])
@@ -101,9 +104,21 @@ class TestStepCommand:
 class TestHistoryCommand:
     """Test `wartz-workflow history --task TASK-1`"""
 
-    @patch("wartz_workflow.cli.ui.convo.get_messages", return_value=[
-        SimpleNamespace(role="user", phase_id="0", tags="transition", content="Done", created_at="2024-01-01"),
-        SimpleNamespace(role="agent", phase_id="0", tags="", content="OK", created_at="2024-01-02"),
+    @patch("wartz_workflow.db.WorkflowDB.get_supervisor_runs", return_value=[
+        {
+            "phase_code": "0",
+            "verdict": "pass",
+            "next_phase_code": "1",
+            "rollback_phase_code": None,
+            "created_at": "2024-01-01",
+        },
+        {
+            "phase_code": "1",
+            "verdict": "pass",
+            "next_phase_code": None,
+            "rollback_phase_code": None,
+            "created_at": "2024-01-02",
+        },
     ])
     def test_history_shows_records(self, mock_get):
         runner = CliRunner()
@@ -111,19 +126,19 @@ class TestHistoryCommand:
             result = runner.invoke(cli, ["history", "--task", "TASK-1"])
         assert result.exit_code == 0
         assert "TASK-1" in result.output
-        assert "Done" in result.output
-        mock_get.assert_called_once_with("TASK-1", limit=None)
+        assert "Phase 0" in result.output
+        mock_get.assert_called_once_with(task_key="TASK-1", limit=200)
 
-    @patch("wartz_workflow.cli.ui.convo.get_messages", return_value=[])
+    @patch("wartz_workflow.db.WorkflowDB.get_supervisor_runs", return_value=[])
     def test_history_empty(self, mock_get):
         runner = CliRunner()
         with patch("wartz_workflow.cli.core._get_task_key_validator", return_value=_validator()):
             result = runner.invoke(cli, ["history", "--task", "TASK-1"])
         assert result.exit_code == 0
         assert "пуста" in result.output
-        mock_get.assert_called_once_with("TASK-1", limit=None)
+        mock_get.assert_called_once_with(task_key="TASK-1", limit=200)
 
-    @patch("wartz_workflow.cli.ui.convo.get_messages", return_value=[])
+    @patch("wartz_workflow.db.WorkflowDB.get_supervisor_runs", return_value=[])
     def test_history_json_mode(self, mock_get):
         runner = CliRunner()
         with patch("wartz_workflow.cli.core._get_task_key_validator", return_value=_validator()):
@@ -133,7 +148,7 @@ class TestHistoryCommand:
         assert parsed["ok"] is True
         assert parsed["task_key"] == "TASK-1"
         assert parsed["count"] == 0
-        mock_get.assert_called_once_with("TASK-1", limit=10)
+        mock_get.assert_called_once_with(task_key="TASK-1", limit=10)
 
     def test_history_repo_is_rejected(self):
         runner = CliRunner()
@@ -150,6 +165,7 @@ class TestCliGuard:
         result = runner.invoke(cli, ["step", "--help"])
         assert result.exit_code == 0
         assert "--task" in result.output
+        assert "Отчёт исполнителя CLI" in result.output
         assert "\n  --repo TEXT" not in result.output
         assert "\n  --skip" not in result.output
 

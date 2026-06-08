@@ -1,67 +1,100 @@
-"""Test WizardEngine with mocked DB."""
+"""WizardEngine unit tests for public supervisor behavior."""
 
-import pytest
-from unittest.mock import patch, MagicMock
-from wartz_workflow.wizard import WizardEngine
+from unittest.mock import patch
+
 from wartz_workflow.models import Phase
+from wartz_workflow.wizard import WizardEngine
 
 
 class TestWizardEvaluate:
+    def _phase(self) -> Phase:
+        return Phase(
+            id=1,
+            code="0",
+            name="Test",
+            description="D",
+            min_time_min=0,
+            is_blocker=False,
+            is_delegated=False,
+            is_critic=False,
+            checks=[],
+            evidence=[],
+            instructions=[],
+            delegate=None,
+            next_recommendation="Move forward",
+            parallel_with=None,
+            gate_after=None,
+            rollback_target=None,
+            execution_type="sync",
+        )
+
     def test_evaluate_pass(self):
-        with patch("wartz_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = "-1"
-            engine = WizardEngine("AAT-1", repo="/tmp")
-            ph = MagicMock()
-            ph.code = "0"
-            ph.name = "Test"
-            ph.is_blocker = False
-            ph.is_delegated = False
-            ph.is_critic = False
-            ph.instructions = []
-            engine.phase_map = {"0": ph}
-            engine.all_phases = [ph]
+        engine = WizardEngine("AAT-1", repo="/tmp")
+        ph = self._phase()
+        engine.current_phase = "0"
+        engine.phase_map = {"0": ph}
+        engine.all_phases = [ph]
 
-            with patch.object(engine, "_build_checklist", return_value=["check"]), \
-                 patch.object(engine, "_check_coverage", return_value=(["check"], [])), \
-                 patch.object(engine, "_get_next_phase", return_value=("1", "Next")), \
-                 patch.object(engine, "_record_transition"):
-                result = engine.evaluate("report ok")
-                assert result["verdict"] == "PASS"
+        with patch.object(engine, "_build_checklist", return_value=["check"]), \
+             patch.object(engine, "_check_coverage", return_value=(["check"], [])), \
+             patch.object(engine, "_get_next_phase", return_value=("1", "Next")), \
+             patch.object(engine, "_record_transition"), \
+             patch.object(engine.db, "create_supervisor_run"), \
+             patch.object(engine.db, "get_task", return_value=engine.task):
+            result = engine.evaluate("report ok")
 
-    def test_evaluate_fail(self):
-        with patch("wartz_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = "0"
-            engine = WizardEngine("AAT-1", repo="/tmp")
-            ph = MagicMock()
-            ph.code = "0"
-            ph.name = "Test"
-            ph.is_blocker = False
-            ph.is_delegated = False
-            ph.is_critic = False
-            ph.instructions = []
-            engine.phase_map = {"0": ph}
-            engine.all_phases = [ph]
+        assert result["verdict"] == "PASS"
+        assert result["next_phase"] == "1"
 
-            with patch.object(engine, "_build_checklist", return_value=["check"]), \
-                 patch.object(engine, "_check_coverage", return_value=([], ["check"])), \
-                 patch.object(engine, "_build_fail_message", return_value="fail msg"):
-                result = engine.evaluate("report bad")
-                assert result["verdict"] == "FAIL"
+    def test_evaluate_partial_when_items_missing(self):
+        engine = WizardEngine("AAT-1", repo="/tmp")
+        ph = self._phase()
+        engine.current_phase = "0"
+        engine.phase_map = {"0": ph}
+        engine.all_phases = [ph]
+
+        with patch.object(engine, "_build_checklist", return_value=["check"]), \
+             patch.object(engine, "_check_coverage", return_value=([], ["check"])), \
+             patch.object(engine, "_record_transition"), \
+             patch.object(engine.db, "create_supervisor_run"), \
+             patch.object(engine.db, "get_task", return_value=engine.task):
+            result = engine.evaluate("report bad")
+
+        assert result["verdict"] == "PARTIAL"
+        assert result["missing"] == ["check"]
 
     def test_get_phase_prompt(self):
-        with patch("wartz_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = "0"
-            engine = WizardEngine("AAT-1", repo="/tmp")
-            ph = MagicMock()
-            ph.code = "0"
-            ph.name = "Test"
-            ph.description = "D"
-            ph.is_blocker = False
-            ph.is_delegated = False
-            ph.instructions = []
-            engine.phase_map = {"0": ph}
-            engine.all_phases = [ph]
+        engine = WizardEngine("AAT-1", repo="/tmp")
+        ph = self._phase()
+        engine.current_phase = "0"
+        engine.phase_map = {"0": ph}
+        engine.all_phases = [ph]
 
-            with patch.object(engine, "_build_checklist", return_value=[]):
-                prompt = engine.get_phase_prompt()
-                assert "Test" in prompt
+        with patch.object(
+            engine,
+            "get_full_context",
+            return_value={
+                "workflow_name": "WF",
+                "workflow_path": [{"code": "0", "name": "Test", "status": "current"}],
+                "current_contract": {
+                    "phase_code": "0",
+                    "phase_name": "Test",
+                    "description": "D",
+                    "instructions": [],
+                    "required_checks": [],
+                    "required_evidence": [],
+                    "execution_type": "sync",
+                    "delegate_agent": None,
+                    "delegate_toolsets": [],
+                    "next_recommendation": "Move forward",
+                    "parallel_with": None,
+                    "rollback_target": None,
+                },
+                "report_template": {"summary": "..."},
+                "global_instructions": ["Do not skip phases."],
+            },
+        ):
+            prompt = engine.get_phase_prompt()
+
+        assert "Test" in prompt
+        assert "Полный путь workflow" in prompt

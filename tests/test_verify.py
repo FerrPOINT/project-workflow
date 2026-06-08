@@ -79,10 +79,10 @@ class TestCheckTokens:
 class TestCheckGitIdentity:
     def test_ok(self):
         """Если git identity настроен — PASS."""
-        ok, msg = verify.check_git_identity()
-        # В этом окружении git настроен (см. memory)
+        with patch("subprocess.check_output", side_effect=["Alice\n", "alice@example.com\n"]):
+            ok, msg = verify.check_git_identity()
         assert ok is True
-        assert "Git identity:" in msg
+        assert msg == "Git identity: Alice <alice@example.com>"
 
     def test_missing(self):
         """Если git identity не настроен — FAIL."""

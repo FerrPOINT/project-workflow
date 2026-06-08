@@ -17,6 +17,8 @@ SCHEMA_PATH = Path(__file__).parent / "db_schema.sql"
 
 
 class WorkflowDB:
+    """SQLite workflow persistence."""
+
     def __init__(self, db_path: str | None = None):
         self.db_path = db_path or str(DB_PATH)
         self._ensure_dir()
@@ -26,6 +28,10 @@ class WorkflowDB:
 
     def _conn(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA synchronous = NORMAL")
+        conn.execute("PRAGMA temp_store = MEMORY")
+        conn.execute("PRAGMA cache_size = -32000")
         conn.execute("PRAGMA foreign_keys = ON")
         conn.row_factory = sqlite3.Row
         return conn
@@ -87,6 +93,23 @@ class WorkflowDB:
                 pass
         return []
 
+    @staticmethod
+    def _json_dumps(value: Any, fallback: str = "{}") -> str:
+        if value is None:
+            return fallback
+        return json.dumps(value, ensure_ascii=False)
+
+    @staticmethod
+    def _json_loads(raw: Any, default: Any) -> Any:
+        if raw in (None, ""):
+            return default
+        if isinstance(raw, (dict, list)):
+            return raw
+        try:
+            return json.loads(raw)
+        except Exception:
+            return default
+
     def _hydrate_workflow_row(self, row: sqlite3.Row | dict | None) -> dict | None:
         if not row:
             return None
@@ -104,6 +127,17 @@ class WorkflowDB:
             data["workflow_is_default"] = bool(data.get("workflow_is_default"))
         return data
 
+    def _hydrate_supervisor_run_row(self, row: sqlite3.Row | dict | None) -> dict | None:
+        if not row:
+            return None
+        data = dict(row)
+        data["covered"] = self._json_loads(data.get("covered"), [])
+        data["missing"] = self._json_loads(data.get("missing"), [])
+        data["blockers"] = self._json_loads(data.get("blockers"), [])
+        data["context_snapshot"] = self._json_loads(data.get("context_snapshot"), {})
+        data["response"] = self._json_loads(data.get("response"), {})
+        return data
+
     def _bootstrap_workflows(self) -> list[dict]:
         return [
             {
@@ -113,7 +147,7 @@ class WorkflowDB:
             },
             {
                 "name": config.SMOKE_WORKFLOW_NAME,
-                "description": "Короткий боевой workflow для CLI smoke/regression тестирования parallel, agents, rollback и history.",
+                "description": "Короткий боевой workflow для CLI smoke/regression тестирования parallel веток, delegated phase metadata, rollback и history.",
                 "is_default": 0,
             },
         ]
@@ -304,6 +338,13 @@ class WorkflowDB:
     def _table_columns(self, conn: sqlite3.Connection, table_name: str) -> list[str]:
         rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
         return [row[1] for row in rows]
+
+    def _table_sql(self, conn: sqlite3.Connection, table_name: str) -> str:
+        row = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+            (table_name,),
+        ).fetchone()
+        return str(row[0] or "") if row else ""
 
     def _migrate_workflows_drop_code(self, conn: sqlite3.Connection) -> None:
         workflow_columns = self._table_columns(conn, "workflows")
@@ -519,7 +560,7 @@ class WorkflowDB:
                 task_key      TEXT NOT NULL UNIQUE,
                 title         TEXT,
                 description   TEXT,
-                current_phase INTEGER NOT NULL DEFAULT -1,
+                current_phase TEXT NOT NULL DEFAULT '-1',
                 status        TEXT DEFAULT 'active'
                     CHECK(status IN ('active', 'done', 'blocked')),
                 created_at    TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -542,7 +583,7 @@ class WorkflowDB:
                     row["task_key"],
                     row["title"],
                     row["description"],
-                    row["current_phase"],
+                    str(row["current_phase"] if row["current_phase"] not in (None, "") else "-1"),
                     row["status"],
                     row["created_at"],
                     row["updated_at"],
@@ -590,6 +631,90 @@ class WorkflowDB:
             conn.execute("ALTER TABLE phases ADD COLUMN is_seed_managed INTEGER NOT NULL DEFAULT 1")
         conn.execute("UPDATE phases SET is_seed_managed = 1 WHERE is_seed_managed IS NULL")
 
+    def _migrate_tasks_current_phase_to_text(self, conn: sqlite3.Connection) -> None:
+        task_columns = self._table_columns(conn, "tasks")
+        if "current_phase" not in task_columns:
+            return
+        info = conn.execute("PRAGMA table_info(tasks)").fetchall()
+        current_phase_col = next((row for row in info if row[1] == "current_phase"), None)
+        if current_phase_col and str(current_phase_col[2] or "").upper() == "TEXT":
+            return
+
+        rows = conn.execute("SELECT * FROM tasks ORDER BY id").fetchall()
+        conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute(
+            """
+            CREATE TABLE tasks_new (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id    INTEGER NOT NULL REFERENCES projects(id),
+                task_key      TEXT NOT NULL UNIQUE,
+                title         TEXT,
+                description   TEXT,
+                current_phase TEXT NOT NULL DEFAULT '-1',
+                status        TEXT DEFAULT 'active'
+                    CHECK(status IN ('active', 'done', 'blocked')),
+                created_at    TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at    TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        for row in rows:
+            current_phase = row["current_phase"]
+            current_phase_value = "-1" if current_phase in (None, "") else str(current_phase)
+            conn.execute(
+                """
+                INSERT INTO tasks_new (id, project_id, task_key, title, description, current_phase, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row["id"],
+                    row["project_id"],
+                    row["task_key"],
+                    row["title"],
+                    row["description"],
+                    current_phase_value,
+                    row["status"],
+                    row["created_at"],
+                    row["updated_at"],
+                ),
+            )
+        conn.execute("DROP TABLE tasks")
+        conn.execute("ALTER TABLE tasks_new RENAME TO tasks")
+        conn.execute("PRAGMA foreign_keys = ON")
+
+    def _migrate_task_history_statuses(self, conn: sqlite3.Connection) -> None:
+        create_sql = self._table_sql(conn, "task_history").lower()
+        if all(token in create_sql for token in ("partial", "blocked", "rollback", "delegated")):
+            return
+
+        rows = conn.execute("SELECT * FROM task_history ORDER BY id").fetchall()
+        conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute(
+            """
+            CREATE TABLE task_history_new (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id      INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+                phase_id     INTEGER NOT NULL REFERENCES phases(id),
+                status       TEXT DEFAULT 'pending'
+                    CHECK(status IN ('pending', 'done', 'partial', 'blocked', 'rollback', 'delegated')),
+                completed_at TEXT,
+                UNIQUE(task_id, phase_id)
+            )
+            """
+        )
+        allowed_statuses = {"pending", "done", "partial", "blocked", "rollback", "delegated"}
+        for row in rows:
+            status = str(row["status"] or "pending").strip().lower()
+            if status not in allowed_statuses:
+                status = "pending"
+            conn.execute(
+                "INSERT INTO task_history_new (id, task_id, phase_id, status, completed_at) VALUES (?, ?, ?, ?, ?)",
+                (row["id"], row["task_id"], row["phase_id"], status, row["completed_at"]),
+            )
+        conn.execute("DROP TABLE task_history")
+        conn.execute("ALTER TABLE task_history_new RENAME TO task_history")
+        conn.execute("PRAGMA foreign_keys = ON")
+
     def _migrate_schema(self, conn: sqlite3.Connection) -> None:
         task_columns = self._table_columns(conn, "tasks")
         self._migrate_workflows_drop_code(conn)
@@ -600,6 +725,8 @@ class WorkflowDB:
         if "project_id" not in task_columns:
             self._migrate_tasks_add_project(conn)
         self._backfill_task_projects(conn)
+        self._migrate_tasks_current_phase_to_text(conn)
+        self._migrate_task_history_statuses(conn)
 
     # ── Init ───────────────────────────────────────────────────────────
 
@@ -1335,7 +1462,7 @@ class WorkflowDB:
                     data["task_key"],
                     data.get("title", ""),
                     data.get("description", ""),
-                    data.get("current_phase", -1),
+                    str(data.get("current_phase", "-1")),
                     data.get("status", "active"),
                 ),
             )
@@ -1385,6 +1512,14 @@ class WorkflowDB:
                 (task_key,),
             ).fetchone()
             return dict(row) if row else None
+
+    def _resolve_task_id(self, value: int | str) -> int:
+        if isinstance(value, int):
+            return value
+        task = self.get_task_by_key(value)
+        if not task:
+            raise ValueError(f"Unknown task key: {value}")
+        return int(task["id"])
 
     def update_task(self, task_id: int, data: dict) -> None:
         fields = []
@@ -1437,6 +1572,80 @@ class WorkflowDB:
 
     def get_task_phases(self, task_id: int) -> list[dict]:
         return self.get_task_history(task_id)
+
+    # ── Supervisor Runs ───────────────────────────────────────────────
+
+    def create_supervisor_run(self, data: dict) -> int:
+        task_id = data.get("task_id")
+        if task_id is None:
+            task_key = data.get("task_key")
+            if task_key is None:
+                raise ValueError("task_id or task_key is required")
+            task_id = self._resolve_task_id(task_key)
+        phase_id = self._resolve_phase_id(data["phase_id"])
+        next_phase_id = data.get("next_phase_id")
+        rollback_phase_id = data.get("rollback_phase_id")
+        with self._conn() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO supervisor_runs (
+                    task_id, phase_id, verdict, report, covered, missing, blockers,
+                    next_phase_id, rollback_phase_id, context_snapshot, response
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    int(task_id),
+                    phase_id,
+                    str(data["verdict"]),
+                    str(data.get("report", "") or ""),
+                    self._json_dumps(data.get("covered", []), fallback="[]"),
+                    self._json_dumps(data.get("missing", []), fallback="[]"),
+                    self._json_dumps(data.get("blockers", []), fallback="[]"),
+                    self._resolve_phase_id(next_phase_id) if next_phase_id is not None else None,
+                    self._resolve_phase_id(rollback_phase_id) if rollback_phase_id is not None else None,
+                    self._json_dumps(data.get("context_snapshot", {}), fallback="{}"),
+                    self._json_dumps(data.get("response", {}), fallback="{}"),
+                ),
+            )
+            conn.commit()
+            return int(cursor.lastrowid or 0)
+
+    def get_supervisor_runs(
+        self,
+        *,
+        task_id: int | None = None,
+        task_key: str | None = None,
+        limit: int = 20,
+    ) -> list[dict]:
+        if task_id is None:
+            if task_key is None:
+                raise ValueError("task_id or task_key is required")
+            task_id = self._resolve_task_id(task_key)
+        with self._conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT supervisor_runs.*, phases.code AS phase_code,
+                       next_phase.code AS next_phase_code,
+                       rollback_phase.code AS rollback_phase_code,
+                       tasks.task_key AS task_key
+                FROM supervisor_runs
+                JOIN phases ON phases.id = supervisor_runs.phase_id
+                JOIN tasks ON tasks.id = supervisor_runs.task_id
+                LEFT JOIN phases AS next_phase ON next_phase.id = supervisor_runs.next_phase_id
+                LEFT JOIN phases AS rollback_phase ON rollback_phase.id = supervisor_runs.rollback_phase_id
+                WHERE supervisor_runs.task_id = ?
+                ORDER BY supervisor_runs.created_at DESC, supervisor_runs.id DESC
+                LIMIT ?
+                """,
+                (int(task_id), int(limit)),
+            ).fetchall()
+            hydrated: list[dict] = []
+            for row in rows:
+                item = self._hydrate_supervisor_run_row(row)
+                if item is not None:
+                    hydrated.append(item)
+            return hydrated
 
     # ── CLI History ──────────────────────────────────────────────────
 

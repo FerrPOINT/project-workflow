@@ -20,13 +20,13 @@ class PhaseCheck:
 
 @dataclass
 class PhaseEvidence:
-    """Evidence который агент должен собрать."""
+    """Evidence, которое должен собрать исполнитель текущей CLI-фазы."""
     item: str = ""
 
 
 @dataclass
 class PhaseInstruction:
-    """Инструкция для агента."""
+    """Инструкция для исполнителя текущей CLI-фазы."""
     step: str = ""
     example: Optional[str] = None
     execution_type: str = "sync"

@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     task_key      TEXT NOT NULL UNIQUE,
     title         TEXT,
     description   TEXT,
-    current_phase INTEGER NOT NULL DEFAULT -1,
+    current_phase TEXT NOT NULL DEFAULT '-1',
     status        TEXT DEFAULT 'active'
         CHECK(status IN ('active', 'done', 'blocked')),
     created_at    TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -83,9 +83,25 @@ CREATE TABLE IF NOT EXISTS task_history (
     task_id      INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
     phase_id     INTEGER NOT NULL REFERENCES phases(id),
     status       TEXT DEFAULT 'pending'
-        CHECK(status IN ('pending', 'done')),
+        CHECK(status IN ('pending', 'done', 'partial', 'blocked', 'rollback', 'delegated')),
     completed_at TEXT,
     UNIQUE(task_id, phase_id)
+);
+
+CREATE TABLE IF NOT EXISTS supervisor_runs (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id          INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    phase_id         INTEGER NOT NULL REFERENCES phases(id),
+    verdict          TEXT NOT NULL CHECK(verdict IN ('pass', 'partial', 'blocked', 'rollback', 'delegate')),
+    report           TEXT NOT NULL DEFAULT '',
+    covered          TEXT NOT NULL DEFAULT '[]',
+    missing          TEXT NOT NULL DEFAULT '[]',
+    blockers         TEXT NOT NULL DEFAULT '[]',
+    next_phase_id    INTEGER REFERENCES phases(id),
+    rollback_phase_id INTEGER REFERENCES phases(id),
+    context_snapshot TEXT NOT NULL DEFAULT '{}',
+    response         TEXT NOT NULL DEFAULT '{}',
+    created_at       TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS cli_history (

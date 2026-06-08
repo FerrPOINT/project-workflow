@@ -94,15 +94,34 @@ class TestCheckConstraints:
     def test_valid_status_accepted(self, conn):
         for st in ("active", "done", "blocked"):
             conn.execute("INSERT INTO tasks (project_id, task_key, status) VALUES (?,?,?)", (1, f"TK-{st}", st))
-        # task_history uses pending|done — use separate phases for each status (UNIQUE on task_id+phase_id)
         conn.execute("INSERT INTO tasks (project_id, task_key, status) VALUES (?,?,?)", (1, "T-history", "active"))
         tid = conn.execute("SELECT id FROM tasks WHERE task_key=?", ("T-history",)).fetchone()[0]
-        for i, st in enumerate(("pending", "done")):
+        for i, st in enumerate(("pending", "done", "partial", "blocked", "rollback", "delegated")):
             conn.execute("INSERT INTO phases (workflow_id,code,name,phase_order) VALUES (?,?,?,?)", (1, f"ph-{i}", "H", i+10))
             pid = conn.execute("SELECT id FROM phases WHERE code=?", (f"ph-{i}",)).fetchone()[0]
             conn.execute(
                 "INSERT INTO task_history (task_id,phase_id,status) VALUES (?,?,?)",
                 (tid, pid, st)
+            )
+
+    def test_supervisor_run_bad_verdict_blocked(self, conn):
+        conn.execute("INSERT INTO tasks (project_id, task_key, status) VALUES (?,?,?)", (1, "SUP-ERR", "active"))
+        tid = conn.execute("SELECT id FROM tasks WHERE task_key=?", ("SUP-ERR",)).fetchone()[0]
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO supervisor_runs (task_id, phase_id, verdict) VALUES (?, ?, ?)",
+                (tid, 1, "garbage"),
+            )
+
+    def test_supervisor_run_valid_verdicts_accepted(self, conn):
+        conn.execute("INSERT INTO tasks (project_id, task_key, status) VALUES (?,?,?)", (1, "SUP-OK", "active"))
+        tid = conn.execute("SELECT id FROM tasks WHERE task_key=?", ("SUP-OK",)).fetchone()[0]
+        for i, verdict in enumerate(("pass", "partial", "blocked", "rollback", "delegate"), start=1):
+            conn.execute("INSERT INTO phases (workflow_id,code,name,phase_order) VALUES (?,?,?,?)", (1, f"sv-{i}", "Supervisor", i + 100))
+            pid = conn.execute("SELECT id FROM phases WHERE code=?", (f"sv-{i}",)).fetchone()[0]
+            conn.execute(
+                "INSERT INTO supervisor_runs (task_id, phase_id, verdict) VALUES (?, ?, ?)",
+                (tid, pid, verdict),
             )
 
     def test_null_skills_accepted(self, conn):

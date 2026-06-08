@@ -48,3 +48,4 @@ Thumbs.db
 *.log
 screenshots/
 .workflow.db
+info/

@@ -5,7 +5,7 @@ from wartz_workflow import wizard, schema
 
 
 class TestWizardFullContext:
-    """Тест полного контекста для агента-визарда."""
+    """Тест полного контекста для CLI-supervisor prompt."""
 
     def test_context_structure(self):
         engine = wizard.WizardEngine("TASKNEIROKLYUCH-999", "/tmp")
