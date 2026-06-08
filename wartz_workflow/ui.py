@@ -363,6 +363,19 @@ def _load_tasks() -> list[dict]:
         project_code = t.get("project_code") or "—"
         project_name = t.get("project_name") or project_code
         
+        # Determine task completion timestamp from history or task updated_at
+        completed_at = ""
+        if t.get("status") == "done":
+            # Look for the most recent history entry with status done
+            done_entries = [tp for tp in task_history if tp["status"] == "done"]
+            if done_entries:
+                completed_at = max(
+                    (tp.get("completed_at") or "" for tp in done_entries),
+                    key=lambda x: x or "",
+                )
+            if not completed_at:
+                completed_at = t.get("updated_at", "")
+        
         result.append(
             {
                 "id": t["id"],
@@ -381,6 +394,7 @@ def _load_tasks() -> list[dict]:
                 "status": t.get("status", "active"),
                 "status_label": "В работе" if t.get("status") != "done" else "Завершена",
                 "created_at": t.get("created_at", ""),
+                "completed_at": completed_at,
             }
         )
     
@@ -486,23 +500,80 @@ def _get_task_detail(task_key: str) -> dict | None:
     task["workflow_phase_count"] = len(workflow_phases)
 
     history = wdb.get_task_history(task["id"])
-    phase_history = []
+
+    # Determine completion timestamp from history
+    task["completed_at"] = ""
+    if task.get("status") == "done":
+        done_entries = [h for h in history if h.get("status") == "done"]
+        if done_entries:
+            task["completed_at"] = max(
+                (h.get("completed_at") or "" for h in done_entries),
+                key=lambda x: x or "",
+            )
+        if not task["completed_at"]:
+            task["completed_at"] = task.get("updated_at", "")
+
+    # Build execution_type lookup from workflow phases
+    phase_execution_type: dict[int, str] = {}
+    phase_order_map: dict[int, int] = {}
+    for p in workflow_phases:
+        pid = p.get("id")
+        if pid is not None:
+            phase_execution_type[pid] = p.get("execution_type", "sync")
+            phase_order_map[pid] = p.get("phase_order", 0)
+
+    # Build raw history items with execution_type
+    raw_history: list[dict] = []
     for h in history:
         phase = wdb.get_phase(h["phase_id"])
         if not phase:
             continue
         history_status = h.get("status", "pending")
-        phase_history.append(
+        pid = phase["id"]
+        raw_history.append(
             {
+                "phase_id": pid,
                 "phase_order": phase["phase_order"],
                 "phase_name": phase["name"],
+                "phase_code": phase.get("code", ""),
                 "phase_description": phase.get("description", ""),
-                "status": "done" if history_status == "done" else ("current" if current_phase and phase["id"] == current_phase["id"] else "wait"),
+                "status": "done" if history_status == "done" else ("current" if current_phase and pid == current_phase["id"] else "wait"),
                 "completed_at": h.get("completed_at", ""),
+                "execution_type": phase_execution_type.get(pid, "sync"),
             }
         )
 
+    # Group by parallel runs (same logic as _build_parallel_phase_blocks)
+    phase_history: list[dict] = []
+    phase_history_blocks: list[dict] = []
+    if raw_history:
+        runs: list[list[dict]] = []
+        current_run: list[dict] = [raw_history[0]]
+        for item in raw_history[1:]:
+            if item.get("execution_type") == "parallel":
+                current_run.append(item)
+            else:
+                runs.append(current_run)
+                current_run = [item]
+        runs.append(current_run)
+
+        for run in runs:
+            if len(run) > 1:
+                group_key = run[0]["phase_code"]
+                for item in run:
+                    item["parallel_group"] = group_key
+                    item["is_parallel"] = True
+            else:
+                run[0]["parallel_group"] = None
+                run[0]["is_parallel"] = False
+            phase_history.extend(run)
+            phase_history_blocks.append({
+                "kind": "parallel" if len(run) > 1 else "single",
+                "phases": run,
+            })
+
     task["phase_history"] = phase_history
+    task["phase_history_blocks"] = phase_history_blocks
     task["completed"] = sum(1 for h in phase_history if h.get("status") == "done")
     task["total_phases"] = task.get("workflow_phase_count", len(config.PHASE_ORDER))
     task["progress_done"] = task["completed"]
@@ -658,7 +729,7 @@ def task_detail_page(request: Request, task_key: str):
             "progress_done": task.get("progress_done", 0),
             "progress_total": task.get("progress_total", 0),
             "work_time": task.get("work_time"),
-            "phase_history": task.get("phase_history", []),
+            "phase_history_blocks": task.get("phase_history_blocks", []),
             "supervisor_runs": task.get("supervisor_runs", []),
         },
     )

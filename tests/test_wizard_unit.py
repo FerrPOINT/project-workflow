@@ -39,6 +39,45 @@ class TestWizard:
             prompt = engine.get_phase_prompt("0")
             assert "Test" in prompt
 
+    def test_get_phase_prompt_parallel(self):
+        """Parallel phases produce a single merged prompt."""
+        ph_a = MagicMock()
+        ph_a.code = "parallel-a"
+        ph_a.name = "Parallel A"
+        ph_a.description = "Desc A"
+        ph_a.execution_type = "parallel"
+        ph_a.parallel_with = "parallel-b"
+        ph_a.rollback_target = None
+        ph_a.instructions = []
+        ph_a.checks = []
+        ph_a.evidence = []
+        ph_a.delegate = None
+        ph_a.next_recommendation = "next"
+
+        ph_b = MagicMock()
+        ph_b.code = "parallel-b"
+        ph_b.name = "Parallel B"
+        ph_b.description = "Desc B"
+        ph_b.execution_type = "parallel"
+        ph_b.parallel_with = "parallel-a"
+        ph_b.rollback_target = None
+        ph_b.instructions = []
+        ph_b.checks = []
+        ph_b.evidence = []
+        ph_b.delegate = None
+        ph_b.next_recommendation = "next"
+
+        with patch("wartz_workflow.wizard.convo") as mock_convo:
+            mock_convo.get_last_phase.return_value = None
+            engine = WizardEngine("AAT-1")
+            engine.phase_map = {"parallel-a": ph_a, "parallel-b": ph_b}
+            engine.all_phases = [ph_a, ph_b]
+            engine.current_phase = "parallel-a"
+            prompt = engine.get_phase_prompt("parallel-a")
+            assert "⚡ ПАРАЛЛЕЛЬНАЯ ГРУППА ФАЗ" in prompt
+            assert "parallel-a" in prompt
+            assert "parallel-b" in prompt
+
     def test_get_full_context(self):
         with patch("wartz_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None

@@ -411,6 +411,106 @@ class WizardEngine:
             return next_phase.code, next_phase.name
         return None, None
 
+    def _get_parallel_group(self, start_phase: Phase) -> list[Phase]:
+        """Return the contiguous parallel run starting at (or containing) start_phase."""
+        try:
+            start_index = self.all_phases.index(start_phase)
+        except ValueError:
+            return [start_phase]
+        group: list[Phase] = [self.all_phases[start_index]]
+        for i in range(start_index + 1, len(self.all_phases)):
+            if self.all_phases[i].execution_type == "parallel":
+                group.append(self.all_phases[i])
+            else:
+                break
+        return group
+
+    def _get_next_phase_after_group(self, group: list[Phase]) -> tuple[str | None, str | None]:
+        """Return the phase that follows the last phase in the group."""
+        if not group:
+            return None, None
+        try:
+            last_index = self.all_phases.index(group[-1])
+        except ValueError:
+            return None, None
+        if last_index + 1 >= len(self.all_phases):
+            return None, None
+        nxt = self.all_phases[last_index + 1]
+        return nxt.code, nxt.name
+
+    def _build_parallel_contract(self, group: list[Phase]) -> dict:
+        """Build a merged contract for a parallel group of phases."""
+        instructions: list[str] = []
+        checks: list[str] = []
+        evidence: list[str] = []
+        for phase in group:
+            for inst in phase.instructions:
+                text = self._text_from_instruction(inst)
+                if text:
+                    instructions.append(f"[{phase.code}] {text}")
+            for chk in phase.checks:
+                text = self._text_from_check(chk)
+                if text:
+                    checks.append(f"[{phase.code}] {text}")
+            for ev in phase.evidence:
+                text = self._text_from_evidence(ev)
+                if text:
+                    evidence.append(f"[{phase.code}] {text}")
+        first = group[0]
+        last = group[-1]
+        # parallel_with of the first phase is the representative partner
+        parallel_target = first.parallel_with
+        next_phase, next_phase_name = self._get_next_phase_after_group(group)
+        return {
+            "phase_code": first.code,
+            "phase_name": f"Parallel group: {', '.join(p.code for p in group)}",
+            "description": "\n".join(f"- {p.code}: {p.description or '-'}" for p in group),
+            "instructions": instructions or ["Нет отдельных инструкций — следуй описаниям фаз и обязательным проверкам."],
+            "required_checks": checks or ["Нет явных checks."],
+            "required_evidence": evidence or ["Нет явных evidence items."],
+            "execution_type": "parallel",
+            "delegate_agent": first.delegate.agent if first.delegate else None,
+            "delegate_toolsets": list(first.delegate.toolsets) if first.delegate else [],
+            "next_recommendation": f"После выполнения переходи к {next_phase or 'завершению workflow'} ({next_phase_name or '-'}).",
+            "parallel_with": parallel_target,
+            "rollback_target": first.rollback_target,
+            "group_phases": [p.code for p in group],
+        }
+
+    def _build_parallel_checklist(self, group: list[Phase]) -> list[str]:
+        """Build a merged checklist for evaluating a parallel group."""
+        items: list[str] = []
+        for phase in group:
+            for inst in phase.instructions:
+                items.append(self._text_from_instruction(inst))
+            for chk in phase.checks:
+                items.append(self._text_from_check(chk))
+            for ev in phase.evidence:
+                items.append(self._text_from_evidence(ev))
+        seen: set[str] = set()
+        deduped: list[str] = []
+        for item in items:
+            k = item.strip().lower()
+            if k and k not in seen:
+                seen.add(k)
+                deduped.append(item.strip())
+        return deduped
+
+    def _record_parallel_transition(self, group: list[Phase], verdict: str, next_phase: str | None) -> None:
+        """Record history for all phases in a parallel group."""
+        task_id = int(self.task["id"])
+        if verdict == "pass":
+            for phase in group:
+                self.db.add_task_history(task_id, phase.code, "done")
+            if next_phase:
+                self.db.add_task_history(task_id, next_phase, "pending")
+                self.db.update_task(task_id, {"current_phase": next_phase, "status": "active"})
+            else:
+                self.db.update_task(task_id, {"current_phase": group[-1].code, "status": "done"})
+            return
+        # For non-pass verdicts, only mark the first phase (the one being evaluated)
+        self._record_transition(group[0], verdict, None, group[0].rollback_target)
+
     def _build_fail_message(self, phase: Phase, missing: list[str], blockers: list[str]) -> str:
         issues = missing or blockers or [phase.name]
         return "Missing or blocked contract items: " + "; ".join(issues)
@@ -507,7 +607,24 @@ class WizardEngine:
             return f"Фаза {phase_id or self.current_phase} не найдена в workflow."
 
         ctx = self.get_full_context()
-        contract = ctx["current_contract"] if target_phase.code == self.current_phase else self._build_current_contract(target_phase)
+        # ── Parallel group handling ────────────────────────────────────
+        is_parallel_target = target_phase.execution_type == "parallel"
+        if is_parallel_target:
+            group = self._get_parallel_group(target_phase)
+            contract = self._build_parallel_contract(group)
+            parallel_banner = (
+                "\n⚡ ПАРАЛЛЕЛЬНАЯ ГРУППА ФАЗ\n"
+                f"Выполняются одновременно: {', '.join(contract['group_phases'])}\n"
+                f"Отчёт по этой группе присылается ОДНИМ сообщением.\n"
+            )
+        else:
+            contract = (
+                ctx["current_contract"]
+                if target_phase.code == self.current_phase
+                else self._build_current_contract(target_phase)
+            )
+            parallel_banner = ""
+
         workflow_lines = [
             f"- {item['code']}: {item['name']} [{item['status']}]"
             for item in ctx["workflow_path"]
@@ -519,10 +636,10 @@ class WizardEngine:
         cli_actor = ctx.get("cli_actor") or self._cli_actor()
 
         delegated = ""
-        if contract["delegate_agent"]:
+        if contract.get("delegate_agent"):
             delegated = (
                 f"\nДелегировано агенту: {contract['delegate_agent']}"
-                + (f" | toolsets: {', '.join(contract['delegate_toolsets'])}" if contract["delegate_toolsets"] else "")
+                + (f" | toolsets: {', '.join(contract['delegate_toolsets'])}" if contract.get("delegate_toolsets") else "")
             )
 
         return (
@@ -536,10 +653,11 @@ class WizardEngine:
             f"Контракт текущей фазы:\n"
             f"- Описание: {contract['description'] or '-'}\n"
             f"- Тип выполнения: {contract['execution_type']}\n"
-            f"- Параллельно с: {contract['parallel_with'] or '-'}\n"
-            f"- Rollback target: {contract['rollback_target'] or '-'}\n"
-            f"- Next recommendation: {contract['next_recommendation'] or '-'}"
-            f"{delegated}\n\n"
+            f"- Параллельно с: {contract.get('parallel_with') or '-'}\n"
+            f"- Rollback target: {contract.get('rollback_target') or '-'}\n"
+            f"- Next recommendation: {contract.get('next_recommendation') or '-'}"
+            f"{delegated}\n"
+            f"{parallel_banner}\n"
             f"Инструкции:\n" + "\n".join(f"- {item}" for item in instructions) + "\n\n"
             f"Checks:\n" + "\n".join(f"- {item}" for item in checks) + "\n\n"
             f"Evidence:\n" + "\n".join(f"- {item}" for item in evidence) + "\n\n"
@@ -562,18 +680,33 @@ class WizardEngine:
                 "next_phase": None,
             }
 
-        checklist = self._build_checklist(phase)
+        # ── Parallel group handling ──────────────────────────────────────
+        is_parallel = phase.execution_type == "parallel"
+        if is_parallel:
+            group = self._get_parallel_group(phase)
+            checklist = self._build_parallel_checklist(group)
+        else:
+            group = [phase]
+            checklist = self._build_checklist(phase)
+
         covered, missing = self._check_coverage(report, checklist)
         blockers = self._extract_blockers(report)
         verdict = self._determine_verdict(phase, covered, missing, blockers, report)
-        next_phase, next_phase_name = self._get_next_phase(phase.code)
-        rollback_target = phase.rollback_target if verdict == "rollback" else None
-        rollback_phase = self.phase_map.get(rollback_target) if rollback_target else None
+
+        if is_parallel and verdict == "pass":
+            next_phase, next_phase_name = self._get_next_phase_after_group(group)
+            rollback_target = group[0].rollback_target if verdict == "rollback" else None
+            rollback_phase = self.phase_map.get(rollback_target) if rollback_target else None
+        else:
+            next_phase, next_phase_name = self._get_next_phase(phase.code)
+            rollback_target = phase.rollback_target if verdict == "rollback" else None
+            rollback_phase = self.phase_map.get(rollback_target) if rollback_target else None
+
         # Build fresh snapshot (not cached) for this evaluation before transition
         context_snapshot = self.get_full_context(use_cache=False)
 
         result = self._build_result(
-            phase=phase,
+            phase=group[0] if is_parallel else phase,
             verdict=verdict,
             covered=covered,
             missing=missing,
@@ -582,13 +715,18 @@ class WizardEngine:
             next_phase_name=next_phase_name if verdict == "pass" else rollback_phase.name if rollback_phase else None,
             rollback_target=rollback_target,
         )
-        self._record_transition(phase, verdict, next_phase, rollback_target)
+
+        if is_parallel:
+            self._record_parallel_transition(group, verdict, next_phase)
+        else:
+            self._record_transition(phase, verdict, next_phase, rollback_target)
+
         self.task = self.db.get_task(self.task["id"]) or self.task
         self.current_phase = self._resolve_current_phase()
         self.db.create_supervisor_run(
             {
                 "task_id": self.task["id"],
-                "phase_id": phase.code,
+                "phase_id": group[0].code if is_parallel else phase.code,
                 "verdict": verdict,
                 "report": report,
                 "covered": covered,
