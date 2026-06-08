@@ -32,8 +32,8 @@
 
 /* ── Progress bar in summary bar ───────────────────────────────────────── */
 .summary-progress{display:flex;align-items:center;gap:10px;margin-top:6px}
-.summary-progress .bar{flex:1;height:8px;border-radius:4px;background:var(--panel);overflow:hidden;max-width:140px}
-.summary-progress .bar-fill{height:100%;border-radius:4px;background:var(--accent);transition:width .3s}
+.summary-progress .bar{flex:1;height:8px;border-radius:4px;background:var(--border);overflow:hidden;max-width:140px;border:1px solid var(--border-strong)}
+.summary-progress .bar-fill{height:100%;border-radius:3px;background:var(--accent);transition:width .3s}
 .summary-progress .bar-fill.done{background:var(--green)}
 
 /* ── Phase history — strict linear vertical list ──────────────────── */
