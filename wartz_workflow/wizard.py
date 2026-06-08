@@ -478,11 +478,9 @@ class WizardEngine:
         }
 
     def _build_parallel_checklist(self, group: list[Phase]) -> list[str]:
-        """Build a merged checklist for evaluating a parallel group."""
+        """Build a merged checklist (checks + evidence only) for evaluating a parallel group."""
         items: list[str] = []
         for phase in group:
-            for inst in phase.instructions:
-                items.append(self._text_from_instruction(inst))
             for chk in phase.checks:
                 items.append(self._text_from_check(chk))
             for ev in phase.evidence:
@@ -497,7 +495,7 @@ class WizardEngine:
         return deduped
 
     def _record_parallel_transition(self, group: list[Phase], verdict: str, next_phase: str | None) -> None:
-        """Record history for all phases in a parallel group."""
+        """Only commit transition on pass. Non-pass verdicts leave the group intact."""
         task_id = int(self.task["id"])
         if verdict == "pass":
             for phase in group:
@@ -508,8 +506,10 @@ class WizardEngine:
             else:
                 self.db.update_task(task_id, {"current_phase": group[-1].code, "status": "done"})
             return
-        # For non-pass verdicts, only mark the first phase (the one being evaluated)
-        self._record_transition(group[0], verdict, None, group[0].rollback_target)
+        # Non-pass: do NOT touch task_history or current_phase.
+        # The group remains active for the next attempt.
+        if verdict == "blocked":
+            self.db.update_task(task_id, {"status": "blocked"})
 
     def _build_fail_message(self, phase: Phase, missing: list[str], blockers: list[str]) -> str:
         issues = missing or blockers or [phase.name]
@@ -597,6 +597,48 @@ class WizardEngine:
             result["message"] = f"Delegate work for phase {phase.code} before continuing."
         else:
             result["message"] = f"Phase {phase.code} is only partially satisfied."
+        return result
+
+    def _build_parallel_result(
+        self,
+        group: list[Phase],
+        verdict: str,
+        covered: list[str],
+        missing: list[str],
+        blockers: list[str],
+        next_phase: str | None,
+        next_phase_name: str | None,
+        rollback_target: str | None,
+    ) -> dict:
+        first = group[0]
+        phase_codes = [p.code for p in group]
+        result = {
+            "verdict": VERDICT_LABELS[verdict],
+            "task_key": self.task_key,
+            "phase": first.code,
+            "phase_name": f"Parallel group: {', '.join(phase_codes)}",
+            "covered": covered,
+            "missing": missing,
+            "blockers": blockers,
+            "current_phase": first.code,
+            "next_phase": next_phase if verdict == "pass" else rollback_target if verdict == "rollback" else None,
+            "next_phase_name": next_phase_name if verdict == "pass" else (self.phase_map.get(rollback_target).name if rollback_target else None),
+            "rollback_target": rollback_target,
+            "required_evidence": list({self._text_from_evidence(ev) for p in group for ev in p.evidence}),
+            "required_checks": list({self._text_from_check(chk) for p in group for chk in p.checks}),
+            "next_step": next_phase or rollback_target or first.code,
+        }
+        if verdict == "pass":
+            result["message"] = f"Parallel group ({', '.join(phase_codes)}) accepted. Proceed to {next_phase or 'completion'}."
+        elif verdict == "rollback":
+            result["message"] = f"Parallel group ({', '.join(phase_codes)}) failed. Roll back to {rollback_target}."
+        elif verdict == "blocked":
+            issues = missing or blockers or phase_codes
+            result["message"] = "Parallel group blocked. Missing items: " + "; ".join(issues)
+        elif verdict == "delegate":
+            result["message"] = f"Delegate work for parallel group ({', '.join(phase_codes)}) before continuing."
+        else:
+            result["message"] = f"Parallel group ({', '.join(phase_codes)}) only partially satisfied."
         return result
 
     # ── Public API ───────────────────────────────────────────────────
@@ -693,10 +735,18 @@ class WizardEngine:
         blockers = self._extract_blockers(report)
         verdict = self._determine_verdict(phase, covered, missing, blockers, report)
 
-        if is_parallel and verdict == "pass":
+        if is_parallel:
             next_phase, next_phase_name = self._get_next_phase_after_group(group)
-            rollback_target = group[0].rollback_target if verdict == "rollback" else None
-            rollback_phase = self.phase_map.get(rollback_target) if rollback_target else None
+            if verdict == "rollback":
+                rollback_target = group[0].rollback_target
+                rollback_phase = self.phase_map.get(rollback_target) if rollback_target else None
+            else:
+                rollback_target = None
+                rollback_phase = None
+            # Non-pass on parallel group: do NOT advance next_phase, stay on group
+            if verdict != "pass":
+                next_phase = None
+                next_phase_name = None
         else:
             next_phase, next_phase_name = self._get_next_phase(phase.code)
             rollback_target = phase.rollback_target if verdict == "rollback" else None
@@ -705,16 +755,28 @@ class WizardEngine:
         # Build fresh snapshot (not cached) for this evaluation before transition
         context_snapshot = self.get_full_context(use_cache=False)
 
-        result = self._build_result(
-            phase=group[0] if is_parallel else phase,
-            verdict=verdict,
-            covered=covered,
-            missing=missing,
-            blockers=blockers,
-            next_phase=next_phase if verdict == "pass" else rollback_target if verdict == "rollback" else None,
-            next_phase_name=next_phase_name if verdict == "pass" else rollback_phase.name if rollback_phase else None,
-            rollback_target=rollback_target,
-        )
+        if is_parallel:
+            result = self._build_parallel_result(
+                group=group,
+                verdict=verdict,
+                covered=covered,
+                missing=missing,
+                blockers=blockers,
+                next_phase=next_phase,
+                next_phase_name=next_phase_name,
+                rollback_target=rollback_target,
+            )
+        else:
+            result = self._build_result(
+                phase=phase,
+                verdict=verdict,
+                covered=covered,
+                missing=missing,
+                blockers=blockers,
+                next_phase=next_phase if verdict == "pass" else rollback_target if verdict == "rollback" else None,
+                next_phase_name=next_phase_name if verdict == "pass" else rollback_phase.name if rollback_phase else None,
+                rollback_target=rollback_target,
+            )
 
         if is_parallel:
             self._record_parallel_transition(group, verdict, next_phase)
