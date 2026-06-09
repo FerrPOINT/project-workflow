@@ -11,6 +11,7 @@ Public surface is intentionally kept compatible with the previous wizard module:
 from __future__ import annotations
 
 import json
+import os
 import re
 import threading
 from typing import Any, Optional
@@ -19,6 +20,10 @@ from . import conversation as convo
 from . import schema
 from .db import WorkflowDB
 from .models import Phase
+from .llm import OllamaClient, PromptBuilder, ResponseParser, LlmVerdict
+
+
+SMART_EVALUATE = os.getenv("SMART_EVALUATE", "").lower() in ("1", "true", "yes", "on")
 
 
 VERDICT_LABELS = {
@@ -759,7 +764,14 @@ class WizardEngine:
                 "next_phase": None,
             }
 
-        # ── Parallel group handling ──────────────────────────────────────
+        if SMART_EVALUATE:
+            try:
+                return self.evaluate_llm(report, phase)
+            except Exception:
+                # Fallback to rule-based on LLM failure
+                pass
+
+        # ── Rule-based evaluate (existing) ──────────────────────────────
         is_parallel = phase.execution_type == "parallel"
         if is_parallel:
             group = self._get_parallel_group(phase)
@@ -781,7 +793,6 @@ class WizardEngine:
             else:
                 rollback_target = None
                 rollback_phase = None
-            # Non-pass on parallel group: do NOT advance next_phase, stay on group
             if verdict != "pass":
                 next_phase = None
                 next_phase_name = None
@@ -790,7 +801,6 @@ class WizardEngine:
             rollback_target = phase.rollback_target if verdict == "rollback" else None
             rollback_phase = self.phase_map.get(rollback_target) if rollback_target else None
 
-        # Build fresh snapshot (not cached) for this evaluation before transition
         context_snapshot = self.get_full_context(use_cache=False)
 
         if is_parallel:
@@ -834,6 +844,75 @@ class WizardEngine:
                 "blockers": blockers,
                 "next_phase_id": next_phase if verdict == "pass" and next_phase else None,
                 "rollback_phase_id": rollback_target,
+                "context_snapshot": context_snapshot,
+                "response": result,
+            }
+        )
+        return result
+
+    def evaluate_llm(self, report: str, phase: Phase) -> dict:
+        """LLM-based evaluate via Ollama + Kimi K2.5."""
+        previously = self._get_previously_covered(phase.code)
+        previously_items = [
+            item for item in self._build_checklist(phase)
+            if self._normalize_text(item) in previously
+        ]
+
+        system = PromptBuilder.SYSTEM_PROMPT
+        user = PromptBuilder.build_user_prompt(
+            self.task_key, phase, report, previously_covered=previously_items or None
+        )
+
+        client = OllamaClient()
+        raw = client.chat(system=system, user=user, temperature=0.1)
+        llm = ResponseParser.parse(raw)
+
+        # Resolve next phase from LLM or fallback to catalog
+        next_phase = llm.next_phase
+        next_phase_name = llm.next_phase_name
+        if llm.verdict == "PASS" and not next_phase:
+            next_phase, next_phase_name = self._get_next_phase(phase.code)
+
+        # Build result dict (same shape as rule-based)
+        result = {
+            "verdict": VERDICT_LABELS.get(llm.verdict.lower(), llm.verdict),
+            "task_key": self.task_key,
+            "phase": phase.code,
+            "phase_name": phase.name,
+            "covered": llm.covered,
+            "missing": llm.missing,
+            "blockers": llm.blockers,
+            "current_phase": phase.code,
+            "next_phase": next_phase,
+            "next_phase_name": next_phase_name,
+            "rollback_target": phase.rollback_target if llm.verdict == "ROLLBACK" else None,
+            "message": llm.message,
+            "confidence": llm.confidence,
+        }
+
+        # Record transition (same as rule-based)
+        verdict_key = llm.verdict.lower()
+        if verdict_key == "pass":
+            self._record_transition(phase, "pass", next_phase, None)
+        elif verdict_key == "rollback":
+            self._record_transition(phase, "rollback", None, phase.rollback_target)
+        else:
+            self._record_transition(phase, verdict_key, None, None)
+
+        self.task = self.db.get_task(self.task["id"]) or self.task
+        self.current_phase = self._resolve_current_phase()
+        context_snapshot = self.get_full_context(use_cache=False)
+        self.db.create_supervisor_run(
+            {
+                "task_id": self.task["id"],
+                "phase_id": phase.code,
+                "verdict": verdict_key,
+                "report": report,
+                "covered": llm.covered,
+                "missing": llm.missing,
+                "blockers": llm.blockers,
+                "next_phase_id": next_phase if verdict_key == "pass" else None,
+                "rollback_phase_id": phase.rollback_target if verdict_key == "rollback" else None,
                 "context_snapshot": context_snapshot,
                 "response": result,
             }

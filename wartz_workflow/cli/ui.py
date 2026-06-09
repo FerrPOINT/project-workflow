@@ -44,6 +44,7 @@ def step_cmd(
     """
     task_key = _require_valid_key(task)
     jmode = ctx.obj.get("json_mode", False)
+    smart = os.getenv("SMART_EVALUATE", "").lower() in ("1", "true", "yes", "on")
 
     from .. import state
 
@@ -68,6 +69,7 @@ def step_cmd(
             raise click.Abort()
 
     engine = wizard.WizardEngine(task_key, repo_path)
+    smart = os.getenv("SMART_EVALUATE", "").lower() in ("1", "true", "yes", "on")
 
     # --report : evaluate report
     if report:
@@ -76,7 +78,10 @@ def step_cmd(
             out_json(result)
         else:
             from ..wizard import format_result
-            print(format_result(result))
+            formatted = format_result(result)
+            if smart:
+                formatted = "[🧠 SMART MODE] " + formatted
+            print(formatted)
         sys.exit(0 if result["verdict"] == "PASS" else 1)
 
     # default: show phase instructions
