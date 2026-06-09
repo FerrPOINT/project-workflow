@@ -177,7 +177,10 @@ class ResponseParser:
         message = str(raw.get("message", "")).strip()
         next_phase = raw.get("next_phase")
         next_phase_name = raw.get("next_phase_name")
-        confidence = float(raw.get("confidence", 0.5))
+        confidence = raw.get("confidence", 0.5)
+        if confidence is None:
+            confidence = 0.5
+        confidence = float(confidence)
 
         return LlmVerdict(
             verdict=verdict,
