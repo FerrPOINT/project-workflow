@@ -66,27 +66,35 @@ class TestStepCommand:
     @patch("wartz_workflow.wizard.WizardEngine")
     def test_step_report_pass(self, mock_engine_cls, mock_load, mock_find):
         mock_engine = mock_engine_cls.return_value
-        mock_engine.evaluate.return_value = {"verdict": "PASS", "next_phase": "1"}
+        mock_engine.evaluate.return_value = {
+            "verdict": "PASS", "phase_name": "Plan", "next_phase": "1", "next_phase_name": "Build",
+            "covered": ["a"], "missing": [], "blockers": [], "message": "Go next",
+        }
         runner = CliRunner()
         with patch("wartz_workflow.cli.core._get_task_key_validator", return_value=_validator()):
             result = runner.invoke(cli, ["step", "--task", "TASK-1", "--report", "Done"])
         assert result.exit_code == 0
         mock_engine.evaluate.assert_called_once_with("Done")
-        parsed = json.loads(result.output)
-        assert parsed["verdict"] == "PASS"
+        assert "✅" in result.output
+        assert "Plan" in result.output
+        assert "Build" in result.output
 
     @patch("wartz_workflow.state.find_repo", return_value="/repo")
     @patch("wartz_workflow.state.load_state", return_value=_mock_state())
     @patch("wartz_workflow.wizard.WizardEngine")
     def test_step_report_fail_exits_one(self, mock_engine_cls, mock_load, mock_find):
         mock_engine = mock_engine_cls.return_value
-        mock_engine.evaluate.return_value = {"verdict": "FAIL", "next_phase": None}
+        mock_engine.evaluate.return_value = {
+            "verdict": "BLOCKED", "phase_name": "Plan", "next_phase": None, "next_phase_name": None,
+            "covered": [], "missing": ["m1"], "blockers": ["b1"], "message": "Blocked",
+        }
         runner = CliRunner()
         with patch("wartz_workflow.cli.core._get_task_key_validator", return_value=_validator()):
             result = runner.invoke(cli, ["step", "--task", "TASK-1", "--report", "Bad"])
         assert result.exit_code == 1
-        parsed = json.loads(result.output)
-        assert parsed["verdict"] == "FAIL"
+        assert "🔴" in result.output or "заблокирована" in result.output
+        assert "m1" in result.output
+        assert "b1" in result.output
 
     def test_step_skip_is_rejected(self):
         runner = CliRunner()

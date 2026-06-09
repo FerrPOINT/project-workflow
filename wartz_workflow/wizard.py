@@ -803,6 +803,89 @@ class WizardEngine:
         return result
 
 
+def format_result(result: dict) -> str:
+    """Преобразует evaluate-result в человекочитаемый CLI-вывод."""
+    verdict = result.get("verdict", "UNKNOWN")
+    phase_name = result.get("phase_name", result.get("phase", "-"))
+    covered = result.get("covered", [])
+    missing = result.get("missing", [])
+    blockers = result.get("blockers", [])
+    next_phase = result.get("next_phase")
+    next_phase_name = result.get("next_phase_name")
+    rollback_target = result.get("rollback_target")
+    message = result.get("message", "")
+    is_parallel = "Parallel group" in phase_name
+
+    lines: list[str] = []
+
+    # ── Заголовок вердикта ───────────────────────────────────────────
+    if verdict == "PASS":
+        header = f"✅ Фаза \"{phase_name}\" принята."
+        if next_phase_name:
+            header += f" Переход к: {next_phase_name}"
+        elif is_parallel:
+            header += " Переход к следующей фазе."
+        lines.append(header)
+    elif verdict == "PARTIAL":
+        lines.append(f"⚠️ Фаза \"{phase_name}\" частично выполнена.")
+    elif verdict == "BLOCKED":
+        lines.append(f"🔴 Фаза \"{phase_name}\" заблокирована.")
+    elif verdict == "ROLLBACK":
+        lines.append(f"⬅️ Фаза \"{phase_name}\" отклонена — требуется rollback.")
+    elif verdict == "DELEGATE":
+        lines.append(f"📤 Фаза \"{phase_name}\" делегирована.")
+    else:
+        lines.append(f"❓ Фаза \"{phase_name}\" — статус: {verdict}")
+
+    lines.append("")
+
+    # ── Закрытые пункты ──────────────────────────────────────────────
+    if covered:
+        lines.append("Закрытые пункты:")
+        for item in covered:
+            lines.append(f"  ✓ {item}")
+        lines.append("")
+
+    # ── Пробелы ──────────────────────────────────────────────────────
+    if missing:
+        lines.append("Не закрытые пункты:")
+        for item in missing:
+            lines.append(f"  ✗ {item}")
+        lines.append("")
+
+    # ── Блокеры ──────────────────────────────────────────────────────
+    if blockers:
+        lines.append("Блокеры:")
+        for item in blockers:
+            lines.append(f"  🔴 {item}")
+        lines.append("")
+
+    # ── Следующий шаг ────────────────────────────────────────────────
+    if verdict == "PASS":
+        if next_phase:
+            lines.append(f"Следующая фаза: {next_phase} — {next_phase_name or '—'}")
+        else:
+            lines.append("🎉 Все фазы пройдены. Workflow завершён.")
+    elif verdict == "PARTIAL":
+        lines.append("Оставайся на текущей фазе. Доделай недостающие пункты и пришли отчёт.")
+    elif verdict == "BLOCKED":
+        lines.append("Фаза заблокирована. Устрани блокеры и пришли новый отчёт.")
+    elif verdict == "ROLLBACK":
+        if rollback_target:
+            lines.append(f"Roll back к фазе: {rollback_target}")
+        else:
+            lines.append("Roll back — возврат к предыдущей фазе.")
+    elif verdict == "DELEGATE":
+        lines.append("Ожидаю завершения делегированной работы. Пришли отчёт когда готово.")
+
+    # ── Сообщение от evaluate ──────────────────────────────────────
+    if message and message not in lines[-1] if lines else True:
+        lines.append("")
+        lines.append(f"💡 {message}")
+
+    return "\n".join(lines)
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # Public wrappers / CLI compatibility
 # ═══════════════════════════════════════════════════════════════════════
@@ -812,6 +895,11 @@ def evaluate_report(task_key: str, report: str, repo: Optional[str] = None) -> d
     engine = WizardEngine(task_key, repo)
     return engine.evaluate(report)
 
+
+def evaluate_report_formatted(task_key: str, report: str, repo: Optional[str] = None) -> str:
+    """CLI shortcut — возвращает человекочитаемый результат."""
+    result = evaluate_report(task_key, report, repo)
+    return format_result(result)
 
 def get_phase_instructions(task_key: str, phase_id: Optional[str] = None, repo: Optional[str] = None) -> str:
     engine = WizardEngine(task_key, repo)

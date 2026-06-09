@@ -74,7 +74,9 @@ def step_cmd(
         result = engine.evaluate(report)
         if jmode:
             out_json(result)
-        print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            from ..wizard import format_result
+            print(format_result(result))
         sys.exit(0 if result["verdict"] == "PASS" else 1)
 
     # default: show phase instructions
