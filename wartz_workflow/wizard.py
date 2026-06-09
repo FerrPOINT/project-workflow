@@ -40,12 +40,6 @@ BLOCKER_PATTERNS = (
     "cannot",
     "can't",
     "stuck",
-    "failure",
-    "блокер",
-    "заблокировано",
-    "заблокирована",
-    "заблокирован",
-    "не могу",
 )
 
 DELEGATE_PATTERNS = ("delegate", "delegated", "delegation", "передал", "делег")
@@ -879,7 +873,7 @@ class WizardEngine:
             "phase_name": phase.name,
             "covered": llm.covered,
             "missing": llm.missing,
-            "blockers": llm.blockers,
+            "blockers": blockers,
             "current_phase": phase.code,
             "next_phase": next_phase,
             "next_phase_name": next_phase_name,
@@ -908,7 +902,7 @@ class WizardEngine:
                 "report": report,
                 "covered": llm.covered,
                 "missing": llm.missing,
-                "blockers": llm.blockers,
+                "blockers": blockers,
                 "next_phase_id": next_phase if verdict_key == "pass" else None,
                 "rollback_phase_id": phase.rollback_target if verdict_key == "rollback" else None,
                 "context_snapshot": context_snapshot,

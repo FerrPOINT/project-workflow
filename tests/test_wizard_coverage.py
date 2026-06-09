@@ -101,8 +101,7 @@ class TestExtractBlockers:
     def test_russian_blockers_detected(self):
         engine = self._make_engine()
         result = engine._extract_blockers("Заблокировано из-за ошибки")
-        assert "заблокировано" in result
-        assert "ошибки" not in result  # "ошибки" больше не блокер — smart mode LLM
+        assert result == []  # All Russian false-positive patterns removed — smart mode LLM handles blockers
     def test_unique_results_no_duplicates(self):
         engine = self._make_engine()
         report = "blocked by X and blocked by Y"
