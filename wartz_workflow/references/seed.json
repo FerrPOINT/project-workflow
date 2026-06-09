@@ -10,7 +10,7 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Перейди к Phase 0.0a — verify-suite.sh",
-    "execution_type": "parallel",
+    "execution_type": "sync",
     "instructions": [
       {
         "step_num": 1,
@@ -82,7 +82,7 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Перейди к Phase 0.01 — создать task docs",
-    "execution_type": "parallel",
+    "execution_type": "sync",
     "instructions": [
       {
         "step_num": 1,
@@ -357,7 +357,7 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Перейди к Phase 0.000 — Workspace",
-    "execution_type": "parallel",
+    "execution_type": "sync",
     "instructions": [
       {
         "step_num": 1,
@@ -726,7 +726,7 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Запускай Phase 1.5 (Deep Research) ПАРАЛЛЕЛЬНО",
-    "execution_type": "parallel",
+    "execution_type": "sync",
     "instructions": [
       {
         "step_num": 1,
@@ -870,7 +870,7 @@
     "parallel_with": null,
     "rollback_target": null,
     "next_recommendation": "Перейди к Phase 3 — написать план",
-    "execution_type": "parallel",
+    "execution_type": "sync",
     "instructions": [
       {
         "id": 41,

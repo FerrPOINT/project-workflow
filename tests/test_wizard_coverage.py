@@ -101,8 +101,8 @@ class TestExtractBlockers:
     def test_russian_blockers_detected(self):
         engine = self._make_engine()
         result = engine._extract_blockers("Заблокировано из-за ошибки")
-        assert "заблок" in result
-        assert "ошиб" in result
+        assert "заблокировано" in result
+        assert "ошибки" in result
 
     def test_unique_results_no_duplicates(self):
         engine = self._make_engine()

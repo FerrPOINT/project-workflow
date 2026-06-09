@@ -39,9 +39,13 @@ BLOCKER_PATTERNS = (
     "failed",
     "failure",
     "блокер",
-    "заблок",
+    "заблокировано",
+    "заблокирована",
+    "заблокирован",
     "не могу",
-    "ошиб",
+    "ошибка",
+    "ошибки",
+    "ошибок",
 )
 
 DELEGATE_PATTERNS = ("delegate", "delegated", "delegation", "передал", "делег")
@@ -371,20 +375,53 @@ class WizardEngine:
                 unique.append(word)
         return unique[:6]
 
-    def _check_coverage(self, report: str, checklist: list[str]) -> tuple[list[str], list[str]]:
+    def _get_previously_covered(self, phase_code: str) -> set[str]:
+        """Return items already covered in previous supervisor runs for this phase."""
+        previously: set[str] = set()
+        task_id = int(self.task.get("id", 0))
+        if not task_id:
+            return previously
+        # Find phase_id for this code
+        phase_id = None
+        for p in self.all_phases:
+            if p.code == phase_code:
+                phase_id = p.id
+                break
+        if not phase_id:
+            return previously
+        runs = self.db.get_supervisor_runs(task_id=task_id, limit=20)
+        for run in runs:
+            if run.get("phase_code") != phase_code:
+                continue
+            covered = run.get("covered", [])
+            if isinstance(covered, str):
+                try:
+                    covered = json.loads(covered)
+                except Exception:
+                    covered = []
+            for item in covered:
+                if isinstance(item, str):
+                    previously.add(self._normalize_text(item))
+        return previously
+
+    def _check_coverage(
+        self, report: str, checklist: list[str], previously_covered: set[str] | None = None
+    ) -> tuple[list[str], list[str]]:
         normalized_report = self._normalize_text(report)
         covered: list[str] = []
         missing: list[str] = []
+        previously_covered = previously_covered or set()
         for item in checklist:
             normalized_item = self._normalize_text(item)
             keywords = self._extract_keywords(item)
             keyword_hits = sum(1 for keyword in keywords if keyword in normalized_report)
             exact_match = normalized_item and normalized_item in normalized_report
+            already_covered = normalized_item in previously_covered
             enough_keywords = False
             if keywords:
                 threshold = min(len(keywords), 2) if len(keywords) > 1 else 1
                 enough_keywords = keyword_hits >= threshold
-            if exact_match or enough_keywords:
+            if exact_match or enough_keywords or already_covered:
                 covered.append(item)
             else:
                 missing.append(item)
@@ -731,7 +768,8 @@ class WizardEngine:
             group = [phase]
             checklist = self._build_checklist(phase)
 
-        covered, missing = self._check_coverage(report, checklist)
+        previously_covered = self._get_previously_covered(phase.code)
+        covered, missing = self._check_coverage(report, checklist, previously_covered)
         blockers = self._extract_blockers(report)
         verdict = self._determine_verdict(phase, covered, missing, blockers, report)
 
