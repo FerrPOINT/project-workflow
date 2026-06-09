@@ -27,11 +27,12 @@ class TestBlockerExtraction:
             assert blockers == []
 
     def test_real_error_word_triggers(self):
+        """"ошибка" больше не считается блокером — smart mode использует LLM."""
         with patch("wartz_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             engine = WizardEngine("AAT-1")
             blockers = engine._extract_blockers("Произошла ошибка в коде")
-            assert "ошибка" in blockers
+            assert "ошибка" not in blockers
 
     def test_no_blockers_explicitly_stated(self):
         with patch("wartz_workflow.wizard.convo") as mock_convo:

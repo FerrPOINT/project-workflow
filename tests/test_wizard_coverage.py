@@ -102,8 +102,7 @@ class TestExtractBlockers:
         engine = self._make_engine()
         result = engine._extract_blockers("Заблокировано из-за ошибки")
         assert "заблокировано" in result
-        assert "ошибки" in result
-
+        assert "ошибки" not in result  # "ошибки" больше не блокер — smart mode LLM
     def test_unique_results_no_duplicates(self):
         engine = self._make_engine()
         report = "blocked by X and blocked by Y"

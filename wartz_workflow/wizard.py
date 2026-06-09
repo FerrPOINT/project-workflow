@@ -37,20 +37,15 @@ VERDICT_LABELS = {
 BLOCKER_PATTERNS = (
     "blocked by",
     "blocker remains",
-    "blocker",
     "cannot",
     "can't",
     "stuck",
-    "failed",
     "failure",
     "блокер",
     "заблокировано",
     "заблокирована",
     "заблокирован",
     "не могу",
-    "ошибка",
-    "ошибки",
-    "ошибок",
 )
 
 DELEGATE_PATTERNS = ("delegate", "delegated", "delegation", "передал", "делег")
@@ -873,7 +868,10 @@ class WizardEngine:
         if llm.verdict == "PASS" and not next_phase:
             next_phase, next_phase_name = self._get_next_phase(phase.code)
 
-        # Build result dict (same shape as rule-based)
+        blockers = llm.blockers if llm.blockers else []
+        if llm.verdict == "BLOCKED":
+            blockers = llm.blockers if llm.blockers else ["LLM identified blocker"]
+
         result = {
             "verdict": VERDICT_LABELS.get(llm.verdict.lower(), llm.verdict),
             "task_key": self.task_key,

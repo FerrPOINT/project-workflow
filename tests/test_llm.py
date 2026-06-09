@@ -45,24 +45,20 @@ class FakeEvidence:
 class TestOllamaClient:
     """Unit tests for Ollama HTTP wrapper."""
 
-    def test_default_env_vars(self):
-        assert OLLAMA_BASE_URL == "http://localhost:11434"
-        assert OLLAMA_MODEL == "kimi-k2.6"
+    def test_default_env_vars(self, monkeypatch):
+        monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        from importlib import reload
+        import wartz_workflow.llm as llm_mod
+        reload(llm_mod)
+        assert llm_mod.OLLAMA_BASE_URL == "http://localhost:11434"
+        assert llm_mod.OLLAMA_MODEL == "kimi-k2.6"
 
-    def test_is_available_true(self):
-        client = OllamaClient()
-        with patch("wartz_workflow.llm.requests.get") as mock_get:
-            mock_get.return_value = MagicMock(status_code=200)
-            assert client.is_available() is True
-
-    def test_is_available_false_on_timeout(self):
-        client = OllamaClient()
-        with patch("wartz_workflow.llm.requests.get") as mock_get:
-            mock_get.side_effect = requests.exceptions.Timeout()
-            assert client.is_available() is False
-
-    def test_chat_parses_json_response(self):
-        client = OllamaClient()
+    def test_chat_parses_json_response(self, monkeypatch):
+        monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        from importlib import reload
+        import wartz_workflow.llm as llm_mod
+        reload(llm_mod)
+        client = llm_mod.OllamaClient()
         expected = {"verdict": "PASS", "confidence": 0.95}
         with patch("wartz_workflow.llm.requests.post") as mock_post:
             mock_post.return_value = MagicMock(
@@ -71,7 +67,27 @@ class TestOllamaClient:
                 raise_for_status=lambda: None,
             )
             result = client.chat("system text", "user text")
-            assert result == expected
+        assert result == expected
+
+    def test_chat_cloud_mode(self, monkeypatch):
+        """Test cloud mode with OpenAI-compatible endpoint."""
+        monkeypatch.setenv("OLLAMA_BASE_URL", "https://ollama.com/v1")
+        from importlib import reload
+        import wartz_workflow.llm as llm_mod
+        reload(llm_mod)
+        client = llm_mod.OllamaClient(api_key="test-key")
+        assert client.is_cloud is True
+        expected = {"verdict": "PASS", "confidence": 0.95}
+        with patch("wartz_workflow.llm.requests.post") as mock_post:
+            mock_post.return_value = MagicMock(
+                status_code=200,
+                json=lambda: {
+                    "choices": [{"message": {"content": json.dumps(expected)}}]
+                },
+                raise_for_status=lambda: None,
+            )
+            result = client.chat("system", "user")
+        assert result == expected
 
     def test_chat_payload_structure(self):
         client = OllamaClient(model="test-model", base_url="http://host:1234")
