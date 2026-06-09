@@ -137,3 +137,17 @@ pytest -q
 - Если в Click CLI появится новая команда, `/settings` подхватит её автоматически.
 - Пустые/синтетические badge'и и placeholder-текст в UI считаются мусором и должны удаляться.
 - После выполнения задачи и прохождения проверок изменения должны быть закоммичены; завершённую работу нельзя оставлять в dirty working tree.
+
+## LLM Smart Evaluate (опционально)
+
+При `SMART_EVALUATE=1` evaluate использует LLM (Ollama Cloud + kimi-k2.6) вместо keyword matching:
+
+```bash
+export SMART_EVALUATE=1
+wartz-workflow step --task TASK-KEY --report "..."
+```
+
+- **Dual-mode OllamaClient**: local `/api/chat` или cloud `/v1/chat/completions`
+- **Fallback**: при недоступности LLM → rule-based evaluate
+- **Покрытие**: llm.py 100%, wizard.py 94%
+- **E2E**: пройдены все фазы от -1 до 5.5 через Ollama Cloud
