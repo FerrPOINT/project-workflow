@@ -87,12 +87,33 @@ class WizardEngine:
         self.project = self.db.get_project(self.task["project_id"])
         self.workflow_id = self.project["workflow_id"] if self.project else None
         self.workflow = self.db.get_workflow(self.workflow_id) if self.workflow_id else None
-        self.all_phases = schema.load_phases_from_db(self.db, workflow_id=self.workflow_id)
-        self.phase_map = {phase.code: phase for phase in self.all_phases}
+        self._all_phases: list[Phase] | None = None
+        self._phase_map: dict[str, Phase] | None = None
         self.current_phase = self._resolve_current_phase()
         # Important: WizardEngine is often reconstructed per CLI call, so cache is ephemeral.
         # For long-lived engines, invalidate() must be called after any mutation.
         self._cache = PromptCache()
+
+    @property
+    def all_phases(self) -> list[Phase]:
+        if self._all_phases is None:
+            self._all_phases = schema.load_phases_from_db(self.db, workflow_id=self.workflow_id)
+        return self._all_phases
+
+    @all_phases.setter
+    def all_phases(self, value: list[Phase]) -> None:
+        self._all_phases = value
+        self._phase_map = None
+
+    @property
+    def phase_map(self) -> dict[str, Phase]:
+        if self._phase_map is None:
+            self._phase_map = {phase.code: phase for phase in self.all_phases}
+        return self._phase_map
+
+    @phase_map.setter
+    def phase_map(self, value: dict[str, Phase]) -> None:
+        self._phase_map = value
 
     # ── Setup / state helpers ────────────────────────────────────────
 
@@ -343,8 +364,8 @@ class WizardEngine:
         return ctx
 
     def _build_checklist(self, phase: Phase) -> list[str]:
+        """Только checks + evidence — это критерии оценки отчёта."""
         items: list[str] = []
-        items.extend(self._text_from_instruction(item) for item in phase.instructions)
         items.extend(self._text_from_check(item) for item in phase.checks)
         items.extend(self._text_from_evidence(item) for item in phase.evidence)
         seen: set[str] = set()
@@ -375,24 +396,12 @@ class WizardEngine:
         task_id = int(self.task.get("id", 0))
         if not task_id:
             return previously
-        # Find phase_id for this code
-        phase_id = None
-        for p in self.all_phases:
-            if p.code == phase_code:
-                phase_id = p.id
-                break
-        if not phase_id:
-            return previously
+
         runs = self.db.get_supervisor_runs(task_id=task_id, limit=20)
         for run in runs:
             if run.get("phase_code") != phase_code:
                 continue
             covered = run.get("covered", [])
-            if isinstance(covered, str):
-                try:
-                    covered = json.loads(covered)
-                except Exception:
-                    covered = []
             for item in covered:
                 if isinstance(item, str):
                     previously.add(self._normalize_text(item))
@@ -413,7 +422,7 @@ class WizardEngine:
             already_covered = normalized_item in previously_covered
             enough_keywords = False
             if keywords:
-                threshold = min(len(keywords), 2) if len(keywords) > 1 else 1
+                threshold = min(len(keywords), 2)
                 enough_keywords = keyword_hits >= threshold
             if exact_match or enough_keywords or already_covered:
                 covered.append(item)
@@ -602,6 +611,20 @@ class WizardEngine:
         next_phase_name: str | None,
         rollback_target: str | None,
     ) -> dict:
+        # Загружаем контракт следующей фазы
+        next_contract = None
+        if next_phase:
+            next_ph = self.phase_map.get(next_phase)
+            if next_ph:
+                next_contract = {
+                    "phase_name": next_ph.name,
+                    "description": next_ph.description,
+                    "instructions": [self._text_from_instruction(i) for i in (next_ph.instructions or [])],
+                    "required_checks": [self._text_from_check(c) for c in next_ph.checks],
+                    "required_evidence": [self._text_from_evidence(e) for e in next_ph.evidence],
+                    "delegate_agent": next_ph.delegate.agent if next_ph.delegate else None,
+                    "delegate_toolsets": next_ph.delegate.toolsets if next_ph.delegate else [],
+                }
         result = {
             "verdict": VERDICT_LABELS[verdict],
             "task_key": self.task_key,
@@ -617,17 +640,21 @@ class WizardEngine:
             "required_evidence": [self._text_from_evidence(item) for item in phase.evidence],
             "required_checks": [self._text_from_check(item) for item in phase.checks],
             "next_step": next_phase or rollback_target or phase.code,
+            "next_phase_contract": next_contract,
         }
         if verdict == "pass":
             result["message"] = phase.next_recommendation or f"Phase {phase.code} accepted."
         elif verdict == "rollback":
             result["message"] = f"Phase {phase.code} failed gate and must roll back to {rollback_target}."
         elif verdict == "blocked":
-            result["message"] = self._build_fail_message(phase, missing, blockers)
+            issues = blockers or missing or [phase.name]
+            result["message"] = f"BLOCKED: {'; '.join(issues)}. Fix and resubmit."
         elif verdict == "delegate":
             result["message"] = f"Delegate work for phase {phase.code} before continuing."
         else:
-            result["message"] = f"Phase {phase.code} is only partially satisfied."
+            # partial
+            issues = missing or [phase.name]
+            result["message"] = f"PARTIAL: {'; '.join(issues)}. Complete before continuing."
         return result
 
     def _build_parallel_result(
@@ -643,6 +670,20 @@ class WizardEngine:
     ) -> dict:
         first = group[0]
         phase_codes = [p.code for p in group]
+        # Загружаем контракт следующей фазы
+        next_contract = None
+        if next_phase:
+            next_ph = self.phase_map.get(next_phase)
+            if next_ph:
+                next_contract = {
+                    "phase_name": next_ph.name,
+                    "description": next_ph.description,
+                    "instructions": [self._text_from_instruction(i) for i in (next_ph.instructions or [])],
+                    "required_checks": [self._text_from_check(c) for c in next_ph.checks],
+                    "required_evidence": [self._text_from_evidence(e) for e in next_ph.evidence],
+                    "delegate_agent": next_ph.delegate.agent if next_ph.delegate else None,
+                    "delegate_toolsets": next_ph.delegate.toolsets if next_ph.delegate else [],
+                }
         result = {
             "verdict": VERDICT_LABELS[verdict],
             "task_key": self.task_key,
@@ -658,18 +699,20 @@ class WizardEngine:
             "required_evidence": list({self._text_from_evidence(ev) for p in group for ev in p.evidence}),
             "required_checks": list({self._text_from_check(chk) for p in group for chk in p.checks}),
             "next_step": next_phase or rollback_target or first.code,
+            "next_phase_contract": next_contract,
         }
         if verdict == "pass":
             result["message"] = f"Parallel group ({', '.join(phase_codes)}) accepted. Proceed to {next_phase or 'completion'}."
         elif verdict == "rollback":
             result["message"] = f"Parallel group ({', '.join(phase_codes)}) failed. Roll back to {rollback_target}."
         elif verdict == "blocked":
-            issues = missing or blockers or phase_codes
-            result["message"] = "Parallel group blocked. Missing items: " + "; ".join(issues)
+            issues = blockers or missing or phase_codes
+            result["message"] = f"BLOCKED: {'; '.join(issues)}. Fix and resubmit."
         elif verdict == "delegate":
             result["message"] = f"Delegate work for parallel group ({', '.join(phase_codes)}) before continuing."
         else:
-            result["message"] = f"Parallel group ({', '.join(phase_codes)}) only partially satisfied."
+            issues = missing or ["unspecified items"]
+            result["message"] = f"PARTIAL: {'; '.join(issues)}. Complete before continuing."
         return result
 
     # ── Public API ───────────────────────────────────────────────────
@@ -716,10 +759,10 @@ class WizardEngine:
             )
 
         return (
-            f"Task: {self.task_key}\n"
+            f"Задача: {self.task_key}\n"
             f"Repo: {self.repo or '-'}\n"
             f"Workflow: {ctx['workflow_name'] or '-'}\n"
-            f"Current phase: {target_phase.code} — {target_phase.name}\n"
+            f"Текущий шаг: {target_phase.code} — {target_phase.name}\n"
             f"Исполнитель CLI: {cli_actor['description']}\n"
             f"CLI entrypoint: {cli_actor['entrypoint']}\n\n"
             f"Полный путь workflow:\n" + "\n".join(workflow_lines) + "\n\n"
@@ -790,7 +833,7 @@ class WizardEngine:
             rollback_target = phase.rollback_target if verdict == "rollback" else None
             rollback_phase = self.phase_map.get(rollback_target) if rollback_target else None
 
-        context_snapshot = self.get_full_context(use_cache=False)
+        context_snapshot = {"phase": phase.code, "phase_name": phase.name, "current_contract": {"phase_code": phase.code}}
 
         if is_parallel:
             result = self._build_parallel_result(
@@ -893,7 +936,7 @@ class WizardEngine:
 
         self.task = self.db.get_task(self.task["id"]) or self.task
         self.current_phase = self._resolve_current_phase()
-        context_snapshot = self.get_full_context(use_cache=False)
+        context_snapshot = {"phase": phase.code, "phase_name": phase.name, "current_contract": {"phase_code": phase.code}}
         self.db.create_supervisor_run(
             {
                 "task_id": self.task["id"],
@@ -913,84 +956,66 @@ class WizardEngine:
 
 
 def format_result(result: dict) -> str:
-    """Преобразует evaluate-result в человекочитаемый CLI-вывод."""
+    """CLI evaluate → человекочитаемый вывод. Только инструкции, чекапы, доказательства."""
     verdict = result.get("verdict", "UNKNOWN")
-    phase_name = result.get("phase_name", result.get("phase", "-"))
-    covered = result.get("covered", [])
-    missing = result.get("missing", [])
-    blockers = result.get("blockers", [])
-    next_phase = result.get("next_phase")
-    next_phase_name = result.get("next_phase_name")
-    rollback_target = result.get("rollback_target")
-    message = result.get("message", "")
-    is_parallel = "Parallel group" in phase_name
+    covered = result.get("covered", []) or []
+    missing = result.get("missing", []) or []
+
+    # При PASS — контракт следующей фазы; иначе текущей
+    if verdict == "PASS":
+        instructions = result.get("next_phase_contract", {}).get("instructions", [])
+        checks = result.get("next_phase_contract", {}).get("required_checks", [])
+        evidence = result.get("next_phase_contract", {}).get("required_evidence", [])
+    else:
+        instructions = result.get("instructions", []) or []
+        checks = result.get("required_checks", []) or []
+        evidence = result.get("required_evidence", []) or []
 
     lines: list[str] = []
 
-    # ── Заголовок вердикта ───────────────────────────────────────────
-    if verdict == "PASS":
-        header = f"✅ Фаза \"{phase_name}\" принята."
-        if next_phase_name:
-            header += f" Переход к: {next_phase_name}"
-        elif is_parallel:
-            header += " Переход к следующей фазе."
-        lines.append(header)
-    elif verdict == "PARTIAL":
-        lines.append(f"⚠️ Фаза \"{phase_name}\" частично выполнена.")
-    elif verdict == "BLOCKED":
-        lines.append(f"🔴 Фаза \"{phase_name}\" заблокирована.")
-    elif verdict == "ROLLBACK":
-        lines.append(f"⬅️ Фаза \"{phase_name}\" отклонена — требуется rollback.")
-    elif verdict == "DELEGATE":
-        lines.append(f"📤 Фаза \"{phase_name}\" делегирована.")
-    else:
-        lines.append(f"❓ Фаза \"{phase_name}\" — статус: {verdict}")
-
-    lines.append("")
-
-    # ── Закрытые пункты ──────────────────────────────────────────────
-    if covered:
-        lines.append("Закрытые пункты:")
-        for item in covered:
-            lines.append(f"  ✓ {item}")
+    # ── Заголовок при PARTIAL ──
+    if verdict == "PARTIAL":
+        lines.append("Ты сделал часть, доделай:")
         lines.append("")
 
-    # ── Пробелы ──────────────────────────────────────────────────────
-    if missing:
-        lines.append("Не закрытые пункты:")
-        for item in missing:
-            lines.append(f"  ✗ {item}")
-        lines.append("")
+    # ── Инструкции ──
+    if instructions:
+        lines.append("Инструкции:")
+        for item in instructions:
+            lines.append(f"  • {item}")
 
-    # ── Блокеры ──────────────────────────────────────────────────────
-    if blockers:
-        lines.append("Блокеры:")
-        for item in blockers:
-            lines.append(f"  🔴 {item}")
-        lines.append("")
-
-    # ── Следующий шаг ────────────────────────────────────────────────
-    if verdict == "PASS":
-        if next_phase:
-            lines.append(f"Следующая фаза: {next_phase} — {next_phase_name or '—'}")
+    # ── Чекапы (при PASS — все со статусом; при PARTIAL — только неготовые) ──
+    if checks:
+        if verdict == "PASS":
+            lines.append("")
+            lines.append("Чекапы:")
+            for item in checks:
+                status = "✓" if item in covered else ("✗" if item in missing else "·")
+                lines.append(f"  {status} {item}")
         else:
-            lines.append("🎉 Все фазы пройдены. Workflow завершён.")
-    elif verdict == "PARTIAL":
-        lines.append("Оставайся на текущей фазе. Доделай недостающие пункты и пришли отчёт.")
-    elif verdict == "BLOCKED":
-        lines.append("Фаза заблокирована. Устрани блокеры и пришли новый отчёт.")
-    elif verdict == "ROLLBACK":
-        if rollback_target:
-            lines.append(f"Roll back к фазе: {rollback_target}")
-        else:
-            lines.append("Roll back — возврат к предыдущей фазе.")
-    elif verdict == "DELEGATE":
-        lines.append("Ожидаю завершения делегированной работы. Пришли отчёт когда готово.")
+            # PARTIAL/BLOCKED/ROLLBACK — показываем только неготовые
+            not_done = [item for item in checks if item not in covered]
+            if not_done:
+                lines.append("")
+                lines.append("Чекапы:")
+                for item in not_done:
+                    lines.append(f"  ✗ {item}")
 
-    # ── Сообщение от evaluate ──────────────────────────────────────
-    if message and message not in lines[-1] if lines else True:
-        lines.append("")
-        lines.append(f"💡 {message}")
+    # ── Доказательства (при PASS — все со статусом; при PARTIAL — только неготовые) ──
+    if evidence:
+        if verdict == "PASS":
+            lines.append("")
+            lines.append("Доказательства:")
+            for item in evidence:
+                status = "✓" if item in covered else ("✗" if item in missing else "·")
+                lines.append(f"  {status} {item}")
+        else:
+            not_done = [item for item in evidence if item not in covered]
+            if not_done:
+                lines.append("")
+                lines.append("Доказательства:")
+                for item in not_done:
+                    lines.append(f"  ✗ {item}")
 
     return "\n".join(lines)
 

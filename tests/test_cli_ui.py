@@ -69,16 +69,26 @@ class TestStepCommand:
         mock_engine.evaluate.return_value = {
             "verdict": "PASS", "phase_name": "Plan", "next_phase": "1", "next_phase_name": "Build",
             "covered": ["a"], "missing": [], "blockers": [], "message": "Go next",
+            "instructions": ["Инструкция 1"],
+            "required_checks": ["a"],
+            "required_evidence": ["e1"],
+            "next_phase_contract": {
+                "instructions": ["Инструкция 2"],
+                "required_checks": ["c2"],
+                "required_evidence": ["e2"],
+            },
         }
         runner = CliRunner()
         with patch("wartz_workflow.cli.core._get_task_key_validator", return_value=_validator()):
             result = runner.invoke(cli, ["step", "--task", "TASK-1", "--report", "Done"])
         assert result.exit_code == 0
         mock_engine.evaluate.assert_called_once_with("Done")
-        assert "✅" in result.output
-        assert "Plan" in result.output
-        assert "Build" in result.output
-
+        assert "Инструкции:" in result.output
+        assert "Инструкция 2" in result.output
+        assert "Чекапы:" in result.output
+        assert "c2" in result.output
+        assert "Доказательства:" in result.output
+        assert "e2" in result.output
     @patch("wartz_workflow.state.find_repo", return_value="/repo")
     @patch("wartz_workflow.state.load_state", return_value=_mock_state())
     @patch("wartz_workflow.wizard.WizardEngine")
@@ -87,14 +97,14 @@ class TestStepCommand:
         mock_engine.evaluate.return_value = {
             "verdict": "BLOCKED", "phase_name": "Plan", "next_phase": None, "next_phase_name": None,
             "covered": [], "missing": ["m1"], "blockers": ["b1"], "message": "Blocked",
+            "required_checks": ["m1"], "required_evidence": [], "instructions": [], "description": "",
         }
         runner = CliRunner()
         with patch("wartz_workflow.cli.core._get_task_key_validator", return_value=_validator()):
             result = runner.invoke(cli, ["step", "--task", "TASK-1", "--report", "Bad"])
         assert result.exit_code == 1
-        assert "🔴" in result.output or "заблокирована" in result.output
+        assert "Чекапы:" in result.output
         assert "m1" in result.output
-        assert "b1" in result.output
 
     def test_step_skip_is_rejected(self):
         runner = CliRunner()

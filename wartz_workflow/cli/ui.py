@@ -82,6 +82,8 @@ def step_cmd(
             if smart:
                 formatted = "[🧠 SMART MODE] " + formatted
             print(formatted)
+            # При PASS — format_result уже показал инструкции следующей фазы, 
+            # get_phase_prompt не нужен — там мусор (workflow_lines, global_instructions, format report)
         sys.exit(0 if result["verdict"] == "PASS" else 1)
 
     # default: show phase instructions

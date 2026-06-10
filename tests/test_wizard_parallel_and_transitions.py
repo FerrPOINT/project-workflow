@@ -303,7 +303,7 @@ class TestBuildResult:
             rollback_target="-1",
         )
         assert result["verdict"] == "ROLLBACK"
-        assert "roll back" in result["message"]
+        assert "roll back to" in result["message"]
 
     def test_blocked_message(self):
         engine = self._make_engine()
@@ -315,7 +315,7 @@ class TestBuildResult:
             rollback_target=None,
         )
         assert result["verdict"] == "BLOCKED"
-        assert "Missing or blocked" in result["message"]
+        assert "BLOCKED" in result["message"]
 
     def test_delegate_message(self):
         engine = self._make_engine()
@@ -327,7 +327,7 @@ class TestBuildResult:
             rollback_target=None,
         )
         assert result["verdict"] == "DELEGATE"
-        assert "Delegate" in result["message"]
+        assert "Delegate work" in result["message"]
 
     def test_partial_message(self):
         engine = self._make_engine()
@@ -339,7 +339,7 @@ class TestBuildResult:
             rollback_target=None,
         )
         assert result["verdict"] == "PARTIAL"
-        assert "partially" in result["message"]
+        assert "PARTIAL" in result["message"]
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -393,7 +393,7 @@ class TestBuildParallelResult:
             None, None, None,
         )
         assert result["verdict"] == "BLOCKED"
-        assert "blocked" in result["message"]
+        assert "BLOCKED" in result["message"]
 
     def test_delegate(self):
         engine = self._make_engine()
@@ -404,7 +404,7 @@ class TestBuildParallelResult:
             None, None, None,
         )
         assert result["verdict"] == "DELEGATE"
-        assert "Delegate" in result["message"]
+        assert "Delegate work" in result["message"]
 
     def test_partial(self):
         engine = self._make_engine()
@@ -415,7 +415,7 @@ class TestBuildParallelResult:
             None, None, None,
         )
         assert result["verdict"] == "PARTIAL"
-        assert "partially" in result["message"]
+        assert "PARTIAL" in result["message"]
 
 
 # ═══════════════════════════════════════════════════════════════════════

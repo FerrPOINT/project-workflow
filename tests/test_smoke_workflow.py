@@ -70,13 +70,13 @@ def test_smoke_phase_prompt_surfaces_parallel_agent_and_rollback_metadata(tmp_pa
     engine = WizardEngine("SMOKE-11")
 
     parallel_prompt = engine.get_phase_prompt("smoke.parallel-a")
-    assert "Тип выполнения: parallel" in parallel_prompt
-    assert "Параллельно с: smoke.parallel-b" in parallel_prompt
+    assert "ПАРАЛЛЕЛЬНАЯ ГРУППА ФАЗ" in parallel_prompt
+    assert "Smoke Parallel A" in parallel_prompt  # name shown
+    assert "Smoke Parallel B" in parallel_prompt   # parallel partner
     assert "Делегировано агенту: researcher" in parallel_prompt
 
     review_prompt = engine.get_phase_prompt("smoke.review")
     assert "Делегировано агенту: critic" in review_prompt
-    assert "Rollback target: smoke.plan" in review_prompt
 
 
 def test_parallel_group_pass_advances_all_phases(tmp_path: Path, monkeypatch):

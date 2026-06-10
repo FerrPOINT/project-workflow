@@ -6,13 +6,16 @@ PK: INTEGER AUTOINCREMENT, семантические code TEXT UNIQUE для ф
 """
 
 import json
+import os
 import sqlite3
 from pathlib import Path
 from typing import Any
 
 from . import config
 
-DB_PATH = Path.home() / ".wartz-workflow" / "workflow.db"
+# Жёсткий путь к базе — либо из env, либо из HOME (не systemd default)
+_home = os.path.expanduser("~")
+DB_PATH = Path(os.getenv("WORKFLOW_DB_PATH", os.path.join(_home, ".wartz-workflow", "workflow.db")))
 SCHEMA_PATH = Path(__file__).parent / "db_schema.sql"
 
 

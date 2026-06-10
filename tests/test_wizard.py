@@ -97,4 +97,4 @@ class TestWizardEvaluate:
             prompt = engine.get_phase_prompt()
 
         assert "Test" in prompt
-        assert "Полный путь workflow" in prompt
+        assert "Текущий шаг" in prompt

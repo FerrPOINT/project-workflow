@@ -19,6 +19,14 @@ class TestFormatResult:
             "next_phase_name": "Next Phase",
             "rollback_target": None,
             "message": "Go next",
+            "instructions": ["Инструкция 1", "Инструкция 2"],
+            "required_checks": ["c1", "c2"],
+            "required_evidence": ["e1"],
+            "next_phase_contract": {
+                "instructions": ["Инструкция 1", "Инструкция 2"],
+                "required_checks": ["c1", "c2"],
+                "required_evidence": ["e1"],
+            },
         }
 
     def _partial(self):
@@ -33,6 +41,9 @@ class TestFormatResult:
             "next_phase_name": None,
             "rollback_target": None,
             "message": "Need more",
+            "instructions": ["Инструкция 1"],
+            "required_checks": ["c1", "m1"],
+            "required_evidence": ["e1"],
         }
 
     def _blocked(self):
@@ -47,6 +58,9 @@ class TestFormatResult:
             "next_phase_name": None,
             "rollback_target": None,
             "message": "Blocked msg",
+            "instructions": ["Инструкция 1"],
+            "required_checks": ["m1"],
+            "required_evidence": [],
         }
 
     def _rollback(self):
@@ -91,146 +105,56 @@ class TestFormatResult:
             "message": "Proceed",
         }
 
-    # ── Verdict headers ────────────────────────────────────────────────
-    def test_pass_header(self):
+    # ── Инструкции, чекапы, доказательства ─────────────────────────────
+    def test_pass_shows_next_phase_instructions(self):
         out = format_result(self._pass())
-        assert "✅" in out
-        assert "Smoke Plan" in out
-        assert "Переход к: Next Phase" in out
+        assert "Инструкции:" in out
+        assert "Инструкция 1" in out
+        assert "Инструкция 2" in out
 
-    def test_partial_header(self):
-        out = format_result(self._partial())
-        assert "⚠️" in out
-        assert "частично выполнена" in out
-
-    def test_blocked_header(self):
-        out = format_result(self._blocked())
-        assert "🔴" in out
-        assert "заблокирована" in out
-
-    def test_rollback_header(self):
-        out = format_result(self._rollback())
-        assert "⬅️" in out
-        assert "отклонена" in out
-
-    def test_delegate_header(self):
-        out = format_result(self._delegate())
-        assert "📤" in out
-        assert "делегирована" in out
-
-    def test_unknown_header(self):
-        out = format_result({"verdict": "UNKNOWN", "phase_name": "X"})
-        assert "❓" in out
-        assert "UNKNOWN" in out
-
-    # ── Content sections ─────────────────────────────────────────────
-    def test_covered_shown(self):
+    def test_pass_shows_next_phase_checks(self):
         out = format_result(self._pass())
-        assert "Закрытые пункты:" in out
+        assert "Чекапы:" in out
         assert "c1" in out
         assert "c2" in out
 
-    def test_missing_shown(self):
+    def test_pass_shows_next_phase_evidence(self):
+        out = format_result(self._pass())
+        assert "Доказательства:" in out
+        assert "e1" in out
+
+    def test_pass_no_covered_done_section(self):
+        """PASS output must NOT contain covered items as a separate 'Сделано' section."""
+        out = format_result(self._pass())
+        assert "Сделано" not in out
+
+    def test_pass_no_message_hint(self):
+        """Message field from JSON must NOT leak into formatted output."""
+        out = format_result(self._pass())
+        assert "Go next" not in out
+
+    def test_partial_shows_header(self):
         out = format_result(self._partial())
-        assert "Не закрытые пункты:" in out
-        assert "m1" in out
+        assert "Ты сделал часть, доделай:" in out
 
-    def test_blockers_shown(self):
-        out = format_result(self._blocked())
-        assert "Блокеры:" in out
-        assert "b1" in out
-
-    def test_no_covered_section_when_empty(self):
-        out = format_result(self._blocked())
-        assert "Закрытые пункты:" not in out
-
-    def test_no_missing_section_when_empty(self):
-        out = format_result(self._pass())
-        assert "Не закрытые пункты:" not in out
-
-    def test_no_blockers_section_when_empty(self):
-        out = format_result(self._pass())
-        assert "Блокеры:" not in out
-
-    # ── Next step messages ─────────────────────────────────────────────
-    def test_pass_with_next(self):
-        out = format_result(self._pass())
-        assert "Следующая фаза:" in out
-        assert "smoke.next" in out
-        assert "Next Phase" in out
-
-    def test_pass_no_next(self):
-        r = self._pass()
-        r["next_phase"] = None
-        r["next_phase_name"] = None
-        out = format_result(r)
-        assert "Все фазы пройдены" in out
-
-    def test_partial_stay_message(self):
+    def test_partial_shows_current_instructions(self):
         out = format_result(self._partial())
-        assert "Оставайся на текущей фазе" in out
+        assert "Инструкции:" in out
+        assert "Инструкция 1" in out
 
-    def test_blocked_message(self):
-        out = format_result(self._blocked())
-        assert "Фаза заблокирована" in out
+    def test_partial_shows_only_not_done_checks(self):
+        out = format_result(self._partial())
+        assert "Чекапы:" in out
+        assert "c1" not in out  # covered, not shown
+        assert "m1" in out  # missing, shown
 
-    def test_rollback_with_target(self):
-        out = format_result(self._rollback())
-        assert "Roll back к фазе:" in out
-        assert "smoke.prev" in out
+    def test_partial_shows_only_not_done_evidence(self):
+        out = format_result(self._partial())
+        assert "Доказательства:" in out
+        assert "e1" in out
 
-    def test_rollback_without_target(self):
-        r = self._rollback()
-        r["rollback_target"] = None
-        out = format_result(r)
-        assert "Roll back" in out
-        assert "к фазе" not in out  # target-specific phrasing omitted
-
-    def test_delegate_message(self):
-        out = format_result(self._delegate())
-        assert "Ожидаю завершения делегированной работы" in out
-
-    # ── Message hint ───────────────────────────────────────────────────
-    def test_message_hint_appended(self):
-        out = format_result(self._pass())
-        assert "💡 Go next" in out
-
-    def test_message_hint_not_appended_when_absent(self):
-        r = self._pass()
-        r["message"] = ""
-        out = format_result(r)
-        assert "💡" not in out
-
-    # ── Parallel specific ──────────────────────────────────────────────
-    def test_parallel_pass_header(self):
-        out = format_result(self._parallel_pass())
-        assert "Parallel group" in out
-        assert "Переход к: Next" in out  # has next_phase_name
-
-    # ── Edge cases ─────────────────────────────────────────────────────
-    def test_empty_result(self):
-        out = format_result({})
-        assert "❓" in out
-        assert "—" in out  # phase_name defaults to "-"
-
-    def test_all_verdicts_have_format(self):
-        """Ensure every known verdict label maps to something in format_result."""
-        for v, label in VERDICT_LABELS.items():
-            out = format_result({
-                "verdict": label, "phase_name": "Test",
-                "covered": [], "missing": [], "blockers": [],
-            })
-            # Should not fall through to UNKNOWN / generic line
-            assert out.strip() != ""
-            assert "❓" not in out or label == "UNKNOWN"
-
-    def test_empty_lists_omitted(self):
-        """All three lists empty → no bullet sections rendered."""
-        out = format_result({
-            "verdict": "PASS", "phase_name": "Done", "covered": [],
-            "missing": [], "blockers": [], "next_phase": None,
-        })
-        assert "Закрытые" not in out
-        assert "Не закрытые" not in out
-        assert "Блокеры" not in out
-        assert "Все фазы пройдены" in out
+    def test_partial_no_checkmarks_for_done(self):
+        """PARTIAL output must not show ✓ for done items, only ✗ for remaining."""
+        out = format_result(self._partial())
+        assert "✓ c1" not in out
+        assert "✗ m1" in out

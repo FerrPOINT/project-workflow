@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import sqlite3
+import json
 import time
 from pathlib import Path
 from typing import Any
@@ -26,7 +27,14 @@ DEFAULT_UI_PORT = config.UI_PORT
 BASE_DIR = Path(__file__).parent
 
 # ── Jinja2 templates (v2/ под base.html + extends) ──────────────────────
+import json as _json
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates" / "v2"))
+
+def _tojson_unicode(value, indent=2):
+    from markupsafe import Markup
+    return Markup(_json.dumps(value, ensure_ascii=False, indent=indent, default=str))
+
+templates.env.filters['tojson_unicode'] = _tojson_unicode
 
 def _group_instructions(instructions):
     """Группирует инструкции по runs: parallel примыкает к предыдущей sync и идёт с ней рядом."""
@@ -584,6 +592,37 @@ def _get_task_detail(task_key: str) -> dict | None:
     supervisor_runs = wdb.get_supervisor_runs(task_key=task_key, limit=200)
     for run in supervisor_runs:
         run["verdict_label"] = VERDICT_LABELS.get(run.get("verdict", ""), run.get("verdict", "").upper())
+        # response уже dict от DB — используем напрямую
+        resp = run.get("response") or {}
+        run["contract"] = {
+            "description": resp.get("description", ""),
+            "instructions": resp.get("instructions", []),
+            "required_checks": resp.get("required_checks", []),
+            "required_evidence": resp.get("required_evidence", []),
+            "covered": resp.get("covered", []),
+            "missing": resp.get("missing", []),
+            "blockers": resp.get("blockers", []),
+            "message": resp.get("message", ""),
+            "next_phase_name": resp.get("next_phase_name", ""),
+        }
+        # Загружаем контракт СЛЕДУЮЩЕЙ фазы (что делать дальше)
+        next_code = resp.get("next_phase")
+        if next_code:
+            next_ph = wdb.get_phase_by_code(next_code)
+            if next_ph:
+                run["next_contract"] = {
+                    "phase_name": next_ph.get("name", next_code),
+                    "description": next_ph.get("description", ""),
+                    "instructions": [i.get("text", "") for i in (next_ph.get("instructions") or [])],
+                    "required_checks": [c.get("text", "") for c in (next_ph.get("checks") or [])],
+                    "required_evidence": [e.get("text", "") for e in (next_ph.get("evidence") or [])],
+                    "delegate_agent": next_ph.get("delegate_agent"),
+                    "delegate_toolsets": next_ph.get("delegate_toolsets", []),
+                }
+            else:
+                run["next_contract"] = None
+        else:
+            run["next_contract"] = None
     task["supervisor_runs"] = supervisor_runs
 
     return task

@@ -106,6 +106,13 @@
 .sr-report,.sr-response,.sr-tags{font-size:13px;color:var(--text-secondary);line-height:1.5}
 .sr-tags.missing{color:var(--yellow)}
 .sr-tags.blockers{color:var(--red)}
+.sr-list{margin:0 0 0 16px;padding:0;list-style:disc}
+.sr-list li{font-size:13px;color:var(--text-secondary);line-height:1.6}
+
+/* ── Raw request/response blocks ───────────────────────────────────── */
+.sr-raw-block{margin:10px 0}
+.sr-raw-label{font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px}
+.sr-raw-text{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-size:12px;color:var(--text-secondary);line-height:1.6;white-space:pre-wrap;word-break:break-word;overflow-x:auto;max-height:300px;overflow-y:auto;font-family:'JetBrains Mono',monospace}
 {% endblock %}
 
 {% block content %}
@@ -227,32 +234,77 @@
         <span class="sr-time">{{ run.created_at[:16] if run.created_at else '—' }}</span>
       </div>
       <div class="sr-body">
-        <div class="sr-row">
-          <span class="sr-label">📝 Отчёт (вход):</span>
-          <span class="sr-report">{{ run.report }}</span>
+        <div class="sr-raw-block">
+          <div class="sr-raw-label">📝 ОТЧЁТ АГЕНТА (что было сделано):</div>
+          <pre class="sr-raw-text">{{ run.report }}</pre>
         </div>
-        {% if run.response and run.response.get('message') %}
-        <div class="sr-row">
-          <span class="sr-label">💬 Ответ supervisor:</span>
-          <span class="sr-response">{{ run.response.get('message') }}</span>
+        <div class="sr-raw-block">
+          <div class="sr-raw-label">💬 ОТВЕТ (что делать дальше):</div>
+          <div class="sr-raw-text">
+            <strong>Вердикт:</strong> {{ run.response.verdict }}<br>
+            <strong>Описание:</strong> {{ run.contract.description or run.contract.phase_name }}<br>
+            {% if run.contract.instructions %}
+            <br><strong>📜 Инструкции:</strong>
+            {% for item in run.contract.instructions %}
+            <br>  • {{ item }}
+            {% endfor %}
+            {% endif %}
+            {% if run.contract.required_checks %}
+            <br><strong>✅ Проверки:</strong>
+            {% for item in run.contract.required_checks %}
+            {% set found = item in run.contract.covered %}
+            <br>  {{ '✓' if found else '✗' }} {{ item }}
+            {% endfor %}
+            {% endif %}
+            {% if run.contract.required_evidence %}
+            <br><strong>📎 Доказательства:</strong>
+            {% for item in run.contract.required_evidence %}
+            {% set found = item in run.contract.covered %}
+            <br>  {{ '✓' if found else '✗' }} {{ item }}
+            {% endfor %}
+            {% endif %}
+            {% if run.contract.next_phase_name %}
+            <br><strong>➡️ Следующий шаг:</strong> {{ run.contract.next_phase_name }}<br>
+            {% endif %}
+            {% if run.contract.message %}
+            <br>💡 {{ run.contract.message }}
+            {% endif %}
+          </div>
         </div>
-        {% endif %}
-        {% if run.covered %}
-        <div class="sr-row">
-          <span class="sr-label">✅ Покрыто:</span>
-          <span class="sr-tags">{{ '; '.join(run.covered) }}</span>
-        </div>
-        {% endif %}
-        {% if run.missing %}
-        <div class="sr-row">
-          <span class="sr-label">⚠️ Пропущено:</span>
-          <span class="sr-tags missing">{{ '; '.join(run.missing) }}</span>
-        </div>
-        {% endif %}
-        {% if run.blockers %}
-        <div class="sr-row">
-          <span class="sr-label">🚫 Блокеры:</span>
-          <span class="sr-tags blockers">{{ '; '.join(run.blockers) }}</span>
+        <!-- Контракт СЛЕДУЮЩЕЙ фазы (что делать дальше) -->
+        {% if run.next_contract %}
+        <div class="sr-raw-block" style="margin-top:12px;background:var(--surface);border:1px solid var(--border-strong);border-radius:8px;padding:12px 16px">
+          <div class="sr-raw-label" style="color:var(--accent);font-weight:700">📋 СЛЕДУЮЩИЙ ШАГ — контракт:</div>
+          <div class="sr-raw-text">
+            <strong>Название:</strong> {{ run.next_contract.phase_name }}<br>
+            {% if run.next_contract.description %}
+            <strong>Описание:</strong> {{ run.next_contract.description }}<br>
+            {% endif %}
+            {% if run.next_contract.instructions %}
+            <br><strong>📜 Инструкции:</strong>
+            {% for item in run.next_contract.instructions %}
+            <br>  • {{ item }}
+            {% endfor %}
+            {% endif %}
+            {% if run.next_contract.required_checks %}
+            <br><strong>✅ Проверки:</strong>
+            {% for item in run.next_contract.required_checks %}
+            <br>  · {{ item }}
+            {% endfor %}
+            {% endif %}
+            {% if run.next_contract.required_evidence %}
+            <br><strong>📎 Доказательства:</strong>
+            {% for item in run.next_contract.required_evidence %}
+            <br>  · {{ item }}
+            {% endfor %}
+            {% endif %}
+            {% if run.next_contract.delegate_agent %}
+            <br><strong>🤖 Агент:</strong> {{ run.next_contract.delegate_agent }}
+            {% if run.next_contract.delegate_toolsets %}
+             ({{ ', '.join(run.next_contract.delegate_toolsets) }})
+            {% endif %}
+            {% endif %}
+          </div>
         </div>
         {% endif %}
       </div>

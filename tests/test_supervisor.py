@@ -103,10 +103,10 @@ def test_supervisor_context_contains_full_path_and_contract(tmp_path: Path, monk
     assert "любой пользователь" in ctx["cli_actor"]["description"].lower()
 
     prompt = engine.get_phase_prompt()
-    assert "Полный путь workflow" in prompt
+    assert "Текущий шаг" in prompt
     assert "Формат отчёта" in prompt
     assert "Create implementation plan" in prompt
-    assert "Исполнитель CLI" in prompt
+    assert "Задача" in prompt
 
 
 

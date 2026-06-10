@@ -228,15 +228,22 @@ class TestCheckCoverageEdgeCases:
         assert missing == []
 
     def test_keyword_threshold_2_of_3(self):
-        """If item has 3 keywords, need at least 2 hits."""
+        """Threshold is min(len, 2): for 4 keywords threshold = 2, so 2 hits are enough."""
         engine = self._make_engine()
         # "implement user authentication service" -> keywords: implement, user, authentication, service (4 words)
-        # report has only "user" and "service" -> 2 hits, threshold = min(4,2) = 2 -> enough
+        # threshold = min(4, 2) = 2 -> report has "user" + "service" = 2 hits -> covered
         covered, missing = engine._check_coverage(
             "user service done",
             ["implement user authentication service"],
         )
         assert covered == ["implement user authentication service"]
+
+        # Only 1 hit -> NOT covered
+        covered, missing = engine._check_coverage(
+            "user done",
+            ["implement user authentication service"],
+        )
+        assert covered == []
 
     def test_single_keyword_needs_one_hit(self):
         """If item produces only 1 keyword, threshold = 1."""

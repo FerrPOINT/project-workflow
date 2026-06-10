@@ -3,7 +3,7 @@
 import json
 import pytest
 from unittest.mock import patch, MagicMock
-from wartz_workflow.wizard import WizardEngine, BLOCKER_PATTERNS
+from wartz_workflow.wizard import WizardEngine, BLOCKER_PATTERNS, Phase
 
 
 class TestBlockerExtraction:
@@ -138,6 +138,10 @@ class TestEvaluateAccumulationEndToEnd:
         tid = engine.task["id"]
 
         # Create phase with 2 instructions
+        class Check:
+            def __init__(self, description):
+                self.description = description
+
         class Instr:
             def __init__(self, step):
                 self.step = step
@@ -156,6 +160,14 @@ class TestEvaluateAccumulationEndToEnd:
                 "INSERT OR REPLACE INTO instructions (phase_id, step_num, description, execution_type) VALUES (?, 2, ?, 'sync')",
                 (pid, "Fix failing code"),
             )
+            conn.execute(
+                "INSERT OR REPLACE INTO checks (phase_id, description) VALUES (?, ?)",
+                (pid, "tests run"),
+            )
+            conn.execute(
+                "INSERT OR REPLACE INTO checks (phase_id, description) VALUES (?, ?)",
+                (pid, "code fixed"),
+            )
             conn.commit()
 
         # Mock phase map
@@ -169,7 +181,7 @@ class TestEvaluateAccumulationEndToEnd:
             rollback_target = None
             next_recommendation = None
             instructions = [Instr("Run tests first"), Instr("Fix failing code")]
-            checks = []
+            checks = [Check("tests run"), Check("code fixed")]
             evidence = []
             delegate = None
             is_delegated = False
@@ -179,18 +191,18 @@ class TestEvaluateAccumulationEndToEnd:
         engine.current_phase = "0"
         engine.task = engine.db.get_task(tid)
 
-        # First report: covers only instruction 1
+        # First report: covers only check 1
         result1 = engine.evaluate("I ran tests first")
         assert result1["verdict"] == "PARTIAL"
-        assert "Run tests first" in result1["covered"]
-        assert "Fix failing code" in result1["missing"]
+        assert "tests run" in result1["covered"]
+        assert "code fixed" in result1["missing"]
 
         # Refresh engine state
         engine.task = engine.db.get_task(tid)
 
-        # Second report: covers instruction 2 (but not 1 explicitly)
+        # Second report: covers check 2 (with accumulated coverage from first run)
         result2 = engine.evaluate("I fixed failing code")
         assert result2["verdict"] == "PASS", f"Expected pass with accumulated coverage, got {result2['verdict']}"
-        assert "Run tests first" in result2["covered"], "Previously covered item should persist"
-        assert "Fix failing code" in result2["covered"], "Current report item should be covered"
+        assert "tests run" in result2["covered"], "Previously covered item should persist"
+        assert "code fixed" in result2["covered"], "Current report item should be covered"
         assert result2["missing"] == [], "All items should be covered after accumulation"
