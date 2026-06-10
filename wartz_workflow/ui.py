@@ -383,7 +383,22 @@ def _load_tasks() -> list[dict]:
                 )
             if not completed_at:
                 completed_at = t.get("updated_at", "")
-        
+
+        # Latest wizard verdict for this task
+        latest_verdict = None
+        latest_verdict_phase = None
+        latest_verdict_message = ""
+        latest_verdict_at = ""
+        supervisor_runs = wdb.get_supervisor_runs(task_id=t["id"], limit=1)
+        if supervisor_runs:
+            run = supervisor_runs[0]
+            latest_verdict = run.get("verdict")
+            latest_verdict_phase = run.get("phase_code")
+            latest_verdict_message = (run.get("response") or {}).get("message", "")
+            if isinstance(latest_verdict_message, str):
+                latest_verdict_message = latest_verdict_message[:120]
+            latest_verdict_at = run.get("created_at", "")[:16]
+
         result.append(
             {
                 "id": t["id"],
@@ -403,6 +418,10 @@ def _load_tasks() -> list[dict]:
                 "status_label": "В работе" if t.get("status") != "done" else "Завершена",
                 "created_at": t.get("created_at", ""),
                 "completed_at": completed_at,
+                "latest_verdict": latest_verdict,
+                "latest_verdict_phase": latest_verdict_phase,
+                "latest_verdict_message": latest_verdict_message,
+                "latest_verdict_at": latest_verdict_at,
             }
         )
     
@@ -469,12 +488,20 @@ def _load_dashboard() -> dict[str, Any]:
     active_tasks = [task for task in tasks if task.get("status") == "active"]
     done_tasks = [task for task in tasks if task.get("status") == "done"]
 
+    # Wizard verdict counters
+    verdict_counts: dict[str, int] = {}
+    for task in tasks:
+        v = task.get("latest_verdict")
+        if v:
+            verdict_counts[v] = verdict_counts.get(v, 0) + 1
+
     return {
         "stats": {
             "projects": len(projects),
             "tasks": len(tasks),
             "active": len(active_tasks),
             "done": len(done_tasks),
+            "verdicts": verdict_counts,
         },
         "active_tasks": active_tasks[:8],
         "projects": sorted(projects, key=lambda item: (-item.get("task_count", 0), item.get("name", "")))[:8],
@@ -624,6 +651,14 @@ def _get_task_detail(task_key: str) -> dict | None:
         else:
             run["next_contract"] = None
     task["supervisor_runs"] = supervisor_runs
+
+    # Summary latest verdict for header badge
+    if supervisor_runs:
+        task["latest_verdict"] = supervisor_runs[0].get("verdict")
+        task["latest_verdict_label"] = supervisor_runs[0].get("verdict_label")
+    else:
+        task["latest_verdict"] = None
+        task["latest_verdict_label"] = None
 
     return task
 

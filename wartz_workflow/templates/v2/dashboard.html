@@ -26,6 +26,11 @@
   <section class="metric-card"><div class="metric-label">Задачи</div><div class="metric-value">{{ stats.tasks }}</div></section>
   <section class="metric-card"><div class="metric-label">Активные</div><div class="metric-value">{{ stats.active }}</div></section>
   <section class="metric-card"><div class="metric-label">Завершённые</div><div class="metric-value">{{ stats.done }}</div></section>
+  {% if stats.verdicts %}
+  {% for verdict, count in stats.verdicts.items() %}
+  <section class="metric-card"><div class="metric-label">Вердикт: {{ verdict.upper() }}</div><div class="metric-value">{{ count }}</div></section>
+  {% endfor %}
+  {% endif %}
 </div>
 
 <div class="dashboard-panels">

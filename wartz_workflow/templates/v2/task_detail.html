@@ -136,6 +136,9 @@
       {% else %}
       <span class="status-big active">🔵 В работе</span>
       {% endif %}
+      {% if task.latest_verdict %}
+      <span class="sr-verdict verdict-{{ task.latest_verdict }}">{{ task.latest_verdict_label }}</span>
+      {% endif %}
     </span>
   </div>
 </div>

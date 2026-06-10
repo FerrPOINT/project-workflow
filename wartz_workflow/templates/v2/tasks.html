@@ -26,6 +26,12 @@
 .task-card .task-key{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent)}
 .task-card .label{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em}
 .task-card .value{font-size:13px;color:var(--text-secondary);font-weight:500}
+.verdict-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;white-space:nowrap}
+.verdict-pass{background:var(--green-soft);color:var(--green)}
+.verdict-partial{background:rgba(234,179,8,.12);color:#eab308}
+.verdict-blocked{background:var(--red-soft);color:var(--red)}
+.verdict-rollback{background:var(--orange-soft);color:var(--orange)}
+.verdict-delegate{background:var(--accent-soft);color:var(--accent)}
 {% endblock %}
 
 {% block content %}
@@ -39,6 +45,7 @@
         <th>Фаза</th>
         <th>Прогресс</th>
         <th>Статус</th>
+        <th>Вердикт</th>
         <th>Создана</th>
       </tr>
     </thead>
@@ -64,11 +71,17 @@
           <span class="status-badge status-active">🔵 В работе</span>
           {% endif %}
         </td>
+        <td>
+          {% if t.latest_verdict %}
+          <span class="verdict-badge verdict-{{ t.latest_verdict }}">{{ t.latest_verdict.upper() }}</span>
+          {% if t.latest_verdict_phase %}<span style="font-size:11px;color:var(--text-dim)">{{ t.latest_verdict_phase }}</span>{% endif %}
+          {% else %}—{% endif %}
+        </td>
         <td>{{ t.created_at[:16] if t.created_at else '—' }}</td>
       </tr>
       {% else %}
       <tr>
-        <td colspan="7" style="text-align:center;color:var(--text-dim);padding:32px">Нет задач</td>
+        <td colspan="8" style="text-align:center;color:var(--text-dim);padding:32px">Нет задач</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -86,6 +99,9 @@
       <span class="status-badge status-blocked">🔴</span>
       {% else %}
       <span class="status-badge status-active">🔵</span>
+      {% endif %}
+      {% if t.latest_verdict %}
+      <span class="verdict-badge verdict-{{ t.latest_verdict }}">{{ t.latest_verdict.upper() }}</span>
       {% endif %}
     </div>
     <div class="row" style="margin-bottom:10px">
