@@ -355,8 +355,12 @@ class WizardEngine:
     # ── Transition recording ─────────────────────────────────────────
 
     def _record_transition(self, phase: Phase, verdict: str, next_phase: str | None, rollback_target: str | None) -> None:
+        from .phase_fsm import PhaseFSM
+        fsm = PhaseFSM(initial="in_progress")
+        fsm.apply_verdict(verdict)
+        new_state = fsm.state
         task_id = int(self.task["id"])
-        if verdict == "pass":
+        if new_state == "done":
             self.db.add_task_history(task_id, phase.code, "done")
             if next_phase:
                 self.db.add_task_history(task_id, next_phase, "pending")
@@ -364,30 +368,31 @@ class WizardEngine:
             else:
                 self.db.update_task(task_id, {"current_phase": phase.code, "status": "done"})
             return
-
-        if verdict == "partial":
-            self.db.add_task_history(task_id, phase.code, "partial")
-            self.db.update_task(task_id, {"current_phase": phase.code, "status": "active"})
-            return
-
-        if verdict == "blocked":
+        if new_state == "blocked":
             self.db.add_task_history(task_id, phase.code, "blocked")
             self.db.update_task(task_id, {"current_phase": phase.code, "status": "blocked"})
             return
-
-        if verdict == "rollback":
+        if new_state == "rollback":
             target = rollback_target or phase.code
             self.db.add_task_history(task_id, phase.code, "rollback")
             self.db.add_task_history(task_id, target, "pending")
             self.db.update_task(task_id, {"current_phase": target, "status": "active"})
             return
-
-        self.db.add_task_history(task_id, phase.code, "delegated")
+        if new_state == "delegated":
+            self.db.add_task_history(task_id, phase.code, "delegated")
+            self.db.update_task(task_id, {"current_phase": phase.code, "status": "active"})
+            return
+        # partial or in_progress
+        self.db.add_task_history(task_id, phase.code, "partial")
         self.db.update_task(task_id, {"current_phase": phase.code, "status": "active"})
 
     def _record_parallel_transition(self, group: list[Phase], verdict: str, next_phase: str | None) -> None:
+        from .phase_fsm import PhaseFSM
+        fsm = PhaseFSM(initial="in_progress")
+        fsm.apply_verdict(verdict)
+        new_state = fsm.state
         task_id = int(self.task["id"])
-        if verdict == "pass":
+        if new_state == "done":
             for phase in group:
                 self.db.add_task_history(task_id, phase.code, "done")
             if next_phase:
@@ -396,7 +401,7 @@ class WizardEngine:
             else:
                 self.db.update_task(task_id, {"current_phase": group[-1].code, "status": "done"})
             return
-        if verdict == "blocked":
+        if new_state == "blocked":
             self.db.update_task(task_id, {"status": "blocked"})
 
     # ── Context / Prompt ─────────────────────────────────────────────
