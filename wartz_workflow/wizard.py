@@ -1,18 +1,17 @@
 """DB-backed workflow supervisor over the phase catalog.
 
-Public surface is intentionally kept compatible with the previous wizard module:
+Thin facade — orchestrates context → contract → checks → store.
+Public surface kept compatible:
 - WizardEngine(task_key, repo)
 - WizardEngine.get_full_context()
 - WizardEngine.get_phase_prompt()
 - WizardEngine.evaluate(report)
 - evaluate_report(...), get_phase_instructions(...), main(...)
 """
-
 from __future__ import annotations
 
 import json
 import os
-import re
 import threading
 from typing import Any, Optional
 
@@ -20,11 +19,18 @@ from . import conversation as convo
 from . import schema
 from .db import WorkflowDB
 from .models import Phase
-from .llm import OllamaClient, PromptBuilder, ResponseParser, LlmVerdict
+from .llm import OllamaClient, PromptBuilder, ResponseParser
 
+from .wizard_types import PhaseContract, WizardAssessment, WizardFinding
+from .wizard_context import WizardContextBuilder
+from .wizard_contracts import PhaseContractBuilder, text_from_instruction, text_from_check, text_from_evidence
+from .wizard_checks import check_coverage, extract_blockers, determine_verdict, build_verdict_message
+from .wizard_store import WizardAssessmentStore
+
+# Backward-compatible re-exports for existing tests
+from .wizard_checks import BLOCKER_PATTERNS, DELEGATE_PATTERNS, normalize_text, extract_keywords
 
 SMART_EVALUATE = os.getenv("SMART_EVALUATE", "").lower() in ("1", "true", "yes", "on")
-
 
 VERDICT_LABELS = {
     "pass": "PASS",
@@ -34,15 +40,9 @@ VERDICT_LABELS = {
     "delegate": "DELEGATE",
 }
 
-BLOCKER_PATTERNS = (
-    "blocked by",
-    "blocker remains",
-    "cannot",
-    "can't",
-    "stuck",
-)
-
-DELEGATE_PATTERNS = ("delegate", "delegated", "delegation", "передал", "делег")
+# Backward-compatible re-exports for existing tests
+from .wizard_checks import BLOCKER_PATTERNS, DELEGATE_PATTERNS, normalize_text, extract_keywords
+from .models import Phase as _Phase  # noqa: F401
 
 
 class PromptCache:
@@ -65,7 +65,6 @@ class PromptCache:
             self._cache[self.key(task_key, current_phase, self._gen)] = value
 
     def invalidate(self) -> None:
-        """Bump generation — old keys become unreachable."""
         with self._lock:
             self._gen += 1
             if self._gen > 1000:
@@ -90,8 +89,6 @@ class WizardEngine:
         self._all_phases: list[Phase] | None = None
         self._phase_map: dict[str, Phase] | None = None
         self.current_phase = self._resolve_current_phase()
-        # Important: WizardEngine is often reconstructed per CLI call, so cache is ephemeral.
-        # For long-lived engines, invalidate() must be called after any mutation.
         self._cache = PromptCache()
 
     @property
@@ -162,233 +159,14 @@ class WizardEngine:
             return fallback
         return current or "-1"
 
+    def _get_current_phase_obj(self) -> Phase | None:
+        return self.phase_map.get(self.current_phase)
+
     def _phase_by_id(self, phase_id: int) -> Phase | None:
         for phase in self.all_phases:
             if int(phase.id) == int(phase_id):
                 return phase
         return None
-
-    def _get_current_phase_obj(self) -> Phase | None:
-        return self.phase_map.get(self.current_phase)
-
-    # ── Context builders ─────────────────────────────────────────────
-
-    @staticmethod
-    def _text_from_instruction(item: Any) -> str:
-        return str(getattr(item, "step", "") or "").strip()
-
-    @staticmethod
-    def _text_from_check(item: Any) -> str:
-        return str(getattr(item, "description", "") or "").strip()
-
-    @staticmethod
-    def _text_from_evidence(item: Any) -> str:
-        return str(getattr(item, "item", "") or "").strip()
-
-    def _phase_to_dict(self, phase: Phase) -> dict:
-        agent_name = phase.delegate.agent if phase.delegate else None
-        return {
-            "id": phase.id,
-            "code": phase.code,
-            "name": phase.name,
-            "description": phase.description,
-            "instructions": [self._text_from_instruction(item) for item in phase.instructions],
-            "checks": [self._text_from_check(item) for item in phase.checks],
-            "evidence": [self._text_from_evidence(item) for item in phase.evidence],
-            "execution_type": phase.execution_type,
-            "next_recommendation": phase.next_recommendation,
-            "parallel_with": phase.parallel_with,
-            "rollback_target": phase.rollback_target,
-            "delegate_agent": agent_name,
-            "delegate_toolsets": list(phase.delegate.toolsets) if phase.delegate else [],
-        }
-
-    def _phase_status_lookup(self) -> dict[str, str]:
-        statuses: dict[str, str] = {}
-        for row in self.db.get_task_history(self.task["id"]):
-            phase = self._phase_by_id(row["phase_id"])
-            if phase:
-                statuses[phase.code] = str(row["status"])
-        current_phase = str(self.task.get("current_phase") or self.current_phase)
-        if current_phase in self.phase_map and current_phase not in statuses and self.task.get("status") != "done":
-            statuses[current_phase] = "current"
-        return statuses
-
-    def _build_phase_history(self) -> list[dict]:
-        history: list[dict] = []
-        for row in self.db.get_task_history(self.task["id"]):
-            phase = self._phase_by_id(row["phase_id"])
-            if not phase:
-                continue
-            history.append(
-                {
-                    "phase_code": phase.code,
-                    "phase_name": phase.name,
-                    "status": row["status"],
-                    "completed_at": row["completed_at"],
-                }
-            )
-        return history
-
-    def _build_recent_verdicts(self, limit: int = 5) -> list[dict]:
-        verdicts: list[dict] = []
-        for row in self.db.get_supervisor_runs(task_id=self.task["id"], limit=limit):
-            verdicts.append(
-                {
-                    "phase_code": row.get("phase_code"),
-                    "verdict": VERDICT_LABELS.get(str(row.get("verdict")), str(row.get("verdict", "")).upper()),
-                    "blockers": row.get("blockers", []),
-                    "missing": row.get("missing", []),
-                    "next_phase": row.get("next_phase_code"),
-                    "rollback_target": row.get("rollback_phase_code"),
-                    "created_at": row.get("created_at"),
-                }
-            )
-        return verdicts
-
-    def _build_workflow_path(self) -> list[dict]:
-        status_lookup = self._phase_status_lookup()
-        path: list[dict] = []
-        for phase in self.all_phases:
-            path.append(
-                {
-                    "code": phase.code,
-                    "name": phase.name,
-                    "status": status_lookup.get(phase.code, "pending"),
-                    "parallel_with": phase.parallel_with,
-                    "rollback_target": phase.rollback_target,
-                }
-            )
-        return path
-
-    def _build_current_contract(self, phase: Phase | None) -> dict:
-        if not phase:
-            return {
-                "phase_code": self.current_phase,
-                "phase_name": "Unknown phase",
-                "description": "",
-                "instructions": [],
-                "required_checks": [],
-                "required_evidence": [],
-                "execution_type": "sync",
-                "delegate_agent": None,
-                "delegate_toolsets": [],
-                "next_recommendation": "",
-                "parallel_with": None,
-                "rollback_target": None,
-            }
-
-        return {
-            "phase_code": phase.code,
-            "phase_name": phase.name,
-            "description": phase.description,
-            "instructions": [self._text_from_instruction(item) for item in phase.instructions],
-            "required_checks": [self._text_from_check(item) for item in phase.checks],
-            "required_evidence": [self._text_from_evidence(item) for item in phase.evidence],
-            "execution_type": phase.execution_type,
-            "delegate_agent": phase.delegate.agent if phase.delegate else None,
-            "delegate_toolsets": list(phase.delegate.toolsets) if phase.delegate else [],
-            "next_recommendation": phase.next_recommendation,
-            "parallel_with": phase.parallel_with,
-            "rollback_target": phase.rollback_target,
-        }
-
-    def _global_instructions(self) -> list[str]:
-        return [
-            "Do not skip phases or invent completed evidence.",
-            "Evaluate progress strictly against the current phase contract from the DB phase catalog.",
-            "Treat the CLI actor as the source of the report whether it is a human user or automation; do not assume a specific model/provider.",
-            "Return a structured phase report with summary, completed items, evidence, blockers, and next step.",
-            "If the phase is blocked, say exactly which checks/evidence are missing and whether rollback is required.",
-        ]
-
-    def _cli_actor(self) -> dict:
-        return {
-            "kind": "cli-user",
-            "description": (
-                "Любой пользователь или автоматизация, которая вызывает WARTZ Workflow CLI "
-                "и отправляет report по текущей фазе. Supervisor не предполагает конкретную модель, "
-                "Ollama или другого провайдера."
-            ),
-            "entrypoint": "wartz-workflow step --task TASK-KEY [--report TEXT]",
-        }
-
-    def _report_template(self) -> dict:
-        return {
-            "summary": "What was achieved in this phase.",
-            "completed": "Bullet list of completed contract items.",
-            "evidence": "Concrete evidence produced in this phase.",
-            "blockers": "Explicit blockers or 'none'.",
-            "next_step": "Single next recommended action.",
-        }
-
-    def get_full_context(self, use_cache: bool = True) -> dict:
-        if use_cache:
-            cached = self._cache.get(self.task_key, self.current_phase)
-            if cached:
-                return cached
-        phase = self._get_current_phase_obj()
-        workflow_path = self._build_workflow_path()
-        completed_phases = [item["code"] for item in workflow_path if item["status"] == "done"]
-
-        messages = []
-        try:
-            messages = convo.get_messages(self.task_key, limit=20)
-        except Exception:
-            messages = []
-
-        ctx = {
-            "task_key": self.task_key,
-            "repo": self.repo,
-            "project_code": self.project.get("code") if self.project else None,
-            "project_name": self.project.get("name") if self.project else None,
-            "workflow_name": self.workflow.get("name") if self.workflow else None,
-            "workflow_id": self.workflow_id,
-            "task_status": self.task.get("status"),
-            "current_phase": self.current_phase,
-            "current_phase_name": phase.name if phase else "Unknown phase",
-            "completed_phases": completed_phases,
-            "all_phases": [self._phase_to_dict(item) for item in self.all_phases],
-            "workflow_path": workflow_path,
-            "phase_history": self._build_phase_history(),
-            "recent_verdicts": self._build_recent_verdicts(),
-            "current_contract": self._build_current_contract(phase),
-            "cli_actor": self._cli_actor(),
-            "global_instructions": self._global_instructions(),
-            "report_template": self._report_template(),
-            "messages": messages,
-            "total_phases": len(self.all_phases),
-            "completed_count": len(completed_phases),
-        }
-        self._cache.set(self.task_key, self.current_phase, ctx)
-        return ctx
-
-    def _build_checklist(self, phase: Phase) -> list[str]:
-        """Только checks + evidence — это критерии оценки отчёта."""
-        items: list[str] = []
-        items.extend(self._text_from_check(item) for item in phase.checks)
-        items.extend(self._text_from_evidence(item) for item in phase.evidence)
-        seen: set[str] = set()
-        deduped: list[str] = []
-        for item in items:
-            k = item.strip().lower()
-            if k and k not in seen:
-                seen.add(k)
-                deduped.append(item.strip())
-        return deduped
-
-    @staticmethod
-    def _normalize_text(text: str) -> str:
-        return re.sub(r"\s+", " ", re.sub(r"[^\wа-яА-Я0-9]+", " ", text.lower())).strip()
-
-    def _extract_keywords(self, text: str) -> list[str]:
-        normalized = self._normalize_text(text)
-        words = [word for word in normalized.split() if len(word) >= 4]
-        unique: list[str] = []
-        for word in words:
-            if word not in unique:
-                unique.append(word)
-        return unique[:6]
 
     def _get_previously_covered(self, phase_code: str) -> set[str]:
         """Return items already covered in previous supervisor runs for this phase."""
@@ -396,7 +174,6 @@ class WizardEngine:
         task_id = int(self.task.get("id", 0))
         if not task_id:
             return previously
-
         runs = self.db.get_supervisor_runs(task_id=task_id, limit=20)
         for run in runs:
             if run.get("phase_code") != phase_code:
@@ -404,169 +181,178 @@ class WizardEngine:
             covered = run.get("covered", [])
             for item in covered:
                 if isinstance(item, str):
-                    previously.add(self._normalize_text(item))
+                    from .wizard_checks import normalize_text
+                    previously.add(normalize_text(item))
         return previously
 
-    def _check_coverage(
-        self, report: str, checklist: list[str], previously_covered: set[str] | None = None
-    ) -> tuple[list[str], list[str]]:
-        normalized_report = self._normalize_text(report)
-        covered: list[str] = []
-        missing: list[str] = []
-        previously_covered = previously_covered or set()
-        for item in checklist:
-            normalized_item = self._normalize_text(item)
-            keywords = self._extract_keywords(item)
-            keyword_hits = sum(1 for keyword in keywords if keyword in normalized_report)
-            exact_match = normalized_item and normalized_item in normalized_report
-            already_covered = normalized_item in previously_covered
-            enough_keywords = False
-            if keywords:
-                threshold = min(len(keywords), 2)
-                enough_keywords = keyword_hits >= threshold
-            if exact_match or enough_keywords or already_covered:
-                covered.append(item)
-            else:
-                missing.append(item)
-        return covered, missing
+    @staticmethod
+    def _text_from_instruction(item):
+        return text_from_instruction(item)
 
-    def _extract_blockers(self, report: str) -> list[str]:
-        lowered = report.lower()
-        lowered = re.sub(r"\bblockers?\s*:\s*(none|no|нет)\b", " ", lowered)
-        lowered = re.sub(r"\b(no blockers?|without blockers?|нет блокеров|без блокеров)\b", " ", lowered)
-        found = [pattern for pattern in BLOCKER_PATTERNS if pattern in lowered]
-        return list(dict.fromkeys(found))
+    @staticmethod
+    def _text_from_check(item):
+        return text_from_check(item)
 
-    def _has_delegate_signal(self, report: str) -> bool:
-        lowered = report.lower()
-        return any(pattern in lowered for pattern in DELEGATE_PATTERNS)
+    @staticmethod
+    def _text_from_evidence(item):
+        return text_from_evidence(item)
 
-    def _get_next_phase(self, phase_code: str) -> tuple[str | None, str | None]:
-        for index, phase in enumerate(self.all_phases):
-            if phase.code != phase_code:
-                continue
-            if index + 1 >= len(self.all_phases):
-                return None, None
-            next_phase = self.all_phases[index + 1]
-            return next_phase.code, next_phase.name
-        return None, None
+    @staticmethod
+    def _normalize_text(text):
+        return normalize_text(text)
 
-    def _get_parallel_group(self, start_phase: Phase) -> list[Phase]:
-        """Return the contiguous parallel run starting at (or containing) start_phase."""
-        try:
-            start_index = self.all_phases.index(start_phase)
-        except ValueError:
-            return [start_phase]
-        group: list[Phase] = [self.all_phases[start_index]]
-        for i in range(start_index + 1, len(self.all_phases)):
-            if self.all_phases[i].execution_type == "parallel":
-                group.append(self.all_phases[i])
-            else:
-                break
-        return group
+    @staticmethod
+    def _extract_keywords(text):
+        return extract_keywords(text)
 
-    def _get_next_phase_after_group(self, group: list[Phase]) -> tuple[str | None, str | None]:
-        """Return the phase that follows the last phase in the group."""
-        if not group:
-            return None, None
-        try:
-            last_index = self.all_phases.index(group[-1])
-        except ValueError:
-            return None, None
-        if last_index + 1 >= len(self.all_phases):
-            return None, None
-        nxt = self.all_phases[last_index + 1]
-        return nxt.code, nxt.name
+    @staticmethod
+    def _check_coverage(report, checklist, previously_covered=None):
+        return check_coverage(report, checklist, previously_covered)
 
-    def _build_parallel_contract(self, group: list[Phase]) -> dict:
-        """Build a merged contract for a parallel group of phases."""
-        instructions: list[str] = []
-        checks: list[str] = []
-        evidence: list[str] = []
-        for phase in group:
-            for inst in phase.instructions:
-                text = self._text_from_instruction(inst)
-                if text:
-                    instructions.append(f"[{phase.code}] {text}")
-            for chk in phase.checks:
-                text = self._text_from_check(chk)
-                if text:
-                    checks.append(f"[{phase.code}] {text}")
-            for ev in phase.evidence:
-                text = self._text_from_evidence(ev)
-                if text:
-                    evidence.append(f"[{phase.code}] {text}")
-        first = group[0]
-        last = group[-1]
-        # parallel_with of the first phase is the representative partner
-        parallel_target = first.parallel_with
-        next_phase, next_phase_name = self._get_next_phase_after_group(group)
-        return {
-            "phase_code": first.code,
-            "phase_name": f"Parallel group: {', '.join(p.code for p in group)}",
-            "description": "\n".join(f"- {p.code}: {p.description or '-'}" for p in group),
-            "instructions": instructions or ["Нет отдельных инструкций — следуй описаниям фаз и обязательным проверкам."],
-            "required_checks": checks or ["Нет явных checks."],
-            "required_evidence": evidence or ["Нет явных evidence items."],
-            "execution_type": "parallel",
-            "delegate_agent": first.delegate.agent if first.delegate else None,
-            "delegate_toolsets": list(first.delegate.toolsets) if first.delegate else [],
-            "next_recommendation": f"После выполнения переходи к {next_phase or 'завершению workflow'} ({next_phase_name or '-'}).",
-            "parallel_with": parallel_target,
-            "rollback_target": first.rollback_target,
-            "group_phases": [p.code for p in group],
+    @staticmethod
+    def _extract_blockers(report):
+        return extract_blockers(report)
+
+    def _has_delegate_signal(self, report):
+        from .wizard_checks import has_delegate_signal
+        return has_delegate_signal(report)
+
+    def _build_fail_message(self, phase, missing, blockers):
+        from .wizard_checks import build_fail_message
+        phase_name = getattr(phase, "name", phase) if hasattr(phase, "name") else phase
+        return build_fail_message(phase_name, missing, blockers)
+
+    def _determine_verdict(self, phase, covered, missing, blockers, report):
+        return determine_verdict(
+            covered=covered,
+            missing=missing,
+            blockers=blockers,
+            report=report,
+            is_delegated=getattr(phase, "is_delegated", False),
+            rollback_target=getattr(phase, "rollback_target", None),
+        )
+
+    def _get_next_phase(self, phase_code):
+        cb = PhaseContractBuilder(self.all_phases)
+        return cb.get_next_phase(phase_code)
+
+    def _get_parallel_group(self, start_phase):
+        cb = PhaseContractBuilder(self.all_phases)
+        return cb.get_parallel_group(start_phase)
+
+    def _get_next_phase_after_group(self, group):
+        cb = PhaseContractBuilder(self.all_phases)
+        return cb._next_after_group(group)
+
+    def _build_result(self, *, phase, verdict, covered, missing, blockers, next_phase, next_phase_name, rollback_target):
+        result = {
+            "verdict": VERDICT_LABELS[verdict],
+            "task_key": self.task_key,
+            "phase": phase.code,
+            "phase_name": phase.name,
+            "covered": covered,
+            "missing": missing,
+            "blockers": blockers,
+            "current_phase": phase.code,
+            "next_phase": next_phase,
+            "next_phase_name": next_phase_name,
+            "rollback_target": rollback_target,
+            "required_evidence": [text_from_evidence(item) for item in phase.evidence],
+            "required_checks": [text_from_check(item) for item in phase.checks],
+            "instructions": [text_from_instruction(item) for item in phase.instructions],
+            "next_step": next_phase or rollback_target or phase.code,
         }
-
-    def _build_parallel_checklist(self, group: list[Phase]) -> list[str]:
-        """Build a merged checklist (checks + evidence only) for evaluating a parallel group."""
-        items: list[str] = []
-        for phase in group:
-            for chk in phase.checks:
-                items.append(self._text_from_check(chk))
-            for ev in phase.evidence:
-                items.append(self._text_from_evidence(ev))
-        seen: set[str] = set()
-        deduped: list[str] = []
-        for item in items:
-            k = item.strip().lower()
-            if k and k not in seen:
-                seen.add(k)
-                deduped.append(item.strip())
-        return deduped
-
-    def _record_parallel_transition(self, group: list[Phase], verdict: str, next_phase: str | None) -> None:
-        """Only commit transition on pass. Non-pass verdicts leave the group intact."""
-        task_id = int(self.task["id"])
         if verdict == "pass":
-            for phase in group:
-                self.db.add_task_history(task_id, phase.code, "done")
-            if next_phase:
-                self.db.add_task_history(task_id, next_phase, "pending")
-                self.db.update_task(task_id, {"current_phase": next_phase, "status": "active"})
-            else:
-                self.db.update_task(task_id, {"current_phase": group[-1].code, "status": "done"})
-            return
-        # Non-pass: do NOT touch task_history or current_phase.
-        # The group remains active for the next attempt.
-        if verdict == "blocked":
-            self.db.update_task(task_id, {"status": "blocked"})
+            result["message"] = phase.next_recommendation or f"Phase {phase.code} accepted."
+        elif verdict == "rollback":
+            result["message"] = f"Phase {phase.code} failed gate and must roll back to {rollback_target}."
+        elif verdict == "delegate":
+            result["message"] = f"Delegate work for phase {phase.code} before continuing."
+        else:
+            result["message"] = build_verdict_message(verdict, phase.name, phase.code, blockers, missing, next_phase, rollback_target)
+        return result
 
-    def _build_fail_message(self, phase: Phase, missing: list[str], blockers: list[str]) -> str:
-        issues = missing or blockers or [phase.name]
-        return "Missing or blocked contract items: " + "; ".join(issues)
+    def _build_parallel_result(self, group, verdict, covered, missing, blockers, next_phase, next_phase_name, rollback_target):
+        first = group[0]
+        phase_codes = [p.code for p in group]
+        result = {
+            "verdict": VERDICT_LABELS[verdict],
+            "task_key": self.task_key,
+            "phase": first.code,
+            "phase_name": f"Parallel group: {', '.join(phase_codes)}",
+            "covered": covered,
+            "missing": missing,
+            "blockers": blockers,
+            "current_phase": first.code,
+            "next_phase": next_phase if verdict == "pass" else rollback_target if verdict == "rollback" else None,
+            "next_phase_name": next_phase_name if verdict == "pass" else (self.phase_map.get(rollback_target).name if rollback_target and self.phase_map.get(rollback_target) else None),
+            "rollback_target": rollback_target,
+            "required_evidence": list({text_from_evidence(ev) for p in group for ev in p.evidence}),
+            "required_checks": list({text_from_check(chk) for p in group for chk in p.checks}),
+            "instructions": [text_from_instruction(inst) for p in group for inst in p.instructions],
+            "next_step": next_phase or rollback_target or first.code,
+        }
+        if verdict == "pass":
+            result["message"] = f"Parallel group ({', '.join(phase_codes)}) accepted. Proceed to {next_phase or 'completion'}."
+        elif verdict == "rollback":
+            result["message"] = f"Parallel group ({', '.join(phase_codes)}) failed. Roll back to {rollback_target}."
+        elif verdict == "blocked":
+            issues = missing or blockers or phase_codes
+            result["message"] = f"BLOCKED: {'; '.join(issues)}. Fix and resubmit."
+        elif verdict == "delegate":
+            result["message"] = f"Delegate work for parallel group ({', '.join(phase_codes)}) before continuing."
+        else:
+            issues = missing or ["unspecified items"]
+            result["message"] = f"PARTIAL: {'; '.join(issues)}. Complete before continuing."
+        return result
 
-    def _determine_verdict(self, phase: Phase, covered: list[str], missing: list[str], blockers: list[str], report: str) -> str:
-        if not missing and not blockers:
-            return "pass"
-        if self._has_delegate_signal(report) and phase.is_delegated:
-            return "delegate"
-        if (blockers or "rollback" in report.lower()) and phase.rollback_target:
-            return "rollback"
-        if blockers:
-            return "blocked"
-        if covered:
-            return "partial"
-        return "partial"
+    def _build_checklist(self, phase):
+        cb = PhaseContractBuilder(self.all_phases)
+        return cb.build_checklist(phase)
+
+    def _build_parallel_checklist(self, group):
+        cb = PhaseContractBuilder(self.all_phases)
+        return cb.build_parallel_checklist(group)
+
+    def _build_current_contract(self, phase):
+        cb = PhaseContractBuilder(self.all_phases)
+        if not phase:
+            return cb.build_missing(self.current_phase).to_dict()
+        return cb.build(phase).to_dict()
+
+    def _build_phase_history(self):
+        builder = WizardContextBuilder(
+            db=self.db, task=self.task, project=self.project,
+            workflow=self.workflow, all_phases=self.all_phases,
+            current_phase=self.current_phase, task_key=self.task_key, repo=self.repo,
+        )
+        return builder._build_phase_history()
+
+    def _build_recent_verdicts(self, limit=5):
+        builder = WizardContextBuilder(
+            db=self.db, task=self.task, project=self.project,
+            workflow=self.workflow, all_phases=self.all_phases,
+            current_phase=self.current_phase, task_key=self.task_key, repo=self.repo,
+        )
+        return builder._build_recent_verdicts(limit=limit)
+
+    def _phase_status_lookup(self):
+        builder = WizardContextBuilder(
+            db=self.db, task=self.task, project=self.project,
+            workflow=self.workflow, all_phases=self.all_phases,
+            current_phase=self.current_phase, task_key=self.task_key, repo=self.repo,
+        )
+        return builder._phase_status_lookup()
+
+    def _build_workflow_path(self):
+        builder = WizardContextBuilder(
+            db=self.db, task=self.task, project=self.project,
+            workflow=self.workflow, all_phases=self.all_phases,
+            current_phase=self.current_phase, task_key=self.task_key, repo=self.repo,
+        )
+        return builder._build_workflow_path()
+
+    # ── Transition recording ─────────────────────────────────────────
 
     def _record_transition(self, phase: Phase, verdict: str, next_phase: str | None, rollback_target: str | None) -> None:
         task_id = int(self.task["id"])
@@ -599,137 +385,40 @@ class WizardEngine:
         self.db.add_task_history(task_id, phase.code, "delegated")
         self.db.update_task(task_id, {"current_phase": phase.code, "status": "active"})
 
-    def _build_result(
-        self,
-        *,
-        phase: Phase,
-        verdict: str,
-        covered: list[str],
-        missing: list[str],
-        blockers: list[str],
-        next_phase: str | None,
-        next_phase_name: str | None,
-        rollback_target: str | None,
-    ) -> dict:
-        # Загружаем контракт следующей фазы
-        next_contract = None
-        if next_phase:
-            next_ph = self.phase_map.get(next_phase)
-            if next_ph:
-                # Если следующая фаза — параллельная, загружаем контракт всей группы
-                if next_ph.execution_type == "parallel":
-                    group = self._get_parallel_group(next_ph)
-                    next_contract = self._build_parallel_contract(group)
-                    next_contract["phase_name"] = group[0].name
-                    next_contract["execution_type"] = "parallel"
-                    next_contract["parallel_with"] = group[0].parallel_with if len(group) > 1 else None
-                else:
-                    next_contract = {
-                        "phase_name": next_ph.name,
-                        "description": next_ph.description,
-                        "instructions": [self._text_from_instruction(i) for i in (next_ph.instructions or [])],
-                        "required_checks": [self._text_from_check(c) for c in next_ph.checks],
-                        "required_evidence": [self._text_from_evidence(e) for e in next_ph.evidence],
-                        "delegate_agent": next_ph.delegate.agent if next_ph.delegate else None,
-                        "delegate_toolsets": next_ph.delegate.toolsets if next_ph.delegate else [],
-                        "execution_type": next_ph.execution_type,
-                        "parallel_with": next_ph.parallel_with,
-                    }
-        result = {
-            "verdict": VERDICT_LABELS[verdict],
-            "task_key": self.task_key,
-            "phase": phase.code,
-            "phase_name": phase.name,
-            "covered": covered,
-            "missing": missing,
-            "blockers": blockers,
-            "current_phase": phase.code,
-            "next_phase": next_phase,
-            "next_phase_name": next_phase_name,
-            "rollback_target": rollback_target,
-            "required_evidence": [self._text_from_evidence(item) for item in phase.evidence],
-            "required_checks": [self._text_from_check(item) for item in phase.checks],
-            "instructions": [self._text_from_instruction(item) for item in phase.instructions],
-            "next_step": next_phase or rollback_target or phase.code,
-            "next_phase_contract": next_contract,
-        }
+    def _record_parallel_transition(self, group: list[Phase], verdict: str, next_phase: str | None) -> None:
+        task_id = int(self.task["id"])
         if verdict == "pass":
-            result["message"] = phase.next_recommendation or f"Phase {phase.code} accepted."
-        elif verdict == "rollback":
-            result["message"] = f"Phase {phase.code} failed gate and must roll back to {rollback_target}."
-        elif verdict == "blocked":
-            issues = blockers or missing or [phase.name]
-            result["message"] = f"BLOCKED: {'; '.join(issues)}. Fix and resubmit."
-        elif verdict == "delegate":
-            result["message"] = f"Delegate work for phase {phase.code} before continuing."
-        else:
-            # partial
-            issues = missing or [phase.name]
-            result["message"] = f"PARTIAL: {'; '.join(issues)}. Complete before continuing."
-        return result
+            for phase in group:
+                self.db.add_task_history(task_id, phase.code, "done")
+            if next_phase:
+                self.db.add_task_history(task_id, next_phase, "pending")
+                self.db.update_task(task_id, {"current_phase": next_phase, "status": "active"})
+            else:
+                self.db.update_task(task_id, {"current_phase": group[-1].code, "status": "done"})
+            return
+        if verdict == "blocked":
+            self.db.update_task(task_id, {"status": "blocked"})
 
-    def _build_parallel_result(
-        self,
-        group: list[Phase],
-        verdict: str,
-        covered: list[str],
-        missing: list[str],
-        blockers: list[str],
-        next_phase: str | None,
-        next_phase_name: str | None,
-        rollback_target: str | None,
-    ) -> dict:
-        first = group[0]
-        phase_codes = [p.code for p in group]
-        # Загружаем контракт следующей фазы
-        next_contract = None
-        if next_phase:
-            next_ph = self.phase_map.get(next_phase)
-            if next_ph:
-                next_contract = {
-                    "phase_name": next_ph.name,
-                    "description": next_ph.description,
-                    "instructions": [self._text_from_instruction(i) for i in (next_ph.instructions or [])],
-                    "required_checks": [self._text_from_check(c) for c in next_ph.checks],
-                    "required_evidence": [self._text_from_evidence(e) for e in next_ph.evidence],
-                    "delegate_agent": next_ph.delegate.agent if next_ph.delegate else None,
-                    "delegate_toolsets": next_ph.delegate.toolsets if next_ph.delegate else [],
-                    "execution_type": next_ph.execution_type,
-                    "parallel_with": next_ph.parallel_with,
-                }
-        result = {
-            "verdict": VERDICT_LABELS[verdict],
-            "task_key": self.task_key,
-            "phase": first.code,
-            "phase_name": f"Parallel group: {', '.join(phase_codes)}",
-            "covered": covered,
-            "missing": missing,
-            "blockers": blockers,
-            "current_phase": first.code,
-            "next_phase": next_phase if verdict == "pass" else rollback_target if verdict == "rollback" else None,
-            "next_phase_name": next_phase_name if verdict == "pass" else (self.phase_map.get(rollback_target).name if rollback_target else None),
-            "rollback_target": rollback_target,
-            "required_evidence": list({self._text_from_evidence(ev) for p in group for ev in p.evidence}),
-            "required_checks": list({self._text_from_check(chk) for p in group for chk in p.checks}),
-            "instructions": [self._text_from_instruction(inst) for p in group for inst in p.instructions],
-            "next_step": next_phase or rollback_target or first.code,
-            "next_phase_contract": next_contract,
-        }
-        if verdict == "pass":
-            result["message"] = f"Parallel group ({', '.join(phase_codes)}) accepted. Proceed to {next_phase or 'completion'}."
-        elif verdict == "rollback":
-            result["message"] = f"Parallel group ({', '.join(phase_codes)}) failed. Roll back to {rollback_target}."
-        elif verdict == "blocked":
-            issues = blockers or missing or phase_codes
-            result["message"] = f"BLOCKED: {'; '.join(issues)}. Fix and resubmit."
-        elif verdict == "delegate":
-            result["message"] = f"Delegate work for parallel group ({', '.join(phase_codes)}) before continuing."
-        else:
-            issues = missing or ["unspecified items"]
-            result["message"] = f"PARTIAL: {'; '.join(issues)}. Complete before continuing."
-        return result
+    # ── Context / Prompt ─────────────────────────────────────────────
 
-    # ── Public API ───────────────────────────────────────────────────
+    def get_full_context(self, use_cache: bool = True) -> dict:
+        if use_cache:
+            cached = self._cache.get(self.task_key, self.current_phase)
+            if cached:
+                return cached
+        builder = WizardContextBuilder(
+            db=self.db,
+            task=self.task,
+            project=self.project,
+            workflow=self.workflow,
+            all_phases=self.all_phases,
+            current_phase=self.current_phase,
+            task_key=self.task_key,
+            repo=self.repo,
+        )
+        ctx = builder.build()
+        self._cache.set(self.task_key, self.current_phase, ctx)
+        return ctx
 
     def get_phase_prompt(self, phase_id: Optional[str] = None) -> str:
         target_phase = self.phase_map.get(phase_id or self.current_phase)
@@ -737,33 +426,39 @@ class WizardEngine:
             return f"Фаза {phase_id or self.current_phase} не найдена в workflow."
 
         ctx = self.get_full_context()
-        # ── Parallel group handling ────────────────────────────────────
+        cb = PhaseContractBuilder(self.all_phases)
         is_parallel_target = target_phase.execution_type == "parallel"
         if is_parallel_target:
-            group = self._get_parallel_group(target_phase)
-            contract = self._build_parallel_contract(group)
+            group = cb.get_parallel_group(target_phase)
+            contract = cb.build_parallel(group).to_dict()
             parallel_banner = (
                 "\n⚡ ПАРАЛЛЕЛЬНАЯ ГРУППА ФАЗ\n"
-                f"Выполняются одновременно: {', '.join(contract['group_phases'])}\n"
+                f"Выполняются одновременно: {', '.join(contract.get('group_phases') or [])}\n"
                 f"Отчёт по этой группе присылается ОДНИМ сообщением.\n"
             )
         else:
-            contract = (
-                ctx["current_contract"]
-                if target_phase.code == self.current_phase
-                else self._build_current_contract(target_phase)
-            )
+            if target_phase.code == self.current_phase:
+                raw = ctx.get("current_contract")
+                if isinstance(raw, dict):
+                    contract = raw
+                else:
+                    contract = raw.to_dict() if raw else cb.build(target_phase).to_dict()
+            else:
+                contract = cb.build(target_phase).to_dict()
             parallel_banner = ""
 
         workflow_lines = [
             f"- {item['code']}: {item['name']} [{item['status']}]"
             for item in ctx["workflow_path"]
         ]
-        instructions = contract["instructions"] or ["Нет отдельных инструкций — следуй описанию фазы и обязательным проверкам."]
-        checks = contract["required_checks"] or ["Нет явных checks."]
-        evidence = contract["required_evidence"] or ["Нет явных evidence items."]
+        instructions = contract.get("instructions") or ["Нет отдельных инструкций — следуй описанию фазы и обязательным проверкам."]
+        checks = contract.get("required_checks") or ["Нет явных checks."]
+        evidence = contract.get("required_evidence") or ["Нет явных evidence items."]
         report_lines = [f"- {key}: {value}" for key, value in ctx["report_template"].items()]
-        cli_actor = ctx.get("cli_actor") or self._cli_actor()
+        cli_actor = ctx.get("cli_actor") or {
+            "description": "CLI user",
+            "entrypoint": "wartz-workflow step --task TASK-KEY [--report TEXT]",
+        }
 
         delegated = ""
         if contract.get("delegate_agent"):
@@ -781,8 +476,8 @@ class WizardEngine:
             f"CLI entrypoint: {cli_actor['entrypoint']}\n\n"
             f"Полный путь workflow:\n" + "\n".join(workflow_lines) + "\n\n"
             f"Контракт текущей фазы:\n"
-            f"- Описание: {contract['description'] or '-'}\n"
-            f"- Тип выполнения: {contract['execution_type']}\n"
+            f"- Описание: {contract.get('description') or '-'}\n"
+            f"- Тип выполнения: {contract.get('execution_type')}\n"
             f"- Параллельно с: {contract.get('parallel_with') or '-'}\n"
             f"- Rollback target: {contract.get('rollback_target') or '-'}\n"
             f"- Next recommendation: {contract.get('next_recommendation') or '-'}"
@@ -794,6 +489,8 @@ class WizardEngine:
             f"Правила supervisor:\n" + "\n".join(f"- {item}" for item in ctx["global_instructions"]) + "\n\n"
             f"Формат отчёта:\n" + "\n".join(report_lines)
         )
+
+    # ── Evaluate ─────────────────────────────────────────────────────
 
     def evaluate(self, report: str) -> dict:
         phase = self._get_current_phase_obj()
@@ -814,10 +511,8 @@ class WizardEngine:
             try:
                 return self.evaluate_llm(report, phase)
             except Exception:
-                # Fallback to rule-based on LLM failure
                 pass
 
-        # ── Rule-based evaluate (existing) ──────────────────────────────
         is_parallel = phase.execution_type == "parallel"
         if is_parallel:
             group = self._get_parallel_group(phase)
@@ -835,43 +530,54 @@ class WizardEngine:
             next_phase, next_phase_name = self._get_next_phase_after_group(group)
             if verdict == "rollback":
                 rollback_target = group[0].rollback_target
-                rollback_phase = self.phase_map.get(rollback_target) if rollback_target else None
             else:
                 rollback_target = None
-                rollback_phase = None
             if verdict != "pass":
                 next_phase = None
                 next_phase_name = None
         else:
             next_phase, next_phase_name = self._get_next_phase(phase.code)
             rollback_target = phase.rollback_target if verdict == "rollback" else None
-            rollback_phase = self.phase_map.get(rollback_target) if rollback_target else None
 
-        context_snapshot = {"phase": phase.code, "phase_name": phase.name, "current_contract": {"phase_code": phase.code}}
+        cb = PhaseContractBuilder(self.all_phases)
+        next_phase_contract = cb.build_next_contract(next_phase) if verdict == "pass" else None
 
+        # Build structured assessment
+        phase_name = phase.name
         if is_parallel:
-            result = self._build_parallel_result(
-                group=group,
-                verdict=verdict,
-                covered=covered,
-                missing=missing,
-                blockers=blockers,
-                next_phase=next_phase,
-                next_phase_name=next_phase_name,
-                rollback_target=rollback_target,
-            )
-        else:
-            result = self._build_result(
-                phase=phase,
-                verdict=verdict,
-                covered=covered,
-                missing=missing,
-                blockers=blockers,
-                next_phase=next_phase if verdict == "pass" else rollback_target if verdict == "rollback" else None,
-                next_phase_name=next_phase_name if verdict == "pass" else rollback_phase.name if rollback_phase else None,
-                rollback_target=rollback_target,
-            )
+            phase_name = f"Parallel group: {', '.join(p.code for p in group)}"
 
+        assessment = WizardAssessment(
+            task_key=self.task_key,
+            phase_code=phase.code,
+            phase_name=phase_name,
+            verdict=verdict,
+            covered=covered,
+            missing=missing,
+            blockers=blockers,
+            next_phase=next_phase if verdict == "pass" else (rollback_target if verdict == "rollback" else None),
+            next_phase_name=next_phase_name if verdict == "pass" else None,
+            rollback_target=rollback_target,
+            next_phase_contract=next_phase_contract,
+            instructions=[text_from_instruction(i) for i in phase.instructions],
+            required_checks=[text_from_check(c) for c in phase.checks],
+            required_evidence=[text_from_evidence(e) for e in phase.evidence],
+            message=build_verdict_message(
+                verdict=verdict,
+                phase_name=phase_name,
+                phase_code=phase.code,
+                blockers=blockers,
+                missing=missing,
+                next_phase=next_phase,
+                rollback_target=rollback_target,
+                is_parallel=is_parallel,
+                group_codes=[p.code for p in group] if is_parallel else None,
+            ),
+        )
+
+        result = assessment.to_result_dict()
+
+        # Record transition
         if is_parallel:
             self._record_parallel_transition(group, verdict, next_phase)
         else:
@@ -879,29 +585,22 @@ class WizardEngine:
 
         self.task = self.db.get_task(self.task["id"]) or self.task
         self.current_phase = self._resolve_current_phase()
-        self.db.create_supervisor_run(
-            {
-                "task_id": self.task["id"],
-                "phase_id": group[0].code if is_parallel else phase.code,
-                "verdict": verdict,
-                "report": report,
-                "covered": covered,
-                "missing": missing,
-                "blockers": blockers,
-                "next_phase_id": next_phase if verdict == "pass" and next_phase else None,
-                "rollback_phase_id": rollback_target,
-                "context_snapshot": context_snapshot,
-                "response": result,
-            }
-        )
+
+        # Persist assessment
+        store = WizardAssessmentStore(self.db)
+        store.save(assessment)
+
         return result
+
+    # ── LLM evaluate (optional) ──────────────────────────────────────
 
     def evaluate_llm(self, report: str, phase: Phase) -> dict:
         """LLM-based evaluate via Ollama + Kimi K2.5."""
+        from .wizard_checks import normalize_text
         previously = self._get_previously_covered(phase.code)
         previously_items = [
-            item for item in self._build_checklist(phase)
-            if self._normalize_text(item) in previously
+            item for item in PhaseContractBuilder(self.all_phases).build_checklist(phase)
+            if normalize_text(item) in previously
         ]
 
         system = PromptBuilder.SYSTEM_PROMPT
@@ -913,11 +612,11 @@ class WizardEngine:
         raw = client.chat(system=system, user=user, temperature=0.1)
         llm = ResponseParser.parse(raw)
 
-        # Resolve next phase from LLM or fallback to catalog
         next_phase = llm.next_phase
         next_phase_name = llm.next_phase_name
         if llm.verdict == "PASS" and not next_phase:
-            next_phase, next_phase_name = self._get_next_phase(phase.code)
+            cb = PhaseContractBuilder(self.all_phases)
+            next_phase, next_phase_name = cb.get_next_phase(phase.code)
 
         blockers = llm.blockers if llm.blockers else []
         if llm.verdict == "BLOCKED":
@@ -939,7 +638,6 @@ class WizardEngine:
             "confidence": llm.confidence,
         }
 
-        # Record transition (same as rule-based)
         verdict_key = llm.verdict.lower()
         if verdict_key == "pass":
             self._record_transition(phase, "pass", next_phase, None)
@@ -969,13 +667,44 @@ class WizardEngine:
         return result
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# Public wrappers / CLI compatibility
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def evaluate_report(task_key: str, report: str, repo: Optional[str] = None) -> dict:
+    engine = WizardEngine(task_key, repo)
+    return engine.evaluate(report)
+
+
+def evaluate_report_formatted(task_key: str, report: str, repo: Optional[str] = None) -> str:
+    """CLI shortcut — returns human-readable result."""
+    result = evaluate_report(task_key, report, repo)
+    return format_result(result)
+
+
+def get_phase_instructions(task_key: str, phase_id: Optional[str] = None, repo: Optional[str] = None) -> str:
+    engine = WizardEngine(task_key, repo)
+    return engine.get_phase_prompt(phase_id)
+
+
+def main(task_key: str, repo: Optional[str] = None, report: Optional[str] = None) -> None:
+    import sys
+    if report:
+        result = evaluate_report(task_key, report, repo)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        sys.exit(0 if result["verdict"] == "PASS" else 1)
+    print(get_phase_instructions(task_key, repo=repo))
+
+
+# ── Legacy format_result ───────────────────────────────────────────
+
 def format_result(result: dict) -> str:
     """CLI evaluate → человекочитаемый вывод. Только инструкции, чекапы, доказательства."""
     verdict = result.get("verdict", "UNKNOWN")
     covered = result.get("covered", []) or []
     missing = result.get("missing", []) or []
 
-    # При PASS — контракт следующей фазы; иначе текущей
     if verdict == "PASS":
         instructions = result.get("next_phase_contract", {}).get("instructions", [])
         checks = result.get("next_phase_contract", {}).get("required_checks", [])
@@ -987,36 +716,31 @@ def format_result(result: dict) -> str:
 
     lines: list[str] = []
 
-    # ── Заголовок при PARTIAL ──
     if verdict == "PARTIAL":
         lines.append("Ты сделал часть, доделай:")
         lines.append("")
 
-    # ── Маркер параллельной фазы при PASS ──
     next_contract = result.get("next_phase_contract") or {}
     next_exec = next_contract.get("execution_type", "")
     next_parallel_with = next_contract.get("parallel_with")
     if verdict == "PASS" and next_exec == "parallel":
         if next_parallel_with:
-            lines.append(f"🔄 Параллельно с {next_parallel_with}")
+            lines.append(f"Параллельно с {next_parallel_with}")
         else:
-            lines.append("🔄 Параллельная фаза")
+            lines.append("Параллельная фаза")
         lines.append("")
 
-    # ── Маркер: sync после parallel block ──
     current_phase_name = result.get("phase_name", "")
     current_phase = result.get("phase", "")
     if verdict == "PASS" and next_exec == "sync" and ("Parallel" in current_phase_name or current_phase.startswith(("smoke.parallel", "parallel"))):
-        lines.append("🔄 Следующая фаза выполняется после завершения параллельного блока")
+        lines.append("Следующая фаза выполняется после завершения параллельного блока")
         lines.append("")
 
-    # ── Инструкции ──
     if instructions:
         lines.append("Инструкции:")
         for item in instructions:
             lines.append(f"  • {item}")
 
-    # ── Чекапы (при PASS — все со статусом; при PARTIAL — только неготовые) ──
     if checks:
         if verdict == "PASS":
             lines.append("")
@@ -1025,7 +749,6 @@ def format_result(result: dict) -> str:
                 status = "✓" if item in covered else ("✗" if item in missing else "·")
                 lines.append(f"  {status} {item}")
         else:
-            # PARTIAL/BLOCKED/ROLLBACK — показываем только неготовые
             not_done = [item for item in checks if item not in covered]
             if not_done:
                 lines.append("")
@@ -1033,7 +756,6 @@ def format_result(result: dict) -> str:
                 for item in not_done:
                     lines.append(f"  ✗ {item}")
 
-    # ── Доказательства (при PASS — все со статусом; при PARTIAL — только неготовые) ──
     if evidence:
         if verdict == "PASS":
             lines.append("")
@@ -1050,34 +772,3 @@ def format_result(result: dict) -> str:
                     lines.append(f"  ✗ {item}")
 
     return "\n".join(lines)
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# Public wrappers / CLI compatibility
-# ═══════════════════════════════════════════════════════════════════════
-
-
-def evaluate_report(task_key: str, report: str, repo: Optional[str] = None) -> dict:
-    engine = WizardEngine(task_key, repo)
-    return engine.evaluate(report)
-
-
-def evaluate_report_formatted(task_key: str, report: str, repo: Optional[str] = None) -> str:
-    """CLI shortcut — возвращает человекочитаемый результат."""
-    result = evaluate_report(task_key, report, repo)
-    return format_result(result)
-
-def get_phase_instructions(task_key: str, phase_id: Optional[str] = None, repo: Optional[str] = None) -> str:
-    engine = WizardEngine(task_key, repo)
-    return engine.get_phase_prompt(phase_id)
-
-
-def main(task_key: str, repo: Optional[str] = None, report: Optional[str] = None) -> None:
-    import sys
-
-    if report:
-        result = evaluate_report(task_key, report, repo)
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-        sys.exit(0 if result["verdict"] == "PASS" else 1)
-
-    print(get_phase_instructions(task_key, repo=repo))
