@@ -624,6 +624,8 @@ class WizardEngine:
                     "required_evidence": [self._text_from_evidence(e) for e in next_ph.evidence],
                     "delegate_agent": next_ph.delegate.agent if next_ph.delegate else None,
                     "delegate_toolsets": next_ph.delegate.toolsets if next_ph.delegate else [],
+                    "execution_type": next_ph.execution_type,
+                    "parallel_with": next_ph.parallel_with,
                 }
         result = {
             "verdict": VERDICT_LABELS[verdict],
@@ -639,6 +641,7 @@ class WizardEngine:
             "rollback_target": rollback_target,
             "required_evidence": [self._text_from_evidence(item) for item in phase.evidence],
             "required_checks": [self._text_from_check(item) for item in phase.checks],
+            "instructions": [self._text_from_instruction(item) for item in phase.instructions],
             "next_step": next_phase or rollback_target or phase.code,
             "next_phase_contract": next_contract,
         }
@@ -683,6 +686,8 @@ class WizardEngine:
                     "required_evidence": [self._text_from_evidence(e) for e in next_ph.evidence],
                     "delegate_agent": next_ph.delegate.agent if next_ph.delegate else None,
                     "delegate_toolsets": next_ph.delegate.toolsets if next_ph.delegate else [],
+                    "execution_type": next_ph.execution_type,
+                    "parallel_with": next_ph.parallel_with,
                 }
         result = {
             "verdict": VERDICT_LABELS[verdict],
@@ -698,6 +703,7 @@ class WizardEngine:
             "rollback_target": rollback_target,
             "required_evidence": list({self._text_from_evidence(ev) for p in group for ev in p.evidence}),
             "required_checks": list({self._text_from_check(chk) for p in group for chk in p.checks}),
+            "instructions": [self._text_from_instruction(inst) for p in group for inst in p.instructions],
             "next_step": next_phase or rollback_target or first.code,
             "next_phase_contract": next_contract,
         }
@@ -976,6 +982,24 @@ def format_result(result: dict) -> str:
     # ── Заголовок при PARTIAL ──
     if verdict == "PARTIAL":
         lines.append("Ты сделал часть, доделай:")
+        lines.append("")
+
+    # ── Маркер параллельной фазы при PASS ──
+    next_contract = result.get("next_phase_contract") or {}
+    next_exec = next_contract.get("execution_type", "")
+    next_parallel_with = next_contract.get("parallel_with")
+    if verdict == "PASS" and next_exec == "parallel":
+        if next_parallel_with:
+            lines.append(f"🔄 Параллельно с {next_parallel_with}")
+        else:
+            lines.append("🔄 Параллельная фаза")
+        lines.append("")
+
+    # ── Маркер: sync после parallel block ──
+    current_phase_name = result.get("phase_name", "")
+    current_phase = result.get("phase", "")
+    if verdict == "PASS" and next_exec == "sync" and ("Parallel" in current_phase_name or current_phase.startswith(("smoke.parallel", "parallel"))):
+        lines.append("🔄 Следующая фаза выполняется после завершения параллельного блока")
         lines.append("")
 
     # ── Инструкции ──
