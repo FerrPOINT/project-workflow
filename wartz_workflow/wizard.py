@@ -616,17 +616,25 @@ class WizardEngine:
         if next_phase:
             next_ph = self.phase_map.get(next_phase)
             if next_ph:
-                next_contract = {
-                    "phase_name": next_ph.name,
-                    "description": next_ph.description,
-                    "instructions": [self._text_from_instruction(i) for i in (next_ph.instructions or [])],
-                    "required_checks": [self._text_from_check(c) for c in next_ph.checks],
-                    "required_evidence": [self._text_from_evidence(e) for e in next_ph.evidence],
-                    "delegate_agent": next_ph.delegate.agent if next_ph.delegate else None,
-                    "delegate_toolsets": next_ph.delegate.toolsets if next_ph.delegate else [],
-                    "execution_type": next_ph.execution_type,
-                    "parallel_with": next_ph.parallel_with,
-                }
+                # Если следующая фаза — параллельная, загружаем контракт всей группы
+                if next_ph.execution_type == "parallel":
+                    group = self._get_parallel_group(next_ph)
+                    next_contract = self._build_parallel_contract(group)
+                    next_contract["phase_name"] = group[0].name
+                    next_contract["execution_type"] = "parallel"
+                    next_contract["parallel_with"] = group[0].parallel_with if len(group) > 1 else None
+                else:
+                    next_contract = {
+                        "phase_name": next_ph.name,
+                        "description": next_ph.description,
+                        "instructions": [self._text_from_instruction(i) for i in (next_ph.instructions or [])],
+                        "required_checks": [self._text_from_check(c) for c in next_ph.checks],
+                        "required_evidence": [self._text_from_evidence(e) for e in next_ph.evidence],
+                        "delegate_agent": next_ph.delegate.agent if next_ph.delegate else None,
+                        "delegate_toolsets": next_ph.delegate.toolsets if next_ph.delegate else [],
+                        "execution_type": next_ph.execution_type,
+                        "parallel_with": next_ph.parallel_with,
+                    }
         result = {
             "verdict": VERDICT_LABELS[verdict],
             "task_key": self.task_key,
