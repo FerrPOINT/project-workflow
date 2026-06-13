@@ -48,6 +48,8 @@ wartz-workflow step --task TASKNEIROKLYUCH-456
 wartz-workflow step --task TASKNEIROKLYUCH-456 --report "сделал X, проверил Y"
 ```
 
+При первом вызове задача автоматически создаётся в БД. Нет необходимости вручную инициализировать `info/` или `progress.json`.
+
 Параметры:
 - `--task` — ключ задачи, обязателен
 - `--report` — отчёт агента
@@ -73,9 +75,11 @@ wartz-workflow --json step --task TASKNEIROKLYUCH-456 --report "..."
 
 ## Web UI
 
-Запуск:
+Запуск (systemd service `wartz-ui.service`):
 
 ```bash
+systemctl restart wartz-ui.service
+# Или вручную для разработки:
 python -m wartz_workflow.ui --host 0.0.0.0 --port 8811
 ```
 
@@ -113,22 +117,25 @@ wartz_workflow/
 ├── conversation.py        # История переговоров / keyword-поиск
 ├── db.py                  # WorkflowDB — ORM-lite над SQLite
 ├── db_schema.sql          # DDL схемы БД
-├── models.py              # Pydantic модели
-├── phases.py              # Управление фазами
-├── schema.py              # Миграции / инициализация каталога фаз
+├── models.py              # Domain dataclasses (Phase, PhaseCheck, etc.)
+├── phases.py              # Phase helpers: get_next_phase, checklists, console tables
+├── schema.py              # Phase loader from DB + JSON seed sync
 ├── service.py             # PhaseService — бизнес-логика
-├── state.py               # WorkflowState
 ├── task_validator.py      # Валидация task_key через проектные regex
 ├── ui.py                  # FastAPI приложение + шаблоны
-├── verify.py              # verify-suite.sh, .gitignore проверки
-├── wizard.py              # WorkflowWizard — evaluate / переходы / supervisor
+├── wizard.py              # WizardEngine — evaluate / transitions / supervisor
+├── wizard_types.py        # PhaseContract, PromptCache, etc.
+├── wizard_contracts.py    # PhaseContractBuilder
+├── wizard_checks.py       # Coverage / blockers / keyword matching
+├── wizard_context.py      # get_full_context, report template
+├── wizard_store.py        # _record_transition, DB writes
 ├── llm.py                 # OllamaClient (local/cloud) для SMART_EVALUATE
 ├── cli/
 │   ├── __init__.py
 │   ├── core.py            # Общий group, helpers, --json
 │   └── ui.py              # Команды step / history
 ├── references/
-│   ├── seed.json          # Сид-данные
+│   ├── seed.json          # Сид-данные (source of truth для default workflow)
 │   └── smoke_seed.json    # Smoke-test сид
 └── templates/v2/
     ├── base.html
@@ -153,13 +160,13 @@ pytest -q
 Покрытие (~31 test-модуль):
 - `test_cli_*.py` — CLI команды (core, UI, smart evaluate, e2e)
 - `test_db*.py` — БД + constraints (плохие значения отклоняются)
-- `test_models.py`, `test_phases.py`, `test_state.py`
-- `test_wizard*.py` — wizard evaluate, transitions, parallel groups, coverage
+- `test_models.py`, `test_phases.py`
+- `test_wizard*.py` — wizard evaluate, transitions, parallel groups, coverage, formatting, context
 - `test_llm.py` — OllamaClient (local/cloud/fallback)
 - `test_ui*.py` — UI endpoints + API
-- `test_verify.py` — verify-suite
 - `test_supervisor.py` — supervisor runs
 - `test_smoke_workflow.py` — сквозной smoke
+- `test_runtime_cleanup.py` — seed hygiene, DB bootstrap, agent deduplication
 
 ## LLM Smart Evaluate (опционально)
 
@@ -181,3 +188,4 @@ wartz-workflow step --task TASK-KEY --report "..."
 - `/settings` подхватывает CLI-команды автоматически при изменении CLI.
 - Пустые / синтетические badge и placeholder-текст в UI считаются мусором и удаляются.
 - После выполнения задачи и прохождения проверок изменения должны быть закоммичены; завершённую работу нельзя оставлять в dirty working tree.
+- Данные workflow хранятся только в SQLite; файловый dual-state (`info/`, `progress.json`) удалён.
