@@ -374,3 +374,36 @@ class TestCliHistory:
         assert len(rows) == 2
         cmds = {r["command"] for r in rows}
         assert cmds == {"step", "history"}
+
+
+class TestSyncPhaseCatalog:
+    def test_sync_removes_stale_seed_phases(self, db):
+        """sync_phase_catalog удаляет is_seed_managed фазы, которых нет в seed."""
+        db.init()
+        phases = [
+            {"code": "keep", "name": "Keep"},
+            {"code": "remove", "name": "Remove"},
+        ]
+        db.sync_phase_catalog(phases, ["keep", "remove"])
+        # Убираем remove из seed
+        phases = [{"code": "keep", "name": "Keep"}]
+        db.sync_phase_catalog(phases, ["keep"])
+        rows = db.get_phases()
+        codes = {r["code"] for r in rows}
+        assert "keep" in codes
+        assert "remove" not in codes
+
+    def test_sync_preserves_non_seed_phases(self, db):
+        """sync_phase_catalog не трогает фазы с is_seed_managed=0."""
+        db.init()
+        phases = [{"code": "seed", "name": "Seed"}]
+        db.sync_phase_catalog(phases, ["seed"])
+        # Добавляем руками фазу не из seed
+        db.create_phase({"id": "custom", "name": "Custom", "description": "", "phase_order": 99})
+        # Убеждаемся что is_seed_managed=0
+        with sqlite3.connect(db.db_path) as conn:
+            conn.execute("UPDATE phases SET is_seed_managed = 0 WHERE code = ?", ("custom",))
+            conn.commit()
+        # Пересинхронизируем
+        db.sync_phase_catalog(phases, ["seed"])
+        assert db.get_phase_by_code("custom") is not None
