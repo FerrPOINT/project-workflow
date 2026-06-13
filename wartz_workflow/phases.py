@@ -1,9 +1,14 @@
-"""Управление фазами workflow — проверки порядка, запуск, чеклисты."""
+"""Управление фазами workflow — порядок, чеклисты, консольный вывод.
 
-from typing import List, Tuple, Optional
+Устаревшие функции (run_phase, check_previous_phase, conditional_delegate_jump)
+удалены — вся логика FSM теперь в wizard.py.
+"""
 
-from . import state, verify
-from .config import PHASE_ORDER
+from typing import List, Optional
+
+from . import config
+
+PHASE_ORDER = config.PHASE_ORDER
 
 
 def get_next_phase(current_phase: str) -> Optional[str]:
@@ -16,105 +21,6 @@ def get_next_phase(current_phase: str) -> Optional[str]:
     if idx + 1 < len(PHASE_ORDER):
         return PHASE_ORDER[idx + 1]
     return None
-
-
-def check_previous_phase(repo: str, task_key: str, phase_name: str) -> Tuple[bool, str]:
-    """Проверить что все предыдущие фазы выполнены."""
-    current = state.load_state(repo, task_key)
-    if not current:
-        return False, "Состояние задачи не найдено"
-
-    completed = set(current.get("phases_completed", []))
-
-    try:
-        target_idx = PHASE_ORDER.index(phase_name)
-    except ValueError:
-        return False, f"Неизвестная фаза: {phase_name}"
-
-    for i in range(target_idx):
-        prev_phase = PHASE_ORDER[i]
-        if prev_phase not in completed:
-            return False, (
-                f"Предыдущая фаза {prev_phase} не выполнена. "
-                f"Завершите её перед запуском {phase_name}."
-            )
-
-    return True, "Все предыдущие фазы выполнены"
-
-
-def run_phase(repo: str, task_key: str, phase_name: str) -> Tuple[bool, str]:
-    """Запустить фазу и отметить выполненной."""
-    if phase_name not in PHASE_ORDER:
-        return False, f"Неизвестная фаза: {phase_name}"
-
-    if phase_name == "0.0a":
-        ok, msg = verify.run_verify_suite(repo)
-        if ok:
-            state.mark_phase_complete(repo, task_key, phase_name, "verify-suite.sh passed")
-        return ok, msg
-
-    if phase_name == "0.00":
-        ok, msg = verify.check_git_identity()
-        if ok:
-            state.mark_phase_complete(repo, task_key, phase_name, msg)
-        return ok, msg
-
-    # Generic: just mark complete
-    state.mark_phase_complete(repo, task_key, phase_name, f"Phase {phase_name} executed")
-    return True, f"Фаза {phase_name} выполнена"
-
-
-def _evaluate_condition(condition: str, repo: str, task_key: str, context: dict) -> bool:
-    """Evaluate a shell-style condition string. Supports {var} substitution."""
-    import subprocess, shlex
-    cmd = condition
-    for key, val in context.items():
-        cmd = cmd.replace(f"{{{key}}}", str(val))
-    try:
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
-        # shell return code 0 = True, non-zero = False
-        return result.returncode == 0
-    except Exception:
-        return False
-
-
-def conditional_delegate_jump(
-    repo: str,
-    task_key: str,
-    phase_id: str,
-    delegate_condition: Optional[str],
-    delegate_target_phase: Optional[str],
-    context: dict,
-) -> Tuple[bool, str, Optional[str]]:
-    """Evaluate delegate_condition and perform jump if True.
-
-    Returns:
-        (jumped, message, target_phase_id)
-    """
-    if not delegate_condition or not delegate_target_phase:
-        return False, "No delegate condition configured", None
-
-    condition_true = _evaluate_condition(delegate_condition, repo, task_key, context)
-
-    if condition_true:
-        current_idx = PHASE_ORDER.index(phase_id)
-        target_idx = PHASE_ORDER.index(delegate_target_phase)
-
-        if target_idx > current_idx:
-            # Jump forward — mark all intermediate phases completed
-            for i in range(current_idx, target_idx + 1):
-                mid = PHASE_ORDER[i]
-                state.mark_phase_complete(repo, task_key, mid, f"auto-completed via delegate jump {phase_id}→{delegate_target_phase}")
-        else:
-            # Jump backward — unmark phases from target+1 up to current
-            for i in range(target_idx + 1, current_idx + 1):
-                mid = PHASE_ORDER[i]
-                state.unmark_phase(repo, task_key, mid)
-            state.set_current_phase(repo, task_key, delegate_target_phase)
-
-        return True, f"Delegate jump {phase_id} → {delegate_target_phase}", delegate_target_phase
-    else:
-        return False, "Condition false — no jump", None
 
 
 def get_phase_checklist_raw(phase_name: str) -> List[str]:

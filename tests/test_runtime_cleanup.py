@@ -6,7 +6,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-from wartz_workflow import config, schema, state
+from wartz_workflow import config, schema
 from wartz_workflow.db import WorkflowDB
 
 
@@ -123,7 +123,7 @@ def test_seed_catalog_names_match_runtime_progress_template():
         for phase in phases
     }
 
-    progress = json.loads(state.generate_progress_json("TASKNEIROKLYUCH-1", "1", "title", "sprint1"))
+    progress = json.loads(schema.generate_progress_json("TASKNEIROKLYUCH-1", "1", "title", "sprint1"))
     progress_names = {
         str(phase.get("phase", "")).strip(): str(phase.get("name", "")).strip()
         for phase in progress.get("phases", [])

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Sequence
 
@@ -388,3 +389,48 @@ def get_phase_order(phases: Optional[List[Phase]] = None) -> List[str]:
     """Вернуть список code фаз в порядке следования."""
     plist = phases or load_phases()
     return [p.code for p in plist]
+
+
+def generate_progress_json(task_key: str, task_id: str, title: str, sprint: str) -> str:
+    """Генерация progress.json template.  Kept for test_runtime_cleanup compat."""
+    phases_data = [
+        {"phase": "-1", "name": "Task Intake", "status": "pending", "min_time_min": 1},
+        {"phase": "0.0a", "name": "Suite Verification", "status": "pending", "min_time_min": 2},
+        {"phase": "0.01", "name": "Task Docs Setup", "status": "pending", "min_time_min": 2},
+        {"phase": "0.000", "name": "Workspace", "status": "pending", "min_time_min": 1},
+        {"phase": "0.00", "name": "Git Identity", "status": "pending", "min_time_min": 1},
+        {"phase": "0.7", "name": "Repo Sync", "status": "pending", "min_time_min": 2},
+        {"phase": "0.9", "name": "CriticGate-PreFlight", "status": "pending", "min_time_min": 2},
+        {"phase": "0.5", "name": "Jira Transition", "status": "pending", "min_time_min": 1},
+        {"phase": "0.6", "name": "Researcher #1", "status": "pending", "min_time_min": 5},
+        {"phase": "1", "name": "Preflight", "status": "pending", "min_time_min": 10},
+        {"phase": "1.5", "name": "Deep Research", "status": "pending", "min_time_min": 5},
+        {"phase": "2", "name": "Research Synthesis", "status": "pending", "min_time_min": 10},
+        {"phase": "3", "name": "Plan", "status": "pending", "min_time_min": 15},
+        {"phase": "3.5", "name": "CriticGate-PrePlan", "status": "pending", "min_time_min": 5},
+        {"phase": "4", "name": "Implement", "status": "pending", "min_time_min": 30},
+        {"phase": "4.5", "name": "CriticGate-PreCommit", "status": "pending", "min_time_min": 5},
+        {"phase": "5", "name": "Validate", "status": "pending", "min_time_min": 10},
+        {"phase": "5.5", "name": "Self-Test", "status": "pending", "min_time_min": 15},
+        {"phase": "6", "name": "Commit", "status": "pending", "min_time_min": 3},
+        {"phase": "7", "name": "MR Draft", "status": "pending", "min_time_min": 5},
+        {"phase": "7.5", "name": "Code Review", "status": "pending", "min_time_min": 10},
+        {"phase": "7.6", "name": "QA Testing", "status": "pending", "min_time_min": 10},
+        {"phase": "7.6.R", "name": "DVR", "status": "pending", "min_time_min": 5},
+        {"phase": "7.7", "name": "CriticGate-PostQA", "status": "pending", "min_time_min": 5},
+        {"phase": "8", "name": "Jira Done", "status": "pending", "min_time_min": 2},
+        {"phase": "9", "name": "Retro", "status": "pending", "min_time_min": 10},
+        {"phase": "10", "name": "Auto-Improve", "status": "pending", "min_time_min": 10},
+    ]
+
+    data = {
+        "task_key": task_key,
+        "task_id": task_id,
+        "title": title,
+        "sprint": sprint,
+        "version": "1.0.0",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "phases": phases_data,
+    }
+
+    return json.dumps(data, indent=2, ensure_ascii=False)

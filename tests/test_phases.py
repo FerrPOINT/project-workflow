@@ -4,12 +4,9 @@ import pytest
 from unittest.mock import Mock, patch
 from wartz_workflow.phases import (
     get_next_phase,
-    check_previous_phase,
-    run_phase,
     get_phase_checklist_raw,
     show_phase_checklist,
     show_all_phases,
-    conditional_delegate_jump,
 )
 from wartz_workflow.db import WorkflowDB
 
@@ -44,10 +41,13 @@ class TestPhaseHelpers:
 
 
 class TestPhaseExecution:
-    def test_check_previous_phase(self):
-        ok, msg = check_previous_phase("/tmp", "AAT-1", "0.00")
-        assert isinstance(ok, bool)
-        assert isinstance(msg, str)
+    def test_run_phase_removed(self):
+        """run_phase was removed in Task 5 — assert it's gone."""
+        import inspect
+        from wartz_workflow import phases as phases_mod
+        assert not hasattr(phases_mod, "run_phase")
+        assert not hasattr(phases_mod, "check_previous_phase")
+        assert not hasattr(phases_mod, "conditional_delegate_jump")
 
 
 
