@@ -9,13 +9,7 @@ from typing import List, Optional
 @dataclass
 class PhaseCheck:
     """Проверка которую CLI выполняет для фазы."""
-    type: str = ""
-    command: Optional[str] = None
     description: str = ""
-    path: Optional[str] = None
-    expected: Optional[List[str]] = None
-    fail_msg: str = "Check failed"
-    optional: bool = False
 
 
 @dataclass
@@ -61,7 +55,6 @@ class Phase:
     delegate: Optional[PhaseDelegate] = None
     next_recommendation: str = ""
     parallel_with: Optional[str] = None
-    gate_after: Optional[str] = None
     rollback_target: Optional[str] = None
     execution_type: str = "sync"
 

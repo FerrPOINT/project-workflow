@@ -26,7 +26,6 @@ class TestPhaseModels:
     def test_phase_check_defaults(self):
         c = PhaseCheck()
         assert c.description == ""
-        assert c.optional is False
 
     def test_phase_delegate_defaults(self):
         d = PhaseDelegate()

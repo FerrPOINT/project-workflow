@@ -23,7 +23,6 @@ class TestWizardEvaluate:
             delegate=None,
             next_recommendation="Move forward",
             parallel_with=None,
-            gate_after=None,
             rollback_target=None,
             execution_type="sync",
         )

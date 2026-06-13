@@ -84,7 +84,6 @@ def _build_phase_from_db(row: dict, wdb: WorkflowDB) -> Phase:
         delegate=delegate,
         next_recommendation=row.get("next_recommendation") or "",
         parallel_with=row.get("parallel_with"),
-        gate_after=None,
         rollback_target=row.get("rollback_target"),
         execution_type=row.get("execution_type", "sync"),
     )
@@ -370,7 +369,6 @@ def _parse_old_yaml(item: dict) -> Phase:
         delegate=delegate,
         next_recommendation=item.get("next_recommendation", ""),
         parallel_with=item.get("parallel_with"),
-        gate_after=item.get("gate_after"),
         rollback_target=item.get("rollback_target"),
         execution_type=item.get("execution_type", "sync"),
     )
