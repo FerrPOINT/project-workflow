@@ -71,7 +71,7 @@ class TestRecordTransitionTypes:
         engine.current_phase = "1"
 
         with patch.object(engine, "_get_previously_covered", return_value=set()), \
-             patch("wartz_workflow.wizard.OllamaClient") as mock_client, \
+             patch("wartz_workflow.wizard_evaluate.OllamaClient") as mock_client, \
              patch.object(engine.db, "create_supervisor_run") as mock_run, \
              patch.object(engine.db, "get_task", return_value=engine.task), \
              patch.object(engine, "_record_transition"):

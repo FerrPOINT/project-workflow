@@ -110,3 +110,12 @@ class WizardVerdict:
     """Simple verdict wrapper."""
     status: str
     explanation: str
+
+
+VERDICT_LABELS: dict[str, str] = {
+    "pass": "PASS",
+    "partial": "PARTIAL",
+    "blocked": "BLOCKED",
+    "rollback": "ROLLBACK",
+    "delegate": "DELEGATE",
+}
