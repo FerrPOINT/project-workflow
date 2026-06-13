@@ -113,6 +113,17 @@
 .sr-raw-block{margin:10px 0}
 .sr-raw-label{font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px}
 .sr-raw-text{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-size:12px;color:var(--text-secondary);line-height:1.6;white-space:pre-wrap;word-break:break-word;overflow-x:auto;max-height:300px;overflow-y:auto;font-family:'JetBrains Mono',monospace}
+.sr-readable-text{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px 16px;font-size:13px;color:var(--text-secondary);line-height:1.6;word-break:break-word}
+.sr-section{display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap;align-items:baseline}
+.sr-section-key{font-size:12px;font-weight:700;color:var(--text-muted);white-space:nowrap;flex-shrink:0;min-width:90px}
+.sr-section-val{font-size:13px;color:var(--text);word-break:break-word;flex:1}
+.sr-subsection{margin-top:10px}
+.sr-subsection-title{font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.sr-checklist{margin:0;padding:0;list-style:none}
+.sr-checklist li{display:flex;gap:8px;align-items:baseline;padding:2px 0;font-size:13px;color:var(--text-secondary)}
+.sr-checklist .check-mark{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--green);flex-shrink:0}
+.sr-checklist .check-cross{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--red);flex-shrink:0}
+.sr-checklist .check-pending{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-dim);flex-shrink:0}
 {% endblock %}
 
 {% block content %}
@@ -237,40 +248,67 @@
         <span class="sr-time">{{ run.created_at[:16] if run.created_at else '—' }}</span>
       </div>
       <div class="sr-body">
+        {% if run.report %}
         <div class="sr-raw-block">
           <div class="sr-raw-label">📝 ОТЧЁТ АГЕНТА (что было сделано):</div>
           <pre class="sr-raw-text">{{ run.report }}</pre>
         </div>
+        {% endif %}
         <div class="sr-raw-block">
           <div class="sr-raw-label">💬 ОТВЕТ (что делать дальше):</div>
-          <div class="sr-raw-text">
-            <strong>Вердикт:</strong> {{ run.response.verdict }}<br>
-            <strong>Описание:</strong> {{ run.contract.description or run.contract.phase_name }}<br>
+          <div class="sr-readable-text">
+            <div class="sr-section">
+              <span class="sr-section-key">Вердикт:</span>
+              <span class="sr-section-val">{{ run.response.verdict }}</span>
+            </div>
+            {% if run.contract.description or run.contract.phase_name %}
+            <div class="sr-section">
+              <span class="sr-section-key">Описание:</span>
+              <span class="sr-section-val">{{ run.contract.description or run.contract.phase_name }}</span>
+            </div>
+            {% endif %}
             {% if run.contract.instructions %}
-            <br><strong>📜 Инструкции:</strong>
-            {% for item in run.contract.instructions %}
-            <br>  • {{ item }}
-            {% endfor %}
+            <div class="sr-subsection">
+              <div class="sr-subsection-title">📜 Инструкции</div>
+              <ul class="sr-checklist">
+                {% for item in run.contract.instructions %}
+                <li><span class="check-pending">•</span> {{ item }}</li>
+                {% endfor %}
+              </ul>
+            </div>
             {% endif %}
             {% if run.contract.required_checks %}
-            <br><strong>✅ Проверки:</strong>
-            {% for item in run.contract.required_checks %}
-            {% set found = item in run.contract.covered %}
-            <br>  {{ '✓' if found else '✗' }} {{ item }}
-            {% endfor %}
+            <div class="sr-subsection">
+              <div class="sr-subsection-title">✅ Проверки</div>
+              <ul class="sr-checklist">
+                {% for item in run.contract.required_checks %}
+                {% set found = item in run.contract.covered %}
+                <li><span class="{{ 'check-mark' if found else 'check-cross' }}">{{ '✓' if found else '✗' }}</span> {{ item }}</li>
+                {% endfor %}
+              </ul>
+            </div>
             {% endif %}
             {% if run.contract.required_evidence %}
-            <br><strong>📎 Доказательства:</strong>
-            {% for item in run.contract.required_evidence %}
-            {% set found = item in run.contract.covered %}
-            <br>  {{ '✓' if found else '✗' }} {{ item }}
-            {% endfor %}
+            <div class="sr-subsection">
+              <div class="sr-subsection-title">📎 Доказательства</div>
+              <ul class="sr-checklist">
+                {% for item in run.contract.required_evidence %}
+                {% set found = item in run.contract.covered %}
+                <li><span class="{{ 'check-mark' if found else 'check-cross' }}">{{ '✓' if found else '✗' }}</span> {{ item }}</li>
+                {% endfor %}
+              </ul>
+            </div>
             {% endif %}
             {% if run.contract.next_phase_name %}
-            <br><strong>➡️ Следующий шаг:</strong> {{ run.contract.next_phase_name }}<br>
+            <div class="sr-section" style="margin-top:8px">
+              <span class="sr-section-key">➡️ Следующий шаг:</span>
+              <span class="sr-section-val">{{ run.contract.next_phase_name }}</span>
+            </div>
             {% endif %}
             {% if run.contract.message %}
-            <br>💡 {{ run.contract.message }}
+            <div class="sr-section" style="margin-top:8px">
+              <span class="sr-section-val" style="color:var(--text-muted)">💡 {{ run.contract.message }}</span>
+            </div>
             {% endif %}
           </div>
         </div>

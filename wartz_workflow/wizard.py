@@ -711,9 +711,10 @@ def format_result(result: dict) -> str:
     missing = result.get("missing", []) or []
 
     if verdict == "PASS":
-        instructions = result.get("next_phase_contract", {}).get("instructions", [])
-        checks = result.get("next_phase_contract", {}).get("required_checks", [])
-        evidence = result.get("next_phase_contract", {}).get("required_evidence", [])
+        npc = result.get("next_phase_contract") or {}
+        instructions = npc.get("instructions", [])
+        checks = npc.get("required_checks", [])
+        evidence = npc.get("required_evidence", [])
     else:
         instructions = result.get("instructions", []) or []
         checks = result.get("required_checks", []) or []

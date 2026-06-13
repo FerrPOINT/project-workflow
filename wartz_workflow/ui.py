@@ -394,9 +394,11 @@ def _load_tasks() -> list[dict]:
             run = supervisor_runs[0]
             latest_verdict = run.get("verdict")
             latest_verdict_phase = run.get("phase_code")
-            latest_verdict_message = (run.get("response") or {}).get("message", "")
-            if isinstance(latest_verdict_message, str):
-                latest_verdict_message = latest_verdict_message[:120]
+            response = run.get("response") or {}
+            if isinstance(response, dict):
+                latest_verdict_message = response.get("message", "")
+            else:
+                latest_verdict_message = str(response)[:120]
             latest_verdict_at = run.get("created_at", "")[:16]
 
         result.append(
