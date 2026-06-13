@@ -360,30 +360,33 @@ class WizardEngine:
         fsm.apply_verdict(verdict)
         new_state = fsm.state
         task_id = int(self.task["id"])
+        # Resolve str phase codes to int ids for FK columns
+        next_phase_id = self.phase_map.get(next_phase).id if next_phase and next_phase in self.phase_map else None
         if new_state == "done":
-            self.db.add_task_history(task_id, phase.code, "done")
-            if next_phase:
-                self.db.add_task_history(task_id, next_phase, "pending")
+            self.db.add_task_history(task_id, phase.id, "done")
+            if next_phase_id:
+                self.db.add_task_history(task_id, next_phase_id, "pending")
                 self.db.update_task(task_id, {"current_phase": next_phase, "status": "active"})
             else:
                 self.db.update_task(task_id, {"current_phase": phase.code, "status": "done"})
             return
         if new_state == "blocked":
-            self.db.add_task_history(task_id, phase.code, "blocked")
+            self.db.add_task_history(task_id, phase.id, "blocked")
             self.db.update_task(task_id, {"current_phase": phase.code, "status": "blocked"})
             return
         if new_state == "rollback":
-            target = rollback_target or phase.code
-            self.db.add_task_history(task_id, phase.code, "rollback")
-            self.db.add_task_history(task_id, target, "pending")
-            self.db.update_task(task_id, {"current_phase": target, "status": "active"})
+            target_phase = self.phase_map.get(rollback_target) if rollback_target else None
+            target_id = target_phase.id if target_phase else phase.id
+            self.db.add_task_history(task_id, phase.id, "rollback")
+            self.db.add_task_history(task_id, target_id, "pending")
+            self.db.update_task(task_id, {"current_phase": rollback_target or phase.code, "status": "active"})
             return
         if new_state == "delegated":
-            self.db.add_task_history(task_id, phase.code, "delegated")
+            self.db.add_task_history(task_id, phase.id, "delegated")
             self.db.update_task(task_id, {"current_phase": phase.code, "status": "active"})
             return
         # partial or in_progress
-        self.db.add_task_history(task_id, phase.code, "partial")
+        self.db.add_task_history(task_id, phase.id, "partial")
         self.db.update_task(task_id, {"current_phase": phase.code, "status": "active"})
 
     def _record_parallel_transition(self, group: list[Phase], verdict: str, next_phase: str | None) -> None:
@@ -394,9 +397,12 @@ class WizardEngine:
         task_id = int(self.task["id"])
         if new_state == "done":
             for phase in group:
-                self.db.add_task_history(task_id, phase.code, "done")
+                self.db.add_task_history(task_id, phase.id, "done")
             if next_phase:
-                self.db.add_task_history(task_id, next_phase, "pending")
+                next_phase_obj = self.phase_map.get(next_phase)
+                next_phase_id = next_phase_obj.id if next_phase_obj else None
+                if next_phase_id:
+                    self.db.add_task_history(task_id, next_phase_id, "pending")
                 self.db.update_task(task_id, {"current_phase": next_phase, "status": "active"})
             else:
                 self.db.update_task(task_id, {"current_phase": group[-1].code, "status": "done"})
@@ -654,17 +660,26 @@ class WizardEngine:
         self.task = self.db.get_task(self.task["id"]) or self.task
         self.current_phase = self._resolve_current_phase()
         context_snapshot = {"phase": phase.code, "phase_name": phase.name, "current_contract": {"phase_code": phase.code}}
+        # Resolve next_phase/rollback to int ids for FK
+        next_phase_int = None
+        if next_phase:
+            npo = self.phase_map.get(next_phase)
+            next_phase_int = npo.id if npo else None
+        rollback_int = None
+        if phase.rollback_target:
+            rpo = self.phase_map.get(phase.rollback_target)
+            rollback_int = rpo.id if rpo else None
         self.db.create_supervisor_run(
             {
                 "task_id": self.task["id"],
-                "phase_id": phase.code,
+                "phase_id": phase.id,
                 "verdict": verdict_key,
                 "report": report,
                 "covered": llm.covered,
                 "missing": llm.missing,
                 "blockers": blockers,
-                "next_phase_id": next_phase if verdict_key == "pass" else None,
-                "rollback_phase_id": phase.rollback_target if verdict_key == "rollback" else None,
+                "next_phase_id": next_phase_int if verdict_key == "pass" else None,
+                "rollback_phase_id": rollback_int if verdict_key == "rollback" else None,
                 "context_snapshot": context_snapshot,
                 "response": result,
             }

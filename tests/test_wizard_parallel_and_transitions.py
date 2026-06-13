@@ -181,7 +181,7 @@ class TestRecordTransition:
              patch.object(engine.db, "update_task") as mock_upd:
             engine._record_transition(ph, "pass", "0", None)
         calls = [c.args for c in mock_hist.call_args_list]
-        assert calls == [(7, "-1", "done"), (7, "0", "pending")]
+        assert calls == [(7, 1, "done"), (7, 2, "pending")]
         mock_upd.assert_called_once_with(7, {"current_phase": "0", "status": "active"})
 
     def test_partial(self, engine):
@@ -189,7 +189,7 @@ class TestRecordTransition:
         with patch.object(engine.db, "add_task_history") as mock_hist, \
              patch.object(engine.db, "update_task") as mock_upd:
             engine._record_transition(ph, "partial", None, None)
-        mock_hist.assert_called_once_with(7, "-1", "partial")
+        mock_hist.assert_called_once_with(7, 1, "partial")
         mock_upd.assert_called_once_with(7, {"current_phase": "-1", "status": "active"})
 
     def test_blocked(self, engine):
@@ -197,7 +197,7 @@ class TestRecordTransition:
         with patch.object(engine.db, "add_task_history") as mock_hist, \
              patch.object(engine.db, "update_task") as mock_upd:
             engine._record_transition(ph, "blocked", None, None)
-        mock_hist.assert_called_once_with(7, "-1", "blocked")
+        mock_hist.assert_called_once_with(7, 1, "blocked")
         mock_upd.assert_called_once_with(7, {"current_phase": "-1", "status": "blocked"})
 
     def test_rollback(self, engine):
@@ -206,7 +206,7 @@ class TestRecordTransition:
              patch.object(engine.db, "update_task") as mock_upd:
             engine._record_transition(ph, "rollback", None, "-1")
         calls = [c.args for c in mock_hist.call_args_list]
-        assert calls == [(7, "0", "rollback"), (7, "-1", "pending")]
+        assert calls == [(7, 2, "rollback"), (7, 1, "pending")]
         mock_upd.assert_called_once_with(7, {"current_phase": "-1", "status": "active"})
 
     def test_rollback_without_target_uses_phase(self, engine):
@@ -216,7 +216,7 @@ class TestRecordTransition:
              patch.object(engine.db, "update_task") as mock_upd:
             engine._record_transition(ph, "rollback", None, None)
         calls = [c.args for c in mock_hist.call_args_list]
-        assert calls == [(7, "0", "rollback"), (7, "0", "pending")]
+        assert calls == [(7, 2, "rollback"), (7, 2, "pending")]
         mock_upd.assert_called_once_with(7, {"current_phase": "0", "status": "active"})
 
     def test_delegate(self, engine):
@@ -224,7 +224,7 @@ class TestRecordTransition:
         with patch.object(engine.db, "add_task_history") as mock_hist, \
              patch.object(engine.db, "update_task") as mock_upd:
             engine._record_transition(ph, "delegate", None, None)
-        mock_hist.assert_called_once_with(7, "-1", "delegated")
+        mock_hist.assert_called_once_with(7, 1, "delegated")
         mock_upd.assert_called_once_with(7, {"current_phase": "-1", "status": "active"})
 
 
@@ -239,7 +239,7 @@ class TestRecordParallelTransition:
              patch.object(engine.db, "update_task") as mock_upd:
             engine._record_parallel_transition(group, "pass", "3")
         calls = [c.args for c in mock_hist.call_args_list]
-        assert calls == [(7, "1", "done"), (7, "2", "done"), (7, "3", "pending")]
+        assert calls == [(7, 3, "done"), (7, 4, "done"), (7, 5, "pending")]
         mock_upd.assert_called_once_with(7, {"current_phase": "3", "status": "active"})
 
     def test_pass_no_next_marks_done(self, engine):
@@ -248,7 +248,7 @@ class TestRecordParallelTransition:
         with patch.object(engine.db, "add_task_history") as mock_hist, \
              patch.object(engine.db, "update_task") as mock_upd:
             engine._record_parallel_transition(group, "pass", None)
-        mock_hist.assert_called_once_with(7, "3", "done")
+        mock_hist.assert_called_once_with(7, 5, "done")
         mock_upd.assert_called_once_with(7, {"current_phase": "3", "status": "done"})
 
     def test_partial_does_not_touch_history(self, engine):
