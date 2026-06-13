@@ -1,9 +1,12 @@
 """Конфигурация WARTZ Workflow CLI."""
 
 import os
+from pathlib import Path
 
-# Пути
-WARTZ_DIR = os.path.expanduser("~/.wartz-workflow")
+# Deterministic default: package-local (not expanduser which varies by process).
+# WARTZ_DIR env var overrides.
+_pkg_dir = Path(__file__).resolve().parent.parent
+WARTZ_DIR = os.getenv("WARTZ_DIR", str(_pkg_dir / "data"))
 SUITES_DIR = "/root/.hermes/skills/software-development"
 
 # Фазы workflow (порядок важен!)

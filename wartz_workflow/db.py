@@ -13,9 +13,11 @@ from typing import Any
 
 from . import config
 
-# Жёсткий путь к базе — либо из env, либо из HOME (не systemd default)
-_home = os.path.expanduser("~")
-DB_PATH = Path(os.getenv("WORKFLOW_DB_PATH", os.path.join(_home, ".wartz-workflow", "workflow.db")))
+# Deterministic default: package-local data directory (not expanduser which
+# resolves differently under systemd vs Hermes terminal).
+# WORKFLOW_DB_PATH env var overrides for production / systemd.
+_pkg_dir = Path(__file__).resolve().parent.parent
+DB_PATH = Path(os.getenv("WORKFLOW_DB_PATH", str(_pkg_dir / "data" / "workflow.db")))
 SCHEMA_PATH = Path(__file__).parent / "db_schema.sql"
 
 
