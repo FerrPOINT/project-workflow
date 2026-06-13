@@ -465,7 +465,6 @@ class WizardEngine:
         instructions = contract.get("instructions") or ["Нет отдельных инструкций — следуй описанию фазы и обязательным проверкам."]
         checks = contract.get("required_checks") or ["Нет явных checks."]
         evidence = contract.get("required_evidence") or ["Нет явных evidence items."]
-        report_lines = [f"- {key}: {value}" for key, value in ctx["report_template"].items()]
         cli_actor = ctx.get("cli_actor") or {
             "description": "CLI user",
             "entrypoint": "wartz-workflow step --task TASK-KEY [--report TEXT]",
@@ -480,12 +479,10 @@ class WizardEngine:
 
         return (
             f"Задача: {self.task_key}\n"
-            f"Repo: {self.repo or '-'}\n"
             f"Workflow: {ctx['workflow_name'] or '-'}\n"
             f"Текущий шаг: {target_phase.code} — {target_phase.name}\n"
             f"Исполнитель CLI: {cli_actor['description']}\n"
             f"CLI entrypoint: {cli_actor['entrypoint']}\n\n"
-            f"Полный путь workflow:\n" + "\n".join(workflow_lines) + "\n\n"
             f"Контракт текущей фазы:\n"
             f"- Описание: {contract.get('description') or '-'}\n"
             f"- Тип выполнения: {contract.get('execution_type')}\n"
@@ -497,8 +494,6 @@ class WizardEngine:
             f"Инструкции:\n" + "\n".join(f"- {item}" for item in instructions) + "\n\n"
             f"Checks:\n" + "\n".join(f"- {item}" for item in checks) + "\n\n"
             f"Evidence:\n" + "\n".join(f"- {item}" for item in evidence) + "\n\n"
-            f"Правила supervisor:\n" + "\n".join(f"- {item}" for item in ctx["global_instructions"]) + "\n\n"
-            f"Формат отчёта:\n" + "\n".join(report_lines)
         )
 
     # ── Evaluate ─────────────────────────────────────────────────────

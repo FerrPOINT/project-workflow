@@ -104,9 +104,10 @@ def test_supervisor_context_contains_full_path_and_contract(tmp_path: Path, monk
 
     prompt = engine.get_phase_prompt()
     assert "Текущий шаг" in prompt
-    assert "Формат отчёта" in prompt
     assert "Create implementation plan" in prompt
     assert "Задача" in prompt
+    assert "Формат отчёта" not in prompt
+    assert "Полный путь workflow" not in prompt
 
 
 
