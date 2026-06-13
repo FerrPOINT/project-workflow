@@ -27,7 +27,30 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
     monkeypatch.setattr(ui_module, "_db", None)
     monkeypatch.setattr(ui_module, "_srv", None)
 
+    # Initialize schema so every test starts with a clean DB
+    from wartz_workflow.db import WorkflowDB
+    from wartz_workflow.schema import ensure_phase_catalog
+    wdb = WorkflowDB(str(test_db))
+    wdb.init()
+    ensure_phase_catalog(wdb)
+
+    # Reduce FD pressure in tests: monkeypatch _conn to skip WAL
+    import sqlite3
+    from pathlib import Path as _Path
+    _orig_conn = WorkflowDB._conn
+    def _test_conn(self):
+        _Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("PRAGMA synchronous = NORMAL")
+        conn.execute("PRAGMA temp_store = MEMORY")
+        conn.execute("PRAGMA cache_size = -32000")
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.row_factory = sqlite3.Row
+        return conn
+    monkeypatch.setattr(WorkflowDB, "_conn", _test_conn)
+
     yield
 
     ui_module._db = None
     ui_module._srv = None
+    monkeypatch.setattr(WorkflowDB, "_conn", _orig_conn)
