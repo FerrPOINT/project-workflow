@@ -7,7 +7,7 @@ from pathlib import Path
 # WARTZ_DIR env var overrides.
 _pkg_dir = Path(__file__).resolve().parent.parent
 WARTZ_DIR = os.getenv("WARTZ_DIR", str(_pkg_dir / "data"))
-SUITES_DIR = "/root/.hermes/skills/software-development"
+SUITES_DIR = os.getenv("WARTZ_SUITES_DIR", "/root/.hermes/skills/software-development")
 
 # Фазы workflow (порядок важен!)
 PHASE_ORDER = [
@@ -66,21 +66,21 @@ REVIEWER_PHASES = ["7.5", "7.6"]
 TOKEN_REQUIRED_PHASES = ["0.5", "8"]
 
 # Jira API
-JIRA_BASE_URL = "https://task.wemakedev.ru"
+JIRA_BASE_URL = os.getenv("JIRA_BASE_URL", "https://task.wemakedev.ru")
 JIRA_API_URL = f"{JIRA_BASE_URL}/rest/api/2"
 
 # GitLab API
-GITLAB_BASE_URL = "https://gt.wmtgroup.ru"
+GITLAB_BASE_URL = os.getenv("GITLAB_BASE_URL", "https://gt.wmtgroup.ru")
 GITLAB_API_URL = f"{GITLAB_BASE_URL}/api/v4"
-GITLAB_PROJECT_ID = "73"  # hr-recruiter/recruiter-front
+GITLAB_PROJECT_ID = os.getenv("GITLAB_PROJECT_ID", "73")  # hr-recruiter/recruiter-front
 
 # verify-suite.sh
 VERIFY_SUITE_SCRIPT = f"{SUITES_DIR}/hr-recruiter-workflow-suite/scripts/verify-suite.sh"
 TASK_INIT_SCRIPT = f"{SUITES_DIR}/hr-recruiter-workflow-suite/scripts/task-init.sh"
 
 # UI
-UI_PORT = 8811
-UI_HOST = "0.0.0.0"
+UI_PORT = int(os.getenv("WARTZ_UI_PORT", "8811"))
+UI_HOST = os.getenv("WARTZ_UI_HOST", "0.0.0.0")
 
 # Bootstrap workflows / projects
 DEFAULT_WORKFLOW_NAME = "Default Workflow"
