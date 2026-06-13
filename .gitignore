@@ -49,3 +49,5 @@ Thumbs.db
 screenshots/
 .workflow.db
 info/
+data/state/
+data/workflow.db
