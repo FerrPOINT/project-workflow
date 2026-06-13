@@ -46,30 +46,7 @@ def step_cmd(
     jmode = ctx.obj.get("json_mode", False)
     smart = os.getenv("SMART_EVALUATE", "").lower() in ("1", "true", "yes", "on")
 
-    from .. import state
-
-    found_repo = state.find_repo(task_key)
-    repo_path = found_repo or os.getcwd()
-
-    # Auto-init if task not initialized
-    current = state.load_state(found_repo, task_key) if found_repo else None
-    if not current:
-        console.print(f"{WARN} Задача {task_key} не инициализирована.")
-        console.print("[bold]Создаём задачу?[/bold] Автоматически создаём info/, progress.json, changelog.md")
-        # Create minimal task structure
-        sprint = "sprint-auto"
-        task_id = task_key.split("-")[-1] if "-" in task_key else task_key
-        title = f"Auto-init {task_key}"
-        success, task_dir = state.create_task_dir(repo_path, sprint, task_id, task_key, title)
-        if success:
-            console.print(f"{PASS} Задача создана: {task_dir}")
-            current = state.load_state(repo_path, task_key)
-        else:
-            console.print(f"{FAIL} Не удалось создать задачу")
-            raise click.Abort()
-
-    engine = wizard.WizardEngine(task_key, repo_path)
-    smart = os.getenv("SMART_EVALUATE", "").lower() in ("1", "true", "yes", "on")
+    engine = wizard.WizardEngine(task_key)
 
     # --report : evaluate report
     if report:
@@ -82,12 +59,10 @@ def step_cmd(
             if smart:
                 formatted = "[🧠 SMART MODE] " + formatted
             print(formatted)
-            # При PASS — format_result уже показал инструкции следующей фазы, 
-            # get_phase_prompt не нужен — там мусор (workflow_lines, global_instructions, format report)
         sys.exit(0 if result["verdict"] == "PASS" else 1)
 
     # default: show phase instructions
-    wizard.main(task_key, repo=repo_path)
+    wizard.main(task_key)
 
 
 # ═══════════════════════════════════════════════════════════════════════

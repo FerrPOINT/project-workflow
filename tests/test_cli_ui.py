@@ -17,15 +17,6 @@ from wartz_workflow.task_validator import TaskKeyValidator
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
-def _mock_state():
-    return {
-        "repo": "/repo",
-        "task_key": "TASK-1",
-        "current_phase": "0",
-        "phases_completed": [],
-    }
-
-
 def _validator() -> TaskKeyValidator:
     return TaskKeyValidator.from_projects([
         {
@@ -39,32 +30,30 @@ def _validator() -> TaskKeyValidator:
 class TestStepCommand:
     """Test `wartz-workflow step --task TASK-1`"""
 
-    @patch("wartz_workflow.state.find_repo", return_value="/repo")
-    @patch("wartz_workflow.state.load_state", return_value=None)
-    @patch("wartz_workflow.state.create_task_dir", return_value=(True, Path("/repo/sprint/TASK-1")))
-    @patch("wartz_workflow.wizard.main")
-    def test_step_auto_init_creates_task(self, mock_main, mock_create, mock_load, mock_find):
-        runner = CliRunner()
-        with patch("wartz_workflow.cli.core._get_task_key_validator", return_value=_validator()):
-            result = runner.invoke(cli, ["step", "--task", "TASK-1"])
-        assert result.exit_code == 0
-        mock_create.assert_called_once()
-        mock_main.assert_called_once_with("TASK-1", repo="/repo")
-
-    @patch("wartz_workflow.state.find_repo", return_value="/repo")
-    @patch("wartz_workflow.state.load_state", return_value=_mock_state())
-    @patch("wartz_workflow.wizard.main")
-    def test_step_shows_phase(self, mock_main, mock_load, mock_find):
-        runner = CliRunner()
-        with patch("wartz_workflow.cli.core._get_task_key_validator", return_value=_validator()):
-            result = runner.invoke(cli, ["step", "--task", "TASK-1"])
-        assert result.exit_code == 0
-        mock_main.assert_called_once_with("TASK-1", repo="/repo")
-
-    @patch("wartz_workflow.state.find_repo", return_value="/repo")
-    @patch("wartz_workflow.state.load_state", return_value=_mock_state())
     @patch("wartz_workflow.wizard.WizardEngine")
-    def test_step_report_pass(self, mock_engine_cls, mock_load, mock_find):
+    def test_step_auto_init_creates_task(self, mock_engine_cls):
+        """WizardEngine auto-creates task in DB if missing."""
+        mock_engine = mock_engine_cls.return_value
+        mock_engine.current_phase = "0"
+        runner = CliRunner()
+        with patch("wartz_workflow.cli.core._get_task_key_validator", return_value=_validator()):
+            result = runner.invoke(cli, ["step", "--task", "TASK-1"])
+        assert result.exit_code == 0
+        # step_cmd creates engine, then wizard.main creates another via get_phase_instructions
+        assert mock_engine_cls.call_count == 2
+        first_call = mock_engine_cls.call_args_list[0]
+        assert first_call[0] == ("TASK-1",)
+
+    @patch("wartz_workflow.wizard.main")
+    def test_step_shows_phase(self, mock_main):
+        runner = CliRunner()
+        with patch("wartz_workflow.cli.core._get_task_key_validator", return_value=_validator()):
+            result = runner.invoke(cli, ["step", "--task", "TASK-1"])
+        assert result.exit_code == 0
+        mock_main.assert_called_once_with("TASK-1")
+
+    @patch("wartz_workflow.wizard.WizardEngine")
+    def test_step_report_pass(self, mock_engine_cls):
         mock_engine = mock_engine_cls.return_value
         mock_engine.evaluate.return_value = {
             "verdict": "PASS", "phase_name": "Plan", "next_phase": "1", "next_phase_name": "Build",
@@ -89,10 +78,9 @@ class TestStepCommand:
         assert "c2" in result.output
         assert "Доказательства:" in result.output
         assert "e2" in result.output
-    @patch("wartz_workflow.state.find_repo", return_value="/repo")
-    @patch("wartz_workflow.state.load_state", return_value=_mock_state())
+
     @patch("wartz_workflow.wizard.WizardEngine")
-    def test_step_report_fail_exits_one(self, mock_engine_cls, mock_load, mock_find):
+    def test_step_report_fail_exits_one(self, mock_engine_cls):
         mock_engine = mock_engine_cls.return_value
         mock_engine.evaluate.return_value = {
             "verdict": "BLOCKED", "phase_name": "Plan", "next_phase": None, "next_phase_name": None,
