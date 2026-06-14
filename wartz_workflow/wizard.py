@@ -40,8 +40,6 @@ VERDICT_LABELS = {
     "delegate": "DELEGATE",
 }
 
-# Backward-compatible re-exports for existing tests
-from .wizard_checks import BLOCKER_PATTERNS, DELEGATE_PATTERNS, normalize_text, extract_keywords
 from .models import Phase as _Phase  # noqa: F401
 
 
@@ -186,18 +184,6 @@ class WizardEngine:
         return previously
 
     @staticmethod
-    def _text_from_instruction(item):
-        return text_from_instruction(item)
-
-    @staticmethod
-    def _text_from_check(item):
-        return text_from_check(item)
-
-    @staticmethod
-    def _text_from_evidence(item):
-        return text_from_evidence(item)
-
-    @staticmethod
     def _normalize_text(text):
         return normalize_text(text)
 
@@ -320,37 +306,30 @@ class WizardEngine:
             return cb.build_missing(self.current_phase).to_dict()
         return cb.build(phase).to_dict()
 
-    def _build_phase_history(self):
-        builder = WizardContextBuilder(
-            db=self.db, task=self.task, project=self.project,
-            workflow=self.workflow, all_phases=self.all_phases,
-            current_phase=self.current_phase, task_key=self.task_key, repo=self.repo,
+    @property
+    def _context_builder(self):
+        return WizardContextBuilder(
+            db=self.db,
+            task=self.task,
+            project=self.project,
+            workflow=self.workflow,
+            all_phases=self.all_phases,
+            current_phase=self.current_phase,
+            task_key=self.task_key,
+            repo=self.repo,
         )
-        return builder._build_phase_history()
+
+    def _build_phase_history(self):
+        return self._context_builder._build_phase_history()
 
     def _build_recent_verdicts(self, limit=5):
-        builder = WizardContextBuilder(
-            db=self.db, task=self.task, project=self.project,
-            workflow=self.workflow, all_phases=self.all_phases,
-            current_phase=self.current_phase, task_key=self.task_key, repo=self.repo,
-        )
-        return builder._build_recent_verdicts(limit=limit)
+        return self._context_builder._build_recent_verdicts(limit=limit)
 
     def _phase_status_lookup(self):
-        builder = WizardContextBuilder(
-            db=self.db, task=self.task, project=self.project,
-            workflow=self.workflow, all_phases=self.all_phases,
-            current_phase=self.current_phase, task_key=self.task_key, repo=self.repo,
-        )
-        return builder._phase_status_lookup()
+        return self._context_builder._phase_status_lookup()
 
     def _build_workflow_path(self):
-        builder = WizardContextBuilder(
-            db=self.db, task=self.task, project=self.project,
-            workflow=self.workflow, all_phases=self.all_phases,
-            current_phase=self.current_phase, task_key=self.task_key, repo=self.repo,
-        )
-        return builder._build_workflow_path()
+        return self._context_builder._build_workflow_path()
 
     # ── Transition recording ─────────────────────────────────────────
 

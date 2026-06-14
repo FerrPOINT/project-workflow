@@ -6,6 +6,8 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Sequence
@@ -149,10 +151,20 @@ def _read_seed_items() -> List[dict]:
 
 
 def _write_seed_document(items: List[dict]) -> None:
-    _SEED_PATH.write_text(
-        json.dumps(items, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
+    tmp_fd, tmp_path = tempfile.mkstemp(
+        dir=_SEED_PATH.parent, prefix="seed.json.tmp_", suffix=".json"
     )
+    try:
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+            json.dump(items, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+        os.replace(tmp_path, _SEED_PATH)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except FileNotFoundError:
+            pass
+        raise
 
 
 def _serialize_seed_instructions(items: list[dict]) -> List[dict]:

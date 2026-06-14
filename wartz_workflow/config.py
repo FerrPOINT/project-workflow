@@ -72,11 +72,6 @@ JIRA_API_URL = f"{JIRA_BASE_URL}/rest/api/2"
 # GitLab API
 GITLAB_BASE_URL = os.getenv("GITLAB_BASE_URL", "https://gt.wmtgroup.ru")
 GITLAB_API_URL = f"{GITLAB_BASE_URL}/api/v4"
-GITLAB_PROJECT_ID = os.getenv("GITLAB_PROJECT_ID", "73")  # hr-recruiter/recruiter-front
-
-# verify-suite.sh
-VERIFY_SUITE_SCRIPT = f"{SUITES_DIR}/hr-recruiter-workflow-suite/scripts/verify-suite.sh"
-TASK_INIT_SCRIPT = f"{SUITES_DIR}/hr-recruiter-workflow-suite/scripts/task-init.sh"
 
 # UI
 UI_PORT = int(os.getenv("WARTZ_UI_PORT", "8811"))

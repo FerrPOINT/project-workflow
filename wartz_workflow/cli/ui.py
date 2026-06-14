@@ -53,6 +53,7 @@ def step_cmd(
         result = engine.evaluate(report)
         if jmode:
             out_json(result)
+            return
         else:
             from ..wizard import format_result
             formatted = format_result(result)

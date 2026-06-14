@@ -16,17 +16,17 @@ client = TestClient(app)
 
 
 def _phase_row(code: str) -> dict:
-    from wartz_workflow.ui import _get_db
+    from wartz_workflow.ui import _app_state
 
-    phase = _get_db().get_phase(code)
+    phase = _app_state.get_db().get_phase(code)
     assert phase is not None
     return phase
 
 
 def _workflow_row(lookup: str | None = None, *, workflow_id: int | None = None, name: str | None = None, is_default: bool | None = None) -> dict:
-    from wartz_workflow.ui import _get_db
+    from wartz_workflow.ui import _app_state
 
-    workflows = _get_db().get_workflows()
+    workflows = _app_state.get_db().get_workflows()
     for workflow in workflows:
         if lookup is not None:
             lookup_token = str(lookup)
@@ -129,9 +129,9 @@ def _phase_restore_payload(phase: dict) -> dict:
 @pytest.fixture(autouse=True)
 def setup_db():
     """Populate DB with seed.json + sample task before UI tests."""
-    from wartz_workflow.ui import _get_db, _seed_to_sqlite
+    from wartz_workflow.ui import _app_state, _seed_to_sqlite
     from wartz_workflow import db as db_module
-    wdb = _get_db()
+    wdb = _app_state.get_db()
     if wdb.is_empty():
         _seed_to_sqlite()
     # Ensure sample task exists for task detail tests
@@ -201,7 +201,7 @@ class TestIndexPage:
     def test_index_recovers_from_legacy_singleton_workflow_code_in_runtime_db(self):
         from wartz_workflow import db as db_module, ui as ui_module
 
-        ui_module._get_db()
+        ui_module._app_state.get_db()
         with sqlite3.connect(db_module.DB_PATH) as conn:
             conn.execute(
                 "UPDATE workflows SET name = ?, description = ?, is_default = 0 WHERE id = (SELECT id FROM workflows ORDER BY id LIMIT 1)",
@@ -215,7 +215,7 @@ class TestIndexPage:
         response = client.get("/")
         assert response.status_code == 200
         assert "Дашборд" in response.text
-        assert any(workflow["is_default"] for workflow in ui_module._get_db().get_workflows())
+        assert any(workflow["is_default"] for workflow in ui_module._app_state.get_db().get_workflows())
 
     def test_index_has_nav(self):
         response = client.get("/")
@@ -336,9 +336,9 @@ class TestPhasesPage:
         assert 'workflow-chip' in response.text
 
     def test_phases_page_filters_by_selected_workflow(self):
-        from wartz_workflow.ui import _get_db
+        from wartz_workflow.ui import _app_state
 
-        wdb = _get_db()
+        wdb = _app_state.get_db()
         workflow = next((item for item in wdb.get_workflows() if item.get("name") == "UI Phases Workflow"), None)
         if workflow:
             workflow_id = workflow["id"]
@@ -418,9 +418,9 @@ class TestPhasesPage:
 
     def test_phases_order_api_persists_reordered_default_workflow_sequence(self, monkeypatch, tmp_path):
         from wartz_workflow import config, schema
-        from wartz_workflow.ui import _get_db
+        from wartz_workflow.ui import _app_state
 
-        wdb = _get_db()
+        wdb = _app_state.get_db()
         default_phases = [phase for phase in wdb.get_phases() if phase.get("workflow_is_default")]
         original_codes = [phase["code"] for phase in default_phases]
         original_batch = [(phase["id"], phase["phase_order"]) for phase in default_phases]
@@ -479,9 +479,9 @@ class TestPhasesPage:
             _update_config_phase_order()
 
     def test_phases_page_shows_selected_agent_instead_of_hardcoded_critic(self):
-        from wartz_workflow.ui import _get_db
+        from wartz_workflow.ui import _app_state
 
-        wdb = _get_db()
+        wdb = _app_state.get_db()
         reviewer = next(agent for agent in wdb.get_agents() if agent["name"] == "reviewer")
         tracked_codes = ["0.9", "3.5", "4.5", "7.7"]
         original_agent_ids = {
@@ -697,7 +697,7 @@ class TestPhaseUpdate:
         assert all(isinstance(i, int) and i > 0 for i in data["ids"]["instructions"])
 
     def test_api_phase_update_round_trips_instruction_skills_as_string_list(self):
-        from wartz_workflow.ui import _get_db
+        from wartz_workflow.ui import _app_state
 
         phase_response = client.get(_phase_api_path("-1"))
         assert phase_response.status_code == 200
@@ -717,15 +717,15 @@ class TestPhaseUpdate:
             assert instructions[0]["skills"] == expected_skills
             assert all(isinstance(item, str) for item in instructions[0]["skills"])
 
-            raw_db = _get_db().get_phase_instructions(_phase_id("-1"))
+            raw_db = _app_state.get_db().get_phase_instructions(_phase_id("-1"))
             assert json.loads(raw_db[0]["skills"]) == expected_skills
         finally:
             client.put(_phase_api_path("-1"), json=restore_payload)
 
     def test_api_phase_update_persists_execution_type(self):
-        from wartz_workflow.ui import _get_db
+        from wartz_workflow.ui import _app_state
 
-        wdb = _get_db()
+        wdb = _app_state.get_db()
         original = wdb.get_phase("4.5")
         assert original is not None
         assert original["execution_type"] == "sync"
@@ -747,9 +747,9 @@ class TestPhaseUpdate:
             client.put(phase_api_path, json={"execution_type": "sync"})
 
     def test_api_phase_update_metadata_only_keeps_existing_phase_content(self):
-        from wartz_workflow.ui import _get_db
+        from wartz_workflow.ui import _app_state
 
-        wdb = _get_db()
+        wdb = _app_state.get_db()
         before_counts = {
             "instructions": len(wdb.get_phase_instructions("4.5")),
             "checks": len(wdb.get_phase_checks("4.5")),
@@ -789,9 +789,9 @@ class TestDragDropAPI:
 
     def test_api_batch_order_update(self):
         from wartz_workflow import config, phases as phases_mod
-        from wartz_workflow.ui import _get_db, _update_config_phase_order
+        from wartz_workflow.ui import _app_state, _update_config_phase_order
 
-        wdb = _get_db()
+        wdb = _app_state.get_db()
         original_rows = [(phase["code"], phase["phase_order"]) for phase in wdb.get_phases()]
         original_phase_order = list(config.PHASE_ORDER)
 
@@ -900,9 +900,9 @@ class TestTaskDetail:
         assert f"0 / {total_phases}" in response.text or f"0/{total_phases}" in response.text
 
     def test_task_detail_renders_phase_history_from_db(self):
-        from wartz_workflow.ui import _get_db
+        from wartz_workflow.ui import _app_state
 
-        wdb = _get_db()
+        wdb = _app_state.get_db()
         task_key = "TASKNEIROKLYUCH-300"
         task = wdb.get_task_by_key(task_key)
         if not task:
@@ -940,9 +940,9 @@ class TestTaskDetail:
         assert task["current_phase_name"] == "Task Intake"
 
     def test_task_detail_marks_text_phase_code_as_current(self):
-        from wartz_workflow.ui import _get_db
+        from wartz_workflow.ui import _app_state
 
-        wdb = _get_db()
+        wdb = _app_state.get_db()
         task_key = "UITEST-402"
         task = wdb.get_task_by_key(task_key)
         if not task:
@@ -1162,7 +1162,7 @@ class TestWorkflowsPage:
     def test_workflows_api_recovers_from_arbitrary_singleton_workflow_code_in_runtime_db(self):
         from wartz_workflow import db as db_module, ui as ui_module
 
-        ui_module._get_db()
+        ui_module._app_state.get_db()
         with sqlite3.connect(db_module.DB_PATH) as conn:
             conn.execute(
                 "UPDATE workflows SET name = ?, description = ?, is_default = 0 WHERE id = (SELECT id FROM workflows ORDER BY id LIMIT 1)",
@@ -1183,7 +1183,7 @@ class TestWorkflowsPage:
     def test_workflows_api_recovers_without_resetting_ui_singletons_after_runtime_code_mutation(self):
         from wartz_workflow import db as db_module, ui as ui_module
 
-        ui_module._get_db()
+        ui_module._app_state.get_db()
         with sqlite3.connect(db_module.DB_PATH) as conn:
             conn.execute(
                 "UPDATE workflows SET name = ?, description = ?, is_default = 0 WHERE id = (SELECT id FROM workflows ORDER BY id LIMIT 1)",

@@ -18,7 +18,7 @@ DELEGATE_PATTERNS = ("delegate", "delegated", "delegation", "передал", "�
 
 
 def normalize_text(text: str) -> str:
-    return re.sub(r"\s+", " ", re.sub(r"[^\wа-яА-Я0-9]+", " ", text.lower())).strip()
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", " ", text.lower(), flags=re.UNICODE)).strip()
 
 
 def extract_keywords(text: str, max_keywords: int = 6) -> list[str]:

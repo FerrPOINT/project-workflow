@@ -8,10 +8,11 @@ PK: INTEGER AUTOINCREMENT, семантические code TEXT UNIQUE для ф
 import json
 import os
 import sqlite3
+import threading
 from pathlib import Path
 from typing import Any
 
-from . import config
+from .. import config
 
 # Deterministic default: package-local data directory (not expanduser which
 # resolves differently under systemd vs Hermes terminal).
@@ -41,7 +42,8 @@ class WorkflowDB:
         conn.row_factory = sqlite3.Row
         return conn
 
-    # ── Resolve helpers (code -> int) ──────────────────────────────────
+    def close(self) -> None:
+        pass
 
     def _resolve_phase_id(self, val: int | str) -> int:
         if isinstance(val, int):
@@ -535,7 +537,7 @@ class WorkflowDB:
         *,
         strict: bool = True,
     ) -> dict | None:
-        from .task_validator import TaskKeyValidator
+        from ..task_validator import TaskKeyValidator
 
         projects = self._project_rows(conn)
         if not projects:

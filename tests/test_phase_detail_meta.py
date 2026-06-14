@@ -3,7 +3,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from wartz_workflow.ui import _get_db, _seed_to_sqlite, app
+from wartz_workflow.ui import _app_state, _seed_to_sqlite, app
 
 
 client = TestClient(app)
@@ -12,7 +12,7 @@ client = TestClient(app)
 @pytest.fixture(autouse=True)
 def setup_db():
     """Ensure seed data exists for phase detail page tests."""
-    wdb = _get_db()
+    wdb = _app_state.get_db()
     if wdb.is_empty():
         _seed_to_sqlite()
 

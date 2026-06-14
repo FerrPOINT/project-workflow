@@ -162,11 +162,25 @@ class OllamaClient:
         try:
             return json.loads(text)
         except json.JSONDecodeError:
-            # Try to extract JSON from surrounding text
-            match = re.search(r"(\{.*\})", text, re.DOTALL)
+            # Try non-greedy extraction of the first JSON object
+            match = re.search(r"(\{.*?\})", text, re.DOTALL)
             if match:
-                return json.loads(match.group(1))
-            raise ValueError(f"Cannot parse JSON from: {text[:200]}")
+                try:
+                    return json.loads(match.group(1))
+                except json.JSONDecodeError:
+                    pass
+            # Fallback: wrap raw text as a BLOCKED response so caller can proceed
+            return {
+                "verdict": "BLOCKED",
+                "covered": [],
+                "missing": [],
+                "blockers": ["LLM response was not valid JSON"],
+                "message": f"Raw response: {text[:500]}",
+                "next_phase": None,
+                "next_phase_name": None,
+                "confidence": 0.0,
+                "raw_text": text,
+            }
 
 
 class PromptBuilder:

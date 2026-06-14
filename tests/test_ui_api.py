@@ -11,9 +11,8 @@ client = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def setup_db():
-    from wartz_workflow.ui import _get_db, _seed_to_sqlite
-
-    wdb = _get_db()
+    from wartz_workflow.ui import _app_state, _seed_to_sqlite
+    wdb = _app_state.get_db()
     if wdb.is_empty():
         _seed_to_sqlite()
     if not wdb.get_task_by_key("TASKNEIROKLYUCH-1"):
@@ -26,9 +25,9 @@ def setup_db():
 
 
 def _phase_id(code: str) -> int:
-    from wartz_workflow.ui import _get_db
+    from wartz_workflow.ui import _app_state
 
-    phase = _get_db().get_phase(code)
+    phase = _app_state.get_db().get_phase(code)
     assert phase is not None
     return int(phase["id"])
 

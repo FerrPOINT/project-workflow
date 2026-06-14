@@ -10,6 +10,7 @@ import argparse
 import sqlite3
 import json
 import time
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,35 @@ import uvicorn
 
 from . import schema, config, db, service
 from .wizard import VERDICT_LABELS
+
+# ── App state ───────────────────────────────────────────────────────────
+class _AppState:
+    """Application state holder (replaces module-level globals)."""
+    __slots__ = ("_db", "_srv")
+
+    def __init__(self):
+        self._db: db.WorkflowDB | None = None
+        self._srv: service.PhaseService | None = None
+
+    def get_db(self) -> db.WorkflowDB:
+        if self._db is None:
+            self._db = db.WorkflowDB()
+            self._db.init()
+        schema.ensure_phase_catalog(self._db)
+        return self._db
+
+    def get_service(self) -> service.PhaseService:
+        if self._srv is None:
+            self._srv = service.PhaseService(self.get_db())
+        return self._srv
+
+    @property
+    def db(self) -> db.WorkflowDB | None:
+        return self._db
+
+
+_app_state = _AppState()
+
 
 # ── Constants ───────────────────────────────────────────────────────────
 DEFAULT_UI_PORT = config.UI_PORT
@@ -82,26 +112,6 @@ def _build_parallel_phase_blocks(phases: list[dict[str, Any]]) -> list[dict[str,
             blocks.append({"kind": "single", "phases": run})
 
     return blocks
-
-
-_db: db.WorkflowDB | None = None
-_srv: service.PhaseService | None = None
-
-def _get_db() -> db.WorkflowDB:
-    """Singleton + lazy init."""
-    global _db
-    if _db is None:
-        _db = db.WorkflowDB()
-        _db.init()
-    schema.ensure_phase_catalog(_db)
-    return _db
-
-def _get_service() -> service.PhaseService:
-    """Service singleton."""
-    global _srv
-    if _srv is None:
-        _srv = service.PhaseService(_get_db())
-    return _srv
 
 
 def _load_cli_reference() -> list[dict[str, Any]]:
@@ -211,9 +221,8 @@ def _load_skills_catalog(*, refresh: bool = False) -> list[dict[str, str | None]
 
 def _seed_to_sqlite() -> None:
     """Разовый импорт seed.json → SQLite."""
-    if _db is not None:
-        schema.ensure_phase_catalog(_db)
-
+    if _app_state.db is not None:
+        schema.ensure_phase_catalog(_app_state.db)
 
 
 
@@ -235,7 +244,7 @@ def _parse_optional_int(raw: Any) -> int | None:
 
 
 def _load_workflows() -> list[dict]:
-    wdb = _get_db()
+    wdb = _app_state.get_db()
     workflows = wdb.get_workflows()
     phases = wdb.get_phases()
     projects = wdb.get_projects()
@@ -263,7 +272,7 @@ def _load_workflows() -> list[dict]:
 
 
 def _load_phases(workflow_id: int | None = None) -> list[dict]:
-    wdb = _get_db()
+    wdb = _app_state.get_db()
     rows = wdb.get_phases(workflow_id=workflow_id)
     agents_by_id = {agent["id"]: agent for agent in wdb.get_agents()}
     result = []
@@ -309,7 +318,7 @@ def _load_phase_detail(phase_id: int | str) -> dict | None:
     resolved_phase_id = _coerce_phase_db_id(phase_id)
     if resolved_phase_id is None:
         return None
-    phase = _get_service().get_phase_detail(resolved_phase_id)
+    phase = _app_state.get_service().get_phase_detail(resolved_phase_id)
     if not phase:
         return None
     phase = dict(phase)
@@ -348,7 +357,7 @@ def _resolve_task_phase(current_phase: Any, wdb: db.WorkflowDB, workflow_id: int
 
 def _load_tasks() -> list[dict]:
     """Загрузить задачи из SQLite."""
-    wdb = _get_db()
+    wdb = _app_state.get_db()
     tasks = wdb.get_tasks()
     workflows = wdb.get_workflows()
     phase_counts_by_workflow = {
@@ -432,7 +441,7 @@ def _load_tasks() -> list[dict]:
 
 def _load_projects() -> list[dict]:
     """Список проектов для UI."""
-    wdb = _get_db()
+    wdb = _app_state.get_db()
     projects = wdb.get_projects()
     tasks = wdb.get_tasks()
     task_counts: dict[int, int] = {}
@@ -512,7 +521,7 @@ def _load_dashboard() -> dict[str, Any]:
 
 def _get_task_detail(task_key: str) -> dict | None:
     """Загрузить деталку задачи: метаданные + история фаз (линейно, без FORK/JOIN)."""
-    wdb = _get_db()
+    wdb = _app_state.get_db()
     task = wdb.get_task_by_key(task_key)
     if not task:
         return None
@@ -714,7 +723,7 @@ def phase_detail(request: Request, phase_id: str):
     phase = _load_phase_detail(phase_id)
     if not phase:
         return HTMLResponse("<h1>Phase not found</h1>", status_code=404)
-    wdb = _get_db()
+    wdb = _app_state.get_db()
     agents = wdb.get_agents()
     skills_catalog = _load_skills_catalog()
     for instruction in phase.get("instructions", []):
@@ -856,7 +865,7 @@ def api_skills(refresh: int = Query(default=0)):
 @app.get("/agents", response_class=HTMLResponse)
 def agents_page(request: Request):
     """Список агентов."""
-    wdb = _get_db()
+    wdb = _app_state.get_db()
     agents = wdb.get_agents()
     return templates.TemplateResponse(
         request=request, name="agents.html",
@@ -905,7 +914,7 @@ def api_workflow_create(body: dict[str, Any]):
     if not payload["name"]:
         return JSONResponse({"ok": False, "error": "name required"}, status_code=400)
     try:
-        workflow_id = _get_db().create_workflow(payload)
+        workflow_id = _app_state.get_db().create_workflow(payload)
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     return {"ok": True, "workflow_id": workflow_id}
@@ -913,7 +922,7 @@ def api_workflow_create(body: dict[str, Any]):
 
 @app.put("/api/workflows/{workflow_id}")
 def api_workflow_update(workflow_id: int, body: dict[str, Any]):
-    wdb = _get_db()
+    wdb = _app_state.get_db()
     existing = wdb.get_workflow(workflow_id)
     if not existing:
         return JSONResponse({"ok": False, "error": "Workflow not found"}, status_code=404)
@@ -936,7 +945,7 @@ def api_workflow_update(workflow_id: int, body: dict[str, Any]):
 
 @app.delete("/api/workflows/{workflow_id}")
 def api_workflow_delete(workflow_id: int):
-    wdb = _get_db()
+    wdb = _app_state.get_db()
     existing = wdb.get_workflow(workflow_id)
     if not existing:
         return JSONResponse({"ok": False, "error": "Workflow not found"}, status_code=404)
@@ -957,7 +966,7 @@ def api_project_create(body: dict[str, Any]):
     payload = _project_form_payload(body)
     if not payload["code"]:
         return JSONResponse({"ok": False, "error": "code required"}, status_code=400)
-    wdb = _get_db()
+    wdb = _app_state.get_db()
     if wdb.get_project_by_code(payload["code"]):
         return JSONResponse({"ok": False, "error": "Project already exists"}, status_code=409)
     try:
@@ -969,7 +978,7 @@ def api_project_create(body: dict[str, Any]):
 
 @app.put("/api/projects/{project_id}")
 def api_project_update(project_id: int, body: dict[str, Any]):
-    wdb = _get_db()
+    wdb = _app_state.get_db()
     existing = wdb.get_project(project_id)
     if not existing:
         return JSONResponse({"ok": False, "error": "Project not found"}, status_code=404)
@@ -997,7 +1006,7 @@ def api_project_update(project_id: int, body: dict[str, Any]):
 
 @app.delete("/api/projects/{project_id}")
 def api_project_delete(project_id: int):
-    wdb = _get_db()
+    wdb = _app_state.get_db()
     existing = wdb.get_project(project_id)
     if not existing:
         return JSONResponse({"ok": False, "error": "Project not found"}, status_code=404)
@@ -1011,7 +1020,7 @@ def api_project_delete(project_id: int):
 @app.get("/api/agents")
 def api_agents():
     """Получить всех агентов."""
-    wdb = _get_db()
+    wdb = _app_state.get_db()
     agents = wdb.get_agents()
     return {"ok": True, "agents": agents}
 
@@ -1022,7 +1031,7 @@ def api_agent_create(body: dict[str, Any]):
     name = body.get("name", "").strip()
     if not name:
         return JSONResponse({"ok": False, "error": "name required"}, status_code=400)
-    wdb = _get_db()
+    wdb = _app_state.get_db()
     agent_id = wdb.create_agent({
         "name": name,
         "description": str(body.get("description", "")).strip(),
@@ -1033,7 +1042,7 @@ def api_agent_create(body: dict[str, Any]):
 @app.put("/api/agents/{agent_id}")
 def api_agent_update(agent_id: int, body: dict[str, Any]):
     """Обновить агента."""
-    wdb = _get_db()
+    wdb = _app_state.get_db()
     existing = wdb.get_agent(agent_id)
     if not existing:
         return JSONResponse({"ok": False, "error": "Agent not found"}, status_code=404)
@@ -1050,7 +1059,7 @@ def api_agent_update(agent_id: int, body: dict[str, Any]):
 @app.delete("/api/agents/{agent_id}")
 def api_agent_delete(agent_id: int):
     """Удалить агента."""
-    wdb = _get_db()
+    wdb = _app_state.get_db()
     existing = wdb.get_agent(agent_id)
     if not existing:
         return JSONResponse({"ok": False, "error": "Agent not found"}, status_code=404)
@@ -1068,7 +1077,7 @@ def api_update_order(body: dict[str, Any]):
     if not orders:
         return JSONResponse({"ok": False, "error": "No orders provided"}, status_code=400)
 
-    wdb = _get_db()
+    wdb = _app_state.get_db()
     batch: list[tuple[int, int]] = []
     ordered_phase_ids: list[int] = []
     for item in orders:
@@ -1088,7 +1097,7 @@ def api_update_order(body: dict[str, Any]):
 
 @app.put("/api/phases/{phase_id}")
 def api_phase_update(phase_id: str, body: dict[str, Any]):
-    srv = _get_service()
+    srv = _app_state.get_service()
     resolved_phase_id = _coerce_phase_db_id(phase_id)
     if resolved_phase_id is None or not srv.get_phase_detail(resolved_phase_id):
         return JSONResponse({"ok": False, "error": "Phase not found"}, status_code=404)
@@ -1132,7 +1141,7 @@ def api_phase_update(phase_id: str, body: dict[str, Any]):
 
 def _update_config_phase_order(wdb: db.WorkflowDB | None = None):
     """Пересобрать runtime PHASE_ORDER из default workflow без повторного seed-sync."""
-    source_db = wdb or _get_db()
+    source_db = wdb or _app_state.get_db()
     rows = [
         phase
         for phase in source_db.get_phases()

@@ -24,8 +24,7 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "WARTZ_DIR", str(runtime_dir))
     monkeypatch.setattr(config, "SETTINGS_PATH", str(settings_path))
     monkeypatch.setattr(schema_module, "_SEED_PATH", seed_path)
-    monkeypatch.setattr(ui_module, "_db", None)
-    monkeypatch.setattr(ui_module, "_srv", None)
+    monkeypatch.setattr(ui_module, "_app_state", ui_module._AppState())
 
     # Initialize schema so every test starts with a clean DB
     from wartz_workflow.db import WorkflowDB

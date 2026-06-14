@@ -1,10 +1,15 @@
-"""Tests for WizardEngine text helpers, status lookup, and verdict builders."""
+"""Tests for text_from_* helpers, status lookup, and verdict builders."""
 
 import pytest
 from unittest.mock import MagicMock, patch
 
 from wartz_workflow.models import Phase, PhaseCheck, PhaseEvidence, PhaseInstruction
 from wartz_workflow.wizard import WizardEngine, VERDICT_LABELS
+from wartz_workflow.wizard_contracts import (
+    text_from_instruction,
+    text_from_check,
+    text_from_evidence,
+)
 
 
 def _make_engine():
@@ -16,25 +21,25 @@ def _make_engine():
 
 
 class TestTextHelpers:
-    """Cover _text_from_instruction, _text_from_check, _text_from_evidence."""
+    """Cover text_from_instruction, text_from_check, text_from_evidence."""
 
     def test_text_from_instruction_with_step(self):
-        assert WizardEngine._text_from_instruction(MagicMock(step="Step A")) == "Step A"
+        assert text_from_instruction(MagicMock(step="Step A")) == "Step A"
 
     def test_text_from_instruction_none(self):
-        assert WizardEngine._text_from_instruction(None) == ""
+        assert text_from_instruction(None) == ""
 
     def test_text_from_check_with_description(self):
-        assert WizardEngine._text_from_check(MagicMock(description="Check B")) == "Check B"
+        assert text_from_check(MagicMock(description="Check B")) == "Check B"
 
     def test_text_from_check_none(self):
-        assert WizardEngine._text_from_check(None) == ""
+        assert text_from_check(None) == ""
 
     def test_text_from_evidence_with_item(self):
-        assert WizardEngine._text_from_evidence(MagicMock(item="Evidence C")) == "Evidence C"
+        assert text_from_evidence(MagicMock(item="Evidence C")) == "Evidence C"
 
     def test_text_from_evidence_none(self):
-        assert WizardEngine._text_from_evidence(None) == ""
+        assert text_from_evidence(None) == ""
 
 
 class TestPhaseStatusLookup:
