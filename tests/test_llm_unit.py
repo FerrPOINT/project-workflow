@@ -7,11 +7,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from wartz_workflow.llm import (
-    OLLAMA_API_KEY,
     OllamaClient,
     PromptBuilder,
     ResponseParser,
-    _load_api_key,
 )
 from wartz_workflow.models import Phase
 
@@ -19,7 +17,8 @@ from wartz_workflow.models import Phase
 class TestLoadApiKey:
     def test_env_key(self, monkeypatch):
         monkeypatch.setenv("OLLAMA_API_KEY", "env-token")
-        import importlib, wartz_workflow.llm
+        import importlib
+        import wartz_workflow.llm
         importlib.reload(wartz_workflow.llm)
         assert wartz_workflow.llm._load_api_key() == "env-token"
 
@@ -29,7 +28,8 @@ class TestLoadApiKey:
         try:
             env_file.parent.mkdir(parents=True, exist_ok=True)
             env_file.write_text("OLLAMA_API_KEY=file-token\n")
-            import importlib, wartz_workflow.llm
+            import importlib
+            import wartz_workflow.llm
             importlib.reload(wartz_workflow.llm)
             assert wartz_workflow.llm._load_api_key() == "file-token"
         finally:
@@ -41,13 +41,15 @@ class TestLoadApiKey:
         env_file = Path.home() / ".hermes" / ".env"
         if env_file.exists():
             env_file.unlink()
-        import importlib, wartz_workflow.llm
+        import importlib
+        import wartz_workflow.llm
         importlib.reload(wartz_workflow.llm)
         assert wartz_workflow.llm._load_api_key() == ""
 
     def test_fresh_import_env(self, monkeypatch):
         monkeypatch.setenv("OLLAMA_API_KEY", "fresh-token")
-        import importlib, wartz_workflow.llm
+        import importlib
+        import wartz_workflow.llm
         importlib.reload(wartz_workflow.llm)
         assert wartz_workflow.llm._load_api_key() == "fresh-token"
         assert wartz_workflow.llm.OLLAMA_API_KEY == "fresh-token"

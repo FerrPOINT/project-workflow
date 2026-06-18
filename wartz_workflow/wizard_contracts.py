@@ -1,7 +1,7 @@
 """Phase contract builder — turns DB phase catalog into structured PhaseContract."""
 from __future__ import annotations
 
-from typing import Any, List, Optional
+from typing import Any
 
 from .wizard_types import PhaseContract
 from .models import Phase

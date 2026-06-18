@@ -3,7 +3,7 @@
 import pytest
 from wartz_workflow.task_validator import (
     TaskKeyValidator, TaskKeyValidationError,
-    migrate_key, validate, validate_or_die, ValidatedTaskKey,
+    migrate_key, validate, validate_or_die,
 )
 
 

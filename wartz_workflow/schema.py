@@ -12,7 +12,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Sequence
 
-import yaml
 
 from . import config
 from wartz_workflow.models import (

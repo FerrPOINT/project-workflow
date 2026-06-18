@@ -1,7 +1,6 @@
 """Tests for LLM-based evaluate (OllamaClient, PromptBuilder, ResponseParser)."""
 
 import json
-import os
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -12,8 +11,6 @@ from wartz_workflow.llm import (
     PromptBuilder,
     ResponseParser,
     LlmVerdict,
-    OLLAMA_BASE_URL,
-    OLLAMA_MODEL,
 )
 
 

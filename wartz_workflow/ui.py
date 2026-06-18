@@ -8,9 +8,7 @@ from __future__ import annotations
 
 import argparse
 import sqlite3
-import json
 import time
-import threading
 from pathlib import Path
 from typing import Any
 

@@ -1,7 +1,6 @@
 """Tests for format_result() human-readable output."""
 
-import pytest
-from wartz_workflow.wizard import format_result, VERDICT_LABELS
+from wartz_workflow.wizard import format_result
 
 
 class TestFormatResult:

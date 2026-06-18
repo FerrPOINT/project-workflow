@@ -13,23 +13,22 @@ from __future__ import annotations
 import json
 import os
 import threading
-from typing import Any, Optional
+from typing import Optional
 
-from . import conversation as convo
 from . import schema
 from .db import WorkflowDB
 from .models import Phase
-from .llm import OllamaClient, PromptBuilder, ResponseParser
 
-from .wizard_types import PhaseContract, WizardAssessment, WizardFinding
+from .wizard_types import WizardAssessment
 from .wizard_context import WizardContextBuilder
 from .wizard_contracts import PhaseContractBuilder, text_from_instruction, text_from_check, text_from_evidence
 from .wizard_checks import check_coverage, extract_blockers, determine_verdict, build_verdict_message
 from .wizard_store import WizardAssessmentStore
 from .wizard_prompt import build_phase_prompt
+from . import conversation as convo  # noqa: F401 — used by tests via monkeypatch
 
 # Backward-compatible re-exports for existing tests
-from .wizard_checks import BLOCKER_PATTERNS, DELEGATE_PATTERNS, normalize_text, extract_keywords
+from .wizard_checks import normalize_text, extract_keywords, BLOCKER_PATTERNS as _BLOCKER_PATTERNS, DELEGATE_PATTERNS as _DELEGATE_PATTERNS  # noqa: F401
 
 SMART_EVALUATE = os.getenv("SMART_EVALUATE", "").lower() in ("1", "true", "yes", "on")
 

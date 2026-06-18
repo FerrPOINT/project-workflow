@@ -4,12 +4,9 @@ Uses click.testing.CliRunner with heavy mocking to avoid FS/DB side effects.
 """
 
 import json
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import click
 from click.testing import CliRunner
-import pytest
 
 from wartz_workflow.cli.core import cli
 from wartz_workflow.task_validator import TaskKeyValidator

@@ -70,6 +70,6 @@ def build_phase_prompt(
         f"{delegated}\n"
         f"{parallel_banner}\n"
         f"Инструкции:\n" + "\n".join(f"- {item}" for item in instructions) + "\n\n"
-        f"Checks:\n" + "\n".join(f"- {item}" for item in checks) + "\n\n"
-        f"Evidence:\n" + "\n".join(f"- {item}" for item in evidence) + "\n\n"
+        "Checks:\n" + "\n".join(f"- {item}" for item in checks) + "\n\n"
+        "Evidence:\n" + "\n".join(f"- {item}" for item in evidence) + "\n\n"
     )

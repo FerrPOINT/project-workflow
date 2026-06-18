@@ -2,9 +2,8 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Optional
+from typing import Optional
 
-from .wizard_types import WizardFinding
 
 BLOCKER_PATTERNS = (
     "blocked by",

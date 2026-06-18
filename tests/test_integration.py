@@ -6,7 +6,6 @@ Scenario: Seed DB → create task → step through phases → verify history
 import json
 from pathlib import Path
 
-import pytest
 
 from fastapi.testclient import TestClient
 

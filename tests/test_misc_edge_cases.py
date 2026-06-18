@@ -1,15 +1,10 @@
 """Misc edge-case tests — cli/core, cli/ui, wizard_context, wizard_prompt."""
 from __future__ import annotations
 
-import json
-import sys
-from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import click
 import pytest
-from click.testing import CliRunner
 
 
 # ═══════════════════════════════════════════════════════════

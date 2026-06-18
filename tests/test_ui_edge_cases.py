@@ -1,16 +1,11 @@
 """UI edge-case tests — error paths, helpers, and uncovered branches."""
 from __future__ import annotations
 
-import json
-from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import pytest
 from fastapi.testclient import TestClient
 
 from wartz_workflow.ui import (
-    _app_state,
     _build_parallel_phase_blocks,
     _coerce_phase_db_id,
     _group_instructions,

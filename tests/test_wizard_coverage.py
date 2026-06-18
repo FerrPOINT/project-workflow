@@ -1,20 +1,17 @@
 """WizardEngine deep coverage tests: checklist dedup, blockers, verdicts, edge cases."""
 
-import pytest
 from unittest.mock import patch, MagicMock
 
-from wartz_workflow.models import Phase, PhaseCheck, PhaseEvidence, PhaseInstruction, PhaseDelegate
-from wartz_workflow.wizard import (
-    WizardEngine,
-    BLOCKER_PATTERNS,
-    DELEGATE_PATTERNS,
-    VERDICT_LABELS,
-)
+from wartz_workflow.models import Phase, PhaseCheck, PhaseEvidence, PhaseInstruction
+from wartz_workflow.wizard import WizardEngine
+from wartz_workflow.wizard_checks import BLOCKER_PATTERNS, DELEGATE_PATTERNS
+from wartz_workflow.wizard_types import VERDICT_LABELS
 
 
 class TestBuildChecklist:
     def _make_engine(self) -> WizardEngine:
-        with patch("wartz_workflow.wizard.convo"):
+        with patch("wartz_workflow.wizard.WizardContextBuilder") as mock_ctx:
+            mock_ctx.return_value.build.return_value = {"task_key": "AAT-1", "current_phase": "1"}
             return WizardEngine("AAT-1")
 
     def test_dedupes_exact_duplicates(self):
@@ -65,7 +62,8 @@ class TestExtractBlockers:
     """Tests for _extract_blockers method."""
 
     def _make_engine(self) -> WizardEngine:
-        with patch("wartz_workflow.wizard.convo"):
+        with patch("wartz_workflow.wizard.WizardContextBuilder") as mock_ctx:
+            mock_ctx.return_value.build.return_value = {"task_key": "AAT-1", "current_phase": "1"}
             return WizardEngine("AAT-1")
 
     def test_no_blockers_returns_empty(self):
@@ -208,7 +206,8 @@ class TestCheckCoverageEdgeCases:
     """Edge cases for _check_coverage and related methods."""
 
     def _make_engine(self) -> WizardEngine:
-        with patch("wartz_workflow.wizard.convo"):
+        with patch("wartz_workflow.wizard.WizardContextBuilder") as mock_ctx:
+            mock_ctx.return_value.build.return_value = {"task_key": "AAT-1", "current_phase": "1"}
             return WizardEngine("AAT-1")
 
     def test_empty_checklist_passes(self):

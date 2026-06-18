@@ -1,9 +1,7 @@
 """Tests for blocker extraction and coverage accumulation."""
 
-import json
-import pytest
-from unittest.mock import patch, MagicMock
-from wartz_workflow.wizard import WizardEngine, BLOCKER_PATTERNS, Phase
+from unittest.mock import patch
+from wartz_workflow.wizard import WizardEngine
 
 
 class TestBlockerExtraction:

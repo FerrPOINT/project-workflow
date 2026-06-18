@@ -1,7 +1,6 @@
 """Tests for WizardEngine edge cases and init error paths."""
 from __future__ import annotations
 
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -9,7 +8,6 @@ from wartz_workflow import schema
 from wartz_workflow.db import WorkflowDB
 from wartz_workflow.models import Phase
 from wartz_workflow.wizard import WizardEngine, format_result
-from wartz_workflow.wizard_types import PhaseContract
 
 
 @pytest.fixture

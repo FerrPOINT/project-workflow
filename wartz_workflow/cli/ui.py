@@ -7,16 +7,15 @@
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 from typing import Optional
 
 import click
 
-from .. import wizard, conversation as convo
+from .. import wizard
 from ..cli.core import cli, out_json, _require_valid_key
-from ..cli.core import console, PASS, FAIL, WARN
+from ..cli.core import console, WARN
 
 # ── Guard: новые команды запрещены ──────────────────────────────────────
 # Если кто-то добавит @cli.command() сюда — тесты поймают.

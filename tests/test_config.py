@@ -1,8 +1,6 @@
 """Tests for config.py env overrides and constants."""
 
-import os
 
-import pytest
 
 from wartz_workflow import config as cfg_module
 

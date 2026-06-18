@@ -1,7 +1,5 @@
 """Test phases.py helpers."""
 
-import pytest
-from unittest.mock import Mock, patch
 from wartz_workflow.phases import (
     get_next_phase,
     get_phase_checklist_raw,
@@ -43,7 +41,6 @@ class TestPhaseHelpers:
 class TestPhaseExecution:
     def test_run_phase_removed(self):
         """run_phase was removed in Task 5 — assert it's gone."""
-        import inspect
         from wartz_workflow import phases as phases_mod
         assert not hasattr(phases_mod, "run_phase")
         assert not hasattr(phases_mod, "check_previous_phase")

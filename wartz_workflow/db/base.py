@@ -8,7 +8,6 @@ PK: INTEGER AUTOINCREMENT, семантические code TEXT UNIQUE для ф
 import json
 import os
 import sqlite3
-import threading
 from pathlib import Path
 from typing import Any
 

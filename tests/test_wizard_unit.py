@@ -1,6 +1,5 @@
 """Tests for wizard.py to boost coverage."""
 
-import pytest
 from unittest.mock import patch, MagicMock
 from wartz_workflow.wizard import WizardEngine
 

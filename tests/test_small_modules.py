@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import re
-from pathlib import Path
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -15,7 +11,7 @@ from wartz_workflow.phases import get_next_phase, get_phase_checklist_raw, show_
 from wartz_workflow.wizard_context import WizardContextBuilder
 from wartz_workflow.task_validator import (
     TaskKeyValidator, ValidatedTaskKey, TaskKeyValidationError,
-    validate, validate_or_die, migrate_key, LEGACY_MIGRATIONS,
+    validate, validate_or_die, migrate_key,
 )
 
 

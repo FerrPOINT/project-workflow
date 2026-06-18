@@ -1,13 +1,11 @@
 """Tests for WorkflowDB — SQLite persistence."""
 
 import json
-import os
 import sqlite3
-from pathlib import Path
 
 import pytest
 
-from wartz_workflow.db import WorkflowDB, DB_PATH
+from wartz_workflow.db import WorkflowDB
 
 
 @pytest.fixture

@@ -1,9 +1,7 @@
 """Tests for text_from_* helpers, status lookup, and verdict builders."""
 
-import pytest
 from unittest.mock import MagicMock, patch
 
-from wartz_workflow.models import Phase, PhaseCheck, PhaseEvidence, PhaseInstruction
 from wartz_workflow.wizard import WizardEngine, VERDICT_LABELS
 from wartz_workflow.wizard_contracts import (
     text_from_instruction,

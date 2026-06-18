@@ -1,6 +1,6 @@
 """Tests that wizard.py passes int phase_id to DB FK columns."""
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from wartz_workflow.models import Phase
 from wartz_workflow.wizard import WizardEngine
 
