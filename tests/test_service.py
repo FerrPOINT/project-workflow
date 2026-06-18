@@ -111,6 +111,8 @@ class TestUpdatePhase:
     def test_get_phase_detail_empty(self, svc):
         assert svc.get_phase_detail(9999) == {}
 
+
+class TestNormalizeSkills:
     def test_normalize_skills_integer(self, svc):
         """Non-list, non-str, non-none input returns []."""
         assert svc.normalize_skills(42) == []
