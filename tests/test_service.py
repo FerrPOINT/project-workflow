@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 
 import pytest
 
@@ -60,6 +61,10 @@ class TestSaveInstructions:
 
 
 class TestSaveChecks:
+    def test_invalid_phase_raises(self, svc):
+        with pytest.raises(ValueError, match="Phase not found"):
+            svc.save_checks(9999, [{"description": "x"}])
+
     def test_save_checks(self, svc, fresh_db):
         phase = fresh_db.get_phase_by_code("1")
         ids = svc.save_checks(phase["id"], [{"description": "Check A"}])
@@ -77,6 +82,10 @@ class TestSaveChecks:
 
 
 class TestSaveEvidence:
+    def test_invalid_phase_raises(self, svc):
+        with pytest.raises(ValueError, match="Phase not found"):
+            svc.save_evidence(9999, [{"description": "x"}])
+
     def test_save_evidence(self, svc, fresh_db):
         phase = fresh_db.get_phase_by_code("1")
         ids = svc.save_evidence(phase["id"], [{"description": "Screenshot"}])
@@ -98,3 +107,24 @@ class TestUpdatePhase:
         svc.update_phase(phase["id"], {"next_recommendation": "Updated"})
         detail = svc.get_phase_detail(phase["id"])
         assert detail["next_recommendation"] == "Updated"
+
+    def test_get_phase_detail_empty(self, svc):
+        assert svc.get_phase_detail(9999) == {}
+
+    def test_normalize_skills_integer(self, svc):
+        """Non-list, non-str, non-none input returns []."""
+        assert svc.normalize_skills(42) == []
+
+    def test_parse_skills_bad_json(self, svc):
+        """Non-JSON string returns empty list."""
+        assert PhaseService.parse_skills("not json") == []
+
+    def test_parse_skills_not_list_json(self, svc):
+        """JSON that parses to dict instead of list returns []."""
+        assert PhaseService.parse_skills('{"a": 1}') == []
+
+    def test_serialize_skills_none(self, svc):
+        assert svc.serialize_skills(None) is None
+
+    def test_serialize_skills_empty(self, svc):
+        assert svc.serialize_skills([]) is None
