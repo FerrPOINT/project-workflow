@@ -51,3 +51,4 @@ screenshots/
 info/
 data/state/
 data/workflow.db
+**/data/workflow.db

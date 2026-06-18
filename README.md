@@ -21,8 +21,8 @@ State-driven workflow CLI с FastAPI/Jinja2 веб-UI для просмотра 
   - **cli_history** — аудит CLI-вызовов
 - **Встроенный workflow supervisor** — оценивает прогресс задачи по плану/фазам/артефактам/CLI-отчётам
 - **TaskKeyValidator** — валидация ключей задач через настраиваемые regex из `projects.key_patterns`
-- `/settings` — read-only реестр реальных CLI-команд (автообновляется при изменении CLI)
-- `/skills` — просмотр скиллов проекта
+- **/settings** — read-only реестр реальных CLI-команд (автообновляется при изменении CLI)
+- **/skills** — просмотр скиллов проекта
 
 ## Установка
 
@@ -114,22 +114,25 @@ JSON endpoints:
 wartz_workflow/
 ├── __init__.py
 ├── config.py              # Конфигурация + константы
-├── conversation.py        # История переговоров / keyword-поиск
-├── db.py                  # WorkflowDB — ORM-lite над SQLite
-├── db_schema.sql          # DDL схемы БД
+├── conversation.py          # История переговоров / keyword-поиск
+├── db/                    # SQLite persistence
+│   ├── __init__.py
+│   ├── base.py             # WorkflowDB — ORM-lite над SQLite
+│   └── db_schema.sql       # DDL схемы БД
 ├── models.py              # Domain dataclasses (Phase, PhaseCheck, etc.)
 ├── phases.py              # Phase helpers: get_next_phase, checklists, console tables
 ├── schema.py              # Phase loader from DB + JSON seed sync
 ├── service.py             # PhaseService — бизнес-логика
 ├── task_validator.py      # Валидация task_key через проектные regex
 ├── ui.py                  # FastAPI приложение + шаблоны
-├── wizard.py              # WizardEngine — evaluate / transitions / supervisor
-├── wizard_types.py        # PhaseContract, PromptCache, etc.
-├── wizard_contracts.py    # PhaseContractBuilder
-├── wizard_checks.py       # Coverage / blockers / keyword matching
-├── wizard_context.py      # get_full_context, report template
-├── wizard_store.py        # _record_transition, DB writes
 ├── llm.py                 # OllamaClient (local/cloud) для SMART_EVALUATE
+├── wizard.py              # WizardEngine — evaluate / transitions / supervisor facade
+├── wizard_types.py        # PhaseContract, PromptCache, WizardAssessment, etc.
+├── wizard_contracts.py    # PhaseContractBuilder
+├── wizard_checks.py       # Coverage / blockers / keyword matching / verdict builder
+├── wizard_context.py      # get_full_context, report template
+├── wizard_evaluate.py     # evaluate_llm_report
+├── wizard_store.py        # _record_transition, DB writes, assessment persist
 ├── cli/
 │   ├── __init__.py
 │   ├── core.py            # Общий group, helpers, --json
@@ -179,7 +182,6 @@ wartz-workflow step --task TASK-KEY --report "..."
 
 - **Dual-mode OllamaClient**: local `/api/chat` или cloud `/v1/chat/completions`
 - **Fallback**: при недоступности LLM → rule-based evaluate
-- **Покрытие**: llm.py 100%, wizard.py ~94%
 - **E2E**: пройдены все фазы от -1 до 5.5 через Ollama Cloud
 
 ## Примечания
@@ -189,3 +191,4 @@ wartz-workflow step --task TASK-KEY --report "..."
 - Пустые / синтетические badge и placeholder-текст в UI считаются мусором и удаляются.
 - После выполнения задачи и прохождения проверок изменения должны быть закоммичены; завершённую работу нельзя оставлять в dirty working tree.
 - Данные workflow хранятся только в SQLite; файловый dual-state (`info/`, `progress.json`) удалён.
+- `WORKFLOW_DB_PATH` env-переменная переопределяет путь к БД (полезно для systemd).

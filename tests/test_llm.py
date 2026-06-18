@@ -247,15 +247,16 @@ class TestWizardEngineEvaluateLLM:
     def engine(self, tmp_path, monkeypatch):
         test_db = tmp_path / "workflow.db"
         import wartz_workflow.db as db_module
+        monkeypatch.setattr(db_module.base, "DB_PATH", str(test_db))
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
+        monkeypatch.setattr("wartz_workflow.wizard.SMART_EVALUATE", True)
         with patch("wartz_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             from wartz_workflow.wizard import WizardEngine
             engine = WizardEngine("SMOKE-LLM-1", repo=str(tmp_path))
         return engine
 
-    def test_evaluate_llm_pass(self, engine, monkeypatch):
-        monkeypatch.setattr("wartz_workflow.wizard.SMART_EVALUATE", True)
+    def test_evaluate_llm_pass(self, engine):
         llm_response = {
             "verdict": "PASS",
             "covered": ["Check git"],
@@ -266,15 +267,15 @@ class TestWizardEngineEvaluateLLM:
             "next_phase_name": "Next",
             "confidence": 0.95,
         }
-        with patch.object(OllamaClient, "chat", return_value=llm_response):
-            result = engine.evaluate("I checked git")
+        with patch("wartz_workflow.wizard_evaluate.OllamaClient.chat") as mock_chat:
+            mock_chat.return_value = llm_response
+            result = engine.evaluate_llm("I checked git", engine._get_current_phase_obj())
         assert result["verdict"] == "PASS"
         assert result["phase"] == "-1"
         assert result["covered"] == ["Check git"]
         assert result["missing"] == []
 
-    def test_evaluate_llm_blocked(self, engine, monkeypatch):
-        monkeypatch.setattr("wartz_workflow.wizard.SMART_EVALUATE", True)
+    def test_evaluate_llm_blocked(self, engine):
         llm_response = {
             "verdict": "BLOCKED",
             "covered": [],
@@ -283,22 +284,20 @@ class TestWizardEngineEvaluateLLM:
             "message": "🔴 Blocked",
             "confidence": 0.9,
         }
-        with patch.object(OllamaClient, "chat", return_value=llm_response):
-            result = engine.evaluate("Cannot access")
+        with patch("wartz_workflow.wizard_evaluate.OllamaClient.chat") as mock_chat:
+            mock_chat.return_value = llm_response
+            result = engine.evaluate_llm("Cannot access", engine._get_current_phase_obj())
         assert result["verdict"] == "BLOCKED"
         assert result["blockers"] == ["No access"]
 
-    def test_evaluate_llm_fallback_on_ollama_failure(self, engine, monkeypatch):
-        """If Ollama fails, evaluate() must fall back to rule-based."""
-        monkeypatch.setattr("wartz_workflow.wizard.SMART_EVALUATE", True)
-        with patch.object(OllamaClient, "chat", side_effect=requests.exceptions.ConnectionError("Ollama down")):
-            # Rule-based: empty report against phase -1 → partial
+    def test_evaluate_llm_fallback_on_ollama_failure(self, engine):
+        """If evaluate_llm fails, evaluate() must fall back to rule-based."""
+        with patch.object(engine, "evaluate_llm", side_effect=requests.exceptions.ConnectionError("Ollama down")):
             result = engine.evaluate("")
         assert result["verdict"] == "PARTIAL"
 
-    def test_evaluate_llm_uses_previously_covered(self, engine, monkeypatch):
+    def test_evaluate_llm_uses_previously_covered(self, engine):
         """LLM prompt includes previously covered items."""
-        monkeypatch.setattr("wartz_workflow.wizard.SMART_EVALUATE", True)
         llm_response = {
             "verdict": "PASS",
             "covered": ["Item A", "Item B"],
@@ -307,8 +306,9 @@ class TestWizardEngineEvaluateLLM:
             "message": "Done",
             "confidence": 0.9,
         }
-        with patch.object(OllamaClient, "chat", return_value=llm_response) as mock_chat:
-            engine.evaluate("Report")
+        with patch("wartz_workflow.wizard_evaluate.OllamaClient.chat") as mock_chat:
+            mock_chat.return_value = llm_response
+            engine.evaluate_llm("Report", engine._get_current_phase_obj())
             args, kwargs = mock_chat.call_args
             # The prompt builder does NOT include previously covered items
             # unless they were passed as previously_covered param.
@@ -324,6 +324,7 @@ class TestWizardEngineEvaluateLLMWithRule:
     def engine(self, tmp_path, monkeypatch):
         test_db = tmp_path / "workflow.db"
         import wartz_workflow.db as db_module
+        monkeypatch.setattr(db_module.base, "DB_PATH", str(test_db))
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
         with patch("wartz_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
@@ -403,15 +404,16 @@ class TestWizardEngineLLMIntegrationDB:
     def engine(self, tmp_path, monkeypatch):
         test_db = tmp_path / "workflow.db"
         import wartz_workflow.db as db_module
+        monkeypatch.setattr(db_module.base, "DB_PATH", str(test_db))
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
+        monkeypatch.setattr("wartz_workflow.wizard.SMART_EVALUATE", True)
         with patch("wartz_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             from wartz_workflow.wizard import WizardEngine
             engine = WizardEngine("DB-LLM-1", repo=str(tmp_path))
         return engine
 
-    def test_supervisor_run_recorded_after_llm_evaluate(self, engine, monkeypatch):
-        monkeypatch.setattr("wartz_workflow.wizard.SMART_EVALUATE", True)
+    def test_supervisor_run_recorded_after_llm_evaluate(self, engine):
         llm_response = {
             "verdict": "PASS",
             "covered": ["Done"],
@@ -422,7 +424,8 @@ class TestWizardEngineLLMIntegrationDB:
             "next_phase_name": "Next",
             "confidence": 0.95,
         }
-        with patch.object(OllamaClient, "chat", return_value=llm_response):
+        with patch("wartz_workflow.wizard_evaluate.OllamaClient.chat") as mock_chat:
+            mock_chat.return_value = llm_response
             engine.evaluate("Report")
 
         runs = engine.db.get_supervisor_runs(task_key="DB-LLM-1", limit=5)
@@ -433,8 +436,7 @@ class TestWizardEngineLLMIntegrationDB:
         assert run["covered"] == ["Done"]
         assert run["missing"] == []
 
-    def test_task_phase_advanced_after_llm_pass(self, engine, monkeypatch):
-        monkeypatch.setattr("wartz_workflow.wizard.SMART_EVALUATE", True)
+    def test_task_phase_advanced_after_llm_pass(self, engine):
         llm_response = {
             "verdict": "PASS",
             "covered": ["Done"],
@@ -445,14 +447,14 @@ class TestWizardEngineLLMIntegrationDB:
             "next_phase_name": "Next",
             "confidence": 0.95,
         }
-        with patch.object(OllamaClient, "chat", return_value=llm_response):
+        with patch("wartz_workflow.wizard_evaluate.OllamaClient.chat") as mock_chat:
+            mock_chat.return_value = llm_response
             engine.evaluate("Report")
 
         task = engine.db.get_task(engine.task["id"])
         assert task["current_phase"] == "2"
 
-    def test_task_blocked_after_llm_blocked(self, engine, monkeypatch):
-        monkeypatch.setattr("wartz_workflow.wizard.SMART_EVALUATE", True)
+    def test_task_blocked_after_llm_blocked(self, engine):
         llm_response = {
             "verdict": "BLOCKED",
             "covered": [],
@@ -461,15 +463,15 @@ class TestWizardEngineLLMIntegrationDB:
             "message": "Blocked",
             "confidence": 0.9,
         }
-        with patch.object(OllamaClient, "chat", return_value=llm_response):
+        with patch("wartz_workflow.wizard_evaluate.OllamaClient.chat") as mock_chat:
+            mock_chat.return_value = llm_response
             engine.evaluate("Report")
 
         task = engine.db.get_task(engine.task["id"])
         assert task["current_phase"] == "-1"
         assert task["status"] == "blocked"
 
-    def test_llm_rollback_records_history(self, engine, monkeypatch):
-        monkeypatch.setattr("wartz_workflow.wizard.SMART_EVALUATE", True)
+    def test_llm_rollback_records_history(self, engine):
         llm_response = {
             "verdict": "ROLLBACK",
             "covered": [],
@@ -478,7 +480,8 @@ class TestWizardEngineLLMIntegrationDB:
             "message": "Rollback",
             "confidence": 0.8,
         }
-        with patch.object(OllamaClient, "chat", return_value=llm_response):
+        with patch("wartz_workflow.wizard_evaluate.OllamaClient.chat") as mock_chat:
+            mock_chat.return_value = llm_response
             result = engine.evaluate("Report")
 
         # Check that task remains in a valid state after rollback
