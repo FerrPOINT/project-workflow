@@ -387,7 +387,30 @@ class TestPhasesPage:
         assert 'data-phase-id="' in response.text
         assert "movePhase(this, -1)" in response.text
         assert "movePhase(this, 1)" in response.text
+        assert "addPhaseAfter(this)" in response.text
         assert "fetch('/api/phases/order'" in response.text
+        assert "fetch('/api/phases'," in response.text
+
+    def test_phases_page_has_add_phase_button_between_reorder_buttons(self):
+        response = client.get("/phases")
+        assert response.status_code == 200
+        assert 'class="phase-add-btn"' in response.text
+        assert 'onclick="addPhaseAfter(this)"' in response.text
+        # Each phase row should now have 3 controls: up, add, down
+        controls_match = re.search(r'class="phase-order-controls".*?\u003c/button\u003e.*?class="phase-add-btn".*?\u003c/button\u003e.*?class="phase-move-btn move-down-btn"', response.text, re.S)
+        assert controls_match is not None
+
+    def test_phases_page_add_phase_button_carries_workflow_id_from_active_nav(self):
+        response = client.get("/phases")
+        assert response.status_code == 200
+
+        workflow = _workflow_row("default")
+        nav_match = re.search(
+            r'class="workflow-nav-item active"[^\u003e]*data-workflow-id="(\d+)"',
+            response.text,
+        )
+        assert nav_match is not None
+        assert int(nav_match.group(1)) == workflow["id"]
 
     def test_phases_page_links_phase_detail_by_db_id_not_legacy_code(self):
         response = client.get("/phases")
@@ -397,6 +420,38 @@ class TestPhasesPage:
 
         assert f'href="/phase/{phase["id"]}"' in response.text
         assert 'href="/phase/0.7"' not in response.text
+
+    def test_phases_page_add_phase_api_flow_creates_phase_in_default_workflow(self):
+        from wartz_workflow.ui import _app_state
+
+        wdb = _app_state.get_db()
+        workflow = _workflow_row("default")
+        original_count = len(wdb.get_phases(workflow_id=workflow["id"]))
+        new_phase_ids: list[int] = []
+        try:
+            resp = client.post("/api/phases", json={"workflow_id": workflow["id"], "phase_order": 2})
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["ok"] is True
+            new_phase_ids.append(data["phase_id"])
+
+            page = client.get(f"/phases?workflow_id={workflow['id']}")
+            assert page.status_code == 200
+            assert "Новая фаза" in page.text
+
+            phase = wdb.get_phase(data["phase_id"])
+            assert phase is not None
+            assert phase["name"] == "Новая фаза"
+            assert phase["is_seed_managed"] == 0
+            assert phase["phase_order"] == 2
+        finally:
+            for pid in new_phase_ids:
+                wdb.delete_phase(pid)
+            # Restore orders shifted by insertion
+            phases = wdb.get_phases(workflow_id=workflow["id"])
+            for idx, phase in enumerate(sorted(phases, key=lambda p: p["phase_order"]), start=1):
+                wdb.update_phase(phase["id"], {"phase_order": idx})
+            assert len(wdb.get_phases(workflow_id=workflow["id"])) == original_count
 
     def test_phases_page_reorder_payload_uses_db_id_not_legacy_code(self):
         response = client.get("/phases")

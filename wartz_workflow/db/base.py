@@ -1294,6 +1294,23 @@ class WorkflowDB:
         """Insert a new phase row (code-based lookup)."""
         with self._conn() as conn:
             workflow_id = self._resolve_workflow_id(data.get("workflow_id", data.get("workflow", data.get("workflow_code"))))
+            # Assign deterministic unique code if omitted
+            code = str(data.get("code", data.get("id", ""))).strip()
+            if not code:
+                prefix = "ui-phase-"
+                existing = conn.execute(
+                    "SELECT code FROM phases WHERE code LIKE ? ORDER BY code DESC LIMIT 1",
+                    (f"{prefix}%",),
+                ).fetchone()
+                if existing:
+                    last = existing["code"]
+                    try:
+                        counter = int(last[len(prefix):]) + 1
+                    except ValueError:
+                        counter = 1
+                else:
+                    counter = 1
+                code = f"{prefix}{counter}"
             c = conn.execute(
                 """
                 INSERT INTO phases (workflow_id, code, name, description, min_time_min, phase_order, agent_id,
@@ -1302,11 +1319,69 @@ class WorkflowDB:
                 """,
                 (
                     workflow_id,
-                    data.get("code", data.get("id", "")),
+                    code,
                     data["name"],
                     data.get("description") or "",
                     data.get("min_time_min", 0),
                     data["phase_order"],
+                    data.get("agent_id"),
+                    data.get("next_recommendation"),
+                    data.get("parallel_with"),
+                    data.get("rollback_target"),
+                    data.get("execution_type", "sync"),
+                    int(bool(data.get("is_seed_managed", 0))),
+                ),
+            )
+            conn.commit()
+            return c.lastrowid or 0
+
+    def insert_phase_after(self, data: dict) -> int:
+        """Insert a new phase at target phase_order and shift existing phases after it."""
+        with self._conn() as conn:
+            workflow_id = self._resolve_workflow_id(data.get("workflow_id", data.get("workflow", data.get("workflow_code"))))
+            target_order = int(data["phase_order"])
+
+            # Shift existing phases with order >= target_order
+            conn.execute(
+                """
+                UPDATE phases
+                SET phase_order = phase_order + 1
+                WHERE workflow_id = ? AND phase_order >= ?
+                """,
+                (workflow_id, target_order),
+            )
+
+            # Assign deterministic unique code if omitted
+            code = str(data.get("code", data.get("id", ""))).strip()
+            if not code:
+                prefix = "ui-phase-"
+                existing = conn.execute(
+                    "SELECT code FROM phases WHERE code LIKE ? ORDER BY code DESC LIMIT 1",
+                    (f"{prefix}%",),
+                ).fetchone()
+                if existing:
+                    last = existing["code"]
+                    try:
+                        counter = int(last[len(prefix):]) + 1
+                    except ValueError:
+                        counter = 1
+                else:
+                    counter = 1
+                code = f"{prefix}{counter}"
+
+            c = conn.execute(
+                """
+                INSERT INTO phases (workflow_id, code, name, description, min_time_min, phase_order, agent_id,
+                                    next_recommendation, parallel_with, rollback_target, execution_type, is_seed_managed)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    workflow_id,
+                    code,
+                    data["name"],
+                    data.get("description") or "",
+                    data.get("min_time_min", 0),
+                    target_order,
                     data.get("agent_id"),
                     data.get("next_recommendation"),
                     data.get("parallel_with"),

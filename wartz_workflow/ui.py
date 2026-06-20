@@ -490,6 +490,26 @@ def _workflow_form_payload(body: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _phase_create_payload(body: dict[str, Any]) -> dict[str, Any]:
+    """Normalize phase creation payload with safe defaults."""
+    name = str(body.get("name", "")).strip()
+    if not name:
+        name = "Новая фаза"
+    description = str(body.get("description", "")).strip()
+    execution_type = str(body.get("execution_type", "sync")).strip()
+    if execution_type not in {"sync", "parallel"}:
+        execution_type = "sync"
+    return {
+        "name": name,
+        "description": description,
+        "execution_type": execution_type,
+        "workflow_id": body.get("workflow_id"),
+        "phase_order": body.get("phase_order"),
+        "code": str(body.get("code", "")).strip() or None,
+        "agent_id": body.get("agent_id"),
+    }
+
+
 def _load_dashboard() -> dict[str, Any]:
     tasks = _load_tasks()
     projects = _load_projects()
@@ -891,6 +911,68 @@ def api_phase_detail(phase_id: str):
     if not phase:
         return JSONResponse({"ok": False, "error": "Phase not found"}, status_code=404)
     return {"ok": True, "phase": phase}
+
+
+@app.post("/api/phases")
+def api_phase_create(body: dict[str, Any]):
+    """Create a new phase inside a workflow at a specific position.
+
+    Body: {
+        "workflow_id": int,        # required
+        "phase_order": int,        # required, 1-based insertion position
+        "name": str,               # optional, default "Новая фаза"
+        "description": str,        # optional
+        "execution_type": str,     # optional, "sync" or "parallel"
+        "agent_id": int,           # optional
+        "code": str,               # optional, auto-generated if omitted
+    }
+    """
+    payload = _phase_create_payload(body)
+    if payload["workflow_id"] is None:
+        return JSONResponse({"ok": False, "error": "workflow_id required"}, status_code=400)
+    try:
+        workflow_id = _app_state.get_db()._resolve_workflow_id(payload["workflow_id"])
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    if not _app_state.get_db().get_workflow(workflow_id):
+        return JSONResponse({"ok": False, "error": f"Workflow not found: {workflow_id}"}, status_code=400)
+
+    if payload["phase_order"] is None:
+        return JSONResponse({"ok": False, "error": "phase_order required"}, status_code=400)
+    try:
+        phase_order = int(payload["phase_order"])
+    except (TypeError, ValueError):
+        return JSONResponse({"ok": False, "error": "phase_order must be an integer"}, status_code=400)
+    if phase_order < 1:
+        return JSONResponse({"ok": False, "error": "phase_order must be >= 1"}, status_code=400)
+
+    workflow_phases = _app_state.get_db().get_phases(workflow_id=workflow_id)
+    max_order = max((p["phase_order"] for p in workflow_phases), default=0)
+    # If phase_order points beyond the end, append instead of creating gaps.
+    if phase_order > max_order + 1:
+        phase_order = max_order + 1
+
+    create_data = {
+        "workflow_id": workflow_id,
+        "phase_order": phase_order,
+        "name": payload["name"],
+        "description": payload["description"],
+        "execution_type": payload["execution_type"],
+        "agent_id": payload["agent_id"],
+        "is_seed_managed": 0,
+    }
+    if payload.get("code"):
+        create_data["code"] = payload["code"]
+
+    try:
+        phase_id = _app_state.get_db().insert_phase_after(create_data)
+    except sqlite3.IntegrityError as exc:
+        return JSONResponse({"ok": False, "error": f"Phase code conflict: {exc}"}, status_code=409)
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    return {"ok": True, "phase_id": phase_id, "phase_order": phase_order}
 
 
 @app.get("/api/tasks")

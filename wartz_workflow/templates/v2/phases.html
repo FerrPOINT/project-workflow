@@ -20,6 +20,8 @@
 .timeline-item{width:100%}
 .timeline-row{display:grid;grid-template-columns:84px minmax(0,1fr);gap:12px;align-items:stretch}
 .phase-order-controls{display:flex;flex-direction:column;align-items:center;gap:8px;padding-top:8px}
+.phase-add-btn{width:36px;height:32px;border-radius:8px;border:1px dashed var(--accent);background:rgba(88,166,255,.12);color:var(--accent);cursor:pointer;transition:all .12s;font-size:20px;font-weight:700;line-height:1}
+.phase-add-btn:hover{background:var(--accent);color:#fff;border-style:solid}
 .phase-move-btn{width:36px;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;transition:all .12s;font-size:16px;font-weight:700}
 .phase-move-btn:hover:not(:disabled){background:var(--surface-hover);border-color:var(--accent)}
 .phase-move-btn:disabled{opacity:.35;cursor:not-allowed}
@@ -45,6 +47,7 @@
 <div class="timeline-row">
   <div class="phase-order-controls">
     <button type="button" class="phase-move-btn move-up-btn" onclick="movePhase(this, -1)" aria-label="Поднять фазу выше">↑</button>
+    <button type="button" class="phase-add-btn" onclick="addPhaseAfter(this)" aria-label="Добавить фазу после">+</button>
     <button type="button" class="phase-move-btn move-down-btn" onclick="movePhase(this, 1)" aria-label="Опустить фазу ниже">↓</button>
     <div class="phase-order-hint">Порядок<br>меняется тут</div>
   </div>
@@ -123,6 +126,43 @@
 <script>
 function getPhaseTimelineItems() {
   return Array.from(document.querySelectorAll('#phasesTimeline .timeline-item'));
+}
+
+async function addPhaseAfter(button) {
+  const item = button.closest('.timeline-item');
+  if (!item) return;
+
+  const workflowId = new URLSearchParams(window.location.search).get('workflow_id')
+    || (document.querySelector('.workflow-nav-item.active')?.dataset.workflowId);
+  if (!workflowId) {
+    showToast('Не удалось определить workflow', 'error');
+    return;
+  }
+
+  const items = getPhaseTimelineItems();
+  const currentIndex = items.indexOf(item);
+  const insertOrder = currentIndex + 2; // after current (1-based)
+
+  button.disabled = true;
+  try {
+    const resp = await fetch('/api/phases', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        workflow_id: parseInt(workflowId, 10),
+        phase_order: insertOrder,
+      }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || !data.ok) {
+      showToast(data.error || 'Не удалось добавить фазу', 'error');
+      return;
+    }
+    // Full reload to re-render server-side grouping and fresh IDs.
+    window.location.reload();
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function renderPhaseTimeline(items) {

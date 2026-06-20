@@ -142,3 +142,132 @@ class TestRemovedLegacyApi:
     def test_parallel_route_removed(self):
         resp = client.put("/api/phases/parallel", json={"groups": [["-1", "0.0a"]]})
         assert resp.status_code == 404
+
+
+class TestApiPhaseCreate:
+    def test_create_phase_requires_workflow_id(self):
+        resp = client.post("/api/phases", json={"phase_order": 1})
+        assert resp.status_code == 400
+        assert resp.json()["ok"] is False
+        assert "workflow_id" in resp.json()["error"]
+
+    def test_create_phase_requires_phase_order(self):
+        workflow = _workflow_row("default")
+        resp = client.post("/api/phases", json={"workflow_id": workflow["id"]})
+        assert resp.status_code == 400
+        assert resp.json()["ok"] is False
+        assert "phase_order" in resp.json()["error"]
+
+    def test_create_phase_rejects_invalid_workflow(self):
+        resp = client.post("/api/phases", json={"workflow_id": 999999, "phase_order": 1})
+        assert resp.status_code == 400
+        assert resp.json()["ok"] is False
+
+    def test_create_phase_inserts_and_shifts_orders(self):
+        from wartz_workflow.ui import _app_state
+
+        wdb = _app_state.get_db()
+        workflow_id = wdb.create_workflow({"name": "Create Phase Test"})
+        try:
+            ph1 = wdb.create_phase({"workflow_id": workflow_id, "code": "cpt-1", "name": "One", "phase_order": 1})
+            ph2 = wdb.create_phase({"workflow_id": workflow_id, "code": "cpt-2", "name": "Two", "phase_order": 2})
+            ph3 = wdb.create_phase({"workflow_id": workflow_id, "code": "cpt-3", "name": "Three", "phase_order": 3})
+
+            resp = client.post("/api/phases", json={"workflow_id": workflow_id, "phase_order": 2})
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["ok"] is True
+            assert "phase_id" in data
+            assert data["phase_order"] == 2
+
+            phases = wdb.get_phases(workflow_id=workflow_id)
+            orders = {p["id"]: p["phase_order"] for p in phases}
+            assert orders[ph1] == 1
+            assert orders[ph2] == 3
+            assert orders[ph3] == 4
+            new_phase = next(p for p in phases if p["id"] == data["phase_id"])
+            assert new_phase["phase_order"] == 2
+            assert new_phase["name"] == "Новая фаза"
+            assert new_phase["execution_type"] == "sync"
+            assert new_phase["is_seed_managed"] == 0
+        finally:
+            for code in ("cpt-1", "cpt-2", "cpt-3"):
+                if wdb.get_phase_by_code(code):
+                    wdb.delete_phase(code)
+            for phase in wdb.get_phases(workflow_id=workflow_id):
+                wdb.delete_phase(phase["id"])
+            wdb.delete_workflow(workflow_id)
+
+    def test_create_phase_appends_when_order_beyond_end(self):
+        from wartz_workflow.ui import _app_state
+
+        wdb = _app_state.get_db()
+        workflow_id = wdb.create_workflow({"name": "Create Phase Append"})
+        try:
+            ph1 = wdb.create_phase({"workflow_id": workflow_id, "code": "cpa-1", "name": "One", "phase_order": 1})
+
+            resp = client.post("/api/phases", json={"workflow_id": workflow_id, "phase_order": 99})
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["phase_order"] == 2
+
+            phases = wdb.get_phases(workflow_id=workflow_id)
+            assert len(phases) == 2
+            orders = {p["id"]: p["phase_order"] for p in phases}
+            assert orders[ph1] == 1
+            assert orders[data["phase_id"]] == 2
+        finally:
+            for code in ("cpa-1",):
+                if wdb.get_phase_by_code(code):
+                    wdb.delete_phase(code)
+            for phase in wdb.get_phases(workflow_id=workflow_id):
+                wdb.delete_phase(phase["id"])
+            wdb.delete_workflow(workflow_id)
+
+    def test_create_phase_accepts_optional_fields(self):
+        from wartz_workflow.ui import _app_state
+
+        wdb = _app_state.get_db()
+        workflow_id = wdb.create_workflow({"name": "Create Phase Full"})
+        try:
+            resp = client.post("/api/phases", json={
+                "workflow_id": workflow_id,
+                "phase_order": 1,
+                "name": "Custom Phase",
+                "description": "Custom description",
+                "execution_type": "parallel",
+            })
+            assert resp.status_code == 200
+            data = resp.json()
+            new_phase = wdb.get_phase(data["phase_id"])
+            assert new_phase is not None
+            assert new_phase["name"] == "Custom Phase"
+            assert new_phase["description"] == "Custom description"
+            assert new_phase["execution_type"] == "parallel"
+        finally:
+            for phase in wdb.get_phases(workflow_id=workflow_id):
+                wdb.delete_phase(phase["id"])
+            wdb.delete_workflow(workflow_id)
+
+
+def _workflow_row(lookup: str | None = None, *, workflow_id: int | None = None, name: str | None = None, is_default: bool | None = None) -> dict:
+    from wartz_workflow.ui import _app_state
+
+    workflows = _app_state.get_db().get_workflows()
+    for workflow in workflows:
+        if lookup is not None:
+            lookup_token = str(lookup)
+            if lookup_token == "default" and bool(workflow.get("is_default")):
+                pass
+            elif str(workflow.get("code", "")) != lookup_token and str(workflow.get("name", "")) != lookup_token:
+                continue
+        if workflow_id is not None and workflow.get("id") != workflow_id:
+            continue
+        if name is not None and workflow.get("name") != name:
+            continue
+        if is_default is not None and bool(workflow.get("is_default")) != is_default:
+            continue
+        return workflow
+    raise AssertionError(
+        f"Workflow not found: lookup={lookup!r} id={workflow_id!r} name={name!r} is_default={is_default!r}"
+    )
