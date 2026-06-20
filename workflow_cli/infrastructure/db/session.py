@@ -7,8 +7,13 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from alembic import command
+from alembic.config import Config
+from sqlalchemy import create_engine, event
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
+
+from .models import Base
 
 _pkg_dir = Path(__file__).resolve().parent.parent.parent
 DEFAULT_DB_PATH = Path(
@@ -17,6 +22,17 @@ DEFAULT_DB_PATH = Path(
 
 _engine = None
 _SessionLocal = None
+
+
+@event.listens_for(Engine, "connect")
+def _set_sqlite_pragma(dbapi_conn, connection_record):
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA journal_mode = WAL")
+    cursor.execute("PRAGMA synchronous = NORMAL")
+    cursor.execute("PRAGMA temp_store = MEMORY")
+    cursor.execute("PRAGMA cache_size = -32000")
+    cursor.execute("PRAGMA foreign_keys = ON")
+    cursor.close()
 
 
 def get_engine(db_path: str | Path | None = None):
@@ -51,3 +67,19 @@ def reset_engine():
     global _engine, _SessionLocal
     _engine = None
     _SessionLocal = None
+
+
+def ensure_migrated(engine: Engine | None = None) -> None:
+    """Apply Alembic migrations to bring schema to head."""
+    engine = engine or get_engine()
+    db_path = str(engine.url.database)
+    here = Path(__file__).resolve().parent.parent.parent.parent
+    alembic_cfg = Config(str(here / "alembic.ini"))
+    alembic_cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_path}")
+    command.upgrade(alembic_cfg, "head")
+
+
+def ensure_schema(engine: Engine | None = None) -> None:
+    """Create all tables from ORM models (fallback for tests / fresh DBs)."""
+    engine = engine or get_engine()
+    Base.metadata.create_all(engine)

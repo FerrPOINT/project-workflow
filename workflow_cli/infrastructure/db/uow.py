@@ -1,6 +1,9 @@
 """SQLAlchemy Unit of Work."""
 from __future__ import annotations
 
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session
+
 from workflow_cli.domain.repositories import (
     AgentRepository,
     PhaseRepository,
@@ -25,8 +28,11 @@ from workflow_cli.infrastructure.db.session import get_session
 class SAUnitOfWork(UnitOfWork):
     """SQLAlchemy session-based unit of work."""
 
-    def __init__(self, db_path: str | None = None):
-        self._session = get_session(db_path)
+    def __init__(self, db_path_or_engine: str | Engine | None = None):
+        if isinstance(db_path_or_engine, Engine):
+            self._session = Session(bind=db_path_or_engine, expire_on_commit=False)
+        else:
+            self._session = get_session(db_path_or_engine)
         self._workflows = SAWorkflowRepository(self._session)
         self._phases = SAPhaseRepository(self._session)
         self._projects = SAProjectRepository(self._session)

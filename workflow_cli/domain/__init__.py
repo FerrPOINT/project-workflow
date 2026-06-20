@@ -44,6 +44,7 @@ class Phase:
     rollback_target: str | None = None
     execution_type: str = "sync"
     is_seed_managed: bool = False
+    workflow_name: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -60,6 +61,7 @@ class Phase:
             "rollback_target": self.rollback_target,
             "execution_type": self.execution_type,
             "is_seed_managed": self.is_seed_managed,
+            "workflow_name": self.workflow_name,
         }
 
 
@@ -106,6 +108,7 @@ class Project:
     code: str = ""
     name: str = ""
     key_patterns: list[str] = field(default_factory=list)
+    workflow_name: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -114,6 +117,7 @@ class Project:
             "code": self.code,
             "name": self.name,
             "key_patterns": self.key_patterns,
+            "workflow_name": self.workflow_name,
         }
 
 
@@ -127,6 +131,7 @@ class Task:
     title: str = ""
     description: str = ""
     current_phase: str = "-1"
+    current_phase_name: str = ""
     status: str = "active"
     created_at: str | None = None
     updated_at: str | None = None
@@ -139,6 +144,7 @@ class Task:
             "title": self.title,
             "description": self.description,
             "current_phase": self.current_phase,
+            "current_phase_name": self.current_phase_name,
             "status": self.status,
             "created_at": self.created_at,
             "updated_at": self.updated_at,

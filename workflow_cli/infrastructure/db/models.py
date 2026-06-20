@@ -12,9 +12,8 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
-    create_engine,
 )
-from sqlalchemy.orm import DeclarativeBase, relationship, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, relationship
 
 
 class Base(DeclarativeBase):
@@ -27,6 +26,8 @@ class Agent(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String, nullable=False)
     description = Column(String, nullable=False, default="")
+
+    phases = relationship("Phase", back_populates="agent")
 
 
 class Workflow(Base):
@@ -44,6 +45,9 @@ class Workflow(Base):
     __table_args__ = (
         CheckConstraint("is_default IN (0, 1)", name="ck_workflows_is_default"),
     )
+
+    phases = relationship("Phase", back_populates="workflow", cascade="all, delete-orphan", passive_deletes=True)
+    projects = relationship("Project", back_populates="workflow", cascade="all, delete-orphan")
 
 
 class Phase(Base):
@@ -78,6 +82,9 @@ class Phase(Base):
         ),
         CheckConstraint("is_seed_managed IN (0, 1)", name="ck_phases_is_seed_managed"),
     )
+
+    workflow = relationship("Workflow", back_populates="phases")
+    agent = relationship("Agent", back_populates="phases")
 
 
 class Instruction(Base):
@@ -145,6 +152,9 @@ class Project(Base):
     name = Column(String, nullable=False)
     key_patterns = Column(String, nullable=False, default="[]", server_default="[]")
 
+    workflow = relationship("Workflow", back_populates="projects")
+    tasks = relationship("Task", back_populates="project", cascade="all, delete-orphan")
+
 
 class Task(Base):
     __tablename__ = "tasks"
@@ -170,6 +180,8 @@ class Task(Base):
     __table_args__ = (
         CheckConstraint("status IN ('active', 'done', 'blocked')", name="ck_tasks_status"),
     )
+
+    project = relationship("Project", back_populates="tasks")
 
 
 class TaskHistory(Base):

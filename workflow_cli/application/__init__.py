@@ -10,12 +10,30 @@ from workflow_cli.domain.repositories import UnitOfWork
 class WorkflowService:
     """Use cases for workflow templates."""
 
+    DEFAULT_PHASE_NAME = "Новая фаза"
+
     def __init__(self, uow: UnitOfWork):
         self._uow = uow
 
     def create_workflow(self, data: dict[str, Any]) -> dict[str, Any]:
         with self._uow:
             wid = self._uow.workflows.create(data)
+            if not data.get("_skip_default_phase"):
+                default_phase = {
+                    "workflow_id": wid,
+                    "code": f"wf-{wid}-default",
+                    "name": self.DEFAULT_PHASE_NAME,
+                    "description": "",
+                    "min_time_min": 0,
+                    "phase_order": 1,
+                    "agent_id": None,
+                    "next_recommendation": None,
+                    "parallel_with": None,
+                    "rollback_target": None,
+                    "execution_type": "sync",
+                    "is_seed_managed": False,
+                }
+                self._uow.phases.create(default_phase)
             workflow = self._uow.workflows.get_by_id(wid)
             if not workflow:
                 raise RuntimeError("Workflow creation failed")
@@ -36,7 +54,19 @@ class WorkflowService:
 
     def delete_workflow(self, workflow_id: int) -> None:
         with self._uow:
+            if self._uow.phases.list(workflow_id):
+                raise ConflictError("Workflow has linked phases and cannot be deleted")
+            if self._uow.projects.list():
+                for project in self._uow.projects.list():
+                    if project.workflow_id == workflow_id:
+                        raise ConflictError("Workflow has linked projects and cannot be deleted")
             self._uow.workflows.delete(workflow_id)
+
+    def ensure_default_exists(self) -> dict[str, Any]:
+        with self._uow:
+            wf = self._uow.workflows.ensure_default_exists()
+            result = wf.to_dict()
+            return result
 
 
 class PhaseServiceApp:
@@ -47,6 +77,19 @@ class PhaseServiceApp:
     def __init__(self, uow: UnitOfWork):
         self._uow = uow
 
+    def _generate_code(self, workflow_id: int, order: int) -> str:
+        prefix = "ui-phase-"
+        existing = self._uow.phases.list(workflow_id)
+        max_num = 0
+        for phase in existing:
+            if phase.code.startswith(prefix):
+                suffix = phase.code[len(prefix):]
+                try:
+                    max_num = max(max_num, int(suffix))
+                except ValueError:
+                    pass
+        return f"{prefix}{max_num + 1}"
+
     def create_phase(self, data: dict[str, Any]) -> dict[str, Any]:
         workflow_id = data["workflow_id"]
         with self._uow:
@@ -54,6 +97,7 @@ class PhaseServiceApp:
             if order is None:
                 order = self._uow.phases.get_next_order(workflow_id)
             else:
+                order = int(order)
                 self._uow.phases.shift_orders(workflow_id, order, delta=1)
 
             phase_data = {
@@ -63,17 +107,18 @@ class PhaseServiceApp:
                 "description": data.get("description", ""),
                 "execution_type": data.get("execution_type", "sync"),
                 "phase_order": order,
+                "agent_id": data.get("agent_id"),
+                "next_recommendation": data.get("next_recommendation"),
+                "parallel_with": data.get("parallel_with"),
+                "rollback_target": data.get("rollback_target"),
                 "is_seed_managed": data.get("is_seed_managed", False),
+                "min_time_min": data.get("min_time_min", 0),
             }
             pid = self._uow.phases.create(phase_data)
             phase = self._uow.phases.get_by_id(pid)
             if not phase:
                 raise RuntimeError("Phase creation failed")
             return phase.to_dict()
-
-    def _generate_code(self, workflow_id: int, order: int) -> str:
-        import uuid
-        return f"phase-{workflow_id}-{order}-{uuid.uuid4().hex[:6]}"
 
     def list_phases(self, workflow_id: int | None = None) -> list[dict[str, Any]]:
         with self._uow:
@@ -101,7 +146,13 @@ class ProjectService:
 
     def create_project(self, data: dict[str, Any]) -> dict[str, Any]:
         with self._uow:
-            pid = self._uow.projects.create(data)
+            payload = dict(data)
+            if "workflow_id" not in payload or payload["workflow_id"] is None:
+                default_wf = self._uow.workflows.ensure_default_exists()
+                payload["workflow_id"] = default_wf.id
+            if "name" not in payload or not payload["name"]:
+                payload["name"] = payload["code"]
+            pid = self._uow.projects.create(payload)
             project = self._uow.projects.get_by_id(pid)
             if not project:
                 raise RuntimeError("Project creation failed")
@@ -122,6 +173,11 @@ class ProjectService:
 
     def delete_project(self, project_id: int) -> None:
         with self._uow:
+            # Mirror WorkflowDB behavior: project with linked tasks cannot be deleted.
+            tasks = self._uow.tasks.list()
+            for task in tasks:
+                if task.project_id == project_id:
+                    raise ConflictError("Project has linked tasks and cannot be deleted")
             self._uow.projects.delete(project_id)
 
 

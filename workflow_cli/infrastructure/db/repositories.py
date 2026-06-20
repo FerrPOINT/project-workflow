@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from typing import Any, Sequence
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from workflow_cli.domain import Agent, Phase, Project, SupervisorRun, Task, Workflow
@@ -35,6 +35,7 @@ def _row_to_phase(row: m.Phase) -> Phase:
         rollback_target=row.rollback_target,
         execution_type=row.execution_type or "sync",
         is_seed_managed=bool(row.is_seed_managed),
+        workflow_name=row.workflow.name if row.workflow else None,
     )
 
 
@@ -59,17 +60,30 @@ def _row_to_project(row: m.Project) -> Project:
         code=row.code,
         name=row.name,
         key_patterns=[str(p) for p in patterns],
+        workflow_name=row.workflow.name if row.workflow else None,
     )
 
 
 def _row_to_task(row: m.Task) -> Task:
+    current_phase = row.current_phase or "-1"
+    phase_name = None
+    try:
+        if current_phase and current_phase != "-1":
+            phase = next(
+                (p for p in row.project.workflow.phases if str(p.id) == current_phase or p.code == current_phase),
+                None,
+            )
+            phase_name = phase.name if phase else current_phase
+    except Exception:
+        phase_name = current_phase
     return Task(
         id=row.id,
         project_id=row.project_id,
         task_key=row.task_key,
         title=row.title or "",
         description=row.description or "",
-        current_phase=row.current_phase or "-1",
+        current_phase=current_phase,
+        current_phase_name=phase_name or "",
         status=row.status or "active",
         created_at=row.created_at,
         updated_at=row.updated_at,
@@ -253,7 +267,7 @@ class SAPhaseRepository(PhaseRepository):
 
     def shift_orders(self, workflow_id: int, start_order: int, delta: int = 1) -> None:
         self._session.execute(
-            "UPDATE phases SET phase_order = phase_order + :delta WHERE workflow_id = :wid AND phase_order >= :start",
+            text("UPDATE phases SET phase_order = phase_order + :delta WHERE workflow_id = :wid AND phase_order >= :start"),
             {"delta": delta, "wid": workflow_id, "start": start_order},
         )
 
