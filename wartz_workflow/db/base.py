@@ -458,8 +458,10 @@ class WorkflowDB:
             )
             conn.execute("UPDATE workflows SET is_default = 0")
             conn.execute("UPDATE workflows SET is_default = 1 WHERE id = ?", (selected["id"],))
-            return
 
+        # Keep only one default workflow
+        rows = conn.execute("SELECT id, name, description, is_default FROM workflows ORDER BY id").fetchall()
+        default_rows = [row for row in rows if int(row["is_default"] or 0) == 1]
         keeper_id = int(default_rows[0]["id"])
         conn.execute("UPDATE workflows SET is_default = 0 WHERE id != ? AND is_default = 1", (keeper_id,))
 
@@ -1005,8 +1007,33 @@ class WorkflowDB:
                     1 if bool(data.get("is_default")) else 0,
                 ),
             )
+            workflow_id = c.lastrowid or 0
+            if not data.get("_skip_default_phase"):
+                # Every workflow must have at least one default phase so /phases is never empty.
+                default_code = f"wf-{workflow_id}-default"
+                conn.execute(
+                    """
+                    INSERT INTO phases (workflow_id, code, name, description, min_time_min, phase_order,
+                                        agent_id, next_recommendation, parallel_with, rollback_target, execution_type, is_seed_managed)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        workflow_id,
+                        default_code,
+                        "Новая фаза",
+                        "",
+                        0,
+                        1,
+                        None,
+                        None,
+                        None,
+                        None,
+                        "sync",
+                        0,
+                    ),
+                )
             conn.commit()
-            return c.lastrowid or 0
+            return workflow_id
 
     def get_workflows(self) -> list[dict]:
         with self._conn() as conn:
@@ -1051,6 +1078,7 @@ class WorkflowDB:
     def delete_workflow(self, workflow_id: int | str) -> None:
         resolved = self._resolve_workflow_id(workflow_id)
         with self._conn() as conn:
+            conn.execute("DELETE FROM phases WHERE workflow_id = ?", (resolved,))
             conn.execute("DELETE FROM workflows WHERE id = ?", (resolved,))
             conn.commit()
 
@@ -1417,6 +1445,17 @@ class WorkflowDB:
     def delete_phase(self, phase_id: int | str) -> None:
         resolved = self._resolve_phase_id(phase_id)
         with self._conn() as conn:
+            row = conn.execute(
+                "SELECT workflow_id FROM phases WHERE id = ?", (resolved,)
+            ).fetchone()
+            if not row:
+                raise ValueError(f"Phase not found: {phase_id}")
+            workflow_id = int(row["workflow_id"])
+            count_row = conn.execute(
+                "SELECT COUNT(*) as cnt FROM phases WHERE workflow_id = ?", (workflow_id,)
+            ).fetchone()
+            if count_row and int(count_row["cnt"]) <= 1:
+                raise ValueError("Cannot delete the only phase of a workflow")
             conn.execute("DELETE FROM phases WHERE id = ?", (resolved,))
             conn.commit()
 

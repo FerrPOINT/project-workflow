@@ -25,6 +25,7 @@ def _bootstrap_supervisor_workflow(wdb: WorkflowDB) -> None:
     workflow_id = wdb.create_workflow({
         "name": SUPERVISOR_WORKFLOW_NAME,
         "description": "Workflow used to validate DB-backed supervisor behavior.",
+        "_skip_default_phase": True,
     })
     wdb.create_project({
         "workflow_id": workflow_id,

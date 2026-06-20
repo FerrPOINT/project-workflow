@@ -8,6 +8,7 @@ import click
 import pytest
 from fastapi.testclient import TestClient
 
+from wartz_workflow import config, schema
 from wartz_workflow.cli.core import cli
 from wartz_workflow.ui import _load_cli_reference, app
 
@@ -456,11 +457,59 @@ class TestPhasesPage:
         finally:
             for pid in new_phase_ids:
                 wdb.delete_phase(pid)
-            # Restore orders shifted by insertion
+            # Restore orders shifted by insertion (default workflow may have many seed phases)
             phases = wdb.get_phases(workflow_id=workflow["id"])
-            for idx, phase in enumerate(sorted(phases, key=lambda p: p["phase_order"]), start=1):
+            seed_codes = {str(item.get("code", item.get("id", ""))).strip() for item in schema._read_seed_items()}
+            seed_phases = [p for p in phases if p["code"] in seed_codes or p.get("is_seed_managed")]
+            extra_phases = [p for p in phases if p not in seed_phases]
+            order_index = {code: idx for idx, code in enumerate(config.PHASE_ORDER)}
+            def _seed_sort_key(p):
+                return order_index.get(p["code"], p.get("phase_order", 0) or 0)
+            def _extra_sort_key(p):
+                return p.get("phase_order", 0) or 0
+            for idx, phase in enumerate(sorted(seed_phases, key=_seed_sort_key), start=1):
+                wdb.update_phase(phase["id"], {"phase_order": idx})
+            for idx, phase in enumerate(sorted(extra_phases, key=_extra_sort_key), start=len(seed_phases)+1):
                 wdb.update_phase(phase["id"], {"phase_order": idx})
             assert len(wdb.get_phases(workflow_id=workflow["id"])) == original_count
+
+    def test_phases_page_delete_button_present_and_api_forbids_last_phase(self):
+        from wartz_workflow.ui import _app_state
+
+        wdb = _app_state.get_db()
+        workflow_id = wdb.create_workflow({"name": "Delete Phase Test"})
+        try:
+            page = client.get(f"/phases?workflow_id={workflow_id}")
+            assert page.status_code == 200
+            assert 'class="phase-delete-btn"' in page.text
+            assert "onclick=\"deletePhase(this)\"" in page.text
+            assert "fetch('/api/phases/'" in page.text
+
+            phases = wdb.get_phases(workflow_id=workflow_id)
+            assert len(phases) == 1
+            default_phase_id = phases[0]["id"]
+
+            # Cannot delete the only phase.
+            resp = client.delete(f"/api/phases/{default_phase_id}")
+            assert resp.status_code == 409
+            assert "only phase" in resp.json()["error"].lower() or "единственную" in resp.json()["error"].lower()
+
+            # Add a second phase, then delete it.
+            wdb.create_phase({"workflow_id": workflow_id, "code": "dpt-second", "name": "Second", "phase_order": 2})
+            second = wdb.get_phase_by_code("dpt-second")
+            assert second is not None
+            resp2 = client.delete(f"/api/phases/{second['id']}")
+            assert resp2.status_code == 200
+            assert resp2.json()["ok"] is True
+
+            # Default phase remains.
+            remaining = wdb.get_phases(workflow_id=workflow_id)
+            assert len(remaining) == 1
+            assert remaining[0]["id"] == default_phase_id
+        finally:
+            if wdb.get_phase_by_code("dpt-second"):
+                wdb.delete_phase("dpt-second")
+            wdb.delete_workflow(workflow_id)
 
     def test_phases_page_reorder_payload_uses_db_id_not_legacy_code(self):
         response = client.get("/phases")
@@ -1191,6 +1240,12 @@ class TestWorkflowsPage:
         })
         assert create.status_code == 200
         workflow_id = create.json()["workflow_id"]
+
+        # New workflow must have a single default phase.
+        phases = client.get(f"/api/phases?workflow_id={workflow_id}").json()["phases"]
+        assert len(phases) == 1
+        assert phases[0]["name"] == "Новая фаза"
+        assert phases[0]["execution_type"] == "sync"
 
         update = client.put(f"/api/workflows/{workflow_id}", json={
             "name": "API Workflow Updated",

@@ -132,7 +132,9 @@ class TestEdgeCases:
         db_path = tmp_path / "test6.db"
         wdb = WorkflowDB(str(db_path))
         wdb.init()
-        wdb.create_phase({"id": "p3", "name": "P3", "phase_order": 0})
+        wid = wdb.get_default_workflow()["id"]
+        wdb.create_phase({"workflow_id": wid, "id": "p3", "name": "P3", "phase_order": 0})
+        wdb.create_phase({"workflow_id": wid, "id": "p4", "name": "P4", "phase_order": 1})
         wdb.create_instruction({"phase_id": "p3", "step_num": 1, "description": "Step"})
         wdb.delete_phase("p3")
         assert wdb.get_phase("p3") is None

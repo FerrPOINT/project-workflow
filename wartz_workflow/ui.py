@@ -35,6 +35,11 @@ class _AppState:
         if self._db is None:
             self._db = db.WorkflowDB()
             self._db.init()
+        # Always re-ensure default workflows so runtime mutations (renamed workflows,
+        # missing default flag) are repaired on the next request.
+        with self._db._conn() as conn:
+            self._db._ensure_default_workflows(conn)
+            conn.commit()
         if not self._catalog_ensured:
             schema.ensure_phase_catalog(self._db)
             self._catalog_ensured = True
@@ -730,6 +735,7 @@ def phases_page(request: Request, workflow_id: int | None = Query(default=None))
             "request": request,
             "phases": phases,
             "phase_blocks": phase_blocks,
+            "phase_count": len(phases),
             "workflows": workflows,
             "selected_workflow": selected_workflow,
             "selected_workflow_id": selected_workflow_id,
@@ -976,6 +982,22 @@ def api_phase_create(body: dict[str, Any]):
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
 
     return {"ok": True, "phase_id": phase_id, "phase_order": phase_order}
+
+
+@app.delete("/api/phases/{phase_id}")
+def api_phase_delete(phase_id: str):
+    """Delete a phase. The last phase of a workflow cannot be deleted."""
+    wdb = _app_state.get_db()
+    resolved_phase_id = _coerce_phase_db_id(phase_id)
+    if resolved_phase_id is None:
+        return JSONResponse({"ok": False, "error": "Invalid phase_id"}, status_code=400)
+    if not wdb.get_phase(resolved_phase_id):
+        return JSONResponse({"ok": False, "error": "Phase not found"}, status_code=404)
+    try:
+        wdb.delete_phase(resolved_phase_id)
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=409)
+    return {"ok": True}
 
 
 @app.get("/api/tasks")

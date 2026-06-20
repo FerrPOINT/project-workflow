@@ -191,6 +191,7 @@ function createWorkflow(){
       if(d.ok){
         showToast('Workflow создан','success');
         reloadWorkflows(d.workflow_id);
+        window.location.href = '/phases?workflow_id=' + d.workflow_id;
       } else {
         showToast(d.error || 'Ошибка','error');
       }

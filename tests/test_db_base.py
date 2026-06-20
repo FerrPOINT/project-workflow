@@ -51,6 +51,14 @@ class TestWorkflowCRUD:
         db.delete_workflow(wid)
         assert db.get_workflow(wid) is None
 
+    def test_delete_workflow_blocked_by_linked_phases(self, db):
+        wid = db.create_workflow({"name": "W2"})
+        db.create_phase({"workflow_id": wid, "code": "w2-p1", "name": "P1", "phase_order": 2})
+        # delete_workflow now cascades phases, so deletion should succeed and leave no phases.
+        db.delete_workflow(wid)
+        assert db.get_workflow(wid) is None
+        assert db.get_phases(workflow_id=wid) == []
+
 
 class TestProjectCRUD:
     def test_create_project_requires_code(self, db):
@@ -120,8 +128,36 @@ class TestPhaseCRUD:
     def test_delete_phase(self, db):
         wid = db.get_default_workflow()["id"]
         phid = db.create_phase({"workflow_id": wid, "code": "4", "name": "Four", "phase_order": 4})
+        db.create_phase({"workflow_id": wid, "code": "5", "name": "Five", "phase_order": 5})
         db.delete_phase(phid)
         assert db.get_phase(phid) is None
+
+    def test_delete_phase_refuses_last_phase(self, db):
+        """A workflow must always keep at least one phase."""
+        workflow_id = db.create_workflow({"name": "Last Phase Guard"})
+        phases = db.get_phases(workflow_id=workflow_id)
+        assert len(phases) == 1
+        with pytest.raises(ValueError, match="only phase"):
+            db.delete_phase(phases[0]["id"])
+
+    def test_delete_phase_allows_non_last(self, db):
+        workflow_id = db.create_workflow({"name": "Non Last Phase"})
+        db.create_phase({"workflow_id": workflow_id, "code": "extra", "name": "Extra", "phase_order": 2})
+        phases = db.get_phases(workflow_id=workflow_id)
+        assert len(phases) == 2
+        extra_phase = next(p for p in phases if p["code"] == "extra")
+        db.delete_phase(extra_phase["id"])
+        remaining = db.get_phases(workflow_id=workflow_id)
+        assert len(remaining) == 1
+
+    def test_create_workflow_creates_default_phase(self, db):
+        workflow_id = db.create_workflow({"name": "Default Phase WF"})
+        phases = db.get_phases(workflow_id=workflow_id)
+        assert len(phases) == 1
+        assert phases[0]["name"] == "Новая фаза"
+        assert phases[0]["execution_type"] == "sync"
+        assert phases[0]["is_seed_managed"] == 0
+        assert phases[0]["phase_order"] == 1
 
     def test_get_phases_by_workflow(self, db):
         wid = db.get_default_workflow()["id"]

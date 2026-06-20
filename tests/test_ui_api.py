@@ -167,7 +167,7 @@ class TestApiPhaseCreate:
         from wartz_workflow.ui import _app_state
 
         wdb = _app_state.get_db()
-        workflow_id = wdb.create_workflow({"name": "Create Phase Test"})
+        workflow_id = wdb.create_workflow({"name": "Create Phase Test", "_skip_default_phase": True})
         try:
             ph1 = wdb.create_phase({"workflow_id": workflow_id, "code": "cpt-1", "name": "One", "phase_order": 1})
             ph2 = wdb.create_phase({"workflow_id": workflow_id, "code": "cpt-2", "name": "Two", "phase_order": 2})
@@ -194,15 +194,13 @@ class TestApiPhaseCreate:
             for code in ("cpt-1", "cpt-2", "cpt-3"):
                 if wdb.get_phase_by_code(code):
                     wdb.delete_phase(code)
-            for phase in wdb.get_phases(workflow_id=workflow_id):
-                wdb.delete_phase(phase["id"])
             wdb.delete_workflow(workflow_id)
 
     def test_create_phase_appends_when_order_beyond_end(self):
         from wartz_workflow.ui import _app_state
 
         wdb = _app_state.get_db()
-        workflow_id = wdb.create_workflow({"name": "Create Phase Append"})
+        workflow_id = wdb.create_workflow({"name": "Create Phase Append", "_skip_default_phase": True})
         try:
             ph1 = wdb.create_phase({"workflow_id": workflow_id, "code": "cpa-1", "name": "One", "phase_order": 1})
 
@@ -220,15 +218,13 @@ class TestApiPhaseCreate:
             for code in ("cpa-1",):
                 if wdb.get_phase_by_code(code):
                     wdb.delete_phase(code)
-            for phase in wdb.get_phases(workflow_id=workflow_id):
-                wdb.delete_phase(phase["id"])
             wdb.delete_workflow(workflow_id)
 
     def test_create_phase_accepts_optional_fields(self):
         from wartz_workflow.ui import _app_state
 
         wdb = _app_state.get_db()
-        workflow_id = wdb.create_workflow({"name": "Create Phase Full"})
+        workflow_id = wdb.create_workflow({"name": "Create Phase Full", "_skip_default_phase": True})
         try:
             resp = client.post("/api/phases", json={
                 "workflow_id": workflow_id,
@@ -245,8 +241,6 @@ class TestApiPhaseCreate:
             assert new_phase["description"] == "Custom description"
             assert new_phase["execution_type"] == "parallel"
         finally:
-            for phase in wdb.get_phases(workflow_id=workflow_id):
-                wdb.delete_phase(phase["id"])
             wdb.delete_workflow(workflow_id)
 
     def test_create_phase_position_respects_server_order_not_dom_index(self):
@@ -255,7 +249,7 @@ class TestApiPhaseCreate:
         from wartz_workflow.ui import _app_state
 
         wdb = _app_state.get_db()
-        workflow_id = wdb.create_workflow({"name": "Create Phase Order Fix"})
+        workflow_id = wdb.create_workflow({"name": "Create Phase Order Fix", "_skip_default_phase": True})
         try:
             ph1 = wdb.create_phase({"workflow_id": workflow_id, "code": "cpof-1", "name": "One", "phase_order": 1})
             ph2 = wdb.create_phase({"workflow_id": workflow_id, "code": "cpof-2", "name": "Two", "phase_order": 2})
@@ -285,8 +279,6 @@ class TestApiPhaseCreate:
             for code in ("cpof-1", "cpof-2", "cpof-3", "cpof-4"):
                 if wdb.get_phase_by_code(code):
                     wdb.delete_phase(code)
-            for phase in wdb.get_phases(workflow_id=workflow_id):
-                wdb.delete_phase(phase["id"])
             wdb.delete_workflow(workflow_id)
 
 

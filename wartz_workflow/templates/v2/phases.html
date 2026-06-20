@@ -22,6 +22,8 @@
 .phase-order-controls{display:flex;flex-direction:column;align-items:center;gap:8px;padding-top:8px}
 .phase-add-btn{width:36px;height:32px;border-radius:8px;border:1px dashed var(--accent);background:rgba(88,166,255,.12);color:var(--accent);cursor:pointer;transition:all .12s;font-size:20px;font-weight:700;line-height:1}
 .phase-add-btn:hover{background:var(--accent);color:#fff;border-style:solid}
+.phase-delete-btn{width:36px;height:32px;border-radius:8px;border:1px solid var(--red);background:rgba(239,68,68,.12);color:var(--red);cursor:pointer;transition:all .12s;font-size:18px;font-weight:700;line-height:1}
+.phase-delete-btn:hover{background:var(--red);color:#fff}
 .phase-move-btn{width:36px;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;transition:all .12s;font-size:16px;font-weight:700}
 .phase-move-btn:hover:not(:disabled){background:var(--surface-hover);border-color:var(--accent)}
 .phase-move-btn:disabled{opacity:.35;cursor:not-allowed}
@@ -40,7 +42,7 @@
 .timeline-desc{font-size:12px;color:var(--text-muted);margin-top:4px}
 .empty-note{color:var(--text-dim);font-size:13px;line-height:1.6}
 @media (max-width: 980px){.phases-layout{grid-template-columns:1fr}.workflow-nav{max-height:none}}
-@media (max-width: 720px){.timeline-row{grid-template-columns:1fr}.phase-order-controls{flex-direction:row;justify-content:flex-start;padding-top:0}.phase-order-hint{text-align:left}}
+@media (max-width: 720px){.timeline-row{grid-template-columns:1fr}.phase-order-controls{flex-direction:row;flex-wrap:wrap;justify-content:flex-start;padding-top:0;gap:6px}.phase-order-hint{text-align:left;width:100%}}
 {% endblock %}
 
 {% macro phase_body(p) -%}
@@ -49,6 +51,7 @@
     <button type="button" class="phase-move-btn move-up-btn" onclick="movePhase(this, -1)" aria-label="Поднять фазу выше">↑</button>
     <button type="button" class="phase-add-btn" onclick="addPhaseAfter(this)" aria-label="Добавить фазу после">+</button>
     <button type="button" class="phase-move-btn move-down-btn" onclick="movePhase(this, 1)" aria-label="Опустить фазу ниже">↓</button>
+    <button type="button" class="phase-delete-btn" onclick="deletePhase(this)" aria-label="Удалить фазу"{% if phase_count <= 1 %} disabled style="opacity:.35;cursor:not-allowed"{% endif %}>×</button>
     <div class="phase-order-hint">Порядок<br>меняется тут</div>
   </div>
   <a href="/phase/{{ p.id }}" class="timeline-card">
@@ -162,6 +165,33 @@ async function addPhaseAfter(button) {
       return;
     }
     // Full reload to re-render server-side grouping and fresh IDs.
+    window.location.reload();
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function deletePhase(button) {
+  const item = button.closest('.timeline-item');
+  if (!item) return;
+
+  const items = getPhaseTimelineItems();
+  if (items.length <= 1) {
+    showToast('Нельзя удалить единственную фазу workflow', 'error');
+    return;
+  }
+
+  if (!confirm('Удалить фазу?')) return;
+
+  button.disabled = true;
+  try {
+    const phaseId = item.dataset.phaseId;
+    const resp = await fetch('/api/phases/' + phaseId, {method: 'DELETE'});
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || !data.ok) {
+      showToast(data.error || 'Не удалось удалить фазу', 'error');
+      return;
+    }
     window.location.reload();
   } finally {
     button.disabled = false;
