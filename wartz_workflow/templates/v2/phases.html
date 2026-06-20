@@ -139,9 +139,12 @@ async function addPhaseAfter(button) {
     return;
   }
 
-  const items = getPhaseTimelineItems();
-  const currentIndex = items.indexOf(item);
-  const insertOrder = currentIndex + 2; // after current (1-based)
+  const currentOrder = parseInt(item.dataset.phaseOrder || '0', 10);
+  if (!currentOrder || currentOrder < 1) {
+    showToast('Не удалось определить позицию фазы', 'error');
+    return;
+  }
+  const insertOrder = currentOrder + 1; // insert after current (1-based server order)
 
   button.disabled = true;
   try {

@@ -24,17 +24,20 @@ from .wizard import VERDICT_LABELS
 # ── App state ───────────────────────────────────────────────────────────
 class _AppState:
     """Application state holder (replaces module-level globals)."""
-    __slots__ = ("_db", "_srv")
+    __slots__ = ("_db", "_srv", "_catalog_ensured")
 
     def __init__(self):
         self._db: db.WorkflowDB | None = None
         self._srv: service.PhaseService | None = None
+        self._catalog_ensured: bool = False
 
     def get_db(self) -> db.WorkflowDB:
         if self._db is None:
             self._db = db.WorkflowDB()
             self._db.init()
-        schema.ensure_phase_catalog(self._db)
+        if not self._catalog_ensured:
+            schema.ensure_phase_catalog(self._db)
+            self._catalog_ensured = True
         return self._db
 
     def get_service(self) -> service.PhaseService:

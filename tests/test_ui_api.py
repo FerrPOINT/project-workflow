@@ -249,6 +249,46 @@ class TestApiPhaseCreate:
                 wdb.delete_phase(phase["id"])
             wdb.delete_workflow(workflow_id)
 
+    def test_create_phase_position_respects_server_order_not_dom_index(self):
+        """Simulate clicking + on the second-to-last phase in a reordered list.
+        The API must insert after that phase, not at the old DOM index."""
+        from wartz_workflow.ui import _app_state
+
+        wdb = _app_state.get_db()
+        workflow_id = wdb.create_workflow({"name": "Create Phase Order Fix"})
+        try:
+            ph1 = wdb.create_phase({"workflow_id": workflow_id, "code": "cpof-1", "name": "One", "phase_order": 1})
+            ph2 = wdb.create_phase({"workflow_id": workflow_id, "code": "cpof-2", "name": "Two", "phase_order": 2})
+            ph3 = wdb.create_phase({"workflow_id": workflow_id, "code": "cpof-3", "name": "Three", "phase_order": 3})
+            ph4 = wdb.create_phase({"workflow_id": workflow_id, "code": "cpof-4", "name": "Four", "phase_order": 4})
+
+            # Move last phase to position 2 via API; now DOM index 1 = 'Four' but server order = 2.
+            resp = client.put("/api/phases/order", json={
+                "orders": [
+                    {"phase_id": ph1, "phase_order": 1},
+                    {"phase_id": ph4, "phase_order": 2},
+                    {"phase_id": ph2, "phase_order": 3},
+                    {"phase_id": ph3, "phase_order": 4},
+                ]
+            })
+            assert resp.status_code == 200
+
+            # Click + on 'Four' (server order 2). New phase must land at order 3.
+            resp = client.post("/api/phases", json={"workflow_id": workflow_id, "phase_order": 3})
+            assert resp.status_code == 200
+            data = resp.json()
+            phases = sorted(wdb.get_phases(workflow_id=workflow_id), key=lambda p: p["phase_order"])
+            names = [p["name"] for p in phases]
+            assert names == ["One", "Four", "Новая фаза", "Two", "Three"]
+            assert data["phase_order"] == 3
+        finally:
+            for code in ("cpof-1", "cpof-2", "cpof-3", "cpof-4"):
+                if wdb.get_phase_by_code(code):
+                    wdb.delete_phase(code)
+            for phase in wdb.get_phases(workflow_id=workflow_id):
+                wdb.delete_phase(phase["id"])
+            wdb.delete_workflow(workflow_id)
+
 
 def _workflow_row(lookup: str | None = None, *, workflow_id: int | None = None, name: str | None = None, is_default: bool | None = None) -> dict:
     from wartz_workflow.ui import _app_state

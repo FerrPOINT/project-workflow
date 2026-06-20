@@ -421,6 +421,15 @@ class TestPhasesPage:
         assert f'href="/phase/{phase["id"]}"' in response.text
         assert 'href="/phase/0.7"' not in response.text
 
+    def test_phases_page_add_phase_button_uses_server_phase_order_attribute(self):
+        response = client.get("/phases")
+        assert response.status_code == 200
+
+        # Each row should expose the server order via data-phase-order and the JS should read it
+        assert 'data-phase-order=' in response.text
+        assert 'parseInt(item.dataset.phaseOrder' in response.text
+        assert 'currentIndex + 2' not in response.text
+
     def test_phases_page_add_phase_api_flow_creates_phase_in_default_workflow(self):
         from wartz_workflow.ui import _app_state
 
