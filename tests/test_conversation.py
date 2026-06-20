@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from wartz_workflow import conversation as convo
+from workflow_cli import conversation as convo
 
 
 @pytest.fixture

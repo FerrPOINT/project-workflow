@@ -3,8 +3,8 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
-from wartz_workflow.models import Phase, PhaseCheck, PhaseEvidence, PhaseInstruction
-from wartz_workflow.wizard import WizardEngine, PromptCache
+from workflow_cli.models import Phase, PhaseCheck, PhaseEvidence, PhaseInstruction
+from workflow_cli.wizard import WizardEngine, PromptCache
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -13,7 +13,7 @@ from wartz_workflow.wizard import WizardEngine, PromptCache
 
 @pytest.fixture
 def engine():
-    with patch("wartz_workflow.wizard.convo") as mock_convo:
+    with patch("workflow_cli.wizard.convo") as mock_convo:
         mock_convo.get_last_phase.return_value = None
         eng = WizardEngine("AAT-1", "/tmp")
         eng.all_phases = [
@@ -274,7 +274,7 @@ class TestRecordParallelTransition:
 
 class TestBuildResult:
     def _make_engine(self):
-        with patch("wartz_workflow.wizard.convo") as mock_convo:
+        with patch("workflow_cli.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             eng = WizardEngine("AAT-1", "/tmp")
         eng.db = MagicMock()
@@ -348,7 +348,7 @@ class TestBuildResult:
 
 class TestBuildParallelResult:
     def _make_engine(self):
-        with patch("wartz_workflow.wizard.convo") as mock_convo:
+        with patch("workflow_cli.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             eng = WizardEngine("AAT-1", "/tmp")
         eng.db = MagicMock()
@@ -424,7 +424,7 @@ class TestBuildParallelResult:
 
 class TestBuildFailMessage:
     def _make_engine(self):
-        with patch("wartz_workflow.wizard.convo") as mock_convo:
+        with patch("workflow_cli.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             eng = WizardEngine("AAT-1")
         eng.db = MagicMock()
@@ -466,7 +466,7 @@ class TestBuildFailMessage:
 
 class TestEvaluateEdgeCases:
     def test_orphan_phase_returns_blocked(self):
-        with patch("wartz_workflow.wizard.convo") as mock_convo:
+        with patch("workflow_cli.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             engine = WizardEngine("AAT-1", "/tmp")
             engine.current_phase = "orphan"
@@ -479,7 +479,7 @@ class TestEvaluateEdgeCases:
         assert result["blockers"] == ["phase-not-configured"]
 
     def test_sync_evaluate_pass(self):
-        with patch("wartz_workflow.wizard.convo") as mock_convo:
+        with patch("workflow_cli.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             engine = WizardEngine("AAT-1", "/tmp")
             ph = Phase(
@@ -501,7 +501,7 @@ class TestEvaluateEdgeCases:
         assert "deploy" in result["covered"]
 
     def test_parallel_evaluate_pass(self):
-        with patch("wartz_workflow.wizard.convo") as mock_convo:
+        with patch("workflow_cli.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             engine = WizardEngine("AAT-1", "/tmp")
             ph_a = Phase(
@@ -538,7 +538,7 @@ class TestEvaluateEdgeCases:
         assert result["phase_name"] == "Parallel group: 1, 2"
 
     def test_parallel_evaluate_partial_stays(self):
-        with patch("wartz_workflow.wizard.convo") as mock_convo:
+        with patch("workflow_cli.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             engine = WizardEngine("AAT-1", "/tmp")
             ph_a = Phase(

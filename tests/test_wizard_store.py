@@ -2,8 +2,8 @@
 import json
 from unittest.mock import MagicMock
 
-from wartz_workflow.wizard_store import WizardAssessmentStore, _row_to_assessment
-from wartz_workflow.wizard_types import WizardAssessment
+from workflow_cli.wizard_store import WizardAssessmentStore, _row_to_assessment
+from workflow_cli.wizard_types import WizardAssessment
 
 
 class TestWizardAssessmentStore:

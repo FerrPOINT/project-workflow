@@ -1,4 +1,4 @@
--- WARTZ Workflow DB — финальная схема
+-- Workflow CLI DB — финальная схема
 -- PK: INTEGER AUTOINCREMENT для runtime-сущностей
 -- code TEXT UNIQUE для семантических идентификаторов фаз/project
 

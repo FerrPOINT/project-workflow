@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
-DB_DIR = Path.home() / ".wartz-workflow"
+DB_DIR = Path.home() / ".workflow-cli"
 DB_PATH = DB_DIR / "conversation.db"
 
 

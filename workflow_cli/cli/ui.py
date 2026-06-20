@@ -38,8 +38,8 @@ def step_cmd(
     """🚶 Step — движение по workflow: показать текущую фазу или отчитаться и перейти.
 
     Usage:
-      wartz-workflow step --task TASK-KEY                → текущие инструкции
-      wartz-workflow step --task TASK-KEY --report "..."  → оценить отчёт исполнителя CLI и перейти
+      workflow-cli step --task TASK-KEY                → текущие инструкции
+      workflow-cli step --task TASK-KEY --report "..."  → оценить отчёт исполнителя CLI и перейти
     """
     task_key = _require_valid_key(task)
     jmode = ctx.obj.get("json_mode", False)
@@ -77,8 +77,8 @@ def history_cmd(ctx: click.Context, task: str, n: Optional[int]) -> None:
     """📜 History — история отчётов, переходов и статусов по задаче.
 
     Usage:
-      wartz-workflow history --task TASK-KEY            → все записи
-      wartz-workflow history --task TASK-KEY --n 50     → последние 50 записей
+      workflow-cli history --task TASK-KEY            → все записи
+      workflow-cli history --task TASK-KEY --n 50     → последние 50 записей
     """
     task_key = _require_valid_key(task)
     jmode = ctx.obj.get("json_mode", False)

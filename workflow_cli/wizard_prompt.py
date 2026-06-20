@@ -45,7 +45,7 @@ def build_phase_prompt(
     evidence = contract.get("required_evidence") or ["Нет явных evidence items."]
     cli_actor = ctx.get("cli_actor") or {
         "description": "CLI user",
-        "entrypoint": "wartz-workflow step --task TASK-KEY [--report TEXT]",
+        "entrypoint": "workflow-cli step --task TASK-KEY [--report TEXT]",
     }
 
     delegated = ""

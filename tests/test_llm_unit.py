@@ -6,21 +6,21 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from wartz_workflow.llm import (
+from workflow_cli.llm import (
     OllamaClient,
     PromptBuilder,
     ResponseParser,
 )
-from wartz_workflow.models import Phase
+from workflow_cli.models import Phase
 
 
 class TestLoadApiKey:
     def test_env_key(self, monkeypatch):
         monkeypatch.setenv("OLLAMA_API_KEY", "env-token")
         import importlib
-        import wartz_workflow.llm
-        importlib.reload(wartz_workflow.llm)
-        assert wartz_workflow.llm._load_api_key() == "env-token"
+        import workflow_cli.llm
+        importlib.reload(workflow_cli.llm)
+        assert workflow_cli.llm._load_api_key() == "env-token"
 
     def test_env_empty_reads_file(self, tmp_path, monkeypatch):
         monkeypatch.setenv("OLLAMA_API_KEY", "")
@@ -29,9 +29,9 @@ class TestLoadApiKey:
             env_file.parent.mkdir(parents=True, exist_ok=True)
             env_file.write_text("OLLAMA_API_KEY=file-token\n")
             import importlib
-            import wartz_workflow.llm
-            importlib.reload(wartz_workflow.llm)
-            assert wartz_workflow.llm._load_api_key() == "file-token"
+            import workflow_cli.llm
+            importlib.reload(workflow_cli.llm)
+            assert workflow_cli.llm._load_api_key() == "file-token"
         finally:
             if env_file.exists():
                 env_file.unlink()
@@ -42,17 +42,17 @@ class TestLoadApiKey:
         if env_file.exists():
             env_file.unlink()
         import importlib
-        import wartz_workflow.llm
-        importlib.reload(wartz_workflow.llm)
-        assert wartz_workflow.llm._load_api_key() == ""
+        import workflow_cli.llm
+        importlib.reload(workflow_cli.llm)
+        assert workflow_cli.llm._load_api_key() == ""
 
     def test_fresh_import_env(self, monkeypatch):
         monkeypatch.setenv("OLLAMA_API_KEY", "fresh-token")
         import importlib
-        import wartz_workflow.llm
-        importlib.reload(wartz_workflow.llm)
-        assert wartz_workflow.llm._load_api_key() == "fresh-token"
-        assert wartz_workflow.llm.OLLAMA_API_KEY == "fresh-token"
+        import workflow_cli.llm
+        importlib.reload(workflow_cli.llm)
+        assert workflow_cli.llm._load_api_key() == "fresh-token"
+        assert workflow_cli.llm.OLLAMA_API_KEY == "fresh-token"
 
 
 class TestOllamaClientDetection:
@@ -161,7 +161,7 @@ class TestPromptBuilder:
         assert report in prompt
 
     def test_build_user_prompt_with_lists(self):
-        from wartz_workflow.models import PhaseInstruction, PhaseCheck, PhaseEvidence
+        from workflow_cli.models import PhaseInstruction, PhaseCheck, PhaseEvidence
         phase = Phase(
             code="1",
             name="Phase One",

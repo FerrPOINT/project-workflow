@@ -14,14 +14,14 @@ from typing import List, Optional, Sequence
 
 
 from . import config
-from wartz_workflow.models import (
+from workflow_cli.models import (
     Phase,
     PhaseCheck,
     PhaseDelegate,
     PhaseEvidence,
     PhaseInstruction,
 )
-from wartz_workflow.db import WorkflowDB
+from workflow_cli.db import WorkflowDB
 
 
 # ── DB Load ─────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 """Tests for wizard_contracts.py."""
-from wartz_workflow.models import Phase, PhaseInstruction, PhaseCheck, PhaseEvidence
-from wartz_workflow.wizard_contracts import PhaseContractBuilder, text_from_instruction, text_from_check, text_from_evidence, phase_to_dict
+from workflow_cli.models import Phase, PhaseInstruction, PhaseCheck, PhaseEvidence
+from workflow_cli.wizard_contracts import PhaseContractBuilder, text_from_instruction, text_from_check, text_from_evidence, phase_to_dict
 
 
 class TestTextHelpers:

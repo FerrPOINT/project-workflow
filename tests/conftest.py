@@ -6,23 +6,23 @@ from pathlib import Path
 
 import pytest
 
-from wartz_workflow import config, db as db_module, schema as schema_module, ui as ui_module
+from workflow_cli import config, db as db_module, schema as schema_module, ui as ui_module
 
 
 @pytest.fixture(autouse=True)
 def isolate_ui_runtime_state(tmp_path, monkeypatch):
     """Keep tests away from the user's real runtime DB/settings and mutable seed file."""
-    runtime_dir = tmp_path / ".wartz-workflow"
+    runtime_dir = tmp_path / ".workflow-cli"
     runtime_dir.mkdir(parents=True, exist_ok=True)
     test_db = runtime_dir / "workflow.db"
     settings_path = runtime_dir / "settings.json"
     seed_path = runtime_dir / "seed.json"
-    repo_seed = Path(__file__).resolve().parents[1] / "wartz_workflow" / "references" / "seed.json"
+    repo_seed = Path(__file__).resolve().parents[1] / "workflow_cli" / "references" / "seed.json"
     seed_path.write_text(repo_seed.read_text(encoding="utf-8"), encoding="utf-8")
 
     monkeypatch.setattr(db_module.base, "DB_PATH", test_db)
     monkeypatch.setattr(db_module, "DB_PATH", test_db)
-    monkeypatch.setattr(config, "WARTZ_DIR", str(runtime_dir))
+    monkeypatch.setattr(config, "WORKFLOW_DIR", str(runtime_dir))
     monkeypatch.setattr(config, "SETTINGS_PATH", str(settings_path))
     monkeypatch.setattr(schema_module, "_SEED_PATH", seed_path)
     monkeypatch.setattr(ui_module, "_app_state", ui_module._AppState())
@@ -30,8 +30,8 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
     # Reduce FD pressure in tests: monkeypatch _conn to skip WAL
     import sqlite3
     from pathlib import Path as _Path
-    from wartz_workflow.db import WorkflowDB
-    from wartz_workflow.schema import ensure_phase_catalog
+    from workflow_cli.db import WorkflowDB
+    from workflow_cli.schema import ensure_phase_catalog
 
     _orig_conn = WorkflowDB._conn
     def _test_conn(self):

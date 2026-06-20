@@ -6,10 +6,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from wartz_workflow.cli.core import FAIL, PASS, WARN, BLOCK, _require_valid_key, cli, out_json
-from wartz_workflow.phases import get_next_phase, get_phase_checklist_raw, show_phase_checklist, show_all_phases
-from wartz_workflow.wizard_context import WizardContextBuilder
-from wartz_workflow.task_validator import (
+from workflow_cli.cli.core import FAIL, PASS, WARN, BLOCK, _require_valid_key, cli, out_json
+from workflow_cli.phases import get_next_phase, get_phase_checklist_raw, show_phase_checklist, show_all_phases
+from workflow_cli.wizard_context import WizardContextBuilder
+from workflow_cli.task_validator import (
     TaskKeyValidator, ValidatedTaskKey, TaskKeyValidationError,
     validate, validate_or_die, migrate_key,
 )
@@ -48,7 +48,7 @@ class TestCliCore:
     def test_require_valid_key_success(self, monkeypatch):
         v = TaskKeyValidator()
         monkeypatch.setattr(
-            "wartz_workflow.cli.core._get_task_key_validator",
+            "workflow_cli.cli.core._get_task_key_validator",
             lambda: v,
         )
         result = _require_valid_key("AAT-123")
@@ -57,7 +57,7 @@ class TestCliCore:
     def test_require_valid_key_abort(self, monkeypatch):
         v = TaskKeyValidator()
         monkeypatch.setattr(
-            "wartz_workflow.cli.core._get_task_key_validator",
+            "workflow_cli.cli.core._get_task_key_validator",
             lambda: v,
         )
         import click
@@ -80,7 +80,7 @@ class TestPhases:
         assert get_next_phase("-1") == "0.0a"
 
     def test_get_next_phase_last_returns_none(self):
-        from wartz_workflow import config
+        from workflow_cli import config
         last = config.PHASE_ORDER[-1]
         assert get_next_phase(last) is None
 
@@ -109,7 +109,7 @@ class TestPhases:
     def test_show_all_phases(self, capsys):
         show_all_phases()
         captured = capsys.readouterr()
-        assert "WARTZ Workflow" in captured.out
+        assert "Workflow CLI" in captured.out
         assert "BLOCKER" in captured.out
 
 
@@ -128,7 +128,7 @@ class TestWizardContextEdgeCases:
         assert builder._phase_by_id(999) is None
 
     def test_phase_by_id_found(self, monkeypatch):
-        from wartz_workflow.models import Phase
+        from workflow_cli.models import Phase
         db = MagicMock()
         phase = Phase(id=1, code="1", name="Preflight", description="", checks=[], evidence=[], instructions=[], next_recommendation="", parallel_with=None, rollback_target=None)
         task = {"id": 1, "current_phase": "1", "status": "in_progress"}
@@ -161,12 +161,12 @@ class TestWizardContextEdgeCases:
         db.get_task_history.return_value = []
         db.get_supervisor_runs.return_value = []
         task = {"id": 1, "current_phase": "1", "status": "in_progress"}
-        from wartz_workflow.models import Phase
+        from workflow_cli.models import Phase
         phase = Phase(id=1, code="1", name="Preflight", description="", checks=[], evidence=[], instructions=[], next_recommendation="", parallel_with=None, rollback_target=None)
 
         def boom(*a, **kw):
             raise RuntimeError("boom")
-        monkeypatch.setattr("wartz_workflow.wizard_context.convo.get_messages", boom)
+        monkeypatch.setattr("workflow_cli.wizard_context.convo.get_messages", boom)
 
         builder = WizardContextBuilder(
             db=db, task=task, project={"code": "AAT"}, workflow=None,

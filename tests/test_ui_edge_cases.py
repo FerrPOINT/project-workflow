@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
 
-from wartz_workflow.ui import (
+from workflow_cli.ui import (
     _build_parallel_phase_blocks,
     _coerce_phase_db_id,
     _group_instructions,
@@ -151,7 +151,7 @@ class TestResolveTaskPhase:
         assert phase["code"] == "x"
 
     def test_legacy_redirect(self, monkeypatch):
-        from wartz_workflow import config
+        from workflow_cli import config
         monkeypatch.setattr(config, "LEGACY_PHASE_REDIRECTS", {"old": "1"})
         db = MagicMock()
         db.get_phases.return_value = []
@@ -188,8 +188,8 @@ class TestScanHermesSkills:
 class TestSeedToSqlite:
     def test_calls_ensure_phase_catalog(self, monkeypatch):
         db = MagicMock()
-        monkeypatch.setattr("wartz_workflow.ui._app_state", MagicMock(db=db))
-        from wartz_workflow import schema
+        monkeypatch.setattr("workflow_cli.ui._app_state", MagicMock(db=db))
+        from workflow_cli import schema
         called = []
         monkeypatch.setattr(schema, "ensure_phase_catalog", lambda db: called.append(True))
         _seed_to_sqlite()
@@ -201,7 +201,7 @@ class TestLoadWorkflows:
         db = MagicMock()
         db.get_workflows.return_value = []
         db.get_phases.return_value = []
-        monkeypatch.setattr("wartz_workflow.ui._app_state", MagicMock(get_db=lambda: db))
+        monkeypatch.setattr("workflow_cli.ui._app_state", MagicMock(get_db=lambda: db))
         assert _load_workflows() == []
 
 
@@ -211,7 +211,7 @@ class TestLoadTasks:
         db.get_tasks.return_value = []
         db.get_workflows.return_value = []
         db.get_phases.return_value = []
-        monkeypatch.setattr("wartz_workflow.ui._app_state", MagicMock(get_db=lambda: db))
+        monkeypatch.setattr("workflow_cli.ui._app_state", MagicMock(get_db=lambda: db))
         assert _load_tasks() == []
 
     def test_response_as_string(self, monkeypatch):
@@ -221,7 +221,7 @@ class TestLoadTasks:
         db.get_phases.return_value = []
         db.get_task_history.return_value = []
         db.get_supervisor_runs.return_value = [{"verdict": "pass", "phase_code": "1", "response": "plain string", "created_at": "2025-01-01"}]
-        monkeypatch.setattr("wartz_workflow.ui._app_state", MagicMock(get_db=lambda: db))
+        monkeypatch.setattr("workflow_cli.ui._app_state", MagicMock(get_db=lambda: db))
         tasks = _load_tasks()
         assert tasks[0]["latest_verdict_message"] == "plain string"
 
@@ -235,7 +235,7 @@ class TestLoadTasks:
             {"status": "done", "completed_at": "2025-01-20"},
         ]
         db.get_supervisor_runs.return_value = []
-        monkeypatch.setattr("wartz_workflow.ui._app_state", MagicMock(get_db=lambda: db))
+        monkeypatch.setattr("workflow_cli.ui._app_state", MagicMock(get_db=lambda: db))
         tasks = _load_tasks()
         assert tasks[0]["completed_at"] == "2025-01-20"
 
@@ -246,7 +246,7 @@ class TestLoadTasks:
         db.get_phases.return_value = []
         db.get_task_history.return_value = [{"status": "done", "completed_at": None}]
         db.get_supervisor_runs.return_value = []
-        monkeypatch.setattr("wartz_workflow.ui._app_state", MagicMock(get_db=lambda: db))
+        monkeypatch.setattr("workflow_cli.ui._app_state", MagicMock(get_db=lambda: db))
         tasks = _load_tasks()
         assert tasks[0]["completed_at"] == "2025-02-01"
 
@@ -257,7 +257,7 @@ class TestLoadTasks:
 
 class TestTaskDetailEdgeCases:
     def test_task_detail_supervisor_runs_next_contract(self, monkeypatch):
-        from wartz_workflow.ui import _get_task_detail
+        from workflow_cli.ui import _get_task_detail
         db = MagicMock()
         db.get_task_by_key.return_value = {"id": 1, "task_key": "AAT-1", "status": "active", "current_phase": "1", "title": "T", "workflow_id": None, "project_id": None}
         db.get_task_history.return_value = []
@@ -267,13 +267,13 @@ class TestTaskDetailEdgeCases:
             {"verdict": "pass", "phase_code": "1", "response": {"next_phase": "2", "message": "ok"}, "created_at": "2025-01-01"}
         ]
         db.get_phase_by_code.return_value = {"name": "Next", "description": "", "instructions": [], "checks": [], "evidence": [], "delegate_agent": None, "delegate_toolsets": []}
-        monkeypatch.setattr("wartz_workflow.ui._app_state", MagicMock(get_db=lambda: db))
+        monkeypatch.setattr("workflow_cli.ui._app_state", MagicMock(get_db=lambda: db))
         task = _get_task_detail("AAT-1")
         assert task["supervisor_runs"][0]["next_contract"] is not None
         assert task["supervisor_runs"][0]["next_contract"]["phase_name"] == "Next"
 
     def test_task_detail_supervisor_runs_no_next_phase(self, monkeypatch):
-        from wartz_workflow.ui import _get_task_detail
+        from workflow_cli.ui import _get_task_detail
         db = MagicMock()
         db.get_task_by_key.return_value = {"id": 1, "task_key": "AAT-1", "status": "active", "current_phase": "1", "title": "T", "workflow_id": None, "project_id": None}
         db.get_task_history.return_value = []
@@ -282,12 +282,12 @@ class TestTaskDetailEdgeCases:
         db.get_supervisor_runs.return_value = [
             {"verdict": "pass", "phase_code": "1", "response": {"message": "ok"}, "created_at": "2025-01-01"}
         ]
-        monkeypatch.setattr("wartz_workflow.ui._app_state", MagicMock(get_db=lambda: db))
+        monkeypatch.setattr("workflow_cli.ui._app_state", MagicMock(get_db=lambda: db))
         task = _get_task_detail("AAT-1")
         assert task["supervisor_runs"][0]["next_contract"] is None
 
     def test_main_entry(self, monkeypatch):
-        from wartz_workflow.ui import main
+        from workflow_cli.ui import main
         called = []
         monkeypatch.setattr("uvicorn.run", lambda *a, **kw: called.append((a, kw)))
         monkeypatch.setattr("sys.argv", ["ui", "--port", "8811"])
@@ -425,8 +425,8 @@ class TestUpdateConfigPhaseOrder:
     def test_empty_phases(self, monkeypatch):
         db = MagicMock()
         db.get_phases.return_value = []
-        monkeypatch.setattr("wartz_workflow.ui._app_state", MagicMock(get_db=lambda: db))
-        from wartz_workflow import config
+        monkeypatch.setattr("workflow_cli.ui._app_state", MagicMock(get_db=lambda: db))
+        from workflow_cli import config
         original = config.PHASE_ORDER[:]
         _update_config_phase_order()
         assert config.PHASE_ORDER == original

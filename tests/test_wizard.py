@@ -2,8 +2,8 @@
 
 from unittest.mock import patch
 
-from wartz_workflow.models import Phase
-from wartz_workflow.wizard import WizardEngine
+from workflow_cli.models import Phase
+from workflow_cli.wizard import WizardEngine
 
 
 class TestWizardEvaluate:

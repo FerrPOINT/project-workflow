@@ -1,5 +1,5 @@
 """Tests for PhaseFSM formal state machine."""
-from wartz_workflow.phase_fsm import PhaseFSM
+from workflow_cli.phase_fsm import PhaseFSM
 
 
 class TestPhaseFSM:

@@ -43,13 +43,14 @@ def _require_valid_key(task_key: str) -> str:
         raise click.Abort()
     return validated.normalized or task_key
 
+"""Workflow CLI — жёсткий пофазовый клиент."""
 
 @click.group()
-@click.version_option(version="1.0.0", prog_name="wartz-workflow")
+@click.version_option(version="1.0.0", prog_name="workflow-cli")
 @click.option("--json", "json_mode", is_flag=True, help="Машиночитаемый JSON вывод (для CLI-автоматизации и внешних исполнителей)")
 @click.pass_context
 def cli(ctx: click.Context, json_mode: bool) -> None:
-    """WARTZ Workflow CLI — жёсткий пофазовый клиент."""
+    """Workflow CLI — жёсткий пофазовый клиент."""
     ctx.ensure_object(dict)
     ctx.obj["json_mode"] = json_mode
 

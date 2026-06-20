@@ -104,7 +104,7 @@ class WizardContextBuilder:
         project_code = self.project.get("code") if self.project else None
         if not project_code:
             return None
-        return Path.home() / ".wartz-workflow" / "tasks" / project_code / self.task_key
+        return Path.home() / ".workflow-cli" / "tasks" / project_code / self.task_key
 
     def _scan_artifacts(self) -> list[ArtifactSnapshot]:
         """Check existence and freshness of known task artifacts."""
@@ -189,11 +189,11 @@ class WizardContextBuilder:
         return {
             "kind": "cli-user",
             "description": (
-                "Любой пользователь или автоматизация, которая вызывает WARTZ Workflow CLI "
+                "Любой пользователь или автоматизация, которая вызывает Workflow CLI CLI "
                 "и отправляет report по текущей фазе. Supervisor не предполагает конкретную модель, "
                 "Ollama или другого провайдера."
             ),
-            "entrypoint": "wartz-workflow step --task TASK-KEY [--report TEXT]",
+            "entrypoint": "workflow-cli step --task TASK-KEY [--report TEXT]",
         }
 
     @staticmethod

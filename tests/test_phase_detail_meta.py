@@ -3,7 +3,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from wartz_workflow.ui import _app_state, _seed_to_sqlite, app
+from workflow_cli.ui import _app_state, _seed_to_sqlite, app
 
 
 client = TestClient(app)

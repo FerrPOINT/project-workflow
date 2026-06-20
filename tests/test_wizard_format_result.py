@@ -1,6 +1,6 @@
 """Tests for format_result() human-readable output."""
 
-from wartz_workflow.wizard import format_result
+from workflow_cli.wizard import format_result
 
 
 class TestFormatResult:

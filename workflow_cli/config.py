@@ -1,13 +1,13 @@
-"""Конфигурация WARTZ Workflow CLI."""
+"""Конфигурация Workflow CLI CLI."""
 
 import os
 from pathlib import Path
 
 # Deterministic default: package-local (not expanduser which varies by process).
-# WARTZ_DIR env var overrides.
+# WORKFLOW_DIR env var overrides.
 _pkg_dir = Path(__file__).resolve().parent.parent
-WARTZ_DIR = os.getenv("WARTZ_DIR", str(_pkg_dir / "data"))
-SUITES_DIR = os.getenv("WARTZ_SUITES_DIR", "/root/.hermes/skills/software-development")
+WORKFLOW_DIR = os.getenv("WORKFLOW_DIR", str(_pkg_dir / "data"))
+SUITES_DIR = os.getenv("WORKFLOW_SUITES_DIR", "/root/.hermes/skills/software-development")
 
 # Фазы workflow (порядок важен!)
 PHASE_ORDER = [
@@ -74,8 +74,8 @@ GITLAB_BASE_URL = os.getenv("GITLAB_BASE_URL", "https://gt.wmtgroup.ru")
 GITLAB_API_URL = f"{GITLAB_BASE_URL}/api/v4"
 
 # UI
-UI_PORT = int(os.getenv("WARTZ_UI_PORT", "8811"))
-UI_HOST = os.getenv("WARTZ_UI_HOST", "0.0.0.0")
+UI_PORT = int(os.getenv("WORKFLOW_UI_PORT", "8811"))
+UI_HOST = os.getenv("WORKFLOW_UI_HOST", "0.0.0.0")
 
 # Bootstrap workflows / projects
 DEFAULT_WORKFLOW_NAME = "Default Workflow"
@@ -90,7 +90,7 @@ SMOKE_TASK_KEY_PATTERNS = [
 
 import json
 
-SETTINGS_PATH = os.path.join(WARTZ_DIR, "settings.json")
+SETTINGS_PATH = os.path.join(WORKFLOW_DIR, "settings.json")
 
 # Legacy bootstrap source only. Runtime source of truth now lives in DB.projects.key_patterns.
 DEFAULT_TASK_KEY_PATTERNS = [

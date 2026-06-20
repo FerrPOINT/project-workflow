@@ -9,9 +9,9 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from wartz_workflow import conversation as convo
-from wartz_workflow.db import WorkflowDB
-from wartz_workflow.ui import app
+from workflow_cli import conversation as convo
+from workflow_cli.db import WorkflowDB
+from workflow_cli.ui import app
 
 
 client = TestClient(app)
@@ -25,7 +25,7 @@ class TestEndToEndWorkflow:
         db_path = tmp_path / "test.db"
         wdb = WorkflowDB(str(db_path))
         wdb.init()
-        seed_path = Path(__file__).parent.parent / "wartz_workflow" / "references" / "seed.json"
+        seed_path = Path(__file__).parent.parent / "workflow_cli" / "references" / "seed.json"
         # seed.json — top-level может быть object или list
         raw = json.loads(seed_path.read_text())
         if isinstance(raw, list):
@@ -111,10 +111,10 @@ class TestEndToEndWorkflow:
 
 class TestConversationHistory:
     def test_get_messages_without_limit_returns_all_records(self, tmp_path: Path, monkeypatch):
-        db_dir = tmp_path / ".wartz-workflow"
+        db_dir = tmp_path / ".workflow-cli"
         db_path = db_dir / "conversation.db"
-        monkeypatch.setattr("wartz_workflow.conversation.DB_DIR", db_dir)
-        monkeypatch.setattr("wartz_workflow.conversation.DB_PATH", db_path)
+        monkeypatch.setattr("workflow_cli.conversation.DB_DIR", db_dir)
+        monkeypatch.setattr("workflow_cli.conversation.DB_PATH", db_path)
 
         convo.add_message("99", "TASK-99", "user", "first")
         convo.add_message("99", "TASK-99", "agent", "second")

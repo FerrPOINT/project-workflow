@@ -1,21 +1,21 @@
 """Tests for wizard.py to boost coverage."""
 
 from unittest.mock import patch, MagicMock
-from wartz_workflow.wizard import WizardEngine
+from workflow_cli.wizard import WizardEngine
 
 
 class TestWizard:
     def test_init(self):
-        with patch("wartz_workflow.wizard.convo") as mock_convo:
+        with patch("workflow_cli.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             engine = WizardEngine("AAT-1")
             assert engine.task_key == "AAT-1"
 
     def test_init_bootstraps_phases_when_workflow_db_is_empty(self, tmp_path, monkeypatch):
         test_db = tmp_path / "workflow.db"
-        monkeypatch.setattr("wartz_workflow.db.DB_PATH", test_db)
+        monkeypatch.setattr("workflow_cli.db.DB_PATH", test_db)
 
-        with patch("wartz_workflow.wizard.convo") as mock_convo:
+        with patch("workflow_cli.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             engine = WizardEngine("AAT-1")
 
@@ -30,7 +30,7 @@ class TestWizard:
         ph.is_blocker = False
         ph.is_delegated = False
         ph.instructions = []
-        with patch("wartz_workflow.wizard.convo") as mock_convo:
+        with patch("workflow_cli.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             engine = WizardEngine("AAT-1")
             engine.phase_map = {"0": ph}
@@ -66,7 +66,7 @@ class TestWizard:
         ph_b.delegate = None
         ph_b.next_recommendation = "next"
 
-        with patch("wartz_workflow.wizard.convo") as mock_convo:
+        with patch("workflow_cli.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             engine = WizardEngine("AAT-1")
             engine.phase_map = {"parallel-a": ph_a, "parallel-b": ph_b}
@@ -78,7 +78,7 @@ class TestWizard:
             assert "parallel-b" in prompt
 
     def test_get_full_context(self):
-        with patch("wartz_workflow.wizard.convo") as mock_convo:
+        with patch("workflow_cli.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             engine = WizardEngine("AAT-1")
             ctx = engine.get_full_context()

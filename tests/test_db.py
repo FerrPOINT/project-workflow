@@ -5,14 +5,14 @@ import sqlite3
 
 import pytest
 
-from wartz_workflow.db import WorkflowDB
+from workflow_cli.db import WorkflowDB
 
 
 @pytest.fixture
 def db(tmp_path, monkeypatch):
     """Чистая БД для каждого теста."""
     test_db = tmp_path / "test_workflow.db"
-    monkeypatch.setattr("wartz_workflow.db.DB_PATH", test_db)
+    monkeypatch.setattr("workflow_cli.db.DB_PATH", test_db)
     db = WorkflowDB(str(test_db))
     db.init()
     return db

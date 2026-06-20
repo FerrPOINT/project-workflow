@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import pytest
 
-from wartz_workflow import schema
-from wartz_workflow.db import WorkflowDB
-from wartz_workflow.models import Phase
-from wartz_workflow.wizard import WizardEngine, format_result
+from workflow_cli import schema
+from workflow_cli.db import WorkflowDB
+from workflow_cli.models import Phase
+from workflow_cli.wizard import WizardEngine, format_result
 
 
 @pytest.fixture
 def fresh_db(tmp_path, monkeypatch):
-    import wartz_workflow.db as db_module
+    import workflow_cli.db as db_module
     monkeypatch.setattr(db_module.base, "DB_PATH", tmp_path / "workflow.db")
     monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "workflow.db")
     db = WorkflowDB()
@@ -28,7 +28,7 @@ def _make_engine(fresh_db, task_key):
 class TestWizardInitErrors:
     def test_unknown_task_key_raises(self, fresh_db):
         # Make match_project_for_task_key return None by monkeypatching it
-        import wartz_workflow.db as db_module
+        import workflow_cli.db as db_module
         monkeypatch = pytest.MonkeyPatch()
         monkeypatch.setattr(db_module.base.WorkflowDB, "match_project_for_task_key", lambda self, tk, strict=True: None)
         try:

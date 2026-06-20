@@ -1,6 +1,6 @@
 """Test models.py methods."""
 
-from wartz_workflow.models import Phase, PhaseInstruction, PhaseCheck, PhaseEvidence, PhaseDelegate
+from workflow_cli.models import Phase, PhaseInstruction, PhaseCheck, PhaseEvidence, PhaseDelegate
 
 
 class TestPhaseModels:

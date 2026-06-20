@@ -1,7 +1,7 @@
-"""WARTZ Workflow UI v2 — шаблонный FastAPI + Jinja2 viewer.
+"""Workflow CLI UI v2 — шаблонный FastAPI + Jinja2 viewer.
 
 Сервер:
-    python -m wartz_workflow.ui [--port N] [--host H]
+    python -m workflow_cli.ui [--port N] [--host H]
 """
 
 from __future__ import annotations
@@ -162,7 +162,7 @@ def _load_cli_reference() -> list[dict[str, Any]]:
             {
                 "name": name,
                 "summary": summary,
-                "usage": f"wartz-workflow {name}",
+                "usage": f"workflow-cli {name}",
                 "help": help_text,
                 "options": options,
             }
@@ -232,7 +232,7 @@ def _seed_to_sqlite() -> None:
 
 
 
-app = FastAPI(title="wartz-workflow UI", version="2.0.0")
+app = FastAPI(title="workflow-cli UI", version="2.0.0")
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -1263,7 +1263,7 @@ def _update_config_phase_order(wdb: db.WorkflowDB | None = None):
 # ═══════════════════════════════════════════════════════════════════════
 
 def main():
-    parser = argparse.ArgumentParser(description="WARTZ Workflow UI v2")
+    parser = argparse.ArgumentParser(description="Workflow CLI UI v2")
     parser.add_argument("--port", type=int, default=DEFAULT_UI_PORT, help="Port (default: %(default)s)")
     parser.add_argument("--host", default="0.0.0.0", help="Host (default: %(default)s)")
     args = parser.parse_args()

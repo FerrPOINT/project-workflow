@@ -2,25 +2,25 @@
 
 
 
-from wartz_workflow import config as cfg_module
+from workflow_cli import config as cfg_module
 
 
 class TestConfigEnvOverrides:
-    def test_wartz_dir_env_override(self, monkeypatch):
-        monkeypatch.setenv("WARTZ_DIR", "/tmp/custom-wartz")
+    def test_workflow_dir_env_override(self, monkeypatch):
+        monkeypatch.setenv("WORKFLOW_DIR", "/tmp/custom-workflow")
         # Reload needed because module-level globals evaluated at import time
         import importlib
         importlib.reload(cfg_module)
-        assert cfg_module.WARTZ_DIR == "/tmp/custom-wartz"
+        assert cfg_module.WORKFLOW_DIR == "/tmp/custom-workflow"
 
     def test_ui_port_env_override(self, monkeypatch):
-        monkeypatch.setenv("WARTZ_UI_PORT", "9999")
+        monkeypatch.setenv("WORKFLOW_UI_PORT", "9999")
         import importlib
         importlib.reload(cfg_module)
         assert cfg_module.UI_PORT == 9999
 
     def test_ui_host_env_override(self, monkeypatch):
-        monkeypatch.setenv("WARTZ_UI_HOST", "127.0.0.1")
+        monkeypatch.setenv("WORKFLOW_UI_HOST", "127.0.0.1")
         import importlib
         importlib.reload(cfg_module)
         assert cfg_module.UI_HOST == "127.0.0.1"

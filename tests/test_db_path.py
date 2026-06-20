@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-from wartz_workflow import db
+from workflow_cli import db
 
 
 def test_db_path_uses_package_local_by_default():

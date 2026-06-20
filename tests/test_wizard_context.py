@@ -1,6 +1,6 @@
 """Tests for WizardEngine.get_full_context()."""
 
-from wartz_workflow import wizard
+from workflow_cli import wizard
 
 
 class TestWizardFullContext:

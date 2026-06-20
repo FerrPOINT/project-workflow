@@ -1,4 +1,4 @@
-"""WARTZ Workflow CLI — thin entrypoint."""
+"""Workflow CLI CLI — thin entrypoint."""
 
 from __future__ import annotations
 
