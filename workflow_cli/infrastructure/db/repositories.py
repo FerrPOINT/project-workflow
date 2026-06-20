@@ -185,6 +185,17 @@ class SAWorkflowRepository(WorkflowRepository):
         row = self._session.get(m.Workflow, workflow_id)
         if row is None:
             raise NotFoundError(f"Workflow {workflow_id} not found")
+        # Legacy schema may not have ON DELETE CASCADE on phase/workflow FKs, so
+        # delete child phases and their content rows explicitly.
+        for child_table in ("instructions", "checks", "evidence"):
+            self._session.execute(
+                text(f"DELETE FROM {child_table} WHERE phase_id IN (SELECT id FROM phases WHERE workflow_id = :wid)"),
+                {"wid": workflow_id},
+            )
+        self._session.execute(
+            text("DELETE FROM phases WHERE workflow_id = :wid"),
+            {"wid": workflow_id},
+        )
         self._session.delete(row)
 
     def ensure_default_exists(self, name: str = "Default Workflow") -> Workflow:
@@ -262,7 +273,13 @@ class SAPhaseRepository(PhaseRepository):
             )
         ).scalars().all()
         if not remaining:
-            raise LastPhaseError("Cannot delete the last phase of a workflow")
+            raise LastPhaseError("Cannot delete the only phase of a workflow")
+        # Cascade delete content rows explicitly (mirror ON DELETE CASCADE).
+        for child_class in (m.Instruction, m.Check, m.Evidence):
+            self._session.execute(
+                text(f"DELETE FROM {child_class.__tablename__} WHERE phase_id = :pid"),
+                {"pid": phase_id},
+            )
         self._session.delete(row)
 
     def shift_orders(self, workflow_id: int, start_order: int, delta: int = 1) -> None:

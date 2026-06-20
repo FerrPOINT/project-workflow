@@ -26,6 +26,7 @@ from .application import (
     TaskService,
     WorkflowService,
 )
+from .infrastructure.db.session import ensure_schema, get_engine
 from .infrastructure.db.uow import SAUnitOfWork
 from .wizard import VERDICT_LABELS
 
@@ -61,7 +62,9 @@ class _AppState:
 
     def get_uow(self) -> SAUnitOfWork:
         if self._uow is None:
-            self._uow = SAUnitOfWork(str(db.DB_PATH))
+            engine = get_engine(str(db.DB_PATH))
+            ensure_schema(engine)
+            self._uow = SAUnitOfWork(engine)
         return self._uow
 
     def workflow_service(self) -> WorkflowService:
@@ -935,12 +938,37 @@ def agents_page(request: Request):
 
 @app.get("/api/phases")
 def api_phases(workflow_id: int | None = Query(default=None)):
-    workflows = _load_workflows()
+    workflows = _app_state.workflow_service().list_workflows()
     selected_workflow = next((item for item in workflows if item["id"] == workflow_id), None)
     if selected_workflow is None and workflow_id is None and workflows:
         selected_workflow = workflows[0]
     selected_workflow_id = selected_workflow["id"] if selected_workflow else workflow_id
-    return {"ok": True, "workflow": selected_workflow, "phases": _load_phases(selected_workflow_id)}
+    phases = _app_state.phase_service().list_phases(selected_workflow_id)
+    agents = {a["id"]: a for a in _app_state.agent_service().list_agents()}
+    enriched = []
+    for p in phases:
+        selected_agent = agents.get(p["agent_id"]) if p.get("agent_id") else None
+        enriched.append(
+            {
+                "id": p["id"],
+                "code": p["code"],
+                "workflow_id": p["workflow_id"],
+                "workflow_name": p.get("workflow_name"),
+                "workflow_is_default": False,
+                "phase_num": p["phase_order"],
+                "name": p["name"],
+                "description": p["description"],
+                "delegate_agent": None,
+                "is_delegated": False,
+                "agent_id": p["agent_id"],
+                "agent_name": selected_agent.get("name") if selected_agent else None,
+                "rollback_target": p.get("rollback_target"),
+                "delegate_timeout": None,
+                "execution_type": p.get("execution_type", "sync"),
+                "parallel_with": p.get("parallel_with"),
+            }
+        )
+    return {"ok": True, "workflow": selected_workflow, "phases": enriched}
 
 
 @app.get("/api/phases/{phase_id}")
@@ -973,7 +1001,7 @@ def api_phase_create(body: dict[str, Any]):
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
 
-    if not _app_state.get_db().get_workflow(workflow_id):
+    if not _app_state.workflow_service().get_workflow(workflow_id):
         return JSONResponse({"ok": False, "error": f"Workflow not found: {workflow_id}"}, status_code=400)
 
     if payload["phase_order"] is None:
@@ -985,9 +1013,8 @@ def api_phase_create(body: dict[str, Any]):
     if phase_order < 1:
         return JSONResponse({"ok": False, "error": "phase_order must be >= 1"}, status_code=400)
 
-    workflow_phases = _app_state.get_db().get_phases(workflow_id=workflow_id)
+    workflow_phases = _app_state.phase_service().list_phases(workflow_id)
     max_order = max((p["phase_order"] for p in workflow_phases), default=0)
-    # If phase_order points beyond the end, append instead of creating gaps.
     if phase_order > max_order + 1:
         phase_order = max_order + 1
 
@@ -998,17 +1025,16 @@ def api_phase_create(body: dict[str, Any]):
         "description": payload["description"],
         "execution_type": payload["execution_type"],
         "agent_id": payload["agent_id"],
-        "is_seed_managed": 0,
+        "is_seed_managed": False,
     }
     if payload.get("code"):
         create_data["code"] = payload["code"]
 
     try:
-        phase_id = _app_state.get_db().insert_phase_after(create_data)
-    except sqlite3.IntegrityError as exc:
-        return JSONResponse({"ok": False, "error": f"Phase code conflict: {exc}"}, status_code=409)
-    except ValueError as exc:
-        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+        phase = _app_state.phase_service().create_phase(create_data)
+        phase_id = phase["id"]
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"Phase creation failed: {exc}"}, status_code=409)
 
     return {"ok": True, "phase_id": phase_id, "phase_order": phase_order}
 
@@ -1016,15 +1042,14 @@ def api_phase_create(body: dict[str, Any]):
 @app.delete("/api/phases/{phase_id}")
 def api_phase_delete(phase_id: str):
     """Delete a phase. The last phase of a workflow cannot be deleted."""
-    wdb = _app_state.get_db()
     resolved_phase_id = _coerce_phase_db_id(phase_id)
     if resolved_phase_id is None:
         return JSONResponse({"ok": False, "error": "Invalid phase_id"}, status_code=400)
-    if not wdb.get_phase(resolved_phase_id):
+    if not _app_state.phase_service().get_phase(resolved_phase_id):
         return JSONResponse({"ok": False, "error": "Phase not found"}, status_code=404)
     try:
-        wdb.delete_phase(resolved_phase_id)
-    except ValueError as exc:
+        _app_state.phase_service().delete_phase(resolved_phase_id)
+    except Exception as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=409)
     return {"ok": True}
 
@@ -1037,7 +1062,31 @@ def api_tasks():
 
 @app.get("/api/workflows")
 def api_workflows():
-    return {"ok": True, "workflows": _load_workflows()}
+    # Repair runtime mutations before listing (mirrors legacy get_db behaviour).
+    _app_state.workflow_service().ensure_default_exists()
+    workflows = _app_state.workflow_service().list_workflows()
+    all_phases = _app_state.phase_service().list_phases()
+    all_projects = _app_state.project_service().list_projects()
+    phase_counts: dict[int, int] = {}
+    project_counts: dict[int, int] = {}
+    for phase in all_phases:
+        wid = phase.get("workflow_id")
+        if isinstance(wid, int):
+            phase_counts[wid] = phase_counts.get(wid, 0) + 1
+    for project in all_projects:
+        wid = project.get("workflow_id")
+        if isinstance(wid, int):
+            project_counts[wid] = project_counts.get(wid, 0) + 1
+    result = []
+    for workflow in workflows:
+        result.append(
+            {
+                **workflow,
+                "phase_count": phase_counts.get(workflow["id"], 0),
+                "project_count": project_counts.get(workflow["id"], 0),
+            }
+        )
+    return {"ok": True, "workflows": result}
 
 
 @app.post("/api/workflows")
@@ -1048,16 +1097,15 @@ def api_workflow_create(body: dict[str, Any]):
     if not payload["name"]:
         return JSONResponse({"ok": False, "error": "name required"}, status_code=400)
     try:
-        workflow_id = _app_state.get_db().create_workflow(payload)
-    except ValueError as exc:
+        workflow = _app_state.workflow_service().create_workflow(payload)
+    except Exception as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
-    return {"ok": True, "workflow_id": workflow_id}
+    return {"ok": True, "workflow_id": workflow["id"]}
 
 
 @app.put("/api/workflows/{workflow_id}")
 def api_workflow_update(workflow_id: int, body: dict[str, Any]):
-    wdb = _app_state.get_db()
-    existing = wdb.get_workflow(workflow_id)
+    existing = _app_state.workflow_service().get_workflow(workflow_id)
     if not existing:
         return JSONResponse({"ok": False, "error": "Workflow not found"}, status_code=404)
 
@@ -1073,26 +1121,44 @@ def api_workflow_update(workflow_id: int, body: dict[str, Any]):
         update_data["description"] = str(body.get("description", "")).strip()
 
     if update_data:
-        wdb.update_workflow(workflow_id, update_data)
+        try:
+            _app_state.workflow_service().update_workflow(workflow_id, update_data)
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     return {"ok": True}
 
 
 @app.delete("/api/workflows/{workflow_id}")
 def api_workflow_delete(workflow_id: int):
-    wdb = _app_state.get_db()
-    existing = wdb.get_workflow(workflow_id)
+    existing = _app_state.workflow_service().get_workflow(workflow_id)
     if not existing:
         return JSONResponse({"ok": False, "error": "Workflow not found"}, status_code=404)
     try:
-        wdb.delete_workflow(workflow_id)
-    except sqlite3.IntegrityError:
-        return JSONResponse({"ok": False, "error": "Workflow has linked projects or phases and cannot be deleted"}, status_code=409)
+        _app_state.workflow_service().delete_workflow(workflow_id)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=409)
     return {"ok": True}
 
 
 @app.get("/api/projects")
 def api_projects():
-    return {"ok": True, "projects": _load_projects()}
+    projects = _app_state.project_service().list_projects()
+    tasks = _app_state.task_service()._uow.tasks.list()
+    task_counts: dict[int, int] = {}
+    for task in tasks:
+        pid = task.project_id
+        if isinstance(pid, int):
+            task_counts[pid] = task_counts.get(pid, 0) + 1
+    result = []
+    for project in projects:
+        result.append(
+            {
+                **project,
+                "task_count": task_counts.get(project["id"], 0),
+                "patterns_count": len(project.get("key_patterns", [])),
+            }
+        )
+    return {"ok": True, "projects": result}
 
 
 @app.post("/api/projects")
@@ -1100,20 +1166,19 @@ def api_project_create(body: dict[str, Any]):
     payload = _project_form_payload(body)
     if not payload["code"]:
         return JSONResponse({"ok": False, "error": "code required"}, status_code=400)
-    wdb = _app_state.get_db()
-    if wdb.get_project_by_code(payload["code"]):
+    existing = _app_state.project_service()._uow.projects.get_by_code(payload["code"])
+    if existing:
         return JSONResponse({"ok": False, "error": "Project already exists"}, status_code=409)
     try:
-        project_id = wdb.create_project(payload)
-    except ValueError as exc:
+        project = _app_state.project_service().create_project(payload)
+    except Exception as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
-    return {"ok": True, "project_id": project_id}
+    return {"ok": True, "project_id": project["id"]}
 
 
 @app.put("/api/projects/{project_id}")
 def api_project_update(project_id: int, body: dict[str, Any]):
-    wdb = _app_state.get_db()
-    existing = wdb.get_project(project_id)
+    existing = _app_state.project_service().get_project(project_id)
     if not existing:
         return JSONResponse({"ok": False, "error": "Project not found"}, status_code=404)
 
@@ -1122,8 +1187,8 @@ def api_project_update(project_id: int, body: dict[str, Any]):
         code = str(body.get("code", "")).strip()
         if not code:
             return JSONResponse({"ok": False, "error": "code required"}, status_code=400)
-        conflict = wdb.get_project_by_code(code)
-        if conflict and conflict["id"] != project_id:
+        conflict = _app_state.project_service()._uow.projects.get_by_code(code)
+        if conflict and conflict.id != project_id:
             return JSONResponse({"ok": False, "error": "Project code already exists"}, status_code=409)
         update_data["code"] = code
     if "name" in body:
@@ -1134,28 +1199,26 @@ def api_project_update(project_id: int, body: dict[str, Any]):
         update_data["key_patterns"] = _parse_key_patterns(body.get("key_patterns", []))
 
     if update_data:
-        wdb.update_project(project_id, update_data)
+        _app_state.project_service().update_project(project_id, update_data)
     return {"ok": True}
 
 
 @app.delete("/api/projects/{project_id}")
 def api_project_delete(project_id: int):
-    wdb = _app_state.get_db()
-    existing = wdb.get_project(project_id)
+    existing = _app_state.project_service().get_project(project_id)
     if not existing:
         return JSONResponse({"ok": False, "error": "Project not found"}, status_code=404)
     try:
-        wdb.delete_project(project_id)
-    except sqlite3.IntegrityError:
-        return JSONResponse({"ok": False, "error": "Project has linked tasks and cannot be deleted"}, status_code=409)
+        _app_state.project_service().delete_project(project_id)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=409)
     return {"ok": True}
 
 
 @app.get("/api/agents")
 def api_agents():
     """Получить всех агентов."""
-    wdb = _app_state.get_db()
-    agents = wdb.get_agents()
+    agents = _app_state.agent_service().list_agents()
     return {"ok": True, "agents": agents}
 
 
@@ -1165,19 +1228,17 @@ def api_agent_create(body: dict[str, Any]):
     name = body.get("name", "").strip()
     if not name:
         return JSONResponse({"ok": False, "error": "name required"}, status_code=400)
-    wdb = _app_state.get_db()
-    agent_id = wdb.create_agent({
+    agent = _app_state.agent_service().create_agent({
         "name": name,
         "description": str(body.get("description", "")).strip(),
     })
-    return {"ok": True, "agent_id": agent_id}
+    return {"ok": True, "agent_id": agent["id"]}
 
 
 @app.put("/api/agents/{agent_id}")
 def api_agent_update(agent_id: int, body: dict[str, Any]):
     """Обновить агента."""
-    wdb = _app_state.get_db()
-    existing = wdb.get_agent(agent_id)
+    existing = _app_state.agent_service().get_agent(agent_id)
     if not existing:
         return JSONResponse({"ok": False, "error": "Agent not found"}, status_code=404)
     update_data = {}
@@ -1186,18 +1247,17 @@ def api_agent_update(agent_id: int, body: dict[str, Any]):
     if "description" in body:
         update_data["description"] = str(body["description"]).strip()
     if update_data:
-        wdb.update_agent(agent_id, update_data)
+        _app_state.agent_service().update_agent(agent_id, update_data)
     return {"ok": True}
 
 
 @app.delete("/api/agents/{agent_id}")
 def api_agent_delete(agent_id: int):
     """Удалить агента."""
-    wdb = _app_state.get_db()
-    existing = wdb.get_agent(agent_id)
+    existing = _app_state.agent_service().get_agent(agent_id)
     if not existing:
         return JSONResponse({"ok": False, "error": "Agent not found"}, status_code=404)
-    wdb.delete_agent(agent_id)
+    _app_state.agent_service().delete_agent(agent_id)
     return {"ok": True}
 
 

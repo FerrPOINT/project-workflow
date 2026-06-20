@@ -39,11 +39,12 @@ class TestWorkflowService:
         assert len(phases) == 1
         assert phases[0]["name"] == "Новая фаза"
 
-    def test_delete_workflow_blocked_by_phases(self, uow):
+    def test_delete_workflow_cascade_deletes_phases(self, uow):
         svc = WorkflowService(uow)
-        wf = svc.create_workflow({"name": "Deletable?"})
-        with pytest.raises(ConflictError):
-            svc.delete_workflow(wf["id"])
+        wf = svc.create_workflow({"name": "Deletable"})
+        svc.delete_workflow(wf["id"])
+        assert svc.get_workflow(wf["id"]) is None
+        assert PhaseServiceApp(uow).list_phases(wf["id"]) == []
 
     def test_delete_workflow_blocked_by_projects(self, uow):
         svc = WorkflowService(uow)

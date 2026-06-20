@@ -54,13 +54,13 @@ class Phase(Base):
     __tablename__ = "phases"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    workflow_id = Column(Integer, ForeignKey("workflows.id"), nullable=False)
+    workflow_id = Column(Integer, ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False)
     code = Column(String, nullable=False, unique=True)
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     min_time_min = Column(Integer, default=0, server_default="0")
     phase_order = Column(Integer, nullable=False)
-    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=True)
+    agent_id = Column(Integer, ForeignKey("agents.id", ondelete="SET NULL"), nullable=True)
     next_recommendation = Column(Text, nullable=True)
     parallel_with = Column(String, nullable=True)
     rollback_target = Column(String, nullable=True)
@@ -85,6 +85,9 @@ class Phase(Base):
 
     workflow = relationship("Workflow", back_populates="phases")
     agent = relationship("Agent", back_populates="phases")
+    instructions = relationship("Instruction", back_populates="phase", cascade="all, delete-orphan")
+    checks = relationship("Check", back_populates="phase", cascade="all, delete-orphan")
+    evidence = relationship("Evidence", back_populates="phase", cascade="all, delete-orphan")
 
 
 class Instruction(Base):
@@ -112,6 +115,8 @@ class Instruction(Base):
         ),
     )
 
+    phase = relationship("Phase", back_populates="instructions")
+
 
 class Check(Base):
     __tablename__ = "checks"
@@ -126,6 +131,8 @@ class Check(Base):
     __table_args__ = (
         UniqueConstraint("phase_id", "description", name="uq_checks_phase_description"),
     )
+
+    phase = relationship("Phase", back_populates="checks")
 
 
 class Evidence(Base):
@@ -142,12 +149,14 @@ class Evidence(Base):
         UniqueConstraint("phase_id", "description", name="uq_evidence_phase_description"),
     )
 
+    phase = relationship("Phase", back_populates="evidence")
+
 
 class Project(Base):
     __tablename__ = "projects"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    workflow_id = Column(Integer, ForeignKey("workflows.id"), nullable=False)
+    workflow_id = Column(Integer, ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False)
     code = Column(String, nullable=False, unique=True)
     name = Column(String, nullable=False)
     key_patterns = Column(String, nullable=False, default="[]", server_default="[]")

@@ -54,12 +54,12 @@ class WorkflowService:
 
     def delete_workflow(self, workflow_id: int) -> None:
         with self._uow:
-            if self._uow.phases.list(workflow_id):
-                raise ConflictError("Workflow has linked phases and cannot be deleted")
-            if self._uow.projects.list():
-                for project in self._uow.projects.list():
-                    if project.workflow_id == workflow_id:
-                        raise ConflictError("Workflow has linked projects and cannot be deleted")
+            # Mirror legacy WorkflowDB behaviour: cascade-delete phases (including
+            # the last one) and then the workflow, but block on linked projects.
+            projects = self._uow.projects.list()
+            for project in projects:
+                if project.workflow_id == workflow_id:
+                    raise ConflictError("Workflow has linked projects and cannot be deleted")
             self._uow.workflows.delete(workflow_id)
 
     def ensure_default_exists(self) -> dict[str, Any]:
