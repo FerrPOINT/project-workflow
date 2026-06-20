@@ -19,16 +19,25 @@ from fastapi.templating import Jinja2Templates
 import uvicorn
 
 from . import schema, config, db, service
+from .application import (
+    AgentService,
+    PhaseServiceApp,
+    ProjectService,
+    TaskService,
+    WorkflowService,
+)
+from .infrastructure.db.uow import SAUnitOfWork
 from .wizard import VERDICT_LABELS
 
 # ── App state ───────────────────────────────────────────────────────────
 class _AppState:
     """Application state holder (replaces module-level globals)."""
-    __slots__ = ("_db", "_srv", "_catalog_ensured")
+    __slots__ = ("_db", "_srv", "_uow", "_catalog_ensured")
 
     def __init__(self):
         self._db: db.WorkflowDB | None = None
         self._srv: service.PhaseService | None = None
+        self._uow: SAUnitOfWork | None = None
         self._catalog_ensured: bool = False
 
     def get_db(self) -> db.WorkflowDB:
@@ -49,6 +58,26 @@ class _AppState:
         if self._srv is None:
             self._srv = service.PhaseService(self.get_db())
         return self._srv
+
+    def get_uow(self) -> SAUnitOfWork:
+        if self._uow is None:
+            self._uow = SAUnitOfWork(str(db.DB_PATH))
+        return self._uow
+
+    def workflow_service(self) -> WorkflowService:
+        return WorkflowService(self.get_uow())
+
+    def phase_service(self) -> PhaseServiceApp:
+        return PhaseServiceApp(self.get_uow())
+
+    def project_service(self) -> ProjectService:
+        return ProjectService(self.get_uow())
+
+    def task_service(self) -> TaskService:
+        return TaskService(self.get_uow())
+
+    def agent_service(self) -> AgentService:
+        return AgentService(self.get_uow())
 
     @property
     def db(self) -> db.WorkflowDB | None:

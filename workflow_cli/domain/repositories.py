@@ -1,0 +1,191 @@
+"""Repository interfaces (ports)."""
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from typing import Any, Sequence
+
+from workflow_cli.domain import Agent, Phase, Project, SupervisorRun, Task, Workflow
+from workflow_cli.domain.exceptions import NotFoundError
+
+
+class WorkflowRepository(ABC):
+    """Persistence contract for workflows."""
+
+    @abstractmethod
+    def list(self) -> Sequence[Workflow]: ...
+
+    @abstractmethod
+    def get_by_id(self, workflow_id: int) -> Workflow | None: ...
+
+    @abstractmethod
+    def get_by_name(self, name: str) -> Workflow | None: ...
+
+    @abstractmethod
+    def get_default(self) -> Workflow | None: ...
+
+    @abstractmethod
+    def create(self, data: dict[str, Any]) -> int: ...
+
+    @abstractmethod
+    def update(self, workflow_id: int, data: dict[str, Any]) -> None: ...
+
+    @abstractmethod
+    def delete(self, workflow_id: int) -> None: ...
+
+    @abstractmethod
+    def ensure_default_exists(self, name: str = "Default Workflow") -> Workflow: ...
+
+
+class PhaseRepository(ABC):
+    """Persistence contract for phases."""
+
+    @abstractmethod
+    def list(self, workflow_id: int | None = None) -> Sequence[Phase]: ...
+
+    @abstractmethod
+    def get_by_id(self, phase_id: int) -> Phase | None: ...
+
+    @abstractmethod
+    def get_by_code(self, code: str) -> Phase | None: ...
+
+    @abstractmethod
+    def create(self, data: dict[str, Any]) -> int: ...
+
+    @abstractmethod
+    def update(self, phase_id: int, data: dict[str, Any]) -> None: ...
+
+    @abstractmethod
+    def delete(self, phase_id: int) -> None: ...
+
+    @abstractmethod
+    def shift_orders(self, workflow_id: int, start_order: int, delta: int = 1) -> None: ...
+
+    @abstractmethod
+    def get_next_order(self, workflow_id: int) -> int: ...
+
+    @abstractmethod
+    def get_phases_for_workflow(self, workflow_id: int) -> Sequence[Phase]: ...
+
+
+class ProjectRepository(ABC):
+    """Persistence contract for projects."""
+
+    @abstractmethod
+    def list(self) -> Sequence[Project]: ...
+
+    @abstractmethod
+    def get_by_id(self, project_id: int) -> Project | None: ...
+
+    @abstractmethod
+    def get_by_code(self, code: str) -> Project | None: ...
+
+    @abstractmethod
+    def create(self, data: dict[str, Any]) -> int: ...
+
+    @abstractmethod
+    def update(self, project_id: int, data: dict[str, Any]) -> None: ...
+
+    @abstractmethod
+    def delete(self, project_id: int) -> None: ...
+
+    @abstractmethod
+    def match_by_task_key(self, task_key: str) -> Project | None: ...
+
+
+class TaskRepository(ABC):
+    """Persistence contract for tasks."""
+
+    @abstractmethod
+    def list(self) -> Sequence[Task]: ...
+
+    @abstractmethod
+    def get_by_id(self, task_id: int) -> Task | None: ...
+
+    @abstractmethod
+    def get_by_key(self, task_key: str) -> Task | None: ...
+
+    @abstractmethod
+    def create(self, data: dict[str, Any]) -> int: ...
+
+    @abstractmethod
+    def update(self, task_id: int, data: dict[str, Any]) -> None: ...
+
+    @abstractmethod
+    def add_history(self, task_id: int, phase_id: int, status: str) -> None: ...
+
+    @abstractmethod
+    def get_history(self, task_id: int) -> Sequence[dict[str, Any]]: ...
+
+
+class AgentRepository(ABC):
+    """Persistence contract for agents."""
+
+    @abstractmethod
+    def list(self) -> Sequence[Agent]: ...
+
+    @abstractmethod
+    def get_by_id(self, agent_id: int) -> Agent | None: ...
+
+    @abstractmethod
+    def create(self, data: dict[str, Any]) -> int: ...
+
+    @abstractmethod
+    def update(self, agent_id: int, data: dict[str, Any]) -> None: ...
+
+    @abstractmethod
+    def delete(self, agent_id: int) -> None: ...
+
+
+class SupervisorRunRepository(ABC):
+    """Persistence contract for supervisor runs."""
+
+    @abstractmethod
+    def list(
+        self,
+        task_id: int | None = None,
+        task_key: str | None = None,
+        limit: int = 200,
+    ) -> Sequence[SupervisorRun]: ...
+
+    @abstractmethod
+    def create(self, data: dict[str, Any]) -> int: ...
+
+
+class UnitOfWork(ABC):
+    """Transaction boundary."""
+
+    @abstractmethod
+    def __enter__(self) -> UnitOfWork: ...
+
+    @abstractmethod
+    def __exit__(self, exc_type, exc_val, exc_tb) -> bool: ...
+
+    @abstractmethod
+    def commit(self) -> None: ...
+
+    @abstractmethod
+    def rollback(self) -> None: ...
+
+    @property
+    @abstractmethod
+    def workflows(self) -> WorkflowRepository: ...
+
+    @property
+    @abstractmethod
+    def phases(self) -> PhaseRepository: ...
+
+    @property
+    @abstractmethod
+    def projects(self) -> ProjectRepository: ...
+
+    @property
+    @abstractmethod
+    def tasks(self) -> TaskRepository: ...
+
+    @property
+    @abstractmethod
+    def agents(self) -> AgentRepository: ...
+
+    @property
+    @abstractmethod
+    def supervisor_runs(self) -> SupervisorRunRepository: ...

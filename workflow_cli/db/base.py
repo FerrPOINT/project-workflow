@@ -1780,7 +1780,7 @@ class WorkflowDB:
     def get_cli_history(self, limit: int = 100) -> list[dict]:
         with self._conn() as conn:
             rows = conn.execute(
-                "SELECT * FROM cli_history ORDER BY created_at DESC LIMIT ?",
+                "SELECT * FROM cli_history ORDER BY created_at ASC, id ASC LIMIT ?",
                 (limit,),
             ).fetchall()
             return [dict(r) for r in rows]
