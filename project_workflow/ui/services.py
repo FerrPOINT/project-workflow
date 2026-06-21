@@ -6,7 +6,7 @@ from typing import Any, cast
 
 import click
 
-from .. import config, db
+from .. import config
 from ..cli.core import cli as project_workflow
 from .dependencies import _AppState
 import project_workflow.ui as _ui_module
@@ -161,7 +161,7 @@ def _load_phase_detail(phase_id: int | str) -> dict[str, Any] | None:
 
 
 def _resolve_task_phase(
-    current_phase: Any, wdb: db.WorkflowDB, workflow_id: int | None = None
+    current_phase: Any, wdb: Any, workflow_id: int | None = None
 ) -> tuple[str, dict[str, Any] | None]:
     token = str(current_phase if current_phase is not None else "-1")
     if workflow_id is not None:

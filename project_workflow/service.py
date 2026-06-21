@@ -5,16 +5,13 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from project_workflow.db import WorkflowDB
+from typing import Any
 
 
 class PhaseService:
     """CRUD operations for phases, instructions, checks, evidence."""
 
-    def __init__(self, db: "WorkflowDB"):
+    def __init__(self, db: Any):
         self._db = db
 
     # ── Bulk сохранение инструкций (atomic) ─────────────────────────────

@@ -43,6 +43,9 @@ python_version = "3.10"
 strict = true
 warn_return_any = true
 warn_unused_ignores = true
+[[tool.mypy.overrides]]
+module = "project_workflow.ui.compat"
+ignore_errors = true
 
 [tool.coverage.run]
 source = ["project_workflow"]

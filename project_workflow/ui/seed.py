@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from typing import cast
+from typing import Any, cast
 
 import project_workflow.ui as _ui_module
 
-from .. import config, db, schema
+from .. import config, schema
 from .dependencies import _AppState
 
 
@@ -21,7 +21,7 @@ def _seed_to_sqlite() -> None:
     schema.ensure_phase_catalog(wdb)
 
 
-def _update_config_phase_order(wdb: db.WorkflowDB | None = None) -> None:
+def _update_config_phase_order(wdb: Any | None = None) -> None:
     """Пересобрать runtime PHASE_ORDER из default workflow без повторного seed-sync."""
     source_db = wdb or _get_app_state().get_db()
     rows = [

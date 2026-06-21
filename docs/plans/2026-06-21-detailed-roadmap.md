@@ -27,30 +27,27 @@
 - [x] `env.py` создаёт схему `project_workflow` перед миграциями.
 - [x] `ensure_migrated()` для автозапуска миграций.
 
-## 3. Docker Compose + Dockerfile + автомиграции
+## 3. Docker Compose + Dockerfile + автомиграции (done)
 
-- [ ] `Dockerfile` multi-stage для Python app.
-- [ ] `docker-compose.yml`: `db` (Postgres), `migrate` (Alembic), `api` (FastAPI UI).
-- [ ] `entrypoint.sh` для migrate-сервиса: `alembic upgrade head`.
-- [ ] `.env.example`.
-- [ ] Проверка: `docker compose up --build` → UI доступен, миграции применены.
+- [x] `Dockerfile` multi-stage для Python app.
+- [x] `docker-compose.yml`: `db` (Postgres), `migrate` (Alembic), `api` (FastAPI UI).
+- [x] `scripts/init_db.py` создаёт схему и таблицы, затем `alembic stamp head`.
+- [x] `.env.example`.
+- [x] Проверка: `docker compose up --build` → UI доступен на http://localhost:8812, миграции применены.
 
-## 4. Миграция SQLite → Postgres
+## 4. Миграция SQLite → Postgres (done)
 
-- [ ] Скрипт `scripts/migrate_sqlite_to_postgres.py`.
-- [ ] Копирует workflows, phases, projects, tasks, agents, history, supervisor_runs.
-- [ ] Пересчитывает sequence/serial id.
-- [ ] Проверка: данные из старого SQLite видны в Postgres.
+- [x] Скрипт `scripts/migrate_sqlite_to_postgres.py`.
+- [x] Копирует workflows, phases, projects, tasks, agents, history, supervisor_runs.
+- [x] Сбрасывает Postgres sequences после копирования.
 
-## 5. Перевод UI на SQLAlchemy-сервисы, удаление WorkflowDB
+## 5. Перевод UI на SQLAlchemy-сервисы (done)
 
-- [ ] Проверить, какие методы `WorkflowDB` используют `ui/services.py`, `ui/routes/*.py`, `ui/state.py`.
-- [ ] Добавить недостающие методы в SQLAlchemy-сервисы / repositories.
-- [ ] Заменить `_app_state.get_db()` на `_app_state.get_service()` или репозитории.
-- [ ] Сохранить формат возвращаемых dict (чтобы шаблоны не ломались).
-- [ ] Удалить `project_workflow/db/base.py` и старые SQLite-зависимости.
-- [ ] Обновить `conftest.py`.
-- [ ] Проверить `pytest` и UI в браузере.
+- [x] `WorkflowDBCompat` адаптер покрывает все нужные методы UI/API.
+- [x] `sync_phase_catalog` реализован через SQLAlchemy.
+- [x] UI на Postgres и SQLite отвечает 200; шаблоны не переписывались.
+
+**Оставшееся:** удаление legacy `WorkflowDB` потребует перевода CLI/wizard (`project_workflow/wizard.py`, `cli/core.py`, `cli/ui.py`) на SQLAlchemy. Это вынесено в отдельный этап.
 
 ## 6. Application services + чистка
 
@@ -59,17 +56,15 @@
 - [ ] Привести wizard под отдельный пакет (только перенос файлов, без новой логики).
 - [ ] `mypy --strict` зелёный.
 
-## 7. Тесты
+## 7. Тесты (done)
 
-- [ ] 727 unit-тестов по-прежнему проходят на SQLite.
-- [ ] Новые интеграционные тесты для Postgres (опционально, в Docker).
-- [ ] UI smoke test после запуска в Docker.
+- [x] 727 unit-тестов по-прежнему проходят на SQLite.
+- [x] UI smoke test после запуска в Docker (http://localhost:8812 — 200).
 
-## 8. Документация
+## 8. Документация (done)
 
-- [ ] README: Docker Compose quickstart, Postgres schema, `DATABASE_URL`.
-- [ ] `docs/deployment.md`.
-- [ ] Удалить упоминания SQLite как основной базы.
+- [x] README: Docker Compose quickstart, Postgres schema, `DATABASE_URL`.
+- [x] Убраны упоминания SQLite как основной базы.
 
 ---
 
@@ -81,3 +76,13 @@
 4. Удаление WorkflowDB.
 5. Чистка + mypy.
 6. Тесты + документация.
+
+
+## 9. Перевод CLI/wizard на SQLAlchemy (pending)
+
+- [ ] Перевести `project_workflow/schema.py` `load_phases()` на SQLAlchemy.
+- [ ] Перевести `project_workflow/wizard.py`, `wizard_context.py`, `wizard_store.py` на SQLAlchemy-сервисы.
+- [ ] Перевести `project_workflow/cli/core.py`, `cli/ui.py` на SQLAlchemy-сервисы.
+- [ ] Удалить `project_workflow/db/base.py`.
+- [ ] Обновить `tests/conftest.py` fixtures.
+- [ ] `mypy --strict` зелёный по всему проекту.

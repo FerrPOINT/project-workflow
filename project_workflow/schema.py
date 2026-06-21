@@ -10,6 +10,9 @@ import os
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
+
+from project_workflow.db import WorkflowDB
 from typing import List, Optional, Sequence
 
 
@@ -21,12 +24,11 @@ from project_workflow.models import (
     PhaseEvidence,
     PhaseInstruction,
 )
-from project_workflow.db import WorkflowDB
 
 
 # ── DB Load ─────────────────────────────────────────────────────
 
-def _build_phase_from_db(row: dict, wdb: WorkflowDB) -> Phase:
+def _build_phase_from_db(row: dict, wdb: Any) -> Phase:
     """Assemble a Phase dataclass from DB rows."""
     phase_id = row["id"]
     phase_code = row.get("code", "")
@@ -90,13 +92,13 @@ def _build_phase_from_db(row: dict, wdb: WorkflowDB) -> Phase:
     )
 
 
-def load_phases_from_db(wdb: WorkflowDB, workflow_id: int | str | None = None) -> List[Phase]:
+def load_phases_from_db(wdb: Any, workflow_id: int | str | None = None) -> List[Phase]:
     """Load all phases from a WorkflowDB instance (already initialised)."""
     rows = wdb.get_phases(workflow_id=workflow_id)
     return [_build_phase_from_db(r, wdb) for r in rows]
 
 
-def get_phase_from_db(wdb: WorkflowDB, phase_code: str, workflow_id: int | str | None = None) -> Optional[Phase]:
+def get_phase_from_db(wdb: Any, phase_code: str, workflow_id: int | str | None = None) -> Optional[Phase]:
     """Find a single phase by code in a WorkflowDB instance."""
     rows = wdb.get_phases(workflow_id=workflow_id)
     for r in rows:
@@ -192,7 +194,7 @@ def _serialize_seed_evidence(items: list[dict]) -> List[dict]:
     return [{"description": item.get("description", item.get("item", ""))} for item in items]
 
 
-def persist_phase_update_to_seed(wdb: WorkflowDB, phase_id: int | str, body: dict) -> None:
+def persist_phase_update_to_seed(wdb: Any, phase_id: int | str, body: dict) -> None:
     relevant_top_level_fields = {
         "name",
         "description",
@@ -258,7 +260,7 @@ def persist_phase_update_to_seed(wdb: WorkflowDB, phase_id: int | str, body: dic
     _write_seed_document(raw)
 
 
-def persist_phase_order_to_seed(wdb: WorkflowDB, ordered_phase_ids: Sequence[int | str]) -> None:
+def persist_phase_order_to_seed(wdb: Any, ordered_phase_ids: Sequence[int | str]) -> None:
     if not ordered_phase_ids:
         return
     if not _SEED_PATH.exists():
@@ -299,7 +301,7 @@ def persist_phase_order_to_seed(wdb: WorkflowDB, ordered_phase_ids: Sequence[int
     _write_seed_document(raw)
 
 
-def ensure_phase_catalog(wdb: WorkflowDB) -> None:
+def ensure_phase_catalog(wdb: Any) -> None:
     default_seed_items = _read_seed_items()
     default_workflow = wdb.get_default_workflow()
     if default_seed_items and default_workflow:

@@ -13,6 +13,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.11-blue?style=flat-square&logo=python&logoColor=white" alt="Python" />
   <img src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
+  <img src="https://img.shields.io/badge/Postgres-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="Postgres" />
   <img src="https://img.shields.io/badge/SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite" />
   <img src="https://img.shields.io/badge/SQLAlchemy-D71F00?style=flat-square&logo=sqlalchemy&logoColor=white" alt="SQLAlchemy" />
   <img src="https://img.shields.io/badge/Pydantic-E92063?style=flat-square&logo=pydantic&logoColor=white" alt="Pydantic" />
@@ -38,13 +39,15 @@
 
 CLI-часть платформы остаётся максимально узкой: ровно две команды — `step` и `history`.
 
+**Стек данных:** PostgreSQL в production/Docker Compose, SQLite для тестов и локального fallback.
+
 ## Features
 
 - **Пофазовый workflow** — каждая задача строго следует шаблону фаз с инструкциями, чек-листами и артефактами.
 - **Встроенный supervisor** — автоматическая оценка отчётов и решение о переходе.
 - **Web UI** — управление шаблонами, фазами, проектами, задачами и агентами.
 - **CLI freeze** — только `step` и `history`; всё остальное через UI.
-- **Лёгкий деплой** — SQLite + FastAPI, можно запустить локально или как systemd-сервис.
+- **Лёгкий деплой** — PostgreSQL (Docker Compose / systemd) или SQLite fallback; FastAPI + Jinja2 UI.
 - **Расширяемые skills** — каталог Hermes-скиллов для фаз.
 
 ## CLI
@@ -70,12 +73,31 @@ systemctl enable project-workflow-ui.service
 systemctl start project-workflow-ui.service
 ```
 
+## Docker Compose (Postgres)
+
+```bash
+# copy env
+cp .env.example .env
+# bring up Postgres + migrations + UI
+docker compose up --build -d
+# UI on http://localhost:8812
+```
+
+Автоматически создаётся схема `project_workflow` в базе `project_workflow`,
+применяется baseline-миграция и UI запускается на Postgres.
+
+Для переноса существующих данных SQLite → Postgres:
+
+```bash
+DATABASE_URL=postgresql+psycopg://user:pass@host:5432/db python scripts/migrate_sqlite_to_postgres.py /path/to/workflow.db
+```
+
 ## Architecture
 
 ```mermaid
 flowchart LR
     A[CLI project-workflow] -- step / history --> B[WizardEngine]
-    B -- read/write --> C[(SQLite)]
+    B -- read/write --> C[(Postgres / SQLite)]
     D[Web UI] -- CRUD --> C
     B -- supervisor --> E[LLM / rule checks]
     E -- verdict --> B
@@ -103,7 +125,7 @@ pip install -e ".[dev,ui]"
 
 - CLI заморожен: ровно две команды — `step` и `history`. Весь CRUD workflows/phases/projects/agents и администрирование выполняется через Web UI.
 - UI-пакет (`project_workflow/ui/`) — чистый FastAPI-приложение с Pydantic-схемами, отдельными routes/services/dependencies.
-- Data layer в стадии рефакторинга: legacy `WorkflowDB` (`project_workflow/db/base.py`) соседствует с SQLAlchemy-сервисами; план миграции — в `docs/plans/2026-06-21-refactor-roadmap.md`.
+- Data layer: UI/API уже работают через SQLAlchemy-сервисы и совместимость-адаптер `WorkflowDBCompat`. Legacy `WorkflowDB` (`project_workflow/db/base.py`) пока используется CLI/wizard; план полного отказа — в `docs/plans/2026-06-21-refactor-roadmap.md`.
 - CI/CD, Docker, health-checks и метрики вне скоупа.
 
 ## Roadmap
