@@ -5,7 +5,6 @@ from abc import ABC, abstractmethod
 from typing import Any, Sequence
 
 from workflow_cli.domain import Agent, Phase, Project, SupervisorRun, Task, Workflow
-from workflow_cli.domain.exceptions import NotFoundError
 
 
 class WorkflowRepository(ABC):

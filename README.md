@@ -140,7 +140,7 @@ workflow_cli/
 ├── references/
 │   ├── seed.json          # Сид-данные (source of truth для default workflow)
 │   └── smoke_seed.json    # Smoke-test сид
-└── templates/v2/
+└── templates/
     ├── base.html
     ├── dashboard.html
     ├── phases.html

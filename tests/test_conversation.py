@@ -36,7 +36,7 @@ class TestAddMessage:
         assert msg_id > 0
 
     def test_add_user_note(self, tmp_db):
-        msg_id = tmp_db.add_user_note("t1", "TASK-1", "report")
+        _ = tmp_db.add_user_note("t1", "TASK-1", "report")
         msgs = tmp_db.get_messages("t1")
         assert len(msgs) == 1
         assert msgs[0].role == "user"

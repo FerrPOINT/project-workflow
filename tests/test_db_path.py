@@ -18,7 +18,7 @@ def test_db_path_reads_from_env():
     """WORKFLOW_DB_PATH env var overrides default when passed to constructor."""
     with patch.dict(os.environ, {"WORKFLOW_DB_PATH": "/tmp/custom-wf.db"}):
         # Constructor should read env directly, not module-level DB_PATH
-        wdb = db.WorkflowDB()
+        _ = db.WorkflowDB()
         # If conftest monkeypatched DB_PATH, constructor ignores env and uses DB_PATH
         # So we test the constructor with explicit db_path instead
         wdb2 = db.WorkflowDB("/tmp/custom-wf.db")

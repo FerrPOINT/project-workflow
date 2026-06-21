@@ -1,4 +1,4 @@
-"""Workflow CLI UI v2 — шаблонный FastAPI + Jinja2 viewer.
+"""Workflow CLI UI — шаблонный FastAPI + Jinja2 viewer.
 
 Сервер:
     python -m workflow_cli.ui [--port N] [--host H]
@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import argparse
-import sqlite3
+import json as _json
 import time
 from pathlib import Path
 from typing import Any
@@ -94,9 +94,8 @@ _app_state = _AppState()
 DEFAULT_UI_PORT = config.UI_PORT
 BASE_DIR = Path(__file__).parent
 
-# ── Jinja2 templates (v2/ под base.html + extends) ──────────────────────
-import json as _json
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates" / "v2"))
+# ── Jinja2 templates ────────────────────────────────────────────────────
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 def _tojson_unicode(value, indent=2):
     from markupsafe import Markup

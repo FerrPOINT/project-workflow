@@ -217,7 +217,7 @@ class TestPhaseCRUD:
         wid = db.get_default_workflow()["id"]
         db.create_phase({"workflow_id": wid, "id": "p-3", "name": "P3", "description": "", "phase_order": 3})
         db.create_phase({"workflow_id": wid, "id": "p-4", "name": "P4", "description": "", "phase_order": 4})
-        iid = db.create_instruction({"phase_id": "p-3", "step_num": 1, "description": "I1", "execution_type": "sync"})
+        _ = db.create_instruction({"phase_id": "p-3", "step_num": 1, "description": "I1", "execution_type": "sync"})
         db.delete_phase("p-3")
         assert db.get_phase("p-3") is None
         assert db.get_phase_instructions("p-3") == []

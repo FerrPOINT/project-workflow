@@ -1,5 +1,6 @@
 """Конфигурация Workflow CLI CLI."""
 
+import json
 import os
 from pathlib import Path
 
@@ -87,8 +88,6 @@ SMOKE_TASK_KEY_PATTERNS = [
 ]
 
 # ── Settings persistence ────────────────────────────────────────────────
-
-import json
 
 SETTINGS_PATH = os.path.join(WORKFLOW_DIR, "settings.json")
 

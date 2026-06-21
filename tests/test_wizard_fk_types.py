@@ -15,7 +15,7 @@ class TestRecordTransitionTypes:
         engine.current_phase = "1"
 
         with patch.object(engine.db, "add_task_history") as mock_history, \
-             patch.object(engine.db, "update_task") as mock_update:
+             patch.object(engine.db, "update_task") as _:
             engine._record_transition(ph, "pass", "2", None)
 
         # First call: mark current phase done
@@ -34,7 +34,7 @@ class TestRecordTransitionTypes:
         engine.current_phase = "1"
 
         with patch.object(engine.db, "add_task_history") as mock_history, \
-             patch.object(engine.db, "update_task") as mock_update:
+             patch.object(engine.db, "update_task") as _:
             engine._record_transition(ph_current, "pass", "2", None)
 
         # Second call: next phase pending
@@ -53,7 +53,7 @@ class TestRecordTransitionTypes:
         engine.current_phase = "1"
 
         with patch.object(engine.db, "add_task_history") as mock_history, \
-             patch.object(engine.db, "update_task") as mock_update:
+             patch.object(engine.db, "update_task") as _:
             engine._record_transition(ph, "rollback", None, "0")
 
         # Second call: rollback target pending

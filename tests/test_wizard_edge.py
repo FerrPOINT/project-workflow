@@ -40,7 +40,7 @@ class TestWizardInitErrors:
     def test_existing_task_empty_current_phase(self, fresh_db):
         # Create task with empty current_phase via direct DB
         proj = fresh_db.create_project({"code": "TST", "name": "Tst", "key_patterns": ["^(?P<prefix>TST)-(?P<number>\\d+)$"]})
-        tid = fresh_db.create_task({"project_id": proj, "task_key": "TST-1", "current_phase": ""})
+        _ = fresh_db.create_task({"project_id": proj, "task_key": "TST-1", "current_phase": ""})
         engine = WizardEngine("TST-1")
         assert engine.current_phase in {"-1", "0.0a"}  # first phase of default workflow
 

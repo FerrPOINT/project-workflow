@@ -11,19 +11,19 @@ test-verbose:
 	pytest -v --tb=short
 
 coverage:
-	pytest --cov=wartz_workflow --cov-report=term-missing -q --tb=short
+	pytest --cov=workflow_cli --cov-report=term-missing -q --tb=short
 
 coverage-html:
-	pytest --cov=wartz_workflow --cov-report=html -q --tb=short
+	pytest --cov=workflow_cli --cov-report=html -q --tb=short
 
 # --- lint ------------------------------------------------------------------
 
 lint:
-	ruff check wartz_workflow/ tests/
-	mypy wartz_workflow/
+	ruff check workflow_cli/ tests/
+	mypy workflow_cli/
 
 lint-fix:
-	ruff check --fix wartz_workflow/ tests/
+	ruff check --fix workflow_cli/ tests/
 
 # --- dev setup -------------------------------------------------------------
 

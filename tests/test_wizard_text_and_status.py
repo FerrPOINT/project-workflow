@@ -63,7 +63,7 @@ class TestPhaseStatusLookup:
         engine.task = {"id": 7, "current_phase": "0", "status": "done"}
         engine.current_phase = "0"
         engine.db.get_task_history.return_value = []
-        result = engine._phase_status_lookup()
+        _ = engine._phase_status_lookup()
         # Phase "0" not in phase_map (only "-1" from init), so lookup is empty
 
 

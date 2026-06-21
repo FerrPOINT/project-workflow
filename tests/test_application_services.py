@@ -5,13 +5,12 @@ import pytest
 from sqlalchemy import create_engine
 
 from workflow_cli.application import (
-    AgentService,
     PhaseServiceApp,
     ProjectService,
     TaskService,
     WorkflowService,
 )
-from workflow_cli.domain.exceptions import ConflictError, LastPhaseError, NotFoundError
+from workflow_cli.domain.exceptions import ConflictError, LastPhaseError
 from workflow_cli.infrastructure.db.models import Base
 from workflow_cli.infrastructure.db.uow import SAUnitOfWork
 
@@ -66,8 +65,8 @@ class TestPhaseServiceApp:
         wf = svc.create_workflow({"name": "Phase Ordering"})
         ps = PhaseServiceApp(uow)
         # Default phase is at order 1; insert at 2
-        p2 = ps.create_phase({"workflow_id": wf["id"], "phase_order": 2, "name": "Second"})
-        p3 = ps.create_phase({"workflow_id": wf["id"], "phase_order": 3, "name": "Third"})
+        _ = ps.create_phase({"workflow_id": wf["id"], "phase_order": 2, "name": "Second"})
+        _ = ps.create_phase({"workflow_id": wf["id"], "phase_order": 3, "name": "Third"})
         phases = ps.list_phases(wf["id"])
         orders = sorted([p["phase_order"] for p in phases])
         assert orders == [1, 2, 3]

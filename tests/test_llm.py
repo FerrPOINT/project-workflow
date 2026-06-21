@@ -479,7 +479,7 @@ class TestWizardEngineLLMIntegrationDB:
         }
         with patch("workflow_cli.wizard_evaluate.OllamaClient.chat") as mock_chat:
             mock_chat.return_value = llm_response
-            result = engine.evaluate("Report")
+            _ = engine.evaluate("Report")
 
         # Check that task remains in a valid state after rollback
         task = engine.db.get_task(engine.task["id"])

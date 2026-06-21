@@ -8,7 +8,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from workflow_cli.domain import Agent, Phase, Project, SupervisorRun, Task, Workflow
-from workflow_cli.domain.exceptions import ConflictError, LastPhaseError, NotFoundError
+from workflow_cli.domain.exceptions import LastPhaseError, NotFoundError
 from workflow_cli.domain.repositories import (
     AgentRepository,
     PhaseRepository,

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from workflow_cli.domain.exceptions import ConflictError, NotFoundError
+from workflow_cli.domain.exceptions import ConflictError
 from workflow_cli.domain.repositories import UnitOfWork
 
 

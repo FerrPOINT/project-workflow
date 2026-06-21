@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # Live CLI test script — executes WizardEngine end-to-end through real CLI.
 # Usage: bash scripts/test_cli_live.sh
-# Requires: wartz-workflow CLI installed (pip install -e .)
+# Requires: workflow-cli installed (pip install -e .)
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 TASK_KEY="SMOKE-$(date +%s)"
-DB="${WORKFLOW_DB:-$HOME/.wartz_workflow/workflow.db}"
+DB="${WORKFLOW_DB:-${WORKFLOW_DB_PATH:-$HOME/.workflow_cli/workflow.db}}"
 API=0   # set to 1 for curl-based API tests (requires running UI server)
+
+CLI="workflow-cli"
 
 pass() { echo "✅ $1"; }
 fail() { echo "❌ $1"; exit 1; }
@@ -16,16 +18,16 @@ step() {
     local task="$1"
     local report="${2:-}"
     if [ -n "$report" ]; then
-        wartz-workflow --json step --task "$task" --report "$report" || true
+        "$CLI" --json step --task "$task" --report "$report" || true
     else
-        wartz-workflow --json step --task "$task" || true
+        "$CLI" --json step --task "$task" || true
     fi
 }
 
 step_json() {
     local task="$1"
     local report="$2"
-    wartz-workflow --json step --task "$task" --report "$report"
+    "$CLI" --json step --task "$task" --report "$report"
 }
 
 echo "═══════════════════════════════════════════════════════════════"
@@ -52,7 +54,7 @@ VERDICT=$(echo "$FINAL_RESULT" | python3 -c "import sys,json; print(json.load(sy
 STATUS=$(sqlite3 "$DB" "SELECT status FROM tasks WHERE task_key='$TASK_KEY';")
 [ "$STATUS" = "done" ] || fail "Expected task status 'done', got '$STATUS'"
 
-HISTORY_COUNT=$(wartz-workflow history --task "$TASK_KEY" --json | python3 -c "import sys,json; print(len(json.load(sys.stdin)['records']))")
+HISTORY_COUNT=$("$CLI" history --task "$TASK_KEY" --json | python3 -c "import sys,json; print(len(json.load(sys.stdin)['records']))")
 [ "$HISTORY_COUNT" -ge 6 ] || fail "Expected ≥6 history records, got $HISTORY_COUNT"
 
 pass "Happy Path: 6 phases → done, $HISTORY_COUNT history records"
@@ -125,17 +127,17 @@ fi
 echo ""
 echo "▶ Scenario 5: Command Guard"
 
-HELP=$(wartz-workflow --help)
+HELP=$("$CLI" --help)
 echo "$HELP" | grep -q "step" || fail "step command missing"
 echo "$HELP" | grep -q "history" || fail "history command missing"
 
 # Rejected options
-if wartz-workflow step --task TEST-1 --skip 2>/dev/null; then
+if "$CLI" step --task TEST-1 --skip 2>/dev/null; then
     fail "Expected --skip to be rejected"
 fi
 echo "✅ --skip rejected"
 
-if wartz-workflow step --task TEST-1 --repo /tmp 2>/dev/null; then
+if "$CLI" step --task TEST-1 --repo /tmp 2>/dev/null; then
     fail "Expected --repo to be rejected"
 fi
 echo "✅ --repo rejected"

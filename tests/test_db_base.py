@@ -269,7 +269,7 @@ class TestSupervisorRuns:
 
     def test_create_supervisor_run_by_task_key(self, db):
         db.create_project({"code": "TST", "name": "Tst", "key_patterns": ["^(?P<prefix>TST)-(?P<number>\\d+)$"]})
-        tid = db.create_task({"task_key": "TST-7"})
+        _ = db.create_task({"task_key": "TST-7"})
         wid = db.get_default_workflow()["id"]
         phid = db.create_phase({"workflow_id": wid, "code": "1", "name": "Phase", "phase_order": 1})
         db.create_supervisor_run({
