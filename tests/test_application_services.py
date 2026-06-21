@@ -4,15 +4,15 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import create_engine
 
-from workflow_cli.application import (
+from project_workflow.application import (
     PhaseServiceApp,
     ProjectService,
     TaskService,
     WorkflowService,
 )
-from workflow_cli.domain.exceptions import ConflictError, LastPhaseError
-from workflow_cli.infrastructure.db.models import Base
-from workflow_cli.infrastructure.db.uow import SAUnitOfWork
+from project_workflow.domain.exceptions import ConflictError, LastPhaseError
+from project_workflow.infrastructure.db.models import Base
+from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
 
 @pytest.fixture

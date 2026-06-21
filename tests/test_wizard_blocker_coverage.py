@@ -1,14 +1,14 @@
 """Tests for blocker extraction and coverage accumulation."""
 
 from unittest.mock import patch
-from workflow_cli.wizard import WizardEngine
+from project_workflow.wizard import WizardEngine
 
 
 class TestBlockerExtraction:
     """Test _extract_blockers: no false positives on partial words."""
 
     def test_exact_blocker_found(self):
-        with patch("workflow_cli.wizard.convo") as mock_convo:
+        with patch("project_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             engine = WizardEngine("AAT-1")
             blockers = engine._extract_blockers("blocked by network")
@@ -16,7 +16,7 @@ class TestBlockerExtraction:
 
     def test_no_false_positive_oshit(self):
         """Words containing 'ошиб' but not real error words should not trigger."""
-        with patch("workflow_cli.wizard.convo") as mock_convo:
+        with patch("project_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             engine = WizardEngine("AAT-1")
             # 'ошибочно' contains 'ошиб' but is not a real blocker word
@@ -26,14 +26,14 @@ class TestBlockerExtraction:
 
     def test_real_error_word_triggers(self):
         """"ошибка" больше не считается блокером — smart mode использует LLM."""
-        with patch("workflow_cli.wizard.convo") as mock_convo:
+        with patch("project_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             engine = WizardEngine("AAT-1")
             blockers = engine._extract_blockers("Произошла ошибка в коде")
             assert "ошибка" not in blockers
 
     def test_no_blockers_explicitly_stated(self):
-        with patch("workflow_cli.wizard.convo") as mock_convo:
+        with patch("project_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             engine = WizardEngine("AAT-1")
             for phrase in ["no blockers", "without blockers", "нет блокеров", "без блокеров"]:
@@ -41,7 +41,7 @@ class TestBlockerExtraction:
                 assert blockers == [], f"Expected no blockers for: {phrase}"
 
     def test_delegate_does_not_trigger_blocker(self):
-        with patch("workflow_cli.wizard.convo") as mock_convo:
+        with patch("project_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             engine = WizardEngine("AAT-1")
             blockers = engine._extract_blockers("передал задачу на delegation")
@@ -53,9 +53,9 @@ class TestCoverageAccumulation:
 
     def _make_engine(self, tmp_path, monkeypatch, task_key="AAT-1", current_phase="0"):
         test_db = tmp_path / "workflow.db"
-        import workflow_cli.db as db_module
+        import project_workflow.db as db_module
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
-        with patch("workflow_cli.wizard.convo") as mock_convo:
+        with patch("project_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             engine = WizardEngine(task_key)
         return engine
@@ -123,9 +123,9 @@ class TestEvaluateAccumulationEndToEnd:
 
     def _make_engine(self, tmp_path, monkeypatch, task_key="AAT-1", current_phase="0"):
         test_db = tmp_path / "workflow.db"
-        import workflow_cli.db as db_module
+        import project_workflow.db as db_module
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
-        with patch("workflow_cli.wizard.convo") as mock_convo:
+        with patch("project_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             engine = WizardEngine(task_key)
         return engine

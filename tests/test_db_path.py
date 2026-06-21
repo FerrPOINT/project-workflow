@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-from workflow_cli import db
+from project_workflow import db
 
 
 def test_db_path_uses_package_local_by_default():

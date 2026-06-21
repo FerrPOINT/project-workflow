@@ -8,16 +8,16 @@ import click
 import pytest
 from fastapi.testclient import TestClient
 
-from workflow_cli import config, schema
-from workflow_cli.cli.core import cli
-from workflow_cli.ui import _load_cli_reference, app
+from project_workflow import config, schema
+from project_workflow.cli.core import cli
+from project_workflow.ui import _load_cli_reference, app
 
 
 client = TestClient(app)
 
 
 def _phase_row(code: str) -> dict:
-    from workflow_cli.ui import _app_state
+    from project_workflow.ui import _app_state
 
     phase = _app_state.get_db().get_phase(code)
     assert phase is not None
@@ -25,7 +25,7 @@ def _phase_row(code: str) -> dict:
 
 
 def _workflow_row(lookup: str | None = None, *, workflow_id: int | None = None, name: str | None = None, is_default: bool | None = None) -> dict:
-    from workflow_cli.ui import _app_state
+    from project_workflow.ui import _app_state
 
     workflows = _app_state.get_db().get_workflows()
     for workflow in workflows:
@@ -84,7 +84,7 @@ def _sample_hermes_skills() -> list[dict[str, str]]:
 
 
 def _prime_skills_cache(monkeypatch: pytest.MonkeyPatch, skills: list[dict[str, str]]) -> None:
-    from workflow_cli import ui as ui_module
+    from project_workflow import ui as ui_module
 
     monkeypatch.setattr(ui_module, "_scan_hermes_skills", lambda: skills, raising=False)
     response = client.get("/api/skills?refresh=1")
@@ -130,8 +130,8 @@ def _phase_restore_payload(phase: dict) -> dict:
 @pytest.fixture(autouse=True)
 def setup_db():
     """Populate DB with seed.json + sample task before UI tests."""
-    from workflow_cli.ui import _app_state, _seed_to_sqlite
-    from workflow_cli import db as db_module
+    from project_workflow.ui import _app_state, _seed_to_sqlite
+    from project_workflow import db as db_module
     wdb = _app_state.get_db()
     if wdb.is_empty():
         _seed_to_sqlite()
@@ -200,7 +200,7 @@ class TestIndexPage:
         assert "Проекты" in response.text
 
     def test_index_recovers_from_legacy_singleton_workflow_code_in_runtime_db(self):
-        from workflow_cli import db as db_module, ui as ui_module
+        from project_workflow import db as db_module, ui as ui_module
 
         ui_module._app_state.get_db()
         with sqlite3.connect(db_module.DB_PATH) as conn:
@@ -337,7 +337,7 @@ class TestPhasesPage:
         assert 'workflow-chip' in response.text
 
     def test_phases_page_filters_by_selected_workflow(self):
-        from workflow_cli.ui import _app_state
+        from project_workflow.ui import _app_state
 
         wdb = _app_state.get_db()
         workflow = next((item for item in wdb.get_workflows() if item.get("name") == "UI Phases Workflow"), None)
@@ -432,7 +432,7 @@ class TestPhasesPage:
         assert 'currentIndex + 2' not in response.text
 
     def test_phases_page_add_phase_api_flow_creates_phase_in_default_workflow(self):
-        from workflow_cli.ui import _app_state
+        from project_workflow.ui import _app_state
 
         wdb = _app_state.get_db()
         workflow = _workflow_row("default")
@@ -474,7 +474,7 @@ class TestPhasesPage:
             assert len(wdb.get_phases(workflow_id=workflow["id"])) == original_count
 
     def test_phases_page_delete_button_present_and_api_forbids_last_phase(self):
-        from workflow_cli.ui import _app_state
+        from project_workflow.ui import _app_state
 
         wdb = _app_state.get_db()
         workflow_id = wdb.create_workflow({"name": "Delete Phase Test"})
@@ -530,8 +530,8 @@ class TestPhasesPage:
         assert 'dataset.parallelKey' not in response.text
 
     def test_phases_order_api_persists_reordered_default_workflow_sequence(self, monkeypatch, tmp_path):
-        from workflow_cli import config, schema
-        from workflow_cli.ui import _app_state
+        from project_workflow import config, schema
+        from project_workflow.ui import _app_state
 
         wdb = _app_state.get_db()
         default_phases = [phase for phase in wdb.get_phases() if phase.get("workflow_is_default")]
@@ -588,11 +588,11 @@ class TestPhasesPage:
         finally:
             wdb.batch_update_orders(original_batch)
             config.PHASE_ORDER[:] = original_codes
-            from workflow_cli.ui import _update_config_phase_order
+            from project_workflow.ui import _update_config_phase_order
             _update_config_phase_order()
 
     def test_phases_page_shows_selected_agent_instead_of_hardcoded_critic(self):
-        from workflow_cli.ui import _app_state
+        from project_workflow.ui import _app_state
 
         wdb = _app_state.get_db()
         reviewer = next(agent for agent in wdb.get_agents() if agent["name"] == "reviewer")
@@ -639,7 +639,7 @@ class TestPhasesPage:
         assert "has_parallel_instructions" not in phase
 
     def test_build_parallel_phase_blocks_uses_execution_type_runs(self):
-        from workflow_cli.ui import _build_parallel_phase_blocks
+        from project_workflow.ui import _build_parallel_phase_blocks
 
         phases = [
             {"code": "4.5", "execution_type": "sync", "parallel_with": None, "phase_num": 16},
@@ -655,7 +655,7 @@ class TestPhasesPage:
         assert blocks[1]["phases"][0].get("parallel_group") is None
 
     def test_build_parallel_phase_blocks_ignores_parallel_with_when_types_are_sync(self):
-        from workflow_cli.ui import _build_parallel_phase_blocks
+        from project_workflow.ui import _build_parallel_phase_blocks
 
         phases = [
             {"code": "4.5", "execution_type": "sync", "parallel_with": "5", "phase_num": 16},
@@ -810,7 +810,7 @@ class TestPhaseUpdate:
         assert all(isinstance(i, int) and i > 0 for i in data["ids"]["instructions"])
 
     def test_api_phase_update_round_trips_instruction_skills_as_string_list(self):
-        from workflow_cli.ui import _app_state
+        from project_workflow.ui import _app_state
 
         phase_response = client.get(_phase_api_path("-1"))
         assert phase_response.status_code == 200
@@ -836,7 +836,7 @@ class TestPhaseUpdate:
             client.put(_phase_api_path("-1"), json=restore_payload)
 
     def test_api_phase_update_persists_execution_type(self):
-        from workflow_cli.ui import _app_state
+        from project_workflow.ui import _app_state
 
         wdb = _app_state.get_db()
         original = wdb.get_phase("4.5")
@@ -860,7 +860,7 @@ class TestPhaseUpdate:
             client.put(phase_api_path, json={"execution_type": "sync"})
 
     def test_api_phase_update_metadata_only_keeps_existing_phase_content(self):
-        from workflow_cli.ui import _app_state
+        from project_workflow.ui import _app_state
 
         wdb = _app_state.get_db()
         before_counts = {
@@ -901,8 +901,8 @@ class TestDragDropAPI:
     """Tests for drag-and-drop backend APIs."""
 
     def test_api_batch_order_update(self):
-        from workflow_cli import config, phases as phases_mod
-        from workflow_cli.ui import _app_state, _update_config_phase_order
+        from project_workflow import config, phases as phases_mod
+        from project_workflow.ui import _app_state, _update_config_phase_order
 
         wdb = _app_state.get_db()
         original_rows = [(phase["code"], phase["phase_order"]) for phase in wdb.get_phases()]
@@ -1013,7 +1013,7 @@ class TestTaskDetail:
         assert f"0 / {total_phases}" in response.text or f"0/{total_phases}" in response.text
 
     def test_task_detail_renders_phase_history_from_db(self):
-        from workflow_cli.ui import _app_state
+        from project_workflow.ui import _app_state
 
         wdb = _app_state.get_db()
         task_key = "TASKNEIROKLYUCH-300"
@@ -1053,7 +1053,7 @@ class TestTaskDetail:
         assert task["current_phase_name"] == "Task Intake"
 
     def test_task_detail_marks_text_phase_code_as_current(self):
-        from workflow_cli.ui import _app_state
+        from project_workflow.ui import _app_state
 
         wdb = _app_state.get_db()
         task_key = "UITEST-402"
@@ -1279,7 +1279,7 @@ class TestWorkflowsPage:
         assert default_workflow["is_default"] is True
 
     def test_workflows_api_recovers_from_arbitrary_singleton_workflow_code_in_runtime_db(self):
-        from workflow_cli import db as db_module, ui as ui_module
+        from project_workflow import db as db_module, ui as ui_module
 
         ui_module._app_state.get_db()
         with sqlite3.connect(db_module.DB_PATH) as conn:
@@ -1300,7 +1300,7 @@ class TestWorkflowsPage:
         assert all("code" not in workflow for workflow in payload["workflows"])
 
     def test_workflows_api_recovers_without_resetting_ui_singletons_after_runtime_code_mutation(self):
-        from workflow_cli import db as db_module, ui as ui_module
+        from project_workflow import db as db_module, ui as ui_module
 
         ui_module._app_state.get_db()
         with sqlite3.connect(db_module.DB_PATH) as conn:
@@ -1354,7 +1354,7 @@ class TestAgentsPage:
 
 class TestSkillsPage:
     def test_api_skills_uses_shared_cached_hermes_catalog(self, monkeypatch):
-        from workflow_cli import ui as ui_module
+        from project_workflow import ui as ui_module
 
         sample = _sample_hermes_skills()
         calls = {"count": 0}
@@ -1429,9 +1429,9 @@ class TestSettingsPage:
         assert response.headers["content-type"] == "text/html; charset=utf-8"
         assert "Настройки" in response.text
         assert "CLI" in response.text
-        assert "workflow-cli step" in response.text
-        assert "workflow-cli history" in response.text
-        assert "workflow-cli ui" not in response.text
+        assert "project-workflow step" in response.text
+        assert "project-workflow history" in response.text
+        assert "project-workflow ui" not in response.text
         assert "Web UI запускается отдельно" not in response.text
         assert "--report" in response.text
         assert "--n" in response.text

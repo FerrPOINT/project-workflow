@@ -2,8 +2,8 @@
 
 from unittest.mock import MagicMock, patch
 
-from workflow_cli.wizard import WizardEngine, VERDICT_LABELS
-from workflow_cli.wizard_contracts import (
+from project_workflow.wizard import WizardEngine, VERDICT_LABELS
+from project_workflow.wizard_contracts import (
     text_from_instruction,
     text_from_check,
     text_from_evidence,
@@ -11,7 +11,7 @@ from workflow_cli.wizard_contracts import (
 
 
 def _make_engine():
-    with patch("workflow_cli.wizard.convo") as mock_convo:
+    with patch("project_workflow.wizard.convo") as mock_convo:
         mock_convo.get_last_phase.return_value = None
         eng = WizardEngine("AAT-1", "/tmp")
     eng.db = MagicMock()

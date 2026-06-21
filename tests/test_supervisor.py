@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from workflow_cli.db import WorkflowDB
-from workflow_cli.wizard import WizardEngine
+from project_workflow.db import WorkflowDB
+from project_workflow.wizard import WizardEngine
 
 
 SUPERVISOR_WORKFLOW_NAME = "Supervisor Workflow"
@@ -12,12 +12,12 @@ SUPERVISOR_PHASES = ["sup.intake", "sup.review", "sup.done"]
 
 def _patch_runtime(monkeypatch, tmp_path: Path) -> Path:
     workflow_db = tmp_path / "workflow.db"
-    convo_dir = tmp_path / ".workflow-cli"
+    convo_dir = tmp_path / ".project-workflow"
     convo_db = convo_dir / "conversation.db"
-    monkeypatch.setattr("workflow_cli.db.base.DB_PATH", workflow_db)
-    monkeypatch.setattr("workflow_cli.db.DB_PATH", workflow_db)
-    monkeypatch.setattr("workflow_cli.conversation.DB_DIR", convo_dir)
-    monkeypatch.setattr("workflow_cli.conversation.DB_PATH", convo_db)
+    monkeypatch.setattr("project_workflow.db.base.DB_PATH", workflow_db)
+    monkeypatch.setattr("project_workflow.db.DB_PATH", workflow_db)
+    monkeypatch.setattr("project_workflow.conversation.DB_DIR", convo_dir)
+    monkeypatch.setattr("project_workflow.conversation.DB_PATH", convo_db)
     return workflow_db
 
 

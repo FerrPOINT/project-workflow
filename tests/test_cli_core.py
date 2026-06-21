@@ -10,8 +10,8 @@ import click
 from click.testing import CliRunner
 import pytest
 
-from workflow_cli.cli.core import cli, out_json, _require_valid_key
-from workflow_cli.task_validator import TaskKeyValidator
+from project_workflow.cli.core import cli, out_json, _require_valid_key
+from project_workflow.task_validator import TaskKeyValidator
 
 
 class TestCliGroup:
@@ -21,7 +21,7 @@ class TestCliGroup:
         runner = CliRunner()
         result = runner.invoke(cli, ["--version"])
         assert result.exit_code == 0
-        assert "workflow-cli" in result.output
+        assert "project-workflow" in result.output
         assert "1.0.0" in result.output
 
     def test_help_shows_two_commands(self):
@@ -66,27 +66,27 @@ class TestRequireValidKey:
         ])
 
     def test_valid_returns_normalized(self):
-        with patch("workflow_cli.cli.core._get_task_key_validator", return_value=self._validator()):
+        with patch("project_workflow.cli.core._get_task_key_validator", return_value=self._validator()):
             key = _require_valid_key("TASK-42")
             assert key == "TASK-42"
 
     def test_valid_with_prefix(self):
-        with patch("workflow_cli.cli.core._get_task_key_validator", return_value=self._validator()):
+        with patch("project_workflow.cli.core._get_task_key_validator", return_value=self._validator()):
             key = _require_valid_key("TASKNEIROKLYUCH-123")
             assert key == "TASKNEIROKLYUCH-123"
 
     def test_invalid_raises_abort(self):
-        with patch("workflow_cli.cli.core._get_task_key_validator", return_value=self._validator()):
+        with patch("project_workflow.cli.core._get_task_key_validator", return_value=self._validator()):
             with pytest.raises(click.Abort):
                 _require_valid_key("lowercase")
 
     def test_invalid_with_spaces(self):
-        with patch("workflow_cli.cli.core._get_task_key_validator", return_value=self._validator()):
+        with patch("project_workflow.cli.core._get_task_key_validator", return_value=self._validator()):
             with pytest.raises(click.Abort):
                 _require_valid_key("TASK 42")
 
     def test_invalid_digits_only(self):
-        with patch("workflow_cli.cli.core._get_task_key_validator", return_value=self._validator()):
+        with patch("project_workflow.cli.core._get_task_key_validator", return_value=self._validator()):
             with pytest.raises(click.Abort):
                 _require_valid_key("12345")
 

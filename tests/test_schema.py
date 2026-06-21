@@ -6,14 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from workflow_cli import config, schema
-from workflow_cli.db import WorkflowDB
-from workflow_cli.models import Phase
+from project_workflow import config, schema
+from project_workflow.db import WorkflowDB
+from project_workflow.models import Phase
 
 
 @pytest.fixture
 def fresh_db(tmp_path, monkeypatch):
-    import workflow_cli.db as db_module
+    import project_workflow.db as db_module
     monkeypatch.setattr(db_module.base, "DB_PATH", tmp_path / "workflow.db")
     monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "workflow.db")
     db = WorkflowDB()
@@ -157,7 +157,7 @@ class TestSerializeHelpers:
 
 class TestGetPhase:
     def test_get_phase_returns_phase(self, tmp_path, monkeypatch):
-        import workflow_cli.db as db_module
+        import project_workflow.db as db_module
         monkeypatch.setattr(db_module.base, "DB_PATH", tmp_path / "workflow.db")
         monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "workflow.db")
         phase = schema.get_phase("1")
@@ -165,7 +165,7 @@ class TestGetPhase:
         assert phase.code == "1"
 
     def test_get_phase_order(self, tmp_path, monkeypatch):
-        import workflow_cli.db as db_module
+        import project_workflow.db as db_module
         monkeypatch.setattr(db_module.base, "DB_PATH", tmp_path / "workflow.db")
         monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "workflow.db")
         order = schema.get_phase_order()
@@ -175,7 +175,7 @@ class TestGetPhase:
 
 class TestLoadPhasesTopLevel:
     def test_load_phases(self, tmp_path, monkeypatch):
-        import workflow_cli.db as db_module
+        import project_workflow.db as db_module
         monkeypatch.setattr(db_module.base, "DB_PATH", tmp_path / "workflow.db")
         monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "workflow.db")
         phases = schema.load_phases()

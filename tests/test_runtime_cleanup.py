@@ -6,12 +6,12 @@ import json
 import sqlite3
 from pathlib import Path
 
-from workflow_cli import config, schema
-from workflow_cli.db import WorkflowDB
+from project_workflow import config, schema
+from project_workflow.db import WorkflowDB
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SEED_PATH = REPO_ROOT / "workflow_cli" / "references" / "seed.json"
+SEED_PATH = REPO_ROOT / "project_workflow" / "references" / "seed.json"
 
 VALID_WORKFLOW_SKILLS = {
     "agent-workflow-patterns",

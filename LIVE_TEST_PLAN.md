@@ -1,19 +1,19 @@
-# Live Test Plan — Workflow CLI CLI / WizardEngine
+# Live Test Plan — project-workflow CLI / WizardEngine
 
 ## Цель
-Проверить внутреннего агента (WizardEngine) через реальные CLI-вызовы на живой БД. Убедиться, что все 5 вердиктов, переходы, rollback, delegate, блокеры работают через `workflow-cli step`.
+Проверить внутреннего агента (WizardEngine) через реальные CLI-вызовы на живой БД. Убедиться, что все 5 вердиктов, переходы, rollback, delegate, блокеры работают через `project-workflow step`.
 
 ## Предусловия
 
 ```bash
 # 1. БД инициализирована
-python -c "from workflow_cli.db import WorkflowDB; w=WorkflowDB(); w.init()"
+python -c "from project_workflow.db import WorkflowDB; w=WorkflowDB(); w.init()"
 
 # 2. Smoke workflow загружен
-python -c "from workflow_cli.schema import ensure_phase_catalog; from workflow_cli.db import WorkflowDB; ensure_phase_catalog(WorkflowDB())"
+python -c "from project_workflow.schema import ensure_phase_catalog; from project_workflow.db import WorkflowDB; ensure_phase_catalog(WorkflowDB())"
 
 # 3. CLI доступен
-which workflow-cli || pip install -e .
+which project-workflow || pip install -e .
 ```
 
 ## Сценарии тестирования
@@ -22,13 +22,13 @@ which workflow-cli || pip install -e .
 
 **Инструкции** (что делать):
 1. Создать задачу `SMOKE-103`.
-2. Выполнить 6 шагов `workflow-cli step --task SMOKE-103 --report "..."`.
+2. Выполнить 6 шагов `project-workflow step --task SMOKE-103 --report "..."`.
 3. Каждый отчёт должен содержать keywords из checks/instructions/evidence текущей фазы.
 4. Проверить `history` — все записи должны иметь `verdict: pass`.
 5. Проверить статус задачи в БД — `done`.
 
 **Скиллы** (какие навыки нужны исполнителю):
-- CLI execution (`workflow-cli step`)
+- CLI execution (`project-workflow step`)
 - Keyword matching (понимать, что wizard ищет keywords в отчёте)
 - DB inspection (`sqlite3 workflow.db`)
 
@@ -39,7 +39,7 @@ which workflow-cli || pip install -e .
 
 **Доказательства** (что фиксируем):
 - JSON-вывод каждого `step --report`.
-- `workflow-cli history --task SMOKE-103 --n 10`.
+- `project-workflow history --task SMOKE-103 --n 10`.
 - `SELECT status FROM tasks WHERE task_key = 'SMOKE-103';`.
 
 ### 🔹 2. Verdict: PARTIAL — неполный отчёт
@@ -106,7 +106,7 @@ which workflow-cli || pip install -e .
 **Доказательства**:
 - JSON с `verdict: ROLLBACK` и `rollback_target`.
 - `SELECT current_phase FROM tasks WHERE task_key = 'SMOKE-105';` = `smoke.plan`.
-- `workflow-cli history --task SMOKE-105`.
+- `project-workflow history --task SMOKE-105`.
 
 ### 🔹 5. Verdict: DELEGATE — делегирование
 
@@ -172,10 +172,10 @@ which workflow-cli || pip install -e .
 ### 🔹 8. Command Guard — только 2 команды
 
 **Инструкции**:
-1. Выполнить: `workflow-cli --help`.
+1. Выполнить: `project-workflow --help`.
 2. Убедиться, что доступны только `step` и `history`.
-3. Попробовать: `workflow-cli step --task TEST --skip` → FAIL.
-4. Попробовать: `workflow-cli step --task TEST --repo /tmp` → FAIL.
+3. Попробовать: `project-workflow step --task TEST --skip` → FAIL.
+4. Попробовать: `project-workflow step --task TEST --repo /tmp` → FAIL.
 
 **Скиллы**:
 - CLI option testing.
@@ -197,11 +197,11 @@ which workflow-cli || pip install -e .
 |------|----------|
 | Task key | SMOKE-XXX |
 | Сценарий | Happy Path / Partial / Blocked / Rollback / Delegate / False Positive |
-| Команды | `workflow-cli step --task KEY --report "..."` |
+| Команды | `project-workflow step --task KEY --report "..."` |
 | Verdict | PASS / PARTIAL / BLOCKED / ROLLBACK / DELEGATE |
 | DB state (до) | `current_phase`, `status` |
 | DB state (после) | `current_phase`, `status`, `next_phase` |
-| История | `workflow-cli history --task KEY` |
+| История | `project-workflow history --task KEY` |
 | Скриншот | Если UI-часть задействована |
 
 ## Автоматизация

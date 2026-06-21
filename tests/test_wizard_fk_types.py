@@ -1,8 +1,8 @@
 """Tests that wizard.py passes int phase_id to DB FK columns."""
 
 from unittest.mock import patch
-from workflow_cli.models import Phase
-from workflow_cli.wizard import WizardEngine
+from project_workflow.models import Phase
+from project_workflow.wizard import WizardEngine
 
 
 class TestRecordTransitionTypes:
@@ -71,7 +71,7 @@ class TestRecordTransitionTypes:
         engine.current_phase = "1"
 
         with patch.object(engine, "_get_previously_covered", return_value=set()), \
-             patch("workflow_cli.wizard_evaluate.OllamaClient") as mock_client, \
+             patch("project_workflow.wizard_evaluate.OllamaClient") as mock_client, \
              patch.object(engine.db, "create_supervisor_run") as mock_run, \
              patch.object(engine.db, "get_task", return_value=engine.task), \
              patch.object(engine, "_record_transition"):

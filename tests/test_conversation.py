@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from workflow_cli import conversation as convo
+from project_workflow import conversation as convo
 
 
 @pytest.fixture

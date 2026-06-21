@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from workflow_cli.db import WorkflowDB
+from project_workflow.db import WorkflowDB
 
 
 @pytest.fixture

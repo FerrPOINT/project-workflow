@@ -8,8 +8,8 @@ from unittest.mock import patch
 
 from click.testing import CliRunner
 
-from workflow_cli.cli.core import cli
-from workflow_cli.task_validator import TaskKeyValidator
+from project_workflow.cli.core import cli
+from project_workflow.task_validator import TaskKeyValidator
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -25,15 +25,15 @@ def _validator() -> TaskKeyValidator:
 
 
 class TestStepCommand:
-    """Test `workflow-cli step --task TASK-1`"""
+    """Test `project-workflow step --task TASK-1`"""
 
-    @patch("workflow_cli.wizard.WizardEngine")
+    @patch("project_workflow.wizard.WizardEngine")
     def test_step_auto_init_creates_task(self, mock_engine_cls):
         """WizardEngine auto-creates task in DB if missing."""
         mock_engine = mock_engine_cls.return_value
         mock_engine.current_phase = "0"
         runner = CliRunner()
-        with patch("workflow_cli.cli.core._get_task_key_validator", return_value=_validator()):
+        with patch("project_workflow.cli.core._get_task_key_validator", return_value=_validator()):
             result = runner.invoke(cli, ["step", "--task", "TASK-1"])
         assert result.exit_code == 0
         # step_cmd creates engine, then wizard.main creates another via get_phase_instructions
@@ -41,15 +41,15 @@ class TestStepCommand:
         first_call = mock_engine_cls.call_args_list[0]
         assert first_call[0] == ("TASK-1",)
 
-    @patch("workflow_cli.wizard.main")
+    @patch("project_workflow.wizard.main")
     def test_step_shows_phase(self, mock_main):
         runner = CliRunner()
-        with patch("workflow_cli.cli.core._get_task_key_validator", return_value=_validator()):
+        with patch("project_workflow.cli.core._get_task_key_validator", return_value=_validator()):
             result = runner.invoke(cli, ["step", "--task", "TASK-1"])
         assert result.exit_code == 0
         mock_main.assert_called_once_with("TASK-1")
 
-    @patch("workflow_cli.wizard.WizardEngine")
+    @patch("project_workflow.wizard.WizardEngine")
     def test_step_report_pass(self, mock_engine_cls):
         mock_engine = mock_engine_cls.return_value
         mock_engine.evaluate.return_value = {
@@ -65,7 +65,7 @@ class TestStepCommand:
             },
         }
         runner = CliRunner()
-        with patch("workflow_cli.cli.core._get_task_key_validator", return_value=_validator()):
+        with patch("project_workflow.cli.core._get_task_key_validator", return_value=_validator()):
             result = runner.invoke(cli, ["step", "--task", "TASK-1", "--report", "Done"])
         assert result.exit_code == 0
         mock_engine.evaluate.assert_called_once_with("Done")
@@ -76,7 +76,7 @@ class TestStepCommand:
         assert "Доказательства:" in result.output
         assert "e2" in result.output
 
-    @patch("workflow_cli.wizard.WizardEngine")
+    @patch("project_workflow.wizard.WizardEngine")
     def test_step_report_fail_exits_one(self, mock_engine_cls):
         mock_engine = mock_engine_cls.return_value
         mock_engine.evaluate.return_value = {
@@ -85,7 +85,7 @@ class TestStepCommand:
             "required_checks": ["m1"], "required_evidence": [], "instructions": [], "description": "",
         }
         runner = CliRunner()
-        with patch("workflow_cli.cli.core._get_task_key_validator", return_value=_validator()):
+        with patch("project_workflow.cli.core._get_task_key_validator", return_value=_validator()):
             result = runner.invoke(cli, ["step", "--task", "TASK-1", "--report", "Bad"])
         assert result.exit_code == 1
         assert "Чекапы:" in result.output
@@ -105,9 +105,9 @@ class TestStepCommand:
 
 
 class TestHistoryCommand:
-    """Test `workflow-cli history --task TASK-1`"""
+    """Test `project-workflow history --task TASK-1`"""
 
-    @patch("workflow_cli.db.WorkflowDB.get_supervisor_runs", return_value=[
+    @patch("project_workflow.db.WorkflowDB.get_supervisor_runs", return_value=[
         {
             "phase_code": "0",
             "verdict": "pass",
@@ -125,26 +125,26 @@ class TestHistoryCommand:
     ])
     def test_history_shows_records(self, mock_get):
         runner = CliRunner()
-        with patch("workflow_cli.cli.core._get_task_key_validator", return_value=_validator()):
+        with patch("project_workflow.cli.core._get_task_key_validator", return_value=_validator()):
             result = runner.invoke(cli, ["history", "--task", "TASK-1"])
         assert result.exit_code == 0
         assert "TASK-1" in result.output
         assert "Phase 0" in result.output
         mock_get.assert_called_once_with(task_key="TASK-1", limit=200)
 
-    @patch("workflow_cli.db.WorkflowDB.get_supervisor_runs", return_value=[])
+    @patch("project_workflow.db.WorkflowDB.get_supervisor_runs", return_value=[])
     def test_history_empty(self, mock_get):
         runner = CliRunner()
-        with patch("workflow_cli.cli.core._get_task_key_validator", return_value=_validator()):
+        with patch("project_workflow.cli.core._get_task_key_validator", return_value=_validator()):
             result = runner.invoke(cli, ["history", "--task", "TASK-1"])
         assert result.exit_code == 0
         assert "пуста" in result.output
         mock_get.assert_called_once_with(task_key="TASK-1", limit=200)
 
-    @patch("workflow_cli.db.WorkflowDB.get_supervisor_runs", return_value=[])
+    @patch("project_workflow.db.WorkflowDB.get_supervisor_runs", return_value=[])
     def test_history_json_mode(self, mock_get):
         runner = CliRunner()
-        with patch("workflow_cli.cli.core._get_task_key_validator", return_value=_validator()):
+        with patch("project_workflow.cli.core._get_task_key_validator", return_value=_validator()):
             result = runner.invoke(cli, ["--json", "history", "--task", "TASK-1", "--n", "10"])
         assert result.exit_code == 0
         parsed = json.loads(result.output)

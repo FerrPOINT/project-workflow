@@ -12,7 +12,7 @@ def conn(tmp_path):
     db_path = tmp_path / "test_constraints.db"
     c = sqlite3.connect(str(db_path))
     # apply schema
-    schema_sql = Path(__file__).parent.parent / "workflow_cli" / "db" / "db_schema.sql"
+    schema_sql = Path(__file__).parent.parent / "project_workflow" / "db" / "db_schema.sql"
     c.executescript(schema_sql.read_text())
     c.execute("PRAGMA foreign_keys = ON")
     c.execute(

@@ -51,7 +51,7 @@ CLI-часть платформы остаётся максимально узк
 | **JSON API** | 23 endpoint для CRUD фаз, workflow, проектов, агентов и задач. |
 | **TaskKeyValidator** | Валидация ключей задач по настраиваемым regex из `projects.key_patterns`. |
 | **SMART evaluate** | Опциональная LLM-оценка отчёта (Ollama Cloud / local) с fallback на rule-based. |
-| **Слои Clean Architecture** | `domain/` → `application/` → `infrastructure/` → `workflow_cli/ui/` / `cli/`. |
+| **Слои Clean Architecture** | `domain/` → `application/` → `infrastructure/` → `project_workflow/ui/` / `cli/`. |
 | **SQLite + Alembic** | Миграции, SQLAlchemy repositories, единый `WorkflowService` / `PhaseServiceApp`. |
 
 ---
@@ -78,8 +78,8 @@ pip install -e ".[dev,ui]"
 Показать текущую фазу или подать отчёт и перейти дальше:
 
 ```bash
-workflow-cli step --task TASK-42
-workflow-cli step --task TASK-42 --report "сделал X, проверил Y"
+project-workflow step --task TASK-42
+project-workflow step --task TASK-42 --report "сделал X, проверил Y"
 ```
 
 ### history
@@ -87,14 +87,14 @@ workflow-cli step --task TASK-42 --report "сделал X, проверил Y"
 История отчётов, переходов и статусов по задаче:
 
 ```bash
-workflow-cli history --task TASK-42
-workflow-cli history --task TASK-42 --n 50
+project-workflow history --task TASK-42
+project-workflow history --task TASK-42 --n 50
 ```
 
 ### JSON-режим
 
 ```bash
-workflow-cli --json step --task TASK-42 --report "..."
+project-workflow --json step --task TASK-42 --report "..."
 ```
 
 ---
@@ -105,13 +105,13 @@ workflow-cli --json step --task TASK-42 --report "..."
 Запуск через systemd:
 
 ```bash
-systemctl restart wartz-ui.service
+systemctl restart project-workflow-ui.service
 ```
 
 Или вручную для разработки:
 
 ```bash
-python -m workflow_cli.ui --host 0.0.0.0 --port 8811
+python -m project_workflow.ui --host 0.0.0.0 --port 8811
 ```
 
 ### Страницы
@@ -227,7 +227,7 @@ flowchart LR
 |----------|-------------------|------|
 | Tests | **727 passed** | зелёный full suite |
 | Lint | **ruff green** | сохранять green |
-| Type check UI | **mypy workflow_cli/ui/ green** | mypy по всему `workflow_cli/` |
+| Type check UI | **mypy project_workflow/ui/ green** | mypy по всему `project_workflow/` |
 | Coverage | не измерялась | ≥ 90% |
 | Raw SQL в production | 1 endpoint + legacy `db/base.py` | 0 вне миграций |
 
@@ -238,15 +238,15 @@ flowchart LR
 
 Подробный план: [`docs/plans/2026-06-21-refactor-roadmap.md`](docs/plans/2026-06-21-refactor-roadmap.md).
 
-- [x] Разбить монолит `ui.py` на пакет `workflow_cli/ui/`
+- [x] Разбить монолит `ui.py` на пакет `project_workflow/ui/`
 - [x] Внедрить Pydantic-схемы для API inputs
-- [x] Добавить `workflow_cli/ui/__main__.py` для systemd
-- [x] Довести `mypy workflow_cli/ui/` до зелёного
+- [x] Добавить `project_workflow/ui/__main__.py` для systemd
+- [x] Довести `mypy project_workflow/ui/` до зелёного
 - [ ] Перевести UI routes с legacy `WorkflowDB` на application services
 - [ ] Дополнить application services до полного CRUD
 - [ ] Удалить / сузить `WorkflowDB` до Alembic-миграций
 - [ ] Типизировать `wizard.py` и декомпозировать логику
-- [ ] Добиться `mypy workflow_cli/ --ignore-missing-imports` green
+- [ ] Добиться `mypy project_workflow/ --ignore-missing-imports` green
 
 ---
 

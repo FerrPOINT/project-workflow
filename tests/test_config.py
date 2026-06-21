@@ -2,7 +2,7 @@
 
 
 
-from workflow_cli import config as cfg_module
+from project_workflow import config as cfg_module
 
 
 class TestConfigEnvOverrides:

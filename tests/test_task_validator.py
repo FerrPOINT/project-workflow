@@ -1,7 +1,7 @@
 """Tests for task_validator with migration support."""
 
 import pytest
-from workflow_cli.task_validator import (
+from project_workflow.task_validator import (
     TaskKeyValidator, TaskKeyValidationError,
     migrate_key, validate, validate_or_die,
 )

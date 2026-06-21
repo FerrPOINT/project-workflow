@@ -1,4 +1,4 @@
-# Workflow CLI — план доработки (audit fix)
+# project-workflow — план доработки (audit fix)
 
 > **Для Hermes:** Использовать workflow-subagent-driven-development skill для реализации задач.
 
@@ -19,9 +19,9 @@
 **Objective:** Убрать `os.path.expanduser("~")` как fallback — он даёт разные пути в systemd vs Hermes terminal vs cron. Сделать поведение предсказуемым.
 
 **Файлы:**
-- Модифицировать: `workflow_cli/db.py:17-18`
+- Модифицировать: `project_workflow/db.py:17-18`
 - Модифицировать: `tests/conftest.py`
-- Модифицировать: `workflow_cli/config.py`
+- Модифицировать: `project_workflow/config.py`
 
 **Шаг 1: Тест на детерминизм**
 
@@ -30,7 +30,7 @@
 def test_db_path_without_env_uses_package_fallback():
     """Без WORKFLOW_DB_PATH DB должен лежать рядом с пакетом, не в HOME."""
     # При отсутствии env должен быть deterministic путь
-    assert str(db.DB_PATH).endswith("workflow-cli/workflow.db")
+    assert str(db.DB_PATH).endswith("project-workflow/workflow.db")
 
 def test_db_path_reads_from_env():
     """WORKFLOW_DB_PATH переопределяет дефолт."""
@@ -42,7 +42,7 @@ def test_db_path_reads_from_env():
 **Шаг 2: Реализация**
 
 ```python
-# workflow_cli/db.py
+# project_workflow/db.py
 # Убрать expanduser fallback. Два режима:
 # 1. WORKFLOW_DB_PATH из env — используем как есть (для systemd)
 # 2. Нет env — путь внутри пакета: Path(__file__).resolve().parent.parent / "data" / "workflow.db"
@@ -53,7 +53,7 @@ DB_PATH = Path(os.getenv("WORKFLOW_DB_PATH", str(PKG_DIR / "data" / "workflow.db
 ```
 
 ```python
-# workflow_cli/config.py
+# project_workflow/config.py
 # Добавить WORKFLOW_DIR через env или fallback рядом с пакетом
 PKG_DIR = Path(__file__).resolve().parent.parent
 WORKFLOW_DIR = os.getenv("WORKFLOW_DIR", str(PKG_DIR / "data"))
@@ -69,11 +69,11 @@ WORKFLOW_DIR = os.getenv("WORKFLOW_DIR", str(PKG_DIR / "data"))
 **Шаг 4: Проверка**
 
 ```bash
-cd /opt/dev/hermes-workspace/workflow-cli-cli
-python -c "from workflow_cli.db import DB_PATH; print(DB_PATH)"
-# → /opt/dev/hermes-workspace/workflow-cli-cli/data/workflow.db
+cd /opt/dev/hermes-workspace/project-workflow
+python -c "from project_workflow.db import DB_PATH; print(DB_PATH)"
+# → /opt/dev/hermes-workspace/project-workflow/data/workflow.db
 
-WORKFLOW_DB_PATH=/tmp/custom.db python -c "from workflow_cli.db import DB_PATH; print(DB_PATH)"
+WORKFLOW_DB_PATH=/tmp/custom.db python -c "from project_workflow.db import DB_PATH; print(DB_PATH)"
 # → /tmp/custom.db
 
 pytest tests/test_db_path.py -v
@@ -82,7 +82,7 @@ pytest tests/test_db_path.py -v
 **Шаг 5: Commit**
 
 ```bash
-git add workflow_cli/db.py workflow_cli/config.py tests/test_db_path.py
+git add project_workflow/db.py project_workflow/config.py tests/test_db_path.py
 git commit -m "fix(db): deterministic DB path — package-local fallback instead of expanduser
 
 Removes os.path.expanduser('~') which resolves differently
@@ -97,8 +97,8 @@ overrides. All processes now see the same SQLite file by default."
 **Objective:** `wizard.py` передаёт `phase.code` (str) в `phase_id` (INTEGER FK). Исправить на `phase.id` (int).
 
 **Файлы:**
-- Модифицировать: `workflow_cli/wizard.py:357-400` (_record_transition, _record_parallel_transition)
-- Модифицировать: `workflow_cli/wizard.py:657-660` (evaluate_llm create_supervisor_run)
+- Модифицировать: `project_workflow/wizard.py:357-400` (_record_transition, _record_parallel_transition)
+- Модифицировать: `project_workflow/wizard.py:657-660` (evaluate_llm create_supervisor_run)
 - Создать тест: `tests/test_wizard_fk_types.py`
 
 **Шаг 1: Тест — catch type mismatch**
@@ -106,8 +106,8 @@ overrides. All processes now see the same SQLite file by default."
 ```python
 # tests/test_wizard_fk_types.py
 from unittest.mock import patch, MagicMock
-from workflow_cli.models import Phase
-from workflow_cli.wizard import WizardEngine
+from project_workflow.models import Phase
+from project_workflow.wizard import WizardEngine
 
 class TestRecordTransitionTypes:
     def test_record_transition_uses_int_phase_id(self):
@@ -130,7 +130,7 @@ class TestRecordTransitionTypes:
 **Шаг 2: Исправление в _record_transition**
 
 ```python
-# workflow_cli/wizard.py
+# project_workflow/wizard.py
 # Заменить phase.code → phase.id во всех add_task_history
 self.db.add_task_history(task_id, phase.id, "done")
 self.db.add_task_history(task_id, next_phase, "pending")  # next_phase — тоже str! Исправить
@@ -167,7 +167,7 @@ pytest tests/test_wizard.py -v
 **Шаг 5: Commit**
 
 ```bash
-git add workflow_cli/wizard.py tests/test_wizard_fk_types.py
+git add project_workflow/wizard.py tests/test_wizard_fk_types.py
 git commit -m "fix(wizard): use int phase.id for FOREIGN KEY in task_history and supervisor_runs
 
 phase.code (str) was being written into INTEGER NOT NULL phase_id
@@ -241,8 +241,8 @@ task_key 'AAT-1' across test classes writing into same DB."
 **Objective:** Убрать зависимость `cli/ui.py` от `state.find_repo()` и `state.create_task_dir()`. WizardEngine сам создаёт задачу в БД при первом вызове.
 
 **Файлы:**
-- Модифицировать: `workflow_cli/cli/ui.py:49-91` (step_cmd)
-- Модифицировать: `workflow_cli/wizard.py:117-142` (_ensure_task)
+- Модифицировать: `project_workflow/cli/ui.py:49-91` (step_cmd)
+- Модифицировать: `project_workflow/wizard.py:117-142` (_ensure_task)
 - Удалить из cli/ui.py: импорты state, find_repo, load_state, create_task_dir
 
 **Шаг 1: Тест — step создаёт задачу без state**
@@ -252,8 +252,8 @@ task_key 'AAT-1' across test classes writing into same DB."
 def test_step_creates_task_in_db_without_state_files():
     """step --task NEW-KEY должен создать задачу в БД без info/ файлов."""
     from click.testing import CliRunner
-    from workflow_cli.cli.ui import step_cmd
-    from workflow_cli.db import WorkflowDB
+    from project_workflow.cli.ui import step_cmd
+    from project_workflow.db import WorkflowDB
 
     runner = CliRunner()
     result = runner.invoke(step_cmd, ["--task", "TASKNEIROKLYUCH-99999"])
@@ -269,7 +269,7 @@ def test_step_creates_task_in_db_without_state_files():
 **Шаг 2: Рефактор step_cmd**
 
 ```python
-# workflow_cli/cli/ui.py
+# project_workflow/cli/ui.py
 # Убрать: from .. import state
 # Убрать: found_repo = state.find_repo(task_key)
 # Убрать: current = state.load_state(...)
@@ -319,7 +319,7 @@ pytest tests/test_cli_*.py -v
 **Шаг 5: Commit**
 
 ```bash
-git add workflow_cli/cli/ui.py tests/test_cli_ui.py
+git add project_workflow/cli/ui.py tests/test_cli_ui.py
 git commit -m "refactor(cli): step creates task via DB only — remove state.py dependency
 
 Removes state.find_repo, state.load_state, state.create_task_dir from
@@ -334,14 +334,14 @@ No more info/ directory auto-creation."
 **Objective:** state.py содержит функции, которые больше не используются CLI. Удалить их, оставив только то что реально нужно.
 
 **Файлы:**
-- Модифицировать: `workflow_cli/state.py`
+- Модифицировать: `project_workflow/state.py`
 - Модифицировать: `tests/test_state.py` — либо удалить, либо обновить на DB-only tests
 
 **Шаг 1: Аудит использования state.py**
 
 ```bash
-cd /opt/dev/hermes-workspace/workflow-cli-cli
-grep -rn "from.*state import\|import.*state\|state\." workflow_cli/cli/ workflow_cli/ui.py
+cd /opt/dev/hermes-workspace/project-workflow
+grep -rn "from.*state import\|import.*state\|state\." project_workflow/cli/ project_workflow/ui.py
 ```
 
 **Шаг 2: Удалить неиспользуемые функции**
@@ -380,7 +380,7 @@ and state/*.json files. All task lifecycle handled by WorkflowDB."
 **Objective:** verify.py проверяет JIRA tokens и git identity, но CLI не ходит в Jira. Сделать эти проверки no-op или удалить.
 
 **Файлы:**
-- Модифицировать: `workflow_cli/verify.py`
+- Модифицировать: `project_workflow/verify.py`
 - Модифицировать: `tests/test_verify.py`
 
 **Шаг 1: Тест на graceful degradation**
@@ -414,7 +414,7 @@ pytest tests/test_verify.py -v
 **Шаг 4: Commit**
 
 ```bash
-git add workflow_cli/verify.py tests/test_verify.py
+git add project_workflow/verify.py tests/test_verify.py
 git commit -m "refactor(verify): make JIRA checks optional — CLI doesn't call Jira API
 
 Removes hard dependency on JIRA_ACCESS_TOKEN and GLAB_TOKEN.
@@ -430,8 +430,8 @@ These checks are legacy; actual workflow uses DB-only supervisor."
 **Objective:** Удалить `__pycache__/`, `.coverage`, `.workflow.db`, `hello_world.py`, `test_hello.py`. Убедиться что `.gitignore` их блокирует.
 
 **Файлы:**
-- Удалить: `workflow_cli/__pycache__/` (весь каталог)
-- Удалить: `workflow_cli/cli/__pycache__/` (весь каталог)
+- Удалить: `project_workflow/__pycache__/` (весь каталог)
+- Удалить: `project_workflow/cli/__pycache__/` (весь каталог)
 - Удалить: `.coverage`
 - Удалить: `.workflow.db`
 - Удалить: `hello_world.py`
@@ -449,7 +449,7 @@ cat .gitignore | grep -E "__pycache__|\.coverage|\.workflow\.db|hello_world"
 **Шаг 2: Удалить из git и файловой системы**
 
 ```bash
-git rm -rf workflow_cli/__pycache__ workflow_cli/cli/__pycache__
+git rm -rf project_workflow/__pycache__ project_workflow/cli/__pycache__
 git rm .coverage .workflow.db hello_world.py test_hello.py
 ```
 
@@ -469,7 +469,7 @@ before the ignore rules."
 **Objective:** При `step --task X` (без --report) метод get_phase_prompt() выводит `workflow_lines`, `global_instructions`, `Формат отчёта` — всё это мусор для агента. Оставить только контракт текущей фазы.
 
 **Файлы:**
-- Модифицировать: `workflow_cli/wizard.py:428-496`
+- Модифицировать: `project_workflow/wizard.py:428-496`
 - Модифицировать: `tests/test_wizard.py` (test_get_phase_prompt)
 
 **Шаг 1: Тест на чистоту вывода**
@@ -516,7 +516,7 @@ pytest tests/test_wizard.py -v
 **Шаг 4: Commit**
 
 ```bash
-git add workflow_cli/wizard.py tests/test_wizard_prompt.py
+git add project_workflow/wizard.py tests/test_wizard_prompt.py
 git commit -m "refactor(wizard): remove boilerplate from get_phase_prompt output
 
 Removes workflow_lines, global_instructions, and report template
@@ -531,7 +531,7 @@ from the phase prompt. Agent only needs current contract + instructions
 **Objective:** `config.py` содержит хардкод: SUITES_DIR, GITLAB_PROJECT_ID, JIRA_BASE_URL, VERIFY_SUITE_SCRIPT. Вынести в env с осмысленными дефолтами.
 
 **Файлы:**
-- Модифицировать: `workflow_cli/config.py`
+- Модифицировать: `project_workflow/config.py`
 - Создать: `.env.example`
 
 **Шаг 1: Тест на env override**
@@ -541,7 +541,7 @@ from the phase prompt. Agent only needs current contract + instructions
 def test_config_reads_from_env():
     with patch.dict(os.environ, {"JIRA_BASE_URL": "https://custom.example.com"}):
         import importlib
-        from workflow_cli import config
+        from project_workflow import config
         importlib.reload(config)
         assert config.JIRA_BASE_URL == "https://custom.example.com"
 ```
@@ -549,7 +549,7 @@ def test_config_reads_from_env():
 **Шаг 2: Рефактор config.py**
 
 ```python
-# workflow_cli/config.py
+# project_workflow/config.py
 # Было:
 SUITES_DIR = "/root/.hermes/skills/software-development"
 # Стало:
@@ -571,7 +571,7 @@ GITLAB_PROJECT_ID = os.getenv("GITLAB_PROJECT_ID", "73")
 **Шаг 3: Commit**
 
 ```bash
-git add workflow_cli/config.py tests/test_config.py .env.example
+git add project_workflow/config.py tests/test_config.py .env.example
 git commit -m "refactor(config): move hardcoded URLs and paths to env vars
 
 SUITES_DIR, JIRA_BASE_URL, GITLAB_PROJECT_ID now read from env with
@@ -587,12 +587,12 @@ sensible defaults. Allows per-environment configuration without code changes."
 **Решение:** Удалить из модели — они не используются. `PhaseInstruction.example` — тоже удалить.
 
 **Файлы:**
-- Модифицировать: `workflow_cli/models.py`
+- Модифицировать: `project_workflow/models.py`
 
 **Шаг 1: Упростить PhaseCheck**
 
 ```python
-# workflow_cli/models.py
+# project_workflow/models.py
 @dataclass
 class PhaseCheck:
     description: str = ""
@@ -619,8 +619,8 @@ class PhaseEvidence:
 **Шаг 4: Обновить все использования**
 
 ```bash
-grep -rn "\.item\b" workflow_cli/ --include='*.py'
-grep -rn "\.example\b" workflow_cli/ --include='*.py'
+grep -rn "\.item\b" project_workflow/ --include='*.py'
+grep -rn "\.example\b" project_workflow/ --include='*.py'
 ```
 
 Обновить `schema.py`, `wizard.py`, `wizard_contracts.py` чтобы использовать `.description` вместо `.item`.
@@ -634,7 +634,7 @@ pytest -q
 **Шаг 6: Commit**
 
 ```bash
-git add workflow_cli/models.py workflow_cli/schema.py workflow_cli/wizard*.py
+git add project_workflow/models.py project_workflow/schema.py project_workflow/wizard*.py
 git commit -m "refactor(models): remove dead fields from PhaseCheck/PhaseEvidence/PhaseInstruction
 
 Removes unused fields (.type, .command, .path, .expected, .fail_msg,
@@ -648,7 +648,7 @@ PhaseEvidence). Aligns dataclass with actual DB schema."
 
 ### Задача 11: README актуализация
 
-**Objective:** README.md всё ещё упоминает `python -m workflow_cli.ui` для запуска UI. Добавить примечание про systemd. Убрать упоминания `info/` и `progress.json`.
+**Objective:** README.md всё ещё упоминает `python -m project_workflow.ui` для запуска UI. Добавить примечание про systemd. Убрать упоминания `info/` и `progress.json`.
 
 **Файлы:**
 - Модифицировать: `README.md`

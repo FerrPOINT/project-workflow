@@ -1,4 +1,4 @@
-# WARTZ Workflow CLI — Makefile
+# WARTZ project-workflow — Makefile
 
 .PHONY: test coverage lint clean install-dev
 
@@ -11,19 +11,19 @@ test-verbose:
 	pytest -v --tb=short
 
 coverage:
-	pytest --cov=workflow_cli --cov-report=term-missing -q --tb=short
+	pytest --cov=project_workflow --cov-report=term-missing -q --tb=short
 
 coverage-html:
-	pytest --cov=workflow_cli --cov-report=html -q --tb=short
+	pytest --cov=project_workflow --cov-report=html -q --tb=short
 
 # --- lint ------------------------------------------------------------------
 
 lint:
-	ruff check workflow_cli/ tests/
-	mypy workflow_cli/
+	ruff check project_workflow/ tests/
+	mypy project_workflow/
 
 lint-fix:
-	ruff check --fix workflow_cli/ tests/
+	ruff check --fix project_workflow/ tests/
 
 # --- dev setup -------------------------------------------------------------
 

@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Live CLI test script — executes WizardEngine end-to-end through real CLI.
 # Usage: bash scripts/test_cli_live.sh
-# Requires: workflow-cli installed (pip install -e .)
+# Requires: project-workflow installed (pip install -e .)
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 TASK_KEY="SMOKE-$(date +%s)"
-DB="${WORKFLOW_DB:-${WORKFLOW_DB_PATH:-$HOME/.workflow_cli/workflow.db}}"
+DB="${WORKFLOW_DB:-${WORKFLOW_DB_PATH:-$HOME/.project_workflow/workflow.db}}"
 API=0   # set to 1 for curl-based API tests (requires running UI server)
 
-CLI="workflow-cli"
+CLI="project-workflow"
 
 pass() { echo "✅ $1"; }
 fail() { echo "❌ $1"; exit 1; }

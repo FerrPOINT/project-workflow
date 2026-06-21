@@ -1,4 +1,4 @@
-# План рефакторинга `workflow_cli` (без расширения CLI)
+# План рефакторинга `project_workflow` (без расширения CLI)
 
 > Правило проекта: CLI остаётся ровно с двумя командами — `step` и `history`. Весь CRUD workflows/phases/projects/agents и администрирование выполняется через Web UI. Новые CLI-команды запрещены.
 
@@ -6,7 +6,7 @@
 
 Привести проект к production-ready архитектуре:
 - один data layer (SQLAlchemy services/repositories);
-- полная типизация (`mypy workflow_cli/` — зелёный);
+- полная типизация (`mypy project_workflow/` — зелёный);
 - UI routes работают через application services, а не legacy `WorkflowDB`;
 - wizard/core логика декомпозирована и типизирована;
 - тесты остаются зелёными на каждом этапе.
@@ -18,7 +18,7 @@
 | Задача | Что делать | Контрольный результат |
 |---|---|---|
 | 1.1 Зафиксировать архитектурные правила | Добавить в `README.md` и `docs/ARCHITECTURE.md` запрет на новые CLI-команды и принцип "весь CRUD через UI". | Раздел "Архитектура и ограничения" в `README.md`. |
-| 1.2 Утвердить границы слоёв | Описать: `domain/` — модели + интерфейсы; `infrastructure/db/` — SQLAlchemy реализации; `application/` — use-case сервисы; `workflow_cli/ui/` — presentation; `workflow_cli/db/` — legacy SQLite (только до миграции). | `docs/ARCHITECTURE.md`. |
+| 1.2 Утвердить границы слоёв | Описать: `domain/` — модели + интерфейсы; `infrastructure/db/` — SQLAlchemy реализации; `application/` — use-case сервисы; `project_workflow/ui/` — presentation; `project_workflow/db/` — legacy SQLite (только до миграции). | `docs/ARCHITECTURE.md`. |
 | 1.3 Усилить тестовый контракт UI | В `tests/test_ui_api.py` добавить JSON-schema проверки ответов `/api/*`, чтобы рефакторинг endpoint'ов не ломал контракт. | Новые тесты проходят. |
 | 1.4 Заморозить CLI | Проверить, что `test_only_two_commands_allowed` всё ещё ловит любую новую команду; при необходимости усилить assert. | `pytest tests/test_ui.py::test_only_two_commands_allowed` green. |
 
@@ -43,7 +43,7 @@
 ## Этап 3. Перевести UI API на application-сервисы
 
 ### Файлы
-- `workflow_cli/ui/routes/api.py`
+- `project_workflow/ui/routes/api.py`
 
 ### Задачи
 - [ ] `api_phases`, `api_phase_create`, `api_phase_update`, `api_phase_delete` — через `PhaseServiceApp` + Pydantic-схемы.
@@ -54,7 +54,7 @@
 - [ ] Сохранить response shape, чтобы `tests/test_ui*.py` не сломались.
 
 ### Контрольный результат
-- `workflow_cli/ui/routes/api.py` не содержит `wdb.create_phase`, `wdb.update_phase`, `wdb.delete_phase`, `DELETE FROM phases`.
+- `project_workflow/ui/routes/api.py` не содержит `wdb.create_phase`, `wdb.update_phase`, `wdb.delete_phase`, `DELETE FROM phases`.
 - `pytest tests/test_ui*.py` — green.
 
 ---
@@ -62,12 +62,12 @@
 ## Этап 4. Перевести wizard и CLI на application-сервисы
 
 ### Файлы
-- `workflow_cli/wizard.py`
-- `workflow_cli/wizard_context.py`
-- `workflow_cli/wizard_store.py`
-- `workflow_cli/service.py`
-- `workflow_cli/cli/core.py`
-- `workflow_cli/cli/ui.py`
+- `project_workflow/wizard.py`
+- `project_workflow/wizard_context.py`
+- `project_workflow/wizard_store.py`
+- `project_workflow/service.py`
+- `project_workflow/cli/core.py`
+- `project_workflow/cli/ui.py`
 
 ### Задачи
 - [ ] Создать read-only/audit сервисы для wizard: `SupervisorRunService`, `TaskHistoryService`.
@@ -85,9 +85,9 @@
 ## Этап 5. Удалить/сузить legacy `WorkflowDB`
 
 ### Файлы
-- `workflow_cli/db/base.py`
-- `workflow_cli/db/__init__.py`
-- `workflow_cli/db/db_schema.sql` (оставить как DDL-справочник)
+- `project_workflow/db/base.py`
+- `project_workflow/db/__init__.py`
+- `project_workflow/db/db_schema.sql` (оставить как DDL-справочник)
 
 ### Задачи
 - [ ] Перенести оставшиеся raw-SQL методы, которые нужны для UI seed/миграций, в SQLAlchemy.
@@ -97,31 +97,31 @@
 
 ### Контрольный результат
 - Raw SQL в production-коде = 0 (кроме миграций Alembic).
-- `mypy workflow_cli/db/` — green или директория удалена.
+- `mypy project_workflow/db/` — green или директория удалена.
 
 ---
 
 ## Этап 6. Типизация и декомпозиция wizard
 
 ### Файлы
-- `workflow_cli/wizard.py`
-- `workflow_cli/wizard_evaluate.py`
-- `workflow_cli/wizard_checks.py`
+- `project_workflow/wizard.py`
+- `project_workflow/wizard_evaluate.py`
+- `project_workflow/wizard_checks.py`
 
 ### Задачи
 - [ ] Вынести из `WizardEngine`:
-  - `_get_parallel_group` → `workflow_cli/wizard_logic/parallel.py`
-  - `_build_parallel_checklist` → `workflow_cli/wizard_logic/checklist.py`
-  - `_build_checklist` → `workflow_cli/wizard_logic/checklist.py`
-  - `_check_coverage` → `workflow_cli/wizard_logic/coverage.py`
-  - `_extract_blockers` → `workflow_cli/wizard_logic/blockers.py`
-  - `_determine_verdict` → `workflow_cli/wizard_logic/verdict.py`
-  - `_get_next_phase`, `_get_next_phase_after_group` → `workflow_cli/wizard_logic/transitions.py`
-- [ ] `format_result` перенести в `workflow_cli/ui/format.py` (presentation layer) или `workflow_cli/cli/format.py`.
+  - `_get_parallel_group` → `project_workflow/wizard_logic/parallel.py`
+  - `_build_parallel_checklist` → `project_workflow/wizard_logic/checklist.py`
+  - `_build_checklist` → `project_workflow/wizard_logic/checklist.py`
+  - `_check_coverage` → `project_workflow/wizard_logic/coverage.py`
+  - `_extract_blockers` → `project_workflow/wizard_logic/blockers.py`
+  - `_determine_verdict` → `project_workflow/wizard_logic/verdict.py`
+  - `_get_next_phase`, `_get_next_phase_after_group` → `project_workflow/wizard_logic/transitions.py`
+- [ ] `format_result` перенести в `project_workflow/ui/format.py` (presentation layer) или `project_workflow/cli/format.py`.
 - [ ] Добавить типы всем параметрам и возвращаемым значениям.
 
 ### Контрольный результат
-- `mypy workflow_cli/wizard*.py` — зелёный.
+- `mypy project_workflow/wizard*.py` — зелёный.
 - `WizardEngine` < 60 строк на метод; логика — в `wizard_logic/`.
 
 ---
@@ -141,7 +141,7 @@
 | Seed/migration helpers | `infrastructure/db/seed.py` | `ensure_phase_catalog`, `sync_phase_catalog`, `_ensure_default_workflows` |
 
 ### Контрольный результат
-- `workflow_cli/db/base.py` удалён.
+- `project_workflow/db/base.py` удалён.
 - `mypy` green.
 
 ---
@@ -149,9 +149,9 @@
 ## Этап 8. Улучшить конфигурацию и runtime-константы
 
 ### Файлы
-- `workflow_cli/config.py`
-- `workflow_cli/schema.py`
-- `workflow_cli/ui/dependencies.py`
+- `project_workflow/config.py`
+- `project_workflow/schema.py`
+- `project_workflow/ui/dependencies.py`
 
 ### Задачи
 - [ ] Заменить глобальные mutable `PHASE_ORDER` и `LEGACY_PHASE_REDIRECTS` на функции, читающие из БД.
@@ -168,7 +168,7 @@
 ## Этап 9. Рефакторинг UI helper'ов
 
 ### Файлы
-- `workflow_cli/ui/services.py`
+- `project_workflow/ui/services.py`
 
 ### Задачи
 - [ ] Разбить `_get_task_detail` (158 строк) на:
@@ -176,11 +176,11 @@
   - `_build_supervisor_runs`
   - `_build_task_progress`
   - `_build_next_contract`
-- [ ] Вынести `_load_dashboard`, `_load_phases`, `_load_projects` в `workflow_cli/ui/queries.py` или `workflow_cli/ui/use_cases/`.
+- [ ] Вынести `_load_dashboard`, `_load_phases`, `_load_projects` в `project_workflow/ui/queries.py` или `project_workflow/ui/use_cases/`.
 - [ ] Удалить дублирование `_load_workflows` / `_load_phases` / `_load_projects`.
 
 ### Контрольный результат
-- Нет функций > 80 строк в `workflow_cli/ui/`.
+- Нет функций > 80 строк в `project_workflow/ui/`.
 - Unit-тесты на UI helpers проходят.
 
 ---
@@ -189,15 +189,15 @@
 
 | Файл | Ошибок сейчас | Как чинить |
 |---|---|---|
-| `workflow_cli/db/base.py` | 68 | удаляется на этапе 5 |
-| `workflow_cli/infrastructure/db/repositories.py` | 50 | типизация Column/Model; разделение по файлам |
-| `workflow_cli/wizard.py` | 39 | этап 6 |
-| `workflow_cli/application/__init__.py` | 15 | return types + параметры |
-| `workflow_cli/schema.py` | 11 | generic dict + seed helpers |
-| `workflow_cli/infrastructure/db/migrations/...` | 11 | оставить как есть или `# type: ignore` |
+| `project_workflow/db/base.py` | 68 | удаляется на этапе 5 |
+| `project_workflow/infrastructure/db/repositories.py` | 50 | типизация Column/Model; разделение по файлам |
+| `project_workflow/wizard.py` | 39 | этап 6 |
+| `project_workflow/application/__init__.py` | 15 | return types + параметры |
+| `project_workflow/schema.py` | 11 | generic dict + seed helpers |
+| `project_workflow/infrastructure/db/migrations/...` | 11 | оставить как есть или `# type: ignore` |
 
 ### Контрольный результат
-- `python -m mypy workflow_cli/ --ignore-missing-imports` — **0 errors**.
+- `python -m mypy project_workflow/ --ignore-missing-imports` — **0 errors**.
 
 ---
 
@@ -226,7 +226,7 @@
 8. Этап 10 — mypy green.
 9. Этап 11 — переработка тестов.
 
-> Каждый этап должен заканчиваться: `ruff check`, `mypy workflow_cli/ui/`, `pytest -q` green.
+> Каждый этап должен заканчиваться: `ruff check`, `mypy project_workflow/ui/`, `pytest -q` green.
 
 ---
 

@@ -1,12 +1,12 @@
 """Test phases.py helpers."""
 
-from workflow_cli.phases import (
+from project_workflow.phases import (
     get_next_phase,
     get_phase_checklist_raw,
     show_phase_checklist,
     show_all_phases,
 )
-from workflow_cli.db import WorkflowDB
+from project_workflow.db import WorkflowDB
 
 
 class TestPhaseHelpers:
@@ -41,7 +41,7 @@ class TestPhaseHelpers:
 class TestPhaseExecution:
     def test_run_phase_removed(self):
         """run_phase was removed in Task 5 — assert it's gone."""
-        from workflow_cli import phases as phases_mod
+        from project_workflow import phases as phases_mod
         assert not hasattr(phases_mod, "run_phase")
         assert not hasattr(phases_mod, "check_previous_phase")
         assert not hasattr(phases_mod, "conditional_delegate_jump")

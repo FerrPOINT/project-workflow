@@ -2,15 +2,15 @@
 
 from unittest.mock import patch, MagicMock
 
-from workflow_cli.models import Phase, PhaseCheck, PhaseEvidence, PhaseInstruction
-from workflow_cli.wizard import WizardEngine
-from workflow_cli.wizard_checks import BLOCKER_PATTERNS, DELEGATE_PATTERNS
-from workflow_cli.wizard_types import VERDICT_LABELS
+from project_workflow.models import Phase, PhaseCheck, PhaseEvidence, PhaseInstruction
+from project_workflow.wizard import WizardEngine
+from project_workflow.wizard_checks import BLOCKER_PATTERNS, DELEGATE_PATTERNS
+from project_workflow.wizard_types import VERDICT_LABELS
 
 
 class TestBuildChecklist:
     def _make_engine(self) -> WizardEngine:
-        with patch("workflow_cli.wizard.WizardContextBuilder") as mock_ctx:
+        with patch("project_workflow.wizard.WizardContextBuilder") as mock_ctx:
             mock_ctx.return_value.build.return_value = {"task_key": "AAT-1", "current_phase": "1"}
             return WizardEngine("AAT-1")
 
@@ -62,7 +62,7 @@ class TestExtractBlockers:
     """Tests for _extract_blockers method."""
 
     def _make_engine(self) -> WizardEngine:
-        with patch("workflow_cli.wizard.WizardContextBuilder") as mock_ctx:
+        with patch("project_workflow.wizard.WizardContextBuilder") as mock_ctx:
             mock_ctx.return_value.build.return_value = {"task_key": "AAT-1", "current_phase": "1"}
             return WizardEngine("AAT-1")
 
@@ -206,7 +206,7 @@ class TestCheckCoverageEdgeCases:
     """Edge cases for _check_coverage and related methods."""
 
     def _make_engine(self) -> WizardEngine:
-        with patch("workflow_cli.wizard.WizardContextBuilder") as mock_ctx:
+        with patch("project_workflow.wizard.WizardContextBuilder") as mock_ctx:
             mock_ctx.return_value.build.return_value = {"task_key": "AAT-1", "current_phase": "1"}
             return WizardEngine("AAT-1")
 

@@ -1,14 +1,14 @@
-# Plan: smart agent in `workflow-cli` via ChatGPT/OpenAI subscription
+# Plan: smart agent in `project-workflow` via ChatGPT/OpenAI subscription
 
 Date: 2026-06-06
-Project: `/opt/dev/hermes-workspace/workflow-cli-cli`
+Project: `/opt/dev/hermes-workspace/project-workflow`
 
 ## 1. What I verified in the current codebase
 
 This plan is grounded in the live repository, not invented from scratch.
 
 ### Existing runtime and UI surface
-- Main UI routes live in `workflow_cli/ui.py`:
+- Main UI routes live in `project_workflow/ui.py`:
   - `/` — minimal dashboard
   - `/phases`
   - `/phase/{phase_id}`
@@ -18,7 +18,7 @@ This plan is grounded in the live repository, not invented from scratch.
   - `/workflows`
   - `/agents`
   - `/settings`
-- `settings` is already intentionally **read-only CLI reference**, auto-built from real Click commands by `_load_cli_reference()` in `workflow_cli/ui.py`.
+- `settings` is already intentionally **read-only CLI reference**, auto-built from real Click commands by `_load_cli_reference()` in `project_workflow/ui.py`.
 - `_load_cli_reference()` already excludes the `ui` command, which matches the product rule that web UI launch must **not** appear as a user CLI command.
 
 ### Existing CLI contract
@@ -29,7 +29,7 @@ This plan is grounded in the live repository, not invented from scratch.
 - There is already a guard in tests preventing uncontrolled CLI growth (`tests/test_ui.py` + CLI module comments/tests).
 
 ### Existing data model
-Current SQLite schema in `workflow_cli/db_schema.sql` contains:
+Current SQLite schema in `project_workflow/db_schema.sql` contains:
 - `agents`
 - `workflows`
 - `phases`
@@ -46,9 +46,9 @@ Important current fact:
 - There are **no** tables for users, auth, subscriptions, provider configs, LLM usage, or agent chat sessions.
 
 ### Existing conversation / wizard foundation
-- `workflow_cli/conversation.py` already stores task conversation in a separate SQLite DB (`~/.workflow-cli/conversation.db`).
+- `project_workflow/conversation.py` already stores task conversation in a separate SQLite DB (`~/.project-workflow/conversation.db`).
 - Roles already include `user | system | wizard | agent`.
-- `workflow_cli/wizard.py` already provides:
+- `project_workflow/wizard.py` already provides:
   - `WizardEngine.get_phase_prompt()`
   - `WizardEngine.get_full_context()`
   - `WizardEngine.evaluate(report)`
@@ -327,7 +327,7 @@ This avoids a risky full conversation migration in the same feature.
 
 ## New modules recommended
 
-### `workflow_cli/assistant_service.py`
+### `project_workflow/assistant_service.py`
 Responsibilities:
 - validate entitlement/project enablement
 - open/reuse task assistant session
@@ -336,14 +336,14 @@ Responsibilities:
 - persist request/response metadata
 - optionally mirror messages into `conversation.py`
 
-### `workflow_cli/assistant_provider_openai.py`
+### `project_workflow/assistant_provider_openai.py`
 Responsibilities:
 - wrap OpenAI API calls
 - isolate provider-specific payload shape
 - normalize errors/timeouts
 - return a stable internal response DTO
 
-### `workflow_cli/subscription_service.py`
+### `project_workflow/subscription_service.py`
 Responsibilities:
 - compute effective entitlement:
   - workspace active?
@@ -351,7 +351,7 @@ Responsibilities:
   - provider enabled?
 - return a single availability verdict for UI/API
 
-### `workflow_cli/context_builder.py` (optional, but clean)
+### `project_workflow/context_builder.py` (optional, but clean)
 Responsibilities:
 - combine:
   - task record
@@ -451,44 +451,44 @@ Store only env var references, never API secrets in SQLite.
 ## 10. File-by-file implementation map
 
 ## Schema and DB
-- `workflow_cli/db_schema.sql`
+- `project_workflow/db_schema.sql`
   - add new assistant/subscription tables
-- `workflow_cli/db.py`
+- `project_workflow/db.py`
   - CRUD and query helpers for new tables
   - project assistant settings resolution
   - session/message persistence helpers
 
 ## Services
-- `workflow_cli/assistant_service.py` (new)
-- `workflow_cli/subscription_service.py` (new)
-- `workflow_cli/assistant_provider_openai.py` (new)
-- `workflow_cli/context_builder.py` (optional new)
+- `project_workflow/assistant_service.py` (new)
+- `project_workflow/subscription_service.py` (new)
+- `project_workflow/assistant_provider_openai.py` (new)
+- `project_workflow/context_builder.py` (optional new)
 
 ## UI/backend routes
-- `workflow_cli/ui.py`
+- `project_workflow/ui.py`
   - new assistant admin page route
   - new task assistant API routes
   - new project assistant settings routes
   - task detail context expansion
 
 ## Templates
-- `workflow_cli/templates/v2/task_detail.html`
+- `project_workflow/templates/v2/task_detail.html`
   - add smart-agent panel
-- `workflow_cli/templates/v2/projects.html`
+- `project_workflow/templates/v2/projects.html`
   - add project-level enable/default-agent controls
-- `workflow_cli/templates/v2/agents.html`
+- `project_workflow/templates/v2/agents.html`
   - keep main list human-readable; optionally add advanced editor affordance
-- `workflow_cli/templates/v2/dashboard.html`
+- `project_workflow/templates/v2/dashboard.html`
   - optional minimal assistant status card only if real data exists
-- `workflow_cli/templates/v2/settings.html`
+- `project_workflow/templates/v2/settings.html`
   - likely no logic change; only regression protection
-- `workflow_cli/templates/v2/assistant.html` or `subscription.html` (new)
+- `project_workflow/templates/v2/assistant.html` or `subscription.html` (new)
   - provider/subscription admin page
 
 ## Existing runtime reuse
-- `workflow_cli/wizard.py`
+- `project_workflow/wizard.py`
   - context/reuse, not duplicate logic
-- `workflow_cli/conversation.py`
+- `project_workflow/conversation.py`
   - optional mirroring of chat transcript
 
 ---

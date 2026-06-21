@@ -6,7 +6,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 import requests
 
-from workflow_cli.llm import (
+from project_workflow.llm import (
     OllamaClient,
     PromptBuilder,
     ResponseParser,
@@ -45,7 +45,7 @@ class TestOllamaClient:
     def test_default_env_vars(self, monkeypatch):
         monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
         from importlib import reload
-        import workflow_cli.llm as llm_mod
+        import project_workflow.llm as llm_mod
         reload(llm_mod)
         assert llm_mod.OLLAMA_BASE_URL == "http://localhost:11434"
         assert llm_mod.OLLAMA_MODEL == "kimi-k2.6"
@@ -53,11 +53,11 @@ class TestOllamaClient:
     def test_chat_parses_json_response(self, monkeypatch):
         monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
         from importlib import reload
-        import workflow_cli.llm as llm_mod
+        import project_workflow.llm as llm_mod
         reload(llm_mod)
         client = llm_mod.OllamaClient()
         expected = {"verdict": "PASS", "confidence": 0.95}
-        with patch("workflow_cli.llm.requests.post") as mock_post:
+        with patch("project_workflow.llm.requests.post") as mock_post:
             mock_post.return_value = MagicMock(
                 status_code=200,
                 json=lambda: {"message": {"content": json.dumps(expected)}},
@@ -70,12 +70,12 @@ class TestOllamaClient:
         """Test cloud mode with OpenAI-compatible endpoint."""
         monkeypatch.setenv("OLLAMA_BASE_URL", "https://ollama.com/v1")
         from importlib import reload
-        import workflow_cli.llm as llm_mod
+        import project_workflow.llm as llm_mod
         reload(llm_mod)
         client = llm_mod.OllamaClient(api_key="test-key")
         assert client.is_cloud is True
         expected = {"verdict": "PASS", "confidence": 0.95}
-        with patch("workflow_cli.llm.requests.post") as mock_post:
+        with patch("project_workflow.llm.requests.post") as mock_post:
             mock_post.return_value = MagicMock(
                 status_code=200,
                 json=lambda: {
@@ -88,7 +88,7 @@ class TestOllamaClient:
 
     def test_chat_payload_structure(self):
         client = OllamaClient(model="test-model", base_url="http://host:1234")
-        with patch("workflow_cli.llm.requests.post") as mock_post:
+        with patch("project_workflow.llm.requests.post") as mock_post:
             mock_post.return_value = MagicMock(
                 status_code=200,
                 json=lambda: {"message": {"content": "{}"}},
@@ -108,7 +108,7 @@ class TestOllamaClient:
 
     def test_chat_empty_content_raises(self):
         client = OllamaClient()
-        with patch("workflow_cli.llm.requests.post") as mock_post:
+        with patch("project_workflow.llm.requests.post") as mock_post:
             mock_post.return_value = MagicMock(
                 status_code=200,
                 json=lambda: {"message": {"content": ""}},
@@ -243,13 +243,13 @@ class TestWizardEngineEvaluateLLM:
     @pytest.fixture
     def engine(self, tmp_path, monkeypatch):
         test_db = tmp_path / "workflow.db"
-        import workflow_cli.db as db_module
+        import project_workflow.db as db_module
         monkeypatch.setattr(db_module.base, "DB_PATH", str(test_db))
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
-        monkeypatch.setattr("workflow_cli.wizard.SMART_EVALUATE", True)
-        with patch("workflow_cli.wizard.convo") as mock_convo:
+        monkeypatch.setattr("project_workflow.wizard.SMART_EVALUATE", True)
+        with patch("project_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
-            from workflow_cli.wizard import WizardEngine
+            from project_workflow.wizard import WizardEngine
             engine = WizardEngine("SMOKE-LLM-1", repo=str(tmp_path))
         return engine
 
@@ -264,7 +264,7 @@ class TestWizardEngineEvaluateLLM:
             "next_phase_name": "Next",
             "confidence": 0.95,
         }
-        with patch("workflow_cli.wizard_evaluate.OllamaClient.chat") as mock_chat:
+        with patch("project_workflow.wizard_evaluate.OllamaClient.chat") as mock_chat:
             mock_chat.return_value = llm_response
             result = engine.evaluate_llm("I checked git", engine._get_current_phase_obj())
         assert result["verdict"] == "PASS"
@@ -281,7 +281,7 @@ class TestWizardEngineEvaluateLLM:
             "message": "🔴 Blocked",
             "confidence": 0.9,
         }
-        with patch("workflow_cli.wizard_evaluate.OllamaClient.chat") as mock_chat:
+        with patch("project_workflow.wizard_evaluate.OllamaClient.chat") as mock_chat:
             mock_chat.return_value = llm_response
             result = engine.evaluate_llm("Cannot access", engine._get_current_phase_obj())
         assert result["verdict"] == "BLOCKED"
@@ -303,7 +303,7 @@ class TestWizardEngineEvaluateLLM:
             "message": "Done",
             "confidence": 0.9,
         }
-        with patch("workflow_cli.wizard_evaluate.OllamaClient.chat") as mock_chat:
+        with patch("project_workflow.wizard_evaluate.OllamaClient.chat") as mock_chat:
             mock_chat.return_value = llm_response
             engine.evaluate_llm("Report", engine._get_current_phase_obj())
             args, kwargs = mock_chat.call_args
@@ -320,17 +320,17 @@ class TestWizardEngineEvaluateLLMWithRule:
     @pytest.fixture
     def engine(self, tmp_path, monkeypatch):
         test_db = tmp_path / "workflow.db"
-        import workflow_cli.db as db_module
+        import project_workflow.db as db_module
         monkeypatch.setattr(db_module.base, "DB_PATH", str(test_db))
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
-        with patch("workflow_cli.wizard.convo") as mock_convo:
+        with patch("project_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
-            from workflow_cli.wizard import WizardEngine
+            from project_workflow.wizard import WizardEngine
             engine = WizardEngine("SMOKE-RULE-1", repo=str(tmp_path))
         return engine
 
     def test_rule_based_evaluate_without_smart(self, engine, monkeypatch):
-        monkeypatch.setattr("workflow_cli.wizard.SMART_EVALUATE", False)
+        monkeypatch.setattr("project_workflow.wizard.SMART_EVALUATE", False)
         result = engine.evaluate("")
         assert result["verdict"] == "PARTIAL"
 
@@ -400,13 +400,13 @@ class TestWizardEngineLLMIntegrationDB:
     @pytest.fixture
     def engine(self, tmp_path, monkeypatch):
         test_db = tmp_path / "workflow.db"
-        import workflow_cli.db as db_module
+        import project_workflow.db as db_module
         monkeypatch.setattr(db_module.base, "DB_PATH", str(test_db))
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
-        monkeypatch.setattr("workflow_cli.wizard.SMART_EVALUATE", True)
-        with patch("workflow_cli.wizard.convo") as mock_convo:
+        monkeypatch.setattr("project_workflow.wizard.SMART_EVALUATE", True)
+        with patch("project_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
-            from workflow_cli.wizard import WizardEngine
+            from project_workflow.wizard import WizardEngine
             engine = WizardEngine("DB-LLM-1", repo=str(tmp_path))
         return engine
 
@@ -421,7 +421,7 @@ class TestWizardEngineLLMIntegrationDB:
             "next_phase_name": "Next",
             "confidence": 0.95,
         }
-        with patch("workflow_cli.wizard_evaluate.OllamaClient.chat") as mock_chat:
+        with patch("project_workflow.wizard_evaluate.OllamaClient.chat") as mock_chat:
             mock_chat.return_value = llm_response
             engine.evaluate("Report")
 
@@ -444,7 +444,7 @@ class TestWizardEngineLLMIntegrationDB:
             "next_phase_name": "Next",
             "confidence": 0.95,
         }
-        with patch("workflow_cli.wizard_evaluate.OllamaClient.chat") as mock_chat:
+        with patch("project_workflow.wizard_evaluate.OllamaClient.chat") as mock_chat:
             mock_chat.return_value = llm_response
             engine.evaluate("Report")
 
@@ -460,7 +460,7 @@ class TestWizardEngineLLMIntegrationDB:
             "message": "Blocked",
             "confidence": 0.9,
         }
-        with patch("workflow_cli.wizard_evaluate.OllamaClient.chat") as mock_chat:
+        with patch("project_workflow.wizard_evaluate.OllamaClient.chat") as mock_chat:
             mock_chat.return_value = llm_response
             engine.evaluate("Report")
 
@@ -477,7 +477,7 @@ class TestWizardEngineLLMIntegrationDB:
             "message": "Rollback",
             "confidence": 0.8,
         }
-        with patch("workflow_cli.wizard_evaluate.OllamaClient.chat") as mock_chat:
+        with patch("project_workflow.wizard_evaluate.OllamaClient.chat") as mock_chat:
             mock_chat.return_value = llm_response
             _ = engine.evaluate("Report")
 

@@ -5,12 +5,12 @@ import sqlite3
 
 import pytest
 
-from workflow_cli.db import WorkflowDB
+from project_workflow.db import WorkflowDB
 
 
 @pytest.fixture
 def fresh_db(tmp_path, monkeypatch):
-    import workflow_cli.db as db_module
+    import project_workflow.db as db_module
     monkeypatch.setattr(db_module.base, "DB_PATH", tmp_path / "workflow.db")
     monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "workflow.db")
     db = WorkflowDB()
