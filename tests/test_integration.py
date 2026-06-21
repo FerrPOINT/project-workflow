@@ -46,7 +46,7 @@ class TestEndToEndWorkflow:
         wdb.create_project({
             "code": "AAT",
             "name": "AAT",
-            "key_patterns": [r"^(?P<prefix>AAT)-(?P<number>[0-9]+)$"],
+            "key_prefixes": ["AAT"],
         })
         wdb.create_task({"task_key": "AAT-99", "title": "Integ Test"})
         task = wdb.get_task_by_key("AAT-99")
@@ -157,10 +157,10 @@ class TestEdgeCases:
         wdb.create_project({
             "code": "AATSK",
             "name": "AATSK",
-            "key_patterns": [r"^(?P<prefix>AAT)-(?P<number>[A-Z0-9]+)$"],
+            "key_prefixes": ["AAT"],
         })
-        wdb.create_task({"task_key": "AAT-SK", "title": "Skip Test"})
-        task = wdb.get_task_by_key("AAT-SK")
+        wdb.create_task({"task_key": "AAT-99", "title": "Skip Test"})
+        task = wdb.get_task_by_key("AAT-99")
         assert task is not None
         wdb.add_task_history(task["id"], "0", "pending")
         # Re-adding with done status should update via ON CONFLICT

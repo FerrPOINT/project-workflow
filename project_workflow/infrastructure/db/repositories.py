@@ -50,17 +50,17 @@ def _row_to_workflow(row: m.Workflow) -> Workflow:
 
 
 def _row_to_project(row: m.Project) -> Project:
-    raw = row.key_patterns or "[]"
+    raw = row.key_prefixes or "[]"
     try:
-        patterns = json.loads(raw) if isinstance(raw, str) else []
+        prefixes = json.loads(raw) if isinstance(raw, str) else []
     except Exception:
-        patterns = []
+        prefixes = []
     return Project(
         id=row.id,
         workflow_id=row.workflow_id,
         code=row.code,
         name=row.name,
-        key_patterns=[str(p) for p in patterns],
+        key_prefixes=[str(p) for p in prefixes],
         workflow_name=row.workflow.name if row.workflow else None,
     )
 
@@ -325,12 +325,12 @@ class SAProjectRepository(ProjectRepository):
         return _row_to_project(row) if row else None
 
     def create(self, data: dict[str, Any]) -> int:
-        patterns = data.get("key_patterns", [])
+        prefixes = data.get("key_prefixes", [])
         item = m.Project(
             workflow_id=data["workflow_id"],
             code=data["code"],
             name=data["name"],
-            key_patterns=json.dumps([str(p) for p in patterns], ensure_ascii=False),
+            key_prefixes=json.dumps([str(p) for p in prefixes], ensure_ascii=False),
         )
         self._session.add(item)
         self._session.flush()
@@ -346,9 +346,9 @@ class SAProjectRepository(ProjectRepository):
             row.code = data["code"]
         if "name" in data:
             row.name = data["name"]
-        if "key_patterns" in data:
-            patterns = data["key_patterns"]
-            row.key_patterns = json.dumps([str(p) for p in patterns], ensure_ascii=False)
+        if "key_prefixes" in data:
+            prefixes = data["key_prefixes"]
+            row.key_prefixes = json.dumps([str(p) for p in prefixes], ensure_ascii=False)
 
     def delete(self, project_id: int) -> None:
         row = self._session.get(m.Project, project_id)
@@ -358,9 +358,9 @@ class SAProjectRepository(ProjectRepository):
 
     def match_by_task_key(self, task_key: str) -> Project | None:
         for project in self.list():
-            for pattern in project.key_patterns:
+            for prefix in project.key_prefixes:
                 import re
-                if re.match(pattern, task_key):
+                if re.match(rf"^{re.escape(prefix)}-[0-9]+$", task_key):
                     return project
         return None
 

@@ -159,7 +159,7 @@ class Project(Base):
     workflow_id = Column(Integer, ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False)
     code = Column(String, nullable=False, unique=True)
     name = Column(String, nullable=False)
-    key_patterns = Column(String, nullable=False, default="[]", server_default="[]")
+    key_prefixes = Column(String, nullable=False, default="[]", server_default="[]")
 
     workflow = relationship("Workflow", back_populates="projects")
     tasks = relationship("Task", back_populates="project", cascade="all, delete-orphan")

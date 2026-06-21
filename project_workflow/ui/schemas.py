@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+from project_workflow import config
 
 
 class OptionalIntMixin:
@@ -88,21 +91,38 @@ class ProjectCreate(BaseModel, OptionalIntMixin):
     name: str | None = Field(default=None)
     description: str | None = Field(default="")
     workflow_id: int | None = Field(default=None)
-    key_patterns: list[str] | str = Field(default=[])
+    key_prefixes: list[str] | str = Field(default=[])
 
     @field_validator("workflow_id", mode="before")
     @classmethod
     def _validate_workflow_id(cls, value: Any) -> int | None:
         return cls._coerce_optional_int(value)
 
-    @field_validator("key_patterns", mode="before")
+    @field_validator("key_prefixes", mode="before")
     @classmethod
-    def _validate_key_patterns(cls, value: Any) -> list[str]:
+    def _validate_key_prefixes(cls, value: Any) -> list[str]:
         if isinstance(value, list):
-            return [str(item).strip() for item in value if str(item).strip()]
+            return [str(item).strip().upper() for item in value if str(item).strip()]
         if isinstance(value, str):
-            return [line.strip() for line in value.splitlines() if line.strip()]
+            return [line.strip().upper() for line in value.splitlines() if line.strip()]
         return []
+
+    @field_validator("key_prefixes", mode="after")
+    @classmethod
+    def _ensure_prefixes_not_empty(cls, value: list[str]) -> list[str]:
+        if not value:
+            return list(config.DEFAULT_TASK_KEY_PREFIXES)
+        return value
+
+    @field_validator("key_prefixes", mode="after")
+    @classmethod
+    def _validate_prefix_format(cls, value: list[str]) -> list[str]:
+        for prefix in value:
+            if not re.fullmatch(r"[A-Z][A-Z0-9]*", prefix):
+                raise ValueError(f"Invalid prefix '{prefix}': use uppercase letters/digits only")
+            if len(prefix) < 2:
+                raise ValueError(f"Prefix '{prefix}' too short (min 2 chars)")
+        return value
 
 
 class ProjectUpdate(BaseModel, OptionalIntMixin):
@@ -110,23 +130,35 @@ class ProjectUpdate(BaseModel, OptionalIntMixin):
     name: str | None = Field(default=None)
     description: str | None = Field(default=None)
     workflow_id: int | None = Field(default=None)
-    key_patterns: list[str] | str | None = Field(default=None)
+    key_prefixes: list[str] | str | None = Field(default=None)
 
     @field_validator("workflow_id", mode="before")
     @classmethod
     def _validate_workflow_id(cls, value: Any) -> int | None:
         return cls._coerce_optional_int(value)
 
-    @field_validator("key_patterns", mode="before")
+    @field_validator("key_prefixes", mode="before")
     @classmethod
-    def _validate_key_patterns(cls, value: Any) -> list[str] | None:
+    def _validate_key_prefixes(cls, value: Any) -> list[str] | None:
         if value is None:
             return None
         if isinstance(value, list):
-            return [str(item).strip() for item in value if str(item).strip()]
+            return [str(item).strip().upper() for item in value if str(item).strip()]
         if isinstance(value, str):
-            return [line.strip() for line in value.splitlines() if line.strip()]
+            return [line.strip().upper() for line in value.splitlines() if line.strip()]
         return []
+
+    @field_validator("key_prefixes", mode="after")
+    @classmethod
+    def _validate_prefix_format(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        for prefix in value:
+            if not re.fullmatch(r"[A-Z][A-Z0-9]*", prefix):
+                raise ValueError(f"Invalid prefix '{prefix}': use uppercase letters/digits only")
+            if len(prefix) < 2:
+                raise ValueError(f"Prefix '{prefix}' too short (min 2 chars)")
+        return value
 
 
 class AgentCreate(BaseModel):

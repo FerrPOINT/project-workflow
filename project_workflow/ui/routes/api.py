@@ -320,7 +320,7 @@ async def api_project_create(payload: ProjectCreate) -> dict[str, Any] | JSONRes
             "code": payload.code,
             "name": payload.name,
             "description": payload.description or "",
-            "key_patterns": list(payload.key_patterns) if payload.key_patterns else [],
+            "key_prefixes": list(payload.key_prefixes) if payload.key_prefixes else [],
             "workflow_id": payload.workflow_id,
         }
     )
@@ -338,8 +338,8 @@ async def api_project_update(project_id: int, payload: ProjectUpdate) -> dict[st
         updates["name"] = payload.name
     if payload.description is not None:
         updates["description"] = payload.description
-    if payload.key_patterns is not None:
-        updates["key_patterns"] = list(payload.key_patterns)
+    if payload.key_prefixes is not None:
+        updates["key_prefixes"] = list(payload.key_prefixes)
     if payload.workflow_id is not None:
         updates["workflow_id"] = payload.workflow_id
     service.update_project(project_id, updates)

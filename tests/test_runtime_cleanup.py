@@ -45,14 +45,14 @@ def _phase_by_code(code: str) -> dict:
     raise AssertionError(f"Phase {code} not found in seed catalog")
 
 
-def test_default_bootstrap_project_patterns_are_project_specific(tmp_path):
+def test_default_bootstrap_project_prefixes_are_project_specific(tmp_path):
     db = WorkflowDB(str(tmp_path / "workflow.db"))
     db.init()
 
-    project = db.get_project_by_code("TASKNEIROKLYUCH")
+    project = db.get_project_by_code("TASK")
     assert project is not None
-    assert project["key_patterns"] == config.DEFAULT_TASK_KEY_PATTERNS
-    assert project["key_patterns"] == [r"^(?P<prefix>TASKNEIROKLYUCH)-(?P<number>[0-9]+)$"]
+    assert project["key_prefixes"] == config.DEFAULT_TASK_KEY_PREFIXES
+    assert project["key_prefixes"] == ["TASK"]
 
 
 def test_sanitize_runtime_state_removes_known_test_residue_and_dedupes_agents(tmp_path):
@@ -62,13 +62,7 @@ def test_sanitize_runtime_state_removes_known_test_residue_and_dedupes_agents(tm
     ui_test_project_id = db.create_project({
         "code": "UITEST",
         "name": "UI Test Project",
-        "key_patterns": [r"^(?P<prefix>UITEST)-(?P<number>[0-9]+)$"],
-    })
-    db.create_task({
-        "task_key": "TASKNEIROKLYUCH-247",
-        "title": "Добавить E2E тесты для workflow",
-        "status": "active",
-        "current_phase": "5",
+        "key_prefixes": ["UITEST"],
     })
     db.create_task({
         "project_id": ui_test_project_id,
@@ -84,12 +78,11 @@ def test_sanitize_runtime_state_removes_known_test_residue_and_dedupes_agents(tm
 
     assert db.get_project_by_code("UITEST") is None
     assert db.get_task_by_key("UITEST-401") is None
-    assert db.get_task_by_key("TASKNEIROKLYUCH-247") is None
     assert [agent["name"] for agent in db.get_agents()].count("architect") == 1
 
-    default_project = db.get_project_by_code("TASKNEIROKLYUCH")
+    default_project = db.get_project_by_code("TASK")
     assert default_project is not None
-    assert default_project["key_patterns"] == [r"^(?P<prefix>TASKNEIROKLYUCH)-(?P<number>[0-9]+)$"]
+    assert default_project["key_prefixes"] == ["TASK"]
 
 
 def test_seed_catalog_task_intake_and_preflight_have_real_content():
@@ -122,7 +115,7 @@ def test_seed_catalog_names_match_runtime_progress_template():
         for phase in phases
     }
 
-    progress = json.loads(schema.generate_progress_json("TASKNEIROKLYUCH-1", "1", "title", "sprint1"))
+    progress = json.loads(schema.generate_progress_json("TASK-1", "1", "title", "sprint1"))
     progress_names = {
         str(phase.get("phase", "")).strip(): str(phase.get("name", "")).strip()
         for phase in progress.get("phases", [])
@@ -224,5 +217,3 @@ def test_db_init_assigns_selected_agents_to_role_bound_default_phases(tmp_path):
         assert phase is not None, f"Phase {code} not found"
         assert phase.get("agent_id") is not None, f"Phase {code} must resolve selected agent"
         assert agents_by_id[phase["agent_id"]] == expected_agent_name
-
-

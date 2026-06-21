@@ -165,27 +165,18 @@ class WorkflowDBCompat:
         from project_workflow import config
         from project_workflow.infrastructure.db import models as m
 
-        legacy_patterns = config.load_legacy_key_patterns()
-        default_project = {
-            "workflow_name": config.DEFAULT_WORKFLOW_NAME,
-            "code": "TASKNEIROKLYUCH",
-            "name": "TASKNEIROKLYUCH",
-            "key_patterns": config.DEFAULT_TASK_KEY_PATTERNS,
-        }
-        if legacy_patterns:
-            default_project = {
-                "workflow_name": config.DEFAULT_WORKFLOW_NAME,
-                "code": "default",
-                "name": "Migrated Default Project",
-                "key_patterns": legacy_patterns,
-            }
         projects = [
-            default_project,
+            {
+                "workflow_name": config.DEFAULT_WORKFLOW_NAME,
+                "code": "TASK",
+                "name": "TASK",
+                "key_prefixes": config.DEFAULT_TASK_KEY_PREFIXES,
+            },
             {
                 "workflow_name": config.SMOKE_WORKFLOW_NAME,
                 "code": config.SMOKE_PROJECT_CODE,
                 "name": config.SMOKE_PROJECT_NAME,
-                "key_patterns": config.SMOKE_TASK_KEY_PATTERNS,
+                "key_prefixes": config.SMOKE_TASK_KEY_PREFIXES,
             },
         ]
 
@@ -202,34 +193,39 @@ class WorkflowDBCompat:
                 ).scalar_one_or_none()
                 if wf is None:
                     continue
-                key_patterns = self._serialize_key_patterns(p["key_patterns"])
+                key_prefixes = self._serialize_key_prefixes(p["key_prefixes"])
                 session.add(
                     m.Project(
                         workflow_id=wf.id,
                         code=p["code"],
                         name=p["name"],
-                        key_patterns=key_patterns,
+                        key_prefixes=key_prefixes,
                     )
                 )
             uow.commit()
 
     @staticmethod
-    def _serialize_key_patterns(patterns: list[str] | str | None) -> str:
-        if patterns is None:
+    def _serialize_key_prefixes(prefixes: list[str] | str | None) -> str:
+        if prefixes is None:
             return "[]"
-        if isinstance(patterns, str):
-            return patterns
-        return json.dumps([str(p) for p in patterns], ensure_ascii=False)
+        if isinstance(prefixes, str):
+            return json.dumps(
+                [str(p).upper() for p in prefixes.splitlines() if str(p).strip()],
+                ensure_ascii=False,
+            )
+        return json.dumps(
+            [str(p).upper() for p in prefixes if str(p).strip()], ensure_ascii=False
+        )
 
     @staticmethod
-    def _deserialize_key_patterns(raw: str | None) -> list[str]:
+    def _deserialize_key_prefixes(raw: str | None) -> list[str]:
         if raw is None:
             return []
         try:
             value = json.loads(raw)
             if isinstance(value, list):
-                return [str(p) for p in value]
-            return [str(value)]
+                return [str(p).upper() for p in value if str(p).strip()]
+            return [str(value).upper()]
         except (json.JSONDecodeError, TypeError):
             return []
 
@@ -544,7 +540,7 @@ class WorkflowDBCompat:
         if project_id is None:
             project = self.match_project_for_task_key(payload.get("task_key", ""))
             if not project:
-                raise ValueError(f"No project regex matched task key: {payload.get('task_key')}")
+                raise ValueError(f"No project prefix matched task key: {payload.get('task_key')}")
             project_id = project["id"]
         payload["project_id"] = project_id
         return self._state.task_service().create_task(payload)["id"]
@@ -730,24 +726,12 @@ class WorkflowDBCompat:
             return rid
 
     def sanitize_runtime_state(self) -> None:
+        """Prune known fixture data and dedupe agents."""
         from sqlalchemy import select
         from project_workflow.infrastructure.db import models as m
 
         with self._state.get_uow() as uow:
             session = uow._session
-            # Sanitize TASKNEIROKLYUCH patterns
-            default_proj = session.execute(
-                select(m.Project).where(m.Project.code == "TASKNEIROKLYUCH")
-            ).scalar_one_or_none()
-            if default_proj:
-                patterns = self._deserialize_key_patterns(default_proj.key_patterns or "[]")
-                cleaned = [p for p in patterns if "HRRECRUITER" not in str(p)]
-                if not cleaned:
-                    from .. import config
-                    cleaned = list(config.DEFAULT_TASK_KEY_PATTERNS)
-                if cleaned != patterns:
-                    default_proj.key_patterns = self._serialize_key_patterns(cleaned)
-
             # Prune known fixture data
             fixture = session.execute(
                 select(m.Project.id).where(
@@ -758,13 +742,6 @@ class WorkflowDBCompat:
             if fixture:
                 session.execute(m.Task.__table__.delete().where(m.Task.project_id == fixture))
                 session.execute(m.Project.__table__.delete().where(m.Project.id == fixture))
-
-            session.execute(
-                m.Task.__table__.delete().where(
-                    m.Task.task_key == "TASKNEIROKLYUCH-247",
-                    m.Task.title == "Добавить E2E тесты для workflow",
-                )
-            )
 
             # Dedupe agents
             seen: dict[tuple[str, str], int] = {}

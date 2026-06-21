@@ -136,22 +136,22 @@ def setup_db():
     if wdb.is_empty():
         _seed_to_sqlite()
     # Ensure sample task exists for task detail tests
-    if not wdb.get_task_by_key("TASKNEIROKLYUCH-247"):
+    if not wdb.get_task_by_key("TASK-247"):
         wdb.create_task({
-            "task_key": "TASKNEIROKLYUCH-247",
+            "task_key": "TASK-247",
             "title": "Добавить E2E тесты для workflow",
             "status": "active",
             "current_phase": "5",
         })
     else:
-        sample_task = wdb.get_task_by_key("TASKNEIROKLYUCH-247")
+        sample_task = wdb.get_task_by_key("TASK-247")
         assert sample_task is not None
         wdb.update_task(sample_task["id"], {
             "title": "Добавить E2E тесты для workflow",
             "status": "active",
             "current_phase": "5",
         })
-    sample_task = wdb.get_task_by_key("TASKNEIROKLYUCH-247")
+    sample_task = wdb.get_task_by_key("TASK-247")
     assert sample_task is not None
     with sqlite3.connect(db_module.DB_PATH) as conn:
         conn.execute("DELETE FROM task_history WHERE task_id = ?", (sample_task["id"],))
@@ -161,7 +161,7 @@ def setup_db():
         project_id = wdb.create_project({
             "code": "UITEST",
             "name": "UI Test Project",
-            "key_patterns": [r"^(?P<prefix>UITEST)-(?P<number>[0-9]+)$"],
+            "key_prefixes": ["UITEST"],
         })
     else:
         project_id = project["id"]
@@ -238,7 +238,7 @@ class TestIndexPage:
         assert "Validate" not in response.text
         assert "regex" not in response.text
         assert '<div class="metric-label">Фазы</div>' not in response.text
-        assert "TASKNEIROKLYUCH — TASKNEIROKLYUCH" not in response.text
+        assert "TASK — TASK" not in response.text
         assert "UITEST — UI Test Project" not in response.text
 
     def test_global_toast_is_hidden_by_default_until_action(self):
@@ -1051,7 +1051,7 @@ class TestTasksPage:
         response = client.get("/tasks")
         assert response.status_code == 200
         # With empty DB after seed, page shows "Нет задач"
-        assert "Нет задач" in response.text or 'class="row"' in response.text or "TASKNEIROKLYUCH" in response.text
+        assert "Нет задач" in response.text or 'class="row"' in response.text or "TASK" in response.text
 
     def test_tasks_api_returns_json(self):
         response = client.get("/api/tasks")
@@ -1080,12 +1080,12 @@ class TestTaskDetail:
     """Tests for task detail page."""
 
     def test_task_detail_returns_html(self):
-        response = client.get("/task/TASKNEIROKLYUCH-247")
+        response = client.get("/task/TASK-247")
         assert response.status_code == 200
         assert "История фаз" in response.text
 
     def test_task_detail_shows_current_phase_and_progress(self):
-        response = client.get("/task/TASKNEIROKLYUCH-247")
+        response = client.get("/task/TASK-247")
         assert response.status_code == 200
         assert "Validate" in response.text
         assert ".gitignore Check" not in response.text
@@ -1097,7 +1097,7 @@ class TestTaskDetail:
         from project_workflow.ui import _app_state
 
         wdb = _app_state.get_db()
-        task_key = "TASKNEIROKLYUCH-300"
+        task_key = "TASK-300"
         task = wdb.get_task_by_key(task_key)
         if not task:
             task_id = wdb.create_task({
@@ -1116,7 +1116,7 @@ class TestTaskDetail:
         assert "Task Intake" in response.text
 
     def test_task_detail_has_phase_history(self):
-        response = client.get("/task/TASKNEIROKLYUCH-247")
+        response = client.get("/task/TASK-247")
         assert response.status_code == 200
         assert "История фаз" in response.text
 
@@ -1169,12 +1169,12 @@ class TestProjectsPage:
         assert response.headers["content-type"] == "text/html; charset=utf-8"
         assert "Проекты" in response.text
 
-    def test_projects_page_shows_project_rows_and_key_patterns(self):
+    def test_projects_page_shows_project_rows_and_key_prefixes(self):
         response = client.get("/projects")
         assert response.status_code == 200
         assert "UI Test Project" in response.text
         assert "UITEST" in response.text
-        assert "Регекспы" in response.text
+        assert "Префиксы ключей задач" in response.text
 
     def test_projects_page_uses_single_editor_with_top_create_button(self):
         response = client.get("/projects")
@@ -1195,27 +1195,27 @@ class TestProjectsPage:
         response = client.get("/projects")
         assert response.status_code == 200
         assert "CRUD проектов" not in response.text
-        assert "source of truth для проектных regex-паттернов" not in response.text
+        assert "source of truth для проектных префиксов" not in response.text
 
     def test_projects_api_create_update_and_delete(self):
         create = client.post("/api/projects", json={
             "code": "APICRUD",
             "name": "API CRUD Project",
-            "key_patterns": [r"^(?P<prefix>APICRUD)-(?P<number>[0-9]+)$"],
+            "key_prefixes": ["APICRUD"],
         })
         assert create.status_code == 200
         project_id = create.json()["project_id"]
 
         update = client.put(f"/api/projects/{project_id}", json={
             "name": "API CRUD Project Updated",
-            "key_patterns": r"^(?P<prefix>APICRUD)-(?P<number>[0-9]{2,})$",
+            "key_prefixes": ["APICRUD"],
         })
         assert update.status_code == 200
 
         projects = client.get("/api/projects").json()["projects"]
         project = next(project for project in projects if project["id"] == project_id)
         assert project["name"] == "API CRUD Project Updated"
-        assert project["key_patterns"] == [r"^(?P<prefix>APICRUD)-(?P<number>[0-9]{2,})$"]
+        assert project["key_prefixes"] == ["APICRUD"]
 
         delete = client.delete(f"/api/projects/{project_id}")
         assert delete.status_code == 200
@@ -1227,7 +1227,7 @@ class TestProjectsPage:
             "code": "WFPROJ",
             "name": "Workflow Bound Project",
             "workflow_id": workflow["id"],
-            "key_patterns": [r"^(?P<prefix>WFPROJ)-(?P<number>[0-9]+)$"],
+            "key_prefixes": ["WFPROJ"],
         })
         assert create.status_code == 200
         project_id = create.json()["project_id"]
@@ -1255,7 +1255,7 @@ class TestProjectsPage:
             "code": "WFMOVE",
             "name": "Workflow move project",
             "workflow_id": default_workflow["id"],
-            "key_patterns": [r"^(?P<prefix>WFMOVE)-(?P<number>[0-9]+)$"],
+            "key_prefixes": ["WFMOVE"],
         })
         assert create.status_code == 200
         project_id = create.json()["project_id"]
@@ -1265,7 +1265,7 @@ class TestProjectsPage:
                 "code": "WFMOVE",
                 "name": "Workflow move project",
                 "workflow_id": workflow_id,
-                "key_patterns": [r"^(?P<prefix>WFMOVE)-(?P<number>[0-9]+)$"],
+                "key_prefixes": ["WFMOVE"],
             })
             assert update.status_code == 200
 

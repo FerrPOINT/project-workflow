@@ -31,7 +31,7 @@ def _bootstrap_supervisor_workflow(wdb: WorkflowDB) -> None:
         "workflow_id": workflow_id,
         "code": "SUP",
         "name": "Supervisor Project",
-        "key_patterns": [r"^(?P<prefix>SUP)-(?P<number>[0-9]+)$"],
+        "key_prefixes": ["SUP"],
     })
 
     critic = next((agent for agent in wdb.get_agents() if agent["name"] == "critic"), None)

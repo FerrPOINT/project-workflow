@@ -11,7 +11,7 @@ from project_workflow.phases import get_next_phase, get_phase_checklist_raw, sho
 from project_workflow.wizard_context import WizardContextBuilder
 from project_workflow.task_validator import (
     TaskKeyValidator, ValidatedTaskKey, TaskKeyValidationError,
-    validate, validate_or_die, migrate_key,
+    validate, validate_or_die,
 )
 
 
@@ -224,13 +224,6 @@ class TestTaskValidatorEdgeCases:
         assert not result.is_valid
         assert result.error_message and "дефиса" in result.error_message
 
-    def test_migration_hrrecruiter(self):
-        v = TaskKeyValidator()
-        result = v.validate("HRRECRUITER-42")
-        assert result.is_valid
-        assert result.was_migrated
-        assert result.normalized == "TASKNEIROKLYUCH-42"
-
     def test_min_prefix_len_blocks_short(self):
         v = TaskKeyValidator(min_prefix_len=3)
         result = v.validate("A-1")
@@ -238,7 +231,7 @@ class TestTaskValidatorEdgeCases:
 
     def test_min_number_len_blocks_short(self):
         v = TaskKeyValidator(min_number_len=2)
-        result = v.validate("AAT-1")
+        result = v.validate("TASK-1")
         assert not result.is_valid
 
     def test_lenient_mode_lowercase_allowed(self):
@@ -248,18 +241,19 @@ class TestTaskValidatorEdgeCases:
 
     def test_jira_only_rejects_internal(self):
         v = TaskKeyValidator.jira_only()
-        result = v.validate("TASKNEIROKLYUCH-1")
+        result = v.validate("TASK-1")
+        # Default jira_only has no prefixes, so TASK is rejected
         assert not result.is_valid
         result2 = v.validate("AAT-123")
         assert result2.is_valid
 
-    def test_from_projects_json_string_patterns(self):
-        v = TaskKeyValidator.from_projects([{"code": "X", "key_patterns": '["^(?P<prefix>XX)-(?P<number>[0-9]+)$"]'}])
+    def test_from_projects_json_string_prefixes(self):
+        v = TaskKeyValidator.from_projects([{"code": "X", "key_prefixes": '["XX"]'}])
         result = v.validate("XX-1")
         assert result.is_valid
 
     def test_from_projects_bad_json_fallback(self):
-        v = TaskKeyValidator.from_projects([{"code": "X", "key_patterns": "not-json"}])
+        v = TaskKeyValidator.from_projects([{"code": "X", "key_prefixes": "not-json"}])
         result = v.validate("not-json")
         assert not result.is_valid
 
@@ -275,22 +269,18 @@ class TestTaskValidatorEdgeCases:
         with pytest.raises(TaskKeyValidationError):
             validate_or_die("bad")
 
-    def test_migrate_key_legacy(self):
-        assert migrate_key("HRRECRUITER-42") == "TASKNEIROKLYUCH-42"
-
-    def test_migrate_key_non_legacy(self):
-        assert migrate_key("AAT-123") is None
-
-    def test_no_match_error_message_contains_patterns(self):
-        v = TaskKeyValidator(patterns=[r"^(?P<prefix>FOO)-(?P<number>[0-9]+)$"])
+    def test_no_match_error_message_contains_prefixes(self):
+        v = TaskKeyValidator(prefixes=["FOO"])
         result = v.validate("BAR-1")
         assert not result.is_valid
         assert "FOO" in result.error_message
 
-    def test_with_migration_custom(self):
-        v = TaskKeyValidator.with_migration({"OLD": "NEW"})
-        assert v.migrations == {"OLD": "NEW"}
+    def test_from_prefixes_ui_factory(self):
+        v = TaskKeyValidator.from_prefixes(["FOO", "BAR"])
+        assert v.is_valid("FOO-1")
+        assert v.is_valid("BAR-2")
+        assert not v.is_valid("BAZ-1")
 
     def test_is_valid_convenience(self):
-        assert TaskKeyValidator().is_valid("AAT-123") is True
+        assert TaskKeyValidator().is_valid("TASK-123") is True
         assert TaskKeyValidator().is_valid("bad") is False

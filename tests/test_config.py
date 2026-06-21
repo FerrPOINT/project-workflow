@@ -69,15 +69,8 @@ class TestSettingsHelpers:
         raw = cfg_module._read_raw_settings()
         assert raw == {}
 
-    def test_load_legacy_key_patterns_found(self, tmp_path, monkeypatch):
-        settings = tmp_path / "settings.json"
-        settings.write_text(r'{"key_patterns": ["^A-\\d+$"]}')
-        monkeypatch.setattr(cfg_module, "SETTINGS_PATH", str(settings))
-        patterns = cfg_module.load_legacy_key_patterns()
-        assert patterns == ["^A-\\d+$"]
+    def test_default_task_key_prefixes(self):
+        assert cfg_module.DEFAULT_TASK_KEY_PREFIXES == ["TASK"]
 
-    def test_load_legacy_key_patterns_missing_returns_none(self, tmp_path, monkeypatch):
-        settings = tmp_path / "settings.json"
-        settings.write_text("{}")
-        monkeypatch.setattr(cfg_module, "SETTINGS_PATH", str(settings))
-        assert cfg_module.load_legacy_key_patterns() is None
+    def test_smoke_task_key_prefixes(self):
+        assert cfg_module.SMOKE_TASK_KEY_PREFIXES == ["SMOKE"]

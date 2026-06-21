@@ -122,18 +122,14 @@ DELEGATED_PHASES = [
 CRITIC_PHASES = ["0.9", "3.5", "4.5", "7.7"]
 RESEARCHER_PHASES = ["0.6", "1.5", "2", "7.6.R"]
 REVIEWER_PHASES = ["7.5", "7.6"]
-TOKEN_REQUIRED_PHASES = ["0.5", "8"]
+TOKEN_REQUIRED_PHASES = ["8"]
 
 DEFAULT_WORKFLOW_NAME = "Default Workflow"
 SMOKE_WORKFLOW_NAME = "Smoke Test Workflow"
 SMOKE_PROJECT_CODE = "SMOKE"
 SMOKE_PROJECT_NAME = "Smoke CLI Test Project"
-SMOKE_TASK_KEY_PATTERNS = [
-    r"^(?P<prefix>SMOKE)-(?P<number>[0-9]+)$",
-]
-DEFAULT_TASK_KEY_PATTERNS = [
-    r"^(?P<prefix>TASKNEIROKLYUCH)-(?P<number>[0-9]+)$",
-]
+SMOKE_TASK_KEY_PREFIXES = ["SMOKE"]
+DEFAULT_TASK_KEY_PREFIXES = ["TASK"]
 
 
 def _read_raw_settings() -> dict:
@@ -146,12 +142,3 @@ def _read_raw_settings() -> dict:
         except Exception:
             return {}
     return {}
-
-
-def load_legacy_key_patterns() -> list[str] | None:
-    """Return pre-project key_patterns from settings.json, if present."""
-    raw = _read_raw_settings()
-    patterns = raw.get("key_patterns")
-    if isinstance(patterns, list) and patterns:
-        return [str(p) for p in patterns]
-    return None

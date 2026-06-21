@@ -35,9 +35,7 @@ def _get_task_key_validator() -> task_validator.TaskKeyValidator:
     wdb = WorkflowDB()
     wdb.init()
     projects = wdb.get_projects()
-    if projects:
-        return task_validator.TaskKeyValidator.from_projects(projects)
-    return task_validator.TaskKeyValidator.with_migration()
+    return task_validator.TaskKeyValidator.from_projects(projects)
 
 
 def _require_valid_key(task_key: str) -> str:

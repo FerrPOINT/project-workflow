@@ -101,13 +101,13 @@ class Workflow:
 
 @dataclass
 class Project:
-    """Domain project with task key patterns."""
+    """Domain project with task key prefixes."""
 
     id: int | None = None
     workflow_id: int = 0
     code: str = ""
     name: str = ""
-    key_patterns: list[str] = field(default_factory=list)
+    key_prefixes: list[str] = field(default_factory=list)
     workflow_name: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -116,7 +116,7 @@ class Project:
             "workflow_id": self.workflow_id,
             "code": self.code,
             "name": self.name,
-            "key_patterns": self.key_patterns,
+            "key_prefixes": self.key_prefixes,
             "workflow_name": self.workflow_name,
         }
 

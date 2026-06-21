@@ -1,8 +1,7 @@
-"""Task Key Validator — configurable regex + migration support.
+"""Task Key Validator — configurable prefix-based validation.
 
 Features:
-  • Multi-format validation (Jira, internal, legacy)
-  • Automatic migration: HRRECRUITER-* → TASKNEIROKLYUCH-*
+  • Multi-format validation (Jira, internal)
   • Configurable via YAML/constructor for UI flexibility
 """
 
@@ -14,31 +13,17 @@ from dataclasses import dataclass
 from typing import List, Optional, Pattern
 
 
-# ═════════════════════════════════════════════════════════════════════════
-# MIGRATION MAP — legacy → new prefixes
-# ═════════════════════════════════════════════════════════════════════════
-
-LEGACY_MIGRATIONS = {
-    "HRRECRUITER": "TASKNEIROKLYUCH",  # Старый HR Recruiter prefix
-    "LEGACY": "TASKNEIROKLYUCH",           # Generic legacy
-}
-
-
 @dataclass(frozen=True)
 class ValidatedTaskKey:
     """Результат валидации ключа задачи."""
+
     raw: str
     is_valid: bool
     project: Optional[str] = None
     prefix: Optional[str] = None
     issue_number: Optional[str] = None
-    matched_pattern: Optional[str] = None
     normalized: Optional[str] = None
     error_message: Optional[str] = None
-    # Migration info
-    was_migrated: bool = False
-    migrated_from: Optional[str] = None
-    migrated_to: Optional[str] = None
 
     def __str__(self) -> str:
         return self.normalized or self.raw
@@ -46,28 +31,41 @@ class ValidatedTaskKey:
 
 class TaskKeyValidationError(Exception):
     """Выбрасывается при невалидном ключе задачи."""
+
     def __init__(self, key: str, reason: str):
         self.key = key
         self.reason = reason
         super().__init__(f"Invalid task key '{key}': {reason}")
 
 
-# ── Default Patterns ────────────────────────────────────────────────────
+# ── Defaults ────────────────────────────────────────────────────────────
 
-# Named groups: (?P<prefix>...) and (?P<number>...) are REQUIRED for extraction
-DEFAULT_PATTERNS = [
-    r"^(?P<prefix>[A-Z][A-Z0-9]*)-(?P<number>[0-9]+)$",   # Jira: AAT-123
-    r"^(?P<prefix>TASKNEIROKLYUCH)-(?P<number>[0-9]+)$",  # Internal
-    r"^(?P<prefix>HRRECRUITER)-(?P<number>[0-9]+)$",      # Legacy (auto-migrate)
-]
+DEFAULT_PREFIXES = ["AAT", "TASK"]
 
 # Minimum lengths to prevent false positives like "X-1"
 MIN_PREFIX_LEN = 2
 MIN_NUMBER_LEN = 1
 
+# Valid prefix characters: uppercase letters and digits
+PREFIX_RE = re.compile(r"^[A-Z][A-Z0-9]*$")
+
+
+def _prefixes_to_regex(prefixes: List[str]) -> str:
+    """Build a regex from plain prefixes that captures prefix and number."""
+    escaped = [re.escape(p) for p in prefixes if p]
+    if not escaped:
+        # Match nothing
+        return r"$^"
+    return r"^(?P<prefix>" + "|".join(escaped) + r")-(?P<number>[0-9]+)$"
+
+
+def _compile_raw_pattern(raw: str) -> tuple[str, Pattern]:
+    """Compile a raw regex string, ensuring prefix/number groups exist."""
+    return (raw, re.compile(raw))
+
 
 class TaskKeyValidator:
-    """Валидатор ключей задач с configurable regex + migration support."""
+    """Валидатор ключей задач с configurable prefixes."""
 
     REJECT_PATTERNS = [
         (r"^-", "Ключ не может начинаться с дефиса"),
@@ -77,55 +75,68 @@ class TaskKeyValidator:
 
     def __init__(
         self,
+        prefixes: Optional[List[str]] = None,
         patterns: Optional[List[str]] = None,
-        project_patterns: Optional[List[dict]] = None,
+        project_prefixes: Optional[List[dict]] = None,
         strict: bool = True,
         min_prefix_len: int = MIN_PREFIX_LEN,
         min_number_len: int = MIN_NUMBER_LEN,
         reject_patterns: Optional[List[tuple]] = None,
-        migrations: Optional[dict] = None,
     ):
-        self.project_patterns = project_patterns or []
-        if self.project_patterns:
+        self.project_prefixes = project_prefixes or []
+        self.raw_patterns = patterns or []
+        if self.project_prefixes:
             self.pattern_sources: List[tuple[Optional[str], str, Pattern]] = []
-            for project in self.project_patterns:
+            self.project_prefix_lists: List[tuple[Optional[str], List[str]]] = []
+            for project in self.project_prefixes:
                 project_code = project.get("code")
-                raw_project_patterns = project.get("key_patterns") or project.get("patterns") or []
-                if isinstance(raw_project_patterns, str):
+                raw_project_prefixes = project.get("key_prefixes") or project.get("prefixes") or []
+                if isinstance(raw_project_prefixes, str):
                     try:
-                        parsed = json.loads(raw_project_patterns)
-                        raw_project_patterns = parsed if isinstance(parsed, list) else [raw_project_patterns]
+                        parsed = json.loads(raw_project_prefixes)
+                        raw_project_prefixes = parsed if isinstance(parsed, list) else [raw_project_prefixes]
                     except Exception:
-                        raw_project_patterns = [raw_project_patterns]
-                for raw_pattern in raw_project_patterns:
-                    pattern_text = str(raw_pattern)
-                    self.pattern_sources.append((project_code, pattern_text, re.compile(pattern_text)))
-            self.raw_patterns = [raw for _, raw, _ in self.pattern_sources]
+                        raw_project_prefixes = [raw_project_prefixes]
+                project_prefixes_list = [str(p) for p in raw_project_prefixes if str(p).strip()]
+                if project_prefixes_list:
+                    regex_text = _prefixes_to_regex(project_prefixes_list)
+                    self.pattern_sources.append((project_code, regex_text, re.compile(regex_text)))
+                    self.project_prefix_lists.append((project_code, project_prefixes_list))
+            self.raw_prefixes = [raw for _, raw, _ in self.pattern_sources]
+        elif prefixes is not None or self.raw_patterns:
+            self.raw_prefixes = prefixes or []
+            regex_text = _prefixes_to_regex(self.raw_prefixes)
+            self.pattern_sources = [(None, regex_text, re.compile(regex_text))]
+            self.project_prefix_lists = []
+            for raw in self.raw_patterns:
+                self.pattern_sources.append((None, raw, re.compile(raw)))
         else:
-            self.raw_patterns = patterns or DEFAULT_PATTERNS
-            self.pattern_sources = [(None, raw, re.compile(raw)) for raw in self.raw_patterns]
+            self.raw_prefixes = DEFAULT_PREFIXES
+            regex_text = _prefixes_to_regex(self.raw_prefixes)
+            self.pattern_sources = [(None, regex_text, re.compile(regex_text))]
+            self.project_prefix_lists = []
         self.strict = strict
         self.min_prefix_len = min_prefix_len
         self.min_number_len = min_number_len
         self.reject_patterns = reject_patterns or self.REJECT_PATTERNS
-        self.migrations = migrations if migrations is not None else LEGACY_MIGRATIONS
         self.skip_uppercase = False
 
     # ── Public API ──────────────────────────────────────────────────────
 
     def validate(self, key: str, raise_on_invalid: bool = False) -> ValidatedTaskKey:
-        """Валидировать ключ задачи. Авто-миграция legacy → new.
+        """Валидировать ключ задачи.
 
         Args:
             key: Raw task key string (e.g. "AAT-123")
             raise_on_invalid: If True -- raise TaskKeyValidationError on failure
 
         Returns:
-            ValidatedTaskKey with migration info if applicable
+            ValidatedTaskKey
         """
         if not key or not isinstance(key, str):
             result = ValidatedTaskKey(
-                raw=str(key), is_valid=False,
+                raw=str(key),
+                is_valid=False,
                 error_message="Key is empty or not a string",
             )
             if raise_on_invalid:
@@ -135,7 +146,7 @@ class TaskKeyValidator:
         stripped = key.strip()
 
         # 1. Uppercase check (skip for lenient mode)
-        if not getattr(self, 'skip_uppercase', False) and stripped.upper() != stripped:
+        if not getattr(self, "skip_uppercase", False) and stripped.upper() != stripped:
             error_msg = (
                 f"Key '{key}' содержит строчные буквы. "
                 "Ключ задаётся В ВЕРХНЕМ РЕГИСТРЕ (например: AAT-123)"
@@ -154,7 +165,7 @@ class TaskKeyValidator:
                     raise TaskKeyValidationError(key, error_msg)
                 return result
 
-        # 3. Try each allowed pattern (with migration)
+        # 3. Try each allowed pattern
         for project_code, raw_pat, compiled_pat in self.pattern_sources:
             match = compiled_pat.match(stripped)
             if match:
@@ -165,14 +176,6 @@ class TaskKeyValidator:
                 if len(prefix) < self.min_prefix_len or len(number) < self.min_number_len:
                     continue
 
-                # Migration: legacy prefix → new prefix
-                was_migrated = False
-                original_prefix = prefix
-                if prefix in self.migrations:
-                    original_prefix = prefix
-                    prefix = self.migrations[prefix]
-                    was_migrated = True
-
                 normalized = f"{prefix}-{number}"
                 result = ValidatedTaskKey(
                     raw=key,
@@ -180,20 +183,16 @@ class TaskKeyValidator:
                     project=project_code or prefix,
                     prefix=prefix,
                     issue_number=number,
-                    matched_pattern=raw_pat,
                     normalized=normalized,
-                    was_migrated=was_migrated,
-                    migrated_from=original_prefix if was_migrated else None,
-                    migrated_to=prefix if was_migrated else None,
                 )
                 return result
 
         # No match
-        allowed = " | ".join(self.raw_patterns)
+        allowed = ", ".join(self.raw_prefixes)
         error_msg = (
-            f"Key '{stripped}' does not match any allowed pattern. "
-            f"Expected: PROJECT-NUMBER (e.g. AAT-123, TASKNEIROKLYUCH-42). "
-            f"Patterns: {allowed}"
+            f"Key '{stripped}' does not match any allowed prefix. "
+            f"Expected: PREFIX-NUMBER (e.g. {allowed}-123). "
+            f"Prefixes: {allowed}"
         )
         result = ValidatedTaskKey(raw=key, is_valid=False, error_message=error_msg)
         if raise_on_invalid:
@@ -210,65 +209,45 @@ class TaskKeyValidator:
     # ── Factory Methods ─────────────────────────────────────────────────
 
     @classmethod
-    def from_patterns(cls, patterns: List[str]) -> "TaskKeyValidator":
-        """Создать валидатор из списка regex patterns (для UI конфигурации)."""
-        return cls(patterns=patterns)
+    def from_prefixes(cls, prefixes: List[str]) -> "TaskKeyValidator":
+        """Создать валидатор из списка plain prefixes (для UI конфигурации)."""
+        return cls(prefixes=prefixes)
 
     @classmethod
     def from_projects(cls, projects: List[dict]) -> "TaskKeyValidator":
-        """Создать валидатор из project rows с key_patterns."""
-        return cls(project_patterns=projects)
+        """Создать валидатор из project rows с key_prefixes."""
+        return cls(project_prefixes=projects)
 
     @classmethod
     def jira_only(cls) -> "TaskKeyValidator":
-        """Валидатор только для чистых Jira-ключей (AAT-123), без internal/migration."""
-        v = cls(
-            patterns=[r"^(?P<prefix>[A-Z][A-Z0-9]*)-(?P<number>[0-9]+)$"],
-            reject_patterns=[
-                (r"^(TASKNEIROKLYUCH|HRRECRUITER)", "Internal/legacy prefixes excluded in Jira-only mode"),
-            ] + cls.REJECT_PATTERNS,
-        )
-        return v
+        """Валидатор только для чистых Jira-ключей (AAT-123), без internal prefixes."""
+        return cls(prefixes=["AAT"], reject_patterns=cls.REJECT_PATTERNS)
 
     @classmethod
     def lenient(cls) -> "TaskKeyValidator":
         """Разрешительный валидатор — минимальные проверки."""
         v = cls(
-            patterns=[r"^(?P<prefix>[A-Za-z0-9]+)-(?P<number>[0-9]+)$"],
+            prefixes=[],
+            patterns=[r"^(?P<prefix>[A-Za-z]+)-(?P<number>[0-9]+)$"],
             min_prefix_len=1,
         )
         v.skip_uppercase = True
         return v
 
-    @classmethod
-    def with_migration(cls, migrations: Optional[dict] = None) -> "TaskKeyValidator":
-        """Валидатор с кастомной картой миграций legacy → new."""
-        return cls(migrations=migrations or LEGACY_MIGRATIONS)
-
 
 # ── Module-level convenience ──────────────────────────────────────────
 
-_default_validator = TaskKeyValidator(migrations=LEGACY_MIGRATIONS)
+_default_validator = TaskKeyValidator()
 
 
 def validate(key: str, raise_on_invalid: bool = False) -> ValidatedTaskKey:
-    """Глобальная функция валидации (использует default patterns + migration)."""
+    """Глобальная функция валидации (использует default prefixes)."""
     return _default_validator.validate(key, raise_on_invalid)
 
 
 def validate_or_die(key: str) -> ValidatedTaskKey:
     return _default_validator.validate_or_die(key)
 
-
-def migrate_key(key: str) -> Optional[str]:
-    """Fast migration: HRRECRUITER-42 -> TASKNEIROKLYUCH-42.
-
-    Returns migrated key or None if not a legacy key.
-    """
-    match = re.match(r"^HRRECRUITER-(?P<number>[0-9]+)$", key.strip())
-    if match:
-        return f"TASKNEIROKLYUCH-{match.group('number')}"
-    return None
 
 # Backward-compat alias
 ValidationResult = ValidatedTaskKey

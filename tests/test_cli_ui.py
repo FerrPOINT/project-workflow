@@ -19,7 +19,7 @@ def _validator() -> TaskKeyValidator:
         {
             "code": "TASK",
             "name": "TASK",
-            "key_patterns": [r"^(?P<prefix>TASK)-(?P<number>[0-9]+)$"],
+            "key_prefixes": ["TASK"],
         }
     ])
 

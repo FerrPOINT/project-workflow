@@ -39,7 +39,7 @@ class TestWizardInitErrors:
 
     def test_existing_task_empty_current_phase(self, fresh_db):
         # Create task with empty current_phase via direct DB
-        proj = fresh_db.create_project({"code": "TST", "name": "Tst", "key_patterns": ["^(?P<prefix>TST)-(?P<number>\\d+)$"]})
+        proj = fresh_db.create_project({"code": "TST", "name": "Tst", "key_prefixes": ["TST"]})
         _ = fresh_db.create_task({"project_id": proj, "task_key": "TST-1", "current_phase": ""})
         engine = WizardEngine("TST-1")
         assert engine.current_phase in {"-1", "0.0a"}  # first phase of default workflow
@@ -47,7 +47,7 @@ class TestWizardInitErrors:
 
 class TestWizardEvaluateEdge:
     def test_evaluate_unknown_phase(self, fresh_db):
-        proj = fresh_db.create_project({"code": "TST", "name": "Tst", "key_patterns": ["^(?P<prefix>TST)-(?P<number>\\d+)$"]})
+        proj = fresh_db.create_project({"code": "TST", "name": "Tst", "key_prefixes": ["TST"]})
         fresh_db.create_task({"project_id": proj, "task_key": "TST-2", "current_phase": "99"})
         engine = WizardEngine("TST-2")
         engine.all_phases = [Phase(id=1, code="1", name="One")]
@@ -57,7 +57,7 @@ class TestWizardEvaluateEdge:
         assert result["message"].startswith("Current phase is not configured")
 
     def test_evaluate_empty_report_with_no_checks_passes(self, fresh_db):
-        proj = fresh_db.create_project({"code": "TST", "name": "Tst", "key_patterns": ["^(?P<prefix>TST)-(?P<number>\\d+)$"]})
+        proj = fresh_db.create_project({"code": "TST", "name": "Tst", "key_prefixes": ["TST"]})
         fresh_db.create_task({"project_id": proj, "task_key": "TST-3", "current_phase": "1"})
         engine = WizardEngine("TST-3")
         engine.all_phases = [Phase(id=1, code="1", name="One")]

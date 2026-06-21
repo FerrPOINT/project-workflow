@@ -15,9 +15,9 @@ def setup_db():
     wdb = _app_state.get_db()
     if wdb.is_empty():
         _seed_to_sqlite()
-    if not wdb.get_task_by_key("TASKNEIROKLYUCH-1"):
+    if not wdb.get_task_by_key("TASK-1"):
         wdb.create_task({
-            "task_key": "TASKNEIROKLYUCH-1",
+            "task_key": "TASK-1",
             "title": "Smoke task for dashboard",
             "status": "active",
             "current_phase": "-1",

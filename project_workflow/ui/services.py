@@ -285,22 +285,22 @@ def _load_projects() -> list[dict[str, Any]]:
 
     result = []
     for project in projects:
-        patterns = project.get("key_patterns") or []
+        prefixes = project.get("key_prefixes") or []
         result.append(
             {
                 **project,
                 "task_count": task_counts.get(project["id"], 0),
-                "patterns_count": len(patterns),
+                "prefixes_count": len(prefixes),
             }
         )
     return result
 
 
-def _parse_key_patterns(raw: Any) -> list[str]:
+def _parse_key_prefixes(raw: Any) -> list[str]:
     if isinstance(raw, list):
-        return [str(item).strip() for item in raw if str(item).strip()]
+        return [str(item).strip().upper() for item in raw if str(item).strip()]
     if isinstance(raw, str):
-        return [line.strip() for line in raw.splitlines() if line.strip()]
+        return [line.strip().upper() for line in raw.splitlines() if line.strip()]
     return []
 
 

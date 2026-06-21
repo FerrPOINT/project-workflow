@@ -32,7 +32,7 @@ from ..cli.core import console, WARN
 # ═══════════════════════════════════════════════════════════════════════
 
 @cli.command()
-@click.option("--task", required=True, help="Task key (e.g. TASKNEIROKLYUCH-42)")
+@click.option("--task", required=True, help="Task key (e.g. TASK-42)")
 @click.option("--report", default=None, help="Отчёт исполнителя CLI (оценить и перейти)")
 @click.pass_context
 def step_cmd(

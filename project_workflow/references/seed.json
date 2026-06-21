@@ -767,7 +767,7 @@
       {
         "id": 17,
         "phase_id": "1",
-        "name": "Check PhaseCheck(type='git_branch', description='Ветка от develop, названа TASKNEIROKLYUCH-*', path=None, expected=None, command=None, fail_msg='Check failed', optional=False)",
+        "name": "Check PhaseCheck(type='git_branch', description='Ветка от develop, названа TASK-*', path=None, expected=None, command=None, fail_msg='Check failed', optional=False)",
         "check_type": "jira_status",
         "target": "",
         "interval_min": 0,

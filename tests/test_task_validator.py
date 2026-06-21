@@ -1,9 +1,12 @@
-"""Tests for task_validator with migration support."""
+"""Tests for task_validator with prefix-based validation."""
 
 import pytest
+
 from project_workflow.task_validator import (
-    TaskKeyValidator, TaskKeyValidationError,
-    migrate_key, validate, validate_or_die,
+    TaskKeyValidator,
+    TaskKeyValidationError,
+    validate,
+    validate_or_die,
 )
 
 
@@ -16,10 +19,10 @@ class TestValidationBasics:
         assert result.normalized == "AAT-123"
 
     def test_valid_internal(self):
-        result = validate("TASKNEIROKLYUCH-42")
+        result = validate("TASK-42")
         assert result.is_valid
-        assert result.project == "TASKNEIROKLYUCH"
-        assert result.normalized == "TASKNEIROKLYUCH-42"
+        assert result.project == "TASK"
+        assert result.normalized == "TASK-42"
 
     def test_invalid_lowercase(self):
         result = validate("aat-123")
@@ -35,29 +38,6 @@ class TestValidationBasics:
         assert not result.is_valid
 
 
-class TestMigration:
-    def test_legacy_hrrecruiter_migrates(self):
-        result = validate("HRRECRUITER-7")
-        assert result.is_valid
-        assert result.was_migrated is True
-        assert result.normalized == "TASKNEIROKLYUCH-7"
-        assert result.migrated_from == "HRRECRUITER"
-        assert result.migrated_to == "TASKNEIROKLYUCH"
-
-    def test_legacy_not_migrates_on_explicit_no_migration(self):
-        v = TaskKeyValidator(migrations={})
-        result = v.validate("HRRECRUITER-7")
-        assert result.is_valid  # Still valid (pattern matches)
-        assert result.was_migrated is False
-        assert result.project == "HRRECRUITER"
-
-    def test_migrate_key_function(self):
-        assert migrate_key("HRRECRUITER-42") == "TASKNEIROKLYUCH-42"
-        assert migrate_key("HRRECRUITER-1") == "TASKNEIROKLYUCH-1"
-        assert migrate_key("AAT-123") is None  # Not legacy
-        assert migrate_key("DEV-1") is None
-
-
 class TestStrictMode:
     def test_raise_on_invalid(self):
         with pytest.raises(TaskKeyValidationError) as exc_info:
@@ -69,7 +49,7 @@ class TestStrictMode:
             validate_or_die("bad-key")
 
     def test_is_valid_quick(self):
-        assert TaskKeyValidator().is_valid("AAT-123")
+        assert TaskKeyValidator().is_valid("TASK-123")
         assert not TaskKeyValidator().is_valid("bad")
 
 
@@ -77,12 +57,12 @@ class TestJiraOnlyValidator:
     def test_jira_only_accepts_aat(self):
         v = TaskKeyValidator.jira_only()
         assert v.is_valid("AAT-123")
-        assert not v.is_valid("TASKNEIROKLYUCH-42")
+        assert not v.is_valid("UNKNOWN-1")
 
-    def test_jira_only_no_migration(self):
+    def test_jira_only_rejects_internal(self):
         v = TaskKeyValidator.jira_only()
-        # HRRECRUITER won't match Jira-only pattern
-        assert not v.is_valid("HRRECRUITER-7")
+        result = v.validate("TASK-1")
+        assert not result.is_valid
 
 
 class TestLenientValidator:
@@ -93,48 +73,37 @@ class TestLenientValidator:
 
 
 class TestUiFactory:
-    def test_from_patterns(self):
-        v = TaskKeyValidator.from_patterns([
-            r"^(?P<prefix>[A-Z]+)-(?P<number>[0-9]+)$",
-        ])
+    def test_from_prefixes(self):
+        v = TaskKeyValidator.from_prefixes(["PROJ"])
         assert v.is_valid("PROJ-99")
-
-    def test_with_migration_custom(self):
-        v = TaskKeyValidator.with_migration({"OLD": "NEW"})
-        result = v.validate("OLD-5")
-        assert result.was_migrated
-        assert result.normalized == "NEW-5"
+        assert not v.is_valid("OTHER-1")
 
 
 class TestProjectScopedFactory:
     def test_from_projects_matches_specific_project(self):
-        v = TaskKeyValidator.from_projects([
-            {
-                "code": "AAT",
-                "name": "AAT",
-                "key_patterns": [r"^(?P<prefix>AAT)-(?P<number>[0-9]+)$"],
-            }
-        ])
+        v = TaskKeyValidator.from_projects(
+            [
+                {
+                    "code": "AAT",
+                    "name": "AAT",
+                    "key_prefixes": ["AAT"],
+                }
+            ]
+        )
         result = v.validate("AAT-42")
         assert result.is_valid
         assert result.project == "AAT"
         assert result.prefix == "AAT"
         assert result.normalized == "AAT-42"
 
-    def test_from_projects_uses_project_legacy_pattern(self):
-        v = TaskKeyValidator.from_projects([
-            {
-                "code": "TASKNEIROKLYUCH",
-                "name": "TASKNEIROKLYUCH",
-                "key_patterns": [
-                    r"^(?P<prefix>TASKNEIROKLYUCH)-(?P<number>[0-9]+)$",
-                    r"^(?P<prefix>HRRECRUITER)-(?P<number>[0-9]+)$",
-                ],
-            }
-        ])
-        result = v.validate("HRRECRUITER-7")
-        assert result.is_valid
-        assert result.project == "TASKNEIROKLYUCH"
-        assert result.prefix == "TASKNEIROKLYUCH"
-        assert result.was_migrated is True
-        assert result.normalized == "TASKNEIROKLYUCH-7"
+    def test_from_projects_ignores_unknown_keys(self):
+        v = TaskKeyValidator.from_projects(
+            [
+                {
+                    "code": "AAT",
+                    "name": "AAT",
+                    "key_prefixes": ["AAT"],
+                }
+            ]
+        )
+        assert not v.validate("OTHER-7").is_valid

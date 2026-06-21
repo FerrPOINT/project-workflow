@@ -20,7 +20,7 @@ DB_PATH = DB_DIR / "conversation.db"
 @dataclass
 class Message:
     id: int
-    task_id: str          # internal task_id (e.g. "TASKNEIROKLYUCH-42")
+    task_id: str          # internal task_id (e.g. "TASK-42")
     task_key: str         # e.g. "AAT-123"
     role: str             # user | system | wizard | agent
     content: str
