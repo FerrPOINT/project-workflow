@@ -16,7 +16,6 @@ def create_app() -> FastAPI:
     app.get("/", response_class=HTMLResponse)(pages.index)
     app.get("/phases", response_class=HTMLResponse)(pages.phases_page)
     app.get("/phase/{phase_id}", response_class=HTMLResponse)(pages.phase_detail)
-    app.get("/phase/{phase_id}/instructions", response_class=HTMLResponse)(pages.instructions_page)
     app.get("/tasks", response_class=HTMLResponse)(pages.tasks_page)
     app.get("/projects", response_class=HTMLResponse)(pages.projects_page)
     app.get("/workflows", response_class=HTMLResponse)(pages.workflows_page)

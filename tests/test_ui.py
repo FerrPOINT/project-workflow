@@ -680,21 +680,21 @@ class TestPhaseDetail:
     def test_phase_detail_has_instructions(self):
         response = client.get(_phase_detail_path("-1"))
         assert response.status_code == 200
-        assert 'flow-card' in response.text
+        assert 'data-instruction-id' in response.text
+        assert 'move-up-btn' in response.text
+        assert 'move-down-btn' in response.text
 
     def test_phase_detail_keeps_sequential_cards_when_phase_instructions_are_sync(self):
         response = client.get(_phase_detail_path("0.0a"))
         assert response.status_code == 200
-        assert 'class="flow-batch-shell"' not in response.text
-        assert 'class="flow-batch-label">⚡ parallel</div>' not in response.text
-        assert 'class="flow-arrow flow-batch-arrow">↓</div>' not in response.text
+        assert 'class="timeline-block timeline-parallel-group"' not in response.text
+        assert 'class="timeline-parallel-label"' not in response.text
 
-    def test_phase_detail_rebuild_flow_keeps_vertical_parallel_batch_shell(self):
+    def test_phase_detail_renders_parallel_group_for_parallel_instructions(self):
         response = client.get(_phase_detail_path("0.0a"))
         assert response.status_code == 200
-        assert "run.className = 'flow-run ' + (group.length > 1 ? 'group flow-batch' : 'single');" in response.text
-        assert "shell.className = 'flow-batch-shell';" in response.text
-        assert "arrow.className = 'flow-arrow flow-batch-arrow';" in response.text
+        assert "renderInstructionTimeline(getInstructionItems())" in response.text
+        assert "function updateInstructionControls()" in response.text
 
     def test_phase_detail_hides_code_and_order_meta(self):
         response = client.get(_phase_detail_path("1"))
@@ -723,7 +723,8 @@ class TestPhaseDetail:
 
         phase = _phase_row("0.7")
 
-        assert f"fetch('/api/phases/{phase['id']}'" in response.text
+        assert f"const phaseId = {phase['id']};" in response.text
+        assert "fetch('/api/phases/' + phaseId" in response.text
         assert "fetch('/api/phases/0.7'" not in response.text
 
     def test_phase_detail_renders_selected_instruction_skills_list_and_only_remaining_add_options(self, monkeypatch):
@@ -743,12 +744,11 @@ class TestPhaseDetail:
 
             response = client.get(_phase_detail_path("-1"))
             assert response.status_code == 200
-            assert 'data-role="selected-skills"' in response.text
-            assert f'data-skill-name="{skills[0]["name"]}"' in response.text
-            assert f'data-skill-name="{skills[2]["name"]}"' in response.text
+            assert f'<span class="badge" style="background:var(--accent-soft);color:var(--accent)">\n            {skills[0]["name"]}' in response.text
+            assert f'<span class="badge" style="background:var(--accent-soft);color:var(--accent)">\n            {skills[2]["name"]}' in response.text
 
             add_select_match = re.search(
-                r'<select class="inline-input" data-field="skill-candidate"[^>]*>(.*?)</select>',
+                r'<select class="inline-input skill-candidate" data-field="skill-candidate"[^\u003e]*\u003e(.*?)\u003c/select\u003e',
                 response.text,
                 re.S,
             )
@@ -760,14 +760,15 @@ class TestPhaseDetail:
         finally:
             client.put(_phase_api_path("-1"), json=restore_payload)
 
-    def test_phase_detail_javascript_uses_selected_skill_list_instead_of_multiselect(self, monkeypatch):
+    def test_phase_detail_javascript_uses_per_instruction_api_calls(self, monkeypatch):
         _prime_skills_cache(monkeypatch, _sample_hermes_skills())
 
         response = client.get(_phase_detail_path("-1"))
         assert response.status_code == 200
-        assert 'function addSkill(selectEl)' in response.text
-        assert 'function removeSkill(btn)' in response.text
-        assert 'function getSelectedSkillsFromPicker(picker)' in response.text
+        assert 'function saveInstructionDescription(input)' in response.text
+        assert 'function toggleInstructionType(badge)' in response.text
+        assert 'function addSkillToInstruction(selectEl)' in response.text
+        assert 'function removeSkillFromInstruction(button, skillName)' in response.text
         assert 'data-field="skill-candidate"' in response.text
         assert 'selectedOptions' not in response.text
 
@@ -783,6 +784,84 @@ class TestPhaseDetail:
         response = client.get("/phase/nonexistent")
         assert response.status_code == 404
 
+    def test_phase_detail_can_update_instruction_description(self):
+        phase_response = client.get(_phase_api_path("-1"))
+        assert phase_response.status_code == 200
+        phase = phase_response.json()["phase"]
+        instruction = phase["instructions"][0]
+        restore_payload = _phase_restore_payload(phase)
+        try:
+            resp = client.put(f"/api/instructions/{instruction['id']}", json={"description": "Updated inline description"})
+            assert resp.status_code == 200
+            after = client.get(_phase_api_path("-1")).json()["phase"]["instructions"][0]
+            assert after["description"] == "Updated inline description"
+        finally:
+            client.put(_phase_api_path("-1"), json=restore_payload)
+
+    def test_phase_detail_can_toggle_instruction_execution_type(self):
+        phase_response = client.get(_phase_api_path("-1"))
+        assert phase_response.status_code == 200
+        phase = phase_response.json()["phase"]
+        instruction = phase["instructions"][0]
+        restore_payload = _phase_restore_payload(phase)
+        try:
+            new_type = "parallel" if instruction["execution_type"] == "sync" else "sync"
+            resp = client.put(f"/api/instructions/{instruction['id']}", json={"execution_type": new_type})
+            assert resp.status_code == 200
+            after = client.get(_phase_api_path("-1")).json()["phase"]["instructions"][0]
+            assert after["execution_type"] == new_type
+        finally:
+            client.put(_phase_api_path("-1"), json=restore_payload)
+
+    def test_phase_detail_can_reorder_instructions(self):
+        phase_response = client.get(_phase_api_path("-1"))
+        assert phase_response.status_code == 200
+        phase = phase_response.json()["phase"]
+        restore_payload = _phase_restore_payload(phase)
+        try:
+            ids = [i["id"] for i in phase["instructions"]]
+            resp = client.put(f"/api/phases/{phase['id']}/instructions/reorder", json={"instruction_ids": list(reversed(ids))})
+            assert resp.status_code == 200
+            after = client.get(_phase_api_path("-1")).json()["phase"]["instructions"]
+            assert [i["id"] for i in after] == list(reversed(ids))
+        finally:
+            client.put(_phase_api_path("-1"), json=restore_payload)
+
+    def test_phase_detail_can_add_and_delete_instruction(self):
+        phase_response = client.get(_phase_api_path("-1"))
+        assert phase_response.status_code == 200
+        phase = phase_response.json()["phase"]
+        restore_payload = _phase_restore_payload(phase)
+        try:
+            resp = client.post("/api/instructions", json={"phase_id": phase["id"], "description": "Temp instruction", "step_num": len(phase["instructions"]) + 1})
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["ok"]
+            after_add = client.get(_phase_api_path("-1")).json()["phase"]
+            assert any(i["description"] == "Temp instruction" for i in after_add["instructions"])
+            new_id = next(i["id"] for i in after_add["instructions"] if i["description"] == "Temp instruction")
+            del_resp = client.delete(f"/api/instructions/{new_id}")
+            assert del_resp.status_code == 200
+            after_del = client.get(_phase_api_path("-1")).json()["phase"]
+            assert not any(i["id"] == new_id for i in after_del["instructions"])
+        finally:
+            client.put(_phase_api_path("-1"), json=restore_payload)
+
+    def test_phase_detail_can_update_instruction_skills(self, monkeypatch):
+        skills = _sample_hermes_skills()
+        _prime_skills_cache(monkeypatch, skills)
+        phase_response = client.get(_phase_api_path("-1"))
+        assert phase_response.status_code == 200
+        phase = phase_response.json()["phase"]
+        instruction = phase["instructions"][0]
+        restore_payload = _phase_restore_payload(phase)
+        try:
+            resp = client.put(f"/api/instructions/{instruction['id']}", json={"skills": [skills[0]["name"]]})
+            assert resp.status_code == 200
+            after = client.get(_phase_api_path("-1")).json()["phase"]["instructions"][0]
+            assert after["skills"] == [skills[0]["name"]]
+        finally:
+            client.put(_phase_api_path("-1"), json=restore_payload)
 
 class TestPhaseUpdate:
     def test_api_phase_update_bulk(self):

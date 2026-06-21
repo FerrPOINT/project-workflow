@@ -169,86 +169,77 @@
   </div>
   {% endif %}
 
-  <!-- Instructions — vertical flow with framed vertical parallel groups -->
+  <!-- Instructions — managed like phases list with inline edit, reorder, add, delete -->
   <div class="wiki-section">
     <div class="wiki-section-title">
       📋 Инструкции
       <span class="count">{{ phase.instructions|length }}</span>
     </div>
-    <div class="flow-list" id="instructions-list">
+
+    {% macro instruction_body(i, instruction_count) %}
+    <div class="timeline-row" style="grid-template-columns:84px minmax(0,1fr)">
+      <div class="phase-order-controls">
+        <button type="button" class="phase-move-btn move-up-btn" onclick="moveInstruction(this, -1)" aria-label="Поднять выше">↑</button>
+        <button type="button" class="phase-add-btn" onclick="addInstructionAfter(this)" aria-label="Добавить после">+</button>
+        <button type="button" class="phase-move-btn move-down-btn" onclick="moveInstruction(this, 1)" aria-label="Опустить ниже">↓</button>
+        <button type="button" class="phase-delete-btn" onclick="deleteInstruction(this)" aria-label="Удалить"{% if instruction_count <= 1 %} disabled style="opacity:.35;cursor:not-allowed"{% endif %}>×</button>
+        <div class="phase-order-hint">Порядок<br>меняется тут</div>
+      </div>
+      <div class="timeline-card" data-instruction-id="{{ i.id }}" data-step-num="{{ i.step_num }}" data-type="{{ i.execution_type }}">
+        <input type="text" class="inline-input" value="{{ i.description }}" data-field="description" onblur="saveInstructionDescription(this)">
+        <div class="timeline-badges">
+          <span class="badge {{ 'badge-parallel' if i.execution_type == 'parallel' else 'badge-sync' }}" style="{{ 'background:var(--orange-soft);color:var(--orange)' if i.execution_type == 'parallel' else 'background:var(--green-soft);color:var(--green)' }};cursor:pointer" onclick="toggleInstructionType(this)">
+            {% if i.execution_type == 'parallel' %}⚡ parallel{% else %}⏱ sync{% endif %}
+          </span>
+          {% for s in i.skills or [] %}
+          <span class="badge" style="background:var(--accent-soft);color:var(--accent)">
+            {{ s }}
+            <button type="button" class="skill-remove-btn" onclick="removeSkillFromInstruction(this, '{{ s }}')" aria-label="Убрать {{ s }}">×</button>
+          </span>
+          {% endfor %}
+          <select class="inline-input skill-candidate" data-field="skill-candidate" onchange="addSkillToInstruction(this)" {% if not i.available_skills %}disabled{% endif %} style="width:auto;height:22px;font-size:11px;padding:0 4px">
+            {% if i.available_skills %}
+            <option value="">+ skill</option>
+              {% for skill in i.available_skills %}
+              <option value="{{ skill.name }}">{{ skill.name }}{% if skill.category %} — {{ skill.category }}{% endif %}</option>
+              {% endfor %}
+            {% else %}
+            <option value="">Все skills выбраны</option>
+            {% endif %}
+          </select>
+        </div>
+      </div>
+    </div>
+    {% endmacro %}
+
+    <div class="timeline" id="instructionsTimeline" style="max-width:none">
       {% set runs = phase.instructions|group_instructions %}
       {% for run in runs %}
         {% if run|length > 1 %}
-        <div class="flow-batch-shell">
-          <div class="flow-batch-label">⚡ parallel</div>
-        {% endif %}
-        <div class="flow-run {{ 'group flow-batch' if run|length > 1 else 'single' }}">
-          {% for i in run %}
-          <div class="flow-card {{ i.execution_type }}" data-id="{{ i.id }}" data-type="{{ i.execution_type }}">
-            <div class="step-dot {{ i.execution_type }}"></div>
-            <div class="item-content">
-              <input type="text" class="inline-input" value="{{ i.description }}" data-field="description" onblur="scheduleSave()">
-              <div class="item-meta">
-                <span class="tag type-{{ i.execution_type }}" onclick="toggleType(this)" data-field="execution_type">
-                  {% if i.execution_type == 'sync' %}⏱ sync{% else %}⚡ parallel{% endif %}
-                </span>
-                {% if i.tool %}
-                <span class="item-tool">{{ i.tool }}</span>
-                {% endif %}
+          <div class="timeline-block timeline-parallel-group">
+            <div class="timeline-parallel-label">⚡ parallel</div>
+            {% for i in run %}
+              <div class="timeline-item" data-instruction-id="{{ i.id }}" data-step-num="{{ i.step_num }}" data-type="{{ i.execution_type }}">
+                {{ instruction_body(i, phase.instructions|length) }}
+                <div class="timeline-arrow"{% if loop.last %} hidden{% endif %}>↓</div>
               </div>
-              <div class="skill-picker">
-                <div class="skill-picker-label">Skills</div>
-                <div class="skill-selected-list" data-role="selected-skills">
-                  {% if i.skills %}
-                    {% for selected_skill in i.skills %}
-                    <div class="skill-selected-item" data-role="selected-skill" data-skill-name="{{ selected_skill }}">
-                      <span class="skill-selected-name">{{ selected_skill }}</span>
-                      <button type="button" class="skill-remove-btn" onclick="removeSkill(this)" aria-label="Убрать {{ selected_skill }}">×</button>
-                    </div>
-                    {% endfor %}
-                  {% else %}
-                  <div class="skill-empty" data-role="selected-empty">Нет выбранных skills</div>
-                  {% endif %}
-                </div>
-                <div class="skill-picker-add-row">
-                  <div class="skill-picker-label">Добавить skill</div>
-                  <select class="inline-input" data-field="skill-candidate" onchange="addSkill(this)" {% if not i.available_skills %}disabled{% endif %}>
-                    {% if i.available_skills %}
-                    <option value="">Выбери skill…</option>
-                      {% for skill in i.available_skills %}
-                      <option value="{{ skill.name }}">{{ skill.name }}{% if skill.category %} — {{ skill.category }}{% endif %}</option>
-                      {% endfor %}
-                    {% elif skills_catalog %}
-                    <option value="">Все skills уже выбраны</option>
-                    {% else %}
-                    <option value="">Каталог skills пуст</option>
-                    {% endif %}
-                  </select>
-                </div>
-              </div>
-            </div>
-            <button class="item-delete" onclick="deleteItem(this)">×</button>
+            {% endfor %}
           </div>
-          {% if run|length > 1 and not loop.last %}
-          <div class="flow-arrow flow-batch-arrow">↓</div>
-          {% endif %}
-          {% endfor %}
-        </div>
-        {% if run|length > 1 %}
-        </div>
+        {% else %}
+          {% set i = run[0] %}
+          <div class="timeline-block">
+            <div class="timeline-item" data-instruction-id="{{ i.id }}" data-step-num="{{ i.step_num }}" data-type="{{ i.execution_type }}">
+              {{ instruction_body(i, phase.instructions|length) }}
+              <div class="timeline-arrow" hidden>↓</div>
+            </div>
+          </div>
         {% endif %}
-        {% if not loop.last %}
-          {% if run|length > 1 %}
-          <div class="flow-join"><span class="join-bar">🔄 JOIN</span></div>
-          {% else %}
-          <div class="flow-arrow">↓</div>
-          {% endif %}
-        {% endif %}
+        <div class="timeline-arrow timeline-arrow-block"{% if loop.last %} hidden{% endif %}>↓</div>
       {% else %}
-      <div class="empty-state">Нет инструкций</div>
+        <div class="empty-state">Нет инструкций</div>
       {% endfor %}
     </div>
-    <button class="wiki-add-btn" onclick="addInstruction()">+ Добавить шаг</button>
+    <button class="wiki-add-btn" onclick="addInstructionLast()">+ Добавить шаг</button>
   </div>
 
   <!-- Checks -->
@@ -298,6 +289,7 @@
 
 {% block extra_script %}
 const skillCatalog = {{ skills_catalog | tojson }};
+const phaseId = {{ phase.id }};
 
 function escapeHtml(value) {
   return String(value)
@@ -320,97 +312,7 @@ function normalizeSkillNames(raw = []) {
   return normalized;
 }
 
-function getRemainingCatalogSkills(selected = []) {
-  const selectedSet = new Set(normalizeSkillNames(selected));
-  return skillCatalog.filter((skill) => {
-    const name = String(skill.name || '').trim();
-    return name && !selectedSet.has(name);
-  });
-}
-
-function renderSelectedSkillsMarkup(selected = []) {
-  const normalized = normalizeSkillNames(selected);
-  if (!normalized.length) {
-    return '<div class="skill-empty" data-role="selected-empty">Нет выбранных skills</div>';
-  }
-  return normalized.map((name) => `
-    <div class="skill-selected-item" data-role="selected-skill" data-skill-name="${escapeHtml(name)}">
-      <span class="skill-selected-name">${escapeHtml(name)}</span>
-      <button type="button" class="skill-remove-btn" onclick="removeSkill(this)" aria-label="Убрать ${escapeHtml(name)}">×</button>
-    </div>
-  `).join('');
-}
-
-function renderSkillCandidateOptions(selected = []) {
-  const remaining = getRemainingCatalogSkills(selected);
-  if (!skillCatalog.length) {
-    return '<option value="">Каталог skills пуст</option>';
-  }
-  const prefix = remaining.length
-    ? '<option value="">Выбери skill…</option>'
-    : '<option value="">Все skills уже выбраны</option>';
-  return prefix + remaining.map((skill) => {
-    const name = String(skill.name || '');
-    const categorySuffix = skill.category ? ` — ${skill.category}` : '';
-    return `<option value="${escapeHtml(name)}">${escapeHtml(name + categorySuffix)}</option>`;
-  }).join('');
-}
-
-function buildSkillPickerMarkup(selected = []) {
-  const normalized = normalizeSkillNames(selected);
-  const remaining = getRemainingCatalogSkills(normalized);
-  const disabledAttr = remaining.length ? '' : ' disabled';
-  return `
-    <div class="skill-picker">
-      <div class="skill-picker-label">Skills</div>
-      <div class="skill-selected-list" data-role="selected-skills">
-        ${renderSelectedSkillsMarkup(normalized)}
-      </div>
-      <div class="skill-picker-add-row">
-        <div class="skill-picker-label">Добавить skill</div>
-        <select class="inline-input" data-field="skill-candidate" onchange="addSkill(this)"${disabledAttr}>
-          ${renderSkillCandidateOptions(normalized)}
-        </select>
-      </div>
-    </div>
-  `;
-}
-
-function getSelectedSkillsFromPicker(picker) {
-  if (!picker) return [];
-  return normalizeSkillNames(
-    [...picker.querySelectorAll('[data-role="selected-skill"]')].map((item) => item.dataset.skillName || '')
-  );
-}
-
-function rerenderSkillPicker(picker, selected = []) {
-  if (!picker) return;
-  picker.outerHTML = buildSkillPickerMarkup(selected);
-}
-
-function addSkill(selectEl) {
-  const picker = selectEl.closest('.skill-picker');
-  if (!picker) return;
-  const nextSkill = String(selectEl.value || '').trim();
-  if (!nextSkill) return;
-  const selected = getSelectedSkillsFromPicker(picker);
-  if (!selected.includes(nextSkill)) {
-    selected.push(nextSkill);
-  }
-  rerenderSkillPicker(picker, selected);
-  scheduleSave();
-}
-
-function removeSkill(btn) {
-  const picker = btn.closest('.skill-picker');
-  const item = btn.closest('[data-role="selected-skill"]');
-  if (!picker || !item) return;
-  const skillName = String(item.dataset.skillName || '').trim();
-  const selected = getSelectedSkillsFromPicker(picker).filter((name) => name !== skillName);
-  rerenderSkillPicker(picker, selected);
-  scheduleSave();
-}
-
+/* ---------- Phase header ---------- */
 function togglePhaseMode(el) {
   const isSync = (el.dataset.mode || 'sync') === 'sync';
   const b = el.querySelector('b');
@@ -423,124 +325,242 @@ function togglePhaseMode(el) {
     b.className = 'mode-sync';
     b.textContent = '⏱ sync';
   }
-  // Save immediately
   savePhase();
 }
 
-function rebuildFlow() {
-  const list = document.getElementById('instructions-list');
-  const cards = [...list.querySelectorAll('.flow-card')];
-  list.innerHTML = '';
-  if (cards.length === 0) {
-    list.innerHTML = '<div class="empty-state">Нет инструкций</div>';
+/* ---------- Instructions list (like phases) ---------- */
+function getInstructionItems() {
+  return Array.from(document.querySelectorAll('#instructionsTimeline .timeline-item'));
+}
+
+function renderInstructionTimeline(items) {
+  const timeline = document.getElementById('instructionsTimeline');
+  if (!timeline) return;
+  const emptyNode = timeline.querySelector('.empty-state');
+  if (items.length === 0) {
+    if (emptyNode) timeline.replaceChildren(emptyNode);
     return;
   }
-  let i = 0;
-  while (i < cards.length) {
-    const group = [cards[i]];
-    i++;
-    while (i < cards.length && cards[i].dataset.type === 'parallel') {
-      group.push(cards[i]);
-      i++;
+  timeline.innerHTML = '';
+  let idx = 0;
+  while (idx < items.length) {
+    const group = [items[idx]];
+    idx++;
+    while (idx < items.length && (items[idx].dataset.type || 'sync') === 'parallel') {
+      group.push(items[idx]);
+      idx++;
     }
-    const run = document.createElement('div');
-    run.className = 'flow-run ' + (group.length > 1 ? 'group flow-batch' : 'single');
-    group.forEach((c, index) => {
-      run.appendChild(c);
-      if (group.length > 1 && index < group.length - 1) {
-        const arrow = document.createElement('div');
-        arrow.className = 'flow-arrow flow-batch-arrow';
-        arrow.textContent = '↓';
-        run.appendChild(arrow);
-      }
-    });
-    if (group.length > 1) {
-      const shell = document.createElement('div');
-      shell.className = 'flow-batch-shell';
+    const isParallelGroup = group.length > 1;
+    const block = document.createElement('div');
+    block.className = 'timeline-block' + (isParallelGroup ? ' timeline-parallel-group' : '');
+    if (isParallelGroup) {
       const label = document.createElement('div');
-      label.className = 'flow-batch-label';
+      label.className = 'timeline-parallel-label';
       label.textContent = '⚡ parallel';
-      shell.appendChild(label);
-      shell.appendChild(run);
-      list.appendChild(shell);
-    } else {
-      list.appendChild(run);
+      block.appendChild(label);
     }
-    if (i < cards.length) {
-      if (group.length > 1) {
-        const join = document.createElement('div');
-        join.className = 'flow-join';
-        join.innerHTML = '<span class="join-bar">🔄 JOIN</span>';
-        list.appendChild(join);
-      } else {
-        const arrow = document.createElement('div');
-        arrow.className = 'flow-arrow';
-        arrow.textContent = '↓';
-        list.appendChild(arrow);
-      }
-    }
+    group.forEach((item, groupIndex) => {
+      const innerArrow = item.querySelector('.timeline-arrow');
+      if (innerArrow) innerArrow.hidden = !(isParallelGroup && groupIndex < group.length - 1);
+      block.appendChild(item);
+    });
+    timeline.appendChild(block);
+    const blockArrow = document.createElement('div');
+    blockArrow.className = 'timeline-arrow timeline-arrow-block';
+    blockArrow.textContent = '↓';
+    blockArrow.hidden = idx >= items.length;
+    timeline.appendChild(blockArrow);
   }
 }
 
+function updateInstructionControls() {
+  const items = getInstructionItems();
+  items.forEach((item, idx) => {
+    const up = item.querySelector('.move-up-btn');
+    const down = item.querySelector('.move-down-btn');
+    if (up) up.disabled = idx === 0;
+    if (down) down.disabled = idx === items.length - 1;
+  });
+}
+
+async function persistInstructionOrder() {
+  const ids = getInstructionItems().map((item) => parseInt(item.dataset.instructionId, 10));
+  const resp = await fetch(`/api/phases/${phaseId}/instructions/reorder`, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({instruction_ids: ids}),
+  });
+  if (!resp.ok) {
+    showToast('Не удалось сохранить порядок инструкций', 'error');
+    return false;
+  }
+  showToast('Порядок инструкций сохранён');
+  return true;
+}
+
+async function moveInstruction(button, direction) {
+  const item = button.closest('.timeline-item');
+  if (!item) return;
+  const items = getInstructionItems();
+  const currentIndex = items.indexOf(item);
+  const targetIndex = currentIndex + direction;
+  if (currentIndex < 0 || targetIndex < 0 || targetIndex >= items.length) return;
+  const reordered = [...items];
+  const [moved] = reordered.splice(currentIndex, 1);
+  reordered.splice(targetIndex, 0, moved);
+  renderInstructionTimeline(reordered);
+  updateInstructionControls();
+  await persistInstructionOrder();
+}
+
+async function addInstructionAfter(button) {
+  const item = button.closest('.timeline-item');
+  if (!item) return;
+  const currentStep = parseInt(item.dataset.stepNum || '0', 10);
+  const stepNum = currentStep > 0 ? currentStep + 1 : 1;
+  button.disabled = true;
+  try {
+    const resp = await fetch('/api/instructions', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({phase_id: phaseId, description: 'Новая инструкция', step_num: stepNum}),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || !data.ok) {
+      showToast(data.error || 'Не удалось добавить инструкцию', 'error');
+      return;
+    }
+    window.location.reload();
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function addInstructionLast() {
+  const timeline = document.getElementById('instructionsTimeline');
+  const items = getInstructionItems();
+  const stepNum = items.length > 0 ? items.length + 1 : 1;
+  const btn = timeline?.nextElementSibling;
+  if (btn) btn.disabled = true;
+  try {
+    const resp = await fetch('/api/instructions', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({phase_id: phaseId, description: 'Новая инструкция', step_num: stepNum}),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || !data.ok) {
+      showToast(data.error || 'Не удалось добавить инструкцию', 'error');
+      return;
+    }
+    window.location.reload();
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function deleteInstruction(button) {
+  const item = button.closest('.timeline-item');
+  if (!item) return;
+  const items = getInstructionItems();
+  if (items.length <= 1) {
+    showToast('Нельзя удалить единственную инструкцию', 'error');
+    return;
+  }
+  if (!confirm('Удалить инструкцию?')) return;
+  button.disabled = true;
+  try {
+    const id = item.dataset.instructionId;
+    const resp = await fetch('/api/instructions/' + id, {method: 'DELETE'});
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || !data.ok) {
+      showToast(data.error || 'Не удалось удалить инструкцию', 'error');
+      return;
+    }
+    window.location.reload();
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function toggleInstructionType(badge) {
+  const card = badge.closest('.timeline-card');
+  const id = card.dataset.instructionId;
+  const isSync = (card.dataset.type || 'sync') === 'sync';
+  const nextType = isSync ? 'parallel' : 'sync';
+  badge.disabled = true;
+  try {
+    const resp = await fetch('/api/instructions/' + id, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({execution_type: nextType}),
+    });
+    if (!resp.ok) {
+      showToast('Не удалось сменить режим', 'error');
+      return;
+    }
+    window.location.reload();
+  } finally {
+    badge.disabled = false;
+  }
+}
+
+async function saveInstructionDescription(input) {
+  const card = input.closest('.timeline-card');
+  const id = card.dataset.instructionId;
+  const resp = await fetch('/api/instructions/' + id, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({description: input.value}),
+  });
+  if (!resp.ok) showToast('Не удалось сохранить описание', 'error');
+}
+
+async function addSkillToInstruction(selectEl) {
+  const card = selectEl.closest('.timeline-card');
+  const id = card.dataset.instructionId;
+  const skill = String(selectEl.value || '').trim();
+  if (!skill) return;
+  const existing = Array.from(card.querySelectorAll('.timeline-badges .badge')).map((b) => b.textContent.replace('×', '').trim());
+  const skills = normalizeSkillNames([...existing, skill]);
+  selectEl.disabled = true;
+  try {
+    const resp = await fetch('/api/instructions/' + id, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({skills: skills}),
+    });
+    if (!resp.ok) {
+      showToast('Не удалось добавить skill', 'error');
+      return;
+    }
+    window.location.reload();
+  } finally {
+    selectEl.disabled = false;
+  }
+}
+
+async function removeSkillFromInstruction(button, skillName) {
+  const card = button.closest('.timeline-card');
+  const id = card.dataset.instructionId;
+  const existing = Array.from(card.querySelectorAll('.timeline-badges .badge')).map((b) => b.textContent.replace('×', '').trim());
+  const skills = normalizeSkillNames(existing.filter((s) => s !== skillName));
+  const resp = await fetch('/api/instructions/' + id, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({skills: skills}),
+  });
+  if (!resp.ok) {
+    showToast('Не удалось убрать skill', 'error');
+    return;
+  }
+  window.location.reload();
+}
+
+/* ---------- Checks & Evidence ---------- */
 function deleteItem(btn) {
-  const card = btn.closest('.flow-card');
-  if (card) {
-    card.remove();
-    rebuildFlow();
-  } else {
-    btn.closest('li').remove();
-  }
-  savePhase();
-}
-
-function toggleType(tag) {
-  const card = tag.closest('.flow-card');
-  const dot = card.querySelector('.step-dot');
-  const isSync = tag.classList.contains('type-sync');
-  if (isSync) {
-    tag.classList.remove('type-sync');
-    tag.classList.add('type-parallel');
-    tag.textContent = '⚡ parallel';
-    card.classList.remove('sync');
-    card.classList.add('parallel');
-    card.setAttribute('data-type', 'parallel');
-    if (dot) dot.className = 'step-dot parallel';
-  } else {
-    tag.classList.remove('type-parallel');
-    tag.classList.add('type-sync');
-    tag.textContent = '⏱ sync';
-    card.classList.remove('parallel');
-    card.classList.add('sync');
-    card.setAttribute('data-type', 'sync');
-    if (dot) dot.className = 'step-dot sync';
-  }
-  rebuildFlow();
-  savePhase();
-}
-
-function addInstruction() {
-  const list = document.getElementById('instructions-list');
-  const empty = list.querySelector('.empty-state');
-  if (empty) empty.remove();
-
-  const card = document.createElement('div');
-  card.className = 'flow-card sync';
-  card.setAttribute('data-id', '');
-  card.setAttribute('data-type', 'sync');
-  card.innerHTML = `
-    <div class="step-dot sync"></div>
-    <div class="item-content">
-      <input type="text" class="inline-input" value="" data-field="description" onblur="scheduleSave()">
-      <div class="item-meta">
-        <span class="tag type-sync" onclick="toggleType(this)" data-field="execution_type">⏱ sync</span>
-        <span class="item-tool"></span>
-      </div>
-      ${buildSkillPickerMarkup([])}
-    </div>
-    <button class="item-delete" onclick="deleteItem(this)">×</button>
-  `;
-  list.appendChild(card);
-  rebuildFlow();
+  const li = btn.closest('li');
+  if (li) li.remove();
   savePhase();
 }
 
@@ -548,7 +568,6 @@ function addCheck() {
   const list = document.getElementById('checks-list');
   const empty = list.querySelector('.empty-state');
   if (empty) empty.remove();
-
   const li = document.createElement('li');
   li.innerHTML = `
     <span class="status-icon wait">○</span>
@@ -564,7 +583,6 @@ function addEvidence() {
   const list = document.getElementById('evidence-list');
   const empty = list.querySelector('.empty-state');
   if (empty) empty.remove();
-
   const li = document.createElement('li');
   li.innerHTML = `
     <span class="file-icon">📄</span>
@@ -576,7 +594,7 @@ function addEvidence() {
   savePhase();
 }
 
-/* ---------- Debounced save ---------- */
+/* ---------- Debounced phase meta save ---------- */
 let _saveTimer = null;
 function scheduleSave() {
   if (_saveTimer) clearTimeout(_saveTimer);
@@ -584,75 +602,42 @@ function scheduleSave() {
 }
 
 async function savePhase() {
-  // ── Meta fields from header ──
   const header = document.querySelector('.wiki-header');
   const meta = {};
-  header.querySelectorAll('[data-field]').forEach(inp => {
+  header.querySelectorAll('[data-field]').forEach((inp) => {
     meta[inp.dataset.field] = inp.value;
   });
 
   const data = {
     name: meta.name || '{{ phase.name }}',
     description: meta.description || '',
-    instructions: [],
     checks: [],
     evidence: [],
     execution_type: document.querySelector('.execution-toggle')?.dataset.mode || 'sync',
     agent_id: document.getElementById('agentSelect')?.value || null,
   };
 
-  document.querySelectorAll('#instructions-list .flow-card').forEach((card, idx) => {
-    const inp = card.querySelector('[data-field="description"]');
-    const tag = card.querySelector('.tag');
-    const tool = card.querySelector('.item-tool');
-    const skillPicker = card.querySelector('.skill-picker');
-    if (inp) {
-      data.instructions.push({
-        step_num: idx + 1,
-        description: inp.value,
-        execution_type: tag && tag.classList.contains('type-parallel') ? 'parallel' : 'sync',
-        tool: tool ? tool.textContent.replace('🔧 ', '').trim() || null : null,
-        skills: skillPicker ? getSelectedSkillsFromPicker(skillPicker) : []
-      });
-    }
-  });
-
-  document.querySelectorAll('#checks-list li').forEach(li => {
+  document.querySelectorAll('#checks-list li').forEach((li) => {
     if (li.classList.contains('empty-state')) return;
     const inp = li.querySelector('[data-field="description"]');
-    if (inp) {
-      data.checks.push({
-        description: inp.value,
-        command: null
-      });
-    }
+    if (inp) data.checks.push({description: inp.value, command: null});
   });
 
-  document.querySelectorAll('#evidence-list li').forEach(li => {
+  document.querySelectorAll('#evidence-list li').forEach((li) => {
     if (li.classList.contains('empty-state')) return;
     const inp = li.querySelector('[data-field="description"]');
-    if (inp) {
-      data.evidence.push({
-        description: inp.value,
-        validator: null
-      });
-    }
+    if (inp) data.evidence.push({description: inp.value, validator: null});
   });
 
-  const resp = await fetch('/api/phases/{{ phase.id }}', {
+  const resp = await fetch('/api/phases/' + phaseId, {
     method: 'PUT',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(data)
+    body: JSON.stringify(data),
   });
   if (!resp.ok) { showToast('Ошибка сохранения', 'error'); return; }
   const result = await resp.json();
   showToast('Сохранено');
-  // Update data-id from server so subsequent saves match right rows
   if (result.ids) {
-    const cards = document.querySelectorAll('#instructions-list .flow-card');
-    (result.ids.instructions || []).forEach((id, i) => {
-      if (cards[i]) cards[i].setAttribute('data-id', String(id));
-    });
     const checks = document.querySelectorAll('#checks-list li:not(.empty-state)');
     (result.ids.checks || []).forEach((id, i) => {
       if (checks[i]) checks[i].setAttribute('data-id', String(id));
@@ -663,4 +648,9 @@ async function savePhase() {
     });
   }
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+  renderInstructionTimeline(getInstructionItems());
+  updateInstructionControls();
+});
 {% endblock %}

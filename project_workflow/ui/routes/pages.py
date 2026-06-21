@@ -9,11 +9,9 @@ from project_workflow import config
 from project_workflow.service import PhaseService
 from project_workflow.ui.services import (
     _build_parallel_phase_blocks,
-    _coerce_phase_db_id,
     _get_task_detail,
     _load_cli_reference,
     _load_dashboard,
-    _load_instructions_page,
     _load_phase_detail,
     _load_phases,
     _load_projects,
@@ -92,27 +90,6 @@ async def phase_detail(request: Request, phase_id: str) -> HTMLResponse:
             "ui_port": config.UI_PORT,
             "phase": phase,
             "agents": agents,
-            "skills_catalog": skills_catalog,
-        },
-    )
-
-
-async def instructions_page(request: Request, phase_id: str) -> HTMLResponse:
-    resolved_id = _coerce_phase_db_id(phase_id)
-    if resolved_id is None:
-        return HTMLResponse("<h1>Phase not found</h1>", status_code=404)
-    data = _load_instructions_page(resolved_id)
-    if data is None:
-        return HTMLResponse("<h1>Phase not found</h1>", status_code=404)
-    skills_catalog = _load_skills_catalog_direct()
-    return templates.TemplateResponse(
-        request=request,
-        name="instructions.html",
-        context={
-            "request": request,
-            "page": "phases",
-            "ui_port": config.UI_PORT,
-            **data,
             "skills_catalog": skills_catalog,
         },
     )

@@ -1,4 +1,4 @@
-"""Tests for standalone instruction management endpoints and page."""
+"""Tests for instruction management API endpoints."""
 
 from __future__ import annotations
 
@@ -144,25 +144,7 @@ class TestInstructionsApi:
 
 
 class TestInstructionsPage:
-    def test_instructions_page_renders(self):
+    def test_instructions_page_removed(self):
         phase_id = _seed_phase_id()
         response = client.get(f"/phase/{phase_id}/instructions")
-        assert response.status_code == 200
-        assert response.headers["content-type"] == "text/html; charset=utf-8"
-        assert "Инструкции фазы" in response.text
-
-    def test_instructions_page_has_management_controls(self):
-        phase_id = _seed_phase_id()
-        response = client.get(f"/phase/{phase_id}/instructions")
-        text = response.text
-        assert 'id="instructionsLayout"' in text
-        assert 'moveInstruction(this, -1)' in text
-        assert 'moveInstruction(this, 1)' in text
-        assert 'addInstruction()' in text
-        assert 'deleteInstruction(this)' in text
-        assert "fetch('/api/instructions/'" in text
-        assert "fetch('/api/phases/' + PHASE_ID + '/instructions/reorder'" in text
-
-    def test_instructions_page_404_for_missing_phase(self):
-        response = client.get("/phase/9999999/instructions")
         assert response.status_code == 404
