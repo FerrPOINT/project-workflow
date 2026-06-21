@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+
+{% block title %}Инструкции фазы {{ phase.name }} — project-workflow{% endblock %}
+{% block header_title %}Инструкции фазы {{ phase.name }}{% endblock %}
+{% block header_actions %}
+  <a href="/phase/{{ phase.id }}" class="btn btn-secondary">← К фазе</a>
+{% endblock %}
+
+{% block extra_style %}
+.instructions-layout{display:flex;flex-direction:column;gap:16px;max-width:900px;margin:0 auto;width:100%}
+.instruction-block{width:100%}
+.instruction-row{display:grid;grid-template-columns:40px 1fr 110px 120px 32px;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);align-items:center}
+@media(max-width:768px){.instruction-row{grid-template-columns:32px 1fr 110px 32px}}
+@media(max-width:480px){.instruction-row{grid-template-columns:1fr 32px;gap:6px}.instruction-row .step-num{display:none}}
+.instruction-row:last-child{border-bottom:none}
+.step-num{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-dim)}
+.instruction-desc textarea{min-height:44px}
+.type-badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;cursor:pointer;user-select:none}
+.type-badge.sync{background:rgba(34,197,94,.12);color:var(--green);border:1px solid rgba(34,197,94,.25)}
+.type-badge.parallel{background:var(--orange-soft);color:var(--orange);border:1px solid var(--orange)}
+.skills-cell{font-size:11px;color:var(--text-muted)}
+.skill-chip{display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:4px;background:var(--accent-soft);color:var(--accent);margin:0 4px 4px 0}
+.parallel-group{border:1px solid var(--orange);border-radius:12px;padding:12px;background:rgba(245,158,11,.08);box-shadow:inset 0 0 0 1px rgba(245,158,11,.18)}
+.parallel-label{display:inline-flex;align-items:center;align-self:flex-start;gap:6px;padding:3px 10px;border-radius:999px;border:1px solid var(--orange);background:var(--orange-soft);color:var(--orange);font-size:11px;font-weight:700;letter-spacing:.04em;margin-bottom:8px}
+.add-row{display:flex;gap:10px;align-items:flex-start;margin-top:8px}
+.order-controls{display:flex;flex-direction:column;align-items:center;gap:4px}
+.order-btn{width:28px;height:24px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-size:14px;line-height:1}
+.order-btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.order-btn:disabled{opacity:.35;cursor:not-allowed}
+.empty-instructions{color:var(--text-dim);font-size:13px;padding:20px 0}
+{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="card-title">Инструкции фазы {{ phase.name }}</div>
+  <div class="empty-note">Добавляй, удаляй и меняй порядок инструкций. Параллельные инструкции группируются.</div>
+</div>
+
+<div class="instructions-layout" id="instructionsLayout">
+  {% for group in instruction_groups %}
+    {% set is_parallel_group = group | length > 1 %}
+    <div class="instruction-block {% if is_parallel_group %}parallel-group{% endif %}" data-block-index="{{ loop.index0 }}">
+      {% if is_parallel_group %}<div class="parallel-label">⚡ parallel</div>{% endif %}
+      {% for instruction in group %}
+      <div class="instruction-row" data-instruction-id="{{ instruction.id }}" data-step-num="{{ instruction.step_num }}">
+        <div class="order-controls">
+          <button type="button" class="order-btn move-up" onclick="moveInstruction(this, -1)" aria-label="Поднять">↑</button>
+          <span class="step-num">{{ instruction.step_num }}</span>
+          <button type="button" class="order-btn move-down" onclick="moveInstruction(this, 1)" aria-label="Опустить">↓</button>
+        </div>
+        <div class="instruction-desc">
+          <textarea class="instruction-text" onchange="updateInstruction(this)">{{ instruction.description }}</textarea>
+        </div>
+        <div>
+          <span class="type-badge {{ instruction.execution_type }}" onclick="toggleType(this)" role="button" tabindex="0">{{ instruction.execution_type }}</span>
+        </div>
+        <div class="skills-cell">
+          {% for skill in instruction.skills %}
+          <span class="skill-chip">{{ skill }}</span>
+          {% endfor %}
+          <button type="button" class="icon-btn" onclick="editSkills(this)" title="Назначить skills">+</button>
+        </div>
+        <div class="row-actions">
+          <button type="button" class="icon-btn" onclick="deleteInstruction(this)" title="Удалить">×</button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="card empty-instructions">Инструкций пока нет.</div>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <div class="add-row">
+    <input type="text" id="newInstructionText" placeholder="Новая инструкция…" style="flex:1">
+    <button type="button" class="btn btn-primary" onclick="addInstruction()">Добавить</button>
+  </div>
+</div>
+
+<div id="skillModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;max-width:400px;width:90%;max-height:80vh;overflow:auto">
+    <div class="card-title">Назначить skills</div>
+    <div id="skillOptions"></div>
+    <div style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end">
+      <button type="button" class="btn btn-secondary" onclick="closeSkillModal()">Отмена</button>
+      <button type="button" class="btn btn-primary" onclick="saveSkills()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_script %}
+const PHASE_ID = {{ phase.id }};
+let currentSkillRow = null;
+const skillsCatalog = {{ skills_catalog | tojson }};
+
+function getRows() {
+  return Array.from(document.querySelectorAll('#instructionsLayout .instruction-row'));
+}
+
+function renumberRows() {
+  getRows().forEach((row, idx) => {
+    row.dataset.stepNum = String(idx + 1);
+    const num = row.querySelector('.step-num');
+    if (num) num.textContent = String(idx + 1);
+  });
+}
+
+function updateTimeline() {
+  const layout = document.getElementById('instructionsLayout');
+  const rows = getRows();
+  layout.innerHTML = '';
+  let currentBlock = null;
+  rows.forEach((row, idx) => {
+    const type = row.querySelector('.type-badge')?.textContent || 'sync';
+    if (idx === 0 || type !== 'parallel') {
+      currentBlock = document.createElement('div');
+      currentBlock.className = 'instruction-block' + (type === 'parallel' ? ' parallel-group' : '');
+      if (type === 'parallel') {
+        const label = document.createElement('div');
+        label.className = 'parallel-label';
+        label.textContent = '⚡ parallel';
+        currentBlock.appendChild(label);
+      }
+      layout.appendChild(currentBlock);
+    }
+    currentBlock.appendChild(row);
+  });
+  renumberRows();
+  updateMoveButtons();
+}
+
+function updateMoveButtons() {
+  const rows = getRows();
+  rows.forEach((row, idx) => {
+    const up = row.querySelector('.move-up');
+    const down = row.querySelector('.move-down');
+    if (up) up.disabled = idx === 0;
+    if (down) down.disabled = idx === rows.length - 1;
+  });
+}
+
+async function persistOrder() {
+  const ids = getRows().map(r => parseInt(r.dataset.instructionId, 10));
+  const resp = await fetch('/api/phases/' + PHASE_ID + '/instructions/reorder', {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({instruction_ids: ids}),
+  });
+  if (!resp.ok) showToast('Не удалось сохранить порядок', 'error');
+}
+
+function moveInstruction(button, dir) {
+  const row = button.closest('.instruction-row');
+  const rows = getRows();
+  const idx = rows.indexOf(row);
+  const target = idx + dir;
+  if (target < 0 || target >= rows.length) return;
+  const reordered = [...rows];
+  const [moved] = reordered.splice(idx, 1);
+  reordered.splice(target, 0, moved);
+  const layout = document.getElementById('instructionsLayout');
+  layout.innerHTML = '';
+  reordered.forEach(r => layout.appendChild(r.closest('.instruction-block') || r));
+  updateTimeline();
+  persistOrder();
+}
+
+async function updateInstruction(textarea) {
+  const row = textarea.closest('.instruction-row');
+  const id = parseInt(row.dataset.instructionId, 10);
+  const resp = await fetch('/api/instructions/' + id, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({description: textarea.value.trim()}),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok || !data.ok) showToast(data.error || 'Ошибка сохранения', 'error');
+}
+
+async function toggleType(badge) {
+  const row = badge.closest('.instruction-row');
+  const id = parseInt(row.dataset.instructionId, 10);
+  const nextType = badge.textContent === 'sync' ? 'parallel' : 'sync';
+  const resp = await fetch('/api/instructions/' + id, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({execution_type: nextType}),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok || !data.ok) {
+    showToast(data.error || 'Ошибка сохранения', 'error');
+    return;
+  }
+  badge.textContent = nextType;
+  badge.className = 'type-badge ' + nextType;
+  updateTimeline();
+}
+
+async function deleteInstruction(button) {
+  const row = button.closest('.instruction-row');
+  const id = parseInt(row.dataset.instructionId, 10);
+  if (!confirm('Удалить инструкцию?')) return;
+  const resp = await fetch('/api/instructions/' + id, {method: 'DELETE'});
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok || !data.ok) {
+    showToast(data.error || 'Ошибка удаления', 'error');
+    return;
+  }
+  row.remove();
+  updateTimeline();
+}
+
+async function addInstruction() {
+  const input = document.getElementById('newInstructionText');
+  const description = input.value.trim();
+  if (!description) return;
+  const resp = await fetch('/api/instructions', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({phase_id: PHASE_ID, description: description}),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok || !data.ok) {
+    showToast(data.error || 'Ошибка добавления', 'error');
+    return;
+  }
+  window.location.reload();
+}
+
+function editSkills(button) {
+  currentSkillRow = button.closest('.instruction-row');
+  const id = parseInt(currentSkillRow.dataset.instructionId, 10);
+  const existing = new Set(Array.from(currentSkillRow.querySelectorAll('.skill-chip')).map(c => c.textContent));
+  const opts = document.getElementById('skillOptions');
+  opts.innerHTML = '';
+  skillsCatalog.forEach(skill => {
+    const name = skill.name || '';
+    const label = document.createElement('label');
+    label.style.display = 'flex'; label.style.alignItems = 'center'; label.style.gap = '8px';
+    label.style.padding = '4px 0'; label.style.cursor = 'pointer';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.value = name; cb.checked = existing.has(name);
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(name + (skill.summary ? ' — ' + skill.summary : '')));
+    opts.appendChild(label);
+  });
+  document.getElementById('skillModal').style.display = 'flex';
+}
+
+function closeSkillModal() {
+  document.getElementById('skillModal').style.display = 'none';
+  currentSkillRow = null;
+}
+
+async function saveSkills() {
+  if (!currentSkillRow) return;
+  const id = parseInt(currentSkillRow.dataset.instructionId, 10);
+  const selected = Array.from(document.querySelectorAll('#skillOptions input:checked')).map(cb => cb.value);
+  const resp = await fetch('/api/instructions/' + id, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({skills: selected}),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok || !data.ok) {
+    showToast(data.error || 'Ошибка сохранения', 'error');
+    return;
+  }
+  window.location.reload();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  updateMoveButtons();
+});
+{% endblock %}

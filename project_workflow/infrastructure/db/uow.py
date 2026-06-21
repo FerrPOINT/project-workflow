@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from project_workflow.domain.repositories import (
     AgentRepository,
+    InstructionRepository,
     PhaseRepository,
     ProjectRepository,
     SupervisorRunRepository,
@@ -18,6 +19,7 @@ from project_workflow.domain.repositories import (
 from project_workflow.infrastructure.db.models import Base
 from project_workflow.infrastructure.db.repositories import (
     SAAgentRepository,
+    SAInstructionRepository,
     SAPhaseRepository,
     SAProjectRepository,
     SASupervisorRunRepository,
@@ -37,6 +39,7 @@ class SAUnitOfWork(UnitOfWork):
             self._session = get_session(db_path_or_engine)
         self._workflows: SAWorkflowRepository = SAWorkflowRepository(self._session)
         self._phases: SAPhaseRepository = SAPhaseRepository(self._session)
+        self._instructions: SAInstructionRepository = SAInstructionRepository(self._session)
         self._projects: SAProjectRepository = SAProjectRepository(self._session)
         self._tasks: SATaskRepository = SATaskRepository(self._session)
         self._agents: SAAgentRepository = SAAgentRepository(self._session)
@@ -82,6 +85,10 @@ class SAUnitOfWork(UnitOfWork):
     @property
     def supervisor_runs(self) -> SupervisorRunRepository:
         return self._supervisor_runs
+
+    @property
+    def instructions(self) -> InstructionRepository:
+        return self._instructions
 
     def create_all(self) -> None:
         """Create schema (dev/test helper)."""

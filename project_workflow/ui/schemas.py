@@ -141,3 +141,21 @@ class AgentUpdate(BaseModel):
 
 class PhaseOrderUpdate(BaseModel):
     orders: list[_PhaseOrderItem] = Field(default=[])
+
+
+class InstructionCreate(BaseModel):
+    phase_id: int = Field(...)
+    description: str = Field(..., min_length=1)
+    execution_type: Literal["sync", "parallel"] = Field(default="sync")
+    skills: list[str] | None = Field(default=None)
+
+
+class InstructionUpdate(BaseModel):
+    description: str | None = Field(default=None, min_length=1)
+    execution_type: Literal["sync", "parallel"] | None = Field(default=None)
+    skills: list[str] | str | None = Field(default=None)
+    step_num: int | None = Field(default=None)
+
+
+class InstructionReorder(BaseModel):
+    instruction_ids: list[int] = Field(...)

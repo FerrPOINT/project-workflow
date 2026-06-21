@@ -11,6 +11,9 @@ from project_workflow.schema import persist_phase_order_to_seed
 from project_workflow.ui.schemas import (
     AgentCreate,
     AgentUpdate,
+    InstructionCreate,
+    InstructionReorder,
+    InstructionUpdate,
     PhaseCreate,
     PhaseOrderUpdate,
     PhaseUpdate,
@@ -396,6 +399,66 @@ async def api_phase_detail(phase_id: str) -> dict[str, Any] | JSONResponse:
     if not phase:
         return _error(f"Фаза {phase_id_int} не найдена", 404)
     return {"ok": True, "phase": phase}
+
+
+async def api_instructions_list(phase_id: int) -> dict[str, Any] | JSONResponse:
+    phase = _app_state.phase_service().get_phase(phase_id)
+    if phase is None:
+        return _error(f"Фаза {phase_id} не найдена", 404)
+    instructions = _app_state.instruction_service().list(phase_id)
+    return {"ok": True, "phase": phase, "instructions": instructions}
+
+
+async def api_instruction_create(payload: InstructionCreate) -> dict[str, Any] | JSONResponse:
+    phase = _app_state.phase_service().get_phase(payload.phase_id)
+    if phase is None:
+        return _error(f"Фаза {payload.phase_id} не найдена", 404)
+    item = _app_state.instruction_service().create(
+        payload.phase_id,
+        {
+            "description": payload.description,
+            "execution_type": payload.execution_type,
+            "skills": payload.skills,
+        },
+    )
+    return {"ok": True, "instruction": item}
+
+
+async def api_instruction_update(instruction_id: int, payload: InstructionUpdate) -> dict[str, Any] | JSONResponse:
+    existing = _app_state.instruction_service().get(instruction_id)
+    if existing is None:
+        return _error(f"Инструкция {instruction_id} не найдена", 404)
+    updates: dict[str, Any] = {}
+    if payload.description is not None:
+        updates["description"] = payload.description
+    if payload.execution_type is not None:
+        updates["execution_type"] = payload.execution_type
+    if payload.skills is not None:
+        skills = payload.skills
+        if isinstance(skills, str):
+            skills = [s.strip() for s in skills.splitlines() if s.strip()]
+        updates["skills"] = skills
+    if payload.step_num is not None:
+        updates["step_num"] = payload.step_num
+    if updates:
+        _app_state.instruction_service().update(instruction_id, updates)
+    return {"ok": True, "instruction": _app_state.instruction_service().get(instruction_id)}
+
+
+async def api_instruction_delete(instruction_id: int) -> dict[str, Any] | JSONResponse:
+    existing = _app_state.instruction_service().get(instruction_id)
+    if existing is None:
+        return _error(f"Инструкция {instruction_id} не найдена", 404)
+    _app_state.instruction_service().delete(instruction_id)
+    return {"ok": True}
+
+
+async def api_instructions_reorder(phase_id: int, payload: InstructionReorder) -> dict[str, Any] | JSONResponse:
+    phase = _app_state.phase_service().get_phase(phase_id)
+    if phase is None:
+        return _error(f"Фаза {phase_id} не найдена", 404)
+    _app_state.instruction_service().reorder(phase_id, payload.instruction_ids)
+    return {"ok": True}
 
 
 # Alias used by app wiring for the /api/phases/order endpoint.

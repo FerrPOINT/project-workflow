@@ -11,6 +11,7 @@ from typing import Any
 
 from .application import (
     AgentService,
+    InstructionService,
     PhaseServiceApp,
     ProjectService,
     TaskService,
@@ -87,6 +88,9 @@ class _AppState:
 
     def agent_service(self) -> AgentService:
         return AgentService(self.get_uow())
+
+    def instruction_service(self) -> InstructionService:
+        return InstructionService(self.get_uow())
 
     @property
     def db(self) -> Any | None:

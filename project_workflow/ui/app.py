@@ -16,6 +16,7 @@ def create_app() -> FastAPI:
     app.get("/", response_class=HTMLResponse)(pages.index)
     app.get("/phases", response_class=HTMLResponse)(pages.phases_page)
     app.get("/phase/{phase_id}", response_class=HTMLResponse)(pages.phase_detail)
+    app.get("/phase/{phase_id}/instructions", response_class=HTMLResponse)(pages.instructions_page)
     app.get("/tasks", response_class=HTMLResponse)(pages.tasks_page)
     app.get("/projects", response_class=HTMLResponse)(pages.projects_page)
     app.get("/workflows", response_class=HTMLResponse)(pages.workflows_page)
@@ -53,6 +54,13 @@ def create_app() -> FastAPI:
     app.put("/api/phases/parallel", response_model=None)(_not_found)
     app.put("/api/phases/{phase_id}", response_model=None)(api.api_phase_update)
     app.put("/api/phases/{phase_id}/group", response_model=None)(_not_found)
+
+    # Instructions management
+    app.get("/api/phases/{phase_id}/instructions", response_model=None)(api.api_instructions_list)
+    app.post("/api/instructions", response_model=None)(api.api_instruction_create)
+    app.put("/api/instructions/{instruction_id}", response_model=None)(api.api_instruction_update)
+    app.delete("/api/instructions/{instruction_id}", response_model=None)(api.api_instruction_delete)
+    app.put("/api/phases/{phase_id}/instructions/reorder", response_model=None)(api.api_instructions_reorder)
 
     return app
 

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Sequence
+from typing import Any, List, Sequence
 
 from project_workflow.domain import Agent, Phase, Project, SupervisorRun, Task, Workflow
 
@@ -64,6 +64,28 @@ class PhaseRepository(ABC):
 
     @abstractmethod
     def get_phases_for_workflow(self, workflow_id: int) -> Sequence[Phase]: ...
+
+
+class InstructionRepository(ABC):
+    """Persistence contract for phase instructions."""
+
+    @abstractmethod
+    def list(self, phase_id: int) -> Sequence[dict[str, Any]]: ...
+
+    @abstractmethod
+    def get_by_id(self, instruction_id: int) -> dict[str, Any] | None: ...
+
+    @abstractmethod
+    def create(self, phase_id: int, data: dict[str, Any]) -> int: ...
+
+    @abstractmethod
+    def update(self, instruction_id: int, data: dict[str, Any]) -> None: ...
+
+    @abstractmethod
+    def delete(self, instruction_id: int) -> None: ...
+
+    @abstractmethod
+    def reorder(self, phase_id: int, orders: List[tuple[int, int]]) -> None: ...
 
 
 class ProjectRepository(ABC):
@@ -188,3 +210,7 @@ class UnitOfWork(ABC):
     @property
     @abstractmethod
     def supervisor_runs(self) -> SupervisorRunRepository: ...
+
+    @property
+    @abstractmethod
+    def instructions(self) -> InstructionRepository: ...

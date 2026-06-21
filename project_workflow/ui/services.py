@@ -1,7 +1,7 @@
 """Data-loading services for UI pages and API responses."""
-
 from __future__ import annotations
 
+import json
 from typing import Any, cast
 
 import click
@@ -570,3 +570,24 @@ def _load_cli_reference() -> list[dict[str, Any]]:
         )
 
     return commands
+
+
+def _load_instructions_page(phase_id: int) -> dict[str, Any] | None:
+    """Load data for the standalone instructions management page."""
+    phase = _get_app_state().phase_service().get_phase(phase_id)
+    if phase is None:
+        return None
+    instructions = _get_app_state().instruction_service().list(phase_id)
+    for instruction in instructions:
+        skills = instruction.get("skills") or []
+        if isinstance(skills, str):
+            try:
+                skills = json.loads(skills)
+            except Exception:
+                skills = []
+        instruction["skills"] = skills
+    return {
+        "phase": phase,
+        "instructions": instructions,
+        "instruction_groups": _group_instructions(instructions),
+    }
