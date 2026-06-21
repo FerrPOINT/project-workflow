@@ -480,7 +480,9 @@ async function addSkillToInstruction(selectEl) {
   const id = card.dataset.instructionId;
   const skill = String(selectEl.value || '').trim();
   if (!skill) return;
-  const existing = Array.from(card.querySelectorAll('.timeline-badges .badge')).map((b) => b.textContent.replace('×', '').trim());
+  const existing = Array.from(card.querySelectorAll('.timeline-badges .badge'))
+    .filter((b) => !b.classList.contains('badge-sync') && !b.classList.contains('badge-parallel'))
+    .map((b) => b.textContent.replace('×', '').trim());
   const skills = normalizeSkillNames([...existing, skill]);
   selectEl.disabled = true;
   try {
@@ -502,7 +504,9 @@ async function addSkillToInstruction(selectEl) {
 async function removeSkillFromInstruction(button, skillName) {
   const card = button.closest('.timeline-card');
   const id = card.dataset.instructionId;
-  const existing = Array.from(card.querySelectorAll('.timeline-badges .badge')).map((b) => b.textContent.replace('×', '').trim());
+  const existing = Array.from(card.querySelectorAll('.timeline-badges .badge'))
+    .filter((b) => !b.classList.contains('badge-sync') && !b.classList.contains('badge-parallel'))
+    .map((b) => b.textContent.replace('×', '').trim());
   const skills = normalizeSkillNames(existing.filter((s) => s !== skillName));
   const resp = await fetch('/api/instructions/' + id, {
     method: 'PUT',
