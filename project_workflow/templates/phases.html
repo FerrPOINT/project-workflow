@@ -35,7 +35,7 @@
     <div class="timeline-desc">{{ d[:120] }}{% if d|length > 120 %}...{% endif %}</div>
     {% endif %}
     <div class="timeline-badges">
-      <button type="button" class="badge {{ 'badge-parallel' if p.execution_type == 'parallel' else 'badge-sync' }}" onclick="togglePhaseType(this)" aria-label="Режим выполнения: {{ p.execution_type }}">
+      <button type="button" class="badge {{ 'badge-parallel' if p.execution_type == 'parallel' else 'badge-sync' }}" onclick="event.preventDefault(); event.stopPropagation(); togglePhaseType(this)" aria-label="Режим выполнения: {{ p.execution_type }}">
         {% if p.execution_type == 'parallel' %}⚡ parallel{% else %}⏱ sync{% endif %}
       </button>
     </div>
