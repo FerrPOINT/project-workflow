@@ -1,81 +1,63 @@
-# Детальный план развития project-workflow
+# Детальный план развития project-workflow v4
 
-> Полный план: Postgres, Docker Compose, production-ready UI на HTMX, удаление технического долга, безопасность, тестирование, документация.
+> Убрал лишнее: нет версионирования API, нет rate limiter, нет оверинжиниринга. Postgres, Docker Compose, HTMX UI, чистый backend.
 
 ---
 
-## 0. Принципы (не обсуждаются)
+## 0. Принципы
 
-- CLI остаётся ровно с двумя командами: `step` и `history`.
-- Язык разработки: Python. Frontend: Jinja2 + HTMX + CSS.
+- CLI: только `step` и `history`.
+- Стек: Python + FastAPI + Jinja2 + HTMX + CSS.
 - Одна база Postgres, одна схема `project_workflow`.
 - Миграции автоматические через Docker Compose.
 - Docker Compose — единственный способ запуска dev/prod-like.
-- Не добавляем Kubernetes / CI/CD / метрики / health-check endpoints в этом плане.
+- Не добавляем Kubernetes / CI/CD / метрики / health-check / rate limiter / API versioning.
 
 ---
 
 ## 1. Инфраструктура и данные
 
-### 1.1. Postgres: миграция с SQLite
+### 1.1. Postgres
 
 #### Задачи
-
-1. **Добавить `psycopg[binary]`** в `pyproject.toml`.
-2. **Переписать `project_workflow/infrastructure/db/session.py`**:
+1. Добавить `psycopg[binary]` в `pyproject.toml`.
+2. Переписать `project_workflow/infrastructure/db/session.py`:
    - `DATABASE_URL` из env.
-   - `create_engine(url, pool_pre_ping=True)`.
-   - SQLite fallback только для тестов (через отдельную фабрику).
+   - Postgres: `create_engine(url, pool_pre_ping=True)`.
+   - SQLite fallback только для тестов.
    - Убрать `PRAGMA` listener из runtime.
-3. **Обновить `project_workflow/infrastructure/db/models.py`**:
+3. Обновить `project_workflow/infrastructure/db/models.py`:
    - Явные `ForeignKey(..., ondelete=...)`.
-   - `DateTime(timezone=True)` вместо строковых timestamp-ов.
-   - `String` с разумными длинами.
-   - Убедиться, что все primary keys — `Integer, primary_key=True`.
-4. **Alembic**:
+   - `DateTime(timezone=True)` вместо строковых timestamp.
+   - Разумные длины `String`.
+4. Alembic:
    - `version_table_schema = "project_workflow"`.
-   - `target_metadata = Base.metadata`.
-   - В `env.py` гарантировать `CREATE SCHEMA IF NOT EXISTS project_workflow` перед `command.upgrade()`.
-5. **Сгенерировать свежую миграцию** на основе актуальных моделей.
+   - `CREATE SCHEMA IF NOT EXISTS project_workflow` перед `upgrade`.
+5. Сгенерировать свежую миграцию.
 
 #### Артефакты
-- `pyproject.toml` с `psycopg[binary]`.
-- `project_workflow/infrastructure/db/session.py`.
-- `project_workflow/infrastructure/db/migrations/versions/xxxx_postgres_schema.py`.
+- `pyproject.toml`
+- `project_workflow/infrastructure/db/session.py`
+- `project_workflow/infrastructure/db/migrations/versions/xxxx_postgres_schema.py`
 
 #### Чек-лист
-- [ ] `pytest` проходит на SQLite.
-- [ ] `alembic upgrade head` работает на чистой Postgres.
-- [ ] `alembic downgrade base` работает.
+- [ ] `pytest` green на SQLite.
+- [ ] `alembic upgrade head` и `downgrade base` работают на Postgres.
 
 ---
 
 ### 1.2. Docker Compose
 
 #### Задачи
-
-1. **Создать `Dockerfile`**:
-   - `python:3.11-slim`.
-   - `apt-get install libpq-dev gcc`.
-   - `pip install -e ".[ui,db]"`.
-   - Не копировать `tests/`, `.git/`, `.venv/`.
-2. **Создать `docker-compose.yml`**:
+1. `Dockerfile`: `python:3.11-slim`, `libpq-dev`, `pip install -e ".[ui,db]"`.
+2. `docker-compose.yml`:
    - `postgres` с healthcheck.
    - `migrate` — `alembic upgrade head`, зависит от `postgres` healthy.
    - `api` — `python -m project_workflow.ui`, зависит от `migrate` completed.
-   - volume `project_workflow_postgres_data`.
-3. **Создать `.env.example`**:
-   ```
-   DATABASE_URL=postgresql+psycopg://project_workflow:project_workflow@postgres:5432/project_workflow?options=-csearch_path=project_workflow
-   UI_HOST=0.0.0.0
-   UI_PORT=8811
-   LOG_LEVEL=INFO
-   ```
-4. **Создать `docker-compose.prod.yml`**:
-   - Без dev-only переменных.
-   - Postgres с volume на хосте.
-5. **Создать `docker-compose.test.yml`**:
-   - Postgres + migrate + test runner.
+   - volume для Postgres.
+3. `.env.example` с `DATABASE_URL`, `UI_HOST`, `UI_PORT`, `LOG_LEVEL`.
+4. `docker-compose.prod.yml` — без dev-only вещей.
+5. `docker-compose.test.yml` — для прогона тестов в контейнере.
 
 #### Артефакты
 - `Dockerfile`
@@ -86,80 +68,75 @@
 - `.env.prod.example`
 
 #### Чек-лист
-- [ ] `docker compose up --build` поднимает Postgres, миграции, API.
-- [ ] `curl http://localhost:8811/` возвращает 200.
-- [ ] `docker compose -f docker-compose.test.yml up --abort-on-container-exit` проходит.
+- [ ] `docker compose up --build` поднимает всё.
+- [ ] `curl http://localhost:8811/` → 200.
 
 ---
 
-### 1.3. Конфигурация через Pydantic Settings
+### 1.3. Конфиг
 
 #### Задачи
-
-1. **Переписать `project_workflow/config.py`** на Pydantic `BaseSettings`:
+1. Переписать `project_workflow/config.py` на Pydantic Settings:
    ```python
-   class Settings(BaseSettings):
-       DATABASE_URL: PostgresDsn
-       DB_SCHEMA: str = "project_workflow"
-       UI_HOST: str = "0.0.0.0"
-       UI_PORT: int = 8811
-       LOG_LEVEL: str = "INFO"
+   DATABASE_URL: PostgresDsn
+   DB_SCHEMA: str = "project_workflow"
+   UI_HOST: str = "0.0.0.0"
+   UI_PORT: int = 8811
+   LOG_LEVEL: str = "INFO"
    ```
-2. **Убрать `WORKFLOW_DB_PATH`, `WORKFLOW_DIR`, `WORKFLOW_UI_PORT`, `WORKFLOW_UI_HOST`**.
-3. **Обновить systemd-сервис** (`/etc/systemd/system/project-workflow-ui.service`) на `Environment="DATABASE_URL=..."`.
-4. **Обновить `project_workflow/ui/main.py`** и CLI на использование `Settings`.
+2. Убрать `WORKFLOW_DB_PATH`, `WORKFLOW_DIR`, `WORKFLOW_UI_PORT`, `WORKFLOW_UI_HOST`.
+3. Обновить systemd-сервис на `DATABASE_URL`.
 
 #### Артефакты
 - `project_workflow/config.py`
-- Обновлённый `/etc/systemd/system/project-workflow-ui.service`
-
-#### Чек-лист
-- [ ] Приложение падает с понятной ошибкой, если `DATABASE_URL` невалидный.
-- [ ] `docker compose` и systemd используют одинаковые переменные.
+- `/etc/systemd/system/project-workflow-ui.service`
 
 ---
 
-### 1.4. Удаление legacy `WorkflowDB`
+### 1.4. Удаление legacy WorkflowDB
 
 #### Задачи
-
-1. **Переписать UI routes (`project_workflow/ui/routes/api.py` и `pages.py`)** на SQLAlchemy-сервисы.
-2. **Переписать wizard** (`project_workflow/wizard.py`) с `WorkflowDB` на `UnitOfWork` / repositories.
-3. **Переписать CLI** (`project_workflow/cli/ui.py`) на SQLAlchemy-сервисы.
-4. **Удалить `project_workflow/db/base.py`**.
-5. **Удалить `project_workflow/db/`**.
-6. **Удалить или переписать тесты legacy DB**.
+1. Перевести UI routes на SQLAlchemy-сервисы.
+2. Перевести wizard на application services.
+3. Перевести CLI на SQLAlchemy-сервисы.
+4. Удалить `project_workflow/db/base.py` и модуль `project_workflow/db/`.
+5. Переписать/удалить legacy DB тесты.
 
 #### Артефакты
-- `project_workflow/application/services.py` (полноценный application layer).
-- `project_workflow/infrastructure/db/repositories.py` (дополненный).
+- `project_workflow/application/services.py`
+- Расширенный `project_workflow/infrastructure/db/repositories.py`
 
 #### Чек-лист
 - [ ] `grep -R "WorkflowDB\|from project_workflow.db" project_workflow/` — пусто.
-- [ ] `pytest` проходит.
-- [ ] `ruff check` green.
+- [ ] `pytest` green.
 
 ---
 
-## 2. Backend: API и application layer
-
-### 2.1. Единый API
+### 1.5. Миграция данных SQLite → Postgres
 
 #### Задачи
+1. Скрипт `scripts/migrate_sqlite_to_postgres.py`.
+2. Читает SQLite, пишет в Postgres через SQLAlchemy.
+3. Сверка count по таблицам.
 
-1. **Отделить HTML-роуты от JSON API**:
-   - `project_workflow/ui/routes/pages.py` — только GET страницы.
-   - `project_workflow/ui/routes/api.py` — только JSON REST API.
-   - `project_workflow/ui/routes/partials.py` — HTMX partials.
-2. **Все API-ответы через Pydantic-модели**.
-3. **Добавить CORS** для dev-режима (origins из env).
-4. **Добавить глобальный exception handler**:
-   - 422 → понятная JSON-ошибка.
-   - 500 → лог + generic message в production.
-5. **Версионирование API**:
-   - Все JSON endpoints под `/api/v1/...`.
-   - HTMX partials под `/partials/...`.
-   - HTML pages под `/...`.
+#### Артефакты
+- `scripts/migrate_sqlite_to_postgres.py`
+
+---
+
+## 2. Backend
+
+### 2.1. UI routes
+
+#### Задачи
+1. Оставить текущую структуру:
+   - `pages.py` — HTML-страницы.
+   - `api.py` — JSON endpoints, которые уже есть.
+   - Добавить `partials.py` — HTMX partials.
+2. Не вводить `/api/v1/`. Оставить `/api/*` как есть.
+3. Все POST/PUT/DELETE возвращают либо redirect, либо partial HTML.
+4. Pydantic-схемы для валидации входов.
+5. Глобальный exception handler: 422 с понятной ошибкой, 500 с логом.
 
 #### Артефакты
 - `project_workflow/ui/routes/pages.py`
@@ -167,482 +144,266 @@
 - `project_workflow/ui/routes/partials.py`
 - `project_workflow/ui/exceptions.py`
 
-#### Чек-лист
-- [ ] `/api/v1/workflows` возвращает JSON.
-- [ ] `/workflows` возвращает HTML.
-- [ ] `/partials/workflow/1` возвращает HTMX partial.
-
 ---
 
 ### 2.2. Application services
 
 #### Задачи
-
-1. **Создать полноценный application layer**:
+1. Создать сервисы:
    - `WorkflowService`
    - `PhaseService`
    - `ProjectService`
    - `TaskService`
    - `AgentService`
-   - `SupervisorService`
-2. **Каждый сервис** принимает `uow: IUnitOfWork`.
-3. **Все бизнес-правила** (constraint checks, переходы фаз) — в сервисах, не в роутах.
-4. **DTO через Pydantic**.
+2. Каждый сервис принимает `uow`.
+3. Бизнес-логика в сервисах, роуты только валидируют и форматируют ответ.
 
 #### Артефакты
-- `project_workflow/application/services.py` (разбить на `services/workflow.py`, `services/phase.py` и т.д. если разрастётся).
-
-#### Чек-лист
-- [ ] Роуты не содержат бизнес-логики, только валидацию входа и форматирование ответа.
-- [ ] Сервисы покрыты unit-тестами.
+- `project_workflow/application/services.py` (или пакет `services/`)
 
 ---
 
 ### 2.3. Wizard refactoring
 
 #### Задачи
-
-1. **Разбить `project_workflow/wizard.py`**:
-   - `wizard/engine.py` — основной цикл.
-   - `wizard/checks.py` — проверки.
-   - `wizard/evaluate.py` — supervisor evaluation.
-   - `wizard/format.py` — format_result.
-2. **Убрать глобальное состояние**.
-3. **Перевести wizard на application services**.
-4. **Добавить mypy-типизацию**.
+1. Разбить `wizard.py`:
+   - `wizard/engine.py`
+   - `wizard/checks.py`
+   - `wizard/evaluate.py`
+   - `wizard/format.py`
+2. Убрать глобальное состояние.
+3. Перевести на application services.
+4. Добавить mypy-типизацию.
 
 #### Артефакты
 - `project_workflow/wizard/` package.
 
-#### Чек-лист
-- [ ] `mypy project_workflow/wizard/` green.
-- [ ] Все wizard-тесты проходят.
-
 ---
 
-## 3. UI: production-ready HTMX + Jinja2
+## 3. UI: HTMX + Jinja2
 
 ### 3.1. Структура шаблонов
 
+```
+project_workflow/templates/
+├── base.html
+├── components/
+│   ├── sidebar.html
+│   ├── header.html
+│   ├── card.html
+│   ├── toast.html
+│   ├── modal.html
+│   ├── form_field.html
+│   └── empty_state.html
+├── macros/
+│   ├── forms.j2
+│   ├── tables.j2
+│   ├── badges.j2
+│   └── icons.j2
+├── pages/
+│   ├── dashboard.html
+│   ├── workflows.html
+│   ├── workflow_detail.html
+│   ├── phases.html
+│   ├── phase_detail.html
+│   ├── projects.html
+│   ├── project_detail.html
+│   ├── tasks.html
+│   ├── task_detail.html
+│   ├── agents.html
+│   ├── skills.html
+│   └── settings.html
+└── partials/
+    ├── workflow_row.html
+    ├── phase_row.html
+    ├── project_row.html
+    ├── task_row.html
+    └── toast.html
+```
+
 #### Задачи
-
-1. **Переместить шаблоны**:
-   ```
-   project_workflow/templates/
-   ├── base.html
-   ├── components/
-   │   ├── sidebar.html
-   │   ├── header.html
-   │   ├── card.html
-   │   ├── toast.html
-   │   ├── modal.html
-   │   ├── form_field.html
-   │   └── empty_state.html
-   ├── macros/
-   │   ├── forms.j2
-   │   ├── tables.j2
-   │   ├── badges.j2
-   │   └── icons.j2
-   ├── pages/
-   │   ├── dashboard.html
-   │   ├── workflows.html
-   │   ├── workflow_detail.html
-   │   ├── phases.html
-   │   ├── phase_detail.html
-   │   ├── projects.html
-   │   ├── project_detail.html
-   │   ├── tasks.html
-   │   ├── task_detail.html
-   │   ├── agents.html
-   │   ├── skills.html
-   │   └── settings.html
-   └── partials/
-       ├── workflow_row.html
-       ├── phase_row.html
-       ├── project_row.html
-       ├── task_row.html
-       └── toast.html
-   ```
-2. **Все страницы наследуют `base.html`**.
-3. **Все повторяющиеся блоки вынесены в components/macros**.
-
-#### Артефакты
-- Перестроенная директория `project_workflow/templates/`.
-
-#### Чек-лист
-- [ ] Нет дублирования вёрстки.
-- [ ] Все inline-стили удалены.
+1. Переместить шаблоны в эту структуру.
+2. Все страницы наследуют `base.html`.
+3. Вынести повторяющиеся блоки в components/macros.
 
 ---
 
-### 3.2. CSS-система
+### 3.2. CSS
 
 #### Задачи
-
-1. **Создать `project_workflow/static/css/project-workflow.css`**.
-2. **Design tokens**:
+1. `project_workflow/static/css/project-workflow.css`.
+2. Design tokens:
    ```css
    :root {
      --pw-primary: #8B3A3A;
-     --pw-primary-hover: #A04040;
      --pw-bg: #0B1220;
      --pw-surface: #111827;
-     --pw-surface-elevated: #1F2937;
      --pw-text: #F9FAFB;
-     --pw-text-muted: #9CA3AF;
      --pw-border: #374151;
-     --pw-success: #10B981;
-     --pw-warning: #F59E0B;
-     --pw-danger: #EF4444;
-     --pw-radius-sm: 4px;
      --pw-radius: 8px;
-     --pw-radius-lg: 12px;
-     --pw-space-xs: 4px;
-     --pw-space-sm: 8px;
      --pw-space-md: 16px;
-     --pw-space-lg: 24px;
-     --pw-space-xl: 32px;
    }
    ```
-3. **Utility classes**: layout, flex, grid, spacing, typography, colors.
-4. **Component classes**: `.btn`, `.btn-primary`, `.card`, `.table`, `.form-input`, `.badge`, `.toast`.
-5. **Подключить `StaticFiles` в FastAPI**.
+3. Компоненты: `.btn`, `.btn-primary`, `.card`, `.table`, `.form-input`, `.badge`, `.toast`.
+4. Подключить `StaticFiles`.
+5. Удалить все inline-стили.
 
 #### Артефакты
 - `project_workflow/static/css/project-workflow.css`
 - `project_workflow/static/js/htmx.min.js`
-- `project_workflow/static/js/project-workflow.js`
-
-#### Чек-лист
-- [ ] UI выглядит единообразно.
-- [ ] Нет inline-стилей в шаблонах.
 
 ---
 
-### 3.3. HTMX-интерактивность
+### 3.3. HTMX
 
 #### Задачи
-
-1. **Vendored HTMX** в `static/js/htmx.min.js`.
-2. **Формы**:
-   - `hx-post`, `hx-put`, `hx-delete`.
-   - `hx-target="#list"`.
-   - `hx-swap="outerHTML"`.
-3. **Inline-edit** для фаз и workflow name/description.
-4. **Reorder фаз**:
-   - HTML5 drag-and-drop или SortableJS.
-   - POST `/partials/phases/reorder`.
-5. **Toast-уведомления** после успешных операций.
-6. **Подтверждение удаления** через modal.
-7. **Фильтры и поиск** по tasks/projects без перезагрузки.
+1. Vendored HTMX.
+2. Формы: `hx-post`, `hx-put`, `hx-delete`, `hx-target`, `hx-swap="outerHTML"`.
+3. Inline-edit фаз.
+4. Reorder фаз через drag-and-drop.
+5. Toast-уведомления.
+6. Подтверждение удаления через modal.
+7. Фильтры и поиск без перезагрузки.
 
 #### Артефакты
 - `project_workflow/ui/routes/partials.py`
 - `project_workflow/static/js/project-workflow.js`
-
-#### Чек-лист
-- [ ] Создание workflow без перезагрузки страницы.
-- [ ] Удаление phase с подтверждением.
-- [ ] Reorder фаз drag-and-drop.
-- [ ] Фильтр tasks по статусу.
 
 ---
 
 ### 3.4. Страницы
 
 #### Задачи
-
-1. **Dashboard**:
-   - Реальные данные.
-   - Карточки: Projects, Tasks, Active, Done.
-   - Последние задачи.
-2. **Workflows**:
-   - Список + create/edit/delete.
-   - Переход к phases.
-3. **Phases**:
-   - Список фаз workflow.
-   - Create/edit/delete.
-   - Reorder.
-   - Назначение skills.
-4. **Projects**:
-   - Список + create/edit/delete.
-   - Связь с workflow.
-5. **Tasks**:
-   - Список с фильтрами.
-   - Task detail с историей supervisor runs.
-6. **Agents**:
-   - CRUD.
-7. **Skills catalog**:
-   - Сканирование Hermes skills.
-   - Mapping к фазам.
-8. **Settings**:
-   - Key patterns.
-   - Skills mapping.
-   - DB connection (read-only для production).
-
-#### Чек-лист
-- [ ] Все страницы существуют и работают.
-- [ ] Нет placeholder/synthetic данных.
+1. Dashboard — real данные.
+2. Workflows — CRUD.
+3. Phases — CRUD + reorder + skills.
+4. Projects — CRUD.
+5. Tasks — list + detail + actions.
+6. Agents — CRUD.
+7. Skills catalog.
+8. Settings — key patterns, skills mapping.
 
 ---
 
-## 4. Безопасность и надёжность
+## 4. Безопасность
 
-### 4.1. Валидация и безопасность
+### 4.1. Валидация
+1. Pydantic-модели для всех входов.
+2. Только SQLAlchemy ORM — никакого raw SQL.
+3. Jinja2 autoescape включён.
+4. CSRF-токены для HTMX-форм.
 
-#### Задачи
-
-1. **Pydantic-модели для всех входов**:
-   - Query params, form data, JSON body.
-2. **Защита от SQL-инъекций**:
-   - Только SQLAlchemy ORM / parameterized queries.
-   - Удалить оставшийся raw SQL.
-3. **XSS-защита**:
-   - Jinja2 autoescape включён.
-   - Никакого `| safe` без валидации.
-4. **CSRF**:
-   - Для HTMX-форм добавить CSRF-токен.
-   - `htmx.config.includeIndicatorStyles = false`.
-5. **Rate limiting**:
-   - `slowapi` или middleware на `/api/*`.
-   - Особенно на endpoint supervisor evaluation.
-
-#### Артефакты
-- `project_workflow/ui/schemas.py` (расширенный).
-- `project_workflow/ui/middleware.py`.
-
-#### Чек-лист
-- [ ] `grep -R "execute\(" project_workflow/infrastructure project_workflow/ui project_workflow/application` — только SQLAlchemy.
-- [ ] Все формы с CSRF-токеном.
-
----
-
-### 4.2. Логирование и observability
-
-#### Задачи
-
-1. **Настроить `structlog`** или стандартный logging.
-2. **Единый формат логов** JSON в production, readable в dev.
-3. **Логировать**:
-   - Все HTTP-запросы (method, path, status, duration).
-   - Supervisor runs (task, phase, verdict).
-   - Ошибки с traceback.
-4. **Log level из env**.
+### 4.2. Логирование
+1. Настроить стандартный logging.
+2. JSON-формат в production, readable в dev.
+3. Логировать HTTP-запросы и supervisor runs.
 
 #### Артефакты
 - `project_workflow/logging_config.py`
-
-#### Чек-лист
-- [ ] `docker compose logs api` показывает запросы.
-- [ ] Ошибки содержат correlation id.
 
 ---
 
 ## 5. Тестирование
 
-### 5.1. Backend tests
+### 5.1. Backend
+1. Сохранить 727 unit-тестов на SQLite.
+2. `tests/integration/test_postgres.py`.
+3. API tests для `/api/*` endpoints.
+4. HTMX partial tests для `/partials/*`.
 
-#### Задачи
+### 5.2. UI
+1. Integration tests через `httpx` + TestClient.
+2. Playwright smoke tests (опционально).
 
-1. **Сохранить 727 unit-тестов** на SQLite.
-2. **Добавить Postgres-интеграционные тесты**:
-   - `tests/integration/test_postgres.py`.
-   - Использовать `pytest-postgresql` или testcontainers.
-3. **API-тесты** для всех `/api/v1/*` endpoints.
-4. **HTMX partial tests** для `/partials/*`.
-5. **Application service tests**.
-
-### 5.2. Frontend/UI tests
-
-#### Задачи
-
-1. **Integration tests** через `httpx` + TestClient.
-2. **Playwright E2E smoke tests**:
-   - Dashboard загружается.
-   - CRUD workflow.
-   - CRUD phase.
-3. **Скриншотные тесты** (опционально).
-
-### 5.3. Docker tests
-
-#### Задачи
-
-1. **`docker-compose.test.yml`**.
-2. **Запуск**: `docker compose -f docker-compose.test.yml up --build --abort-on-container-exit`.
+### 5.3. Docker
+1. `docker-compose.test.yml`.
+2. Прогон в CI-заготовке.
 
 ---
 
 ## 6. Документация
 
 ### 6.1. README
-
-#### Задачи
-
-1. **Актуальная архитектура**.
-2. **Quickstart**: `docker compose up --build`.
-3. **CLI examples** с `project-workflow`.
-4. **API overview**.
-5. **Скриншоты UI**.
-6. **Roadmap link**.
+1. Quickstart: `docker compose up --build`.
+2. CLI examples.
+3. API overview.
+4. Скриншоты UI.
 
 ### 6.2. Документация для разработчиков
-
-#### Задачи
-
-1. `docs/architecture.md` — слои, data flow.
-2. `docs/ui/components.md` — список Jinja2 компонентов.
-3. `docs/ui/css-tokens.md` — design tokens.
-4. `docs/api.md` — endpoints.
-5. `docs/deployment.md` — Docker Compose, systemd.
-
-### 6.3. Комментарии в коде
-
-#### Задачи
-
-1. Docstrings для всех public функций/классов.
-2. TODO/FIXME — только с issue reference.
+1. `docs/architecture.md`
+2. `docs/ui/components.md`
+3. `docs/ui/css-tokens.md`
+4. `docs/api.md`
+5. `docs/deployment.md`
 
 ---
 
-## 7. Миграция данных
+## 7. Порядок выполнения
 
-### 7.1. Из SQLite в Postgres
-
-#### Задачи
-
-1. **Скрипт `scripts/migrate_sqlite_to_postgres.py`**:
-   - Читает SQLite из `WORKFLOW_DB_PATH` или аргумента.
-   - Пишет в Postgres через SQLAlchemy.
-   - Сохраняет ID-шники, constraints, foreign keys.
-2. **Проверка**:
-   - Сверка количества записей по таблицам.
-   - Проверка целостности FK.
-
-#### Артефакты
-- `scripts/migrate_sqlite_to_postgres.py`
-
-#### Чек-лист
-- [ ] Скрипт успешно переносит текущую SQLite БД в Postgres.
-- [ ] UI после миграции показывает те же данные.
-
----
-
-## 8. Порядок выполнения
-
-### Этап 1: Фундамент (P0)
+### Этап 1: Фундамент
 1. Pydantic Settings config.
-2. Postgres session + Alembic schema setup.
+2. Postgres session + Alembic schema.
 3. Docker Compose + Dockerfile + автомиграции.
 4. Перевод UI/API на SQLAlchemy-сервисы.
 5. Удаление legacy `WorkflowDB`.
 
-### Этап 2: Backend чистота (P0)
-6. Application services (Workflow, Phase, Project, Task, Agent).
-7. REST API `/api/v1/*` + exception handlers + CORS.
-8. Wizard refactoring на application services.
-9. mypy зелёный по `project_workflow/` (цель).
+### Этап 2: Backend
+6. Application services.
+7. HTMX partials + exception handlers.
+8. Wizard refactoring.
+9. mypy green по `project_workflow/`.
 
-### Этап 3: UI редизайн (P0)
+### Этап 3: UI
 10. Рефактор шаблонов: base, components, macros, pages, partials.
 11. CSS-система + StaticFiles.
 12. HTMX подключение.
-13. Production-ready страницы Dashboard/Workflows/Phases/Projects/Tasks.
+13. Production-ready страницы.
 
-### Этап 4: UI интерактивность (P1)
+### Этап 4: Интерактивность
 14. HTMX формы без перезагрузки.
-15. Inline-edit, reorder фаз.
-16. Toast, modal, filters, search.
-17. Agents, Skills, Settings pages.
+15. Inline-edit, reorder, toasts.
+16. Фильтры, modal, empty states.
 
-### Этап 5: Тесты и безопасность (P1)
-18. Postgres integration tests.
-19. API tests.
-20. HTMX partial tests.
-21. CSRF, rate limiting, input validation.
-
-### Этап 6: Документация и деплой (P2)
-22. README + screenshots.
-23. `docs/architecture.md`, `docs/ui/*`, `docs/api.md`.
-24. `docker-compose.prod.yml`.
-25. Миграционный скрипт SQLite → Postgres.
+### Этап 5: Тесты и документация
+17. Postgres integration tests.
+18. API + partial tests.
+19. CSRF, input validation.
+20. README + screenshots + docs.
 
 ---
 
-## 9. Чек-листы завершения этапов
+## 8. Что не делаем
 
-### Этап 1
-- [ ] `docker compose up --build` работает.
-- [ ] `pytest` green.
-- [ ] `WorkflowDB` удалён.
-
-### Этап 2
-- [ ] `mypy project_workflow/` green.
-- [ ] Все API endpoints под `/api/v1/`.
-- [ ] Роуты не содержат бизнес-логики.
-
-### Этап 3
-- [ ] Нет inline-стилей.
-- [ ] Все страницы работают.
-- [ ] UI единообразный.
-
-### Этап 4
-- [ ] 5+ HTMX-форм без перезагрузки.
-- [ ] Reorder фаз drag-and-drop.
-- [ ] Toast-уведомления.
-
-### Этап 5
-- [ ] Postgres integration tests green.
-- [ ] API tests green.
-- [ ] CSRF на формах.
-
-### Этап 6
-- [ ] README со скриншотами.
-- [ ] Документация завершена.
-- [ ] Prod compose проверен.
-
----
-
-## 10. Что явно НЕ делаем
-
-- Не добавляем новые CLI-команды.
+- Не добавляем CLI-команды.
 - Не переходим на React/Vue/Svelte.
-- Не разбиваем Postgres на несколько схем.
-- Не добавляем Kubernetes, CI/CD pipelines, health-check endpoints, Prometheus-метрики в этом плане.
-- Не переписываем логику supervisor evaluation на другой язык/фреймворк.
+- Не разбиваем Postgres на схемы.
+- Не версионируем API (`/api/v1/` не нужен).
+- Не добавляем rate limiter.
+- Не добавляем Kubernetes / CI/CD / метрики / health-check.
 
 ---
 
-## 11. Итоговая архитектура
+## 9. Итоговая архитектура
 
 ```
-┌─────────────────────────────┐
-│ Browser                      │
-│ HTMX + minimal JS           │
-└─────────────┬───────────────┘
-              │
-              ▼
-┌─────────────────────────────┐
-│ FastAPI                      │
-│ ├── HTML routes (pages)      │
-│ ├── HTMX partials            │
-│ └── REST API (/api/v1/*)     │
-└─────────────┬───────────────┘
-              │
-              ▼
-┌─────────────────────────────┐
-│ Application services         │
-│ Wizard engine                │
-└─────────────┬───────────────┘
-              │
-              ▼
-┌─────────────────────────────┐
-│ SQLAlchemy + Alembic         │
-└─────────────┬───────────────┘
-              │
-              ▼
-┌─────────────────────────────┐
-│ Postgres                     │
-│ DB: project_workflow         │
-│ Schema: project_workflow     │
-└─────────────────────────────┘
+Browser
+  HTMX + minimal JS
+    │
+    ▼
+FastAPI
+  ├── HTML pages (/workflows, /tasks, ...)
+  ├── HTMX partials (/partials/*)
+  └── JSON API (/api/*) — существующее
+    │
+    ▼
+Application services
+Wizard engine
+    │
+    ▼
+SQLAlchemy + Alembic
+    │
+    ▼
+Postgres
+  DB: project_workflow
+  Schema: project_workflow
 ```
