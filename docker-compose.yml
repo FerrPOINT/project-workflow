@@ -1,0 +1,43 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: project_workflow
+      POSTGRES_PASSWORD: project_workflow
+      POSTGRES_DB: project_workflow
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U project_workflow -d project_workflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "5432:5432"
+
+  migrate:
+    build: .
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://project_workflow:project_workflow@db:5432/project_workflow
+      DB_SCHEMA: project_workflow
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build: .
+    ports:
+      - "8812:8811"
+    environment:
+      DATABASE_URL: postgresql+psycopg://project_workflow:project_workflow@db:5432/project_workflow
+      DB_SCHEMA: project_workflow
+      UI_HOST: 0.0.0.0
+      UI_PORT: 8811
+      LOG_LEVEL: INFO
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  postgres_data:

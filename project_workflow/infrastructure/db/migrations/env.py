@@ -2,6 +2,7 @@ from logging.config import fileConfig
 from pathlib import Path
 import sys
 
+import os
 from sqlalchemy import engine_from_config, pool, text
 
 from alembic import context
@@ -27,6 +28,11 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 target_metadata = Base.metadata
 
+# Allow Docker / ops to override the DB URL via environment.
+DATABASE_URL = os.environ.get("DATABASE_URL")
+if DATABASE_URL:
+    config.set_main_option("sqlalchemy.url", DATABASE_URL)
+
 SCHEMA = get_settings().DB_SCHEMA
 
 
@@ -40,14 +46,16 @@ def _ensure_schema(connection) -> None:
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
-    url = config.get_main_option("sqlalchemy.url")
-    context.configure(
+    url = os.environ.get("DATABASE_URL") or config.get_main_option("sqlalchemy.url")
+    configure_kwargs = dict(
         url=url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
-        version_table_schema=SCHEMA,
     )
+    if "postgresql" in (url or ""):
+        configure_kwargs["version_table_schema"] = SCHEMA
+    context.configure(**configure_kwargs)
 
     with context.begin_transaction():
         context.run_migrations()
@@ -63,11 +71,13 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         _ensure_schema(connection)
-        context.configure(
+        configure_kwargs = dict(
             connection=connection,
             target_metadata=target_metadata,
-            version_table_schema=SCHEMA,
         )
+        if connection.dialect.name == "postgresql":
+            configure_kwargs["version_table_schema"] = SCHEMA
+        context.configure(**configure_kwargs)
 
         with context.begin_transaction():
             context.run_migrations()
