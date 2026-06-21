@@ -1,6 +1,6 @@
-# План доработки project-workflow v2
+# План доработки project-workflow v3
 
-> Автоматические миграции. Postgres. React + TypeScript frontend. Docker Compose — единственный способ запуска dev/prod-like.
+> Автоматические миграции. Postgres. FastAPI + Jinja2 + HTMX — весь стек остаётся на Python. Docker Compose — единственный способ запуска dev/prod-like.
 
 ---
 
@@ -103,7 +103,7 @@ EXPOSE 8811
 #### P0. Конфиг через Pydantic Settings
 - `project_workflow/config.py` → Pydantic Settings:
   ```python
-  DATABASE_URL: PostgresDns
+  DATABASE_URL: PostgresDsn
   UI_HOST: str = "0.0.0.0"
   UI_PORT: int = 8811
   LOG_LEVEL: str = "INFO"
@@ -118,137 +118,148 @@ EXPOSE 8811
 
 ---
 
-## 2. UI: отдельный React + TypeScript frontend
+## 2. UI: FastAPI + Jinja2 + HTMX, но сделано по-человечески
 
-### 2.1. Почему React, а не Jinja2/HTMX
-- Текущий SSR-Jinja2 превращается в лапшу из inline-стилей и шаблонов.
-- GitHub отображает репо как "HTML" — выглядит неадекватно.
-- React + TypeScript — стандарт production UI. GitHub покажет TypeScript/React в статистике.
-- API backend уже есть. Frontend ходит в `/api/*`.
+### 2.1. Почему Python-стек
+- Весь проект уже на Python/FastAPI.
+- Не тянем JS-билд, Webpack, npm.
+- HTMX даёт SPA-подобный UX без написания большого JS.
+- Проблема не в Jinja2, а в текущей реализации: inline-стили, отсутствие компонентов, дублирование.
 
-### 2.2. Структура frontend
+### 2.2. Структура шаблонов
 
 ```
-frontend/
-├── package.json
-├── vite.config.ts
-├── tsconfig.json
-├── index.html
-├── src/
-│   ├── main.tsx
-│   ├── App.tsx
-│   ├── api/
-│   │   └── client.ts          # axios/fetch wrapper
-│   ├── components/
-│   │   ├── Layout.tsx
-│   │   ├── Sidebar.tsx
-│   │   ├── Dashboard.tsx
-│   │   ├── WorkflowList.tsx
-│   │   ├── WorkflowForm.tsx
-│   │   ├── PhaseList.tsx
-│   │   ├── PhaseForm.tsx
-│   │   ├── ProjectList.tsx
-│   │   ├── ProjectForm.tsx
-│   │   ├── TaskList.tsx
-│   │   ├── TaskDetail.tsx
-│   │   ├── AgentList.tsx
-│   │   ├── SkillsCatalog.tsx
-│   │   └── Settings.tsx
-│   ├── hooks/
-│   │   ├── useApi.ts
-│   │   ├── useDashboard.ts
-│   │   └── useMutation.ts
-│   ├── types/
-│   │   └── index.ts
-│   └── styles/
-│       └── index.css
+project_workflow/templates/
+├── base.html
+├── components/
+│   ├── sidebar.html
+│   ├── header.html
+│   ├── card.html
+│   ├── toast.html
+│   └── form_field.html
+├── macros/
+│   ├── forms.j2
+│   ├── tables.j2
+│   └── badges.j2
+├── pages/
+│   ├── dashboard.html
+│   ├── workflows.html
+│   ├── workflow_form.html
+│   ├── phases.html
+│   ├── phase_form.html
+│   ├── projects.html
+│   ├── project_form.html
+│   ├── tasks.html
+│   ├── task_detail.html
+│   ├── agents.html
+│   ├── skills.html
+│   └── settings.html
+└── partials/
+    ├── workflow_row.html
+    ├── phase_row.html
+    ├── task_row.html
+    └── toast.html
 ```
 
-### 2.3. Техстек frontend
-- React 18
-- TypeScript
-- Vite (сборка + dev server + proxy к backend)
-- Tailwind CSS или Mantine UI
-- React Query / TanStack Query для кеширования API
-- React Router для навигации
-- Axios для HTTP
+### 2.3. CSS-система
+- Удалить все `style="..."` из шаблонов.
+- Единый CSS-файл `project_workflow/static/css/project-workflow.css`.
+- Design tokens:
+  ```css
+  :root {
+    --pw-primary: #8B3A3A;
+    --pw-primary-light: #A04040;
+    --pw-bg: #0B1220;
+    --pw-surface: #111827;
+    --pw-text: #F9FAFB;
+    --pw-text-muted: #9CA3AF;
+    --pw-border: #374151;
+    --pw-radius: 8px;
+    --pw-space-xs: 4px;
+    --pw-space-sm: 8px;
+    --pw-space-md: 16px;
+    --pw-space-lg: 24px;
+  }
+  ```
+- Подключить `StaticFiles` в FastAPI.
+- Использовать utility-first подход вручную или подключить **Tailwind CSS через CDN** (для SSR-проекта — приемлемо).
 
-### 2.4. Интеграция с backend
-- Backend отдаёт API на `localhost:8811/api/*`.
-- Vite dev server проксирует `/api` → `http://localhost:8811`.
-- Production: frontend билдится в `frontend/dist/` и отдаётся через FastAPI `StaticFiles` + `index.html` для всех не-API путей.
+### 2.4. HTMX
+- Vendored `htmx.min.js` в `project_workflow/static/js/htmx.min.js`.
+- Формы отправляются через `hx-post`, `hx-put`, `hx-delete`.
+- Обновление списков через `hx-target` + partials.
+- Loading states через `hx-indicator`.
+- Toast-уведомления через `hx-trigger` + `hx-swap`.
 
-### 2.5. Backend API — доработки
-- Все HTML-роуты из `project_workflow/ui/routes/pages.py` удаляются.
-- Остаются только JSON API в `project_workflow/ui/routes/api.py`.
-- Добавить CORS для dev-режима.
-- Добавить `StaticFiles(directory="frontend/dist", html=True)` для production.
-- Все API-ответы — строго типизированные Pydantic-модели.
+### 2.5. Backend UI-роуты
+- Оставляем `project_workflow/ui/routes/pages.py` для страниц.
+- Добавляем `project_workflow/ui/routes/partials.py` для HTMX-обновлений.
+- Все POST/PUT/DELETE возвращают либо redirect, либо partial HTML для HTMX.
+- Строгая валидация форм через Pydantic.
 
 ### 2.6. Задачи
 
-#### P0. Frontend scaffold
-- `frontend/` с Vite + React + TS.
-- Tailwind CSS подключён.
-- Базовый `Layout` + `Sidebar`.
-- API client.
+#### P0. Рефактор шаблонов
+- Вынести `base.html`, `components/`, `macros/`, `pages/`, `partials/`.
+- Удалить inline-стили.
+- Подключить CSS и HTMX.
 
-#### P0. Страницы CRUD
-- Dashboard
-- Workflows (list, create, edit, delete)
-- Phases (list per workflow, create, edit, delete, reorder)
-- Projects (list, create, edit, delete)
-- Tasks (list, detail, phase transition via `project-workflow step` integration)
-- Agents
-- Skills catalog
-- Settings (key patterns, skills mapping)
+#### P0. Production-ready страницы
+- Dashboard с real данными, без synthetic KPI.
+- Workflows: list + create/edit/delete.
+- Phases: list per workflow + create/edit/delete + inline reorder.
+- Projects: list + create/edit/delete.
+- Tasks: list + detail + phase actions.
+- Agents: list + create/edit/delete.
+- Skills catalog.
+- Settings: key patterns, skills mapping.
 
-#### P1. UX
+#### P1. HTMX-интерактивность
+- Inline-edit фаз.
+- Drag-and-drop reorder фаз (SortableJS или нативный HTML5 DnD + HTMX).
+- Создание/удаление без перезагрузки страницы.
 - Toast-уведомления.
-- Формы с валидацией.
-- Drag-and-drop для reorder фаз.
-- Фильтры и поиск.
-- Loading / error states.
+- Фильтры и поиск по задачам/проектам.
 
-#### P2. Production build
-- `frontend/Dockerfile` для сборки.
-- Backend раздаёт статику.
-- `docker-compose.yml` включает `frontend` сервис (опционально для dev).
+#### P2. UX-доработки
+- Формы с inline-ошибками.
+- Loading skeletons.
+- Empty states.
+- Подтверждение удаления.
 
 ### 2.7. Чек-лист
-- [ ] `frontend/` scaffold с Vite + React + TS.
-- [ ] Backend отдаёт только JSON API.
-- [ ] Все страницы из текущего UI перенесены в React.
-- [ ] `docker compose up` поднимает backend + Postgres + frontend.
-- [ ] GitHub статистика показывает TypeScript/React вместо HTML.
+- [ ] Нет inline-стилей.
+- [ ] Есть `components/`, `macros/`, `pages/`, `partials/`.
+- [ ] HTMX подключён и используется в 5+ формах.
+- [ ] UI выглядит как единое приложение, а не набор HTML-страниц.
+- [ ] README содержит скриншоты дашборда.
 
 ---
 
 ## 3. Docker Compose: единый источник правды
 
-### 3.1. Dev-режим
+### 3.1. Dev
 ```bash
 docker compose up --build
 ```
-Backend на `localhost:8811`, frontend dev server на `localhost:5173`, Postgres на `localhost:5432`.
+Backend на `localhost:8811`, Postgres на `localhost:5432`.
 
 ### 3.2. Production-like
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build
 ```
-- Frontend билдится в `frontend/dist/`.
-- Backend раздаёт статику.
+- Тот же образ.
 - Postgres с volume.
-- Без dev server.
+- Без dev-only настроек.
 
 ### 3.3. env-файлы
-- `.env.example` — для dev.
-- `.env.prod.example` — для production-like.
+- `.env.example` — dev.
+- `.env.prod.example` — production-like.
 
 ### 3.4. Чек-лист
 - [ ] `docker compose up` работает из коробки.
 - [ ] Миграции применяются автоматически.
-- [ ] Frontend и backend видят друг друга.
+- [ ] `StaticFiles` раздаёт CSS/JS.
 
 ---
 
@@ -258,11 +269,12 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build
 - SQLite-режим остаётся для unit-тестов.
 - Добавить `tests/integration/test_postgres.py`.
 
-### 4.2. Frontend tests
-- Vitest для unit.
-- Playwright для E2E (хотя бы smoke: login/dashboard/CRUD workflow).
+### 4.2. UI tests
+- `httpx`-based integration tests для всех UI-роутов.
+- Проверка HTMX partials.
+- Скриншоты через Playwright (опционально).
 
-### 4.3. Integration tests
+### 4.3. Docker integration tests
 - `docker compose -f docker-compose.test.yml up --abort-on-container-exit`.
 
 ---
@@ -272,12 +284,12 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build
 1. **P0. Postgres + session.py + Pydantic Settings.**
 2. **P0. Docker Compose + Dockerfile + автоматические Alembic-миграции.**
 3. **P0. Перевод UI/API на SQLAlchemy-сервисы, удаление legacy WorkflowDB.**
-4. **P0. React + Vite + TS scaffold, Tailwind, API client.**
-5. **P0. Backend: убрать HTML-роуты, оставить JSON API, добавить CORS и StaticFiles для dist.**
-6. **P0. React страницы Dashboard/Workflows/Phases/Projects/Tasks.**
-7. **P1. React страницы Agents/Skills/Settings, drag-and-drop, toasts, фильтры.**
-8. **P1. Postgres-интеграционные тесты + frontend unit-тесты.**
-9. **P2. Production docker-compose, README-скриншоты, CI-заготовка.**
+4. **P0. Рефактор шаблонов: base, components, macros, pages, partials.**
+5. **P0. CSS-система + HTMX-подключение.**
+6. **P0. Production-ready страницы (Dashboard/Workflows/Phases/Projects/Tasks).**
+7. **P1. HTMX-интерактивность: inline-edit, reorder, toasts, фильтры.**
+8. **P1. Postgres-интеграционные тесты + UI integration tests.**
+9. **P2. Agents/Skills/Settings, empty states, скриншоты для README.**
 
 ---
 
@@ -285,38 +297,38 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build
 
 - Не добавляем CLI-команды (freeze: только `step` и `history`).
 - Не разбиваем базу на несколько схем.
-- Не остаёмся на Jinja2/HTMX для сложного UI.
-- Не добавляем Kubernetes / метрики / CI/CD в этот план.
+- Не переходим на React/Vue/Svelte.
+- Не добавляем Kubernetes / CI/CD / метрики в этот план.
 
 ---
 
 ## 7. Итоговая архитектура
 
 ```
-┌─────────────────┐
-│  React + Vite   │
-│   frontend/     │
-└────────┬────────┘
-         │ /api/*
-         ▼
-┌─────────────────┐
-│   FastAPI app   │
-│ project_workflow│
-│   .ui/routes    │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ SQLAlchemy +    │
-│ Alembic         │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│    Postgres     │
-│  project_workflow
-│   schema: pw    │
-└─────────────────┘
+┌─────────────────────────────┐
+│   Browser                     │
+│   HTMX + minimal JS          │
+└─────────────┬─────────────────┘
+              │
+              ▼
+┌─────────────────────────────┐
+│   FastAPI                     │
+│   - HTML routes (pages)       │
+│   - HTMX partials             │
+│   - JSON API                  │
+└─────────────┬─────────────────┘
+              │
+              ▼
+┌─────────────────────────────┐
+│   SQLAlchemy + Alembic        │
+└─────────────┬─────────────────┘
+              │
+              ▼
+┌─────────────────────────────┐
+│   Postgres                    │
+│   DB: project_workflow        │
+│   Schema: project_workflow    │
+└─────────────────────────────┘
 ```
 
 Единственная ручная команда разработчика: `docker compose up --build`.
