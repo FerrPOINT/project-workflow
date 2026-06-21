@@ -174,7 +174,7 @@ class Task(Base):
     title = Column(String, nullable=True)
     description = Column(Text, nullable=True)
     current_phase = Column(
-        String,
+        Text,
         nullable=False,
         default="-1",
         server_default="-1",

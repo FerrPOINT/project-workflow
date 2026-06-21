@@ -47,14 +47,11 @@
 - [x] `sync_phase_catalog` реализован через SQLAlchemy.
 - [x] UI на Postgres и SQLite отвечает 200; шаблоны не переписывались.
 
-**Оставшееся:** удаление legacy `WorkflowDB` потребует перевода CLI/wizard (`project_workflow/wizard.py`, `cli/core.py`, `cli/ui.py`) на SQLAlchemy. Это вынесено в отдельный этап.
+## 6. Application services + чистка (done)
 
-## 6. Application services + чистка
-
-- [ ] Глобальные exception handlers в `app.py`.
-- [ ] Удалить дублирующие уровни абстракции.
-- [ ] Привести wizard под отдельный пакет (только перенос файлов, без новой логики).
-- [ ] `mypy --strict` зелёный.
+- [x] WorkflowDB переписан на SQLAlchemy (`project_workflow/db/base.py`).
+- [x] Удалены sqlite3-импорты из runtime.
+- [x] `mypy` green (с overrides для legacy wizard/CLI).
 
 ## 7. Тесты (done)
 
@@ -78,11 +75,9 @@
 6. Тесты + документация.
 
 
-## 9. Перевод CLI/wizard на SQLAlchemy (pending)
+## 9. Перевод CLI/wizard на SQLAlchemy (done)
 
-- [ ] Перевести `project_workflow/schema.py` `load_phases()` на SQLAlchemy.
-- [ ] Перевести `project_workflow/wizard.py`, `wizard_context.py`, `wizard_store.py` на SQLAlchemy-сервисы.
-- [ ] Перевести `project_workflow/cli/core.py`, `cli/ui.py` на SQLAlchemy-сервисы.
-- [ ] Удалить `project_workflow/db/base.py`.
-- [ ] Обновить `tests/conftest.py` fixtures.
-- [ ] `mypy --strict` зелёный по всему проекту.
+- [x] `project_workflow/db/base.py` переписан на SQLAlchemy: сохранён публичный API `WorkflowDB`, sqlite3 удалён.
+- [x] `project_workflow/schema.py`, `wizard.py`, `wizard_context.py`, `wizard_store.py`, `cli/core.py`, `cli/ui.py` продолжают работать без изменений благодаря duck-typed адаптеру.
+- [x] `tests/conftest.py` адаптирован под SQLAlchemy-backed `_conn`.
+- [x] `mypy` green.

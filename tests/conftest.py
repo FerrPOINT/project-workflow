@@ -33,7 +33,7 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
     from project_workflow.schema import ensure_phase_catalog
     from project_workflow.ui.dependencies import _AppState
 
-    _orig_conn = WorkflowDB._conn
+    _orig_conn = getattr(WorkflowDB, "_conn", None)
     def _test_conn(self):
         _Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(self.db_path)
@@ -43,7 +43,8 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
         conn.execute("PRAGMA foreign_keys = ON")
         conn.row_factory = sqlite3.Row
         return conn
-    monkeypatch.setattr(WorkflowDB, "_conn", _test_conn)
+    if _orig_conn is not None:
+        monkeypatch.setattr(WorkflowDB, "_conn", _test_conn)
 
     # Initialize legacy schema so the seed-sync step has a populated DB to mirror.
     wdb = WorkflowDB(str(test_db))
@@ -57,4 +58,5 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
 
     # Restore original module-level singleton so later tests are not confused.
     ui_module._app_state = _AppState()
-    monkeypatch.setattr(WorkflowDB, "_conn", _orig_conn)
+    if _orig_conn is not None:
+        monkeypatch.setattr(WorkflowDB, "_conn", _orig_conn)
