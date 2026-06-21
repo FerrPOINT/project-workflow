@@ -6,35 +6,36 @@ from project_workflow import config as cfg_module
 
 
 class TestConfigEnvOverrides:
+    def _reload_config(self):
+        import importlib
+        from project_workflow import config as cfg_module
+        cfg_module.get_settings.cache_clear()
+        importlib.reload(cfg_module)
+        return cfg_module
+
     def test_workflow_dir_env_override(self, monkeypatch):
         monkeypatch.setenv("WORKFLOW_DIR", "/tmp/custom-workflow")
-        # Reload needed because module-level globals evaluated at import time
-        import importlib
-        importlib.reload(cfg_module)
+        cfg_module = self._reload_config()
         assert cfg_module.WORKFLOW_DIR == "/tmp/custom-workflow"
 
     def test_ui_port_env_override(self, monkeypatch):
-        monkeypatch.setenv("WORKFLOW_UI_PORT", "9999")
-        import importlib
-        importlib.reload(cfg_module)
+        monkeypatch.setenv("UI_PORT", "9999")
+        cfg_module = self._reload_config()
         assert cfg_module.UI_PORT == 9999
 
     def test_ui_host_env_override(self, monkeypatch):
-        monkeypatch.setenv("WORKFLOW_UI_HOST", "127.0.0.1")
-        import importlib
-        importlib.reload(cfg_module)
+        monkeypatch.setenv("UI_HOST", "127.0.0.1")
+        cfg_module = self._reload_config()
         assert cfg_module.UI_HOST == "127.0.0.1"
 
     def test_jira_base_url_env_override(self, monkeypatch):
         monkeypatch.setenv("JIRA_BASE_URL", "https://jira.example.com")
-        import importlib
-        importlib.reload(cfg_module)
+        cfg_module = self._reload_config()
         assert cfg_module.JIRA_BASE_URL == "https://jira.example.com"
 
     def test_gitlab_base_url_env_override(self, monkeypatch):
         monkeypatch.setenv("GITLAB_BASE_URL", "https://gitlab.example.com")
-        import importlib
-        importlib.reload(cfg_module)
+        cfg_module = self._reload_config()
         assert cfg_module.GITLAB_BASE_URL == "https://gitlab.example.com"
 
 

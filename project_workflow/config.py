@@ -1,16 +1,86 @@
-"""Конфигурация project-workflow CLI."""
+"""project-workflow configuration."""
+from __future__ import annotations
 
 import json
 import os
+from functools import lru_cache
 from pathlib import Path
 
-# Deterministic default: package-local (not expanduser which varies by process).
-# WORKFLOW_DIR env var overrides.
-_pkg_dir = Path(__file__).resolve().parent.parent
-WORKFLOW_DIR = os.getenv("WORKFLOW_DIR", str(_pkg_dir / "data"))
-SUITES_DIR = os.getenv("WORKFLOW_SUITES_DIR", "/root/.hermes/skills/software-development")
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Фазы workflow (порядок важен!)
+_pkg_dir = Path(__file__).resolve().parent.parent
+
+
+class Settings(BaseSettings):
+    """Runtime settings loaded from environment variables."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    DATABASE_URL: str = f"sqlite:///{_pkg_dir / 'data' / 'workflow.db'}"
+    DB_SCHEMA: str = "project_workflow"
+
+    UI_HOST: str = "0.0.0.0"
+    UI_PORT: int = 8811
+
+    LOG_LEVEL: str = "INFO"
+
+    SUITES_DIR: str = os.getenv(
+        "SUITES_DIR", str(Path.home() / ".hermes" / "skills" / "software-development")
+    )
+
+    JIRA_BASE_URL: str = "https://task.wemakedev.ru"
+    GITLAB_BASE_URL: str = "https://gt.wmtgroup.ru"
+
+    WORKFLOW_DIR: str = os.getenv("WORKFLOW_DIR", str(_pkg_dir / "data"))
+
+    @property
+    def SETTINGS_PATH(self) -> str:
+        return os.path.join(self.WORKFLOW_DIR, "settings.json")
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def _normalize_sqlite_url(cls, value: str) -> str:
+        if value.startswith("sqlite://"):
+            return value
+        if value.startswith("postgresql"):
+            return value
+        if Path(value).suffix == ".db":
+            return f"sqlite:///{value}"
+        return value
+
+    @property
+    def JIRA_API_URL(self) -> str:
+        return f"{self.JIRA_BASE_URL}/rest/api/2"
+
+    @property
+    def GITLAB_API_URL(self) -> str:
+        return f"{self.GITLAB_BASE_URL}/api/v4"
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+
+
+# Module-level compatibility aliases (deprecated, kept during migration)
+# These allow old code/tests to keep importing `config.WORKFLOW_DIR` etc.
+settings = get_settings()
+UI_PORT = settings.UI_PORT
+UI_HOST = settings.UI_HOST
+SUITES_DIR = settings.SUITES_DIR
+JIRA_BASE_URL = settings.JIRA_BASE_URL
+JIRA_API_URL = settings.JIRA_API_URL
+GITLAB_BASE_URL = settings.GITLAB_BASE_URL
+GITLAB_API_URL = settings.GITLAB_API_URL
+WORKFLOW_DIR = settings.WORKFLOW_DIR
+SETTINGS_PATH = settings.SETTINGS_PATH
+
 PHASE_ORDER = [
     "-1",      # Task Intake
     "0.0a",    # Suite Verification
@@ -41,44 +111,22 @@ PHASE_ORDER = [
     "10",      # Auto-Improve
 ]
 
-# Удалённые legacy-фазы перенаправляем на ближайшую живую setup-фазу
 LEGACY_PHASE_REDIRECTS = {
     "0.01a": "0.00",
     "0.01b": "0.00",
     "0": "0.00",
 }
 
-# Делегируемые фазы (требуют delegate_task)
 DELEGATED_PHASES = [
     "0.6", "0.9", "1.5", "3.5", "4.5",
     "7.5", "7.6", "7.6.R", "7.7", "9",
 ]
 
-# Фазы с CriticGate
 CRITIC_PHASES = ["0.9", "3.5", "4.5", "7.7"]
-
-# Фазы Researcher
 RESEARCHER_PHASES = ["0.6", "1.5", "2", "7.6.R"]
-
-# Фазы Reviewer
 REVIEWER_PHASES = ["7.5", "7.6"]
-
-# Фазы с обязательными токенами
 TOKEN_REQUIRED_PHASES = ["0.5", "8"]
 
-# Jira API
-JIRA_BASE_URL = os.getenv("JIRA_BASE_URL", "https://task.wemakedev.ru")
-JIRA_API_URL = f"{JIRA_BASE_URL}/rest/api/2"
-
-# GitLab API
-GITLAB_BASE_URL = os.getenv("GITLAB_BASE_URL", "https://gt.wmtgroup.ru")
-GITLAB_API_URL = f"{GITLAB_BASE_URL}/api/v4"
-
-# UI
-UI_PORT = int(os.getenv("WORKFLOW_UI_PORT", "8811"))
-UI_HOST = os.getenv("WORKFLOW_UI_HOST", "0.0.0.0")
-
-# Bootstrap workflows / projects
 DEFAULT_WORKFLOW_NAME = "Default Workflow"
 SMOKE_WORKFLOW_NAME = "Smoke Test Workflow"
 SMOKE_PROJECT_CODE = "SMOKE"
@@ -86,20 +134,16 @@ SMOKE_PROJECT_NAME = "Smoke CLI Test Project"
 SMOKE_TASK_KEY_PATTERNS = [
     r"^(?P<prefix>SMOKE)-(?P<number>[0-9]+)$",
 ]
-
-# ── Settings persistence ────────────────────────────────────────────────
-
-SETTINGS_PATH = os.path.join(WORKFLOW_DIR, "settings.json")
-
-# Legacy bootstrap source only. Runtime source of truth now lives in DB.projects.key_patterns.
 DEFAULT_TASK_KEY_PATTERNS = [
     r"^(?P<prefix>TASKNEIROKLYUCH)-(?P<number>[0-9]+)$",
 ]
 
+
 def _read_raw_settings() -> dict:
-    if os.path.exists(SETTINGS_PATH):
+    path = SETTINGS_PATH
+    if os.path.exists(path):
         try:
-            with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
+            with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             return data if isinstance(data, dict) else {}
         except Exception:
