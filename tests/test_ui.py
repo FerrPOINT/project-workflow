@@ -703,7 +703,8 @@ class TestPhaseDetail:
         assert 'data-field="code"' not in response.text
         assert 'data-field="phase_num"' not in response.text
         assert 'href="/phases"' in response.text
-        assert 'Порядок меняется на странице фаз' in response.text
+        assert '← Назад к фазам' in response.text
+        assert 'Порядок меняется на странице фаз' not in response.text
 
     def test_phase_detail_hides_next_recommendation_inline_input(self):
         response = client.get(_phase_detail_path("0.00"))

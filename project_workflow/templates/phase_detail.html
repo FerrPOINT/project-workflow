@@ -87,7 +87,6 @@
     <input type="text" class="inline-input wiki-subtitle" value="{{ phase.description or '' }}" data-field="description" onblur="scheduleSave()" style="width:100%">
 
     <div class="wiki-meta">
-      <span><a href="/phases">Порядок меняется на странице фаз</a></span>
       <span>Агент: <select id="agentSelect" class="inline-input" style="width:180px;display:inline" onchange="scheduleSave()">
         <option value="">—</option>
         {% for a in agents %}
