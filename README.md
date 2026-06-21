@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://capsule-render.vercel.app/api?type=waving&height=180&text=project-workflow&desc=State-driven%20workflow%20platform&color=gradient&customColorList=0,2,2,5,30" alt="project-workflow banner" />
+  <img src="https://capsule-render.vercel.app/api?type=rect&height=160&text=project-workflow&desc=State-driven%20workflow%20platform&color=8B3A3A&fontColor=FFFFFF&descSize=20&fontSize=60" alt="project-workflow banner" />
 </p>
 
 <p align="center">
@@ -38,32 +38,58 @@
 
 CLI-часть платформы остаётся максимально узкой: ровно две команды — `step` и `history`.
 
----
+## Features
 
-<a name="features"></a>
-## ✨ Features
+- **Пофазовый workflow** — каждая задача строго следует шаблону фаз с инструкциями, чек-листами и артефактами.
+- **Встроенный supervisor** — автоматическая оценка отчётов и решение о переходе.
+- **Web UI** — управление шаблонами, фазами, проектами, задачами и агентами.
+- **CLI freeze** — только `step` и `history`; всё остальное через UI.
+- **Лёгкий деплой** — SQLite + FastAPI, можно запустить локально или как systemd-сервис.
+- **Расширяемые skills** — каталог Hermes-скиллов для фаз.
 
-| Feature | Описание |
-|---------|----------|
-| **Жёсткий пофазовый workflow** | Каждая задача привязана к workflow; переходы контролируются `WizardEngine` + `PhaseFSM`. |
-| **Двухкомандный CLI** | Только `step` и `history`. JSON-режим для автоматизации. |
-| **Web UI** | 11 страниц: dashboard, phases, projects, workflows, agents, tasks, settings, skills. |
-| **JSON API** | 23 endpoint для CRUD фаз, workflow, проектов, агентов и задач. |
-| **TaskKeyValidator** | Валидация ключей задач по настраиваемым regex из `projects.key_patterns`. |
-| **SMART evaluate** | Опциональная LLM-оценка отчёта (Ollama Cloud / local) с fallback на rule-based. |
-| **Слои Clean Architecture** | `domain/` → `application/` → `infrastructure/` → `project_workflow/ui/` / `cli/`. |
-| **SQLite + Alembic** | Миграции, SQLAlchemy repositories, единый `WorkflowService` / `PhaseServiceApp`. |
+## CLI
 
----
+```bash
+# Запуск рабочей фазы задачи
+project-workflow step --task TASK-123 --report "Сделал X, проверил Y"
 
-<a name="cli"></a>
-## 🖥️ CLI
+# История фаз и supervisor-решений
+project-workflow history --task TASK-123 --n 10
+```
 
-> **Правило проекта:** в CLI ровно две команды — `step` и `history`.
-> CRUD workflows / phases / projects / agents и администрирование выполняются через Web UI.
-> Подробный план рефакторинга: [`docs/plans/2026-06-21-refactor-roadmap.md`](docs/plans/2026-06-21-refactor-roadmap.md).
+## Web UI
 
-### Установка
+```bash
+python -m project_workflow.ui --host 0.0.0.0 --port 8811
+```
+
+Или через systemd:
+
+```bash
+systemctl enable project-workflow-ui.service
+systemctl start project-workflow-ui.service
+```
+
+## Architecture
+
+```mermaid
+flowchart LR
+    A[CLI project-workflow] -- step / history --> B[WizardEngine]
+    B -- read/write --> C[(SQLite)]
+    D[Web UI] -- CRUD --> C
+    B -- supervisor --> E[LLM / rule checks]
+    E -- verdict --> B
+```
+
+## Quality
+
+| Проверка | Команда | Статус |
+|---|---|---|
+| Lint | `python -m ruff check project_workflow/ tests/` | green |
+| UI type-check | `python -m mypy project_workflow/ui/ --ignore-missing-imports` | green |
+| Tests | `pytest -q --tb=short` | **727 passed** |
+
+## Установка
 
 ```bash
 git clone https://github.com/FerrPOINT/project-workflow.git
@@ -73,191 +99,28 @@ source .venv/bin/activate
 pip install -e ".[dev,ui]"
 ```
 
-### step
+## Архитектура и ограничения
 
-Показать текущую фазу или подать отчёт и перейти дальше:
+- CLI заморожен: ровно две команды — `step` и `history`. Весь CRUD workflows/phases/projects/agents и администрирование выполняется через Web UI.
+- UI-пакет (`project_workflow/ui/`) — чистый FastAPI-приложение с Pydantic-схемами, отдельными routes/services/dependencies.
+- Data layer в стадии рефакторинга: legacy `WorkflowDB` (`project_workflow/db/base.py`) соседствует с SQLAlchemy-сервисами; план миграции — в `docs/plans/2026-06-21-refactor-roadmap.md`.
+- CI/CD, Docker, health-checks и метрики вне скоупа.
 
-```bash
-project-workflow step --task TASK-42
-project-workflow step --task TASK-42 --report "сделал X, проверил Y"
-```
+## Roadmap
 
-### history
+Краткая версия:
 
-История отчётов, переходов и статусов по задаче:
-
-```bash
-project-workflow history --task TASK-42
-project-workflow history --task TASK-42 --n 50
-```
-
-### JSON-режим
-
-```bash
-project-workflow --json step --task TASK-42 --report "..."
-```
-
----
-
-<a name="ui"></a>
-## 🌐 Web UI
-
-Запуск через systemd:
-
-```bash
-systemctl restart project-workflow-ui.service
-```
-
-Или вручную для разработки:
-
-```bash
-python -m project_workflow.ui --host 0.0.0.0 --port 8811
-```
-
-### Страницы
-
-| Страница | URL | Что делает |
-|----------|-----|-----------|
-| Dashboard | `/` | Сводка по задачам, фазам, агентам |
-| Phases | `/phases` | Список фаз + порядок |
-| Phase detail | `/phase/{phase_id}` | Инструкции, чеки, эвиденс |
-| Tasks | `/tasks` | Список задач |
-| Task detail | `/task/{task_key}` | История и текущая фаза |
-| Projects | `/projects` | CRUD проектов + key patterns |
-| Workflows | `/workflows` | CRUD workflow-шаблонов |
-| Agents | `/agents` | CRUD агентов |
-| Skills | `/skills` | Справочник скиллов |
-| Settings | `/settings` | Read-only реестр CLI-команд |
-
-### API
-
-| Endpoint | Метод | Описание |
-|----------|-------|----------|
-| `/api/workflows` | GET / POST | Список / создание workflow |
-| `/api/workflows/{id}` | PUT / DELETE | Обновление / удаление workflow |
-| `/api/phases` | GET / POST | Список / создание фазы |
-| `/api/phases/{id}` | GET / PUT / DELETE | Детали / обновление / удаление фазы |
-| `/api/phases/order` | PUT | Изменение порядка фаз |
-| `/api/projects` | GET / POST / PUT / DELETE | CRUD проектов |
-| `/api/agents` | GET / POST / PUT / DELETE | CRUD агентов |
-| `/api/tasks` | GET | Список задач |
-| `/api/tasks/{task_key}` | GET | Детали задачи |
-| `/api/skills` | GET | Каталог скиллов |
-| `/api/settings` | GET | Настройки и CLI-реестр |
-
----
-
-<a name="architecture"></a>
-## 🏗️ Architecture
-
-```mermaid
-flowchart TD
-    subgraph CLI["🖥️ CLI"]
-        step[step]
-        history[history]
-    end
-
-    subgraph UI["🌐 Web UI"]
-        pages[HTML pages]
-        api[JSON API]
-    end
-
-    subgraph App["application/"]
-        ws[WorkflowService]
-        ps[PhaseServiceApp]
-        prs[ProjectService]
-        ts[TaskService]
-        ags[AgentService]
-    end
-
-    subgraph Domain["domain/"]
-        models[Models + Repository interfaces]
-    end
-
-    subgraph Infra["infrastructure/db/"]
-        sa[SQLAlchemy models]
-        repo[Repositories]
-        alembic[Alembic migrations]
-    end
-
-    subgraph Legacy["legacy db/"]
-        wdb[WorkflowDB — в процессе миграции]
-    end
-
-    CLI -->|wizard| App
-    UI -->|routes| App
-    App --> Domain
-    Domain -->|implemented by| Infra
-    App -.->|ещё используется| Legacy
-```
-
-### Принципы
-
-- **Application services** — единая точка входа для бизнес-логики.
-- **Domain** не зависит от SQLAlchemy; `infrastructure/db/repositories.py` реализует интерфейсы из `domain/repositories.py`.
-- **UI routes** только валидируют входные данные, вызывают сервисы и формируют ответ.
-- **Raw SQL** допустим только в Alembic-миграциях.
-- **Seed/sync default workflow** — явная операция, не side-effect при каждом запросе.
-
----
-
-<a name="workflow"></a>
-## 🔄 Жизненный цикл задачи
-
-```mermaid
-flowchart LR
-    A[Создание задачи] --> B{Определить workflow}
-    B --> C[Текущая фаза]
-    C --> D[Агент выполняет инструкции]
-    D --> E[Отчёт через CLI step]
-    E --> F{Supervisor evaluate}
-    F -->|PASS| G[Следующая фаза]
-    F -->|ROLLBACK| H[Предыдущая фаза]
-    F -->|BLOCK| I[Блокировка задачи]
-    G --> C
-    H --> C
-```
-
----
-
-<a name="quality"></a>
-## 🛡️ Quality Bar
-
-| Контроль | Текущее состояние | Цель |
-|----------|-------------------|------|
-| Tests | **727 passed** | зелёный full suite |
-| Lint | **ruff green** | сохранять green |
-| Type check UI | **mypy project_workflow/ui/ green** | mypy по всему `project_workflow/` |
-| Coverage | не измерялась | ≥ 90% |
-| Raw SQL в production | 1 endpoint + legacy `db/base.py` | 0 вне миграций |
-
----
-
-<a name="roadmap"></a>
-## 🗺️ Roadmap
+1. Убрать двойной data layer — весь raw SQLite уйдёт в SQLAlchemy services.
+2. Выполнить Pydantic + mypy-чистку вне UI.
+3. Разделить `wizard.py` на доменные сервисы.
+4. Добавить API-тесты на все UI routes.
 
 Подробный план: [`docs/plans/2026-06-21-refactor-roadmap.md`](docs/plans/2026-06-21-refactor-roadmap.md).
 
-- [x] Разбить монолит `ui.py` на пакет `project_workflow/ui/`
-- [x] Внедрить Pydantic-схемы для API inputs
-- [x] Добавить `project_workflow/ui/__main__.py` для systemd
-- [x] Довести `mypy project_workflow/ui/` до зелёного
-- [ ] Перевести UI routes с legacy `WorkflowDB` на application services
-- [ ] Дополнить application services до полного CRUD
-- [ ] Удалить / сузить `WorkflowDB` до Alembic-миграций
-- [ ] Типизировать `wizard.py` и декомпозировать логику
-- [ ] Добиться `mypy project_workflow/ --ignore-missing-imports` green
+## License
 
----
-
-## 📫 Links
+MIT
 
 <p align="center">
-  <a href="https://github.com/FerrPOINT/project-workflow"><img src="https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white" /></a>
-</p>
-
----
-
-<p align="center">
-  <img src="https://capsule-render.vercel.app/api?type=waving&height=100&section=footer&color=gradient&customColorList=0,2,2,5,30" alt="footer" />
+  <img src="https://capsule-render.vercel.app/api?type=waving&height=100&section=footer&color=8B3A3A" alt="footer" />
 </p>
