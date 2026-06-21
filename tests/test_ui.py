@@ -748,7 +748,7 @@ class TestPhaseDetail:
             assert f'<span class="badge" style="background:var(--accent-soft);color:var(--accent)">\n            {skills[2]["name"]}' in response.text
 
             add_select_match = re.search(
-                r'<select class="inline-input skill-candidate" data-field="skill-candidate"[^\u003e]*\u003e(.*?)\u003c/select\u003e',
+                r'<select class="skill-candidate" data-field="skill-candidate"[^>]*>(.*?)</select>',
                 response.text,
                 re.S,
             )

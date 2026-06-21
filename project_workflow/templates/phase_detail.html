@@ -26,55 +26,6 @@
 .wiki-section-title{font-size:13px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
 .wiki-section-title .count{font-size:11px;font-weight:500;color:var(--text-dim);background:var(--panel);padding:1px 7px;border-radius:4px;text-transform:none;letter-spacing:0}
 
-/* ── Instruction flow: vertical serial + framed vertical parallel groups ── */
-.flow-list{display:flex;flex-direction:column;gap:0}
-
-/* One run = either single card or framed vertical group */
-.flow-batch-shell{width:100%;display:flex;flex-direction:column;gap:10px;border:1px solid var(--orange);border-radius:12px;padding:12px;background:rgba(245,158,11,.08);box-shadow:inset 0 0 0 1px rgba(245,158,11,.18)}
-.flow-batch-label{display:inline-flex;align-items:center;align-self:flex-start;gap:6px;padding:3px 10px;border-radius:999px;border:1px solid var(--orange);background:var(--orange-soft);color:var(--orange);font-size:11px;font-weight:700;letter-spacing:.04em}
-.flow-run{display:flex;gap:12px;width:100%}
-.flow-run.single .flow-card{flex:1}
-.flow-run.group{flex-direction:column;gap:10px}
-.flow-run.group .flow-card{width:100%;min-width:0;overflow:hidden}
-
-/* Card */
-.flow-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;display:flex;gap:10px;min-width:0;transition:all .12s}
-.flow-card:hover{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
-.flow-card.sync{border-left:3px solid var(--green)}
-.flow-card.parallel{border-left:3px solid var(--orange);background:var(--orange-soft)}
-.flow-card .step-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:6px}
-.flow-card .step-dot.sync{background:var(--green)}
-.flow-card .step-dot.parallel{background:var(--orange)}
-.flow-card .item-content{flex:1;min-width:0}
-.flow-card .item-meta{display:flex;gap:10px;margin-top:6px;font-size:12px;color:var(--text-dim);align-items:center;flex-wrap:wrap}
-.flow-card .item-meta .tag{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;background:var(--panel);font-weight:500;cursor:pointer;transition:all .12s;font-size:11px}
-.flow-card .item-meta .tag:hover{transform:scale(1.05)}
-.flow-card .item-meta .tag.type-sync{color:var(--green);background:var(--green-soft)}
-.flow-card .item-meta .tag.type-parallel{color:var(--orange);background:var(--orange-soft)}
-.flow-card .item-tool{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-dim);background:var(--panel);padding:2px 6px;border-radius:4px}
-.flow-card .skill-picker{display:grid;gap:8px;margin-top:10px}
-.flow-card .skill-picker-label{font-size:11px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em}
-.flow-card .skill-selected-list{display:flex;flex-wrap:wrap;gap:8px;min-height:40px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--panel)}
-.flow-card .skill-selected-item{display:inline-flex;align-items:center;gap:8px;max-width:100%;padding:5px 10px;border-radius:999px;background:var(--accent-soft);color:var(--text-secondary);border:1px solid rgba(96,165,250,.18)}
-.flow-card .skill-selected-name{font-size:12px;line-height:1.3;word-break:break-word}
-.flow-card .skill-remove-btn{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border:none;border-radius:999px;background:transparent;color:var(--text-dim);cursor:pointer;font-size:14px;line-height:1;padding:0}
-.flow-card .skill-remove-btn:hover{color:var(--red);background:rgba(239,68,68,.12)}
-.flow-card .skill-picker-add-row{display:grid;gap:6px}
-.flow-card .skill-picker select[data-field="skill-candidate"]{background:var(--panel);border:1px solid var(--border)}
-.flow-card .skill-picker select[data-field="skill-candidate"]:disabled{opacity:.72;cursor:not-allowed}
-.flow-card .skill-empty{font-size:12px;color:var(--text-dim)}
-.flow-card .item-delete{flex-shrink:0;opacity:0;transition:opacity .12s;background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:18px;padding:0 4px;border-radius:4px}
-.flow-card:hover .item-delete{opacity:1}
-.flow-card .item-delete:hover{color:var(--red)}
-
-/* Arrow between serial runs */
-.flow-arrow{display:flex;justify-content:center;padding:6px 0;color:var(--text-dim);font-size:14px}
-.flow-batch-arrow{padding:0;color:var(--orange);font-size:18px}
-
-/* JOIN after parallel group */
-.flow-join{display:flex;justify-content:center;padding:4px 0}
-.flow-join .join-bar{display:inline-flex;align-items:center;gap:8px;padding:4px 14px;border-radius:6px;background:var(--orange-soft);border:1px dashed var(--orange);color:var(--orange);font-size:11px;font-weight:600}
-
 /* Check list */
 .check-list{list-style:none;padding:0;margin:0}
 .check-list>li{padding:10px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
@@ -109,6 +60,9 @@
 .inline-input:hover{background:var(--panel)}
 .inline-input:focus{background:var(--panel);border-color:var(--accent)}
 
+.timeline-name-input{font-size:14px;font-weight:500;color:var(--text);line-height:1.4;background:transparent;border:none;border-bottom:1px dashed var(--border);padding:2px 0;width:100%;font-family:inherit;outline:none}
+.timeline-name-input:hover{background:var(--panel)}
+.timeline-name-input:focus{background:var(--panel);border-bottom-color:var(--accent);padding:2px 8px}
 .empty-state{color:var(--text-dim);font-size:13px;padding:16px 0}
 
 /* Phase execution mode toggle */
@@ -116,6 +70,11 @@
 .execution-toggle:hover{background:var(--panel);border-color:var(--accent)}
 .mode-sync{color:var(--green)}
 .mode-parallel{color:var(--orange)}
+/* Skill remove inside badge */
+.timeline-badges .badge .skill-remove-btn{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border:none;border-radius:999px;background:transparent;color:var(--text-dim);cursor:pointer;font-size:12px;line-height:1;padding:0;margin-left:2px}
+.timeline-badges .badge .skill-remove-btn:hover{color:var(--red);background:rgba(239,68,68,.12)}
+.timeline-badges select.skill-candidate{width:auto;max-width:180px;height:24px;font-size:11px;padding:0 4px;background:var(--panel);border:1px solid var(--border);border-radius:4px;color:var(--text-secondary)}
+
 {% endblock %}
 
 {% block content %}
@@ -177,7 +136,7 @@
     </div>
 
     {% macro instruction_body(i, instruction_count) %}
-    <div class="timeline-row" style="grid-template-columns:84px minmax(0,1fr)">
+    <div class="timeline-row" >
       <div class="phase-order-controls">
         <button type="button" class="phase-move-btn move-up-btn" onclick="moveInstruction(this, -1)" aria-label="Поднять выше">↑</button>
         <button type="button" class="phase-add-btn" onclick="addInstructionAfter(this)" aria-label="Добавить после">+</button>
@@ -186,9 +145,9 @@
         <div class="phase-order-hint">Порядок<br>меняется тут</div>
       </div>
       <div class="timeline-card" data-instruction-id="{{ i.id }}" data-step-num="{{ i.step_num }}" data-type="{{ i.execution_type }}">
-        <input type="text" class="inline-input" value="{{ i.description }}" data-field="description" onblur="saveInstructionDescription(this)">
+        <input type="text" class="timeline-name-input" value="{{ i.description }}" data-field="description" onblur="saveInstructionDescription(this)">
         <div class="timeline-badges">
-          <span class="badge {{ 'badge-parallel' if i.execution_type == 'parallel' else 'badge-sync' }}" style="{{ 'background:var(--orange-soft);color:var(--orange)' if i.execution_type == 'parallel' else 'background:var(--green-soft);color:var(--green)' }};cursor:pointer" onclick="toggleInstructionType(this)">
+          <span class="badge {{ 'badge-parallel' if i.execution_type == 'parallel' else 'badge-sync' }}" style="cursor:pointer" onclick="toggleInstructionType(this)" role="button" tabindex="0">
             {% if i.execution_type == 'parallel' %}⚡ parallel{% else %}⏱ sync{% endif %}
           </span>
           {% for s in i.skills or [] %}
@@ -197,11 +156,11 @@
             <button type="button" class="skill-remove-btn" onclick="removeSkillFromInstruction(this, '{{ s }}')" aria-label="Убрать {{ s }}">×</button>
           </span>
           {% endfor %}
-          <select class="inline-input skill-candidate" data-field="skill-candidate" onchange="addSkillToInstruction(this)" {% if not i.available_skills %}disabled{% endif %} style="width:auto;height:22px;font-size:11px;padding:0 4px">
+          <select class="skill-candidate" data-field="skill-candidate" onchange="addSkillToInstruction(this)" {% if not i.available_skills %}disabled{% endif %}>
             {% if i.available_skills %}
             <option value="">+ skill</option>
               {% for skill in i.available_skills %}
-              <option value="{{ skill.name }}">{{ skill.name }}{% if skill.category %} — {{ skill.category }}{% endif %}</option>
+              <option value="{{ skill.name }}">{{ skill.name }}</option>
               {% endfor %}
             {% else %}
             <option value="">Все skills выбраны</option>
@@ -212,7 +171,7 @@
     </div>
     {% endmacro %}
 
-    <div class="timeline" id="instructionsTimeline" style="max-width:none">
+    <div class="timeline" id="instructionsTimeline">
       {% set runs = phase.instructions|group_instructions %}
       {% for run in runs %}
         {% if run|length > 1 %}
