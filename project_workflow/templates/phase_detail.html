@@ -147,9 +147,11 @@
       <div class="timeline-card" data-instruction-id="{{ i.id }}" data-step-num="{{ i.step_num }}" data-type="{{ i.execution_type }}">
         <input type="text" class="timeline-name-input" value="{{ i.description }}" data-field="description" onblur="saveInstructionDescription(this)">
         <div class="timeline-badges">
-          <span class="badge {{ 'badge-parallel' if i.execution_type == 'parallel' else 'badge-sync' }}" style="cursor:pointer" onclick="toggleInstructionType(this)" role="button" tabindex="0">
+          <button type="button" class="badge {{ 'badge-parallel' if i.execution_type == 'parallel' else 'badge-sync' }}" onclick="toggleInstructionType(this)" aria-label="Режим выполнения: {{ i.execution_type }}">
             {% if i.execution_type == 'parallel' %}⚡ parallel{% else %}⏱ sync{% endif %}
-          </span>
+          </button>
+        </div>
+        <div class="timeline-badges">
           {% for s in i.skills or [] %}
           <span class="badge" style="background:var(--accent-soft);color:var(--accent)">
             {{ s }}

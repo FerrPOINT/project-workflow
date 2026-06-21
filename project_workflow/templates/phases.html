@@ -35,9 +35,13 @@
     <div class="timeline-desc">{{ d[:120] }}{% if d|length > 120 %}...{% endif %}</div>
     {% endif %}
     <div class="timeline-badges">
+      <button type="button" class="badge {{ 'badge-parallel' if p.execution_type == 'parallel' else 'badge-sync' }}" onclick="togglePhaseType(this)" aria-label="Режим выполнения: {{ p.execution_type }}">
+        {% if p.execution_type == 'parallel' %}⚡ parallel{% else %}⏱ sync{% endif %}
+      </button>
+    </div>
+    <div class="timeline-badges">
       {% if p.agent_name %}<span class="badge badge-agent">🤖 {{ p.agent_name }}</span>{% endif %}
       {% if p.is_delegated %}<span class="badge badge-delegate">👤 delegate</span>{% endif %}
-      {% if p.execution_type == 'parallel' %}<span class="badge badge-parallel">⚡ parallel</span>{% endif %}
     </div>
   </a>
 </div>
@@ -164,6 +168,30 @@ async function deletePhase(button) {
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok || !data.ok) {
       showToast(data.error || 'Не удалось удалить фазу', 'error');
+      return;
+    }
+    window.location.reload();
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function togglePhaseType(button) {
+  const item = button.closest('.timeline-item');
+  if (!item) return;
+  const phaseId = item.dataset.phaseId;
+  const isSync = (item.dataset.executionType || 'sync') === 'sync';
+  const nextType = isSync ? 'parallel' : 'sync';
+  button.disabled = true;
+  try {
+    const resp = await fetch('/api/phases/' + phaseId, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({execution_type: nextType}),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || !data.ok) {
+      showToast(data.error || 'Не удалось сменить режим', 'error');
       return;
     }
     window.location.reload();
