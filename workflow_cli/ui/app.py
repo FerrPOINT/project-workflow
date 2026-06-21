@@ -10,7 +10,7 @@ from .routes import api, pages
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="workflow-cli UI", version=__version__)
+    app = FastAPI(title="project-workflow UI", version=__version__)
 
     # Pages
     app.get("/", response_class=HTMLResponse)(pages.index)

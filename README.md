@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://capsule-render.vercel.app/api?type=waving&height=180&text=workflow-cli&desc=State-driven%20workflow%20engine&color=gradient&customColorList=0,2,2,5,30" alt="workflow-cli banner" />
+  <img src="https://capsule-render.vercel.app/api?type=waving&height=180&text=project-workflow&desc=State-driven%20workflow%20platform&color=gradient&customColorList=0,2,2,5,30" alt="project-workflow banner" />
 </p>
 
 <p align="center">
@@ -32,10 +32,11 @@
 
 ## Позиционирование
 
-**workflow-cli** — это пофазовый движок задач с жёстким контролем переходов.
-Каждая задача проходит по заранее определённому workflow из фаз с инструкциями, чек-листами и артефактами.
-CLI агент отчитывается текстом — supervisor оценивает отчёт и решает: PASS, ROLLBACK или BLOCK.
-Всё управление workflow-шаблонами, фазами, проектами и агентами делается через веб-UI.
+**project-workflow** — это пофазовая платформа управления задачами.
+В ядре — жёсткий контроль переходов между фазами: агент отчитывается через CLI, встроенный supervisor оценивает отчёт и решает PASS / ROLLBACK / BLOCK.
+Всё управление workflow-шаблонами, фазами, проектами и агентами ведётся через Web UI.
+
+CLI-часть платформы остаётся максимально узкой: ровно две команды — `step` и `history`.
 
 ---
 
@@ -65,8 +66,8 @@ CLI агент отчитывается текстом — supervisor оцени
 ### Установка
 
 ```bash
-git clone https://github.com/FerrPOINT/project-workflow-cli.git
-cd project-workflow-cli
+git clone https://github.com/FerrPOINT/project-workflow.git
+cd project-workflow
 python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev,ui]"
@@ -252,7 +253,7 @@ flowchart LR
 ## 📫 Links
 
 <p align="center">
-  <a href="https://github.com/FerrPOINT/project-workflow-cli"><img src="https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white" /></a>
+  <a href="https://github.com/FerrPOINT/project-workflow"><img src="https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white" /></a>
 </p>
 
 ---
