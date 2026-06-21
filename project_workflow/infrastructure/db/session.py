@@ -60,10 +60,20 @@ def get_database_url() -> str:
     return url
 
 
+def _normalize_url(url: str | None) -> str:
+    if not url:
+        return get_database_url()
+    if "://" in url:
+        return url
+    if Path(url).suffix == ".db":
+        return f"sqlite:///{url}"
+    return url
+
+
 def get_engine(url: str | None = None) -> Engine:
     """Return a cached or newly created SQLAlchemy engine."""
     global _engine
-    target = url or get_database_url()
+    target = _normalize_url(url)
     normalized_target = str(target)
     if _engine is None or str(_engine.url) != normalized_target:
         if _is_sqlite(target):
