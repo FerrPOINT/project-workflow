@@ -1,17 +1,17 @@
 """Database connection / session factory.
 
-Supports both PostgreSQL (runtime) and SQLite (tests/fallback).
 The DSN is read from config.Settings.DATABASE_URL.
 """
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 from project_workflow.config import get_settings
 
@@ -25,36 +25,12 @@ def _is_sqlite(url: str) -> bool:
     return url.startswith("sqlite://")
 
 
-def _get_default_sqlite_url() -> str:
-    pkg_dir = Path(__file__).resolve().parent.parent.parent
-    return f"sqlite:///{pkg_dir / 'data' / 'workflow.db'}"
-
-
-@event.listens_for(Engine, "connect")
-def _set_sqlite_pragma(dbapi_conn, connection_record):
-    # Only applies to SQLite connections
-    if getattr(connection_record, "dialect", None) is None or connection_record.dialect.name != "sqlite":
-        return
-    try:
-        cursor = dbapi_conn.cursor()
-    except AttributeError:
-        return
-    cursor.execute("PRAGMA journal_mode = WAL")
-    cursor.execute("PRAGMA synchronous = NORMAL")
-    cursor.execute("PRAGMA temp_store = MEMORY")
-    cursor.execute("PRAGMA cache_size = -32000")
-    cursor.execute("PRAGMA foreign_keys = ON")
-    cursor.close()
-
-
 def get_database_url() -> str:
     url = get_settings().DATABASE_URL
     if not url:
-        return _get_default_sqlite_url()
-    if "://" in url:
-        return url
-    if Path(url).suffix == ".db":
-        return f"sqlite:///{url}"
+        raise RuntimeError(
+            "DATABASE_URL is not configured. Set it to a PostgreSQL or SQLite DSN."
+        )
     return url
 
 
@@ -83,7 +59,6 @@ def get_engine(url: str | None = None) -> Engine:
                 echo=False,
             )
         else:
-            # PostgreSQL
             connect_args = {}
             schema = get_settings().DB_SCHEMA
             if schema:
@@ -99,15 +74,32 @@ def get_engine(url: str | None = None) -> Engine:
     return _engine
 
 
-def get_sessionmaker(url: str | None = None) -> sessionmaker:
+def get_sessionmaker(url: str | None = None) -> sessionmaker[Any]:
     """Return a sessionmaker bound to the given (or default) DB URL."""
     engine = get_engine(url)
     return sessionmaker(bind=engine, expire_on_commit=False)
 
 
-def get_session(url: str | None = None):
+def get_session(url: str | None = None) -> Session:
     """Return a new SQLAlchemy Session."""
     return get_sessionmaker(url)()
+
+
+@event.listens_for(Engine, "connect")
+def _set_sqlite_pragma(dbapi_conn: Any, connection_record: Any) -> None:
+    """Apply performance and correctness pragmas to SQLite connections."""
+    if getattr(connection_record, "dialect", None) is None or connection_record.dialect.name != "sqlite":
+        return
+    try:
+        cursor = dbapi_conn.cursor()
+    except AttributeError:
+        return
+    cursor.execute("PRAGMA journal_mode = WAL")
+    cursor.execute("PRAGMA synchronous = NORMAL")
+    cursor.execute("PRAGMA temp_store = MEMORY")
+    cursor.execute("PRAGMA cache_size = -32000")
+    cursor.execute("PRAGMA foreign_keys = ON")
+    cursor.close()
 
 
 def reset_engine() -> None:

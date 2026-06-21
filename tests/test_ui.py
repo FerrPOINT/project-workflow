@@ -843,6 +843,7 @@ class TestPhaseUpdate:
         assert original is not None
         assert original["execution_type"] == "sync"
         phase_api_path = _phase_api_path("4.5")
+        default_workflow_id = _workflow_row(name=config.DEFAULT_WORKFLOW_NAME)["id"]
 
         try:
             resp = client.put(phase_api_path, json={"execution_type": "parallel"})
@@ -852,7 +853,7 @@ class TestPhaseUpdate:
             assert updated is not None
             assert updated["execution_type"] == "parallel"
 
-            phases_resp = client.get("/api/phases")
+            phases_resp = client.get("/api/phases", params={"workflow_id": default_workflow_id})
             assert phases_resp.status_code == 200
             updated_phase = next(item for item in phases_resp.json()["phases"] if item["code"] == "4.5")
             assert updated_phase["execution_type"] == "parallel"

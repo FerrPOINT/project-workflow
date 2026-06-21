@@ -22,7 +22,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    DATABASE_URL: str = f"sqlite:///{_pkg_dir / 'data' / 'workflow.db'}"
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "")
     DB_SCHEMA: str = "project_workflow"
 
     UI_HOST: str = "0.0.0.0"
@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     JIRA_BASE_URL: str = "https://task.wemakedev.ru"
     GITLAB_BASE_URL: str = "https://gt.wmtgroup.ru"
 
-    WORKFLOW_DIR: str = os.getenv("WORKFLOW_DIR", str(_pkg_dir / "data"))
+    WORKFLOW_DIR: str = os.getenv("WORKFLOW_DIR", str(Path.home() / ".project-workflow"))
 
     @property
     def SETTINGS_PATH(self) -> str:
@@ -45,13 +45,10 @@ class Settings(BaseSettings):
 
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
-    def _normalize_sqlite_url(cls, value: str) -> str:
-        if value.startswith("sqlite://"):
+    def _normalize_database_url(cls, value: str) -> str:
+        if value:
             return value
-        if value.startswith("postgresql"):
-            return value
-        if Path(value).suffix == ".db":
-            return f"sqlite:///{value}"
+        # Required setting; let pydantic raise if missing.
         return value
 
     @property

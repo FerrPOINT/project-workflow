@@ -244,7 +244,7 @@ class TestWizardEngineEvaluateLLM:
     def engine(self, tmp_path, monkeypatch):
         test_db = tmp_path / "workflow.db"
         import project_workflow.db as db_module
-        monkeypatch.setattr(db_module.base, "DB_PATH", str(test_db))
+        monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
         monkeypatch.setattr("project_workflow.wizard.SMART_EVALUATE", True)
         with patch("project_workflow.wizard.convo") as mock_convo:
@@ -321,7 +321,7 @@ class TestWizardEngineEvaluateLLMWithRule:
     def engine(self, tmp_path, monkeypatch):
         test_db = tmp_path / "workflow.db"
         import project_workflow.db as db_module
-        monkeypatch.setattr(db_module.base, "DB_PATH", str(test_db))
+        monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
         with patch("project_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
@@ -401,7 +401,7 @@ class TestWizardEngineLLMIntegrationDB:
     def engine(self, tmp_path, monkeypatch):
         test_db = tmp_path / "workflow.db"
         import project_workflow.db as db_module
-        monkeypatch.setattr(db_module.base, "DB_PATH", str(test_db))
+        monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
         monkeypatch.setattr("project_workflow.wizard.SMART_EVALUATE", True)
         with patch("project_workflow.wizard.convo") as mock_convo:

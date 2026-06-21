@@ -22,7 +22,7 @@ def _patch_runtime(monkeypatch, tmp_path: Path) -> Path:
     workflow_db = tmp_path / "workflow.db"
     convo_dir = tmp_path / ".project-workflow"
     convo_db = convo_dir / "conversation.db"
-    monkeypatch.setattr("project_workflow.db.base.DB_PATH", workflow_db)
+    monkeypatch.setattr("project_workflow.db.DB_PATH", workflow_db)
     monkeypatch.setattr("project_workflow.db.DB_PATH", workflow_db)
     monkeypatch.setattr("project_workflow.conversation.DB_DIR", convo_dir)
     monkeypatch.setattr("project_workflow.conversation.DB_PATH", convo_db)

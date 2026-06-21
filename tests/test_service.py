@@ -13,7 +13,7 @@ from project_workflow.service import PhaseService
 @pytest.fixture
 def fresh_db(tmp_path, monkeypatch):
     import project_workflow.db as db_module
-    monkeypatch.setattr(db_module.base, "DB_PATH", tmp_path / "workflow.db")
+    monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "workflow.db")
     monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "workflow.db")
     db = WorkflowDB()
     db.init()

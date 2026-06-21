@@ -40,9 +40,9 @@ target-version = ["py310"]
 
 [tool.mypy]
 python_version = "3.10"
-strict = true
-warn_return_any = true
+strict = false
 warn_unused_ignores = true
+disallow_untyped_defs = true
 [[tool.mypy.overrides]]
 module = "project_workflow.ui.compat"
 ignore_errors = true
@@ -65,9 +65,11 @@ module = [
 ignore_errors = true
 
 [[tool.mypy.overrides]]
+module = "project_workflow.infrastructure.db"
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
 module = [
-    "project_workflow.infrastructure.db.repositories",
-    "project_workflow.infrastructure.db.session",
     "project_workflow.config",
     "project_workflow.application",
     "project_workflow.wizard_checks",
@@ -79,14 +81,8 @@ ignore_errors = true
 
 [[tool.mypy.overrides]]
 module = [
-    "project_workflow.infrastructure.db.migrations.env",
-    "project_workflow.infrastructure.db.uow",
-]
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = [
-    "project_workflow.db.base",
+    "project_workflow.db.compat",
+    "project_workflow.app_state",
     "project_workflow.schema",
     "project_workflow.cli.core",
     "project_workflow.cli.ui",

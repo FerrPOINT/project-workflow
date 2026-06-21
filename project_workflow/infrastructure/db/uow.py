@@ -1,6 +1,8 @@
 """SQLAlchemy Unit of Work."""
 from __future__ import annotations
 
+from typing import Any, Literal
+
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -33,17 +35,17 @@ class SAUnitOfWork(UnitOfWork):
             self._session = Session(bind=db_path_or_engine, expire_on_commit=False)
         else:
             self._session = get_session(db_path_or_engine)
-        self._workflows = SAWorkflowRepository(self._session)
-        self._phases = SAPhaseRepository(self._session)
-        self._projects = SAProjectRepository(self._session)
-        self._tasks = SATaskRepository(self._session)
-        self._agents = SAAgentRepository(self._session)
-        self._supervisor_runs = SASupervisorRunRepository(self._session)
+        self._workflows: SAWorkflowRepository = SAWorkflowRepository(self._session)
+        self._phases: SAPhaseRepository = SAPhaseRepository(self._session)
+        self._projects: SAProjectRepository = SAProjectRepository(self._session)
+        self._tasks: SATaskRepository = SATaskRepository(self._session)
+        self._agents: SAAgentRepository = SAAgentRepository(self._session)
+        self._supervisor_runs: SASupervisorRunRepository = SASupervisorRunRepository(self._session)
 
     def __enter__(self) -> UnitOfWork:
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> Literal[False]:
         if exc_type is not None:
             self.rollback()
         else:

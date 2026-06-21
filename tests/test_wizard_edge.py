@@ -13,7 +13,7 @@ from project_workflow.wizard import WizardEngine, format_result
 @pytest.fixture
 def fresh_db(tmp_path, monkeypatch):
     import project_workflow.db as db_module
-    monkeypatch.setattr(db_module.base, "DB_PATH", tmp_path / "workflow.db")
+    monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "workflow.db")
     monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "workflow.db")
     db = WorkflowDB()
     db.init()
@@ -30,7 +30,7 @@ class TestWizardInitErrors:
         # Make match_project_for_task_key return None by monkeypatching it
         import project_workflow.db as db_module
         monkeypatch = pytest.MonkeyPatch()
-        monkeypatch.setattr(db_module.base.WorkflowDB, "match_project_for_task_key", lambda self, tk, strict=True: None)
+        monkeypatch.setattr(db_module.WorkflowDB, "match_project_for_task_key", lambda self, tk, strict=True: None)
         try:
             with pytest.raises(ValueError, match="Cannot resolve project"):
                 WizardEngine("ZZZ-999")

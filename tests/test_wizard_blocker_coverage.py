@@ -62,18 +62,15 @@ class TestCoverageAccumulation:
 
     def test_get_previously_covered_reads_runs(self, tmp_path, monkeypatch):
         engine = self._make_engine(tmp_path, monkeypatch, "SMOKE-9999", "0")
-        # WizardEngine.__init__ already created the task
         tid = engine.task["id"]
-        # Create phase 0 in DB
-        with engine.db._conn() as conn:
-            conn.execute(
-                "INSERT OR REPLACE INTO phases (code, workflow_id, name, phase_order, execution_type) VALUES (?, 1, ?, 1, 'sync')",
-                ("0", "Test"),
-            )
-            pid = conn.execute("SELECT id FROM phases WHERE code=?", ("0",)).fetchone()["id"]
-            conn.commit()
+        pid = engine.db.create_phase({
+            "code": "0",
+            "workflow_id": 1,
+            "name": "Test",
+            "phase_order": 1,
+            "execution_type": "sync",
+        })
 
-        # Simulate previous run with covered items
         engine.db.create_supervisor_run({
             "task_id": tid,
             "phase_id": pid,
@@ -86,7 +83,6 @@ class TestCoverageAccumulation:
             "response": {},
         })
 
-        # Refresh engine
         engine.task = engine.db.get_task(tid)
         engine.all_phases = []
         class FakePhase:
@@ -132,10 +128,8 @@ class TestEvaluateAccumulationEndToEnd:
 
     def test_evaluate_across_reports(self, tmp_path, monkeypatch):
         engine = self._make_engine(tmp_path, monkeypatch, "SMOKE-9996", "0")
-        # task already created by WizardEngine.__init__
         tid = engine.task["id"]
 
-        # Create phase with 2 instructions
         class Check:
             def __init__(self, description):
                 self.description = description
@@ -144,29 +138,17 @@ class TestEvaluateAccumulationEndToEnd:
             def __init__(self, step):
                 self.step = step
 
-        with engine.db._conn() as conn:
-            conn.execute(
-                "INSERT OR REPLACE INTO phases (code, workflow_id, name, phase_order, execution_type) VALUES (?, 1, ?, 1, 'sync')",
-                ("0", "Test"),
-            )
-            pid = conn.execute("SELECT id FROM phases WHERE code=?", ("0",)).fetchone()["id"]
-            conn.execute(
-                "INSERT OR REPLACE INTO instructions (phase_id, step_num, description, execution_type) VALUES (?, 1, ?, 'sync')",
-                (pid, "Run tests first"),
-            )
-            conn.execute(
-                "INSERT OR REPLACE INTO instructions (phase_id, step_num, description, execution_type) VALUES (?, 2, ?, 'sync')",
-                (pid, "Fix failing code"),
-            )
-            conn.execute(
-                "INSERT OR REPLACE INTO checks (phase_id, description) VALUES (?, ?)",
-                (pid, "tests run"),
-            )
-            conn.execute(
-                "INSERT OR REPLACE INTO checks (phase_id, description) VALUES (?, ?)",
-                (pid, "code fixed"),
-            )
-            conn.commit()
+        pid = engine.db.create_phase({
+            "code": "0",
+            "workflow_id": 1,
+            "name": "Test",
+            "phase_order": 1,
+            "execution_type": "sync",
+        })
+        engine.db.create_instruction({"phase_id": pid, "step_num": 1, "description": "Run tests first", "execution_type": "sync"})
+        engine.db.create_instruction({"phase_id": pid, "step_num": 2, "description": "Fix failing code", "execution_type": "sync"})
+        engine.db.create_check({"phase_id": pid, "description": "tests run"})
+        engine.db.create_check({"phase_id": pid, "description": "code fixed"})
 
         # Mock phase map
         class FakePhase:

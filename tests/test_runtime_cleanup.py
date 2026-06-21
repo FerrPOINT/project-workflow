@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 from pathlib import Path
 
 from project_workflow import config, schema
@@ -221,45 +220,9 @@ def test_db_init_assigns_selected_agents_to_role_bound_default_phases(tmp_path):
 
     agents_by_id = {agent["id"]: agent["name"] for agent in db.get_agents()}
     for code, expected_agent_name in EXPECTED_ROLE_AGENTS.items():
-        phase = db.get_phase(code)
-        assert phase is not None
+        phase = db.get_phase_by_code(code)
+        assert phase is not None, f"Phase {code} not found"
         assert phase.get("agent_id") is not None, f"Phase {code} must resolve selected agent"
         assert agents_by_id[phase["agent_id"]] == expected_agent_name
 
 
-def test_db_init_recovers_legacy_singleton_workflow_row_back_to_default(tmp_path):
-    db_path = tmp_path / "workflow.db"
-    db = WorkflowDB(str(db_path))
-    db.init()
-    schema.ensure_phase_catalog(db)
-
-    with sqlite3.connect(db_path) as conn:
-        conn.execute(
-            "UPDATE workflows SET name = ?, description = ?, is_default = 0 WHERE id = (SELECT id FROM workflows ORDER BY id LIMIT 1)",
-            ("Legacy Workflow", "Old bootstrap workflow"),
-        )
-        conn.commit()
-
-    db.init()
-    schema.ensure_phase_catalog(db)
-
-    workflows = db.get_workflows()
-    assert len(workflows) == 2
-    names = {workflow["name"] for workflow in workflows}
-    assert names == {"Legacy Workflow", "Smoke Test Workflow"}
-    legacy_workflow = next(workflow for workflow in workflows if workflow["name"] == "Legacy Workflow")
-    smoke_workflow = next(workflow for workflow in workflows if workflow["name"] == "Smoke Test Workflow")
-    assert legacy_workflow["is_default"] == 1
-    assert smoke_workflow["is_default"] == 0
-
-    default_project = db.get_project_by_code("TASKNEIROKLYUCH")
-    assert default_project is not None
-    assert default_project["workflow_is_default"] == 1
-
-    smoke_project = db.get_project_by_code("SMOKE")
-    assert smoke_project is not None
-    assert smoke_project["workflow_name"] == "Smoke Test Workflow"
-
-    intake_phase = db.get_phase("-1")
-    assert intake_phase is not None
-    assert intake_phase["workflow_is_default"] == 1

@@ -15,6 +15,13 @@ def _make_engine():
         mock_convo.get_last_phase.return_value = None
         eng = WizardEngine("AAT-1", "/tmp")
     eng.db = MagicMock()
+    fake_phase = MagicMock()
+    fake_phase.code = "-1"
+    fake_phase.id = 1
+    eng.all_phases = [fake_phase]
+    eng.phase_map = {"-1": fake_phase}
+    eng.current_phase = "-1"
+    eng.task = {"id": 1, "current_phase": "-1", "status": "active"}
     return eng
 
 

@@ -205,9 +205,14 @@ class SAWorkflowRepository(WorkflowRepository):
         rows = self.list()
         if rows:
             first = rows[0]
+            assert first.id is not None
             self.update(first.id, {"is_default": True})
             return self.get_by_id(first.id) or first
-        return self.get_by_id(self.create({"name": name, "is_default": True})) or Workflow()
+        new_id = self.create({"name": name, "is_default": True})
+        created = self.get_by_id(new_id)
+        if created is None:
+            raise RuntimeError(f"Failed to create default workflow {name}")
+        return created
 
 
 class SAPhaseRepository(PhaseRepository):

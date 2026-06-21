@@ -3,6 +3,8 @@ from pathlib import Path
 import sys
 
 import os
+from typing import Any
+
 from sqlalchemy import engine_from_config, pool, text
 
 from alembic import context
@@ -36,7 +38,7 @@ if DATABASE_URL:
 SCHEMA = get_settings().DB_SCHEMA
 
 
-def _ensure_schema(connection) -> None:
+def _ensure_schema(connection: Any) -> None:
     """Create target schema before running migrations on PostgreSQL."""
     dialect = connection.dialect.name
     if dialect != "postgresql":
