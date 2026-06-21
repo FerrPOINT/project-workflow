@@ -1,211 +1,262 @@
-# workflow-cli
+<p align="center">
+  <img src="https://capsule-render.vercel.app/api?type=waving&height=180&text=workflow-cli&desc=State-driven%20workflow%20engine&color=gradient&customColorList=0,2,2,5,30" alt="workflow-cli banner" />
+</p>
 
-State-driven workflow CLI с FastAPI/Jinja2 веб-UI для просмотра и редактирования данных workflow.
+<p align="center">
+  <a href="#features"><img src="https://img.shields.io/badge/✨%20Features-0B1220?style=for-the-badge" /></a>
+  <a href="#cli"><img src="https://img.shields.io/badge/🖥️%20CLI-111827?style=for-the-badge" /></a>
+  <a href="#ui"><img src="https://img.shields.io/badge/🌐%20Web%20UI-1F2937?style=for-the-badge" /></a>
+  <a href="#architecture"><img src="https://img.shields.io/badge/🏗️%20Architecture-374151?style=for-the-badge" /></a>
+  <a href="#quality"><img src="https://img.shields.io/badge/🛡️%20Quality-4B5563?style=for-the-badge" /></a>
+</p>
 
-## Что есть сейчас
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.11-blue?style=flat-square&logo=python&logoColor=white" alt="Python" />
+  <img src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
+  <img src="https://img.shields.io/badge/SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite" />
+  <img src="https://img.shields.io/badge/SQLAlchemy-D71F00?style=flat-square&logo=sqlalchemy&logoColor=white" alt="SQLAlchemy" />
+  <img src="https://img.shields.io/badge/Pydantic-E92063?style=flat-square&logo=pydantic&logoColor=white" alt="Pydantic" />
+  <img src="https://img.shields.io/badge/Click-yellow?style=flat-square&logo=clickhouse&logoColor=white" alt="Click" />
+  <img src="https://img.shields.io/badge/Rich-000000?style=flat-square&logo=rich&logoColor=white" alt="Rich" />
+  <img src="https://img.shields.io/badge/Jinja2-B41717?style=flat-square&logo=jinja&logoColor=white" alt="Jinja2" />
+  <img src="https://img.shields.io/badge/Alembic-6B8E23?style=flat-square&logo=alembic&logoColor=white" alt="Alembic" />
+</p>
 
-- **CLI** — ровно 2 команды:
-  - `step` — показать текущую фазу / подать отчёт и перейти дальше
-  - `history` — история отчётов, переходов и статусов по задаче
-  - Глобальный флаг `--json` — машиночитаемый вывод для автоматизации
-- **SQLite** хранит:
-  - **workflows** — workflow-шаблоны (с дефолтным)
-  - **phases** — фазы workflow с `execution_type` (`sync` / `parallel`)
-  - **instructions** — пошаговые инструкции фаз
-  - **checks / evidence** — чек-листы и артефакты фаз
-  - **projects** — проекты + `key_patterns` (source of truth для regex ключей задач)
-  - **tasks** — задачи с `task_key` (ранее `jira_key`)
-  - **agents** — агенты исполнители
-  - **task_history** — история прохождения фаз
-  - **supervisor_runs** — запуски встроенного workflow supervisor
-  - **cli_history** — аудит CLI-вызовов
-- **Встроенный workflow supervisor** — оценивает прогресс задачи по плану/фазам/артефактам/CLI-отчётам
-- **TaskKeyValidator** — валидация ключей задач через настраиваемые regex из `projects.key_patterns`
-- **/settings** — read-only реестр реальных CLI-команд (автообновляется при изменении CLI)
-- **/skills** — просмотр скиллов проекта
+<p align="center">
+  <img src="https://img.shields.io/badge/pytest-0A9EDC?style=flat-square&logo=pytest&logoColor=white" alt="pytest" />
+  <img src="https://img.shields.io/badge/ruff-261230?style=flat-square&logo=ruff&logoColor=white" alt="ruff" />
+  <img src="https://img.shields.io/badge/mypy-2E6AFF?style=flat-square&logo=mypy&logoColor=white" alt="mypy" />
+</p>
 
-## Установка
+---
+
+## Позиционирование
+
+**workflow-cli** — это пофазовый движок задач с жёстким контролем переходов.
+Каждая задача проходит по заранее определённому workflow из фаз с инструкциями, чек-листами и артефактами.
+CLI агент отчитывается текстом — supervisor оценивает отчёт и решает: PASS, ROLLBACK или BLOCK.
+Всё управление workflow-шаблонами, фазами, проектами и агентами делается через веб-UI.
+
+---
+
+<a name="features"></a>
+## ✨ Features
+
+| Feature | Описание |
+|---------|----------|
+| **Жёсткий пофазовый workflow** | Каждая задача привязана к workflow; переходы контролируются `WizardEngine` + `PhaseFSM`. |
+| **Двухкомандный CLI** | Только `step` и `history`. JSON-режим для автоматизации. |
+| **Web UI** | 11 страниц: dashboard, phases, projects, workflows, agents, tasks, settings, skills. |
+| **JSON API** | 23 endpoint для CRUD фаз, workflow, проектов, агентов и задач. |
+| **TaskKeyValidator** | Валидация ключей задач по настраиваемым regex из `projects.key_patterns`. |
+| **SMART evaluate** | Опциональная LLM-оценка отчёта (Ollama Cloud / local) с fallback на rule-based. |
+| **Слои Clean Architecture** | `domain/` → `application/` → `infrastructure/` → `workflow_cli/ui/` / `cli/`. |
+| **SQLite + Alembic** | Миграции, SQLAlchemy repositories, единый `WorkflowService` / `PhaseServiceApp`. |
+
+---
+
+<a name="cli"></a>
+## 🖥️ CLI
+
+> **Правило проекта:** в CLI ровно две команды — `step` и `history`.
+> CRUD workflows / phases / projects / agents и администрирование выполняются через Web UI.
+> Подробный план рефакторинга: [`docs/plans/2026-06-21-refactor-roadmap.md`](docs/plans/2026-06-21-refactor-roadmap.md).
+
+### Установка
 
 ```bash
-cd /opt/dev/hermes-workspace/workflow-cli-cli
+git clone https://github.com/FerrPOINT/project-workflow-cli.git
+cd project-workflow-cli
 python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev,ui]"
 ```
 
-## CLI
+### step
+
+Показать текущую фазу или подать отчёт и перейти дальше:
 
 ```bash
-workflow-cli --help
+workflow-cli step --task TASK-42
+workflow-cli step --task TASK-42 --report "сделал X, проверил Y"
 ```
 
-### 1) step
+### history
 
-Показать текущую фазу / перейти по отчёту:
+История отчётов, переходов и статусов по задаче:
 
 ```bash
-workflow-cli step --task TASKNEIROKLYUCH-456
-workflow-cli step --task TASKNEIROKLYUCH-456 --report "сделал X, проверил Y"
+workflow-cli history --task TASK-42
+workflow-cli history --task TASK-42 --n 50
 ```
-
-При первом вызове задача автоматически создаётся в БД. Нет необходимости вручную инициализировать `info/` или `progress.json`.
-
-Параметры:
-- `--task` — ключ задачи, обязателен
-- `--report` — отчёт агента
-
-### 2) history
-
-История сообщений/переходов по задаче:
-
-```bash
-workflow-cli history --task TASKNEIROKLYUCH-456
-workflow-cli history --task TASKNEIROKLYUCH-456 --n 50
-```
-
-Параметры:
-- `--task` — ключ задачи, обязателен
-- `--n` — количество записей; без параметра — вся история
 
 ### JSON-режим
 
 ```bash
-workflow-cli --json step --task TASKNEIROKLYUCH-456 --report "..."
+workflow-cli --json step --task TASK-42 --report "..."
 ```
 
-## Web UI
+---
 
-Запуск (systemd service `workflow-ui.service`):
+<a name="ui"></a>
+## 🌐 Web UI
+
+Запуск через systemd:
 
 ```bash
-systemctl restart workflow-ui.service
-# Или вручную для разработки:
+systemctl restart wartz-ui.service
+```
+
+Или вручную для разработки:
+
+```bash
 python -m workflow_cli.ui --host 0.0.0.0 --port 8811
 ```
 
-Страницы:
-- `/` — dashboard
-- `/phases` — список фаз
-- `/phase/{id}` — детальная карточка фазы (инструкции, чеки, эвиденс)
-- `/tasks` — список задач
-- `/task/{task_key}` — детальная карточка задачи + история supervisor
-- `/projects` — CRUD проектов и regex ключей
-- `/agents` — CRUD агентов
-- `/workflows` — CRUD workflow-шаблонов
-- `/skills` — скиллы проекта
-- `/settings` — read-only реестр CLI-команд
+### Страницы
 
-## API
+| Страница | URL | Что делает |
+|----------|-----|-----------|
+| Dashboard | `/` | Сводка по задачам, фазам, агентам |
+| Phases | `/phases` | Список фаз + порядок |
+| Phase detail | `/phase/{phase_id}` | Инструкции, чеки, эвиденс |
+| Tasks | `/tasks` | Список задач |
+| Task detail | `/task/{task_key}` | История и текущая фаза |
+| Projects | `/projects` | CRUD проектов + key patterns |
+| Workflows | `/workflows` | CRUD workflow-шаблонов |
+| Agents | `/agents` | CRUD агентов |
+| Skills | `/skills` | Справочник скиллов |
+| Settings | `/settings` | Read-only реестр CLI-команд |
 
-JSON endpoints:
-- `/api/phases`
-- `/api/phases/{phase_id}`
-- `/api/phases/order` (PUT — изменение порядка)
-- `/api/tasks`
-- `/api/projects` (GET/POST/PUT/DELETE)
-- `/api/agents` (GET/POST/PUT/DELETE)
-- `/api/workflows` (GET/POST/PUT/DELETE)
-- `/api/settings`
-- `/api/skills`
+### API
 
-## Структура проекта
+| Endpoint | Метод | Описание |
+|----------|-------|----------|
+| `/api/workflows` | GET / POST | Список / создание workflow |
+| `/api/workflows/{id}` | PUT / DELETE | Обновление / удаление workflow |
+| `/api/phases` | GET / POST | Список / создание фазы |
+| `/api/phases/{id}` | GET / PUT / DELETE | Детали / обновление / удаление фазы |
+| `/api/phases/order` | PUT | Изменение порядка фаз |
+| `/api/projects` | GET / POST / PUT / DELETE | CRUD проектов |
+| `/api/agents` | GET / POST / PUT / DELETE | CRUD агентов |
+| `/api/tasks` | GET | Список задач |
+| `/api/tasks/{task_key}` | GET | Детали задачи |
+| `/api/skills` | GET | Каталог скиллов |
+| `/api/settings` | GET | Настройки и CLI-реестр |
 
-```text
-workflow_cli/
-├── __init__.py
-├── config.py              # Конфигурация + константы
-├── conversation.py          # История переговоров / keyword-поиск
-├── db/                    # SQLite persistence
-│   ├── __init__.py
-│   ├── base.py             # WorkflowDB — ORM-lite над SQLite
-│   └── db_schema.sql       # DDL схемы БД
-├── models.py              # Domain dataclasses (Phase, PhaseCheck, etc.)
-├── phases.py              # Phase helpers: get_next_phase, checklists, console tables
-├── schema.py              # Phase loader from DB + JSON seed sync
-├── service.py             # PhaseService — бизнес-логика
-├── task_validator.py      # Валидация task_key через проектные regex
-├── ui.py                  # FastAPI приложение + шаблоны
-├── llm.py                 # OllamaClient (local/cloud) для SMART_EVALUATE
-├── wizard.py              # WizardEngine — evaluate / transitions / supervisor facade
-├── wizard_types.py        # PhaseContract, PromptCache, WizardAssessment, etc.
-├── wizard_contracts.py    # PhaseContractBuilder
-├── wizard_checks.py       # Coverage / blockers / keyword matching / verdict builder
-├── wizard_context.py      # get_full_context, report template
-├── wizard_evaluate.py     # evaluate_llm_report
-├── wizard_store.py        # _record_transition, DB writes, assessment persist
-├── cli/
-│   ├── __init__.py
-│   ├── core.py            # Общий group, helpers, --json
-│   └── ui.py              # Команды step / history
-├── references/
-│   ├── seed.json          # Сид-данные (source of truth для default workflow)
-│   └── smoke_seed.json    # Smoke-test сид
-└── templates/
-    ├── base.html
-    ├── dashboard.html
-    ├── phases.html
-    ├── phase_detail.html
-    ├── tasks.html
-    ├── task_detail.html
-    ├── projects.html
-    ├── agents.html
-    ├── workflows.html
-    ├── skills.html
-    └── settings.html
+---
+
+<a name="architecture"></a>
+## 🏗️ Architecture
+
+```mermaid
+flowchart TD
+    subgraph CLI["🖥️ CLI"]
+        step[step]
+        history[history]
+    end
+
+    subgraph UI["🌐 Web UI"]
+        pages[HTML pages]
+        api[JSON API]
+    end
+
+    subgraph App["application/"]
+        ws[WorkflowService]
+        ps[PhaseServiceApp]
+        prs[ProjectService]
+        ts[TaskService]
+        ags[AgentService]
+    end
+
+    subgraph Domain["domain/"]
+        models[Models + Repository interfaces]
+    end
+
+    subgraph Infra["infrastructure/db/"]
+        sa[SQLAlchemy models]
+        repo[Repositories]
+        alembic[Alembic migrations]
+    end
+
+    subgraph Legacy["legacy db/"]
+        wdb[WorkflowDB — в процессе миграции]
+    end
+
+    CLI -->|wizard| App
+    UI -->|routes| App
+    App --> Domain
+    Domain -->|implemented by| Infra
+    App -.->|ещё используется| Legacy
 ```
 
-## Тесты
+### Принципы
 
-```bash
-pytest -q
+- **Application services** — единая точка входа для бизнес-логики.
+- **Domain** не зависит от SQLAlchemy; `infrastructure/db/repositories.py` реализует интерфейсы из `domain/repositories.py`.
+- **UI routes** только валидируют входные данные, вызывают сервисы и формируют ответ.
+- **Raw SQL** допустим только в Alembic-миграциях.
+- **Seed/sync default workflow** — явная операция, не side-effect при каждом запросе.
+
+---
+
+<a name="workflow"></a>
+## 🔄 Жизненный цикл задачи
+
+```mermaid
+flowchart LR
+    A[Создание задачи] --> B{Определить workflow}
+    B --> C[Текущая фаза]
+    C --> D[Агент выполняет инструкции]
+    D --> E[Отчёт через CLI step]
+    E --> F{Supervisor evaluate}
+    F -->|PASS| G[Следующая фаза]
+    F -->|ROLLBACK| H[Предыдущая фаза]
+    F -->|BLOCK| I[Блокировка задачи]
+    G --> C
+    H --> C
 ```
 
-Покрытие (~31 test-модуль):
-- `test_cli_*.py` — CLI команды (core, UI, smart evaluate, e2e)
-- `test_db*.py` — БД + constraints (плохие значения отклоняются)
-- `test_models.py`, `test_phases.py`
-- `test_wizard*.py` — wizard evaluate, transitions, parallel groups, coverage, formatting, context
-- `test_llm.py` — OllamaClient (local/cloud/fallback)
-- `test_ui*.py` — UI endpoints + API
-- `test_supervisor.py` — supervisor runs
-- `test_smoke_workflow.py` — сквозной smoke
-- `test_runtime_cleanup.py` — seed hygiene, DB bootstrap, agent deduplication
+---
 
-## LLM Smart Evaluate (опционально)
+<a name="quality"></a>
+## 🛡️ Quality Bar
 
-При `SMART_EVALUATE=1` evaluate использует LLM (Ollama Cloud + kimi-k2.6) вместо keyword matching:
+| Контроль | Текущее состояние | Цель |
+|----------|-------------------|------|
+| Tests | **727 passed** | зелёный full suite |
+| Lint | **ruff green** | сохранять green |
+| Type check UI | **mypy workflow_cli/ui/ green** | mypy по всему `workflow_cli/` |
+| Coverage | не измерялась | ≥ 90% |
+| Raw SQL в production | 1 endpoint + legacy `db/base.py` | 0 вне миграций |
 
-```bash
-export SMART_EVALUATE=1
-workflow-cli step --task TASK-KEY --report "..."
-```
+---
 
-- **Dual-mode OllamaClient**: local `/api/chat` или cloud `/v1/chat/completions`
-- **Fallback**: при недоступности LLM → rule-based evaluate
-- **E2E**: пройдены все фазы от -1 до 5.5 через Ollama Cloud
+<a name="roadmap"></a>
+## 🗺️ Roadmap
 
-## Примечания
+Подробный план: [`docs/plans/2026-06-21-refactor-roadmap.md`](docs/plans/2026-06-21-refactor-roadmap.md).
 
-- Web UI не должен попадать в CLI как отдельная команда.
-- **CLI заморожен: ровно 2 команды — `step` и `history`.** Весь CRUD workflows/phases/projects/agents и администрирование делается через Web UI. Новые CLI-команды запрещены.
-- `/settings` подхватывает CLI-команды автоматически при изменении CLI.
-- Пустые / синтетические badge и placeholder-текст в UI считаются мусором и удаляются.
-- После выполнения задачи и прохождения проверок изменения должны быть закоммичены; завершённую работу нельзя оставлять в dirty working tree.
-- Данные workflow хранятся только в SQLite; файловый dual-state (`info/`, `progress.json`) удалён.
-- `WORKFLOW_DB_PATH` env-переменная переопределяет путь к БД (полезно для systemd).
+- [x] Разбить монолит `ui.py` на пакет `workflow_cli/ui/`
+- [x] Внедрить Pydantic-схемы для API inputs
+- [x] Добавить `workflow_cli/ui/__main__.py` для systemd
+- [x] Довести `mypy workflow_cli/ui/` до зелёного
+- [ ] Перевести UI routes с legacy `WorkflowDB` на application services
+- [ ] Дополнить application services до полного CRUD
+- [ ] Удалить / сузить `WorkflowDB` до Alembic-миграций
+- [ ] Типизировать `wizard.py` и декомпозировать логику
+- [ ] Добиться `mypy workflow_cli/ --ignore-missing-imports` green
 
-## Архитектура и ограничения
+---
 
-```text
-domain/          — модели и интерфейсы репозиториев
-infrastructure/ — SQLAlchemy engine, repositories, migrations, seed
-application/     — use-case сервисы (WorkflowService, PhaseServiceApp, ...)
-workflow_cli/ui/ — FastAPI/Jinja2 presentation layer
-workflow_cli/cli/— только 2 команды: step, history
-```
+## 📫 Links
 
-- Application services — единая точка входа для бизнес-логики.
-- UI routes не работают с `WorkflowDB` напрямую; вызывают сервисы.
-- Raw SQL допустим только в Alembic-миграциях.
-- Seed/sync default workflow — явная операция, а не side-effect на каждый запрос.
-- Подробный план рефакторинга: `docs/plans/2026-06-21-refactor-roadmap.md`.
+<p align="center">
+  <a href="https://github.com/FerrPOINT/project-workflow-cli"><img src="https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white" /></a>
+</p>
+
+---
+
+<p align="center">
+  <img src="https://capsule-render.vercel.app/api?type=waving&height=100&section=footer&color=gradient&customColorList=0,2,2,5,30" alt="footer" />
+</p>
