@@ -25,7 +25,9 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "WORKFLOW_DIR", str(runtime_dir))
     monkeypatch.setattr(config, "SETTINGS_PATH", str(settings_path))
     monkeypatch.setattr(schema_module, "_SEED_PATH", seed_path)
-    monkeypatch.setattr(ui_module, "_app_state", ui_module._AppState())
+
+    # Reset the shared UI app state so it picks up the monkeypatched DB_PATH.
+    ui_module._app_state.reset()
 
     # Reduce FD pressure in tests: monkeypatch _conn to skip WAL
     import sqlite3
@@ -52,6 +54,5 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
 
     yield
 
-    ui_module._db = None
-    ui_module._srv = None
+    ui_module._app_state.reset()
     monkeypatch.setattr(WorkflowDB, "_conn", _orig_conn)

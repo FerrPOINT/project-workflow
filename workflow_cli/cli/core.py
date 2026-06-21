@@ -9,7 +9,7 @@ from typing import Any
 import click
 from rich.console import Console
 
-from .. import task_validator
+from .. import __version__, task_validator
 
 console = Console()
 
@@ -43,10 +43,9 @@ def _require_valid_key(task_key: str) -> str:
         raise click.Abort()
     return validated.normalized or task_key
 
-"""Workflow CLI — жёсткий пофазовый клиент."""
 
 @click.group()
-@click.version_option(version="1.0.0", prog_name="workflow-cli")
+@click.version_option(version=__version__, prog_name="workflow-cli")
 @click.option("--json", "json_mode", is_flag=True, help="Машиночитаемый JSON вывод (для CLI-автоматизации и внешних исполнителей)")
 @click.pass_context
 def cli(ctx: click.Context, json_mode: bool) -> None:

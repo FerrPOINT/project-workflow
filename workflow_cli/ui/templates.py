@@ -1,0 +1,36 @@
+"""Jinja2 template setup and custom filters for the UI."""
+
+from __future__ import annotations
+
+import json as _json
+from pathlib import Path
+from typing import Any
+
+from fastapi.templating import Jinja2Templates
+from markupsafe import Markup
+
+
+BASE_DIR = Path(__file__).parent.parent
+
+
+def _tojson_unicode(value: Any, indent: int = 2) -> Markup:
+    return Markup(_json.dumps(value, ensure_ascii=False, indent=indent, default=str))
+
+
+def _group_instructions(instructions: list[dict[str, Any]] | None) -> list[list[dict[str, Any]]]:
+    """Группирует инструкции по runs: parallel примыкает к предыдущей sync и идёт с ней рядом."""
+    if not instructions:
+        return []
+    groups: list[list[dict[str, Any]]] = [instructions[0:1]]
+    for item in instructions[1:]:
+        if item.get("execution_type") == "parallel":
+            groups[-1].append(item)
+        else:
+            groups.append([item])
+    return groups
+
+
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+templates.env.filters["tojson_unicode"] = _tojson_unicode
+templates.env.filters["group_instructions"] = _group_instructions
+env = templates.env
