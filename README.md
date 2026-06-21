@@ -187,8 +187,25 @@ workflow-cli step --task TASK-KEY --report "..."
 ## Примечания
 
 - Web UI не должен попадать в CLI как отдельная команда.
+- **CLI заморожен: ровно 2 команды — `step` и `history`.** Весь CRUD workflows/phases/projects/agents и администрирование делается через Web UI. Новые CLI-команды запрещены.
 - `/settings` подхватывает CLI-команды автоматически при изменении CLI.
 - Пустые / синтетические badge и placeholder-текст в UI считаются мусором и удаляются.
 - После выполнения задачи и прохождения проверок изменения должны быть закоммичены; завершённую работу нельзя оставлять в dirty working tree.
 - Данные workflow хранятся только в SQLite; файловый dual-state (`info/`, `progress.json`) удалён.
 - `WORKFLOW_DB_PATH` env-переменная переопределяет путь к БД (полезно для systemd).
+
+## Архитектура и ограничения
+
+```text
+domain/          — модели и интерфейсы репозиториев
+infrastructure/ — SQLAlchemy engine, repositories, migrations, seed
+application/     — use-case сервисы (WorkflowService, PhaseServiceApp, ...)
+workflow_cli/ui/ — FastAPI/Jinja2 presentation layer
+workflow_cli/cli/— только 2 команды: step, history
+```
+
+- Application services — единая точка входа для бизнес-логики.
+- UI routes не работают с `WorkflowDB` напрямую; вызывают сервисы.
+- Raw SQL допустим только в Alembic-миграциях.
+- Seed/sync default workflow — явная операция, а не side-effect на каждый запрос.
+- Подробный план рефакторинга: `docs/plans/2026-06-21-refactor-roadmap.md`.

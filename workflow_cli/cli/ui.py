@@ -1,8 +1,13 @@
-"""CLI commands — 2 команды: step, history.
+"""CLI commands — ровно 2 команды: step, history.
 
-ВНИМАНИЕ: Этот файл содержит РОВНО 2 команды. Не добавлять новые.
-- step     --task TASK-KEY [--report TEXT]
-- history  --task TASK-KEY [--n N]
+ПРАВИЛО ПРОЕКТА: новые CLI-команды ЗАПРЕЩЕНЫ.
+Весь CRUD workflows/phases/projects/agents и администрирование выполняется через Web UI.
+Если кто-то добавит @cli.command() сюда — тесты поймают
+(см. test_ui.py::test_only_two_commands_allowed).
+
+Разрешённые команды:
+- step    --task TASK-KEY [--report TEXT]
+- history --task TASK-KEY [--n N]
 """
 
 from __future__ import annotations

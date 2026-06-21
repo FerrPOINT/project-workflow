@@ -1,4 +1,9 @@
-"""CLI core — shared group, helpers, constants. No commands here."""
+"""CLI core — shared group, helpers, constants. No commands here.
+
+ПРАВИЛО ПРОЕКТА: этот файл содержит только общий click-group и хелперы.
+Никакие CLI-команды здесь не регистрируются. Все команды живут в
+`workflow_cli/cli/ui.py` и их ровно две: step, history.
+"""
 
 from __future__ import annotations
 
