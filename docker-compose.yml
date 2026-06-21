@@ -17,7 +17,7 @@ services:
 
   migrate:
     build: .
-    command: ["alembic", "upgrade", "head"]
+    command: ["python", "scripts/init_db.py"]
     environment:
       DATABASE_URL: postgresql+psycopg://project_workflow:project_workflow@db:5432/project_workflow
       DB_SCHEMA: project_workflow

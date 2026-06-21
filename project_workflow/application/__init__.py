@@ -98,7 +98,9 @@ class PhaseServiceApp:
                 order = self._uow.phases.get_next_order(workflow_id)
             else:
                 order = int(order)
-                self._uow.phases.shift_orders(workflow_id, order, delta=1)
+                existing = self._uow.phases.list(workflow_id)
+                if any(p.phase_order == order for p in existing):
+                    self._uow.phases.shift_orders(workflow_id, order, delta=1)
 
             phase_data = {
                 "workflow_id": workflow_id,

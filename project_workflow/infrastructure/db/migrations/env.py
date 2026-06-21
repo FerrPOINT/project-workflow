@@ -71,6 +71,8 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         _ensure_schema(connection)
+        if connection.dialect.name == "postgresql":
+            connection.execute(text(f"SET search_path TO {SCHEMA}"))
         configure_kwargs = dict(
             connection=connection,
             target_metadata=target_metadata,

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
-from .. import db, schema
+from .. import schema
 from ..application import (
     AgentService,
     PhaseServiceApp,
@@ -12,25 +13,30 @@ from ..application import (
     TaskService,
     WorkflowService,
 )
-from ..infrastructure.db.session import ensure_schema, get_engine
+from ..config import get_settings
 from ..infrastructure.db.uow import SAUnitOfWork
+
+if TYPE_CHECKING:
+    from .compat import WorkflowDBCompat
 
 
 class _AppState:
     """Application state holder (replaces module-level globals)."""
 
-    __slots__ = ("_db", "_srv", "_uow", "_catalog_ensured")
+    __slots__ = ("_db", "_srv", "_uow", "_catalog_ensured", "_database_url")
 
-    def __init__(self) -> None:
-        self._db: db.WorkflowDB | None = None
+    def __init__(self, database_url: str | None = None) -> None:
+        self._db: "WorkflowDBCompat" | None = None
         self._srv: Any | None = None  # legacy PhaseService wrapper
         self._uow: SAUnitOfWork | None = None
         self._catalog_ensured: bool = False
+        self._database_url: str = database_url or get_settings().DATABASE_URL
 
-    def get_db(self) -> db.WorkflowDB:
+    def get_db(self) -> "WorkflowDBCompat":
+        from .compat import WorkflowDBCompat
+
         if self._db is None:
-            self._db = db.WorkflowDB()
-            self._db.init()
+            self._db = WorkflowDBCompat()
         # Always re-ensure default workflows so runtime mutations (renamed workflows,
         # missing default flag) are repaired on the next request.
         with self._db._conn() as conn:
@@ -56,11 +62,16 @@ class _AppState:
         return self._srv
 
     def get_uow(self) -> SAUnitOfWork:
-        if self._uow is None:
-            engine = get_engine(str(db.DB_PATH))
+        from ..infrastructure.db.session import ensure_schema, get_engine
+
+        target = self._database_url
+        if target.startswith("sqlite:///"):
+            target = str(Path(target[10:]).resolve())
+            target = f"sqlite:///{target}"
+        engine = get_engine(target)
+        if engine.dialect.name == "sqlite":
             ensure_schema(engine)
-            self._uow = SAUnitOfWork(engine)
-        return self._uow
+        return SAUnitOfWork(engine)
 
     def workflow_service(self) -> WorkflowService:
         return WorkflowService(self.get_uow())
@@ -78,7 +89,7 @@ class _AppState:
         return AgentService(self.get_uow())
 
     @property
-    def db(self) -> db.WorkflowDB | None:
+    def db(self) -> "WorkflowDBCompat" | None:
         return self._db
 
 

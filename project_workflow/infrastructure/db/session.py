@@ -33,13 +33,11 @@ def _get_default_sqlite_url() -> str:
 @event.listens_for(Engine, "connect")
 def _set_sqlite_pragma(dbapi_conn, connection_record):
     # Only applies to SQLite connections
+    if getattr(connection_record, "dialect", None) is None or connection_record.dialect.name != "sqlite":
+        return
     try:
         cursor = dbapi_conn.cursor()
     except AttributeError:
-        return
-    try:
-        cursor.execute("SELECT 1 FROM sqlite_master LIMIT 1")
-    except Exception:
         return
     cursor.execute("PRAGMA journal_mode = WAL")
     cursor.execute("PRAGMA synchronous = NORMAL")
@@ -122,7 +120,12 @@ def reset_engine() -> None:
 def ensure_schema(engine: Engine | None = None) -> None:
     """Create all tables from ORM models (fallback for tests / fresh DBs)."""
     engine = engine or get_engine()
-    Base.metadata.create_all(engine)
+    with engine.begin() as conn:
+        if engine.dialect.name == "postgresql":
+            schema = get_settings().DB_SCHEMA
+            conn.exec_driver_sql(f"CREATE SCHEMA IF NOT EXISTS {schema}")
+            conn.exec_driver_sql(f"SET search_path TO {schema}")
+        Base.metadata.create_all(conn)
 
 
 def run_alembic_command(cmd: str, engine: Engine | None = None) -> None:

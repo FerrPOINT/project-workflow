@@ -3,15 +3,18 @@
 Удалены: questions, answers, checkups. Только CRUD для фаз/инструкций/checks/evidence.
 """
 
-from typing import Any
+from __future__ import annotations
 
-from .db import WorkflowDB
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from project_workflow.db import WorkflowDB
 
 
 class PhaseService:
     """CRUD operations for phases, instructions, checks, evidence."""
 
-    def __init__(self, db: WorkflowDB):
+    def __init__(self, db: "WorkflowDB"):
         self._db = db
 
     # ── Bulk сохранение инструкций (atomic) ─────────────────────────────
@@ -23,8 +26,12 @@ class PhaseService:
         if not phase_row:
             raise ValueError(f"Phase not found: {phase_id}")
         resolved = phase_row["id"]
-        conn = self._db._conn()
-        try:
+        # Prefer SQLAlchemy if the DB handle exposes a SQLAlchemy engine (UI/SA path).
+        sa_engine = getattr(self._db, "_sa_engine", None)
+        if sa_engine is not None:
+            return self._save_instructions_sa(resolved, items, sa_engine)
+
+        with self._db._conn() as conn:
             conn.execute("BEGIN")
             conn.execute("DELETE FROM instructions WHERE phase_id = ?", (resolved,))
             ids = []
@@ -45,11 +52,27 @@ class PhaseService:
                 ids.append(c.lastrowid)
             conn.commit()
             return ids
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
+
+    def _save_instructions_sa(self, resolved: int, items: list[dict[str, Any]], engine) -> list[int]:
+        from project_workflow.infrastructure.db import models as m
+        from sqlalchemy.orm import Session
+
+        with Session(engine, expire_on_commit=False) as session:
+            session.query(m.Instruction).filter(m.Instruction.phase_id == resolved).delete()
+            ids: list[int] = []
+            for idx, item in enumerate(items, 1):
+                inst = m.Instruction(
+                    phase_id=resolved,
+                    step_num=idx,
+                    description=item["description"],
+                    execution_type=item.get("execution_type", "sync"),
+                    skills=self.serialize_skills(self.normalize_skills(item.get("skills"))),
+                )
+                session.add(inst)
+                session.flush()
+                ids.append(int(inst.id))
+            session.commit()
+            return ids
 
     def save_checks(self, phase_id: int | str, items: list[dict[str, Any]]) -> list[int]:
         """Перезаписать checks фазы. Возвращает новые id."""
@@ -57,8 +80,11 @@ class PhaseService:
         if not phase_row:
             raise ValueError(f"Phase not found: {phase_id}")
         resolved = phase_row["id"]
-        conn = self._db._conn()
-        try:
+        sa_engine = getattr(self._db, "_sa_engine", None)
+        if sa_engine is not None:
+            return self._save_checks_sa(resolved, items, sa_engine)
+
+        with self._db._conn() as conn:
             conn.execute("BEGIN")
             conn.execute("DELETE FROM checks WHERE phase_id = ?", (resolved,))
             ids = []
@@ -70,11 +96,21 @@ class PhaseService:
                 ids.append(c.lastrowid)
             conn.commit()
             return ids
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
+
+    def _save_checks_sa(self, resolved: int, items: list[dict[str, Any]], engine) -> list[int]:
+        from project_workflow.infrastructure.db import models as m
+        from sqlalchemy.orm import Session
+
+        with Session(engine, expire_on_commit=False) as session:
+            session.query(m.Check).filter(m.Check.phase_id == resolved).delete()
+            ids: list[int] = []
+            for item in items:
+                chk = m.Check(phase_id=resolved, description=item["description"])
+                session.add(chk)
+                session.flush()
+                ids.append(int(chk.id))
+            session.commit()
+            return ids
 
     def save_evidence(self, phase_id: int | str, items: list[dict[str, Any]]) -> list[int]:
         """Сохранить evidence фазы."""
@@ -82,8 +118,11 @@ class PhaseService:
         if not phase_row:
             raise ValueError(f"Phase not found: {phase_id}")
         resolved = phase_row["id"]
-        conn = self._db._conn()
-        try:
+        sa_engine = getattr(self._db, "_sa_engine", None)
+        if sa_engine is not None:
+            return self._save_evidence_sa(resolved, items, sa_engine)
+
+        with self._db._conn() as conn:
             conn.execute("BEGIN")
             conn.execute("DELETE FROM evidence WHERE phase_id = ?", (resolved,))
             ids = []
@@ -95,11 +134,21 @@ class PhaseService:
                 ids.append(c.lastrowid)
             conn.commit()
             return ids
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
+
+    def _save_evidence_sa(self, resolved: int, items: list[dict[str, Any]], engine) -> list[int]:
+        from project_workflow.infrastructure.db import models as m
+        from sqlalchemy.orm import Session
+
+        with Session(engine, expire_on_commit=False) as session:
+            session.query(m.Evidence).filter(m.Evidence.phase_id == resolved).delete()
+            ids: list[int] = []
+            for item in items:
+                ev = m.Evidence(phase_id=resolved, description=item["description"])
+                session.add(ev)
+                session.flush()
+                ids.append(int(ev.id))
+            session.commit()
+            return ids
 
     # ── Read helpers ──────────────────────────────────────────────────
 

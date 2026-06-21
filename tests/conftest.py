@@ -26,14 +26,12 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "SETTINGS_PATH", str(settings_path))
     monkeypatch.setattr(schema_module, "_SEED_PATH", seed_path)
 
-    # Reset the shared UI app state so it picks up the monkeypatched DB_PATH.
-    ui_module._app_state.reset()
-
     # Reduce FD pressure in tests: monkeypatch _conn to skip WAL
     import sqlite3
     from pathlib import Path as _Path
     from project_workflow.db import WorkflowDB
     from project_workflow.schema import ensure_phase_catalog
+    from project_workflow.ui.dependencies import _AppState
 
     _orig_conn = WorkflowDB._conn
     def _test_conn(self):
@@ -47,12 +45,16 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
         return conn
     monkeypatch.setattr(WorkflowDB, "_conn", _test_conn)
 
-    # Initialize schema so every test starts with a clean DB
+    # Initialize legacy schema so the seed-sync step has a populated DB to mirror.
     wdb = WorkflowDB(str(test_db))
     wdb.init()
     ensure_phase_catalog(wdb)
 
+    # Point the UI's SQLAlchemy-backed state at the same temp DB.
+    ui_module._app_state = _AppState(database_url=f"sqlite:///{test_db}")
+
     yield
 
-    ui_module._app_state.reset()
+    # Restore original module-level singleton so later tests are not confused.
+    ui_module._app_state = _AppState()
     monkeypatch.setattr(WorkflowDB, "_conn", _orig_conn)
