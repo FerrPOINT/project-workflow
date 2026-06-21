@@ -142,7 +142,6 @@
         <button type="button" class="phase-add-btn" onclick="addInstructionAfter(this)" aria-label="Добавить после">+</button>
         <button type="button" class="phase-move-btn move-down-btn" onclick="moveInstruction(this, 1)" aria-label="Опустить ниже">↓</button>
         <button type="button" class="phase-delete-btn" onclick="deleteInstruction(this)" aria-label="Удалить"{% if instruction_count <= 1 %} disabled style="opacity:.35;cursor:not-allowed"{% endif %}>×</button>
-        <div class="phase-order-hint">Порядок<br>меняется тут</div>
       </div>
       <div class="timeline-card" data-instruction-id="{{ i.id }}" data-step-num="{{ i.step_num }}" data-type="{{ i.execution_type }}">
         <input type="text" class="timeline-name-input" value="{{ i.description }}" data-field="description" onblur="saveInstructionDescription(this)">

@@ -26,7 +26,6 @@
     <button type="button" class="phase-add-btn" onclick="addPhaseAfter(this)" aria-label="Добавить фазу после">+</button>
     <button type="button" class="phase-move-btn move-down-btn" onclick="movePhase(this, 1)" aria-label="Опустить фазу ниже">↓</button>
     <button type="button" class="phase-delete-btn" onclick="deletePhase(this)" aria-label="Удалить фазу"{% if phase_count <= 1 %} disabled style="opacity:.35;cursor:not-allowed"{% endif %}>×</button>
-    <div class="phase-order-hint">Порядок<br>меняется тут</div>
   </div>
   <a href="/phase/{{ p.id }}" class="timeline-card">
     <div class="timeline-name">{{ p.name }}</div>
