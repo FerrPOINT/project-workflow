@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/project-workflow-banner.jpg" alt="project-workflow banner" />
+  <img src="https://capsule-render.vercel.app/api?type=waving&height=180&text=project-workflow&desc=State-driven%20workflow%20platform&fontColor=F8FAFC&fontSize=60&fontAlignY=35&descAlignY=55&color=06B6D4" alt="project-workflow banner" />
 </p>
 
 <p align="center">
