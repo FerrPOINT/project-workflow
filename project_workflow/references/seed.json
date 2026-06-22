@@ -725,7 +725,7 @@
     "delegate_toolsets": null,
     "parallel_with": null,
     "rollback_target": null,
-    "next_recommendation": "Запускай Phase 1.5 (Deep Research) ПАРАЛЛЕЛЬНО",
+    "next_recommendation": "New",
     "execution_type": "sync",
     "instructions": [
       {
