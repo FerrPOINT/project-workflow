@@ -264,7 +264,7 @@ class TestWizardEngineEvaluateLLM:
             "next_phase_name": "Next",
             "confidence": 0.95,
         }
-        with patch("project_workflow.wizard_evaluate.OllamaClient.chat") as mock_chat:
+        with patch("project_workflow.wizard.evaluate.OllamaClient.chat") as mock_chat:
             mock_chat.return_value = llm_response
             result = engine.evaluate_llm("I checked git", engine._get_current_phase_obj())
         assert result["verdict"] == "PASS"
@@ -281,7 +281,7 @@ class TestWizardEngineEvaluateLLM:
             "message": "🔴 Blocked",
             "confidence": 0.9,
         }
-        with patch("project_workflow.wizard_evaluate.OllamaClient.chat") as mock_chat:
+        with patch("project_workflow.wizard.evaluate.OllamaClient.chat") as mock_chat:
             mock_chat.return_value = llm_response
             result = engine.evaluate_llm("Cannot access", engine._get_current_phase_obj())
         assert result["verdict"] == "BLOCKED"
@@ -303,7 +303,7 @@ class TestWizardEngineEvaluateLLM:
             "message": "Done",
             "confidence": 0.9,
         }
-        with patch("project_workflow.wizard_evaluate.OllamaClient.chat") as mock_chat:
+        with patch("project_workflow.wizard.evaluate.OllamaClient.chat") as mock_chat:
             mock_chat.return_value = llm_response
             engine.evaluate_llm("Report", engine._get_current_phase_obj())
             args, kwargs = mock_chat.call_args
@@ -421,7 +421,7 @@ class TestWizardEngineLLMIntegrationDB:
             "next_phase_name": "Next",
             "confidence": 0.95,
         }
-        with patch("project_workflow.wizard_evaluate.OllamaClient.chat") as mock_chat:
+        with patch("project_workflow.wizard.evaluate.OllamaClient.chat") as mock_chat:
             mock_chat.return_value = llm_response
             engine.evaluate("Report")
 
@@ -444,7 +444,7 @@ class TestWizardEngineLLMIntegrationDB:
             "next_phase_name": "Next",
             "confidence": 0.95,
         }
-        with patch("project_workflow.wizard_evaluate.OllamaClient.chat") as mock_chat:
+        with patch("project_workflow.wizard.evaluate.OllamaClient.chat") as mock_chat:
             mock_chat.return_value = llm_response
             engine.evaluate("Report")
 
@@ -460,7 +460,7 @@ class TestWizardEngineLLMIntegrationDB:
             "message": "Blocked",
             "confidence": 0.9,
         }
-        with patch("project_workflow.wizard_evaluate.OllamaClient.chat") as mock_chat:
+        with patch("project_workflow.wizard.evaluate.OllamaClient.chat") as mock_chat:
             mock_chat.return_value = llm_response
             engine.evaluate("Report")
 
@@ -477,7 +477,7 @@ class TestWizardEngineLLMIntegrationDB:
             "message": "Rollback",
             "confidence": 0.8,
         }
-        with patch("project_workflow.wizard_evaluate.OllamaClient.chat") as mock_chat:
+        with patch("project_workflow.wizard.evaluate.OllamaClient.chat") as mock_chat:
             mock_chat.return_value = llm_response
             _ = engine.evaluate("Report")
 
