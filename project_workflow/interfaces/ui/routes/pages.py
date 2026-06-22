@@ -6,7 +6,7 @@ from fastapi import Query, Request
 from fastapi.responses import HTMLResponse
 
 from project_workflow import config
-from project_workflow.infrastructure.db.legacy import PhaseService
+from project_workflow.infrastructure.db.phase_service import PhaseService
 from project_workflow.interfaces.ui.services import (
     _build_parallel_phase_blocks,
     _get_task_detail,

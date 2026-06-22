@@ -10,7 +10,7 @@ from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 
 
-BASE_DIR = Path(__file__).parent.parent.parent
+BASE_DIR = Path(__file__).parent
 
 
 def _tojson_unicode(value: Any, indent: int = 2) -> Markup:

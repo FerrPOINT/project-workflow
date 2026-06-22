@@ -58,7 +58,7 @@ module = [
     "project_workflow.infrastructure.llm",
     "project_workflow.infrastructure.conversation",
     "project_workflow.domain.fsm",
-    "project_workflow.infrastructure.db.legacy",
+    "project_workflow.infrastructure.db.phase_service",
     "project_workflow.wizard.evaluate",
     "project_workflow.domain.repositories",
 ]

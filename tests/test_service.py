@@ -7,7 +7,7 @@ import pytest
 
 from project_workflow.infrastructure.db import schema
 from project_workflow.infrastructure.db import WorkflowDB
-from project_workflow.infrastructure.db.legacy import PhaseService
+from project_workflow.infrastructure.db.phase_service import PhaseService
 
 
 @pytest.fixture

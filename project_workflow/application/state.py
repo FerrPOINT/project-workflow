@@ -29,7 +29,7 @@ class _AppState:
 
     def __init__(self, database_url: str | None = None) -> None:
         self._db: Any | None = None
-        self._srv: Any | None = None  # legacy PhaseService wrapper
+        self._srv: Any | None = None  # PhaseService helper for UI detail/edit routes
         self._uow: SAUnitOfWork | None = None
         self._catalog_ensured: bool = False
         self._database_url: str = database_url or get_settings().DATABASE_URL
@@ -63,7 +63,7 @@ class _AppState:
     def get_service(self) -> Any:
         """Return the legacy PhaseService used by detail/edit routes."""
         if self._srv is None:
-            from ..infrastructure.db.legacy import PhaseService
+            from ..infrastructure.db.phase_service import PhaseService
 
             self._srv = PhaseService(self.get_db())
         return self._srv
