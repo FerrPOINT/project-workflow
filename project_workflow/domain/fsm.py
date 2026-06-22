@@ -6,6 +6,10 @@ Formalizes the lifecycle of a single workflow phase:
                 ↘ rollback
                 ↘ delegated
 """
+from __future__ import annotations
+
+from typing import Any, List, Optional
+
 from transitions import Machine
 
 from project_workflow import config
@@ -13,7 +17,8 @@ from project_workflow import config
 
 class _FSMModel:
     """Dummy model for transitions Machine."""
-    pass
+
+    state: str = "pending"
 
 
 class PhaseFSM:
@@ -21,7 +26,7 @@ class PhaseFSM:
 
     STATES = ["pending", "in_progress", "done", "blocked", "rollback", "delegated"]
 
-    TRANSITIONS = [
+    TRANSITIONS: List[dict[str, Any]] = [
         {"trigger": "start", "source": "pending", "dest": "in_progress"},
         {"trigger": "succeed", "source": "in_progress", "dest": "done"},
         {"trigger": "partial_pass", "source": "in_progress", "dest": "in_progress"},
@@ -32,7 +37,7 @@ class PhaseFSM:
         {"trigger": "resume", "source": ["blocked", "rollback", "delegated"], "dest": "in_progress"},
     ]
 
-    VERDICT_TO_TRIGGER = {
+    VERDICT_TO_TRIGGER: dict[str, str] = {
         "pass": "succeed",
         "partial": "partial_pass",
         "blocked": "block",
@@ -43,7 +48,7 @@ class PhaseFSM:
     def __init__(self, initial: str = "in_progress"):
         self._model = _FSMModel()
         self._model.state = initial
-        self._machine = Machine(
+        self._machine: Any = Machine(
             model=self._model,
             states=self.STATES,
             initial=initial,
@@ -71,8 +76,6 @@ class PhaseFSM:
 
 
 # ── Phase order & checklist helpers (moved from root phases.py) ─────────────
-
-from typing import List, Optional
 
 
 def get_next_phase(current_phase: str) -> Optional[str]:

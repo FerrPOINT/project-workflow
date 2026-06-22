@@ -1,6 +1,6 @@
 """Tests that wizard.py passes int phase_id to DB FK columns."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from project_workflow.wizard.models import Phase
 from project_workflow.wizard import WizardEngine
 
@@ -14,6 +14,8 @@ class TestRecordTransitionTypes:
         engine.all_phases = [ph]
         engine.current_phase = "1"
 
+        engine.task = {"id": 7, "current_phase": engine.current_phase, "status": "active", "project_id": 1}
+        engine.db = MagicMock()
         with patch.object(engine.db, "add_task_history") as mock_history, \
              patch.object(engine.db, "update_task") as _:
             engine._record_transition(ph, "pass", "2", None)
@@ -33,6 +35,8 @@ class TestRecordTransitionTypes:
         engine.all_phases = [ph_current, ph_next]
         engine.current_phase = "1"
 
+        engine.task = {"id": 7, "current_phase": engine.current_phase, "status": "active", "project_id": 1}
+        engine.db = MagicMock()
         with patch.object(engine.db, "add_task_history") as mock_history, \
              patch.object(engine.db, "update_task") as _:
             engine._record_transition(ph_current, "pass", "2", None)
@@ -52,6 +56,8 @@ class TestRecordTransitionTypes:
         engine.all_phases = [ph, ph_prev]
         engine.current_phase = "1"
 
+        engine.task = {"id": 7, "current_phase": engine.current_phase, "status": "active", "project_id": 1}
+        engine.db = MagicMock()
         with patch.object(engine.db, "add_task_history") as mock_history, \
              patch.object(engine.db, "update_task") as _:
             engine._record_transition(ph, "rollback", None, "0")
@@ -70,6 +76,8 @@ class TestRecordTransitionTypes:
         engine.all_phases = [ph]
         engine.current_phase = "1"
 
+        engine.task = {"id": 7, "current_phase": engine.current_phase, "status": "active", "project_id": 1}
+        engine.db = MagicMock()
         with patch.object(engine, "_get_previously_covered", return_value=set()), \
              patch("project_workflow.wizard.evaluate.OllamaClient") as mock_client, \
              patch.object(engine.db, "create_supervisor_run") as mock_run, \

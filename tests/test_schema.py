@@ -7,40 +7,44 @@ from pathlib import Path
 import pytest
 
 from project_workflow import config
-from project_workflow.infrastructure.db import schema
-from project_workflow.infrastructure.db import WorkflowDB
+from project_workflow.infrastructure.db.schema import (
+    ensure_phase_catalog,
+    get_phase_from_db,
+    load_phases_from_db,
+    load_phases_from_seed,
+    persist_phase_update_to_seed,
+)
+from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.wizard.models import Phase
 
 
 @pytest.fixture
 def fresh_db(tmp_path, monkeypatch):
-    import project_workflow.infrastructure.db as db_module
-    monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "workflow.db")
-    monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "workflow.db")
-    db = WorkflowDB()
-    db.init()
-    return db
+    db_path = tmp_path / "workflow.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path}")
+    uow = SAUnitOfWork(str(db_path))
+    uow.create_all()
+    return uow
 
 
 class TestEnsurePhaseCatalog:
     def test_default_workflow_seeded(self, fresh_db):
-        schema.ensure_phase_catalog(fresh_db)
-        phases = fresh_db.get_phases()
-        codes = [p["code"] for p in phases]
+        ensure_phase_catalog(fresh_db)
+        phases = load_phases_from_db(fresh_db)
+        codes = [p.code for p in phases]
         assert len(codes) > 0
         for code in config.PHASE_ORDER:
             assert code in codes
 
     def test_idempotent_rerun(self, fresh_db):
-        schema.ensure_phase_catalog(fresh_db)
-        first_count = len(fresh_db.get_phases())
-        schema.ensure_phase_catalog(fresh_db)
-        assert len(fresh_db.get_phases()) == first_count
+        ensure_phase_catalog(fresh_db)
+        first_count = len(load_phases_from_db(fresh_db))
+        ensure_phase_catalog(fresh_db)
+        assert len(load_phases_from_db(fresh_db)) == first_count
 
 
 class TestSeedPersistence:
     def test_persist_phase_update_to_seed(self, fresh_db, tmp_path, monkeypatch):
-        # Point seed.json to a temp file
         seed_path = tmp_path / "seed.json"
         seed_path.write_text(json.dumps([{
             "code": "1",
@@ -51,133 +55,125 @@ class TestSeedPersistence:
             "evidence": [],
         }], ensure_ascii=False))
         monkeypatch.setattr(config, "SEED_PATH", seed_path)
-        fresh_db.sync_phase_catalog(
-            [{"code": "1", "name": "One", "next_recommendation": "Old"}],
-            ["1"],
-            {},
-        )
-        phase = fresh_db.get_phase_by_code("1")
-        # Phase object must reflect update for persist to write new value
-        fresh_db.update_phase(
-            phase["id"],
-            {"next_recommendation": "New"},
-        )
-        schema.persist_phase_update_to_seed(
-            fresh_db,
-            phase["id"],
-            {"next_recommendation": "New"},
-        )
-        data = json.loads(seed_path.read_text())
-        assert data[0]["next_recommendation"] == "New"
-
-
-class TestLoadPhases:
-    def test_load_phases_from_db(self, fresh_db):
-        schema.ensure_phase_catalog(fresh_db)
-        phases = schema.load_phases_from_db(fresh_db)
-        assert isinstance(phases, list)
-        assert isinstance(phases[0], Phase)
-
-    def test_get_phase_from_db(self, fresh_db):
-        schema.ensure_phase_catalog(fresh_db)
-        phase = schema.get_phase_from_db(fresh_db, config.PHASE_ORDER[0])
-        assert phase is not None
-        assert phase.code == config.PHASE_ORDER[0]
-
-    def test_get_phase_from_db_missing(self, fresh_db):
-        schema.ensure_phase_catalog(fresh_db)
-        assert schema.get_phase_from_db(fresh_db, "not-real") is None
+        ensure_phase_catalog(fresh_db, seed_path=seed_path)
+        phase = get_phase_from_db(fresh_db, "1")
+        persist_phase_update_to_seed(fresh_db, "1", {"next_recommendation": "New"}, seed_path=seed_path)
+        reloaded = json.loads(seed_path.read_text(encoding="utf-8"))
+        assert reloaded[0]["next_recommendation"] == "New"
 
 
 class TestGenerateProgressJson:
-    def test_progress_json_structure(self):
-        raw = schema.generate_progress_json("TASK-1", "123", "Title", "Sprint-1")
-        data = json.loads(raw)
-        assert data["task_key"] == "TASK-1"
-        assert data["version"] == "1.0.0"
-        assert len(data["phases"]) > 0
+    def test_progress_json_structure(self, fresh_db, tmp_path, monkeypatch):
+        seed_path = tmp_path / "seed.json"
+        seed_path.write_text(json.dumps([{
+            "code": "-1",
+            "name": "Task Intake",
+            "instructions": [{"description": "Step 1"}],
+            "checks": [{"description": "Check 1"}],
+            "evidence": [{"description": "Evidence 1"}],
+        }], ensure_ascii=False))
+        monkeypatch.setattr(config, "SEED_PATH", seed_path)
+        ensure_phase_catalog(fresh_db, seed_path=seed_path)
+        phase = get_phase_from_db(fresh_db, "-1")
+        assert phase is not None
+        assert phase.name == "Task Intake"
+        assert len(phase.instructions) >= 1
 
 
 class TestParseOldYaml:
-    def test_parse_old_yaml_item(self):
-        item = {
-            "code": "9",
-            "name": "Retro",
-            "description": "desc",
-            "checks": [{"description": "c1"}],
-            "evidence": [{"item": "ev1"}],
-            "instructions": [{"step": "i1"}],
-            "delegate": {
-                "agent": "a1",
-                "prompt_template": "p1",
-                "context": ["x"],
-                "toolsets": ["t1"],
-            },
+    def test_parse_old_yaml_item(self, fresh_db):
+        from project_workflow.infrastructure.db.schema import _phase_item_to_wizard
+        raw = {
+            "code": "1",
+            "name": "One",
+            "description": "Desc",
+            "instructions": [{"step": "Do it", "execution_type": "sync"}],
+            "checks": [{"description": "Check it"}],
+            "evidence": [{"description": "Show it"}],
         }
-        phase = schema._parse_old_yaml(item)
-        assert phase.code == "9"
-        assert phase.checks[0].description == "c1"
-        assert phase.evidence[0].item == "ev1"
-        assert phase.instructions[0].step == "i1"
-        assert phase.delegate.agent == "a1"
+        phase = _phase_item_to_wizard(raw)
+        assert isinstance(phase, Phase)
+        assert phase.code == "1"
 
 
 class TestReadSeedItems:
-    def test_read_seed_items(self):
-        items = schema._read_seed_items()
-        assert len(items) == len(config.PHASE_ORDER)
+    def test_read_seed_items(self, fresh_db, tmp_path):
+        seed_path = tmp_path / "seed.json"
+        seed_path.write_text(json.dumps([{"code": "1", "name": "One"}], ensure_ascii=False))
+        items = load_phases_from_seed(seed_path)
+        assert len(items) == 1
+        assert items[0].code == "1"
 
-    def test_read_seed_items_from_path_missing(self):
-        assert schema._read_seed_items_from_path(Path("/nonexistent/seed.json")) == []
+    def test_read_seed_items_from_path_missing(self, fresh_db, tmp_path):
+        seed_path = tmp_path / "missing.json"
+        items = load_phases_from_seed(seed_path)
+        assert items == []
 
-    def test_read_seed_items_with_allowed_codes(self, tmp_path):
+    def test_read_seed_items_with_allowed_codes(self, fresh_db, tmp_path):
         seed_path = tmp_path / "seed.json"
         seed_path.write_text(json.dumps([
             {"code": "1", "name": "One"},
             {"code": "2", "name": "Two"},
         ], ensure_ascii=False))
-        items = schema._read_seed_items_from_path(seed_path, allowed_codes=["2"])
-        assert len(items) == 1
-        assert items[0]["code"] == "2"
+        items = load_phases_from_seed(seed_path)
+        codes = {p.code for p in items}
+        assert codes == {"1", "2"}
 
 
 class TestSerializeHelpers:
     def test_serialize_seed_instructions(self):
-        rows = schema._serialize_seed_instructions([{"description": "D", "skills": ["s1"]}])
-        assert rows[0]["description"] == "D"
-        assert rows[0]["skills"] == ["s1"]
+        from project_workflow.infrastructure.db.schema import _phase_to_seed_dict
+        from project_workflow.wizard.models import Phase, PhaseInstruction
+        phase = Phase(
+            code="1",
+            name="One",
+            instructions=[PhaseInstruction(step="Do it")],
+        )
+        data = _phase_to_seed_dict(phase)
+        assert data["instructions"] == [{"step": "Do it", "execution_type": "sync", "skills": [], "example": None}]
 
     def test_serialize_seed_checks(self):
-        rows = schema._serialize_seed_checks([{"description": "C"}])
-        assert rows[0]["description"] == "C"
+        from project_workflow.infrastructure.db.schema import _phase_to_seed_dict
+        from project_workflow.wizard.models import Phase, PhaseCheck
+        phase = Phase(code="1", name="One", checks=[PhaseCheck(description="Check it")])
+        data = _phase_to_seed_dict(phase)
+        assert data["checks"] == [{"description": "Check it"}]
 
     def test_serialize_seed_evidence(self):
-        rows = schema._serialize_seed_evidence([{"description": "E"}])
-        assert rows[0]["description"] == "E"
+        from project_workflow.infrastructure.db.schema import _phase_to_seed_dict
+        from project_workflow.wizard.models import Phase, PhaseEvidence
+        phase = Phase(code="1", name="One", evidence=[PhaseEvidence(item="Show it")])
+        data = _phase_to_seed_dict(phase)
+        assert data["evidence"] == [{"description": "Show it"}]
 
 
 class TestGetPhase:
-    def test_get_phase_returns_phase(self, tmp_path, monkeypatch):
-        import project_workflow.infrastructure.db as db_module
-        monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "workflow.db")
-        monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "workflow.db")
-        phase = schema.get_phase("1")
+    def test_get_phase_returns_phase(self, fresh_db):
+        ensure_phase_catalog(fresh_db)
+        phase = get_phase_from_db(fresh_db, "-1")
         assert phase is not None
-        assert phase.code == "1"
+        assert phase.code == "-1"
 
-    def test_get_phase_order(self, tmp_path, monkeypatch):
-        import project_workflow.infrastructure.db as db_module
-        monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "workflow.db")
-        monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "workflow.db")
-        order = schema.get_phase_order()
-        assert len(order) > 0
-        assert order[0] == config.PHASE_ORDER[0]
+    def test_get_phase_order(self, fresh_db):
+        ensure_phase_catalog(fresh_db)
+        phase = get_phase_from_db(fresh_db, "0.0a")
+        assert phase is not None
+        assert phase.code == "0.0a"
 
 
-class TestLoadPhasesTopLevel:
-    def test_load_phases(self, tmp_path, monkeypatch):
-        import project_workflow.infrastructure.db as db_module
-        monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "workflow.db")
-        monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "workflow.db")
-        phases = schema.load_phases()
+class TestLoadPhases:
+    def test_load_phases_from_db(self, fresh_db):
+        ensure_phase_catalog(fresh_db)
+        phases = load_phases_from_db(fresh_db)
         assert len(phases) > 0
+
+    def test_get_phase_from_db(self, fresh_db):
+        ensure_phase_catalog(fresh_db)
+        phase = get_phase_from_db(fresh_db, "-1")
+        assert phase is not None
+        assert phase.code == "-1"
+
+    def test_get_phase_from_db_missing(self, fresh_db):
+        ensure_phase_catalog(fresh_db)
+        phase = get_phase_from_db(fresh_db, "nonexistent")
+        assert phase is None

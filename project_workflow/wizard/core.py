@@ -14,9 +14,14 @@ import json
 import threading
 from typing import Optional
 
-from .. import config
 from ..infrastructure.db import schema
-from ..infrastructure.db import WorkflowDB
+from ..infrastructure.db.uow import SAUnitOfWork
+from ..domain.repositories import UnitOfWork
+from ..application.workflow import WorkflowService
+from ..application.phase import PhaseServiceApp
+from ..application.project import ProjectService
+from ..application.task import TaskService
+from ..application.agent import AgentService
 from .models import Phase  # noqa: F401
 from ..infrastructure import conversation as convo  # noqa: F401 — used by tests via monkeypatch
 
@@ -69,26 +74,45 @@ class PromptCache:
 class WizardEngine:
     """Internal supervisor that evaluates workflow progress against DB phase contracts."""
 
-    def __init__(self, task_key: str, repo: Optional[str] = None):
+    def __init__(self, task_key: str, repo: Optional[str] = None, uow: UnitOfWork | None = None, create_if_missing: bool = True):
         self.task_key = task_key
         self.repo = repo
-        self.db = WorkflowDB()
-        self.db.init()
-        schema.ensure_phase_catalog(self.db)
+        self._uow = uow if uow is not None else SAUnitOfWork()
+        self._store = WizardAssessmentStore(self._uow)
+        self._uow.create_all()
+        schema.ensure_phase_catalog(self._uow)
 
-        self.task = self._ensure_task()
-        self.project = self.db.get_project(self.task["project_id"])
+        self._workflow_service = WorkflowService(self._uow)
+        self._phase_service = PhaseServiceApp(self._uow)
+        self._project_service = ProjectService(self._uow)
+        self._task_service = TaskService(self._uow)
+        self._agent_service = AgentService(self._uow)
+
+        self.task = self._ensure_task() if create_if_missing else self._task_service.get_task_by_key(task_key)
+        self.project = self._project_service.get_project(self.task["project_id"]) if self.task and self.task.get("project_id") else None
         self.workflow_id = self.project["workflow_id"] if self.project else None
-        self.workflow = self.db.get_workflow(self.workflow_id) if self.workflow_id else None
+        self.workflow = self._workflow_service.get_workflow(self.workflow_id) if self.workflow_id else None
         self._all_phases: list[Phase] | None = None
         self._phase_map: dict[str, Phase] | None = None
         self.current_phase = self._resolve_current_phase()
         self._cache = PromptCache()
 
     @property
+    def db(self):
+        """Backward-compat accessor for legacy tests."""
+        return self._uow
+
+    @db.setter
+    def db(self, value) -> None:
+        """Allow legacy tests to inject a mock DB."""
+        self._uow = value
+        if hasattr(self, "_task_service"):
+            self._task_service = TaskService(self._uow)
+
+    @property
     def all_phases(self) -> list[Phase]:
         if self._all_phases is None:
-            self._all_phases = schema.load_phases_from_db(self.db, workflow_id=self.workflow_id)
+            self._all_phases = schema.load_phases_from_db(self._uow, workflow_id=self.workflow_id)
         return self._all_phases
 
     @all_phases.setter
@@ -109,36 +133,50 @@ class WizardEngine:
     # ── Setup / state helpers ────────────────────────────────────────
 
     def _ensure_task(self) -> dict:
-        existing = self.db.get_task_by_key(self.task_key)
+        existing = self._task_service.get_task_by_key(self.task_key)
         if existing:
             if str(existing.get("current_phase") or "").strip() == "":
                 current_phase = self._first_phase_code_for_project(existing["project_id"])
-                self.db.update_task(existing["id"], {"current_phase": current_phase})
-                return self.db.get_task(existing["id"]) or existing
+                self._task_service.update_task(existing["id"], {"current_phase": current_phase})
+                return self._task_service.get_task(existing["id"]) or existing
             return existing
 
-        project = self.db.match_project_for_task_key(self.task_key, strict=False)
+        project = self._resolve_project()
         if not project:
             raise ValueError(f"Cannot resolve project for task key: {self.task_key}")
         current_phase = self._first_phase_code_for_project(project["id"])
-        task_id = self.db.create_task(
+        task = self._task_service.create_task(
             {
-                "project": project["id"],
+                "project_id": project["id"],
                 "task_key": self.task_key,
                 "title": self.task_key,
                 "current_phase": current_phase,
                 "status": "active",
             }
         )
-        task = self.db.get_task(task_id)
-        if not task:
-            raise ValueError(f"Failed to create task: {self.task_key}")
         return task
 
+    def _resolve_project(self) -> dict[str, Any] | None:
+        # Try matching via project key prefixes first.
+        for project in self._project_service.list_projects():
+            for prefix in project.get("key_prefixes", []):
+                if self.task_key.startswith(prefix + "-") or self.task_key == prefix:
+                    return project
+        # Fall back to the default workflow/project if no prefix matches.
+        self._workflow_service.ensure_default_exists()
+        projects = self._project_service.list_projects()
+        if projects:
+            return projects[0]
+        # Create a default project under the default workflow.
+        return self._project_service.create_project({
+            "code": "default",
+            "name": "Default Project",
+        })
+
     def _first_phase_code_for_project(self, project_id: int) -> str:
-        project = self.db.get_project(project_id)
+        project = self._project_service.get_project(project_id)
         workflow_id = project["workflow_id"] if project else None
-        phases = schema.load_phases_from_db(self.db, workflow_id=workflow_id)
+        phases = schema.load_phases_from_db(self._uow, workflow_id=workflow_id)
         return phases[0].code if phases else "-1"
 
     def _resolve_current_phase(self) -> str:
@@ -148,8 +186,8 @@ class WizardEngine:
         if self.all_phases:
             fallback = self.all_phases[0].code
             if current != fallback:
-                self.db.update_task(self.task["id"], {"current_phase": fallback})
-                self.task = self.db.get_task(self.task["id"]) or self.task
+                self._task_service.update_task(self.task["id"], {"current_phase": fallback})
+                self.task = self._task_service.get_task(self.task["id"]) or self.task
             return fallback
         return current or "-1"
 
@@ -168,9 +206,13 @@ class WizardEngine:
         task_id = int(self.task.get("id", 0))
         if not task_id:
             return previously
-        runs = self.db.get_supervisor_runs(task_id=task_id, limit=20)
+        runs = [r.to_dict() for r in self._uow.supervisor_runs.list(task_id=task_id, limit=20)]
         for run in runs:
-            if run.get("phase_code") != phase_code:
+            run_phase_id = run.get("phase_id")
+            if run_phase_id is None:
+                continue
+            phase = self._uow.phases.get_by_id(int(run_phase_id))
+            if phase is None or str(phase.code) != str(phase_code):
                 continue
             covered = run.get("covered", [])
             for item in covered:
@@ -305,7 +347,7 @@ class WizardEngine:
     @property
     def _context_builder(self):
         return WizardContextBuilder(
-            db=self.db,
+            uow=self._uow,
             task=self.task,
             project=self.project,
             workflow=self.workflow,
@@ -316,18 +358,86 @@ class WizardEngine:
         )
 
     def _build_phase_history(self):
-        return self._context_builder._build_phase_history()
+        history: list[dict] = []
+        for row in self._uow.get_task_history(self.task["id"]):
+            phase = self._phase_by_id(row["phase_id"])
+            if not phase:
+                continue
+            history.append({
+                "phase_code": phase.code,
+                "phase_name": phase.name,
+                "status": row["status"],
+                "completed_at": row["completed_at"],
+            })
+        return history
 
     def _build_recent_verdicts(self, limit=5):
-        return self._context_builder._build_recent_verdicts(limit=limit)
+        verdicts: list[dict] = []
+        for row in self._uow.get_supervisor_runs(task_id=self.task["id"], limit=limit):
+            if isinstance(row, dict):
+                verdicts.append({
+                    "phase_code": row.get("phase_code"),
+                    "verdict": str(row.get("verdict") or "").upper(),
+                    "blockers": row.get("blockers") or [],
+                    "missing": row.get("missing") or [],
+                    "next_phase": row.get("next_phase_code"),
+                    "rollback_target": row.get("rollback_phase_code"),
+                    "created_at": row.get("created_at"),
+                })
+            else:
+                verdicts.append({
+                    "phase_code": row.phase_code,
+                    "verdict": str(row.verdict or "").upper(),
+                    "blockers": row.blockers or [],
+                    "missing": row.missing or [],
+                    "next_phase": row.next_phase_code,
+                    "rollback_target": row.rollback_phase_code,
+                    "created_at": row.created_at,
+                })
+        return verdicts
 
     def _phase_status_lookup(self):
-        return self._context_builder._phase_status_lookup()
+        statuses: dict[str, str] = {}
+        for row in self._uow.get_task_history(self.task["id"]):
+            phase = self._phase_by_id(row["phase_id"])
+            if phase:
+                statuses[phase.code] = str(row["status"])
+        current_phase = str(self.task.get("current_phase") or self.current_phase)
+        if current_phase in self.phase_map and current_phase not in statuses and self.task.get("status") != "done":
+            statuses[current_phase] = "current"
+        return statuses
+
+    def _phase_by_id(self, phase_id):
+        for phase in self.all_phases:
+            if int(phase.id) == int(phase_id):
+                return phase
+        return None
 
     def _build_workflow_path(self):
-        return self._context_builder._build_workflow_path()
+        status_lookup = self._phase_status_lookup()
+        path: list[dict] = []
+        for phase in self.all_phases:
+            path.append({
+                "code": phase.code,
+                "name": phase.name,
+                "status": status_lookup.get(phase.code, "pending"),
+                "parallel_with": phase.parallel_with,
+                "rollback_target": phase.rollback_target,
+            })
+        return path
 
-    # ── Transition recording ─────────────────────────────────────────
+    @property
+    def _context_builder(self):
+        return WizardContextBuilder(
+            uow=self._uow,
+            task=self.task,
+            project=self.project,
+            workflow=self.workflow,
+            all_phases=self.all_phases,
+            current_phase=self.current_phase,
+            task_key=self.task_key,
+            repo=self.repo,
+        )
 
     def _record_transition(self, phase: Phase, verdict: str, next_phase: str | None, rollback_target: str | None) -> None:
         from ..domain.fsm import PhaseFSM
@@ -384,8 +494,18 @@ class WizardEngine:
             return
         if new_state == "blocked":
             self.db.update_task(task_id, {"status": "blocked"})
+            return
+        if new_state == "rollback":
+            target_phase = self.phase_map.get(next_phase) if next_phase else None
+            target_id = target_phase.id if target_phase else group[-1].id
+            self.db.add_task_history(task_id, group[-1].id, "rollback")
+            self.db.add_task_history(task_id, target_id, "pending")
+            self.db.update_task(task_id, {"current_phase": next_phase or group[-1].code, "status": "active"})
+            return
+        # partial: legacy tests expect no DB side effects at all.
+        return
 
-    # ── Context / Prompt ─────────────────────────────────────────────
+    # ── Context / Prompt ─────────────────────────────────────────────────────
 
     def get_full_context(self, use_cache: bool = True) -> dict:
         if use_cache:
@@ -393,7 +513,7 @@ class WizardEngine:
             if cached:
                 return cached
         builder = WizardContextBuilder(
-            db=self.db,
+            uow=self._uow,
             task=self.task,
             project=self.project,
             workflow=self.workflow,
@@ -511,12 +631,27 @@ class WizardEngine:
         else:
             self._record_transition(phase, verdict, next_phase, rollback_target)
 
-        self.task = self.db.get_task(self.task["id"]) or self.task
+        self.task = self._task_service.get_task(self.task["id"]) or self.task
         self.current_phase = self._resolve_current_phase()
 
         # Persist assessment
-        store = WizardAssessmentStore(self.db)
-        store.save(assessment)
+        self.db.create_supervisor_run(
+            task_id=self.task["id"],
+            phase_id=phase.id,
+            verdict=assessment.verdict,
+            report=assessment.message or "",
+            covered=assessment.covered,
+            missing=assessment.missing,
+            blockers=assessment.blockers,
+            next_phase_id=self.phase_map.get(next_phase).id if next_phase and next_phase in self.phase_map else None,
+            rollback_phase_id=self.phase_map.get(rollback_target).id if rollback_target and rollback_target in self.phase_map else None,
+            context_snapshot={
+                "phase": assessment.phase_code,
+                "phase_name": assessment.phase_name,
+                "current_contract": {"phase_code": assessment.phase_code},
+            },
+            response=assessment.to_result_dict(),
+        )
 
         return result
 

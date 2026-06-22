@@ -1,9 +1,8 @@
 """Application services — use cases."""
 from __future__ import annotations
 
-from typing import Any, List, cast
+from typing import Any
 
-from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.repositories import UnitOfWork
 
 
@@ -16,7 +15,7 @@ class PhaseServiceApp:
         self._uow = uow
 
     def _generate_code(self, workflow_id: int, order: int) -> str:
-        prefix = "ui-phase-"
+        prefix = f"wf-{workflow_id}-phase-"
         existing = self._uow.phases.list(workflow_id)
         max_num = 0
         for phase in existing:
@@ -29,7 +28,7 @@ class PhaseServiceApp:
         return f"{prefix}{max_num + 1}"
 
     def create_phase(self, data: dict[str, Any]) -> dict[str, Any]:
-        workflow_id = data["workflow_id"]
+        workflow_id = int(data["workflow_id"])
         with self._uow:
             order = data.get("phase_order")
             if order is None:
@@ -62,7 +61,7 @@ class PhaseServiceApp:
 
     def list_phases(self, workflow_id: int | None = None) -> list[dict[str, Any]]:
         with self._uow:
-            return [p.to_dict() for p in self._uow.phases.list(workflow_id)]
+            return [p.to_dict() for p in self._uow.phases.list(workflow_id=workflow_id)]
 
     def get_phase(self, phase_id: int) -> dict[str, Any] | None:
         with self._uow:
@@ -72,8 +71,10 @@ class PhaseServiceApp:
     def update_phase(self, phase_id: int, data: dict[str, Any]) -> None:
         with self._uow:
             self._uow.phases.update(phase_id, data)
+            return None
 
     def delete_phase(self, phase_id: int) -> None:
         with self._uow:
             self._uow.phases.delete(phase_id)
+            return None
 

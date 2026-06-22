@@ -136,8 +136,8 @@ flowchart TD
 ### Принципы
 
 - Единый data layer: все операции через SQLAlchemy-модели и репозитории.
-- UI-пакет (`project_workflow/ui/`) — чистое FastAPI-приложение с отдельными routes, services, dependencies.
-- `project_workflow/db/compat.py` — SQLAlchemy-реализация `WorkflowDB`, сохраняющая публичный API для CLI/wizard/tests.
+- UI-пакет (`project_workflow/interfaces/ui/`) — чистое FastAPI-приложение с отдельными routes, services, dependencies.
+- `project_workflow/infrastructure/db/compat.py` — SQLAlchemy-реализация `WorkflowDB`, сохраняющая публичный API для CLI/wizard/tests.
 - Конфигурация централизована в `project_workflow.config` на Pydantic Settings; `DATABASE_URL` обязателен.
 
 <a name="quality"></a>
@@ -147,7 +147,7 @@ flowchart TD
 |---|---|---|
 | Lint | `ruff check .` | **green** |
 | Type check | `mypy project_workflow` | **green** |
-| Tests | `pytest -q --tb=short` | **643 passed** |
+| Tests | `pytest -q --tb=short` | **636 passed** |
 | Docker UI health | `curl http://localhost:8812/` | **200** |
 | Systemd UI health | `curl http://localhost:8811/` | **200** |
 
@@ -162,7 +162,7 @@ flowchart TD
 - [x] `WorkflowDB` переписан на SQLAlchemy, `db/base.py` и `db_schema.sql` удалены
 - [x] mypy green, ruff green, 643 теста green
 - [ ] Postgres-интеграционные тесты
-- [ ] Разделение `wizard.py` на доменные application-сервисы
+- [x] `WizardEngine` и wizard-модули собраны в пакет `project_workflow/wizard/`
 - [ ] API-тесты на все UI routes
 
 Подробный план: [`docs/plans/2026-06-21-detailed-roadmap.md`](docs/plans/2026-06-21-detailed-roadmap.md).

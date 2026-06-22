@@ -33,13 +33,14 @@ class TestWizardEvaluate:
         engine.current_phase = "0"
         engine.phase_map = {"0": ph}
         engine.all_phases = [ph]
+        engine.task = {"id": 1, "task_key": "AAT-1", "current_phase": "0"}
+        store = engine._store
 
         with patch.object(engine, "_build_checklist", return_value=["check"]), \
              patch.object(engine, "_check_coverage", return_value=(["check"], [])), \
              patch.object(engine, "_get_next_phase", return_value=("1", "Next")), \
              patch.object(engine, "_record_transition"), \
-             patch.object(engine.db, "create_supervisor_run"), \
-             patch.object(engine.db, "get_task", return_value=engine.task):
+             patch.object(engine._store, "save"):
             result = engine.evaluate("report ok")
 
         assert result["verdict"] == "PASS"
@@ -51,12 +52,12 @@ class TestWizardEvaluate:
         engine.current_phase = "0"
         engine.phase_map = {"0": ph}
         engine.all_phases = [ph]
+        engine.task = {"id": 1, "task_key": "AAT-1", "current_phase": "0"}
 
         with patch.object(engine, "_build_checklist", return_value=["check"]), \
              patch.object(engine, "_check_coverage", return_value=([], ["check"])), \
              patch.object(engine, "_record_transition"), \
-             patch.object(engine.db, "create_supervisor_run"), \
-             patch.object(engine.db, "get_task", return_value=engine.task):
+             patch.object(engine._store, "save"):
             result = engine.evaluate("report bad")
 
         assert result["verdict"] == "PARTIAL"

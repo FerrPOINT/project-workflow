@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from project_workflow.infrastructure.db import WorkflowDB
+from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.wizard import WizardEngine
 
 
@@ -10,7 +10,7 @@ SUPERVISOR_WORKFLOW_NAME = "Supervisor Workflow"
 SUPERVISOR_PHASES = ["sup.intake", "sup.review", "sup.done"]
 
 
-def _patch_runtime(monkeypatch, tmp_path: Path) -> Path:
+def _patch_runtime(monkeypatch, tmp_path: Path) -> SAUnitOfWork:
     workflow_db = tmp_path / "workflow.db"
     convo_dir = tmp_path / ".project-workflow"
     convo_db = convo_dir / "conversation.db"
@@ -21,26 +21,29 @@ def _patch_runtime(monkeypatch, tmp_path: Path) -> Path:
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{workflow_db}")
     from project_workflow import config
     config.get_settings.cache_clear()
-    return workflow_db
+    uow = SAUnitOfWork(str(workflow_db))
+    uow.create_all()
+    return uow
 
 
-def _bootstrap_supervisor_workflow(wdb: WorkflowDB) -> None:
-    workflow_id = wdb.create_workflow({
+def _bootstrap_supervisor_workflow(uow: SAUnitOfWork) -> None:
+    workflow_id = uow.workflows.create({
         "name": SUPERVISOR_WORKFLOW_NAME,
         "description": "Workflow used to validate DB-backed supervisor behavior.",
         "_skip_default_phase": True,
     })
-    wdb.create_project({
+    uow.projects.create({
         "workflow_id": workflow_id,
         "code": "SUP",
         "name": "Supervisor Project",
         "key_prefixes": ["SUP"],
     })
 
-    critic = next((agent for agent in wdb.get_agents() if agent["name"] == "critic"), None)
-    critic_id = critic["id"] if critic else wdb.create_agent({"name": "critic", "description": "Quality gate"})
+    agents = [a.to_dict() for a in uow.agents.list()]
+    critic = next((agent for agent in agents if agent["name"] == "critic"), None)
+    critic_id = critic["id"] if critic else uow.agents.create({"name": "critic", "description": "Quality gate"})
 
-    wdb.create_phase({
+    intake_id = uow.phases.create({
         "workflow_id": workflow_id,
         "code": "sup.intake",
         "name": "Intake",
@@ -48,16 +51,15 @@ def _bootstrap_supervisor_workflow(wdb: WorkflowDB) -> None:
         "phase_order": 1,
         "next_recommendation": "Prepare review package once the plan is documented.",
     })
-    wdb.create_instruction({
-        "phase_id": "sup.intake",
+    uow.instructions.create(intake_id, {
         "step_num": 1,
         "description": "Create implementation plan",
         "execution_type": "sync",
     })
-    wdb.create_check({"phase_id": "sup.intake", "description": "Plan is documented"})
-    wdb.create_evidence({"phase_id": "sup.intake", "description": "Plan file attached"})
+    uow.checks.create(intake_id, {"description": "Plan is documented"})
+    uow.evidence.create(intake_id, {"description": "Plan file attached"})
 
-    wdb.create_phase({
+    review_id = uow.phases.create({
         "workflow_id": workflow_id,
         "code": "sup.review",
         "name": "Review Gate",
@@ -67,16 +69,15 @@ def _bootstrap_supervisor_workflow(wdb: WorkflowDB) -> None:
         "rollback_target": "sup.intake",
         "next_recommendation": "Move to done only after the gate is green.",
     })
-    wdb.create_instruction({
-        "phase_id": "sup.review",
+    uow.instructions.create(review_id, {
         "step_num": 1,
         "description": "Validate release readiness",
         "execution_type": "sync",
     })
-    wdb.create_check({"phase_id": "sup.review", "description": "All acceptance criteria confirmed"})
-    wdb.create_evidence({"phase_id": "sup.review", "description": "Reviewer sign-off attached"})
+    uow.checks.create(review_id, {"description": "All acceptance criteria confirmed"})
+    uow.evidence.create(review_id, {"description": "Reviewer sign-off attached"})
 
-    wdb.create_phase({
+    uow.phases.create({
         "workflow_id": workflow_id,
         "code": "sup.done",
         "name": "Done",
@@ -87,16 +88,13 @@ def _bootstrap_supervisor_workflow(wdb: WorkflowDB) -> None:
 
 
 def test_supervisor_context_contains_full_path_and_contract(tmp_path: Path, monkeypatch) -> None:
-    workflow_db = _patch_runtime(monkeypatch, tmp_path)
-    wdb = WorkflowDB(str(workflow_db))
-    wdb.init()
-    _bootstrap_supervisor_workflow(wdb)
-
-    engine = WizardEngine("SUP-1", repo="/repo")
-    task = wdb.get_task_by_key("SUP-1")
+    uow = _patch_runtime(monkeypatch, tmp_path)
+    _bootstrap_supervisor_workflow(uow)
+    engine = WizardEngine("SUP-1", repo="/repo", uow=uow)
+    task = uow.tasks.get_by_key("SUP-1")
 
     assert task is not None
-    assert task["current_phase"] == "sup.intake"
+    assert task.current_phase == "sup.intake"
 
     ctx = engine.get_full_context()
     assert [phase["code"] for phase in ctx["workflow_path"]] == SUPERVISOR_PHASES
@@ -117,12 +115,10 @@ def test_supervisor_context_contains_full_path_and_contract(tmp_path: Path, monk
 
 
 def test_supervisor_evaluate_pass_updates_db_state_and_persists_run(tmp_path: Path, monkeypatch) -> None:
-    workflow_db = _patch_runtime(monkeypatch, tmp_path)
-    wdb = WorkflowDB(str(workflow_db))
-    wdb.init()
-    _bootstrap_supervisor_workflow(wdb)
+    uow = _patch_runtime(monkeypatch, tmp_path)
+    _bootstrap_supervisor_workflow(uow)
 
-    engine = WizardEngine("SUP-2", repo="/repo")
+    engine = WizardEngine("SUP-2", repo="/repo", uow=uow)
     result = engine.evaluate(
         "summary: Created implementation plan. completed: Plan is documented. evidence: Plan file attached. blockers: none. next_step: move to review."
     )
@@ -130,40 +126,45 @@ def test_supervisor_evaluate_pass_updates_db_state_and_persists_run(tmp_path: Pa
     assert result["verdict"] == "PASS"
     assert result["next_phase"] == "sup.review"
 
-    task = wdb.get_task_by_key("SUP-2")
+    task = uow.tasks.get_by_key("SUP-2")
     assert task is not None
-    assert task["current_phase"] == "sup.review"
+    assert task.current_phase == "sup.review"
 
     history = {
-        wdb.get_phase(item["phase_id"])["code"]: item["status"]
-        for item in wdb.get_task_history(task["id"])
+        uow.phases.get_by_id(item['phase_id']).code: item['status']
+        for item in uow.tasks.get_history(task.id)
     }
     assert history["sup.intake"] == "done"
     assert history["sup.review"] == "pending"
 
-    runs = wdb.get_supervisor_runs(task_key="SUP-2")
+    runs = uow.supervisor_runs.list(task_key="SUP-2")
     assert len(runs) == 1
-    assert runs[0]["verdict"] == "pass"
-    assert runs[0]["response"]["next_phase"] == "sup.review"
-    assert runs[0]["context_snapshot"]["current_contract"]["phase_code"] == "sup.intake"
+    assert runs[0].verdict == "pass"
+    assert runs[0].response["next_phase"] == "sup.review"
+    assert runs[0].context_snapshot["current_contract"]["phase_code"] == "sup.intake"
 
 
 
 def test_supervisor_rolls_back_gate_phase_when_report_is_blocked(tmp_path: Path, monkeypatch) -> None:
-    workflow_db = _patch_runtime(monkeypatch, tmp_path)
-    wdb = WorkflowDB(str(workflow_db))
-    wdb.init()
-    _bootstrap_supervisor_workflow(wdb)
+    uow = _patch_runtime(monkeypatch, tmp_path)
+    _bootstrap_supervisor_workflow(uow)
 
-    task_id = wdb.create_task({
+    project_row = next((p for p in uow.projects.list() if p.code == "SUP"), None)
+    project_id = project_row.id if project_row else None
+    intake_row = uow.phases.get_by_code("sup.intake")
+    intake_id = intake_row.id if intake_row else None
+    review_row = uow.phases.get_by_code("sup.review")
+    review_id = review_row.id if review_row else None
+    task_id = uow.tasks.create({
         "task_key": "SUP-3",
         "title": "Rollback case",
+        "project_id": project_id,
         "current_phase": "sup.review",
     })
-    wdb.add_task_history(task_id, "sup.intake", "done")
-    wdb.add_task_history(task_id, "sup.review", "pending")
+    uow.tasks.add_history(task_id, intake_id, "done")
+    uow.tasks.add_history(task_id, review_id, "pending")
 
-    engine = WizardEngine("SUP-3", repo="/repo")
+    engine = WizardEngine("SUP-3", repo="/repo", uow=uow, create_if_missing=False)
     result = engine.evaluate(
         "Blocked by dependency mismatch. blocker remains and the gate cannot pass."
     )
@@ -172,17 +173,17 @@ def test_supervisor_rolls_back_gate_phase_when_report_is_blocked(tmp_path: Path,
     assert result["rollback_target"] == "sup.intake"
     assert result["next_phase"] == "sup.intake"
 
-    task = wdb.get_task_by_key("SUP-3")
+    task = uow.tasks.get_by_key("SUP-3")
     assert task is not None
-    assert task["current_phase"] == "sup.intake"
+    assert task.current_phase == "sup.intake"
 
     history = {
-        wdb.get_phase(item["phase_id"])["code"]: item["status"]
-        for item in wdb.get_task_history(task["id"])
+        uow.phases.get_by_id(item['phase_id']).code: item['status']
+        for item in uow.tasks.get_history(task.id)
     }
     assert history["sup.review"] == "rollback"
     assert history["sup.intake"] == "pending"
 
-    runs = wdb.get_supervisor_runs(task_key="SUP-3")
-    assert runs[0]["verdict"] == "rollback"
-    assert runs[0]["response"]["rollback_target"] == "sup.intake"
+    runs = uow.supervisor_runs.list(task_key="SUP-3")
+    assert runs[0].verdict == "rollback"
+    assert runs[0].response["rollback_target"] == "sup.intake"

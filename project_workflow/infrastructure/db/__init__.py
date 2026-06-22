@@ -3,53 +3,35 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .compat import WorkflowDBCompat as WorkflowDB
+from ... import config
 
-# Legacy module-level DB path — tests monkeypatch this attribute.
-DB_PATH = Path.home() / ".project-workflow" / "workflow.db"
+DB_PATH = Path(config.get_settings().WORKFLOW_DIR) / "workflow.db"
 
-from .models import (
-    Agent,
-    Check,
-    Evidence,
-    Instruction,
-    Phase,
-    Project,
-    SupervisorRun,
-    Task,
-    Workflow,
-)
+from .models import Base
 from .repositories import (
-    AgentRepository,
-    InstructionRepository,
-    PhaseRepository,
-    ProjectRepository,
-    SupervisorRunRepository,
-    TaskRepository,
-    WorkflowRepository,
+    SAAgentRepository,
+    SAInstructionRepository,
+    SAPhaseRepository,
+    SAProjectRepository,
+    SASupervisorRunRepository,
+    SATaskRepository,
+    SAWorkflowRepository,
 )
-from .session import ensure_schema, get_engine
-from .uow import SAUnitOfWork
+from .session import get_engine, get_session
+from .uow import SAUnitOfWork, UnitOfWork
 
 __all__ = [
-    "Agent",
-    "AgentRepository",
-    "Check",
-    "Evidence",
-    "Instruction",
-    "InstructionRepository",
-    "Phase",
-    "PhaseRepository",
-    "Project",
-    "ProjectRepository",
-    "SAUnitOfWork",
-    "SupervisorRun",
-    "SupervisorRunRepository",
-    "Task",
-    "TaskRepository",
-    "Workflow",
-    "WorkflowDB",
-    "WorkflowRepository",
-    "ensure_schema",
+    "Base",
+    "DB_PATH",
+    "SAAgentRepository",
+    "SAInstructionRepository",
+    "SAPhaseRepository",
+    "SAProjectRepository",
+    "SASupervisorRunRepository",
+    "SATaskRepository",
+    "SAWorkflowRepository",
     "get_engine",
+    "get_session",
+    "SAUnitOfWork",
+    "UnitOfWork",
 ]

@@ -58,6 +58,7 @@ def create_app() -> FastAPI:
     app.get("/api/phases/{phase_id}/instructions", response_model=None)(api.api_instructions_list)
     app.post("/api/instructions", response_model=None)(api.api_instruction_create)
     app.put("/api/instructions/{instruction_id}", response_model=None)(api.api_instruction_update)
+    app.put("/api/instructions/{instruction_id}/skills", response_model=None)(api.api_instruction_update_skills)
     app.delete("/api/instructions/{instruction_id}", response_model=None)(api.api_instruction_delete)
     app.put("/api/phases/{phase_id}/instructions/reorder", response_model=None)(api.api_instructions_reorder)
 

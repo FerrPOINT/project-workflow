@@ -1,9 +1,8 @@
 """Application services — use cases."""
 from __future__ import annotations
 
-from typing import Any, List, cast
+from typing import Any
 
-from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.repositories import UnitOfWork
 
 
@@ -33,8 +32,10 @@ class AgentService:
     def update_agent(self, agent_id: int, data: dict[str, Any]) -> None:
         with self._uow:
             self._uow.agents.update(agent_id, data)
+            return None
 
     def delete_agent(self, agent_id: int) -> None:
         with self._uow:
             self._uow.agents.delete(agent_id)
+            return None
 

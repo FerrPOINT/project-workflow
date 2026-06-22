@@ -42,59 +42,14 @@ target-version = ["py310"]
 python_version = "3.10"
 strict = false
 warn_unused_ignores = true
-disallow_untyped_defs = true
-[[tool.mypy.overrides]]
-module = "project_workflow.interfaces.ui.compat"
-ignore_errors = true
-[[tool.mypy.overrides]]
-module = [
-    "project_workflow.wizard.models",
-    "project_workflow.domain.validation",
-]
-ignore_errors = true
+ignore_missing_imports = true
+# disallow_untyped_defs disabled: the project mixes strict domain code with SQLAlchemy
+# ORM models and auto-generated Alembic boilerplate where full annotation is impractical.
 
 [[tool.mypy.overrides]]
 module = [
-    "project_workflow.infrastructure.llm",
-    "project_workflow.infrastructure.conversation",
-    "project_workflow.domain.fsm",
-    "project_workflow.infrastructure.db.phase_service",
-    "project_workflow.wizard.evaluate",
-    "project_workflow.domain.repositories",
-]
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "project_workflow.infrastructure.db"
-follow_imports = "skip"
-
-[[tool.mypy.overrides]]
-module = [
-    "project_workflow.config",
-    "project_workflow.application",
-    "project_workflow.wizard.checks",
-    "project_workflow.wizard.contracts",
-    "project_workflow.wizard.prompt",
-    "project_workflow.wizard.types",
-]
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = [
-    "project_workflow.infrastructure.db.compat",
-    "project_workflow.application.state",
-    "project_workflow.infrastructure.db.schema",
-    "project_workflow.interfaces.cli.core",
-    "project_workflow.interfaces.cli.ui",
-]
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = [
-    "project_workflow.wizard.core",
-    "project_workflow.wizard.context",
-    "project_workflow.wizard.store",
-    "project_workflow.interfaces.cli.__main__",
+    "project_workflow.infrastructure.db.migrations.env",
+    "project_workflow.infrastructure.db.migrations.versions.*",
 ]
 ignore_errors = true
 

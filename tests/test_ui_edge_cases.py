@@ -130,33 +130,32 @@ class TestResolveTaskPhase:
         db = MagicMock()
         db.get_phases.return_value = []
         db.get_phase.return_value = None
-        token, phase = _resolve_task_phase(None, db)
+        token, phase = _resolve_task_phase(None, _db=db)
         assert token == "-1"
         assert phase is None
 
     def test_by_code_match(self):
         db = MagicMock()
-        db.get_phases.return_value = []
-        db.get_phase.return_value = {"code": "1", "id": 10}
-        token, phase = _resolve_task_phase("1", db)
+        db.get_phases.return_value = [{"id": 1, "code": "1", "name": "One", "phase_order": 1}]
+        db.get_phase.return_value = None
+        token, phase = _resolve_task_phase("1", _db=db)
         assert token == "1"
         assert phase["code"] == "1"
 
     def test_numeric_id(self):
         db = MagicMock()
-        db.get_phases.return_value = []
-        db.get_phase.return_value = {"id": 99, "code": "x"}
-        token, phase = _resolve_task_phase("99", db)
-        assert token == "99"
-        assert phase["code"] == "x"
+        db.get_phases.return_value = [{"id": 42, "code": "1", "name": "One", "phase_order": 1}]
+        db.get_phase.return_value = None
+        token, phase = _resolve_task_phase(42, _db=db)
+        assert phase["id"] == 42
 
     def test_legacy_redirect(self, monkeypatch):
         from project_workflow import config
         monkeypatch.setattr(config, "LEGACY_PHASE_REDIRECTS", {"old": "1"})
         db = MagicMock()
-        db.get_phases.return_value = []
-        db.get_phase.side_effect = lambda x: {"code": "1", "id": 10} if str(x) == "1" else None
-        token, phase = _resolve_task_phase("old", db)
+        db.get_phases.return_value = [{"id": 10, "code": "1", "name": "One", "phase_order": 1}]
+        db.get_phase.return_value = None
+        token, phase = _resolve_task_phase("old", _db=db)
         assert token == "1"
         assert phase["code"] == "1"
 
@@ -164,7 +163,7 @@ class TestResolveTaskPhase:
         db = MagicMock()
         db.get_phases.return_value = []
         db.get_phase.return_value = None
-        token, phase = _resolve_task_phase("unknown", db)
+        token, phase = _resolve_task_phase("unknown", _db=db)
         assert token == "unknown"
         assert phase is None
 
@@ -188,7 +187,7 @@ class TestScanHermesSkills:
 class TestSeedToSqlite:
     def test_calls_ensure_phase_catalog(self, monkeypatch):
         db = MagicMock()
-        monkeypatch.setattr("project_workflow.interfaces.ui._app_state", MagicMock(db=db))
+        monkeypatch.setattr("project_workflow.interfaces.ui._app_state", MagicMock(get_db=lambda: db))
         from project_workflow.infrastructure.db import schema
         called = []
         monkeypatch.setattr(schema, "ensure_phase_catalog", lambda db: called.append(True))

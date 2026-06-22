@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from typing import List, Optional, Pattern
+from typing import Any, List, Optional, Pattern
 
 
 @dataclass(frozen=True)
@@ -247,6 +247,25 @@ def validate(key: str, raise_on_invalid: bool = False) -> ValidatedTaskKey:
 
 def validate_or_die(key: str) -> ValidatedTaskKey:
     return _default_validator.validate_or_die(key)
+
+
+def get_project_for_task_key(uow: Any, task_key: str) -> dict[str, Any] | None:
+    """Resolve a project row from a task key using configured project prefixes."""
+    validated = _default_validator.validate(task_key)
+    prefix = validated.prefix
+    if not prefix:
+        return None
+    for project in uow.projects.list():
+        project_dict = project.to_dict() if hasattr(project, "to_dict") else dict(project)
+        key_prefixes = project_dict.get("key_prefixes", []) or []
+        if isinstance(key_prefixes, str):
+            try:
+                key_prefixes = json.loads(key_prefixes)
+            except Exception:
+                key_prefixes = []
+        if prefix in key_prefixes:
+            return project_dict
+    return None
 
 
 # Backward-compat alias

@@ -17,6 +17,35 @@ def _get_app_state() -> _AppState:
     return cast(_AppState, _ui_module._app_state)
 
 
+def _workflow_service() -> Any:
+    return _get_db()
+
+
+def _phase_service() -> Any:
+    return _get_db()
+
+
+def _project_service() -> Any:
+    return _get_db()
+
+
+def _task_service() -> Any:
+    return _get_db()
+
+
+def _agent_service() -> Any:
+    return _get_db()
+
+
+def _instruction_service() -> Any:
+    return _get_db()
+
+
+def _get_db() -> Any:
+    """Return the current DB/UoW (legacy helper for UI page loaders)."""
+    return _get_app_state().get_db()
+
+
 def _parse_optional_int(raw: Any) -> int | None:
     if raw is None or raw == "":
         return None
@@ -160,29 +189,31 @@ def _load_phase_detail(phase_id: int | str) -> dict[str, Any] | None:
 
 
 def _resolve_task_phase(
-    current_phase: Any, wdb: Any, workflow_id: int | None = None
+    current_phase: Any, _db: Any | None = None, workflow_id: int | None = None
 ) -> tuple[str, dict[str, Any] | None]:
     token = str(current_phase if current_phase is not None else "-1")
-    if workflow_id is not None:
-        workflow_phases = wdb.get_phases(workflow_id=workflow_id)
-        for phase in workflow_phases:
-            if str(phase.get("code", phase.get("id"))) == token:
-                return token, phase
-        for phase in workflow_phases:
-            if str(phase.get("id")) == token:
-                return token, phase
+    wdb = _db or _get_db()
+
+    workflow_phases = wdb.get_phases(workflow_id=workflow_id) if workflow_id is not None else wdb.get_phases()
+    for phase in workflow_phases:
+        if str(phase.get("code", phase.get("id"))) == token:
+            return token, phase
+        if str(phase.get("id")) == token:
+            return token, phase
+
     found_phase = wdb.get_phase(token)
     if found_phase:
         return token, dict(found_phase)
+
     redirected = config.LEGACY_PHASE_REDIRECTS.get(token)
     if redirected:
-        if workflow_id is not None:
-            for phase in wdb.get_phases(workflow_id=workflow_id):
-                if str(phase.get("code", phase.get("id"))) == redirected:
-                    return redirected, dict(phase)
+        for phase in workflow_phases:
+            if str(phase.get("code", phase.get("id"))) == redirected:
+                return redirected, dict(phase)
         redirected_phase = wdb.get_phase(redirected)
         if redirected_phase:
             return redirected, dict(redirected_phase)
+
     try:
         numeric = int(token)
     except (TypeError, ValueError):
@@ -210,7 +241,7 @@ def _load_tasks() -> list[dict[str, Any]]:
         total_phases = phase_counts_by_workflow.get(workflow_id, default_phase_count)
 
         current_phase_id, current = _resolve_task_phase(
-            t.get("current_phase", "-1"), wdb, workflow_id=workflow_id
+            t.get("current_phase", "-1"), workflow_id=workflow_id
         )
         current = current or {}
         project_code = t.get("project_code") or "—"

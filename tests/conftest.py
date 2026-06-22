@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 
 from project_workflow import config
-from project_workflow.infrastructure.db import schema as schema_module
 
 
 @pytest.fixture(autouse=True)
@@ -43,12 +42,13 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
     original_app_state = app_state._app_state
     app_state._app_state = app_state._AppState(database_url=database_url)
 
-    from project_workflow.infrastructure.db import WorkflowDB
+    
     from project_workflow.infrastructure.db.schema import ensure_phase_catalog
+    from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
-    wdb = WorkflowDB()
-    wdb.init()
-    ensure_phase_catalog(wdb)
+    uow = SAUnitOfWork(database_url)
+    uow.create_all()
+    ensure_phase_catalog(uow)
 
     yield
 

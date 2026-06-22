@@ -18,6 +18,7 @@ from typing import Optional
 
 import click
 
+from ...infrastructure.db.uow import SAUnitOfWork
 from ... import wizard
 from .core import cli, out_json, _require_valid_key
 from .core import console, WARN
@@ -88,9 +89,21 @@ def history_cmd(ctx: click.Context, task: str, n: Optional[int]) -> None:
     task_key = _require_valid_key(task)
     jmode = ctx.obj.get("json_mode", False)
 
-    from ...infrastructure.db import WorkflowDB
-    wdb = WorkflowDB()
-    runs = wdb.get_supervisor_runs(task_key=task_key, limit=n or 200)
+    
+    with SAUnitOfWork() as uow:
+        runs_raw = uow.supervisor_runs.list(task_key=task_key, limit=n or 200)
+        runs = []
+        for r in runs_raw:
+            rd = r.to_dict()
+            next_phase_id = rd.get("next_phase_id")
+            rollback_phase_id = rd.get("rollback_phase_id")
+            phase = uow.phases.get_by_id(int(rd.get("phase_id") or 0))
+            next_phase = uow.phases.get_by_id(int(next_phase_id)) if next_phase_id is not None else None
+            rollback_phase = uow.phases.get_by_id(int(rollback_phase_id)) if rollback_phase_id is not None else None
+            rd["phase_code"] = phase.code if phase else "-"
+            rd["next_phase_code"] = next_phase.code if next_phase else "-"
+            rd["rollback_phase_code"] = rollback_phase.code if rollback_phase else "-"
+            runs.append(rd)
 
     if jmode:
         out_json({

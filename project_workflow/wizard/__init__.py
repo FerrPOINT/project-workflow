@@ -6,9 +6,6 @@ Public API re-exported from project_workflow.wizard subpackage.
 from __future__ import annotations
 
 from project_workflow import config
-
-SMART_EVALUATE = config.SMART_EVALUATE
-
 from project_workflow.infrastructure import conversation as convo  # noqa: F401
 from project_workflow.wizard.checks import (
     BLOCKER_PATTERNS,
@@ -45,12 +42,14 @@ from project_workflow.wizard.evaluate import (
     evaluate_llm_report,
 )
 from project_workflow.wizard.prompt import build_phase_prompt
-from project_workflow.wizard.store import WizardAssessmentStore, _row_to_assessment
+from project_workflow.wizard.store import WizardAssessmentStore
 from project_workflow.wizard.types import (
     ArtifactSnapshot,
     PhaseContract,
     WizardAssessment,
 )
+
+SMART_EVALUATE = config.SMART_EVALUATE
 
 __all__ = [
     "ArtifactSnapshot",

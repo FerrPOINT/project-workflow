@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from ..infrastructure import conversation as convo
-from ..infrastructure.db import WorkflowDB
+
 from .models import Phase
 from .types import ArtifactSnapshot
 from .contracts import PhaseContractBuilder, phase_to_dict
@@ -16,7 +16,7 @@ class WizardContextBuilder:
 
     def __init__(
         self,
-        db: WorkflowDB,
+        uow: Any,
         task: dict[str, Any],
         project: dict[str, Any] | None,
         workflow: dict[str, Any] | None,
@@ -25,7 +25,7 @@ class WizardContextBuilder:
         task_key: str,
         repo: Optional[str] = None,
     ):
-        self.db = db
+        self.uow = uow
         self.task = task
         self.project = project
         self.workflow = workflow
@@ -50,7 +50,7 @@ class WizardContextBuilder:
 
     def _phase_status_lookup(self) -> dict[str, str]:
         statuses: dict[str, str] = {}
-        for row in self.db.get_task_history(self.task["id"]):
+        for row in self.uow.get_task_history(self.task["id"]):
             phase = self._phase_by_id(row["phase_id"])
             if phase:
                 statuses[phase.code] = str(row["status"])
@@ -74,7 +74,7 @@ class WizardContextBuilder:
 
     def _build_phase_history(self) -> list[dict[str, Any]]:
         history: list[dict] = []
-        for row in self.db.get_task_history(self.task["id"]):
+        for row in self.uow.get_task_history(self.task["id"]):
             phase = self._phase_by_id(row["phase_id"])
             if not phase:
                 continue
@@ -88,16 +88,27 @@ class WizardContextBuilder:
 
     def _build_recent_verdicts(self, limit: int = 5) -> list[dict[str, Any]]:
         verdicts: list[dict] = []
-        for row in self.db.get_supervisor_runs(task_id=self.task["id"], limit=limit):
-            verdicts.append({
-                "phase_code": row.get("phase_code"),
-                "verdict": str(row.get("verdict", "")).upper(),
-                "blockers": row.get("blockers", []),
-                "missing": row.get("missing", []),
-                "next_phase": row.get("next_phase_code"),
-                "rollback_target": row.get("rollback_phase_code"),
-                "created_at": row.get("created_at"),
-            })
+        for row in self.uow.get_supervisor_runs(task_id=self.task["id"], limit=limit):
+            if isinstance(row, dict):
+                verdicts.append({
+                    "phase_code": row.get("phase_code"),
+                    "verdict": str(row.get("verdict") or "").upper(),
+                    "blockers": row.get("blockers") or [],
+                    "missing": row.get("missing") or [],
+                    "next_phase": row.get("next_phase_code"),
+                    "rollback_target": row.get("rollback_phase_code"),
+                    "created_at": row.get("created_at"),
+                })
+            else:
+                verdicts.append({
+                    "phase_code": row.phase_code,
+                    "verdict": str(row.verdict or "").upper(),
+                    "blockers": row.blockers or [],
+                    "missing": row.missing or [],
+                    "next_phase": row.next_phase_code,
+                    "rollback_target": row.rollback_phase_code,
+                    "created_at": row.created_at,
+                })
         return verdicts
 
     def _artifact_dir(self) -> Path | None:

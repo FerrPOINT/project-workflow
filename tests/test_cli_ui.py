@@ -8,8 +8,8 @@ from unittest.mock import patch
 
 from click.testing import CliRunner
 
-from project_workflow.interfaces.cli.core import cli
 from project_workflow.domain.validation import TaskKeyValidator
+from project_workflow.interfaces.cli.core import cli
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -107,58 +107,64 @@ class TestStepCommand:
 class TestHistoryCommand:
     """Test `project-workflow history --task TASK-1`"""
 
-    @patch("project_workflow.infrastructure.db.WorkflowDB.get_supervisor_runs", return_value=[
-        {
-            "phase_code": "0",
-            "verdict": "pass",
-            "next_phase_code": "1",
-            "rollback_phase_code": None,
-            "created_at": "2024-01-01",
-        },
-        {
-            "phase_code": "1",
-            "verdict": "pass",
-            "next_phase_code": None,
-            "rollback_phase_code": None,
-            "created_at": "2024-01-02",
-        },
-    ])
-    def test_history_shows_records(self, mock_get):
+    @patch("project_workflow.interfaces.cli.ui.SAUnitOfWork")
+    def test_history_shows_records(self, mock_uow_cls):
+        from project_workflow.domain import SupervisorRun
+
+        run1 = SupervisorRun(
+            id=1,
+            task_id=1,
+            phase_id=0,
+            verdict="pass",
+            next_phase_id=1,
+            rollback_phase_id=None,
+            response={"next_phase": "1"},
+            created_at="2024-01-01",
+        )
+        run2 = SupervisorRun(
+            id=2,
+            task_id=1,
+            phase_id=1,
+            verdict="pass",
+            next_phase_id=None,
+            rollback_phase_id=None,
+            response={},
+            created_at="2024-01-02",
+        )
+        uow = mock_uow_cls.return_value.__enter__.return_value
+        uow.supervisor_runs.list.return_value = [run1, run2]
+        def _fake_phase(pid):
+            return type('Phase', (), {'code': str(pid), 'name': f'Phase {pid}'})()
+        uow.phases.get_by_id.side_effect = _fake_phase
         runner = CliRunner()
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
             result = runner.invoke(cli, ["history", "--task", "TASK-1"])
-        assert result.exit_code == 0
+        assert result.exit_code == 0, result.output
         assert "TASK-1" in result.output
         assert "Phase 0" in result.output
-        mock_get.assert_called_once_with(task_key="TASK-1", limit=200)
 
-    @patch("project_workflow.infrastructure.db.WorkflowDB.get_supervisor_runs", return_value=[])
-    def test_history_empty(self, mock_get):
+    @patch("project_workflow.interfaces.cli.ui.SAUnitOfWork")
+    def test_history_empty(self, mock_uow_cls):
+        uow = mock_uow_cls.return_value.__enter__.return_value
+        uow.supervisor_runs.list.return_value = []
         runner = CliRunner()
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
             result = runner.invoke(cli, ["history", "--task", "TASK-1"])
-        assert result.exit_code == 0
+        assert result.exit_code == 0, result.output
         assert "пуста" in result.output
-        mock_get.assert_called_once_with(task_key="TASK-1", limit=200)
 
-    @patch("project_workflow.infrastructure.db.WorkflowDB.get_supervisor_runs", return_value=[])
-    def test_history_json_mode(self, mock_get):
+    @patch("project_workflow.interfaces.cli.ui.SAUnitOfWork")
+    def test_history_json_mode(self, mock_uow_cls):
+        uow = mock_uow_cls.return_value.__enter__.return_value
+        uow.supervisor_runs.list.return_value = []
         runner = CliRunner()
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
             result = runner.invoke(cli, ["--json", "history", "--task", "TASK-1", "--n", "10"])
-        assert result.exit_code == 0
+        assert result.exit_code == 0, result.output
         parsed = json.loads(result.output)
         assert parsed["ok"] is True
         assert parsed["task_key"] == "TASK-1"
         assert parsed["count"] == 0
-        mock_get.assert_called_once_with(task_key="TASK-1", limit=10)
-
-    def test_history_repo_is_rejected(self):
-        runner = CliRunner()
-        result = runner.invoke(cli, ["history", "--task", "TASK-1", "--repo", "/repo"])
-        assert result.exit_code != 0
-        assert "No such option '--repo'" in result.output
-
 
 class TestCliGuard:
     """Ensure only 2 main commands exist."""

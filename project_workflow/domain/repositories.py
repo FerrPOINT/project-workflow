@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, List, Sequence
+from typing import Any, List, Literal, Sequence
 
 from project_workflow.domain import Agent, Phase, Project, SupervisorRun, Task, Workflow
 
@@ -65,6 +65,18 @@ class PhaseRepository(ABC):
     @abstractmethod
     def get_phases_for_workflow(self, workflow_id: int) -> Sequence[Phase]: ...
 
+    @abstractmethod
+    def get_checks(self, phase_id: int) -> Sequence[dict[str, Any]]: ...
+
+    @abstractmethod
+    def get_evidence(self, phase_id: int) -> Sequence[dict[str, Any]]: ...
+
+    @abstractmethod
+    def set_checks(self, phase_id: int, items: list[dict[str, Any]]) -> None: ...
+
+    @abstractmethod
+    def set_evidence(self, phase_id: int, items: list[dict[str, Any]]) -> None: ...
+
 
 class InstructionRepository(ABC):
     """Persistence contract for phase instructions."""
@@ -83,6 +95,9 @@ class InstructionRepository(ABC):
 
     @abstractmethod
     def delete(self, instruction_id: int) -> None: ...
+
+    @abstractmethod
+    def delete_for_phase(self, phase_id: int) -> None: ...
 
     @abstractmethod
     def reorder(self, phase_id: int, orders: List[tuple[int, int]]) -> None: ...
@@ -172,6 +187,32 @@ class SupervisorRunRepository(ABC):
     def create(self, data: dict[str, Any]) -> int: ...
 
 
+class CheckRepository(ABC):
+    """Persistence contract for phase checks."""
+
+    @abstractmethod
+    def list(self, phase_id: int) -> Sequence[dict[str, Any]]: ...
+
+    @abstractmethod
+    def create(self, phase_id: int, data: dict[str, Any]) -> int: ...
+
+    @abstractmethod
+    def delete_for_phase(self, phase_id: int) -> None: ...
+
+
+class EvidenceRepository(ABC):
+    """Persistence contract for phase evidence."""
+
+    @abstractmethod
+    def list(self, phase_id: int) -> Sequence[dict[str, Any]]: ...
+
+    @abstractmethod
+    def create(self, phase_id: int, data: dict[str, Any]) -> int: ...
+
+    @abstractmethod
+    def delete_for_phase(self, phase_id: int) -> None: ...
+
+
 class UnitOfWork(ABC):
     """Transaction boundary."""
 
@@ -179,7 +220,7 @@ class UnitOfWork(ABC):
     def __enter__(self) -> UnitOfWork: ...
 
     @abstractmethod
-    def __exit__(self, exc_type, exc_val, exc_tb) -> bool: ...
+    def __exit__(self, exc_type, exc_val, exc_tb) -> Literal[False]: ...
 
     @abstractmethod
     def commit(self) -> None: ...
@@ -214,3 +255,37 @@ class UnitOfWork(ABC):
     @property
     @abstractmethod
     def instructions(self) -> InstructionRepository: ...
+
+    @property
+    @abstractmethod
+    def checks(self) -> CheckRepository: ...
+
+    @property
+    @abstractmethod
+    def evidence(self) -> EvidenceRepository: ...
+
+    # Legacy compatibility aliases used by WizardEngine while tests migrate.
+    # TODO: remove once all WizardEngine internals and tests use repositories.
+    @abstractmethod
+    def add_task_history(self, task_id: int, phase_id: int, status: str) -> None: ...
+
+    @abstractmethod
+    def update_task(self, task_id: int, data: dict[str, Any]) -> None: ...
+
+    @abstractmethod
+    def create_supervisor_run(self, **kwargs: Any) -> int: ...
+
+    @abstractmethod
+    def create_phase(self, data: dict[str, Any]) -> int: ...
+
+    @abstractmethod
+    def get_task(self, task_id: int) -> Task | None: ...
+
+    @abstractmethod
+    def get_task_by_key(self, key: str) -> Task | None: ...
+
+    @abstractmethod
+    def get_phase_by_code(self, code: str) -> Phase | None: ...
+
+    @abstractmethod
+    def get_phase_by_id(self, phase_id: int) -> Phase | None: ...

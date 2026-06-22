@@ -31,11 +31,13 @@ def out_json(data: dict[str, Any]) -> None:
 
 
 def _get_task_key_validator() -> task_validator.TaskKeyValidator:
-    from ...infrastructure.db import WorkflowDB
+    
 
-    wdb = WorkflowDB()
-    wdb.init()
-    projects = wdb.get_projects()
+    uow = SAUnitOfWork()
+    uow.create_all()
+    schema.ensure_phase_catalog(uow)
+    projects_raw = uow.projects.list()
+    projects = [p.to_dict() for p in projects_raw]
     return task_validator.TaskKeyValidator.from_projects(projects)
 
 

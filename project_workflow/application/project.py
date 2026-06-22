@@ -1,7 +1,7 @@
 """Application services — use cases."""
 from __future__ import annotations
 
-from typing import Any, List, cast
+from typing import Any
 
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.repositories import UnitOfWork
@@ -39,6 +39,7 @@ class ProjectService:
     def update_project(self, project_id: int, data: dict[str, Any]) -> None:
         with self._uow:
             self._uow.projects.update(project_id, data)
+            return None
 
     def delete_project(self, project_id: int) -> None:
         with self._uow:
@@ -48,4 +49,5 @@ class ProjectService:
                 if task.project_id == project_id:
                     raise ConflictError("Project has linked tasks and cannot be deleted")
             self._uow.projects.delete(project_id)
+            return None
 

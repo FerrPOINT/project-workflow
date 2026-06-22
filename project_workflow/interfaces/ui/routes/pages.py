@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse
 from project_workflow import config
 from project_workflow.infrastructure.db.phase_service import PhaseService
 from project_workflow.interfaces.ui.services import (
+    _agent_service,
     _build_parallel_phase_blocks,
     _get_task_detail,
     _load_cli_reference,
@@ -69,8 +70,7 @@ async def phase_detail(request: Request, phase_id: str) -> HTMLResponse:
     phase = _load_phase_detail(phase_id)
     if not phase:
         return HTMLResponse("<h1>Phase not found</h1>", status_code=404)
-    wdb = _app_state.get_db()
-    agents = wdb.get_agents()
+    agents = _agent_service().list_agents()
     skills_catalog = _load_skills_catalog_direct()
     for instruction in phase.get("instructions", []):
         selected_skills = PhaseService.normalize_skills(instruction.get("skills"))
@@ -195,8 +195,7 @@ async def skills_page(request: Request, refresh: int = Query(default=0)) -> HTML
 
 async def agents_page(request: Request) -> HTMLResponse:
     """Список агентов."""
-    wdb = _app_state.get_db()
-    agents = wdb.get_agents()
+    agents = _agent_service().list_agents()
     return templates.TemplateResponse(
         request=request,
         name="agents.html",

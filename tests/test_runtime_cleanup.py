@@ -7,7 +7,7 @@ from pathlib import Path
 
 from project_workflow import config
 from project_workflow.infrastructure.db import schema
-from project_workflow.infrastructure.db import WorkflowDB
+
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -47,7 +47,7 @@ def _phase_by_code(code: str) -> dict:
 
 
 def test_default_bootstrap_project_prefixes_are_project_specific(tmp_path):
-    db = WorkflowDB(str(tmp_path / "workflow.db"))
+    uow = SAUnitOfWork(str(tmp_path / "workflow.db"))
     db.init()
 
     project = db.get_project_by_code("TASK")
@@ -57,7 +57,7 @@ def test_default_bootstrap_project_prefixes_are_project_specific(tmp_path):
 
 
 def test_sanitize_runtime_state_removes_known_test_residue_and_dedupes_agents(tmp_path):
-    db = WorkflowDB(str(tmp_path / "workflow.db"))
+    uow = SAUnitOfWork(str(tmp_path / "workflow.db"))
     db.init()
 
     ui_test_project_id = db.create_project({
@@ -208,7 +208,7 @@ def test_seed_catalog_role_bound_phases_are_fully_filled_with_agents_skills_and_
 
 
 def test_db_init_assigns_selected_agents_to_role_bound_default_phases(tmp_path):
-    db = WorkflowDB(str(tmp_path / "workflow.db"))
+    uow = SAUnitOfWork(str(tmp_path / "workflow.db"))
     db.init()
     schema.ensure_phase_catalog(db)
 

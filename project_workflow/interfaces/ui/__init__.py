@@ -11,6 +11,7 @@ from .app import app
 from .main import main
 from .seed import _seed_to_sqlite, _update_config_phase_order
 from .services import (
+    _agent_service,
     _build_parallel_phase_blocks,
     _coerce_phase_db_id,
     _get_task_detail,
@@ -35,6 +36,7 @@ __all__ = [
     "main",
     "_app_state",
     "_AppState",
+    "_agent_service",
     "_build_parallel_phase_blocks",
     "_coerce_phase_db_id",
     "_get_task_detail",

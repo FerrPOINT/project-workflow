@@ -36,7 +36,7 @@ class TestGetTaskKeyValidator:
         from project_workflow.interfaces.cli.core import _get_task_key_validator
         db = MagicMock()
         db.get_projects.return_value = []
-        monkeypatch.setattr("project_workflow.infrastructure.db.WorkflowDB", lambda: db)
+        monkeypatch.setattr("project_workflow.infrastructure.db.uow.SAUnitOfWork", lambda: db)
         validator = _get_task_key_validator()
         # should not raise and have default patterns
         assert validator is not None

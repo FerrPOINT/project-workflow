@@ -6,7 +6,7 @@ from project_workflow.domain.fsm import (
     show_phase_checklist,
     show_all_phases,
 )
-from project_workflow.infrastructure.db import WorkflowDB
+
 
 
 class TestPhaseHelpers:
@@ -21,9 +21,9 @@ class TestPhaseHelpers:
         assert nxt is None
 
     def test_get_phase_checklist_raw(self):
-        wdb = WorkflowDB()
-        wdb.init()
-        phase_code = "0.0a" if wdb.get_phase("0.0a") else "0.00"
+        uow = SAUnitOfWork()
+        uow.init()
+        phase_code = "0.0a" if uow.get_phase("0.0a") else "0.00"
         items = get_phase_checklist_raw(phase_code)
         assert isinstance(items, list)
 

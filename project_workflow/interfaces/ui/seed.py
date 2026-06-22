@@ -7,7 +7,9 @@ from typing import Any, cast
 import project_workflow.interfaces.ui as _ui_module
 
 from ... import config
+from ...application.phase import PhaseServiceApp
 from ...infrastructure.db import schema
+from ...infrastructure.db.uow import SAUnitOfWork
 from .dependencies import _AppState
 
 
@@ -25,9 +27,15 @@ def _seed_to_sqlite() -> None:
 def _update_config_phase_order(wdb: Any | None = None) -> None:
     """Пересобрать runtime PHASE_ORDER из default workflow без повторного seed-sync."""
     source_db = wdb or _get_app_state().get_db()
+    if isinstance(source_db, SAUnitOfWork):
+        uow = source_db
+    else:
+        uow = _get_app_state().get_uow()
+    default_workflow = uow.workflows.get_default()
+    workflow_id = default_workflow.id if default_workflow else None
     rows = [
         phase
-        for phase in source_db.get_phases()
+        for phase in PhaseServiceApp(uow).list_phases(workflow_id=workflow_id)
         if phase.get("workflow_is_default") and phase.get("is_seed_managed")
     ]
     if not rows:

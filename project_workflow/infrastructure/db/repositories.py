@@ -4,13 +4,15 @@ from __future__ import annotations
 import json
 from typing import Any, List, Sequence
 
-from sqlalchemy import select, text
+from sqlalchemy import delete, select, text
 from sqlalchemy.orm import Session
 
 from project_workflow.domain import Agent, Phase, Project, SupervisorRun, Task, Workflow
 from project_workflow.domain.exceptions import LastPhaseError, NotFoundError
 from project_workflow.domain.repositories import (
     AgentRepository,
+    CheckRepository,
+    EvidenceRepository,
     InstructionRepository,
     PhaseRepository,
     ProjectRepository,
@@ -147,7 +149,10 @@ class SAWorkflowRepository(WorkflowRepository):
 
     def get_by_id(self, workflow_id: int) -> Workflow | None:
         row = self._session.get(m.Workflow, workflow_id)
-        return _row_to_workflow(row) if row else None
+        if row is None:
+            return None
+        self._session.refresh(row)
+        return _row_to_workflow(row)
 
     def get_by_name(self, name: str) -> Workflow | None:
         row = self._session.execute(
@@ -203,12 +208,6 @@ class SAWorkflowRepository(WorkflowRepository):
         existing = self.get_default()
         if existing:
             return existing
-        rows = self.list()
-        if rows:
-            first = rows[0]
-            assert first.id is not None
-            self.update(first.id, {"is_default": True})
-            return self.get_by_id(first.id) or first
         new_id = self.create({"name": name, "is_default": True})
         created = self.get_by_id(new_id)
         if created is None:
@@ -302,6 +301,28 @@ class SAPhaseRepository(PhaseRepository):
 
     def get_phases_for_workflow(self, workflow_id: int) -> Sequence[Phase]:
         return self.list(workflow_id=workflow_id)
+
+    def get_checks(self, phase_id: int) -> Sequence[dict[str, Any]]:
+        rows = self._session.execute(
+            select(m.Check).where(m.Check.phase_id == phase_id)
+        ).scalars().all()
+        return [{"id": r.id, "phase_id": r.phase_id, "description": r.description} for r in rows]
+
+    def get_evidence(self, phase_id: int) -> Sequence[dict[str, Any]]:
+        rows = self._session.execute(
+            select(m.Evidence).where(m.Evidence.phase_id == phase_id)
+        ).scalars().all()
+        return [{"id": r.id, "phase_id": r.phase_id, "description": r.description} for r in rows]
+
+    def set_checks(self, phase_id: int, items: list[dict[str, Any]]) -> None:
+        self._session.execute(delete(m.Check).where(m.Check.phase_id == phase_id))
+        for item in items:
+            self._session.add(m.Check(phase_id=phase_id, description=item.get("description", "")))
+
+    def set_evidence(self, phase_id: int, items: list[dict[str, Any]]) -> None:
+        self._session.execute(delete(m.Evidence).where(m.Evidence.phase_id == phase_id))
+        for item in items:
+            self._session.add(m.Evidence(phase_id=phase_id, description=item.get("description", "")))
 
 
 class SAProjectRepository(ProjectRepository):
@@ -432,6 +453,70 @@ class SATaskRepository(TaskRepository):
             }
             for r in rows
         ]
+
+
+class SACheckRepository(CheckRepository):
+    """SQLAlchemy implementation of CheckRepository."""
+
+    def __init__(self, session: Session):
+        self._session = session
+
+    def list(self, phase_id: int) -> Sequence[dict[str, Any]]:
+        rows = self._session.execute(
+            select(m.Check).where(m.Check.phase_id == phase_id)
+        ).scalars().all()
+        return [
+            {
+                "id": r.id,
+                "phase_id": r.phase_id,
+                "description": r.description,
+            }
+            for r in rows
+        ]
+
+    def create(self, phase_id: int, data: dict[str, Any]) -> int:
+        item = m.Check(phase_id=phase_id, description=data["description"])
+        self._session.add(item)
+        self._session.flush()
+        return int(item.id)
+
+    def delete_for_phase(self, phase_id: int) -> None:
+        self._session.execute(
+            text("DELETE FROM checks WHERE phase_id = :pid"),
+            {"pid": phase_id},
+        )
+
+
+class SAEvidenceRepository(EvidenceRepository):
+    """SQLAlchemy implementation of EvidenceRepository."""
+
+    def __init__(self, session: Session):
+        self._session = session
+
+    def list(self, phase_id: int) -> Sequence[dict[str, Any]]:
+        rows = self._session.execute(
+            select(m.Evidence).where(m.Evidence.phase_id == phase_id)
+        ).scalars().all()
+        return [
+            {
+                "id": r.id,
+                "phase_id": r.phase_id,
+                "description": r.description,
+            }
+            for r in rows
+        ]
+
+    def create(self, phase_id: int, data: dict[str, Any]) -> int:
+        item = m.Evidence(phase_id=phase_id, description=data["description"])
+        self._session.add(item)
+        self._session.flush()
+        return int(item.id)
+
+    def delete_for_phase(self, phase_id: int) -> None:
+        self._session.execute(
+            text("DELETE FROM evidence WHERE phase_id = :pid"),
+            {"pid": phase_id},
+        )
 
 
 class SAAgentRepository(AgentRepository):
@@ -579,6 +664,12 @@ class SAInstructionRepository(InstructionRepository):
             raise NotFoundError(f"Instruction {instruction_id} not found")
         self._session.delete(row)
 
+    def delete_for_phase(self, phase_id: int) -> None:
+        self._session.execute(
+            text("DELETE FROM instructions WHERE phase_id = :pid"),
+            {"pid": phase_id},
+        )
+
     def reorder(self, phase_id: int, orders: List[tuple[int, int]]) -> None:
         """Reassign step_num values based on (instruction_id, new_step_num) pairs.
 
@@ -607,6 +698,36 @@ class SAInstructionRepository(InstructionRepository):
             .order_by(m.Instruction.step_num.desc())
         ).scalar()
         return (max_step or 0) + 1
+
+
+class SACLIHistoryRepository:
+    """SQLAlchemy repository for CLI call history."""
+
+    def __init__(self, session: Session):
+        self._session = session
+
+    def list(self, limit: int = 200) -> Sequence[dict[str, Any]]:
+        rows = self._session.execute(
+            select(m.CliHistory).order_by(m.CliHistory.id.asc()).limit(limit)
+        ).scalars().all()
+        return [m.model_to_dict(r) for r in rows]
+
+    def create(
+        self,
+        command: str,
+        task_key: str | None = None,
+        request: str | None = None,
+        response: str | None = None,
+    ) -> int:
+        item = m.CliHistory(
+            command=command,
+            task_key=task_key,
+            request=request,
+            response=response,
+        )
+        self._session.add(item)
+        self._session.flush()
+        return int(item.id)
 
 
 def _parse_skills(raw: str | None) -> list[str]:

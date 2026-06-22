@@ -39,6 +39,8 @@ def _normalize_url(url: str | None) -> str:
         return get_database_url()
     if "://" in url:
         return url
+    if url == ":memory:" or url.startswith("/"):
+        return f"sqlite:///{url}"
     if Path(url).suffix == ".db":
         return f"sqlite:///{url}"
     return url

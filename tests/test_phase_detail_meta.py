@@ -13,7 +13,7 @@ client = TestClient(app)
 def setup_db():
     """Ensure seed data exists for phase detail page tests."""
     wdb = _app_state.get_db()
-    if wdb.is_empty():
+    if uow.is_empty():
         _seed_to_sqlite()
 
 

@@ -18,6 +18,7 @@ from . import (
     WorkflowService,
 )
 from ..config import get_settings
+from ..infrastructure.db.phase_service import PhaseService
 from ..infrastructure.db.session import ensure_schema, get_engine
 from ..infrastructure.db.uow import SAUnitOfWork
 
@@ -41,27 +42,30 @@ class _AppState:
             target = f"sqlite:///{target}"
         return target
 
-    def get_db(self) -> Any:
-        from ..infrastructure.db.compat import WorkflowDBCompat
-
-        if self._db is None:
-            self._db = WorkflowDBCompat(state=self)
-        self._db.init()
+    def get_db(self) -> SAUnitOfWork:
+        """Return the SQLAlchemy UnitOfWork and ensure seed catalog is loaded."""
+        if self._uow is None:
+            engine = get_engine(self._database_url_normalized())
+            if engine.dialect.name == "sqlite":
+                ensure_schema(engine)
+            self._uow = SAUnitOfWork(engine)
         if not self._catalog_ensured:
             from ..infrastructure.db import schema
 
-            schema.ensure_phase_catalog(self._db)
+            schema.ensure_phase_catalog(self._uow)
             self._catalog_ensured = True
-        return self._db
+        return self._uow
 
     def reset(self) -> None:
+        if self._uow is not None:
+            self._uow.close()
         self._db = None
         self._srv = None
         self._uow = None
         self._catalog_ensured = False
 
-    def get_service(self) -> Any:
-        """Return the legacy PhaseService used by detail/edit routes."""
+    def get_service(self) -> PhaseService:
+        """PhaseService helper for UI detail/edit routes."""
         if self._srv is None:
             from ..infrastructure.db.phase_service import PhaseService
 
