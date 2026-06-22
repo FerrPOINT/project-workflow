@@ -1,7 +1,7 @@
 """Compatibility adapter: legacy WorkflowDB interface backed by SQLAlchemy.
 
 This module provides ``WorkflowDBCompat`` — a duck-typed shim that exposes
-exactly the subset of ``project_workflow.db.WorkflowDB`` that CLI, wizard and
+exactly the subset of ``project_workflow.infrastructure.db.WorkflowDB`` that CLI, wizard and
 seed loaders need.  It delegates reads/writes to the SQLAlchemy-backed
 application services and repositories, removing the runtime dependency on the
 legacy sqlite3 WorkflowDB while keeping call-site code unchanged.
@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Generator
 
 if TYPE_CHECKING:
-    from ...app_state import _AppState
+    from ...application.state import _AppState
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +79,7 @@ class WorkflowDBCompat:
     """Legacy-compatible DB handle backed by SQLAlchemy services.
 
     The constructor accepts an optional ``_AppState`` instance.  When omitted it
-    falls back to the global ``project_workflow.app_state._app_state`` so
+    falls back to the global ``project_workflow.application.state._app_state`` so
     legacy ``WorkflowDB()`` call sites keep working.
     """
 
@@ -93,7 +93,7 @@ class WorkflowDBCompat:
             return
 
         from ... import config
-        from ...app_state import _AppState
+        from ...application.state import _AppState
 
         if db_path is not None:
             db_url = str(db_path)
@@ -102,19 +102,12 @@ class WorkflowDBCompat:
             self._state = _AppState(database_url=db_url)
             return
 
-        # Legacy default instance: respect a monkeypatched DB_PATH over the
-        # environment DATABASE_URL so tests that patch DB_PATH keep working.
-        from ...db import DB_PATH
-
         env_url = config.get_settings().DATABASE_URL
-        if env_url and not env_url.startswith("sqlite://"):
+        default_db_path = Path(getattr(config, "DB_PATH", str(Path(config.get_settings().WORKFLOW_DIR) / "workflow.db")))
+        if env_url and env_url.startswith("sqlite://"):
             db_url = env_url
-        elif env_url and env_url.startswith("sqlite:///"):
-            env_path = Path(env_url.replace("sqlite:///", "")).resolve()
-            db_path_resolved = Path(DB_PATH).resolve()
-            db_url = env_url if env_path == db_path_resolved else f"sqlite:///{DB_PATH}"
         else:
-            db_url = f"sqlite:///{DB_PATH}"
+            db_url = f"sqlite:///{default_db_path}"
         self._state = _AppState(database_url=db_url)
 
     @property

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from project_workflow.db import WorkflowDB
+from project_workflow.infrastructure.db import WorkflowDB
 from project_workflow.wizard import WizardEngine
 
 
@@ -14,10 +14,13 @@ def _patch_runtime(monkeypatch, tmp_path: Path) -> Path:
     workflow_db = tmp_path / "workflow.db"
     convo_dir = tmp_path / ".project-workflow"
     convo_db = convo_dir / "conversation.db"
-    monkeypatch.setattr("project_workflow.db.DB_PATH", workflow_db)
-    monkeypatch.setattr("project_workflow.db.DB_PATH", workflow_db)
-    monkeypatch.setattr("project_workflow.conversation.DB_DIR", convo_dir)
-    monkeypatch.setattr("project_workflow.conversation.DB_PATH", convo_db)
+    monkeypatch.setattr("project_workflow.infrastructure.db.DB_PATH", workflow_db)
+    monkeypatch.setattr("project_workflow.infrastructure.db.DB_PATH", workflow_db)
+    monkeypatch.setattr("project_workflow.infrastructure.conversation.DB_DIR", convo_dir)
+    monkeypatch.setattr("project_workflow.infrastructure.conversation.DB_PATH", convo_db)
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{workflow_db}")
+    from project_workflow import config
+    config.get_settings.cache_clear()
     return workflow_db
 
 

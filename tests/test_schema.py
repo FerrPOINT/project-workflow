@@ -6,14 +6,15 @@ from pathlib import Path
 
 import pytest
 
-from project_workflow import config, schema
-from project_workflow.db import WorkflowDB
-from project_workflow.models import Phase
+from project_workflow import config
+from project_workflow.infrastructure.db import schema
+from project_workflow.infrastructure.db import WorkflowDB
+from project_workflow.wizard.models import Phase
 
 
 @pytest.fixture
 def fresh_db(tmp_path, monkeypatch):
-    import project_workflow.db as db_module
+    import project_workflow.infrastructure.db as db_module
     monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "workflow.db")
     monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "workflow.db")
     db = WorkflowDB()
@@ -49,7 +50,7 @@ class TestSeedPersistence:
             "checks": [],
             "evidence": [],
         }], ensure_ascii=False))
-        monkeypatch.setattr(schema, "_SEED_PATH", seed_path)
+        monkeypatch.setattr(config, "SEED_PATH", seed_path)
         fresh_db.sync_phase_catalog(
             [{"code": "1", "name": "One", "next_recommendation": "Old"}],
             ["1"],
@@ -157,7 +158,7 @@ class TestSerializeHelpers:
 
 class TestGetPhase:
     def test_get_phase_returns_phase(self, tmp_path, monkeypatch):
-        import project_workflow.db as db_module
+        import project_workflow.infrastructure.db as db_module
         monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "workflow.db")
         monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "workflow.db")
         phase = schema.get_phase("1")
@@ -165,7 +166,7 @@ class TestGetPhase:
         assert phase.code == "1"
 
     def test_get_phase_order(self, tmp_path, monkeypatch):
-        import project_workflow.db as db_module
+        import project_workflow.infrastructure.db as db_module
         monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "workflow.db")
         monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "workflow.db")
         order = schema.get_phase_order()
@@ -175,7 +176,7 @@ class TestGetPhase:
 
 class TestLoadPhasesTopLevel:
     def test_load_phases(self, tmp_path, monkeypatch):
-        import project_workflow.db as db_module
+        import project_workflow.infrastructure.db as db_module
         monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "workflow.db")
         monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "workflow.db")
         phases = schema.load_phases()

@@ -53,7 +53,7 @@ class TestCoverageAccumulation:
 
     def _make_engine(self, tmp_path, monkeypatch, task_key="AAT-1", current_phase="0"):
         test_db = tmp_path / "workflow.db"
-        import project_workflow.db as db_module
+        import project_workflow.infrastructure.db as db_module
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
         with patch("project_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
@@ -119,7 +119,7 @@ class TestEvaluateAccumulationEndToEnd:
 
     def _make_engine(self, tmp_path, monkeypatch, task_key="AAT-1", current_phase="0"):
         test_db = tmp_path / "workflow.db"
-        import project_workflow.db as db_module
+        import project_workflow.infrastructure.db as db_module
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
         with patch("project_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None

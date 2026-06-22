@@ -2,7 +2,7 @@
 
 import pytest
 
-from project_workflow.task_validator import (
+from project_workflow.domain.validation import (
     TaskKeyValidator,
     TaskKeyValidationError,
     validate,

@@ -70,10 +70,10 @@ WORKFLOW_DIR = os.getenv("WORKFLOW_DIR", str(PKG_DIR / "data"))
 
 ```bash
 cd /opt/dev/hermes-workspace/project-workflow
-python -c "from project_workflow.db import DB_PATH; print(DB_PATH)"
+python -c "from project_workflow.infrastructure.db import DB_PATH; print(DB_PATH)"
 # → /opt/dev/hermes-workspace/project-workflow/data/workflow.db
 
-WORKFLOW_DB_PATH=/tmp/custom.db python -c "from project_workflow.db import DB_PATH; print(DB_PATH)"
+WORKFLOW_DB_PATH=/tmp/custom.db python -c "from project_workflow.infrastructure.db import DB_PATH; print(DB_PATH)"
 # → /tmp/custom.db
 
 pytest tests/test_db_path.py -v
@@ -106,7 +106,7 @@ overrides. All processes now see the same SQLite file by default."
 ```python
 # tests/test_wizard_fk_types.py
 from unittest.mock import patch, MagicMock
-from project_workflow.models import Phase
+from project_workflow.wizard.models import Phase
 from project_workflow.wizard import WizardEngine
 
 class TestRecordTransitionTypes:
@@ -252,8 +252,8 @@ task_key 'AAT-1' across test classes writing into same DB."
 def test_step_creates_task_in_db_without_state_files():
     """step --task NEW-KEY должен создать задачу в БД без info/ файлов."""
     from click.testing import CliRunner
-    from project_workflow.cli.ui import step_cmd
-    from project_workflow.db import WorkflowDB
+    from project_workflow.interfaces.cli.ui import step_cmd
+    from project_workflow.infrastructure.db import WorkflowDB
 
     runner = CliRunner()
     result = runner.invoke(step_cmd, ["--task", "TASKNEIROKLYUCH-99999"])
@@ -648,7 +648,7 @@ PhaseEvidence). Aligns dataclass with actual DB schema."
 
 ### Задача 11: README актуализация
 
-**Objective:** README.md всё ещё упоминает `python -m project_workflow.ui` для запуска UI. Добавить примечание про systemd. Убрать упоминания `info/` и `progress.json`.
+**Objective:** README.md всё ещё упоминает `python -m project_workflow.interfaces.ui` для запуска UI. Добавить примечание про systemd. Убрать упоминания `info/` и `progress.json`.
 
 **Файлы:**
 - Модифицировать: `README.md`

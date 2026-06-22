@@ -5,10 +5,10 @@ from typing import Any, cast
 
 import click
 
-from .. import config
+from ... import config
 from ..cli.core import cli as project_workflow
 from .dependencies import _AppState
-import project_workflow.ui as _ui_module
+import project_workflow.interfaces.ui as _ui_module
 from .templates import env as _templates_env
 
 
@@ -364,7 +364,7 @@ def _load_dashboard() -> dict[str, Any]:
 
 def _get_task_detail(task_key: str) -> dict[str, Any] | None:
     """Загрузить деталку задачи: метаданные + история фаз (линейно, без FORK/JOIN)."""
-    from ..wizard import VERDICT_LABELS
+    from ...wizard import VERDICT_LABELS
 
     wdb = _get_app_state().get_db()
     task = wdb.get_task_by_key(task_key)

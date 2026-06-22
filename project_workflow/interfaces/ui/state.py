@@ -1,7 +1,7 @@
 """Global mutable application state holder for the UI.
 
 Kept in its own tiny module so every UI sub-module can share the same
-instance.  Tests monkeypatch ``project_workflow.ui._app_state``; because the
+instance.  Tests monkeypatch ``project_workflow.interfaces.ui._app_state``; because the
 symbol is defined here, the patch reaches all consumers.
 """
 

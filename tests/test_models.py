@@ -1,6 +1,6 @@
 """Test models.py methods."""
 
-from project_workflow.models import Phase, PhaseInstruction, PhaseCheck, PhaseEvidence, PhaseDelegate
+from project_workflow.wizard.models import Phase, PhaseInstruction, PhaseCheck, PhaseEvidence, PhaseDelegate
 
 
 class TestPhaseModels:

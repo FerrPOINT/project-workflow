@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from project_workflow import config, schema
-from project_workflow.db import WorkflowDB
+from project_workflow import config
+from project_workflow.infrastructure.db import schema
+from project_workflow.infrastructure.db import WorkflowDB
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

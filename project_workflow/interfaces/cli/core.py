@@ -2,7 +2,7 @@
 
 ПРАВИЛО ПРОЕКТА: этот файл содержит только общий click-group и хелперы.
 Никакие CLI-команды здесь не регистрируются. Все команды живут в
-`project_workflow/cli/ui.py` и их ровно две: step, history.
+`project_workflow/interfaces/cli/ui.py` и их ровно две: step, history.
 """
 
 from __future__ import annotations
@@ -14,7 +14,8 @@ from typing import Any
 import click
 from rich.console import Console
 
-from .. import __version__, task_validator
+from ... import __version__
+from ...domain import validation as task_validator
 
 console = Console()
 
@@ -30,7 +31,7 @@ def out_json(data: dict[str, Any]) -> None:
 
 
 def _get_task_key_validator() -> task_validator.TaskKeyValidator:
-    from ..db import WorkflowDB
+    from ...infrastructure.db import WorkflowDB
 
     wdb = WorkflowDB()
     wdb.init()

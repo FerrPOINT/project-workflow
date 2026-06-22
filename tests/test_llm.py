@@ -6,7 +6,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 import requests
 
-from project_workflow.llm import (
+from project_workflow.infrastructure.llm import (
     OllamaClient,
     PromptBuilder,
     ResponseParser,
@@ -45,7 +45,7 @@ class TestOllamaClient:
     def test_default_env_vars(self, monkeypatch):
         monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
         from importlib import reload
-        import project_workflow.llm as llm_mod
+        import project_workflow.infrastructure.llm as llm_mod
         reload(llm_mod)
         assert llm_mod.OLLAMA_BASE_URL == "http://localhost:11434"
         assert llm_mod.OLLAMA_MODEL == "kimi-k2.6"
@@ -53,11 +53,11 @@ class TestOllamaClient:
     def test_chat_parses_json_response(self, monkeypatch):
         monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
         from importlib import reload
-        import project_workflow.llm as llm_mod
+        import project_workflow.infrastructure.llm as llm_mod
         reload(llm_mod)
         client = llm_mod.OllamaClient()
         expected = {"verdict": "PASS", "confidence": 0.95}
-        with patch("project_workflow.llm.requests.post") as mock_post:
+        with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
             mock_post.return_value = MagicMock(
                 status_code=200,
                 json=lambda: {"message": {"content": json.dumps(expected)}},
@@ -70,12 +70,12 @@ class TestOllamaClient:
         """Test cloud mode with OpenAI-compatible endpoint."""
         monkeypatch.setenv("OLLAMA_BASE_URL", "https://ollama.com/v1")
         from importlib import reload
-        import project_workflow.llm as llm_mod
+        import project_workflow.infrastructure.llm as llm_mod
         reload(llm_mod)
         client = llm_mod.OllamaClient(api_key="test-key")
         assert client.is_cloud is True
         expected = {"verdict": "PASS", "confidence": 0.95}
-        with patch("project_workflow.llm.requests.post") as mock_post:
+        with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
             mock_post.return_value = MagicMock(
                 status_code=200,
                 json=lambda: {
@@ -88,7 +88,7 @@ class TestOllamaClient:
 
     def test_chat_payload_structure(self):
         client = OllamaClient(model="test-model", base_url="http://host:1234")
-        with patch("project_workflow.llm.requests.post") as mock_post:
+        with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
             mock_post.return_value = MagicMock(
                 status_code=200,
                 json=lambda: {"message": {"content": "{}"}},
@@ -108,7 +108,7 @@ class TestOllamaClient:
 
     def test_chat_empty_content_raises(self):
         client = OllamaClient()
-        with patch("project_workflow.llm.requests.post") as mock_post:
+        with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
             mock_post.return_value = MagicMock(
                 status_code=200,
                 json=lambda: {"message": {"content": ""}},
@@ -243,7 +243,7 @@ class TestWizardEngineEvaluateLLM:
     @pytest.fixture
     def engine(self, tmp_path, monkeypatch):
         test_db = tmp_path / "workflow.db"
-        import project_workflow.db as db_module
+        import project_workflow.infrastructure.db as db_module
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
         monkeypatch.setattr("project_workflow.wizard.SMART_EVALUATE", True)
@@ -320,7 +320,7 @@ class TestWizardEngineEvaluateLLMWithRule:
     @pytest.fixture
     def engine(self, tmp_path, monkeypatch):
         test_db = tmp_path / "workflow.db"
-        import project_workflow.db as db_module
+        import project_workflow.infrastructure.db as db_module
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
         with patch("project_workflow.wizard.convo") as mock_convo:
@@ -400,7 +400,7 @@ class TestWizardEngineLLMIntegrationDB:
     @pytest.fixture
     def engine(self, tmp_path, monkeypatch):
         test_db = tmp_path / "workflow.db"
-        import project_workflow.db as db_module
+        import project_workflow.infrastructure.db as db_module
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
         monkeypatch.setattr("project_workflow.wizard.SMART_EVALUATE", True)

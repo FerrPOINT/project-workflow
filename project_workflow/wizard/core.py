@@ -11,14 +11,14 @@ Public surface kept compatible:
 from __future__ import annotations
 
 import json
-import os
 import threading
 from typing import Optional
 
-from .. import schema
-from ..db import WorkflowDB
+from .. import config
+from ..infrastructure.db import schema
+from ..infrastructure.db import WorkflowDB
 from .models import Phase  # noqa: F401
-from .. import conversation as convo  # noqa: F401 — used by tests via monkeypatch
+from ..infrastructure import conversation as convo  # noqa: F401 — used by tests via monkeypatch
 
 # Backward-compatible re-exports for existing tests
 from .checks import normalize_text, extract_keywords, BLOCKER_PATTERNS as _BLOCKER_PATTERNS, DELEGATE_PATTERNS as _DELEGATE_PATTERNS  # noqa: F401
@@ -29,8 +29,6 @@ from .contracts import PhaseContractBuilder, text_from_instruction, text_from_ch
 from .checks import check_coverage, extract_blockers, determine_verdict, build_verdict_message
 from .store import WizardAssessmentStore
 from .prompt import build_phase_prompt
-
-SMART_EVALUATE = os.getenv("SMART_EVALUATE", "").lower() in ("1", "true", "yes", "on")
 
 VERDICT_LABELS = {
     "pass": "PASS",

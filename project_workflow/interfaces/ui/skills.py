@@ -50,9 +50,9 @@ def _load_skills_catalog(*, refresh: bool = False) -> list[dict[str, str | None]
     ):
         return [dict(item) for item in _skills_catalog_cache]
 
-    # Resolve the scanner dynamically so test monkeypatches on project_workflow.ui
+    # Resolve the scanner dynamically so test monkeypatches on project_workflow.interfaces.ui
     # propagate even though the scanner lives in a submodule.
-    from project_workflow.ui import _scan_hermes_skills
+    from project_workflow.interfaces.ui import _scan_hermes_skills
 
     _skills_catalog_cache = _scan_hermes_skills()
     _skills_catalog_cached_at = now

@@ -2,10 +2,10 @@
 
 from unittest.mock import patch, MagicMock
 
-from project_workflow.models import Phase, PhaseCheck, PhaseEvidence, PhaseInstruction
+from project_workflow.wizard.models import Phase, PhaseCheck, PhaseEvidence, PhaseInstruction
 from project_workflow.wizard import WizardEngine
-from project_workflow.wizard_checks import BLOCKER_PATTERNS, DELEGATE_PATTERNS
-from project_workflow.wizard_types import VERDICT_LABELS
+from project_workflow.wizard.checks import BLOCKER_PATTERNS, DELEGATE_PATTERNS
+from project_workflow.wizard.types import VERDICT_LABELS
 
 
 class TestBuildChecklist:

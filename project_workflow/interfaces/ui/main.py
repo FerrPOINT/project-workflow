@@ -6,7 +6,7 @@ import argparse
 
 import uvicorn
 
-from .. import config
+from ... import config
 from .app import app
 
 

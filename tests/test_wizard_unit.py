@@ -13,7 +13,7 @@ class TestWizard:
 
     def test_init_bootstraps_phases_when_workflow_db_is_empty(self, tmp_path, monkeypatch):
         test_db = tmp_path / "workflow.db"
-        monkeypatch.setattr("project_workflow.db.DB_PATH", test_db)
+        monkeypatch.setattr("project_workflow.infrastructure.db.DB_PATH", test_db)
 
         with patch("project_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None

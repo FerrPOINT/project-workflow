@@ -1,5 +1,5 @@
 """Tests for PhaseFSM formal state machine."""
-from project_workflow.phase_fsm import PhaseFSM
+from project_workflow.domain.fsm import PhaseFSM
 
 
 class TestPhaseFSM:

@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-import project_workflow.ui as _ui_module
+import project_workflow.interfaces.ui as _ui_module
 
-from .. import config, schema
+from ... import config
+from ...infrastructure.db import schema
 from .dependencies import _AppState
 
 

@@ -7,10 +7,10 @@
 
 ```bash
 # 1. БД инициализирована
-python -c "from project_workflow.db import WorkflowDB; w=WorkflowDB(); w.init()"
+python -c "from project_workflow.infrastructure.db import WorkflowDB; w=WorkflowDB(); w.init()"
 
 # 2. Smoke workflow загружен
-python -c "from project_workflow.schema import ensure_phase_catalog; from project_workflow.db import WorkflowDB; ensure_phase_catalog(WorkflowDB())"
+python -c "from project_workflow.infrastructure.db.schema import ensure_phase_catalog; from project_workflow.infrastructure.db import WorkflowDB; ensure_phase_catalog(WorkflowDB())"
 
 # 3. CLI доступен
 which project-workflow || pip install -e .

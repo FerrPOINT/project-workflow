@@ -25,7 +25,7 @@ dev = ["pytest>=8.0", "pytest-cov>=4.0", "ruff>=0.3", "mypy>=1.7", "pydantic-set
 ui  = ["fastapi>=0.100", "uvicorn[standard]>=0.23", "jinja2>=3.1"]
 
 [project.scripts]
-project-workflow = "project_workflow.cli:main"
+project-workflow = "project_workflow.interfaces.cli:main"
 
 [tool.alembic]
 # placeholder; alembic.ini carries real config
@@ -44,22 +44,22 @@ strict = false
 warn_unused_ignores = true
 disallow_untyped_defs = true
 [[tool.mypy.overrides]]
-module = "project_workflow.ui.compat"
+module = "project_workflow.interfaces.ui.compat"
 ignore_errors = true
 [[tool.mypy.overrides]]
 module = [
-    "project_workflow.models",
-    "project_workflow.task_validator",
+    "project_workflow.wizard.models",
+    "project_workflow.domain.validation",
 ]
 ignore_errors = true
 
 [[tool.mypy.overrides]]
 module = [
-    "project_workflow.llm",
-    "project_workflow.conversation",
-    "project_workflow.phase_fsm",
-    "project_workflow.service",
-    "project_workflow.wizard_evaluate",
+    "project_workflow.infrastructure.llm",
+    "project_workflow.infrastructure.conversation",
+    "project_workflow.domain.fsm",
+    "project_workflow.infrastructure.db.legacy",
+    "project_workflow.wizard.evaluate",
     "project_workflow.domain.repositories",
 ]
 ignore_errors = true
@@ -72,30 +72,29 @@ follow_imports = "skip"
 module = [
     "project_workflow.config",
     "project_workflow.application",
-    "project_workflow.wizard_checks",
-    "project_workflow.wizard_contracts",
-    "project_workflow.wizard_prompt",
-    "project_workflow.wizard_types",
+    "project_workflow.wizard.checks",
+    "project_workflow.wizard.contracts",
+    "project_workflow.wizard.prompt",
+    "project_workflow.wizard.types",
 ]
 ignore_errors = true
 
 [[tool.mypy.overrides]]
 module = [
-    "project_workflow.db.compat",
-    "project_workflow.app_state",
-    "project_workflow.schema",
-    "project_workflow.cli.core",
-    "project_workflow.cli.ui",
+    "project_workflow.infrastructure.db.compat",
+    "project_workflow.application.state",
+    "project_workflow.infrastructure.db.schema",
+    "project_workflow.interfaces.cli.core",
+    "project_workflow.interfaces.cli.ui",
 ]
 ignore_errors = true
 
 [[tool.mypy.overrides]]
 module = [
-    "project_workflow.wizard",
-    "project_workflow.wizard_context",
-    "project_workflow.wizard_store",
-    "project_workflow.wizard_flow",
-    "project_workflow.cli.__main__",
+    "project_workflow.wizard.core",
+    "project_workflow.wizard.context",
+    "project_workflow.wizard.store",
+    "project_workflow.interfaces.cli.__main__",
 ]
 ignore_errors = true
 

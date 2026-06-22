@@ -9,7 +9,7 @@ from typing import Any
 from .models import Phase
 from .types import VERDICT_LABELS
 from .contracts import PhaseContractBuilder
-from ..llm import OllamaClient, PromptBuilder, ResponseParser
+from ..infrastructure.llm import OllamaClient, PromptBuilder, ResponseParser
 
 
 def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict:

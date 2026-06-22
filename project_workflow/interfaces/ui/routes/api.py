@@ -7,8 +7,8 @@ from typing import Any
 from fastapi import Query
 from fastapi.responses import JSONResponse
 
-from project_workflow.schema import persist_phase_order_to_seed
-from project_workflow.ui.schemas import (
+from project_workflow.infrastructure.db.schema import persist_phase_order_to_seed
+from project_workflow.interfaces.ui.schemas import (
     AgentCreate,
     AgentUpdate,
     InstructionCreate,
@@ -22,10 +22,10 @@ from project_workflow.ui.schemas import (
     WorkflowCreate,
     WorkflowUpdate,
 )
-from project_workflow.ui.seed import _update_config_phase_order
-from project_workflow.ui.services import _coerce_phase_db_id, _load_phase_detail, _load_tasks
-from project_workflow.ui.skills import _load_skills_catalog as _load_skills_catalog_direct
-from project_workflow.ui.state import _app_state
+from project_workflow.interfaces.ui.seed import _update_config_phase_order
+from project_workflow.interfaces.ui.services import _coerce_phase_db_id, _load_phase_detail, _load_tasks
+from project_workflow.interfaces.ui.skills import _load_skills_catalog as _load_skills_catalog_direct
+from project_workflow.interfaces.ui.state import _app_state
 
 
 def _error(message: str, status: int) -> JSONResponse:
@@ -34,7 +34,7 @@ def _error(message: str, status: int) -> JSONResponse:
 
 async def api_settings_get() -> dict[str, Any] | JSONResponse:
     """Вернуть реестр CLI-команд для UI/интеграций."""
-    from project_workflow.ui.services import _load_cli_reference
+    from project_workflow.interfaces.ui.services import _load_cli_reference
 
     return {"ok": True, "commands": _load_cli_reference()}
 
@@ -84,7 +84,7 @@ async def api_tasks(workflow_id: int | None = Query(default=None)) -> dict[str, 
 
 
 async def api_task_detail(task_key: str) -> dict[str, Any] | JSONResponse:
-    from project_workflow.ui.services import _get_task_detail
+    from project_workflow.interfaces.ui.services import _get_task_detail
 
     task = _get_task_detail(task_key)
     if task is None:
@@ -93,13 +93,13 @@ async def api_task_detail(task_key: str) -> dict[str, Any] | JSONResponse:
 
 
 async def api_projects() -> dict[str, Any] | JSONResponse:
-    from project_workflow.ui.services import _load_projects
+    from project_workflow.interfaces.ui.services import _load_projects
 
     return {"ok": True, "projects": _load_projects()}
 
 
 async def api_workflows() -> dict[str, Any] | JSONResponse:
-    from project_workflow.ui.services import _load_workflows
+    from project_workflow.interfaces.ui.services import _load_workflows
 
     return {"ok": True, "workflows": _load_workflows()}
 
@@ -200,7 +200,7 @@ async def api_phase_update(phase_id: int, payload: PhaseUpdate) -> dict[str, Any
     if payload.evidence is not None:
         ev_ids = srv.save_evidence(resolved_phase_id, payload.evidence)
 
-    from project_workflow.schema import persist_phase_update_to_seed as _persist_seed
+    from project_workflow.infrastructure.db.schema import persist_phase_update_to_seed as _persist_seed
     wdb = _app_state.get_db()
     _persist_seed(wdb, resolved_phase_id, payload.model_dump(exclude_unset=True))
 

@@ -3,7 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 from project_workflow.wizard import WizardEngine, VERDICT_LABELS
-from project_workflow.wizard_contracts import (
+from project_workflow.wizard.contracts import (
     text_from_instruction,
     text_from_check,
     text_from_evidence,

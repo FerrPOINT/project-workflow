@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from ..db import WorkflowDB
+from ..infrastructure.db import WorkflowDB
 from .types import WizardAssessment
 
 

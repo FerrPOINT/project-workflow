@@ -3,7 +3,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from project_workflow.ui import _app_state, _seed_to_sqlite, app
+from project_workflow.interfaces.ui import _app_state, _seed_to_sqlite, app
 
 
 client = TestClient(app)

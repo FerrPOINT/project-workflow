@@ -5,7 +5,11 @@ Public API re-exported from project_workflow.wizard subpackage.
 
 from __future__ import annotations
 
-from project_workflow import conversation as convo  # noqa: F401
+from project_workflow import config
+
+SMART_EVALUATE = config.SMART_EVALUATE
+
+from project_workflow.infrastructure import conversation as convo  # noqa: F401
 from project_workflow.wizard.checks import (
     BLOCKER_PATTERNS,
     DELEGATE_PATTERNS,
@@ -25,7 +29,6 @@ from project_workflow.wizard.contracts import (
     text_from_instruction,
 )
 from project_workflow.wizard.core import (
-    SMART_EVALUATE,
     VERDICT_LABELS,
     PromptCache,
     WizardEngine,

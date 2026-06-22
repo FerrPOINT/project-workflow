@@ -78,7 +78,7 @@ services:
       UI_PORT: 8811
     ports:
       - "8811:8811"
-    command: ["python", "-m", "project_workflow.ui"]
+    command: ["python", "-m", "project_workflow.interfaces.ui"]
     depends_on:
       migrate:
         condition: service_completed_successfully

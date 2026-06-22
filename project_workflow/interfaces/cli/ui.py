@@ -18,9 +18,9 @@ from typing import Optional
 
 import click
 
-from .. import wizard
-from ..cli.core import cli, out_json, _require_valid_key
-from ..cli.core import console, WARN
+from ... import wizard
+from .core import cli, out_json, _require_valid_key
+from .core import console, WARN
 
 # ── Guard: новые команды запрещены ──────────────────────────────────────
 # Если кто-то добавит @cli.command() сюда — тесты поймают.
@@ -59,7 +59,7 @@ def step_cmd(
             out_json(result)
             return
         else:
-            from ..wizard import format_result
+            from ...wizard import format_result
             formatted = format_result(result)
             if smart:
                 formatted = "[🧠 SMART MODE] " + formatted
@@ -88,7 +88,7 @@ def history_cmd(ctx: click.Context, task: str, n: Optional[int]) -> None:
     task_key = _require_valid_key(task)
     jmode = ctx.obj.get("json_mode", False)
 
-    from ..db import WorkflowDB
+    from ...infrastructure.db import WorkflowDB
     wdb = WorkflowDB()
     runs = wdb.get_supervisor_runs(task_key=task_key, limit=n or 200)
 

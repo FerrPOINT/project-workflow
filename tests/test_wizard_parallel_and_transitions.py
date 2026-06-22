@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
-from project_workflow.models import Phase, PhaseCheck, PhaseEvidence, PhaseInstruction
+from project_workflow.wizard.models import Phase, PhaseCheck, PhaseEvidence, PhaseInstruction
 from project_workflow.wizard import WizardEngine, PromptCache
 
 

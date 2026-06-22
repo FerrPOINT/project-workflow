@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import project_workflow.schema as _schema_mod
 import json
 import os
 import tempfile
@@ -13,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from project_workflow.db import WorkflowDB
+from project_workflow.infrastructure.db import WorkflowDB
 from typing import List, Optional, Sequence
 
 
@@ -147,18 +146,18 @@ def _read_seed_items_from_path(seed_path: Path, allowed_codes: Sequence[str] | N
 
 
 def _read_seed_items() -> List[dict]:
-    return _read_seed_items_from_path(_schema_mod._SEED_PATH, config.PHASE_ORDER)
+    return _read_seed_items_from_path(config.SEED_PATH, config.PHASE_ORDER)
 
 
 def _write_seed_document(items: List[dict]) -> None:
     tmp_fd, tmp_path = tempfile.mkstemp(
-        dir=_schema_mod._SEED_PATH.parent, prefix="seed.json.tmp_", suffix=".json"
+        dir=config.SEED_PATH.parent, prefix="seed.json.tmp_", suffix=".json"
     )
     try:
         with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
             json.dump(items, f, ensure_ascii=False, indent=2)
             f.write("\n")
-        os.replace(tmp_path, _schema_mod._SEED_PATH)
+        os.replace(tmp_path, config.SEED_PATH)
     except Exception:
         try:
             os.unlink(tmp_path)
@@ -211,10 +210,10 @@ def persist_phase_update_to_seed(wdb: Any, phase_id: int | str, body: dict) -> N
         or "agent_id" in body
     ):
         return
-    if not _schema_mod._SEED_PATH.exists():
+    if not config.SEED_PATH.exists():
         return
 
-    with open(_schema_mod._SEED_PATH, encoding="utf-8") as f:
+    with open(config.SEED_PATH, encoding="utf-8") as f:
         raw = json.load(f)
 
     phase = wdb.get_phase(phase_id)
@@ -262,10 +261,10 @@ def persist_phase_update_to_seed(wdb: Any, phase_id: int | str, body: dict) -> N
 def persist_phase_order_to_seed(wdb: Any, ordered_phase_ids: Sequence[int | str]) -> None:
     if not ordered_phase_ids:
         return
-    if not _schema_mod._SEED_PATH.exists():
+    if not config.SEED_PATH.exists():
         return
 
-    with open(_schema_mod._SEED_PATH, encoding="utf-8") as f:
+    with open(config.SEED_PATH, encoding="utf-8") as f:
         raw = json.load(f)
 
     seed_codes = [
@@ -311,7 +310,7 @@ def ensure_phase_catalog(wdb: Any) -> None:
             workflow_id=default_workflow["id"],
         )
 
-    smoke_seed_items = _read_seed_items_from_path(_schema_mod._SMOKE_SEED_PATH)
+    smoke_seed_items = _read_seed_items_from_path(config.SMOKE_SEED_PATH)
     smoke_workflow = wdb.get_workflow_by_name(config.SMOKE_WORKFLOW_NAME)
     if smoke_seed_items and smoke_workflow:
         smoke_phase_order = [item["code"] for item in smoke_seed_items]

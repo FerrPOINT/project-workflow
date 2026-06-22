@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from project_workflow.models import Phase
+from project_workflow.wizard.models import Phase
 from project_workflow.wizard import WizardEngine
 
 

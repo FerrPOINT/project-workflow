@@ -42,13 +42,13 @@ class _AppState:
         return target
 
     def get_db(self) -> Any:
-        from ..db.compat import WorkflowDBCompat
+        from ..infrastructure.db.compat import WorkflowDBCompat
 
         if self._db is None:
             self._db = WorkflowDBCompat(state=self)
         self._db.init()
         if not self._catalog_ensured:
-            from .. import schema
+            from ..infrastructure.db import schema
 
             schema.ensure_phase_catalog(self._db)
             self._catalog_ensured = True
@@ -63,7 +63,7 @@ class _AppState:
     def get_service(self) -> Any:
         """Return the legacy PhaseService used by detail/edit routes."""
         if self._srv is None:
-            from ..service import PhaseService
+            from ..infrastructure.db.legacy import PhaseService
 
             self._srv = PhaseService(self.get_db())
         return self._srv

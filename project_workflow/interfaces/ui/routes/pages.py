@@ -6,8 +6,8 @@ from fastapi import Query, Request
 from fastapi.responses import HTMLResponse
 
 from project_workflow import config
-from project_workflow.service import PhaseService
-from project_workflow.ui.services import (
+from project_workflow.infrastructure.db.legacy import PhaseService
+from project_workflow.interfaces.ui.services import (
     _build_parallel_phase_blocks,
     _get_task_detail,
     _load_cli_reference,
@@ -18,9 +18,9 @@ from project_workflow.ui.services import (
     _load_tasks,
     _load_workflows,
 )
-from project_workflow.ui.skills import _load_skills_catalog as _load_skills_catalog_direct
-from project_workflow.ui.state import _app_state
-from project_workflow.ui.templates import templates
+from project_workflow.interfaces.ui.skills import _load_skills_catalog as _load_skills_catalog_direct
+from project_workflow.interfaces.ui.state import _app_state
+from project_workflow.interfaces.ui.templates import templates
 
 
 async def index(request: Request) -> HTMLResponse:

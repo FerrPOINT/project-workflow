@@ -9,9 +9,9 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from project_workflow import conversation as convo
-from project_workflow.db import WorkflowDB
-from project_workflow.ui import app
+from project_workflow.infrastructure import conversation as convo
+from project_workflow.infrastructure.db import WorkflowDB
+from project_workflow.interfaces.ui import app
 
 
 client = TestClient(app)
@@ -113,8 +113,8 @@ class TestConversationHistory:
     def test_get_messages_without_limit_returns_all_records(self, tmp_path: Path, monkeypatch):
         db_dir = tmp_path / ".project-workflow"
         db_path = db_dir / "conversation.db"
-        monkeypatch.setattr("project_workflow.conversation.DB_DIR", db_dir)
-        monkeypatch.setattr("project_workflow.conversation.DB_PATH", db_path)
+        monkeypatch.setattr("project_workflow.infrastructure.conversation.DB_DIR", db_dir)
+        monkeypatch.setattr("project_workflow.infrastructure.conversation.DB_PATH", db_path)
 
         convo.add_message("99", "TASK-99", "user", "first")
         convo.add_message("99", "TASK-99", "agent", "second")

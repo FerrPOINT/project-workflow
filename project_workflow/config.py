@@ -9,7 +9,7 @@ from pathlib import Path
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-_pkg_dir = Path(__file__).resolve().parent.parent
+_pkg_dir = Path(__file__).resolve().parent
 
 
 class Settings(BaseSettings):
@@ -77,6 +77,14 @@ GITLAB_BASE_URL = settings.GITLAB_BASE_URL
 GITLAB_API_URL = settings.GITLAB_API_URL
 WORKFLOW_DIR = settings.WORKFLOW_DIR
 SETTINGS_PATH = settings.SETTINGS_PATH
+
+
+
+# Seed data paths (moved from schema.py)
+SEED_PATH = _pkg_dir / "references" / "seed.json"
+SMOKE_SEED_PATH = _pkg_dir / "references" / "smoke_seed.json"
+
+SMART_EVALUATE: bool = os.getenv("SMART_EVALUATE", "").lower() in ("1", "true", "yes", "on")
 
 PHASE_ORDER = [
     "-1",      # Task Intake

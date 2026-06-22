@@ -4,8 +4,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Optional
 
-from .. import conversation as convo
-from ..db import WorkflowDB
+from ..infrastructure import conversation as convo
+from ..infrastructure.db import WorkflowDB
 from .models import Phase
 from .types import ArtifactSnapshot
 from .contracts import PhaseContractBuilder, phase_to_dict

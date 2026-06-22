@@ -1,7 +1,13 @@
 """Infrastructure persistence layer — SQLAlchemy DB adapters and repositories."""
 from __future__ import annotations
 
+from pathlib import Path
+
 from .compat import WorkflowDBCompat as WorkflowDB
+
+# Legacy module-level DB path — tests monkeypatch this attribute.
+DB_PATH = Path.home() / ".project-workflow" / "workflow.db"
+
 from .models import (
     Agent,
     Check,

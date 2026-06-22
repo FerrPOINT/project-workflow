@@ -10,8 +10,8 @@ import click
 from click.testing import CliRunner
 import pytest
 
-from project_workflow.cli.core import cli, out_json, _require_valid_key
-from project_workflow.task_validator import TaskKeyValidator
+from project_workflow.interfaces.cli.core import cli, out_json, _require_valid_key
+from project_workflow.domain.validation import TaskKeyValidator
 
 
 class TestCliGroup:
@@ -63,27 +63,27 @@ class TestRequireValidKey:
         ])
 
     def test_valid_returns_normalized(self):
-        with patch("project_workflow.cli.core._get_task_key_validator", return_value=self._validator()):
+        with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=self._validator()):
             key = _require_valid_key("TASK-42")
             assert key == "TASK-42"
 
     def test_valid_with_prefix(self):
-        with patch("project_workflow.cli.core._get_task_key_validator", return_value=self._validator()):
+        with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=self._validator()):
             key = _require_valid_key("TASK-123")
             assert key == "TASK-123"
 
     def test_invalid_raises_abort(self):
-        with patch("project_workflow.cli.core._get_task_key_validator", return_value=self._validator()):
+        with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=self._validator()):
             with pytest.raises(click.Abort):
                 _require_valid_key("BAD-123")
 
     def test_invalid_with_spaces(self):
-        with patch("project_workflow.cli.core._get_task_key_validator", return_value=self._validator()):
+        with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=self._validator()):
             with pytest.raises(click.Abort):
                 _require_valid_key("TASK 42")
 
     def test_invalid_digits_only(self):
-        with patch("project_workflow.cli.core._get_task_key_validator", return_value=self._validator()):
+        with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=self._validator()):
             with pytest.raises(click.Abort):
                 _require_valid_key("12345")
 

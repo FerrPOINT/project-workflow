@@ -5,14 +5,14 @@ import json
 
 import pytest
 
-from project_workflow import schema
-from project_workflow.db import WorkflowDB
-from project_workflow.service import PhaseService
+from project_workflow.infrastructure.db import schema
+from project_workflow.infrastructure.db import WorkflowDB
+from project_workflow.infrastructure.db.legacy import PhaseService
 
 
 @pytest.fixture
 def fresh_db(tmp_path, monkeypatch):
-    import project_workflow.db as db_module
+    import project_workflow.infrastructure.db as db_module
     monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "workflow.db")
     monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "workflow.db")
     db = WorkflowDB()

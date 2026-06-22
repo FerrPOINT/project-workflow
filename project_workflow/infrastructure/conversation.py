@@ -204,3 +204,7 @@ def build_status_digest(task_id: str, task_key: str, current_phase: Optional[str
         "has_info": has_info,
         "latest_notes": [m.content[:120] for m in notes if m.role == "user"][-5:],
     }
+
+
+# Public alias used by legacy callers
+ensure_db = _ensure_db

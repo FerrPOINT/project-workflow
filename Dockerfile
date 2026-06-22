@@ -30,4 +30,4 @@ ENV PYTHONDONTWRITEBYTECODE=1
 
 EXPOSE 8811
 
-CMD ["python", "-m", "project_workflow.ui", "--host", "0.0.0.0", "--port", "8811"]
+CMD ["python", "-m", "project_workflow.interfaces.ui", "--host", "0.0.0.0", "--port", "8811"]

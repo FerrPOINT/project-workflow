@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from .. import __version__
+from ... import __version__
 from .routes import api, pages
 
 

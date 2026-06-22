@@ -4,14 +4,14 @@ Uses TestClient to hit GET/POST/PUT endpoints.
 """
 import pytest
 from fastapi.testclient import TestClient
-from project_workflow.ui import app
+from project_workflow.interfaces.ui import app
 
 client = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
 def setup_db():
-    from project_workflow.ui import _app_state, _seed_to_sqlite
+    from project_workflow.interfaces.ui import _app_state, _seed_to_sqlite
     wdb = _app_state.get_db()
     if wdb.is_empty():
         _seed_to_sqlite()
@@ -25,7 +25,7 @@ def setup_db():
 
 
 def _phase_id(code: str) -> int:
-    from project_workflow.ui import _app_state
+    from project_workflow.interfaces.ui import _app_state
 
     phase = _app_state.get_db().get_phase(code)
     assert phase is not None
@@ -164,7 +164,7 @@ class TestApiPhaseCreate:
         assert resp.json()["ok"] is False
 
     def test_create_phase_inserts_and_shifts_orders(self):
-        from project_workflow.ui import _app_state
+        from project_workflow.interfaces.ui import _app_state
 
         wdb = _app_state.get_db()
         workflow_id = wdb.create_workflow({"name": "Create Phase Test", "_skip_default_phase": True})
@@ -197,7 +197,7 @@ class TestApiPhaseCreate:
             wdb.delete_workflow(workflow_id)
 
     def test_create_phase_appends_when_order_beyond_end(self):
-        from project_workflow.ui import _app_state
+        from project_workflow.interfaces.ui import _app_state
 
         wdb = _app_state.get_db()
         workflow_id = wdb.create_workflow({"name": "Create Phase Append", "_skip_default_phase": True})
@@ -221,7 +221,7 @@ class TestApiPhaseCreate:
             wdb.delete_workflow(workflow_id)
 
     def test_create_phase_accepts_optional_fields(self):
-        from project_workflow.ui import _app_state
+        from project_workflow.interfaces.ui import _app_state
 
         wdb = _app_state.get_db()
         workflow_id = wdb.create_workflow({"name": "Create Phase Full", "_skip_default_phase": True})
@@ -246,7 +246,7 @@ class TestApiPhaseCreate:
     def test_create_phase_position_respects_server_order_not_dom_index(self):
         """Simulate clicking + on the second-to-last phase in a reordered list.
         The API must insert after that phase, not at the old DOM index."""
-        from project_workflow.ui import _app_state
+        from project_workflow.interfaces.ui import _app_state
 
         wdb = _app_state.get_db()
         workflow_id = wdb.create_workflow({"name": "Create Phase Order Fix", "_skip_default_phase": True})
@@ -283,7 +283,7 @@ class TestApiPhaseCreate:
 
 
 def _workflow_row(lookup: str | None = None, *, workflow_id: int | None = None, name: str | None = None, is_default: bool | None = None) -> dict:
-    from project_workflow.ui import _app_state
+    from project_workflow.interfaces.ui import _app_state
 
     workflows = _app_state.get_db().get_workflows()
     for workflow in workflows:

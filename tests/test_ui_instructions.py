@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from project_workflow.ui import app
+from project_workflow.interfaces.ui import app
 
 
 client = TestClient(app)
