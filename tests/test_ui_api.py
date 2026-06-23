@@ -510,9 +510,78 @@ class TestApiTasks:
         assert data["ok"] is True
         assert "tasks" in data
 
+    def test_api_tasks_filtered_by_workflow(self, client):
+        from project_workflow.interfaces.ui import _app_state
+        default_wf = next(w for w in _app_state.workflow_service().list_workflows() if w.get("is_default"))
+        resp = client.get(f"/api/tasks?workflow_id={default_wf['id']}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert all(t.get("workflow_id") == default_wf["id"] for t in data["tasks"])
+
     def test_api_task_detail_route_not_wired(self, client):
         resp = client.get("/api/tasks/NONEXISTENT-99999")
         assert resp.status_code == 404
+
+
+class TestApiSkills:
+    def test_api_skills(self, client):
+        resp = client.get("/api/skills")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert "skills" in data
+        assert isinstance(data["skills"], list)
+
+    def test_api_skills_refresh(self, client):
+        resp = client.get("/api/skills?refresh=1")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert "skills" in data
+
+
+class TestApiPhaseDelete:
+    def test_delete_phase(self, client):
+        from project_workflow.interfaces.ui import _app_state
+        uow = _app_state.get_db()
+        workflow = _app_state.workflow_service().create_workflow({"name": _unique("del-phase-wf"), "_skip_default_phase": True})
+        workflow_id = workflow["id"]
+        try:
+            ph1 = _app_state.phase_service().create_phase({
+                "workflow_id": workflow_id,
+                "code": _unique("delph1"),
+                "name": "To keep",
+                "phase_order": 1,
+            })
+            ph2 = _app_state.phase_service().create_phase({
+                "workflow_id": workflow_id,
+                "code": _unique("delph2"),
+                "name": "To delete",
+                "phase_order": 2,
+            })
+            resp = client.delete(f"/api/phases/{ph2['id']}")
+            assert resp.status_code == 200
+            assert _app_state.phase_service().get_phase(ph2["id"]) is None
+            assert _app_state.phase_service().get_phase(ph1["id"]) is not None
+        finally:
+            uow.workflows.delete(int(workflow_id))
+            uow.commit()
+
+
+class TestApiInstructionsReorder:
+    def test_reorder_instructions(self, client):
+        from project_workflow.interfaces.ui import _app_state
+        phase_id = _phase_id(client, "0.0a")
+        resp1 = client.post("/api/instructions", json={"phase_id": phase_id, "description": "first"})
+        resp2 = client.post("/api/instructions", json={"phase_id": phase_id, "description": "second"})
+        id1 = resp1.json()["instruction"]["id"]
+        id2 = resp2.json()["instruction"]["id"]
+        resp = client.put(f"/api/phases/{phase_id}/instructions/reorder", json={"instruction_ids": [id2, id1]})
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is True
+        ordered = _app_state.instruction_service().list_instructions(phase_id)
+        assert [i["id"] for i in ordered[:2]] == [id2, id1]
 
 
 class TestApiPhaseUpdate:
