@@ -8,7 +8,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from project_workflow import config
-from project_workflow.infrastructure.db import schema
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.cli.core import cli
 from project_workflow.interfaces.ui import _load_cli_reference, app
@@ -234,21 +233,18 @@ class TestIndexPage:
         from project_workflow.infrastructure import db as db_module
         from project_workflow.interfaces import ui as ui_module
 
-        ui_module._app_state.get_db()
-        with sqlite3.connect(db_module.DB_PATH) as conn:
+        ui_module._app_state.reset()
+        with sqlite3.connect(str(db_module.DB_PATH)) as conn:
             conn.execute(
                 "UPDATE workflows SET name = ?, description = ?, is_default = 0 WHERE id = (SELECT id FROM workflows ORDER BY id LIMIT 1)",
                 ("Legacy Workflow", "Old bootstrap workflow"),
             )
             conn.commit()
 
-        ui_module._db = None
-        ui_module._srv = None
-
         response = client.get("/")
         assert response.status_code == 200
         assert "Дашборд" in response.text
-        assert any(workflow["is_default"] for workflow in [w.to_dict() for w in ui_module._app_state.get_db().workflows.list()])
+        assert any(workflow["is_default"] for workflow in client.get("/api/workflows").json()["workflows"])
 
     def test_index_has_nav(self):
         response = client.get("/")
@@ -564,7 +560,6 @@ class TestPhasesPage:
 
     def test_phases_order_api_persists_reordered_default_workflow_sequence(self, monkeypatch, tmp_path):
         from project_workflow import config
-        from project_workflow.infrastructure.db import schema
         from project_workflow.interfaces.ui import _update_config_phase_order
 
         uow = ui_app_state.get_db()
@@ -1407,16 +1402,13 @@ class TestWorkflowsPage:
         from project_workflow.infrastructure import db as db_module
         from project_workflow.interfaces import ui as ui_module
 
-        ui_module._app_state.get_db()
-        with sqlite3.connect(db_module.DB_PATH) as conn:
+        ui_module._app_state.reset()
+        with sqlite3.connect(str(db_module.DB_PATH)) as conn:
             conn.execute(
                 "UPDATE workflows SET name = ?, description = ?, is_default = 0 WHERE id = (SELECT id FROM workflows ORDER BY id LIMIT 1)",
                 ("Renamed Workflow", "Broken runtime workflow"),
             )
             conn.commit()
-
-        ui_module._db = None
-        ui_module._srv = None
 
         response = client.get("/api/workflows")
         assert response.status_code == 200
@@ -1429,8 +1421,8 @@ class TestWorkflowsPage:
         from project_workflow.infrastructure import db as db_module
         from project_workflow.interfaces import ui as ui_module
 
-        ui_module._app_state.get_db()
-        with sqlite3.connect(db_module.DB_PATH) as conn:
+        ui_module._app_state.reset()
+        with sqlite3.connect(str(db_module.DB_PATH)) as conn:
             conn.execute(
                 "UPDATE workflows SET name = ?, description = ?, is_default = 0 WHERE id = (SELECT id FROM workflows ORDER BY id LIMIT 1)",
                 ("Singleton Workflow", "Broken live singleton workflow"),

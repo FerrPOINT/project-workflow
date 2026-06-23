@@ -6,16 +6,14 @@
 from __future__ import annotations
 
 import json
-import os
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, List, Optional
+
+import yaml
 
 from project_workflow.domain.repositories import UnitOfWork
-from typing import List, Optional, Sequence
-
-
 from ... import config
 from ...wizard.models import (
     Phase,
@@ -103,7 +101,28 @@ def load_phases_from_db(
     if isinstance(workflow_id, str):
         workflow_id = int(workflow_id) if workflow_id.isdigit() else None
     rows = uow.phases.list(workflow_id)
-    return [_build_phase_from_db(r, uow) for r in rows]
+    phases = [_build_phase_from_db(r, uow) for r in rows]
+    if not phases:
+        # Fallback intake phase so the wizard always has a current phase.
+        phases = [Phase(
+            id=None,
+            code="-1",
+            name="Task Intake",
+            description="Initial task intake before workflow catalog is configured.",
+            min_time_min=0,
+            is_blocker=False,
+            is_delegated=False,
+            is_critic=False,
+            checks=[],
+            evidence=[],
+            instructions=[],
+            delegate=None,
+            next_recommendation="",
+            parallel_with=None,
+            rollback_target=None,
+            execution_type="sync",
+        )]
+    return phases
 
 
 def get_phase_from_db(
@@ -132,9 +151,6 @@ def load_phases(workflow_id: int | str | None = None) -> List[Phase]:
 # ── JSON Seed fallback ───────────
 
 
-import yaml
-
-
 def _load_seed(path: Path | str | None = None) -> list[dict[str, Any]]:
     seed_path = Path(path) if path else config.SEED_PATH
     if not seed_path.exists():
@@ -148,24 +164,26 @@ def _load_seed(path: Path | str | None = None) -> list[dict[str, Any]]:
 
 def _phase_item_to_wizard(item: dict[str, Any]) -> Phase:
     """Convert a raw seed dict into a wizard Phase dataclass."""
+    def _text(val: Any) -> str:
+        if isinstance(val, dict):
+            return str(val.get("description", val.get("item", val.get("step", "")))).strip()
+        return str(val).strip()
+
     instructions = [
         PhaseInstruction(
-            step=ir.get("description", ir.get("step", "")),
-            example=ir.get("example"),
-            execution_type=ir.get("execution_type", "sync"),
-            skills=ir.get("skills", []),
+            step=_text(ir),
+            example=ir.get("example") if isinstance(ir, dict) else None,
+            execution_type=ir.get("execution_type", "sync") if isinstance(ir, dict) else "sync",
+            skills=ir.get("skills", []) if isinstance(ir, dict) else [],
         )
         for ir in item.get("instructions", [])
+        if _text(ir)
     ]
-    checks = [
-        PhaseCheck(description=cr.get("description", cr.get("item", "")))
-        for cr in item.get("checks", [])
-    ]
-    evidence = [
-        PhaseEvidence(item=er.get("description", er.get("item", "")))
-        for er in item.get("evidence", [])
-    ]
-    delegate = None
+    checks = [PhaseCheck(description=_text(cr)) for cr in item.get("checks", []) if _text(cr)]
+    evidence = [PhaseEvidence(item=_text(er)) for er in item.get("evidence", []) if _text(er)]
+
+    delegate: PhaseDelegate | None = None
+    selected_agent = str(item.get("selected_agent", "")).strip()
     if item.get("delegate"):
         d = item["delegate"]
         delegate = PhaseDelegate(
@@ -175,23 +193,33 @@ def _phase_item_to_wizard(item: dict[str, Any]) -> Phase:
             timeout_min=d.get("timeout_min", 10),
             max_cycles=d.get("max_cycles", 3),
         )
+    elif selected_agent:
+        delegate = PhaseDelegate(
+            agent=selected_agent,
+            prompt_template=item.get("delegate_prompt", f"Phase {item.get('code', '')}: {item.get('description', '')}"),
+            context=item.get("delegate_context", []),
+            toolsets=item.get("delegate_toolsets", []),
+            timeout_min=int(item.get("delegate_timeout_min", 10) or 10),
+            max_cycles=int(item.get("delegate_max_cycles", 3) or 3),
+        )
+
     return Phase(
         id=None,
         code=item.get("code", ""),
         name=item.get("name", ""),
         description=item.get("description", ""),
         min_time_min=item.get("min_time_min", 0),
-        is_blocker=item.get("is_blocker", False),
+        is_blocker=bool(item.get("is_blocker", False)),
         is_delegated=bool(delegate),
-        is_critic=item.get("code", "") in config.CRITIC_PHASES,
+        is_critic=bool(item.get("is_critic", False)),
         checks=checks,
         evidence=evidence,
         instructions=instructions,
         delegate=delegate,
-        next_recommendation=item.get("next_recommendation", ""),
-        parallel_with=item.get("parallel_with"),
-        rollback_target=item.get("rollback_target"),
-        execution_type=item.get("execution_type", "sync"),
+        next_recommendation=str(item.get("next_recommendation", "")),
+        parallel_with=str(item.get("parallel_with")) if item.get("parallel_with") else None,
+        rollback_target=str(item.get("rollback_target")) if item.get("rollback_target") else None,
+        execution_type=str(item.get("execution_type", "sync")),
     )
 
 
@@ -262,6 +290,13 @@ def ensure_phase_catalog(
     seed_path = Path(seed_path) if seed_path else config.SEED_PATH
     seed_phases = load_phases_from_seed(seed_path)
 
+    # Create agents referenced by selected_agent from seed.
+    for phase in seed_phases:
+        delegate = getattr(phase, "delegate", None)
+        agent_name = (delegate.agent or "") if delegate else ""
+        if agent_name and not uow.agents.get_by_name(agent_name):
+            uow.agents.create({"name": agent_name, "description": f"Seed agent for {phase.code}"})
+
     with uow:
         default_workflow = uow.workflows.ensure_default_exists()
         workflow_id = default_workflow.id
@@ -271,6 +306,16 @@ def ensure_phase_catalog(
 
         for order, phase in enumerate(seed_phases, start=1):
             existing = existing_by_code.get(phase.code)
+            # Resolve selected agent to an agent_id when seed provides one.
+            selected_agent_name = ""
+            if getattr(phase, "delegate", None):
+                selected_agent_name = (phase.delegate.agent or "") if phase.delegate else ""
+            agent_id = None
+            if selected_agent_name:
+                for agent in uow.agents.list():
+                    if agent.name == selected_agent_name:
+                        agent_id = agent.id
+                        break
             data = {
                 "workflow_id": workflow_id,
                 "code": phase.code,
@@ -283,6 +328,7 @@ def ensure_phase_catalog(
                 "rollback_target": phase.rollback_target,
                 "execution_type": phase.execution_type,
                 "is_seed_managed": True,
+                "agent_id": agent_id,
             }
             if existing:
                 uow.phases.update(existing.id, data)
@@ -322,10 +368,11 @@ def persist_phase_order_to_seed(
     seed_path = Path(seed_path) if seed_path else config.SEED_PATH
     with uow:
         default_workflow = uow.workflows.get_default()
-        workflow_id = default_workflow.id if default_workflow else None
-        phases = load_phases_from_db(uow, workflow_id=workflow_id)
+        if default_workflow:
+            workflow_id = default_workflow.id
+            load_phases_from_db(uow, workflow_id=workflow_id)
 
-    # Reorder seed entries to match DB order; drop unknown codes.
+        # Reorder seed entries to match DB order; drop unknown codes.
     code_to_entry: dict[str, dict[str, Any]] = {p["code"]: p for p in _load_seed(seed_path) if isinstance(p, dict)}
     ordered_entries = [code_to_entry[code] for code in ordered_phase_codes if code in code_to_entry]
     for code in code_to_entry:
@@ -378,7 +425,7 @@ def seed_is_stale(seed_path: Path | str | None = None) -> bool:
     if not seed_path.exists():
         return True
     seed_mtime = seed_path.stat().st_mtime
-    db_path = config.DB_PATH
+    db_path = Path(config.get_settings().WORKFLOW_DIR) / "workflow.db"
     if not db_path.exists():
         return True
     db_mtime = db_path.stat().st_mtime

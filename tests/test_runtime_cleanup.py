@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from project_workflow import config
+from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.db import schema
 
 
@@ -48,9 +49,9 @@ def _phase_by_code(code: str) -> dict:
 
 def test_default_bootstrap_project_prefixes_are_project_specific(tmp_path):
     uow = SAUnitOfWork(str(tmp_path / "workflow.db"))
-    db.init()
+    uow.init()
 
-    project = db.get_project_by_code("TASK")
+    project = uow.get_project_by_code("TASK")
     assert project is not None
     assert project["key_prefixes"] == config.DEFAULT_TASK_KEY_PREFIXES
     assert project["key_prefixes"] == ["TASK"]
@@ -58,30 +59,30 @@ def test_default_bootstrap_project_prefixes_are_project_specific(tmp_path):
 
 def test_sanitize_runtime_state_removes_known_test_residue_and_dedupes_agents(tmp_path):
     uow = SAUnitOfWork(str(tmp_path / "workflow.db"))
-    db.init()
+    uow.init()
 
-    ui_test_project_id = db.create_project({
+    ui_test_project_id = uow.create_project({
         "code": "UITEST",
         "name": "UI Test Project",
         "key_prefixes": ["UITEST"],
     })
-    db.create_task({
+    uow.create_task({
         "project_id": ui_test_project_id,
         "task_key": "UITEST-401",
         "title": "Проверка project-aware UI",
         "status": "active",
         "current_phase": "-1",
     })
-    db.create_agent({"name": "architect", "description": "Проектирует и уточняет контракты"})
-    db.create_agent({"name": "architect", "description": "Проектирует и уточняет контракты"})
+    uow.create_agent({"name": "architect", "description": "Проектирует и уточняет контракты"})
+    uow.create_agent({"name": "architect", "description": "Проектирует и уточняет контракты"})
 
-    db.sanitize_runtime_state()
+    uow.sanitize_runtime_state()
 
-    assert db.get_project_by_code("UITEST") is None
-    assert db.get_task_by_key("UITEST-401") is None
-    assert [agent["name"] for agent in db.get_agents()].count("architect") == 1
+    assert uow.get_project_by_code("UITEST") is None
+    assert uow.get_task_by_key("UITEST-401") is None
+    assert [agent["name"] for agent in uow.get_agents()].count("architect") == 1
 
-    default_project = db.get_project_by_code("TASK")
+    default_project = uow.get_project_by_code("TASK")
     assert default_project is not None
     assert default_project["key_prefixes"] == ["TASK"]
 
@@ -116,10 +117,14 @@ def test_seed_catalog_names_match_runtime_progress_template():
         for phase in phases
     }
 
-    progress = json.loads(schema.generate_progress_json("TASK-1", "1", "title", "sprint1"))
+    from project_workflow.infrastructure.db.uow import SAUnitOfWork
+    uow = SAUnitOfWork()
+    uow.init()
+    schema.ensure_phase_catalog(uow)
+    phases_db = uow.get_phases()
     progress_names = {
-        str(phase.get("phase", "")).strip(): str(phase.get("name", "")).strip()
-        for phase in progress.get("phases", [])
+        str(phase.get("code", "")).strip(): str(phase.get("name", "")).strip()
+        for phase in phases_db
     }
 
     assert seed_names == progress_names
@@ -209,12 +214,12 @@ def test_seed_catalog_role_bound_phases_are_fully_filled_with_agents_skills_and_
 
 def test_db_init_assigns_selected_agents_to_role_bound_default_phases(tmp_path):
     uow = SAUnitOfWork(str(tmp_path / "workflow.db"))
-    db.init()
-    schema.ensure_phase_catalog(db)
+    uow.init()
+    schema.ensure_phase_catalog(uow)
 
-    agents_by_id = {agent["id"]: agent["name"] for agent in db.get_agents()}
+    agents_by_id = {agent["id"]: agent["name"] for agent in uow.get_agents()}
     for code, expected_agent_name in EXPECTED_ROLE_AGENTS.items():
-        phase = db.get_phase_by_code(code)
+        phase = uow.get_phase_by_code(code)
         assert phase is not None, f"Phase {code} not found"
         assert phase.get("agent_id") is not None, f"Phase {code} must resolve selected agent"
         assert agents_by_id[phase["agent_id"]] == expected_agent_name

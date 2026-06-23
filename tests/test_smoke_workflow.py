@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import pytest
 from pathlib import Path
 
 from project_workflow.infrastructure.db import schema
+from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
 from project_workflow.wizard import WizardEngine
 
@@ -23,20 +25,28 @@ def _patch_runtime(monkeypatch, tmp_path: Path) -> Path:
     convo_dir = tmp_path / ".project-workflow"
     convo_db = convo_dir / "conversation.db"
     monkeypatch.setattr("project_workflow.infrastructure.db.DB_PATH", workflow_db)
-    monkeypatch.setattr("project_workflow.infrastructure.db.DB_PATH", workflow_db)
     monkeypatch.setattr("project_workflow.infrastructure.conversation.DB_DIR", convo_dir)
     monkeypatch.setattr("project_workflow.infrastructure.conversation.DB_PATH", convo_db)
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{workflow_db}")
     from project_workflow import config
+    from project_workflow.infrastructure.db.session import reset_engine
+    reset_engine()
     config.get_settings.cache_clear()
     return workflow_db
+
+
+@pytest.fixture(autouse=True)
+def _reset_engine_per_test(monkeypatch, tmp_path):
+    """Ensure each smoke test gets its own isolated DB engine/session."""
+    from project_workflow.infrastructure.db.session import reset_engine
+    reset_engine()
 
 
 def test_bootstrap_adds_smoke_project_and_short_workflow(tmp_path: Path, monkeypatch):
     workflow_db = _patch_runtime(monkeypatch, tmp_path)
     uow = SAUnitOfWork(str(workflow_db))
     uow.init()
-    schema.ensure_phase_catalog(wdb)
+    schema.ensure_phase_catalog(uow)
 
     workflows = uow.get_workflows()
     workflow_names = {workflow["name"] for workflow in workflows}
@@ -57,7 +67,7 @@ def test_wizard_uses_project_workflow_and_starts_from_first_smoke_phase(tmp_path
     workflow_db = _patch_runtime(monkeypatch, tmp_path)
     uow = SAUnitOfWork(str(workflow_db))
     uow.init()
-    schema.ensure_phase_catalog(wdb)
+    schema.ensure_phase_catalog(uow)
 
     engine = WizardEngine("SMOKE-7")
 
@@ -69,7 +79,7 @@ def test_smoke_phase_prompt_surfaces_parallel_agent_and_rollback_metadata(tmp_pa
     workflow_db = _patch_runtime(monkeypatch, tmp_path)
     uow = SAUnitOfWork(str(workflow_db))
     uow.init()
-    schema.ensure_phase_catalog(wdb)
+    schema.ensure_phase_catalog(uow)
 
     engine = WizardEngine("SMOKE-11")
 
@@ -88,11 +98,12 @@ def test_parallel_group_pass_advances_all_phases(tmp_path: Path, monkeypatch):
     workflow_db = _patch_runtime(monkeypatch, tmp_path)
     uow = SAUnitOfWork(str(workflow_db))
     uow.init()
-    schema.ensure_phase_catalog(wdb)
+    schema.ensure_phase_catalog(uow)
 
     engine = WizardEngine("SMOKE-101")
     # Move to parallel-a
     uow.update_task(engine.task["id"], {"current_phase": "smoke.parallel-a"})
+    uow.commit()
     engine.current_phase = "smoke.parallel-a"
 
     # Full report covering both checks
@@ -109,7 +120,7 @@ def test_parallel_group_pass_advances_all_phases(tmp_path: Path, monkeypatch):
 
     # All group phases should be done in history
     history = uow.get_task_history(engine.task["id"])
-    statuses = {uow.get_phase(h["phase_id"])["code"]: h["status"] for h in history}
+    statuses = {uow.get_phase(h["phase_id"])["code"]: h["status"] for h in history if h.get("phase_id")}
     assert statuses.get("smoke.parallel-a") == "done"
     assert statuses.get("smoke.parallel-b") == "done"
 
@@ -123,10 +134,11 @@ def test_parallel_group_partial_stays_on_group(tmp_path: Path, monkeypatch):
     workflow_db = _patch_runtime(monkeypatch, tmp_path)
     uow = SAUnitOfWork(str(workflow_db))
     uow.init()
-    schema.ensure_phase_catalog(wdb)
+    schema.ensure_phase_catalog(uow)
 
     engine = WizardEngine("SMOKE-102")
     uow.update_task(engine.task["id"], {"current_phase": "smoke.parallel-a"})
+    uow.commit()
     engine.current_phase = "smoke.parallel-a"
 
     # Only one check covered → partial
@@ -153,10 +165,11 @@ def test_parallel_group_blocked_stays_on_group(tmp_path: Path, monkeypatch):
     workflow_db = _patch_runtime(monkeypatch, tmp_path)
     uow = SAUnitOfWork(str(workflow_db))
     uow.init()
-    schema.ensure_phase_catalog(wdb)
+    schema.ensure_phase_catalog(uow)
 
     engine = WizardEngine("SMOKE-103")
     uow.update_task(engine.task["id"], {"current_phase": "smoke.parallel-a"})
+    uow.commit()
     engine.current_phase = "smoke.parallel-a"
 
     report = "Blocker: dependency mismatch. Cannot proceed."

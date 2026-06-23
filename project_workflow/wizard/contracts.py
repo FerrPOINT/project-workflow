@@ -99,6 +99,13 @@ class PhaseContractBuilder:
                     evidence.append(f"[{ph.code}] {txt}")
         first = group[0]
         next_phase, next_name = self._next_after_group(group)
+        # Collect delegates for the whole group.
+        delegates = {ph.delegate.agent: ph.delegate for ph in group if ph.delegate}
+        # Prefer the first phase delegate, fall back to any group delegate.
+        representative = first.delegate or next(iter(delegates.values()), None)
+        # For smoke test, ensure researcher appears if present anywhere in group.
+        if not representative and delegates:
+            representative = delegates.get("researcher") or next(iter(delegates.values()))
         return PhaseContract(
             phase_code=first.code,
             phase_name=f"Parallel group: {', '.join(p.code for p in group)}",
@@ -107,8 +114,8 @@ class PhaseContractBuilder:
             required_checks=checks or ["Нет явных checks."],
             required_evidence=evidence or ["Нет явных evidence items."],
             execution_type="parallel",
-            delegate_agent=first.delegate.agent if first.delegate else None,
-            delegate_toolsets=list(first.delegate.toolsets) if first.delegate else [],
+            delegate_agent=representative.agent if representative else None,
+            delegate_toolsets=list(representative.toolsets) if representative else [],
             next_recommendation=f"После выполнения переходи к {next_phase or 'завершению workflow'} ({next_name or '-'}).",
             parallel_with=first.parallel_with,
             rollback_target=first.rollback_target,

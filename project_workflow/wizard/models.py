@@ -41,7 +41,7 @@ class PhaseDelegate:
 @dataclass
 class Phase:
     """Полное описание фазы workflow."""
-    id: int = 0
+    id: int | None = 0
     code: str = ""
     name: str = ""
     description: str = ""
@@ -57,6 +57,16 @@ class Phase:
     parallel_with: Optional[str] = None
     rollback_target: Optional[str] = None
     execution_type: str = "sync"
+
+    selected_agent: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if self.selected_agent and not self.delegate:
+            self.delegate = PhaseDelegate(
+                agent=self.selected_agent,
+                prompt_template=f"Phase {self.code}: {self.description}",
+                toolsets=[],
+            )
 
     def render_instructions(self, context: dict) -> List[str]:
         """Подставить переменные в инструкции."""

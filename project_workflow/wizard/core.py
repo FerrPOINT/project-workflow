@@ -12,11 +12,10 @@ from __future__ import annotations
 
 import json
 import threading
-from typing import Optional
+from typing import Any, Optional
 
 from ..infrastructure.db import schema
 from ..infrastructure.db.uow import SAUnitOfWork
-from ..domain.repositories import UnitOfWork
 from ..application.workflow import WorkflowService
 from ..application.phase import PhaseServiceApp
 from ..application.project import ProjectService
@@ -74,13 +73,17 @@ class PromptCache:
 class WizardEngine:
     """Internal supervisor that evaluates workflow progress against DB phase contracts."""
 
-    def __init__(self, task_key: str, repo: Optional[str] = None, uow: UnitOfWork | None = None, create_if_missing: bool = True):
+    def __init__(self, task_key: str, repo: Optional[str] = None, uow: SAUnitOfWork | None = None, create_if_missing: bool = True):
         self.task_key = task_key
         self.repo = repo
+        self.create_if_missing = create_if_missing
         self._uow = uow if uow is not None else SAUnitOfWork()
         self._store = WizardAssessmentStore(self._uow)
+
         self._uow.create_all()
+        self._bootstrap_smoke_project_and_workflow()
         schema.ensure_phase_catalog(self._uow)
+        self._ensure_smoke_phases()
 
         self._workflow_service = WorkflowService(self._uow)
         self._phase_service = PhaseServiceApp(self._uow)
@@ -89,6 +92,9 @@ class WizardEngine:
         self._agent_service = AgentService(self._uow)
 
         self.task = self._ensure_task() if create_if_missing else self._task_service.get_task_by_key(task_key)
+        if self.task is None:
+            raise ValueError(f"Task {task_key} not found")
+        self._uow.commit()
         self.project = self._project_service.get_project(self.task["project_id"]) if self.task and self.task.get("project_id") else None
         self.workflow_id = self.project["workflow_id"] if self.project else None
         self.workflow = self._workflow_service.get_workflow(self.workflow_id) if self.workflow_id else None
@@ -138,8 +144,12 @@ class WizardEngine:
             if str(existing.get("current_phase") or "").strip() == "":
                 current_phase = self._first_phase_code_for_project(existing["project_id"])
                 self._task_service.update_task(existing["id"], {"current_phase": current_phase})
+                self._uow.commit()
                 return self._task_service.get_task(existing["id"]) or existing
             return existing
+
+        if not self.create_if_missing:
+            raise ValueError(f"Task {self.task_key} not found and create_if_missing=False")
 
         project = self._resolve_project()
         if not project:
@@ -154,6 +164,7 @@ class WizardEngine:
                 "status": "active",
             }
         )
+        self._uow.commit()
         return task
 
     def _resolve_project(self) -> dict[str, Any] | None:
@@ -162,16 +173,89 @@ class WizardEngine:
             for prefix in project.get("key_prefixes", []):
                 if self.task_key.startswith(prefix + "-") or self.task_key == prefix:
                     return project
-        # Fall back to the default workflow/project if no prefix matches.
-        self._workflow_service.ensure_default_exists()
-        projects = self._project_service.list_projects()
-        if projects:
-            return projects[0]
+        # Fall back to the default workflow/project.
+        default_wf = self._workflow_service.ensure_default_exists()
+        default_wf_id = default_wf.get("id") if default_wf else None
+        for project in self._project_service.list_projects():
+            if default_wf_id and project.get("workflow_id") == default_wf_id:
+                return project
         # Create a default project under the default workflow.
         return self._project_service.create_project({
             "code": "default",
             "name": "Default Project",
         })
+
+    def _bootstrap_smoke_project_and_workflow(self) -> None:
+        from project_workflow import config
+        smoke_wf = self._uow.workflows.get_by_name(config.SMOKE_WORKFLOW_NAME)
+        if smoke_wf:
+            smoke_wf_id = smoke_wf.id
+        else:
+            smoke_wf_id = self._uow.workflows.create({
+                "name": config.SMOKE_WORKFLOW_NAME,
+                "description": "Smoke test workflow",
+                "_skip_default_phase": True,
+            })
+        smoke_project = self._uow.projects.get_by_code(config.SMOKE_PROJECT_CODE)
+        if smoke_project is None:
+            self._uow.projects.create({
+                "workflow_id": smoke_wf_id,
+                "code": config.SMOKE_PROJECT_CODE,
+                "name": config.SMOKE_PROJECT_NAME,
+                "key_prefixes": list(config.SMOKE_TASK_KEY_PREFIXES),
+                "workflow_name": config.SMOKE_WORKFLOW_NAME,
+            })
+            self._uow.commit()
+        self._ensure_smoke_phases()
+
+    def _ensure_smoke_phases(self) -> None:
+        from project_workflow import config
+        smoke_wf = self._uow.workflows.get_by_name(config.SMOKE_WORKFLOW_NAME)
+        if not smoke_wf:
+            return
+        smoke_phases = list(self._uow.phases.list(workflow_id=smoke_wf.id))
+        if smoke_phases:
+            return
+        seed_phases = schema.load_phases_from_seed(config.SMOKE_SEED_PATH)
+        for order, phase in enumerate(seed_phases, start=1):
+            data = {
+                "workflow_id": smoke_wf.id,
+                "code": phase.code,
+                "name": phase.name,
+                "description": phase.description,
+                "min_time_min": phase.min_time_min,
+                "phase_order": order,
+                "next_recommendation": phase.next_recommendation,
+                "parallel_with": phase.parallel_with,
+                "rollback_target": phase.rollback_target,
+                "execution_type": phase.execution_type,
+                "is_seed_managed": True,
+            }
+            if phase.delegate:
+                agent = self._uow.agents.get_by_name(phase.delegate.agent)
+                if agent:
+                    data["agent_id"] = agent.id
+            phase_id = self._uow.phases.create(data)
+            for idx, instr in enumerate(phase.instructions, start=1):
+                self._uow.instructions.create(
+                    int(phase_id),
+                    {
+                        "step_num": idx,
+                        "description": instr.step,
+                        "example": instr.example,
+                        "execution_type": instr.execution_type,
+                        "skills": instr.skills,
+                    },
+                )
+            self._uow.phases.set_checks(
+                int(phase_id),
+                [{"description": c.description} for c in phase.checks],
+            )
+            self._uow.phases.set_evidence(
+                int(phase_id),
+                [{"description": e.item} for e in phase.evidence],
+            )
+        self._uow.commit()
 
     def _first_phase_code_for_project(self, project_id: int) -> str:
         project = self._project_service.get_project(project_id)
@@ -407,12 +491,6 @@ class WizardEngine:
             statuses[current_phase] = "current"
         return statuses
 
-    def _phase_by_id(self, phase_id):
-        for phase in self.all_phases:
-            if int(phase.id) == int(phase_id):
-                return phase
-        return None
-
     def _build_workflow_path(self):
         status_lookup = self._phase_status_lookup()
         path: list[dict] = []
@@ -425,19 +503,6 @@ class WizardEngine:
                 "rollback_target": phase.rollback_target,
             })
         return path
-
-    @property
-    def _context_builder(self):
-        return WizardContextBuilder(
-            uow=self._uow,
-            task=self.task,
-            project=self.project,
-            workflow=self.workflow,
-            all_phases=self.all_phases,
-            current_phase=self.current_phase,
-            task_key=self.task_key,
-            repo=self.repo,
-        )
 
     def _record_transition(self, phase: Phase, verdict: str, next_phase: str | None, rollback_target: str | None) -> None:
         from ..domain.fsm import PhaseFSM
@@ -454,10 +519,12 @@ class WizardEngine:
                 self.db.update_task(task_id, {"current_phase": next_phase, "status": "active"})
             else:
                 self.db.update_task(task_id, {"current_phase": phase.code, "status": "done"})
+            self._uow.commit()
             return
         if new_state == "blocked":
             self.db.add_task_history(task_id, phase.id, "blocked")
             self.db.update_task(task_id, {"current_phase": phase.code, "status": "blocked"})
+            self._uow.commit()
             return
         if new_state == "rollback":
             target_phase = self.phase_map.get(rollback_target) if rollback_target else None
@@ -465,14 +532,17 @@ class WizardEngine:
             self.db.add_task_history(task_id, phase.id, "rollback")
             self.db.add_task_history(task_id, target_id, "pending")
             self.db.update_task(task_id, {"current_phase": rollback_target or phase.code, "status": "active"})
+            self._uow.commit()
             return
         if new_state == "delegated":
             self.db.add_task_history(task_id, phase.id, "delegated")
             self.db.update_task(task_id, {"current_phase": phase.code, "status": "active"})
+            self._uow.commit()
             return
         # partial or in_progress
         self.db.add_task_history(task_id, phase.id, "partial")
         self.db.update_task(task_id, {"current_phase": phase.code, "status": "active"})
+        self._uow.commit()
 
     def _record_parallel_transition(self, group: list[Phase], verdict: str, next_phase: str | None) -> None:
         from ..domain.fsm import PhaseFSM
@@ -491,16 +561,17 @@ class WizardEngine:
                 self.db.update_task(task_id, {"current_phase": next_phase, "status": "active"})
             else:
                 self.db.update_task(task_id, {"current_phase": group[-1].code, "status": "done"})
+            self._uow.commit()
             return
         if new_state == "blocked":
-            self.db.update_task(task_id, {"status": "blocked"})
+            self.db.update_task(task_id, {"current_phase": group[0].code, "status": "blocked"})
+            self._uow.commit()
             return
         if new_state == "rollback":
             target_phase = self.phase_map.get(next_phase) if next_phase else None
-            target_id = target_phase.id if target_phase else group[-1].id
-            self.db.add_task_history(task_id, group[-1].id, "rollback")
-            self.db.add_task_history(task_id, target_id, "pending")
-            self.db.update_task(task_id, {"current_phase": next_phase or group[-1].code, "status": "active"})
+            target_code = target_phase.code if target_phase else group[-1].code
+            self.db.update_task(task_id, {"current_phase": target_code, "status": "active"})
+            self._uow.commit()
             return
         # partial: legacy tests expect no DB side effects at all.
         return
@@ -595,6 +666,10 @@ class WizardEngine:
         if is_parallel:
             phase_name = f"Parallel group: {', '.join(p.code for p in group)}"
 
+        if verdict == "pass" and next_phase:
+            next_phase_obj = self.phase_map.get(next_phase)
+            next_phase_name = next_phase_obj.name if next_phase_obj else next_phase_name
+
         assessment = WizardAssessment(
             task_key=self.task_key,
             phase_code=phase.code,
@@ -624,6 +699,8 @@ class WizardEngine:
         )
 
         result = assessment.to_result_dict()
+        if next_phase_contract is not None:
+            result["next_phase_contract"] = next_phase_contract.to_dict() if hasattr(next_phase_contract, "to_dict") else next_phase_contract
 
         # Record transition
         if is_parallel:
@@ -631,6 +708,7 @@ class WizardEngine:
         else:
             self._record_transition(phase, verdict, next_phase, rollback_target)
 
+        self._uow.commit()
         self.task = self._task_service.get_task(self.task["id"]) or self.task
         self.current_phase = self._resolve_current_phase()
 

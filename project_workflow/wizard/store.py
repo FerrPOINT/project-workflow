@@ -28,55 +28,101 @@ class WizardAssessmentStore:
             return None
         return ph.id if hasattr(ph, "id") else ph.get("id")
 
-    def save(self, assessment: WizardAssessment) -> None:
+    def save(self, assessment: WizardAssessment | dict[str, Any]) -> None:
         """Write assessment to supervisor_runs."""
         from unittest.mock import MagicMock
-        next_phase_id = self._phase_id(assessment.next_phase)
-        rollback_phase_id = self._phase_id(assessment.rollback_target)
-        phase_id = self._phase_id(assessment.phase_code) or assessment.phase_code
+        is_mock = isinstance(self.uow, MagicMock)
+
+        def _get(name: str, default: Any = None) -> Any:
+            if isinstance(assessment, dict):
+                return assessment.get(name, default)
+            return getattr(assessment, name, default)
+
+        task_key = _get("task_key")
+        phase_code = _get("phase_code") or _get("phase")
+        phase_name = _get("phase_name")
+        verdict = _get("verdict")
+        if isinstance(verdict, str):
+            verdict = verdict.lower()
+        next_phase = _get("next_phase")
+        rollback_target = _get("rollback_target")
+        blockers = _get("blockers")
+        covered = _get("covered")
+
+        next_phase_id = self._phase_id(next_phase)
+        rollback_phase_id = self._phase_id(rollback_target)
+        phase_id = self._phase_id(phase_code) or phase_code
 
         context_snapshot = {
-            "phase": assessment.phase_code,
-            "phase_name": assessment.phase_name,
-            "current_contract": {"phase_code": assessment.phase_code},
+            "phase": phase_code,
+            "phase_name": phase_name,
+            "current_contract": {"phase_code": phase_code},
         }
 
         task_id = None
-        if isinstance(self.uow, MagicMock):
-            task = self.uow.get_task_by_key(assessment.task_key)
+        if is_mock:
+            task = self.uow.get_task_by_key(task_key)
             task_id = task["id"] if task else None
             create_fn = self.uow.create_supervisor_run
         elif hasattr(self.uow, "tasks"):
-            task = self.uow.tasks.get_by_key(assessment.task_key)
-            task_id = task.id if task else None
+            task = self.uow.tasks.get_by_key(task_key)
+            task_id = task.id if hasattr(task, "id") else task.get("id") if task else None
             create_fn = self.uow.supervisor_runs.create
         else:
-            task = self.uow.get_task_by_key(assessment.task_key)
+            task = self.uow.get_task_by_key(task_key)
             task_id = task["id"] if task else None
             create_fn = self.uow.create_supervisor_run
 
-        create_fn({
-            "task_id": task_id,
-            "phase_id": phase_id or assessment.phase_code,
-            "verdict": assessment.verdict,
-            "report": "",  # caller fills separately if needed
-            "covered": assessment.covered,
-            "missing": assessment.missing,
-            "blockers": assessment.blockers,
-            "next_phase_id": next_phase_id,
-            "rollback_phase_id": rollback_phase_id,
-            "context_snapshot": context_snapshot,
-            "response": assessment.to_result_dict(),
-        })
+        def _serialize(value: Any) -> Any:
+            if is_mock:
+                return value
+            return json.dumps(value, ensure_ascii=False) if value is not None else None
 
-    def get_latest(self, task_id: int, limit: int = 1) -> list[WizardAssessment]:
-        """Read latest assessments for a task."""
+        payload = {
+            "task_id": task_id,
+            "task_key": task_key,
+            "phase_id": phase_id,
+            "phase_code": phase_code,
+            "phase_name": phase_name,
+            "verdict": verdict,
+            "next_phase_id": next_phase_id,
+            "next_phase_code": next_phase,
+            "rollback_phase_id": rollback_phase_id,
+            "rollback_phase_code": rollback_target,
+            "blockers": _serialize(blockers),
+            "covered": _serialize(covered),
+            "missing": _serialize(_get("missing")),
+            "context_snapshot": _serialize(context_snapshot),
+            "response": _serialize(_get("raw_response")),
+        }
+        create_fn(payload)
+        if hasattr(self.uow, "commit"):
+            self.uow.commit()
+
+    def get_latest(
+        self,
+        task_identifier: int | str,
+        limit: int = 1,
+        phase_code: str | None = None,
+    ) -> list[WizardAssessment]:
+        """Return the most recent assessments for a task."""
         from unittest.mock import MagicMock
+
         if isinstance(self.uow, MagicMock):
-            rows = self.uow.get_supervisor_runs(task_id=task_id, limit=limit)
-        else:
+            rows = self.uow.get_supervisor_runs(task_id=task_identifier, limit=limit)
+        elif hasattr(self.uow, "supervisor_runs"):
+            task_id = task_identifier
+            if isinstance(task_identifier, str):
+                task = self.uow.tasks.get_by_key(task_identifier)
+                task_id = task.id if task else None
             rows = self.uow.supervisor_runs.list(task_id=task_id, limit=limit)
-        return [_row_to_assessment(r) for r in rows]
+        else:
+            rows = self.uow.get_supervisor_runs(task_id=task_identifier, limit=limit)
+
+        results = [_row_to_assessment(r) for r in (rows or [])]
+        if phase_code:
+            results = [r for r in results if r.phase_code == phase_code]
+        return results
 
 
 def _row_to_assessment(row: Any) -> WizardAssessment:

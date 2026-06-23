@@ -62,7 +62,7 @@ class Phase(Base):
     workflow_id: Mapped[int] = mapped_column(
         ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False
     )
-    code: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    code: Mapped[str] = mapped_column(String, nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     min_time_min: Mapped[int] = mapped_column(default=0, server_default="0")
@@ -84,6 +84,7 @@ class Phase(Base):
         server_default="0",
     )
     __table_args__ = (
+        UniqueConstraint("workflow_id", "code", name="uq_phases_workflow_code"),
         CheckConstraint(
             "execution_type IN ('sync', 'parallel')",
             name="ck_phases_execution_type",

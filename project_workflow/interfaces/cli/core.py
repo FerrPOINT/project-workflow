@@ -31,7 +31,8 @@ def out_json(data: dict[str, Any]) -> None:
 
 
 def _get_task_key_validator() -> task_validator.TaskKeyValidator:
-    
+    from project_workflow.infrastructure.db.uow import SAUnitOfWork
+    from project_workflow.infrastructure.db import schema
 
     uow = SAUnitOfWork()
     uow.create_all()

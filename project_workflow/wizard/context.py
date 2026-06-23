@@ -16,24 +16,27 @@ class WizardContextBuilder:
 
     def __init__(
         self,
-        uow: Any,
-        task: dict[str, Any],
-        project: dict[str, Any] | None,
-        workflow: dict[str, Any] | None,
-        all_phases: list[Phase],
-        current_phase: str,
-        task_key: str,
+        uow: Any = None,
+        task: dict[str, Any] | None = None,
+        project: dict[str, Any] | None = None,
+        workflow: dict[str, Any] | None = None,
+        all_phases: list[Phase] | None = None,
+        current_phase: str = "",
+        task_key: str = "",
         repo: Optional[str] = None,
+        db: Any = None,
     ):
+        if uow is None and db is not None:
+            uow = db
         self.uow = uow
-        self.task = task
+        self.task = task or {}
         self.project = project
         self.workflow = workflow
-        self.all_phases = all_phases
+        self.all_phases = all_phases or []
         self.current_phase = current_phase
         self.task_key = task_key
         self.repo = repo
-        self._contract_builder = PhaseContractBuilder(all_phases)
+        self._contract_builder = PhaseContractBuilder(self.all_phases)
         self._phase_map: dict[str, Phase] | None = None
 
     @property

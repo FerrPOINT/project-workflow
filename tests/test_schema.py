@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 
@@ -56,7 +55,6 @@ class TestSeedPersistence:
         }], ensure_ascii=False))
         monkeypatch.setattr(config, "SEED_PATH", seed_path)
         ensure_phase_catalog(fresh_db, seed_path=seed_path)
-        phase = get_phase_from_db(fresh_db, "1")
         persist_phase_update_to_seed(fresh_db, "1", {"next_recommendation": "New"}, seed_path=seed_path)
         reloaded = json.loads(seed_path.read_text(encoding="utf-8"))
         assert reloaded[0]["next_recommendation"] == "New"

@@ -12,6 +12,7 @@ from alembic.config import Config
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import NullPool
 
 from project_workflow.config import get_settings
 
@@ -57,8 +58,9 @@ def get_engine(url: str | None = None) -> Engine:
             Path(db_path).parent.mkdir(parents=True, exist_ok=True)
             _engine = create_engine(
                 target,
-                connect_args={"check_same_thread": False},
+                connect_args={"check_same_thread": False, "timeout": 10},
                 echo=False,
+                poolclass=NullPool,
             )
         else:
             connect_args = {}

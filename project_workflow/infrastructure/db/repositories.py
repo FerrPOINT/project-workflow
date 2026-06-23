@@ -80,7 +80,7 @@ def _row_to_task(row: m.Task) -> Task:
     except Exception:
         phase_name = current_phase
     return Task(
-        id=row.id,
+        id=getattr(row, "id", None),
         project_id=row.project_id,
         task_key=row.task_key,
         title=row.title or "",
@@ -151,7 +151,6 @@ class SAWorkflowRepository(WorkflowRepository):
         row = self._session.get(m.Workflow, workflow_id)
         if row is None:
             return None
-        self._session.refresh(row)
         return _row_to_workflow(row)
 
     def get_by_name(self, name: str) -> Workflow | None:
@@ -392,19 +391,42 @@ class SATaskRepository(TaskRepository):
     def __init__(self, session: Session):
         self._session = session
 
-    def list(self) -> Sequence[Task]:
-        rows = self._session.execute(select(m.Task).order_by(m.Task.id.desc())).scalars().all()
-        return [_row_to_task(r) for r in rows]
+    def get_by_key(self, task_key: str) -> Task | None:
+        with self._session.no_autoflush:
+            row = self._session.execute(
+                select(m.Task).where(m.Task.task_key == task_key)
+            ).scalar_one_or_none()
+        if row is None:
+            return None
+        try:
+            project_id = row.project_id
+            project_id = int(project_id)
+        except Exception:
+            project_id = 0
+        return Task(
+            id=row.id,
+            project_id=project_id,
+            task_key=row.task_key,
+            title=row.title or "",
+            description=row.description or "",
+            current_phase=row.current_phase or "-1",
+            current_phase_name="",
+            status=row.status or "active",
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
 
     def get_by_id(self, task_id: int) -> Task | None:
-        row = self._session.get(m.Task, task_id)
-        return _row_to_task(row) if row else None
+        with self._session.no_autoflush:
+            row = self._session.get(m.Task, task_id)
+        if row is None:
+            return None
+        return _row_to_task(row)
 
-    def get_by_key(self, task_key: str) -> Task | None:
-        row = self._session.execute(
-            select(m.Task).where(m.Task.task_key == task_key)
-        ).scalar_one_or_none()
-        return _row_to_task(row) if row else None
+    def list(self) -> Sequence[Task]:
+        with self._session.no_autoflush:
+            rows = self._session.execute(select(m.Task).order_by(m.Task.id.desc())).scalars().all()
+        return [_row_to_task(r) for r in rows]
 
     def create(self, data: dict[str, Any]) -> int:
         item = m.Task(
@@ -420,7 +442,8 @@ class SATaskRepository(TaskRepository):
         return int(item.id)
 
     def update(self, task_id: int, data: dict[str, Any]) -> None:
-        row = self._session.get(m.Task, task_id)
+        with self._session.no_autoflush:
+            row = self._session.get(m.Task, task_id)
         if row is None:
             raise NotFoundError(f"Task {task_id} not found")
         for key, val in data.items():
@@ -428,21 +451,28 @@ class SATaskRepository(TaskRepository):
                 setattr(row, key, val)
 
     def add_history(self, task_id: int, phase_id: int, status: str) -> None:
-        existing = self._session.execute(
-            select(m.TaskHistory).where(
-                m.TaskHistory.task_id == task_id,
-                m.TaskHistory.phase_id == phase_id,
-            )
-        ).scalar_one_or_none()
+        # Check pending objects first to avoid duplicate inserts inside the same session.
+        for obj in self._session.new:
+            if isinstance(obj, m.TaskHistory) and obj.task_id == task_id and obj.phase_id == phase_id:
+                obj.status = status
+                return
+        with self._session.no_autoflush:
+            existing = self._session.execute(
+                select(m.TaskHistory).where(
+                    m.TaskHistory.task_id == task_id,
+                    m.TaskHistory.phase_id == phase_id,
+                )
+            ).scalar_one_or_none()
         if existing:
             existing.status = status
         else:
             self._session.add(m.TaskHistory(task_id=task_id, phase_id=phase_id, status=status))
 
     def get_history(self, task_id: int) -> Sequence[dict[str, Any]]:
-        rows = self._session.execute(
-            select(m.TaskHistory).where(m.TaskHistory.task_id == task_id)
-        ).scalars().all()
+        with self._session.no_autoflush:
+            rows = self._session.execute(
+                select(m.TaskHistory).where(m.TaskHistory.task_id == task_id)
+            ).scalars().all()
         return [
             {
                 "id": r.id,
@@ -528,6 +558,12 @@ class SAAgentRepository(AgentRepository):
     def list(self) -> Sequence[Agent]:
         rows = self._session.execute(select(m.Agent)).scalars().all()
         return [_row_to_agent(r) for r in rows]
+
+    def get_by_name(self, name: str) -> Agent | None:
+        row = self._session.execute(
+            select(m.Agent).where(m.Agent.name == name)
+        ).scalar_one_or_none()
+        return _row_to_agent(row) if row else None
 
     def get_by_id(self, agent_id: int) -> Agent | None:
         row = self._session.get(m.Agent, agent_id)

@@ -34,7 +34,6 @@ class TestWizardEvaluate:
         engine.phase_map = {"0": ph}
         engine.all_phases = [ph]
         engine.task = {"id": 1, "task_key": "AAT-1", "current_phase": "0"}
-        store = engine._store
 
         with patch.object(engine, "_build_checklist", return_value=["check"]), \
              patch.object(engine, "_check_coverage", return_value=(["check"], [])), \

@@ -20,7 +20,6 @@ from project_workflow.interfaces.ui.services import (
     _load_workflows,
 )
 from project_workflow.interfaces.ui.skills import _load_skills_catalog as _load_skills_catalog_direct
-from project_workflow.interfaces.ui.state import _app_state
 from project_workflow.interfaces.ui.templates import templates
 
 

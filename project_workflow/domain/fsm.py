@@ -92,26 +92,27 @@ def get_next_phase(current_phase: str) -> Optional[str]:
 
 def get_phase_checklist_raw(phase_name: str) -> List[str]:
     """Вернуть raw список чеклиста для фазы (для JSON output)."""
-    checklists = {
-        "-1": ["Прочитать Jira тикет", "Извлечь acceptance criteria", "Зафиксировать в requirements.md", "Проверить assignee"],
-        "0.00": ["Проверить git config user.name", "Проверить git config user.email", "Убедиться что identity выставлен корректно"],
-        "0.5": ["Перевести Jira в статус 'В работе'", "Зафиксировать transition в changelog.md"],
-        "0.6": ["Запустить workflow_researcher (delegate_task)", "Получить отчёт по dataflow", "Зафиксировать findings", "Дождаться COMPLETE"],
-        "1": ["Определить репозиторий(и)", "Проверить target branch", "Синхронизировать ветку", "Проверить окружение"],
-        "1.5": ["Запустить Deep Research (delegate_task)", "Собрать архитектуру + API + types", "Проверить existing реализации"],
-        "3": ["Написать план в PLAN.md", "Чеклист подзадач (min 5)", "Оценить время", "CriticGate review"],
-        "4": ["Реализовать по плану", "Обновлять current-stage.md", "TDD: тесты перед кодом", "Каждый checkpoint — ревизия"],
-        "5": ["Запустить линтер/форматтер", "Проверить типы (tsc/mypy)", "Unit tests PASS", "Integration tests (если есть)"],
-        "5.5": ["Скриншоты UI (если фронт)", "E2E тесты (если есть)", "Ручное тестирование edge cases", "Проверить на тестовых данных"],
-        "6": ["git add только нужные файлы", "Сообщение с task_id", "Conventional commit format", "push --set-upstream origin"],
-        "7": ["Создать MR через GitLab UI", "Заполнить description с чеклистом", "Прикрепить скриншоты к MR", "Назначить reviewer"],
-        "7.5": ["Запустить workflow_reviewer (delegate_task)", "Ревью стиля, безопасности, логики", "Зафиксировать замечания", "Внести правки"],
-        "7.6": ["Запустить QA (delegate_task)", "Функциональное тестирование", "Проверить на тестовом стенде", "Зафиксировать результаты"],
-        "7.6.R": ["Запустить workflow_researcher (DVR)", "Проверить dataflow соответствие", "Зафиксировать DVR report", "Дождаться COMPLETE"],
-        "8": ["Перевести Jira в 'Выполнено'", "Прикрепить MR ссылку к тикету", "Зафиксировать в changelog.md", "Голосовой отчёт (если нужно)"],
-        "9": ["Ретроспектива: что сработало", "Метрики: время, tool calls, токены", "Сравнение solo vs delegate", "Обновить project-knowledge.md"],
-    }
-    return checklists.get(phase_name, [])
+    from project_workflow.infrastructure.db.uow import SAUnitOfWork
+    from project_workflow.infrastructure.db import schema
+    try:
+        uow = SAUnitOfWork()
+        uow.create_all()
+        schema.ensure_phase_catalog(uow)
+        phase = schema.get_phase_from_db(uow, phase_name)
+        if phase:
+            items: list[str] = []
+            for check in phase.checks:
+                txt = getattr(check, "description", "")
+                if txt:
+                    items.append(str(txt).strip())
+            for ev in phase.evidence:
+                txt = getattr(ev, "item", "")
+                if txt:
+                    items.append(str(txt).strip())
+            return items
+    except Exception:
+        pass
+    return []
 
 
 def show_phase_checklist(phase_name: str) -> None:

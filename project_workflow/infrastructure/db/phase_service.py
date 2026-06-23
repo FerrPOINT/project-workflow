@@ -7,9 +7,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy.orm import Session
-
-from ...domain.repositories import UnitOfWork
 from . import models as m
 from .uow import SAUnitOfWork
 

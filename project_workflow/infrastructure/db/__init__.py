@@ -5,8 +5,6 @@ from pathlib import Path
 
 from ... import config
 
-DB_PATH = Path(config.get_settings().WORKFLOW_DIR) / "workflow.db"
-
 from .models import Base
 from .repositories import (
     SAAgentRepository,
@@ -19,6 +17,8 @@ from .repositories import (
 )
 from .session import get_engine, get_session
 from .uow import SAUnitOfWork, UnitOfWork
+
+DB_PATH = Path(config.get_settings().WORKFLOW_DIR) / "workflow.db"
 
 __all__ = [
     "Base",

@@ -250,7 +250,7 @@ class TestWizardEngineEvaluateLLM:
         with patch("project_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             from project_workflow.wizard import WizardEngine
-            engine = WizardEngine("SMOKE-LLM-1", repo=str(tmp_path))
+            engine = WizardEngine("TASK-LLM-1", repo=str(tmp_path))
         return engine
 
     def test_evaluate_llm_pass(self, engine):
@@ -311,7 +311,7 @@ class TestWizardEngineEvaluateLLM:
             # unless they were passed as previously_covered param.
             # Here we just verify the prompt was built and sent.
             assert "Report" in kwargs["user"]
-            assert "SMOKE-LLM-1" in kwargs["user"]
+            assert "TASK-LLM-1" in kwargs["user"]
 
 
 class TestWizardEngineEvaluateLLMWithRule:
@@ -326,7 +326,7 @@ class TestWizardEngineEvaluateLLMWithRule:
         with patch("project_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             from project_workflow.wizard import WizardEngine
-            engine = WizardEngine("SMOKE-RULE-1", repo=str(tmp_path))
+            engine = WizardEngine("TASK-RULE-1", repo=str(tmp_path))
         return engine
 
     def test_rule_based_evaluate_without_smart(self, engine, monkeypatch):

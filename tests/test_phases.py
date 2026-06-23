@@ -1,5 +1,6 @@
 """Test phases.py helpers."""
 
+from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.domain.fsm import (
     get_next_phase,
     get_phase_checklist_raw,

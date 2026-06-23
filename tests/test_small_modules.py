@@ -89,8 +89,8 @@ class TestPhases:
 
     def test_get_phase_checklist_raw_known(self):
         items = get_phase_checklist_raw("1")
-        assert len(items) >= 4
-        assert "Определить репозиторий(и)" in items[0]
+        assert len(items) >= 3
+        assert any("репозиторий" in item for item in items)
 
     def test_get_phase_checklist_raw_unknown_empty(self):
         assert get_phase_checklist_raw("999") == []

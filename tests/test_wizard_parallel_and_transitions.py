@@ -265,7 +265,9 @@ class TestRecordParallelTransition:
              patch.object(engine.db, "update_task") as mock_upd:
             engine._record_parallel_transition(group, "blocked", "3")
         mock_hist.assert_not_called()
-        mock_upd.assert_called_once_with(7, {"status": "blocked"})
+        call = mock_upd.call_args[0][1]
+        assert call["status"] == "blocked"
+        assert call["current_phase"] == "1"
 
 
 # ═══════════════════════════════════════════════════════════════════════

@@ -4,11 +4,11 @@ Uses TestClient to hit GET/POST/PUT endpoints.
 """
 import os
 import tempfile
+import uuid
 
 import pytest
 from fastapi.testclient import TestClient
 
-from project_workflow.application.state import _AppState
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
 
@@ -171,9 +171,6 @@ class TestRemovedLegacyApi:
     def test_parallel_route_removed(self, client):
         resp = client.put("/api/phases/parallel", json={"groups": [["-1", "0.0a"]]})
         assert resp.status_code == 404
-
-
-import uuid
 
 
 def _unique(prefix: str) -> str:

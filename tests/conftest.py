@@ -9,6 +9,9 @@ import pytest
 from project_workflow import config
 
 
+_ORIGINAL_PHASE_ORDER = list(config.PHASE_ORDER)
+
+
 @pytest.fixture(autouse=True)
 def isolate_ui_runtime_state(tmp_path, monkeypatch):
     """Keep tests away from the user's real runtime DB/settings and mutable seed file."""
@@ -42,13 +45,13 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
     original_app_state = app_state._app_state
     app_state._app_state = app_state._AppState(database_url=database_url)
 
-    
     from project_workflow.infrastructure.db.schema import ensure_phase_catalog
     from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
     uow = SAUnitOfWork(database_url)
     uow.create_all()
     ensure_phase_catalog(uow)
+    uow.close()
 
     yield
 
@@ -56,3 +59,5 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
     app_state._app_state = original_app_state
     reset_engine()
     config.get_settings.cache_clear()
+    config.PHASE_ORDER[:] = list(_ORIGINAL_PHASE_ORDER)
+
