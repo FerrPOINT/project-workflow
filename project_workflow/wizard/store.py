@@ -111,10 +111,12 @@ class WizardAssessmentStore:
         if isinstance(self.uow, MagicMock):
             rows = self.uow.get_supervisor_runs(task_id=task_identifier, limit=limit)
         elif hasattr(self.uow, "supervisor_runs"):
-            task_id = task_identifier
+            task_id: int | str = task_identifier
             if isinstance(task_identifier, str):
                 task = self.uow.tasks.get_by_key(task_identifier)
-                task_id = task.id if task else None
+                if task is None:
+                    return []
+                task_id = task.id
             rows = self.uow.supervisor_runs.list(task_id=task_id, limit=limit)
         else:
             rows = self.uow.get_supervisor_runs(task_id=task_identifier, limit=limit)
@@ -147,7 +149,7 @@ def _row_to_assessment(row: Any) -> WizardAssessment:
             resp = {}
     return WizardAssessment(
         task_key=resp.get("task_key", "") or "",
-        phase_code=resp.get("phase", phase_code),
+        phase_code=str(resp.get("phase", phase_code) or ""),
         phase_name=resp.get("phase_name", ""),
         verdict=str(verdict).lower(),
         covered=covered,

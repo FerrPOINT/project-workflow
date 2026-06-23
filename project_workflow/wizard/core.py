@@ -264,6 +264,8 @@ class WizardEngine:
         return phases[0].code if phases else "-1"
 
     def _resolve_current_phase(self) -> str:
+        if not self.task:
+            return "-1"
         current = str(self.task.get("current_phase") or "").strip()
         if current and current in self.phase_map:
             return current
@@ -279,14 +281,17 @@ class WizardEngine:
         return self.phase_map.get(self.current_phase)
 
     def _phase_by_id(self, phase_id: int) -> Phase | None:
+        needle = int(phase_id)
         for phase in self.all_phases:
-            if int(phase.id) == int(phase_id):
+            if phase.id is not None and int(phase.id) == needle:
                 return phase
         return None
 
     def _get_previously_covered(self, phase_code: str) -> set[str]:
         """Return items already covered in previous supervisor runs for this phase."""
         previously: set[str] = set()
+        if not self.task:
+            return previously
         task_id = int(self.task.get("id", 0))
         if not task_id:
             return previously
@@ -383,6 +388,7 @@ class WizardEngine:
     def _build_parallel_result(self, group, verdict, covered, missing, blockers, next_phase, next_phase_name, rollback_target):
         first = group[0]
         phase_codes = [p.code for p in group]
+        rollback_phase_obj = self.phase_map.get(rollback_target) if rollback_target else None
         result = {
             "verdict": VERDICT_LABELS[verdict],
             "task_key": self.task_key,
@@ -393,7 +399,7 @@ class WizardEngine:
             "blockers": blockers,
             "current_phase": first.code,
             "next_phase": next_phase if verdict == "pass" else rollback_target if verdict == "rollback" else None,
-            "next_phase_name": next_phase_name if verdict == "pass" else (self.phase_map.get(rollback_target).name if rollback_target and self.phase_map.get(rollback_target) else None),
+            "next_phase_name": next_phase_name if verdict == "pass" else (rollback_phase_obj.name if rollback_phase_obj else None),
             "rollback_target": rollback_target,
             "required_evidence": list({text_from_evidence(ev) for p in group for ev in p.evidence}),
             "required_checks": list({text_from_check(chk) for p in group for chk in p.checks}),
@@ -509,9 +515,12 @@ class WizardEngine:
         fsm = PhaseFSM(initial="in_progress")
         fsm.apply_verdict(verdict)
         new_state = fsm.state
+        if not self.task:
+            return
         task_id = int(self.task["id"])
         # Resolve str phase codes to int ids for FK columns
-        next_phase_id = self.phase_map.get(next_phase).id if next_phase and next_phase in self.phase_map else None
+        next_phase_obj = self.phase_map.get(next_phase) if next_phase and next_phase in self.phase_map else None
+        next_phase_id = next_phase_obj.id if next_phase_obj else None
         if new_state == "done":
             self.db.add_task_history(task_id, phase.id, "done")
             if next_phase_id:
@@ -549,6 +558,8 @@ class WizardEngine:
         fsm = PhaseFSM(initial="in_progress")
         fsm.apply_verdict(verdict)
         new_state = fsm.state
+        if not self.task:
+            return
         task_id = int(self.task["id"])
         if new_state == "done":
             for phase in group:
@@ -709,10 +720,14 @@ class WizardEngine:
             self._record_transition(phase, verdict, next_phase, rollback_target)
 
         self._uow.commit()
+        if not self.task:
+            return result
         self.task = self._task_service.get_task(self.task["id"]) or self.task
         self.current_phase = self._resolve_current_phase()
 
         # Persist assessment
+        next_phase_obj = self.phase_map.get(next_phase) if next_phase and next_phase in self.phase_map else None
+        rollback_phase_obj = self.phase_map.get(rollback_target) if rollback_target and rollback_target in self.phase_map else None
         self.db.create_supervisor_run(
             task_id=self.task["id"],
             phase_id=phase.id,
@@ -721,8 +736,8 @@ class WizardEngine:
             covered=assessment.covered,
             missing=assessment.missing,
             blockers=assessment.blockers,
-            next_phase_id=self.phase_map.get(next_phase).id if next_phase and next_phase in self.phase_map else None,
-            rollback_phase_id=self.phase_map.get(rollback_target).id if rollback_target and rollback_target in self.phase_map else None,
+            next_phase_id=next_phase_obj.id if next_phase_obj else None,
+            rollback_phase_id=rollback_phase_obj.id if rollback_phase_obj else None,
             context_snapshot={
                 "phase": assessment.phase_code,
                 "phase_name": assessment.phase_name,

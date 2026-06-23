@@ -5,7 +5,7 @@ implementation has been removed.
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from . import models as m
 from .uow import SAUnitOfWork
@@ -17,7 +17,7 @@ class PhaseService:
     def __init__(self, uow_or_state: SAUnitOfWork | Any):
         """Accept either a UnitOfWork or an _AppState instance."""
         if type(uow_or_state).__name__ == "_AppState":
-            self._uow: SAUnitOfWork = uow_or_state.get_uow()
+            self._uow: SAUnitOfWork = cast(SAUnitOfWork, cast(Any, uow_or_state).get_uow())
         else:
             self._uow = uow_or_state
 

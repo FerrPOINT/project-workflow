@@ -5,7 +5,7 @@ import sys
 import os
 from typing import Any
 
-from sqlalchemy import engine_from_config, pool, text
+from sqlalchemy import create_engine, pool, text
 
 from alembic import context
 
@@ -65,26 +65,24 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
+    db_url = os.environ.get("DATABASE_URL") or config.get_main_option("sqlalchemy.url")
+    is_postgresql = "postgresql" in (db_url or "")
+    connectable = create_engine(
+        db_url,
         poolclass=pool.NullPool,
+        isolation_level="AUTOCOMMIT" if is_postgresql else None,
     )
 
     with connectable.connect() as connection:
         _ensure_schema(connection)
-        if connection.dialect.name == "postgresql":
-            connection.execute(text(f"SET search_path TO {SCHEMA}"))
         configure_kwargs = dict(
             connection=connection,
             target_metadata=target_metadata,
+            version_table_schema=SCHEMA,
+            transactional_ddl=False if is_postgresql else True,
         )
-        if connection.dialect.name == "postgresql":
-            configure_kwargs["version_table_schema"] = SCHEMA
         context.configure(**configure_kwargs)
-
-        with context.begin_transaction():
-            context.run_migrations()
+        context.run_migrations()
 
 
 if context.is_offline_mode():

@@ -316,3 +316,248 @@ class TestApiPhaseCreate:
         finally:
             uow.workflows.delete(int(workflow_id))
             uow.commit()
+
+
+
+class TestApiWorkflows:
+    def test_list_workflows(self, client):
+        resp = client.get("/api/workflows")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert "workflows" in data
+
+    def test_create_workflow(self, client):
+        resp = client.post("/api/workflows", json={"name": _unique("new-wf"), "description": "desc"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert "workflow_id" in data
+
+    def test_create_workflow_requires_name(self, client):
+        resp = client.post("/api/workflows", json={"description": "desc"})
+        assert resp.status_code == 400
+        assert resp.json()["ok"] is False
+
+    def test_create_workflow_rejects_code(self, client):
+        resp = client.post("/api/workflows", json={"name": _unique("wf"), "code": "X"})
+        assert resp.status_code == 400
+        assert "code" in resp.json()["error"]
+
+    def test_update_workflow(self, client):
+        from project_workflow.interfaces.ui import _app_state
+        wf = _app_state.workflow_service().create_workflow({"name": _unique("upd-wf"), "_skip_default_phase": True})
+        resp = client.put(f"/api/workflows/{wf['id']}", json={"name": "Updated", "description": "new"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["workflow"]["name"] == "Updated"
+
+    def test_update_workflow_not_found(self, client):
+        resp = client.put("/api/workflows/999999", json={"name": "X"})
+        assert resp.status_code == 404
+
+    def test_delete_default_workflow_forbidden(self, client):
+        from project_workflow.interfaces.ui import _app_state
+        default = next(w for w in _app_state.workflow_service().list_workflows() if w.get("is_default"))
+        resp = client.delete(f"/api/workflows/{default['id']}")
+        assert resp.status_code in (400, 409)
+
+    def test_delete_workflow_with_phases_forbidden(self, client):
+        from project_workflow.interfaces.ui import _app_state
+        wf = _app_state.workflow_service().create_workflow({"name": _unique("del-wf"), "_skip_default_phase": True})
+        _app_state.phase_service().create_phase({"workflow_id": wf["id"], "code": _unique("delph"), "name": "Phase", "phase_order": 1})
+        resp = client.delete(f"/api/workflows/{wf['id']}")
+        assert resp.status_code == 409
+
+
+class TestApiProjects:
+    def test_list_projects(self, client):
+        resp = client.get("/api/projects")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert "projects" in data
+
+    def test_create_and_update_project(self, client):
+        from project_workflow.interfaces.ui import _app_state
+        default_wf = next(w for w in _app_state.workflow_service().list_workflows() if w.get("is_default"))
+        code = _unique("PRJ")
+        resp = client.post("/api/projects", json={
+            "code": code,
+            "name": "Test Project",
+            "description": "desc",
+            "workflow_id": default_wf["id"],
+            "key_prefixes": ["TST"],
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        project_id = data["project_id"]
+
+        resp = client.put(f"/api/projects/{project_id}", json={"name": "Updated", "key_prefixes": ["ABC", "DEF"]})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["project"]["name"] == "Updated"
+
+    def test_create_project_invalid_prefix(self, client):
+        from project_workflow.interfaces.ui import _app_state
+        default_wf = next(w for w in _app_state.workflow_service().list_workflows() if w.get("is_default"))
+        resp = client.post("/api/projects", json={
+            "code": _unique("PRJ"),
+            "name": "X",
+            "workflow_id": default_wf["id"],
+            "key_prefixes": ["a"],
+        })
+        assert resp.status_code == 422
+
+    def test_delete_project_with_tasks_forbidden(self, client):
+        from project_workflow.interfaces.ui import _app_state
+        default_wf = next(w for w in _app_state.workflow_service().list_workflows() if w.get("is_default"))
+        code = _unique("PRJ")
+        resp = client.post("/api/projects", json={
+            "code": code,
+            "name": "To Delete",
+            "workflow_id": default_wf["id"],
+            "key_prefixes": ["ZZZ"],
+        })
+        project_id = resp.json()["project_id"]
+        _app_state.task_service().create_task({
+            "project_id": project_id,
+            "task_key": _unique("TASK"),
+            "title": "Task",
+            "status": "active",
+            "current_phase": "-1",
+        })
+        resp = client.delete(f"/api/projects/{project_id}")
+        assert resp.status_code == 409
+
+
+class TestApiAgents:
+    def test_list_agents(self, client):
+        resp = client.get("/api/agents")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert "agents" in data
+
+    def test_create_and_update_agent(self, client):
+        name = _unique("Agent")
+        resp = client.post("/api/agents", json={"name": name, "description": "desc"})
+        assert resp.status_code == 200
+        data = resp.json()
+        agent_id = data["agent_id"]
+
+        resp = client.put(f"/api/agents/{agent_id}", json={"name": name + "2", "description": "updated"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["agent"]["description"] == "updated"
+
+    def test_delete_agent_assigned_to_phase_forbidden(self, client):
+        from project_workflow.interfaces.ui import _app_state
+        name = _unique("Agent")
+        resp = client.post("/api/agents", json={"name": name})
+        agent_id = resp.json()["agent_id"]
+        phase_id = _phase_id(client, "0.0a")
+        _app_state.phase_service().update_phase(phase_id, {"agent_id": agent_id})
+        resp = client.delete(f"/api/agents/{agent_id}")
+        assert resp.status_code == 400
+
+
+class TestApiInstructions:
+    def test_list_create_update_delete_instructions(self, client):
+        from project_workflow.interfaces.ui import _app_state
+        phase_id = _phase_id(client, "0.0a")
+
+        resp = client.get(f"/api/phases/{phase_id}/instructions")
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is True
+
+        resp = client.post("/api/instructions", json={
+            "phase_id": phase_id,
+            "description": "do X",
+            "execution_type": "parallel",
+            "skills": ["web", "search"],
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        instruction_id = data["instruction"]["id"]
+
+        resp = client.put(f"/api/instructions/{instruction_id}", json={
+            "description": "do Y",
+            "execution_type": "sync",
+            "skills": ["web"],
+        })
+        assert resp.status_code == 200
+        inst = resp.json()["instruction"]
+        assert inst["description"] == "do Y"
+        assert inst["execution_type"] == "sync"
+
+        resp = client.put(f"/api/instructions/{instruction_id}/skills", json={"skills": ["search"]})
+        assert resp.status_code == 200
+        assert resp.json()["instruction"]["skills"] == ["search"]
+
+        resp = client.delete(f"/api/instructions/{instruction_id}")
+        assert resp.status_code == 200
+        assert _app_state.instruction_service().get_instruction(instruction_id) is None
+
+
+class TestApiTasks:
+    def test_api_tasks(self, client):
+        resp = client.get("/api/tasks")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert "tasks" in data
+
+    def test_api_task_detail_route_not_wired(self, client):
+        resp = client.get("/api/tasks/NONEXISTENT-99999")
+        assert resp.status_code == 404
+
+
+class TestApiPhaseUpdate:
+    def test_update_phase_name_and_execution_type(self, client):
+        from project_workflow.interfaces.ui import _app_state
+        phase_id = _phase_id(client, "0.01")
+        resp = client.put(f"/api/phases/{phase_id}", json={
+            "name": "Renamed phase",
+            "execution_type": "parallel",
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        phase = _app_state.phase_service().get_phase(phase_id)
+        assert phase["name"] == "Renamed phase"
+        assert phase["execution_type"] == "parallel"
+
+    def test_update_phase_forbidden_code(self, client):
+        phase_id = _phase_id(client, "0.000")
+        resp = client.put(f"/api/phases/{phase_id}", json={"code": "x.y"})
+        assert resp.status_code == 400
+
+    def test_update_phase_not_found(self, client):
+        resp = client.put("/api/phases/999999", json={"name": "x"})
+        assert resp.status_code == 404
+
+
+class TestPageRoutes:
+    def test_workflows_page(self, client):
+        resp = client.get("/workflows")
+        assert resp.status_code == 200
+        assert "html" in resp.headers.get("content-type", "")
+
+    def test_agents_page(self, client):
+        resp = client.get("/agents")
+        assert resp.status_code == 200
+
+    def test_skills_page(self, client):
+        resp = client.get("/skills")
+        assert resp.status_code == 200
+
+    def test_task_detail_page(self, client):
+        resp = client.get("/task/TASK-1")
+        assert resp.status_code == 200
+
+    def test_phase_detail_page_not_found(self, client):
+        resp = client.get("/phase/999999")
+        assert resp.status_code == 404

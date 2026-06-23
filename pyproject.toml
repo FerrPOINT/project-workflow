@@ -61,6 +61,14 @@ omit = [
     "*/references/*",
 ]
 
+[tool.pytest.ini_options]
+timeout = 60
+markers = [
+    "integration: tests requiring a local PostgreSQL instance",
+    "slow: tests that take more than 10 seconds",
+]
+addopts = "-m 'not integration'"
+
 [tool.coverage.report]
 fail_under = 90
 exclude_lines = [

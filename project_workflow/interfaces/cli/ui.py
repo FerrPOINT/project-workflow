@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import os
 import sys
-from typing import Optional
+from typing import Any, Optional
 
 import click
 
@@ -92,9 +92,9 @@ def history_cmd(ctx: click.Context, task: str, n: Optional[int]) -> None:
     
     with SAUnitOfWork() as uow:
         runs_raw = uow.supervisor_runs.list(task_key=task_key, limit=n or 200)
-        runs = []
-        for r in runs_raw:
-            rd = r.to_dict()
+        runs: list[dict[str, Any]] = []
+        for raw in runs_raw:
+            rd: dict[str, Any] = raw.to_dict()
             next_phase_id = rd.get("next_phase_id")
             rollback_phase_id = rd.get("rollback_phase_id")
             phase = uow.phases.get_by_id(int(rd.get("phase_id") or 0))

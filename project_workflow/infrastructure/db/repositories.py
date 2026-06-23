@@ -313,12 +313,12 @@ class SAPhaseRepository(PhaseRepository):
         ).scalars().all()
         return [{"id": r.id, "phase_id": r.phase_id, "description": r.description} for r in rows]
 
-    def set_checks(self, phase_id: int, items: list[dict[str, Any]]) -> None:
+    def set_checks(self, phase_id: int, items: List[dict[str, Any]]) -> None:
         self._session.execute(delete(m.Check).where(m.Check.phase_id == phase_id))
         for item in items:
             self._session.add(m.Check(phase_id=phase_id, description=item.get("description", "")))
 
-    def set_evidence(self, phase_id: int, items: list[dict[str, Any]]) -> None:
+    def set_evidence(self, phase_id: int, items: List[dict[str, Any]]) -> None:
         self._session.execute(delete(m.Evidence).where(m.Evidence.phase_id == phase_id))
         for item in items:
             self._session.add(m.Evidence(phase_id=phase_id, description=item.get("description", "")))

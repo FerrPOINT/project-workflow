@@ -45,9 +45,12 @@ class WizardContextBuilder:
             self._phase_map = {phase.code: phase for phase in self.all_phases}
         return self._phase_map
 
-    def _phase_by_id(self, phase_id: int) -> Phase | None:
+    def _phase_by_id(self, phase_id: int | str | None) -> Phase | None:
+        if phase_id is None:
+            return None
+        needle = int(phase_id)
         for phase in self.all_phases:
-            if int(phase.id) == int(phase_id):
+            if phase.id is not None and int(phase.id) == needle:
                 return phase
         return None
 

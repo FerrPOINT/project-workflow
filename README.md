@@ -147,7 +147,7 @@ flowchart TD
 |---|---|---|
 | Lint | `ruff check .` | **green** |
 | Type check | `mypy project_workflow` | **green** |
-| Tests | `pytest -q --tb=short` | **636 passed** |
+| Tests | `pytest -q --timeout=60` | **672 passed** |
 | Docker UI health | `curl http://localhost:8812/` | **200** |
 | Systemd UI health | `curl http://localhost:8811/` | **200** |
 
@@ -164,6 +164,7 @@ flowchart TD
 - [ ] Postgres-интеграционные тесты
 - [x] `WizardEngine` и wizard-модули собраны в пакет `project_workflow/wizard/`
 - [ ] API-тесты на все UI routes
+- [ ] Postgres-интеграционные тесты
 
 Подробный план: [`docs/plans/2026-06-21-detailed-roadmap.md`](docs/plans/2026-06-21-detailed-roadmap.md).
 

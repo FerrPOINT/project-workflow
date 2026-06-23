@@ -142,7 +142,8 @@ def get_phase_from_db(
 def load_phases(workflow_id: int | str | None = None) -> List[Phase]:
     """Load all phases from DB ordered by phase_order."""
     from .uow import SAUnitOfWork
-    with SAUnitOfWork() as uow:
+    uow = SAUnitOfWork()
+    with uow:
         uow.create_all()
         ensure_phase_catalog(uow)
         return load_phases_from_db(uow, workflow_id=workflow_id)

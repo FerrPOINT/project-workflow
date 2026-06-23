@@ -74,10 +74,10 @@ class SAUnitOfWork(UnitOfWork):
         """Return a new UoW bound to the same database URL."""
         return SAUnitOfWork()
 
-    def __enter__(self) -> UnitOfWork:
+    def __enter__(self) -> "SAUnitOfWork":
         return self
 
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> Literal[False]:
+    def __exit__(self, exc_type, exc_val, exc_tb) -> Literal[False]:
         if exc_type is not None:
             self.rollback()
         else:
@@ -215,11 +215,11 @@ class SAUnitOfWork(UnitOfWork):
 
     def get_phase_by_id(self, phase_id: int) -> Any | None:
         row = self.phases.get_by_id(phase_id)
-        return row.to_dict() if hasattr(row, "to_dict") else row
+        return row.to_dict() if row and hasattr(row, "to_dict") else row
 
     def get_phase_by_code(self, code: str) -> Any | None:
         row = self.phases.get_by_code(code)
-        return row.to_dict() if hasattr(row, "to_dict") else row
+        return row.to_dict() if row and hasattr(row, "to_dict") else row
 
     def get_phase(self, token: Any) -> Any | None:
         """Legacy alias resolving a phase by id or code."""
@@ -239,15 +239,15 @@ class SAUnitOfWork(UnitOfWork):
                 row = self.phases.get_by_id(int(token))
             except (TypeError, ValueError):
                 pass
-        return row.to_dict() if hasattr(row, "to_dict") else row
+        return row.to_dict() if row and hasattr(row, "to_dict") else row
 
     def get_task(self, task_id: int) -> Any | None:
         row = self.tasks.get_by_id(task_id)
-        return row.to_dict() if hasattr(row, "to_dict") else row
+        return row.to_dict() if row and hasattr(row, "to_dict") else row
 
     def get_task_by_key(self, key: str) -> Any | None:
         row = self.tasks.get_by_key(key)
-        return row.to_dict() if hasattr(row, "to_dict") else row
+        return row.to_dict() if row and hasattr(row, "to_dict") else row
 
     def update_task(self, task_id: int, data: dict[str, Any]) -> None:
         return self.tasks.update(task_id, data)
@@ -391,7 +391,7 @@ class SAUnitOfWork(UnitOfWork):
         return [r.to_dict() if hasattr(r, "to_dict") else r for r in self.tasks.get_history(task_id)]
 
     def get_supervisor_runs(self, **kwargs: Any) -> list[dict[str, Any]]:
-        return [r.to_dict() if hasattr(r, "to_dict") else r for r in self.supervisor_runs.list(**kwargs)]
+        return [r.to_dict() for r in self.supervisor_runs.list(**kwargs)]
 
     def init(self) -> None:
         self.create_all()
@@ -553,5 +553,9 @@ class SAUnitOfWork(UnitOfWork):
         bind = self._session.bind
         if bind is None:
             raise RuntimeError("Session has no engine bound")
+        # For PostgreSQL make sure the target schema exists and search_path
+        # is set before creating tables.
+        from .session import ensure_schema
+        ensure_schema(bind)
         Base.metadata.create_all(bind)
         return None

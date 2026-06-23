@@ -10,7 +10,7 @@ from typing import Any
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, event
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import NullPool
 
@@ -113,15 +113,24 @@ def reset_engine() -> None:
     _SessionLocal = None
 
 
-def ensure_schema(engine: Engine | None = None) -> None:
+def ensure_schema(engine: Engine | Connection | None = None) -> None:
     """Create all tables from ORM models (fallback for tests / fresh DBs)."""
-    engine = engine or get_engine()
-    with engine.begin() as conn:
-        if engine.dialect.name == "postgresql":
+    target = engine or get_engine()
+    dialect = target.dialect.name
+    if isinstance(target, Connection):
+        conn = target
+        if dialect == "postgresql":
             schema = get_settings().DB_SCHEMA
             conn.exec_driver_sql(f"CREATE SCHEMA IF NOT EXISTS {schema}")
             conn.exec_driver_sql(f"SET search_path TO {schema}")
         Base.metadata.create_all(conn)
+    else:
+        with target.begin() as conn:
+            if dialect == "postgresql":
+                schema = get_settings().DB_SCHEMA
+                conn.exec_driver_sql(f"CREATE SCHEMA IF NOT EXISTS {schema}")
+                conn.exec_driver_sql(f"SET search_path TO {schema}")
+            Base.metadata.create_all(conn)
 
 
 def run_alembic_command(cmd: str, engine: Engine | None = None) -> None:
@@ -129,8 +138,14 @@ def run_alembic_command(cmd: str, engine: Engine | None = None) -> None:
     engine = engine or get_engine()
     here = Path(__file__).resolve().parent.parent.parent.parent
     alembic_cfg = Config(str(here / "alembic.ini"))
-    alembic_cfg.set_main_option("sqlalchemy.url", str(engine.url))
+    # Preserve the real password (str(URL) masks it) and escape percent signs
+    # so configparser interpolation does not treat them as substitution syntax.
+    url = engine.url.render_as_string(hide_password=False).replace("%", "%%")
+    alembic_cfg.set_main_option("sqlalchemy.url", url)
     getattr(command, cmd)(alembic_cfg, "head")
+    # Alembic leaves the engine pool open; close it so migrations do not hold
+    # connections that can block test database teardown.
+    engine.dispose()
 
 
 def ensure_migrated(engine: Engine | None = None) -> None:
@@ -141,6 +156,7 @@ def ensure_migrated(engine: Engine | None = None) -> None:
         with engine.begin() as conn:
             conn.exec_driver_sql(f"CREATE SCHEMA IF NOT EXISTS {schema}")
     run_alembic_command("upgrade", engine)
+    engine.dispose()
 
 
 def stamp_head(engine: Engine | None = None) -> None:
