@@ -147,7 +147,7 @@ flowchart TD
 |---|---|---|
 | Lint | `ruff check .` | **green** |
 | Type check | `mypy project_workflow` | **green** |
-| Tests | `pytest -q --timeout=60` | **672 passed** |
+| Tests | `pytest -q --timeout=60` | **679 passed** |
 | Docker UI health | `curl http://localhost:8812/` | **200** |
 | Systemd UI health | `curl http://localhost:8811/` | **200** |
 
@@ -161,10 +161,12 @@ flowchart TD
 - [x] UI/API переведены на SQLAlchemy-сервисы
 - [x] `WorkflowDB` переписан на SQLAlchemy, `db/base.py` и `db_schema.sql` удалены
 - [x] mypy green, ruff green, 643 теста green
-- [ ] Postgres-интеграционные тесты
+- [x] Postgres-интеграционные тесты
 - [x] `WizardEngine` и wizard-модули собраны в пакет `project_workflow/wizard/`
-- [ ] API-тесты на все UI routes
-- [ ] Postgres-интеграционные тесты
+- [x] API-тесты на все UI routes
+- [x] Production hardening: `/health` endpoint, graceful shutdown, PG connection retry
+- [ ] Coverage > 95%
+- [ ] mypy `--check-untyped-defs` для wizard/core.py
 
 Подробный план: [`docs/plans/2026-06-21-detailed-roadmap.md`](docs/plans/2026-06-21-detailed-roadmap.md).
 

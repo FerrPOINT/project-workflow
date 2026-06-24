@@ -1,6 +1,7 @@
 """Tests for DB session factory and UI template helpers."""
 from __future__ import annotations
 
+import pytest
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -21,11 +22,11 @@ class TestSessionHelpers:
     def test_is_sqlite_detects_sqlite(self):
         assert _is_sqlite("sqlite:///tmp/db.sqlite")
         assert _is_sqlite("sqlite:///:memory:")
-        assert not _is_sqlite("postgresql://user:pass@localhost/db")
-        assert not _is_sqlite("mysql://user:pass@localhost/db")
+        assert not _is_sqlite("postgresql://user:***@localhost/db")
+        assert not _is_sqlite("mysql://user:***@localhost/db")
 
     def test_normalize_url_passes_through_valid_urls(self):
-        assert _normalize_url("postgresql://u:p@h/d") == "postgresql://u:p@h/d"
+        assert _normalize_url("postgresql://u:***@h/d") == "postgresql://u:***@h/d"
         assert _normalize_url("sqlite:///tmp/db.sqlite") == "sqlite:///tmp/db.sqlite"
 
     def test_normalize_url_converts_path_to_sqlite(self):
@@ -50,6 +51,43 @@ class TestSessionHelpers:
         e2 = get_engine(f"sqlite:///{db2}")
         assert e1 is not e2
         reset_engine()
+
+    def test_get_engine_postgresql_retry_then_success(self, monkeypatch):
+        from project_workflow.infrastructure.db import session as session_module
+        from unittest.mock import MagicMock, patch
+        calls = []
+        fake_engine = MagicMock()
+        fake_engine.connect.return_value.__enter__ = lambda self: self
+        fake_engine.connect.return_value.__exit__ = lambda *a: None
+        fake_engine.connect.return_value.exec_driver_sql = lambda q: None
+        fake_engine.url = "postgresql://u:***@h/d"
+
+        def _fake_create_engine(*a, **kw):
+            calls.append((a, kw))
+            if len(calls) < 3:
+                raise RuntimeError(f"db down #{len(calls)}")
+            return fake_engine
+
+        with patch.object(session_module, "create_engine", _fake_create_engine):
+            from project_workflow.infrastructure.db.session import _create_postgres_engine
+            engine = _create_postgres_engine("postgresql://u:***@h/d")
+        assert engine is fake_engine
+        assert len(calls) == 3
+
+    def test_get_engine_postgresql_retry_exhausted(self, monkeypatch):
+        from project_workflow.infrastructure.db import session as session_module
+        from unittest.mock import patch
+        calls = []
+
+        def _fake_create_engine(*a, **kw):
+            calls.append((a, kw))
+            raise RuntimeError("db down")
+
+        with patch.object(session_module, "create_engine", _fake_create_engine):
+            from project_workflow.infrastructure.db.session import _create_postgres_engine
+            with pytest.raises(RuntimeError, match="db down"):
+                _create_postgres_engine("postgresql://u:***@h/d")
+        assert len(calls) == 3
 
     def test_get_session_returns_active_session(self, tmp_path):
         reset_engine()

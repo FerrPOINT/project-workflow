@@ -307,6 +307,25 @@ class TestApiErrorPaths:
         assert response.status_code == 404
         assert response.json()["ok"] is False
 
+    def test_health_endpoint_ok(self):
+        response = client.get("/health")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ok"] is True
+        assert data["database"] == "ok"
+        assert "version" in data
+
+    def test_health_endpoint_bad_db(self, monkeypatch):
+        def _bad_engine(*a, **kw):
+            raise RuntimeError("db down")
+        monkeypatch.setattr("project_workflow.infrastructure.db.session.get_engine", _bad_engine)
+        response = client.get("/health")
+        assert response.status_code == 503
+        data = response.json()
+        assert data["ok"] is False
+        assert data["database"] == "error"
+        assert "db down" in data["error"]
+
     def test_api_workflow_create_missing_name(self):
         response = client.post("/api/workflows", json={})
         assert response.status_code == 400

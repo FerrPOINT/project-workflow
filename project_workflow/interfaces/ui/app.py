@@ -2,15 +2,60 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
+from sqlalchemy import text
 
 from ... import __version__
+from ...infrastructure.db.session import get_engine
 from .routes import api, pages
 
 
+async def _health() -> JSONResponse:
+    """Liveness/readiness probe with DB connectivity check."""
+    from ...infrastructure.db import session as _session
+    health = {"ok": True, "version": __version__, "database": "unknown"}
+    status = 200
+    try:
+        engine = _session.get_engine()
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+            health["database"] = "ok"
+    except Exception as exc:  # noqa: BLE001
+        health["ok"] = False
+        health["database"] = "error"
+        health["error"] = str(exc)
+        status = 503
+    return JSONResponse(health, status_code=status)
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Graceful startup: verify DB is reachable before accepting traffic."""
+    try:
+        engine = get_engine()
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception as exc:  # noqa: BLE001
+        app.state.startup_error = str(exc)
+    else:
+        app.state.startup_error = None
+    yield
+    # Shutdown: dispose engine pool to release DB connections cleanly.
+    try:
+        engine = get_engine()
+        engine.dispose()
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def create_app() -> FastAPI:
-    app = FastAPI(title="project-workflow UI", version=__version__)
+    app = FastAPI(title="project-workflow UI", version=__version__, lifespan=_lifespan)
+
+    app.get("/health")(_health)
 
     # Pages
     app.get("/", response_class=HTMLResponse)(pages.index)

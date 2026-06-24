@@ -4,6 +4,7 @@ The DSN is read from config.Settings.DATABASE_URL.
 """
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,10 @@ from .models import Base
 
 _engine = None
 _SessionLocal = None
+
+
+PG_CONNECT_RETRY_ATTEMPTS: int = 3
+PG_CONNECT_RETRY_DELAY: float = 1.0
 
 
 def _is_sqlite(url: str) -> bool:
@@ -63,11 +68,20 @@ def get_engine(url: str | None = None) -> Engine:
                 poolclass=NullPool,
             )
         else:
-            connect_args = {}
-            schema = get_settings().DB_SCHEMA
-            if schema:
-                connect_args["options"] = f"-csearch_path={schema}"
-            _engine = create_engine(
+            _engine = _create_postgres_engine(target)
+    return _engine
+
+
+def _create_postgres_engine(target: str) -> Engine:
+    """Create a PostgreSQL engine with search_path and connection retry."""
+    connect_args = {}
+    schema = get_settings().DB_SCHEMA
+    if schema:
+        connect_args["options"] = f"-csearch_path={schema}"
+    last_exc: Exception | None = None
+    for attempt in range(PG_CONNECT_RETRY_ATTEMPTS):
+        try:
+            engine = create_engine(
                 target,
                 pool_pre_ping=True,
                 pool_size=10,
@@ -75,7 +89,17 @@ def get_engine(url: str | None = None) -> Engine:
                 connect_args=connect_args,
                 echo=False,
             )
-    return _engine
+            # Validate the engine can actually connect before returning it.
+            with engine.connect() as conn:
+                conn.exec_driver_sql("SELECT 1")
+            return engine
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+            if attempt + 1 < PG_CONNECT_RETRY_ATTEMPTS:
+                time.sleep(PG_CONNECT_RETRY_DELAY)
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError("Failed to create PostgreSQL engine")
 
 
 def get_sessionmaker(url: str | None = None) -> sessionmaker[Any]:
