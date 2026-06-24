@@ -447,8 +447,10 @@ class WizardEngine:
             repo=self.repo,
         )
 
-    def _build_phase_history(self):
-        history: list[dict] = []
+    def _build_phase_history(self) -> list[dict[str, Any]]:
+        history: list[dict[str, Any]] = []
+        if not self.task:
+            return history
         for row in self._uow.get_task_history(self.task["id"]):
             phase = self._phase_by_id(row["phase_id"])
             if not phase:
@@ -461,8 +463,10 @@ class WizardEngine:
             })
         return history
 
-    def _build_recent_verdicts(self, limit=5):
-        verdicts: list[dict] = []
+    def _build_recent_verdicts(self, limit: int = 5) -> list[dict[str, Any]]:
+        verdicts: list[dict[str, Any]] = []
+        if not self.task:
+            return verdicts
         for row in self._uow.get_supervisor_runs(task_id=self.task["id"], limit=limit):
             if isinstance(row, dict):
                 verdicts.append({
@@ -486,8 +490,10 @@ class WizardEngine:
                 })
         return verdicts
 
-    def _phase_status_lookup(self):
+    def _phase_status_lookup(self) -> dict[str, str]:
         statuses: dict[str, str] = {}
+        if not self.task:
+            return statuses
         for row in self._uow.get_task_history(self.task["id"]):
             phase = self._phase_by_id(row["phase_id"])
             if phase:
@@ -497,9 +503,9 @@ class WizardEngine:
             statuses[current_phase] = "current"
         return statuses
 
-    def _build_workflow_path(self):
+    def _build_workflow_path(self) -> list[dict[str, Any]]:
         status_lookup = self._phase_status_lookup()
-        path: list[dict] = []
+        path: list[dict[str, Any]] = []
         for phase in self.all_phases:
             path.append({
                 "code": phase.code,
