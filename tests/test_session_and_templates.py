@@ -122,6 +122,68 @@ class TestSessionHelpers:
         assert "phases" in tables
         reset_engine()
 
+    def test_ensure_schema_accepts_connection(self, tmp_path):
+        reset_engine()
+        db = tmp_path / "test.db"
+        engine = get_engine(f"sqlite:///{db}")
+        with engine.connect() as conn:
+            ensure_schema(conn)
+        with engine.connect() as conn:
+            from sqlalchemy import text
+            tables = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'")).scalars().all()
+        assert "workflows" in tables
+        reset_engine()
+
+    def test_get_database_url_empty_raises(self):
+        from unittest.mock import patch
+        from project_workflow.infrastructure.db.session import get_database_url
+        fake_settings = type("S", (), {"DATABASE_URL": ""})()
+        with patch("project_workflow.infrastructure.db.session.get_settings", return_value=fake_settings):
+            with pytest.raises(RuntimeError, match="DATABASE_URL is not configured"):
+                get_database_url()
+
+    def test_run_alembic_command_mocks_alembic(self, tmp_path):
+        from unittest.mock import patch
+        from project_workflow.infrastructure.db.session import run_alembic_command
+        engine = get_engine(f"sqlite:///{tmp_path}/test.db")
+        with patch("project_workflow.infrastructure.db.session.command.upgrade") as mock_upgrade, \
+             patch("project_workflow.infrastructure.db.session.Config"):
+            run_alembic_command("upgrade", engine)
+            mock_upgrade.assert_called_once()
+        reset_engine()
+
+    def test_stamp_head_mocks_alembic(self, tmp_path):
+        from unittest.mock import patch
+        from project_workflow.infrastructure.db.session import stamp_head
+        engine = get_engine(f"sqlite:///{tmp_path}/test.db")
+        with patch("project_workflow.infrastructure.db.session.command.stamp") as mock_stamp, \
+             patch("project_workflow.infrastructure.db.session.Config"):
+            stamp_head(engine)
+            mock_stamp.assert_called_once()
+        reset_engine()
+
+    def test_ensure_migrated_postgresql_branch(self, tmp_path):
+        from unittest.mock import patch, MagicMock
+        from project_workflow.infrastructure.db.session import ensure_migrated
+        fake_engine = MagicMock()
+        fake_engine.url = "postgresql://u:***@h/d"
+        with patch("project_workflow.infrastructure.db.session._is_sqlite", return_value=False), \
+             patch("project_workflow.infrastructure.db.session.run_alembic_command") as mock_run, \
+             patch("project_workflow.infrastructure.db.session.get_engine", return_value=fake_engine):
+            ensure_migrated(fake_engine)
+        fake_engine.begin().__enter__().exec_driver_sql.assert_called_once()
+        mock_run.assert_called_once_with("upgrade", fake_engine)
+
+    def test_ensure_schema_postgresql_connection(self):
+        from unittest.mock import MagicMock, patch
+        from project_workflow.infrastructure.db.session import ensure_schema
+        fake_conn = MagicMock()
+        fake_conn.dialect.name = "postgresql"
+        with patch("project_workflow.infrastructure.db.session.get_settings", return_value=type("S", (), {"DB_SCHEMA": "test_schema"})()), \
+             patch("project_workflow.infrastructure.db.session.Base.metadata.create_all"):
+            ensure_schema(fake_conn)
+        fake_conn.begin().__enter__().exec_driver_sql.assert_called()
+
     def test_reset_engine_clears_cache(self, tmp_path):
         db = tmp_path / "test.db"
         e1 = get_engine(f"sqlite:///{db}")
@@ -129,6 +191,24 @@ class TestSessionHelpers:
         e2 = get_engine(f"sqlite:///{db}")
         assert e1 is not e2
         reset_engine()
+
+
+class TestSqlitePragmaEdgeCases:
+    def test_non_sqlite_dialect_returns(self):
+        from project_workflow.infrastructure.db.session import _set_sqlite_pragma
+        class FakeConn:
+            pass
+        class FakeRec:
+            dialect = type("D", (), {"name": "postgresql"})()
+        _set_sqlite_pragma(FakeConn(), FakeRec())
+
+    def test_no_cursor_attribute_returns(self):
+        from project_workflow.infrastructure.db.session import _set_sqlite_pragma
+        class FakeConn:
+            pass
+        class FakeRec:
+            dialect = type("D", (), {"name": "sqlite"})()
+        _set_sqlite_pragma(FakeConn(), FakeRec())
 
 
 class TestTemplateHelpers:
