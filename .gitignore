@@ -27,7 +27,7 @@ wheels/
 *.egg
 
 # Testing
-.coverage
+.coverage*
 .pytest_cache/
 htmlcov/
 .tox/
