@@ -16,6 +16,7 @@ from .services import (
     _coerce_phase_db_id,
     _get_task_detail,
     _group_instructions,
+    _instruction_service,
     _load_cli_reference,
     _load_dashboard,
     _load_phase_detail,
@@ -25,8 +26,13 @@ from .services import (
     _load_workflows,
     _parse_key_prefixes,
     _parse_optional_int,
+    _phase_create_payload,
+    _phase_service,
+    _project_service,
     _resolve_task_phase,
+    _task_service,
     _workflow_form_payload,
+    _workflow_service,
 )
 from .skills import _load_skills_catalog, _scan_hermes_skills
 from .templates import _tojson_unicode, env as _templates_env
@@ -41,6 +47,7 @@ __all__ = [
     "_coerce_phase_db_id",
     "_get_task_detail",
     "_group_instructions",
+    "_instruction_service",
     "_load_cli_reference",
     "_load_dashboard",
     "_load_phase_detail",
@@ -51,12 +58,17 @@ __all__ = [
     "_load_workflows",
     "_parse_key_prefixes",
     "_parse_optional_int",
+    "_phase_create_payload",
+    "_phase_service",
+    "_project_service",
     "_resolve_task_phase",
     "_scan_hermes_skills",
     "_seed_to_sqlite",
+    "_task_service",
     "_tojson_unicode",
     "_update_config_phase_order",
     "_workflow_form_payload",
+    "_workflow_service",
     "_templates_env",
 ]
 

@@ -28,6 +28,24 @@ class WizardAssessmentStore:
             return None
         return ph.id if hasattr(ph, "id") else ph.get("id")
 
+    @staticmethod
+    def _row_phase_code(row: Any) -> str:
+        if isinstance(row, dict):
+            return row.get("phase_code") or ""
+        if hasattr(row, "phase_code"):
+            return row.phase_code or ""
+        if hasattr(row, "response"):
+            resp = row.response
+            if isinstance(resp, str):
+                try:
+                    import json
+                    resp = json.loads(resp)
+                except Exception:
+                    resp = {}
+            if isinstance(resp, dict):
+                return resp.get("phase") or resp.get("phase_code") or ""
+        return ""
+
     def save(self, assessment: WizardAssessment | dict[str, Any]) -> None:
         """Write assessment to supervisor_runs."""
         from unittest.mock import MagicMock
@@ -58,6 +76,10 @@ class WizardAssessmentStore:
             "phase_name": phase_name,
             "current_contract": {"phase_code": phase_code},
         }
+
+        raw_response = _get("raw_response")
+        if raw_response is None and not isinstance(assessment, dict) and hasattr(assessment, "to_result_dict"):
+            raw_response = assessment.to_result_dict()
 
         task_id = None
         if is_mock:
@@ -93,7 +115,7 @@ class WizardAssessmentStore:
             "covered": _serialize(covered),
             "missing": _serialize(_get("missing")),
             "context_snapshot": _serialize(context_snapshot),
-            "response": _serialize(_get("raw_response")),
+            "response": _serialize(raw_response),
         }
         create_fn(payload)
         if hasattr(self.uow, "commit"):
@@ -141,7 +163,7 @@ def _row_to_assessment(row: Any) -> WizardAssessment:
         covered = row.covered or []
         missing = row.missing or []
         blockers = row.blockers or []
-        phase_code = row.phase_code or ""
+        phase_code = WizardAssessmentStore._row_phase_code(row)
     if isinstance(resp, str):
         try:
             resp = json.loads(resp)
