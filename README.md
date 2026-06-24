@@ -147,7 +147,8 @@ flowchart TD
 |---|---|---|
 | Lint | `ruff check .` | **green** |
 | Type check | `mypy project_workflow` | **green** |
-| Tests | `pytest -q --timeout=60` | **679 passed** |
+| Tests | `pytest -q --timeout=60` | **818 passed** |
+| Coverage | combined slices (`-p no:cov`) | **95%** |
 | Docker UI health | `curl http://localhost:8812/` | **200** |
 | Systemd UI health | `curl http://localhost:8811/` | **200** |
 
@@ -165,8 +166,8 @@ flowchart TD
 - [x] `WizardEngine` и wizard-модули собраны в пакет `project_workflow/wizard/`
 - [x] API-тесты на все UI routes
 - [x] Production hardening: `/health` endpoint, graceful shutdown, PG connection retry
-- [ ] Coverage > 95%
-- [ ] mypy `--check-untyped-defs` для wizard/core.py
+- [x] Coverage > 95%
+- [x] mypy `--check-untyped-defs` для wizard/core.py
 
 Подробный план: [`docs/plans/2026-06-21-detailed-roadmap.md`](docs/plans/2026-06-21-detailed-roadmap.md).
 
