@@ -35,7 +35,7 @@ textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:140px;resiz
       <div class="project-name">{{ project.name }}</div>
       <div class="project-meta">
         <span>{{ project.workflow_name }}</span>
-        <span>{{ project.task_count }} задач</span>
+        <span>{{ project.task_count | pluralize('задача,задачи,задач') }}</span>
         <span>{{ project.prefixes_count }} {{ 'префикс' if project.prefixes_count == 1 else 'префикса' if 2 <= project.prefixes_count <= 4 else 'префиксов' }}</span>
       </div>
     </button>
@@ -224,9 +224,9 @@ function renderProjectNav(){
     var workflow = document.createElement('span');
     workflow.textContent = project.workflow_name || workflowNameById(project.workflow_id);
     var tasks = document.createElement('span');
-    tasks.textContent = project.task_count + ' задач';
+    tasks.textContent = pluralizeRu(project.task_count, 'задача', 'задачи', 'задач');
     var patterns = document.createElement('span');
-    patterns.textContent = project.prefixes_count + ' префиксов';
+    patterns.textContent = pluralizeRu(project.prefixes_count, 'префикс', 'префикса', 'префиксов');
 
     meta.appendChild(workflow);
     meta.appendChild(tasks);

@@ -93,6 +93,14 @@
         <option value="{{ a.id }}" {% if phase.agent_id == a.id %}selected{% endif %}>{{ a.name }}</option>
         {% endfor %}
       </select></span>
+      {% if phase.delegate_agent %}
+      <span>Агент: {{ phase.delegate_agent }} {% if phase.delegate_timeout %}({{ phase.delegate_timeout }} мин){% endif %}</span>
+      {% endif %}
+      {% if phase.rollback_target %}
+      <span>Откат: {{ phase.rollback_target }}</span>
+      {% endif %}
+    </div>
+    <div class="execution-row" style="margin-top:12px">
       <span class="execution-toggle" data-mode="{{ phase.execution_type or 'sync' }}" onclick="togglePhaseMode(this)">
         {% if phase.execution_type == 'parallel' %}
         <b class="mode-parallel">⚡ parallel</b>
@@ -100,12 +108,6 @@
         <b class="mode-sync">⏱ sync</b>
         {% endif %}
       </span>
-      {% if phase.delegate_agent %}
-      <span>Агент: {{ phase.delegate_agent }} {% if phase.delegate_timeout %}({{ phase.delegate_timeout }} мин){% endif %}</span>
-      {% endif %}
-      {% if phase.rollback_target %}
-      <span>Откат: {{ phase.rollback_target }}</span>
-      {% endif %}
     </div>
   </div>
 
@@ -145,11 +147,12 @@
       </div>
       <div class="timeline-card" data-instruction-id="{{ i.id }}" data-step-num="{{ i.step_num }}" data-type="{{ i.execution_type }}">
         <input type="text" class="timeline-name-input" value="{{ i.description }}" data-field="description" onblur="saveInstructionDescription(this)">
-        <div class="timeline-badges">
+        <div class="execution-row">
           <button type="button" class="badge {{ 'badge-parallel' if i.execution_type == 'parallel' else 'badge-sync' }}" onclick="toggleInstructionType(this)" aria-label="Режим выполнения: {{ i.execution_type }}">
             {% if i.execution_type == 'parallel' %}⚡ parallel{% else %}⏱ sync{% endif %}
           </button>
         </div>
+        {% if (i.skills or []) or i.available_skills %}
         <div class="timeline-badges">
           {% for s in i.skills or [] %}
           <span class="badge" style="background:var(--accent-soft);color:var(--accent)">
@@ -168,6 +171,7 @@
             {% endif %}
           </select>
         </div>
+        {% endif %}
       </div>
     </div>
     {% endmacro %}

@@ -59,7 +59,7 @@
       <a href="/projects" class="list-item">
         <div class="list-title">{{ project.name or project.code }}</div>
         <div class="list-meta">
-          <span>{{ project.task_count }} задач</span>
+          <span>{{ project.task_count | pluralize('задача,задачи,задач') }}</span>
         </div>
       </a>
       {% endfor %}

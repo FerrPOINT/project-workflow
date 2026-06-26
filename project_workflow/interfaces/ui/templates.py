@@ -30,7 +30,19 @@ def _group_instructions(instructions: list[dict[str, Any]] | None) -> list[list[
     return groups
 
 
+def _pluralize(value: int, forms: str) -> str:
+    """Russian pluralization filter: {{ count | pluralize('проект,проекта,проектов') }}."""
+    n = int(value)
+    one, few, many = [f.strip() for f in forms.split(",")]
+    if n % 10 == 1 and n % 100 != 11:
+        return f"{n} {one}"
+    if 2 <= n % 10 <= 4 and (n % 100 < 10 or n % 100 >= 20):
+        return f"{n} {few}"
+    return f"{n} {many}"
+
+
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 templates.env.filters["tojson_unicode"] = _tojson_unicode
 templates.env.filters["group_instructions"] = _group_instructions
+templates.env.filters["pluralize"] = _pluralize
 env = templates.env
