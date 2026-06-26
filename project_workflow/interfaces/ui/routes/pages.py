@@ -11,6 +11,7 @@ from project_workflow.interfaces.ui.services import (
     _agent_service,
     _build_parallel_phase_blocks,
     _get_task_detail,
+    _group_instructions,
     _load_cli_reference,
     _load_dashboard,
     _load_phase_detail,
@@ -203,5 +204,42 @@ async def agents_page(request: Request) -> HTMLResponse:
             "agents": agents,
             "page": "agents",
             "ui_port": config.UI_PORT,
+        },
+    )
+
+
+async def instructions_page(
+    request: Request,
+    phase_id: int | None = Query(default=None),
+) -> HTMLResponse:
+    """Dedicated instructions editor page for a phase."""
+    if phase_id is None:
+        return HTMLResponse("<h1>Bad request: phase_id is required</h1>", status_code=400)
+    phase = _load_phase_detail(str(phase_id))
+    if not phase:
+        return HTMLResponse("<h1>Phase not found</h1>", status_code=404)
+    skills_catalog = _load_skills_catalog_direct()
+    instructions = phase.get("instructions", [])
+    for instruction in instructions:
+        selected_skills = PhaseService.normalize_skills(instruction.get("skills"))
+        instruction["skills"] = selected_skills
+        selected_names = set(selected_skills)
+        instruction["available_skills"] = [
+            dict(skill)
+            for skill in skills_catalog
+            if str(skill.get("name") or "") not in selected_names
+        ]
+    instruction_groups = _group_instructions(instructions)
+    return templates.TemplateResponse(
+        request=request,
+        name="instructions.html",
+        context={
+            "request": request,
+            "page": "phases",
+            "ui_port": config.UI_PORT,
+            "phase": phase,
+            "instructions": instructions,
+            "instruction_groups": instruction_groups,
+            "skills_catalog": skills_catalog,
         },
     )

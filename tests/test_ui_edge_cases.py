@@ -174,7 +174,7 @@ class TestResolveTaskPhase:
 class TestScanHermesSkills:
     def test_find_all_skills_fails(self, monkeypatch):
         fake_mod = MagicMock()
-        fake_mod._find_all_skills.side_effect = RuntimeError("boom")
+        fake_mod._find_all_skills.side_effect = AttributeError("boom")
         monkeypatch.setattr("importlib.import_module", lambda name, *a, **kw: fake_mod if name == "tools.skills_tool" else MagicMock())
         assert _scan_hermes_skills() == []
 

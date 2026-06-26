@@ -2,13 +2,11 @@
 from __future__ import annotations
 
 import logging
-import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
-from starlette.middleware.base import BaseHTTPMiddleware
 from sqlalchemy import text
 
 from ... import __version__
@@ -67,6 +65,7 @@ def create_app() -> FastAPI:
     app.get("/", response_class=HTMLResponse)(pages.index)
     app.get("/phases", response_class=HTMLResponse)(pages.phases_page)
     app.get("/phase/{phase_id}", response_class=HTMLResponse)(pages.phase_detail)
+    app.get("/instructions", response_class=HTMLResponse)(pages.instructions_page)
     app.get("/tasks", response_class=HTMLResponse)(pages.tasks_page)
     app.get("/projects", response_class=HTMLResponse)(pages.projects_page)
     app.get("/workflows", response_class=HTMLResponse)(pages.workflows_page)
