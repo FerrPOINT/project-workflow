@@ -139,6 +139,7 @@ flowchart TD
 - UI-пакет (`project_workflow/interfaces/ui/`) — чистое FastAPI-приложение с отдельными routes, services, dependencies.
 - `project_workflow/infrastructure/db/compat.py` — SQLAlchemy-реализация `WorkflowDB`, сохраняющая публичный API для CLI/wizard/tests.
 - Конфигурация централизована в `project_workflow.config` на Pydantic Settings; `DATABASE_URL` обязателен.
+- Легаси удалено: исходный `WorkflowDB`, `db/base.py`, `db_schema.sql`, `wartz-workflow-cli`, `wartz_ui` и устаревшие wizard endpoints больше не существуют.
 
 <a name="quality"></a>
 ## 🛡️ Quality Bar
@@ -147,10 +148,11 @@ flowchart TD
 |---|---|---|
 | Lint | `ruff check .` | **green** |
 | Type check | `mypy project_workflow` | **green** |
-| Tests | `pytest -q --timeout=60` | **818 passed** |
+| Tests | `pytest -q --timeout=60 --forked` | **869 passed, 6 deselected** |
 | Coverage | combined slices (`-p no:cov`) | **95%** |
-| Docker UI health | `curl http://localhost:8812/` | **200** |
-| Systemd UI health | `curl http://localhost:8811/` | **200** |
+| Systemd UI health | `curl http://localhost:8811/api/tasks` | **200** |
+
+> **Примечание:** `pytest -n auto` без `--forked` может зависнуть из-за FD exhaustion при SQLite WAL. В CI и на WARTZ используем `--forked`. Параллельный прогон без forked актуален только для PostgreSQL-бекенда.
 
 <a name="roadmap"></a>
 ## 🗺️ Roadmap
@@ -161,13 +163,15 @@ flowchart TD
 - [x] Docker Compose: Postgres + migrate + UI
 - [x] UI/API переведены на SQLAlchemy-сервисы
 - [x] `WorkflowDB` переписан на SQLAlchemy, `db/base.py` и `db_schema.sql` удалены
-- [x] mypy green, ruff green, 643 теста green
+- [x] Legacy `wartz-workflow-cli`, `wartz_ui` и старые wizard endpoints удалены
+- [x] mypy green, ruff green, 869 тестов green
 - [x] Postgres-интеграционные тесты
 - [x] `WizardEngine` и wizard-модули собраны в пакет `project_workflow/wizard/`
 - [x] API-тесты на все UI routes
 - [x] Production hardening: `/health` endpoint, graceful shutdown, PG connection retry
 - [x] Coverage > 95%
 - [x] mypy `--check-untyped-defs` для wizard/core.py
+- [x] UI-доработки: execution_type на отдельной строке, русское склонение счётчиков, очистка рабочей БД от мусора
 
 Подробный план: [`docs/plans/2026-06-21-detailed-roadmap.md`](docs/plans/2026-06-21-detailed-roadmap.md).
 
