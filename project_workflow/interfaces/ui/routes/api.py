@@ -91,6 +91,17 @@ async def api_task_detail(task_key: str) -> dict[str, Any] | JSONResponse:
     return {"ok": True, "task": task}
 
 
+async def api_task_delete(task_key: str) -> JSONResponse:
+    task = _app_state.task_service().get_task_by_key(task_key)
+    if task is None:
+        return _error(f"Задача {task_key!r} не найдена", 404)
+    task_id = task.get("id")
+    if not isinstance(task_id, int):
+        return _error("Некорректный идентификатор задачи", 400)
+    _app_state.task_service().delete_task(task_id)
+    return JSONResponse({}, status_code=204)
+
+
 async def api_projects() -> dict[str, Any] | JSONResponse:
     from project_workflow.interfaces.ui.services import _load_projects
 

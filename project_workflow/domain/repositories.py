@@ -152,6 +152,9 @@ class TaskRepository(ABC):
     @abstractmethod
     def get_history(self, task_id: int) -> Sequence[dict[str, Any]]: ...
 
+    @abstractmethod
+    def delete(self, task_id: int) -> None: ...
+
 
 class AgentRepository(ABC):
     """Persistence contract for agents."""

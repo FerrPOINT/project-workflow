@@ -484,6 +484,17 @@ class SATaskRepository(TaskRepository):
             for r in rows
         ]
 
+    def delete(self, task_id: int) -> None:
+        with self._session.no_autoflush:
+            row = self._session.get(m.Task, task_id)
+        if row is None:
+            raise ValueError(f"Task {task_id} not found")
+        self._session.execute(
+            delete(m.TaskHistory).where(m.TaskHistory.task_id == task_id)
+        )
+        self._session.delete(row)
+        self._session.flush()
+
 
 class SACheckRepository(CheckRepository):
     """SQLAlchemy implementation of CheckRepository."""

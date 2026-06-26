@@ -47,4 +47,9 @@ class TaskService:
         self._uow.tasks.add_history(task_id, int(phase_id), status)
         self._uow.commit()
         return None
+
+    def delete_task(self, task_id: int) -> None:
+        self._uow.tasks.delete(task_id)
+        self._uow.commit()
+        return None
 __all__ = ['TaskService']

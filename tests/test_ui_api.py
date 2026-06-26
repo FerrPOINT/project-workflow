@@ -521,9 +521,31 @@ class TestApiTasks:
         assert data["ok"] is True
         assert all(t.get("workflow_id") == default_wf["id"] for t in data["tasks"])
 
-    def test_api_task_detail_route_not_wired(self, client):
+    def test_api_task_detail_404_for_unknown_key(self, client):
         resp = client.get("/api/tasks/NONEXISTENT-99999")
         assert resp.status_code == 404
+
+    def test_delete_task_cascade(self, client):
+        from project_workflow.interfaces.ui import _app_state
+        uow = _app_state.get_db()
+        project = uow.projects.get_by_code("DEFAULT")
+        assert project is not None
+        task = _app_state.task_service().create_task({
+            "project_id": project.id,
+            "task_key": "TASK-DEL-1",
+            "title": "To delete",
+            "status": "active",
+            "current_phase": "-1",
+        })
+        phase = uow.phases.get_by_code("0.0a")
+        assert phase is not None
+        _app_state.task_service().add_history(task["id"], phase.id, "done")
+        assert uow.tasks.get_history(task["id"])
+
+        resp = client.delete(f"/api/tasks/{task['task_key']}")
+        assert resp.status_code == 204
+        assert uow.tasks.get_by_id(task["id"]) is None
+        assert uow.tasks.get_history(task["id"]) == []
 
 
 class TestApiSkills:
