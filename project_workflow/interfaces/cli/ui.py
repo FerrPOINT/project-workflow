@@ -20,6 +20,7 @@ import click
 
 from ...infrastructure.db.uow import SAUnitOfWork
 from ... import wizard
+from ...wizard import format_result
 from .core import cli, out_json, _require_valid_key
 from .core import console, WARN
 
@@ -59,16 +60,28 @@ def step_cmd(
         if jmode:
             out_json(result)
             return
-        else:
-            from ...wizard import format_result
-            formatted = format_result(result)
-            if smart:
-                formatted = "[🧠 SMART MODE] " + formatted
-            print(formatted)
+        formatted = format_result(result)
+        if smart:
+            formatted = "[🧠 SMART MODE] " + formatted
+        console.print(formatted)
         sys.exit(0 if result["verdict"] == "PASS" else 1)
 
-    # default: show phase instructions
-    wizard.main(task_key)
+    # default: show phase prompt/instructions
+    prompt = engine.get_phase_prompt()
+    if jmode:
+        out_json({"ok": True, "task_key": task_key, "phase": engine.current_phase, "prompt": prompt})
+        return
+    formatted = format_result({
+        "phase_name": engine.current_phase,
+        "verdict": "INFO",
+        "message": prompt,
+        "instructions": [],
+        "required_checks": [],
+        "required_evidence": [],
+    })
+    if smart:
+        formatted = "[🧠 SMART MODE] " + formatted
+    console.print(formatted)
 
 
 # ═══════════════════════════════════════════════════════════════════════

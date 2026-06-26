@@ -36,22 +36,28 @@ class TestStepCommand:
         """WizardEngine auto-creates task in DB if missing."""
         mock_engine = mock_engine_cls.return_value
         mock_engine.current_phase = "0"
+        mock_engine.get_phase_prompt.return_value = "do stuff"
         runner = CliRunner()
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
             result = runner.invoke(cli, ["step", "--task", "TASK-1"])
         assert result.exit_code == 0
-        # step_cmd creates engine, then wizard.main creates another via get_phase_instructions
-        assert mock_engine_cls.call_count == 2
+        # step_cmd creates a single engine and asks for the phase prompt.
+        assert mock_engine_cls.call_count == 1
         first_call = mock_engine_cls.call_args_list[0]
         assert first_call[0] == ("TASK-1",)
+        mock_engine.get_phase_prompt.assert_called_once()
 
-    @patch("project_workflow.wizard.main")
-    def test_step_shows_phase(self, mock_main):
+    @patch("project_workflow.wizard.WizardEngine")
+    def test_step_shows_phase(self, mock_engine_cls):
+        mock_engine = mock_engine_cls.return_value
+        mock_engine.current_phase = "0.00"
+        mock_engine.get_phase_prompt.return_value = "phase prompt"
         runner = CliRunner()
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
             result = runner.invoke(cli, ["step", "--task", "TASK-1"])
         assert result.exit_code == 0
-        mock_main.assert_called_once_with("TASK-1")
+        assert "phase prompt" in result.output
+        mock_engine.get_phase_prompt.assert_called_once_with()
 
     @patch("project_workflow.wizard.WizardEngine")
     def test_step_report_pass(self, mock_engine_cls):
@@ -126,6 +132,21 @@ class TestStepCommand:
         assert result.exit_code == 0
         parsed = json.loads(result.output)
         assert parsed["verdict"] == "PASS"
+
+    @patch("project_workflow.wizard.WizardEngine")
+    def test_step_prompt_json_mode(self, mock_engine_cls):
+        mock_engine = mock_engine_cls.return_value
+        mock_engine.current_phase = "0.00"
+        mock_engine.get_phase_prompt.return_value = "next steps"
+        runner = CliRunner()
+        with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
+            result = runner.invoke(cli, ["--json", "step", "--task", "TASK-1"])
+        assert result.exit_code == 0
+        parsed = json.loads(result.output)
+        assert parsed["ok"] is True
+        assert parsed["task_key"] == "TASK-1"
+        assert parsed["phase"] == "0.00"
+        assert parsed["prompt"] == "next steps"
 
     def test_step_skip_is_rejected(self):
         runner = CliRunner()

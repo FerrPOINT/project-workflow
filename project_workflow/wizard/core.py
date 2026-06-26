@@ -790,6 +790,12 @@ def get_phase_instructions(task_key: str, phase_id: Optional[str] = None, repo: 
 
 
 def main(task_key: str, repo: Optional[str] = None, report: Optional[str] = None) -> None:
+    """Deprecated compatibility entrypoint.
+
+    Kept only for existing scripts/tests that call wizard.main() directly.
+    New code should use WizardEngine(task_key).get_phase_prompt() or
+    WizardEngine(task_key).evaluate(report).
+    """
     import sys
     import project_workflow.wizard as _wizard_pkg
     if report:
@@ -818,6 +824,11 @@ def format_result(result: dict) -> str:
         evidence = result.get("required_evidence", []) or []
 
     lines: list[str] = []
+
+    message = result.get("message", "")
+    if message:
+        lines.append(message)
+        lines.append("")
 
     if verdict == "PARTIAL":
         lines.append("Ты сделал часть, доделай:")
