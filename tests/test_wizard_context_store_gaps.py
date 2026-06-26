@@ -80,7 +80,7 @@ class TestWizardContextBuilder:
         )
         with pytest.MonkeyPatch().context() as mp:
             import project_workflow.infrastructure.conversation as convo
-            mp.setattr(convo, "get_messages", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")))
+            mp.setattr(convo, "get_messages", lambda *a, **kw: (_ for _ in ()).throw(OSError("boom")))
             result = builder.build()
         assert result["messages"] == []
 

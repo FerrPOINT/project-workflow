@@ -89,7 +89,7 @@ class TestUiSeedSkillsFinalGaps:
 
     def test_scan_hermes_skills_exception(self):
         from project_workflow.interfaces.ui import skills as skills_mod
-        with patch("importlib.import_module", side_effect=Exception("boom")):
+        with patch("importlib.import_module", side_effect=ImportError("boom")):
             assert skills_mod._scan_hermes_skills() == []
 
 

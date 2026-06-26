@@ -56,6 +56,7 @@ class TestSessionHelpers:
 
     def test_get_engine_postgresql_retry_then_success(self, monkeypatch):
         from project_workflow.infrastructure.db import session as session_module
+        from sqlalchemy.exc import OperationalError
         from unittest.mock import MagicMock, patch
         calls = []
         fake_engine = MagicMock()
@@ -67,7 +68,7 @@ class TestSessionHelpers:
         def _fake_create_engine(*a, **kw):
             calls.append((a, kw))
             if len(calls) < 3:
-                raise RuntimeError(f"db down #{len(calls)}")
+                raise OperationalError("boom", {}, RuntimeError(f"db down #{len(calls)}"))
             return fake_engine
 
         with patch.object(session_module, "create_engine", _fake_create_engine):
@@ -78,16 +79,17 @@ class TestSessionHelpers:
 
     def test_get_engine_postgresql_retry_exhausted(self, monkeypatch):
         from project_workflow.infrastructure.db import session as session_module
+        from sqlalchemy.exc import OperationalError
         from unittest.mock import patch
         calls = []
 
         def _fake_create_engine(*a, **kw):
             calls.append((a, kw))
-            raise RuntimeError("db down")
+            raise OperationalError("boom", {}, RuntimeError("db down"))
 
         with patch.object(session_module, "create_engine", _fake_create_engine):
             from project_workflow.infrastructure.db.session import _create_postgres_engine
-            with pytest.raises(RuntimeError, match="db down"):
+            with pytest.raises(OperationalError, match="db down"):
                 _create_postgres_engine("postgresql://u:***@h/d")
         assert len(calls) == 3
 

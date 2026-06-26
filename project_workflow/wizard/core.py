@@ -826,7 +826,7 @@ def format_result(result: dict) -> str:
     lines: list[str] = []
 
     message = result.get("message", "")
-    if message:
+    if message and verdict != "PASS":
         lines.append(message)
         lines.append("")
 
