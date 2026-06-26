@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import importlib
+import logging
 import time
+
+logger = logging.getLogger(__name__)
 
 _SKILLS_CACHE_TTL_SECONDS = 60.0
 _skills_catalog_cache: list[dict[str, str | None]] | None = None
@@ -14,12 +17,14 @@ def _scan_hermes_skills() -> list[dict[str, str | None]]:
     try:
         skills_tool = importlib.import_module("tools.skills_tool")
         find_all_skills = getattr(skills_tool, "_find_all_skills")
-    except Exception:
+    except (ImportError, AttributeError, TypeError) as exc:
+        logger.warning("Hermes skills scanner not available: %s", exc)
         return []
 
     try:
         found = find_all_skills()
-    except Exception:
+    except (ImportError, AttributeError, TypeError) as exc:
+        logger.warning("Hermes skills scan failed: %s", exc)
         return []
 
     skills: list[dict[str, str | None]] = []

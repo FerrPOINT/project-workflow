@@ -11,6 +11,7 @@ ResponseParser — validates and normalises LLM JSON responses
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from dataclasses import dataclass
@@ -18,6 +19,7 @@ from typing import Any
 
 import requests
 
+logger = logging.getLogger(__name__)
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "kimi-k2.6")
@@ -36,8 +38,8 @@ def _load_api_key() -> str:
                 for line in f:
                     if line.startswith("OLLAMA_API_KEY="):
                         return line.split("=", 1)[1].strip()
-        except Exception:
-            pass
+        except (OSError, ValueError) as exc:
+            logger.warning("Failed to read OLLAMA_API_KEY from env file: %s", exc)
     return ""
 
 
@@ -79,7 +81,8 @@ class OllamaClient:
             else:
                 r = requests.get(f"{self.base_url}/api/tags", timeout=5)
             return r.status_code == 200
-        except Exception:
+        except (requests.RequestException, OSError) as exc:
+            logger.warning("LLM health-check failed: %s", exc)
             return False
 
     def chat(self, system: str, user: str, temperature: float = 0.1) -> dict[str, Any]:

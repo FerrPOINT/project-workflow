@@ -8,11 +8,15 @@ Formalizes the lifecycle of a single workflow phase:
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, List, Optional
 
 from transitions import Machine
+from transitions.core import MachineError
 
 from project_workflow import config
+
+logger = logging.getLogger(__name__)
 
 
 class _FSMModel:
@@ -70,8 +74,8 @@ class PhaseFSM:
             return self.state
         try:
             getattr(self._model, trigger)()
-        except Exception:
-            pass
+        except MachineError as exc:
+            logger.warning("FSM transition rejected: %s", exc)
         return self.state
 
 

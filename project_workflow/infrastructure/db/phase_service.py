@@ -5,10 +5,14 @@ implementation has been removed.
 """
 from __future__ import annotations
 
+import json
+import logging
 from typing import Any, cast
 
 from . import models as m
 from .uow import SAUnitOfWork
+
+logger = logging.getLogger(__name__)
 
 
 class PhaseService:
@@ -156,11 +160,10 @@ class PhaseService:
     def parse_skills(raw: str | None) -> list[str]:
         if not raw:
             return []
-        import json
-
         try:
             parsed = json.loads(raw)
-        except Exception:
+        except (json.JSONDecodeError, TypeError) as exc:
+            logger.warning("Failed to parse skills JSON: %s", exc)
             return []
         return parsed if isinstance(parsed, list) else []
 
@@ -169,6 +172,4 @@ class PhaseService:
         normalized = PhaseService.normalize_skills(skills)
         if not normalized:
             return None
-        import json
-
         return json.dumps(normalized, ensure_ascii=False)

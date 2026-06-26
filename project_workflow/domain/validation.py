@@ -8,9 +8,12 @@ Features:
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass
 from typing import Any, List, Optional, Pattern
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -95,7 +98,8 @@ class TaskKeyValidator:
                     try:
                         parsed = json.loads(raw_project_prefixes)
                         raw_project_prefixes = parsed if isinstance(parsed, list) else [raw_project_prefixes]
-                    except Exception:
+                    except (json.JSONDecodeError, TypeError) as exc:
+                        logger.warning("Failed to parse project prefixes: %s", exc)
                         raw_project_prefixes = [raw_project_prefixes]
                 project_prefixes_list = [str(p) for p in raw_project_prefixes if str(p).strip()]
                 if project_prefixes_list:
@@ -261,7 +265,8 @@ def get_project_for_task_key(uow: Any, task_key: str) -> dict[str, Any] | None:
         if isinstance(key_prefixes, str):
             try:
                 key_prefixes = json.loads(key_prefixes)
-            except Exception:
+            except (json.JSONDecodeError, TypeError) as exc:
+                logger.warning("Failed to parse project key_prefixes: %s", exc)
                 key_prefixes = []
         if prefix in key_prefixes:
             return project_dict

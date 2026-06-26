@@ -1,6 +1,7 @@
 """Wizard context builder — assembles task dossier from DB + artifacts."""
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any, Optional
 
@@ -9,6 +10,8 @@ from ..infrastructure import conversation as convo
 from .models import Phase
 from .types import ArtifactSnapshot
 from .contracts import PhaseContractBuilder, phase_to_dict
+
+logger = logging.getLogger(__name__)
 
 
 class WizardContextBuilder:
@@ -161,7 +164,8 @@ class WizardContextBuilder:
         messages = []
         try:
             messages = convo.get_messages(self.task_key, limit=20)
-        except Exception:
+        except (OSError, ValueError, TypeError) as exc:
+            logger.warning("Failed to load conversation messages: %s", exc)
             messages = []
 
         current_contract = self._contract_builder.build(phase) if phase else self._contract_builder.build_missing(self.current_phase)

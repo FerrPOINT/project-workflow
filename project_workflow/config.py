@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from functools import lru_cache
 from pathlib import Path
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
 
 _pkg_dir = Path(__file__).resolve().parent
 
@@ -147,6 +150,7 @@ def _read_raw_settings() -> dict:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             return data if isinstance(data, dict) else {}
-        except Exception:
+        except (json.JSONDecodeError, OSError, TypeError) as exc:
+            logger.warning("Failed to load settings file: %s", exc)
             return {}
     return {}

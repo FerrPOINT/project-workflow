@@ -4,6 +4,7 @@ The DSN is read from config.Settings.DATABASE_URL.
 """
 from __future__ import annotations
 
+import logging
 import time
 from pathlib import Path
 from typing import Any
@@ -14,10 +15,13 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import NullPool
+from sqlalchemy.exc import SQLAlchemyError
 
 from project_workflow.config import get_settings
 
 from .models import Base
+
+logger = logging.getLogger(__name__)
 
 _engine = None
 _SessionLocal = None
@@ -93,8 +97,9 @@ def _create_postgres_engine(target: str) -> Engine:
             with engine.connect() as conn:
                 conn.exec_driver_sql("SELECT 1")
             return engine
-        except Exception as exc:  # noqa: BLE001
+        except (SQLAlchemyError, OSError) as exc:
             last_exc = exc
+            logger.warning("Postgres engine creation failed (attempt %s): %s", attempt + 1, exc)
             if attempt + 1 < PG_CONNECT_RETRY_ATTEMPTS:
                 time.sleep(PG_CONNECT_RETRY_DELAY)
     if last_exc is not None:

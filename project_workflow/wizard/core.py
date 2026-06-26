@@ -11,6 +11,7 @@ Public surface kept compatible:
 from __future__ import annotations
 
 import json
+import logging
 import threading
 from typing import Any, Optional
 
@@ -33,6 +34,8 @@ from .contracts import PhaseContractBuilder, text_from_instruction, text_from_ch
 from .checks import check_coverage, extract_blockers, determine_verdict, build_verdict_message
 from .store import WizardAssessmentStore
 from .prompt import build_phase_prompt
+
+logger = logging.getLogger(__name__)
 
 VERDICT_LABELS = {
     "pass": "PASS",
@@ -646,7 +649,8 @@ class WizardEngine:
         if _wizard_mod.SMART_EVALUATE:
             try:
                 return self.evaluate_llm(report, phase)
-            except Exception:
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("LLM evaluate failed: %s", exc)
                 pass
 
         is_parallel = phase.execution_type == "parallel"

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, List, Sequence
 
 from sqlalchemy import delete, select, text
@@ -21,6 +22,8 @@ from project_workflow.domain.repositories import (
     WorkflowRepository,
 )
 from project_workflow.infrastructure.db import models as m
+
+logger = logging.getLogger(__name__)
 
 
 def _row_to_phase(row: m.Phase) -> Phase:
@@ -55,7 +58,8 @@ def _row_to_project(row: m.Project) -> Project:
     raw = row.key_prefixes or "[]"
     try:
         prefixes = json.loads(raw) if isinstance(raw, str) else []
-    except Exception:
+    except (json.JSONDecodeError, TypeError) as exc:
+        logger.warning("Failed to parse project key_prefixes: %s", exc)
         prefixes = []
     return Project(
         id=row.id,
@@ -77,7 +81,8 @@ def _row_to_task(row: m.Task) -> Task:
                 None,
             )
             phase_name = phase.name if phase else current_phase
-    except Exception:
+    except (AttributeError, TypeError) as exc:
+        logger.warning("Failed to resolve task phase name: %s", exc)
         phase_name = current_phase
     return Task(
         id=getattr(row, "id", None),
@@ -108,7 +113,8 @@ def _row_to_supervisor_run(row: m.SupervisorRun) -> SupervisorRun:
         try:
             parsed = json.loads(raw)
             return parsed if isinstance(parsed, list) else []
-        except Exception:
+        except (json.JSONDecodeError, TypeError) as exc:
+            logger.warning("Failed to parse supervisor list field: %s", exc)
             return []
 
     def _parse_obj(raw: str | None) -> dict[str, Any]:
@@ -117,7 +123,8 @@ def _row_to_supervisor_run(row: m.SupervisorRun) -> SupervisorRun:
         try:
             parsed = json.loads(raw)
             return parsed if isinstance(parsed, dict) else {}
-        except Exception:
+        except (json.JSONDecodeError, TypeError) as exc:
+            logger.warning("Failed to parse supervisor object field: %s", exc)
             return {}
 
     return SupervisorRun(
@@ -401,7 +408,8 @@ class SATaskRepository(TaskRepository):
         try:
             project_id = row.project_id
             project_id = int(project_id)
-        except Exception:
+        except (ValueError, TypeError) as exc:
+            logger.warning("Failed to cast task project_id: %s", exc)
             project_id = 0
         return Task(
             id=row.id,

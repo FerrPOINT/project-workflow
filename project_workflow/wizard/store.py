@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 
 from .types import WizardAssessment
+
+logger = logging.getLogger(__name__)
 
 
 class WizardAssessmentStore:
@@ -38,9 +41,9 @@ class WizardAssessmentStore:
             resp = row.response
             if isinstance(resp, str):
                 try:
-                    import json
                     resp = json.loads(resp)
-                except Exception:
+                except (json.JSONDecodeError, TypeError) as exc:
+                    logger.warning("Failed to parse supervisor response: %s", exc)
                     resp = {}
             if isinstance(resp, dict):
                 return resp.get("phase") or resp.get("phase_code") or ""
@@ -167,7 +170,8 @@ def _row_to_assessment(row: Any) -> WizardAssessment:
     if isinstance(resp, str):
         try:
             resp = json.loads(resp)
-        except Exception:
+        except (json.JSONDecodeError, TypeError) as exc:
+            logger.warning("Failed to parse assessment response: %s", exc)
             resp = {}
     return WizardAssessment(
         task_key=resp.get("task_key", "") or "",

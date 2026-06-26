@@ -1,17 +1,21 @@
 """FastAPI application factory and route wiring."""
-
 from __future__ import annotations
 
+import logging
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 from sqlalchemy import text
 
 from ... import __version__
 from ...infrastructure.db.session import get_engine
 from .routes import api, pages
+
+logger = logging.getLogger(__name__)
 
 
 async def _health() -> JSONResponse:
@@ -25,6 +29,7 @@ async def _health() -> JSONResponse:
             conn.execute(text("SELECT 1"))
             health["database"] = "ok"
     except Exception as exc:  # noqa: BLE001
+        logger.error("Health check failed: %s", exc)
         health["ok"] = False
         health["database"] = "error"
         health["error"] = str(exc)
@@ -40,6 +45,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
     except Exception as exc:  # noqa: BLE001
+        logger.warning("Startup DB check failed: %s", exc)
         app.state.startup_error = str(exc)
     else:
         app.state.startup_error = None
@@ -48,8 +54,8 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         engine = get_engine()
         engine.dispose()
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Engine dispose failed during shutdown: %s", exc)
 
 
 def create_app() -> FastAPI:
