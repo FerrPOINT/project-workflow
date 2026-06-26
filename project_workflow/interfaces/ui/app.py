@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 from sqlalchemy import text
 
 from ... import __version__
@@ -16,11 +18,29 @@ from .routes import api, pages
 logger = logging.getLogger(__name__)
 
 
+class _RequestLoggingMiddleware(BaseHTTPMiddleware):
+    """Log every incoming request with method, path, status and duration."""
+
+    async def dispatch(self, request: Request, call_next):
+        start = time.perf_counter()
+        response = await call_next(request)
+        duration = (time.perf_counter() - start) * 1000
+        logger.info(
+            "%s %s %s %.2fms",
+            request.method,
+            request.url.path,
+            response.status_code,
+            duration,
+        )
+        return response
+
+
 async def _health() -> JSONResponse:
     """Liveness/readiness probe with DB connectivity check."""
     from ...infrastructure.db import session as _session
     health = {"ok": True, "version": __version__, "database": "unknown"}
     status = 200
+    start = time.perf_counter()
     try:
         engine = _session.get_engine()
         with engine.connect() as conn:
@@ -32,6 +52,7 @@ async def _health() -> JSONResponse:
         health["database"] = "error"
         health["error"] = str(exc)
         status = 503
+    health["db_latency_ms"] = round((time.perf_counter() - start) * 1000, 2)
     return JSONResponse(health, status_code=status)
 
 
@@ -58,6 +79,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     app = FastAPI(title="project-workflow UI", version=__version__, lifespan=_lifespan)
+    app.add_middleware(_RequestLoggingMiddleware)
 
     app.get("/health")(_health)
 
