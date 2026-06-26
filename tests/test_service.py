@@ -5,6 +5,8 @@ import json
 
 import pytest
 
+pytestmark = [pytest.mark.unit]
+
 from project_workflow.infrastructure.db.schema import ensure_phase_catalog
 from project_workflow.infrastructure.db.phase_service import PhaseService
 from project_workflow.infrastructure.db.uow import SAUnitOfWork

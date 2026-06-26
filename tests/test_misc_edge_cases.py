@@ -6,6 +6,8 @@ from unittest.mock import MagicMock
 import click
 import pytest
 
+pytestmark = [pytest.mark.cli]
+
 
 # ═══════════════════════════════════════════════════════════
 # cli/core.py

@@ -4,6 +4,8 @@ from __future__ import annotations
 import pytest
 from unittest.mock import MagicMock, patch
 
+pytestmark = [pytest.mark.unit]
+
 
 class TestEntryPoints:
     def test_cli_module_main_invokes_main(self, monkeypatch):

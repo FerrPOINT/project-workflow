@@ -6,6 +6,8 @@ from unittest.mock import MagicMock, patch
 import click
 import pytest
 
+pytestmark = [pytest.mark.unit]
+
 from project_workflow.infrastructure.db.session import _normalize_url, ensure_schema
 from project_workflow.interfaces.ui import schemas
 from project_workflow.application.workflow import WorkflowService

@@ -1,6 +1,8 @@
 """Tests for config.py env overrides and constants."""
 
+import pytest
 
+pytestmark = [pytest.mark.unit]
 
 from project_workflow import config as cfg_module
 

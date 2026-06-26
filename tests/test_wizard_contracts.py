@@ -1,6 +1,9 @@
 """Tests for wizard_contracts.py."""
+import pytest
 from project_workflow.wizard.models import Phase, PhaseInstruction, PhaseCheck, PhaseEvidence
 from project_workflow.wizard.contracts import PhaseContractBuilder, text_from_instruction, text_from_check, text_from_evidence, phase_to_dict
+
+pytestmark = [pytest.mark.wizard]
 
 
 class TestTextHelpers:

@@ -1,4 +1,8 @@
 """Tests for PhaseFSM formal state machine."""
+import pytest
+
+pytestmark = [pytest.mark.unit]
+
 from project_workflow.domain.fsm import PhaseFSM
 
 

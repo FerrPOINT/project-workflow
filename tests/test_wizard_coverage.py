@@ -2,6 +2,10 @@
 
 from unittest.mock import patch, MagicMock
 
+import pytest
+
+pytestmark = [pytest.mark.wizard]
+
 from project_workflow.wizard.models import Phase, PhaseCheck, PhaseEvidence, PhaseInstruction
 from project_workflow.wizard import WizardEngine
 from project_workflow.wizard.checks import BLOCKER_PATTERNS, DELEGATE_PATTERNS

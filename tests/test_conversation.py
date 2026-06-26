@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+pytestmark = [pytest.mark.unit]
+
 from project_workflow.infrastructure import conversation as convo
 
 

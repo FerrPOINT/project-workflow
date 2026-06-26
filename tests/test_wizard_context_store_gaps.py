@@ -5,6 +5,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+pytestmark = [pytest.mark.wizard]
+
 from project_workflow.wizard.context import WizardContextBuilder
 from project_workflow.wizard.models import Phase
 from project_workflow.wizard.store import WizardAssessmentStore, _row_to_assessment

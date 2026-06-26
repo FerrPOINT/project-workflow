@@ -1,6 +1,9 @@
 """WizardEngine unit tests for public supervisor behavior."""
 
+import pytest
 from unittest.mock import patch
+
+pytestmark = [pytest.mark.wizard]
 
 from project_workflow.wizard.models import Phase
 from project_workflow.wizard import WizardEngine

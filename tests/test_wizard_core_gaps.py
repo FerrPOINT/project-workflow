@@ -5,6 +5,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+pytestmark = [pytest.mark.wizard]
+
 from project_workflow.wizard import WizardEngine
 from project_workflow.wizard.models import Phase
 

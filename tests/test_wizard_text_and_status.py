@@ -1,6 +1,9 @@
 """Tests for text_from_* helpers, status lookup, and verdict builders."""
 
+import pytest
 from unittest.mock import MagicMock, patch
+
+pytestmark = [pytest.mark.wizard]
 
 from project_workflow.wizard import WizardEngine, VERDICT_LABELS
 from project_workflow.wizard.contracts import (

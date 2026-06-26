@@ -1,5 +1,9 @@
 """Tests for WizardEngine.get_full_context()."""
 
+import pytest
+
+pytestmark = [pytest.mark.wizard]
+
 from project_workflow import wizard
 
 

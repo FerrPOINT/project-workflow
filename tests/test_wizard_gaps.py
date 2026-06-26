@@ -7,6 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+pytestmark = [pytest.mark.wizard]
+
 from project_workflow.infrastructure.db.session import reset_engine
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.wizard.context import WizardContextBuilder

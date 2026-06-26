@@ -3,6 +3,10 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+pytestmark = [pytest.mark.wizard]
+
 from project_workflow.wizard.evaluate import evaluate_llm_report
 from project_workflow.wizard.models import Phase
 from project_workflow import config

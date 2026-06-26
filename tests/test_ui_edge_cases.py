@@ -3,7 +3,10 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
 from fastapi.testclient import TestClient
+
+pytestmark = [pytest.mark.ui]
 
 from project_workflow.interfaces.ui import (
     _build_parallel_phase_blocks,

@@ -2,6 +2,8 @@
 
 import pytest
 
+pytestmark = [pytest.mark.unit]
+
 from project_workflow.domain.validation import (
     TaskKeyValidator,
     TaskKeyValidationError,

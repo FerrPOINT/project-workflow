@@ -2,6 +2,10 @@
 import json
 from unittest.mock import MagicMock
 
+import pytest
+
+pytestmark = [pytest.mark.wizard]
+
 from project_workflow.wizard.store import WizardAssessmentStore, _row_to_assessment
 from project_workflow.wizard.types import WizardAssessment
 

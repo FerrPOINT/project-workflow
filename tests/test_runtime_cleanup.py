@@ -5,6 +5,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.unit]
+
 from project_workflow import config
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.db import schema

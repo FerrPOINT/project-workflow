@@ -1,10 +1,15 @@
+"""Supervisor workflow tests using custom DB workflow."""
+
 from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.wizard]
+
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.wizard import WizardEngine
-
 
 SUPERVISOR_WORKFLOW_NAME = "Supervisor Workflow"
 SUPERVISOR_PHASES = ["sup.intake", "sup.review", "sup.done"]

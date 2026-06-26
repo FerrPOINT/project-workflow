@@ -1,6 +1,11 @@
 """Tests that wizard.py passes int phase_id to DB FK columns."""
+"""Tests that wizard.py passes int phase_id to DB FK columns."""
 
+import pytest
 from unittest.mock import MagicMock, patch
+
+pytestmark = [pytest.mark.wizard]
+
 from project_workflow.wizard.models import Phase
 from project_workflow.wizard import WizardEngine
 

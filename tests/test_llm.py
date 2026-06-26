@@ -1,10 +1,13 @@
 """Tests for LLM-based evaluate (OllamaClient, PromptBuilder, ResponseParser)."""
+"""Tests for LLM-based evaluate (OllamaClient, PromptBuilder, ResponseParser)."""
 
 import json
 from unittest.mock import patch, MagicMock
 
 import pytest
 import requests
+
+pytestmark = [pytest.mark.unit]
 
 from project_workflow.infrastructure.llm import (
     OllamaClient,

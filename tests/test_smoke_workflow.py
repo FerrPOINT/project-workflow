@@ -1,13 +1,16 @@
+"""Smoke workflow tests — end-to-end DB-backed workflow."""
+
 from __future__ import annotations
 
-import pytest
 from pathlib import Path
+
+import pytest
+
+pytestmark = [pytest.mark.wizard]
 
 from project_workflow.infrastructure.db import schema
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
-
 from project_workflow.wizard import WizardEngine
-
 
 SMOKE_WORKFLOW_NAME = "Smoke Test Workflow"
 SMOKE_PHASE_CODES = [

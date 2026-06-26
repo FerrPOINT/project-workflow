@@ -1,5 +1,9 @@
 """Tests for format_result() human-readable output."""
 
+import pytest
+
+pytestmark = [pytest.mark.wizard]
+
 from project_workflow.wizard import format_result
 
 

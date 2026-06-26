@@ -5,6 +5,8 @@ from unittest.mock import patch
 
 import pytest
 
+pytestmark = [pytest.mark.wizard]
+
 from project_workflow import config
 from project_workflow.infrastructure.db.schema import ensure_phase_catalog
 from project_workflow.infrastructure.db.session import reset_engine

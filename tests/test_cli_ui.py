@@ -7,7 +7,10 @@ import json
 import os
 from unittest.mock import patch
 
+import pytest
 from click.testing import CliRunner
+
+pytestmark = [pytest.mark.cli]
 
 from project_workflow.domain.validation import TaskKeyValidator
 from project_workflow.interfaces.cli.core import cli

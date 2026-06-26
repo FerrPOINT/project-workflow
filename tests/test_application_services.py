@@ -5,6 +5,8 @@ import pytest
 from sqlalchemy import create_engine
 from unittest.mock import MagicMock
 
+pytestmark = [pytest.mark.unit]
+
 from project_workflow.application import (
     AgentService,
     PhaseServiceApp,

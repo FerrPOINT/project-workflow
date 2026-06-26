@@ -3,6 +3,10 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
+
+pytestmark = [pytest.mark.ui]
+
 from project_workflow.interfaces.ui import (
     _instruction_service,
     _phase_create_payload,

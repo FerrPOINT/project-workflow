@@ -5,6 +5,8 @@ import pytest
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
+pytestmark = [pytest.mark.unit]
+
 from project_workflow.infrastructure.db.session import (
     _is_sqlite,
     _normalize_url,

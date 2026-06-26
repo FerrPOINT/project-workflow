@@ -1,6 +1,11 @@
 """Tests for blocker extraction and coverage accumulation."""
+"""Tests for blocker extraction and coverage accumulation."""
 
+import pytest
 from unittest.mock import patch
+
+pytestmark = [pytest.mark.wizard]
+
 from project_workflow.wizard import WizardEngine
 
 

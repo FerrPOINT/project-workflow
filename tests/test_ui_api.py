@@ -9,6 +9,8 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 
+pytestmark = [pytest.mark.ui]
+
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
 

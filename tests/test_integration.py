@@ -6,8 +6,10 @@ Scenario: Seed DB → create task → step through phases → verify history
 import json
 from pathlib import Path
 
-
+import pytest
 from fastapi.testclient import TestClient
+
+pytestmark = [pytest.mark.ui]
 
 from project_workflow.infrastructure import conversation as convo
 from project_workflow.infrastructure.db.uow import SAUnitOfWork

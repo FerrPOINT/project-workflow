@@ -4,6 +4,9 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import click
+import pytest
+
+pytestmark = [pytest.mark.ui]
 
 from project_workflow.interfaces.ui.services import (
     _load_tasks,

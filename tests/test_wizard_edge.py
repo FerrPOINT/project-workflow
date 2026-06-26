@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+pytestmark = [pytest.mark.wizard]
+
 from project_workflow.infrastructure.db import schema
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 

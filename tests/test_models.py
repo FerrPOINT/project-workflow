@@ -1,5 +1,9 @@
 """Test models.py methods."""
 
+import pytest
+
+pytestmark = [pytest.mark.unit]
+
 from project_workflow.wizard.models import Phase, PhaseInstruction, PhaseCheck, PhaseEvidence, PhaseDelegate
 
 

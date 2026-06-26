@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
+
+pytestmark = [pytest.mark.ui]
 
 from project_workflow.interfaces.ui import app
 

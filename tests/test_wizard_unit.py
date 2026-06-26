@@ -1,6 +1,10 @@
 """Tests for wizard.py to boost coverage."""
 
+import pytest
 from unittest.mock import patch, MagicMock
+
+pytestmark = [pytest.mark.wizard]
+
 from project_workflow.wizard import WizardEngine
 
 

@@ -7,6 +7,8 @@ import click
 import pytest
 from fastapi.testclient import TestClient
 
+pytestmark = [pytest.mark.ui]
+
 from project_workflow import config
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.cli.core import cli

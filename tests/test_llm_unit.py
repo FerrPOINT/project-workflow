@@ -6,6 +6,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+pytestmark = [pytest.mark.unit]
+
 from project_workflow.infrastructure.llm import (
     OllamaClient,
     PromptBuilder,
