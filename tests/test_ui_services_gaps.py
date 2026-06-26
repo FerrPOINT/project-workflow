@@ -13,6 +13,15 @@ from project_workflow.interfaces.ui import (
     _workflow_form_payload,
     _workflow_service,
 )
+from project_workflow.interfaces.ui.schemas import (
+    AgentCreate,
+    PhaseCreate,
+    PhaseUpdate,
+    ProjectCreate,
+    ProjectUpdate,
+    WorkflowCreate,
+    WorkflowUpdate,
+)
 
 
 class TestServiceHelpers:
@@ -70,3 +79,43 @@ class TestResolveTaskPhaseRedirects:
         token, phase = _resolve_task_phase("999", _db=db)
         assert token == "999"
         assert phase is None
+
+
+class TestSchemas:
+    def test_phase_create_insert_after_string(self):
+        p = PhaseCreate(workflow_id=1, insert_after="2")
+        assert p.phase_order == 3
+
+    def test_phase_create_coerce_invalid_phase_order(self):
+        p = PhaseCreate(workflow_id=1, phase_order="bad")
+        assert p.phase_order is None
+
+    def test_phase_update_excluded_fields(self):
+        p = PhaseUpdate(name="X", code="ignored", phase_num=99)
+        assert p.name == "X"
+        assert "code" not in p.model_dump(exclude={"code", "phase_num", "phase_order"})
+
+    def test_project_create_key_prefixes_from_string(self):
+        p = ProjectCreate(code="p", key_prefixes="foo\nbar")
+        assert p.key_prefixes == ["FOO", "BAR"]
+
+    def test_project_create_default_prefixes(self):
+        p = ProjectCreate(code="p", key_prefixes=[])
+        assert p.key_prefixes
+
+    def test_project_update_key_prefixes_none(self):
+        p = ProjectUpdate(code="p")
+        assert p.key_prefixes is None
+
+    def test_workflow_create_defaults(self):
+        w = WorkflowCreate()
+        assert w.name is None
+        assert w.description == ""
+
+    def test_workflow_update_fields(self):
+        w = WorkflowUpdate(name="N", description="D", code="C")
+        assert w.name == "N"
+
+    def test_agent_create_valid(self):
+        a = AgentCreate(name="A")
+        assert a.name == "A"

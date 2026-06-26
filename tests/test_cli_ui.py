@@ -4,6 +4,7 @@ Uses click.testing.CliRunner with heavy mocking to avoid FS/DB side effects.
 """
 
 import json
+import os
 from unittest.mock import patch
 
 from click.testing import CliRunner
@@ -90,6 +91,38 @@ class TestStepCommand:
         assert result.exit_code == 1
         assert "Чекапы:" in result.output
         assert "m1" in result.output
+
+    @patch("project_workflow.wizard.WizardEngine")
+    def test_step_report_smart_mode_prefix(self, mock_engine_cls):
+        os.environ["SMART_EVALUATE"] = "true"
+        try:
+            mock_engine = mock_engine_cls.return_value
+            mock_engine.evaluate.return_value = {
+                "verdict": "PASS", "phase_name": "Plan", "next_phase": "1", "next_phase_name": "Build",
+                "covered": [], "missing": [], "blockers": [], "message": "ok",
+                "required_checks": [], "required_evidence": [], "instructions": [],
+            }
+            runner = CliRunner()
+            with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
+                result = runner.invoke(cli, ["step", "--task", "TASK-1", "--report", "Done"])
+            assert result.exit_code == 0
+            assert "[🧠 SMART MODE]" in result.output
+        finally:
+            os.environ.pop("SMART_EVALUATE", None)
+
+    @patch("project_workflow.wizard.WizardEngine")
+    def test_step_report_json_mode(self, mock_engine_cls):
+        mock_engine = mock_engine_cls.return_value
+        mock_engine.evaluate.return_value = {
+            "verdict": "PASS", "phase_name": "Plan", "next_phase": None,
+            "covered": [], "missing": [], "blockers": [], "message": "ok",
+        }
+        runner = CliRunner()
+        with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
+            result = runner.invoke(cli, ["--json", "step", "--task", "TASK-1", "--report", "Done"])
+        assert result.exit_code == 0
+        parsed = json.loads(result.output)
+        assert parsed["verdict"] == "PASS"
 
     def test_step_skip_is_rejected(self):
         runner = CliRunner()

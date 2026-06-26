@@ -96,14 +96,38 @@ class TestProjectScopedFactory:
         assert result.prefix == "AAT"
         assert result.normalized == "AAT-42"
 
-    def test_from_projects_ignores_unknown_keys(self):
+    def test_from_projects_json_string_prefixes(self):
         v = TaskKeyValidator.from_projects(
             [
                 {
                     "code": "AAT",
                     "name": "AAT",
-                    "key_prefixes": ["AAT"],
+                    "key_prefixes": '["AAT", "TASK"]',
                 }
             ]
         )
-        assert not v.validate("OTHER-7").is_valid
+        assert v.validate("AAT-42").is_valid
+        assert v.validate("TASK-42").is_valid
+
+    def test_from_projects_invalid_json_string_prefixes(self):
+        v = TaskKeyValidator.from_projects(
+            [
+                {
+                    "code": "AAT",
+                    "name": "AAT",
+                    "key_prefixes": "AAT",
+                }
+            ]
+        )
+        assert v.validate("AAT-42").is_valid
+
+    def test_validated_key_str(self):
+        from project_workflow.domain.validation import ValidatedTaskKey
+        v = ValidatedTaskKey(raw="x", is_valid=True, normalized="NORM-1")
+        assert str(v) == "NORM-1"
+
+    def test_compile_raw_pattern(self):
+        from project_workflow.domain.validation import _compile_raw_pattern
+        label, compiled = _compile_raw_pattern(r"^(?P<prefix>TEST)-(?P<number>\d+)$")
+        assert label == r"^(?P<prefix>TEST)-(?P<number>\d+)$"
+        assert compiled.match("TEST-1")

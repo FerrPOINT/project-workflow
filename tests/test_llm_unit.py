@@ -11,7 +11,96 @@ from project_workflow.infrastructure.llm import (
     PromptBuilder,
     ResponseParser,
 )
+from project_workflow.wizard.evaluate import evaluate_llm_report
 from project_workflow.wizard.models import Phase
+
+
+def _make_engine():
+    engine = MagicMock()
+    engine.task_key = "TASK-1"
+    engine.task = {"id": 1}
+    engine.all_phases = []
+    engine.phase_map = {}
+    engine._get_previously_covered.return_value = []
+    engine._resolve_current_phase.return_value = "1"
+    engine.db.get_task.return_value = engine.task
+    return engine
+
+
+class TestEvaluateLlmReportVerdicts:
+    def test_blocked_sets_default_blocker(self):
+        engine = _make_engine()
+        phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[])
+        with patch.object(OllamaClient, "chat", return_value={
+            "verdict": "BLOCKED",
+            "covered": [],
+            "missing": ["x"],
+            "blockers": [],
+            "message": "blocked",
+            "next_phase": None,
+            "next_phase_name": None,
+            "confidence": 0.7,
+        }):
+            result = evaluate_llm_report("r", phase, engine)
+        assert result["verdict"] == "BLOCKED"
+        assert result["blockers"] == ["LLM identified blocker"]
+        engine._record_transition.assert_called_once()
+
+    def test_rollback_uses_rollback_target(self):
+        engine = _make_engine()
+        phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[], rollback_target="0")
+        with patch.object(OllamaClient, "chat", return_value={
+            "verdict": "ROLLBACK",
+            "covered": [],
+            "missing": [],
+            "blockers": [],
+            "message": "rb",
+            "next_phase": None,
+            "next_phase_name": None,
+            "confidence": 0.6,
+        }):
+            result = evaluate_llm_report("r", phase, engine)
+        assert result["verdict"] == "ROLLBACK"
+        assert result["rollback_target"] == "0"
+        assert result["next_phase"] is None
+
+    def test_delegate_records_transition(self):
+        engine = _make_engine()
+        phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[])
+        with patch.object(OllamaClient, "chat", return_value={
+            "verdict": "DELEGATE",
+            "covered": [],
+            "missing": [],
+            "blockers": [],
+            "message": "delegate",
+            "next_phase": None,
+            "next_phase_name": None,
+            "confidence": 0.5,
+        }):
+            result = evaluate_llm_report("r", phase, engine)
+        assert result["verdict"] == "DELEGATE"
+        engine._record_transition.assert_called_once()
+
+    def test_pass_fills_next_phase_from_builder(self):
+        engine = _make_engine()
+        next_phase = Phase(code="2", name="Two", instructions=[], checks=[], evidence=[])
+        engine.all_phases = [Phase(code="1", name="One", instructions=[], checks=[], evidence=[]), next_phase]
+        engine.phase_map = {"2": next_phase}
+        phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[])
+        with patch.object(OllamaClient, "chat", return_value={
+            "verdict": "PASS",
+            "covered": ["a"],
+            "missing": [],
+            "blockers": [],
+            "message": "ok",
+            "next_phase": None,
+            "next_phase_name": None,
+            "confidence": 0.9,
+        }):
+            result = evaluate_llm_report("r", phase, engine)
+        assert result["verdict"] == "PASS"
+        assert result["next_phase"] == "2"
+        assert result["next_phase_name"] == "Two"
 
 
 class TestLoadApiKey:
