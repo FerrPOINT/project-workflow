@@ -1,6 +1,5 @@
-"""SQLAlchemy ORM models mirroring the existing SQLite schema.
+"""SQLAlchemy ORM models for the project-workflow schema.
 
-Kept 1:1 with db/db_schema.sql so existing rows load without migration.
 Uses SQLAlchemy 2 ``mapped_column`` style so mypy sees plain ``int``/``str``
 types instead of ``Column[...]`` wrappers.
 """

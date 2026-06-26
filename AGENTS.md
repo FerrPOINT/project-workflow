@@ -17,9 +17,9 @@ After any change to the SQLAlchemy layer, application services, UI state, or wiz
 
 1. **Full test suite**
    ```bash
-   pytest -q --timeout=60
+   pytest -q --timeout=60 --forked
    ```
-   Expected: `631 passed` (or current total), 0 failed, 0 errors.
+   Expected: **869 passed, 6 deselected**, 0 failed, 0 errors.
 
 2. **Lint**
    ```bash
@@ -27,21 +27,18 @@ After any change to the SQLAlchemy layer, application services, UI state, or wiz
    ```
    Expected: `All checks passed!`
 
-3. **UI service health**
+3. **Type check**
+   ```bash
+   mypy project_workflow
+   ```
+   Expected: `Success: no issues found in 57 source files`.
+
+4. **UI service health**
    ```bash
    systemctl restart project-workflow-ui.service
    curl -s -o /dev/null -w "%{http_code}" http://localhost:8811/api/tasks
    ```
    Expected: `200`.
-
-4. **CLI wizard end-to-end** (uses the same PostgreSQL DB as the UI service)
-   ```bash
-   DATABASE_URL=postgresql+psycopg://project_workflow:project_workflow@localhost:5432/project_workflow \
-     python -m project_workflow.interfaces.cli step \
-     --task <EXISTING-TASK-KEY> \
-     --report "..."
-   ```
-   Expected: valid wizard response with phase contract and verdict.
 
 5. **Browser check** for UI changes
    - Open `http://localhost:8811/` and `http://localhost:8811/phases`.
@@ -49,6 +46,6 @@ After any change to the SQLAlchemy layer, application services, UI state, or wiz
 
 ## Notes
 
-- `mypy project_workflow` currently reports 36 pre-existing errors. They are non-blocking, but must not be increased by new changes.
+- `pytest -n auto` without `--forked` can hang on SQLite WAL due to FD exhaustion; use `--forked` for the full suite.
 - `SAUnitOfWork()` with no arguments resolves PostgreSQL `DATABASE_URL` first, then falls back to SQLite `DB_PATH`. This is intentional to keep CLI/UI/test paths aligned.
 - The in-repo skill `project-workflow-test-suite-recovery` contains the full checklist and failure-symptom table.
