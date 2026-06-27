@@ -9,8 +9,8 @@ import json
 import logging
 from typing import Any, cast
 
-from ..infrastructure.db import models as m
-from ..infrastructure.db.uow import SAUnitOfWork
+from project_workflow.domain.repositories import UnitOfWork
+
 
 logger = logging.getLogger(__name__)
 
@@ -18,10 +18,10 @@ logger = logging.getLogger(__name__)
 class PhaseService:
     """CRUD operations for phases, instructions, checks, evidence."""
 
-    def __init__(self, uow_or_state: SAUnitOfWork | Any):
+    def __init__(self, uow_or_state: UnitOfWork | Any):
         """Accept either a UnitOfWork or an _AppState instance."""
         if type(uow_or_state).__name__ == "_AppState":
-            self._uow: SAUnitOfWork = cast(SAUnitOfWork, cast(Any, uow_or_state).get_uow())
+            self._uow: UnitOfWork = cast(Any, uow_or_state).get_uow()
         else:
             self._uow = uow_or_state
 
@@ -67,44 +67,21 @@ class PhaseService:
         """Replace all checks for a phase."""
         resolved = self._resolve_phase_id(phase_id)
         with self._uow:
-            self._delete_checks(resolved)
             ids: list[int] = []
-            for item in items:
-                chk = m.Check(phase_id=resolved, description=item["description"])
-                self._uow._session.add(chk)
-                self._uow._session.flush()
-                ids.append(int(chk.id))
+            self._uow.phases.set_checks(resolved, items)
+            # Reload to return ids in order.
+            for row in self._uow.phases.get_checks(resolved):
+                ids.append(int(row["id"]))
             return ids
-
     def save_evidence(self, phase_id: int | str, items: list[dict[str, Any]]) -> list[int]:
         """Replace all evidence for a phase."""
         resolved = self._resolve_phase_id(phase_id)
         with self._uow:
-            self._delete_evidence(resolved)
             ids: list[int] = []
-            for item in items:
-                ev = m.Evidence(phase_id=resolved, description=item["description"])
-                self._uow._session.add(ev)
-                self._uow._session.flush()
-                ids.append(int(ev.id))
+            self._uow.phases.set_evidence(resolved, items)
+            for row in self._uow.phases.get_evidence(resolved):
+                ids.append(int(row["id"]))
             return ids
-
-    def _delete_checks(self, phase_id: int) -> None:
-        from sqlalchemy import text
-
-        self._uow._session.execute(
-            text("DELETE FROM checks WHERE phase_id = :pid"),
-            {"pid": phase_id},
-        )
-
-    def _delete_evidence(self, phase_id: int) -> None:
-        from sqlalchemy import text
-
-        self._uow._session.execute(
-            text("DELETE FROM evidence WHERE phase_id = :pid"),
-            {"pid": phase_id},
-        )
-
     # ── Read helpers ─────────────────────────────────────────────────
 
     def get_phase_detail(self, phase_id: int | str) -> dict[str, Any]:
