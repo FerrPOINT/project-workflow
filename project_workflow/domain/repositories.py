@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from typing import Any, List, Literal, Sequence
 
 from project_workflow.domain import Agent, Phase, Project, SupervisorRun, Task, Workflow
@@ -153,6 +154,9 @@ class TaskRepository(ABC):
     def get_history(self, task_id: int) -> Sequence[dict[str, Any]]: ...
 
     @abstractmethod
+    def get_history_batch(self, task_ids: Sequence[int]) -> Mapping[int, Sequence[dict[str, Any]]]: ...
+
+    @abstractmethod
     def delete(self, task_id: int) -> None: ...
 
 
@@ -188,6 +192,9 @@ class SupervisorRunRepository(ABC):
         task_key: str | None = None,
         limit: int = 200,
     ) -> Sequence[SupervisorRun]: ...
+
+    @abstractmethod
+    def latest_for_tasks(self, task_ids: Sequence[int]) -> Sequence[SupervisorRun]: ...
 
     @abstractmethod
     def create(self, data: dict[str, Any]) -> int: ...

@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Mapping
 from typing import Any, List, Sequence
 
-from sqlalchemy import delete, select, text
-from sqlalchemy.orm import Session
+from sqlalchemy import delete, func, select, text
+from sqlalchemy.orm import aliased, Session
 
 from project_workflow.domain import Agent, Phase, Project, SupervisorRun, Task, Workflow
 from project_workflow.domain.exceptions import LastPhaseError, NotFoundError
@@ -492,6 +493,25 @@ class SATaskRepository(TaskRepository):
             for r in rows
         ]
 
+    def get_history_batch(self, task_ids: Sequence[int]) -> Mapping[int, Sequence[dict[str, Any]]]:
+        if not task_ids:
+            return {}
+        with self._session.no_autoflush:
+            rows = self._session.execute(
+                select(m.TaskHistory).where(m.TaskHistory.task_id.in_(task_ids))
+            ).scalars().all()
+        result: dict[int, list[dict[str, Any]]] = {tid: [] for tid in task_ids}
+        for r in rows:
+            entry = {
+                "id": r.id,
+                "task_id": r.task_id,
+                "phase_id": r.phase_id,
+                "status": r.status,
+                "completed_at": r.completed_at,
+            }
+            result.setdefault(r.task_id, []).append(entry)
+        return result
+
     def delete(self, task_id: int) -> None:
         with self._session.no_autoflush:
             row = self._session.get(m.Task, task_id)
@@ -628,6 +648,28 @@ class SASupervisorRunRepository(SupervisorRunRepository):
         stmt = select(m.SupervisorRun).order_by(m.SupervisorRun.id.desc()).limit(limit)
         if task_id is not None:
             stmt = stmt.where(m.SupervisorRun.task_id == task_id)
+        rows = self._session.execute(stmt).scalars().all()
+        return [_row_to_supervisor_run(r) for r in rows]
+
+    def latest_for_tasks(self, task_ids: Sequence[int]) -> Sequence[SupervisorRun]:
+        if not task_ids:
+            return []
+        # PostgreSQL/CTE-compatible: select the latest run per task_id using ROW_NUMBER().
+        cte = (
+            select(
+                m.SupervisorRun,
+                (
+                    func.row_number().over(
+                        partition_by=m.SupervisorRun.task_id,
+                        order_by=m.SupervisorRun.id.desc()
+                    )
+                ).label("rn"),
+            )
+            .where(m.SupervisorRun.task_id.in_(task_ids))
+            .cte("latest_runs")
+        )
+        aliased_run = aliased(m.SupervisorRun, cte)
+        stmt = select(aliased_run).where(cte.c.rn == 1)
         rows = self._session.execute(stmt).scalars().all()
         return [_row_to_supervisor_run(r) for r in rows]
 

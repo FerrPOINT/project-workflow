@@ -1,6 +1,7 @@
 """Data-loading services for UI pages and API responses."""
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
 import click
@@ -188,6 +189,43 @@ def _load_phase_detail(phase_id: int | str) -> dict[str, Any] | None:
     return phase
 
 
+def _run_to_dict(run: Any) -> dict[str, Any]:
+    if isinstance(run, dict):
+        return run
+    if hasattr(run, "to_dict"):
+        return run.to_dict()
+    return dict(run)
+
+
+def _resolve_task_phase_local(
+    current_phase: Any, workflow_phases: list[dict[str, Any]]
+) -> tuple[str, dict[str, Any] | None]:
+    """Resolve a phase token against a preloaded list of phases (no DB hits)."""
+    token = str(current_phase if current_phase is not None else "-1")
+
+    for phase in workflow_phases:
+        if str(phase.get("code", phase.get("id"))) == token:
+            return token, phase
+        if str(phase.get("id")) == token:
+            return token, phase
+
+    redirected = config.LEGACY_PHASE_REDIRECTS.get(token)
+    if redirected:
+        for phase in workflow_phases:
+            if str(phase.get("code", phase.get("id"))) == redirected:
+                return redirected, dict(phase)
+
+    try:
+        numeric = int(token)
+    except (TypeError, ValueError):
+        return token, None
+
+    for phase in workflow_phases:
+        if phase.get("id") == numeric:
+            return token, dict(phase)
+    return token, None
+
+
 def _resolve_task_phase(
     current_phase: Any, _db: Any | None = None, workflow_id: int | None = None
 ) -> tuple[str, dict[str, Any] | None]:
@@ -223,25 +261,59 @@ def _resolve_task_phase(
 
 
 def _load_tasks() -> list[dict[str, Any]]:
-    """Загрузить задачи из SQLite."""
+    """Load tasks for the UI with batched history/supervisor lookups."""
     wdb = _get_app_state().get_db()
     tasks = wdb.get_tasks()
     workflows = wdb.get_workflows()
-    phase_counts_by_workflow = {
-        workflow["id"]: len(wdb.get_phases(workflow_id=workflow["id"]))
-        for workflow in workflows
-    }
-    default_phase_count = len(config.PHASE_ORDER)
-    result = []
 
+    # Batch phase counts and phase lookup maps per workflow.
+    phase_counts_by_workflow: dict[int, int] = {}
+    phases_by_workflow: dict[int | None, list[dict[str, Any]]] = {}
+    all_phases: list[dict[str, Any]] = []
+    for workflow in workflows:
+        wid = workflow["id"]
+        phases = wdb.get_phases(workflow_id=wid)
+        phases_by_workflow[wid] = phases
+        all_phases.extend(phases)
+        phase_counts_by_workflow[wid] = len(phases)
+    phases_by_workflow[None] = all_phases
+
+    default_phase_count = len(config.PHASE_ORDER)
+
+    # Batch load history and latest supervisor runs for all tasks in one go.
+    task_ids = [t["id"] for t in tasks if isinstance(t.get("id"), int)]
+    history_batch: Mapping[int, Sequence[dict[str, Any]]] = {}
+    latest_runs: dict[int, dict[str, Any]] = {}
+    if task_ids:
+        raw_history_batch = wdb.tasks.get_history_batch(task_ids)
+        if isinstance(raw_history_batch, Mapping):
+            history_batch = raw_history_batch
+        else:
+            history_batch = {tid: wdb.get_task_history(tid) for tid in task_ids}
+
+        raw_latest = wdb.supervisor_runs.latest_for_tasks(task_ids)
+        if isinstance(raw_latest, Sequence) and not isinstance(raw_latest, (str, bytes)):
+            for latest_run in raw_latest:
+                tid = getattr(latest_run, "task_id", None)
+                if tid is not None and tid not in latest_runs:
+                    latest_runs[tid] = _run_to_dict(latest_run)
+        else:
+            for tid in task_ids:
+                runs = wdb.get_supervisor_runs(task_id=tid, limit=1)
+                if runs:
+                    latest_runs[tid] = _run_to_dict(runs[0])
+
+    result = []
     for t in tasks:
-        task_history = wdb.get_task_history(t["id"])
-        completed = sum(1 for tp in task_history if tp["status"] == "done")
+        task_id = t["id"]
+        task_history = list(history_batch.get(task_id, []))
+        completed = sum(1 for tp in task_history if tp.get("status") == "done")
         workflow_id = t.get("workflow_id")
         total_phases = phase_counts_by_workflow.get(workflow_id, default_phase_count)
 
-        current_phase_id, current = _resolve_task_phase(
-            t.get("current_phase", "-1"), workflow_id=workflow_id
+        current_phase_id, current = _resolve_task_phase_local(
+            t.get("current_phase", "-1"),
+            phases_by_workflow.get(workflow_id, []),
         )
         current = current or {}
         project_code = t.get("project_code") or "—"
@@ -249,7 +321,7 @@ def _load_tasks() -> list[dict[str, Any]]:
 
         completed_at = ""
         if t.get("status") == "done":
-            done_entries = [tp for tp in task_history if tp["status"] == "done"]
+            done_entries = [tp for tp in task_history if tp.get("status") == "done"]
             if done_entries:
                 completed_at = max(
                     (tp.get("completed_at") or "" for tp in done_entries),
@@ -262,9 +334,8 @@ def _load_tasks() -> list[dict[str, Any]]:
         latest_verdict_phase = None
         latest_verdict_message = ""
         latest_verdict_at = ""
-        supervisor_runs = wdb.get_supervisor_runs(task_id=t["id"], limit=1)
-        if supervisor_runs:
-            run = supervisor_runs[0]
+        run: dict[str, Any] | None = latest_runs.get(task_id)
+        if run:
             latest_verdict = run.get("verdict")
             latest_verdict_phase = run.get("phase_code")
             response = run.get("response") or {}
@@ -272,11 +343,11 @@ def _load_tasks() -> list[dict[str, Any]]:
                 latest_verdict_message = response.get("message", "")
             else:
                 latest_verdict_message = str(response)[:120]
-            latest_verdict_at = run.get("created_at", "")[:16]
+            latest_verdict_at = str(run.get("created_at", ""))[:16]
 
         result.append(
             {
-                "id": t["id"],
+                "id": task_id,
                 "task_key": t["task_key"],
                 "title": t.get("title", ""),
                 "project_id": t.get("project_id"),
