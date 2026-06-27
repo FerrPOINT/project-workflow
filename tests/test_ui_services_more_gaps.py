@@ -54,9 +54,10 @@ class TestServicesMoreGaps:
     def test_load_dashboard_verdict_count(self, monkeypatch):
         uow = MagicMock()
         uow.get_projects.return_value = []
+        from project_workflow.application.ui import UIDataService
         monkeypatch.setattr("project_workflow.interfaces.ui.services._get_app_state", lambda: _mock_state(uow))
-        with patch("project_workflow.interfaces.ui.services._load_tasks") as mock_tasks, \
-             patch("project_workflow.interfaces.ui.services._load_projects") as mock_projects:
+        with patch.object(UIDataService, "_load_tasks") as mock_tasks, \
+             patch.object(UIDataService, "_load_projects") as mock_projects:
             mock_tasks.return_value = [{"status": "active", "latest_verdict": "PASS"}]
             mock_projects.return_value = []
             result = _load_dashboard()

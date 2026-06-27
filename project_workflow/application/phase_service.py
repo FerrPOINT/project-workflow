@@ -9,8 +9,8 @@ import json
 import logging
 from typing import Any, cast
 
-from . import models as m
-from .uow import SAUnitOfWork
+from ..infrastructure.db import models as m
+from ..infrastructure.db.uow import SAUnitOfWork
 
 logger = logging.getLogger(__name__)
 

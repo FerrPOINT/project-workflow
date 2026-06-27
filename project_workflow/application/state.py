@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 from . import AgentService, InstructionService, PhaseServiceApp, ProjectService, TaskService, WorkflowService
 from ..config import get_settings
-from ..infrastructure.db.phase_service import PhaseService
+from ..application.phase_service import PhaseService
 from ..infrastructure.db.session import ensure_schema, get_engine
 from ..infrastructure.db.uow import SAUnitOfWork
 
