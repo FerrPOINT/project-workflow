@@ -760,6 +760,7 @@ class WizardEngine:
             },
             response=assessment.to_result_dict(),
         )
+        self._uow.commit()
 
         return result
 

@@ -10,10 +10,11 @@ from typing import Any
 from . import AgentService, InstructionService, PhaseServiceApp, ProjectService, TaskService, WorkflowService
 from ..config import get_settings
 from ..application.phase_service import PhaseService
-from ..infrastructure.db.session import ensure_schema, get_engine
+from ..infrastructure.db.session import ensure_migrated, ensure_schema, get_engine
 from ..infrastructure.db.uow import SAUnitOfWork
 
 _CATALOG_ENSURED_URLS: set[str] = set()
+_MIGRATED_URLS: set[str] = set()
 
 class _AppState:
     """Application state holder (replaces module-level globals)."""
@@ -35,6 +36,7 @@ class _AppState:
 
     def reset(self) -> None:
         _CATALOG_ENSURED_URLS.discard(self._database_url_normalized())
+        _MIGRATED_URLS.discard(self._database_url_normalized())
 
     def get_service(self) -> PhaseService:
         """PhaseService helper for UI detail/edit routes."""
@@ -42,10 +44,13 @@ class _AppState:
 
     def get_uow(self) -> SAUnitOfWork:
         engine = get_engine(self._database_url_normalized())
+        url = self._database_url_normalized()
         if engine.dialect.name == 'sqlite':
             ensure_schema(engine)
+        elif url not in _MIGRATED_URLS:
+            ensure_migrated(engine)
+            _MIGRATED_URLS.add(url)
         uow = SAUnitOfWork(engine)
-        url = self._database_url_normalized()
         if url not in _CATALOG_ENSURED_URLS:
             from ..infrastructure.db import schema
             schema.ensure_phase_catalog(uow)
