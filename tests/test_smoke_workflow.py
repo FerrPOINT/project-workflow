@@ -144,11 +144,11 @@ def test_parallel_group_partial_stays_on_group(tmp_path: Path, monkeypatch):
     uow.commit()
     engine.current_phase = "smoke.parallel-a"
 
-    # Only one check covered → partial
+    # Only one check covered → soft_fail
     report = "backend check is ready. ui check is not ready."
     result = engine.evaluate(report)
 
-    assert result["verdict"] == "PARTIAL"
+    assert result["verdict"] == "SOFT_FAIL"
     assert result["next_phase"] is None
     assert "Parallel group" in result["phase_name"]
 

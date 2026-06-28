@@ -79,7 +79,7 @@ class TestCoverageAccumulation:
         engine.db.create_supervisor_run({
             "task_id": tid,
             "phase_id": pid,
-            "verdict": "partial",
+            "verdict": "soft_fail",
             "report": "report1",
             "covered": ["Item A", "Item B"],
             "missing": ["Item C"],
@@ -178,7 +178,7 @@ class TestEvaluateAccumulationEndToEnd:
 
         # First report: covers only check 1
         result1 = engine.evaluate("I ran tests first")
-        assert result1["verdict"] == "PARTIAL"
+        assert result1["verdict"] == "SOFT_FAIL"
         assert "tests run" in result1["covered"]
         assert "code fixed" in result1["missing"]
 

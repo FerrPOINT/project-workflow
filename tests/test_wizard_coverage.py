@@ -147,7 +147,7 @@ class TestDetermineVerdict:
             engine, self._make_phase(is_delegated=False), [], ["missing"], [], report
         )
         assert result != "delegate"
-        assert result == "partial"  # nothing covered, nothing blocked
+        assert result == "hard_fail"  # nothing covered, nothing blocked
 
     def test_pass_takes_precedence_over_delegate_when_no_issues(self):
         """If phase is fully satisfied, PASS wins even if report mentions delegate."""
@@ -191,19 +191,19 @@ class TestDetermineVerdict:
         )
         assert result == "blocked"
 
-    def test_partial_when_covered_but_missing(self):
+    def test_soft_fail_when_covered_but_missing(self):
         engine = MagicMock()
         result = WizardEngine._determine_verdict(
             engine, self._make_phase(), ["c1"], ["m1"], [], "partial"
         )
-        assert result == "partial"
+        assert result == "soft_fail"
 
-    def test_partial_when_nothing_covered_nothing_blocked(self):
+    def test_hard_fail_when_nothing_covered_nothing_blocked(self):
         engine = MagicMock()
         result = WizardEngine._determine_verdict(
             engine, self._make_phase(), [], ["m1"], [], "bad"
         )
-        assert result == "partial"
+        assert result == "hard_fail"
 
 
 class TestCheckCoverageEdgeCases:
@@ -269,7 +269,7 @@ class TestCheckCoverageEdgeCases:
 
 class TestVerdictLabels:
     def test_all_verdicts_have_labels(self):
-        for v in ("pass", "partial", "blocked", "rollback", "delegate"):
+        for v in ("pass", "partial", "soft_fail", "hard_fail", "blocked", "rollback", "delegate"):
             assert v in VERDICT_LABELS
             assert VERDICT_LABELS[v].isupper()
 

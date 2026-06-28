@@ -65,7 +65,7 @@ class TestWizardEngineIntegration:
 
         engine = WizardEngine("AAT-PARTIAL")
         result = engine.evaluate("some progress but not everything")
-        assert result["verdict"] in {"PARTIAL", "BLOCKED"}
+        assert result["verdict"] in {"SOFT_FAIL", "HARD_FAIL", "BLOCKED"}
 
     def test_evaluate_blocker_detected(self, wizard_db):
         uow = SAUnitOfWork(wizard_db)

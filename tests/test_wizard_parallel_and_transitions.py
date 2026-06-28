@@ -190,7 +190,7 @@ class TestRecordTransition:
         ph = engine.phase_map["-1"]
         with patch.object(engine.db, "add_task_history") as mock_hist, \
              patch.object(engine.db, "update_task") as mock_upd:
-            engine._record_transition(ph, "partial", None, None)
+            engine._record_transition(ph, "soft_fail", None, None)
         mock_hist.assert_called_once_with(7, 1, "partial")
         mock_upd.assert_called_once_with(7, {"current_phase": "-1", "status": "active"})
 
@@ -257,7 +257,7 @@ class TestRecordParallelTransition:
         group = [engine.phase_map["1"], engine.phase_map["2"]]
         with patch.object(engine.db, "add_task_history") as mock_hist, \
              patch.object(engine.db, "update_task") as mock_upd:
-            engine._record_parallel_transition(group, "partial", "3")
+            engine._record_parallel_transition(group, "soft_fail", "3")
         mock_hist.assert_not_called()
         mock_upd.assert_not_called()
 
@@ -333,17 +333,17 @@ class TestBuildResult:
         assert result["verdict"] == "DELEGATE"
         assert "Delegate work" in result["message"]
 
-    def test_partial_message(self):
+    def test_soft_fail_message(self):
         engine = self._make_engine()
         ph = Phase(id=1, code="0", name="X", description="")
         result = engine._build_result(
-            phase=ph, verdict="partial",
+            phase=ph, verdict="soft_fail",
             covered=["c1"], missing=["m1"], blockers=[],
             next_phase=None, next_phase_name=None,
             rollback_target=None,
         )
-        assert result["verdict"] == "PARTIAL"
-        assert "PARTIAL" in result["message"]
+        assert result["verdict"] == "SOFT_FAIL"
+        assert "SOFT_FAIL" in result["message"]
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -410,16 +410,16 @@ class TestBuildParallelResult:
         assert result["verdict"] == "DELEGATE"
         assert "Delegate work" in result["message"]
 
-    def test_partial(self):
+    def test_soft_fail(self):
         engine = self._make_engine()
         ph_a = Phase(id=1, code="1", name="A", description="")
         group = [ph_a]
         result = engine._build_parallel_result(
-            group, "partial", ["c1"], ["m1"], [],
+            group, "soft_fail", ["c1"], ["m1"], [],
             None, None, None,
         )
-        assert result["verdict"] == "PARTIAL"
-        assert "PARTIAL" in result["message"]
+        assert result["verdict"] == "SOFT_FAIL"
+        assert "SOFT_FAIL" in result["message"]
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -575,6 +575,6 @@ class TestEvaluateEdgeCases:
             engine.task = {"id": 7, "current_phase": "1", "status": "active", "project_id": 1}
             engine.db = MagicMock()
             result = engine.evaluate("microservice deployed")
-        assert result["verdict"] == "PARTIAL"
+        assert result["verdict"] == "SOFT_FAIL"
         assert result["next_phase"] is None  # non-pass: stay on group
         assert "write unit tests" in result["missing"]

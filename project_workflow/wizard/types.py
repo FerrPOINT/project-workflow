@@ -115,6 +115,8 @@ class WizardVerdict:
 VERDICT_LABELS: dict[str, str] = {
     "pass": "PASS",
     "partial": "PARTIAL",
+    "soft_fail": "SOFT_FAIL",
+    "hard_fail": "HARD_FAIL",
     "blocked": "BLOCKED",
     "rollback": "ROLLBACK",
     "delegate": "DELEGATE",

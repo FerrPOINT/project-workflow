@@ -40,6 +40,8 @@ logger = logging.getLogger(__name__)
 VERDICT_LABELS = {
     "pass": "PASS",
     "partial": "PARTIAL",
+    "soft_fail": "SOFT_FAIL",
+    "hard_fail": "HARD_FAIL",
     "blocked": "BLOCKED",
     "rollback": "ROLLBACK",
     "delegate": "DELEGATE",
@@ -418,9 +420,12 @@ class WizardEngine:
             result["message"] = f"BLOCKED: {'; '.join(issues)}. Fix and resubmit."
         elif verdict == "delegate":
             result["message"] = f"Delegate work for parallel group ({', '.join(phase_codes)}) before continuing."
+        elif verdict == "soft_fail":
+            issues = missing or ["unspecified items"]
+            result["message"] = f"SOFT_FAIL: {'; '.join(issues)}. Complete before continuing."
         else:
             issues = missing or ["unspecified items"]
-            result["message"] = f"PARTIAL: {'; '.join(issues)}. Complete before continuing."
+            result["message"] = f"HARD_FAIL: {'; '.join(issues)}. Cannot proceed without required items."
         return result
 
     def _build_checklist(self, phase):
@@ -830,7 +835,7 @@ def format_result(result: dict) -> str:
         lines.append(message)
         lines.append("")
 
-    if verdict == "PARTIAL":
+    if verdict == "PARTIAL" or verdict == "SOFT_FAIL":
         lines.append("Ты сделал часть, доделай:")
         lines.append("")
 

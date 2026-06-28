@@ -294,7 +294,7 @@ class TestWizardEngineEvaluateLLM:
         """If evaluate_llm fails, evaluate() must fall back to rule-based."""
         with patch.object(engine, "evaluate_llm", side_effect=requests.exceptions.ConnectionError("Ollama down")):
             result = engine.evaluate("")
-        assert result["verdict"] == "PARTIAL"
+        assert result["verdict"] in {"SOFT_FAIL", "HARD_FAIL"}
 
     def test_evaluate_llm_uses_previously_covered(self, engine):
         """LLM prompt includes previously covered items."""
@@ -335,7 +335,7 @@ class TestWizardEngineEvaluateLLMWithRule:
     def test_rule_based_evaluate_without_smart(self, engine, monkeypatch):
         monkeypatch.setattr("project_workflow.wizard.SMART_EVALUATE", False)
         result = engine.evaluate("")
-        assert result["verdict"] == "PARTIAL"
+        assert result["verdict"] in {"SOFT_FAIL", "HARD_FAIL"}
 
 
 class TestOllamaResponseParserEdgeCases:

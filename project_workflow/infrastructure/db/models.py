@@ -269,7 +269,7 @@ class SupervisorRun(Base):
     )
     __table_args__ = (
         CheckConstraint(
-            "verdict IN ('pass', 'partial', 'blocked', 'rollback', 'delegate')",
+            "verdict IN ('pass', 'partial', 'soft_fail', 'hard_fail', 'blocked', 'rollback', 'delegate')",
             name="ck_supervisor_runs_verdict",
         ),
     )

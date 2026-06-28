@@ -62,7 +62,7 @@ class TestWizardEvaluate:
              patch.object(engine._store, "save"):
             result = engine.evaluate("report bad")
 
-        assert result["verdict"] == "PARTIAL"
+        assert result["verdict"] == "HARD_FAIL"
         assert result["missing"] == ["check"]
 
     def test_get_phase_prompt(self):

@@ -12,6 +12,11 @@
 .metric-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px}
 .metric-label{font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
 .metric-value{font-size:28px;font-weight:700;color:var(--text)}
+.metric-verdict-soft_fail .metric-value,.metric-verdict-soft-fail .metric-value{color:#eab308}
+.metric-verdict-hard_fail .metric-value,.metric-verdict-hard-fail .metric-value{color:var(--red)}
+.metric-verdict-blocked .metric-value{color:var(--red)}
+.metric-verdict-rollback .metric-value{color:var(--orange)}
+.metric-verdict-delegate .metric-value{color:var(--accent)}
 .dashboard-panels{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
 .list-stack{display:flex;flex-direction:column;gap:12px}
 .list-item{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px}
@@ -28,7 +33,7 @@
   <section class="metric-card"><div class="metric-label">Завершённые</div><div class="metric-value">{{ stats.done }}</div></section>
   {% if stats.verdicts %}
   {% for verdict, count in stats.verdicts.items() %}
-  <section class="metric-card"><div class="metric-label">Вердикт: {{ verdict.upper() }}</div><div class="metric-value">{{ count }}</div></section>
+  <section class="metric-card metric-verdict-{{ verdict }}"><div class="metric-label">Вердикт: {{ verdict.upper() }}</div><div class="metric-value">{{ count }}</div></section>
   {% endfor %}
   {% endif %}
 </div>

@@ -88,8 +88,8 @@ def determine_verdict(
     if blockers:
         return "blocked"
     if covered:
-        return "partial"
-    return "partial"
+        return "soft_fail"
+    return "hard_fail"
 
 
 def build_fail_message(phase_name: str, missing: list[str], blockers: list[str]) -> str:
@@ -120,8 +120,11 @@ def build_verdict_message(
             return f"BLOCKED: {'; '.join(issues)}. Fix and resubmit."
         if verdict == "delegate":
             return f"Delegate work for parallel group ({codes_str}) before continuing."
+        if verdict == "soft_fail":
+            issues = missing or ["unspecified items"]
+            return f"SOFT_FAIL: {'; '.join(issues)}. Complete before continuing."
         issues = missing or ["unspecified items"]
-        return f"PARTIAL: {'; '.join(issues)}. Complete before continuing."
+        return f"HARD_FAIL: {'; '.join(issues)}. Cannot proceed without required items."
 
     if verdict == "pass":
         return f"Phase {phase_code} accepted."
@@ -132,5 +135,8 @@ def build_verdict_message(
         return f"BLOCKED: {'; '.join(issues)}. Fix and resubmit."
     if verdict == "delegate":
         return f"Delegate work for phase {phase_code} before continuing."
+    if verdict == "soft_fail":
+        issues = missing or [phase_name]
+        return f"SOFT_FAIL: {'; '.join(issues)}. Complete before continuing."
     issues = missing or [phase_name]
-    return f"PARTIAL: {'; '.join(issues)}. Complete before continuing."
+    return f"HARD_FAIL: {'; '.join(issues)}. Cannot proceed without required items."
