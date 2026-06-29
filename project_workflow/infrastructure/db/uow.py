@@ -131,6 +131,10 @@ class SAUnitOfWork(UnitOfWork):
         return self._evidence
 
     @property
+    def session(self) -> Session:
+        return self._session
+
+    @property
     def cli_history(self) -> SACLIHistoryRepository:
         return self._cli_history
 

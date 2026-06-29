@@ -13,6 +13,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -285,6 +286,26 @@ class CliHistory(Base):
     response: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[str | None] = mapped_column(
         String, default="CURRENT_TIMESTAMP", server_default="CURRENT_TIMESTAMP"
+    )
+
+
+class WizardMemory(Base):
+    __tablename__ = "wizard_memories"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    task_id: Mapped[int] = mapped_column(
+        ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    memory_type: Mapped[str] = mapped_column(String, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[str | None] = mapped_column(
+        String, default="CURRENT_TIMESTAMP", server_default="CURRENT_TIMESTAMP"
+    )
+    __table_args__ = (
+        CheckConstraint(
+            "memory_type IN ('correction', 'lesson', 'blocker_pattern', 'preference')",
+            name="ck_wizard_memories_memory_type",
+        ),
     )
 
 
