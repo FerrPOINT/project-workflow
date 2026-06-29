@@ -89,7 +89,9 @@ class TestWizardEngineIntegration:
     def test_format_result_partial(self):
         from project_workflow.wizard.core import format_result
         text = format_result({"verdict": "PARTIAL", "instructions": ["i"], "required_checks": ["c"], "required_evidence": ["e"]})
-        assert "Ты сделал часть" in text
+        assert "Ты сделал часть" not in text
+        assert "Инструкции:" in text
+        assert "  · c" in text
 
     def test_format_result_blocked(self):
         from project_workflow.wizard.core import format_result

@@ -303,7 +303,9 @@ class TestWizardCoreGaps:
                 "execution_type": "sync",
             },
         })
-        assert "параллельного блока" in text
+        assert "Инструкции:" in text
+        assert "  · do" in text
+        assert "параллельного блока" not in text
 
     def test_format_result_pass_parallel(self):
         from project_workflow.wizard.core import format_result
@@ -317,7 +319,9 @@ class TestWizardCoreGaps:
                 "parallel_with": "PH-1",
             },
         })
-        assert "Параллельно" in text
+        assert "Инструкции:" in text
+        assert "  · do" in text
+        assert "Параллельно" not in text
 
 
 class TestPublicWrapperGaps:

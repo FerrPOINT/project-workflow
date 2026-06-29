@@ -852,16 +852,24 @@ def main(task_key: str, repo: Optional[str] = None, report: Optional[str] = None
 # ── Legacy format_result ───────────────────────────────────────────
 
 def format_result(result: dict) -> str:
-    """CLI evaluate → человекочитаемый вывод. Только инструкции, чекапы, доказательства."""
-    verdict = result.get("verdict", "UNKNOWN")
-    covered = result.get("covered", []) or []
-    missing = result.get("missing", []) or []
+    """CLI evaluate → человекочитаемый вывод.
 
-    if verdict == "PASS":
-        npc = result.get("next_phase_contract") or {}
-        instructions = npc.get("instructions", [])
-        checks = npc.get("required_checks", [])
-        evidence = npc.get("required_evidence", [])
+    Только три секции: Инструкции, Чекапы, Доказательства.
+    Никаких эмодзи, verdict-заголовков, internal phase codes, boilerplate.
+    PASS: показываем контракт следующей фазы со статусом pending (·).
+    Не-PASS: показываем только недоделанные пункты текущей фазы.
+    """
+    verdict = str(result.get("verdict", "UNKNOWN")).upper()
+    covered = result.get("covered", []) or []
+    covered_set = {str(i) for i in covered}
+
+    is_pass = verdict == "PASS"
+
+    if is_pass:
+        contract = result.get("next_phase_contract") or {}
+        instructions = contract.get("instructions", []) or []
+        checks = contract.get("required_checks", []) or []
+        evidence = contract.get("required_evidence", []) or []
     else:
         instructions = result.get("instructions", []) or []
         checks = result.get("required_checks", []) or []
@@ -869,64 +877,35 @@ def format_result(result: dict) -> str:
 
     lines: list[str] = []
 
-    message = result.get("message", "")
-    if message and verdict != "PASS":
-        lines.append(message)
-        lines.append("")
-
-    if verdict == "PARTIAL" or verdict == "SOFT_FAIL":
-        lines.append("Ты сделал часть, доделай:")
-        lines.append("")
-
-    next_contract = result.get("next_phase_contract") or {}
-    next_exec = next_contract.get("execution_type", "")
-    next_parallel_with = next_contract.get("parallel_with")
-    if verdict == "PASS" and next_exec == "parallel":
-        if next_parallel_with:
-            lines.append(f"Параллельно с {next_parallel_with}")
-        else:
-            lines.append("Параллельная фаза")
-        lines.append("")
-
-    current_phase_name = result.get("phase_name", "")
-    current_phase = result.get("phase", "")
-    if verdict == "PASS" and next_exec == "sync" and ("Parallel" in current_phase_name or current_phase.startswith(("smoke.parallel", "parallel"))):
-        lines.append("Следующая фаза выполняется после завершения параллельного блока")
-        lines.append("")
+    if is_pass:
+        next_name = result.get("next_phase_name") or result.get("next_phase") or ""
+        if next_name:
+            lines.append(f"Следующий шаг: {next_name}")
+            lines.append("")
 
     if instructions:
         lines.append("Инструкции:")
         for item in instructions:
-            lines.append(f"  • {item}")
+            lines.append(f"  · {item}")
 
-    if checks:
-        if verdict == "PASS":
-            lines.append("")
-            lines.append("Чекапы:")
-            for item in checks:
-                status = "✓" if item in covered else ("✗" if item in missing else "·")
-                lines.append(f"  {status} {item}")
-        else:
-            not_done = [item for item in checks if item not in covered]
-            if not_done:
-                lines.append("")
-                lines.append("Чекапы:")
-                for item in not_done:
-                    lines.append(f"  ✗ {item}")
+    if is_pass:
+        check_items = checks
+    else:
+        check_items = [c for c in checks if str(c) not in covered_set]
+    if check_items:
+        lines.append("")
+        lines.append("Чекапы:")
+        for item in check_items:
+            lines.append(f"  · {item}")
 
-    if evidence:
-        if verdict == "PASS":
-            lines.append("")
-            lines.append("Доказательства:")
-            for item in evidence:
-                status = "✓" if item in covered else ("✗" if item in missing else "·")
-                lines.append(f"  {status} {item}")
-        else:
-            not_done = [item for item in evidence if item not in covered]
-            if not_done:
-                lines.append("")
-                lines.append("Доказательства:")
-                for item in not_done:
-                    lines.append(f"  ✗ {item}")
+    if is_pass:
+        evidence_items = evidence
+    else:
+        evidence_items = [e for e in evidence if str(e) not in covered_set]
+    if evidence_items:
+        lines.append("")
+        lines.append("Доказательства:")
+        for item in evidence_items:
+            lines.append(f"  · {item}")
 
     return "\n".join(lines)

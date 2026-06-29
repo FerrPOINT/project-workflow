@@ -340,7 +340,9 @@ class TestWizardCoreFinalGaps:
                 "required_evidence": ["evidence"],
             },
         })
-        assert "Параллельная фаза" in text
+        assert "Инструкции:" in text
+        assert "  · do" in text
+        assert "Параллельная фаза" not in text
 
     def test_format_result_pass_sync_after_parallel(self):
         text = core_mod.format_result({
@@ -353,7 +355,9 @@ class TestWizardCoreFinalGaps:
                 "instructions": ["do"],
             },
         })
-        assert "Следующая фаза" in text
+        assert "Инструкции:" in text
+        assert "  · do" in text
+        assert "параллельного блока" not in text
 
 
 class TestUiServicesFinalGaps:

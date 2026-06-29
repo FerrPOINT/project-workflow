@@ -10,9 +10,6 @@ from project_workflow.wizard.memory import MemoryStore
 def test_wizard_memory_model_table_exists():
     uow = SAUnitOfWork()
     uow.create_all()
-    # If table does not exist this will raise.
-    from project_workflow.infrastructure.db.models import WizardMemory
-
     store = MemoryStore(uow)
     rows = store.list_for_task(0)
     assert rows == []

@@ -1,7 +1,6 @@
 """Tests for WizardEngine auto-memory capture."""
 from __future__ import annotations
 
-from project_workflow.wizard import SMART_EVALUATE
 from project_workflow.wizard.core import WizardEngine
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
