@@ -79,7 +79,9 @@ class TestFormatResult:
 
     def test_soft_fail_format(self):
         out = format_result(self._assessment("soft_fail", ["c1"], ["m1"]).to_result_dict())
-        assert "Ты сделал часть" in out
+        assert "Чекапы:" in out
+        assert "m1" in out
+        assert "Ты сделал часть" not in out
 
     def test_hard_fail_format(self):
         out = format_result(self._assessment("hard_fail", [], ["m1"]).to_result_dict())

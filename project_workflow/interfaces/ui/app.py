@@ -104,7 +104,6 @@ def create_app() -> FastAPI:
     app.post("/api/phases", response_model=None)(api.api_phase_create)
     app.delete("/api/phases/{phase_id}", response_model=None)(api.api_phase_delete)
     app.get("/api/tasks", response_model=None)(api.api_tasks)
-    app.get("/api/tasks/{task_key}", response_model=None)(api.api_task_detail)
     app.delete("/api/tasks/{task_key}", response_model=None)(api.api_task_delete)
     app.get("/api/workflows", response_model=None)(api.api_workflows)
     app.post("/api/workflows", response_model=None)(api.api_workflow_create)
@@ -127,6 +126,7 @@ def create_app() -> FastAPI:
     app.put("/api/phases/parallel", response_model=None)(_not_found)
     app.put("/api/phases/{phase_id}", response_model=None)(api.api_phase_update)
     app.put("/api/phases/{phase_id}/group", response_model=None)(_not_found)
+    app.get("/api/tasks/{task_key}", response_model=None)(_not_found)
 
     # Instructions management
     app.get("/api/phases/{phase_id}/instructions", response_model=None)(api.api_instructions_list)

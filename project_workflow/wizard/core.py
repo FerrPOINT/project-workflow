@@ -889,9 +889,15 @@ def format_result(result: dict) -> str:
             lines.append(f"  · {item}")
 
     if is_pass:
-        check_items = checks
+        check_items = list(checks)
     else:
         check_items = [c for c in checks if str(c) not in covered_set]
+        missing = result.get("missing", []) or []
+        # missing items are the not-done checks from the user report
+        for m in missing:
+            s = str(m)
+            if s not in covered_set and s not in check_items:
+                check_items.append(s)
     if check_items:
         lines.append("")
         lines.append("Чекапы:")

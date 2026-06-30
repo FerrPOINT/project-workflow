@@ -115,7 +115,7 @@ sudo systemctl restart project-workflow-ui.service
 
 ```bash
 DATABASE_URL=postgresql+psycopg://user:pass@host:5432/db \
-  python scripts/migrate_sqlite_to_postgres.py /path/to/workflow.db
+  python scripts/archive/legacy/migrate_sqlite_to_postgres.py /path/to/workflow.db
 ```
 
 <a name="architecture"></a>

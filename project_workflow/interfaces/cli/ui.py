@@ -74,8 +74,7 @@ def step_cmd(
     formatted = format_result({
         "phase_name": engine.current_phase,
         "verdict": "INFO",
-        "message": prompt,
-        "instructions": [],
+        "instructions": [prompt],
         "required_checks": [],
         "required_evidence": [],
     })
