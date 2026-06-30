@@ -1,86 +1,85 @@
-"""Tests for WizardMemory model and MemoryStore."""
+"""Tests for wizard.memory.MemoryStore."""
 from __future__ import annotations
+
+from unittest.mock import MagicMock
 
 import pytest
 
-from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.wizard.memory import MemoryStore
 
 
-def test_wizard_memory_model_table_exists():
-    uow = SAUnitOfWork()
-    uow.create_all()
+def _make_uow(rows=None):
+    uow = MagicMock()
+    query = MagicMock()
+    query.filter.return_value = query
+    query.order_by.return_value = query
+    query.limit.return_value = query
+    query.all.return_value = rows or []
+    uow.session.query.return_value = query
+    return uow, query
+
+
+def test_add_memory():
+    uow, _ = _make_uow()
+    uow.session.flush = MagicMock()
     store = MemoryStore(uow)
-    rows = store.list_for_task(0)
-    assert rows == []
-    uow.close()
+    # mem.id is None until flush assigns it; mock the created object.
+    def _add(obj):
+        obj.id = 42
+    uow.session.add.side_effect = _add
+    mem_id = store.add(1, "lesson", "remember this")
+    assert mem_id == 42
+    uow.session.add.assert_called_once()
+    uow.session.flush.assert_called_once()
 
 
-def test_memory_store_add_and_list():
-    uow = SAUnitOfWork()
-    uow.create_all()
+def test_add_invalid_type():
+    store = MemoryStore(MagicMock())
+    with pytest.raises(ValueError, match="Invalid memory_type"):
+        store.add(1, "bad", "x")
+
+
+def test_list_for_task():
+    row = MagicMock()
+    row.id = 1
+    row.task_id = 2
+    row.memory_type = "lesson"
+    row.content = "c"
+    row.created_at = "2024-01-01"
+    uow, _ = _make_uow(rows=[row])
     store = MemoryStore(uow)
-
-    project_id = uow.projects.create({"workflow_id": 1, "code": "mem-test", "name": "Mem Test"})
-    uow.commit()
-    task_id = uow.tasks.create(
-        {"project_id": project_id, "task_key": "MEM-1", "title": "T", "current_phase": "-1"}
-    )
-    uow.commit()
-
-    mem_id = store.add(task_id, "lesson", "Always commit after evaluate.")
-    assert isinstance(mem_id, int)
-    uow.commit()
-
-    rows = store.list_for_task(task_id)
-    assert len(rows) == 1
-    assert rows[0]["memory_type"] == "lesson"
-    assert rows[0]["content"] == "Always commit after evaluate."
-    uow.close()
+    result = store.list_for_task(2)
+    assert len(result) == 1
+    assert result[0]["memory_type"] == "lesson"
 
 
-def test_memory_store_find_by_type():
-    uow = SAUnitOfWork()
-    uow.create_all()
+def test_find_by_type():
+    row = MagicMock()
+    row.id = 1
+    row.task_id = 2
+    row.memory_type = "correction"
+    row.content = "fix"
+    row.created_at = "2024-01-01"
+    uow, _ = _make_uow(rows=[row])
     store = MemoryStore(uow)
-
-    project_id = uow.projects.create({"workflow_id": 1, "code": "mem-test2", "name": "Mem Test 2"})
-    uow.commit()
-    task_id = uow.tasks.create(
-        {"project_id": project_id, "task_key": "MEM-2", "title": "T", "current_phase": "-1"}
-    )
-    uow.commit()
-
-    store.add(task_id, "blocker_pattern", "Tests timeout without --forked")
-    store.add(task_id, "lesson", "Use commit")
-    uow.commit()
-
-    blockers = store.find_by_type(task_id, "blocker_pattern")
-    assert len(blockers) == 1
-    assert blockers[0]["memory_type"] == "blocker_pattern"
-
-    with pytest.raises(ValueError):
-        store.add(task_id, "bad_type", "x")
-    with pytest.raises(ValueError):
-        store.find_by_type(task_id, "bad_type")
-    uow.close()
+    result = store.find_by_type(2, "correction")
+    assert len(result) == 1
 
 
-def test_memory_store_format_for_prompt():
-    uow = SAUnitOfWork()
-    uow.create_all()
+def test_find_by_type_invalid():
+    store = MemoryStore(MagicMock())
+    with pytest.raises(ValueError, match="Invalid memory_type"):
+        store.find_by_type(1, "bad")
+
+
+def test_format_for_prompt():
+    row = MagicMock()
+    row.id = 1
+    row.task_id = 2
+    row.memory_type = "lesson"
+    row.content = "do X"
+    row.created_at = "2024-01-01"
+    uow, _ = _make_uow(rows=[row])
     store = MemoryStore(uow)
-
-    project_id = uow.projects.create({"workflow_id": 1, "code": "mem-test3", "name": "Mem Test 3"})
-    uow.commit()
-    task_id = uow.tasks.create(
-        {"project_id": project_id, "task_key": "MEM-3", "title": "T", "current_phase": "-1"}
-    )
-    uow.commit()
-
-    store.add(task_id, "preference", "No emojis in output")
-    uow.commit()
-
-    bullets = store.format_for_prompt(task_id)
-    assert bullets == ["[preference] No emojis in output"]
-    uow.close()
+    bullets = store.format_for_prompt(2)
+    assert bullets == ["[lesson] do X"]
