@@ -206,5 +206,3 @@ def build_status_digest(task_id: str, task_key: str, current_phase: Optional[str
     }
 
 
-# Public alias used by legacy callers
-ensure_db = _ensure_db

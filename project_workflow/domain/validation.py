@@ -273,5 +273,3 @@ def get_project_for_task_key(uow: Any, task_key: str) -> dict[str, Any] | None:
     return None
 
 
-# Backward-compat alias
-ValidationResult = ValidatedTaskKey

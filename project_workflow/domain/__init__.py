@@ -187,10 +187,3 @@ class SupervisorRun:
         }
 
 
-@dataclass
-class PhaseContent:
-    """Instructions / checks / evidence for a phase."""
-
-    instructions: list[dict[str, Any]] = field(default_factory=list)
-    checks: list[dict[str, Any]] = field(default_factory=list)
-    evidence: list[dict[str, Any]] = field(default_factory=list)

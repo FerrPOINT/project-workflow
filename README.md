@@ -111,13 +111,6 @@ sudo systemctl restart project-workflow-ui.service
 
 При старте автоматически создаётся схема `project_workflow`, таблицы и baseline-версия Alembic.
 
-Перенос данных SQLite → Postgres:
-
-```bash
-DATABASE_URL=postgresql+psycopg://user:pass@host:5432/db \
-  python scripts/archive/legacy/migrate_sqlite_to_postgres.py /path/to/workflow.db
-```
-
 <a name="architecture"></a>
 ## 🏗️ Architecture
 
