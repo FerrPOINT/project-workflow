@@ -18,27 +18,27 @@ class TestConfigEnvOverrides:
     def test_workflow_dir_env_override(self, monkeypatch):
         monkeypatch.setenv("WORKFLOW_DIR", "/tmp/custom-workflow")
         cfg_module = self._reload_config()
-        assert cfg_module.WORKFLOW_DIR == "/tmp/custom-workflow"
+        assert cfg_module.get_settings().WORKFLOW_DIR == "/tmp/custom-workflow"
 
     def test_ui_port_env_override(self, monkeypatch):
         monkeypatch.setenv("UI_PORT", "9999")
         cfg_module = self._reload_config()
-        assert cfg_module.UI_PORT == 9999
+        assert cfg_module.get_settings().UI_PORT == 9999
 
     def test_ui_host_env_override(self, monkeypatch):
         monkeypatch.setenv("UI_HOST", "127.0.0.1")
         cfg_module = self._reload_config()
-        assert cfg_module.UI_HOST == "127.0.0.1"
+        assert cfg_module.get_settings().UI_HOST == "127.0.0.1"
 
     def test_jira_base_url_env_override(self, monkeypatch):
         monkeypatch.setenv("JIRA_BASE_URL", "https://jira.example.com")
         cfg_module = self._reload_config()
-        assert cfg_module.JIRA_BASE_URL == "https://jira.example.com"
+        assert cfg_module.get_settings().JIRA_BASE_URL == "https://jira.example.com"
 
     def test_gitlab_base_url_env_override(self, monkeypatch):
         monkeypatch.setenv("GITLAB_BASE_URL", "https://gitlab.example.com")
         cfg_module = self._reload_config()
-        assert cfg_module.GITLAB_BASE_URL == "https://gitlab.example.com"
+        assert cfg_module.get_settings().GITLAB_BASE_URL == "https://gitlab.example.com"
 
 
 class TestConfigConstants:
@@ -60,14 +60,17 @@ class TestConfigConstants:
 
 class TestSettingsHelpers:
     def test_read_raw_settings_missing_returns_empty(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(cfg_module, "SETTINGS_PATH", str(tmp_path / "no_settings.json"))
+        monkeypatch.setenv("WORKFLOW_DIR", str(tmp_path / "nonexistent"))
+        cfg_module.get_settings.cache_clear()
         raw = cfg_module._read_raw_settings()
         assert raw == {}
 
     def test_read_raw_settings_bad_json_returns_empty(self, tmp_path, monkeypatch):
-        bad = tmp_path / "bad.json"
-        bad.write_text("not json")
-        monkeypatch.setattr(cfg_module, "SETTINGS_PATH", str(bad))
+        bad_dir = tmp_path / "bad-settings"
+        bad_dir.mkdir()
+        (bad_dir / "settings.json").write_text("not json")
+        monkeypatch.setenv("WORKFLOW_DIR", str(bad_dir))
+        cfg_module.get_settings.cache_clear()
         raw = cfg_module._read_raw_settings()
         assert raw == {}
 

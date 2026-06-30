@@ -439,7 +439,3 @@ def get_seed_mtime(seed_path: Path | str | None = None) -> str:
     if not seed_path.exists():
         return ""
     return datetime.fromtimestamp(seed_path.stat().st_mtime, tz=timezone.utc).isoformat()
-
-
-# Backward-compatible alias used by a few scripts and smoke tests.
-load_phases_from_yaml = load_phases_from_seed

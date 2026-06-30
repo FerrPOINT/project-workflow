@@ -36,7 +36,7 @@ def _get_app_state() -> _AppState:
 
 
 def _get_db() -> Any:
-    """Return the current DB/UoW (legacy helper for UI page loaders)."""
+    """Return the current DB/UoW for UI page loaders."""
     return _get_app_state().get_db()
 
 

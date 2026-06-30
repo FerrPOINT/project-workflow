@@ -18,7 +18,6 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
     runtime_dir = tmp_path / ".project-workflow"
     runtime_dir.mkdir(parents=True, exist_ok=True)
     test_db = runtime_dir / "workflow.db"
-    settings_path = runtime_dir / "settings.json"
     seed_path = runtime_dir / "seed.json"
     smoke_seed_path = runtime_dir / "smoke_seed.json"
     repo_seed = Path(__file__).resolve().parents[1] / "project_workflow" / "references" / "seed.json"
@@ -28,10 +27,9 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
 
     database_url = f"sqlite:///{test_db}"
     monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("WORKFLOW_DIR", str(runtime_dir))
     config.get_settings.cache_clear()
 
-    monkeypatch.setattr(config, "WORKFLOW_DIR", str(runtime_dir))
-    monkeypatch.setattr(config, "SETTINGS_PATH", str(settings_path))
     monkeypatch.setattr(config, "SEED_PATH", seed_path)
     monkeypatch.setattr(config, "SMOKE_SEED_PATH", smoke_seed_path)
 

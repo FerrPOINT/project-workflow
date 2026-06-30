@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import Query, Request
 from fastapi.responses import HTMLResponse
 
-from project_workflow import config
+from project_workflow.config import get_settings
 from project_workflow.application.phase_service import PhaseService
 from project_workflow.interfaces.ui.services import (
     _agent_service,
@@ -33,7 +33,7 @@ async def index(request: Request) -> HTMLResponse:
         context={
             "request": request,
             "page": "dashboard",
-            "ui_port": config.UI_PORT,
+            "ui_port": get_settings().UI_PORT,
             **dashboard,
         },
     )
@@ -61,7 +61,7 @@ async def phases_page(
             "selected_workflow": selected_workflow,
             "selected_workflow_id": selected_workflow_id,
             "page": "phases",
-            "ui_port": config.UI_PORT,
+            "ui_port": get_settings().UI_PORT,
         },
     )
 
@@ -87,7 +87,7 @@ async def phase_detail(request: Request, phase_id: str) -> HTMLResponse:
         context={
             "request": request,
             "page": "phases",
-            "ui_port": config.UI_PORT,
+            "ui_port": get_settings().UI_PORT,
             "phase": phase,
             "agents": agents,
             "skills_catalog": skills_catalog,
@@ -105,7 +105,7 @@ async def tasks_page(request: Request) -> HTMLResponse:
             "request": request,
             "tasks": tasks,
             "page": "tasks",
-            "ui_port": config.UI_PORT,
+            "ui_port": get_settings().UI_PORT,
         },
     )
 
@@ -120,7 +120,7 @@ async def projects_page(request: Request) -> HTMLResponse:
         context={
             "request": request,
             "page": "projects",
-            "ui_port": config.UI_PORT,
+            "ui_port": get_settings().UI_PORT,
             "projects": projects,
             "workflows": workflows,
             "selected_project": projects[0] if projects else None,
@@ -136,7 +136,7 @@ async def workflows_page(request: Request) -> HTMLResponse:
         context={
             "request": request,
             "page": "workflows",
-            "ui_port": config.UI_PORT,
+            "ui_port": get_settings().UI_PORT,
             "workflows": workflows,
             "selected_workflow": workflows[0] if workflows else None,
         },
@@ -155,7 +155,7 @@ async def task_detail_page(request: Request, task_key: str) -> HTMLResponse:
             "request": request,
             "task": task,
             "page": "tasks",
-            "ui_port": config.UI_PORT,
+            "ui_port": get_settings().UI_PORT,
             "current_phase_name": task.get("current_phase_name"),
             "progress_done": task.get("progress_done", 0),
             "progress_total": task.get("progress_total", 0),
@@ -174,7 +174,7 @@ async def settings_page(request: Request) -> HTMLResponse:
         context={
             "request": request,
             "page": "settings",
-            "ui_port": config.UI_PORT,
+            "ui_port": get_settings().UI_PORT,
             "commands": _load_cli_reference(),
         },
     )
@@ -187,7 +187,7 @@ async def skills_page(request: Request, refresh: int = Query(default=0)) -> HTML
         context={
             "request": request,
             "page": "skills",
-            "ui_port": config.UI_PORT,
+            "ui_port": get_settings().UI_PORT,
             "skills": _load_skills_catalog_direct(refresh=bool(refresh)),
         },
     )
@@ -203,7 +203,7 @@ async def agents_page(request: Request) -> HTMLResponse:
             "request": request,
             "agents": agents,
             "page": "agents",
-            "ui_port": config.UI_PORT,
+            "ui_port": get_settings().UI_PORT,
         },
     )
 
@@ -236,7 +236,7 @@ async def instructions_page(
         context={
             "request": request,
             "page": "phases",
-            "ui_port": config.UI_PORT,
+            "ui_port": get_settings().UI_PORT,
             "phase": phase,
             "instructions": instructions,
             "instruction_groups": instruction_groups,

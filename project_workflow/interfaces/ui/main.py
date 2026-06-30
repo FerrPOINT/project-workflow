@@ -6,11 +6,11 @@ import argparse
 
 import uvicorn
 
-from ... import config
-from .app import app
+from project_workflow.config import get_settings
+from project_workflow.interfaces.ui.app import app
 
 
-DEFAULT_UI_PORT = config.UI_PORT
+DEFAULT_UI_PORT = get_settings().UI_PORT
 
 
 def main() -> None:

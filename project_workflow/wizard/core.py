@@ -112,12 +112,12 @@ class WizardEngine:
 
     @property
     def db(self):
-        """Backward-compat accessor for legacy tests."""
+        """UoW accessor used by tests and internal callers."""
         return self._uow
 
     @db.setter
     def db(self, value) -> None:
-        """Allow legacy tests to inject a mock DB."""
+        """Allow tests to inject a mock UoW."""
         self._uow = value
         if hasattr(self, "_task_service"):
             self._task_service = TaskService(self._uow)
@@ -811,7 +811,7 @@ class WizardEngine:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Public wrappers / CLI compatibility
+# Public wrappers / CLI entrypoints
 # ═══════════════════════════════════════════════════════════════════════
 
 
@@ -834,12 +834,7 @@ def get_phase_instructions(task_key: str, phase_id: Optional[str] = None, repo: 
 
 
 def main(task_key: str, repo: Optional[str] = None, report: Optional[str] = None) -> None:
-    """Deprecated compatibility entrypoint.
-
-    Kept only for existing scripts/tests that call wizard.main() directly.
-    New code should use WizardEngine(task_key).get_phase_prompt() or
-    WizardEngine(task_key).evaluate(report).
-    """
+    """CLI entrypoint kept for existing scripts/tests that call wizard.main() directly."""
     import sys
     import project_workflow.wizard as _wizard_pkg
     if report:

@@ -141,7 +141,9 @@ class TestEdgeCases:
         uow.create_instruction({"phase_id": "p3", "step_num": 1, "description": "Step"})
         uow.delete_phase("p3")
         assert uow.get_phase("p3") is None
-        inst = uow.get_phase_instructions("p3")
+        p4 = uow.get_phase("p4")
+        assert p4 is not None
+        inst = list(uow.instructions.list(int(p4["id"])))
         assert len(inst) == 0
 
     def test_empty_cli_history(self, tmp_path: Path):

@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
-from sqlalchemy.sql import select, text
+from sqlalchemy.sql import text
 
 from project_workflow.domain.exceptions import NotFoundError
 from project_workflow.domain.repositories import (
@@ -138,28 +138,9 @@ class SAUnitOfWork(UnitOfWork):
     def cli_history(self) -> SACLIHistoryRepository:
         return self._cli_history
 
-    # Compatibility aliases used by legacy tests and WizardEngine internals.
-    def is_empty(self) -> bool:
-        """Return True when no workflows/projects/tasks exist."""
-        from project_workflow.infrastructure.db import models as m
-        return (
-            self._session.execute(select(m.Workflow)).scalar_one_or_none() is None
-            and self._session.execute(select(m.Project)).scalar_one_or_none() is None
-            and self._session.execute(select(m.Task)).scalar_one_or_none() is None
-        )
-
     def add_task_history(self, task_id: int, phase_id: int | str, status: str) -> None:
         self.tasks.add_history(task_id, int(phase_id), status)
         self.commit()
-
-    def get_phase_instructions(self, token: Any) -> list[Any]:
-        phase = self.get_phase(token)
-        if phase is None:
-            return []
-        phase_id = phase["id"] if isinstance(phase, dict) else getattr(phase, "id", None)
-        if phase_id is None:
-            return []
-        return list(self.instructions.list(int(phase_id)))
 
     def create_supervisor_run(self, *args: Any, **kwargs: Any) -> int:
         if args and isinstance(args[0], dict) and not kwargs:
@@ -226,8 +207,7 @@ class SAUnitOfWork(UnitOfWork):
         return row.to_dict() if row and hasattr(row, "to_dict") else row
 
     def get_phase(self, token: Any) -> Any | None:
-        """Legacy alias resolving a phase by id or code."""
-        # Prefer numeric id lookup to avoid collisions with code strings like "3".
+        """Resolve a phase by id or code."""
         numeric_id: int | None = None
         if isinstance(token, int):
             numeric_id = token

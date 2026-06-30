@@ -68,21 +68,6 @@ def get_settings() -> Settings:
     return Settings()
 
 
-# Module-level compatibility aliases (deprecated, kept during migration)
-# These allow old code/tests to keep importing `config.WORKFLOW_DIR` etc.
-settings = get_settings()
-UI_PORT = settings.UI_PORT
-UI_HOST = settings.UI_HOST
-SUITES_DIR = settings.SUITES_DIR
-JIRA_BASE_URL = settings.JIRA_BASE_URL
-JIRA_API_URL = settings.JIRA_API_URL
-GITLAB_BASE_URL = settings.GITLAB_BASE_URL
-GITLAB_API_URL = settings.GITLAB_API_URL
-WORKFLOW_DIR = settings.WORKFLOW_DIR
-SETTINGS_PATH = settings.SETTINGS_PATH
-
-
-
 # Seed data paths (moved from schema.py)
 SEED_PATH = _pkg_dir / "references" / "seed.json"
 SMOKE_SEED_PATH = _pkg_dir / "references" / "smoke_seed.json"
@@ -144,7 +129,7 @@ DEFAULT_TASK_KEY_PREFIXES = ["TASK"]
 
 
 def _read_raw_settings() -> dict:
-    path = SETTINGS_PATH
+    path = get_settings().SETTINGS_PATH
     if os.path.exists(path):
         try:
             with open(path, "r", encoding="utf-8") as f:

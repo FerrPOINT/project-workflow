@@ -30,7 +30,8 @@ class TestConfigRawSettings:
         from project_workflow import config as config_module
         bad_file = tmp_path / "settings.json"
         bad_file.write_text("not json")
-        monkeypatch.setattr(config_module, "SETTINGS_PATH", str(bad_file))
+        monkeypatch.setenv("WORKFLOW_DIR", str(tmp_path))
+        config_module.get_settings.cache_clear()
         assert config_module._read_raw_settings() == {}
 
 

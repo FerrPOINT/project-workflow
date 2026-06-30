@@ -31,12 +31,16 @@ class TestConfigFinalGap:
         from project_workflow import config as config_mod
         path = tmp_path / "cfg.json"
         path.write_text("[1, 2]")
-        old_path = config_mod.SETTINGS_PATH
-        monkeypatch.setattr(config_mod, "SETTINGS_PATH", str(path))
+        bad_dir = tmp_path / "bad-cfg"
+        bad_dir.mkdir()
+        path.rename(bad_dir / "settings.json")
+        monkeypatch.setenv("WORKFLOW_DIR", str(bad_dir))
+        config_mod.get_settings.cache_clear()
         try:
             assert config_mod._read_raw_settings() == {}
         finally:
-            monkeypatch.setattr(config_mod, "SETTINGS_PATH", old_path)
+            monkeypatch.delenv("WORKFLOW_DIR")
+            config_mod.get_settings.cache_clear()
 
 
 def _mock_state(uow=None):
