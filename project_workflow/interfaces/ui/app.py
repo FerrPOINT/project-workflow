@@ -117,11 +117,11 @@ def create_app() -> FastAPI:
     app.post("/api/agents", response_model=None)(api.api_agent_create)
     app.put("/api/agents/{agent_id}", response_model=None)(api.api_agent_update)
     app.delete("/api/agents/{agent_id}", response_model=None)(api.api_agent_delete)
-    # Removed legacy endpoints handler
+    # Explicit 404 stubs for endpoints intentionally not implemented by this UI.
     async def _not_found() -> JSONResponse:
         return JSONResponse({"ok": False, "error": "Not found"}, status_code=404)
 
-    # Phase order / detail / legacy removed (must come before /{phase_id})
+    # Phase order update must be registered before /{phase_id} to avoid shadowing.
     app.put("/api/phases/order", response_model=None)(api.api_update_order)
     app.put("/api/phases/parallel", response_model=None)(_not_found)
     app.put("/api/phases/{phase_id}", response_model=None)(api.api_phase_update)

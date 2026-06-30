@@ -24,7 +24,7 @@ from ..application.task import TaskService
 from ..application.agent import AgentService
 from .models import Phase
 
-# Backward-compatible re-exports for existing tests
+# Re-exports kept for existing tests importing from wizard.core directly.
 from .checks import normalize_text, extract_keywords
 
 from .types import WizardAssessment

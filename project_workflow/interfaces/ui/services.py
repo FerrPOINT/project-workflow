@@ -18,6 +18,7 @@ from .helpers import (
     _parse_optional_int,
 )
 from .payloads import _phase_create_payload, _workflow_form_payload
+from ..cli.core import cli as project_workflow  # noqa: F401
 
 
 # Re-export helpers/payloads so existing tests and routes keep importing from services.
