@@ -16,9 +16,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """No-op: the initial schema already creates projects.key_prefixes."""
-    pass
 
 
 def downgrade() -> None:
     """No-op reverse."""
-    pass

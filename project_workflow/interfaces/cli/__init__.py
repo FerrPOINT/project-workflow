@@ -5,7 +5,7 @@ from __future__ import annotations
 from .core import cli
 
 # ── Import command modules (registers subcommands) ─────
-from . import ui         # noqa: E402,F401
+from . import ui as ui
 
 
 def main() -> None:

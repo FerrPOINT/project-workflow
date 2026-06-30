@@ -6,7 +6,7 @@ Public API re-exported from project_workflow.wizard subpackage.
 from __future__ import annotations
 
 from project_workflow import config
-from project_workflow.infrastructure import conversation as convo  # noqa: F401
+from project_workflow.infrastructure import conversation as convo
 from project_workflow.wizard.checks import (
     BLOCKER_PATTERNS,
     DELEGATE_PATTERNS,
@@ -73,10 +73,10 @@ __all__ = [
     "convo",
     "determine_verdict",
     "evaluate_llm_report",
-    "extract_blockers",
-    "extract_keywords",
     "evaluate_report",
     "evaluate_report_formatted",
+    "extract_blockers",
+    "extract_keywords",
     "format_result",
     "get_phase_instructions",
     "main",

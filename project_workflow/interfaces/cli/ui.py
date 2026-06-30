@@ -101,7 +101,7 @@ def history_cmd(ctx: click.Context, task: str, n: Optional[int]) -> None:
     task_key = _require_valid_key(task)
     jmode = ctx.obj.get("json_mode", False)
 
-    
+
     with SAUnitOfWork() as uow:
         runs_raw = uow.supervisor_runs.list(task_key=task_key, limit=n or 200)
         runs: list[dict[str, Any]] = []

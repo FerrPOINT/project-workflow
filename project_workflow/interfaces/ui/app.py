@@ -46,7 +46,7 @@ async def _health() -> JSONResponse:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
             health["database"] = "ok"
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.error("Health check failed: %s", exc)
         health["ok"] = False
         health["database"] = "error"
@@ -63,7 +63,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         engine = get_engine()
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("Startup DB check failed: %s", exc)
         app.state.startup_error = str(exc)
     else:
@@ -73,7 +73,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         engine = get_engine()
         engine.dispose()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("Engine dispose failed during shutdown: %s", exc)
 
 

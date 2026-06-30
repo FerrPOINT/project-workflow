@@ -33,7 +33,7 @@ class UIDataService:
             wid = project.get("workflow_id")
             if isinstance(wid, int):
                 project_counts[wid] = project_counts.get(wid, 0) + 1
-    
+
         result = []
         for workflow in workflows:
             result.append(
@@ -44,7 +44,7 @@ class UIDataService:
                 }
             )
         return result
-    
+
     def _load_phases(self, workflow_id: int | None = None) -> list[dict[str, Any]]:
         wdb = self._app_state.get_db()
         rows = wdb.get_phases(workflow_id=workflow_id)
@@ -74,7 +74,7 @@ class UIDataService:
                 }
             )
         return result
-    
+
     def _coerce_phase_db_id(self, raw_phase_id: int | str | None) -> int | None:
         if isinstance(raw_phase_id, int):
             return raw_phase_id if raw_phase_id > 0 else None
@@ -85,7 +85,7 @@ class UIDataService:
             return None
         phase_id = int(token)
         return phase_id if phase_id > 0 else None
-    
+
     def _load_phase_detail(self, phase_id: int | str) -> dict[str, Any] | None:
         resolved_phase_id = self._coerce_phase_db_id(phase_id)
         if resolved_phase_id is None:
@@ -96,13 +96,13 @@ class UIDataService:
         phase = dict(phase)
         phase["phase_num"] = phase.get("phase_num", phase.get("phase_order"))
         return phase
-    
+
     def _load_tasks(self) -> list[dict[str, Any]]:
         """Load tasks for the UI with batched history/supervisor lookups."""
         wdb = self._app_state.get_db()
         tasks = wdb.get_tasks()
         workflows = wdb.get_workflows()
-    
+
         # Batch phase counts and phase lookup maps per workflow.
         phase_counts_by_workflow: dict[int, int] = {}
         phases_by_workflow: dict[int | None, list[dict[str, Any]]] = {}
@@ -114,9 +114,9 @@ class UIDataService:
             all_phases.extend(phases)
             phase_counts_by_workflow[wid] = len(phases)
         phases_by_workflow[None] = all_phases
-    
+
         default_phase_count = len(config.PHASE_ORDER)
-    
+
         # Batch load history and latest supervisor runs for all tasks in one go.
         task_ids = [t["id"] for t in tasks if isinstance(t.get("id"), int)]
         history_batch: Mapping[int, Sequence[dict[str, Any]]] = {}
@@ -127,7 +127,7 @@ class UIDataService:
                 history_batch = raw_history_batch
             else:
                 history_batch = {tid: wdb.get_task_history(tid) for tid in task_ids}
-    
+
             raw_latest = wdb.supervisor_runs.latest_for_tasks(task_ids)
             if isinstance(raw_latest, Sequence) and not isinstance(raw_latest, (str, bytes)):
                 for latest_run in raw_latest:
@@ -139,7 +139,7 @@ class UIDataService:
                     runs = wdb.get_supervisor_runs(task_id=tid, limit=1)
                     if runs:
                         latest_runs[tid] = _run_to_dict(runs[0])
-    
+
         result = []
         for t in tasks:
             task_id = t["id"]
@@ -147,7 +147,7 @@ class UIDataService:
             completed = sum(1 for tp in task_history if tp.get("status") == "done")
             workflow_id = t.get("workflow_id")
             total_phases = phase_counts_by_workflow.get(workflow_id, default_phase_count)
-    
+
             current_phase_id, current = _resolve_task_phase_local(
                 t.get("current_phase", "-1"),
                 phases_by_workflow.get(workflow_id, []),
@@ -155,7 +155,7 @@ class UIDataService:
             current = current or {}
             project_code = t.get("project_code") or "—"
             project_name = t.get("project_name") or project_code
-    
+
             completed_at = ""
             if t.get("status") == "done":
                 done_entries = [tp for tp in task_history if tp.get("status") == "done"]
@@ -166,7 +166,7 @@ class UIDataService:
                     )
                 if not completed_at:
                     completed_at = t.get("updated_at", "")
-    
+
             latest_verdict = None
             latest_verdict_phase = None
             latest_verdict_message = ""
@@ -181,7 +181,7 @@ class UIDataService:
                 else:
                     latest_verdict_message = str(response)[:120]
                 latest_verdict_at = str(run.get("created_at", ""))[:16]
-    
+
             result.append(
                 {
                     "id": task_id,
@@ -207,9 +207,9 @@ class UIDataService:
                     "latest_verdict_at": latest_verdict_at,
                 }
             )
-    
+
         return result
-    
+
     def _load_projects(self) -> list[dict[str, Any]]:
         """Список проектов для UI."""
         wdb = self._app_state.get_db()
@@ -220,7 +220,7 @@ class UIDataService:
             pid = task.get("project_id")
             if isinstance(pid, int):
                 task_counts[pid] = task_counts.get(pid, 0) + 1
-    
+
         result = []
         for project in projects:
             prefixes = project.get("key_prefixes") or []
@@ -232,20 +232,20 @@ class UIDataService:
                 }
             )
         return result
-    
+
     def _load_dashboard(self) -> dict[str, Any]:
         tasks = self._load_tasks()
         projects = self._load_projects()
-    
+
         active_tasks = [task for task in tasks if task.get("status") == "active"]
         done_tasks = [task for task in tasks if task.get("status") == "done"]
-    
+
         verdict_counts: dict[str, int] = {}
         for task in tasks:
             v = task.get("latest_verdict")
             if v:
                 verdict_counts[v] = verdict_counts.get(v, 0) + 1
-    
+
         return {
             "stats": {
                 "projects": len(projects),
@@ -259,16 +259,16 @@ class UIDataService:
                 projects, key=lambda item: (-item.get("task_count", 0), item.get("name", ""))
             )[:8],
         }
-    
+
     def _get_task_detail(self, task_key: str) -> dict[str, Any] | None:
         """Загрузить деталку задачи: метаданные + история фаз (линейно, без FORK/JOIN)."""
         from project_workflow.wizard import VERDICT_LABELS
-    
+
         wdb = self._app_state.get_db()
         task = wdb.get_task_by_key(task_key)
         if not task:
             return None
-    
+
         task = dict(task)
         task["project_code"] = task.get("project_code") or "—"
         task["project_name"] = task.get("project_name") or task["project_code"]
@@ -277,28 +277,28 @@ class UIDataService:
             if task["project_name"] == task["project_code"]
             else f"{task['project_code']} — {task['project_name']}"
         )
-    
+
         current_phase_id, current_phase = _resolve_task_phase(
             task.get("current_phase", "-1"), wdb, workflow_id=task.get("workflow_id")
         )
         task["current_phase_name"] = current_phase["name"] if current_phase else task.get("current_phase", "")
         task["current_phase_order"] = current_phase["phase_order"] if current_phase else 0
-    
+
         task["status_label"] = {"active": "В работе", "done": "Завершена", "blocked": "Заблокирована"}.get(
             task.get("status", ""), "—"
         )
         task["status_class"] = {"active": "active", "done": "done", "blocked": "blocked"}.get(
             task.get("status", ""), "wait"
         )
-    
+
         workflow_id = task.get("workflow_id")
         workflow_phases = (
             wdb.get_phases(workflow_id=workflow_id) if workflow_id is not None else wdb.get_phases()
         )
         task["workflow_phase_count"] = len(workflow_phases)
-    
+
         history = wdb.get_task_history(task["id"])
-    
+
         task["completed_at"] = ""
         if task.get("status") == "done":
             done_entries = [h for h in history if h.get("status") == "done"]
@@ -309,7 +309,7 @@ class UIDataService:
                 )
             if not task["completed_at"]:
                 task["completed_at"] = task.get("updated_at", "")
-    
+
         phase_execution_type: dict[int, str] = {}
         phase_order_map: dict[int, int] = {}
         for p in workflow_phases:
@@ -317,7 +317,7 @@ class UIDataService:
             if pid is not None:
                 phase_execution_type[pid] = p.get("execution_type", "sync")
                 phase_order_map[pid] = p.get("phase_order", 0)
-    
+
         raw_history: list[dict[str, Any]] = []
         for h in history:
             phase = wdb.get_phase(h["phase_id"])
@@ -339,7 +339,7 @@ class UIDataService:
                     "execution_type": phase_execution_type.get(pid, "sync"),
                 }
             )
-    
+
         phase_history: list[dict[str, Any]] = []
         phase_history_blocks: list[dict[str, Any]] = []
         if raw_history:
@@ -352,7 +352,7 @@ class UIDataService:
                     runs.append(current_run)
                     current_run = [item]
             runs.append(current_run)
-    
+
             for run in runs:
                 if len(run) > 1:
                     group_key = run[0]["phase_code"]
@@ -367,7 +367,7 @@ class UIDataService:
                     "kind": "parallel" if len(run) > 1 else "single",
                     "phases": run,
                 })
-    
+
         task["phase_history"] = phase_history
         task["phase_history_blocks"] = phase_history_blocks
         task["completed"] = sum(1 for h in phase_history if h.get("status") == "done")
@@ -375,7 +375,7 @@ class UIDataService:
         task["progress_done"] = task["completed"]
         task["progress_total"] = task["total_phases"]
         task["work_time"] = None
-    
+
         supervisor_runs: list[dict[str, Any]] = wdb.get_supervisor_runs(task_key=task_key, limit=200)
         for super_run in supervisor_runs:
             super_run["verdict_label"] = VERDICT_LABELS.get(super_run.get("verdict", ""), super_run.get("verdict", "").upper())
@@ -409,13 +409,12 @@ class UIDataService:
             else:
                 super_run["next_contract"] = None
         task["supervisor_runs"] = supervisor_runs
-    
+
         if supervisor_runs:
             task["latest_verdict"] = supervisor_runs[0].get("verdict")
             task["latest_verdict_label"] = supervisor_runs[0].get("verdict_label")
         else:
             task["latest_verdict"] = None
             task["latest_verdict_label"] = None
-    
+
         return task
-    

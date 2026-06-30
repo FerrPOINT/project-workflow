@@ -22,11 +22,10 @@ from ..application.phase import PhaseServiceApp
 from ..application.project import ProjectService
 from ..application.task import TaskService
 from ..application.agent import AgentService
-from .models import Phase  # noqa: F401
-from ..infrastructure import conversation as convo  # noqa: F401 — used by tests via monkeypatch
+from .models import Phase
 
 # Backward-compatible re-exports for existing tests
-from .checks import normalize_text, extract_keywords, BLOCKER_PATTERNS as _BLOCKER_PATTERNS, DELEGATE_PATTERNS as _DELEGATE_PATTERNS  # noqa: F401
+from .checks import normalize_text, extract_keywords
 
 from .types import WizardAssessment
 from .context import WizardContextBuilder
@@ -656,9 +655,8 @@ class WizardEngine:
         if _wizard_mod.SMART_EVALUATE:
             try:
                 return self.evaluate_llm(report, phase)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning("LLM evaluate failed: %s", exc)
-                pass
 
         is_parallel = phase.execution_type == "parallel"
         if is_parallel:
