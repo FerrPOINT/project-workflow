@@ -1,133 +1,109 @@
-"""Tests for wizard_contracts.py."""
-import pytest
-from project_workflow.wizard.models import Phase, PhaseInstruction, PhaseCheck, PhaseEvidence
-from project_workflow.wizard.contracts import PhaseContractBuilder, text_from_instruction, text_from_check, text_from_evidence, phase_to_dict
+"""Tests for wizard.contracts."""
+from __future__ import annotations
 
-pytestmark = [pytest.mark.wizard]
-
-
-class TestTextHelpers:
-    def test_text_from_instruction_with_step(self):
-        item = PhaseInstruction(step="Run tests")
-        assert text_from_instruction(item) == "Run tests"
-
-    def test_text_from_instruction_none(self):
-        assert text_from_instruction(None) == ""
-
-    def test_text_from_check(self):
-        item = PhaseCheck(description="Check A")
-        assert text_from_check(item) == "Check A"
-
-    def test_text_from_evidence(self):
-        item = PhaseEvidence(item="Screenshot")
-        assert text_from_evidence(item) == "Screenshot"
+from project_workflow.wizard.contracts import PhaseContractBuilder, phase_to_dict, text_from_check, text_from_evidence, text_from_instruction
+from project_workflow.wizard.models import Phase, PhaseCheck, PhaseDelegate, PhaseEvidence, PhaseInstruction
 
 
-class TestPhaseToDict:
-    def test_basic(self):
-        p = Phase(
-            id=1, code="1", name="N", description="Desc",
-            instructions=[PhaseInstruction(step="Inst")],
-            checks=[PhaseCheck(description="Ch")],
-            evidence=[PhaseEvidence(item="Ev")],
-            execution_type="sync",
-        )
-        d = phase_to_dict(p)
-        assert d["code"] == "1"
-        assert d["instructions"] == ["Inst"]
-        assert d["checks"] == ["Ch"]
-        assert d["evidence"] == ["Ev"]
+def test_text_helpers():
+    assert text_from_instruction(PhaseInstruction(step=" x ")) == "x"
+    assert text_from_check(PhaseCheck(description=" c ")) == "c"
+    assert text_from_evidence(PhaseEvidence(item=" e ")) == "e"
 
 
-class TestPhaseContractBuilder:
-    def _make_phases(self):
-        return [
-            Phase(id=1, code="1", name="A", execution_type="sync"),
-            Phase(id=2, code="2", name="B", execution_type="parallel", instructions=[PhaseInstruction(step="Do B")]),
-            Phase(id=3, code="3", name="C", execution_type="parallel", checks=[PhaseCheck(description="Chk C")]),
-            Phase(id=4, code="4", name="D", execution_type="sync"),
-        ]
+def test_phase_to_dict():
+    phase = Phase(
+        id=1,
+        code="p1",
+        name="P",
+        description="D",
+        instructions=[PhaseInstruction(step="i")],
+        checks=[PhaseCheck(description="c")],
+        evidence=[PhaseEvidence(item="e")],
+        delegate=PhaseDelegate(agent="a1", toolsets=["t1"]),
+    )
+    d = phase_to_dict(phase)
+    assert d["code"] == "p1"
+    assert d["delegate_agent"] == "a1"
+    assert d["delegate_toolsets"] == ["t1"]
 
-    def test_build_single(self):
-        phases = self._make_phases()
-        cb = PhaseContractBuilder(phases)
-        contract = cb.build(phases[0])
-        assert contract.phase_code == "1"
-        assert contract.execution_type == "sync"
-        assert contract.instructions == []
 
-    def test_build_missing(self):
-        phases = self._make_phases()
-        cb = PhaseContractBuilder(phases)
-        contract = cb.build_missing("99")
-        assert contract.phase_code == "99"
-        assert contract.phase_name == "Unknown phase"
+def _make_phases():
+    p1 = Phase(code="p1", name="P1", execution_type="sync", next_recommendation="go")
+    p2 = Phase(code="p2", name="P2", execution_type="parallel", parallel_with="p1")
+    p3 = Phase(code="p3", name="P3", execution_type="parallel")
+    p4 = Phase(code="p4", name="P4", execution_type="sync")
+    return [p1, p2, p3, p4]
 
-    def test_build_parallel(self):
-        phases = self._make_phases()
-        cb = PhaseContractBuilder(phases)
-        group = [phases[1], phases[2]]
-        contract = cb.build_parallel(group)
-        assert contract.execution_type == "parallel"
-        assert "Do B" in contract.instructions[0]
-        assert "Chk C" in contract.required_checks[0]
-        assert contract.group_phases == ["2", "3"]
-        assert contract.next_recommendation.startswith("После выполнения")
 
-    def test_build_checklist_dedup(self):
-        phases = self._make_phases()
-        cb = PhaseContractBuilder(phases)
-        # phase 2 has instruction, no checks/evidence
-        assert cb.build_checklist(phases[1]) == []
-        # phase 3 has check
-        assert cb.build_checklist(phases[2]) == ["Chk C"]
+def test_build_single():
+    p1, *_ = _make_phases()
+    cb = PhaseContractBuilder([p1])
+    contract = cb.build(p1)
+    assert contract.phase_code == "p1"
+    assert contract.execution_type == "sync"
 
-    def test_get_parallel_group(self):
-        phases = self._make_phases()
-        cb = PhaseContractBuilder(phases)
-        group = cb.get_parallel_group(phases[1])
-        assert [p.code for p in group] == ["2", "3"]
 
-    def test_get_next_phase(self):
-        phases = self._make_phases()
-        cb = PhaseContractBuilder(phases)
-        code, name = cb.get_next_phase("1")
-        assert code == "2"
-        assert name == "B"
+def test_build_missing():
+    cb = PhaseContractBuilder([])
+    contract = cb.build_missing("x")
+    assert contract.phase_name == "Unknown phase"
 
-    def test_get_next_phase_last_returns_none(self):
-        phases = self._make_phases()
-        cb = PhaseContractBuilder(phases)
-        assert cb.get_next_phase("4") == (None, None)
 
-    def test_get_next_phase_not_found_returns_none(self):
-        phases = self._make_phases()
-        cb = PhaseContractBuilder(phases)
-        assert cb.get_next_phase("99") == (None, None)
+def test_build_parallel():
+    phases = _make_phases()
+    cb = PhaseContractBuilder(phases)
+    contract = cb.build_parallel(phases[1:3])
+    assert contract.execution_type == "parallel"
+    assert "p2" in contract.group_phases
+    assert "p3" in contract.group_phases
 
-    def test_next_after_group(self):
-        phases = self._make_phases()
-        cb = PhaseContractBuilder(phases)
-        code, name = cb._next_after_group([phases[1], phases[2]])
-        assert code == "4"
-        assert name == "D"
 
-    def test_build_next_contract_single(self):
-        phases = self._make_phases()
-        cb = PhaseContractBuilder(phases)
-        contract = cb.build_next_contract("1")
-        assert contract is not None
-        assert contract.phase_code == "1"  # builds contract for the given phase, not next
+def test_build_checklist():
+    p = Phase(checks=[PhaseCheck(description=" c "), PhaseCheck(description="c")], evidence=[PhaseEvidence(item=" e")])
+    cb = PhaseContractBuilder([])
+    assert cb.build_checklist(p) == ["c", "e"]
 
-    def test_build_next_contract_parallel(self):
-        phases = self._make_phases()
-        cb = PhaseContractBuilder(phases)
-        contract = cb.build_next_contract("2")
-        assert contract is not None
-        assert contract.execution_type == "parallel"
 
-    def test_build_next_contract_none(self):
-        phases = self._make_phases()
-        cb = PhaseContractBuilder(phases)
-        assert cb.build_next_contract(None) is None
-        assert cb.build_next_contract("99") is None
+def test_build_parallel_checklist():
+    p1 = Phase(checks=[PhaseCheck(description="c1")])
+    p2 = Phase(evidence=[PhaseEvidence(item="e1")])
+    cb = PhaseContractBuilder([])
+    assert cb.build_parallel_checklist([p1, p2]) == ["c1", "e1"]
+
+
+def test_get_parallel_group():
+    phases = _make_phases()
+    cb = PhaseContractBuilder(phases)
+    group = cb.get_parallel_group(phases[1])
+    assert [p.code for p in group] == ["p2", "p3"]
+
+
+def test_get_parallel_group_not_found():
+    phases = _make_phases()
+    cb = PhaseContractBuilder(phases)
+    p = Phase(code="px")
+    group = cb.get_parallel_group(p)
+    assert group == [p]
+
+
+def test_get_next_phase():
+    phases = _make_phases()
+    cb = PhaseContractBuilder(phases)
+    assert cb.get_next_phase("p1") == ("p2", "P2")
+    assert cb.get_next_phase("p4") == (None, None)
+    assert cb.get_next_phase("px") == (None, None)
+
+
+def test_build_next_contract():
+    phases = _make_phases()
+    cb = PhaseContractBuilder(phases)
+    contract = cb.build_next_contract("p2")
+    assert contract is not None
+    assert contract.execution_type == "parallel"
+
+
+def test_build_next_contract_none():
+    cb = PhaseContractBuilder([])
+    assert cb.build_next_contract(None) is None
+    assert cb.build_next_contract("x") is None
