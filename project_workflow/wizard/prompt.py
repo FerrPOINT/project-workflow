@@ -61,10 +61,48 @@ def _format_messages(ctx: dict[str, Any], limit: int = 5) -> str:
     return "\n".join(lines)
 
 
+def _format_parallel_contract(contract: dict[str, Any], group_details: list[dict[str, Any]]) -> str:
+    """Full parallel contract for the LLM prompt (keeps phase names and metadata)."""
+    group_names = [d.get("phase_name") or d.get("phase_code") or "-" for d in group_details]
+    parts = [
+        f"- Описание: {contract.get('description') or '-'}\n",
+        "- Тип выполнения: parallel\n",
+        f"- Фазы в группе: {', '.join(group_names)}\n",
+        f"- Rollback target: {contract.get('rollback_target') or '-'}\n\n",
+        "Параллельные фазы (выполняются одновременно, отчёт — одним сообщением):\n",
+    ]
+    for detail in group_details:
+        name = detail.get("phase_name") or detail.get("phase_code") or "-"
+        agent = detail.get("delegate_agent") or "не задан"
+        toolsets = ", ".join(detail.get("delegate_toolsets") or [])
+        agent_line = f"Агент: {agent}" + (f" | toolsets: {toolsets}" if toolsets else "")
+        partner_code = detail.get("parallel_with") or "-"
+        partner = next(
+            (d.get("phase_name") or d.get("phase_code") or partner_code for d in group_details if d.get("phase_code") == partner_code),
+            partner_code,
+        )
+        parts.append(f"\n[{name}] (параллельно с {partner})\n")
+        parts.append(f"  {agent_line}\n")
+        desc = detail.get("description") or "-"
+        parts.append(f"  Описание: {desc}\n")
+        instructions = detail.get("instructions") or []
+        if instructions:
+            parts.append("  Инструкции:\n" + "\n".join(f"    · {item}" for item in instructions) + "\n")
+        checks = detail.get("required_checks") or []
+        if checks:
+            parts.append("  Чекапы:\n" + "\n".join(f"    · {item}" for item in checks) + "\n")
+        evidence = detail.get("required_evidence") or []
+        if evidence:
+            parts.append("  Доказательства:\n" + "\n".join(f"    · {item}" for item in evidence) + "\n")
+    return "".join(parts)
+
+
 def _format_contract(contract: dict[str, Any], human_only: bool = False) -> str:
     group_details = contract.get("group_details") or []
     if group_details:
-        return _format_parallel_contract(contract, group_details, human_only=human_only)
+        if human_only:
+            return _format_parallel_contract_human(group_details)
+        return _format_parallel_contract(contract, group_details)
     instructions = contract.get("instructions") or ["Нет отдельных инструкций — следуй описанию фазы и обязательным проверкам."]
     checks = contract.get("required_checks") or ["Нет явных checks."]
     evidence = contract.get("required_evidence") or ["Нет явных evidence items."]
@@ -87,44 +125,28 @@ def _format_contract(contract: dict[str, Any], human_only: bool = False) -> str:
     return "".join(parts)
 
 
-def _format_parallel_contract(contract: dict[str, Any], group_details: list[dict[str, Any]], human_only: bool = False) -> str:
-    group_names = [d.get("phase_name") or d.get("phase_code") or "-" for d in group_details]
-    parts: list[str] = []
-    if not human_only:
-        parts.extend([
-            f"- Описание: {contract.get('description') or '-'}\n",
-            "- Тип выполнения: parallel\n",
-            f"- Фазы в группе: {', '.join(group_names)}\n",
-            f"- Rollback target: {contract.get('rollback_target') or '-'}\n\n",
-            "Параллельные фазы (выполняются одновременно, отчёт — одним сообщением):\n",
-        ])
+def _format_parallel_contract_human(group_details: list[dict[str, Any]]) -> str:
+    """Flatten parallel group into a single concrete instruction list for CLI humans.
+
+    Phase names are intentionally omitted — workers need actions, not abstract labels.
+    """
+    instructions: list[str] = []
+    checks: list[str] = []
+    evidence: list[str] = []
     for detail in group_details:
-        name = detail.get("phase_name") or detail.get("phase_code") or "-"
         agent = detail.get("delegate_agent") or "не задан"
-        toolsets = ", ".join(detail.get("delegate_toolsets") or [])
-        agent_line = f"Агент: {agent}" + (f" | toolsets: {toolsets}" if toolsets else "")
-        partner_code = detail.get("parallel_with") or "-"
-        partner = next(
-            (d.get("phase_name") or d.get("phase_code") or partner_code for d in group_details if d.get("phase_code") == partner_code),
-            partner_code,
-        )
-        if human_only:
-            parts.append(f"\n[{name}]\n")
-        else:
-            parts.append(f"\n[{name}] (параллельно с {partner})\n")
-        parts.append(f"  {agent_line}\n")
-        desc = detail.get("description") or "-"
-        if not human_only:
-            parts.append(f"  Описание: {desc}\n")
-        instructions = detail.get("instructions") or []
-        if instructions:
-            parts.append("  Инструкции:\n" + "\n".join(f"    · {item}" for item in instructions) + "\n")
-        checks = detail.get("required_checks") or []
-        if checks:
-            parts.append("  Чекапы:\n" + "\n".join(f"    · {item}" for item in checks) + "\n")
-        evidence = detail.get("required_evidence") or []
-        if evidence:
-            parts.append("  Доказательства:\n" + "\n".join(f"    · {item}" for item in evidence) + "\n")
+        for item in detail.get("instructions", []) or []:
+            instructions.append(f"[{agent}] {item}")
+        for item in detail.get("required_checks", []) or []:
+            checks.append(f"[{agent}] {item}")
+        for item in detail.get("required_evidence", []) or []:
+            evidence.append(f"[{agent}] {item}")
+
+    parts = ["Инструкции:\n" + "\n".join(f"  · {item}" for item in instructions) + "\n\n"]
+    if checks:
+        parts.append("Чекапы:\n" + "\n".join(f"  · {item}" for item in checks) + "\n\n")
+    if evidence:
+        parts.append("Доказательства:\n" + "\n".join(f"  · {item}" for item in evidence) + "\n\n")
     return "".join(parts)
 
 
@@ -228,15 +250,10 @@ def format_current_phase_instructions(
     if is_parallel_target:
         group = cb.get_parallel_group(target_phase)
         contract = cb.build_parallel(group).to_dict()
-        group_names = [getattr(p, "name", p.code) for p in group]
-        parts = [
-            f"Текущий шаг: параллельная группа ({', '.join(group_names)})\n\n",
-            "ПАРАЛЛЕЛЬНАЯ ГРУППА ФАЗ\n",
-            f"Выполняются одновременно: {', '.join(group_names)}\n",
-            "Отчёт по этой группе присылается ОДНИМ сообщением.\n",
-            _format_parallel_contract(contract, contract.get("group_details") or [], human_only=True),
-        ]
-        return "".join(parts)
+        return (
+            "Выполняй следующие действия параллельно. Отчёт по ним присылай ОДНИМ сообщением.\n\n"
+            + _format_parallel_contract_human(contract.get("group_details") or [])
+        )
 
     # Serial phase
     raw = ctx.get("current_contract")

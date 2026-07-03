@@ -5,6 +5,11 @@ from project_workflow.interfaces.ui import _app_state
 
 
 def test_app_state_export():
-    # _app_state is resolved lazily via __getattr__ and should be an _AppState instance.
-    from project_workflow.interfaces.ui.dependencies import _AppState
-    assert isinstance(_app_state, _AppState)
+    # _app_state is a dynamic proxy that delegates to the canonical _AppState instance.
+    from project_workflow.application.state import _app_state as core_app_state, _AppState
+    from project_workflow.infrastructure.db.uow import SAUnitOfWork
+    assert callable(getattr(_app_state, "get_uow"))
+    assert isinstance(_app_state.get_uow(), SAUnitOfWork)
+    assert isinstance(core_app_state, _AppState)
+    # Proxy itself is not an _AppState, but it behaves like one at runtime.
+    assert not isinstance(_app_state, _AppState)
