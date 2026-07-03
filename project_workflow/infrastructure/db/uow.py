@@ -411,9 +411,6 @@ class SAUnitOfWork(UnitOfWork):
         smoke_wf = self.workflows.get_by_name(config.SMOKE_WORKFLOW_NAME)
         if not smoke_wf:
             return
-        smoke_phases = list(self.phases.list(workflow_id=smoke_wf.id))
-        if smoke_phases:
-            return
         seed_phases = schema.load_phases_from_seed(config.SMOKE_SEED_PATH)
         # Ensure agents referenced by selected_agent exist first.
         for phase in seed_phases:
@@ -421,6 +418,8 @@ class SAUnitOfWork(UnitOfWork):
             if agent_name and not self.agents.get_by_name(agent_name):
                 self.agents.create({"name": agent_name, "description": f"Smoke seed agent for {phase.code}"})
         self.commit()
+
+        existing_by_code = {p.code: p for p in self.phases.list(workflow_id=smoke_wf.id)}
         for order, phase in enumerate(seed_phases, start=1):
             data = {
                 "workflow_id": smoke_wf.id,
@@ -439,7 +438,17 @@ class SAUnitOfWork(UnitOfWork):
                 agent = self.agents.get_by_name(phase.delegate.agent)
                 if agent:
                     data["agent_id"] = agent.id
-            phase_id = self.phases.create(data)
+            existing = existing_by_code.get(phase.code)
+            if existing:
+                assert existing.id is not None
+                self.phases.update(existing.id, data)
+                phase_id = existing.id
+            else:
+                phase_id = self.phases.create(data)
+
+            assert phase_id is not None
+            # Sync instructions, checks, evidence from seed (idempotent upsert)
+            self.instructions.delete_for_phase(int(phase_id))
             for idx, instr in enumerate(phase.instructions, start=1):
                 self.instructions.create(
                     int(phase_id),

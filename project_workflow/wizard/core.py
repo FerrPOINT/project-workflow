@@ -219,10 +219,15 @@ class WizardEngine:
         smoke_wf = self._uow.workflows.get_by_name(config.SMOKE_WORKFLOW_NAME)
         if not smoke_wf:
             return
-        smoke_phases = list(self._uow.phases.list(workflow_id=smoke_wf.id))
-        if smoke_phases:
-            return
         seed_phases = schema.load_phases_from_seed(config.SMOKE_SEED_PATH)
+        # Ensure agents referenced by selected_agent exist first.
+        for phase in seed_phases:
+            agent_name = phase.delegate.agent if phase.delegate else ""
+            if agent_name and not self._uow.agents.get_by_name(agent_name):
+                self._uow.agents.create({"name": agent_name, "description": f"Smoke seed agent for {phase.code}"})
+        self._uow.commit()
+
+        existing_by_code = {p.code: p for p in self._uow.phases.list(workflow_id=smoke_wf.id)}
         for order, phase in enumerate(seed_phases, start=1):
             data = {
                 "workflow_id": smoke_wf.id,
@@ -241,7 +246,17 @@ class WizardEngine:
                 agent = self._uow.agents.get_by_name(phase.delegate.agent)
                 if agent:
                     data["agent_id"] = agent.id
-            phase_id = self._uow.phases.create(data)
+            existing = existing_by_code.get(phase.code)
+            if existing:
+                assert existing.id is not None
+                self._uow.phases.update(existing.id, data)
+                phase_id = existing.id
+            else:
+                phase_id = self._uow.phases.create(data)
+
+            assert phase_id is not None
+            # Sync instructions, checks, evidence from seed (idempotent upsert)
+            self._uow.instructions.delete_for_phase(int(phase_id))
             for idx, instr in enumerate(phase.instructions, start=1):
                 self._uow.instructions.create(
                     int(phase_id),

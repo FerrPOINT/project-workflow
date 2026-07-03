@@ -88,9 +88,9 @@ def test_smoke_phase_prompt_surfaces_parallel_agent_and_rollback_metadata(tmp_pa
 
     parallel_prompt = engine.get_phase_prompt("smoke.parallel-a")
     assert "ПАРАЛЛЕЛЬНАЯ ГРУППА ФАЗ" in parallel_prompt
-    assert "Smoke Parallel A" in parallel_prompt  # name shown
+    assert "Parser & Data Layer" in parallel_prompt  # name shown
     assert "smoke.parallel-b" in parallel_prompt   # parallel partner (code)
-    assert "Агент: researcher" in parallel_prompt  # per-phase agent
+    assert "Агент: backend" in parallel_prompt  # per-phase agent
     assert "Параллельные фазы (выполняются одновременно" in parallel_prompt
 
     review_prompt = engine.get_phase_prompt("smoke.review")
@@ -110,11 +110,22 @@ def test_parallel_group_pass_advances_all_phases(tmp_path: Path, monkeypatch):
     uow.commit()
     engine.current_phase = "smoke.parallel-a"
 
-    # Full report covering both checks
+    # Full report covering both parallel branches
     report = (
-        "backend check prepared. "
-        "ui check prepared. "
-        "Evidence: backend check, ui check."
+        "Parser загружает входные документы Markdown и DOCX без ошибок на примерах. "
+        "Внутренняя модель содержит заголовки, секции, таблицы, списки и метаданные. "
+        "Экспорт обратно в Markdown сохраняет структуру и форматирование. "
+        "Round-trip unit-тесты проходят зелёными, включая пустые секции и вложенные таблицы. "
+        "Код parser и модульные тесты в репозитории. "
+        "Примеры round-trip: исходный файл → модель → файл. "
+        "Отчёт о покрытии edge cases приложен. "
+        "UI отображает дерево секций и метаданные документа. "
+        "Структурные операции add, remove и move работают и сохраняются в модель. "
+        "Редактирование содержимого секций работает для текста, таблиц и списков. "
+        "UI тесты проходят зелёными. "
+        "Код UI и интеграционные тесты в репозитории. "
+        "Примеры структурных операций с моделью приложены. "
+        "Скриншоты и логи демонстрации UI приложены."
     )
     result = engine.evaluate(report)
 
@@ -145,8 +156,13 @@ def test_parallel_group_partial_stays_on_group(tmp_path: Path, monkeypatch):
     uow.commit()
     engine.current_phase = "smoke.parallel-a"
 
-    # Only one check covered → soft_fail
-    report = "backend check is ready. ui check is not ready."
+    # Only parser branch covered → soft_fail
+    report = (
+        "Parser загружает входные документы Markdown без ошибок. "
+        "Внутренняя модель содержит заголовки. "
+        "Round-trip unit-тесты проходят зелёными. "
+        "UI не готов: дерево секций и структурные операции пока не реализованы."
+    )
     result = engine.evaluate(report)
 
     assert result["verdict"] == "SOFT_FAIL"
