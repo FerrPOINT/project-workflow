@@ -35,7 +35,7 @@ def _get_task_key_validator() -> task_validator.TaskKeyValidator:
     from project_workflow.infrastructure.db import schema
 
     uow = SAUnitOfWork()
-    uow.create_all()
+    uow.init()
     schema.ensure_phase_catalog(uow)
     projects_raw = uow.projects.list()
     projects = [p.to_dict() for p in projects_raw]

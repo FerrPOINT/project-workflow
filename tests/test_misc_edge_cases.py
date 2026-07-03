@@ -43,6 +43,14 @@ class TestGetTaskKeyValidator:
         # should not raise and have default patterns
         assert validator is not None
 
+    def test_bootstraps_default_project_for_task_keys(self, tmp_path, monkeypatch):
+        from project_workflow.interfaces.cli.core import _get_task_key_validator
+        monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'cli.db'}")
+        validator = _get_task_key_validator()
+        result = validator.validate("TASK-1")
+        assert result.is_valid
+        assert result.normalized == "TASK-1"
+
 
 class TestRequireValidKey:
     def test_valid_returns_normalized(self, monkeypatch):
