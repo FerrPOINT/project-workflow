@@ -62,6 +62,9 @@ def _format_messages(ctx: dict[str, Any], limit: int = 5) -> str:
 
 
 def _format_contract(contract: dict[str, Any]) -> str:
+    group_details = contract.get("group_details") or []
+    if group_details:
+        return _format_parallel_contract(contract, group_details)
     instructions = contract.get("instructions") or ["Нет отдельных инструкций — следуй описанию фазы и обязательным проверкам."]
     checks = contract.get("required_checks") or ["Нет явных checks."]
     evidence = contract.get("required_evidence") or ["Нет явных evidence items."]
@@ -77,6 +80,37 @@ def _format_contract(contract: dict[str, Any]) -> str:
     if contract.get("delegate_agent"):
         toolsets = ", ".join(contract.get("delegate_toolsets") or [])
         parts.append(f"Делегировано агенту: {contract['delegate_agent']}" + (f" | toolsets: {toolsets}" if toolsets else "") + "\n\n")
+    return "".join(parts)
+
+
+def _format_parallel_contract(contract: dict[str, Any], group_details: list[dict[str, Any]]) -> str:
+    parts = [
+        f"- Описание группы: {contract.get('description') or '-'}\n",
+        "- Тип выполнения: parallel\n",
+        f"- Фазы в группе: {', '.join(contract.get('group_phases') or [])}\n",
+        f"- Rollback target: {contract.get('rollback_target') or '-'}\n\n",
+        "Параллельные фазы (выполняются одновременно, отчёт — одним сообщением):\n",
+    ]
+    for detail in group_details:
+        code = detail.get("phase_code") or "-"
+        name = detail.get("phase_name") or "-"
+        agent = detail.get("delegate_agent") or "не задан"
+        toolsets = ", ".join(detail.get("delegate_toolsets") or [])
+        agent_line = f"Агент: {agent}" + (f" | toolsets: {toolsets}" if toolsets else "")
+        partner = detail.get("parallel_with") or "-"
+        parts.append(f"\n[{code}] {name} (параллельно с {partner})\n")
+        parts.append(f"  {agent_line}\n")
+        desc = detail.get("description") or "-"
+        parts.append(f"  Описание: {desc}\n")
+        instructions = detail.get("instructions") or []
+        if instructions:
+            parts.append("  Инструкции:\n" + "\n".join(f"    · {item}" for item in instructions) + "\n")
+        checks = detail.get("required_checks") or []
+        if checks:
+            parts.append("  Checks:\n" + "\n".join(f"    · {item}" for item in checks) + "\n")
+        evidence = detail.get("required_evidence") or []
+        if evidence:
+            parts.append("  Evidence:\n" + "\n".join(f"    · {item}" for item in evidence) + "\n")
     return "".join(parts)
 
 

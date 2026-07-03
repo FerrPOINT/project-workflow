@@ -141,3 +141,63 @@ class TestFormatResult:
         out = format_result(self._blocked())
         assert "  · m1" in out
         assert "Blocked msg" not in out
+
+    # ── PARALLEL GROUP ─────────────────────────────────────────────────
+    def _pass_parallel(self):
+        return {
+            "verdict": "PASS",
+            "phase_name": "Smoke Plan",
+            "phase": "smoke.plan",
+            "covered": ["c1"],
+            "missing": [],
+            "blockers": [],
+            "next_phase": "smoke.parallel-a",
+            "next_phase_name": "Smoke Parallel A",
+            "rollback_target": None,
+            "message": "Phase accepted.",
+            "instructions": [],
+            "required_checks": [],
+            "required_evidence": [],
+            "next_phase_contract": {
+                "phase_code": "smoke.parallel-a",
+                "phase_name": "Parallel group: smoke.parallel-a, smoke.parallel-b",
+                "execution_type": "parallel",
+                "group_phases": ["smoke.parallel-a", "smoke.parallel-b"],
+                "group_details": [
+                    {
+                        "phase_code": "smoke.parallel-a",
+                        "phase_name": "Smoke Parallel A",
+                        "instructions": ["Backend check."],
+                        "required_checks": ["backend check prepared"],
+                        "required_evidence": ["backend check"],
+                        "delegate_agent": "researcher",
+                        "delegate_toolsets": [],
+                        "parallel_with": "smoke.parallel-b",
+                    },
+                    {
+                        "phase_code": "smoke.parallel-b",
+                        "phase_name": "Smoke Parallel B",
+                        "instructions": ["UI check."],
+                        "required_checks": ["ui check prepared"],
+                        "required_evidence": ["ui check"],
+                        "delegate_agent": "coder",
+                        "delegate_toolsets": [],
+                        "parallel_with": "smoke.parallel-a",
+                    },
+                ],
+            },
+        }
+
+    def test_pass_parallel_group_lists_phases_and_agents(self):
+        out = format_result(self._pass_parallel())
+        assert "Параллельная группа фаз: smoke.parallel-a, smoke.parallel-b" in out
+        assert "параллельно с smoke.parallel-b" in out
+        assert "параллельно с smoke.parallel-a" in out
+        assert "агент: researcher" in out
+        assert "агент: coder" in out
+        assert "Backend check." in out
+        assert "UI check." in out
+        assert "backend check prepared" in out
+        assert "ui check prepared" in out
+        assert "Чекапы:" in out
+        assert "Доказательства:" in out

@@ -32,6 +32,7 @@ class PhaseContract:
     parallel_with: Optional[str] = None
     rollback_target: Optional[str] = None
     group_phases: Optional[List[str]] = None  # set for parallel blocks
+    group_details: List[dict[str, Any]] = field(default_factory=list)  # per-phase details for parallel groups
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -47,6 +48,7 @@ class PhaseContract:
             "parallel_with": self.parallel_with,
             "rollback_target": self.rollback_target,
             "group_phases": self.group_phases,
+            "group_details": self.group_details,
         }
 
 
@@ -79,10 +81,12 @@ class WizardAssessment:
     required_evidence: List[str] = field(default_factory=list)
     message: str = ""
     reasoning_mode: str = "deterministic"
+    group_phases: Optional[List[str]] = None  # set for parallel blocks
 
     def to_result_dict(self) -> dict[str, Any]:
         """Legacy-compatible result dict for CLI / UI consumers."""
-        return {
+        next_contract_dict = self.next_phase_contract.to_dict() if self.next_phase_contract else None
+        result = {
             "verdict": self.verdict.upper() if self.verdict else "UNKNOWN",
             "task_key": self.task_key,
             "phase": self.phase_code,
@@ -98,9 +102,14 @@ class WizardAssessment:
             "required_checks": self.required_checks,
             "instructions": self.instructions,
             "next_step": self.next_phase or self.rollback_target or self.phase_code,
-            "next_phase_contract": self.next_phase_contract.to_dict() if self.next_phase_contract else None,
+            "next_phase_contract": next_contract_dict,
             "message": self.message,
         }
+        if self.group_phases:
+            result["group_phases"] = self.group_phases
+            if next_contract_dict:
+                result["group_details"] = next_contract_dict.get("group_details") or []
+        return result
 
 
 VERDICT_LABELS: dict[str, str] = {

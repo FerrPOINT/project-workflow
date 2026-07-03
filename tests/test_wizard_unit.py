@@ -43,7 +43,7 @@ class TestWizard:
             assert "Test" in prompt
 
     def test_get_phase_prompt_parallel(self):
-        """Parallel phases produce a single merged prompt."""
+        """Parallel phases produce a single merged prompt with per-phase agents and partner."""
         ph_a = MagicMock()
         ph_a.code = "parallel-a"
         ph_a.name = "Parallel A"
@@ -81,6 +81,9 @@ class TestWizard:
             assert "parallel-a, parallel-b" in prompt
             assert "parallel-a" in prompt
             assert "parallel-b" in prompt
+            assert "параллельно с" in prompt
+            assert "Выполняются одновременно" in prompt
+            assert "Отчёт по этой группе присылается ОДНИМ сообщением" in prompt
 
     def test_get_full_context(self):
         with patch("project_workflow.wizard.convo") as mock_convo:

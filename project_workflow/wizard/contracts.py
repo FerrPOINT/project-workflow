@@ -82,19 +82,33 @@ class PhaseContractBuilder:
         instructions: list[str] = []
         checks: list[str] = []
         evidence: list[str] = []
+        group_details: list[dict[str, Any]] = []
         for ph in group:
-            for inst in ph.instructions:
-                txt = text_from_instruction(inst)
+            ph_instructions = [text_from_instruction(inst) for inst in ph.instructions]
+            ph_checks = [text_from_check(chk) for chk in ph.checks]
+            ph_evidence = [text_from_evidence(ev) for ev in ph.evidence]
+            for txt in ph_instructions:
                 if txt:
                     instructions.append(f"[{ph.code}] {txt}")
-            for chk in ph.checks:
-                txt = text_from_check(chk)
+            for txt in ph_checks:
                 if txt:
                     checks.append(f"[{ph.code}] {txt}")
-            for ev in ph.evidence:
-                txt = text_from_evidence(ev)
+            for txt in ph_evidence:
                 if txt:
                     evidence.append(f"[{ph.code}] {txt}")
+            group_details.append({
+                "phase_code": ph.code,
+                "phase_name": ph.name,
+                "description": ph.description,
+                "instructions": [t for t in ph_instructions if t],
+                "required_checks": [t for t in ph_checks if t],
+                "required_evidence": [t for t in ph_evidence if t],
+                "execution_type": ph.execution_type,
+                "delegate_agent": ph.delegate.agent if ph.delegate else None,
+                "delegate_toolsets": list(ph.delegate.toolsets) if ph.delegate else [],
+                "parallel_with": ph.parallel_with,
+                "rollback_target": ph.rollback_target,
+            })
         first = group[0]
         next_phase, next_name = self._next_after_group(group)
         # Collect delegates for the whole group.
@@ -117,6 +131,7 @@ class PhaseContractBuilder:
             parallel_with=first.parallel_with,
             rollback_target=first.rollback_target,
             group_phases=[p.code for p in group],
+            group_details=group_details,
         )
 
     def build_checklist(self, phase: Phase) -> list[str]:

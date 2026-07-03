@@ -393,6 +393,8 @@ class WizardEngine:
         first = group[0]
         phase_codes = [p.code for p in group]
         rollback_phase_obj = self.phase_map.get(rollback_target) if rollback_target else None
+        cb = PhaseContractBuilder(self.all_phases)
+        parallel_contract = cb.build_parallel(group).to_dict()
         result = {
             "verdict": VERDICT_LABELS[verdict],
             "task_key": self.task_key,
@@ -409,6 +411,8 @@ class WizardEngine:
             "required_checks": list({text_from_check(chk) for p in group for chk in p.checks}),
             "instructions": [text_from_instruction(inst) for p in group for inst in p.instructions],
             "next_step": next_phase or rollback_target or first.code,
+            "group_phases": phase_codes,
+            "group_details": parallel_contract.get("group_details") or [],
         }
         if verdict == "pass":
             result["message"] = "Phase accepted."
@@ -717,9 +721,8 @@ class WizardEngine:
                 missing=missing,
                 next_phase=next_phase,
                 rollback_target=rollback_target,
-                is_parallel=is_parallel,
-                group_codes=[p.code for p in group] if is_parallel else None,
             ),
+            group_phases=[p.code for p in group] if is_parallel else None,
         )
 
         result = assessment.to_result_dict()
@@ -849,6 +852,7 @@ def format_result(result: dict) -> str:
     Никаких эмодзи, verdict-заголовков, internal phase codes, boilerplate.
     PASS: показываем контракт следующей фазы со статусом pending (·).
     Не-PASS: показываем только недоделанные пункты текущей фазы.
+    Для parallel групп перечисляем все фазы с агентами и параллельными партнёрами.
     """
     verdict = str(result.get("verdict", "UNKNOWN")).upper()
     covered = result.get("covered", []) or []
@@ -857,20 +861,28 @@ def format_result(result: dict) -> str:
 
     if is_pass:
         contract = result.get("next_phase_contract") or {}
-        instructions = list(contract.get("instructions", []) or [])
-        checks = list(contract.get("required_checks", []) or [])
-        evidence = list(contract.get("required_evidence", []) or [])
+        group_details = contract.get("group_details") or []
+        if group_details:
+            instructions, checks, evidence = _flatten_parallel_contract(contract, covered_set)
+        else:
+            instructions = list(contract.get("instructions", []) or [])
+            checks = list(contract.get("required_checks", []) or [])
+            evidence = list(contract.get("required_evidence", []) or [])
     else:
-        instructions = list(result.get("instructions", []) or [])
-        checks = list(result.get("required_checks", []) or [])
-        evidence = list(result.get("required_evidence", []) or [])
-        missing = result.get("missing", []) or []
-        checks = [c for c in checks if str(c) not in covered_set]
-        evidence = [e for e in evidence if str(e) not in covered_set]
-        for m in missing:
-            s = str(m)
-            if s not in covered_set and s not in checks and s not in evidence:
-                checks.append(s)
+        group_details = result.get("group_details") or []
+        if group_details:
+            instructions, checks, evidence = _flatten_parallel_contract(result, covered_set)
+        else:
+            instructions = list(result.get("instructions", []) or [])
+            checks = list(result.get("required_checks", []) or [])
+            evidence = list(result.get("required_evidence", []) or [])
+            missing = result.get("missing", []) or []
+            checks = [c for c in checks if str(c) not in covered_set]
+            evidence = [e for e in evidence if str(e) not in covered_set]
+            for m in missing:
+                s = str(m)
+                if s not in covered_set and s not in checks and s not in evidence:
+                    checks.append(s)
 
     lines: list[str] = []
 
@@ -900,3 +912,29 @@ def format_result(result: dict) -> str:
             lines.append(f"  · {item}")
 
     return "\n".join(lines)
+
+
+def _flatten_parallel_contract(contract: dict[str, Any], covered_set: set[str]) -> tuple[list[str], list[str], list[str]]:
+    """Flatten a parallel group contract into (instructions, checks, evidence) with phase labels."""
+    instructions: list[str] = []
+    checks: list[str] = []
+    evidence: list[str] = []
+    group_codes = contract.get("group_phases") or []
+    if group_codes:
+        instructions.append(f"Параллельная группа фаз: {', '.join(group_codes)} — выполняются одновременно, отчёт одним сообщением")
+    for detail in contract.get("group_details") or []:
+        code = detail.get("phase_code") or "-"
+        name = detail.get("phase_name") or "-"
+        agent = detail.get("delegate_agent") or "не задан"
+        toolsets = ", ".join(detail.get("delegate_toolsets") or [])
+        partner = detail.get("parallel_with") or "-"
+        instructions.append(f"[{code}] {name} — параллельно с {partner}, агент: {agent}" + (f" | toolsets: {toolsets}" if toolsets else ""))
+        for item in detail.get("instructions", []) or []:
+            instructions.append(f"  [{code}] {item}")
+        for item in detail.get("required_checks", []) or []:
+            if str(item) not in covered_set:
+                checks.append(f"[{code}] {item}")
+        for item in detail.get("required_evidence", []) or []:
+            if str(item) not in covered_set:
+                evidence.append(f"[{code}] {item}")
+    return instructions, checks, evidence

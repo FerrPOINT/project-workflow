@@ -90,7 +90,8 @@ def test_smoke_phase_prompt_surfaces_parallel_agent_and_rollback_metadata(tmp_pa
     assert "ПАРАЛЛЕЛЬНАЯ ГРУППА ФАЗ" in parallel_prompt
     assert "Smoke Parallel A" in parallel_prompt  # name shown
     assert "smoke.parallel-b" in parallel_prompt   # parallel partner (code)
-    assert "Делегировано агенту: researcher" in parallel_prompt
+    assert "Агент: researcher" in parallel_prompt  # per-phase agent
+    assert "Параллельные фазы (выполняются одновременно" in parallel_prompt
 
     review_prompt = engine.get_phase_prompt("smoke.review")
     assert "Делегировано агенту: critic" in review_prompt
