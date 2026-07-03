@@ -141,7 +141,7 @@ flowchart TD
 |---|---|---|
 | Lint | `ruff check .` | **green** |
 | Type check | `mypy project_workflow` | **green** |
-| Tests | `pytest -q --timeout=60 --forked` | **869 passed, 6 deselected** |
+| Tests | `pytest -q --timeout=60` | **956 passed, 6 deselected** |
 | Coverage | combined slices (`-p no:cov`) | **95%** |
 | Systemd UI health | `curl http://localhost:8811/api/tasks` | **200** |
 
@@ -157,7 +157,7 @@ flowchart TD
 - [x] UI/API переведены на SQLAlchemy-сервисы
 - [x] `WorkflowDB` переписан на SQLAlchemy, `db/base.py` и `db_schema.sql` удалены
 - [x] Legacy `wartz-workflow-cli`, `wartz_ui` и старые wizard endpoints удалены
-- [x] mypy green, ruff green, 869 тестов green
+- [x] 869 тестов green
 - [x] Postgres-интеграционные тесты
 - [x] `WizardEngine` и wizard-модули собраны в пакет `project_workflow/wizard/`
 - [x] API-тесты на все UI routes
@@ -165,6 +165,8 @@ flowchart TD
 - [x] Coverage > 95%
 - [x] mypy `--check-untyped-defs` для wizard/core.py
 - [x] UI-доработки: execution_type на отдельной строке, русское склонение счётчиков, очистка рабочей БД от мусора
+- [x] Wizard evaluate: stateful prompt, три секции в CLI output, явный parallel rendering
+- [x] Smoke seed: real structured-document editor workflow, synced to PostgreSQL UI
 
 Подробный план: [`docs/plans/2026-06-21-detailed-roadmap.md`](docs/plans/2026-06-21-detailed-roadmap.md).
 

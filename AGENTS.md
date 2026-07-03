@@ -17,9 +17,9 @@ After any change to the SQLAlchemy layer, application services, UI state, or wiz
 
 1. **Full test suite**
    ```bash
-   pytest -q --timeout=60 --forked
+   pytest -q --timeout=60
    ```
-   Expected: **869 passed, 6 deselected**, 0 failed, 0 errors.
+   Expected: **956 passed, 6 deselected**, 0 failed, 0 errors.
 
 2. **Lint**
    ```bash
@@ -31,7 +31,7 @@ After any change to the SQLAlchemy layer, application services, UI state, or wiz
    ```bash
    mypy project_workflow
    ```
-   Expected: `Success: no issues found in 57 source files`.
+   Expected: `Success: no issues found in 64 source files`.
 
 4. **UI service health**
    ```bash
