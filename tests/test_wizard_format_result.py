@@ -190,9 +190,9 @@ class TestFormatResult:
 
     def test_pass_parallel_group_lists_phases_and_agents(self):
         out = format_result(self._pass_parallel())
-        assert "Параллельная группа фаз: smoke.parallel-a, smoke.parallel-b" in out
-        assert "параллельно с smoke.parallel-b" in out
-        assert "параллельно с smoke.parallel-a" in out
+        assert "Параллельная группа фаз: Smoke Parallel A, Smoke Parallel B" in out
+        assert "параллельно с Smoke Parallel B" in out
+        assert "параллельно с Smoke Parallel A" in out
         assert "агент: researcher" in out
         assert "агент: coder" in out
         assert "Backend check." in out

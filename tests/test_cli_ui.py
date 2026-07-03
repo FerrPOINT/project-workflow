@@ -36,28 +36,28 @@ class TestStepCommand:
         """WizardEngine auto-creates task in DB if missing."""
         mock_engine = mock_engine_cls.return_value
         mock_engine.current_phase = "0"
-        mock_engine.get_phase_prompt.return_value = "do stuff"
+        mock_engine.format_current_phase_instructions.return_value = "do stuff"
         runner = CliRunner()
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
             result = runner.invoke(cli, ["step", "--task", "TASK-1"])
         assert result.exit_code == 0
-        # step_cmd creates a single engine and asks for the phase prompt.
+        # step_cmd creates a single engine and asks for the phase instructions.
         assert mock_engine_cls.call_count == 1
         first_call = mock_engine_cls.call_args_list[0]
         assert first_call[0] == ("TASK-1",)
-        mock_engine.get_phase_prompt.assert_called_once()
+        mock_engine.format_current_phase_instructions.assert_called_once()
 
     @patch("project_workflow.wizard.WizardEngine")
     def test_step_shows_phase(self, mock_engine_cls):
         mock_engine = mock_engine_cls.return_value
         mock_engine.current_phase = "0.00"
-        mock_engine.get_phase_prompt.return_value = "phase prompt"
+        mock_engine.format_current_phase_instructions.return_value = "phase instructions"
         runner = CliRunner()
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
             result = runner.invoke(cli, ["step", "--task", "TASK-1"])
         assert result.exit_code == 0
-        assert "phase prompt" in result.output
-        mock_engine.get_phase_prompt.assert_called_once_with()
+        assert "phase instructions" in result.output
+        mock_engine.format_current_phase_instructions.assert_called_once_with()
 
     @patch("project_workflow.wizard.WizardEngine")
     def test_step_report_pass(self, mock_engine_cls):

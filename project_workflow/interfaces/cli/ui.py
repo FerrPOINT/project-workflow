@@ -71,16 +71,9 @@ def step_cmd(
     if jmode:
         out_json({"ok": True, "task_key": task_key, "phase": engine.current_phase, "prompt": prompt})
         return
-    formatted = format_result({
-        "phase_name": engine.current_phase,
-        "verdict": "INFO",
-        "instructions": [prompt],
-        "required_checks": [],
-        "required_evidence": [],
-    })
-    if smart:
-        formatted = "[🧠 SMART MODE] " + formatted
-    console.print(formatted)
+    instructions = engine.format_current_phase_instructions()
+    console.print(instructions)
+    return
 
 
 # ═══════════════════════════════════════════════════════════════════════

@@ -15,7 +15,6 @@ from ..infrastructure.db.uow import SAUnitOfWork
 
 _CATALOG_ENSURED_URLS: set[str] = set()
 _MIGRATED_URLS: set[str] = set()
-_SMOKE_ENSURED_URLS: set[str] = set()
 
 class _AppState:
     """Application state holder (replaces module-level globals)."""
@@ -38,7 +37,6 @@ class _AppState:
     def reset(self) -> None:
         _CATALOG_ENSURED_URLS.discard(self._database_url_normalized())
         _MIGRATED_URLS.discard(self._database_url_normalized())
-        _SMOKE_ENSURED_URLS.discard(self._database_url_normalized())
 
     def get_service(self) -> PhaseService:
         """PhaseService helper for UI detail/edit routes."""
@@ -57,9 +55,6 @@ class _AppState:
             from ..infrastructure.db import schema
             schema.ensure_phase_catalog(uow)
             _CATALOG_ENSURED_URLS.add(url)
-        if url not in _SMOKE_ENSURED_URLS:
-            uow._bootstrap_smoke_project_and_workflow()
-            _SMOKE_ENSURED_URLS.add(url)
         return uow
 
     def workflow_service(self) -> WorkflowService:

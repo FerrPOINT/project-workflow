@@ -78,9 +78,7 @@ class TestWizard:
             engine.current_phase = "parallel-a"
             prompt = engine.get_phase_prompt("parallel-a")
             assert "ПАРАЛЛЕЛЬНАЯ ГРУППА ФАЗ" in prompt
-            assert "parallel-a, parallel-b" in prompt
-            assert "parallel-a" in prompt
-            assert "parallel-b" in prompt
+            assert "Parallel A, Parallel B" in prompt
             assert "параллельно с" in prompt
             assert "Выполняются одновременно" in prompt
             assert "Отчёт по этой группе присылается ОДНИМ сообщением" in prompt

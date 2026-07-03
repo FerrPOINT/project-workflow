@@ -651,7 +651,16 @@ class WizardEngine:
             phase_id=phase_id,
         )
 
-    # ── Evaluate ─────────────────────────────────────────────────────
+    def format_current_phase_instructions(self) -> str:
+        """Human-only instructions for `step --task X` without a report."""
+        from .prompt import format_current_phase_instructions as _fmt
+        return _fmt(
+            task_key=self.task_key,
+            phase_map=self.phase_map,
+            all_phases=self.all_phases,
+            current_phase=self.current_phase,
+            ctx=self.get_full_context(),
+        )
 
     def evaluate(self, report: str) -> dict:
         phase = self._get_current_phase_obj()
@@ -934,22 +943,26 @@ def _flatten_parallel_contract(contract: dict[str, Any], covered_set: set[str]) 
     instructions: list[str] = []
     checks: list[str] = []
     evidence: list[str] = []
-    group_codes = contract.get("group_phases") or []
-    if group_codes:
-        instructions.append(f"Параллельная группа фаз: {', '.join(group_codes)} — выполняются одновременно, отчёт одним сообщением")
-    for detail in contract.get("group_details") or []:
-        code = detail.get("phase_code") or "-"
-        name = detail.get("phase_name") or "-"
+    group_details = contract.get("group_details") or []
+    group_names = [d.get("phase_name") or d.get("phase_code") or "-" for d in group_details]
+    if group_names:
+        instructions.append(f"Параллельная группа фаз: {', '.join(group_names)} — выполняются одновременно, отчёт одним сообщением")
+    for detail in group_details:
+        name = detail.get("phase_name") or detail.get("phase_code") or "-"
         agent = detail.get("delegate_agent") or "не задан"
         toolsets = ", ".join(detail.get("delegate_toolsets") or [])
-        partner = detail.get("parallel_with") or "-"
-        instructions.append(f"[{code}] {name} — параллельно с {partner}, агент: {agent}" + (f" | toolsets: {toolsets}" if toolsets else ""))
+        partner_code = detail.get("parallel_with") or "-"
+        partner = next(
+            (d.get("phase_name") or d.get("phase_code") or partner_code for d in group_details if d.get("phase_code") == partner_code),
+            partner_code,
+        )
+        instructions.append(f"{name} — параллельно с {partner}, агент: {agent}" + (f" | toolsets: {toolsets}" if toolsets else ""))
         for item in detail.get("instructions", []) or []:
-            instructions.append(f"  [{code}] {item}")
+            instructions.append(f"  {item}")
         for item in detail.get("required_checks", []) or []:
             if str(item) not in covered_set:
-                checks.append(f"[{code}] {item}")
+                checks.append(f"{name}: {item}")
         for item in detail.get("required_evidence", []) or []:
             if str(item) not in covered_set:
-                evidence.append(f"[{code}] {item}")
+                evidence.append(f"{name}: {item}")
     return instructions, checks, evidence

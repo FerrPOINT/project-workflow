@@ -7,6 +7,7 @@ import argparse
 import uvicorn
 
 from project_workflow.config import get_settings
+from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui.app import app
 
 
@@ -18,6 +19,12 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=DEFAULT_UI_PORT, help="Port (default: %(default)s)")
     parser.add_argument("--host", default="0.0.0.0", help="Host (default: %(default)s)")
     args = parser.parse_args()
+    database_url = get_settings().DATABASE_URL
+    uow = SAUnitOfWork(database_url)
+    try:
+        uow.init()
+    finally:
+        uow.close()
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
 
 
