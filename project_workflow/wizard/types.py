@@ -29,7 +29,6 @@ class PhaseContract:
     execution_type: str = "sync"
     delegate_agent: Optional[str] = None
     delegate_toolsets: List[str] = field(default_factory=list)
-    next_recommendation: str = ""
     parallel_with: Optional[str] = None
     rollback_target: Optional[str] = None
     group_phases: Optional[List[str]] = None  # set for parallel blocks
@@ -45,7 +44,6 @@ class PhaseContract:
             "execution_type": self.execution_type,
             "delegate_agent": self.delegate_agent,
             "delegate_toolsets": self.delegate_toolsets,
-            "next_recommendation": self.next_recommendation,
             "parallel_with": self.parallel_with,
             "rollback_target": self.rollback_target,
             "group_phases": self.group_phases,

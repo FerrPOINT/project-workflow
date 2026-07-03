@@ -1,9 +1,83 @@
-"""Prompt assembly for WizardEngine phase contracts."""
+"""Prompt assembly for WizardEngine phase contracts.
+
+The prompt is stateful: it includes task history, recent verdicts, and recent
+conversation messages already collected by WizardContextBuilder. This gives the
+LLM (or deterministic consumer) enough context to avoid repeating failures.
+"""
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from .contracts import PhaseContractBuilder
+
+
+def _format_history(ctx: dict[str, Any], limit: int = 5) -> str:
+    items = ctx.get("phase_history") or []
+    if not items:
+        return "Нет завершённых фаз."
+    lines: list[str] = []
+    for item in items[-limit:]:
+        code = item.get("phase_code") or "-"
+        name = item.get("phase_name") or ""
+        status = item.get("status") or "-"
+        label = f"{name} ({code})" if name else code
+        lines.append(f"- {label}: {status}")
+    return "\n".join(lines)
+
+
+def _format_verdicts(ctx: dict[str, Any], limit: int = 3) -> str:
+    items = ctx.get("recent_verdicts") or []
+    if not items:
+        return "Нет предыдущих вердиктов."
+    lines: list[str] = []
+    for item in items[:limit]:
+        code = item.get("phase_code") or "-"
+        verdict = item.get("verdict") or "-"
+        blockers = item.get("blockers") or []
+        missing = item.get("missing") or []
+        parts = [f"- {code}: {verdict}"]
+        if missing:
+            parts.append(f"  missing: {', '.join(str(m) for m in missing[:3])}")
+        if blockers:
+            parts.append(f"  blockers: {', '.join(str(b) for b in blockers[:3])}")
+        lines.extend(parts)
+    return "\n".join(lines)
+
+
+def _format_messages(ctx: dict[str, Any], limit: int = 5) -> str:
+    items = ctx.get("messages") or []
+    if not items:
+        return "Нет сообщений."
+    lines: list[str] = []
+    for item in items[-limit:]:
+        if isinstance(item, dict):
+            role = item.get("role") or item.get("actor") or "-"
+            text = item.get("content") or item.get("text") or ""
+        else:
+            role = getattr(item, "role", getattr(item, "actor", "-"))
+            text = getattr(item, "content", getattr(item, "text", ""))
+        preview = str(text).replace("\n", " ")[:120]
+        lines.append(f"- {role}: {preview}")
+    return "\n".join(lines)
+
+
+def _format_contract(contract: dict[str, Any]) -> str:
+    instructions = contract.get("instructions") or ["Нет отдельных инструкций — следуй описанию фазы и обязательным проверкам."]
+    checks = contract.get("required_checks") or ["Нет явных checks."]
+    evidence = contract.get("required_evidence") or ["Нет явных evidence items."]
+    parts = [
+        f"- Описание: {contract.get('description') or '-'}\n",
+        f"- Тип выполнения: {contract.get('execution_type') or 'sync'}\n",
+        f"- Параллельно с: {contract.get('parallel_with') or '-'}\n",
+        f"- Rollback target: {contract.get('rollback_target') or '-'}\n",
+        "Инструкции:\n" + "\n".join(f"  - {item}" for item in instructions) + "\n\n",
+        "Checks:\n" + "\n".join(f"  - {item}" for item in checks) + "\n\n",
+        "Evidence:\n" + "\n".join(f"  - {item}" for item in evidence) + "\n\n",
+    ]
+    if contract.get("delegate_agent"):
+        toolsets = ", ".join(contract.get("delegate_toolsets") or [])
+        parts.append(f"Делегировано агенту: {contract['delegate_agent']}" + (f" | toolsets: {toolsets}" if toolsets else "") + "\n\n")
+    return "".join(parts)
 
 
 def build_phase_prompt(
@@ -14,7 +88,7 @@ def build_phase_prompt(
     ctx: dict,
     phase_id: Optional[str] = None,
 ) -> str:
-    """Build human-readable prompt for a given phase (or current)."""
+    """Build a stateful human-readable prompt for a given phase (or current)."""
     target_phase = phase_map.get(phase_id or current_phase)
     if not target_phase:
         return f"Фаза {phase_id or current_phase} не найдена в workflow."
@@ -24,10 +98,11 @@ def build_phase_prompt(
     if is_parallel_target:
         group = cb.get_parallel_group(target_phase)
         contract = cb.build_parallel(group).to_dict()
+        group_codes = contract.get("group_phases") or []
         parallel_banner = (
-            "\n⚡ ПАРАЛЛЕЛЬНАЯ ГРУППА ФАЗ\n"
-            f"Выполняются одновременно: {', '.join(contract.get('group_phases') or [])}\n"
-            f"Отчёт по этой группе присылается ОДНИМ сообщением.\n"
+            "ПАРАЛЛЕЛЬНАЯ ГРУППА ФАЗ\n"
+            f"Выполняются одновременно: {', '.join(group_codes)}\n"
+            "Отчёт по этой группе присылается ОДНИМ сообщением.\n\n"
         )
     else:
         if target_phase.code == current_phase:
@@ -40,36 +115,45 @@ def build_phase_prompt(
             contract = cb.build(target_phase).to_dict()
         parallel_banner = ""
 
-    instructions = contract.get("instructions") or ["Нет отдельных инструкций — следуй описанию фазы и обязательным проверкам."]
-    checks = contract.get("required_checks") or ["Нет явных checks."]
-    evidence = contract.get("required_evidence") or ["Нет явных evidence items."]
     cli_actor = ctx.get("cli_actor") or {
         "description": "CLI user",
         "entrypoint": "project-workflow step --task TASK-KEY [--report TEXT]",
     }
-
-    delegated = ""
-    if contract.get("delegate_agent"):
-        delegated = (
-            f"\nДелегировано агенту: {contract['delegate_agent']}"
-            + (f" | toolsets: {', '.join(contract['delegate_toolsets'])}" if contract.get("delegate_toolsets") else "")
-        )
+    report_template = ctx.get("report_template") or {
+        "summary": "What was achieved in this phase.",
+        "completed": "Bullet list of completed contract items.",
+        "evidence": "Concrete evidence produced in this phase.",
+        "blockers": "Explicit blockers or 'none'.",
+        "next_step": "Single next recommended action.",
+    }
+    # Guard against partial report_template dicts from tests.
+    report_template = {
+        "summary": report_template.get("summary", "What was achieved in this phase."),
+        "completed": report_template.get("completed", "Bullet list of completed contract items."),
+        "evidence": report_template.get("evidence", "Concrete evidence produced in this phase."),
+        "blockers": report_template.get("blockers", "Explicit blockers or 'none'."),
+        "next_step": report_template.get("next_step", "Single next recommended action."),
+    }
 
     return (
         f"Задача: {task_key}\n"
-        f"Workflow: {ctx['workflow_name'] or '-'}\n"
+        f"Workflow: {ctx.get('workflow_name') or '-'}\n"
         f"Текущий шаг: {target_phase.code} — {target_phase.name}\n"
         f"Исполнитель CLI: {cli_actor['description']}\n"
         f"CLI entrypoint: {cli_actor['entrypoint']}\n\n"
+        f"{parallel_banner}"
         f"Контракт текущей фазы:\n"
-        f"- Описание: {contract.get('description') or '-'}\n"
-        f"- Тип выполнения: {contract.get('execution_type')}\n"
-        f"- Параллельно с: {contract.get('parallel_with') or '-'}\n"
-        f"- Rollback target: {contract.get('rollback_target') or '-'}\n"
-        f"- Next recommendation: {contract.get('next_recommendation') or '-'}"
-        f"{delegated}\n"
-        f"{parallel_banner}\n"
-        f"Инструкции:\n" + "\n".join(f"- {item}" for item in instructions) + "\n\n"
-        "Checks:\n" + "\n".join(f"- {item}" for item in checks) + "\n\n"
-        "Evidence:\n" + "\n".join(f"- {item}" for item in evidence) + "\n\n"
+        f"{_format_contract(contract)}"
+        f"История выполнения:\n"
+        f"{_format_history(ctx)}\n\n"
+        f"Недавние вердикты:\n"
+        f"{_format_verdicts(ctx)}\n\n"
+        f"Недавние сообщения:\n"
+        f"{_format_messages(ctx)}\n\n"
+        f"Формат отчёта:\n"
+        f"- summary: {report_template['summary']}\n"
+        f"- completed: {report_template['completed']}\n"
+        f"- evidence: {report_template['evidence']}\n"
+        f"- blockers: {report_template['blockers']}\n"
+        f"- next_step: {report_template['next_step']}\n"
     )

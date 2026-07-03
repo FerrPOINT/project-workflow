@@ -69,7 +69,14 @@ class TestFormatResult:
     # ── PASS ──────────────────────────────────────────────────────────
     def test_pass_shows_next_phase_name(self):
         out = format_result(self._pass())
-        assert "Следующий шаг: Next Phase" in out
+        assert "Перейди к шагу: Next Phase" in out
+        # Must be inside the instructions section, not a standalone header.
+        lines = out.splitlines()
+        instr_idx = next((i for i, line in enumerate(lines) if line == "Инструкции:"), -1)
+        next_idx = next((i for i, line in enumerate(lines) if "Перейди к шагу" in line), -1)
+        assert instr_idx != -1
+        assert next_idx != -1
+        assert next_idx > instr_idx
 
     def test_pass_shows_next_phase_instructions(self):
         out = format_result(self._pass())

@@ -114,8 +114,12 @@ def test_supervisor_context_contains_full_path_and_contract(tmp_path: Path, monk
     assert "Текущий шаг" in prompt
     assert "Create implementation plan" in prompt
     assert "Задача" in prompt
-    assert "Формат отчёта" not in prompt
+    assert "Формат отчёта" in prompt
     assert "Полный путь workflow" not in prompt
+    # Empty history/verdicts/messages sections are still present.
+    assert "История выполнения:" in prompt
+    assert "Недавние вердикты:" in prompt
+    assert "Недавние сообщения:" in prompt
 
 
 

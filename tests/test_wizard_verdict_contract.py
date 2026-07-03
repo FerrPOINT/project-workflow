@@ -44,12 +44,12 @@ class TestVerdictLabels:
 class TestVerdictMessages:
     def test_soft_fail_message(self):
         msg = build_verdict_message("soft_fail", "Plan", "1", [], ["missing item"], None, None)
-        assert "SOFT_FAIL" in msg or "partial" in msg.lower()
+        assert "Incomplete" in msg
         assert "missing item" in msg
 
     def test_hard_fail_message(self):
         msg = build_verdict_message("hard_fail", "Plan", "1", [], ["missing item"], None, None)
-        assert "HARD_FAIL" in msg or "missing item" in msg
+        assert "Cannot proceed" in msg or "missing item" in msg
 
 
 class TestFSMAcceptsNewVerdicts:

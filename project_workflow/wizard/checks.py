@@ -108,35 +108,18 @@ def build_verdict_message(
     is_parallel: bool = False,
     group_codes: list[str] | None = None,
 ) -> str:
-    if is_parallel:
-        codes = group_codes or [phase_code]
-        codes_str = ", ".join(codes)
-        if verdict == "pass":
-            return f"Parallel group ({codes_str}) accepted. Proceed to {next_phase or 'completion'}."
-        if verdict == "rollback":
-            return f"Parallel group ({codes_str}) failed. Roll back to {rollback_target}."
-        if verdict == "blocked":
-            issues = blockers or missing or codes
-            return f"BLOCKED: {'; '.join(issues)}. Fix and resubmit."
-        if verdict == "delegate":
-            return f"Delegate work for parallel group ({codes_str}) before continuing."
-        if verdict == "soft_fail":
-            issues = missing or ["unspecified items"]
-            return f"SOFT_FAIL: {'; '.join(issues)}. Complete before continuing."
-        issues = missing or ["unspecified items"]
-        return f"HARD_FAIL: {'; '.join(issues)}. Cannot proceed without required items."
+    """Single-line actionable status for machine-readable result["message"]."""
+    issues = blockers or missing or []
+    issues_str = "; ".join(str(i) for i in issues) if issues else "unspecified items"
 
     if verdict == "pass":
-        return f"Phase {phase_code} accepted."
+        return "Phase accepted."
     if verdict == "rollback":
-        return f"Phase {phase_code} failed gate and must roll back to {rollback_target}."
+        return f"Roll back and fix: {issues_str}."
     if verdict == "blocked":
-        issues = blockers or missing or [phase_name]
-        return f"BLOCKED: {'; '.join(issues)}. Fix and resubmit."
+        return f"Blocked: {issues_str}. Fix and resubmit."
     if verdict == "delegate":
-        return f"Delegate work for phase {phase_code} before continuing."
+        return "Delegate the work before continuing."
     if verdict == "soft_fail":
-        issues = missing or [phase_name]
-        return f"SOFT_FAIL: {'; '.join(issues)}. Complete before continuing."
-    issues = missing or [phase_name]
-    return f"HARD_FAIL: {'; '.join(issues)}. Cannot proceed without required items."
+        return f"Incomplete: {issues_str}. Complete before continuing."
+    return f"Cannot proceed: {issues_str}."

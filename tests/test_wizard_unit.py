@@ -77,7 +77,8 @@ class TestWizard:
             engine.all_phases = [ph_a, ph_b]
             engine.current_phase = "parallel-a"
             prompt = engine.get_phase_prompt("parallel-a")
-            assert "⚡ ПАРАЛЛЕЛЬНАЯ ГРУППА ФАЗ" in prompt
+            assert "ПАРАЛЛЕЛЬНАЯ ГРУППА ФАЗ" in prompt
+            assert "parallel-a, parallel-b" in prompt
             assert "parallel-a" in prompt
             assert "parallel-b" in prompt
 
@@ -177,9 +178,22 @@ class TestDeterministicChecks:
         from project_workflow.wizard.checks import determine_verdict
         assert determine_verdict(covered=[], missing=["m"], blockers=[], report="delegated", is_delegated=True) == "delegate"
 
-    def test_build_verdict_message_parallel(self):
+    def test_build_verdict_message_pass(self):
         from project_workflow.wizard.checks import build_verdict_message
-        assert "Parallel group" in build_verdict_message("pass", "P", "1", [], [], "2", None, is_parallel=True, group_codes=["1", "2"])
-        assert "Roll back" in build_verdict_message("rollback", "P", "1", [], [], None, "0", is_parallel=True, group_codes=["1", "2"])
-        assert "Delegate work" in build_verdict_message("delegate", "P", "1", [], [], None, None, is_parallel=True, group_codes=["1", "2"])
-        assert "BLOCKED" in build_verdict_message("blocked", "P", "1", ["b"], [], None, None, is_parallel=True, group_codes=["1", "2"])
+        assert build_verdict_message("pass", "P", "1", [], [], "2", None) == "Phase accepted."
+
+    def test_build_verdict_message_blocked(self):
+        from project_workflow.wizard.checks import build_verdict_message
+        assert build_verdict_message("blocked", "P", "1", ["b"], [], None, None) == "Blocked: b. Fix and resubmit."
+
+    def test_build_verdict_message_rollback(self):
+        from project_workflow.wizard.checks import build_verdict_message
+        assert build_verdict_message("rollback", "P", "1", [], ["m"], None, "0") == "Roll back and fix: m."
+
+    def test_build_verdict_message_no_phase_codes(self):
+        from project_workflow.wizard.checks import build_verdict_message
+        result = build_verdict_message("soft_fail", "P", "1", [], ["m"], None, None)
+        assert "Phase 1" not in result
+        assert "HARD_FAIL" not in result
+        assert "SOFT_FAIL" not in result
+        assert "Incomplete" in result

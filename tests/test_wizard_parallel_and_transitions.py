@@ -294,7 +294,7 @@ class TestBuildResult:
             rollback_target=None,
         )
         assert result["verdict"] == "PASS"
-        assert result["message"] == "Go next"
+        assert result["message"] == "Phase accepted."
         assert result["next_phase"] == "1"
 
     def test_rollback_message(self):
@@ -307,7 +307,8 @@ class TestBuildResult:
             rollback_target="-1",
         )
         assert result["verdict"] == "ROLLBACK"
-        assert "roll back to" in result["message"]
+        assert "Roll back" in result["message"]
+        assert "-1" in result["message"]
 
     def test_blocked_message(self):
         engine = self._make_engine()
@@ -319,7 +320,8 @@ class TestBuildResult:
             rollback_target=None,
         )
         assert result["verdict"] == "BLOCKED"
-        assert "BLOCKED" in result["message"]
+        assert "Blocked" in result["message"]
+        assert "b1" in result["message"]
 
     def test_delegate_message(self):
         engine = self._make_engine()
@@ -331,7 +333,7 @@ class TestBuildResult:
             rollback_target=None,
         )
         assert result["verdict"] == "DELEGATE"
-        assert "Delegate work" in result["message"]
+        assert "Delegate the work" in result["message"]
 
     def test_soft_fail_message(self):
         engine = self._make_engine()
@@ -343,7 +345,8 @@ class TestBuildResult:
             rollback_target=None,
         )
         assert result["verdict"] == "SOFT_FAIL"
-        assert "SOFT_FAIL" in result["message"]
+        assert "Incomplete" in result["message"]
+        assert "m1" in result["message"]
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -397,7 +400,8 @@ class TestBuildParallelResult:
             None, None, None,
         )
         assert result["verdict"] == "BLOCKED"
-        assert "BLOCKED" in result["message"]
+        assert "Blocked" in result["message"]
+        assert "b1" in result["message"]
 
     def test_delegate(self):
         engine = self._make_engine()
@@ -408,7 +412,7 @@ class TestBuildParallelResult:
             None, None, None,
         )
         assert result["verdict"] == "DELEGATE"
-        assert "Delegate work" in result["message"]
+        assert "Delegate the work" in result["message"]
 
     def test_soft_fail(self):
         engine = self._make_engine()
@@ -419,7 +423,8 @@ class TestBuildParallelResult:
             None, None, None,
         )
         assert result["verdict"] == "SOFT_FAIL"
-        assert "SOFT_FAIL" in result["message"]
+        assert "Incomplete" in result["message"]
+        assert "m1" in result["message"]
 
 
 # ═══════════════════════════════════════════════════════════════════════

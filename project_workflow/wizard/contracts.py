@@ -29,7 +29,6 @@ def phase_to_dict(phase: Phase) -> dict[str, Any]:
         "checks": [text_from_check(item) for item in phase.checks],
         "evidence": [text_from_evidence(item) for item in phase.evidence],
         "execution_type": phase.execution_type,
-        "next_recommendation": phase.next_recommendation,
         "parallel_with": phase.parallel_with,
         "rollback_target": phase.rollback_target,
         "delegate_agent": phase.delegate.agent if phase.delegate else None,
@@ -62,7 +61,6 @@ class PhaseContractBuilder:
             execution_type=phase.execution_type,
             delegate_agent=phase.delegate.agent if phase.delegate else None,
             delegate_toolsets=list(phase.delegate.toolsets) if phase.delegate else [],
-            next_recommendation=phase.next_recommendation or "",
             parallel_with=phase.parallel_with,
             rollback_target=phase.rollback_target,
         )
@@ -116,7 +114,6 @@ class PhaseContractBuilder:
             execution_type="parallel",
             delegate_agent=representative.agent if representative else None,
             delegate_toolsets=list(representative.toolsets) if representative else [],
-            next_recommendation=f"После выполнения переходи к {next_phase or 'завершению workflow'} ({next_name or '-'}).",
             parallel_with=first.parallel_with,
             rollback_target=first.rollback_target,
             group_phases=[p.code for p in group],

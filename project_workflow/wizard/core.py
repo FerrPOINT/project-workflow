@@ -382,11 +382,9 @@ class WizardEngine:
             "next_step": next_phase or rollback_target or phase.code,
         }
         if verdict == "pass":
-            result["message"] = phase.next_recommendation or f"Phase {phase.code} accepted."
+            result["message"] = "Phase accepted."
         elif verdict == "rollback":
-            result["message"] = f"Phase {phase.code} failed gate and must roll back to {rollback_target}."
-        elif verdict == "delegate":
-            result["message"] = f"Delegate work for phase {phase.code} before continuing."
+            result["message"] = f"Roll back and fix: {rollback_target}."
         else:
             result["message"] = build_verdict_message(verdict, phase.name, phase.code, blockers, missing, next_phase, rollback_target)
         return result
@@ -413,20 +411,20 @@ class WizardEngine:
             "next_step": next_phase or rollback_target or first.code,
         }
         if verdict == "pass":
-            result["message"] = f"Parallel group ({', '.join(phase_codes)}) accepted. Proceed to {next_phase or 'completion'}."
+            result["message"] = "Phase accepted."
         elif verdict == "rollback":
-            result["message"] = f"Parallel group ({', '.join(phase_codes)}) failed. Roll back to {rollback_target}."
+            result["message"] = f"Roll back and fix: {rollback_target}."
         elif verdict == "blocked":
-            issues = missing or blockers or phase_codes
-            result["message"] = f"BLOCKED: {'; '.join(issues)}. Fix and resubmit."
+            issues = blockers or missing or phase_codes
+            result["message"] = f"Blocked: {'; '.join(issues)}. Fix and resubmit."
         elif verdict == "delegate":
-            result["message"] = f"Delegate work for parallel group ({', '.join(phase_codes)}) before continuing."
+            result["message"] = "Delegate the work before continuing."
         elif verdict == "soft_fail":
             issues = missing or ["unspecified items"]
-            result["message"] = f"SOFT_FAIL: {'; '.join(issues)}. Complete before continuing."
+            result["message"] = f"Incomplete: {'; '.join(issues)}. Complete before continuing."
         else:
             issues = missing or ["unspecified items"]
-            result["message"] = f"HARD_FAIL: {'; '.join(issues)}. Cannot proceed without required items."
+            result["message"] = f"Cannot proceed: {'; '.join(issues)}."
         return result
 
     def _build_checklist(self, phase):
@@ -855,56 +853,50 @@ def format_result(result: dict) -> str:
     verdict = str(result.get("verdict", "UNKNOWN")).upper()
     covered = result.get("covered", []) or []
     covered_set = {str(i) for i in covered}
-
     is_pass = verdict == "PASS"
 
     if is_pass:
         contract = result.get("next_phase_contract") or {}
-        instructions = contract.get("instructions", []) or []
-        checks = contract.get("required_checks", []) or []
-        evidence = contract.get("required_evidence", []) or []
+        instructions = list(contract.get("instructions", []) or [])
+        checks = list(contract.get("required_checks", []) or [])
+        evidence = list(contract.get("required_evidence", []) or [])
     else:
-        instructions = result.get("instructions", []) or []
-        checks = result.get("required_checks", []) or []
-        evidence = result.get("required_evidence", []) or []
+        instructions = list(result.get("instructions", []) or [])
+        checks = list(result.get("required_checks", []) or [])
+        evidence = list(result.get("required_evidence", []) or [])
+        missing = result.get("missing", []) or []
+        checks = [c for c in checks if str(c) not in covered_set]
+        evidence = [e for e in evidence if str(e) not in covered_set]
+        for m in missing:
+            s = str(m)
+            if s not in covered_set and s not in checks and s not in evidence:
+                checks.append(s)
 
     lines: list[str] = []
 
+    # PASS: first instruction becomes the actionable next step.
     if is_pass:
         next_name = result.get("next_phase_name") or result.get("next_phase") or ""
-        if next_name:
-            lines.append(f"Следующий шаг: {next_name}")
-            lines.append("")
+        if next_name and instructions:
+            instructions.insert(0, f"Перейди к шагу: {next_name}")
+        elif next_name:
+            instructions.insert(0, f"Перейди к шагу: {next_name}")
 
     if instructions:
         lines.append("Инструкции:")
         for item in instructions:
             lines.append(f"  · {item}")
 
-    if is_pass:
-        check_items = list(checks)
-    else:
-        check_items = [c for c in checks if str(c) not in covered_set]
-        missing = result.get("missing", []) or []
-        # missing items are the not-done checks from the user report
-        for m in missing:
-            s = str(m)
-            if s not in covered_set and s not in check_items:
-                check_items.append(s)
-    if check_items:
+    if checks:
         lines.append("")
         lines.append("Чекапы:")
-        for item in check_items:
+        for item in checks:
             lines.append(f"  · {item}")
 
-    if is_pass:
-        evidence_items = evidence
-    else:
-        evidence_items = [e for e in evidence if str(e) not in covered_set]
-    if evidence_items:
+    if evidence:
         lines.append("")
         lines.append("Доказательства:")
-        for item in evidence_items:
+        for item in evidence:
             lines.append(f"  · {item}")
 
     return "\n".join(lines)
