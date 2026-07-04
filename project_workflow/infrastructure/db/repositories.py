@@ -35,6 +35,9 @@ def _row_to_phase(row: m.Phase) -> Phase:
         name=row.name,
         description=row.description or "",
         min_time_min=row.min_time_min or 0,
+        is_blocker=bool(row.is_blocker),
+        is_delegated=bool(row.is_delegated),
+        is_critic=bool(row.is_critic),
         phase_order=row.phase_order,
         agent_id=row.agent_id,
         next_recommendation=row.next_recommendation or "",
@@ -259,6 +262,9 @@ class SAPhaseRepository(PhaseRepository):
             rollback_target=data.get("rollback_target"),
             execution_type=data.get("execution_type", "sync"),
             is_seed_managed=1 if data.get("is_seed_managed") else 0,
+            is_blocker=1 if data.get("is_blocker") else 0,
+            is_delegated=1 if data.get("is_delegated") else 0,
+            is_critic=1 if data.get("is_critic") else 0,
         )
         self._session.add(item)
         self._session.flush()
@@ -648,6 +654,8 @@ class SASupervisorRunRepository(SupervisorRunRepository):
         stmt = select(m.SupervisorRun).order_by(m.SupervisorRun.id.desc()).limit(limit)
         if task_id is not None:
             stmt = stmt.where(m.SupervisorRun.task_id == task_id)
+        if task_key is not None:
+            stmt = stmt.join(m.Task, m.SupervisorRun.task_id == m.Task.id).where(m.Task.task_key == task_key)
         rows = self._session.execute(stmt).scalars().all()
         return [_row_to_supervisor_run(r) for r in rows]
 

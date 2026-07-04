@@ -82,6 +82,21 @@ class Phase(Base):
         default=0,
         server_default="0",
     )
+    is_blocker: Mapped[int] = mapped_column(
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+    is_delegated: Mapped[int] = mapped_column(
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+    is_critic: Mapped[int] = mapped_column(
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
     __table_args__ = (
         UniqueConstraint("workflow_id", "code", name="uq_phases_workflow_code"),
         CheckConstraint(
@@ -89,6 +104,9 @@ class Phase(Base):
             name="ck_phases_execution_type",
         ),
         CheckConstraint("is_seed_managed IN (0, 1)", name="ck_phases_is_seed_managed"),
+        CheckConstraint("is_blocker IN (0, 1)", name="ck_phases_is_blocker"),
+        CheckConstraint("is_delegated IN (0, 1)", name="ck_phases_is_delegated"),
+        CheckConstraint("is_critic IN (0, 1)", name="ck_phases_is_critic"),
     )
 
     workflow: Mapped[Workflow] = relationship("Workflow", back_populates="phases")

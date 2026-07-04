@@ -107,7 +107,9 @@ def history_cmd(ctx: click.Context, task: str, n: Optional[int]) -> None:
 
 
     with SAUnitOfWork() as uow:
-        runs_raw = uow.supervisor_runs.list(task_key=task_key, limit=n or 200)
+        task_obj = uow.tasks.get_by_key(task_key)
+        task_id = task_obj.id if task_obj else None
+        runs_raw = uow.supervisor_runs.list(task_id=task_id, task_key=task_key, limit=n or 200)
         runs: list[dict[str, Any]] = []
         for raw in runs_raw:
             rd: dict[str, Any] = raw.to_dict()

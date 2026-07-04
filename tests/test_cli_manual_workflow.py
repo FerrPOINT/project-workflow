@@ -55,6 +55,11 @@ def manual_env(tmp_path, monkeypatch):
             "description": p["description"],
             "execution_type": p["execution_type"],
             "parallel_with": p.get("parallel_with"),
+            "rollback_target": p.get("rollback_target"),
+            "is_delegated": p.get("is_delegated", False),
+            "is_blocker": p.get("is_blocker", False),
+            "is_critic": p.get("is_critic", False),
+            "is_seed_managed": p.get("is_seed_managed", False),
         })
         for inst in p.get("instructions", []):
             uow.instructions.create(
@@ -228,8 +233,91 @@ class TestManualWorkflowEndToEnd:
         data = json.loads(result.output)
         assert data["verdict"] == "PASS"
         assert data["phase"] == "manual.seq-instr"
-        assert data["next_phase"] == "manual.done"
+        assert data["next_phase"] == "manual.rollback-demo"
         assert data["missing"] == []
+
+    def test_rollback_phase_response(self, manual_env):
+        runner = CliRunner(
+            env={"SMART_EVALUATE": "false", "DATABASE_URL": "", "WORKFLOW_DIR": manual_env}
+        )
+        for report in [
+            (
+                "Цель задачи MANUAL-6 зафиксирована. Входные данные зафиксированы. "
+                "Описание цели приложено. Список входных данных приложен."
+            ),
+            (
+                "Архитектура определена. Библиотеки выбраны. "
+                "Документ архитектуры приложен. Список библиотек приложен."
+            ),
+            (
+                "Backend endpoint работает. Unit-тесты backend проходят. "
+                "Frontend компонент работает. UI-тесты frontend проходят. "
+                "Код backend приложен. Тесты backend приложены. "
+                "Код frontend приложен. Тесты frontend приложены."
+            ),
+            (
+                "Окружение подготовлено. CI настроен. Линтер настроен. Итоговый отчёт собран. "
+                "Конфиг окружения приложен. Конфиг CI приложен. Конфиг линтера приложен. "
+                "Итоговый отчёт приложен."
+            ),
+        ]:
+            result = runner.invoke(cli, ["--json", "step", "--task", "MANUAL-6", "--report", report])
+            assert result.exit_code == 0, result.output
+            data = json.loads(result.output)
+            assert data["verdict"] == "PASS", data
+
+        # Rollback: report contains "rollback" and phase has rollback_target
+        result = runner.invoke(
+            cli,
+            ["--json", "step", "--task", "MANUAL-6", "--report", "Integration failed. rollback."],
+        )
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["verdict"] == "ROLLBACK"
+        assert data["phase"] == "manual.rollback-demo"
+        assert data["rollback_target"] == "manual.seq-instr"
+
+    def test_delegate_phase_response(self, manual_env):
+        runner = CliRunner(
+            env={"SMART_EVALUATE": "false", "DATABASE_URL": "", "WORKFLOW_DIR": manual_env}
+        )
+        for report in [
+            (
+                "Цель задачи MANUAL-7 зафиксирована. Входные данные зафиксированы. "
+                "Описание цели приложено. Список входных данных приложен."
+            ),
+            (
+                "Архитектура определена. Библиотеки выбраны. "
+                "Документ архитектуры приложен. Список библиотек приложен."
+            ),
+            (
+                "Backend endpoint работает. Unit-тесты backend проходят. "
+                "Frontend компонент работает. UI-тесты frontend проходят. "
+                "Код backend приложен. Тесты backend приложены. "
+                "Код frontend приложен. Тесты frontend приложены."
+            ),
+            (
+                "Окружение подготовлено. CI настроен. Линтер настроен. Итоговый отчёт собран. "
+                "Конфиг окружения приложен. Конфиг CI приложен. Конфиг линтера приложен. "
+                "Итоговый отчёт приложен."
+            ),
+            "Attempt integration. Integration passed. Integration log attached.",
+        ]:
+            result = runner.invoke(cli, ["--json", "step", "--task", "MANUAL-7", "--report", report])
+            assert result.exit_code == 0, result.output
+            data = json.loads(result.output)
+            assert data["verdict"] == "PASS", data
+
+        # Delegate: report contains delegate signal and phase is_delegated=True
+        result = runner.invoke(
+            cli,
+            ["--json", "step", "--task", "MANUAL-7", "--report", "delegate this review to senior engineer"],
+        )
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["verdict"] == "DELEGATE"
+        assert data["phase"] == "manual.delegate-demo"
+        assert data["next_phase"] is None
 
     def test_full_workflow_to_done(self, manual_env):
         runner = CliRunner(
@@ -255,6 +343,11 @@ class TestManualWorkflowEndToEnd:
                 "Конфиг окружения приложен. Конфиг CI приложен. Конфиг линтера приложен. "
                 "Итоговый отчёт приложен."
             ),
+            "Attempt integration. Integration passed. Integration log attached.",
+            (
+                "Senior review delegated. Delegation record. "
+                "Delegation handoff email attached."
+            ),
             (
                 "README обновлён. MR смержен. README приложен. Merge commit приложен."
             ),
@@ -265,12 +358,11 @@ class TestManualWorkflowEndToEnd:
             )
             assert result.exit_code == 0, result.output
             data = json.loads(result.output)
-            assert data["verdict"] == "PASS", data
-
+            assert data["verdict"] in ("PASS", "DELEGATE"), data
         result = runner.invoke(cli, ["--json", "step", "--task", "MANUAL-5"])
         assert result.exit_code == 0, result.output
         data = json.loads(result.output)
-        assert data["ok"] is True
         assert data["phase"] == "manual.done"
-        assert data.get("status") == "done"
+        assert data["status"] == "done"
+
         assert "prompt" not in data

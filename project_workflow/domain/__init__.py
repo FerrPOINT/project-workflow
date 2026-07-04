@@ -37,6 +37,9 @@ class Phase:
     name: str = ""
     description: str = ""
     min_time_min: int = 0
+    is_blocker: bool = False
+    is_delegated: bool = False
+    is_critic: bool = False
     phase_order: int = 0
     agent_id: int | None = None
     next_recommendation: str = ""
@@ -54,6 +57,9 @@ class Phase:
             "name": self.name,
             "description": self.description,
             "min_time_min": self.min_time_min,
+            "is_blocker": self.is_blocker,
+            "is_delegated": self.is_delegated,
+            "is_critic": self.is_critic,
             "phase_order": self.phase_order,
             "agent_id": self.agent_id,
             "next_recommendation": self.next_recommendation,

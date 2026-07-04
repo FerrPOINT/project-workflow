@@ -199,7 +199,7 @@
     ]
   },
   {
-    "phase_order": 6,
+    "phase_order": 8,
     "code": "manual.done",
     "name": "Done",
     "description": "Завершение.",
@@ -232,5 +232,56 @@
         "description": "Merge commit"
       }
     ]
+  },
+  {
+    "phase_order": 6,
+    "code": "manual.rollback-demo",
+    "name": "Rollback Demo",
+    "description": "Phase for rollback CLI response test.",
+    "execution_type": "sync",
+    "instructions": [
+      {
+        "description": "Attempt integration.",
+        "execution_type": "sync"
+      }
+    ],
+    "checks": [
+      {
+        "description": "Integration passed"
+      },
+      {
+        "description": "Integration log attached"
+      }
+    ],
+    "evidence": [
+      {
+        "description": "Integration log"
+      }
+    ],
+    "rollback_target": "manual.seq-instr"
+  },
+  {
+    "phase_order": 7,
+    "code": "manual.delegate-demo",
+    "name": "Delegate Demo",
+    "description": "Phase for delegate CLI response test.",
+    "execution_type": "sync",
+    "instructions": [
+      {
+        "description": "Delegate review to senior.",
+        "execution_type": "sync"
+      }
+    ],
+    "checks": [
+      {
+        "description": "Senior review delegated"
+      }
+    ],
+    "evidence": [
+      {
+        "description": "Delegation record"
+      }
+    ],
+    "is_delegated": true
   }
 ]
