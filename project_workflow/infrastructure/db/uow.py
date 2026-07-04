@@ -50,7 +50,7 @@ class SAUnitOfWork(UnitOfWork):
                 target = url
             else:
                 from project_workflow.infrastructure import db
-                target = str(getattr(db, "DB_PATH", ""))
+                target = str(getattr(db, "get_db_path", lambda: getattr(db, "DB_PATH", ""))())
             if not target:
                 target = None
             self._session = get_session(target)

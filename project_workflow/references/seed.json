@@ -665,7 +665,7 @@
     "parallel_with": "1",
     "rollback_target": null,
     "next_recommendation": "Когда Researcher #1 + Preflight готовы → Phase 2 (Synthesis)",
-    "execution_type": "sync",
+    "execution_type": "parallel",
     "instructions": [
       {
         "step_num": 1,
@@ -723,10 +723,10 @@
     "delegate_timeout": null,
     "delegate_max_cycles": null,
     "delegate_toolsets": null,
-    "parallel_with": null,
+    "parallel_with": "0.6",
     "rollback_target": null,
     "next_recommendation": "New",
-    "execution_type": "sync",
+    "execution_type": "parallel",
     "instructions": [
       {
         "step_num": 1,
@@ -809,7 +809,7 @@
     "parallel_with": "2",
     "rollback_target": null,
     "next_recommendation": "Когда Deep Research + Synthesis готовы → Phase 3 (Plan)",
-    "execution_type": "sync",
+    "execution_type": "parallel",
     "instructions": [
       {
         "step_num": 1,
@@ -867,10 +867,10 @@
     "delegate_timeout": null,
     "delegate_max_cycles": null,
     "delegate_toolsets": null,
-    "parallel_with": null,
+    "parallel_with": "1.5",
     "rollback_target": null,
     "next_recommendation": "Перейди к Phase 3 — написать план",
-    "execution_type": "sync",
+    "execution_type": "parallel",
     "instructions": [
       {
         "id": 41,
@@ -1214,7 +1214,7 @@
     "parallel_with": "5",
     "rollback_target": "4",
     "next_recommendation": "Если PASS → Phase 5 (Validate). Если FAIL → вернись к Phase 4.",
-    "execution_type": "sync",
+    "execution_type": "parallel",
     "instructions": [
       {
         "step_num": 1,
@@ -1747,7 +1747,7 @@
     "parallel_with": "7.6",
     "rollback_target": "4",
     "next_recommendation": "Жди Phase 7.6 (QA) тоже",
-    "execution_type": "sync",
+    "execution_type": "parallel",
     "instructions": [
       {
         "step_num": 1,

@@ -1,0 +1,236 @@
+[
+  {
+    "phase_order": 1,
+    "code": "manual.intake",
+    "name": "Intake",
+    "description": "Собрать требования.",
+    "execution_type": "sync",
+    "instructions": [
+      {
+        "step_num": 1,
+        "description": "Зафиксировать цель задачи.",
+        "execution_type": "sync"
+      },
+      {
+        "step_num": 2,
+        "description": "Зафиксировать входные данные.",
+        "execution_type": "sync"
+      }
+    ],
+    "checks": [
+      {
+        "description": "Цель задачи зафиксирована"
+      },
+      {
+        "description": "Входные данные зафиксированы"
+      }
+    ],
+    "evidence": [
+      {
+        "description": "Описание цели"
+      },
+      {
+        "description": "Список входных данных"
+      }
+    ]
+  },
+  {
+    "phase_order": 2,
+    "code": "manual.plan",
+    "name": "Plan",
+    "description": "Составить план.",
+    "execution_type": "sync",
+    "instructions": [
+      {
+        "step_num": 1,
+        "description": "Определить архитектуру.",
+        "execution_type": "sync"
+      },
+      {
+        "step_num": 2,
+        "description": "Выбрать библиотеки.",
+        "execution_type": "sync"
+      }
+    ],
+    "checks": [
+      {
+        "description": "Архитектура определена"
+      },
+      {
+        "description": "Библиотеки выбраны"
+      }
+    ],
+    "evidence": [
+      {
+        "description": "Документ архитектуры"
+      },
+      {
+        "description": "Список библиотек"
+      }
+    ]
+  },
+  {
+    "phase_order": 3,
+    "code": "manual.parallel-a",
+    "name": "Parallel Phase A",
+    "description": "Параллельная работа A.",
+    "execution_type": "parallel",
+    "parallel_with": "manual.parallel-b",
+    "instructions": [
+      {
+        "step_num": 1,
+        "description": "Реализовать backend endpoint.",
+        "execution_type": "parallel"
+      },
+      {
+        "step_num": 2,
+        "description": "Написать unit-тесты backend.",
+        "execution_type": "parallel"
+      }
+    ],
+    "checks": [
+      {
+        "description": "Backend endpoint работает"
+      },
+      {
+        "description": "Unit-тесты backend проходят"
+      }
+    ],
+    "evidence": [
+      {
+        "description": "Код backend"
+      },
+      {
+        "description": "Тесты backend"
+      }
+    ]
+  },
+  {
+    "phase_order": 4,
+    "code": "manual.parallel-b",
+    "name": "Parallel Phase B",
+    "description": "Параллельная работа B.",
+    "execution_type": "parallel",
+    "parallel_with": "manual.parallel-a",
+    "instructions": [
+      {
+        "step_num": 1,
+        "description": "Реализовать frontend компонент.",
+        "execution_type": "parallel"
+      },
+      {
+        "step_num": 2,
+        "description": "Написать UI-тесты frontend.",
+        "execution_type": "parallel"
+      }
+    ],
+    "checks": [
+      {
+        "description": "Frontend компонент работает"
+      },
+      {
+        "description": "UI-тесты frontend проходят"
+      }
+    ],
+    "evidence": [
+      {
+        "description": "Код frontend"
+      },
+      {
+        "description": "Тесты frontend"
+      }
+    ]
+  },
+  {
+    "phase_order": 5,
+    "code": "manual.seq-instr",
+    "name": "Sequential Instructions",
+    "description": "Фаза с последовательными и параллельными инструкциями.",
+    "execution_type": "sync",
+    "instructions": [
+      {
+        "step_num": 1,
+        "description": "Шаг 1: подготовить окружение.",
+        "execution_type": "sync"
+      },
+      {
+        "step_num": 2,
+        "description": "Шаг 2 параллельный: настроить CI.",
+        "execution_type": "parallel"
+      },
+      {
+        "step_num": 3,
+        "description": "Шаг 3 параллельный: настроить линтер.",
+        "execution_type": "parallel"
+      },
+      {
+        "step_num": 4,
+        "description": "Шаг 4: собрать итоговый отчёт.",
+        "execution_type": "sync"
+      }
+    ],
+    "checks": [
+      {
+        "description": "Окружение подготовлено"
+      },
+      {
+        "description": "CI настроен"
+      },
+      {
+        "description": "Линтер настроен"
+      },
+      {
+        "description": "Итоговый отчёт собран"
+      }
+    ],
+    "evidence": [
+      {
+        "description": "Конфиг окружения"
+      },
+      {
+        "description": "Конфиг CI"
+      },
+      {
+        "description": "Конфиг линтера"
+      },
+      {
+        "description": "Итоговый отчёт"
+      }
+    ]
+  },
+  {
+    "phase_order": 6,
+    "code": "manual.done",
+    "name": "Done",
+    "description": "Завершение.",
+    "execution_type": "sync",
+    "instructions": [
+      {
+        "step_num": 1,
+        "description": "Обновить README.",
+        "execution_type": "sync"
+      },
+      {
+        "step_num": 2,
+        "description": "Смержить в основную ветку.",
+        "execution_type": "sync"
+      }
+    ],
+    "checks": [
+      {
+        "description": "README обновлён"
+      },
+      {
+        "description": "MR смержен"
+      }
+    ],
+    "evidence": [
+      {
+        "description": "README"
+      },
+      {
+        "description": "Merge commit"
+      }
+    ]
+  }
+]
