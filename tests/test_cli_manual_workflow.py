@@ -267,8 +267,10 @@ class TestManualWorkflowEndToEnd:
             data = json.loads(result.output)
             assert data["verdict"] == "PASS", data
 
-        final = runner.invoke(cli, ["--json", "step", "--task", "MANUAL-5"])
-        assert final.exit_code == 0, final.output
-        data = json.loads(final.output)
+        result = runner.invoke(cli, ["--json", "step", "--task", "MANUAL-5"])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
         assert data["ok"] is True
         assert data["phase"] == "manual.done"
+        assert data.get("status") == "done"
+        assert "prompt" not in data

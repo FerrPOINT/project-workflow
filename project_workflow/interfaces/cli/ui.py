@@ -64,11 +64,22 @@ def step_cmd(
         if smart:
             formatted = "[🧠 SMART MODE] " + formatted
         console.print(formatted)
-        sys.exit(0 if result["verdict"] == "PASS" else 1)
+        # Recoverable verdicts (PASS / SOFT_FAIL) should not produce a CLI error exit code.
+        sys.exit(0 if result["verdict"] in ("PASS", "SOFT_FAIL") else 1)
 
     # default: show phase prompt/instructions
     prompt = engine.get_phase_prompt()
     if jmode:
+        # For completed tasks return a compact contract without the heavy prompt.
+        if engine.task and engine.task.get("status") == "done":
+            out_json({
+                "ok": True,
+                "task_key": task_key,
+                "phase": engine.current_phase,
+                "status": "done",
+                "instructions": engine.format_current_phase_instructions(),
+            })
+            return
         out_json({"ok": True, "task_key": task_key, "phase": engine.current_phase, "prompt": prompt})
         return
     instructions = engine.format_current_phase_instructions()
