@@ -1,6 +1,7 @@
 """SQLAlchemy repository implementations."""
 from __future__ import annotations
 
+import datetime as _dt
 import json
 import logging
 from collections.abc import Mapping
@@ -25,6 +26,14 @@ from project_workflow.domain.repositories import (
 from project_workflow.infrastructure.db import models as m
 
 logger = logging.getLogger(__name__)
+
+
+def _iso(value: _dt.datetime | str | None) -> str | None:
+    if value is None or isinstance(value, str):
+        return value
+    if isinstance(value, _dt.datetime):
+        return value.isoformat()
+    return str(value)
 
 
 def _row_to_phase(row: m.Phase) -> Phase:
@@ -97,8 +106,8 @@ def _row_to_task(row: m.Task) -> Task:
         current_phase=current_phase,
         current_phase_name=phase_name or "",
         status=row.status or "active",
-        created_at=row.created_at,
-        updated_at=row.updated_at,
+        created_at=_iso(row.created_at),
+        updated_at=_iso(row.updated_at),
     )
 
 
@@ -144,7 +153,7 @@ def _row_to_supervisor_run(row: m.SupervisorRun) -> SupervisorRun:
         rollback_phase_id=row.rollback_phase_id,
         context_snapshot=_parse_obj(row.context_snapshot),
         response=_parse_obj(row.response),
-        created_at=row.created_at,
+        created_at=_iso(row.created_at),
     )
 
 
@@ -427,8 +436,8 @@ class SATaskRepository(TaskRepository):
             current_phase=row.current_phase or "-1",
             current_phase_name="",
             status=row.status or "active",
-            created_at=row.created_at,
-            updated_at=row.updated_at,
+            created_at=_iso(row.created_at),
+            updated_at=_iso(row.updated_at),
         )
 
     def get_by_id(self, task_id: int) -> Task | None:
@@ -494,7 +503,7 @@ class SATaskRepository(TaskRepository):
                 "task_id": r.task_id,
                 "phase_id": r.phase_id,
                 "status": r.status,
-                "completed_at": r.completed_at,
+                "completed_at": _iso(r.completed_at),
             }
             for r in rows
         ]
@@ -513,7 +522,7 @@ class SATaskRepository(TaskRepository):
                 "task_id": r.task_id,
                 "phase_id": r.phase_id,
                 "status": r.status,
-                "completed_at": r.completed_at,
+                "completed_at": _iso(r.completed_at),
             }
             result.setdefault(r.task_id, []).append(entry)
         return result

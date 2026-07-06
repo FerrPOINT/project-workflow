@@ -5,14 +5,17 @@ types instead of ``Column[...]`` wrappers.
 """
 from __future__ import annotations
 
+import datetime
 from typing import Any
 
 from sqlalchemy import (
     CheckConstraint,
+    DateTime,
     ForeignKey,
     String,
     Text,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -219,11 +222,11 @@ class Task(Base):
         default="active",
         server_default="active",
     )
-    created_at: Mapped[str | None] = mapped_column(
-        String, default="CURRENT_TIMESTAMP", server_default="CURRENT_TIMESTAMP"
+    created_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
     )
-    updated_at: Mapped[str | None] = mapped_column(
-        String, default="CURRENT_TIMESTAMP", server_default="CURRENT_TIMESTAMP"
+    updated_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
     )
     __table_args__ = (
         CheckConstraint("status IN ('active', 'done', 'blocked')", name="ck_tasks_status"),
@@ -246,7 +249,7 @@ class TaskHistory(Base):
         default="pending",
         server_default="pending",
     )
-    completed_at: Mapped[str | None] = mapped_column(String, nullable=True)
+    completed_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     __table_args__ = (
         UniqueConstraint("task_id", "phase_id", name="uq_task_history_task_phase"),
         CheckConstraint(
@@ -282,8 +285,8 @@ class SupervisorRun(Base):
     response: Mapped[str] = mapped_column(
         Text, nullable=False, default="{}", server_default="{}"
     )
-    created_at: Mapped[str | None] = mapped_column(
-        String, default="CURRENT_TIMESTAMP", server_default="CURRENT_TIMESTAMP"
+    created_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
     )
     __table_args__ = (
         CheckConstraint(
@@ -301,8 +304,8 @@ class CliHistory(Base):
     task_key: Mapped[str | None] = mapped_column(String, nullable=True)
     request: Mapped[str | None] = mapped_column(Text, nullable=True)
     response: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[str | None] = mapped_column(
-        String, default="CURRENT_TIMESTAMP", server_default="CURRENT_TIMESTAMP"
+    created_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
     )
 
 
@@ -315,8 +318,8 @@ class WizardMemory(Base):
     )
     memory_type: Mapped[str] = mapped_column(String, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[str | None] = mapped_column(
-        String, default="CURRENT_TIMESTAMP", server_default="CURRENT_TIMESTAMP"
+    created_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
     )
     __table_args__ = (
         CheckConstraint(

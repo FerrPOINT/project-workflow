@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import Any
 
 from project_workflow.infrastructure.db.models import WizardMemory
+from project_workflow.infrastructure.db.repositories import _iso
 
 
 class MemoryStore:
@@ -39,7 +40,7 @@ class MemoryStore:
                 "task_id": int(r.task_id),
                 "memory_type": r.memory_type,
                 "content": r.content,
-                "created_at": r.created_at,
+                "created_at": _iso(r.created_at),
             }
             for r in rows
         ]
@@ -61,7 +62,7 @@ class MemoryStore:
                 "task_id": int(r.task_id),
                 "memory_type": r.memory_type,
                 "content": r.content,
-                "created_at": r.created_at,
+                "created_at": _iso(r.created_at),
             }
             for r in rows
         ]
