@@ -660,13 +660,13 @@ class TestPhasesPage:
         phase_html = response.text.split(_phase_href("7.5"), 1)[1].split('</a>', 1)[0]
 
         assert "Code Review" in phase_html
-        assert "⚡ parallel" not in phase_html
+        assert "⚡ parallel" in phase_html
 
     def test_phases_api_exposes_real_execution_type_without_fake_instruction_parallel_flag(self):
         response = client.get("/api/phases")
         assert response.status_code == 200
 
-        phase = next(item for item in response.json()["phases"] if item["code"] == "7.5")
+        phase = next(item for item in response.json()["phases"] if item["code"] == "3.5")
 
         assert phase["execution_type"] == "sync"
         assert "has_parallel_instructions" not in phase
@@ -952,46 +952,46 @@ class TestPhaseUpdate:
 
     def test_api_phase_update_persists_execution_type(self):
         uow = ui_app_state.get_db()
-        original = _as_dict(uow.phases.get_by_code("4.5"))
+        original = _as_dict(uow.phases.get_by_code("3.5"))
         assert original is not None
         assert original["execution_type"] == "sync"
-        phase_api_path = _phase_api_path("4.5")
+        phase_api_path = _phase_api_path("3.5")
         default_workflow_id = _workflow_row(name=config.DEFAULT_WORKFLOW_NAME)["id"]
 
         try:
             resp = client.put(phase_api_path, json={"execution_type": "parallel"})
             assert resp.status_code == 200
 
-            updated = _as_dict(uow.phases.get_by_code("4.5"))
+            updated = _as_dict(uow.phases.get_by_code("3.5"))
             assert updated is not None
             assert updated["execution_type"] == "parallel"
 
             phases_resp = client.get("/api/phases", params={"workflow_id": default_workflow_id})
             assert phases_resp.status_code == 200
-            updated_phase = next(item for item in phases_resp.json()["phases"] if item["code"] == "4.5")
+            updated_phase = next(item for item in phases_resp.json()["phases"] if item["code"] == "3.5")
             assert updated_phase["execution_type"] == "parallel"
         finally:
             client.put(phase_api_path, json={"execution_type": "sync"})
 
     def test_api_phase_update_metadata_only_keeps_existing_phase_content(self):
         uow = ui_app_state.get_db()
-        phase_id = _phase_id("4.5")
+        phase_id = _phase_id("3.5")
         before_counts = {
             "instructions": len(list(uow.instructions.list(phase_id))),
             "checks": len(list(uow.phases.get_checks(phase_id))),
             "evidence": len(list(uow.phases.get_evidence(phase_id))),
         }
         assert all(count > 0 for count in before_counts.values())
-        phase_api_path = _phase_api_path("4.5")
+        phase_api_path = _phase_api_path("3.5")
 
         try:
             resp = client.put(phase_api_path, json={"execution_type": "parallel"})
             assert resp.status_code == 200
 
             after_counts = {
-                "instructions": len(list(uow.instructions.list(_phase_id("4.5")))),
-                "checks": len(list(uow.phases.get_checks(_phase_id("4.5")))),
-                "evidence": len(list(uow.phases.get_evidence(_phase_id("4.5")))),
+                "instructions": len(list(uow.instructions.list(_phase_id("3.5")))),
+                "checks": len(list(uow.phases.get_checks(_phase_id("3.5")))),
+                "evidence": len(list(uow.phases.get_evidence(_phase_id("3.5")))),
             }
             assert after_counts == before_counts
         finally:

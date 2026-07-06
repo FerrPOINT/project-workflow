@@ -12,7 +12,6 @@ from click.testing import CliRunner
 
 from project_workflow.interfaces.cli.ui import cli
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
-from project_workflow.infrastructure import db as db_module
 
 
 @pytest.fixture

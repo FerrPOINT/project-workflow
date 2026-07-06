@@ -46,7 +46,7 @@ class SAUnitOfWork(UnitOfWork):
             from ... import config
             url = config.get_settings().DATABASE_URL
             target: str | None
-            if url and "://" in url and not url.startswith("sqlite:///"):
+            if url and "://" in url:
                 target = url
             else:
                 from project_workflow.infrastructure import db

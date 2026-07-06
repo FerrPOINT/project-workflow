@@ -179,14 +179,14 @@ def test_seed_catalog_instruction_descriptions_do_not_use_or_analog_placeholders
 
 
 def test_seed_catalog_parallelism_uses_phase_runs_instead_of_fake_instruction_batches():
-    # Genuine parallel pairs in seed.json (have parallel_with partner)
-    expected_parallel_phase_codes = {"5", "7.6", "7.6.R"}
+    # Genuine parallel pairs/groups in seed.json (have parallel_with partner)
+    expected_parallel_phase_codes = {"0.6", "1", "1.5", "2", "4.5", "5", "7.5", "7.6", "7.6.R"}
     for code in expected_parallel_phase_codes:
         phase = _phase_by_code(code)
         assert phase["execution_type"] == "parallel", f"Phase {code} must be marked parallel at phase level"
 
     # Sequential phases must NOT be falsely marked parallel
-    sequential_codes = {"-1", "0.0a", "0.00", "1", "2", "0.01", "0.000", "0.7", "0.9", "0.5", "0.6", "3", "3.5", "4", "4.5"}
+    sequential_codes = {"-1", "0.0a", "0.00", "0.01", "0.000", "0.7", "0.9", "0.5", "3", "3.5", "4", "5.5", "6", "7", "7.7", "8", "9", "10"}
     for code in sequential_codes:
         phase = _phase_by_code(code)
         assert phase["execution_type"] == "sync", f"Phase {code} must be sequential (sync)"
