@@ -21,7 +21,7 @@ class UIDataService:
     def _load_workflows(self) -> list[dict[str, Any]]:
         wdb = self._app_state.get_db()
         workflows = wdb.get_workflows()
-        phases = wdb.get_phases()
+        phases = wdb.get_all_phases()
         projects = wdb.get_projects()
         phase_counts: dict[int, int] = {}
         project_counts: dict[int, int] = {}
@@ -140,21 +140,30 @@ class UIDataService:
                     if runs:
                         latest_runs[tid] = _run_to_dict(runs[0])
 
+        # Batch project lookup.
+        projects_by_id: dict[int, dict[str, Any]] = {}
+        for project in wdb.get_projects():
+            pid = project.get("id")
+            if isinstance(pid, int):
+                projects_by_id[pid] = project
+
         result = []
         for t in tasks:
             task_id = t["id"]
             task_history = list(history_batch.get(task_id, []))
             completed = sum(1 for tp in task_history if tp.get("status") == "done")
-            workflow_id = t.get("workflow_id")
-            total_phases = phase_counts_by_workflow.get(workflow_id, default_phase_count)
+            project = projects_by_id.get(int(t["project_id"]) if isinstance(t.get("project_id"), int) else 0, {})
+            project_code = project.get("code") or ""
+            project_name = project.get("name") or ""
+            workflow_id_raw = project.get("workflow_id")
+            workflow_id: int | None = int(workflow_id_raw) if isinstance(workflow_id_raw, int) else None
+            total_phases = phase_counts_by_workflow.get(workflow_id, default_phase_count) if workflow_id is not None else default_phase_count
 
             current_phase_id, current = _resolve_task_phase_local(
                 t.get("current_phase", "-1"),
                 phases_by_workflow.get(workflow_id, []),
             )
             current = current or {}
-            project_code = t.get("project_code") or "—"
-            project_name = t.get("project_name") or project_code
 
             completed_at = ""
             if t.get("status") == "done":
@@ -192,7 +201,7 @@ class UIDataService:
                     "project_name": project_name,
                     "project_label": project_name if project_name == project_code else f"{project_code} — {project_name}",
                     "phase_id": current.get("code", current_phase_id),
-                    "phase_num": current.get("phase_num", "?"),
+                    "phase_num": current.get("phase_num", current.get("phase_order", "?")),
                     "phase_name": current.get("name", current_phase_id),
                     "current_phase_name": current.get("name", current_phase_id),
                     "completed": completed,

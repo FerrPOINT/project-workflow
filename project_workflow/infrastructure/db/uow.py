@@ -340,6 +340,11 @@ class SAUnitOfWork(UnitOfWork):
         rows = self.phases.list(workflow_id=workflow_id)
         return [r.to_dict() if hasattr(r, "to_dict") else r for r in rows]
 
+    def get_all_phases(self) -> list[Any]:
+        """Return phases across every workflow (used by dashboard aggregation)."""
+        rows = self.phases.list()
+        return [r.to_dict() if hasattr(r, "to_dict") else r for r in rows]
+
     def get_projects(self) -> list[Any]:
         rows = self.projects.list()
         return [r.to_dict() if hasattr(r, "to_dict") else r for r in rows]
