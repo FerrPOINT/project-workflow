@@ -50,6 +50,7 @@ from project_workflow.wizard.types import (
 )
 
 SMART_EVALUATE = config.SMART_EVALUATE
+SMART_REASONING = config.SMART_REASONING
 
 __all__ = [
     "ArtifactSnapshot",
@@ -62,6 +63,7 @@ __all__ = [
     "PromptCache",
     "ResponseParser",
     "SMART_EVALUATE",
+    "SMART_REASONING",
     "VERDICT_LABELS",
     "WizardAssessment",
     "WizardAssessmentStore",
