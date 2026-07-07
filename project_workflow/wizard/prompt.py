@@ -125,6 +125,35 @@ def _format_contract(contract: dict[str, Any], human_only: bool = False) -> str:
     return "".join(parts)
 
 
+def build_reasoning_prompt(report: str, contract: dict[str, Any]) -> str:
+    """Build a chain-of-thought prompt that asks the LLM to reason before verdict.
+
+    The LLM must identify claims in the report, match them to contract items,
+    note contradictions, and return structured JSON.
+    """
+    contract_text = _format_contract(contract, human_only=False)
+    return (
+        "Ты — внутренний рецензент отчёта об исполнении фазы workflow.\n"
+        "Проанализируй отчёт, сопоставь каждое утверждение с пунктами контракта фазы,\n"
+        "выяви противоречия и расплывчатые формулировки. Верни ТОЛЬКО JSON:\n\n"
+        "{\n"
+        '  "analysis": "краткий анализ отчёта",\n'
+        '  "claims": [\n'
+        '    {"item": "утверждение из отчёта", "matches": ["пункт контракта"], "valid": true|false}\n'
+        '  ],\n'
+        '  "blockers": ["список блокеров"],\n'
+        '  "missing": ["список не выполненных пунктов контракта"],\n'
+        '  "verdict": "PASS|PARTIAL|BLOCKED|ROLLBACK|HARD_FAIL|SOFT_FAIL",\n'
+        '  "confidence": 0.0..1.0,\n'
+        '  "next_steps": ["конкретные действия"]\n'
+        "}\n\n"
+        "Контракт фазы:\n"
+        f"{contract_text}\n"
+        "Отчёт:\n"
+        f"{report}\n"
+    )
+
+
 def _format_parallel_contract_human(group_details: list[dict[str, Any]]) -> str:
     """Flatten parallel group into a single concrete instruction list for CLI humans.
 
