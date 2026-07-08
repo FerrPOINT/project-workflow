@@ -26,7 +26,6 @@ from ..infrastructure.db.uow import SAUnitOfWork
 
 # Re-exports kept for existing tests importing from wizard.core directly.
 from .checks import (
-    build_verdict_message,
     check_coverage,
     determine_verdict,
     extract_blockers,
@@ -34,29 +33,18 @@ from .checks import (
     normalize_text,
 )
 from .context import WizardContextBuilder
-from .contracts import (
-    PhaseContractBuilder,
-    text_from_check,
-    text_from_evidence,
-    text_from_instruction,
-)
+from .contracts import PhaseContractBuilder
+
+# Backward-compatible re-exports moved to dedicated modules.
+from .formatting import format_result  # noqa: F401
 from .memory import MemoryStore
 from .models import Phase
 from .prompt import build_phase_prompt
+from .result_builder import VERDICT_LABELS  # noqa: F401
 from .store import WizardAssessmentStore
 from .types import WizardAssessment
 
 logger = logging.getLogger(__name__)
-
-VERDICT_LABELS = {
-    "pass": "PASS",
-    "partial": "PARTIAL",
-    "soft_fail": "SOFT_FAIL",
-    "hard_fail": "HARD_FAIL",
-    "blocked": "BLOCKED",
-    "rollback": "ROLLBACK",
-    "delegate": "DELEGATE",
-}
 
 
 class PromptCache:
@@ -409,78 +397,36 @@ class WizardEngine:
     def _build_result(
         self, *, phase, verdict, covered, missing, blockers, next_phase, next_phase_name, rollback_target
     ):
-        result = {
-            "verdict": VERDICT_LABELS[verdict],
-            "task_key": self.task_key,
-            "phase": phase.code,
-            "phase_name": phase.name,
-            "covered": covered,
-            "missing": missing,
-            "blockers": blockers,
-            "current_phase": phase.code,
-            "next_phase": next_phase,
-            "next_phase_name": next_phase_name,
-            "rollback_target": rollback_target,
-            "required_evidence": [text_from_evidence(item) for item in phase.evidence],
-            "required_checks": [text_from_check(item) for item in phase.checks],
-            "instructions": [text_from_instruction(item) for item in phase.instructions],
-            "next_step": next_phase or rollback_target or phase.code,
-        }
-        if verdict == "pass":
-            result["message"] = "Phase accepted."
-        elif verdict == "rollback":
-            result["message"] = f"Roll back and fix: {rollback_target}."
-        else:
-            result["message"] = build_verdict_message(
-                verdict, phase.name, phase.code, blockers, missing, next_phase, rollback_target
-            )
-        return result
+        from .result_builder import build_result
+        return build_result(
+            task_key=self.task_key,
+            phase=phase,
+            verdict=verdict,
+            covered=covered,
+            missing=missing,
+            blockers=blockers,
+            next_phase=next_phase,
+            next_phase_name=next_phase_name,
+            rollback_target=rollback_target,
+        )
 
     def _build_parallel_result(
         self, group, verdict, covered, missing, blockers, next_phase, next_phase_name, rollback_target
     ):
-        first = group[0]
-        phase_codes = [p.code for p in group]
-        rollback_phase_obj = self.phase_map.get(rollback_target) if rollback_target else None
-        cb = PhaseContractBuilder(self.all_phases)
-        parallel_contract = cb.build_parallel(group).to_dict()
-        result = {
-            "verdict": VERDICT_LABELS[verdict],
-            "task_key": self.task_key,
-            "phase": first.code,
-            "phase_name": f"Parallel group: {', '.join(phase_codes)}",
-            "covered": covered,
-            "missing": missing,
-            "blockers": blockers,
-            "current_phase": first.code,
-            "next_phase": next_phase if verdict == "pass" else rollback_target if verdict == "rollback" else None,
-            "next_phase_name": next_phase_name
-            if verdict == "pass"
-            else (rollback_phase_obj.name if rollback_phase_obj else None),
-            "rollback_target": rollback_target,
-            "required_evidence": list({text_from_evidence(ev) for p in group for ev in p.evidence}),
-            "required_checks": list({text_from_check(chk) for p in group for chk in p.checks}),
-            "instructions": [text_from_instruction(inst) for p in group for inst in p.instructions],
-            "next_step": next_phase or rollback_target or first.code,
-            "group_phases": phase_codes,
-            "group_details": parallel_contract.get("group_details") or [],
-        }
-        if verdict == "pass":
-            result["message"] = "Phase accepted."
-        elif verdict == "rollback":
-            result["message"] = f"Roll back and fix: {rollback_target}."
-        elif verdict == "blocked":
-            issues = blockers or missing or phase_codes
-            result["message"] = f"Blocked: {'; '.join(issues)}. Fix and resubmit."
-        elif verdict == "delegate":
-            result["message"] = "Delegate the work before continuing."
-        elif verdict == "soft_fail":
-            issues = missing or ["unspecified items"]
-            result["message"] = f"Incomplete: {'; '.join(issues)}. Complete before continuing."
-        else:
-            issues = missing or ["unspecified items"]
-            result["message"] = f"Cannot proceed: {'; '.join(issues)}."
-        return result
+        from .result_builder import build_parallel_result
+        return build_parallel_result(
+            task_key=self.task_key,
+            group=group,
+            phase_map=self.phase_map,
+            all_phases=self.all_phases,
+            verdict=verdict,
+            covered=covered,
+            missing=missing,
+            blockers=blockers,
+            next_phase=next_phase,
+            next_phase_name=next_phase_name,
+            rollback_target=rollback_target,
+        )
 
     def _build_checklist(self, phase):
         cb = PhaseContractBuilder(self.all_phases)
@@ -589,83 +535,27 @@ class WizardEngine:
     def _record_transition(
         self, phase: Phase, verdict: str, next_phase: str | None, rollback_target: str | None
     ) -> None:
-        from ..domain.fsm import PhaseFSM
-
-        fsm = PhaseFSM(initial="in_progress")
-        fsm.apply_verdict(verdict)
-        new_state = fsm.state
-        if not self.task:
-            return
-        task_id = int(self.task["id"])
-        # Resolve str phase codes to int ids for FK columns
-        next_phase_obj = self.phase_map.get(next_phase) if next_phase and next_phase in self.phase_map else None
-        next_phase_id = next_phase_obj.id if next_phase_obj else None
-        if new_state == "done":
-            self.db.add_task_history(task_id, phase.id, "done")
-            if next_phase_id:
-                self.db.add_task_history(task_id, next_phase_id, "pending")
-                self.db.update_task(task_id, {"current_phase": next_phase, "status": "active"})
-            else:
-                self.db.update_task(task_id, {"current_phase": phase.code, "status": "done"})
-            self._uow.commit()
-            return
-        if new_state == "blocked":
-            self.db.add_task_history(task_id, phase.id, "blocked")
-            self.db.update_task(task_id, {"current_phase": phase.code, "status": "blocked"})
-            self._uow.commit()
-            return
-        if new_state == "rollback":
-            target_phase = self.phase_map.get(rollback_target) if rollback_target else None
-            target_id = target_phase.id if target_phase else phase.id
-            self.db.add_task_history(task_id, phase.id, "rollback")
-            self.db.add_task_history(task_id, target_id, "pending")
-            self.db.update_task(task_id, {"current_phase": rollback_target or phase.code, "status": "active"})
-            self._uow.commit()
-            return
-        if new_state == "delegated":
-            self.db.add_task_history(task_id, phase.id, "delegated")
-            self.db.update_task(task_id, {"current_phase": phase.code, "status": "active"})
-            self._uow.commit()
-            return
-        # partial or in_progress
-        self.db.add_task_history(task_id, phase.id, "partial")
-        self.db.update_task(task_id, {"current_phase": phase.code, "status": "active"})
-        self._uow.commit()
+        from .transitions import record_transition
+        record_transition(
+            db=self.db,
+            task=self.task,
+            phase=phase,
+            verdict=verdict,
+            next_phase=next_phase,
+            rollback_target=rollback_target,
+            phase_map=self.phase_map,
+        )
 
     def _record_parallel_transition(self, group: list[Phase], verdict: str, next_phase: str | None) -> None:
-        from ..domain.fsm import PhaseFSM
-
-        fsm = PhaseFSM(initial="in_progress")
-        fsm.apply_verdict(verdict)
-        new_state = fsm.state
-        if not self.task:
-            return
-        task_id = int(self.task["id"])
-        if new_state == "done":
-            for phase in group:
-                self.db.add_task_history(task_id, phase.id, "done")
-            if next_phase:
-                next_phase_obj = self.phase_map.get(next_phase)
-                next_phase_id = next_phase_obj.id if next_phase_obj else None
-                if next_phase_id:
-                    self.db.add_task_history(task_id, next_phase_id, "pending")
-                self.db.update_task(task_id, {"current_phase": next_phase, "status": "active"})
-            else:
-                self.db.update_task(task_id, {"current_phase": group[-1].code, "status": "done"})
-            self._uow.commit()
-            return
-        if new_state == "blocked":
-            self.db.update_task(task_id, {"current_phase": group[0].code, "status": "blocked"})
-            self._uow.commit()
-            return
-        if new_state == "rollback":
-            target_phase = self.phase_map.get(next_phase) if next_phase else None
-            target_code = target_phase.code if target_phase else group[-1].code
-            self.db.update_task(task_id, {"current_phase": target_code, "status": "active"})
-            self._uow.commit()
-            return
-        # partial: legacy tests expect no DB side effects at all.
-        return
+        from .transitions import record_parallel_transition
+        record_parallel_transition(
+            db=self.db,
+            task=self.task,
+            group=group,
+            phase_map=self.phase_map,
+            verdict=verdict,
+            next_phase=next_phase,
+        )
 
     # ── Context / Prompt ─────────────────────────────────────────────────────
 
@@ -764,39 +654,24 @@ class WizardEngine:
         next_phase_contract = cb.build_next_contract(next_phase) if verdict == "pass" else None
 
         # Build structured assessment
-        phase_name = phase.name
-        if is_parallel:
-            phase_name = f"Parallel group: {', '.join(p.code for p in group)}"
-
         if verdict == "pass" and next_phase:
             next_phase_obj = self.phase_map.get(next_phase)
             next_phase_name = next_phase_obj.name if next_phase_obj else next_phase_name
 
-        assessment = WizardAssessment(
+        from .result_builder import build_assessment
+
+        assessment = build_assessment(
             task_key=self.task_key,
-            phase_code=phase.code,
-            phase_name=phase_name,
+            phase=phase,
+            group=group,
             verdict=verdict,
             covered=covered,
             missing=missing,
             blockers=blockers,
-            next_phase=next_phase if verdict == "pass" else (rollback_target if verdict == "rollback" else None),
-            next_phase_name=next_phase_name if verdict == "pass" else None,
+            next_phase=next_phase,
+            next_phase_name=next_phase_name,
             rollback_target=rollback_target,
             next_phase_contract=next_phase_contract,
-            instructions=[text_from_instruction(i) for i in phase.instructions],
-            required_checks=[text_from_check(c) for c in phase.checks],
-            required_evidence=[text_from_evidence(e) for e in phase.evidence],
-            message=build_verdict_message(
-                verdict=verdict,
-                phase_name=phase_name,
-                phase_code=phase.code,
-                blockers=blockers,
-                missing=missing,
-                next_phase=next_phase,
-                rollback_target=rollback_target,
-            ),
-            group_phases=[p.code for p in group] if is_parallel else None,
         )
 
         result = assessment.to_result_dict()
@@ -924,115 +799,3 @@ def main(task_key: str, repo: str | None = None, report: str | None = None) -> N
         print(json.dumps(result, ensure_ascii=False, indent=2))
         sys.exit(0 if result["verdict"] == "PASS" else 1)
     print(_wizard_pkg.get_phase_instructions(task_key, repo=repo))
-
-
-# ── Legacy format_result ───────────────────────────────────────────
-
-
-def format_result(result: dict) -> str:
-    """CLI evaluate → человекочитаемый вывод.
-
-    Только три секции: Инструкции, Чекапы, Доказательства.
-    Никаких эмодзи, verdict-заголовков, internal phase codes, boilerplate.
-    PASS: показываем контракт следующей фазы со статусом pending (·).
-    Не-PASS: показываем только недоделанные пункты текущей фазы.
-    Для parallel групп перечисляем все фазы с агентами и параллельными партнёрами.
-    """
-    verdict = str(result.get("verdict", "UNKNOWN")).upper()
-    covered = result.get("covered", []) or []
-    covered_set = {str(i) for i in covered}
-    is_pass = verdict == "PASS"
-
-    if is_pass:
-        contract = result.get("next_phase_contract") or {}
-        group_details = contract.get("group_details") or []
-        if group_details:
-            instructions, checks, evidence = _flatten_parallel_contract(contract, covered_set)
-        else:
-            instructions = list(contract.get("instructions", []) or [])
-            checks = list(contract.get("required_checks", []) or [])
-            evidence = list(contract.get("required_evidence", []) or [])
-    else:
-        group_details = result.get("group_details") or []
-        if group_details:
-            instructions, checks, evidence = _flatten_parallel_contract(result, covered_set)
-        else:
-            instructions = list(result.get("instructions", []) or [])
-            checks = list(result.get("required_checks", []) or [])
-            evidence = list(result.get("required_evidence", []) or [])
-            missing = result.get("missing", []) or []
-            checks = [c for c in checks if str(c) not in covered_set]
-            evidence = [e for e in evidence if str(e) not in covered_set]
-            for m in missing:
-                s = str(m)
-                if s not in covered_set and s not in checks and s not in evidence:
-                    checks.append(s)
-
-    lines: list[str] = []
-
-    # PASS: first instruction becomes the actionable next step.
-    if is_pass:
-        next_name = result.get("next_phase_name") or result.get("next_phase") or ""
-        if next_name and instructions:
-            instructions.insert(0, f"Перейди к шагу: {next_name}")
-        elif next_name:
-            instructions.insert(0, f"Перейди к шагу: {next_name}")
-
-    if instructions:
-        lines.append("Инструкции:")
-        for item in instructions:
-            lines.append(f"  · {item}")
-
-    if checks:
-        lines.append("")
-        lines.append("Чекапы:")
-        for item in checks:
-            lines.append(f"  · {item}")
-
-    if evidence:
-        lines.append("")
-        lines.append("Доказательства:")
-        for item in evidence:
-            lines.append(f"  · {item}")
-
-    return "\n".join(lines)
-
-
-def _flatten_parallel_contract(
-    contract: dict[str, Any], covered_set: set[str]
-) -> tuple[list[str], list[str], list[str]]:
-    """Flatten a parallel group contract into (instructions, checks, evidence) with phase labels."""
-    instructions: list[str] = []
-    checks: list[str] = []
-    evidence: list[str] = []
-    group_details = contract.get("group_details") or []
-    group_names = [d.get("phase_name") or d.get("phase_code") or "-" for d in group_details]
-    if group_names:
-        instructions.append(
-            f"Параллельная группа фаз: {', '.join(group_names)} — выполняются одновременно, отчёт одним сообщением"
-        )
-    for detail in group_details:
-        name = detail.get("phase_name") or detail.get("phase_code") or "-"
-        agent = detail.get("delegate_agent") or "не задан"
-        toolsets = ", ".join(detail.get("delegate_toolsets") or [])
-        partner_code = detail.get("parallel_with") or "-"
-        partner = next(
-            (
-                d.get("phase_name") or d.get("phase_code") or partner_code
-                for d in group_details
-                if d.get("phase_code") == partner_code
-            ),
-            partner_code,
-        )
-        instructions.append(
-            f"{name} — параллельно с {partner}, агент: {agent}" + (f" | toolsets: {toolsets}" if toolsets else "")
-        )
-        for item in detail.get("instructions", []) or []:
-            instructions.append(f"  {item}")
-        for item in detail.get("required_checks", []) or []:
-            if str(item) not in covered_set:
-                checks.append(f"{name}: {item}")
-        for item in detail.get("required_evidence", []) or []:
-            if str(item) not in covered_set:
-                evidence.append(f"{name}: {item}")
-    return instructions, checks, evidence

@@ -26,15 +26,14 @@ from project_workflow.wizard.contracts import (
     text_from_instruction,
 )
 from project_workflow.wizard.core import (
-    VERDICT_LABELS,
     PromptCache,
     WizardEngine,
     evaluate_report,
     evaluate_report_formatted,
-    format_result,
     get_phase_instructions,
     main,
 )
+from project_workflow.wizard.formatting import format_result
 from project_workflow.wizard.evaluate import (
     OllamaClient,
     PromptBuilder,
@@ -42,6 +41,7 @@ from project_workflow.wizard.evaluate import (
     evaluate_llm_report,
 )
 from project_workflow.wizard.prompt import build_phase_prompt
+from project_workflow.wizard.result_builder import VERDICT_LABELS
 from project_workflow.wizard.store import WizardAssessmentStore
 from project_workflow.wizard.types import (
     ArtifactSnapshot,
