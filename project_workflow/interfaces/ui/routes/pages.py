@@ -5,8 +5,8 @@ from __future__ import annotations
 from fastapi import Query, Request
 from fastapi.responses import HTMLResponse
 
-from project_workflow.config import get_settings
 from project_workflow.application.phase_service import PhaseService
+from project_workflow.config import get_settings
 from project_workflow.interfaces.ui.services import (
     _agent_service,
     _build_parallel_phase_blocks,
@@ -20,7 +20,9 @@ from project_workflow.interfaces.ui.services import (
     _load_tasks,
     _load_workflows,
 )
-from project_workflow.interfaces.ui.skills import _load_skills_catalog as _load_skills_catalog_direct
+from project_workflow.interfaces.ui.skills import (
+    _load_skills_catalog as _load_skills_catalog_direct,
+)
 from project_workflow.interfaces.ui.templates import templates
 
 
@@ -39,9 +41,7 @@ async def index(request: Request) -> HTMLResponse:
     )
 
 
-async def phases_page(
-    request: Request, workflow_id: int | None = Query(default=None)
-) -> HTMLResponse:
+async def phases_page(request: Request, workflow_id: int | None = Query(default=None)) -> HTMLResponse:
     workflows = _load_workflows()
     selected_workflow = next((item for item in workflows if item["id"] == workflow_id), None)
     if selected_workflow is None and workflows:
@@ -77,9 +77,7 @@ async def phase_detail(request: Request, phase_id: str) -> HTMLResponse:
         instruction["skills"] = selected_skills
         selected_names = set(selected_skills)
         instruction["available_skills"] = [
-            dict(skill)
-            for skill in skills_catalog
-            if str(skill.get("name") or "") not in selected_names
+            dict(skill) for skill in skills_catalog if str(skill.get("name") or "") not in selected_names
         ]
     return templates.TemplateResponse(
         request=request,
@@ -225,9 +223,7 @@ async def instructions_page(
         instruction["skills"] = selected_skills
         selected_names = set(selected_skills)
         instruction["available_skills"] = [
-            dict(skill)
-            for skill in skills_catalog
-            if str(skill.get("name") or "") not in selected_names
+            dict(skill) for skill in skills_catalog if str(skill.get("name") or "") not in selected_names
         ]
     instruction_groups = _group_instructions(instructions)
     return templates.TemplateResponse(

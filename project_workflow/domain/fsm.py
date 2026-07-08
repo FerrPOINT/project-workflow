@@ -6,10 +6,11 @@ Formalizes the lifecycle of a single workflow phase:
                 ↘ rollback
                 ↘ delegated
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, List, Optional
+from typing import Any
 
 from transitions import Machine
 from transitions.core import MachineError
@@ -30,7 +31,7 @@ class PhaseFSM:
 
     STATES = ["pending", "in_progress", "done", "blocked", "rollback", "delegated"]
 
-    TRANSITIONS: List[dict[str, Any]] = [
+    TRANSITIONS: list[dict[str, Any]] = [
         {"trigger": "start", "source": "pending", "dest": "in_progress"},
         {"trigger": "succeed", "source": "in_progress", "dest": "done"},
         {"trigger": "partial_pass", "source": "in_progress", "dest": "in_progress"},
@@ -86,7 +87,7 @@ class PhaseFSM:
 # ── Phase order & checklist helpers (moved from root phases.py) ─────────────
 
 
-def get_next_phase(current_phase: str) -> Optional[str]:
+def get_next_phase(current_phase: str) -> str | None:
     """Определить следующую фазу по порядку."""
     try:
         idx = config.PHASE_ORDER.index(current_phase)
@@ -98,10 +99,11 @@ def get_next_phase(current_phase: str) -> Optional[str]:
     return None
 
 
-def get_phase_checklist_raw(phase_name: str) -> List[str]:
+def get_phase_checklist_raw(phase_name: str) -> list[str]:
     """Вернуть raw список чеклиста для фазы (для JSON output)."""
-    from project_workflow.infrastructure.db.uow import SAUnitOfWork
     from project_workflow.infrastructure.db import schema
+    from project_workflow.infrastructure.db.uow import SAUnitOfWork
+
     try:
         uow = SAUnitOfWork()
         uow.create_all()
@@ -144,9 +146,9 @@ def show_phase_checklist(phase_name: str) -> None:
 
 def show_all_phases() -> None:
     """Показать все фазы с пометками."""
+    from rich import box
     from rich.console import Console
     from rich.table import Table
-    from rich import box
 
     console = Console()
     table = Table(title="🗺️ project-workflow — все фазы", box=box.ROUNDED)
@@ -157,11 +159,24 @@ def show_all_phases() -> None:
 
     # Stub names mapping for display
     names = {
-        "-1": "Task Intake", "0.00": "Git Identity", "0.5": "Jira Transition",
-        "0.6": "Researcher #1", "1": "Preflight", "1.5": "Deep Research",
-        "3": "Plan", "4": "Implement", "5": "Validate", "5.5": "Self-Test",
-        "6": "Commit", "7": "MR Draft", "7.5": "Code Review", "7.6": "QA Testing",
-        "7.6.R": "DVR", "8": "Jira Done", "9": "Retro", "10": "Auto-Improve",
+        "-1": "Task Intake",
+        "0.00": "Git Identity",
+        "0.5": "Jira Transition",
+        "0.6": "Researcher #1",
+        "1": "Preflight",
+        "1.5": "Deep Research",
+        "3": "Plan",
+        "4": "Implement",
+        "5": "Validate",
+        "5.5": "Self-Test",
+        "6": "Commit",
+        "7": "MR Draft",
+        "7.5": "Code Review",
+        "7.6": "QA Testing",
+        "7.6.R": "DVR",
+        "8": "Jira Done",
+        "9": "Retro",
+        "10": "Auto-Improve",
     }
     for code in config.PHASE_ORDER:
         table.add_row(code, names.get(code, ""), "", "")

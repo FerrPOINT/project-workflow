@@ -1,4 +1,5 @@
 """Coverage gaps for wizard/evaluate.py and ui/seed.py."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -7,9 +8,9 @@ import pytest
 
 pytestmark = [pytest.mark.wizard]
 
+from project_workflow import config
 from project_workflow.wizard.evaluate import evaluate_llm_report
 from project_workflow.wizard.models import Phase
-from project_workflow import config
 
 
 def _phase(**overrides) -> Phase:
@@ -36,7 +37,17 @@ def _phase(**overrides) -> Phase:
 
 
 class MockLlmResponse:
-    def __init__(self, verdict="PASS", next_phase=None, next_phase_name=None, blockers=None, covered=None, missing=None, message="", confidence=0.9):
+    def __init__(
+        self,
+        verdict="PASS",
+        next_phase=None,
+        next_phase_name=None,
+        blockers=None,
+        covered=None,
+        missing=None,
+        message="",
+        confidence=0.9,
+    ):
         self.verdict = verdict
         self.next_phase = next_phase
         self.next_phase_name = next_phase_name
@@ -96,6 +107,7 @@ class TestEvaluateGaps:
 class TestSeedGaps:
     def test_update_config_phase_order_no_rows(self, monkeypatch):
         from project_workflow.interfaces.ui import seed as seed_mod
+
         before = list(config.PHASE_ORDER)
         uow = MagicMock()
         uow.workflows.get_default.return_value = MagicMock(id=1)

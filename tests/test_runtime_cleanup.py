@@ -10,10 +10,8 @@ import pytest
 pytestmark = [pytest.mark.unit]
 
 from project_workflow import config
-from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.db import schema
-
-
+from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SEED_PATH = REPO_ROOT / "project_workflow" / "references" / "seed.json"
@@ -65,18 +63,22 @@ def test_sanitize_runtime_state_removes_known_test_residue_and_dedupes_agents(tm
     uow = SAUnitOfWork(str(tmp_path / "workflow.db"))
     uow.init()
 
-    ui_test_project_id = uow.create_project({
-        "code": "UITEST",
-        "name": "UI Test Project",
-        "key_prefixes": ["UITEST"],
-    })
-    uow.create_task({
-        "project_id": ui_test_project_id,
-        "task_key": "UITEST-401",
-        "title": "Проверка project-aware UI",
-        "status": "active",
-        "current_phase": "-1",
-    })
+    ui_test_project_id = uow.create_project(
+        {
+            "code": "UITEST",
+            "name": "UI Test Project",
+            "key_prefixes": ["UITEST"],
+        }
+    )
+    uow.create_task(
+        {
+            "project_id": ui_test_project_id,
+            "task_key": "UITEST-401",
+            "title": "Проверка project-aware UI",
+            "status": "active",
+            "current_phase": "-1",
+        }
+    )
     uow.create_agent({"name": "architect", "description": "Проектирует и уточняет контракты"})
     uow.create_agent({"name": "architect", "description": "Проектирует и уточняет контракты"})
 
@@ -113,26 +115,21 @@ def test_seed_catalog_order_matches_config_phase_order():
     assert codes == config.PHASE_ORDER
 
 
-
 def test_seed_catalog_names_match_runtime_progress_template():
     phases = json.loads(SEED_PATH.read_text(encoding="utf-8"))
     seed_names = {
-        str(phase.get("code", phase.get("id", ""))).strip(): str(phase.get("name", "")).strip()
-        for phase in phases
+        str(phase.get("code", phase.get("id", ""))).strip(): str(phase.get("name", "")).strip() for phase in phases
     }
 
     from project_workflow.infrastructure.db.uow import SAUnitOfWork
+
     uow = SAUnitOfWork()
     uow.init()
     schema.ensure_phase_catalog(uow)
     phases_db = uow.get_phases()
-    progress_names = {
-        str(phase.get("code", "")).strip(): str(phase.get("name", "")).strip()
-        for phase in phases_db
-    }
+    progress_names = {str(phase.get("code", "")).strip(): str(phase.get("name", "")).strip() for phase in phases_db}
 
     assert seed_names == progress_names
-
 
 
 def test_seed_catalog_has_no_blank_instruction_descriptions():
@@ -186,7 +183,26 @@ def test_seed_catalog_parallelism_uses_phase_runs_instead_of_fake_instruction_ba
         assert phase["execution_type"] == "parallel", f"Phase {code} must be marked parallel at phase level"
 
     # Sequential phases must NOT be falsely marked parallel
-    sequential_codes = {"-1", "0.0a", "0.00", "0.01", "0.000", "0.7", "0.9", "0.5", "3", "3.5", "4", "5.5", "6", "7", "7.7", "8", "9", "10"}
+    sequential_codes = {
+        "-1",
+        "0.0a",
+        "0.00",
+        "0.01",
+        "0.000",
+        "0.7",
+        "0.9",
+        "0.5",
+        "3",
+        "3.5",
+        "4",
+        "5.5",
+        "6",
+        "7",
+        "7.7",
+        "8",
+        "9",
+        "10",
+    }
     for code in sequential_codes:
         phase = _phase_by_code(code)
         assert phase["execution_type"] == "sync", f"Phase {code} must be sequential (sync)"
@@ -210,7 +226,9 @@ def test_seed_catalog_role_bound_phases_are_fully_filled_with_agents_skills_and_
 
         for instruction in phase["instructions"]:
             skills = instruction.get("skills")
-            assert isinstance(skills, list) and skills, f"Phase {code} instruction {instruction.get('step_num')} must declare skills"
+            assert isinstance(skills, list) and skills, (
+                f"Phase {code} instruction {instruction.get('step_num')} must declare skills"
+            )
             assert set(skills).issubset(VALID_WORKFLOW_SKILLS), (
                 f"Phase {code} instruction {instruction.get('step_num')} uses unknown skills: {skills}"
             )

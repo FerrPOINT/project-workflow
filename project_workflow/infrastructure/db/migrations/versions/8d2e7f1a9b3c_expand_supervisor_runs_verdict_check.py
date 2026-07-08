@@ -5,16 +5,17 @@ Revises: 7a1e9c3b4d5f
 Create Date: 2026-06-28 03:00:00.000000
 
 """
-from typing import Sequence, Union
+
+from collections.abc import Sequence
 
 from alembic import op
 from sqlalchemy import text
 
 # revision identifiers, used by Alembic.
-revision: str = '8d2e7f1a9b3c'
-down_revision: Union[str, Sequence[str], None] = '7a1e9c3b4d5f'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+revision: str = "8d2e7f1a9b3c"
+down_revision: str | Sequence[str] | None = "7a1e9c3b4d5f"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 SCHEMA = "project_workflow"
 TABLE = "supervisor_runs"

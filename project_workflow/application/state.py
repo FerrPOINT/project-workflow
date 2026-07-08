@@ -4,30 +4,41 @@ Replaces module-level globals and lives outside the UI package so the CLI
 and seed loaders can reuse the same SQLAlchemy-backed services without
 circular imports.
 """
+
 from __future__ import annotations
+
 from pathlib import Path
 from typing import Any
-from . import AgentService, InstructionService, PhaseServiceApp, ProjectService, TaskService, WorkflowService
-from ..config import get_settings
+
 from ..application.phase_service import PhaseService
+from ..config import get_settings
 from ..infrastructure.db.session import ensure_migrated, ensure_schema, get_engine
 from ..infrastructure.db.uow import SAUnitOfWork
+from . import (
+    AgentService,
+    InstructionService,
+    PhaseServiceApp,
+    ProjectService,
+    TaskService,
+    WorkflowService,
+)
 
-_CATALOG_ENSURED_URLS: set[str] = set()
 _MIGRATED_URLS: set[str] = set()
+
 
 class _AppState:
     """Application state holder (replaces module-level globals)."""
-    __slots__ = ('_database_url',)
 
-    def __init__(self, database_url: str | None=None) -> None:
+    __slots__ = ("_database_url",)
+
+    def __init__(self, database_url: str | None = None) -> None:
         self._database_url: str = database_url or get_settings().DATABASE_URL
 
     def _database_url_normalized(self) -> str:
         target = self._database_url
-        if target.startswith('sqlite:///'):
+        if target.startswith("sqlite:///"):
             target = str(Path(target[10:]).resolve())
-            target = f'sqlite:///{target}'
+            target = f"sqlite:///{target}"
         return target
 
     def get_db(self) -> SAUnitOfWork:
@@ -35,7 +46,9 @@ class _AppState:
         return self.get_uow()
 
     def reset(self) -> None:
-        _CATALOG_ENSURED_URLS.discard(self._database_url_normalized())
+        from ..infrastructure.db import schema
+
+        schema.mark_catalog_not_ensured(self._database_url_normalized())
         _MIGRATED_URLS.discard(self._database_url_normalized())
 
     def get_service(self) -> PhaseService:
@@ -45,16 +58,15 @@ class _AppState:
     def get_uow(self) -> SAUnitOfWork:
         engine = get_engine(self._database_url_normalized())
         url = self._database_url_normalized()
-        if engine.dialect.name == 'sqlite':
+        if engine.dialect.name == "sqlite":
             ensure_schema(engine)
         elif url not in _MIGRATED_URLS:
             ensure_migrated(engine)
             _MIGRATED_URLS.add(url)
         uow = SAUnitOfWork(engine)
-        if url not in _CATALOG_ENSURED_URLS:
-            from ..infrastructure.db import schema
-            schema.ensure_phase_catalog(uow)
-            _CATALOG_ENSURED_URLS.add(url)
+        from ..infrastructure.db import schema
+
+        schema.ensure_phase_catalog(uow)
         return uow
 
     def workflow_service(self) -> WorkflowService:
@@ -82,5 +94,7 @@ class _AppState:
     @property
     def _database_url_public(self) -> str:
         return self._database_url
+
+
 _app_state = _AppState()
-__all__ = ['_AppState', '_app_state']
+__all__ = ["_AppState", "_app_state"]

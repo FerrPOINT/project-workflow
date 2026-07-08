@@ -9,7 +9,6 @@ import uvicorn
 from project_workflow.config import get_settings
 from project_workflow.interfaces.ui.app import app
 
-
 DEFAULT_UI_PORT = get_settings().UI_PORT
 
 
@@ -19,6 +18,7 @@ def main() -> None:
     parser.add_argument("--host", default="0.0.0.0", help="Host (default: %(default)s)")
     args = parser.parse_args()
     from project_workflow.application.state import _app_state
+
     uow = _app_state.get_uow()
     try:
         uow._bootstrap_smoke_project_and_workflow()

@@ -1,12 +1,13 @@
 """Read-only UI data loaders implemented as an application service."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from typing import Any
 
 from .. import config
-from .state import _AppState
 from ..interfaces.ui.helpers import _resolve_task_phase, _resolve_task_phase_local, _run_to_dict
+from .state import _AppState
 
 
 class UIDataService:
@@ -157,7 +158,11 @@ class UIDataService:
             project_name = project.get("name") or ""
             workflow_id_raw = project.get("workflow_id")
             workflow_id: int | None = int(workflow_id_raw) if isinstance(workflow_id_raw, int) else None
-            total_phases = phase_counts_by_workflow.get(workflow_id, default_phase_count) if workflow_id is not None else default_phase_count
+            total_phases = (
+                phase_counts_by_workflow.get(workflow_id, default_phase_count)
+                if workflow_id is not None
+                else default_phase_count
+            )
 
             current_phase_id, current = _resolve_task_phase_local(
                 t.get("current_phase", "-1"),
@@ -199,7 +204,9 @@ class UIDataService:
                     "project_id": t.get("project_id"),
                     "project_code": project_code,
                     "project_name": project_name,
-                    "project_label": project_name if project_name == project_code else f"{project_code} — {project_name}",
+                    "project_label": project_name
+                    if project_name == project_code
+                    else f"{project_code} — {project_name}",
                     "phase_id": current.get("code", current_phase_id),
                     "phase_num": current.get("phase_num", current.get("phase_order", "?")),
                     "phase_name": current.get("name", current_phase_id),
@@ -264,9 +271,7 @@ class UIDataService:
                 "verdicts": verdict_counts,
             },
             "active_tasks": active_tasks[:8],
-            "projects": sorted(
-                projects, key=lambda item: (-item.get("task_count", 0), item.get("name", ""))
-            )[:8],
+            "projects": sorted(projects, key=lambda item: (-item.get("task_count", 0), item.get("name", "")))[:8],
         }
 
     def _get_task_detail(self, task_key: str) -> dict[str, Any] | None:
@@ -301,9 +306,7 @@ class UIDataService:
         )
 
         workflow_id = task.get("workflow_id")
-        workflow_phases = (
-            wdb.get_phases(workflow_id=workflow_id) if workflow_id is not None else wdb.get_phases()
-        )
+        workflow_phases = wdb.get_phases(workflow_id=workflow_id) if workflow_id is not None else wdb.get_phases()
         task["workflow_phase_count"] = len(workflow_phases)
 
         history = wdb.get_task_history(task["id"])
@@ -372,10 +375,12 @@ class UIDataService:
                     run[0]["parallel_group"] = None
                     run[0]["is_parallel"] = False
                 phase_history.extend(run)
-                phase_history_blocks.append({
-                    "kind": "parallel" if len(run) > 1 else "single",
-                    "phases": run,
-                })
+                phase_history_blocks.append(
+                    {
+                        "kind": "parallel" if len(run) > 1 else "single",
+                        "phases": run,
+                    }
+                )
 
         task["phase_history"] = phase_history
         task["phase_history_blocks"] = phase_history_blocks
@@ -387,7 +392,9 @@ class UIDataService:
 
         supervisor_runs: list[dict[str, Any]] = wdb.get_supervisor_runs(task_key=task_key, limit=200)
         for super_run in supervisor_runs:
-            super_run["verdict_label"] = VERDICT_LABELS.get(super_run.get("verdict", ""), super_run.get("verdict", "").upper())
+            super_run["verdict_label"] = VERDICT_LABELS.get(
+                super_run.get("verdict", ""), super_run.get("verdict", "").upper()
+            )
             resp = super_run.get("response") or {}
             super_run["contract"] = {
                 "description": resp.get("description", ""),

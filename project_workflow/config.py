@@ -1,4 +1,5 @@
 """project-workflow configuration."""
+
 from __future__ import annotations
 
 import json
@@ -33,9 +34,7 @@ class Settings(BaseSettings):
 
     LOG_LEVEL: str = "INFO"
 
-    SUITES_DIR: str = os.getenv(
-        "SUITES_DIR", str(Path.home() / ".hermes" / "skills" / "software-development")
-    )
+    SUITES_DIR: str = os.getenv("SUITES_DIR", str(Path.home() / ".hermes" / "skills" / "software-development"))
 
     JIRA_BASE_URL: str = "https://task.wemakedev.ru"
     GITLAB_BASE_URL: str = "https://gt.wmtgroup.ru"
@@ -76,33 +75,33 @@ SMART_EVALUATE: bool = os.getenv("SMART_EVALUATE", "").lower() in ("1", "true", 
 SMART_REASONING: bool = os.getenv("SMART_REASONING", "").lower() in ("1", "true", "yes", "on")
 
 PHASE_ORDER = [
-    "-1",      # Task Intake
-    "0.0a",    # Suite Verification
-    "0.01",    # Task Docs Setup
-    "0.000",   # Workspace
-    "0.00",    # Git Identity
-    "0.7",     # Repo Sync
-    "0.9",     # CriticGate-PreFlight
-    "0.5",     # Jira Transition
-    "0.6",     # Researcher #1
-    "1",       # Preflight
-    "1.5",     # Deep Research
-    "2",       # Research Synthesis
-    "3",       # Plan
-    "3.5",     # CriticGate-PrePlan
-    "4",       # Implement
-    "4.5",     # CriticGate-PreCommit
-    "5",       # Validate
-    "5.5",     # Self-Test
-    "6",       # Commit
-    "7",       # MR Draft
-    "7.5",     # Code Review
-    "7.6",     # QA Testing
-    "7.6.R",   # DVR
-    "7.7",     # CriticGate-PostQA
-    "8",       # Jira Done
-    "9",       # Retro
-    "10",      # Auto-Improve
+    "-1",  # Task Intake
+    "0.0a",  # Suite Verification
+    "0.01",  # Task Docs Setup
+    "0.000",  # Workspace
+    "0.00",  # Git Identity
+    "0.7",  # Repo Sync
+    "0.9",  # CriticGate-PreFlight
+    "0.5",  # Jira Transition
+    "0.6",  # Researcher #1
+    "1",  # Preflight
+    "1.5",  # Deep Research
+    "2",  # Research Synthesis
+    "3",  # Plan
+    "3.5",  # CriticGate-PrePlan
+    "4",  # Implement
+    "4.5",  # CriticGate-PreCommit
+    "5",  # Validate
+    "5.5",  # Self-Test
+    "6",  # Commit
+    "7",  # MR Draft
+    "7.5",  # Code Review
+    "7.6",  # QA Testing
+    "7.6.R",  # DVR
+    "7.7",  # CriticGate-PostQA
+    "8",  # Jira Done
+    "9",  # Retro
+    "10",  # Auto-Improve
 ]
 
 LEGACY_PHASE_REDIRECTS = {
@@ -112,8 +111,16 @@ LEGACY_PHASE_REDIRECTS = {
 }
 
 DELEGATED_PHASES = [
-    "0.6", "0.9", "1.5", "3.5", "4.5",
-    "7.5", "7.6", "7.6.R", "7.7", "9",
+    "0.6",
+    "0.9",
+    "1.5",
+    "3.5",
+    "4.5",
+    "7.5",
+    "7.6",
+    "7.6.R",
+    "7.7",
+    "9",
 ]
 
 CRITIC_PHASES = ["0.9", "3.5", "4.5", "7.7"]
@@ -133,7 +140,7 @@ def _read_raw_settings() -> dict:
     path = get_settings().SETTINGS_PATH
     if os.path.exists(path):
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 data = json.load(f)
             return data if isinstance(data, dict) else {}
         except (json.JSONDecodeError, OSError, TypeError) as exc:

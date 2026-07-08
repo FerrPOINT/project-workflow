@@ -2,6 +2,7 @@
 
 Uses TestClient to hit GET/POST/PUT endpoints.
 """
+
 import os
 import tempfile
 import uuid
@@ -21,29 +22,36 @@ def client():
     db_url = f"sqlite:///{db_path}"
     os.environ["DATABASE_URL"] = db_url
     from project_workflow import config
+
     config.get_settings.cache_clear()
-    from project_workflow.interfaces.ui import app, _app_state
+    from project_workflow.interfaces.ui import _app_state, app
+
     _app_state.__init__(database_url=db_url)  # type: ignore[misc]
     _app_state.reset()
     uow = _app_state.get_db()
     uow.create_all()
     from project_workflow.infrastructure.db.schema import ensure_phase_catalog
+
     ensure_phase_catalog(uow)
     default_workflow = uow.workflows.ensure_default_exists()
     if not uow.projects.get_by_code("DEFAULT"):
-        uow.projects.create({
-            "code": "DEFAULT",
-            "name": "Default Project",
-            "workflow_id": default_workflow.id,
-        })
+        uow.projects.create(
+            {
+                "code": "DEFAULT",
+                "name": "Default Project",
+                "workflow_id": default_workflow.id,
+            }
+        )
     if not uow.tasks.get_by_key("TASK-1"):
-        uow.tasks.create({
-            "project_id": uow.projects.get_by_code("DEFAULT").id,
-            "task_key": "TASK-1",
-            "title": "Smoke task for dashboard",
-            "status": "active",
-            "current_phase": "-1",
-        })
+        uow.tasks.create(
+            {
+                "project_id": uow.projects.get_by_code("DEFAULT").id,
+                "task_key": "TASK-1",
+                "title": "Smoke task for dashboard",
+                "status": "active",
+                "current_phase": "-1",
+            }
+        )
     uow.commit()
     with TestClient(app) as c:
         yield c
@@ -52,6 +60,7 @@ def client():
 
 def _phase_id(client, code: str) -> int:
     from project_workflow.interfaces.ui import _app_state
+
     for p in _app_state.phase_service().list_phases():
         if p.get("code") == code:
             return int(p["id"])
@@ -188,6 +197,7 @@ class TestApiPhaseCreate:
 
     def test_create_phase_requires_phase_order(self, client):
         from project_workflow.interfaces.ui import _app_state
+
         workflow = _app_state.workflow_service().create_workflow({"name": _unique("wf"), "_skip_default_phase": True})
         resp = client.post("/api/phases", json={"workflow_id": workflow["id"]})
         assert resp.status_code == 400
@@ -203,13 +213,21 @@ class TestApiPhaseCreate:
         from project_workflow.interfaces.ui import _app_state
 
         uow = _app_state.get_db()
-        workflow = _app_state.workflow_service().create_workflow({"name": _unique("cpt-wf"), "_skip_default_phase": True})
+        workflow = _app_state.workflow_service().create_workflow(
+            {"name": _unique("cpt-wf"), "_skip_default_phase": True}
+        )
         workflow_id = workflow["id"]
         c1, c2, c3 = _unique("cpt"), _unique("cpt"), _unique("cpt")
         try:
-            ph1 = _app_state.phase_service().create_phase({"workflow_id": workflow_id, "code": c1, "name": "One", "phase_order": 1})
-            ph2 = _app_state.phase_service().create_phase({"workflow_id": workflow_id, "code": c2, "name": "Two", "phase_order": 2})
-            ph3 = _app_state.phase_service().create_phase({"workflow_id": workflow_id, "code": c3, "name": "Three", "phase_order": 3})
+            ph1 = _app_state.phase_service().create_phase(
+                {"workflow_id": workflow_id, "code": c1, "name": "One", "phase_order": 1}
+            )
+            ph2 = _app_state.phase_service().create_phase(
+                {"workflow_id": workflow_id, "code": c2, "name": "Two", "phase_order": 2}
+            )
+            ph3 = _app_state.phase_service().create_phase(
+                {"workflow_id": workflow_id, "code": c3, "name": "Three", "phase_order": 3}
+            )
 
             resp = client.post("/api/phases", json={"workflow_id": workflow_id, "phase_order": 2})
             assert resp.status_code == 200
@@ -236,11 +254,15 @@ class TestApiPhaseCreate:
         from project_workflow.interfaces.ui import _app_state
 
         uow = _app_state.get_db()
-        workflow = _app_state.workflow_service().create_workflow({"name": _unique("cpa-wf"), "_skip_default_phase": True})
+        workflow = _app_state.workflow_service().create_workflow(
+            {"name": _unique("cpa-wf"), "_skip_default_phase": True}
+        )
         workflow_id = workflow["id"]
         c1 = _unique("cpa")
         try:
-            ph1 = _app_state.phase_service().create_phase({"workflow_id": workflow_id, "code": c1, "name": "One", "phase_order": 1})
+            ph1 = _app_state.phase_service().create_phase(
+                {"workflow_id": workflow_id, "code": c1, "name": "One", "phase_order": 1}
+            )
 
             resp = client.post("/api/phases", json={"workflow_id": workflow_id, "phase_order": 99})
             assert resp.status_code == 200
@@ -260,16 +282,21 @@ class TestApiPhaseCreate:
         from project_workflow.interfaces.ui import _app_state
 
         uow = _app_state.get_db()
-        workflow = _app_state.workflow_service().create_workflow({"name": _unique("cpfull-wf"), "_skip_default_phase": True})
+        workflow = _app_state.workflow_service().create_workflow(
+            {"name": _unique("cpfull-wf"), "_skip_default_phase": True}
+        )
         workflow_id = workflow["id"]
         try:
-            resp = client.post("/api/phases", json={
-                "workflow_id": workflow_id,
-                "phase_order": 1,
-                "name": "Custom Phase",
-                "description": "Custom description",
-                "execution_type": "parallel",
-            })
+            resp = client.post(
+                "/api/phases",
+                json={
+                    "workflow_id": workflow_id,
+                    "phase_order": 1,
+                    "name": "Custom Phase",
+                    "description": "Custom description",
+                    "execution_type": "parallel",
+                },
+            )
             assert resp.status_code == 200
             data = resp.json()
             new_phase = _app_state.phase_service().get_phase(data["phase_id"])
@@ -287,38 +314,52 @@ class TestApiPhaseCreate:
         from project_workflow.interfaces.ui import _app_state
 
         uow = _app_state.get_db()
-        workflow = _app_state.workflow_service().create_workflow({"name": _unique("cpof-wf"), "_skip_default_phase": True})
+        workflow = _app_state.workflow_service().create_workflow(
+            {"name": _unique("cpof-wf"), "_skip_default_phase": True}
+        )
         workflow_id = workflow["id"]
         codes = [_unique("cpof") for _ in range(4)]
         try:
-            ph1 = _app_state.phase_service().create_phase({"workflow_id": workflow_id, "code": codes[0], "name": "One", "phase_order": 1})
-            ph2 = _app_state.phase_service().create_phase({"workflow_id": workflow_id, "code": codes[1], "name": "Two", "phase_order": 2})
-            ph3 = _app_state.phase_service().create_phase({"workflow_id": workflow_id, "code": codes[2], "name": "Three", "phase_order": 3})
-            ph4 = _app_state.phase_service().create_phase({"workflow_id": workflow_id, "code": codes[3], "name": "Four", "phase_order": 4})
+            ph1 = _app_state.phase_service().create_phase(
+                {"workflow_id": workflow_id, "code": codes[0], "name": "One", "phase_order": 1}
+            )
+            ph2 = _app_state.phase_service().create_phase(
+                {"workflow_id": workflow_id, "code": codes[1], "name": "Two", "phase_order": 2}
+            )
+            ph3 = _app_state.phase_service().create_phase(
+                {"workflow_id": workflow_id, "code": codes[2], "name": "Three", "phase_order": 3}
+            )
+            ph4 = _app_state.phase_service().create_phase(
+                {"workflow_id": workflow_id, "code": codes[3], "name": "Four", "phase_order": 4}
+            )
 
             # Move last phase to position 2 via API; now DOM index 1 = 'Four' but server order = 2.
-            resp = client.put("/api/phases/order", json={
-                "orders": [
-                    {"phase_id": ph1["id"], "phase_order": 1},
-                    {"phase_id": ph4["id"], "phase_order": 2},
-                    {"phase_id": ph2["id"], "phase_order": 3},
-                    {"phase_id": ph3["id"], "phase_order": 4},
-                ]
-            })
+            resp = client.put(
+                "/api/phases/order",
+                json={
+                    "orders": [
+                        {"phase_id": ph1["id"], "phase_order": 1},
+                        {"phase_id": ph4["id"], "phase_order": 2},
+                        {"phase_id": ph2["id"], "phase_order": 3},
+                        {"phase_id": ph3["id"], "phase_order": 4},
+                    ]
+                },
+            )
             assert resp.status_code == 200
 
             # Click + on 'Four' (server order 2). New phase must land at order 3.
             resp = client.post("/api/phases", json={"workflow_id": workflow_id, "phase_order": 3})
             assert resp.status_code == 200
             data = resp.json()
-            phases = sorted(_app_state.phase_service().list_phases(workflow_id=workflow_id), key=lambda p: p["phase_order"])
+            phases = sorted(
+                _app_state.phase_service().list_phases(workflow_id=workflow_id), key=lambda p: p["phase_order"]
+            )
             names = [p["name"] for p in phases]
             assert names == ["One", "Four", "Новая фаза", "Two", "Three"]
             assert data["phase_order"] == 3
         finally:
             uow.workflows.delete(int(workflow_id))
             uow.commit()
-
 
 
 class TestApiWorkflows:
@@ -348,6 +389,7 @@ class TestApiWorkflows:
 
     def test_update_workflow(self, client):
         from project_workflow.interfaces.ui import _app_state
+
         wf = _app_state.workflow_service().create_workflow({"name": _unique("upd-wf"), "_skip_default_phase": True})
         resp = client.put(f"/api/workflows/{wf['id']}", json={"name": "Updated", "description": "new"})
         assert resp.status_code == 200
@@ -361,14 +403,18 @@ class TestApiWorkflows:
 
     def test_delete_default_workflow_forbidden(self, client):
         from project_workflow.interfaces.ui import _app_state
+
         default = next(w for w in _app_state.workflow_service().list_workflows() if w.get("is_default"))
         resp = client.delete(f"/api/workflows/{default['id']}")
         assert resp.status_code in (400, 409)
 
     def test_delete_workflow_with_phases_forbidden(self, client):
         from project_workflow.interfaces.ui import _app_state
+
         wf = _app_state.workflow_service().create_workflow({"name": _unique("del-wf"), "_skip_default_phase": True})
-        _app_state.phase_service().create_phase({"workflow_id": wf["id"], "code": _unique("delph"), "name": "Phase", "phase_order": 1})
+        _app_state.phase_service().create_phase(
+            {"workflow_id": wf["id"], "code": _unique("delph"), "name": "Phase", "phase_order": 1}
+        )
         resp = client.delete(f"/api/workflows/{wf['id']}")
         assert resp.status_code == 409
 
@@ -383,15 +429,19 @@ class TestApiProjects:
 
     def test_create_and_update_project(self, client):
         from project_workflow.interfaces.ui import _app_state
+
         default_wf = next(w for w in _app_state.workflow_service().list_workflows() if w.get("is_default"))
         code = _unique("PRJ")
-        resp = client.post("/api/projects", json={
-            "code": code,
-            "name": "Test Project",
-            "description": "desc",
-            "workflow_id": default_wf["id"],
-            "key_prefixes": ["TST"],
-        })
+        resp = client.post(
+            "/api/projects",
+            json={
+                "code": code,
+                "name": "Test Project",
+                "description": "desc",
+                "workflow_id": default_wf["id"],
+                "key_prefixes": ["TST"],
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["ok"] is True
@@ -404,33 +454,43 @@ class TestApiProjects:
 
     def test_create_project_invalid_prefix(self, client):
         from project_workflow.interfaces.ui import _app_state
+
         default_wf = next(w for w in _app_state.workflow_service().list_workflows() if w.get("is_default"))
-        resp = client.post("/api/projects", json={
-            "code": _unique("PRJ"),
-            "name": "X",
-            "workflow_id": default_wf["id"],
-            "key_prefixes": ["a"],
-        })
+        resp = client.post(
+            "/api/projects",
+            json={
+                "code": _unique("PRJ"),
+                "name": "X",
+                "workflow_id": default_wf["id"],
+                "key_prefixes": ["a"],
+            },
+        )
         assert resp.status_code == 422
 
     def test_delete_project_with_tasks_forbidden(self, client):
         from project_workflow.interfaces.ui import _app_state
+
         default_wf = next(w for w in _app_state.workflow_service().list_workflows() if w.get("is_default"))
         code = _unique("PRJ")
-        resp = client.post("/api/projects", json={
-            "code": code,
-            "name": "To Delete",
-            "workflow_id": default_wf["id"],
-            "key_prefixes": ["ZZZ"],
-        })
+        resp = client.post(
+            "/api/projects",
+            json={
+                "code": code,
+                "name": "To Delete",
+                "workflow_id": default_wf["id"],
+                "key_prefixes": ["ZZZ"],
+            },
+        )
         project_id = resp.json()["project_id"]
-        _app_state.task_service().create_task({
-            "project_id": project_id,
-            "task_key": _unique("TASK"),
-            "title": "Task",
-            "status": "active",
-            "current_phase": "-1",
-        })
+        _app_state.task_service().create_task(
+            {
+                "project_id": project_id,
+                "task_key": _unique("TASK"),
+                "title": "Task",
+                "status": "active",
+                "current_phase": "-1",
+            }
+        )
         resp = client.delete(f"/api/projects/{project_id}")
         assert resp.status_code == 409
 
@@ -457,6 +517,7 @@ class TestApiAgents:
 
     def test_delete_agent_assigned_to_phase_forbidden(self, client):
         from project_workflow.interfaces.ui import _app_state
+
         name = _unique("Agent")
         resp = client.post("/api/agents", json={"name": name})
         agent_id = resp.json()["agent_id"]
@@ -469,27 +530,34 @@ class TestApiAgents:
 class TestApiInstructions:
     def test_list_create_update_delete_instructions(self, client):
         from project_workflow.interfaces.ui import _app_state
+
         phase_id = _phase_id(client, "0.0a")
 
         resp = client.get(f"/api/phases/{phase_id}/instructions")
         assert resp.status_code == 200
         assert resp.json()["ok"] is True
 
-        resp = client.post("/api/instructions", json={
-            "phase_id": phase_id,
-            "description": "do X",
-            "execution_type": "parallel",
-            "skills": ["web", "search"],
-        })
+        resp = client.post(
+            "/api/instructions",
+            json={
+                "phase_id": phase_id,
+                "description": "do X",
+                "execution_type": "parallel",
+                "skills": ["web", "search"],
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         instruction_id = data["instruction"]["id"]
 
-        resp = client.put(f"/api/instructions/{instruction_id}", json={
-            "description": "do Y",
-            "execution_type": "sync",
-            "skills": ["web"],
-        })
+        resp = client.put(
+            f"/api/instructions/{instruction_id}",
+            json={
+                "description": "do Y",
+                "execution_type": "sync",
+                "skills": ["web"],
+            },
+        )
         assert resp.status_code == 200
         inst = resp.json()["instruction"]
         assert inst["description"] == "do Y"
@@ -514,6 +582,7 @@ class TestApiTasks:
 
     def test_api_tasks_filtered_by_workflow(self, client):
         from project_workflow.interfaces.ui import _app_state
+
         default_wf = next(w for w in _app_state.workflow_service().list_workflows() if w.get("is_default"))
         resp = client.get(f"/api/tasks?workflow_id={default_wf['id']}")
         assert resp.status_code == 200
@@ -527,16 +596,19 @@ class TestApiTasks:
 
     def test_delete_task_cascade(self, client):
         from project_workflow.interfaces.ui import _app_state
+
         uow = _app_state.get_db()
         project = uow.projects.get_by_code("DEFAULT")
         assert project is not None
-        task = _app_state.task_service().create_task({
-            "project_id": project.id,
-            "task_key": "TASK-DEL-1",
-            "title": "To delete",
-            "status": "active",
-            "current_phase": "-1",
-        })
+        task = _app_state.task_service().create_task(
+            {
+                "project_id": project.id,
+                "task_key": "TASK-DEL-1",
+                "title": "To delete",
+                "status": "active",
+                "current_phase": "-1",
+            }
+        )
         phase = uow.phases.get_by_code("0.0a")
         assert phase is not None
         _app_state.task_service().add_history(task["id"], phase.id, "done")
@@ -568,22 +640,29 @@ class TestApiSkills:
 class TestApiPhaseDelete:
     def test_delete_phase(self, client):
         from project_workflow.interfaces.ui import _app_state
+
         uow = _app_state.get_db()
-        workflow = _app_state.workflow_service().create_workflow({"name": _unique("del-phase-wf"), "_skip_default_phase": True})
+        workflow = _app_state.workflow_service().create_workflow(
+            {"name": _unique("del-phase-wf"), "_skip_default_phase": True}
+        )
         workflow_id = workflow["id"]
         try:
-            ph1 = _app_state.phase_service().create_phase({
-                "workflow_id": workflow_id,
-                "code": _unique("delph1"),
-                "name": "To keep",
-                "phase_order": 1,
-            })
-            ph2 = _app_state.phase_service().create_phase({
-                "workflow_id": workflow_id,
-                "code": _unique("delph2"),
-                "name": "To delete",
-                "phase_order": 2,
-            })
+            ph1 = _app_state.phase_service().create_phase(
+                {
+                    "workflow_id": workflow_id,
+                    "code": _unique("delph1"),
+                    "name": "To keep",
+                    "phase_order": 1,
+                }
+            )
+            ph2 = _app_state.phase_service().create_phase(
+                {
+                    "workflow_id": workflow_id,
+                    "code": _unique("delph2"),
+                    "name": "To delete",
+                    "phase_order": 2,
+                }
+            )
             resp = client.delete(f"/api/phases/{ph2['id']}")
             assert resp.status_code == 200
             assert _app_state.phase_service().get_phase(ph2["id"]) is None
@@ -596,6 +675,7 @@ class TestApiPhaseDelete:
 class TestApiInstructionsReorder:
     def test_reorder_instructions(self, client):
         from project_workflow.interfaces.ui import _app_state
+
         phase_id = _phase_id(client, "0.0a")
         resp1 = client.post("/api/instructions", json={"phase_id": phase_id, "description": "first"})
         resp2 = client.post("/api/instructions", json={"phase_id": phase_id, "description": "second"})
@@ -611,11 +691,15 @@ class TestApiInstructionsReorder:
 class TestApiPhaseUpdate:
     def test_update_phase_name_and_execution_type(self, client):
         from project_workflow.interfaces.ui import _app_state
+
         phase_id = _phase_id(client, "0.01")
-        resp = client.put(f"/api/phases/{phase_id}", json={
-            "name": "Renamed phase",
-            "execution_type": "parallel",
-        })
+        resp = client.put(
+            f"/api/phases/{phase_id}",
+            json={
+                "name": "Renamed phase",
+                "execution_type": "parallel",
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["ok"] is True

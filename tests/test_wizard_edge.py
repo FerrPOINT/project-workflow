@@ -1,6 +1,6 @@
 """Tests for WizardEngine edge cases and init error paths."""
-from __future__ import annotations
 
+from __future__ import annotations
 
 import pytest
 
@@ -8,13 +8,13 @@ pytestmark = [pytest.mark.wizard]
 
 from project_workflow.infrastructure.db import schema
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
-
 from project_workflow.wizard import WizardEngine
 
 
 @pytest.fixture
 def fresh_db(tmp_path, monkeypatch):
     import project_workflow.infrastructure.db as db_module
+
     monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "workflow.db")
     uow = SAUnitOfWork(str(tmp_path / "workflow.db"))
     uow.init()

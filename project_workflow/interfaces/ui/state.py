@@ -7,8 +7,8 @@ symbol is defined here, the patch reaches all consumers.
 
 from __future__ import annotations
 
-from ...application.state import _AppState
 from ...application import state as _app_state_module
+from ...application.state import _AppState
 
 
 class _AppStateProxy:

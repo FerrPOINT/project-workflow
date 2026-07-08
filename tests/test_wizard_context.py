@@ -15,9 +15,17 @@ class TestWizardFullContext:
         ctx = engine.get_full_context()
 
         # Required top-level keys
-        for key in ("task_key", "repo", "current_phase", "current_phase_name",
-                    "completed_phases", "all_phases", "phase_history",
-                    "total_phases", "completed_count"):
+        for key in (
+            "task_key",
+            "repo",
+            "current_phase",
+            "current_phase_name",
+            "completed_phases",
+            "all_phases",
+            "phase_history",
+            "total_phases",
+            "completed_count",
+        ):
             assert key in ctx, f"Missing key: {key}"
 
     def test_task_key_passed_through(self):

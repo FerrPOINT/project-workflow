@@ -1,4 +1,5 @@
 """Tests for application layer services."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

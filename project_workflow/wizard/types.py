@@ -2,15 +2,17 @@
 
 Do NOT import heavy modules here; keep it lightweight.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, List, Optional
+from typing import Any
 
 
 @dataclass
 class ArtifactSnapshot:
     """Snapshot of a task artifact file."""
+
     path: str
     exists: bool
     mtime: float = 0.0
@@ -20,19 +22,20 @@ class ArtifactSnapshot:
 @dataclass
 class PhaseContract:
     """Expected deliverables for a single phase (or parallel group)."""
+
     phase_code: str
     phase_name: str
     description: str = ""
-    instructions: List[str] = field(default_factory=list)
-    required_checks: List[str] = field(default_factory=list)
-    required_evidence: List[str] = field(default_factory=list)
+    instructions: list[str] = field(default_factory=list)
+    required_checks: list[str] = field(default_factory=list)
+    required_evidence: list[str] = field(default_factory=list)
     execution_type: str = "sync"
-    delegate_agent: Optional[str] = None
-    delegate_toolsets: List[str] = field(default_factory=list)
-    parallel_with: Optional[str] = None
-    rollback_target: Optional[str] = None
-    group_phases: Optional[List[str]] = None  # set for parallel blocks
-    group_details: List[dict[str, Any]] = field(default_factory=list)  # per-phase details for parallel groups
+    delegate_agent: str | None = None
+    delegate_toolsets: list[str] = field(default_factory=list)
+    parallel_with: str | None = None
+    rollback_target: str | None = None
+    group_phases: list[str] | None = None  # set for parallel blocks
+    group_details: list[dict[str, Any]] = field(default_factory=list)  # per-phase details for parallel groups
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -55,33 +58,35 @@ class PhaseContract:
 @dataclass
 class WizardFinding:
     """A single issue discovered by deterministic checks."""
+
     severity: str  # "fatal", "error", "warning"
     source: str  # e.g. "missing_artifact", "stale_file", "contradiction"
     message: str
-    remediation: Optional[str] = None
+    remediation: str | None = None
 
 
 @dataclass
 class WizardAssessment:
     """Complete assessment for a phase evaluation."""
+
     task_key: str
     phase_code: str
     phase_name: str
     verdict: str  # pass, partial, blocked, rollback, delegate
-    covered: List[str] = field(default_factory=list)
-    missing: List[str] = field(default_factory=list)
-    blockers: List[str] = field(default_factory=list)
-    findings: List[WizardFinding] = field(default_factory=list)
-    next_phase: Optional[str] = None
-    next_phase_name: Optional[str] = None
-    rollback_target: Optional[str] = None
-    next_phase_contract: Optional[PhaseContract] = None
-    instructions: List[str] = field(default_factory=list)
-    required_checks: List[str] = field(default_factory=list)
-    required_evidence: List[str] = field(default_factory=list)
+    covered: list[str] = field(default_factory=list)
+    missing: list[str] = field(default_factory=list)
+    blockers: list[str] = field(default_factory=list)
+    findings: list[WizardFinding] = field(default_factory=list)
+    next_phase: str | None = None
+    next_phase_name: str | None = None
+    rollback_target: str | None = None
+    next_phase_contract: PhaseContract | None = None
+    instructions: list[str] = field(default_factory=list)
+    required_checks: list[str] = field(default_factory=list)
+    required_evidence: list[str] = field(default_factory=list)
     message: str = ""
     reasoning_mode: str = "deterministic"
-    group_phases: Optional[List[str]] = None  # set for parallel blocks
+    group_phases: list[str] | None = None  # set for parallel blocks
 
     def to_result_dict(self) -> dict[str, Any]:
         """Legacy-compatible result dict for CLI / UI consumers."""

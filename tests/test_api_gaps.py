@@ -1,4 +1,5 @@
 """API route coverage gap tests using mocked _app_state."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -9,7 +10,6 @@ from fastapi.testclient import TestClient
 pytestmark = [pytest.mark.ui]
 
 from project_workflow.interfaces.ui import app
-
 
 client = TestClient(app)
 
@@ -56,7 +56,9 @@ class TestApiPhaseCreate:
             state.workflow_service.return_value.get_workflow.return_value = {"id": 1}
             state.phase_service.return_value.list_phases.return_value = []
             state.phase_service.return_value.create_phase.return_value = {"id": 10}
-            response = client.post("/api/phases", json={"name": "X", "phase_order": 1, "workflow_id": 1, "code": "custom"})
+            response = client.post(
+                "/api/phases", json={"name": "X", "phase_order": 1, "workflow_id": 1, "code": "custom"}
+            )
         assert response.status_code == 200
         assert response.json()["phase_id"] == 10
 

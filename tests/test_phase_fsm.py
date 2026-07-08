@@ -1,4 +1,5 @@
 """Tests for PhaseFSM formal state machine."""
+
 import pytest
 
 pytestmark = [pytest.mark.unit]
@@ -49,6 +50,7 @@ class TestPhaseFSM:
 
     def test_show_phase_checklist_with_items(self, capsys):
         from project_workflow.domain.fsm import show_phase_checklist
+
         show_phase_checklist("0.00")
         captured = capsys.readouterr()
         assert "Чеклист фазы 0.00" in captured.out
@@ -56,13 +58,15 @@ class TestPhaseFSM:
 
     def test_show_phase_checklist_empty(self, capsys):
         from project_workflow.domain.fsm import show_phase_checklist
+
         show_phase_checklist("-1")
         captured = capsys.readouterr()
         assert "Чеклист фазы -1" in captured.out
 
     def test_show_all_phases(self, capsys):
-        from project_workflow.domain.fsm import show_all_phases
         from project_workflow import config
+        from project_workflow.domain.fsm import show_all_phases
+
         show_all_phases()
         captured = capsys.readouterr()
         assert config.PHASE_ORDER[0] in captured.out
@@ -70,4 +74,5 @@ class TestPhaseFSM:
 
     def test_get_phase_checklist_raw_empty_on_missing(self):
         from project_workflow.domain.fsm import get_phase_checklist_raw
+
         assert get_phase_checklist_raw("nonexistent") == []

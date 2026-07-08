@@ -4,14 +4,13 @@ import pytest
 
 pytestmark = [pytest.mark.unit]
 
-from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.domain.fsm import (
     get_next_phase,
     get_phase_checklist_raw,
-    show_phase_checklist,
     show_all_phases,
+    show_phase_checklist,
 )
-
+from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
 
 class TestPhaseHelpers:
@@ -47,9 +46,7 @@ class TestPhaseExecution:
     def test_run_phase_removed(self):
         """run_phase was removed in Task 5 — assert it's gone."""
         from project_workflow.domain import fsm as phases_mod
+
         assert not hasattr(phases_mod, "run_phase")
         assert not hasattr(phases_mod, "check_previous_phase")
         assert not hasattr(phases_mod, "conditional_delegate_jump")
-
-
-

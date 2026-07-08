@@ -2,6 +2,7 @@
 
 Sandboxed: only parses structured text/JSON; no external calls.
 """
+
 from __future__ import annotations
 
 import re
@@ -54,9 +55,7 @@ class ReasoningEngine:
             "blockers": ReasoningEngine._extract_list(text, "Blockers"),
             "missing": ReasoningEngine._extract_list(text, "Missing"),
             "verdict": ReasoningEngine._extract_value(text, "Verdict"),
-            "confidence": ReasoningEngine._to_float(
-                ReasoningEngine._extract_value(text, "Confidence"), default=0.0
-            ),
+            "confidence": ReasoningEngine._to_float(ReasoningEngine._extract_value(text, "Confidence"), default=0.0),
             "next_steps": ReasoningEngine._extract_list(text, "Next steps"),
         }
         return ReasoningEngine._from_dict(data)

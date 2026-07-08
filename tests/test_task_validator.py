@@ -5,8 +5,8 @@ import pytest
 pytestmark = [pytest.mark.unit]
 
 from project_workflow.domain.validation import (
-    TaskKeyValidator,
     TaskKeyValidationError,
+    TaskKeyValidator,
     validate,
     validate_or_die,
 )
@@ -125,11 +125,13 @@ class TestProjectScopedFactory:
 
     def test_validated_key_str(self):
         from project_workflow.domain.validation import ValidatedTaskKey
+
         v = ValidatedTaskKey(raw="x", is_valid=True, normalized="NORM-1")
         assert str(v) == "NORM-1"
 
     def test_compile_raw_pattern(self):
         from project_workflow.domain.validation import _compile_raw_pattern
+
         label, compiled = _compile_raw_pattern(r"^(?P<prefix>TEST)-(?P<number>\d+)$")
         assert label == r"^(?P<prefix>TEST)-(?P<number>\d+)$"
         assert compiled.match("TEST-1")

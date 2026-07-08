@@ -1,4 +1,5 @@
 """Tests for wizard.persona.PersonaAdapter."""
+
 from __future__ import annotations
 
 from project_workflow.wizard.persona import PersonaAdapter
@@ -14,7 +15,8 @@ def _make_result(verdict: str, **kwargs):
         "blockers": kwargs.get("blockers", []),
         "next_phase": kwargs.get("next_phase", "0.0a"),
         "next_phase_name": kwargs.get("next_phase_name", "Suite Verification"),
-        "next_phase_contract": kwargs.get("next_phase_contract") or {
+        "next_phase_contract": kwargs.get("next_phase_contract")
+        or {
             "instructions": ["Run tests"],
             "required_checks": ["Check B"],
             "required_evidence": ["Screenshot"],

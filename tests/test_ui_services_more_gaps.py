@@ -1,4 +1,5 @@
 """Additional coverage gaps for interfaces/ui/services.py."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -9,12 +10,12 @@ import pytest
 pytestmark = [pytest.mark.ui]
 
 from project_workflow.interfaces.ui.services import (
-    _load_tasks,
-    _load_dashboard,
+    _build_parallel_phase_blocks,
     _get_task_detail,
     _load_cli_reference,
+    _load_dashboard,
+    _load_tasks,
     _parse_key_prefixes,
-    _build_parallel_phase_blocks,
     _resolve_task_phase,
 )
 
@@ -32,7 +33,9 @@ class TestServicesMoreGaps:
         uow.get_tasks.return_value = [{"id": 1, "task_key": "A-1", "current_phase": "1", "status": "active"}]
         uow.get_workflows.return_value = []
         uow.get_task_history.return_value = []
-        uow.get_supervisor_runs.return_value = [{"response": "raw string", "verdict": "pass", "created_at": "2025-01-01T00:00:00"}]
+        uow.get_supervisor_runs.return_value = [
+            {"response": "raw string", "verdict": "pass", "created_at": "2025-01-01T00:00:00"}
+        ]
         monkeypatch.setattr("project_workflow.interfaces.ui.services._get_app_state", lambda: _mock_state(uow))
         result = _load_tasks()
         assert result[0]["latest_verdict_message"] == "raw string"[:120]
@@ -43,11 +46,13 @@ class TestServicesMoreGaps:
         assert _parse_key_prefixes(123) == []
 
     def test_build_parallel_phase_blocks(self):
-        blocks = _build_parallel_phase_blocks([
-            {"code": "1", "execution_type": "sync"},
-            {"code": "2", "execution_type": "parallel"},
-            {"code": "3", "execution_type": "sync"},
-        ])
+        blocks = _build_parallel_phase_blocks(
+            [
+                {"code": "1", "execution_type": "sync"},
+                {"code": "2", "execution_type": "parallel"},
+                {"code": "3", "execution_type": "sync"},
+            ]
+        )
         assert blocks[0]["kind"] == "parallel"
         assert blocks[1]["kind"] == "single"
 
@@ -55,9 +60,12 @@ class TestServicesMoreGaps:
         uow = MagicMock()
         uow.get_projects.return_value = []
         from project_workflow.application.ui import UIDataService
+
         monkeypatch.setattr("project_workflow.interfaces.ui.services._get_app_state", lambda: _mock_state(uow))
-        with patch.object(UIDataService, "_load_tasks") as mock_tasks, \
-             patch.object(UIDataService, "_load_projects") as mock_projects:
+        with (
+            patch.object(UIDataService, "_load_tasks") as mock_tasks,
+            patch.object(UIDataService, "_load_projects") as mock_projects,
+        ):
             mock_tasks.return_value = [{"status": "active", "latest_verdict": "PASS"}]
             mock_projects.return_value = []
             result = _load_dashboard()
@@ -65,7 +73,13 @@ class TestServicesMoreGaps:
 
     def test_get_task_detail_completed_at_fallback(self, monkeypatch):
         uow = MagicMock()
-        uow.get_task_by_key.return_value = {"id": 1, "task_key": "A-1", "status": "done", "updated_at": "2025-02-01", "workflow_id": 1}
+        uow.get_task_by_key.return_value = {
+            "id": 1,
+            "task_key": "A-1",
+            "status": "done",
+            "updated_at": "2025-02-01",
+            "workflow_id": 1,
+        }
         uow.get_task_history.return_value = [{"phase_id": 1, "status": "done", "completed_at": ""}]
         uow.get_supervisor_runs.return_value = []
         uow.get_projects.return_value = []
@@ -77,7 +91,13 @@ class TestServicesMoreGaps:
 
     def test_get_task_detail_history_phase_not_found(self, monkeypatch):
         uow = MagicMock()
-        uow.get_task_by_key.return_value = {"id": 1, "task_key": "A-1", "status": "active", "current_phase": "1", "workflow_id": 1}
+        uow.get_task_by_key.return_value = {
+            "id": 1,
+            "task_key": "A-1",
+            "status": "active",
+            "current_phase": "1",
+            "workflow_id": 1,
+        }
         uow.get_task_history.return_value = [{"phase_id": 99, "status": "done", "completed_at": ""}]
         uow.get_supervisor_runs.return_value = []
         uow.get_projects.return_value = []
@@ -101,10 +121,14 @@ class TestServicesMoreGaps:
         assert result["supervisor_runs"][0]["next_contract"] is None
 
     def test_load_cli_reference(self):
-        with patch("project_workflow.interfaces.ui.services.project_workflow.commands", {
-            "help": click.Command("help"),
-            "ui": click.Command("ui", hidden=True),
-        }, create=True):
+        with patch(
+            "project_workflow.interfaces.ui.services.project_workflow.commands",
+            {
+                "help": click.Command("help"),
+                "ui": click.Command("ui", hidden=True),
+            },
+            create=True,
+        ):
             result = _load_cli_reference()
         assert any(item["name"] == "help" for item in result)
         assert not any(item["name"] == "ui" for item in result)

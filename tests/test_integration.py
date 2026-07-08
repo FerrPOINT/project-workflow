@@ -13,9 +13,7 @@ pytestmark = [pytest.mark.ui]
 
 from project_workflow.infrastructure import conversation as convo
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
-
 from project_workflow.interfaces.ui import app
-
 
 client = TestClient(app)
 
@@ -46,11 +44,13 @@ class TestEndToEndWorkflow:
         db_path = tmp_path / "test2.db"
         uow = SAUnitOfWork(str(db_path))
         uow.init()
-        uow.create_project({
-            "code": "AAT",
-            "name": "AAT",
-            "key_prefixes": ["AAT"],
-        })
+        uow.create_project(
+            {
+                "code": "AAT",
+                "name": "AAT",
+                "key_prefixes": ["AAT"],
+            }
+        )
         uow.create_task({"task_key": "AAT-99", "title": "Integ Test"})
         task = uow.get_task_by_key("AAT-99")
         assert task is not None
@@ -90,13 +90,15 @@ class TestEndToEndWorkflow:
         uow = SAUnitOfWork(str(db_path))
         uow.init()
         agent_id = uow.create_agent({"name": "test-bot", "description": "Executes delegated work"})
-        uow.create_phase({
-            "id": "p2",
-            "name": "P2",
-            "phase_order": 0,
-            "agent_id": agent_id,
-            "execution_type": "parallel",
-        })
+        uow.create_phase(
+            {
+                "id": "p2",
+                "name": "P2",
+                "phase_order": 0,
+                "agent_id": agent_id,
+                "execution_type": "parallel",
+            }
+        )
         rows = uow.get_phases()
         assert len(rows) == 1
         assert "group_id" not in rows[0]
@@ -159,11 +161,13 @@ class TestEdgeCases:
         uow = SAUnitOfWork(str(db_path))
         uow.init()
         uow.create_phase({"id": "0", "name": "Phase 0", "phase_order": 1})
-        uow.create_project({
-            "code": "AATSK",
-            "name": "AATSK",
-            "key_prefixes": ["AAT"],
-        })
+        uow.create_project(
+            {
+                "code": "AATSK",
+                "name": "AATSK",
+                "key_prefixes": ["AAT"],
+            }
+        )
         uow.create_task({"task_key": "AAT-99", "title": "Skip Test"})
         task = uow.get_task_by_key("AAT-99")
         assert task is not None

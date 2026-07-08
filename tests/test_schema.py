@@ -1,4 +1,5 @@
 """Tests for schema.py bootstrap and seed persistence."""
+
 from __future__ import annotations
 
 import json
@@ -47,14 +48,21 @@ class TestEnsurePhaseCatalog:
 class TestSeedPersistence:
     def test_persist_phase_update_to_seed(self, fresh_db, tmp_path, monkeypatch):
         seed_path = tmp_path / "seed.json"
-        seed_path.write_text(json.dumps([{
-            "code": "1",
-            "name": "One",
-            "next_recommendation": "Old",
-            "instructions": [],
-            "checks": [],
-            "evidence": [],
-        }], ensure_ascii=False))
+        seed_path.write_text(
+            json.dumps(
+                [
+                    {
+                        "code": "1",
+                        "name": "One",
+                        "next_recommendation": "Old",
+                        "instructions": [],
+                        "checks": [],
+                        "evidence": [],
+                    }
+                ],
+                ensure_ascii=False,
+            )
+        )
         monkeypatch.setattr(config, "SEED_PATH", seed_path)
         ensure_phase_catalog(fresh_db, seed_path=seed_path)
         persist_phase_update_to_seed(fresh_db, "1", {"next_recommendation": "New"}, seed_path=seed_path)
@@ -65,13 +73,20 @@ class TestSeedPersistence:
 class TestGenerateProgressJson:
     def test_progress_json_structure(self, fresh_db, tmp_path, monkeypatch):
         seed_path = tmp_path / "seed.json"
-        seed_path.write_text(json.dumps([{
-            "code": "-1",
-            "name": "Task Intake",
-            "instructions": [{"description": "Step 1"}],
-            "checks": [{"description": "Check 1"}],
-            "evidence": [{"description": "Evidence 1"}],
-        }], ensure_ascii=False))
+        seed_path.write_text(
+            json.dumps(
+                [
+                    {
+                        "code": "-1",
+                        "name": "Task Intake",
+                        "instructions": [{"description": "Step 1"}],
+                        "checks": [{"description": "Check 1"}],
+                        "evidence": [{"description": "Evidence 1"}],
+                    }
+                ],
+                ensure_ascii=False,
+            )
+        )
         monkeypatch.setattr(config, "SEED_PATH", seed_path)
         ensure_phase_catalog(fresh_db, seed_path=seed_path)
         phase = get_phase_from_db(fresh_db, "-1")
@@ -83,6 +98,7 @@ class TestGenerateProgressJson:
 class TestParseOldYaml:
     def test_parse_old_yaml_item(self, fresh_db):
         from project_workflow.infrastructure.db.schema import _phase_item_to_wizard
+
         raw = {
             "code": "1",
             "name": "One",
@@ -111,10 +127,15 @@ class TestReadSeedItems:
 
     def test_read_seed_items_with_allowed_codes(self, fresh_db, tmp_path):
         seed_path = tmp_path / "seed.json"
-        seed_path.write_text(json.dumps([
-            {"code": "1", "name": "One"},
-            {"code": "2", "name": "Two"},
-        ], ensure_ascii=False))
+        seed_path.write_text(
+            json.dumps(
+                [
+                    {"code": "1", "name": "One"},
+                    {"code": "2", "name": "Two"},
+                ],
+                ensure_ascii=False,
+            )
+        )
         items = load_phases_from_seed(seed_path)
         codes = {p.code for p in items}
         assert codes == {"1", "2"}
@@ -124,6 +145,7 @@ class TestSerializeHelpers:
     def test_serialize_seed_instructions(self):
         from project_workflow.infrastructure.db.schema import _phase_to_seed_dict
         from project_workflow.wizard.models import Phase, PhaseInstruction
+
         phase = Phase(
             code="1",
             name="One",
@@ -135,6 +157,7 @@ class TestSerializeHelpers:
     def test_serialize_seed_checks(self):
         from project_workflow.infrastructure.db.schema import _phase_to_seed_dict
         from project_workflow.wizard.models import Phase, PhaseCheck
+
         phase = Phase(code="1", name="One", checks=[PhaseCheck(description="Check it")])
         data = _phase_to_seed_dict(phase)
         assert data["checks"] == [{"description": "Check it"}]
@@ -142,6 +165,7 @@ class TestSerializeHelpers:
     def test_serialize_seed_evidence(self):
         from project_workflow.infrastructure.db.schema import _phase_to_seed_dict
         from project_workflow.wizard.models import Phase, PhaseEvidence
+
         phase = Phase(code="1", name="One", evidence=[PhaseEvidence(item="Show it")])
         data = _phase_to_seed_dict(phase)
         assert data["evidence"] == [{"description": "Show it"}]

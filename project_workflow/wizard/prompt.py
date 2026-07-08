@@ -4,9 +4,10 @@ The prompt is stateful: it includes task history, recent verdicts, and recent
 conversation messages already collected by WizardContextBuilder. This gives the
 LLM (or deterministic consumer) enough context to avoid repeating failures.
 """
+
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from .contracts import PhaseContractBuilder
 
@@ -78,7 +79,11 @@ def _format_parallel_contract(contract: dict[str, Any], group_details: list[dict
         agent_line = f"Агент: {agent}" + (f" | toolsets: {toolsets}" if toolsets else "")
         partner_code = detail.get("parallel_with") or "-"
         partner = next(
-            (d.get("phase_name") or d.get("phase_code") or partner_code for d in group_details if d.get("phase_code") == partner_code),
+            (
+                d.get("phase_name") or d.get("phase_code") or partner_code
+                for d in group_details
+                if d.get("phase_code") == partner_code
+            ),
             partner_code,
         )
         parts.append(f"\n[{name}] (параллельно с {partner})\n")
@@ -103,25 +108,35 @@ def _format_contract(contract: dict[str, Any], human_only: bool = False) -> str:
         if human_only:
             return _format_parallel_contract_human(group_details)
         return _format_parallel_contract(contract, group_details)
-    instructions = contract.get("instructions") or ["Нет отдельных инструкций — следуй описанию фазы и обязательным проверкам."]
+    instructions = contract.get("instructions") or [
+        "Нет отдельных инструкций — следуй описанию фазы и обязательным проверкам."
+    ]
     checks = contract.get("required_checks") or ["Нет явных checks."]
     evidence = contract.get("required_evidence") or ["Нет явных evidence items."]
     parts: list[str] = []
     if not human_only:
-        parts.extend([
-            f"- Описание: {contract.get('description') or '-'}\n",
-            f"- Тип выполнения: {contract.get('execution_type') or 'sync'}\n",
-            f"- Параллельно с: {contract.get('parallel_with') or '-'}\n",
-            f"- Rollback target: {contract.get('rollback_target') or '-'}\n",
-        ])
-    parts.extend([
-        "Инструкции:\n" + "\n".join(f"  - {item}" for item in instructions) + "\n\n",
-        "Чекапы:\n" + "\n".join(f"  - {item}" for item in checks) + "\n\n",
-        "Доказательства:\n" + "\n".join(f"  - {item}" for item in evidence) + "\n\n",
-    ])
+        parts.extend(
+            [
+                f"- Описание: {contract.get('description') or '-'}\n",
+                f"- Тип выполнения: {contract.get('execution_type') or 'sync'}\n",
+                f"- Параллельно с: {contract.get('parallel_with') or '-'}\n",
+                f"- Rollback target: {contract.get('rollback_target') or '-'}\n",
+            ]
+        )
+    parts.extend(
+        [
+            "Инструкции:\n" + "\n".join(f"  - {item}" for item in instructions) + "\n\n",
+            "Чекапы:\n" + "\n".join(f"  - {item}" for item in checks) + "\n\n",
+            "Доказательства:\n" + "\n".join(f"  - {item}" for item in evidence) + "\n\n",
+        ]
+    )
     if contract.get("delegate_agent"):
         toolsets = ", ".join(contract.get("delegate_toolsets") or [])
-        parts.append(f"Делегировано агенту: {contract['delegate_agent']}" + (f" | toolsets: {toolsets}" if toolsets else "") + "\n\n")
+        parts.append(
+            f"Делегировано агенту: {contract['delegate_agent']}"
+            + (f" | toolsets: {toolsets}" if toolsets else "")
+            + "\n\n"
+        )
     return "".join(parts)
 
 
@@ -140,7 +155,7 @@ def build_reasoning_prompt(report: str, contract: dict[str, Any]) -> str:
         '  "analysis": "краткий анализ отчёта",\n'
         '  "claims": [\n'
         '    {"item": "утверждение из отчёта", "matches": ["пункт контракта"], "valid": true|false}\n'
-        '  ],\n'
+        "  ],\n"
         '  "blockers": ["список блокеров"],\n'
         '  "missing": ["список не выполненных пунктов контракта"],\n'
         '  "verdict": "PASS|PARTIAL|BLOCKED|ROLLBACK|HARD_FAIL|SOFT_FAIL",\n'
@@ -185,7 +200,7 @@ def build_phase_prompt(
     all_phases: list,
     current_phase: str,
     ctx: dict,
-    phase_id: Optional[str] = None,
+    phase_id: str | None = None,
 ) -> str:
     """Build a stateful human-readable prompt for a given phase (or current)."""
     target_phase = phase_map.get(phase_id or current_phase)
@@ -290,7 +305,4 @@ def format_current_phase_instructions(
         contract = raw
     else:
         contract = raw.to_dict() if raw else cb.build(target_phase).to_dict()
-    return (
-        f"Текущий шаг: {target_phase.name}\n\n"
-        f"{_format_contract(contract, human_only=True)}"
-    )
+    return f"Текущий шаг: {target_phase.name}\n\n{_format_contract(contract, human_only=True)}"

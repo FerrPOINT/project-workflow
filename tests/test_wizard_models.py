@@ -1,7 +1,14 @@
 """Tests for wizard.models."""
+
 from __future__ import annotations
 
-from project_workflow.wizard.models import Phase, PhaseCheck, PhaseDelegate, PhaseEvidence, PhaseInstruction
+from project_workflow.wizard.models import (
+    Phase,
+    PhaseCheck,
+    PhaseDelegate,
+    PhaseEvidence,
+    PhaseInstruction,
+)
 
 
 def test_phase_delegate_from_selected_agent():

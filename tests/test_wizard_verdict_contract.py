@@ -1,14 +1,16 @@
 """RED-GREEN for the refined verdict contract: pass/soft_fail/hard_fail/blocked/rollback/delegate."""
+
 from __future__ import annotations
 
 import pytest
 
 pytestmark = [pytest.mark.wizard]
 
-from project_workflow.wizard.checks import determine_verdict, build_verdict_message
-from project_workflow.wizard.types import WizardAssessment, PhaseContract, VERDICT_LABELS
-from project_workflow.wizard.core import VERDICT_LABELS as CORE_VERDICT_LABELS, format_result
 from project_workflow.domain.fsm import PhaseFSM
+from project_workflow.wizard.checks import build_verdict_message, determine_verdict
+from project_workflow.wizard.core import VERDICT_LABELS as CORE_VERDICT_LABELS
+from project_workflow.wizard.core import format_result
+from project_workflow.wizard.types import VERDICT_LABELS, PhaseContract, WizardAssessment
 
 
 class TestDeterministicVerdictContract:
@@ -25,13 +27,22 @@ class TestDeterministicVerdictContract:
         assert determine_verdict(covered=[], missing=["m1"], blockers=["b1"], report="blocked") == "blocked"
 
     def test_rollback_when_target_and_signal(self):
-        assert determine_verdict(covered=[], missing=["m1"], blockers=[], report="rollback", rollback_target="0") == "rollback"
+        assert (
+            determine_verdict(covered=[], missing=["m1"], blockers=[], report="rollback", rollback_target="0")
+            == "rollback"
+        )
 
     def test_rollback_when_blockers_and_target(self):
-        assert determine_verdict(covered=["c1"], missing=["m1"], blockers=["b1"], report="x", rollback_target="0") == "rollback"
+        assert (
+            determine_verdict(covered=["c1"], missing=["m1"], blockers=["b1"], report="x", rollback_target="0")
+            == "rollback"
+        )
 
     def test_delegate_verdict_unchanged(self):
-        assert determine_verdict(covered=[], missing=["m1"], blockers=[], report="delegate this", is_delegated=True) == "delegate"
+        assert (
+            determine_verdict(covered=[], missing=["m1"], blockers=[], report="delegate this", is_delegated=True)
+            == "delegate"
+        )
 
 
 class TestVerdictLabels:

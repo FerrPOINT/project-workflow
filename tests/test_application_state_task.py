@@ -1,4 +1,5 @@
 """Tests for application.task and application.state."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -87,6 +88,7 @@ class TestAppState:
     def test_init_default_url(self, monkeypatch):
         monkeypatch.setenv("DATABASE_URL", "sqlite:///env.db")
         from project_workflow.config import get_settings
+
         get_settings.cache_clear()
         state = _AppState()
         assert state._database_url == "sqlite:///env.db"
@@ -98,7 +100,9 @@ class TestAppState:
     def test_reset(self):
         state = _AppState("sqlite:///reset.db")
         url = state._database_url_normalized()
-        from project_workflow.application.state import _CATALOG_ENSURED_URLS, _MIGRATED_URLS
+        from project_workflow.application.state import _MIGRATED_URLS
+        from project_workflow.infrastructure.db.schema import _CATALOG_ENSURED_URLS
+
         _CATALOG_ENSURED_URLS.add(url)
         _MIGRATED_URLS.add(url)
         state.reset()
@@ -110,6 +114,7 @@ class TestAppState:
         state.get_uow.return_value = MagicMock()
         # Bind real methods to the mock so we exercise the implementation logic.
         from project_workflow.application.state import _AppState as RealState
+
         state.workflow_service = lambda: RealState.workflow_service(state)
         state.phase_service = lambda: RealState.phase_service(state)
         state.project_service = lambda: RealState.project_service(state)
@@ -133,9 +138,11 @@ class TestAppState:
         assert state.db is None
 
     def test_get_uow_sqlite(self):
-        from pathlib import Path
         import tempfile
+        from pathlib import Path
+
         from project_workflow.infrastructure.db.session import reset_engine
+
         reset_engine()
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "appstate.db"

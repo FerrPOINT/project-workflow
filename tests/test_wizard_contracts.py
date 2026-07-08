@@ -1,8 +1,21 @@
 """Tests for wizard.contracts."""
+
 from __future__ import annotations
 
-from project_workflow.wizard.contracts import PhaseContractBuilder, phase_to_dict, text_from_check, text_from_evidence, text_from_instruction
-from project_workflow.wizard.models import Phase, PhaseCheck, PhaseDelegate, PhaseEvidence, PhaseInstruction
+from project_workflow.wizard.contracts import (
+    PhaseContractBuilder,
+    phase_to_dict,
+    text_from_check,
+    text_from_evidence,
+    text_from_instruction,
+)
+from project_workflow.wizard.models import (
+    Phase,
+    PhaseCheck,
+    PhaseDelegate,
+    PhaseEvidence,
+    PhaseInstruction,
+)
 
 
 def test_text_helpers():

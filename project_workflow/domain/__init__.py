@@ -1,4 +1,5 @@
 """Domain layer — business entities and value objects."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -191,5 +192,3 @@ class SupervisorRun:
             "response": self.response,
             "created_at": self.created_at,
         }
-
-

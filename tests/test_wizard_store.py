@@ -1,4 +1,5 @@
 """Tests for wizard_store.py — WizardAssessmentStore persistence."""
+
 import json
 from unittest.mock import MagicMock
 
@@ -88,18 +89,20 @@ class TestWizardAssessmentStore:
         db = self._make_db()
         db.get_supervisor_runs.return_value = [
             {
-                "response": json.dumps({
-                    "task_key": "T-1",
-                    "phase": "1",
-                    "phase_name": "P1",
-                    "next_phase": "2",
-                    "next_phase_name": "P2",
-                    "rollback_target": None,
-                    "message": "ok",
-                    "instructions": ["Inst"],
-                    "required_checks": ["Ch"],
-                    "required_evidence": ["Ev"],
-                }),
+                "response": json.dumps(
+                    {
+                        "task_key": "T-1",
+                        "phase": "1",
+                        "phase_name": "P1",
+                        "next_phase": "2",
+                        "next_phase_name": "P2",
+                        "rollback_target": None,
+                        "message": "ok",
+                        "instructions": ["Inst"],
+                        "required_checks": ["Ch"],
+                        "required_evidence": ["Ev"],
+                    }
+                ),
                 "verdict": "pass",
                 "covered": ["A"],
                 "missing": [],
@@ -129,18 +132,20 @@ class TestWizardAssessmentStore:
 class TestRowToAssessment:
     def test_basic(self):
         row = {
-            "response": json.dumps({
-                "task_key": "TK",
-                "phase": "1",
-                "phase_name": "One",
-                "next_phase": "2",
-                "next_phase_name": "Two",
-                "rollback_target": None,
-                "message": "m",
-                "instructions": ["i"],
-                "required_checks": ["c"],
-                "required_evidence": ["e"],
-            }),
+            "response": json.dumps(
+                {
+                    "task_key": "TK",
+                    "phase": "1",
+                    "phase_name": "One",
+                    "next_phase": "2",
+                    "next_phase_name": "Two",
+                    "rollback_target": None,
+                    "message": "m",
+                    "instructions": ["i"],
+                    "required_checks": ["c"],
+                    "required_evidence": ["e"],
+                }
+            ),
             "verdict": "pass",
             "covered": ["A"],
             "missing": ["B"],

@@ -1,6 +1,6 @@
 """Tests for conversation.py SQLite persistence."""
-from __future__ import annotations
 
+from __future__ import annotations
 
 import pytest
 
@@ -132,8 +132,14 @@ class TestBuildStatusDigest:
 class TestMessageDataclass:
     def test_message_to_dict(self):
         m = convo.Message(
-            id=1, task_id="t1", task_key="TASK-1", role="user",
-            content="hello", phase_id="1", tags="note", created_at="now"
+            id=1,
+            task_id="t1",
+            task_key="TASK-1",
+            role="user",
+            content="hello",
+            phase_id="1",
+            tags="note",
+            created_at="now",
         )
         d = m.to_dict()
         assert d["role"] == "user"

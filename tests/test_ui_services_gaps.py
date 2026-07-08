@@ -1,4 +1,5 @@
 """Additional tests for UI services helper coverage gaps."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -60,6 +61,7 @@ class TestWorkflowFormPayload:
 class TestResolveTaskPhaseRedirects:
     def test_legacy_redirect_via_get_phase(self, monkeypatch):
         from project_workflow import config
+
         monkeypatch.setattr(config, "LEGACY_PHASE_REDIRECTS", {"old": "1"})
         db = MagicMock()
         db.get_phases.return_value = []

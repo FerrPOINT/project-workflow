@@ -1,4 +1,5 @@
 """Form payload normalizers for UI routes."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -32,4 +33,3 @@ def _phase_create_payload(body: dict[str, Any]) -> dict[str, Any]:
         "code": str(body.get("code", "")).strip() or None,
         "agent_id": body.get("agent_id"),
     }
-

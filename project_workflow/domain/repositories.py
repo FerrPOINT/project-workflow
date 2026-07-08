@@ -1,9 +1,11 @@
 """Repository interfaces (ports)."""
+
 from __future__ import annotations
 
+import builtins
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
-from typing import Any, List, Literal, Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any, Literal
 
 from project_workflow.domain import Agent, Phase, Project, SupervisorRun, Task, Workflow
 
@@ -73,10 +75,10 @@ class PhaseRepository(ABC):
     def get_evidence(self, phase_id: int) -> Sequence[dict[str, Any]]: ...
 
     @abstractmethod
-    def set_checks(self, phase_id: int, items: List[dict[str, Any]]) -> None: ...
+    def set_checks(self, phase_id: int, items: builtins.list[dict[str, Any]]) -> None: ...
 
     @abstractmethod
-    def set_evidence(self, phase_id: int, items: List[dict[str, Any]]) -> None: ...
+    def set_evidence(self, phase_id: int, items: builtins.list[dict[str, Any]]) -> None: ...
 
 
 class InstructionRepository(ABC):
@@ -101,7 +103,7 @@ class InstructionRepository(ABC):
     def delete_for_phase(self, phase_id: int) -> None: ...
 
     @abstractmethod
-    def reorder(self, phase_id: int, orders: List[tuple[int, int]]) -> None: ...
+    def reorder(self, phase_id: int, orders: builtins.list[tuple[int, int]]) -> None: ...
 
 
 class ProjectRepository(ABC):

@@ -1,10 +1,11 @@
 """Tests for interfaces.ui.seed helpers."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from project_workflow.interfaces.ui import seed as seed_mod
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from project_workflow.interfaces.ui import seed as seed_mod
 
 
 def test_seed_to_sqlite():

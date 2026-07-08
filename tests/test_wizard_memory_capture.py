@@ -1,8 +1,9 @@
 """Tests for WizardEngine auto-memory capture."""
+
 from __future__ import annotations
 
-from project_workflow.wizard.core import WizardEngine
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from project_workflow.wizard.core import WizardEngine
 
 
 def test_evaluate_captures_blocker_memory(tmp_path):

@@ -1,7 +1,8 @@
 """Tests for wizard.py to boost coverage."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 pytestmark = [pytest.mark.wizard]
 
@@ -95,13 +96,15 @@ class TestWizard:
 class TestPromptAndModels:
     def test_build_phase_prompt_missing_phase(self):
         from project_workflow.wizard.prompt import build_phase_prompt
+
         ctx = {"workflow_name": "W", "cli_actor": {"description": "d", "entrypoint": "e"}}
         result = build_phase_prompt("TASK-1", {}, [], "1", ctx, phase_id="missing")
         assert "не найдена" in result
 
     def test_build_phase_prompt_non_current_phase(self):
-        from project_workflow.wizard.prompt import build_phase_prompt
         from project_workflow.wizard.models import Phase
+        from project_workflow.wizard.prompt import build_phase_prompt
+
         phase = Phase(code="2", name="Two", description="Desc", execution_type="sync")
         ctx = {"workflow_name": "W", "current_contract": None, "cli_actor": {"description": "d", "entrypoint": "e"}}
         result = build_phase_prompt("TASK-1", {"2": phase}, [phase], "1", ctx, phase_id="2")
@@ -109,8 +112,9 @@ class TestPromptAndModels:
         assert "Desc" in result
 
     def test_build_phase_prompt_current_contract_dict(self):
-        from project_workflow.wizard.prompt import build_phase_prompt
         from project_workflow.wizard.models import Phase
+        from project_workflow.wizard.prompt import build_phase_prompt
+
         phase = Phase(code="1", name="One", description="Desc")
         contract = {
             "description": "CDesc",
@@ -131,12 +135,14 @@ class TestPromptAndModels:
 
     def test_phase_dataclass_post_init_delegate(self):
         from project_workflow.wizard.models import Phase, PhaseDelegate
+
         phase = Phase(code="1", name="One", selected_agent="agent-x")
         assert isinstance(phase.delegate, PhaseDelegate)
         assert phase.delegate.agent == "agent-x"
 
     def test_phase_render_instructions(self):
         from project_workflow.wizard.models import Phase, PhaseInstruction
+
         phase = Phase(
             code="1",
             instructions=[PhaseInstruction(step="run {env}")],
@@ -148,51 +154,68 @@ class TestPromptAndModels:
 class TestDeterministicChecks:
     def test_extract_keywords_empty_input(self):
         from project_workflow.wizard.checks import extract_keywords
+
         assert extract_keywords("") == []
 
     def test_extract_keywords_filters_short_words(self):
         from project_workflow.wizard.checks import extract_keywords
+
         assert extract_keywords("one two three four five six seven") == ["three", "four", "five", "seven"]
 
     def test_check_coverage_with_previously_covered(self):
         from project_workflow.wizard.checks import check_coverage
+
         covered, missing = check_coverage("report", ["item one"], previously_covered={"item one"})
         assert "item one" in covered
         assert missing == []
 
     def test_check_coverage_keyword_threshold(self):
         from project_workflow.wizard.checks import check_coverage
+
         covered, missing = check_coverage("alpha beta gamma", ["alpha beta", "delta echo"])
         assert "alpha beta" in covered
         assert "delta echo" in missing
 
     def test_extract_blockers_negative_phrases(self):
         from project_workflow.wizard.checks import extract_blockers
+
         assert extract_blockers("no blockers, everything fine") == []
         assert extract_blockers("blocked by dependency") == ["blocked by"]
 
     def test_determine_verdict_rollback(self):
         from project_workflow.wizard.checks import determine_verdict
-        assert determine_verdict(covered=[], missing=["m"], blockers=[], report="rollback", rollback_target="0") == "rollback"
+
+        assert (
+            determine_verdict(covered=[], missing=["m"], blockers=[], report="rollback", rollback_target="0")
+            == "rollback"
+        )
 
     def test_determine_verdict_delegate(self):
         from project_workflow.wizard.checks import determine_verdict
-        assert determine_verdict(covered=[], missing=["m"], blockers=[], report="delegated", is_delegated=True) == "delegate"
+
+        assert (
+            determine_verdict(covered=[], missing=["m"], blockers=[], report="delegated", is_delegated=True)
+            == "delegate"
+        )
 
     def test_build_verdict_message_pass(self):
         from project_workflow.wizard.checks import build_verdict_message
+
         assert build_verdict_message("pass", "P", "1", [], [], "2", None) == "Phase accepted."
 
     def test_build_verdict_message_blocked(self):
         from project_workflow.wizard.checks import build_verdict_message
+
         assert build_verdict_message("blocked", "P", "1", ["b"], [], None, None) == "Blocked: b. Fix and resubmit."
 
     def test_build_verdict_message_rollback(self):
         from project_workflow.wizard.checks import build_verdict_message
+
         assert build_verdict_message("rollback", "P", "1", [], ["m"], None, "0") == "Roll back and fix: m."
 
     def test_build_verdict_message_no_phase_codes(self):
         from project_workflow.wizard.checks import build_verdict_message
+
         result = build_verdict_message("soft_fail", "P", "1", [], ["m"], None, None)
         assert "Phase 1" not in result
         assert "HARD_FAIL" not in result

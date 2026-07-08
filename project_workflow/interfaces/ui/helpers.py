@@ -1,9 +1,10 @@
 """Pure UI helper functions (no CLI/DB dependencies)."""
+
 from __future__ import annotations
 
 from typing import Any
-from ... import config
 
+from ... import config
 from .templates import env as _templates_env
 
 
@@ -34,7 +35,6 @@ def _group_instructions(instructions: list[dict[str, Any]]) -> list[list[dict[st
 
 
 _templates_env.filters["group_instructions"] = _group_instructions
-
 
 
 def _parse_key_prefixes(raw: Any) -> list[str]:

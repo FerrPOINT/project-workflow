@@ -1,8 +1,10 @@
 """Tests for blocker extraction and coverage accumulation."""
+
 """Tests for blocker extraction and coverage accumulation."""
 
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 pytestmark = [pytest.mark.wizard]
 
@@ -30,7 +32,7 @@ class TestBlockerExtraction:
             assert blockers == []
 
     def test_real_error_word_triggers(self):
-        """"ошибка" больше не считается блокером — smart mode использует LLM."""
+        """ "ошибка" больше не считается блокером — smart mode использует LLM."""
         with patch("project_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             engine = WizardEngine("AAT-1")
@@ -59,6 +61,7 @@ class TestCoverageAccumulation:
     def _make_engine(self, tmp_path, monkeypatch, task_key="AAT-1", current_phase="0"):
         test_db = tmp_path / "workflow.db"
         import project_workflow.infrastructure.db as db_module
+
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
         with patch("project_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
@@ -68,31 +71,37 @@ class TestCoverageAccumulation:
     def test_get_previously_covered_reads_runs(self, tmp_path, monkeypatch):
         engine = self._make_engine(tmp_path, monkeypatch, "SMOKE-9999", "0")
         tid = engine.task["id"]
-        pid = engine.db.create_phase({
-            "code": "0",
-            "workflow_id": 1,
-            "name": "Test",
-            "phase_order": 1,
-            "execution_type": "sync",
-        })
+        pid = engine.db.create_phase(
+            {
+                "code": "0",
+                "workflow_id": 1,
+                "name": "Test",
+                "phase_order": 1,
+                "execution_type": "sync",
+            }
+        )
 
-        engine.db.create_supervisor_run({
-            "task_id": tid,
-            "phase_id": pid,
-            "verdict": "soft_fail",
-            "report": "report1",
-            "covered": ["Item A", "Item B"],
-            "missing": ["Item C"],
-            "blockers": [],
-            "context_snapshot": {},
-            "response": {},
-        })
+        engine.db.create_supervisor_run(
+            {
+                "task_id": tid,
+                "phase_id": pid,
+                "verdict": "soft_fail",
+                "report": "report1",
+                "covered": ["Item A", "Item B"],
+                "missing": ["Item C"],
+                "blockers": [],
+                "context_snapshot": {},
+                "response": {},
+            }
+        )
 
         engine.task = engine.db.get_task(tid)
         engine.all_phases = []
+
         class FakePhase:
             id = pid
             code = "0"
+
         engine.all_phases = [FakePhase()]
         engine.phase_map = {"0": FakePhase()}
 
@@ -125,6 +134,7 @@ class TestEvaluateAccumulationEndToEnd:
     def _make_engine(self, tmp_path, monkeypatch, task_key="AAT-1", current_phase="0"):
         test_db = tmp_path / "workflow.db"
         import project_workflow.infrastructure.db as db_module
+
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
         with patch("project_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
@@ -143,15 +153,21 @@ class TestEvaluateAccumulationEndToEnd:
             def __init__(self, step):
                 self.step = step
 
-        pid = engine.db.create_phase({
-            "code": "0",
-            "workflow_id": 1,
-            "name": "Test",
-            "phase_order": 1,
-            "execution_type": "sync",
-        })
-        engine.db.create_instruction({"phase_id": pid, "step_num": 1, "description": "Run tests first", "execution_type": "sync"})
-        engine.db.create_instruction({"phase_id": pid, "step_num": 2, "description": "Fix failing code", "execution_type": "sync"})
+        pid = engine.db.create_phase(
+            {
+                "code": "0",
+                "workflow_id": 1,
+                "name": "Test",
+                "phase_order": 1,
+                "execution_type": "sync",
+            }
+        )
+        engine.db.create_instruction(
+            {"phase_id": pid, "step_num": 1, "description": "Run tests first", "execution_type": "sync"}
+        )
+        engine.db.create_instruction(
+            {"phase_id": pid, "step_num": 2, "description": "Fix failing code", "execution_type": "sync"}
+        )
         engine.db.create_check({"phase_id": pid, "description": "tests run"})
         engine.db.create_check({"phase_id": pid, "description": "code fixed"})
 

@@ -1,4 +1,5 @@
 """Tests for infrastructure.db.models."""
+
 from __future__ import annotations
 
 from project_workflow.infrastructure.db.models import Task, model_to_dict

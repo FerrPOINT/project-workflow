@@ -1,8 +1,12 @@
 """Application services — use cases."""
+
 from __future__ import annotations
+
 from typing import Any
+
 from project_workflow.domain.repositories import UnitOfWork
 from project_workflow.domain.validation import get_project_for_task_key
+
 
 class TaskService:
     """Use cases for tasks."""
@@ -18,6 +22,7 @@ class TaskService:
                 key = payload.get("task_key", "")
                 prefix = key.split("-")[0] if "-" in key else key
                 from project_workflow.application.project import ProjectService
+
                 project = ProjectService(self._uow).create_project({"name": prefix, "code": prefix})
             payload["project_id"] = project["id"]
         tid = self._uow.tasks.create(payload)
@@ -52,4 +57,6 @@ class TaskService:
         self._uow.tasks.delete(task_id)
         self._uow.commit()
         return None
-__all__ = ['TaskService']
+
+
+__all__ = ["TaskService"]

@@ -1,4 +1,5 @@
 """Unit tests for small coverage gaps in wizard context, store and entry points."""
+
 from __future__ import annotations
 
 import importlib
@@ -74,6 +75,7 @@ class TestWizardStore:
         store = WizardAssessmentStore(uow)
 
         from project_workflow.wizard.core import WizardEngine
+
         engine = WizardEngine("TASK-1", uow=uow)
         task_id = engine.task["id"]
 
@@ -115,5 +117,8 @@ class TestModuleEntryPoints:
         monkeypatch.setattr(mod, "main", lambda: called.append(True))
         # Execute the module's __main__ block directly.
         with pytest.raises(SystemExit):
-            exec("if __name__ == '__main__':\n    main()\n    raise SystemExit(0)", {"__name__": "__main__", "main": mod.main, "SystemExit": SystemExit})
+            exec(
+                "if __name__ == '__main__':\n    main()\n    raise SystemExit(0)",
+                {"__name__": "__main__", "main": mod.main, "SystemExit": SystemExit},
+            )
         assert called

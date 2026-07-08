@@ -3,37 +3,40 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 
 @dataclass
 class PhaseCheck:
     """Проверка которую CLI выполняет для фазы."""
+
     description: str = ""
 
 
 @dataclass
 class PhaseEvidence:
     """Evidence, которое должен собрать исполнитель текущей CLI-фазы."""
+
     item: str = ""
 
 
 @dataclass
 class PhaseInstruction:
     """Инструкция для исполнителя текущей CLI-фазы."""
+
     step: str = ""
-    example: Optional[str] = None
+    example: str | None = None
     execution_type: str = "sync"
-    skills: List[str] = field(default_factory=list)
+    skills: list[str] = field(default_factory=list)
 
 
 @dataclass
 class PhaseDelegate:
     """Конфигурация delegate_task для делегированной фазы."""
+
     agent: str = ""
     prompt_template: str = ""
-    context: List[str] = field(default_factory=list)
-    toolsets: List[str] = field(default_factory=list)
+    context: list[str] = field(default_factory=list)
+    toolsets: list[str] = field(default_factory=list)
     timeout_min: int = 10
     max_cycles: int = 3
 
@@ -41,6 +44,7 @@ class PhaseDelegate:
 @dataclass
 class Phase:
     """Полное описание фазы workflow."""
+
     id: int | None = 0
     code: str = ""
     name: str = ""
@@ -49,16 +53,16 @@ class Phase:
     is_blocker: bool = False
     is_delegated: bool = False
     is_critic: bool = False
-    checks: List[PhaseCheck] = field(default_factory=list)
-    evidence: List[PhaseEvidence] = field(default_factory=list)
-    instructions: List[PhaseInstruction] = field(default_factory=list)
-    delegate: Optional[PhaseDelegate] = None
+    checks: list[PhaseCheck] = field(default_factory=list)
+    evidence: list[PhaseEvidence] = field(default_factory=list)
+    instructions: list[PhaseInstruction] = field(default_factory=list)
+    delegate: PhaseDelegate | None = None
     next_recommendation: str = ""
-    parallel_with: Optional[str] = None
-    rollback_target: Optional[str] = None
+    parallel_with: str | None = None
+    rollback_target: str | None = None
     execution_type: str = "sync"
 
-    selected_agent: Optional[str] = None
+    selected_agent: str | None = None
 
     def __post_init__(self) -> None:
         if self.selected_agent and not self.delegate:
@@ -68,7 +72,7 @@ class Phase:
                 toolsets=[],
             )
 
-    def render_instructions(self, context: dict) -> List[str]:
+    def render_instructions(self, context: dict) -> list[str]:
         """Подставить переменные в инструкции."""
         result = []
         for inst in self.instructions:

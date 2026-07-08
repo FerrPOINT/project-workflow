@@ -1,4 +1,5 @@
 """JSON API routes for the workflow UI."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -6,7 +7,10 @@ from typing import Any
 from fastapi import Query
 from fastapi.responses import JSONResponse
 
-from project_workflow.infrastructure.db.schema import persist_phase_order_to_seed, persist_phase_update_to_seed
+from project_workflow.infrastructure.db.schema import (
+    persist_phase_order_to_seed,
+    persist_phase_update_to_seed,
+)
 from project_workflow.interfaces.ui.schemas import (
     AgentCreate,
     AgentUpdate,
@@ -22,8 +26,14 @@ from project_workflow.interfaces.ui.schemas import (
     WorkflowUpdate,
 )
 from project_workflow.interfaces.ui.seed import _update_config_phase_order
-from project_workflow.interfaces.ui.services import _coerce_phase_db_id, _load_phase_detail, _load_tasks
-from project_workflow.interfaces.ui.skills import _load_skills_catalog as _load_skills_catalog_direct
+from project_workflow.interfaces.ui.services import (
+    _coerce_phase_db_id,
+    _load_phase_detail,
+    _load_tasks,
+)
+from project_workflow.interfaces.ui.skills import (
+    _load_skills_catalog as _load_skills_catalog_direct,
+)
 from project_workflow.interfaces.ui.state import _app_state
 
 
@@ -454,9 +464,7 @@ async def api_instruction_update(instruction_id: int, payload: InstructionUpdate
     return {"ok": True, "instruction": _app_state.instruction_service().get_instruction(instruction_id)}
 
 
-async def api_instruction_update_skills(
-    instruction_id: int, payload: dict[str, Any]
-) -> dict[str, Any] | JSONResponse:
+async def api_instruction_update_skills(instruction_id: int, payload: dict[str, Any]) -> dict[str, Any] | JSONResponse:
     existing = _app_state.instruction_service().get_instruction(instruction_id)
     if existing is None:
         return _error(f"Инструкция {instruction_id} не найдена", 404)

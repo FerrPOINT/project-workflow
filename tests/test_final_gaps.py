@@ -1,4 +1,5 @@
 """Final coverage gap tests to push coverage above 95%."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -8,27 +9,28 @@ import pytest
 
 pytestmark = [pytest.mark.unit]
 
-from project_workflow.infrastructure.db.session import _normalize_url, ensure_schema
-from project_workflow.interfaces.ui import schemas
-from project_workflow.application.workflow import WorkflowService
 from project_workflow.application.agent import AgentService
+from project_workflow.application.instruction_service import InstructionService
 from project_workflow.application.phase import PhaseServiceApp
 from project_workflow.application.project import ProjectService
 from project_workflow.application.task import TaskService
-from project_workflow.application.instruction_service import InstructionService
-from project_workflow.wizard.store import WizardAssessmentStore
-from project_workflow.wizard.types import WizardAssessment
-from project_workflow.wizard import core as core_mod
+from project_workflow.application.workflow import WorkflowService
+from project_workflow.infrastructure.db.session import _normalize_url, ensure_schema
+from project_workflow.interfaces.ui import schemas
 from project_workflow.interfaces.ui.services import (
-    _load_cli_reference,
     _get_task_detail,
+    _load_cli_reference,
     _load_tasks,
 )
+from project_workflow.wizard import core as core_mod
+from project_workflow.wizard.store import WizardAssessmentStore
+from project_workflow.wizard.types import WizardAssessment
 
 
 class TestConfigFinalGap:
     def test_read_raw_settings_non_dict(self, tmp_path, monkeypatch):
         from project_workflow import config as config_mod
+
         path = tmp_path / "cfg.json"
         path.write_text("[1, 2]")
         bad_dir = tmp_path / "bad-cfg"
@@ -76,7 +78,8 @@ class TestSchemasFinalGaps:
 
 class TestDomainFinalGaps:
     def test_task_key_str(self):
-        from project_workflow.domain import TaskKey, PhaseCode
+        from project_workflow.domain import PhaseCode, TaskKey
+
         assert str(TaskKey("A-1", "A", 1)) == "A-1"
         assert str(PhaseCode("1")) == "1"
 
@@ -84,6 +87,7 @@ class TestDomainFinalGaps:
 class TestUiSeedSkillsFinalGaps:
     def test_update_config_phase_order_no_rows(self, monkeypatch):
         from project_workflow.interfaces.ui import seed as seed_mod
+
         before = list(schemas.config.PHASE_ORDER)
         uow = MagicMock()
         uow.workflows.get_default.return_value = None
@@ -93,6 +97,7 @@ class TestUiSeedSkillsFinalGaps:
 
     def test_scan_hermes_skills_exception(self):
         from project_workflow.interfaces.ui import skills as skills_mod
+
         with patch("importlib.import_module", side_effect=ImportError("boom")):
             assert skills_mod._scan_hermes_skills() == []
 
@@ -100,12 +105,14 @@ class TestUiSeedSkillsFinalGaps:
 class TestWizardModelContractFinalGaps:
     def test_phase_selected_agent(self):
         from project_workflow.wizard.models import Phase
+
         phase = Phase(code="1", name="T", selected_agent="ag", description="D")
         assert phase.delegate.agent == "ag"
 
     def test_parallel_contract_researcher_fallback(self):
         from project_workflow.wizard.contracts import PhaseContractBuilder
         from project_workflow.wizard.models import Phase, PhaseDelegate
+
         p1 = Phase(code="1", name="A", delegate=PhaseDelegate(agent="researcher", prompt_template="x", toolsets=[]))
         p2 = Phase(code="2", name="B")
         group = [p1, p2]
@@ -164,6 +171,7 @@ class TestApplicationServiceFinalGaps:
 class TestCliFinalGap:
     def test_cli_main(self):
         from project_workflow.interfaces.cli import main
+
         with patch("project_workflow.interfaces.cli.cli") as mock_cli:
             main()
         mock_cli.assert_called_once()
@@ -235,10 +243,16 @@ class TestWizardStoreFinalGaps:
         uow = MagicMock()
         uow.get_task_by_key.return_value = {"id": 5}
         store = WizardAssessmentStore(uow)
-        store.save(WizardAssessment(
-            task_key="A-1", phase_code="P1", phase_name="P", verdict="pass",
-            next_phase="P2", rollback_target="P0",
-        ))
+        store.save(
+            WizardAssessment(
+                task_key="A-1",
+                phase_code="P1",
+                phase_name="P",
+                verdict="pass",
+                next_phase="P2",
+                rollback_target="P0",
+            )
+        )
         assert uow.create_supervisor_run.call_args[0][0]["task_id"] == 5
 
     def test_get_latest_else_branch(self):
@@ -310,6 +324,7 @@ class TestWizardCoreFinalGaps:
 
     def test_evaluate_smart_exception(self, monkeypatch):
         import project_workflow.wizard as wizard_pkg
+
         engine = core_mod.WizardEngine("AAT-1", repo="/tmp")
         engine.task = {"id": 1, "project_id": 1, "current_phase": "1"}
         uow = MagicMock()
@@ -332,33 +347,37 @@ class TestWizardCoreFinalGaps:
         mock_llm.assert_called_once()
 
     def test_format_result_pass_parallel(self):
-        text = core_mod.format_result({
-            "verdict": "PASS",
-            "phase_code": "1",
-            "next_phase_contract": {
-                "phase_code": "2",
-                "phase_name": "N",
-                "execution_type": "parallel",
-                "instructions": ["do"],
-                "required_checks": ["check"],
-                "required_evidence": ["evidence"],
-            },
-        })
+        text = core_mod.format_result(
+            {
+                "verdict": "PASS",
+                "phase_code": "1",
+                "next_phase_contract": {
+                    "phase_code": "2",
+                    "phase_name": "N",
+                    "execution_type": "parallel",
+                    "instructions": ["do"],
+                    "required_checks": ["check"],
+                    "required_evidence": ["evidence"],
+                },
+            }
+        )
         assert "Инструкции:" in text
         assert "  · do" in text
         assert "Параллельная фаза" not in text
 
     def test_format_result_pass_sync_after_parallel(self):
-        text = core_mod.format_result({
-            "verdict": "PASS",
-            "phase_code": "parallel.end",
-            "phase_name": "Parallel group end",
-            "next_phase_contract": {
-                "phase_code": "2",
-                "execution_type": "sync",
-                "instructions": ["do"],
-            },
-        })
+        text = core_mod.format_result(
+            {
+                "verdict": "PASS",
+                "phase_code": "parallel.end",
+                "phase_name": "Parallel group end",
+                "next_phase_contract": {
+                    "phase_code": "2",
+                    "execution_type": "sync",
+                    "instructions": ["do"],
+                },
+            }
+        )
         assert "Инструкции:" in text
         assert "  · do" in text
         assert "параллельного блока" not in text
@@ -370,7 +389,9 @@ class TestUiServicesFinalGaps:
         uow.get_tasks.return_value = [{"id": 1, "task_key": "A-1", "current_phase": "1", "status": "active"}]
         uow.get_workflows.return_value = []
         uow.get_task_history.return_value = []
-        uow.get_supervisor_runs.return_value = [{"response": "raw", "verdict": "pass", "created_at": "2025-01-01T00:00:00"}]
+        uow.get_supervisor_runs.return_value = [
+            {"response": "raw", "verdict": "pass", "created_at": "2025-01-01T00:00:00"}
+        ]
         monkeypatch.setattr("project_workflow.interfaces.ui.services._get_app_state", lambda: _mock_state(uow))
         result = _load_tasks()
         assert result[0]["latest_verdict_message"] == "raw"[:120]
@@ -390,11 +411,18 @@ class TestUiServicesFinalGaps:
 
     def test_get_task_detail_parallel_history(self, monkeypatch):
         uow = MagicMock()
-        uow.get_task_by_key.return_value = {"id": 1, "task_key": "A-1", "status": "active", "current_phase": "1", "workflow_id": 1}
+        uow.get_task_by_key.return_value = {
+            "id": 1,
+            "task_key": "A-1",
+            "status": "active",
+            "current_phase": "1",
+            "workflow_id": 1,
+        }
         uow.get_phases.return_value = [
             {"id": 1, "code": "1", "name": "P1", "phase_order": 1, "execution_type": "parallel"},
             {"id": 2, "code": "2", "name": "P2", "phase_order": 2, "execution_type": "parallel"},
         ]
+
         def _get_phase(pid):
             return {"id": pid, "code": str(pid), "name": f"P{pid}", "phase_order": pid}
 
@@ -410,7 +438,13 @@ class TestUiServicesFinalGaps:
 
     def test_get_task_detail_next_contract_none(self, monkeypatch):
         uow = MagicMock()
-        uow.get_task_by_key.return_value = {"id": 1, "task_key": "A-1", "status": "active", "current_phase": "1", "workflow_id": 1}
+        uow.get_task_by_key.return_value = {
+            "id": 1,
+            "task_key": "A-1",
+            "status": "active",
+            "current_phase": "1",
+            "workflow_id": 1,
+        }
         uow.get_task_history.return_value = [{"phase_id": 1, "status": "done", "completed_at": ""}]
         uow.get_supervisor_runs.return_value = [{"verdict": "pass", "response": {"message": "ok"}}]
         uow.get_projects.return_value = []

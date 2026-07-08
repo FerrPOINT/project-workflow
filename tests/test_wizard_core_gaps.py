@@ -1,4 +1,5 @@
 """WizardEngine coverage gap tests for wizard/core.py helpers."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -105,7 +106,9 @@ class TestWizardCoreGaps:
         engine.all_phases = [ph]
         engine.phase_map = {"1": ph}
         engine.task = {"id": 1, "current_phase": "99", "project_id": 1}
-        engine._task_service = type("S", (), {"update_task": lambda *a, **kw: None, "get_task": lambda *a, **kw: None})()
+        engine._task_service = type(
+            "S", (), {"update_task": lambda *a, **kw: None, "get_task": lambda *a, **kw: None}
+        )()
         assert engine._resolve_current_phase() == "1"
 
     def test_resolve_current_phase_empty_current(self):
@@ -177,7 +180,15 @@ class TestWizardCoreGaps:
         engine = WizardEngine("AAT-1", repo="/tmp")
         engine.task = {"id": 1}
         uow = MagicMock()
-        row = {"phase_code": "1", "verdict": "pass", "blockers": [], "missing": [], "next_phase_code": None, "rollback_phase_code": None, "created_at": "2025-01-01"}
+        row = {
+            "phase_code": "1",
+            "verdict": "pass",
+            "blockers": [],
+            "missing": [],
+            "next_phase_code": None,
+            "rollback_phase_code": None,
+            "created_at": "2025-01-01",
+        }
         uow.get_supervisor_runs.return_value = [row]
         engine._uow = uow
         verdicts = engine._build_recent_verdicts()
@@ -292,33 +303,39 @@ class TestWizardCoreGaps:
 
     def test_format_result_pass_sync_after_parallel(self):
         from project_workflow.wizard.core import format_result
-        text = format_result({
-            "verdict": "PASS",
-            "phase_name": "Parallel block",
-            "phase": "parallel.foo",
-            "next_phase_contract": {
-                "instructions": ["do"],
-                "required_checks": ["check"],
-                "required_evidence": ["ev"],
-                "execution_type": "sync",
-            },
-        })
+
+        text = format_result(
+            {
+                "verdict": "PASS",
+                "phase_name": "Parallel block",
+                "phase": "parallel.foo",
+                "next_phase_contract": {
+                    "instructions": ["do"],
+                    "required_checks": ["check"],
+                    "required_evidence": ["ev"],
+                    "execution_type": "sync",
+                },
+            }
+        )
         assert "Инструкции:" in text
         assert "  · do" in text
         assert "параллельного блока" not in text
 
     def test_format_result_pass_parallel(self):
         from project_workflow.wizard.core import format_result
-        text = format_result({
-            "verdict": "PASS",
-            "next_phase_contract": {
-                "instructions": ["do"],
-                "required_checks": ["check"],
-                "required_evidence": ["ev"],
-                "execution_type": "parallel",
-                "parallel_with": "PH-1",
-            },
-        })
+
+        text = format_result(
+            {
+                "verdict": "PASS",
+                "next_phase_contract": {
+                    "instructions": ["do"],
+                    "required_checks": ["check"],
+                    "required_evidence": ["ev"],
+                    "execution_type": "parallel",
+                    "parallel_with": "PH-1",
+                },
+            }
+        )
         assert "Инструкции:" in text
         assert "  · do" in text
         assert "Параллельно" not in text
@@ -327,13 +344,15 @@ class TestWizardCoreGaps:
 class TestPublicWrapperGaps:
     def test_main_with_report(self, monkeypatch):
         from project_workflow.wizard import core as core_mod
+
         monkeypatch.setattr(core_mod, "evaluate_report", lambda *_a, **_kw: {"verdict": "PASS"})
         with patch("builtins.print"), pytest.raises(SystemExit):
             core_mod.main("TASK-1", report="ok")
 
     def test_main_without_report(self, monkeypatch):
-        from project_workflow.wizard import core as core_mod
         import project_workflow.wizard as _wiz
+        from project_workflow.wizard import core as core_mod
+
         fake_engine = MagicMock()
         fake_engine.get_phase_prompt.return_value = "prompt"
         monkeypatch.setattr(_wiz, "WizardEngine", lambda *a, **kw: fake_engine)
@@ -343,6 +362,7 @@ class TestPublicWrapperGaps:
 
     def test_main_exits_one_on_fail(self, monkeypatch):
         from project_workflow.wizard import core as core_mod
+
         monkeypatch.setattr(core_mod, "evaluate_report", lambda *_a, **_kw: {"verdict": "BLOCKED"})
         with patch("builtins.print"), pytest.raises(SystemExit) as exc:
             core_mod.main("TASK-1", report="bad")

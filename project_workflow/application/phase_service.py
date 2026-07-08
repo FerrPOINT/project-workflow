@@ -3,6 +3,7 @@
 Re-implemented on top of the SQLAlchemy UnitOfWork; the old sqlite3/raw-SQL
 implementation has been removed.
 """
+
 from __future__ import annotations
 
 import json
@@ -10,7 +11,6 @@ import logging
 from typing import Any, cast
 
 from project_workflow.domain.repositories import UnitOfWork
-
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +40,7 @@ class PhaseService:
                 raise ValueError(f"Phase not found: {phase_id}")
             return phase.id
 
-    def save_instructions(
-        self, phase_id: int | str, items: list[dict[str, Any]]
-    ) -> list[int]:
+    def save_instructions(self, phase_id: int | str, items: list[dict[str, Any]]) -> list[int]:
         """Replace all instructions for a phase.  Returns new ids in order."""
         resolved = self._resolve_phase_id(phase_id)
         with self._uow:
@@ -55,9 +53,7 @@ class PhaseService:
                         "step_num": idx,
                         "description": item["description"],
                         "execution_type": item.get("execution_type", "sync"),
-                        "skills": self.serialize_skills(
-                            self.normalize_skills(item.get("skills"))
-                        ),
+                        "skills": self.serialize_skills(self.normalize_skills(item.get("skills"))),
                     },
                 )
                 ids.append(new_id)
@@ -73,6 +69,7 @@ class PhaseService:
             for row in self._uow.phases.get_checks(resolved):
                 ids.append(int(row["id"]))
             return ids
+
     def save_evidence(self, phase_id: int | str, items: list[dict[str, Any]]) -> list[int]:
         """Replace all evidence for a phase."""
         resolved = self._resolve_phase_id(phase_id)
@@ -82,6 +79,7 @@ class PhaseService:
             for row in self._uow.phases.get_evidence(resolved):
                 ids.append(int(row["id"]))
             return ids
+
     # ── Read helpers ─────────────────────────────────────────────────
 
     def get_phase_detail(self, phase_id: int | str) -> dict[str, Any]:
@@ -100,8 +98,14 @@ class PhaseService:
                 normalized = dict(item)
                 normalized["skills"] = self.normalize_skills(item.get("skills"))
                 instructions.append(normalized)
-            checks = [{"id": r["id"], "phase_id": r["phase_id"], "description": r["description"]} for r in self._uow.phases.get_checks(resolved)]
-            evidence = [{"id": r["id"], "phase_id": r["phase_id"], "description": r["description"]} for r in self._uow.phases.get_evidence(resolved)]
+            checks = [
+                {"id": r["id"], "phase_id": r["phase_id"], "description": r["description"]}
+                for r in self._uow.phases.get_checks(resolved)
+            ]
+            evidence = [
+                {"id": r["id"], "phase_id": r["phase_id"], "description": r["description"]}
+                for r in self._uow.phases.get_evidence(resolved)
+            ]
             return {
                 **phase_dict,
                 "instructions": instructions,

@@ -34,11 +34,13 @@ def _scan_hermes_skills() -> list[dict[str, str | None]]:
         name = str(item.get("name") or "").strip()
         if not name:
             continue
-        skills.append({
-            "name": name,
-            "description": str(item.get("description") or "").strip() or None,
-            "category": str(item.get("category") or "").strip() or None,
-        })
+        skills.append(
+            {
+                "name": name,
+                "description": str(item.get("description") or "").strip() or None,
+                "category": str(item.get("category") or "").strip() or None,
+            }
+        )
 
     skills.sort(key=lambda item: ((item.get("category") or ""), item["name"]))
     return skills

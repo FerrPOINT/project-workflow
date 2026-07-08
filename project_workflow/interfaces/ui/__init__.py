@@ -35,7 +35,8 @@ from .services import (
     _workflow_service,
 )
 from .skills import _load_skills_catalog, _scan_hermes_skills
-from .templates import _tojson_unicode, env as _templates_env
+from .templates import _tojson_unicode
+from .templates import env as _templates_env
 
 __all__ = [
     "app",
@@ -76,8 +77,10 @@ __all__ = [
 def __getattr__(name: str) -> object:
     if name == "_app_state":
         from .state import _app_state
+
         return _app_state
     if name == "_AppState":
         from .dependencies import _AppState
+
         return _AppState
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -1,14 +1,14 @@
 """WizardEngine deep coverage tests: checklist dedup, blockers, verdicts, edge cases."""
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 pytestmark = [pytest.mark.wizard]
 
-from project_workflow.wizard.models import Phase, PhaseCheck, PhaseEvidence, PhaseInstruction
 from project_workflow.wizard import WizardEngine
 from project_workflow.wizard.checks import BLOCKER_PATTERNS, DELEGATE_PATTERNS
+from project_workflow.wizard.models import Phase, PhaseCheck, PhaseEvidence, PhaseInstruction
 from project_workflow.wizard.types import VERDICT_LABELS
 
 
@@ -21,7 +21,10 @@ class TestBuildChecklist:
     def test_dedupes_exact_duplicates(self):
         engine = self._make_engine()
         ph = Phase(
-            id=1, code="0", name="T", description="",
+            id=1,
+            code="0",
+            name="T",
+            description="",
             checks=[PhaseCheck(description="  Run tests  ")],
             evidence=[PhaseEvidence(item="Run tests")],
             instructions=[PhaseInstruction(step="Run tests")],
@@ -32,7 +35,10 @@ class TestBuildChecklist:
     def test_dedupes_case_insensitive(self):
         engine = self._make_engine()
         ph = Phase(
-            id=1, code="0", name="T", description="",
+            id=1,
+            code="0",
+            name="T",
+            description="",
             checks=[PhaseCheck(description="Run tests")],
             evidence=[PhaseEvidence(item="run tests")],
         )
@@ -42,7 +48,10 @@ class TestBuildChecklist:
     def test_skips_empty_strings(self):
         engine = self._make_engine()
         ph = Phase(
-            id=1, code="0", name="T", description="",
+            id=1,
+            code="0",
+            name="T",
+            description="",
             checks=[PhaseCheck(description="")],
             evidence=[PhaseEvidence(item="  ")],
             instructions=[PhaseInstruction(step="")],
@@ -53,7 +62,10 @@ class TestBuildChecklist:
     def test_preserves_order_of_first_occurrence(self):
         engine = self._make_engine()
         ph = Phase(
-            id=1, code="0", name="T", description="",
+            id=1,
+            code="0",
+            name="T",
+            description="",
             checks=[PhaseCheck(description="Second")],
             evidence=[PhaseEvidence(item="First")],
             instructions=[PhaseInstruction(step="Second")],
@@ -104,6 +116,7 @@ class TestExtractBlockers:
         engine = self._make_engine()
         result = engine._extract_blockers("Заблокировано из-за ошибки")
         assert result == []  # All Russian false-positive patterns removed — smart mode LLM handles blockers
+
     def test_unique_results_no_duplicates(self):
         engine = self._make_engine()
         report = "blocked by X and blocked by Y"
@@ -120,24 +133,26 @@ class TestDetermineVerdict:
         rollback_target: str | None = None,
     ) -> Phase:
         return Phase(
-            id=1, code="0", name="T", description="",
+            id=1,
+            code="0",
+            name="T",
+            description="",
             is_delegated=is_delegated,
             rollback_target=rollback_target,
         )
 
     def test_pass_when_nothing_missing(self):
         engine = MagicMock()
-        assert WizardEngine._determine_verdict(
-            engine, self._make_phase(), ["c1"], [], [], "ok"
-        ) == "pass"
+        assert WizardEngine._determine_verdict(engine, self._make_phase(), ["c1"], [], [], "ok") == "pass"
 
     def test_delegate_when_delegated_and_signal_present(self):
         """Delegate fires when phase is delegated, signal present, AND there are issues."""
         engine = MagicMock()
         report = "I delegate this to the ops agent"
-        assert WizardEngine._determine_verdict(
-            engine, self._make_phase(is_delegated=True), [], ["missing"], [], report
-        ) == "delegate"
+        assert (
+            WizardEngine._determine_verdict(engine, self._make_phase(is_delegated=True), [], ["missing"], [], report)
+            == "delegate"
+        )
 
     def test_delegate_signal_ignored_when_not_delegated(self):
         """If phase is NOT delegated, delegate signal falls through to next rule."""
@@ -153,9 +168,7 @@ class TestDetermineVerdict:
         """If phase is fully satisfied, PASS wins even if report mentions delegate."""
         engine = MagicMock()
         report = "I delegate this and everything is done"
-        result = WizardEngine._determine_verdict(
-            engine, self._make_phase(is_delegated=True), ["c1"], [], [], report
-        )
+        result = WizardEngine._determine_verdict(engine, self._make_phase(is_delegated=True), ["c1"], [], [], report)
         assert result == "pass"
 
     def test_rollback_when_blockers_and_target_set(self):
@@ -186,23 +199,17 @@ class TestDetermineVerdict:
 
     def test_blocked_when_blockers_no_rollback_target(self):
         engine = MagicMock()
-        result = WizardEngine._determine_verdict(
-            engine, self._make_phase(), ["c1"], ["m1"], ["blocked by"], "bad"
-        )
+        result = WizardEngine._determine_verdict(engine, self._make_phase(), ["c1"], ["m1"], ["blocked by"], "bad")
         assert result == "blocked"
 
     def test_soft_fail_when_covered_but_missing(self):
         engine = MagicMock()
-        result = WizardEngine._determine_verdict(
-            engine, self._make_phase(), ["c1"], ["m1"], [], "partial"
-        )
+        result = WizardEngine._determine_verdict(engine, self._make_phase(), ["c1"], ["m1"], [], "partial")
         assert result == "soft_fail"
 
     def test_hard_fail_when_nothing_covered_nothing_blocked(self):
         engine = MagicMock()
-        result = WizardEngine._determine_verdict(
-            engine, self._make_phase(), [], ["m1"], [], "bad"
-        )
+        result = WizardEngine._determine_verdict(engine, self._make_phase(), [], ["m1"], [], "bad")
         assert result == "hard_fail"
 
 

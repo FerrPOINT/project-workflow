@@ -4,12 +4,13 @@ These tests are skipped by default (`-m 'not integration'`).
 Run them explicitly with:
     pytest -m integration tests/test_postgres_integration.py -v
 """
+
 from __future__ import annotations
 
 import os
 
-import pytest
 import psycopg
+import pytest
 
 from project_workflow import config as config_module
 from project_workflow.infrastructure.db.session import (
@@ -27,7 +28,6 @@ PG_PASSWORD = os.environ.get("PGPASSWORD", "project_workflow")
 PG_ADMIN_DB = os.environ.get("PGDATABASE", "project_workflow")
 
 
-
 @pytest.fixture(scope="function")
 def pg_url(monkeypatch):
     """Create a fresh PostgreSQL database and yield a SQLAlchemy URL for it."""
@@ -35,13 +35,9 @@ def pg_url(monkeypatch):
         pytest.skip("PGPASSWORD is not set")
     pid = os.getpid()
     db_name = f"project_workflow_test_{pid}"
-    base_url = (
-        f"postgresql+psycopg://{PG_USER}:{PG_PASSWORD}@{PG_HOST}:{PG_PORT}/{db_name}"
-    )
+    base_url = f"postgresql+psycopg://{PG_USER}:{PG_PASSWORD}@{PG_HOST}:{PG_PORT}/{db_name}"
 
-    admin_conn = psycopg.connect(
-        host=PG_HOST, port=PG_PORT, dbname=PG_ADMIN_DB, user=PG_USER, password=PG_PASSWORD
-    )
+    admin_conn = psycopg.connect(host=PG_HOST, port=PG_PORT, dbname=PG_ADMIN_DB, user=PG_USER, password=PG_PASSWORD)
     admin_conn.autocommit = True
     with admin_conn.cursor() as cur:
         cur.execute("SET idle_in_transaction_session_timeout = 0")
@@ -57,9 +53,7 @@ def pg_url(monkeypatch):
     yield base_url
 
     reset_engine()
-    admin_conn = psycopg.connect(
-        host=PG_HOST, port=PG_PORT, dbname=PG_ADMIN_DB, user=PG_USER, password=PG_PASSWORD
-    )
+    admin_conn = psycopg.connect(host=PG_HOST, port=PG_PORT, dbname=PG_ADMIN_DB, user=PG_USER, password=PG_PASSWORD)
     admin_conn.autocommit = True
     with admin_conn.cursor() as cur:
         cur.execute(f"DROP DATABASE IF EXISTS {db_name} WITH (FORCE)")
@@ -78,6 +72,7 @@ class TestPostgresSession:
         ensure_schema(engine)
         with engine.connect() as conn:
             from sqlalchemy import text
+
             rows = conn.execute(
                 text("""SELECT table_name FROM information_schema.tables
                        WHERE table_schema='project_workflow'""")
@@ -92,9 +87,8 @@ class TestPostgresSession:
         ensure_migrated(engine)
         with engine.connect() as conn:
             from sqlalchemy import text
-            version = conn.execute(
-                text("SELECT version_num FROM project_workflow.alembic_version")
-            ).scalar()
+
+            version = conn.execute(text("SELECT version_num FROM project_workflow.alembic_version")).scalar()
         assert version is not None
 
 
@@ -104,15 +98,11 @@ class TestPostgresUoW:
         uow = SAUnitOfWork(pg_url)
         with uow:
             uow.create_all()
-            wf_id = uow.workflows.create(
-                {"name": "Test Workflow", "description": "Test", "is_default": True}
-            )
+            wf_id = uow.workflows.create({"name": "Test Workflow", "description": "Test", "is_default": True})
             workflows = {w.name: w.id for w in uow.workflows.list()}
             assert workflows.get("Test Workflow") == wf_id
 
-            proj_id = uow.projects.create(
-                {"workflow_id": wf_id, "code": "TST", "name": "Default"}
-            )
+            proj_id = uow.projects.create({"workflow_id": wf_id, "code": "TST", "name": "Default"})
             projects = {p.code: p.id for p in uow.projects.list()}
             assert projects.get("TST") == proj_id
 
@@ -134,12 +124,8 @@ class TestPostgresUoW:
         uow = SAUnitOfWork(pg_url)
         with uow:
             uow.create_all()
-            default_wf_id = uow.workflows.create(
-                {"name": "Default", "description": "default", "is_default": True}
-            )
-            uow.projects.create(
-                {"workflow_id": default_wf_id, "code": "DEFAULT", "name": "Default Project"}
-            )
+            default_wf_id = uow.workflows.create({"name": "Default", "description": "default", "is_default": True})
+            uow.projects.create({"workflow_id": default_wf_id, "code": "DEFAULT", "name": "Default Project"})
             uow.commit()
 
         schema_module.ensure_phase_catalog(uow)
@@ -153,9 +139,7 @@ class TestPostgresUoW:
         uow = SAUnitOfWork(pg_url)
         with uow:
             uow.create_all()
-            wf_id = uow.workflows.create(
-                {"name": "Rollback WF", "description": "rollback"}
-            )
+            wf_id = uow.workflows.create({"name": "Rollback WF", "description": "rollback"})
             uow.rollback()
 
         with uow:

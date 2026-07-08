@@ -3,14 +3,17 @@
 The actual loader logic lives in project_workflow.application.ui to keep the
 interface layer free of DB/infrastructure details.
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence
 from typing import Any, cast
 
-from project_workflow.application.ui import UIDataService
-from .dependencies import _AppState
 import project_workflow.interfaces.ui as _ui_module
+from project_workflow.application.ui import UIDataService
+
+from ..cli.core import cli as project_workflow  # noqa: F401
+from .dependencies import _AppState
 from .helpers import (
     _build_parallel_phase_blocks,
     _group_instructions,
@@ -18,8 +21,6 @@ from .helpers import (
     _parse_optional_int,
 )
 from .payloads import _phase_create_payload, _workflow_form_payload
-from ..cli.core import cli as project_workflow  # noqa: F401
-
 
 # Re-export helpers/payloads so existing tests and routes keep importing from services.
 _build_parallel_phase_blocks = _build_parallel_phase_blocks
@@ -72,6 +73,7 @@ def _ui_data_service() -> UIDataService:
 def _load_cli_reference() -> list[dict[str, Any]]:
     """Auto-discover CLI commands for the UI reference page."""
     from .cli_reference import _load_cli_reference as _impl
+
     return _impl()
 
 
@@ -122,6 +124,7 @@ def _resolve_task_phase(
 ) -> tuple[str, dict[str, Any] | None]:
     """Resolve a phase token to (phase_id, phase_dict)."""
     from .helpers import _resolve_task_phase as _impl
+
     db = _db if _db is not None else _get_db()
     return _impl(current_phase, _db=db, workflow_id=workflow_id)
 
@@ -133,4 +136,5 @@ def _resolve_task_phase_local(
 ) -> tuple[str, dict[str, Any] | None]:
     """Resolve a phase token using a preloaded phase list."""
     from .helpers import _resolve_task_phase_local as _impl
+
     return _impl(current_phase, list(phases), workflow_id=workflow_id)

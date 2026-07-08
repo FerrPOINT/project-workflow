@@ -9,7 +9,6 @@ from typing import Any
 from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 
-
 BASE_DIR = Path(__file__).parent
 
 

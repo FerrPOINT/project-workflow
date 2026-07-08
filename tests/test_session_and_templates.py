@@ -1,4 +1,5 @@
 """Tests for DB session factory and UI template helpers."""
+
 from __future__ import annotations
 
 import pytest
@@ -55,9 +56,12 @@ class TestSessionHelpers:
         reset_engine()
 
     def test_get_engine_postgresql_retry_then_success(self, monkeypatch):
-        from project_workflow.infrastructure.db import session as session_module
-        from sqlalchemy.exc import OperationalError
         from unittest.mock import MagicMock, patch
+
+        from sqlalchemy.exc import OperationalError
+
+        from project_workflow.infrastructure.db import session as session_module
+
         calls = []
         fake_engine = MagicMock()
         fake_engine.connect.return_value.__enter__ = lambda self: self
@@ -73,14 +77,18 @@ class TestSessionHelpers:
 
         with patch.object(session_module, "create_engine", _fake_create_engine):
             from project_workflow.infrastructure.db.session import _create_postgres_engine
+
             engine = _create_postgres_engine("postgresql://u:***@h/d")
         assert engine is fake_engine
         assert len(calls) == 3
 
     def test_get_engine_postgresql_retry_exhausted(self, monkeypatch):
-        from project_workflow.infrastructure.db import session as session_module
-        from sqlalchemy.exc import OperationalError
         from unittest.mock import patch
+
+        from sqlalchemy.exc import OperationalError
+
+        from project_workflow.infrastructure.db import session as session_module
+
         calls = []
 
         def _fake_create_engine(*a, **kw):
@@ -89,6 +97,7 @@ class TestSessionHelpers:
 
         with patch.object(session_module, "create_engine", _fake_create_engine):
             from project_workflow.infrastructure.db.session import _create_postgres_engine
+
             with pytest.raises(OperationalError, match="db down"):
                 _create_postgres_engine("postgresql://u:***@h/d")
         assert len(calls) == 3
@@ -100,6 +109,7 @@ class TestSessionHelpers:
         assert isinstance(sess, Session)
         # SQLite pragmas were applied by event listener.
         from sqlalchemy import text
+
         pragma = sess.execute(text("PRAGMA journal_mode")).scalar()
         assert pragma is not None
         sess.close()
@@ -121,6 +131,7 @@ class TestSessionHelpers:
         ensure_schema(engine)
         with engine.connect() as conn:
             from sqlalchemy import text
+
             tables = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'")).scalars().all()
         assert "workflows" in tables
         assert "phases" in tables
@@ -134,13 +145,16 @@ class TestSessionHelpers:
             ensure_schema(conn)
         with engine.connect() as conn:
             from sqlalchemy import text
+
             tables = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'")).scalars().all()
         assert "workflows" in tables
         reset_engine()
 
     def test_get_database_url_empty_raises(self):
         from unittest.mock import patch
+
         from project_workflow.infrastructure.db.session import get_database_url
+
         fake_settings = type("S", (), {"DATABASE_URL": ""})()
         with patch("project_workflow.infrastructure.db.session.get_settings", return_value=fake_settings):
             with pytest.raises(RuntimeError, match="DATABASE_URL is not configured"):
@@ -148,43 +162,62 @@ class TestSessionHelpers:
 
     def test_run_alembic_command_mocks_alembic(self, tmp_path):
         from unittest.mock import patch
+
         from project_workflow.infrastructure.db.session import run_alembic_command
+
         engine = get_engine(f"sqlite:///{tmp_path}/test.db")
-        with patch("project_workflow.infrastructure.db.session.command.upgrade") as mock_upgrade, \
-             patch("project_workflow.infrastructure.db.session.Config"):
+        with (
+            patch("project_workflow.infrastructure.db.session.command.upgrade") as mock_upgrade,
+            patch("project_workflow.infrastructure.db.session.Config"),
+        ):
             run_alembic_command("upgrade", engine)
             mock_upgrade.assert_called_once()
         reset_engine()
 
     def test_stamp_head_mocks_alembic(self, tmp_path):
         from unittest.mock import patch
+
         from project_workflow.infrastructure.db.session import stamp_head
+
         engine = get_engine(f"sqlite:///{tmp_path}/test.db")
-        with patch("project_workflow.infrastructure.db.session.command.stamp") as mock_stamp, \
-             patch("project_workflow.infrastructure.db.session.Config"):
+        with (
+            patch("project_workflow.infrastructure.db.session.command.stamp") as mock_stamp,
+            patch("project_workflow.infrastructure.db.session.Config"),
+        ):
             stamp_head(engine)
             mock_stamp.assert_called_once()
         reset_engine()
 
     def test_ensure_migrated_postgresql_branch(self, tmp_path):
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import MagicMock, patch
+
         from project_workflow.infrastructure.db.session import ensure_migrated
+
         fake_engine = MagicMock()
         fake_engine.url = "postgresql://u:***@h/d"
-        with patch("project_workflow.infrastructure.db.session._is_sqlite", return_value=False), \
-             patch("project_workflow.infrastructure.db.session.run_alembic_command") as mock_run, \
-             patch("project_workflow.infrastructure.db.session.get_engine", return_value=fake_engine):
+        with (
+            patch("project_workflow.infrastructure.db.session._is_sqlite", return_value=False),
+            patch("project_workflow.infrastructure.db.session.run_alembic_command") as mock_run,
+            patch("project_workflow.infrastructure.db.session.get_engine", return_value=fake_engine),
+        ):
             ensure_migrated(fake_engine)
         fake_engine.begin().__enter__().exec_driver_sql.assert_called_once()
         mock_run.assert_called_once_with("upgrade", fake_engine)
 
     def test_ensure_schema_postgresql_connection(self):
         from unittest.mock import MagicMock, patch
+
         from project_workflow.infrastructure.db.session import ensure_schema
+
         fake_conn = MagicMock()
         fake_conn.dialect.name = "postgresql"
-        with patch("project_workflow.infrastructure.db.session.get_settings", return_value=type("S", (), {"DB_SCHEMA": "test_schema"})()), \
-             patch("project_workflow.infrastructure.db.session.Base.metadata.create_all"):
+        with (
+            patch(
+                "project_workflow.infrastructure.db.session.get_settings",
+                return_value=type("S", (), {"DB_SCHEMA": "test_schema"})(),
+            ),
+            patch("project_workflow.infrastructure.db.session.Base.metadata.create_all"),
+        ):
             ensure_schema(fake_conn)
         fake_conn.begin().__enter__().exec_driver_sql.assert_called()
 
@@ -200,18 +233,24 @@ class TestSessionHelpers:
 class TestSqlitePragmaEdgeCases:
     def test_non_sqlite_dialect_returns(self):
         from project_workflow.infrastructure.db.session import _set_sqlite_pragma
+
         class FakeConn:
             pass
+
         class FakeRec:
             dialect = type("D", (), {"name": "postgresql"})()
+
         _set_sqlite_pragma(FakeConn(), FakeRec())
 
     def test_no_cursor_attribute_returns(self):
         from project_workflow.infrastructure.db.session import _set_sqlite_pragma
+
         class FakeConn:
             pass
+
         class FakeRec:
             dialect = type("D", (), {"name": "sqlite"})()
+
         _set_sqlite_pragma(FakeConn(), FakeRec())
 
 

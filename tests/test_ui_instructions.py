@@ -9,7 +9,6 @@ pytestmark = [pytest.mark.ui]
 
 from project_workflow.interfaces.ui import app
 
-
 client = TestClient(app)
 
 

@@ -1,9 +1,8 @@
 """Deterministic checks engine for Wizard — hard rules, no LLM authority."""
+
 from __future__ import annotations
 
 import re
-from typing import Optional
-
 
 BLOCKER_PATTERNS = (
     "blocked by",
@@ -77,7 +76,7 @@ def determine_verdict(
     blockers: list[str],
     report: str,
     is_delegated: bool = False,
-    rollback_target: Optional[str] = None,
+    rollback_target: str | None = None,
 ) -> str:
     if not missing and not blockers:
         return "pass"

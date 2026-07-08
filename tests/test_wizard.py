@@ -1,12 +1,13 @@
 """WizardEngine unit tests for public supervisor behavior."""
 
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 pytestmark = [pytest.mark.wizard]
 
-from project_workflow.wizard.models import Phase
 from project_workflow.wizard import WizardEngine
+from project_workflow.wizard.models import Phase
 
 
 class TestWizardEvaluate:
@@ -38,11 +39,13 @@ class TestWizardEvaluate:
         engine.all_phases = [ph]
         engine.task = {"id": 1, "task_key": "AAT-1", "current_phase": "0"}
 
-        with patch.object(engine, "_build_checklist", return_value=["check"]), \
-             patch.object(engine, "_check_coverage", return_value=(["check"], [])), \
-             patch.object(engine, "_get_next_phase", return_value=("1", "Next")), \
-             patch.object(engine, "_record_transition"), \
-             patch.object(engine._store, "save"):
+        with (
+            patch.object(engine, "_build_checklist", return_value=["check"]),
+            patch.object(engine, "_check_coverage", return_value=(["check"], [])),
+            patch.object(engine, "_get_next_phase", return_value=("1", "Next")),
+            patch.object(engine, "_record_transition"),
+            patch.object(engine._store, "save"),
+        ):
             result = engine.evaluate("report ok")
 
         assert result["verdict"] == "PASS"
@@ -56,10 +59,12 @@ class TestWizardEvaluate:
         engine.all_phases = [ph]
         engine.task = {"id": 1, "task_key": "AAT-1", "current_phase": "0"}
 
-        with patch.object(engine, "_build_checklist", return_value=["check"]), \
-             patch.object(engine, "_check_coverage", return_value=([], ["check"])), \
-             patch.object(engine, "_record_transition"), \
-             patch.object(engine._store, "save"):
+        with (
+            patch.object(engine, "_build_checklist", return_value=["check"]),
+            patch.object(engine, "_check_coverage", return_value=([], ["check"])),
+            patch.object(engine, "_record_transition"),
+            patch.object(engine._store, "save"),
+        ):
             result = engine.evaluate("report bad")
 
         assert result["verdict"] == "HARD_FAIL"

@@ -1,10 +1,10 @@
 """Wizard assessment store — reads/writes structured assessments via supervisor_runs table."""
+
 from __future__ import annotations
 
 import json
 import logging
 from typing import Any
-
 
 from .types import WizardAssessment
 
@@ -21,6 +21,7 @@ class WizardAssessmentStore:
         if not code:
             return None
         from unittest.mock import MagicMock
+
         if isinstance(self.uow, MagicMock):
             ph = self.uow.get_phase_by_code(code)
         elif hasattr(self.uow, "phases"):
@@ -52,6 +53,7 @@ class WizardAssessmentStore:
     def save(self, assessment: WizardAssessment | dict[str, Any]) -> None:
         """Write assessment to supervisor_runs."""
         from unittest.mock import MagicMock
+
         is_mock = isinstance(self.uow, MagicMock)
 
         def _get(name: str, default: Any = None) -> Any:

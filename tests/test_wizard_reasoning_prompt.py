@@ -1,4 +1,5 @@
 """Tests for the chain-of-thought reasoning prompt."""
+
 from __future__ import annotations
 
 from project_workflow.wizard.prompt import build_reasoning_prompt

@@ -15,17 +15,19 @@ pytestmark = [pytest.mark.cli]
 from project_workflow.domain.validation import TaskKeyValidator
 from project_workflow.interfaces.cli.core import cli
 
-
 # ── Helpers ──────────────────────────────────────────────────────────
 
+
 def _validator() -> TaskKeyValidator:
-    return TaskKeyValidator.from_projects([
-        {
-            "code": "TASK",
-            "name": "TASK",
-            "key_prefixes": ["TASK"],
-        }
-    ])
+    return TaskKeyValidator.from_projects(
+        [
+            {
+                "code": "TASK",
+                "name": "TASK",
+                "key_prefixes": ["TASK"],
+            }
+        ]
+    )
 
 
 class TestStepCommand:
@@ -63,8 +65,14 @@ class TestStepCommand:
     def test_step_report_pass(self, mock_engine_cls):
         mock_engine = mock_engine_cls.return_value
         mock_engine.evaluate.return_value = {
-            "verdict": "PASS", "phase_name": "Plan", "next_phase": "1", "next_phase_name": "Build",
-            "covered": ["a"], "missing": [], "blockers": [], "message": "Go next",
+            "verdict": "PASS",
+            "phase_name": "Plan",
+            "next_phase": "1",
+            "next_phase_name": "Build",
+            "covered": ["a"],
+            "missing": [],
+            "blockers": [],
+            "message": "Go next",
             "instructions": ["Инструкция 1"],
             "required_checks": ["a"],
             "required_evidence": ["e1"],
@@ -90,9 +98,18 @@ class TestStepCommand:
     def test_step_report_fail_exits_one(self, mock_engine_cls):
         mock_engine = mock_engine_cls.return_value
         mock_engine.evaluate.return_value = {
-            "verdict": "BLOCKED", "phase_name": "Plan", "next_phase": None, "next_phase_name": None,
-            "covered": [], "missing": ["m1"], "blockers": ["b1"], "message": "Blocked",
-            "required_checks": ["m1"], "required_evidence": [], "instructions": [], "description": "",
+            "verdict": "BLOCKED",
+            "phase_name": "Plan",
+            "next_phase": None,
+            "next_phase_name": None,
+            "covered": [],
+            "missing": ["m1"],
+            "blockers": ["b1"],
+            "message": "Blocked",
+            "required_checks": ["m1"],
+            "required_evidence": [],
+            "instructions": [],
+            "description": "",
         }
         runner = CliRunner()
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
@@ -107,9 +124,17 @@ class TestStepCommand:
         try:
             mock_engine = mock_engine_cls.return_value
             mock_engine.evaluate.return_value = {
-                "verdict": "PASS", "phase_name": "Plan", "next_phase": "1", "next_phase_name": "Build",
-                "covered": [], "missing": [], "blockers": [], "message": "ok",
-                "required_checks": [], "required_evidence": [], "instructions": [],
+                "verdict": "PASS",
+                "phase_name": "Plan",
+                "next_phase": "1",
+                "next_phase_name": "Build",
+                "covered": [],
+                "missing": [],
+                "blockers": [],
+                "message": "ok",
+                "required_checks": [],
+                "required_evidence": [],
+                "instructions": [],
             }
             runner = CliRunner()
             with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
@@ -123,8 +148,13 @@ class TestStepCommand:
     def test_step_report_json_mode(self, mock_engine_cls):
         mock_engine = mock_engine_cls.return_value
         mock_engine.evaluate.return_value = {
-            "verdict": "PASS", "phase_name": "Plan", "next_phase": None,
-            "covered": [], "missing": [], "blockers": [], "message": "ok",
+            "verdict": "PASS",
+            "phase_name": "Plan",
+            "next_phase": None,
+            "covered": [],
+            "missing": [],
+            "blockers": [],
+            "message": "ok",
         }
         runner = CliRunner()
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
@@ -190,8 +220,10 @@ class TestHistoryCommand:
         )
         uow = mock_uow_cls.return_value.__enter__.return_value
         uow.supervisor_runs.list.return_value = [run1, run2]
+
         def _fake_phase(pid):
-            return type('Phase', (), {'code': str(pid), 'name': f'Phase {pid}'})()
+            return type("Phase", (), {"code": str(pid), "name": f"Phase {pid}"})()
+
         uow.phases.get_by_id.side_effect = _fake_phase
         runner = CliRunner()
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
@@ -222,6 +254,7 @@ class TestHistoryCommand:
         assert parsed["ok"] is True
         assert parsed["task_key"] == "TASK-1"
         assert parsed["count"] == 0
+
 
 class TestCliGuard:
     """Ensure only 2 main commands exist."""

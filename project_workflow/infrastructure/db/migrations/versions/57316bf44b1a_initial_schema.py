@@ -5,16 +5,16 @@ Revises:
 Create Date: 2026-06-21 14:43:30.436445
 
 """
-from typing import Sequence, Union
+
+from collections.abc import Sequence
 
 from alembic import op
 
-
 # revision identifiers, used by Alembic.
-revision: str = '57316bf44b1a'
-down_revision: Union[str, Sequence[str], None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+revision: str = "57316bf44b1a"
+down_revision: str | Sequence[str] | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -24,6 +24,7 @@ def upgrade() -> None:
     # Import models here so Base.metadata sees them.
     from project_workflow.infrastructure.db import models  # noqa: F401
     from project_workflow.infrastructure.db.models import Base
+
     bind = op.get_bind()
     Base.metadata.create_all(bind)
 
@@ -33,6 +34,7 @@ def downgrade() -> None:
     op.execute("SET search_path TO project_workflow")
     from project_workflow.infrastructure.db import models  # noqa: F401
     from project_workflow.infrastructure.db.models import Base
+
     bind = op.get_bind()
     Base.metadata.drop_all(bind)
     op.execute("DROP SCHEMA IF NOT EXISTS project_workflow CASCADE")

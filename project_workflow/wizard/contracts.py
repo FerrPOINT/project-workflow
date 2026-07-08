@@ -1,10 +1,11 @@
 """Phase contract builder — turns DB phase catalog into structured PhaseContract."""
+
 from __future__ import annotations
 
 from typing import Any
 
-from .types import PhaseContract
 from .models import Phase
+from .types import PhaseContract
 
 
 def text_from_instruction(item: Any) -> str:
@@ -96,19 +97,21 @@ class PhaseContractBuilder:
             for txt in ph_evidence:
                 if txt:
                     evidence.append(f"[{ph.code}] {txt}")
-            group_details.append({
-                "phase_code": ph.code,
-                "phase_name": ph.name,
-                "description": ph.description,
-                "instructions": [t for t in ph_instructions if t],
-                "required_checks": [t for t in ph_checks if t],
-                "required_evidence": [t for t in ph_evidence if t],
-                "execution_type": ph.execution_type,
-                "delegate_agent": ph.delegate.agent if ph.delegate else None,
-                "delegate_toolsets": list(ph.delegate.toolsets) if ph.delegate else [],
-                "parallel_with": ph.parallel_with,
-                "rollback_target": ph.rollback_target,
-            })
+            group_details.append(
+                {
+                    "phase_code": ph.code,
+                    "phase_name": ph.name,
+                    "description": ph.description,
+                    "instructions": [t for t in ph_instructions if t],
+                    "required_checks": [t for t in ph_checks if t],
+                    "required_evidence": [t for t in ph_evidence if t],
+                    "execution_type": ph.execution_type,
+                    "delegate_agent": ph.delegate.agent if ph.delegate else None,
+                    "delegate_toolsets": list(ph.delegate.toolsets) if ph.delegate else [],
+                    "parallel_with": ph.parallel_with,
+                    "rollback_target": ph.rollback_target,
+                }
+            )
         first = group[0]
         next_phase, next_name = self._next_after_group(group)
         # Collect delegates for the whole group.

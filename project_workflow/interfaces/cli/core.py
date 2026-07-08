@@ -31,8 +31,8 @@ def out_json(data: dict[str, Any]) -> None:
 
 
 def _get_task_key_validator() -> task_validator.TaskKeyValidator:
-    from project_workflow.infrastructure.db.uow import SAUnitOfWork
     from project_workflow.infrastructure.db import schema
+    from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
     uow = SAUnitOfWork()
     uow.init()
@@ -53,7 +53,9 @@ def _require_valid_key(task_key: str) -> str:
 
 @click.group()
 @click.version_option(version=__version__, prog_name="project-workflow")
-@click.option("--json", "json_mode", is_flag=True, help="Машиночитаемый JSON вывод (для CLI-автоматизации и внешних исполнителей)")
+@click.option(
+    "--json", "json_mode", is_flag=True, help="Машиночитаемый JSON вывод (для CLI-автоматизации и внешних исполнителей)"
+)
 @click.pass_context
 def cli(ctx: click.Context, json_mode: bool) -> None:
     """project-workflow — жёсткий пофазовый клиент."""

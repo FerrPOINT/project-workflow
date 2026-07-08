@@ -1,4 +1,5 @@
 """CLI command discovery for the UI reference page."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -55,4 +56,3 @@ def _load_cli_reference() -> list[dict[str, Any]]:
         )
 
     return commands
-

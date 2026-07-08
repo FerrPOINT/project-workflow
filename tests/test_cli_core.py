@@ -1,21 +1,24 @@
 """Tests for interfaces.cli.core."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
 import click
-from click.testing import CliRunner
 import pytest
+from click.testing import CliRunner
 
 from project_workflow.interfaces.cli.core import _require_valid_key, cli, out_json
 
 
 def test_cli_group_sets_json_mode():
     runner = CliRunner()
+
     @cli.command()
     @click.pass_context
     def probe(ctx):
         click.echo(f"json={ctx.obj.get('json_mode')}")
+
     result = runner.invoke(cli, ["--json", "probe"])
     assert result.exit_code == 0
     assert "json=True" in result.output

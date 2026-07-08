@@ -5,10 +5,11 @@ Revises: caeb9ba65f4a
 Create Date: 2026-07-06 05:55:13.894
 
 """
-from typing import Sequence
 
-from alembic import op
+from collections.abc import Sequence
+
 import sqlalchemy as sa
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "249bc4ab2fa9"

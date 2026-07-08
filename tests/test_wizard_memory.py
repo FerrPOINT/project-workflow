@@ -1,4 +1,5 @@
 """Tests for wizard.memory.MemoryStore."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -23,9 +24,11 @@ def test_add_memory():
     uow, _ = _make_uow()
     uow.session.flush = MagicMock()
     store = MemoryStore(uow)
+
     # mem.id is None until flush assigns it; mock the created object.
     def _add(obj):
         obj.id = 42
+
     uow.session.add.side_effect = _add
     mem_id = store.add(1, "lesson", "remember this")
     assert mem_id == 42

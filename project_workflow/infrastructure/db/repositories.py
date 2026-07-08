@@ -1,14 +1,16 @@
 """SQLAlchemy repository implementations."""
+
 from __future__ import annotations
 
+import builtins
 import datetime as _dt
 import json
 import logging
-from collections.abc import Mapping
-from typing import Any, List, Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 from sqlalchemy import delete, func, select, text
-from sqlalchemy.orm import aliased, Session
+from sqlalchemy.orm import Session, aliased
 
 from project_workflow.domain import Agent, Phase, Project, SupervisorRun, Task, Workflow
 from project_workflow.domain.exceptions import LastPhaseError, NotFoundError
@@ -174,15 +176,11 @@ class SAWorkflowRepository(WorkflowRepository):
         return _row_to_workflow(row)
 
     def get_by_name(self, name: str) -> Workflow | None:
-        row = self._session.execute(
-            select(m.Workflow).where(m.Workflow.name == name)
-        ).scalar_one_or_none()
+        row = self._session.execute(select(m.Workflow).where(m.Workflow.name == name)).scalar_one_or_none()
         return _row_to_workflow(row) if row else None
 
     def get_default(self) -> Workflow | None:
-        row = self._session.execute(
-            select(m.Workflow).where(m.Workflow.is_default == 1)
-        ).scalar_one_or_none()
+        row = self._session.execute(select(m.Workflow).where(m.Workflow.is_default == 1)).scalar_one_or_none()
         return _row_to_workflow(row) if row else None
 
     def create(self, data: dict[str, Any]) -> int:
@@ -252,9 +250,7 @@ class SAPhaseRepository(PhaseRepository):
         return _row_to_phase(row) if row else None
 
     def get_by_code(self, code: str) -> Phase | None:
-        row = self._session.execute(
-            select(m.Phase).where(m.Phase.code == code)
-        ).scalar_one_or_none()
+        row = self._session.execute(select(m.Phase).where(m.Phase.code == code)).scalar_one_or_none()
         return _row_to_phase(row) if row else None
 
     def create(self, data: dict[str, Any]) -> int:
@@ -293,12 +289,16 @@ class SAPhaseRepository(PhaseRepository):
         row = self._session.get(m.Phase, phase_id)
         if row is None:
             raise NotFoundError(f"Phase {phase_id} not found")
-        remaining = self._session.execute(
-            select(m.Phase).where(
-                m.Phase.workflow_id == row.workflow_id,
-                m.Phase.id != phase_id,
+        remaining = (
+            self._session.execute(
+                select(m.Phase).where(
+                    m.Phase.workflow_id == row.workflow_id,
+                    m.Phase.id != phase_id,
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         if not remaining:
             raise LastPhaseError("Cannot delete the only phase of a workflow")
         # Cascade delete content rows explicitly (mirror ON DELETE CASCADE).
@@ -311,7 +311,10 @@ class SAPhaseRepository(PhaseRepository):
 
     def shift_orders(self, workflow_id: int, start_order: int, delta: int = 1) -> None:
         self._session.execute(
-            text("UPDATE phases SET phase_order = phase_order + :delta WHERE workflow_id = :wid AND phase_order >= :start"),
+            text(
+                "UPDATE phases SET phase_order = phase_order + :delta "
+                "WHERE workflow_id = :wid AND phase_order >= :start"
+            ),
             {"delta": delta, "wid": workflow_id, "start": start_order},
         )
 
@@ -325,23 +328,19 @@ class SAPhaseRepository(PhaseRepository):
         return self.list(workflow_id=workflow_id)
 
     def get_checks(self, phase_id: int) -> Sequence[dict[str, Any]]:
-        rows = self._session.execute(
-            select(m.Check).where(m.Check.phase_id == phase_id)
-        ).scalars().all()
+        rows = self._session.execute(select(m.Check).where(m.Check.phase_id == phase_id)).scalars().all()
         return [{"id": r.id, "phase_id": r.phase_id, "description": r.description} for r in rows]
 
     def get_evidence(self, phase_id: int) -> Sequence[dict[str, Any]]:
-        rows = self._session.execute(
-            select(m.Evidence).where(m.Evidence.phase_id == phase_id)
-        ).scalars().all()
+        rows = self._session.execute(select(m.Evidence).where(m.Evidence.phase_id == phase_id)).scalars().all()
         return [{"id": r.id, "phase_id": r.phase_id, "description": r.description} for r in rows]
 
-    def set_checks(self, phase_id: int, items: List[dict[str, Any]]) -> None:
+    def set_checks(self, phase_id: int, items: builtins.list[dict[str, Any]]) -> None:
         self._session.execute(delete(m.Check).where(m.Check.phase_id == phase_id))
         for item in items:
             self._session.add(m.Check(phase_id=phase_id, description=item.get("description", "")))
 
-    def set_evidence(self, phase_id: int, items: List[dict[str, Any]]) -> None:
+    def set_evidence(self, phase_id: int, items: builtins.list[dict[str, Any]]) -> None:
         self._session.execute(delete(m.Evidence).where(m.Evidence.phase_id == phase_id))
         for item in items:
             self._session.add(m.Evidence(phase_id=phase_id, description=item.get("description", "")))
@@ -362,9 +361,7 @@ class SAProjectRepository(ProjectRepository):
         return _row_to_project(row) if row else None
 
     def get_by_code(self, code: str) -> Project | None:
-        row = self._session.execute(
-            select(m.Project).where(m.Project.code == code)
-        ).scalar_one_or_none()
+        row = self._session.execute(select(m.Project).where(m.Project.code == code)).scalar_one_or_none()
         return _row_to_project(row) if row else None
 
     def create(self, data: dict[str, Any]) -> int:
@@ -403,6 +400,7 @@ class SAProjectRepository(ProjectRepository):
         for project in self.list():
             for prefix in project.key_prefixes:
                 import re
+
                 if re.match(rf"^{re.escape(prefix)}-[0-9]+$", task_key):
                     return project
         return None
@@ -416,9 +414,7 @@ class SATaskRepository(TaskRepository):
 
     def get_by_key(self, task_key: str) -> Task | None:
         with self._session.no_autoflush:
-            row = self._session.execute(
-                select(m.Task).where(m.Task.task_key == task_key)
-            ).scalar_one_or_none()
+            row = self._session.execute(select(m.Task).where(m.Task.task_key == task_key)).scalar_one_or_none()
         if row is None:
             return None
         try:
@@ -494,9 +490,7 @@ class SATaskRepository(TaskRepository):
 
     def get_history(self, task_id: int) -> Sequence[dict[str, Any]]:
         with self._session.no_autoflush:
-            rows = self._session.execute(
-                select(m.TaskHistory).where(m.TaskHistory.task_id == task_id)
-            ).scalars().all()
+            rows = self._session.execute(select(m.TaskHistory).where(m.TaskHistory.task_id == task_id)).scalars().all()
         return [
             {
                 "id": r.id,
@@ -512,9 +506,9 @@ class SATaskRepository(TaskRepository):
         if not task_ids:
             return {}
         with self._session.no_autoflush:
-            rows = self._session.execute(
-                select(m.TaskHistory).where(m.TaskHistory.task_id.in_(task_ids))
-            ).scalars().all()
+            rows = (
+                self._session.execute(select(m.TaskHistory).where(m.TaskHistory.task_id.in_(task_ids))).scalars().all()
+            )
         result: dict[int, list[dict[str, Any]]] = {tid: [] for tid in task_ids}
         for r in rows:
             entry = {
@@ -532,9 +526,7 @@ class SATaskRepository(TaskRepository):
             row = self._session.get(m.Task, task_id)
         if row is None:
             raise ValueError(f"Task {task_id} not found")
-        self._session.execute(
-            delete(m.TaskHistory).where(m.TaskHistory.task_id == task_id)
-        )
+        self._session.execute(delete(m.TaskHistory).where(m.TaskHistory.task_id == task_id))
         self._session.delete(row)
         self._session.flush()
 
@@ -546,9 +538,7 @@ class SACheckRepository(CheckRepository):
         self._session = session
 
     def list(self, phase_id: int) -> Sequence[dict[str, Any]]:
-        rows = self._session.execute(
-            select(m.Check).where(m.Check.phase_id == phase_id)
-        ).scalars().all()
+        rows = self._session.execute(select(m.Check).where(m.Check.phase_id == phase_id)).scalars().all()
         return [
             {
                 "id": r.id,
@@ -578,9 +568,7 @@ class SAEvidenceRepository(EvidenceRepository):
         self._session = session
 
     def list(self, phase_id: int) -> Sequence[dict[str, Any]]:
-        rows = self._session.execute(
-            select(m.Evidence).where(m.Evidence.phase_id == phase_id)
-        ).scalars().all()
+        rows = self._session.execute(select(m.Evidence).where(m.Evidence.phase_id == phase_id)).scalars().all()
         return [
             {
                 "id": r.id,
@@ -614,9 +602,7 @@ class SAAgentRepository(AgentRepository):
         return [_row_to_agent(r) for r in rows]
 
     def get_by_name(self, name: str) -> Agent | None:
-        row = self._session.execute(
-            select(m.Agent).where(m.Agent.name == name)
-        ).scalar_one_or_none()
+        row = self._session.execute(select(m.Agent).where(m.Agent.name == name)).scalar_one_or_none()
         return _row_to_agent(row) if row else None
 
     def get_by_id(self, agent_id: int) -> Agent | None:
@@ -676,10 +662,7 @@ class SASupervisorRunRepository(SupervisorRunRepository):
             select(
                 m.SupervisorRun,
                 (
-                    func.row_number().over(
-                        partition_by=m.SupervisorRun.task_id,
-                        order_by=m.SupervisorRun.id.desc()
-                    )
+                    func.row_number().over(partition_by=m.SupervisorRun.task_id, order_by=m.SupervisorRun.id.desc())
                 ).label("rn"),
             )
             .where(m.SupervisorRun.task_id.in_(task_ids))
@@ -716,11 +699,13 @@ class SAInstructionRepository(InstructionRepository):
         self._session = session
 
     def list(self, phase_id: int) -> Sequence[dict[str, Any]]:
-        rows = self._session.execute(
-            select(m.Instruction)
-            .where(m.Instruction.phase_id == phase_id)
-            .order_by(m.Instruction.step_num)
-        ).scalars().all()
+        rows = (
+            self._session.execute(
+                select(m.Instruction).where(m.Instruction.phase_id == phase_id).order_by(m.Instruction.step_num)
+            )
+            .scalars()
+            .all()
+        )
         return [
             {
                 "id": r.id,
@@ -784,7 +769,7 @@ class SAInstructionRepository(InstructionRepository):
             {"pid": phase_id},
         )
 
-    def reorder(self, phase_id: int, orders: List[tuple[int, int]]) -> None:
+    def reorder(self, phase_id: int, orders: builtins.list[tuple[int, int]]) -> None:
         """Reassign step_num values based on (instruction_id, new_step_num) pairs.
 
         Uses a two-stage raw-SQL update: first shift every instruction in the
@@ -821,9 +806,7 @@ class SACLIHistoryRepository:
         self._session = session
 
     def list(self, limit: int = 200) -> Sequence[dict[str, Any]]:
-        rows = self._session.execute(
-            select(m.CliHistory).order_by(m.CliHistory.id.asc()).limit(limit)
-        ).scalars().all()
+        rows = self._session.execute(select(m.CliHistory).order_by(m.CliHistory.id.asc()).limit(limit)).scalars().all()
         return [m.model_to_dict(r) for r in rows]
 
     def create(

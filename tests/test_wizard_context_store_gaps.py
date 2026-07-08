@@ -1,4 +1,5 @@
 """Coverage gap tests for wizard context and store."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -39,7 +40,12 @@ class TestWizardContextBuilder:
     def test_phase_status_lookup_no_phase(self):
         uow = MagicMock()
         uow.get_task_history.return_value = [{"phase_id": 99, "status": "done"}]
-        builder = WizardContextBuilder(uow=uow, task={"id": 1, "status": "active", "current_phase": "1"}, all_phases=[self._phase(id=1)], current_phase="1")
+        builder = WizardContextBuilder(
+            uow=uow,
+            task={"id": 1, "status": "active", "current_phase": "1"},
+            all_phases=[self._phase(id=1)],
+            current_phase="1",
+        )
         statuses = builder._phase_status_lookup()
         assert statuses == {"1": "current"}
 
@@ -80,6 +86,7 @@ class TestWizardContextBuilder:
         )
         with pytest.MonkeyPatch().context() as mp:
             import project_workflow.infrastructure.conversation as convo
+
             mp.setattr(convo, "get_messages", lambda *a, **kw: (_ for _ in ()).throw(OSError("boom")))
             result = builder.build()
         assert result["messages"] == []
@@ -90,6 +97,7 @@ class TestWizardAssessmentStore:
         class FakePhases:
             def get_by_code(self, code):
                 return type("P", (), {"id": 5})()
+
         uow = type("U", (), {"phases": FakePhases()})()
         store = WizardAssessmentStore(uow)
         assert store._phase_id("1") == 5
@@ -103,11 +111,13 @@ class TestWizardAssessmentStore:
     def test_row_phase_code_from_response_dict(self):
         class Row:
             response = '{"phase": "PH-1"}'
+
         assert WizardAssessmentStore._row_phase_code(Row()) == "PH-1"
 
     def test_row_phase_code_from_response_str_bad_json(self):
         class Row:
             response = "not json"
+
         assert WizardAssessmentStore._row_phase_code(Row()) == ""
 
     def test_save_without_raw_response(self):
@@ -130,17 +140,21 @@ class TestWizardAssessmentStore:
     def test_get_latest_by_str_task_with_phase_filter(self):
         class FakeRuns:
             def list(self, **kw):
-                return [{
-                    "response": '{"phase": "PH-1", "phase_code": "PH-1"}',
-                    "verdict": "pass",
-                    "covered": [],
-                    "missing": [],
-                    "blockers": [],
-                    "phase_code": "PH-1",
-                }]
+                return [
+                    {
+                        "response": '{"phase": "PH-1", "phase_code": "PH-1"}',
+                        "verdict": "pass",
+                        "covered": [],
+                        "missing": [],
+                        "blockers": [],
+                        "phase_code": "PH-1",
+                    }
+                ]
+
         class FakeTasks:
             def get_by_key(self, key):
                 return type("T", (), {"id": 42})()
+
         uow = type("U", (), {"tasks": FakeTasks(), "supervisor_runs": FakeRuns()})()
         store = WizardAssessmentStore(uow)
         results = store.get_latest("AAT-1", phase_code="PH-1")
@@ -168,6 +182,7 @@ class TestRowToAssessment:
             covered = []
             missing = []
             blockers = []
+
         a = _row_to_assessment(Row())
         assert a.phase_code == "PH-2"
         assert a.verdict == "partial"
@@ -179,5 +194,6 @@ class TestRowToAssessment:
             covered = []
             missing = []
             blockers = []
+
         a = _row_to_assessment(Row())
         assert a.verdict == "blocked"

@@ -1,4 +1,5 @@
 """UI edge-case tests — error paths, helpers, and uncovered branches."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -32,6 +33,7 @@ client = TestClient(app)
 # Pure helpers
 # ═══════════════════════════════════════════════════════════
 
+
 class TestToJsonUnicode:
     def test_serializes_dict(self):
         result = _tojson_unicode({"a": 1})
@@ -40,6 +42,7 @@ class TestToJsonUnicode:
     def test_handles_non_serializable(self):
         class Foo:
             pass
+
         result = _tojson_unicode({"obj": Foo()})
         assert "obj" in str(result)
 
@@ -81,10 +84,12 @@ class TestBuildParallelPhaseBlocks:
         assert blocks[0]["kind"] == "single"
 
     def test_parallel(self):
-        blocks = _build_parallel_phase_blocks([
-            {"code": "1", "execution_type": "sync"},
-            {"code": "2", "execution_type": "parallel"},
-        ])
+        blocks = _build_parallel_phase_blocks(
+            [
+                {"code": "1", "execution_type": "sync"},
+                {"code": "2", "execution_type": "parallel"},
+            ]
+        )
         assert len(blocks) == 1
         assert blocks[0]["kind"] == "parallel"
         assert blocks[0]["phases"][0]["parallel_group"] == "1"
@@ -154,6 +159,7 @@ class TestResolveTaskPhase:
 
     def test_legacy_redirect(self, monkeypatch):
         from project_workflow import config
+
         monkeypatch.setattr(config, "LEGACY_PHASE_REDIRECTS", {"old": "1"})
         db = MagicMock()
         db.get_phases.return_value = [{"id": 10, "code": "1", "name": "One", "phase_order": 1}]
@@ -175,13 +181,17 @@ class TestScanHermesSkills:
     def test_find_all_skills_fails(self, monkeypatch):
         fake_mod = MagicMock()
         fake_mod._find_all_skills.side_effect = AttributeError("boom")
-        monkeypatch.setattr("importlib.import_module", lambda name, *a, **kw: fake_mod if name == "tools.skills_tool" else MagicMock())
+        monkeypatch.setattr(
+            "importlib.import_module", lambda name, *a, **kw: fake_mod if name == "tools.skills_tool" else MagicMock()
+        )
         assert _scan_hermes_skills() == []
 
     def test_filters_non_dict_items(self, monkeypatch):
         fake_mod = MagicMock()
         fake_mod._find_all_skills.return_value = ["string", {"name": "a"}, {"name": ""}]
-        monkeypatch.setattr("importlib.import_module", lambda name, *a, **kw: fake_mod if name == "tools.skills_tool" else MagicMock())
+        monkeypatch.setattr(
+            "importlib.import_module", lambda name, *a, **kw: fake_mod if name == "tools.skills_tool" else MagicMock()
+        )
         result = _scan_hermes_skills()
         assert len(result) == 1
         assert result[0]["name"] == "a"
@@ -192,6 +202,7 @@ class TestSeedToSqlite:
         db = MagicMock()
         monkeypatch.setattr("project_workflow.interfaces.ui._app_state", MagicMock(get_db=lambda: db))
         from project_workflow.infrastructure.db import schema
+
         called = []
         monkeypatch.setattr(schema, "ensure_phase_catalog", lambda db: called.append(True))
         _seed_to_sqlite()
@@ -218,18 +229,43 @@ class TestLoadTasks:
 
     def test_response_as_string(self, monkeypatch):
         db = MagicMock()
-        db.get_tasks.return_value = [{"id": 1, "task_key": "AAT-1", "status": "active", "current_phase": "-1", "project_id": None, "project_code": None, "project_name": None, "workflow_id": None}]
+        db.get_tasks.return_value = [
+            {
+                "id": 1,
+                "task_key": "AAT-1",
+                "status": "active",
+                "current_phase": "-1",
+                "project_id": None,
+                "project_code": None,
+                "project_name": None,
+                "workflow_id": None,
+            }
+        ]
         db.get_workflows.return_value = []
         db.get_phases.return_value = []
         db.get_task_history.return_value = []
-        db.get_supervisor_runs.return_value = [{"verdict": "pass", "phase_code": "1", "response": "plain string", "created_at": "2025-01-01"}]
+        db.get_supervisor_runs.return_value = [
+            {"verdict": "pass", "phase_code": "1", "response": "plain string", "created_at": "2025-01-01"}
+        ]
         monkeypatch.setattr("project_workflow.interfaces.ui._app_state", MagicMock(get_db=lambda: db))
         tasks = _load_tasks()
         assert tasks[0]["latest_verdict_message"] == "plain string"
 
     def test_task_done_with_history(self, monkeypatch):
         db = MagicMock()
-        db.get_tasks.return_value = [{"id": 1, "task_key": "AAT-1", "status": "done", "current_phase": "-1", "project_id": None, "project_code": None, "project_name": None, "workflow_id": None, "updated_at": "2025-02-01"}]
+        db.get_tasks.return_value = [
+            {
+                "id": 1,
+                "task_key": "AAT-1",
+                "status": "done",
+                "current_phase": "-1",
+                "project_id": None,
+                "project_code": None,
+                "project_name": None,
+                "workflow_id": None,
+                "updated_at": "2025-02-01",
+            }
+        ]
         db.get_workflows.return_value = []
         db.get_phases.return_value = []
         db.get_task_history.return_value = [
@@ -243,7 +279,19 @@ class TestLoadTasks:
 
     def test_task_done_no_completed_at_fallback(self, monkeypatch):
         db = MagicMock()
-        db.get_tasks.return_value = [{"id": 1, "task_key": "AAT-1", "status": "done", "current_phase": "-1", "project_id": None, "project_code": None, "project_name": None, "workflow_id": None, "updated_at": "2025-02-01"}]
+        db.get_tasks.return_value = [
+            {
+                "id": 1,
+                "task_key": "AAT-1",
+                "status": "done",
+                "current_phase": "-1",
+                "project_id": None,
+                "project_code": None,
+                "project_name": None,
+                "workflow_id": None,
+                "updated_at": "2025-02-01",
+            }
+        ]
         db.get_workflows.return_value = []
         db.get_phases.return_value = []
         db.get_task_history.return_value = [{"status": "done", "completed_at": None}]
@@ -257,18 +305,41 @@ class TestLoadTasks:
 # Task detail edge cases
 # ═══════════════════════════════════════════════════════════
 
+
 class TestTaskDetailEdgeCases:
     def test_task_detail_supervisor_runs_next_contract(self, monkeypatch):
         from project_workflow.interfaces.ui import _get_task_detail
+
         db = MagicMock()
-        db.get_task_by_key.return_value = {"id": 1, "task_key": "AAT-1", "status": "active", "current_phase": "1", "title": "T", "workflow_id": None, "project_id": None}
+        db.get_task_by_key.return_value = {
+            "id": 1,
+            "task_key": "AAT-1",
+            "status": "active",
+            "current_phase": "1",
+            "title": "T",
+            "workflow_id": None,
+            "project_id": None,
+        }
         db.get_task_history.return_value = []
         db.get_workflows.return_value = []
         db.get_phases.return_value = []
         db.get_supervisor_runs.return_value = [
-            {"verdict": "pass", "phase_code": "1", "response": {"next_phase": "2", "message": "ok"}, "created_at": "2025-01-01"}
+            {
+                "verdict": "pass",
+                "phase_code": "1",
+                "response": {"next_phase": "2", "message": "ok"},
+                "created_at": "2025-01-01",
+            }
         ]
-        db.get_phase_by_code.return_value = {"name": "Next", "description": "", "instructions": [], "checks": [], "evidence": [], "delegate_agent": None, "delegate_toolsets": []}
+        db.get_phase_by_code.return_value = {
+            "name": "Next",
+            "description": "",
+            "instructions": [],
+            "checks": [],
+            "evidence": [],
+            "delegate_agent": None,
+            "delegate_toolsets": [],
+        }
         monkeypatch.setattr("project_workflow.interfaces.ui._app_state", MagicMock(get_db=lambda: db))
         task = _get_task_detail("AAT-1")
         assert task["supervisor_runs"][0]["next_contract"] is not None
@@ -276,8 +347,17 @@ class TestTaskDetailEdgeCases:
 
     def test_task_detail_supervisor_runs_no_next_phase(self, monkeypatch):
         from project_workflow.interfaces.ui import _get_task_detail
+
         db = MagicMock()
-        db.get_task_by_key.return_value = {"id": 1, "task_key": "AAT-1", "status": "active", "current_phase": "1", "title": "T", "workflow_id": None, "project_id": None}
+        db.get_task_by_key.return_value = {
+            "id": 1,
+            "task_key": "AAT-1",
+            "status": "active",
+            "current_phase": "1",
+            "title": "T",
+            "workflow_id": None,
+            "project_id": None,
+        }
         db.get_task_history.return_value = []
         db.get_workflows.return_value = []
         db.get_phases.return_value = []
@@ -290,6 +370,7 @@ class TestTaskDetailEdgeCases:
 
     def test_main_entry(self, monkeypatch):
         from project_workflow.interfaces.ui import main
+
         called = []
         monkeypatch.setattr("uvicorn.run", lambda *a, **kw: called.append((a, kw)))
         monkeypatch.setattr("sys.argv", ["ui", "--port", "8811"])
@@ -303,6 +384,7 @@ class TestTaskDetailEdgeCases:
 # ═══════════════════════════════════════════════════════════
 # API error paths
 # ═══════════════════════════════════════════════════════════
+
 
 class TestApiErrorPaths:
     def test_api_phase_detail_not_found(self):
@@ -321,6 +403,7 @@ class TestApiErrorPaths:
     def test_health_endpoint_bad_db(self, monkeypatch):
         def _bad_engine(*a, **kw):
             raise RuntimeError("db down")
+
         monkeypatch.setattr("project_workflow.infrastructure.db.session.get_engine", _bad_engine)
         response = client.get("/health")
         assert response.status_code == 503
@@ -370,6 +453,7 @@ class TestApiErrorPaths:
 # Page-level edge cases
 # ═══════════════════════════════════════════════════════════
 
+
 class TestPageEdgeCases:
     def test_index_page(self):
         response = client.get("/")
@@ -417,6 +501,7 @@ class TestPageEdgeCases:
 # CLI reference
 # ═══════════════════════════════════════════════════════════
 
+
 class TestLoadCliReference:
     def test_loads_commands(self):
         commands = _load_cli_reference()
@@ -426,6 +511,7 @@ class TestLoadCliReference:
 # ═══════════════════════════════════════════════════════════
 # Workflow form payload
 # ═══════════════════════════════════════════════════════════
+
 
 class TestWorkflowFormPayload:
     def test_basic(self):
@@ -442,12 +528,14 @@ class TestWorkflowFormPayload:
 # Update config phase order
 # ═══════════════════════════════════════════════════════════
 
+
 class TestUpdateConfigPhaseOrder:
     def test_empty_phases(self, monkeypatch):
         db = MagicMock()
         db.get_phases.return_value = []
         monkeypatch.setattr("project_workflow.interfaces.ui._app_state", MagicMock(get_db=lambda: db))
         from project_workflow import config
+
         original = config.PHASE_ORDER[:]
         _update_config_phase_order()
         assert config.PHASE_ORDER == original

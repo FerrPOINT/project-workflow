@@ -11,7 +11,6 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
 
 DB_DIR = Path.home() / ".project-workflow"
 DB_PATH = DB_DIR / "conversation.db"
@@ -20,12 +19,12 @@ DB_PATH = DB_DIR / "conversation.db"
 @dataclass
 class Message:
     id: int
-    task_id: str          # internal task_id (e.g. "TASK-42")
-    task_key: str         # e.g. "AAT-123"
-    role: str             # user | system | wizard | agent
+    task_id: str  # internal task_id (e.g. "TASK-42")
+    task_key: str  # e.g. "AAT-123"
+    role: str  # user | system | wizard | agent
     content: str
-    phase_id: Optional[str] = None
-    tags: Optional[str] = None   # comma-separated tags: done,fail,changelog,auto
+    phase_id: str | None = None
+    tags: str | None = None  # comma-separated tags: done,fail,changelog,auto
     created_at: str = ""  # ISO UTC
 
     def to_dict(self) -> dict:
@@ -69,13 +68,14 @@ def _ensure_db() -> sqlite3.Connection:
 
 # ── Write ───────────────────────────────────────────────────────────────
 
+
 def add_message(
     task_id: str,
     task_key: str,
     role: str,
     content: str,
-    phase_id: Optional[str] = None,
-    tags: Optional[str] = None,
+    phase_id: str | None = None,
+    tags: str | None = None,
 ) -> int:
     """Добавить сообщение в историю задачи. Возвращает row id."""
     now = datetime.now(timezone.utc).isoformat()
@@ -94,7 +94,7 @@ def add_message(
         conn.close()
 
 
-def add_user_note(task_id: str, task_key: str, content: str, phase_id: Optional[str] = None) -> int:
+def add_user_note(task_id: str, task_key: str, content: str, phase_id: str | None = None) -> int:
     """Быстрый entrypoint для пользовательского отчёта."""
     return add_message(task_id, task_key, "user", content, phase_id, tags="note")
 
@@ -102,7 +102,9 @@ def add_user_note(task_id: str, task_key: str, content: str, phase_id: Optional[
 def add_phase_transition(task_id: str, task_key: str, from_phase: str, to_phase: str) -> None:
     """Записать переход фазы в историю."""
     add_message(
-        task_id, task_key, "system",
+        task_id,
+        task_key,
+        "system",
         f"Phase transition: {from_phase} → {to_phase}",
         phase_id=to_phase,
         tags="transition",
@@ -120,12 +122,13 @@ def add_wizard_answer(task_id: str, task_key: str, phase_id: str, answer: str, o
 
 # ── Read ──────────────────────────────────────────────────────────────
 
+
 def get_messages(
     task_id: str,
-    limit: Optional[int] = 200,
-    phase_id: Optional[str] = None,
-    tags: Optional[str] = None,
-) -> List[Message]:
+    limit: int | None = 200,
+    phase_id: str | None = None,
+    tags: str | None = None,
+) -> list[Message]:
     """Получить историю сообщений по задаче (от новых к старым)."""
     conn = _ensure_db()
     try:
@@ -148,12 +151,12 @@ def get_messages(
         conn.close()
 
 
-def get_latest_user_notes(task_id: str, limit: int = 20) -> List[Message]:
+def get_latest_user_notes(task_id: str, limit: int = 20) -> list[Message]:
     """Последние пользовательские отчёты по задаче."""
     return get_messages(task_id, limit=limit, tags="note")
 
 
-def get_last_phase(task_id: str) -> Optional[str]:
+def get_last_phase(task_id: str) -> str | None:
     """Последняя известная фаза из истории."""
     conn = _ensure_db()
     try:
@@ -181,7 +184,8 @@ def check_keyword_in_history(task_id: str, keyword: str, limit: int = 100) -> bo
 
 # ── Summary / Digest ──────────────────────────────────────────────────
 
-def build_status_digest(task_id: str, task_key: str, current_phase: Optional[str] = None) -> dict:
+
+def build_status_digest(task_id: str, task_key: str, current_phase: str | None = None) -> dict:
     """Собрать краткий дайджест статуса из истории."""
     notes = get_messages(task_id, limit=50)
     phase_transitions = [m for m in notes if m.tags == "transition"]
@@ -204,5 +208,3 @@ def build_status_digest(task_id: str, task_key: str, current_phase: Optional[str
         "has_info": has_info,
         "latest_notes": [m.content[:120] for m in notes if m.role == "user"][-5:],
     }
-
-

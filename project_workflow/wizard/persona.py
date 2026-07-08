@@ -9,6 +9,7 @@ Rules:
 - BLOCKED/HARD_FAIL → explicit blocker + what to fix.
 - Always end with one actionable next step.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -38,18 +39,14 @@ class PersonaAdapter:
 
         if is_partial:
             lines.append("Ты сделал часть, доделай:")
-            instructions, checks, evidence = PersonaAdapter._not_done_items(
-                result, covered, missing
-            )
+            instructions, checks, evidence = PersonaAdapter._not_done_items(result, covered, missing)
         elif is_pass:
             instructions, checks, evidence = PersonaAdapter._next_phase_items(result)
             next_name = result.get("next_phase_name") or result.get("next_phase") or ""
             if next_name:
                 instructions.insert(0, f"Перейди к шагу: {next_name}")
         else:
-            instructions, checks, evidence = PersonaAdapter._not_done_items(
-                result, covered, missing
-            )
+            instructions, checks, evidence = PersonaAdapter._not_done_items(result, covered, missing)
             if blockers:
                 instructions.insert(0, f"Блокер: {blockers[0]}")
             if missing and not blockers:
@@ -102,9 +99,7 @@ class PersonaAdapter:
         return instructions, checks, evidence
 
     @staticmethod
-    def _flatten_parallel(
-        contract: dict[str, Any], covered: set[str]
-    ) -> tuple[list[str], list[str], list[str]]:
+    def _flatten_parallel(contract: dict[str, Any], covered: set[str]) -> tuple[list[str], list[str], list[str]]:
         instructions: list[str] = []
         checks: list[str] = []
         evidence: list[str] = []
@@ -128,8 +123,7 @@ class PersonaAdapter:
                 partner_code,
             )
             instructions.append(
-                f"{name} — параллельно с {partner}, агент: {agent}"
-                + (f" | toolsets: {toolsets}" if toolsets else "")
+                f"{name} — параллельно с {partner}, агент: {agent}" + (f" | toolsets: {toolsets}" if toolsets else "")
             )
             for item in detail.get("instructions", []) or []:
                 instructions.append(f"  {item}")

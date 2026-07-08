@@ -2,6 +2,7 @@
 
 The DSN is read from config.Settings.DATABASE_URL.
 """
+
 from __future__ import annotations
 
 import logging
@@ -13,9 +14,9 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import NullPool
-from sqlalchemy.exc import SQLAlchemyError
 
 from project_workflow.config import get_settings
 
@@ -38,9 +39,7 @@ def _is_sqlite(url: str) -> bool:
 def get_database_url() -> str:
     url = get_settings().DATABASE_URL
     if not url:
-        raise RuntimeError(
-            "DATABASE_URL is not configured. Set it to a PostgreSQL or SQLite DSN."
-        )
+        raise RuntimeError("DATABASE_URL is not configured. Set it to a PostgreSQL or SQLite DSN.")
     return url
 
 

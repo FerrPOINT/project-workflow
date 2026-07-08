@@ -1,4 +1,5 @@
 """Tests for interfaces.ui.skills catalog helpers."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -42,6 +43,7 @@ def test_load_skills_catalog_refreshes(monkeypatch):
     scanner = MagicMock(return_value=[{"name": "cached"}])
     # The function resolves the scanner via the parent ui package namespace.
     import project_workflow.interfaces.ui as ui_pkg
+
     monkeypatch.setattr(ui_pkg, "_scan_hermes_skills", scanner)
     first = skills_mod._load_skills_catalog()
     assert first == [{"name": "cached"}]

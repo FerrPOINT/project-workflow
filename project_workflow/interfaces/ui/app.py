@@ -1,4 +1,5 @@
 """FastAPI application factory and route wiring."""
+
 from __future__ import annotations
 
 import logging
@@ -8,8 +9,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
-from starlette.middleware.base import BaseHTTPMiddleware
 from sqlalchemy import text
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from ... import __version__
 from ...infrastructure.db.session import get_engine
@@ -38,6 +39,7 @@ class _RequestLoggingMiddleware(BaseHTTPMiddleware):
 async def _health() -> JSONResponse:
     """Liveness/readiness probe with DB connectivity check."""
     from ...infrastructure.db import session as _session
+
     health = {"ok": True, "version": __version__, "database": "unknown"}
     status = 200
     start = time.perf_counter()
@@ -117,6 +119,7 @@ def create_app() -> FastAPI:
     app.post("/api/agents", response_model=None)(api.api_agent_create)
     app.put("/api/agents/{agent_id}", response_model=None)(api.api_agent_update)
     app.delete("/api/agents/{agent_id}", response_model=None)(api.api_agent_delete)
+
     # Explicit 404 stubs for endpoints intentionally not implemented by this UI.
     async def _not_found() -> JSONResponse:
         return JSONResponse({"ok": False, "error": "Not found"}, status_code=404)

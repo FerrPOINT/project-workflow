@@ -8,7 +8,6 @@ import pytest
 
 from project_workflow import config
 
-
 _ORIGINAL_PHASE_ORDER = list(config.PHASE_ORDER)
 
 
@@ -34,6 +33,7 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "SMOKE_SEED_PATH", smoke_seed_path)
 
     from project_workflow.infrastructure import db as db_module
+
     monkeypatch.setattr(db_module, "DB_PATH", test_db)
 
     from project_workflow.application import state as app_state
@@ -63,4 +63,3 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
     reset_engine()
     config.get_settings.cache_clear()
     config.PHASE_ORDER[:] = list(_ORIGINAL_PHASE_ORDER)
-

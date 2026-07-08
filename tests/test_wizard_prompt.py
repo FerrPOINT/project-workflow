@@ -1,4 +1,5 @@
 """Tests for wizard.prompt.build_phase_prompt."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -18,7 +19,10 @@ def test_prompt_for_current_phase():
     phase = _phase("p1")
     phase_map = {"p1": phase}
     result = build_phase_prompt(
-        "T-1", phase_map, [], "p1",
+        "T-1",
+        phase_map,
+        [],
+        "p1",
         {"workflow_name": "W", "cli_actor": {"description": "D", "entrypoint": "E"}},
     )
     assert "T-1" in result
@@ -27,7 +31,10 @@ def test_prompt_for_current_phase():
 
 def test_prompt_for_missing_phase():
     result = build_phase_prompt(
-        "T-1", {}, [], "p1",
+        "T-1",
+        {},
+        [],
+        "p1",
         {"workflow_name": "W"},
         phase_id="p99",
     )
@@ -39,7 +46,10 @@ def test_prompt_parallel_group():
     phase_map = {"p1": phase}
     with patch_contract_builder():
         result = build_phase_prompt(
-            "T-1", phase_map, [], "p1",
+            "T-1",
+            phase_map,
+            [],
+            "p1",
             {"workflow_name": "W"},
             phase_id="p1",
         )
@@ -51,7 +61,10 @@ def test_prompt_delegated():
     phase_map = {"p1": phase}
     with patch_contract_builder(delegate_agent="a1"):
         result = build_phase_prompt(
-            "T-1", phase_map, [], "p1",
+            "T-1",
+            phase_map,
+            [],
+            "p1",
             {"workflow_name": "W"},
             phase_id="p1",
         )
@@ -59,7 +72,8 @@ def test_prompt_delegated():
 
 
 def patch_contract_builder(delegate_agent=None):
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import MagicMock, patch
+
     from project_workflow.wizard import prompt as prompt_mod
 
     def _inner(_all_phases):

@@ -14,15 +14,14 @@ from __future__ import annotations
 
 import os
 import sys
-from typing import Any, Optional
+from typing import Any
 
 import click
 
-from ...infrastructure.db.uow import SAUnitOfWork
 from ... import wizard
+from ...infrastructure.db.uow import SAUnitOfWork
 from ...wizard import format_result
-from .core import cli, out_json, _require_valid_key
-from .core import console, WARN
+from .core import WARN, _require_valid_key, cli, console, out_json
 
 # ── Guard: новые команды запрещены ──────────────────────────────────────
 # Если кто-то добавит @cli.command() сюда — тесты поймают.
@@ -33,6 +32,7 @@ from .core import console, WARN
 #  COMMAND: step
 # ═══════════════════════════════════════════════════════════════════════
 
+
 @cli.command()
 @click.option("--task", required=True, help="Task key (e.g. TASK-42)")
 @click.option("--report", default=None, help="Отчёт исполнителя CLI (оценить и перейти)")
@@ -40,7 +40,7 @@ from .core import console, WARN
 def step_cmd(
     ctx: click.Context,
     task: str,
-    report: Optional[str],
+    report: str | None,
 ) -> None:
     """🚶 Step — движение по workflow: показать текущую фазу или отчитаться и перейти.
 
@@ -72,13 +72,15 @@ def step_cmd(
     if jmode:
         # For completed tasks return a compact contract without the heavy prompt.
         if engine.task and engine.task.get("status") == "done":
-            out_json({
-                "ok": True,
-                "task_key": task_key,
-                "phase": engine.current_phase,
-                "status": "done",
-                "instructions": engine.format_current_phase_instructions(),
-            })
+            out_json(
+                {
+                    "ok": True,
+                    "task_key": task_key,
+                    "phase": engine.current_phase,
+                    "status": "done",
+                    "instructions": engine.format_current_phase_instructions(),
+                }
+            )
             return
         out_json({"ok": True, "task_key": task_key, "phase": engine.current_phase, "prompt": prompt})
         return
@@ -91,11 +93,12 @@ def step_cmd(
 #  COMMAND: history
 # ═══════════════════════════════════════════════════════════════════════
 
+
 @cli.command()
 @click.option("--task", required=True, help="Task key")
 @click.option("--n", type=int, default=None, help="Количество записей (по умолчанию: все)")
 @click.pass_context
-def history_cmd(ctx: click.Context, task: str, n: Optional[int]) -> None:
+def history_cmd(ctx: click.Context, task: str, n: int | None) -> None:
     """📜 History — история отчётов, переходов и статусов по задаче.
 
     Usage:
@@ -104,7 +107,6 @@ def history_cmd(ctx: click.Context, task: str, n: Optional[int]) -> None:
     """
     task_key = _require_valid_key(task)
     jmode = ctx.obj.get("json_mode", False)
-
 
     with SAUnitOfWork() as uow:
         task_obj = uow.tasks.get_by_key(task_key)
@@ -124,21 +126,23 @@ def history_cmd(ctx: click.Context, task: str, n: Optional[int]) -> None:
             runs.append(rd)
 
     if jmode:
-        out_json({
-            "ok": True,
-            "task_key": task_key,
-            "count": len(runs),
-            "records": [
-                {
-                    "phase_code": r.get("phase_code"),
-                    "verdict": r.get("verdict"),
-                    "next_phase": r.get("next_phase_code"),
-                    "rollback_phase": r.get("rollback_phase_code"),
-                    "created_at": r.get("created_at"),
-                }
-                for r in runs
-            ],
-        })
+        out_json(
+            {
+                "ok": True,
+                "task_key": task_key,
+                "count": len(runs),
+                "records": [
+                    {
+                        "phase_code": r.get("phase_code"),
+                        "verdict": r.get("verdict"),
+                        "next_phase": r.get("next_phase_code"),
+                        "rollback_phase": r.get("rollback_phase_code"),
+                        "created_at": r.get("created_at"),
+                    }
+                    for r in runs
+                ],
+            }
+        )
         return
 
     if not runs:

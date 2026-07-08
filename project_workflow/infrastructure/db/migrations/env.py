@@ -1,13 +1,11 @@
+import os
+import sys
 from logging.config import fileConfig
 from pathlib import Path
-import sys
-
-import os
 from typing import Any
 
-from sqlalchemy import create_engine, pool, text
-
 from alembic import context
+from sqlalchemy import create_engine, pool, text
 
 # Make package importable when alembic is run from repo root.
 ROOT = Path(__file__).resolve().parents[3]

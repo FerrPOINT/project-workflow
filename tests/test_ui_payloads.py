@@ -1,4 +1,5 @@
 """Tests for interfaces.ui.payloads."""
+
 from __future__ import annotations
 
 from project_workflow.interfaces.ui.payloads import _phase_create_payload, _workflow_form_payload

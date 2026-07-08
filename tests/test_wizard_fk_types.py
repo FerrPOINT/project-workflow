@@ -1,13 +1,15 @@
 """Tests that wizard.py passes int phase_id to DB FK columns."""
+
 """Tests that wizard.py passes int phase_id to DB FK columns."""
 
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 pytestmark = [pytest.mark.wizard]
 
-from project_workflow.wizard.models import Phase
 from project_workflow.wizard import WizardEngine
+from project_workflow.wizard.models import Phase
 
 
 class TestRecordTransitionTypes:
@@ -21,8 +23,7 @@ class TestRecordTransitionTypes:
 
         engine.task = {"id": 7, "current_phase": engine.current_phase, "status": "active", "project_id": 1}
         engine.db = MagicMock()
-        with patch.object(engine.db, "add_task_history") as mock_history, \
-             patch.object(engine.db, "update_task") as _:
+        with patch.object(engine.db, "add_task_history") as mock_history, patch.object(engine.db, "update_task") as _:
             engine._record_transition(ph, "pass", "2", None)
 
         # First call: mark current phase done
@@ -42,8 +43,7 @@ class TestRecordTransitionTypes:
 
         engine.task = {"id": 7, "current_phase": engine.current_phase, "status": "active", "project_id": 1}
         engine.db = MagicMock()
-        with patch.object(engine.db, "add_task_history") as mock_history, \
-             patch.object(engine.db, "update_task") as _:
+        with patch.object(engine.db, "add_task_history") as mock_history, patch.object(engine.db, "update_task") as _:
             engine._record_transition(ph_current, "pass", "2", None)
 
         # Second call: next phase pending
@@ -63,8 +63,7 @@ class TestRecordTransitionTypes:
 
         engine.task = {"id": 7, "current_phase": engine.current_phase, "status": "active", "project_id": 1}
         engine.db = MagicMock()
-        with patch.object(engine.db, "add_task_history") as mock_history, \
-             patch.object(engine.db, "update_task") as _:
+        with patch.object(engine.db, "add_task_history") as mock_history, patch.object(engine.db, "update_task") as _:
             engine._record_transition(ph, "rollback", None, "0")
 
         # Second call: rollback target pending
@@ -83,15 +82,21 @@ class TestRecordTransitionTypes:
 
         engine.task = {"id": 7, "current_phase": engine.current_phase, "status": "active", "project_id": 1}
         engine.db = MagicMock()
-        with patch.object(engine, "_get_previously_covered", return_value=set()), \
-             patch("project_workflow.wizard.evaluate.OllamaClient") as mock_client, \
-             patch.object(engine.db, "create_supervisor_run") as mock_run, \
-             patch.object(engine.db, "get_task", return_value=engine.task), \
-             patch.object(engine, "_record_transition"):
+        with (
+            patch.object(engine, "_get_previously_covered", return_value=set()),
+            patch("project_workflow.wizard.evaluate.OllamaClient") as mock_client,
+            patch.object(engine.db, "create_supervisor_run") as mock_run,
+            patch.object(engine.db, "get_task", return_value=engine.task),
+            patch.object(engine, "_record_transition"),
+        ):
             mock_client.return_value.chat.return_value = {
                 "verdict": "PASS",
-                "covered": [], "missing": [], "blockers": [],
-                "message": "ok", "next_phase": None, "next_phase_name": None,
+                "covered": [],
+                "missing": [],
+                "blockers": [],
+                "message": "ok",
+                "next_phase": None,
+                "next_phase_name": None,
                 "confidence": 1.0,
             }
             engine.evaluate_llm("report ok", ph)

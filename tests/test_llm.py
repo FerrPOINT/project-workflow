@@ -1,8 +1,9 @@
 """Tests for LLM-based evaluate (OllamaClient, PromptBuilder, ResponseParser)."""
+
 """Tests for LLM-based evaluate (OllamaClient, PromptBuilder, ResponseParser)."""
 
 import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
@@ -10,10 +11,10 @@ import requests
 pytestmark = [pytest.mark.unit]
 
 from project_workflow.infrastructure.llm import (
+    LlmVerdict,
     OllamaClient,
     PromptBuilder,
     ResponseParser,
-    LlmVerdict,
 )
 
 
@@ -42,13 +43,16 @@ class FakeEvidence:
     def __init__(self, item):
         self.item = item
 
+
 class TestOllamaClient:
     """Unit tests for Ollama HTTP wrapper."""
 
     def test_default_env_vars(self, monkeypatch):
         monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
         from importlib import reload
+
         import project_workflow.infrastructure.llm as llm_mod
+
         reload(llm_mod)
         assert llm_mod.OLLAMA_BASE_URL == "http://localhost:11434"
         assert llm_mod.OLLAMA_MODEL == "kimi-k2.6"
@@ -56,7 +60,9 @@ class TestOllamaClient:
     def test_chat_parses_json_response(self, monkeypatch):
         monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
         from importlib import reload
+
         import project_workflow.infrastructure.llm as llm_mod
+
         reload(llm_mod)
         client = llm_mod.OllamaClient()
         expected = {"verdict": "PASS", "confidence": 0.95}
@@ -73,7 +79,9 @@ class TestOllamaClient:
         """Test cloud mode with OpenAI-compatible endpoint."""
         monkeypatch.setenv("OLLAMA_BASE_URL", "https://ollama.com/v1")
         from importlib import reload
+
         import project_workflow.infrastructure.llm as llm_mod
+
         reload(llm_mod)
         client = llm_mod.OllamaClient(api_key="test-key")
         assert client.is_cloud is True
@@ -81,9 +89,7 @@ class TestOllamaClient:
         with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
             mock_post.return_value = MagicMock(
                 status_code=200,
-                json=lambda: {
-                    "choices": [{"message": {"content": json.dumps(expected)}}]
-                },
+                json=lambda: {"choices": [{"message": {"content": json.dumps(expected)}}]},
                 raise_for_status=lambda: None,
             )
             result = client.chat("system", "user")
@@ -148,9 +154,7 @@ class TestPromptBuilder:
 
     def test_build_user_prompt_with_previously_covered(self):
         phase = FakePhase(instructions=[FakeInstruction("Run tests")])
-        prompt = PromptBuilder.build_user_prompt(
-            "T-1", phase, "r", previously_covered=["Run tests"]
-        )
+        prompt = PromptBuilder.build_user_prompt("T-1", phase, "r", previously_covered=["Run tests"])
         assert "ALREADY COMPLETED" in prompt
         assert "Run tests" in prompt
 
@@ -247,12 +251,14 @@ class TestWizardEngineEvaluateLLM:
     def engine(self, tmp_path, monkeypatch):
         test_db = tmp_path / "workflow.db"
         import project_workflow.infrastructure.db as db_module
+
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
         monkeypatch.setattr("project_workflow.wizard.SMART_EVALUATE", True)
         with patch("project_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             from project_workflow.wizard import WizardEngine
+
             engine = WizardEngine("TASK-LLM-1", repo=str(tmp_path))
         return engine
 
@@ -324,11 +330,13 @@ class TestWizardEngineEvaluateLLMWithRule:
     def engine(self, tmp_path, monkeypatch):
         test_db = tmp_path / "workflow.db"
         import project_workflow.infrastructure.db as db_module
+
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
         with patch("project_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             from project_workflow.wizard import WizardEngine
+
             engine = WizardEngine("TASK-RULE-1", repo=str(tmp_path))
         return engine
 
@@ -404,12 +412,14 @@ class TestWizardEngineLLMIntegrationDB:
     def engine(self, tmp_path, monkeypatch):
         test_db = tmp_path / "workflow.db"
         import project_workflow.infrastructure.db as db_module
+
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
         monkeypatch.setattr("project_workflow.wizard.SMART_EVALUATE", True)
         with patch("project_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             from project_workflow.wizard import WizardEngine
+
             engine = WizardEngine("DB-LLM-1", repo=str(tmp_path))
         return engine
 

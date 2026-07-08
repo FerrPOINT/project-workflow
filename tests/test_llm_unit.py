@@ -1,4 +1,5 @@
 """Unit tests for llm.py without network calls."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -33,16 +34,20 @@ class TestEvaluateLlmReportVerdicts:
     def test_blocked_sets_default_blocker(self):
         engine = _make_engine()
         phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[])
-        with patch.object(OllamaClient, "chat", return_value={
-            "verdict": "BLOCKED",
-            "covered": [],
-            "missing": ["x"],
-            "blockers": [],
-            "message": "blocked",
-            "next_phase": None,
-            "next_phase_name": None,
-            "confidence": 0.7,
-        }):
+        with patch.object(
+            OllamaClient,
+            "chat",
+            return_value={
+                "verdict": "BLOCKED",
+                "covered": [],
+                "missing": ["x"],
+                "blockers": [],
+                "message": "blocked",
+                "next_phase": None,
+                "next_phase_name": None,
+                "confidence": 0.7,
+            },
+        ):
             result = evaluate_llm_report("r", phase, engine)
         assert result["verdict"] == "BLOCKED"
         assert result["blockers"] == ["LLM identified blocker"]
@@ -51,16 +56,20 @@ class TestEvaluateLlmReportVerdicts:
     def test_rollback_uses_rollback_target(self):
         engine = _make_engine()
         phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[], rollback_target="0")
-        with patch.object(OllamaClient, "chat", return_value={
-            "verdict": "ROLLBACK",
-            "covered": [],
-            "missing": [],
-            "blockers": [],
-            "message": "rb",
-            "next_phase": None,
-            "next_phase_name": None,
-            "confidence": 0.6,
-        }):
+        with patch.object(
+            OllamaClient,
+            "chat",
+            return_value={
+                "verdict": "ROLLBACK",
+                "covered": [],
+                "missing": [],
+                "blockers": [],
+                "message": "rb",
+                "next_phase": None,
+                "next_phase_name": None,
+                "confidence": 0.6,
+            },
+        ):
             result = evaluate_llm_report("r", phase, engine)
         assert result["verdict"] == "ROLLBACK"
         assert result["rollback_target"] == "0"
@@ -69,16 +78,20 @@ class TestEvaluateLlmReportVerdicts:
     def test_delegate_records_transition(self):
         engine = _make_engine()
         phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[])
-        with patch.object(OllamaClient, "chat", return_value={
-            "verdict": "DELEGATE",
-            "covered": [],
-            "missing": [],
-            "blockers": [],
-            "message": "delegate",
-            "next_phase": None,
-            "next_phase_name": None,
-            "confidence": 0.5,
-        }):
+        with patch.object(
+            OllamaClient,
+            "chat",
+            return_value={
+                "verdict": "DELEGATE",
+                "covered": [],
+                "missing": [],
+                "blockers": [],
+                "message": "delegate",
+                "next_phase": None,
+                "next_phase_name": None,
+                "confidence": 0.5,
+            },
+        ):
             result = evaluate_llm_report("r", phase, engine)
         assert result["verdict"] == "DELEGATE"
         engine._record_transition.assert_called_once()
@@ -89,16 +102,20 @@ class TestEvaluateLlmReportVerdicts:
         engine.all_phases = [Phase(code="1", name="One", instructions=[], checks=[], evidence=[]), next_phase]
         engine.phase_map = {"2": next_phase}
         phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[])
-        with patch.object(OllamaClient, "chat", return_value={
-            "verdict": "PASS",
-            "covered": ["a"],
-            "missing": [],
-            "blockers": [],
-            "message": "ok",
-            "next_phase": None,
-            "next_phase_name": None,
-            "confidence": 0.9,
-        }):
+        with patch.object(
+            OllamaClient,
+            "chat",
+            return_value={
+                "verdict": "PASS",
+                "covered": ["a"],
+                "missing": [],
+                "blockers": [],
+                "message": "ok",
+                "next_phase": None,
+                "next_phase_name": None,
+                "confidence": 0.9,
+            },
+        ):
             result = evaluate_llm_report("r", phase, engine)
         assert result["verdict"] == "PASS"
         assert result["next_phase"] == "2"
@@ -109,7 +126,9 @@ class TestLoadApiKey:
     def test_env_key(self, monkeypatch):
         monkeypatch.setenv("OLLAMA_API_KEY", "env-token")
         import importlib
+
         import project_workflow.infrastructure.llm
+
         importlib.reload(project_workflow.infrastructure.llm)
         assert project_workflow.infrastructure.llm._load_api_key() == "env-token"
 
@@ -120,7 +139,9 @@ class TestLoadApiKey:
             env_file.parent.mkdir(parents=True, exist_ok=True)
             env_file.write_text("OLLAMA_API_KEY=file-token\n")
             import importlib
+
             import project_workflow.infrastructure.llm
+
             importlib.reload(project_workflow.infrastructure.llm)
             assert project_workflow.infrastructure.llm._load_api_key() == "file-token"
         finally:
@@ -133,14 +154,18 @@ class TestLoadApiKey:
         if env_file.exists():
             env_file.unlink()
         import importlib
+
         import project_workflow.infrastructure.llm
+
         importlib.reload(project_workflow.infrastructure.llm)
         assert project_workflow.infrastructure.llm._load_api_key() == ""
 
     def test_fresh_import_env(self, monkeypatch):
         monkeypatch.setenv("OLLAMA_API_KEY", "fresh-token")
         import importlib
+
         import project_workflow.infrastructure.llm
+
         importlib.reload(project_workflow.infrastructure.llm)
         assert project_workflow.infrastructure.llm._load_api_key() == "fresh-token"
         assert project_workflow.infrastructure.llm.OLLAMA_API_KEY == "fresh-token"
@@ -252,7 +277,8 @@ class TestPromptBuilder:
         assert report in prompt
 
     def test_build_user_prompt_with_lists(self):
-        from project_workflow.wizard.models import PhaseInstruction, PhaseCheck, PhaseEvidence
+        from project_workflow.wizard.models import PhaseCheck, PhaseEvidence, PhaseInstruction
+
         phase = Phase(
             code="1",
             name="Phase One",
@@ -290,13 +316,15 @@ class TestResponseParser:
         assert v.verdict == "PARTIAL"
 
     def test_parse_coerces_types(self):
-        v = ResponseParser.parse({
-            "verdict": "blocked",
-            "covered": "single",
-            "missing": None,
-            "blockers": [],
-            "confidence": None,
-        })
+        v = ResponseParser.parse(
+            {
+                "verdict": "blocked",
+                "covered": "single",
+                "missing": None,
+                "blockers": [],
+                "confidence": None,
+            }
+        )
         assert v.covered == ["single"]
         assert v.missing == []
         assert v.confidence == 0.5

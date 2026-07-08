@@ -7,7 +7,6 @@ pytestmark = [pytest.mark.ui]
 
 from project_workflow.interfaces.ui import _seed_to_sqlite, app
 
-
 client = TestClient(app)
 
 
@@ -15,6 +14,7 @@ client = TestClient(app)
 def setup_db():
     """Ensure seed data exists for phase detail page tests."""
     from project_workflow.infrastructure.db.uow import SAUnitOfWork
+
     uow = SAUnitOfWork()
     if not list(uow.workflows.list()) and not list(uow.projects.list()) and not list(uow.tasks.list()):
         _seed_to_sqlite()

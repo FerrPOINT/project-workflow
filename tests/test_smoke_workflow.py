@@ -33,6 +33,7 @@ def _patch_runtime(monkeypatch, tmp_path: Path) -> Path:
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{workflow_db}")
     from project_workflow import config
     from project_workflow.infrastructure.db.session import reset_engine
+
     reset_engine()
     config.get_settings.cache_clear()
     return workflow_db
@@ -42,6 +43,7 @@ def _patch_runtime(monkeypatch, tmp_path: Path) -> Path:
 def _reset_engine_per_test(monkeypatch, tmp_path):
     """Ensure each smoke test gets its own isolated DB engine/session."""
     from project_workflow.infrastructure.db.session import reset_engine
+
     reset_engine()
 
 
@@ -89,7 +91,7 @@ def test_smoke_phase_prompt_surfaces_parallel_agent_and_rollback_metadata(tmp_pa
     parallel_prompt = engine.get_phase_prompt("smoke.parallel-a")
     assert "ПАРАЛЛЕЛЬНАЯ ГРУППА ФАЗ" in parallel_prompt
     assert "Parser & Data Layer" in parallel_prompt  # name shown
-    assert "smoke.parallel-b" in parallel_prompt   # parallel partner (code)
+    assert "smoke.parallel-b" in parallel_prompt  # parallel partner (code)
     assert "Агент: backend" in parallel_prompt  # per-phase agent
     assert "Параллельные фазы (выполняются одновременно" in parallel_prompt
 

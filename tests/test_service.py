@@ -1,4 +1,5 @@
 """Tests for service.py — PhaseService."""
+
 from __future__ import annotations
 
 import json
@@ -7,8 +8,8 @@ import pytest
 
 pytestmark = [pytest.mark.unit]
 
-from project_workflow.infrastructure.db.schema import ensure_phase_catalog
 from project_workflow.application.phase_service import PhaseService
+from project_workflow.infrastructure.db.schema import ensure_phase_catalog
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
 
@@ -46,9 +47,12 @@ class TestNormalizeAndSerializeSkills:
 class TestSaveInstructions:
     def test_save_and_get_phase_detail(self, svc, fresh_db):
         phase = fresh_db.phases.get_by_code("1")
-        ids = svc.save_instructions(phase.id, [
-            {"description": "Run tests", "execution_type": "sync", "skills": ["testing"]},
-        ])
+        ids = svc.save_instructions(
+            phase.id,
+            [
+                {"description": "Run tests", "execution_type": "sync", "skills": ["testing"]},
+            ],
+        )
         assert len(ids) == 1
         detail = svc.get_phase_detail(phase.id)
         assert detail["instructions"][0]["description"] == "Run tests"

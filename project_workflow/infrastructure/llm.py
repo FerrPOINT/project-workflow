@@ -204,7 +204,7 @@ class PromptBuilder:
         "9. verdict = ROLLBACK — worker explicitly cannot/will not do this.\n"
         "10. verdict = DELEGATE — worker delegates to another agent.\n\n"
         "Output STRICT JSON with these keys:\n"
-        '{\n'
+        "{\n"
         '  "verdict": "PASS" | "PARTIAL" | "BLOCKED" | "ROLLBACK" | "DELEGATE",\n'
         '  "covered": ["item description"],\n'
         '  "missing": ["item description"],\n'
@@ -213,7 +213,7 @@ class PromptBuilder:
         '  "next_phase": "phase_code or null",\n'
         '  "next_phase_name": "phase_name or null",\n'
         '  "confidence": 0.0-1.0\n'
-        '}\n'
+        "}\n"
     )
 
     @staticmethod
@@ -246,20 +246,24 @@ class PromptBuilder:
                 lines.append(f"  • {desc}")
 
         if previously_covered:
-            lines.extend([
-                "",
-                "ALREADY COMPLETED IN PREVIOUS REPORTS (count as done):",
-            ])
+            lines.extend(
+                [
+                    "",
+                    "ALREADY COMPLETED IN PREVIOUS REPORTS (count as done):",
+                ]
+            )
             for item in previously_covered:
                 lines.append(f"  ✓ {item}")
 
-        lines.extend([
-            "",
-            "WORKER REPORT:",
-            f'"""{report}"""',
-            "",
-            "Evaluate this report and return strict JSON.",
-        ])
+        lines.extend(
+            [
+                "",
+                "WORKER REPORT:",
+                f'"""{report}"""',
+                "",
+                "Evaluate this report and return strict JSON.",
+            ]
+        )
         return "\n".join(lines)
 
 

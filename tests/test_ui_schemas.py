@@ -1,4 +1,5 @@
 """Tests for interfaces.ui.schemas."""
+
 from __future__ import annotations
 
 import pytest

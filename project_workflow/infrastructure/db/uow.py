@@ -1,4 +1,5 @@
 """SQLAlchemy Unit of Work."""
+
 from __future__ import annotations
 
 from typing import Any, Literal
@@ -44,12 +45,14 @@ class SAUnitOfWork(UnitOfWork):
             self._session = Session(bind=db_path_or_engine, expire_on_commit=False)
         elif db_path_or_engine is None:
             from ... import config
+
             url = config.get_settings().DATABASE_URL
             target: str | None
             if url and "://" in url:
                 target = url
             else:
                 from project_workflow.infrastructure import db
+
                 target = str(getattr(db, "get_db_path", lambda: getattr(db, "DB_PATH", ""))())
             if not target:
                 target = None
@@ -70,11 +73,11 @@ class SAUnitOfWork(UnitOfWork):
         self._supervisor_runs: SASupervisorRunRepository = SASupervisorRunRepository(self._session)
         self._cli_history: SACLIHistoryRepository = SACLIHistoryRepository(self._session)
 
-    def clone(self) -> "SAUnitOfWork":
+    def clone(self) -> SAUnitOfWork:
         """Return a new UoW bound to the same database URL."""
         return SAUnitOfWork()
 
-    def __enter__(self) -> "SAUnitOfWork":
+    def __enter__(self) -> SAUnitOfWork:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> Literal[False]:
@@ -149,6 +152,7 @@ class SAUnitOfWork(UnitOfWork):
 
     def create_phase(self, *args: Any, **kwargs: Any) -> int:
         from project_workflow.application.phase import PhaseServiceApp
+
         if args and isinstance(args[0], dict) and not kwargs:
             kwargs = args[0]
         data = dict(kwargs)
@@ -306,15 +310,18 @@ class SAUnitOfWork(UnitOfWork):
 
     def create_project(self, data: dict[str, Any]) -> dict[str, Any]:
         from project_workflow.application.project import ProjectService
+
         return ProjectService(self).create_project(data)
 
     def create_agent(self, data: dict[str, Any]) -> int:
         from project_workflow.application.agent import AgentService
+
         result = AgentService(self).create_agent(data)
         return result["id"]
 
     def create_workflow(self, data: dict[str, Any]) -> dict[str, Any]:
         from project_workflow.application.workflow import WorkflowService
+
         return WorkflowService(self).create_workflow(data)
 
     def delete_workflow(self, workflow_id: int) -> None:
@@ -325,6 +332,7 @@ class SAUnitOfWork(UnitOfWork):
 
     def create_task(self, *args: Any, **kwargs: Any) -> int:
         from project_workflow.application.task import TaskService
+
         if args and isinstance(args[0], dict) and not kwargs:
             kwargs = args[0]
         data = dict(kwargs)
@@ -389,30 +397,36 @@ class SAUnitOfWork(UnitOfWork):
 
     def _bootstrap_smoke_project_and_workflow(self) -> None:
         from project_workflow import config
+
         smoke_wf = self.workflows.get_by_name(config.SMOKE_WORKFLOW_NAME)
         if smoke_wf:
             smoke_wf_id = smoke_wf.id
         else:
-            smoke_wf_id = self.workflows.create({
-                "name": config.SMOKE_WORKFLOW_NAME,
-                "description": "Smoke test workflow",
-                "_skip_default_phase": True,
-            })
+            smoke_wf_id = self.workflows.create(
+                {
+                    "name": config.SMOKE_WORKFLOW_NAME,
+                    "description": "Smoke test workflow",
+                    "_skip_default_phase": True,
+                }
+            )
         smoke_project = self.projects.get_by_code(config.SMOKE_PROJECT_CODE)
         if smoke_project is None:
-            self.projects.create({
-                "workflow_id": smoke_wf_id,
-                "code": config.SMOKE_PROJECT_CODE,
-                "name": config.SMOKE_PROJECT_NAME,
-                "key_prefixes": list(config.SMOKE_TASK_KEY_PREFIXES),
-                "workflow_name": config.SMOKE_WORKFLOW_NAME,
-            })
+            self.projects.create(
+                {
+                    "workflow_id": smoke_wf_id,
+                    "code": config.SMOKE_PROJECT_CODE,
+                    "name": config.SMOKE_PROJECT_NAME,
+                    "key_prefixes": list(config.SMOKE_TASK_KEY_PREFIXES),
+                    "workflow_name": config.SMOKE_WORKFLOW_NAME,
+                }
+            )
         self.commit()
         self._ensure_smoke_phases()
 
     def _ensure_smoke_phases(self) -> None:
-        from project_workflow.infrastructure.db import schema
         from project_workflow import config
+        from project_workflow.infrastructure.db import schema
+
         smoke_wf = self.workflows.get_by_name(config.SMOKE_WORKFLOW_NAME)
         if not smoke_wf:
             return
@@ -477,15 +491,18 @@ class SAUnitOfWork(UnitOfWork):
 
     def _bootstrap_default_project(self) -> None:
         from project_workflow import config
+
         code = "TASK"
         if self.get_project_by_code(code) is None:
             default_wf = self.workflows.ensure_default_exists()
-            self.projects.create({
-                "workflow_id": default_wf.id,
-                "code": code,
-                "name": "Default Project",
-                "key_prefixes": list(config.DEFAULT_TASK_KEY_PREFIXES),
-            })
+            self.projects.create(
+                {
+                    "workflow_id": default_wf.id,
+                    "code": code,
+                    "name": "Default Project",
+                    "key_prefixes": list(config.DEFAULT_TASK_KEY_PREFIXES),
+                }
+            )
             self.commit()
 
     def get_default_workflow(self) -> Any | None:
@@ -554,6 +571,7 @@ class SAUnitOfWork(UnitOfWork):
         # For PostgreSQL make sure the target schema exists and search_path
         # is set before creating tables.
         from .session import ensure_schema
+
         ensure_schema(bind)
         Base.metadata.create_all(bind)
         return None

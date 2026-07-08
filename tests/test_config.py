@@ -10,7 +10,9 @@ from project_workflow import config as cfg_module
 class TestConfigEnvOverrides:
     def _reload_config(self):
         import importlib
+
         from project_workflow import config as cfg_module
+
         cfg_module.get_settings.cache_clear()
         importlib.reload(cfg_module)
         return cfg_module

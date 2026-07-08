@@ -1,7 +1,11 @@
 """Application services — use cases."""
+
 from __future__ import annotations
+
 from typing import Any
+
 from project_workflow.domain.repositories import UnitOfWork
+
 
 class AgentService:
     """Use cases for agents."""
@@ -13,7 +17,7 @@ class AgentService:
         aid = self._uow.agents.create(data)
         agent = self._uow.agents.get_by_id(aid)
         if not agent:
-            raise RuntimeError('Agent creation failed')
+            raise RuntimeError("Agent creation failed")
         self._uow.commit()
         return agent.to_dict()
 

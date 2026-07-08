@@ -2,21 +2,24 @@
 
 Public API: evaluate_llm_report(report, phase, engine).
 """
+
 from __future__ import annotations
 
 from typing import Any
 
-from .models import Phase
-from .types import VERDICT_LABELS
-from .contracts import PhaseContractBuilder
-from .reasoning import ReasoningEngine, ReasoningResult
-from .prompt import build_reasoning_prompt
-from ..infrastructure.llm import OllamaClient, PromptBuilder, ResponseParser
 from .. import config as _config
+from ..infrastructure.llm import OllamaClient, PromptBuilder, ResponseParser
+from .contracts import PhaseContractBuilder
+from .models import Phase
+from .prompt import build_reasoning_prompt
+from .reasoning import ReasoningEngine, ReasoningResult
+from .types import VERDICT_LABELS
+
 
 def _build_contract_for_reasoning(phase: Phase, engine: Any) -> dict[str, Any]:
     """Flatten current phase contract into a dict for the reasoning prompt."""
     from .contracts import text_from_check, text_from_evidence, text_from_instruction
+
     return {
         "phase_code": phase.code,
         "phase_name": phase.name,
@@ -118,15 +121,10 @@ def _evaluate_llm_report_legacy(report: str, phase: Phase, engine: Any) -> dict:
 
     previously = engine._get_previously_covered(phase.code)
     checklist = PhaseContractBuilder(engine.all_phases).build_checklist(phase)
-    previously_items = [
-        item for item in checklist
-        if normalize_text(item) in previously
-    ]
+    previously_items = [item for item in checklist if normalize_text(item) in previously]
 
     system = PromptBuilder.SYSTEM_PROMPT
-    user = PromptBuilder.build_user_prompt(
-        engine.task_key, phase, report, previously_covered=previously_items or None
-    )
+    user = PromptBuilder.build_user_prompt(engine.task_key, phase, report, previously_covered=previously_items or None)
 
     client = OllamaClient()
     raw = client.chat(system=system, user=user, temperature=0.1)

@@ -1,15 +1,15 @@
 """Wizard context builder — assembles task dossier from DB + artifacts."""
+
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from ..infrastructure import conversation as convo
-
+from .contracts import PhaseContractBuilder, phase_to_dict
 from .models import Phase
 from .types import ArtifactSnapshot
-from .contracts import PhaseContractBuilder, phase_to_dict
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ class WizardContextBuilder:
         all_phases: list[Phase] | None = None,
         current_phase: str = "",
         task_key: str = "",
-        repo: Optional[str] = None,
+        repo: str | None = None,
         db: Any = None,
     ):
         if uow is None and db is not None:
@@ -72,13 +72,15 @@ class WizardContextBuilder:
         status_lookup = self._phase_status_lookup()
         path: list[dict] = []
         for phase in self.all_phases:
-            path.append({
-                "code": phase.code,
-                "name": phase.name,
-                "status": status_lookup.get(phase.code, "pending"),
-                "parallel_with": phase.parallel_with,
-                "rollback_target": phase.rollback_target,
-            })
+            path.append(
+                {
+                    "code": phase.code,
+                    "name": phase.name,
+                    "status": status_lookup.get(phase.code, "pending"),
+                    "parallel_with": phase.parallel_with,
+                    "rollback_target": phase.rollback_target,
+                }
+            )
         return path
 
     def _build_phase_history(self) -> list[dict[str, Any]]:
@@ -87,37 +89,43 @@ class WizardContextBuilder:
             phase = self._phase_by_id(row["phase_id"])
             if not phase:
                 continue
-            history.append({
-                "phase_code": phase.code,
-                "phase_name": phase.name,
-                "status": row["status"],
-                "completed_at": row["completed_at"],
-            })
+            history.append(
+                {
+                    "phase_code": phase.code,
+                    "phase_name": phase.name,
+                    "status": row["status"],
+                    "completed_at": row["completed_at"],
+                }
+            )
         return history
 
     def _build_recent_verdicts(self, limit: int = 5) -> list[dict[str, Any]]:
         verdicts: list[dict] = []
         for row in self.uow.get_supervisor_runs(task_id=self.task["id"], limit=limit):
             if isinstance(row, dict):
-                verdicts.append({
-                    "phase_code": row.get("phase_code"),
-                    "verdict": str(row.get("verdict") or "").upper(),
-                    "blockers": row.get("blockers") or [],
-                    "missing": row.get("missing") or [],
-                    "next_phase": row.get("next_phase_code"),
-                    "rollback_target": row.get("rollback_phase_code"),
-                    "created_at": row.get("created_at"),
-                })
+                verdicts.append(
+                    {
+                        "phase_code": row.get("phase_code"),
+                        "verdict": str(row.get("verdict") or "").upper(),
+                        "blockers": row.get("blockers") or [],
+                        "missing": row.get("missing") or [],
+                        "next_phase": row.get("next_phase_code"),
+                        "rollback_target": row.get("rollback_phase_code"),
+                        "created_at": row.get("created_at"),
+                    }
+                )
             else:
-                verdicts.append({
-                    "phase_code": row.phase_code,
-                    "verdict": str(row.verdict or "").upper(),
-                    "blockers": row.blockers or [],
-                    "missing": row.missing or [],
-                    "next_phase": row.next_phase_code,
-                    "rollback_target": row.rollback_phase_code,
-                    "created_at": row.created_at,
-                })
+                verdicts.append(
+                    {
+                        "phase_code": row.phase_code,
+                        "verdict": str(row.verdict or "").upper(),
+                        "blockers": row.blockers or [],
+                        "missing": row.missing or [],
+                        "next_phase": row.next_phase_code,
+                        "rollback_target": row.rollback_phase_code,
+                        "created_at": row.created_at,
+                    }
+                )
         return verdicts
 
     def _artifact_dir(self) -> Path | None:
@@ -143,17 +151,21 @@ class WizardContextBuilder:
             path = artifact_dir / name
             if path.exists():
                 stat = path.stat()
-                snapshots.append(ArtifactSnapshot(
-                    path=str(path),
-                    exists=True,
-                    mtime=stat.st_mtime,
-                    size=stat.st_size,
-                ))
+                snapshots.append(
+                    ArtifactSnapshot(
+                        path=str(path),
+                        exists=True,
+                        mtime=stat.st_mtime,
+                        size=stat.st_size,
+                    )
+                )
             else:
-                snapshots.append(ArtifactSnapshot(
-                    path=str(path),
-                    exists=False,
-                ))
+                snapshots.append(
+                    ArtifactSnapshot(
+                        path=str(path),
+                        exists=False,
+                    )
+                )
         return snapshots
 
     def build(self) -> dict[str, Any]:
@@ -168,7 +180,9 @@ class WizardContextBuilder:
             logger.warning("Failed to load conversation messages: %s", exc)
             messages = []
 
-        current_contract = self._contract_builder.build(phase) if phase else self._contract_builder.build_missing(self.current_phase)
+        current_contract = (
+            self._contract_builder.build(phase) if phase else self._contract_builder.build_missing(self.current_phase)
+        )
 
         return {
             "task_key": self.task_key,
@@ -200,7 +214,8 @@ class WizardContextBuilder:
         return [
             "Do not skip phases or invent completed evidence.",
             "Evaluate progress strictly against the current phase contract from the DB phase catalog.",
-            "Treat the CLI actor as the source of the report whether it is a human user or automation; do not assume a specific model/provider.",
+            "Treat the CLI actor as the source of the report whether it is a human user "
+            "or automation; do not assume a specific model/provider.",
             "Return a structured phase report with summary, completed items, evidence, blockers, and next step.",
             "If the phase is blocked, say exactly which checks/evidence are missing and whether rollback is required.",
         ]

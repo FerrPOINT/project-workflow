@@ -3,6 +3,7 @@
 Uses SQLAlchemy 2 ``mapped_column`` style so mypy sees plain ``int``/``str``
 types instead of ``Column[...]`` wrappers.
 """
+
 from __future__ import annotations
 
 import datetime
@@ -31,7 +32,7 @@ class Agent(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str] = mapped_column(String, nullable=False, default="")
 
-    phases: Mapped[list["Phase"]] = relationship("Phase", back_populates="agent")
+    phases: Mapped[list[Phase]] = relationship("Phase", back_populates="agent")
 
 
 class Workflow(Base):
@@ -45,33 +46,25 @@ class Workflow(Base):
         default=0,
         server_default="0",
     )
-    __table_args__ = (
-        CheckConstraint("is_default IN (0, 1)", name="ck_workflows_is_default"),
-    )
+    __table_args__ = (CheckConstraint("is_default IN (0, 1)", name="ck_workflows_is_default"),)
 
-    phases: Mapped[list["Phase"]] = relationship(
+    phases: Mapped[list[Phase]] = relationship(
         "Phase", back_populates="workflow", cascade="all, delete-orphan", passive_deletes=True
     )
-    projects: Mapped[list["Project"]] = relationship(
-        "Project", back_populates="workflow", cascade="all, delete-orphan"
-    )
+    projects: Mapped[list[Project]] = relationship("Project", back_populates="workflow", cascade="all, delete-orphan")
 
 
 class Phase(Base):
     __tablename__ = "phases"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    workflow_id: Mapped[int] = mapped_column(
-        ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False
-    )
+    workflow_id: Mapped[int] = mapped_column(ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False)
     code: Mapped[str] = mapped_column(String, nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     min_time_min: Mapped[int] = mapped_column(default=0, server_default="0")
     phase_order: Mapped[int] = mapped_column(nullable=False)
-    agent_id: Mapped[int | None] = mapped_column(
-        ForeignKey("agents.id", ondelete="SET NULL"), nullable=True
-    )
+    agent_id: Mapped[int | None] = mapped_column(ForeignKey("agents.id", ondelete="SET NULL"), nullable=True)
     next_recommendation: Mapped[str | None] = mapped_column(Text, nullable=True)
     parallel_with: Mapped[str | None] = mapped_column(String, nullable=True)
     rollback_target: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -114,15 +107,11 @@ class Phase(Base):
 
     workflow: Mapped[Workflow] = relationship("Workflow", back_populates="phases")
     agent: Mapped[Agent | None] = relationship("Agent", back_populates="phases")
-    instructions: Mapped[list["Instruction"]] = relationship(
+    instructions: Mapped[list[Instruction]] = relationship(
         "Instruction", back_populates="phase", cascade="all, delete-orphan"
     )
-    checks: Mapped[list["Check"]] = relationship(
-        "Check", back_populates="phase", cascade="all, delete-orphan"
-    )
-    evidence: Mapped[list["Evidence"]] = relationship(
-        "Evidence", back_populates="phase", cascade="all, delete-orphan"
-    )
+    checks: Mapped[list[Check]] = relationship("Check", back_populates="phase", cascade="all, delete-orphan")
+    evidence: Mapped[list[Evidence]] = relationship("Evidence", back_populates="phase", cascade="all, delete-orphan")
 
 
 class Instruction(Base):
@@ -161,9 +150,7 @@ class Check(Base):
         nullable=False,
     )
     description: Mapped[str] = mapped_column(String, nullable=False)
-    __table_args__ = (
-        UniqueConstraint("phase_id", "description", name="uq_checks_phase_description"),
-    )
+    __table_args__ = (UniqueConstraint("phase_id", "description", name="uq_checks_phase_description"),)
 
     phase: Mapped[Phase] = relationship("Phase", back_populates="checks")
 
@@ -177,9 +164,7 @@ class Evidence(Base):
         nullable=False,
     )
     description: Mapped[str] = mapped_column(String, nullable=False)
-    __table_args__ = (
-        UniqueConstraint("phase_id", "description", name="uq_evidence_phase_description"),
-    )
+    __table_args__ = (UniqueConstraint("phase_id", "description", name="uq_evidence_phase_description"),)
 
     phase: Mapped[Phase] = relationship("Phase", back_populates="evidence")
 
@@ -188,19 +173,13 @@ class Project(Base):
     __tablename__ = "projects"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    workflow_id: Mapped[int] = mapped_column(
-        ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False
-    )
+    workflow_id: Mapped[int] = mapped_column(ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False)
     code: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
-    key_prefixes: Mapped[str] = mapped_column(
-        String, nullable=False, default="[]", server_default="[]"
-    )
+    key_prefixes: Mapped[str] = mapped_column(String, nullable=False, default="[]", server_default="[]")
 
     workflow: Mapped[Workflow] = relationship("Workflow", back_populates="projects")
-    tasks: Mapped[list["Task"]] = relationship(
-        "Task", back_populates="project", cascade="all, delete-orphan"
-    )
+    tasks: Mapped[list[Task]] = relationship("Task", back_populates="project", cascade="all, delete-orphan")
 
 
 class Task(Base):
@@ -222,15 +201,9 @@ class Task(Base):
         default="active",
         server_default="active",
     )
-    created_at: Mapped[datetime.datetime | None] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    updated_at: Mapped[datetime.datetime | None] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    __table_args__ = (
-        CheckConstraint("status IN ('active', 'done', 'blocked')", name="ck_tasks_status"),
-    )
+    created_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (CheckConstraint("status IN ('active', 'done', 'blocked')", name="ck_tasks_status"),)
 
     project: Mapped[Project] = relationship("Project", back_populates="tasks")
 
@@ -273,21 +246,11 @@ class SupervisorRun(Base):
     covered: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
     missing: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
     blockers: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
-    next_phase_id: Mapped[int | None] = mapped_column(
-        ForeignKey("phases.id"), nullable=True
-    )
-    rollback_phase_id: Mapped[int | None] = mapped_column(
-        ForeignKey("phases.id"), nullable=True
-    )
-    context_snapshot: Mapped[str] = mapped_column(
-        Text, nullable=False, default="{}", server_default="{}"
-    )
-    response: Mapped[str] = mapped_column(
-        Text, nullable=False, default="{}", server_default="{}"
-    )
-    created_at: Mapped[datetime.datetime | None] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    next_phase_id: Mapped[int | None] = mapped_column(ForeignKey("phases.id"), nullable=True)
+    rollback_phase_id: Mapped[int | None] = mapped_column(ForeignKey("phases.id"), nullable=True)
+    context_snapshot: Mapped[str] = mapped_column(Text, nullable=False, default="{}", server_default="{}")
+    response: Mapped[str] = mapped_column(Text, nullable=False, default="{}", server_default="{}")
+    created_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
     __table_args__ = (
         CheckConstraint(
             "verdict IN ('pass', 'partial', 'soft_fail', 'hard_fail', 'blocked', 'rollback', 'delegate')",
@@ -304,23 +267,17 @@ class CliHistory(Base):
     task_key: Mapped[str | None] = mapped_column(String, nullable=True)
     request: Mapped[str | None] = mapped_column(Text, nullable=True)
     response: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime.datetime | None] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class WizardMemory(Base):
     __tablename__ = "wizard_memories"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    task_id: Mapped[int] = mapped_column(
-        ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True
-    )
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True)
     memory_type: Mapped[str] = mapped_column(String, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime.datetime | None] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
     __table_args__ = (
         CheckConstraint(
             "memory_type IN ('correction', 'lesson', 'blocker_pattern', 'preference')",

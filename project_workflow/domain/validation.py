@@ -11,7 +11,8 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any, List, Optional, Pattern
+from re import Pattern
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -22,11 +23,11 @@ class ValidatedTaskKey:
 
     raw: str
     is_valid: bool
-    project: Optional[str] = None
-    prefix: Optional[str] = None
-    issue_number: Optional[str] = None
-    normalized: Optional[str] = None
-    error_message: Optional[str] = None
+    project: str | None = None
+    prefix: str | None = None
+    issue_number: str | None = None
+    normalized: str | None = None
+    error_message: str | None = None
 
     def __str__(self) -> str:
         return self.normalized or self.raw
@@ -53,7 +54,7 @@ MIN_NUMBER_LEN = 1
 PREFIX_RE = re.compile(r"^[A-Z][A-Z0-9]*$")
 
 
-def _prefixes_to_regex(prefixes: List[str]) -> str:
+def _prefixes_to_regex(prefixes: list[str]) -> str:
     """Build a regex from plain prefixes that captures prefix and number."""
     escaped = [re.escape(p) for p in prefixes if p]
     if not escaped:
@@ -78,19 +79,19 @@ class TaskKeyValidator:
 
     def __init__(
         self,
-        prefixes: Optional[List[str]] = None,
-        patterns: Optional[List[str]] = None,
-        project_prefixes: Optional[List[dict]] = None,
+        prefixes: list[str] | None = None,
+        patterns: list[str] | None = None,
+        project_prefixes: list[dict] | None = None,
         strict: bool = True,
         min_prefix_len: int = MIN_PREFIX_LEN,
         min_number_len: int = MIN_NUMBER_LEN,
-        reject_patterns: Optional[List[tuple]] = None,
+        reject_patterns: list[tuple] | None = None,
     ):
         self.project_prefixes = project_prefixes or []
         self.raw_patterns = patterns or []
         if self.project_prefixes:
-            self.pattern_sources: List[tuple[Optional[str], str, Pattern]] = []
-            self.project_prefix_lists: List[tuple[Optional[str], List[str]]] = []
+            self.pattern_sources: list[tuple[str | None, str, Pattern]] = []
+            self.project_prefix_lists: list[tuple[str | None, list[str]]] = []
             for project in self.project_prefixes:
                 project_code = project.get("code")
                 raw_project_prefixes = project.get("key_prefixes") or project.get("prefixes") or []
@@ -151,10 +152,7 @@ class TaskKeyValidator:
 
         # 1. Uppercase check (skip for lenient mode)
         if not getattr(self, "skip_uppercase", False) and stripped.upper() != stripped:
-            error_msg = (
-                f"Key '{key}' содержит строчные буквы. "
-                "Ключ задаётся В ВЕРХНЕМ РЕГИСТРЕ (например: AAT-123)"
-            )
+            error_msg = f"Key '{key}' содержит строчные буквы. Ключ задаётся В ВЕРХНЕМ РЕГИСТРЕ (например: AAT-123)"
             result = ValidatedTaskKey(raw=key, is_valid=False, error_message=error_msg)
             if raise_on_invalid:
                 raise TaskKeyValidationError(key, error_msg)
@@ -213,22 +211,22 @@ class TaskKeyValidator:
     # ── Factory Methods ─────────────────────────────────────────────────
 
     @classmethod
-    def from_prefixes(cls, prefixes: List[str]) -> "TaskKeyValidator":
+    def from_prefixes(cls, prefixes: list[str]) -> TaskKeyValidator:
         """Создать валидатор из списка plain prefixes (для UI конфигурации)."""
         return cls(prefixes=prefixes)
 
     @classmethod
-    def from_projects(cls, projects: List[dict]) -> "TaskKeyValidator":
+    def from_projects(cls, projects: list[dict]) -> TaskKeyValidator:
         """Создать валидатор из project rows с key_prefixes."""
         return cls(project_prefixes=projects)
 
     @classmethod
-    def jira_only(cls) -> "TaskKeyValidator":
+    def jira_only(cls) -> TaskKeyValidator:
         """Валидатор только для чистых Jira-ключей (AAT-123), без internal prefixes."""
         return cls(prefixes=["AAT"], reject_patterns=cls.REJECT_PATTERNS)
 
     @classmethod
-    def lenient(cls) -> "TaskKeyValidator":
+    def lenient(cls) -> TaskKeyValidator:
         """Разрешительный валидатор — минимальные проверки."""
         v = cls(
             prefixes=[],
@@ -271,5 +269,3 @@ def get_project_for_task_key(uow: Any, task_key: str) -> dict[str, Any] | None:
         if prefix in key_prefixes:
             return project_dict
     return None
-
-

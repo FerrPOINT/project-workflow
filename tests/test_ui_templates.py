@@ -1,9 +1,14 @@
 """Tests for interfaces.ui.templates filters."""
+
 from __future__ import annotations
 
 from markupsafe import Markup
 
-from project_workflow.interfaces.ui.templates import _group_instructions, _pluralize, _tojson_unicode
+from project_workflow.interfaces.ui.templates import (
+    _group_instructions,
+    _pluralize,
+    _tojson_unicode,
+)
 
 
 def test_tojson_unicode():

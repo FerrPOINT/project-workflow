@@ -1,4 +1,5 @@
 """Tests for interfaces.ui.cli_reference."""
+
 from __future__ import annotations
 
 from project_workflow.interfaces.ui.cli_reference import _load_cli_reference

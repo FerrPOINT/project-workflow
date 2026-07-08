@@ -1,7 +1,17 @@
 """Tests for domain entities."""
+
 from __future__ import annotations
 
-from project_workflow.domain import Agent, Phase, PhaseCode, Project, SupervisorRun, Task, TaskKey, Workflow
+from project_workflow.domain import (
+    Agent,
+    Phase,
+    PhaseCode,
+    Project,
+    SupervisorRun,
+    Task,
+    TaskKey,
+    Workflow,
+)
 
 
 def test_task_key_str():

@@ -1,4 +1,5 @@
 """Integration tests for WizardEngine against real seeded SQLite DB."""
+
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -26,6 +27,7 @@ def wizard_db(tmp_path, monkeypatch):
     ensure_phase_catalog(uow)
     uow.close()
     from project_workflow.infrastructure import db as db_module
+
     monkeypatch.setattr(db_module, "DB_PATH", db_path)
     return url
 
@@ -50,7 +52,9 @@ class TestWizardEngineIntegration:
     def test_existing_task_with_empty_current_phase_gets_first_phase(self, wizard_db):
         uow = SAUnitOfWork(wizard_db)
         project = uow.create_project({"code": "AAT", "name": "AAT", "key_prefixes": ["AAT"]})
-        task_id = uow.create_task({"task_key": "AAT-EMPTY", "title": "Empty", "current_phase": "", "project_id": project["id"]})
+        task_id = uow.create_task(
+            {"task_key": "AAT-EMPTY", "title": "Empty", "current_phase": "", "project_id": project["id"]}
+        )
         uow.close()
 
         engine = WizardEngine("AAT-EMPTY", create_if_missing=False)
@@ -80,22 +84,35 @@ class TestWizardEngineIntegration:
 
     def test_format_result_pass(self):
         from project_workflow.wizard.core import format_result
-        text = format_result({
-            "verdict": "PASS",
-            "next_phase_contract": {"instructions": ["do"], "required_checks": ["check"], "required_evidence": ["ev"]},
-        })
+
+        text = format_result(
+            {
+                "verdict": "PASS",
+                "next_phase_contract": {
+                    "instructions": ["do"],
+                    "required_checks": ["check"],
+                    "required_evidence": ["ev"],
+                },
+            }
+        )
         assert "Инструкции" in text
 
     def test_format_result_partial(self):
         from project_workflow.wizard.core import format_result
-        text = format_result({"verdict": "PARTIAL", "instructions": ["i"], "required_checks": ["c"], "required_evidence": ["e"]})
+
+        text = format_result(
+            {"verdict": "PARTIAL", "instructions": ["i"], "required_checks": ["c"], "required_evidence": ["e"]}
+        )
         assert "Ты сделал часть" not in text
         assert "Инструкции:" in text
         assert "  · c" in text
 
     def test_format_result_blocked(self):
         from project_workflow.wizard.core import format_result
-        text = format_result({"verdict": "BLOCKED", "instructions": ["i"], "required_checks": ["c"], "required_evidence": ["e"]})
+
+        text = format_result(
+            {"verdict": "BLOCKED", "instructions": ["i"], "required_checks": ["c"], "required_evidence": ["e"]}
+        )
         assert "Инструкции" in text
         assert "Чекапы" in text
         assert "Доказательства" in text
