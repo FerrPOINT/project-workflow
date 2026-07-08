@@ -58,6 +58,7 @@ module = [
 ignore_errors = true
 
 [tool.coverage.run]
+parallel = true
 source = ["project_workflow"]
 omit = [
     "*/tests/*",
@@ -81,7 +82,7 @@ filterwarnings = [
 addopts = "-m 'not integration'"
 
 [tool.coverage.report]
-fail_under = 34
+fail_under = 90
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",
