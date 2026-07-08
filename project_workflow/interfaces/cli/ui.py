@@ -48,11 +48,12 @@ def step_cmd(
       project-workflow step --task TASK-KEY                → текущие инструкции
       project-workflow step --task TASK-KEY --report "..."  → оценить отчёт исполнителя CLI и перейти
     """
-    task_key = _require_valid_key(task)
+    uow = SAUnitOfWork()
+    task_key = _require_valid_key(task, uow)
     jmode = ctx.obj.get("json_mode", False)
     smart = os.getenv("SMART_EVALUATE", "").lower() in ("1", "true", "yes", "on")
 
-    engine = wizard.WizardEngine(task_key)
+    engine = wizard.WizardEngine(task_key, uow=uow)
 
     # --report : evaluate report
     if report:

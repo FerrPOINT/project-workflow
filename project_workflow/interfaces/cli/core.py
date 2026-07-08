@@ -30,11 +30,12 @@ def out_json(data: dict[str, Any]) -> None:
     sys.exit(0 if data.get("ok", True) else 1)
 
 
-def _get_task_key_validator() -> task_validator.TaskKeyValidator:
+def _get_task_key_validator(uow=None) -> task_validator.TaskKeyValidator:
     from project_workflow.infrastructure.db import schema
     from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
-    uow = SAUnitOfWork()
+    if uow is None:
+        uow = SAUnitOfWork()
     uow.init()
     schema.ensure_phase_catalog(uow)
     projects_raw = uow.projects.list()
@@ -42,9 +43,12 @@ def _get_task_key_validator() -> task_validator.TaskKeyValidator:
     return task_validator.TaskKeyValidator.from_projects(projects)
 
 
-def _require_valid_key(task_key: str) -> str:
+def _require_valid_key(task_key: str, uow=None) -> str:
     """Проверить валидность ключа задачи. Вернуть normalized или выбросить Abort."""
-    validated = _get_task_key_validator().validate(task_key)
+    if uow is None:
+        validated = _get_task_key_validator().validate(task_key)
+    else:
+        validated = _get_task_key_validator(uow=uow).validate(task_key)
     if not validated.is_valid:
         console.print(f"{FAIL} [bold red]Invalid task key:[/bold red] {validated.error_message}")
         raise click.Abort()
