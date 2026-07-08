@@ -33,13 +33,13 @@ from project_workflow.wizard.core import (
     get_phase_instructions,
     main,
 )
-from project_workflow.wizard.formatting import format_result
 from project_workflow.wizard.evaluate import (
     OllamaClient,
     PromptBuilder,
     ResponseParser,
     evaluate_llm_report,
 )
+from project_workflow.wizard.formatting import format_result
 from project_workflow.wizard.prompt import build_phase_prompt
 from project_workflow.wizard.result_builder import VERDICT_LABELS
 from project_workflow.wizard.store import WizardAssessmentStore
