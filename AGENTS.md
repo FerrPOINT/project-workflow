@@ -15,11 +15,11 @@
 
 After any change to the SQLAlchemy layer, application services, UI state, or wizard engine, run the following checks before committing:
 
-1. **Full test suite**
+1. **Tests**
    ```bash
    pytest -q --timeout=60
    ```
-   Expected: **963 passed, 6 deselected**, 0 failed, 0 errors.
+   Expected: **961 passed, 6 deselected**, 0 failed, 0 errors.
 
 2. **Coverage**
    ```bash
@@ -37,7 +37,7 @@ After any change to the SQLAlchemy layer, application services, UI state, or wiz
    ```bash
    mypy project_workflow
    ```
-   Expected: `Success: no issues found in 82 source files`.
+   Expected: `Success: no issues found in 83 source files`.
 
 5. **UI service health**
    ```bash

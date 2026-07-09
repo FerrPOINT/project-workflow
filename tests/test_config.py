@@ -48,9 +48,6 @@ class TestConfigConstants:
         assert len(cfg_module.PHASE_ORDER) > 0
         assert "-1" in cfg_module.PHASE_ORDER
 
-    def test_legacy_redirects(self):
-        assert cfg_module.LEGACY_PHASE_REDIRECTS["0"] == "0.00"
-
     def test_critic_phases_subset_of_order(self):
         for ph in cfg_module.CRITIC_PHASES:
             assert ph in cfg_module.PHASE_ORDER

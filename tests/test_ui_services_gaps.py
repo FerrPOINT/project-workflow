@@ -58,18 +58,7 @@ class TestWorkflowFormPayload:
         assert payload["description"] == "desc"
 
 
-class TestResolveTaskPhaseRedirects:
-    def test_legacy_redirect_via_get_phase(self, monkeypatch):
-        from project_workflow import config
-
-        monkeypatch.setattr(config, "LEGACY_PHASE_REDIRECTS", {"old": "1"})
-        db = MagicMock()
-        db.get_phases.return_value = []
-        db.get_phase.side_effect = lambda token: {"id": 99, "code": "1", "name": "One"} if str(token) == "1" else None
-        token, phase = _resolve_task_phase("old", _db=db)
-        assert token == "1"
-        assert phase["id"] == 99
-
+class TestResolveTaskPhase:
     def test_numeric_phase_lookup(self):
         db = MagicMock()
         db.get_phases.return_value = []
@@ -84,6 +73,14 @@ class TestResolveTaskPhaseRedirects:
         db.get_phase.return_value = None
         token, phase = _resolve_task_phase("999", _db=db)
         assert token == "999"
+        assert phase is None
+
+    def test_unresolvable_string(self):
+        db = MagicMock()
+        db.get_phases.return_value = []
+        db.get_phase.return_value = None
+        token, phase = _resolve_task_phase("old", _db=db)
+        assert token == "old"
         assert phase is None
 
 

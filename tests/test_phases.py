@@ -4,13 +4,13 @@ import pytest
 
 pytestmark = [pytest.mark.unit]
 
-from project_workflow.domain.fsm import (
+from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from tests._phase_helpers import (
     get_next_phase,
     get_phase_checklist_raw,
     show_all_phases,
     show_phase_checklist,
 )
-from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
 
 class TestPhaseHelpers:

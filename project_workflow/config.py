@@ -104,12 +104,6 @@ PHASE_ORDER = [
     "10",  # Auto-Improve
 ]
 
-LEGACY_PHASE_REDIRECTS = {
-    "0.01a": "0.00",
-    "0.01b": "0.00",
-    "0": "0.00",
-}
-
 DELEGATED_PHASES = [
     "0.6",
     "0.9",

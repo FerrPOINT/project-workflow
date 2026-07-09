@@ -157,17 +157,6 @@ class TestResolveTaskPhase:
         token, phase = _resolve_task_phase(42, _db=db)
         assert phase["id"] == 42
 
-    def test_legacy_redirect(self, monkeypatch):
-        from project_workflow import config
-
-        monkeypatch.setattr(config, "LEGACY_PHASE_REDIRECTS", {"old": "1"})
-        db = MagicMock()
-        db.get_phases.return_value = [{"id": 10, "code": "1", "name": "One", "phase_order": 1}]
-        db.get_phase.return_value = None
-        token, phase = _resolve_task_phase("old", _db=db)
-        assert token == "1"
-        assert phase["code"] == "1"
-
     def test_unresolvable(self):
         db = MagicMock()
         db.get_phases.return_value = []

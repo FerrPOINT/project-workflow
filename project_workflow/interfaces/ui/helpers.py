@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from ... import config
 from .templates import env as _templates_env
 
 
@@ -103,15 +102,6 @@ def _resolve_task_phase(
     if found_phase:
         return token, dict(found_phase)
 
-    redirected = config.LEGACY_PHASE_REDIRECTS.get(token)
-    if redirected:
-        for phase in workflow_phases:
-            if str(phase.get("code", phase.get("id"))) == redirected:
-                return redirected, dict(phase)
-        redirected_phase = wdb.get_phase(redirected)
-        if redirected_phase:
-            return redirected, dict(redirected_phase)
-
     try:
         numeric = int(token)
     except (TypeError, ValueError):
@@ -131,12 +121,6 @@ def _resolve_task_phase_local(
             return token, phase
         if str(phase.get("id")) == token:
             return token, phase
-
-    redirected = config.LEGACY_PHASE_REDIRECTS.get(token)
-    if redirected:
-        for phase in workflow_phases:
-            if str(phase.get("code", phase.get("id"))) == redirected:
-                return redirected, dict(phase)
 
     try:
         numeric = int(token)

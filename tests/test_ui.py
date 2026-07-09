@@ -1089,8 +1089,8 @@ class TestDragDropAPI:
 
     def test_api_batch_order_update(self):
         from project_workflow import config
-        from project_workflow.domain import fsm as phases_mod
         from project_workflow.interfaces.ui import _update_config_phase_order
+        from tests._phase_helpers import get_next_phase
 
         uow = ui_app_state.get_db()
         original_rows = [(phase["code"], phase["phase_order"]) for phase in [p.to_dict() for p in uow.phases.list()]]
@@ -1112,7 +1112,7 @@ class TestDragDropAPI:
             assert data["ok"] is True
             assert data["updated"] == 3
             assert all(isinstance(phase_code, str) for phase_code in config.PHASE_ORDER)
-            assert phases_mod.get_next_phase("0.0a") is not None
+            assert get_next_phase("0.0a") is not None
         finally:
             _batch_update_orders(uow, original_rows)
             config.PHASE_ORDER[:] = original_phase_order
