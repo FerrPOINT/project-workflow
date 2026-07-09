@@ -66,13 +66,4 @@ class SAProjectRepository(ProjectRepository):
             raise NotFoundError(f"Project {project_id} not found")
         self._session.delete(row)
 
-    def match_by_task_key(self, task_key: str) -> Project | None:
-        for project in self.list():
-            for prefix in project.key_prefixes:
-                import re
-
-                if re.match(rf"^{re.escape(prefix)}-[0-9]+$", task_key):
-                    return project
-        return None
-
 

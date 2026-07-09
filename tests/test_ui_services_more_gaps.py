@@ -122,7 +122,7 @@ class TestServicesMoreGaps:
 
     def test_load_cli_reference(self):
         with patch(
-            "project_workflow.interfaces.ui.services.project_workflow.commands",
+            "project_workflow.interfaces.ui.cli_reference.project_workflow.commands",
             {
                 "help": click.Command("help"),
                 "ui": click.Command("ui", hidden=True),

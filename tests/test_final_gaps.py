@@ -398,14 +398,14 @@ class TestUiServicesFinalGaps:
 
     def test_load_cli_reference_argument(self, monkeypatch):
         cmd = click.Command("cmd", params=[click.Argument(["arg"])])
-        with patch("project_workflow.interfaces.ui.services.project_workflow.commands", {"cmd": cmd}, create=True):
+        with patch("project_workflow.interfaces.ui.cli_reference.project_workflow.commands", {"cmd": cmd}, create=True):
             result = _load_cli_reference()
         assert result[0]["options"] == []
 
     def test_load_cli_reference_default(self):
         opt = click.Option(["--flag"], help="help", default="x")
         cmd = click.Command("cmd", params=[opt])
-        with patch("project_workflow.interfaces.ui.services.project_workflow.commands", {"cmd": cmd}, create=True):
+        with patch("project_workflow.interfaces.ui.cli_reference.project_workflow.commands", {"cmd": cmd}, create=True):
             result = _load_cli_reference()
         assert result[0]["options"][0]["default"] == "x"
 

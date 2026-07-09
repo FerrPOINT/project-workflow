@@ -127,9 +127,6 @@ class ProjectRepository(ABC):
     @abstractmethod
     def delete(self, project_id: int) -> None: ...
 
-    @abstractmethod
-    def match_by_task_key(self, task_key: str) -> Project | None: ...
-
 
 class TaskRepository(ABC):
     """Persistence contract for tasks."""

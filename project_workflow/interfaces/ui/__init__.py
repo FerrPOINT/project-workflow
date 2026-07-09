@@ -11,12 +11,9 @@ from .app import app
 from .main import main
 from .seed import _seed_to_sqlite, _update_config_phase_order
 from .services import (
-    _agent_service,
     _build_parallel_phase_blocks,
     _coerce_phase_db_id,
     _get_task_detail,
-    _group_instructions,
-    _instruction_service,
     _load_cli_reference,
     _load_dashboard,
     _load_phase_detail,
@@ -27,15 +24,11 @@ from .services import (
     _parse_key_prefixes,
     _parse_optional_int,
     _phase_create_payload,
-    _phase_service,
-    _project_service,
     _resolve_task_phase,
-    _task_service,
     _workflow_form_payload,
-    _workflow_service,
 )
 from .skills import _load_skills_catalog, _scan_hermes_skills
-from .templates import _tojson_unicode
+from .templates import _group_instructions
 from .templates import env as _templates_env
 
 __all__ = [
@@ -43,12 +36,10 @@ __all__ = [
     "main",
     "_app_state",
     "_AppState",
-    "_agent_service",
     "_build_parallel_phase_blocks",
     "_coerce_phase_db_id",
     "_get_task_detail",
     "_group_instructions",
-    "_instruction_service",
     "_load_cli_reference",
     "_load_dashboard",
     "_load_phase_detail",
@@ -60,16 +51,11 @@ __all__ = [
     "_parse_key_prefixes",
     "_parse_optional_int",
     "_phase_create_payload",
-    "_phase_service",
-    "_project_service",
     "_resolve_task_phase",
     "_scan_hermes_skills",
     "_seed_to_sqlite",
-    "_task_service",
-    "_tojson_unicode",
     "_update_config_phase_order",
     "_workflow_form_payload",
-    "_workflow_service",
     "_templates_env",
 ]
 

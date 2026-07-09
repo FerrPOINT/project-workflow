@@ -18,7 +18,7 @@ from project_workflow.infrastructure.db.session import (
     reset_engine,
 )
 from project_workflow.interfaces.ui import templates as templates_module
-from project_workflow.interfaces.ui.templates import _group_instructions, _tojson_unicode
+from project_workflow.interfaces.ui.templates import _group_instructions
 
 
 class TestSessionHelpers:
@@ -255,22 +255,6 @@ class TestSqlitePragmaEdgeCases:
 
 
 class TestTemplateHelpers:
-    def test_tojson_unicode_escapes_unicode(self):
-        value = {"text": "привет"}
-        out = _tojson_unicode(value)
-        assert "привет" in str(out)
-        assert "\\u" not in str(out)
-
-    def test_tojson_unicode_default_handler(self):
-        class Custom:
-            value = 42
-
-            def __str__(self):
-                return f"custom-{self.value}"
-
-        out = _tojson_unicode({"x": Custom()})
-        assert "custom-42" in str(out)
-
     def test_group_instructions_groups_parallel_with_previous(self):
         instructions = [
             {"id": 1, "execution_type": "sync"},
@@ -287,6 +271,8 @@ class TestTemplateHelpers:
 
     def test_group_instructions_returns_empty_for_none(self):
         assert _group_instructions(None) == []
+
+    def test_group_instructions_returns_empty_for_empty(self):
         assert _group_instructions([]) == []
 
     def test_group_instructions_single_item(self):
@@ -294,5 +280,5 @@ class TestTemplateHelpers:
         assert out == [[{"id": 1}]]
 
     def test_templates_env_exposes_filters(self):
-        assert "tojson_unicode" in templates_module.env.filters
         assert "group_instructions" in templates_module.env.filters
+        assert "pluralize" in templates_module.env.filters

@@ -141,7 +141,7 @@ flowchart TD
 |---|---|---|
 | Lint | `ruff check .` | **green** |
 | Type check | `mypy project_workflow` | **green** |
-| Tests | `pytest -q --timeout=60` | **961 passed, 6 deselected** |
+| Tests | `pytest -q --timeout=60` | **939 passed, 6 deselected** |
 | Coverage | combined slices (`-p no:cov`) | **>= 90%** |
 | Systemd UI health | `curl http://localhost:8811/api/tasks` | **200** |
 

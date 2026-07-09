@@ -92,15 +92,6 @@ async def api_tasks(workflow_id: int | None = Query(default=None)) -> dict[str, 
     return {"ok": True, "tasks": tasks}
 
 
-async def api_task_detail(task_key: str) -> dict[str, Any] | JSONResponse:
-    from project_workflow.interfaces.ui.services import _get_task_detail
-
-    task = _get_task_detail(task_key)
-    if task is None:
-        return _error(f"Задача {task_key!r} не найдена", 404)
-    return {"ok": True, "task": task}
-
-
 async def api_task_delete(task_key: str) -> JSONResponse:
     task = _app_state.task_service().get_task_by_key(task_key)
     if task is None:
@@ -493,14 +484,3 @@ async def api_instructions_reorder(phase_id: int, payload: InstructionReorder) -
 
 # Alias used by app wiring for the /api/phases/order endpoint.
 api_update_order = api_phase_batch_order
-
-
-async def api_task_set_phase(task_key: str, payload: dict[str, Any]) -> dict[str, Any] | JSONResponse:
-    task = _app_state.task_service().get_task_by_key(task_key)
-    if not task:
-        return _error(f"Задача {task_key!r} не найдена", 404)
-    phase_code = payload.get("phase")
-    if phase_code is None:
-        return _error("phase обязателен", 400)
-    _app_state.task_service().update_task(task["id"], {"current_phase": str(phase_code)})
-    return {"ok": True}

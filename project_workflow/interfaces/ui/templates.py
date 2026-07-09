@@ -2,18 +2,12 @@
 
 from __future__ import annotations
 
-import json as _json
 from pathlib import Path
 from typing import Any
 
 from fastapi.templating import Jinja2Templates
-from markupsafe import Markup
 
 BASE_DIR = Path(__file__).parent
-
-
-def _tojson_unicode(value: Any, indent: int = 2) -> Markup:
-    return Markup(_json.dumps(value, ensure_ascii=False, indent=indent, default=str))
 
 
 def _group_instructions(instructions: list[dict[str, Any]] | None) -> list[list[dict[str, Any]]]:
@@ -41,7 +35,6 @@ def _pluralize(value: int, forms: str) -> str:
 
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
-templates.env.filters["tojson_unicode"] = _tojson_unicode
 templates.env.filters["group_instructions"] = _group_instructions
 templates.env.filters["pluralize"] = _pluralize
 env = templates.env

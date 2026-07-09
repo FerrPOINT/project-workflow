@@ -73,14 +73,10 @@ class SAUnitOfWork(UnitOfWork):
         self._supervisor_runs: SASupervisorRunRepository = SASupervisorRunRepository(self._session)
         self._cli_history: SACLIHistoryRepository = SACLIHistoryRepository(self._session)
 
-    def clone(self) -> SAUnitOfWork:
-        """Return a new UoW bound to the same database URL."""
-        return SAUnitOfWork()
-
     def __enter__(self) -> SAUnitOfWork:
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> Literal[False]:
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> Literal[False]:
         if exc_type is not None:
             self.rollback()
         else:

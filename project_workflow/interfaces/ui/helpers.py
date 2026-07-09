@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
-
-from .templates import env as _templates_env
 
 
 def _parse_optional_int(raw: Any) -> int | None:
@@ -15,25 +14,6 @@ def _parse_optional_int(raw: Any) -> int | None:
     except (TypeError, ValueError):
         return None
     return value if value > 0 else None
-
-
-def _group_instructions(instructions: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
-    """Группирует инструкции по runs: parallel примыкает к предыдущей sync и идёт с ней рядом."""
-    if not instructions:
-        return []
-    groups: list[list[dict[str, Any]]] = []
-    current = [instructions[0]]
-    for instruction in instructions[1:]:
-        if instruction.get("execution_type") == "parallel":
-            current.append(instruction)
-        else:
-            groups.append(current)
-            current = [instruction]
-    groups.append(current)
-    return groups
-
-
-_templates_env.filters["group_instructions"] = _group_instructions
 
 
 def _parse_key_prefixes(raw: Any) -> list[str]:
@@ -111,7 +91,7 @@ def _resolve_task_phase(
 
 
 def _resolve_task_phase_local(
-    current_phase: Any, workflow_phases: list[dict[str, Any]], workflow_id: int | None = None
+    current_phase: Any, workflow_phases: Sequence[dict[str, Any]], workflow_id: int | None = None
 ) -> tuple[str, dict[str, Any] | None]:
     """Resolve a phase token against a preloaded list of phases (no DB hits)."""
     token = str(current_phase if current_phase is not None else "-1")

@@ -20,7 +20,6 @@ from project_workflow.interfaces.ui import (
     _resolve_task_phase,
     _scan_hermes_skills,
     _seed_to_sqlite,
-    _tojson_unicode,
     _update_config_phase_order,
     _workflow_form_payload,
     app,
@@ -34,35 +33,18 @@ client = TestClient(app)
 # ═══════════════════════════════════════════════════════════
 
 
-class TestToJsonUnicode:
-    def test_serializes_dict(self):
-        result = _tojson_unicode({"a": 1})
-        assert '"a": 1' in str(result)
-
-    def test_handles_non_serializable(self):
-        class Foo:
-            pass
-
-        result = _tojson_unicode({"obj": Foo()})
-        assert "obj" in str(result)
-
-
 class TestGroupInstructions:
-    def test_empty(self):
-        assert _group_instructions([]) == []
-
-    def test_single_sync(self):
-        inst = [{"step": "a", "execution_type": "sync"}]
-        assert _group_instructions(inst) == [[inst[0]]]
-
-    def test_parallel_appends(self):
-        inst = [
-            {"step": "a", "execution_type": "sync"},
-            {"step": "b", "execution_type": "parallel"},
+    def test_groups_parallel_with_previous(self):
+        instructions = [
+            {"id": 1, "execution_type": "sync"},
+            {"id": 2, "execution_type": "parallel"},
+            {"id": 3, "execution_type": "sync"},
         ]
-        result = _group_instructions(inst)
-        assert len(result) == 1
-        assert len(result[0]) == 2
+        result = _group_instructions(instructions)
+        assert result == [[instructions[0], instructions[1]], [instructions[2]]]
+
+    def test_empty_instructions(self):
+        assert _group_instructions([]) == []
 
     def test_sync_breaks_group(self):
         inst = [

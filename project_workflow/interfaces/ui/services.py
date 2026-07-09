@@ -12,23 +12,13 @@ from typing import Any, cast
 import project_workflow.interfaces.ui as _ui_module
 from project_workflow.application.ui import UIDataService
 
-from ..cli.core import cli as project_workflow  # noqa: F401
 from .dependencies import _AppState
 from .helpers import (
     _build_parallel_phase_blocks,
-    _group_instructions,
     _parse_key_prefixes,
     _parse_optional_int,
 )
 from .payloads import _phase_create_payload, _workflow_form_payload
-
-# Re-export helpers/payloads so existing tests and routes keep importing from services.
-_build_parallel_phase_blocks = _build_parallel_phase_blocks
-_group_instructions = _group_instructions
-_parse_key_prefixes = _parse_key_prefixes
-_parse_optional_int = _parse_optional_int
-_phase_create_payload = _phase_create_payload
-_workflow_form_payload = _workflow_form_payload
 
 
 def _get_app_state() -> _AppState:
@@ -39,30 +29,6 @@ def _get_app_state() -> _AppState:
 def _get_db() -> Any:
     """Return the current DB/UoW for UI page loaders."""
     return _get_app_state().get_db()
-
-
-def _workflow_service() -> Any:
-    return _get_db()
-
-
-def _phase_service() -> Any:
-    return _get_db()
-
-
-def _project_service() -> Any:
-    return _get_db()
-
-
-def _task_service() -> Any:
-    return _get_db()
-
-
-def _agent_service() -> Any:
-    return _get_db()
-
-
-def _instruction_service() -> Any:
-    return _get_db()
 
 
 def _ui_data_service() -> UIDataService:
@@ -137,4 +103,25 @@ def _resolve_task_phase_local(
     """Resolve a phase token using a preloaded phase list."""
     from .helpers import _resolve_task_phase_local as _impl
 
-    return _impl(current_phase, list(phases), workflow_id=workflow_id)
+    return _impl(current_phase, phases, workflow_id=workflow_id)
+
+
+# Helpers and payloads remain importable from this module.
+__all__ = [
+    "_build_parallel_phase_blocks",
+    "_parse_key_prefixes",
+    "_parse_optional_int",
+    "_phase_create_payload",
+    "_workflow_form_payload",
+    "_load_cli_reference",
+    "_load_workflows",
+    "_load_phases",
+    "_load_phase_detail",
+    "_load_tasks",
+    "_load_projects",
+    "_load_dashboard",
+    "_get_task_detail",
+    "_coerce_phase_db_id",
+    "_resolve_task_phase",
+    "_resolve_task_phase_local",
+]

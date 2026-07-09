@@ -18,11 +18,13 @@ dependencies = [
     "sqlalchemy>=2.0,<3.0",
     "alembic>=1.13,<2.0",
     "psycopg[binary]>=3.0",
+    "transitions>=0.9,<1.0",
+    "requests>=2.30",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-cov>=4.0", "ruff>=0.3", "mypy>=1.7", "pydantic-settings>=2.0"]
-ui  = ["fastapi>=0.100", "uvicorn[standard]>=0.23", "jinja2>=3.1"]
+dev = ["pytest>=8.0", "pytest-cov>=4.0", "ruff>=0.3", "mypy>=1.7"]
+ui  = ["fastapi>=0.100", "uvicorn[standard]>=0.23"]
 
 [project.scripts]
 project-workflow = "project_workflow.interfaces.cli:main"
@@ -37,10 +39,6 @@ target-version = "py310"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "W"]
 per-file-ignores = { "tests/**/*.py" = ["E402"] }
-
-[tool.black]
-line-length = 120
-target-version = ["py310"]
 
 [tool.mypy]
 python_version = "3.10"
@@ -91,3 +89,6 @@ exclude_lines = [
     "if __name__ == .__main__.:",
     "if TYPE_CHECKING:",
 ]
+
+[tool.coverage.html]
+directory = "htmlcov"
