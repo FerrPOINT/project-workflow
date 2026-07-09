@@ -21,6 +21,9 @@
   <img src="https://img.shields.io/badge/Rich-000000?style=flat-square&logo=rich&logoColor=white" alt="Rich" />
   <img src="https://img.shields.io/badge/Jinja2-B41717?style=flat-square&logo=jinja&logoColor=white" alt="Jinja2" />
   <img src="https://img.shields.io/badge/Alembic-6B8E23?style=flat-square&logo=alembic&logoColor=white" alt="Alembic" />
+  <img src="https://img.shields.io/badge/OpenAI%20Compatible-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI Compatible" />
+  <img src="https://img.shields.io/badge/Ollama-000000?style=flat-square&logo=ollama&logoColor=white" alt="Ollama" />
+  <img src="https://img.shields.io/badge/OpenRouter-000000?style=flat-square&logo=openrouter&logoColor=white" alt="OpenRouter" />
 </p>
 
 <p align="center">
@@ -66,6 +69,7 @@ SQLite остаётся только для тестов (временные ф�
 | ORM & migrations | SQLAlchemy 2 + Alembic | модели, репозитории, UoW, миграции |
 | API | FastAPI + Pydantic | UI и JSON API |
 | UI | Jinja2 + minimal JS | server-side HTML, без frontend-фреймворков |
+| LLM / Supervisor | OpenAI-compatible API, Ollama, OpenRouter | wizard reasoning и legacy report evaluation |
 | CLI | Click + Rich | `step` / `history` |
 | Config | Pydantic Settings | `.env`, переменные окружения |
 
