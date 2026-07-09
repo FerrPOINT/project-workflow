@@ -11,10 +11,6 @@ class NotFoundError(WorkflowCliError):
     """Entity not found."""
 
 
-class ValidationError(WorkflowCliError):
-    """Domain validation failed."""
-
-
 class ConflictError(WorkflowCliError):
     """Unique constraint or business conflict."""
 

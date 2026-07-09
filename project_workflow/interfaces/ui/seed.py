@@ -8,7 +8,6 @@ import project_workflow.interfaces.ui as _ui_module
 
 from ... import config
 from ...application.phase import PhaseServiceApp
-from ...infrastructure.db import schema
 from ...infrastructure.db.uow import SAUnitOfWork
 from .dependencies import _AppState
 
@@ -16,12 +15,6 @@ from .dependencies import _AppState
 def _get_app_state() -> _AppState:
     """Return the current UI application state (supports test monkeypatching)."""
     return cast(_AppState, _ui_module._app_state)
-
-
-def _seed_to_sqlite() -> None:
-    """Разовый импорт seed.json → SQLite."""
-    wdb = _get_app_state().get_db()
-    schema.ensure_phase_catalog(wdb)
 
 
 def _update_config_phase_order(wdb: Any | None = None) -> None:

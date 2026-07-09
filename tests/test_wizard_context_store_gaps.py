@@ -55,17 +55,19 @@ class TestWizardContextBuilder:
         builder = WizardContextBuilder(uow=uow, task={"id": 1}, all_phases=[self._phase(id=1)])
         assert builder._build_phase_history() == []
 
-    def test_recent_verdicts_object_row(self):
+    def test_recent_verdicts_dict_row(self):
         uow = MagicMock()
-        row = MagicMock()
-        row.phase_code = "1"
-        row.verdict = "pass"
-        row.blockers = []
-        row.missing = []
-        row.next_phase_code = None
-        row.rollback_phase_code = None
-        row.created_at = "2025-01-01"
-        uow.get_supervisor_runs.return_value = [row]
+        uow.get_supervisor_runs.return_value = [
+            {
+                "phase_code": "1",
+                "verdict": "pass",
+                "blockers": [],
+                "missing": [],
+                "next_phase_code": None,
+                "rollback_phase_code": None,
+                "created_at": "2025-01-01",
+            }
+        ]
         builder = WizardContextBuilder(uow=uow, task={"id": 1}, all_phases=[])
         verdicts = builder._build_recent_verdicts()
         assert len(verdicts) == 1

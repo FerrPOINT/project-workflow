@@ -19,7 +19,6 @@ from project_workflow.interfaces.ui import (
     _parse_optional_int,
     _resolve_task_phase,
     _scan_hermes_skills,
-    _seed_to_sqlite,
     _update_config_phase_order,
     _workflow_form_payload,
     app,
@@ -166,18 +165,6 @@ class TestScanHermesSkills:
         result = _scan_hermes_skills()
         assert len(result) == 1
         assert result[0]["name"] == "a"
-
-
-class TestSeedToSqlite:
-    def test_calls_ensure_phase_catalog(self, monkeypatch):
-        db = MagicMock()
-        monkeypatch.setattr("project_workflow.interfaces.ui._app_state", MagicMock(get_db=lambda: db))
-        from project_workflow.infrastructure.db import schema
-
-        called = []
-        monkeypatch.setattr(schema, "ensure_phase_catalog", lambda db: called.append(True))
-        _seed_to_sqlite()
-        assert called
 
 
 class TestLoadWorkflows:

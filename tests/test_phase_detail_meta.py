@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 pytestmark = [pytest.mark.ui]
 
-from project_workflow.interfaces.ui import _seed_to_sqlite, app
+from project_workflow.interfaces.ui import app
 
 client = TestClient(app)
 
@@ -13,11 +13,12 @@ client = TestClient(app)
 @pytest.fixture(autouse=True)
 def setup_db():
     """Ensure seed data exists for phase detail page tests."""
+    from project_workflow.infrastructure.db import schema
     from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
     uow = SAUnitOfWork()
     if not list(uow.workflows.list()) and not list(uow.projects.list()) and not list(uow.tasks.list()):
-        _seed_to_sqlite()
+        schema.ensure_phase_catalog(uow)
 
 
 def test_phase_detail_hides_next_recommendation_meta_entirely():

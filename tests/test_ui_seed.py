@@ -8,16 +8,6 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui import seed as seed_mod
 
 
-def test_seed_to_sqlite():
-    state = MagicMock()
-    uow = MagicMock(spec=SAUnitOfWork)
-    state.get_db.return_value = uow
-    with patch.object(seed_mod, "_get_app_state", return_value=state):
-        with patch("project_workflow.interfaces.ui.seed.schema.ensure_phase_catalog") as ensure:
-            seed_mod._seed_to_sqlite()
-            ensure.assert_called_once_with(uow)
-
-
 def test_update_config_phase_order_with_uow():
     uow = MagicMock(spec=SAUnitOfWork)
     wf = MagicMock()

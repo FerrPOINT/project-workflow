@@ -91,11 +91,6 @@ def determine_verdict(
     return "hard_fail"
 
 
-def build_fail_message(phase_name: str, missing: list[str], blockers: list[str]) -> str:
-    issues = missing or blockers or [phase_name]
-    return "Missing or blocked contract items: " + "; ".join(issues)
-
-
 def build_verdict_message(
     verdict: str,
     phase_name: str,

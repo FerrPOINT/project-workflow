@@ -97,30 +97,17 @@ class WizardContextBuilder:
     def _build_recent_verdicts(self, limit: int = 5) -> list[dict[str, Any]]:
         verdicts: list[dict] = []
         for row in self.uow.get_supervisor_runs(task_id=self.task["id"], limit=limit):
-            if isinstance(row, dict):
-                verdicts.append(
-                    {
-                        "phase_code": row.get("phase_code"),
-                        "verdict": str(row.get("verdict") or "").upper(),
-                        "blockers": row.get("blockers") or [],
-                        "missing": row.get("missing") or [],
-                        "next_phase": row.get("next_phase_code"),
-                        "rollback_target": row.get("rollback_phase_code"),
-                        "created_at": row.get("created_at"),
-                    }
-                )
-            else:
-                verdicts.append(
-                    {
-                        "phase_code": row.phase_code,
-                        "verdict": str(row.verdict or "").upper(),
-                        "blockers": row.blockers or [],
-                        "missing": row.missing or [],
-                        "next_phase": row.next_phase_code,
-                        "rollback_target": row.rollback_phase_code,
-                        "created_at": row.created_at,
-                    }
-                )
+            verdicts.append(
+                {
+                    "phase_code": row.get("phase_code"),
+                    "verdict": str(row.get("verdict") or "").upper(),
+                    "blockers": row.get("blockers") or [],
+                    "missing": row.get("missing") or [],
+                    "next_phase": row.get("next_phase_code"),
+                    "rollback_target": row.get("rollback_phase_code"),
+                    "created_at": row.get("created_at"),
+                }
+            )
         return verdicts
 
     def build(self) -> dict[str, Any]:
