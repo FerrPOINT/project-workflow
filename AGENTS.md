@@ -55,3 +55,21 @@ After any change to the SQLAlchemy layer, application services, UI state, or wiz
 - Use `pytest -q --timeout=60` for the standard full suite. `--forked` is no longer required for stability; coverage reports are inaccurate under `--forked`.
 - `SAUnitOfWork()` with no arguments resolves PostgreSQL `DATABASE_URL` first, then falls back to SQLite `DB_PATH`. This is intentional to keep CLI/UI/test paths aligned.
 - The in-repo skill `project-workflow-test-suite-recovery` contains the full checklist and failure-symptom table.
+
+## Production-readiness — what we deliberately skip
+
+This project is an internal lightweight agent utility, not a customer-facing production service. The following items were evaluated and explicitly rejected for this repo:
+
+| Item | Decision | Rationale |
+|---|---|---|
+| CI/CD pipeline (GitLab/GitHub) | **Skip** | Repo is maintained manually; verification ritual above is sufficient. |
+| Security middleware (CORS, CSP, HTTPS redirect, rate limits) | **Skip** | UI runs on a private host / VPN; no external exposure. |
+| Hardcoded local credentials in `docker-compose.yml` | **Accept for dev only** | Compose stack is for local development; production uses env-provided `DATABASE_URL`. |
+| Observability / metrics / structured JSON logs | **Skip** | Request logging middleware and `/health` endpoint provide enough visibility for an internal tool. |
+| Input validation / sanitization hardening audit | **Skip** | API uses Pydantic schemas and SQLAlchemy ORM; raw SQL is limited to migration/admin scripts. |
+| Graceful connection draining beyond lifespan dispose | **Skip** | Internal tool tolerance for brief connection drops is acceptable. |
+| Backup/restore runbook | **Skip** | Data is seed-reproducible and task-level state is not business-critical. |
+| Bandit/safety/pre-commit hooks | **Skip** | `ruff` + `mypy` + `pytest` coverage gate is the agreed quality bar. |
+| Hardcoded internal URLs (`JIRA_BASE_URL`, `GITLAB_BASE_URL`) | **Accept** | These are stable internal endpoints; still overridable via env if needed in the future. |
+
+If any of these assumptions change (e.g. external exposure, multi-user access, customer data), revisit this section before expanding scope.

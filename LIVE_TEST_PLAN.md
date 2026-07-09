@@ -1,102 +1,111 @@
 # Live Test Plan — project-workflow CLI / WizardEngine
 
 ## Цель
-Проверить внутреннего агента (WizardEngine) через реальные CLI-вызовы на живой БД. Убедиться, что все 5 вердиктов, переходы, rollback, delegate, блокеры работают через `project-workflow step`.
+Проверить внутреннего агента (`WizardEngine`) через реальные CLI-вызовы на живой БД. Убедиться, что вердикты, переходы, rollback, delegate и блокеры работают через `project-workflow step`.
 
 ## Предусловия
 
 ```bash
-# 1. БД инициализирована
-python -c "from project_workflow.infrastructure.db import WorkflowDB; w=WorkflowDB(); w.init()"
+# 1. БД инициализирована и smoke-данные загружены
+python - <<'PY'
+from project_workflow.application.state import _AppState
+from project_workflow.infrastructure.db import schema
 
-# 2. Smoke workflow загружен
-python -c "from project_workflow.infrastructure.db.schema import ensure_phase_catalog; from project_workflow.infrastructure.db import WorkflowDB; ensure_phase_catalog(WorkflowDB())"
+state = _AppState()
+uow = state.get_uow()
+schema.ensure_phase_catalog(uow)
+uow._bootstrap_smoke_project_and_workflow()
+PY
 
-# 3. CLI доступен
-which project-workflow || pip install -e .
+# 2. CLI доступен
+which project-workflow || pip install -e ".[dev,ui]"
 ```
+
+## Smoke workflow
+
+Текущий smoke seed содержит **6 фаз**:
+
+| Order | Code | Name | Execution type | Rollback target | Parallel with |
+|---|---|---|---|---|---|
+| 1 | `smoke.intake` | Document Intake | sync | — | — |
+| 2 | `smoke.plan` | Schema & Architecture Plan | sync | — | — |
+| 3 | `smoke.parallel-a` | Parser & Data Layer | parallel | — | `smoke.parallel-b` |
+| 4 | `smoke.parallel-b` | Editor UI | parallel | — | `smoke.parallel-a` |
+| 5 | `smoke.review` | Integration & Validation Gate | sync | `smoke.plan` | — |
+| 6 | `smoke.done` | Release & Docs | sync | — | — |
 
 ## Сценарии тестирования
 
 ### 🔹 1. Happy Path — полный проход 6 фаз
 
-**Инструкции** (что делать):
-1. Создать задачу `SMOKE-103`.
-2. Выполнить 6 шагов `project-workflow step --task SMOKE-103 --report "..."`.
-3. Каждый отчёт должен содержать keywords из checks/instructions/evidence текущей фазы.
-4. Проверить `history` — все записи должны иметь `verdict: pass`.
+**Инструкции**:
+1. Сгенерировать уникальный ключ: `TASK_KEY="SMOKE-$(date +%s)"`.
+2. Выполнить 6 шагов `project-workflow --json step --task "$TASK_KEY" --report "..."`.
+3. Каждый отчёт должен содержать keywords из `checks`/`instructions`/`evidence` текущей фазы.
+4. Проверить `history` — записи должны иметь `verdict: PASS`.
 5. Проверить статус задачи в БД — `done`.
 
-**Скиллы** (какие навыки нужны исполнителю):
-- CLI execution (`project-workflow step`)
-- Keyword matching (понимать, что wizard ищет keywords в отчёте)
-- DB inspection (`sqlite3 workflow.db`)
-
-**Проверки** (граничные условия):
+**Проверки**:
 - Нельзя пропускать фазы.
 - Нельзя подать пустой `--report`.
 - Последняя фаза `smoke.done` должна вернуть `next_phase: null`.
 
-**Доказательства** (что фиксируем):
+**Доказательства**:
 - JSON-вывод каждого `step --report`.
-- `project-workflow history --task SMOKE-103 --n 10`.
-- `SELECT status FROM tasks WHERE task_key = 'SMOKE-103';`.
+- `project-workflow history --task "$TASK_KEY" --json`.
+- `SELECT status FROM tasks WHERE task_key = '<TASK_KEY>';`.
+
+---
 
 ### 🔹 2. Verdict: PARTIAL — неполный отчёт
 
 **Инструкции**:
-1. На фазе `smoke.intake` подать отчёт без обязательных keywords (например, без "requirements").
-2. Ожидать `verdict: PARTIAL`.
-3. Убедиться, что `current_phase` осталась той же.
-4. Подать полный отчёт → PASS → переход к следующей фазе.
-
-**Скиллы**:
-- Намеренное создание неполного отчёта для проверки edge case.
-- Чтение JSON-ответа CLI.
+1. Сгенерировать ключ: `TASK_PARTIAL="SMOKE-$(date +%s)-P"`.
+2. На фазе `smoke.intake` подать отчёт без обязательных keywords (например, без "formats", "scope").
+3. Ожидать `verdict: PARTIAL`.
+4. Убедиться, что `current_phase` осталась той же.
+5. Подать полный отчёт → `PASS` → переход к следующей фазе.
 
 **Проверки**:
-- `current_phase` не изменилась при PARTIAL.
+- `current_phase` не изменилась при `PARTIAL`.
 - `status` остался `active` (не `blocked`).
 - В `missing` перечислены конкретные пропущенные items.
 
 **Доказательства**:
 - JSON с `verdict: PARTIAL`.
-- `SELECT current_phase FROM tasks WHERE task_key = 'SMOKE-103';` до и после.
+- `SELECT current_phase FROM tasks WHERE task_key = '<TASK_PARTIAL>';` до и после.
+
+---
 
 ### 🔹 3. Verdict: BLOCKED — blocker без rollback target
 
 **Инструкции**:
-1. На фазе `smoke.plan` подать отчёт: "blocked by missing requirements, cannot proceed".
-2. Убедиться, что фаза `smoke.plan` не имеет `rollback_target`.
-3. Ожидать `verdict: BLOCKED`.
-4. Проверить, что задача перешла в статус `blocked`.
-
-**Скиллы**:
-- DB query: `SELECT rollback_target FROM phases WHERE code = 'smoke.plan';`.
-- Формирование отчёта с explicit blocker.
+1. Сгенерировать ключ: `TASK_BLOCKED="SMOKE-$(date +%s)-B"`.
+2. Пройти `smoke.intake` полным отчётом.
+3. На фазе `smoke.plan` подать отчёт: "blocked by missing requirements, cannot proceed".
+4. Убедиться, что фаза `smoke.plan` не имеет `rollback_target`.
+5. Ожидать `verdict: BLOCKED`.
 
 **Проверки**:
-- Если `rollback_target IS NULL`, то вердикт = BLOCKED (не ROLLBACK).
+- Если `rollback_target IS NULL`, то вердикт = `BLOCKED` (не `ROLLBACK`).
 - `status` задачи = `blocked`.
 - `current_phase` остаётся прежней.
 
 **Доказательства**:
 - JSON с `verdict: BLOCKED`.
-- `SELECT status, current_phase FROM tasks WHERE task_key = 'SMOKE-104';`
+- `SELECT status, current_phase FROM tasks WHERE task_key = '<TASK_BLOCKED>';`
 - Запись в `supervisor_runs` с `verdict: blocked`.
+
+---
 
 ### 🔹 4. Verdict: ROLLBACK — откат на предыдущую фазу
 
 **Инструкции**:
-1. Найти фазу с `rollback_target` (например, `smoke.review` → `smoke.plan`).
-2. Дойти до неё через все предыдущие фазы.
+1. Сгенерировать ключ: `TASK_ROLL="SMOKE-$(date +%s)-R"`.
+2. Дойти до `smoke.review` через все предыдущие фазы.
 3. Подать отчёт: "Tests failed, must rollback to plan phase".
 4. Ожидать `verdict: ROLLBACK` и `rollback_target: smoke.plan`.
 5. Убедиться, что `current_phase` = `smoke.plan`.
-
-**Скиллы**:
-- Workflow navigation (понимать rollback_target в schema).
-- Создание негативного отчёта с rollback intent.
 
 **Проверки**:
 - Фаза имеет `rollback_target`.
@@ -105,71 +114,48 @@ which project-workflow || pip install -e .
 
 **Доказательства**:
 - JSON с `verdict: ROLLBACK` и `rollback_target`.
-- `SELECT current_phase FROM tasks WHERE task_key = 'SMOKE-105';` = `smoke.plan`.
-- `project-workflow history --task SMOKE-105`.
+- `SELECT current_phase FROM tasks WHERE task_key = '<TASK_ROLL>';` = `smoke.plan`.
+- `project-workflow history --task <TASK_ROLL> --json`.
+
+---
 
 ### 🔹 5. Verdict: DELEGATE — делегирование
 
 **Инструкции**:
-1. Найти/создать фазу с `is_delegated = true` и assigned agent.
-2. Подать отчёт: "delegate this to ops agent".
-3. Ожидать `verdict: DELEGATE`.
-
-**Скиллы**:
-- Delegate signal generation.
-- Проверка `is_delegated` в БД.
+1. Сгенерировать ключ: `TASK_DEL="SMOKE-$(date +%s)-D"`.
+2. Подать на `smoke.intake` отчёт с delegate-сигналом, например: "delegate this to ops agent".
+3. Ожидать `verdict: DELEGATE` (только если фаза помечена как delegated и в отчёте есть delegate signal).
 
 **Проверки**:
-- `is_delegated = true` обязательно (иначе вердикт будет PARTIAL).
+- `is_delegated = true` обязательно (иначе вердикт будет `PARTIAL`/`HARD_FAIL`).
 - Статус задачи остаётся `active`.
 
 **Доказательства**:
 - JSON с `verdict: DELEGATE`.
-- DB: `SELECT is_delegated FROM phases WHERE code = '...';`
+- DB: `SELECT is_delegated FROM phases WHERE code = 'smoke.intake';`
+
+---
 
 ### 🔹 6. False Positive Guard — "rollback" в тексте не должен давать ROLLBACK
 
 **Инструкции**:
-1. На фазе `smoke.review` (rollback_target есть, но отчёт корректный).
-2. Подать отчёт: "Rollback path reviewed, no issues found".
-3. Ожидать `verdict: PASS` (не ROLLBACK!).
-
-**Скиллы**:
-- Понимание логики: `rollback` в тексте + `rollback_target` → ROLLBACK, но только если есть issues/blockers.
+1. Сгенерировать ключ: `TASK_FP="SMOKE-$(date +%s)-FP"`.
+2. Дойти до `smoke.review` (rollback target есть, но отчёт корректный).
+3. Подать отчёт: "Rollback path reviewed, no issues found".
+4. Ожидать `verdict: PASS` (не `ROLLBACK`).
 
 **Проверки**:
 - Отчёт содержит слово "rollback".
-- Нет blockers.
-- Нет missing items.
-- Вердикт = PASS.
+- Нет blockers / missing items.
+- Вердикт = `PASS`.
 
 **Доказательства**:
 - JSON с `verdict: PASS`.
-- Сравнение с предыдущим regression (было ROLLBACK до фикса).
+- Сравнение с предыдущим regression (было `ROLLBACK` до фикса).
 
-### 🔹 7. Cache Coherence — PromptCache
+---
 
-**Инструкции**:
-1. Создать задачу.
-2. Вызвать `get_phase_prompt()` — cold.
-3. Вызвать `get_phase_prompt()` — cached.
-4. Выполнить `evaluate()` → transition.
-5. Проверить, что snapshot в `supervisor_runs` — fresh (use_cache=False).
-
-**Скиллы**:
-- Performance measurement.
-- DB inspection.
-
-**Проверки**:
-- Cache hit: <0.1ms.
-- Cache miss after transition: rebuild.
-- `context_snapshot` в DB содержит актуальный `current_phase`.
-
-**Доказательства**:
-- Benchmark timings.
-- JSON `context_snapshot` из `supervisor_runs`.
-
-### 🔹 8. Command Guard — только 2 команды
+### 🔹 7. Command Guard — только 2 команды
 
 **Инструкции**:
 1. Выполнить: `project-workflow --help`.
@@ -177,13 +163,9 @@ which project-workflow || pip install -e .
 3. Попробовать: `project-workflow step --task TEST --skip` → FAIL.
 4. Попробовать: `project-workflow step --task TEST --repo /tmp` → FAIL.
 
-**Скиллы**:
-- CLI option testing.
-- Negative test design.
-
 **Проверки**:
 - `exit_code != 0` для rejected options.
-- `--version` = 1.0.0.
+- `--version` = `1.0.0`.
 
 **Доказательства**:
 - `stderr` с `No such option`.
@@ -194,21 +176,22 @@ which project-workflow || pip install -e .
 После каждого сценария фиксируем:
 
 | Поле | Значение |
-|------|----------|
-| Task key | SMOKE-XXX |
-| Сценарий | Happy Path / Partial / Blocked / Rollback / Delegate / False Positive |
-| Команды | `project-workflow step --task KEY --report "..."` |
-| Verdict | PASS / PARTIAL / BLOCKED / ROLLBACK / DELEGATE |
+|---|---|
+| Task key | `SMOKE-<timestamp>[-SUFFIX]` |
+| Сценарий | Happy Path / Partial / Blocked / Rollback / Delegate / False Positive / Command Guard |
+| Команды | `project-workflow --json step --task KEY --report "..."` |
+| Verdict | `PASS` / `PARTIAL` / `BLOCKED` / `ROLLBACK` / `DELEGATE` |
 | DB state (до) | `current_phase`, `status` |
 | DB state (после) | `current_phase`, `status`, `next_phase` |
-| История | `project-workflow history --task KEY` |
+| История | `project-workflow history --task KEY --json` |
 | Скриншот | Если UI-часть задействована |
 
 ## Автоматизация
 
 Скрипт live-тестирования:
+
 ```bash
 bash scripts/test_cli_live.sh
 ```
 
-Скрипт выполняет сценарии 1, 2, 3, 4 автоматически и сверяет JSON-ответы.
+Скрипт выполняет сценарии 1, 2, 3, 4, 5 автоматически и сверяет JSON-ответы.
