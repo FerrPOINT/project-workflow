@@ -41,6 +41,22 @@ def _error(message: str, status: int) -> JSONResponse:
     return JSONResponse({"ok": False, "error": message}, status_code=status)
 
 
+def _updates_from_payload(payload: Any, fields: list[str]) -> dict[str, Any]:
+    """Build an update dict from payload fields that are not None."""
+    updates: dict[str, Any] = {}
+    for key in fields:
+        value = getattr(payload, key, None)
+        if value is not None:
+            updates[key] = value
+    return updates
+
+
+def _normalize_skills(skills: Any) -> list[str]:
+    if isinstance(skills, str):
+        return [s.strip() for s in skills.splitlines() if s.strip()]
+    return skills
+
+
 async def api_settings_get() -> dict[str, Any] | JSONResponse:
     """Вернуть реестр CLI-команд для UI/интеграций."""
     from project_workflow.interfaces.ui.services import _load_cli_reference
@@ -297,12 +313,9 @@ async def api_workflow_update(workflow_id: int, payload: WorkflowUpdate) -> dict
         return _error(f"Workflow {workflow_id} не найден", 404)
     if payload.code is not None and payload.code != existing.get("code"):
         return _error("Workflow code field is no longer supported", 400)
-    updates: dict[str, Any] = {}
-    if payload.name is not None:
-        updates["name"] = payload.name
-    if payload.description is not None:
-        updates["description"] = payload.description
-    service.update_workflow(workflow_id, updates)
+    updates = _updates_from_payload(payload, ["name", "description"])
+    if updates:
+        service.update_workflow(workflow_id, updates)
     return {"ok": True, "workflow": service.get_workflow(workflow_id)}
 
 
@@ -343,16 +356,11 @@ async def api_project_update(project_id: int, payload: ProjectUpdate) -> dict[st
     existing = service.get_project(project_id)
     if not existing:
         return _error(f"Проект {project_id} не найден", 404)
-    updates: dict[str, Any] = {}
-    if payload.name is not None:
-        updates["name"] = payload.name
-    if payload.description is not None:
-        updates["description"] = payload.description
+    updates = _updates_from_payload(payload, ["name", "description", "workflow_id"])
     if payload.key_prefixes is not None:
         updates["key_prefixes"] = list(payload.key_prefixes)
-    if payload.workflow_id is not None:
-        updates["workflow_id"] = payload.workflow_id
-    service.update_project(project_id, updates)
+    if updates:
+        service.update_project(project_id, updates)
     return {"ok": True, "project": service.get_project(project_id)}
 
 
@@ -379,12 +387,9 @@ async def api_agent_update(agent_id: int, payload: AgentUpdate) -> dict[str, Any
     existing = service.get_agent(agent_id)
     if not existing:
         return _error(f"Агент {agent_id} не найден", 404)
-    updates: dict[str, Any] = {}
-    if payload.name is not None:
-        updates["name"] = payload.name
-    if payload.description is not None:
-        updates["description"] = payload.description
-    service.update_agent(agent_id, updates)
+    updates = _updates_from_payload(payload, ["name", "description"])
+    if updates:
+        service.update_agent(agent_id, updates)
     return {"ok": True, "agent": service.get_agent(agent_id)}
 
 
@@ -438,18 +443,9 @@ async def api_instruction_update(instruction_id: int, payload: InstructionUpdate
     existing = _app_state.instruction_service().get_instruction(instruction_id)
     if existing is None:
         return _error(f"Инструкция {instruction_id} не найдена", 404)
-    updates: dict[str, Any] = {}
-    if payload.description is not None:
-        updates["description"] = payload.description
-    if payload.execution_type is not None:
-        updates["execution_type"] = payload.execution_type
+    updates = _updates_from_payload(payload, ["description", "execution_type", "step_num"])
     if payload.skills is not None:
-        skills = payload.skills
-        if isinstance(skills, str):
-            skills = [s.strip() for s in skills.splitlines() if s.strip()]
-        updates["skills"] = skills
-    if payload.step_num is not None:
-        updates["step_num"] = payload.step_num
+        updates["skills"] = _normalize_skills(payload.skills)
     if updates:
         _app_state.instruction_service().update_instruction(instruction_id, updates)
     return {"ok": True, "instruction": _app_state.instruction_service().get_instruction(instruction_id)}
@@ -459,10 +455,9 @@ async def api_instruction_update_skills(instruction_id: int, payload: dict[str, 
     existing = _app_state.instruction_service().get_instruction(instruction_id)
     if existing is None:
         return _error(f"Инструкция {instruction_id} не найдена", 404)
-    skills = payload.get("skills", [])
-    if isinstance(skills, str):
-        skills = [s.strip() for s in skills.splitlines() if s.strip()]
-    _app_state.instruction_service().update_instruction(instruction_id, {"skills": skills})
+    _app_state.instruction_service().update_instruction(
+        instruction_id, {"skills": _normalize_skills(payload.get("skills", []))}
+    )
     return {"ok": True, "instruction": _app_state.instruction_service().get_instruction(instruction_id)}
 
 
