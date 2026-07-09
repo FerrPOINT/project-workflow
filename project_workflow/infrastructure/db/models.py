@@ -270,22 +270,6 @@ class CliHistory(Base):
     created_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
-class WizardMemory(Base):
-    __tablename__ = "wizard_memories"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True)
-    memory_type: Mapped[str] = mapped_column(String, nullable=False)
-    content: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    __table_args__ = (
-        CheckConstraint(
-            "memory_type IN ('correction', 'lesson', 'blocker_pattern', 'preference')",
-            name="ck_wizard_memories_memory_type",
-        ),
-    )
-
-
 # Runtime helper used by repository layer to extract a plain dict from a model.
 def model_to_dict(model: Base) -> dict[str, Any]:
     return {c.name: getattr(model, c.name) for c in model.__table__.columns}

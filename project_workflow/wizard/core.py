@@ -37,12 +37,10 @@ from .contracts import PhaseContractBuilder
 
 # Backward-compatible re-exports moved to dedicated modules.
 from .formatting import format_result  # noqa: F401
-from .memory import MemoryStore
 from .models import Phase
 from .prompt import build_phase_prompt
 from .result_builder import VERDICT_LABELS  # noqa: F401
 from .store import WizardAssessmentStore
-from .types import WizardAssessment
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +83,6 @@ class WizardEngine:
         self.create_if_missing = create_if_missing
         self._uow = uow if uow is not None else SAUnitOfWork()
         self._store = WizardAssessmentStore(self._uow)
-        self._memory = MemoryStore(self._uow)
 
         self._uow.create_all()
         self._bootstrap_smoke_project_and_workflow()
@@ -689,7 +686,6 @@ class WizardEngine:
         self._uow.commit()
         if not self.task:
             return result
-        self._capture_memory_from_assessment(assessment)
         self.task = self._task_service.get_task(self.task["id"]) or self.task
         self.current_phase = self._resolve_current_phase()
 
@@ -726,41 +722,6 @@ class WizardEngine:
         from .evaluate import evaluate_llm_report
 
         return evaluate_llm_report(report, phase, self)
-
-    def _capture_memory_from_assessment(self, assessment: WizardAssessment) -> None:
-        """Extract simple, durable learnings from this evaluation.
-
-        Sandboxed: only stores memories; does not read git/files/tests.
-        """
-        if not self.task:
-            return
-        task_id = int(self.task.get("id", 0))
-        if not task_id:
-            return
-
-        if assessment.blockers:
-            blocker_text = ", ".join(str(b) for b in assessment.blockers)
-            self._memory.add(
-                task_id,
-                "blocker_pattern",
-                f"Phase {assessment.phase_code} produced blockers: {blocker_text}",
-            )
-
-        if assessment.verdict in {"partial", "soft_fail"} and assessment.missing:
-            missing_text = "; ".join(str(m) for m in assessment.missing)
-            self._memory.add(
-                task_id,
-                "lesson",
-                f"Phase {assessment.phase_code} frequently missing: {missing_text}",
-            )
-
-        if assessment.verdict == "pass" and assessment.blockers:
-            # If pass despite blockers, we likely degraded gracefully; remember that.
-            self._memory.add(
-                task_id,
-                "lesson",
-                f"Phase {assessment.phase_code}: passed with noted blockers.",
-            )
 
 
 # ═══════════════════════════════════════════════════════════════════════

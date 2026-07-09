@@ -12,7 +12,6 @@
 
 from __future__ import annotations
 
-import os
 import sys
 from typing import Any
 
@@ -51,7 +50,6 @@ def step_cmd(
     uow = SAUnitOfWork()
     task_key = _require_valid_key(task, uow)
     jmode = ctx.obj.get("json_mode", False)
-    smart = os.getenv("SMART_EVALUATE", "").lower() in ("1", "true", "yes", "on")
 
     engine = wizard.WizardEngine(task_key, uow=uow)
 
@@ -61,10 +59,7 @@ def step_cmd(
         if jmode:
             out_json(result)
             return
-        formatted = format_result(result)
-        if smart:
-            formatted = "[🧠 SMART MODE] " + formatted
-        console.print(formatted)
+        console.print(format_result(result))
         # Recoverable verdicts (PASS / SOFT_FAIL) should not produce a CLI error exit code.
         sys.exit(0 if result["verdict"] in ("PASS", "SOFT_FAIL") else 1)
 
