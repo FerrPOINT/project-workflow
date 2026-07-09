@@ -34,6 +34,8 @@ from project_workflow.infrastructure.db.repositories import (
 )
 from project_workflow.infrastructure.db.session import get_session
 
+from .row_utils import row_to_dict, rows_to_dicts
+
 
 class SAUnitOfWork(UnitOfWork):
     """SQLAlchemy session-based unit of work."""
@@ -168,8 +170,7 @@ class SAUnitOfWork(UnitOfWork):
         return self.instructions.create(int(phase_id), data)
 
     def get_phase_by_code(self, code: str) -> Any | None:
-        row = self.phases.get_by_code(code)
-        return row.to_dict() if row and hasattr(row, "to_dict") else row
+        return row_to_dict(self.phases.get_by_code(code))
 
     def get_phase(self, token: Any) -> Any | None:
         """Resolve a phase by id or code."""
@@ -181,22 +182,20 @@ class SAUnitOfWork(UnitOfWork):
         if numeric_id is not None:
             row = self.phases.get_by_id(numeric_id)
             if row is not None:
-                return row.to_dict() if hasattr(row, "to_dict") else row
+                return row_to_dict(row)
         row = self.phases.get_by_code(str(token))
         if row is None:
             try:
                 row = self.phases.get_by_id(int(token))
             except (TypeError, ValueError):
                 pass
-        return row.to_dict() if row and hasattr(row, "to_dict") else row
+        return row_to_dict(row)
 
     def get_task(self, task_id: int) -> Any | None:
-        row = self.tasks.get_by_id(task_id)
-        return row.to_dict() if row and hasattr(row, "to_dict") else row
+        return row_to_dict(self.tasks.get_by_id(task_id))
 
     def get_task_by_key(self, key: str) -> Any | None:
-        row = self.tasks.get_by_key(key)
-        return row.to_dict() if row and hasattr(row, "to_dict") else row
+        return row_to_dict(self.tasks.get_by_key(key))
 
     def update_task(self, task_id: int, data: dict[str, Any]) -> None:
         return self.tasks.update(task_id, data)
@@ -238,29 +237,23 @@ class SAUnitOfWork(UnitOfWork):
         if workflow_id is None:
             default_wf = self.workflows.ensure_default_exists()
             workflow_id = default_wf.id if default_wf else None
-        rows = self.phases.list(workflow_id=workflow_id)
-        return [r.to_dict() if hasattr(r, "to_dict") else r for r in rows]
+        return rows_to_dicts(self.phases.list(workflow_id=workflow_id))
 
     def get_all_phases(self) -> list[Any]:
         """Return phases across every workflow (used by dashboard aggregation)."""
-        rows = self.phases.list()
-        return [r.to_dict() if hasattr(r, "to_dict") else r for r in rows]
+        return rows_to_dicts(self.phases.list())
 
     def get_projects(self) -> list[Any]:
-        rows = self.projects.list()
-        return [r.to_dict() if hasattr(r, "to_dict") else r for r in rows]
+        return rows_to_dicts(self.projects.list())
 
     def get_tasks(self) -> list[Any]:
-        rows = self.tasks.list()
-        return [r.to_dict() if hasattr(r, "to_dict") else r for r in rows]
+        return rows_to_dicts(self.tasks.list())
 
     def get_agents(self) -> list[Any]:
-        rows = self.agents.list()
-        return [r.to_dict() if hasattr(r, "to_dict") else r for r in rows]
+        return rows_to_dicts(self.agents.list())
 
     def get_workflows(self) -> list[Any]:
-        rows = self.workflows.list()
-        return [r.to_dict() if hasattr(r, "to_dict") else r for r in rows]
+        return rows_to_dicts(self.workflows.list())
 
     def list_phases(self, workflow_id: int | None = None) -> list[Any]:
         return self.get_phases(workflow_id)
@@ -278,10 +271,10 @@ class SAUnitOfWork(UnitOfWork):
         return self.get_workflows()
 
     def get_task_history(self, task_id: int) -> list[dict[str, Any]]:
-        return [r.to_dict() if hasattr(r, "to_dict") else r for r in self.tasks.get_history(task_id)]
+        return rows_to_dicts(self.tasks.get_history(task_id))
 
     def get_supervisor_runs(self, **kwargs: Any) -> list[dict[str, Any]]:
-        return [r.to_dict() for r in self.supervisor_runs.list(**kwargs)]
+        return rows_to_dicts(self.supervisor_runs.list(**kwargs))
 
     def init(self) -> None:
         self.create_all()
