@@ -91,10 +91,6 @@ class _AppState:
     def db(self) -> Any | None:
         return None
 
-    @property
-    def _database_url_public(self) -> str:
-        return self._database_url
-
 
 _app_state = _AppState()
 __all__ = ["_AppState", "_app_state"]

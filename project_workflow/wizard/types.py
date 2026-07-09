@@ -15,8 +15,6 @@ class ArtifactSnapshot:
 
     path: str
     exists: bool
-    mtime: float = 0.0
-    size: int = 0
 
 
 @dataclass
@@ -56,16 +54,6 @@ class PhaseContract:
 
 
 @dataclass
-class WizardFinding:
-    """A single issue discovered by deterministic checks."""
-
-    severity: str  # "fatal", "error", "warning"
-    source: str  # e.g. "missing_artifact", "stale_file", "contradiction"
-    message: str
-    remediation: str | None = None
-
-
-@dataclass
 class WizardAssessment:
     """Complete assessment for a phase evaluation."""
 
@@ -76,7 +64,6 @@ class WizardAssessment:
     covered: list[str] = field(default_factory=list)
     missing: list[str] = field(default_factory=list)
     blockers: list[str] = field(default_factory=list)
-    findings: list[WizardFinding] = field(default_factory=list)
     next_phase: str | None = None
     next_phase_name: str | None = None
     rollback_target: str | None = None
@@ -85,7 +72,6 @@ class WizardAssessment:
     required_checks: list[str] = field(default_factory=list)
     required_evidence: list[str] = field(default_factory=list)
     message: str = ""
-    reasoning_mode: str = "deterministic"
     group_phases: list[str] | None = None  # set for parallel blocks
 
     def to_result_dict(self) -> dict[str, Any]:
