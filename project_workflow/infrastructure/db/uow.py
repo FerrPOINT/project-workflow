@@ -6,7 +6,6 @@ from typing import Any, Literal
 
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
-from sqlalchemy.sql import text
 
 from project_workflow.domain.exceptions import NotFoundError
 from project_workflow.domain.repositories import (
@@ -25,7 +24,6 @@ from project_workflow.infrastructure.db.models import Base
 from project_workflow.infrastructure.db.repositories import (
     SAAgentRepository,
     SACheckRepository,
-    SACLIHistoryRepository,
     SAEvidenceRepository,
     SAInstructionRepository,
     SAPhaseRepository,
@@ -71,7 +69,6 @@ class SAUnitOfWork(UnitOfWork):
         self._tasks: SATaskRepository = SATaskRepository(self._session)
         self._agents: SAAgentRepository = SAAgentRepository(self._session)
         self._supervisor_runs: SASupervisorRunRepository = SASupervisorRunRepository(self._session)
-        self._cli_history: SACLIHistoryRepository = SACLIHistoryRepository(self._session)
 
     def __enter__(self) -> SAUnitOfWork:
         return self
@@ -133,10 +130,6 @@ class SAUnitOfWork(UnitOfWork):
     def session(self) -> Session:
         return self._session
 
-    @property
-    def cli_history(self) -> SACLIHistoryRepository:
-        return self._cli_history
-
     def add_task_history(self, task_id: int, phase_id: int | str, status: str) -> None:
         self.tasks.add_history(task_id, int(phase_id), status)
         self.commit()
@@ -174,34 +167,6 @@ class SAUnitOfWork(UnitOfWork):
             raise RuntimeError("create_instruction requires phase_id")
         return self.instructions.create(int(phase_id), data)
 
-    def create_check(self, *args: Any, **kwargs: Any) -> int:
-        if args and isinstance(args[0], dict) and not kwargs:
-            kwargs = args[0]
-        data = dict(kwargs)
-        phase_id = data.pop("phase_id")
-        if isinstance(phase_id, str):
-            phase = self.phases.get_by_code(phase_id)
-            phase_id = phase.id if phase else None
-        if phase_id is None:
-            raise RuntimeError("create_check requires phase_id")
-        return self.checks.create(int(phase_id), data)
-
-    def create_evidence(self, *args: Any, **kwargs: Any) -> int:
-        if args and isinstance(args[0], dict) and not kwargs:
-            kwargs = args[0]
-        data = dict(kwargs)
-        phase_id = data.pop("phase_id")
-        if isinstance(phase_id, str):
-            phase = self.phases.get_by_code(phase_id)
-            phase_id = phase.id if phase else None
-        if phase_id is None:
-            raise RuntimeError("create_evidence requires phase_id")
-        return self.evidence.create(int(phase_id), data)
-
-    def get_phase_by_id(self, phase_id: int) -> Any | None:
-        row = self.phases.get_by_id(phase_id)
-        return row.to_dict() if row and hasattr(row, "to_dict") else row
-
     def get_phase_by_code(self, code: str) -> Any | None:
         row = self.phases.get_by_code(code)
         return row.to_dict() if row and hasattr(row, "to_dict") else row
@@ -235,74 +200,6 @@ class SAUnitOfWork(UnitOfWork):
 
     def update_task(self, task_id: int, data: dict[str, Any]) -> None:
         return self.tasks.update(task_id, data)
-
-    def get_cli_history(self, limit: int = 200) -> list[dict[str, Any]]:
-        return list(self.cli_history.list(limit))
-
-    def log_cli_call(
-        self,
-        command: str,
-        task_key: str | None = None,
-        request: str | None = None,
-        response: str | None = None,
-    ) -> int:
-        return self.cli_history.create(command, task_key, request, response)
-
-    def import_phases(self, phases: list[dict[str, Any]]) -> None:
-        default_wf = self.workflows.ensure_default_exists()
-        workflow_id = default_wf.id if default_wf else None
-        if workflow_id is None:
-            raise RuntimeError("No default workflow available for import_phases")
-        self._session.execute(
-            text("DELETE FROM instructions WHERE phase_id IN (SELECT id FROM phases WHERE workflow_id = :wid)"),
-            {"wid": workflow_id},
-        )
-        self._session.execute(
-            text("DELETE FROM checks WHERE phase_id IN (SELECT id FROM phases WHERE workflow_id = :wid)"),
-            {"wid": workflow_id},
-        )
-        self._session.execute(
-            text("DELETE FROM evidence WHERE phase_id IN (SELECT id FROM phases WHERE workflow_id = :wid)"),
-            {"wid": workflow_id},
-        )
-        self._session.execute(
-            text("DELETE FROM phases WHERE workflow_id = :wid"),
-            {"wid": workflow_id},
-        )
-        for order, phase in enumerate(phases, start=1):
-            data = {
-                "workflow_id": workflow_id,
-                "code": str(phase.get("code", order)),
-                "name": phase.get("name", f"Phase {order}"),
-                "description": phase.get("description", ""),
-                "phase_order": order,
-                "next_recommendation": phase.get("next_recommendation", ""),
-                "parallel_with": phase.get("parallel_with"),
-                "rollback_target": phase.get("rollback_target"),
-                "execution_type": phase.get("execution_type", "sync"),
-                "is_seed_managed": phase.get("is_seed_managed", True),
-            }
-            phase_id = self.phases.create(data)
-            for idx, instr in enumerate(phase.get("instructions", []), start=1):
-                self.instructions.create(
-                    int(phase_id),
-                    {
-                        "step_num": idx,
-                        "description": instr.get("step", instr.get("description", "")),
-                        "example": instr.get("example", ""),
-                        "execution_type": instr.get("execution_type", "sync"),
-                        "skills": instr.get("skills", []),
-                    },
-                )
-            self.phases.set_checks(
-                int(phase_id),
-                [{"description": c.get("description", c.get("item", ""))} for c in phase.get("checks", [])],
-            )
-            self.phases.set_evidence(
-                int(phase_id),
-                [{"description": e.get("description", e.get("item", ""))} for e in phase.get("evidence", [])],
-            )
-        self.commit()
 
     def create_project(self, data: dict[str, Any]) -> dict[str, Any]:
         from project_workflow.application.project import ProjectService
@@ -403,10 +300,6 @@ class SAUnitOfWork(UnitOfWork):
         from .uow_bootstrap import bootstrap_default_project
         bootstrap_default_project(self)
 
-    def get_default_workflow(self) -> Any | None:
-        row = self.workflows.ensure_default_exists()
-        return row.to_dict() if hasattr(row, "to_dict") else row
-
     def delete_phase(self, token: int | str) -> None:
         phase_id: int | None = None
         if isinstance(token, str):
@@ -417,49 +310,6 @@ class SAUnitOfWork(UnitOfWork):
         if phase_id is None:
             raise NotFoundError(f"Phase {token} not found")
         self.phases.delete(int(phase_id))
-
-    def get_project_by_code(self, code: str) -> Any | None:
-        row = self.projects.get_by_code(code)
-        if row is None:
-            return None
-        return row.to_dict() if hasattr(row, "to_dict") else row
-
-    def sanitize_runtime_state(self) -> None:
-        """Remove known test residue and deduplicate agents."""
-        # Remove test projects by known prefixes
-        for project in self.projects.list():
-            code = project.code
-            if code in ("UITEST",):
-                pid = project.id
-                if pid is None:
-                    continue
-                self._session.execute(
-                    text("DELETE FROM task_history WHERE task_id IN (SELECT id FROM tasks WHERE project_id = :pid)"),
-                    {"pid": pid},
-                )
-                self._session.execute(
-                    text("DELETE FROM supervisor_runs WHERE task_id IN (SELECT id FROM tasks WHERE project_id = :pid)"),
-                    {"pid": pid},
-                )
-                self._session.execute(
-                    text("DELETE FROM tasks WHERE project_id = :pid"),
-                    {"pid": pid},
-                )
-                self.projects.delete(int(pid))
-
-        # Dedupe agents by name
-        agents = list(self.agents.list())
-        seen: dict[str, int] = {}
-        for agent in agents:
-            aid = agent.id
-            if aid is None:
-                continue
-            if agent.name in seen:
-                self.agents.delete(int(aid))
-            else:
-                seen[agent.name] = int(aid)
-
-        self._session.commit()
 
     def create_all(self) -> None:
         """Create schema (dev/test helper)."""

@@ -152,8 +152,7 @@ class TestEvaluateAccumulationEndToEnd:
         engine.db.create_instruction(
             {"phase_id": pid, "step_num": 2, "description": "Fix failing code", "execution_type": "sync"}
         )
-        engine.db.create_check({"phase_id": pid, "description": "tests run"})
-        engine.db.create_check({"phase_id": pid, "description": "code fixed"})
+        engine.db.phases.set_checks(pid, [{"description": "tests run"}, {"description": "code fixed"}])
 
         # Mock phase map
         class FakePhase:

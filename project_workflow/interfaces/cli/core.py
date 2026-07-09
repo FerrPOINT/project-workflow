@@ -19,7 +19,6 @@ from ...domain import validation as task_validator
 
 console = Console()
 
-FAIL = "[red]❌[/red]"
 WARN = "[yellow]⚠️[/yellow]"
 
 
@@ -48,7 +47,7 @@ def _require_valid_key(task_key: str, uow=None) -> str:
     else:
         validated = _get_task_key_validator(uow=uow).validate(task_key)
     if not validated.is_valid:
-        console.print(f"{FAIL} [bold red]Invalid task key:[/bold red] {validated.error_message}")
+        console.print(f"[red]❌[/red] [bold red]Invalid task key:[/bold red] {validated.error_message}")
         raise click.Abort()
     return validated.normalized or task_key
 
@@ -65,4 +64,4 @@ def cli(ctx: click.Context, json_mode: bool) -> None:
     ctx.obj["json_mode"] = json_mode
 
 
-__all__ = ["cli", "out_json", "_require_valid_key", "console", "FAIL", "WARN"]
+__all__ = ["cli", "out_json", "_require_valid_key", "console", "WARN"]

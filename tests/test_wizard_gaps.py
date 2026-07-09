@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 import importlib
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-
-pytestmark = [pytest.mark.wizard]
 
 from project_workflow.infrastructure.db.session import reset_engine
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
@@ -17,11 +14,13 @@ from project_workflow.wizard.models import Phase
 from project_workflow.wizard.store import WizardAssessmentStore
 from project_workflow.wizard.types import WizardAssessment
 
+pytestmark = [pytest.mark.wizard]
+
 
 class TestWizardContextBuilder:
-    def test_uow_from_db_kwarg(self):
+    def test_uow_from_uow_kwarg(self):
         uow = MagicMock()
-        builder = WizardContextBuilder(db=uow, task={"id": 1})
+        builder = WizardContextBuilder(uow=uow, task={"id": 1})
         assert builder.uow is uow
 
     def test_phase_by_id_none(self):
@@ -38,33 +37,6 @@ class TestWizardContextBuilder:
             current_phase="0.0a",
         )
         assert builder._phase_status_lookup() == {}
-
-    def test_scan_artifacts_no_project(self):
-        builder = WizardContextBuilder(task={"id": 1}, task_key="TASK-1")
-        assert builder._scan_artifacts() == []
-
-    def test_scan_artifacts_existing_file(self, tmp_path, monkeypatch):
-        task_dir = tmp_path / ".project-workflow" / "tasks" / "PRJ" / "TASK-1"
-        task_dir.mkdir(parents=True)
-        (task_dir / "progress.json").write_text("{}")
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        builder = WizardContextBuilder(
-            task={"id": 1},
-            project={"code": "PRJ"},
-            task_key="TASK-1",
-        )
-        snapshots = builder._scan_artifacts()
-        assert any(s.exists for s in snapshots)
-
-    def test_scan_artifacts_missing_dir(self):
-        builder = WizardContextBuilder(
-            task={"id": 1},
-            project={"code": "NOPE_NOPE_NOPE"},
-            task_key="TASK-1",
-        )
-        snapshots = builder._scan_artifacts()
-        assert len(snapshots) == 5
-        assert all(not s.exists for s in snapshots)
 
 
 class TestWizardStore:

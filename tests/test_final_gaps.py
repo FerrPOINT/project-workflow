@@ -20,7 +20,6 @@ from project_workflow.interfaces.ui import schemas
 from project_workflow.interfaces.ui.services import (
     _get_task_detail,
     _load_cli_reference,
-    _load_tasks,
 )
 from project_workflow.wizard import core as core_mod
 from project_workflow.wizard.store import WizardAssessmentStore
@@ -347,17 +346,6 @@ class TestWizardCoreFinalGaps:
 
 
 class TestUiServicesFinalGaps:
-    def test_load_tasks_response_not_dict(self, monkeypatch):
-        uow = MagicMock()
-        uow.get_tasks.return_value = [{"id": 1, "task_key": "A-1", "current_phase": "1", "status": "active"}]
-        uow.get_workflows.return_value = []
-        uow.get_task_history.return_value = []
-        uow.get_supervisor_runs.return_value = [
-            {"response": "raw", "verdict": "pass", "created_at": "2025-01-01T00:00:00"}
-        ]
-        monkeypatch.setattr("project_workflow.interfaces.ui.services._get_app_state", lambda: _mock_state(uow))
-        result = _load_tasks()
-        assert result[0]["latest_verdict_message"] == "raw"[:120]
 
     def test_load_cli_reference_argument(self, monkeypatch):
         cmd = click.Command("cmd", params=[click.Argument(["arg"])])
@@ -397,7 +385,7 @@ class TestUiServicesFinalGaps:
         uow.get_supervisor_runs.return_value = [{"verdict": "pass", "response": {}}]
         monkeypatch.setattr("project_workflow.interfaces.ui.services._get_app_state", lambda: _mock_state(uow))
         result = _get_task_detail("A-1")
-        assert result["phase_history"][0]["parallel_group"] == "1"
+        assert result["phase_history_blocks"][0]["phases"][0]["parallel_group"] == "1"
 
     def test_get_task_detail_next_contract_none(self, monkeypatch):
         uow = MagicMock()

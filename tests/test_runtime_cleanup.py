@@ -53,44 +53,10 @@ def test_default_bootstrap_project_prefixes_are_project_specific(tmp_path):
     uow = SAUnitOfWork(str(tmp_path / "workflow.db"))
     uow.init()
 
-    project = uow.get_project_by_code("TASK")
+    project = next((p for p in uow.get_projects() if p["code"] == "TASK"), None)
     assert project is not None
     assert project["key_prefixes"] == config.DEFAULT_TASK_KEY_PREFIXES
     assert project["key_prefixes"] == ["TASK"]
-
-
-def test_sanitize_runtime_state_removes_known_test_residue_and_dedupes_agents(tmp_path):
-    uow = SAUnitOfWork(str(tmp_path / "workflow.db"))
-    uow.init()
-
-    ui_test_project_id = uow.create_project(
-        {
-            "code": "UITEST",
-            "name": "UI Test Project",
-            "key_prefixes": ["UITEST"],
-        }
-    )
-    uow.create_task(
-        {
-            "project_id": ui_test_project_id,
-            "task_key": "UITEST-401",
-            "title": "Проверка project-aware UI",
-            "status": "active",
-            "current_phase": "-1",
-        }
-    )
-    uow.create_agent({"name": "architect", "description": "Проектирует и уточняет контракты"})
-    uow.create_agent({"name": "architect", "description": "Проектирует и уточняет контракты"})
-
-    uow.sanitize_runtime_state()
-
-    assert uow.get_project_by_code("UITEST") is None
-    assert uow.get_task_by_key("UITEST-401") is None
-    assert [agent["name"] for agent in uow.get_agents()].count("architect") == 1
-
-    default_project = uow.get_project_by_code("TASK")
-    assert default_project is not None
-    assert default_project["key_prefixes"] == ["TASK"]
 
 
 def test_seed_catalog_task_intake_and_preflight_have_real_content():

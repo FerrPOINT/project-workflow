@@ -3,7 +3,6 @@
 Scenario: Seed DB → create task → step through phases → verify history
 """
 
-import json
 from pathlib import Path
 
 import pytest
@@ -22,22 +21,19 @@ class TestEndToEndWorkflow:
     """Full cycle via direct DB + API checks."""
 
     def test_seeded_db_has_workflows_and_agents(self, tmp_path: Path):
-        """Seed импорт + проверка workflow-aware фаз и agents."""
+        """Seed bootstrap + проверка workflow-aware фаз и agents."""
         db_path = tmp_path / "test.db"
         uow = SAUnitOfWork(str(db_path))
         uow.init()
-        seed_path = Path(__file__).parent.parent / "project_workflow" / "references" / "seed.json"
-        # seed.json — top-level может быть object или list
-        raw = json.loads(seed_path.read_text())
-        if isinstance(raw, list):
-            uow.import_phases(raw)
-        else:
-            uow.import_phases(raw["phases"])
-        phases = uow.get_phases()
+        phases = uow.get_all_phases()
         assert len(phases) > 0
         p = phases[0]
         assert "id" in p and "name" in p and "phase_order" in p
         assert "execution_type" in p
+        workflows = uow.get_workflows()
+        assert any(w["name"] == "Smoke Test Workflow" for w in workflows)
+        agents = uow.get_agents()
+        assert len(agents) > 0
 
     def test_create_task_and_history(self, tmp_path: Path):
         """Создание таски + запись истории."""
@@ -71,18 +67,6 @@ class TestEndToEndWorkflow:
         created = [agent for agent in agents if agent["name"] == "coder" and agent["description"] == "Пишет код"]
         assert len(created) == 1
         assert created[0]["id"] is not None
-
-    def test_cli_history_logs_and_reads(self, tmp_path: Path):
-        """Лог CLI вызовов."""
-        db_path = tmp_path / "test4.db"
-        uow = SAUnitOfWork(str(db_path))
-        uow.init()
-        uow.log_cli_call("step", "AAT-10", '{"report": "done"}', '{"next": "1"}')
-        uow.log_cli_call("history", "AAT-10", None, None)
-        rows = uow.get_cli_history()
-        assert len(rows) == 2
-        assert {rows[0]["command"], rows[1]["command"]} == {"step", "history"}
-        assert rows[1]["command"] == "history"
 
     def test_phase_with_agent(self, tmp_path: Path):
         """Фаза с agent_id без legacy group_id."""
@@ -137,7 +121,7 @@ class TestEdgeCases:
         db_path = tmp_path / "test6.db"
         uow = SAUnitOfWork(str(db_path))
         uow.init()
-        wid = uow.get_default_workflow()["id"]
+        wid = uow.workflows.ensure_default_exists().id
         uow.create_phase({"workflow_id": wid, "id": "p3", "name": "P3", "phase_order": 0})
         uow.create_phase({"workflow_id": wid, "id": "p4", "name": "P4", "phase_order": 1})
         uow.create_instruction({"phase_id": "p3", "step_num": 1, "description": "Step"})
@@ -147,14 +131,6 @@ class TestEdgeCases:
         assert p4 is not None
         inst = list(uow.instructions.list(int(p4["id"])))
         assert len(inst) == 0
-
-    def test_empty_cli_history(self, tmp_path: Path):
-        db_path = tmp_path / "test7.db"
-        uow = SAUnitOfWork(str(db_path))
-        uow.init()
-        rows = uow.get_cli_history(limit=10)
-        assert len(rows) == 0
-
     def test_task_history_no_skipped_status(self, tmp_path: Path):
         """В task_history статус skipped не должен использоваться, но DB его принимает."""
         db_path = tmp_path / "test8.db"

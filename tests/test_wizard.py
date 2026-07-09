@@ -96,7 +96,6 @@ class TestWizardEvaluate:
                     "rollback_target": None,
                 },
                 "report_template": {"summary": "..."},
-                "global_instructions": ["Do not skip phases."],
             },
         ):
             prompt = engine.get_phase_prompt()

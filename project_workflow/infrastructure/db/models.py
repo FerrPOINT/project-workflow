@@ -259,17 +259,6 @@ class SupervisorRun(Base):
     )
 
 
-class CliHistory(Base):
-    __tablename__ = "cli_history"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    command: Mapped[str] = mapped_column(String, nullable=False)
-    task_key: Mapped[str | None] = mapped_column(String, nullable=True)
-    request: Mapped[str | None] = mapped_column(Text, nullable=True)
-    response: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
-
 # Runtime helper used by repository layer to extract a plain dict from a model.
 def model_to_dict(model: Base) -> dict[str, Any]:
     return {c.name: getattr(model, c.name) for c in model.__table__.columns}

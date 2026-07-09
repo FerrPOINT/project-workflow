@@ -198,29 +198,6 @@ class TestLoadTasks:
         monkeypatch.setattr("project_workflow.interfaces.ui._app_state", MagicMock(get_db=lambda: db))
         assert _load_tasks() == []
 
-    def test_response_as_string(self, monkeypatch):
-        db = MagicMock()
-        db.get_tasks.return_value = [
-            {
-                "id": 1,
-                "task_key": "AAT-1",
-                "status": "active",
-                "current_phase": "-1",
-                "project_id": None,
-                "project_code": None,
-                "project_name": None,
-                "workflow_id": None,
-            }
-        ]
-        db.get_workflows.return_value = []
-        db.get_phases.return_value = []
-        db.get_task_history.return_value = []
-        db.get_supervisor_runs.return_value = [
-            {"verdict": "pass", "phase_code": "1", "response": "plain string", "created_at": "2025-01-01"}
-        ]
-        monkeypatch.setattr("project_workflow.interfaces.ui._app_state", MagicMock(get_db=lambda: db))
-        tasks = _load_tasks()
-        assert tasks[0]["latest_verdict_message"] == "plain string"
 
     def test_task_done_with_history(self, monkeypatch):
         db = MagicMock()
@@ -239,10 +216,14 @@ class TestLoadTasks:
         ]
         db.get_workflows.return_value = []
         db.get_phases.return_value = []
-        db.get_task_history.return_value = [
-            {"status": "done", "completed_at": "2025-01-15"},
-            {"status": "done", "completed_at": "2025-01-20"},
-        ]
+        db.tasks = MagicMock()
+        db.tasks.get_history_batch.return_value = {
+            1: [
+                {"phase_id": 1, "status": "done", "completed_at": "2025-01-15"},
+                {"phase_id": 1, "status": "done", "completed_at": "2025-01-20"},
+            ]
+        }
+        db.get_phase.return_value = {"id": 1, "name": "P", "phase_order": 1}
         db.get_supervisor_runs.return_value = []
         monkeypatch.setattr("project_workflow.interfaces.ui._app_state", MagicMock(get_db=lambda: db))
         tasks = _load_tasks()

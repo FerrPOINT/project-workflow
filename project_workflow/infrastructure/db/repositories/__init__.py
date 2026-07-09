@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from project_workflow.infrastructure.db.repositories.agent import SAAgentRepository
 from project_workflow.infrastructure.db.repositories.check import SACheckRepository
-from project_workflow.infrastructure.db.repositories.cli_history import SACLIHistoryRepository
 from project_workflow.infrastructure.db.repositories.converters import (
     _iso,
     _row_to_agent,
@@ -25,7 +24,6 @@ from project_workflow.infrastructure.db.repositories.workflow import SAWorkflowR
 __all__ = [
     "SAAgentRepository",
     "SACheckRepository",
-    "SACLIHistoryRepository",
     "SAEvidenceRepository",
     "SAInstructionRepository",
     "SAPhaseRepository",

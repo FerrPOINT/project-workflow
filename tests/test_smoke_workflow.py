@@ -59,7 +59,7 @@ def test_bootstrap_adds_smoke_project_and_short_workflow(tmp_path: Path, monkeyp
     assert SMOKE_WORKFLOW_NAME in workflow_names
 
     smoke_workflow = next(workflow for workflow in workflows if workflow["name"] == SMOKE_WORKFLOW_NAME)
-    smoke_project = uow.get_project_by_code("SMOKE")
+    smoke_project = next((p for p in uow.get_projects() if p["code"] == "SMOKE"), None)
     assert smoke_project is not None
     assert smoke_project["workflow_id"] == smoke_workflow["id"]
     assert smoke_project["workflow_name"] == SMOKE_WORKFLOW_NAME

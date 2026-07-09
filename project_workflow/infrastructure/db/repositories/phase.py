@@ -109,9 +109,6 @@ class SAPhaseRepository(PhaseRepository):
         ).scalar()
         return (max_order or 0) + 1
 
-    def get_phases_for_workflow(self, workflow_id: int) -> Sequence[Phase]:
-        return self.list(workflow_id=workflow_id)
-
     def get_checks(self, phase_id: int) -> Sequence[dict[str, Any]]:
         rows = self._session.execute(select(m.Check).where(m.Check.phase_id == phase_id)).scalars().all()
         return [{"id": r.id, "phase_id": r.phase_id, "description": r.description} for r in rows]

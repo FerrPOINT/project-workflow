@@ -122,7 +122,6 @@ def test_supervisor_context_contains_full_path_and_contract(tmp_path: Path, monk
     assert ctx["current_contract"]["phase_code"] == "sup.intake"
     assert ctx["current_contract"]["required_evidence"] == ["Plan file attached"]
     assert "summary" in ctx["report_template"]
-    assert any("skip" in item.lower() for item in ctx["global_instructions"])
     assert ctx["cli_actor"]["kind"] == "cli-user"
     assert "любой пользователь" in ctx["cli_actor"]["description"].lower()
 

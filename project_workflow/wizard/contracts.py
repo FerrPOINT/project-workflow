@@ -113,7 +113,7 @@ class PhaseContractBuilder:
                 }
             )
         first = group[0]
-        next_phase, next_name = self._next_after_group(group)
+        next_phase, _ = self._next_after_group(group)
         # Collect delegates for the whole group.
         delegates = {ph.delegate.agent: ph.delegate for ph in group if ph.delegate}
         # Prefer the first phase delegate, fall back to any group delegate.

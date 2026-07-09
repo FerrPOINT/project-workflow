@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Any
 
 from ..infrastructure import conversation as convo
 from .contracts import PhaseContractBuilder, phase_to_dict
 from .models import Phase
-from .types import ArtifactSnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +25,7 @@ class WizardContextBuilder:
         current_phase: str = "",
         task_key: str = "",
         repo: str | None = None,
-        db: Any = None,
     ):
-        if uow is None and db is not None:
-            uow = db
         self.uow = uow
         self.task = task or {}
         self.project = project
@@ -128,46 +123,6 @@ class WizardContextBuilder:
                 )
         return verdicts
 
-    def _artifact_dir(self) -> Path | None:
-        project_code = self.project.get("code") if self.project else None
-        if not project_code:
-            return None
-        return Path.home() / ".project-workflow" / "tasks" / project_code / self.task_key
-
-    def _scan_artifacts(self) -> list[ArtifactSnapshot]:
-        """Check existence and freshness of known task artifacts."""
-        artifact_dir = self._artifact_dir()
-        if not artifact_dir:
-            return []
-        known_files = [
-            "progress.json",
-            "requirements.md",
-            "current-stage.md",
-            "changelog.md",
-            "test-cases.md",
-        ]
-        snapshots: list[ArtifactSnapshot] = []
-        for name in known_files:
-            path = artifact_dir / name
-            if path.exists():
-                stat = path.stat()
-                snapshots.append(
-                    ArtifactSnapshot(
-                        path=str(path),
-                        exists=True,
-                        mtime=stat.st_mtime,
-                        size=stat.st_size,
-                    )
-                )
-            else:
-                snapshots.append(
-                    ArtifactSnapshot(
-                        path=str(path),
-                        exists=False,
-                    )
-                )
-        return snapshots
-
     def build(self) -> dict[str, Any]:
         phase = self.phase_map.get(self.current_phase)
         workflow_path = self._build_workflow_path()
@@ -201,24 +156,11 @@ class WizardContextBuilder:
             "recent_verdicts": self._build_recent_verdicts(),
             "current_contract": current_contract.to_dict(),
             "cli_actor": self._cli_actor(),
-            "global_instructions": self._global_instructions(),
             "report_template": self._report_template(),
             "messages": messages,
             "total_phases": len(self.all_phases),
             "completed_count": len(completed_phases),
-            "artifact_snapshots": [a.__dict__ for a in self._scan_artifacts()],
         }
-
-    @staticmethod
-    def _global_instructions() -> list[str]:
-        return [
-            "Do not skip phases or invent completed evidence.",
-            "Evaluate progress strictly against the current phase contract from the DB phase catalog.",
-            "Treat the CLI actor as the source of the report whether it is a human user "
-            "or automation; do not assume a specific model/provider.",
-            "Return a structured phase report with summary, completed items, evidence, blockers, and next step.",
-            "If the phase is blocked, say exactly which checks/evidence are missing and whether rollback is required.",
-        ]
 
     @staticmethod
     def _cli_actor() -> dict[str, Any]:

@@ -14,7 +14,6 @@ from project_workflow.interfaces.ui.services import (
     _get_task_detail,
     _load_cli_reference,
     _load_dashboard,
-    _load_tasks,
     _parse_key_prefixes,
     _resolve_task_phase,
 )
@@ -28,17 +27,6 @@ def _mock_state(uow=None):
 
 
 class TestServicesMoreGaps:
-    def test_load_tasks_response_not_dict(self, monkeypatch):
-        uow = MagicMock()
-        uow.get_tasks.return_value = [{"id": 1, "task_key": "A-1", "current_phase": "1", "status": "active"}]
-        uow.get_workflows.return_value = []
-        uow.get_task_history.return_value = []
-        uow.get_supervisor_runs.return_value = [
-            {"response": "raw string", "verdict": "pass", "created_at": "2025-01-01T00:00:00"}
-        ]
-        monkeypatch.setattr("project_workflow.interfaces.ui.services._get_app_state", lambda: _mock_state(uow))
-        result = _load_tasks()
-        assert result[0]["latest_verdict_message"] == "raw string"[:120]
 
     def test_parse_key_prefixes(self):
         assert _parse_key_prefixes(["a", " b "]) == ["A", "B"]
@@ -105,7 +93,7 @@ class TestServicesMoreGaps:
         uow.get_phases.return_value = []
         monkeypatch.setattr("project_workflow.interfaces.ui.services._get_app_state", lambda: _mock_state(uow))
         result = _get_task_detail("A-1")
-        assert result["phase_history"] == []
+        assert result["phase_history_blocks"] == []
 
     def test_get_task_detail_next_contract_none(self, monkeypatch):
         uow = MagicMock()
