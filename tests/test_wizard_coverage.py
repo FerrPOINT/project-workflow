@@ -1,5 +1,7 @@
 """WizardEngine deep coverage tests: checklist dedup, blockers, verdicts, edge cases."""
 
+from __future__ import annotations
+
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -7,7 +9,12 @@ import pytest
 pytestmark = [pytest.mark.wizard]
 
 from project_workflow.wizard import WizardEngine
-from project_workflow.wizard.checks import BLOCKER_PATTERNS, DELEGATE_PATTERNS
+from project_workflow.wizard.checks import (
+    BLOCKER_PATTERNS,
+    DELEGATE_PATTERNS,
+    check_coverage,
+    extract_blockers,
+)
 from project_workflow.wizard.models import Phase, PhaseCheck, PhaseEvidence, PhaseInstruction
 from project_workflow.wizard.types import VERDICT_LABELS
 
@@ -75,26 +82,18 @@ class TestBuildChecklist:
 
 
 class TestExtractBlockers:
-    """Tests for _extract_blockers method."""
-
-    def _make_engine(self) -> WizardEngine:
-        with patch("project_workflow.wizard.WizardContextBuilder") as mock_ctx:
-            mock_ctx.return_value.build.return_value = {"task_key": "AAT-1", "current_phase": "1"}
-            return WizardEngine("AAT-1")
+    """Tests for extract_blockers helper."""
 
     def test_no_blockers_returns_empty(self):
-        engine = self._make_engine()
-        assert engine._extract_blockers("Everything is fine, no issues") == []
+        assert extract_blockers("Everything is fine, no issues") == []
 
     def test_blocked_by_finds_blocker(self):
-        engine = self._make_engine()
         report = "I am blocked by missing API key"
-        result = engine._extract_blockers(report)
+        result = extract_blockers(report)
         assert "blocked by" in result
 
     def test_no_blockers_explicitly_ignored(self):
         """Phrases like 'no blockers' must not trigger false positives."""
-        engine = self._make_engine()
         for phrase in (
             "No blockers found",
             "Blockers: none",
@@ -104,28 +103,25 @@ class TestExtractBlockers:
             "нет блокеров",
             "без блокеров",
         ):
-            assert engine._extract_blockers(phrase) == [], f"Failed for: {phrase}"
+            assert extract_blockers(phrase) == [], f"Failed for: {phrase}"
 
     def test_still_finds_real_blocker_after_no_prefix(self):
-        engine = self._make_engine()
         report = "No blockers in section A, but blocked by auth in section B"
-        result = engine._extract_blockers(report)
+        result = extract_blockers(report)
         assert "blocked by" in result
 
     def test_russian_blockers_detected(self):
-        engine = self._make_engine()
-        result = engine._extract_blockers("Заблокировано из-за ошибки")
-        assert result == []  # All Russian false-positive patterns removed — smart mode LLM handles blockers
+        result = extract_blockers("Заблокировано из-за ошибки")
+        assert result == []  # Russian false-positive patterns removed — smart mode LLM handles blockers
 
     def test_unique_results_no_duplicates(self):
-        engine = self._make_engine()
         report = "blocked by X and blocked by Y"
-        result = engine._extract_blockers(report)
+        result = extract_blockers(report)
         assert result == ["blocked by"]  # deduped
 
 
 class TestDetermineVerdict:
-    """Tests for _determine_verdict method with all edge cases."""
+    """Tests for _determine_verdict static method with all edge cases."""
 
     def _make_phase(
         self,
@@ -214,23 +210,16 @@ class TestDetermineVerdict:
 
 
 class TestCheckCoverageEdgeCases:
-    """Edge cases for _check_coverage and related methods."""
-
-    def _make_engine(self) -> WizardEngine:
-        with patch("project_workflow.wizard.WizardContextBuilder") as mock_ctx:
-            mock_ctx.return_value.build.return_value = {"task_key": "AAT-1", "current_phase": "1"}
-            return WizardEngine("AAT-1")
+    """Edge cases for check_coverage."""
 
     def test_empty_checklist_passes(self):
         """When phase has zero checks, any report satisfies coverage."""
-        engine = self._make_engine()
-        covered, missing = engine._check_coverage("anything", [])
+        covered, missing = check_coverage("anything", [])
         assert covered == []
         assert missing == []
 
     def test_exact_match_wins(self):
-        engine = self._make_engine()
-        covered, missing = engine._check_coverage(
+        covered, missing = check_coverage(
             "I completed the code review today",
             ["code review"],
         )
@@ -239,17 +228,16 @@ class TestCheckCoverageEdgeCases:
 
     def test_keyword_threshold_2_of_3(self):
         """Threshold is min(len, 2): for 4 keywords threshold = 2, so 2 hits are enough."""
-        engine = self._make_engine()
         # "implement user authentication service" -> keywords: implement, user, authentication, service (4 words)
         # threshold = min(4, 2) = 2 -> report has "user" + "service" = 2 hits -> covered
-        covered, missing = engine._check_coverage(
+        covered, missing = check_coverage(
             "user service done",
             ["implement user authentication service"],
         )
         assert covered == ["implement user authentication service"]
 
         # Only 1 hit -> NOT covered
-        covered, missing = engine._check_coverage(
+        covered, missing = check_coverage(
             "user done",
             ["implement user authentication service"],
         )
@@ -257,17 +245,15 @@ class TestCheckCoverageEdgeCases:
 
     def test_single_keyword_needs_one_hit(self):
         """If item produces only 1 keyword, threshold = 1."""
-        engine = self._make_engine()
-        covered, missing = engine._check_coverage(
+        covered, missing = check_coverage(
             "deployed",
             ["deploy"],
         )
         assert covered == ["deploy"]
 
     def test_no_match_when_keywords_below_threshold(self):
-        engine = self._make_engine()
-        # 4 keywords need 2 hits; report has only 1
-        covered, missing = engine._check_coverage(
+        """4 keywords need 2 hits; report has only 1."""
+        covered, missing = check_coverage(
             "user done",  # only "user" matches
             ["implement user authentication service"],
         )

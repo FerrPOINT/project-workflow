@@ -60,6 +60,6 @@ class TestWizardEvaluateEdge:
     def test_save_records_assessment(self, fresh_db):
         fresh_db.create_task({"task_key": "PROJ-42", "title": "x", "current_phase": "-1"})
         engine = _make_engine(fresh_db, "PROJ-42")
-        result = engine.evaluate("report")
-        engine._store.save(result)
+        engine.evaluate("report")
+        # evaluate() itself records the supervisor run; _store removed as dead code
         assert len(fresh_db.get_supervisor_runs()) >= 1

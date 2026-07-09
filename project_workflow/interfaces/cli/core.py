@@ -19,10 +19,8 @@ from ...domain import validation as task_validator
 
 console = Console()
 
-PASS = "[green]✅[/green]"
 FAIL = "[red]❌[/red]"
 WARN = "[yellow]⚠️[/yellow]"
-BLOCK = "[red]🔴[/red]"
 
 
 def out_json(data: dict[str, Any]) -> None:
@@ -67,4 +65,4 @@ def cli(ctx: click.Context, json_mode: bool) -> None:
     ctx.obj["json_mode"] = json_mode
 
 
-__all__ = ["cli", "out_json", "_require_valid_key", "console", "PASS", "FAIL", "WARN", "BLOCK"]
+__all__ = ["cli", "out_json", "_require_valid_key", "console", "FAIL", "WARN"]

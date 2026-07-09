@@ -59,14 +59,14 @@ CREATE INDEX IF NOT EXISTS ix_conversation_phase ON conversation(phase_id);
 
 
 def _ensure_db() -> sqlite3.Connection:
-    DB_DIR.mkdir(parents=True, exist_ok=True)
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(DB_PATH))
     conn.executescript(SQL_INIT)
     conn.row_factory = sqlite3.Row
     return conn
 
 
-# ── Write ───────────────────────────────────────────────────────────────
+# ── Write / Read ───────────────────────────────────────────────────────
 
 
 def add_message(
@@ -92,35 +92,6 @@ def add_message(
         return cur.lastrowid or 0
     finally:
         conn.close()
-
-
-def add_user_note(task_id: str, task_key: str, content: str, phase_id: str | None = None) -> int:
-    """Быстрый entrypoint для пользовательского отчёта."""
-    return add_message(task_id, task_key, "user", content, phase_id, tags="note")
-
-
-def add_phase_transition(task_id: str, task_key: str, from_phase: str, to_phase: str) -> None:
-    """Записать переход фазы в историю."""
-    add_message(
-        task_id,
-        task_key,
-        "system",
-        f"Phase transition: {from_phase} → {to_phase}",
-        phase_id=to_phase,
-        tags="transition",
-    )
-
-
-def add_wizard_question(task_id: str, task_key: str, phase_id: str, question: str) -> None:
-    add_message(task_id, task_key, "wizard", question, phase_id, tags="question")
-
-
-def add_wizard_answer(task_id: str, task_key: str, phase_id: str, answer: str, ok: bool) -> None:
-    tag = "pass" if ok else "fail"
-    add_message(task_id, task_key, "user", answer, phase_id, tags=tag)
-
-
-# ── Read ──────────────────────────────────────────────────────────────
 
 
 def get_messages(
@@ -149,62 +120,3 @@ def get_messages(
         return [Message(**dict(r)) for r in reversed(rows)]  # chron order
     finally:
         conn.close()
-
-
-def get_latest_user_notes(task_id: str, limit: int = 20) -> list[Message]:
-    """Последние пользовательские отчёты по задаче."""
-    return get_messages(task_id, limit=limit, tags="note")
-
-
-def get_last_phase(task_id: str) -> str | None:
-    """Последняя известная фаза из истории."""
-    conn = _ensure_db()
-    try:
-        row = conn.execute(
-            "SELECT phase_id FROM conversation WHERE task_id = ? AND phase_id IS NOT NULL ORDER BY id DESC LIMIT 1",
-            (task_id,),
-        ).fetchone()
-        return row["phase_id"] if row else None
-    finally:
-        conn.close()
-
-
-def check_keyword_in_history(task_id: str, keyword: str, limit: int = 100) -> bool:
-    """Проверить было ли keyword в истории (case-insensitive)."""
-    conn = _ensure_db()
-    try:
-        row = conn.execute(
-            "SELECT 1 FROM conversation WHERE task_id = ? AND content LIKE ? LIMIT 1",
-            (task_id, f"%{keyword}%"),
-        ).fetchone()
-        return bool(row)
-    finally:
-        conn.close()
-
-
-# ── Summary / Digest ──────────────────────────────────────────────────
-
-
-def build_status_digest(task_id: str, task_key: str, current_phase: str | None = None) -> dict:
-    """Собрать краткий дайджест статуса из истории."""
-    notes = get_messages(task_id, limit=50)
-    phase_transitions = [m for m in notes if m.tags == "transition"]
-    last_phase = current_phase or (phase_transitions[-1].phase_id if phase_transitions else None)
-
-    # Какие keywords были упомянуты (простой heuristic)
-    content_all = " ".join(m.content.lower() for m in notes)
-    has_changelog = "changelog" in content_all
-    has_progress = "progress" in content_all or "progress.json" in content_all
-    has_info = "info/" in content_all or "info " in content_all
-
-    return {
-        "task_id": task_id,
-        "task_key": task_key,
-        "last_phase": last_phase,
-        "total_messages": len(notes),
-        "transitions_count": len(phase_transitions),
-        "has_changelog": has_changelog,
-        "has_progress": has_progress,
-        "has_info": has_info,
-        "latest_notes": [m.content[:120] for m in notes if m.role == "user"][-5:],
-    }

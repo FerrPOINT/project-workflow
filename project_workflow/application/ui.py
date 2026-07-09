@@ -276,7 +276,7 @@ class UIDataService:
 
     def _get_task_detail(self, task_key: str) -> dict[str, Any] | None:
         """Загрузить деталку задачи: метаданные + история фаз (линейно, без FORK/JOIN)."""
-        from project_workflow.wizard import VERDICT_LABELS
+        from project_workflow.wizard.types import VERDICT_LABELS
 
         wdb = self._app_state.get_db()
         task = wdb.get_task_by_key(task_key)

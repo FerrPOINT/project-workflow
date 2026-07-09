@@ -1,6 +1,6 @@
 """Tests for blocker extraction and coverage accumulation."""
 
-"""Tests for blocker extraction and coverage accumulation."""
+from __future__ import annotations
 
 from unittest.mock import patch
 
@@ -9,54 +9,40 @@ import pytest
 pytestmark = [pytest.mark.wizard]
 
 from project_workflow.wizard import WizardEngine
+from project_workflow.wizard.checks import check_coverage, extract_blockers, normalize_text
 
 
 class TestBlockerExtraction:
-    """Test _extract_blockers: no false positives on partial words."""
+    """Test extract_blockers: no false positives on partial words."""
 
     def test_exact_blocker_found(self):
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
-            engine = WizardEngine("AAT-1")
-            blockers = engine._extract_blockers("blocked by network")
-            assert "blocked by" in blockers
+        blockers = extract_blockers("blocked by network")
+        assert "blocked by" in blockers
 
     def test_no_false_positive_oshit(self):
         """Words containing 'ошиб' but not real error words should not trigger."""
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
-            engine = WizardEngine("AAT-1")
-            # 'ошибочно' contains 'ошиб' but is not a real blocker word
-            blockers = engine._extract_blockers("Это ошибочно сработало")
-            # None of the current BLOCKER_PATTERNS should match partial word 'ошиб'
-            assert blockers == []
+        # 'ошибочно' contains 'ошиб' but is not a real blocker word
+        blockers = extract_blockers("Это ошибочно сработало")
+        # None of the current BLOCKER_PATTERNS should match partial word 'ошиб'
+        assert blockers == []
 
     def test_real_error_word_triggers(self):
-        """ "ошибка" больше не считается блокером — smart mode использует LLM."""
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
-            engine = WizardEngine("AAT-1")
-            blockers = engine._extract_blockers("Произошла ошибка в коде")
-            assert "ошибка" not in blockers
+        """"ошибка" больше не считается блокером — smart mode использует LLM."""
+        blockers = extract_blockers("Произошла ошибка в коде")
+        assert "ошибка" not in blockers
 
     def test_no_blockers_explicitly_stated(self):
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
-            engine = WizardEngine("AAT-1")
-            for phrase in ["no blockers", "without blockers", "нет блокеров", "без блокеров"]:
-                blockers = engine._extract_blockers(phrase)
-                assert blockers == [], f"Expected no blockers for: {phrase}"
+        for phrase in ["no blockers", "without blockers", "нет блокеров", "без блокеров"]:
+            blockers = extract_blockers(phrase)
+            assert blockers == [], f"Expected no blockers for: {phrase}"
 
     def test_delegate_does_not_trigger_blocker(self):
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
-            engine = WizardEngine("AAT-1")
-            blockers = engine._extract_blockers("передал задачу на delegation")
-            assert "delegate" not in blockers
+        blockers = extract_blockers("передал задачу на delegation")
+        assert "delegate" not in blockers
 
 
 class TestCoverageAccumulation:
-    """Test _get_previously_covered and _check_coverage accumulation."""
+    """Test _get_previously_covered and check_coverage accumulation."""
 
     def _make_engine(self, tmp_path, monkeypatch, task_key="AAT-1", current_phase="0"):
         test_db = tmp_path / "workflow.db"
@@ -106,24 +92,22 @@ class TestCoverageAccumulation:
         engine.phase_map = {"0": FakePhase()}
 
         prev = engine._get_previously_covered("0")
-        assert engine._normalize_text("Item A") in prev
-        assert engine._normalize_text("Item B") in prev
+        assert normalize_text("Item A") in prev
+        assert normalize_text("Item B") in prev
 
-    def test_check_coverage_uses_previously_covered(self, tmp_path, monkeypatch):
-        engine = self._make_engine(tmp_path, monkeypatch, "SMOKE-9998", "0")
+    def test_check_coverage_uses_previously_covered(self):
         # Use checklist items with distinct keywords to avoid false keyword overlap
         checklist = ["Run unit tests", "Fix failing assertions", "Update changelog"]
-        previously = {engine._normalize_text("Run unit tests")}
+        previously = {normalize_text("Run unit tests")}
         # Current report covers only "Update changelog"
-        covered, missing = engine._check_coverage("I updated the changelog today", checklist, previously)
+        covered, missing = check_coverage("I updated the changelog today", checklist, previously)
         assert "Run unit tests" in covered  # from previous run
         assert "Fix failing assertions" in missing
         assert "Update changelog" in covered  # matched in current report
 
-    def test_check_coverage_without_previously_covered(self, tmp_path, monkeypatch):
-        engine = self._make_engine(tmp_path, monkeypatch, "SMOKE-9997", "0")
+    def test_check_coverage_without_previously_covered(self):
         checklist = ["Run unit tests", "Fix failing assertions"]
-        covered, missing = engine._check_coverage("I ran all unit tests successfully", checklist)
+        covered, missing = check_coverage("I ran all unit tests successfully", checklist)
         assert "Run unit tests" in covered
         assert "Fix failing assertions" in missing
 

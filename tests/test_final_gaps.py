@@ -279,43 +279,6 @@ class TestWizardCoreFinalGaps:
         engine.all_phases = []
         assert engine._resolve_current_phase() == "-1"
 
-    def test_build_current_contract(self):
-        engine = core_mod.WizardEngine("AAT-1", repo="/tmp")
-        phase = MagicMock()
-        phase.code = "1"
-        phase.name = "T"
-        phase.execution_type = "sync"
-        phase.description = "D"
-        phase.instructions = []
-        phase.required_checks = []
-        phase.required_evidence = []
-        phase.next_recommendation = ""
-        phase.rollback_target = None
-        phase.parallel_with = None
-        phase.delegate_agent = None
-        phase.delegate_toolsets = []
-        contract = engine._build_current_contract(phase)
-        assert contract["phase_code"] == "1"
-
-    def test_build_phase_history_missing_phase(self):
-        engine = core_mod.WizardEngine("AAT-1", repo="/tmp")
-        engine.task = {"id": 1}
-        uow = MagicMock()
-        uow.get_task_history.return_value = [{"phase_id": 99, "status": "done", "completed_at": ""}]
-        engine._uow = uow
-        assert engine._build_phase_history() == []
-
-    def test_build_recent_verdicts_dict(self):
-        engine = core_mod.WizardEngine("AAT-1", repo="/tmp")
-        engine.task = {"id": 1}
-        uow = MagicMock()
-        uow.get_supervisor_runs.return_value = [
-            {"verdict": "pass", "phase_code": "1", "response": {"message": "ok"}, "created_at": "2025-01-01"},
-        ]
-        engine._uow = uow
-        result = engine._build_recent_verdicts(1)
-        assert result[0]["verdict"] == "PASS"
-
     def test_record_transition_no_task(self):
         engine = core_mod.WizardEngine("AAT-1", repo="/tmp")
         engine.task = None

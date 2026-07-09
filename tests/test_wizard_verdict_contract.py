@@ -8,9 +8,10 @@ pytestmark = [pytest.mark.wizard]
 
 from project_workflow.domain.fsm import PhaseFSM
 from project_workflow.wizard.checks import build_verdict_message, determine_verdict
-from project_workflow.wizard.core import VERDICT_LABELS as CORE_VERDICT_LABELS
 from project_workflow.wizard.core import format_result
 from project_workflow.wizard.types import VERDICT_LABELS, PhaseContract, WizardAssessment
+
+CORE_VERDICT_LABELS = VERDICT_LABELS
 
 
 class TestDeterministicVerdictContract:

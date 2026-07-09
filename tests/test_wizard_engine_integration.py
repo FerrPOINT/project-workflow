@@ -78,7 +78,7 @@ class TestWizardEngineIntegration:
         uow.close()
 
         engine = WizardEngine("AAT-BLOCK")
-        with patch.object(engine, "_extract_blockers", return_value=["no api key"]):
+        with patch("project_workflow.wizard.core.extract_blockers", return_value=["no api key"]):
             result = engine.evaluate("blocked by missing api key")
         assert result["verdict"] == "BLOCKED"
 

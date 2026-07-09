@@ -44,57 +44,6 @@ class TestWizardCoreGaps:
             execution_type=execution_type,
         )
 
-    def test_extract_keywords(self):
-        engine = WizardEngine("AAT-1", repo="/tmp")
-        result = engine._extract_keywords("hello world")
-        assert isinstance(result, list)
-
-    def test_has_delegate_signal(self):
-        engine = WizardEngine("AAT-1", repo="/tmp")
-        assert engine._has_delegate_signal("delegate this work") is True
-
-    def test_build_fail_message(self):
-        engine = WizardEngine("AAT-1", repo="/tmp")
-        ph = self._phase(code="1", name="One")
-        msg = engine._build_fail_message(ph, ["a"], [])
-        assert "Missing or blocked" in msg
-
-    def test_check_coverage(self):
-        engine = WizardEngine("AAT-1", repo="/tmp")
-        covered, missing = engine._check_coverage("done", ["done", "todo"])
-        assert "done" in covered
-        assert "todo" in missing
-
-    def test_normalize_text_wrapper(self):
-        engine = WizardEngine("AAT-1", repo="/tmp")
-        assert engine._normalize_text(" Hello ") == "hello"
-
-    def test_build_workflow_path(self):
-        engine = WizardEngine("AAT-1", repo="/tmp")
-        engine.task = {"id": 1}
-        ph = self._phase(code="1", id=1)
-        engine.all_phases = [ph]
-        engine.phase_map = {"1": ph}
-        uow = MagicMock()
-        uow.get_task_history.return_value = []
-        engine._uow = uow
-        path = engine._build_workflow_path()
-        assert path[0]["code"] == "1"
-
-    def test_build_current_contract(self):
-        engine = WizardEngine("AAT-1", repo="/tmp")
-        ph = self._phase(code="1", id=1)
-        engine.all_phases = [ph]
-        engine.phase_map = {"1": ph}
-        result = engine._build_current_contract(ph)
-        assert result["phase_code"] == "1"
-
-    def test_build_current_contract_missing(self):
-        engine = WizardEngine("AAT-1", repo="/tmp")
-        engine.current_phase = "missing"
-        result = engine._build_current_contract(None)
-        assert result["phase_code"] == "missing"
-
     def test_resolve_current_phase_no_task(self):
         engine = WizardEngine("AAT-1", repo="/tmp")
         engine.task = None
@@ -121,11 +70,6 @@ class TestWizardCoreGaps:
         svc.get_task.return_value = None
         engine._task_service = svc
         assert engine._resolve_current_phase() == "1"
-
-    def test_phase_by_id_no_match(self):
-        engine = WizardEngine("AAT-1", repo="/tmp")
-        engine.all_phases = []
-        assert engine._phase_by_id(1) is None
 
     def test_get_previously_covered_no_task(self):
         engine = WizardEngine("AAT-1", repo="/tmp")
@@ -158,82 +102,6 @@ class TestWizardCoreGaps:
         db.supervisor_runs.list.return_value = [Row]
         engine.db = db
         assert engine._get_previously_covered("99") == set()
-
-    def test_build_phase_history(self):
-        engine = WizardEngine("AAT-1", repo="/tmp")
-        engine.task = {"id": 1}
-        ph = self._phase(code="1", id=1)
-        engine.all_phases = [ph]
-        engine.phase_map = {"1": ph}
-        uow = MagicMock()
-        uow.get_task_history.return_value = [{"phase_id": 1, "status": "done", "completed_at": "2025-01-01"}]
-        engine._uow = uow
-        history = engine._build_phase_history()
-        assert len(history) == 1
-
-    def test_build_phase_history_no_task(self):
-        engine = WizardEngine("AAT-1", repo="/tmp")
-        engine.task = None
-        assert engine._build_phase_history() == []
-
-    def test_build_recent_verdicts(self):
-        engine = WizardEngine("AAT-1", repo="/tmp")
-        engine.task = {"id": 1}
-        uow = MagicMock()
-        row = {
-            "phase_code": "1",
-            "verdict": "pass",
-            "blockers": [],
-            "missing": [],
-            "next_phase_code": None,
-            "rollback_phase_code": None,
-            "created_at": "2025-01-01",
-        }
-        uow.get_supervisor_runs.return_value = [row]
-        engine._uow = uow
-        verdicts = engine._build_recent_verdicts()
-        assert verdicts[0]["verdict"] == "PASS"
-
-    def test_build_recent_verdicts_object_row(self):
-        engine = WizardEngine("AAT-1", repo="/tmp")
-        engine.task = {"id": 1}
-        uow = MagicMock()
-        row = MagicMock()
-        row.phase_code = "1"
-        row.verdict = "pass"
-        row.blockers = []
-        row.missing = []
-        row.next_phase_code = None
-        row.rollback_phase_code = None
-        row.created_at = "2025-01-01"
-        uow.get_supervisor_runs.return_value = [row]
-        engine._uow = uow
-        verdicts = engine._build_recent_verdicts()
-        assert verdicts[0]["verdict"] == "PASS"
-
-    def test_phase_status_lookup(self):
-        engine = WizardEngine("AAT-1", repo="/tmp")
-        engine.task = {"id": 1, "current_phase": "1", "status": "active"}
-        ph = self._phase(code="1", id=1)
-        engine.all_phases = [ph]
-        engine.phase_map = {"1": ph}
-        uow = MagicMock()
-        uow.get_task_history.return_value = [{"phase_id": 1, "status": "done"}]
-        engine._uow = uow
-        statuses = engine._phase_status_lookup()
-        assert statuses == {"1": "done"}
-
-    def test_phase_status_lookup_sets_current(self):
-        engine = WizardEngine("AAT-1", repo="/tmp")
-        engine.task = {"id": 1, "current_phase": "1", "status": "active"}
-        ph = self._phase(code="1", id=1)
-        engine.all_phases = [ph]
-        engine.phase_map = {"1": ph}
-        uow = MagicMock()
-        uow.get_task_history.return_value = []
-        engine._uow = uow
-        statuses = engine._phase_status_lookup()
-        assert statuses == {"1": "current"}
 
     def test_record_transition_no_task(self):
         engine = WizardEngine("AAT-1", repo="/tmp")

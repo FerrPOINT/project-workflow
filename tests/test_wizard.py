@@ -41,10 +41,9 @@ class TestWizardEvaluate:
 
         with (
             patch.object(engine, "_build_checklist", return_value=["check"]),
-            patch.object(engine, "_check_coverage", return_value=(["check"], [])),
+            patch("project_workflow.wizard.core.check_coverage", return_value=(["check"], [])),
             patch.object(engine, "_get_next_phase", return_value=("1", "Next")),
             patch.object(engine, "_record_transition"),
-            patch.object(engine._store, "save"),
         ):
             result = engine.evaluate("report ok")
 
@@ -61,9 +60,8 @@ class TestWizardEvaluate:
 
         with (
             patch.object(engine, "_build_checklist", return_value=["check"]),
-            patch.object(engine, "_check_coverage", return_value=([], ["check"])),
+            patch("project_workflow.wizard.core.check_coverage", return_value=([], ["check"])),
             patch.object(engine, "_record_transition"),
-            patch.object(engine._store, "save"),
         ):
             result = engine.evaluate("report bad")
 

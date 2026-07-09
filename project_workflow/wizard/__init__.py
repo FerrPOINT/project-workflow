@@ -29,8 +29,6 @@ from project_workflow.wizard.core import (
     PromptCache,
     WizardEngine,
     evaluate_report,
-    evaluate_report_formatted,
-    get_phase_instructions,
     main,
 )
 from project_workflow.wizard.evaluate import (
@@ -41,7 +39,6 @@ from project_workflow.wizard.evaluate import (
 )
 from project_workflow.wizard.formatting import format_result
 from project_workflow.wizard.prompt import build_phase_prompt
-from project_workflow.wizard.result_builder import VERDICT_LABELS
 from project_workflow.wizard.store import WizardAssessmentStore
 from project_workflow.wizard.types import (
     ArtifactSnapshot,
@@ -64,7 +61,6 @@ __all__ = [
     "ResponseParser",
     "SMART_EVALUATE",
     "SMART_REASONING",
-    "VERDICT_LABELS",
     "WizardAssessment",
     "WizardAssessmentStore",
     "WizardContextBuilder",
@@ -74,13 +70,11 @@ __all__ = [
     "check_coverage",
     "convo",
     "determine_verdict",
-    "evaluate_llm_report",
     "evaluate_report",
-    "evaluate_report_formatted",
+    "evaluate_llm_report",
     "extract_blockers",
     "extract_keywords",
     "format_result",
-    "get_phase_instructions",
     "main",
     "normalize_text",
     "phase_to_dict",
