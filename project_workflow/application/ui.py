@@ -6,6 +6,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from .. import config
+from ..infrastructure.db.row_utils import row_to_dict
 from ..interfaces.ui.helpers import _resolve_task_phase, _resolve_task_phase_local, _run_to_dict
 from .state import _AppState
 
@@ -240,30 +241,9 @@ class UIDataService:
             "projects": sorted(projects, key=lambda item: (-item.get("task_count", 0), item.get("name", "")))[:8],
         }
 
-    def _get_task_detail(self, task_key: str) -> dict[str, Any] | None:
-        """Загрузить деталку задачи: метаданные + история фаз (линейно, без FORK/JOIN)."""
-        from project_workflow.wizard.types import VERDICT_LABELS
-
-        wdb = self._app_state.get_db()
-        task = wdb.get_task_by_key(task_key)
-        if not task:
-            return None
-
-        task = dict(task)
-        task["project_code"] = task.get("project_code") or "—"
-        task["project_name"] = task.get("project_name") or task["project_code"]
-        task["project_label"] = (
-            task["project_name"]
-            if task["project_name"] == task["project_code"]
-            else f"{task['project_code']} — {task['project_name']}"
-        )
-
-        current_phase_id, current_phase = _resolve_task_phase(
-            task.get("current_phase", "-1"), wdb, workflow_id=task.get("workflow_id")
-        )
-        task["current_phase_name"] = current_phase["name"] if current_phase else task.get("current_phase", "")
-        task["current_phase_order"] = current_phase["phase_order"] if current_phase else 0
-
+    def _resolve_task_workflow_id(
+        self, task: dict[str, Any], wdb: Any
+    ) -> tuple[int | None, list[dict[str, Any]]]:
         workflow_id = task.get("workflow_id")
         if workflow_id is None:
             project = task.get("project")
@@ -272,36 +252,50 @@ class UIDataService:
             elif task.get("project_id") is not None:
                 proj_row = wdb.projects.get_by_id(int(task["project_id"]))
                 if proj_row is not None:
-                    workflow_id = getattr(proj_row, "workflow_id", None) or proj_row.to_dict().get("workflow_id")
-        workflow_phases = wdb.get_phases(workflow_id=workflow_id) if workflow_id is not None else wdb.get_phases()
-        task["workflow_phase_count"] = len(workflow_phases)
-        task["total_phases"] = len(workflow_phases) or len(config.PHASE_ORDER)
+                    workflow_id = getattr(proj_row, "workflow_id", None) or row_to_dict(proj_row).get("workflow_id")
+        if workflow_id is not None:
+            phases = wdb.get_phases(workflow_id=workflow_id)
+        else:
+            phases = wdb.get_phases()
+        return workflow_id, phases
 
-        history = wdb.get_task_history(task["id"])
-        task["completed"] = sum(1 for h in history if h.get("status") == "done")
-        task["progress_done"] = task["completed"]
-        task["progress_total"] = task["total_phases"]
+    def _compute_completion_time(self, task: dict[str, Any], history: list[dict[str, Any]]) -> str:
+        if task.get("status") != "done":
+            return ""
+        done_entries = [h for h in history if h.get("status") == "done"]
+        if done_entries:
+            completed_at = max(
+                (h.get("completed_at") or "" for h in done_entries),
+                key=lambda x: x or "",
+            )
+            if completed_at:
+                return completed_at
+        return task.get("updated_at", "")
 
-        task["completed_at"] = ""
-        if task.get("status") == "done":
-            done_entries = [h for h in history if h.get("status") == "done"]
-            if done_entries:
-                task["completed_at"] = max(
-                    (h.get("completed_at") or "" for h in done_entries),
-                    key=lambda x: x or "",
-                )
-            if not task["completed_at"]:
-                task["completed_at"] = task.get("updated_at", "")
-
+    def _build_phase_history_blocks(
+        self,
+        history: list[dict[str, Any]],
+        workflow_phases: list[dict[str, Any]],
+        current_phase: dict[str, Any] | None,
+        wdb: Any,
+    ) -> list[dict[str, Any]]:
         phase_execution_type: dict[int, str] = {}
         for p in workflow_phases:
             pid = p.get("id")
             if pid is not None:
                 phase_execution_type[pid] = p.get("execution_type", "sync")
 
+        phase_by_id: dict[int, dict[str, Any]] = {}
+        for p in workflow_phases:
+            pid = p.get("id")
+            if pid is not None:
+                phase_by_id[pid] = p
+
         raw_history: list[dict[str, Any]] = []
         for h in history:
-            phase = wdb.get_phase(h["phase_id"])
+            phase = phase_by_id.get(h["phase_id"])
+            if phase is None:
+                phase = wdb.get_phase(h["phase_id"])
             if not phase:
                 continue
             history_status = h.get("status", "pending")
@@ -321,7 +315,7 @@ class UIDataService:
                 }
             )
 
-        phase_history_blocks: list[dict[str, Any]] = []
+        blocks: list[dict[str, Any]] = []
         if raw_history:
             runs: list[list[dict[str, Any]]] = []
             current_run: list[dict[str, Any]] = [raw_history[0]]
@@ -340,18 +334,12 @@ class UIDataService:
                         item["parallel_group"] = group_key
                 else:
                     run[0]["parallel_group"] = None
-                phase_history_blocks.append(
-                    {
-                        "kind": "parallel" if len(run) > 1 else "single",
-                        "phases": run,
-                    }
-                )
+                blocks.append({"kind": "parallel" if len(run) > 1 else "single", "phases": run})
+        return blocks
 
-        task["phase_history_blocks"] = phase_history_blocks
-        task["completed"] = sum(1 for h in raw_history if h.get("status") == "done")
-        task["total_phases"] = task.get("workflow_phase_count", len(config.PHASE_ORDER))
+    def _decorate_supervisor_runs(self, supervisor_runs: list[dict[str, Any]], wdb: Any) -> list[dict[str, Any]]:
+        from project_workflow.wizard.types import VERDICT_LABELS
 
-        supervisor_runs: list[dict[str, Any]] = wdb.get_supervisor_runs(task_key=task_key, limit=200)
         for super_run in supervisor_runs:
             super_run["verdict_label"] = VERDICT_LABELS.get(
                 super_run.get("verdict", ""), super_run.get("verdict", "").upper()
@@ -385,7 +373,50 @@ class UIDataService:
                     super_run["next_contract"] = None
             else:
                 super_run["next_contract"] = None
-        task["supervisor_runs"] = supervisor_runs
+        return supervisor_runs
+
+    def _get_task_detail(self, task_key: str) -> dict[str, Any] | None:
+        """Загрузить деталку задачи: метаданные + история фаз (линейно, без FORK/JOIN)."""
+        wdb = self._app_state.get_db()
+        task = wdb.get_task_by_key(task_key)
+        if not task:
+            return None
+
+        task = dict(task)
+        task["project_code"] = task.get("project_code") or "—"
+        task["project_name"] = task.get("project_name") or task["project_code"]
+        task["project_label"] = (
+            task["project_name"]
+            if task["project_name"] == task["project_code"]
+            else f"{task['project_code']} — {task['project_name']}"
+        )
+
+        current_phase_id, current_phase = _resolve_task_phase(
+            task.get("current_phase", "-1"), wdb, workflow_id=task.get("workflow_id")
+        )
+        task["current_phase_name"] = current_phase["name"] if current_phase else task.get("current_phase", "")
+        task["current_phase_order"] = current_phase["phase_order"] if current_phase else 0
+
+        workflow_id, workflow_phases = self._resolve_task_workflow_id(task, wdb)
+        task["workflow_phase_count"] = len(workflow_phases)
+        task["total_phases"] = len(workflow_phases) or len(config.PHASE_ORDER)
+
+        history = wdb.get_task_history(task["id"])
+        task["completed"] = sum(1 for h in history if h.get("status") == "done")
+        task["progress_done"] = task["completed"]
+        task["progress_total"] = task["total_phases"]
+        task["completed_at"] = self._compute_completion_time(task, history)
+
+        task["phase_history_blocks"] = self._build_phase_history_blocks(
+            history, workflow_phases, current_phase, wdb
+        )
+        task["completed"] = sum(
+            1 for block in task["phase_history_blocks"] for p in block["phases"] if p.get("status") == "done"
+        )
+        task["total_phases"] = task.get("workflow_phase_count", len(config.PHASE_ORDER))
+
+        supervisor_runs = wdb.get_supervisor_runs(task_key=task_key, limit=200)
+        task["supervisor_runs"] = self._decorate_supervisor_runs(supervisor_runs, wdb)
 
         if supervisor_runs:
             task["latest_verdict"] = supervisor_runs[0].get("verdict")
