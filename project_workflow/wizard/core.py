@@ -20,6 +20,7 @@ from ..application.project import ProjectService
 from ..application.task import TaskService
 from ..application.workflow import WorkflowService
 from ..infrastructure.db import schema
+from ..infrastructure.db.row_utils import row_to_dict
 from ..infrastructure.db.uow import SAUnitOfWork
 from ..infrastructure.db.uow_bootstrap import (
     bootstrap_smoke_project_and_workflow,
@@ -335,28 +336,56 @@ class WizardEngine:
             ctx=self.get_full_context(),
         )
 
-    def evaluate(self, report: str) -> dict:
-        phase = self._get_current_phase_obj()
-        if not phase:
-            return {
-                "verdict": "BLOCKED",
-                "task_key": self.task_key,
-                "phase": self.current_phase,
-                "message": "Current phase is not configured in the workflow catalog.",
-                "covered": [],
-                "missing": [],
-                "blockers": ["phase-not-configured"],
-                "current_phase": self.current_phase,
-                "next_phase": None,
-            }
+    def _blocked_result(self) -> dict[str, Any]:
+        return {
+            "verdict": "BLOCKED",
+            "task_key": self.task_key,
+            "phase": self.current_phase,
+            "message": "Current phase is not configured in the workflow catalog.",
+            "covered": [],
+            "missing": [],
+            "blockers": ["phase-not-configured"],
+            "current_phase": self.current_phase,
+            "next_phase": None,
+        }
 
+    def _try_llm_evaluate(self, report: str, phase: Phase) -> dict | None:
         import project_workflow.wizard as _wizard_mod
 
-        if _wizard_mod.SMART_EVALUATE:
-            try:
-                return self.evaluate_llm(report, phase)
-            except Exception as exc:
-                logger.warning("LLM evaluate failed: %s", exc)
+        if not _wizard_mod.SMART_EVALUATE:
+            return None
+        try:
+            return self.evaluate_llm(report, phase)
+        except Exception as exc:
+            logger.warning("LLM evaluate failed: %s", exc)
+            return None
+
+    def _resolve_transition(
+        self, phase: Phase, verdict: str, group: list[Phase]
+    ) -> tuple[str | None, str | None, str | None]:
+        """Return (next_phase_code, next_phase_name, rollback_target_code)."""
+        is_parallel = len(group) > 1
+        if is_parallel:
+            next_phase, next_phase_name = self._get_next_phase_after_group(group)
+            rollback_target = group[0].rollback_target if verdict == "rollback" else None
+            if verdict != "pass":
+                next_phase = None
+                next_phase_name = None
+        else:
+            next_phase, next_phase_name = self._get_next_phase(phase.code)
+            rollback_target = phase.rollback_target if verdict == "rollback" else None
+
+        if verdict == "pass" and next_phase:
+            next_phase_obj = self.phase_map.get(next_phase)
+            next_phase_name = next_phase_obj.name if next_phase_obj else next_phase_name
+        return next_phase, next_phase_name, rollback_target
+
+    def _build_assessment(
+        self,
+        phase: Phase,
+        report: str,
+    ) -> tuple[Any, str | None, str | None, dict]:
+        from .result_builder import build_assessment
 
         is_parallel = phase.execution_type == "parallel"
         if is_parallel:
@@ -371,28 +400,10 @@ class WizardEngine:
         blockers = extract_blockers(report)
         verdict = self._determine_verdict(phase, covered, missing, blockers, report)
 
-        if is_parallel:
-            next_phase, next_phase_name = self._get_next_phase_after_group(group)
-            if verdict == "rollback":
-                rollback_target = group[0].rollback_target
-            else:
-                rollback_target = None
-            if verdict != "pass":
-                next_phase = None
-                next_phase_name = None
-        else:
-            next_phase, next_phase_name = self._get_next_phase(phase.code)
-            rollback_target = phase.rollback_target if verdict == "rollback" else None
+        next_phase, next_phase_name, rollback_target = self._resolve_transition(phase, verdict, group)
 
         cb = PhaseContractBuilder(self.all_phases)
         next_phase_contract = cb.build_next_contract(next_phase) if verdict == "pass" else None
-
-        # Build structured assessment
-        if verdict == "pass" and next_phase:
-            next_phase_obj = self.phase_map.get(next_phase)
-            next_phase_name = next_phase_obj.name if next_phase_obj else next_phase_name
-
-        from .result_builder import build_assessment
 
         assessment = build_assessment(
             task_key=self.task_key,
@@ -410,30 +421,38 @@ class WizardEngine:
 
         result = assessment.to_result_dict()
         if next_phase_contract is not None:
-            result["next_phase_contract"] = (
-                next_phase_contract.to_dict() if hasattr(next_phase_contract, "to_dict") else next_phase_contract
-            )
+            result["next_phase_contract"] = row_to_dict(next_phase_contract)
+        return assessment, next_phase, rollback_target, result
 
-        # Record transition
+    def _record_evaluation(
+        self, phase: Phase, verdict: str, next_phase: str | None, rollback_target: str | None
+    ) -> None:
+        is_parallel = phase.execution_type == "parallel"
         if is_parallel:
+            group = self._get_parallel_group(phase)
             self._record_parallel_transition(group, verdict, next_phase)
         else:
             self._record_transition(phase, verdict, next_phase, rollback_target)
-
         self._uow.commit()
-        if not self.task:
-            return result
-        self.task = self._task_service.get_task(self.task["id"]) or self.task
-        self.current_phase = self._resolve_current_phase()
+        if self.task:
+            self.task = self._task_service.get_task(self.task["id"]) or self.task
+            self.current_phase = self._resolve_current_phase()
 
-        # Persist assessment
+    def _persist_supervisor_run(
+        self,
+        assessment: Any,
+        next_phase: str | None,
+        rollback_target: str | None,
+    ) -> None:
+        if not self.task:
+            return
         next_phase_obj = self.phase_map.get(next_phase) if next_phase and next_phase in self.phase_map else None
         rollback_phase_obj = (
             self.phase_map.get(rollback_target) if rollback_target and rollback_target in self.phase_map else None
         )
         self.db.create_supervisor_run(
             task_id=self.task["id"],
-            phase_id=phase.id,
+            phase_id=getattr(self.phase_map.get(assessment.phase_code), "id", None),
             verdict=assessment.verdict,
             report=assessment.message or "",
             covered=assessment.covered,
@@ -450,6 +469,18 @@ class WizardEngine:
         )
         self._uow.commit()
 
+    def evaluate(self, report: str) -> dict:
+        phase = self._get_current_phase_obj()
+        if not phase:
+            return self._blocked_result()
+
+        llm_result = self._try_llm_evaluate(report, phase)
+        if llm_result is not None:
+            return llm_result
+
+        assessment, next_phase, rollback_target, result = self._build_assessment(phase, report)
+        self._record_evaluation(phase, assessment.verdict, next_phase, rollback_target)
+        self._persist_supervisor_run(assessment, next_phase, rollback_target)
         return result
 
     # ── LLM evaluate (optional) ──────────────────────────────────────
