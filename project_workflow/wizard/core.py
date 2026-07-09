@@ -21,6 +21,10 @@ from ..application.task import TaskService
 from ..application.workflow import WorkflowService
 from ..infrastructure.db import schema
 from ..infrastructure.db.uow import SAUnitOfWork
+from ..infrastructure.db.uow_bootstrap import (
+    bootstrap_smoke_project_and_workflow,
+    ensure_smoke_phases,
+)
 
 # Re-exports kept for existing tests importing from wizard.core directly.
 from .checks import check_coverage, determine_verdict, extract_blockers
@@ -74,7 +78,7 @@ class WizardEngine:
         self._uow = uow if uow is not None else SAUnitOfWork()
 
         self._uow.create_all()
-        self._bootstrap_smoke_project_and_workflow()
+        bootstrap_smoke_project_and_workflow(self._uow)
         schema.ensure_phase_catalog(self._uow)
         self._ensure_smoke_phases()
 
@@ -182,98 +186,8 @@ class WizardEngine:
             }
         )
 
-    def _bootstrap_smoke_project_and_workflow(self) -> None:
-        from project_workflow import config
-
-        smoke_wf = self._uow.workflows.get_by_name(config.SMOKE_WORKFLOW_NAME)
-        if smoke_wf:
-            smoke_wf_id = smoke_wf.id
-        else:
-            smoke_wf_id = self._uow.workflows.create(
-                {
-                    "name": config.SMOKE_WORKFLOW_NAME,
-                    "description": "Smoke test workflow",
-                    "_skip_default_phase": True,
-                }
-            )
-        smoke_project = self._uow.projects.get_by_code(config.SMOKE_PROJECT_CODE)
-        if smoke_project is None:
-            self._uow.projects.create(
-                {
-                    "workflow_id": smoke_wf_id,
-                    "code": config.SMOKE_PROJECT_CODE,
-                    "name": config.SMOKE_PROJECT_NAME,
-                    "key_prefixes": list(config.SMOKE_TASK_KEY_PREFIXES),
-                    "workflow_name": config.SMOKE_WORKFLOW_NAME,
-                }
-            )
-            self._uow.commit()
-        self._ensure_smoke_phases()
-
     def _ensure_smoke_phases(self) -> None:
-        from project_workflow import config
-
-        smoke_wf = self._uow.workflows.get_by_name(config.SMOKE_WORKFLOW_NAME)
-        if not smoke_wf:
-            return
-        seed_phases = schema.load_phases_from_seed(config.SMOKE_SEED_PATH)
-        # Ensure agents referenced by selected_agent exist first.
-        for phase in seed_phases:
-            agent_name = phase.delegate.agent if phase.delegate else ""
-            if agent_name and not self._uow.agents.get_by_name(agent_name):
-                self._uow.agents.create({"name": agent_name, "description": f"Smoke seed agent for {phase.code}"})
-        self._uow.commit()
-
-        existing_by_code = {p.code: p for p in self._uow.phases.list(workflow_id=smoke_wf.id)}
-        for order, phase in enumerate(seed_phases, start=1):
-            data = {
-                "workflow_id": smoke_wf.id,
-                "code": phase.code,
-                "name": phase.name,
-                "description": phase.description,
-                "min_time_min": phase.min_time_min,
-                "phase_order": order,
-                "next_recommendation": phase.next_recommendation,
-                "parallel_with": phase.parallel_with,
-                "rollback_target": phase.rollback_target,
-                "execution_type": phase.execution_type,
-                "is_seed_managed": True,
-            }
-            if phase.delegate:
-                agent = self._uow.agents.get_by_name(phase.delegate.agent)
-                if agent:
-                    data["agent_id"] = agent.id
-            existing = existing_by_code.get(phase.code)
-            if existing:
-                assert existing.id is not None
-                self._uow.phases.update(existing.id, data)
-                phase_id = existing.id
-            else:
-                phase_id = self._uow.phases.create(data)
-
-            assert phase_id is not None
-            # Sync instructions, checks, evidence from seed (idempotent upsert)
-            self._uow.instructions.delete_for_phase(int(phase_id))
-            for idx, instr in enumerate(phase.instructions, start=1):
-                self._uow.instructions.create(
-                    int(phase_id),
-                    {
-                        "step_num": idx,
-                        "description": instr.step,
-                        "example": instr.example,
-                        "execution_type": instr.execution_type,
-                        "skills": instr.skills,
-                    },
-                )
-            self._uow.phases.set_checks(
-                int(phase_id),
-                [{"description": c.description} for c in phase.checks],
-            )
-            self._uow.phases.set_evidence(
-                int(phase_id),
-                [{"description": e.item} for e in phase.evidence],
-            )
-        self._uow.commit()
+        ensure_smoke_phases(self._uow)
 
     def _first_phase_code_for_project(self, project_id: int) -> str:
         project = self._project_service.get_project(project_id)
