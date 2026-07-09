@@ -105,7 +105,6 @@ def build_verdict_message(
     next_phase: str | None,
     rollback_target: str | None,
     is_parallel: bool = False,
-    group_codes: list[str] | None = None,
 ) -> str:
     """Single-line actionable status for machine-readable result["message"]."""
     issues = blockers or missing or []

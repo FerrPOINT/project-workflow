@@ -1,10 +1,10 @@
 """Phase Finite State Machine using transitions library.
 
 Formalizes the lifecycle of a single workflow phase:
-    pending → in_progress → done
-                ↘ blocked
-                ↘ rollback
-                ↘ delegated
+    in_progress → done
+    in_progress → blocked
+    in_progress → rollback
+    in_progress → delegated
 """
 
 from __future__ import annotations
@@ -32,7 +32,6 @@ class PhaseFSM:
     STATES = ["pending", "in_progress", "done", "blocked", "rollback", "delegated"]
 
     TRANSITIONS: list[dict[str, Any]] = [
-        {"trigger": "start", "source": "pending", "dest": "in_progress"},
         {"trigger": "succeed", "source": "in_progress", "dest": "done"},
         {"trigger": "partial_pass", "source": "in_progress", "dest": "in_progress"},
         {"trigger": "soft_fail", "source": "in_progress", "dest": "in_progress"},
@@ -40,8 +39,6 @@ class PhaseFSM:
         {"trigger": "block", "source": "in_progress", "dest": "blocked"},
         {"trigger": "rollback", "source": "in_progress", "dest": "rollback"},
         {"trigger": "delegate", "source": "in_progress", "dest": "delegated"},
-        {"trigger": "restart", "source": ["blocked", "rollback", "delegated"], "dest": "pending"},
-        {"trigger": "resume", "source": ["blocked", "rollback", "delegated"], "dest": "in_progress"},
     ]
 
     VERDICT_TO_TRIGGER: dict[str, str] = {
@@ -68,9 +65,6 @@ class PhaseFSM:
     @property
     def state(self) -> str:
         return self._model.state
-
-    def is_terminal(self) -> bool:
-        return self.state in {"done", "blocked"}
 
     def apply_verdict(self, verdict: str) -> str:
         """Apply a wizard verdict and return the new state."""

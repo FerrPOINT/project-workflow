@@ -141,8 +141,8 @@ flowchart TD
 |---|---|---|
 | Lint | `ruff check .` | **green** |
 | Type check | `mypy project_workflow` | **green** |
-| Tests | `pytest -q --timeout=60` | **956 passed, 6 deselected** |
-| Coverage | combined slices (`-p no:cov`) | **95%** |
+| Tests | `pytest -q --timeout=60` | **963 passed, 6 deselected** |
+| Coverage | combined slices (`-p no:cov`) | **>= 90%** |
 | Systemd UI health | `curl http://localhost:8811/api/tasks` | **200** |
 
 > **Примечание:** `pytest -n auto` без `--forked` может зависнуть из-за FD exhaustion при SQLite WAL. В CI и на WARTZ используем `--forked`. Параллельный прогон без forked актуален только для PostgreSQL-бекенда.

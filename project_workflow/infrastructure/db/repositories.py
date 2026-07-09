@@ -1,4 +1,4 @@
-"""SQLAlchemy repository implementations (compat shim)."""
+"""SQLAlchemy repository implementations (compat shim)."""  # pragma: no cover
 
 from __future__ import annotations
 

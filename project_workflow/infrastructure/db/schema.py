@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 import tempfile
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -465,24 +464,3 @@ def persist_phase_update_to_seed(
         json.dump(seed_data, tmp, ensure_ascii=False, indent=2)
         tmp_path = Path(tmp.name)
     tmp_path.replace(seed_path)
-
-
-def seed_is_stale(seed_path: Path | str | None = None) -> bool:
-    """Return True if seed file modification time is older than DB records."""
-    seed_path = Path(seed_path) if seed_path else config.SEED_PATH
-    if not seed_path.exists():
-        return True
-    seed_mtime = seed_path.stat().st_mtime
-    db_path = Path(config.get_settings().WORKFLOW_DIR) / "workflow.db"
-    if not db_path.exists():
-        return True
-    db_mtime = db_path.stat().st_mtime
-    return seed_mtime < db_mtime
-
-
-def get_seed_mtime(seed_path: Path | str | None = None) -> str:
-    """ISO timestamp of the seed file's last modification."""
-    seed_path = Path(seed_path) if seed_path else config.SEED_PATH
-    if not seed_path.exists():
-        return ""
-    return datetime.fromtimestamp(seed_path.stat().st_mtime, tz=timezone.utc).isoformat()
