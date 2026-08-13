@@ -76,11 +76,13 @@ def run_migrations_online() -> None:
         configure_kwargs = dict(
             connection=connection,
             target_metadata=target_metadata,
-            version_table_schema=SCHEMA,
             transactional_ddl=False if is_postgresql else True,
         )
+        if is_postgresql:
+            configure_kwargs["version_table_schema"] = SCHEMA
         context.configure(**configure_kwargs)
-        context.run_migrations()
+        with context.begin_transaction():
+            context.run_migrations()
 
 
 if context.is_offline_mode():

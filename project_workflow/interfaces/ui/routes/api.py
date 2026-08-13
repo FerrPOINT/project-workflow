@@ -35,6 +35,7 @@ from project_workflow.interfaces.ui.skills import (
     _load_skills_catalog as _load_skills_catalog_direct,
 )
 from project_workflow.interfaces.ui.state import _app_state
+from project_workflow.interfaces.ui.v2_views import load_v2_run, load_v2_runs
 
 
 def _error(message: str, status: int) -> JSONResponse:
@@ -106,6 +107,17 @@ async def api_tasks(workflow_id: int | None = Query(default=None)) -> dict[str, 
     if workflow_id is not None:
         tasks = [t for t in tasks if t.get("workflow_id") == workflow_id]
     return {"ok": True, "tasks": tasks}
+
+
+async def api_v2_runs() -> dict[str, Any]:
+    return {"ok": True, "runs": load_v2_runs()}
+
+
+async def api_v2_run(task_key: str) -> dict[str, Any] | JSONResponse:
+    run = load_v2_run(task_key)
+    if run is None:
+        return _error(f"Agentic SDLC v2 run {task_key!r} not found", 404)
+    return {"ok": True, "run": run}
 
 
 async def api_task_delete(task_key: str) -> JSONResponse:

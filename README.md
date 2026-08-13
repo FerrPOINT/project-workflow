@@ -41,7 +41,9 @@
 Агент отчитывается через CLI, встроенный supervisor оценивает отчёт и выдаёт вердикт: **PASS**, **SOFT_FAIL**, **HARD_FAIL**, **ROLLBACK**, **BLOCKED** или **DELEGATE**.
 Всё управление шаблонами workflow, фазами, проектами, агентами и задачами ведётся через Web UI.
 
-CLI остаётся минимальным: ровно две команды — `step` и `history`.
+Legacy CLI остаётся минимальным: `step` и `history`. Изолированный
+`agentic-sdlc-v2` использует namespaced-команды `v2`, не меняя существующие
+задачи и историю.
 
 В production используется **PostgreSQL**.
 
@@ -58,6 +60,7 @@ SQLite остаётся только для тестов (временные ф�
 | CLI freeze | Только `step` и `history`; весь CRUD — через UI. |
 | PostgreSQL | Единый production-стек: systemd UI и CLI используют тот же Postgres через `DATABASE_URL`. |
 | Автоматические миграции | `docker compose up` сам создаёт схему, таблицы и baseline. |
+| Agentic SDLC v2 | Детерминированный 70-фазный каталог, feature/bug profiles, typed verifiers, immutable receipts и human gates. |
 
 <a name="stack"></a>
 ## 🔧 Core Stack
@@ -82,6 +85,13 @@ project-workflow step --task TASK-123 --report "Сделал X, проверил
 
 # История фаз и supervisor-решений
 project-workflow history --task TASK-123 --n 10
+
+# Agentic SDLC v2: каталог, запуск, текущий контракт, submit и history
+project-workflow --json v2 catalog
+project-workflow --json v2 start --task AAT-123 --profile feature
+project-workflow --json v2 current --task AAT-123
+project-workflow --json v2 submit --task AAT-123 --report /absolute/path/phase-report-v2.json
+project-workflow --json v2 history --task AAT-123
 ```
 
 CLI ожидает переменную окружения `DATABASE_URL`:
@@ -114,6 +124,11 @@ sudo systemctl restart project-workflow-ui.service
 ```
 
 При старте автоматически создаётся схема `project_workflow`, таблицы и baseline-версия Alembic.
+
+Для v2 dashboard откройте `/v2`. Он отображает pinned catalog revision,
+60/54-фазный профиль, controller decisions, verifier receipts и отдельные
+role-bound approval records. Dashboard read-only: переходы выполняет только
+policy engine через `phase-report/v2`.
 
 <a name="architecture"></a>
 ## 🏗️ Architecture

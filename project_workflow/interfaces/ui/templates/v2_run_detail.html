@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ run.taskKey }} · Agentic SDLC v2{% endblock %}
+{% block header_title %}{{ run.taskKey }} · {{ run.profile }}{% endblock %}
+{% block header_actions %}<a class="btn btn-secondary" href="/v2">← Все запуски v2</a>{% endblock %}
+{% block content %}
+<div class="phase-detail-header">
+  <h2>{{ run.workflowVersion }} · {{ run.status }}</h2>
+  <div class="meta"><span><b>Текущая фаза:</b> {{ run.currentPhase }}</span><span><b>Decision:</b> {{ run.lastDecision or '—' }}</span><span><b>Catalog:</b> <code>{{ run.catalogRevision[:12] }}</code></span></div>
+</div>
+<div class="card" style="margin-bottom:16px">
+  <div class="card-header"><div class="card-title">Полный профиль</div><div>{{ run.path|length }} фаз</div></div>
+  <div class="timeline">
+  {% for item in run.path %}
+    <div class="timeline-item"><div class="timeline-card" style="cursor:default;{% if item.state == 'passed' %}border-color:var(--green){% elif item.state == 'current' %}border-color:var(--accent){% elif item.state == 'aborted' %}border-color:var(--red){% endif %}">
+      <div class="timeline-name"><code>{{ item.phaseId }}</code> · {{ item.name }} {% if item.isGate %}<span class="badge badge-delegate">Human gate</span>{% endif %}</div>
+      <div class="timeline-desc">{{ item.ownerRole }} · {{ item.state }}</div>
+    </div></div>{% if not loop.last %}<div class="timeline-arrow">↓</div>{% endif %}
+  {% endfor %}
+  </div>
+</div>
+<div class="card" style="margin-bottom:16px;padding:0;overflow-x:auto">
+  <div class="card-header" style="padding:18px 18px 0"><div class="card-title">Attempts и verifier receipts</div></div>
+  <table><thead><tr><th>Фаза</th><th>Decision</th><th>Receipt</th><th>Проверки</th><th>Время</th></tr></thead><tbody>
+  {% for item in run.attempts %}<tr><td>{{ item.phaseId }}</td><td>{{ item.decision }}</td><td><code>{{ item.receiptId[:12] }}</code></td><td>{% for receipt in item.verificationReceipts %}<div>{{ receipt.verifierType }} · {{ receipt.evidenceId }} · <b>{{ receipt.status }}</b></div>{% else %}—{% endfor %}</td><td>{{ item.createdAt or '—' }}</td></tr>
+  {% else %}<tr><td colspan="5" style="text-align:center;padding:24px">Нет attempts</td></tr>{% endfor %}
+  </tbody></table>
+</div>
+<div class="card" style="padding:0;overflow-x:auto">
+  <div class="card-header" style="padding:18px 18px 0"><div class="card-title">Human approvals</div></div>
+  <table><thead><tr><th>Фаза</th><th>Роль</th><th>Identity</th><th>Revision</th><th>Decision</th></tr></thead><tbody>
+  {% for item in run.approvals %}<tr><td>{{ item.phaseId }}</td><td>{{ item.role }}</td><td>{{ item.identity }}</td><td><code>{{ item.subjectRevision[:16] }}</code></td><td>{{ item.decision }}</td></tr>
+  {% else %}<tr><td colspan="5" style="text-align:center;padding:24px">Approvals ещё не зафиксированы</td></tr>{% endfor %}
+  </tbody></table>
+</div>
+{% endblock %}

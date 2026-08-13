@@ -23,6 +23,7 @@ from project_workflow.interfaces.ui.skills import (
 )
 from project_workflow.interfaces.ui.state import _app_state
 from project_workflow.interfaces.ui.templates import _group_instructions, templates
+from project_workflow.interfaces.ui.v2_views import load_v2_run, load_v2_runs
 
 
 async def index(request: Request) -> HTMLResponse:
@@ -104,6 +105,25 @@ async def tasks_page(request: Request) -> HTMLResponse:
             "page": "tasks",
             "ui_port": get_settings().UI_PORT,
         },
+    )
+
+
+async def v2_runs_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request=request,
+        name="v2_runs.html",
+        context={"request": request, "runs": load_v2_runs(), "page": "v2", "ui_port": get_settings().UI_PORT},
+    )
+
+
+async def v2_run_detail_page(request: Request, task_key: str) -> HTMLResponse:
+    run = load_v2_run(task_key)
+    if run is None:
+        return HTMLResponse("<h1>Agentic SDLC v2 run not found</h1>", status_code=404)
+    return templates.TemplateResponse(
+        request=request,
+        name="v2_run_detail.html",
+        context={"request": request, "run": run, "page": "v2", "ui_port": get_settings().UI_PORT},
     )
 
 
