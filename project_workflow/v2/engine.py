@@ -25,7 +25,7 @@ from project_workflow.infrastructure.db.models import (
     WorkflowCatalogV2 as WorkflowCatalogRecordV2,
 )
 
-from .catalog import WorkflowCatalogV2, load_default_catalog
+from .catalog import CatalogError, WorkflowCatalogV2, load_default_catalog
 from .schemas import (
     ActionStatus,
     CheckStatus,
@@ -125,8 +125,8 @@ class PolicyEngineV2:
         self._persist_catalog()
         existing = self.session.scalar(select(WorkflowRunV2).where(WorkflowRunV2.task_key == task_key))
         if existing:
-            if existing.profile != profile or existing.catalog_revision != self.catalog.revision:
-                raise ReplayConflict("task is already pinned to a different profile or catalog revision")
+            if existing.profile != profile:
+                raise ReplayConflict("task is already pinned to a different profile")
             return self._run_dict(existing)
         run = WorkflowRunV2(
             task_key=task_key,
@@ -142,9 +142,10 @@ class PolicyEngineV2:
 
     def current(self, task_key: str) -> dict[str, Any]:
         run = self._get_run(task_key)
+        catalog = self._catalog_for_run(run)
         return {
             **self._run_dict(run),
-            "contract": self.catalog.phase(run.current_phase) if run.status == "active" else None,
+            "contract": catalog.phase_contract(run.profile, run.current_phase) if run.status == "active" else None,
         }
 
     def history(self, task_key: str) -> list[dict[str, Any]]:
@@ -170,6 +171,7 @@ class PolicyEngineV2:
         report_json = _canonical_json(report_payload)
         report_hash = hashlib.sha256(report_json.encode("utf-8")).hexdigest()
         run = self._get_run(report.taskKey, for_update=True)
+        catalog = self._catalog_for_run(run)
 
         replay = self.session.scalar(
             select(PhaseAttemptV2).where(
@@ -183,10 +185,10 @@ class PolicyEngineV2:
                 raise ReplayConflict("same task/run/phase key was reused with different report content")
             return PhaseDecisionV2.model_validate_json(replay.decision_json)
 
-        phase = self.catalog.phase(report.phaseId)
+        phase = catalog.phase(report.phaseId)
         self._validate_envelope(run, report, phase)
         self._validate_actor(run, report, phase)
-        self._validate_revision_continuity(run, report)
+        self._validate_revision_continuity(run, report, catalog)
         actions, checks, evidence = self._validate_contract_coverage(report, phase)
         verification_results, missing_checks, invalid_evidence = self._verify_evidence(
             run, report, phase, checks, evidence
@@ -210,7 +212,7 @@ class PolicyEngineV2:
         rollback_target: str | None = None
         invalidated: list[str] = []
         if decision == Decision.PASS:
-            next_phase = self.catalog.next_phase(run.profile, old_phase)
+            next_phase = catalog.next_phase(run.profile, old_phase)
             if next_phase is None:
                 run.status = "done"
             else:
@@ -219,15 +221,15 @@ class PolicyEngineV2:
             if old_phase == "D31" and failure_class == "post-deploy-failure":
                 rollback_target = "D31"
                 linked_bug_key = report.inputRevisions["linkedBugTaskKey"]
-                self._start_linked_bug_run(run, linked_bug_key)
+                self._start_linked_bug_run(run, linked_bug_key, catalog)
                 run.status = "aborted"
                 blockers.append(f"linked bug run {linked_bug_key} started at B01")
             else:
-                rollback_target = self.catalog.resolve_route(
+                rollback_target = catalog.resolve_route(
                     run.profile, old_phase, failure_class or "phase-incomplete"
                 )
                 run.current_phase = rollback_target
-                invalidated = self._invalidate_downstream(run, rollback_target)
+                invalidated = self._invalidate_downstream(run, rollback_target, catalog)
         elif decision == Decision.ABORT:
             run.status = "aborted"
         run.last_decision = decision.value
@@ -286,10 +288,12 @@ class PolicyEngineV2:
         if missing_bindings:
             raise ContractViolation(f"required revision bindings are missing: {missing_bindings}")
 
-    def _start_linked_bug_run(self, source_run: WorkflowRunV2, task_key: str) -> None:
+    def _start_linked_bug_run(
+        self, source_run: WorkflowRunV2, task_key: str, catalog: WorkflowCatalogV2
+    ) -> None:
         import re
 
-        pattern = self.catalog.payload["policy"]["taskKeyPattern"]
+        pattern = catalog.payload["policy"]["taskKeyPattern"]
         if task_key == source_run.task_key or not re.fullmatch(pattern, task_key):
             raise ContractViolation("linkedBugTaskKey must identify a different allowed Jira task")
         existing = self.session.scalar(select(WorkflowRunV2).where(WorkflowRunV2.task_key == task_key))
@@ -310,8 +314,10 @@ class PolicyEngineV2:
             )
         )
 
-    def _validate_revision_continuity(self, run: WorkflowRunV2, report: PhaseReportV2) -> None:
-        path = self.catalog.path(run.profile)
+    def _validate_revision_continuity(
+        self, run: WorkflowRunV2, report: PhaseReportV2, catalog: WorkflowCatalogV2
+    ) -> None:
+        path = catalog.path(run.profile)
         current_index = path.index(report.phaseId)
         baselines = self.session.scalars(
             select(BaselineRevisionV2).where(
@@ -444,7 +450,7 @@ class PolicyEngineV2:
             binding = requirement["revisionBinding"]
             expected_revision = report.inputRevisions.get(binding)
             if binding == "catalogRevision":
-                expected_revision = self.catalog.revision
+                expected_revision = run.catalog_revision
             if not expected_revision or item.subjectRevision != expected_revision:
                 invalid.append(item.evidenceId)
                 results.append(
@@ -618,8 +624,10 @@ class PolicyEngineV2:
             return Decision.INCOMPLETE, "phase-incomplete", blockers
         return Decision.PASS, None, blockers
 
-    def _invalidate_downstream(self, run: WorkflowRunV2, target_phase: str) -> list[str]:
-        path = self.catalog.path(run.profile)
+    def _invalidate_downstream(
+        self, run: WorkflowRunV2, target_phase: str, catalog: WorkflowCatalogV2
+    ) -> list[str]:
+        path = catalog.path(run.profile)
         target_index = path.index(target_phase)
         baselines = self.session.scalars(
             select(BaselineRevisionV2).where(
@@ -753,9 +761,27 @@ class PolicyEngineV2:
         run = self.session.scalar(statement)
         if not run:
             raise ContractViolation(f"v2 task run not found: {task_key}")
-        if run.catalog_revision != self.catalog.revision:
-            raise ContractViolation("active task is pinned to a different catalog revision")
         return run
+
+    def _catalog_for_run(self, run: WorkflowRunV2) -> WorkflowCatalogV2:
+        if run.catalog_revision == self.catalog.revision:
+            return self.catalog
+        record = self.session.scalar(
+            select(WorkflowCatalogRecordV2).where(
+                WorkflowCatalogRecordV2.catalog_revision == run.catalog_revision
+            )
+        )
+        if record is None:
+            raise ContractViolation("pinned catalog revision is not available")
+        try:
+            payload = json.loads(record.catalog_json)
+            catalog = WorkflowCatalogV2(payload)
+            catalog.validate()
+        except (json.JSONDecodeError, CatalogError) as exc:
+            raise ContractViolation("stored pinned catalog is invalid") from exc
+        if catalog.workflow_version != run.workflow_version:
+            raise ContractViolation("pinned catalog workflow version mismatch")
+        return catalog
 
     @staticmethod
     def _run_dict(run: WorkflowRunV2) -> dict[str, Any]:

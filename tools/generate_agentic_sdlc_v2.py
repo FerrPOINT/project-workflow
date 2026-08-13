@@ -632,6 +632,13 @@ def make_phase(definition: tuple[str, str, str, str], order: int) -> dict[str, A
     approval = HUMAN_GATES.get(phase_id)
     if approval:
         approval = {**approval, "allowSamePersonAcrossRoles": True, "decision": "approved"}
+    def profile_route(feature_target: str, bug_target: str) -> str | dict[str, str]:
+        if phase_id.startswith("F"):
+            return feature_target
+        if phase_id.startswith("B"):
+            return bug_target
+        return {"feature": feature_target, "bug": bug_target}
+
     return {
         "phaseId": phase_id,
         "name": name,
@@ -652,14 +659,10 @@ def make_phase(definition: tuple[str, str, str, str], order: int) -> dict[str, A
         "failureRoutes": {
             "phase-incomplete": phase_id,
             "external-unavailable": phase_id,
-            "change-scope": (
-                {"feature": "F05", "bug": "B06"}
-                if phase_id.startswith(("D", "X"))
-                else ("F05" if phase_id.startswith("F") else "B06")
-            ),
-            "architecture-defect": "F12",
-            "threat-model-defect": "F13",
-            "test-design-defect": "F15" if phase_id.startswith(("F", "D")) else "B07",
+            "change-scope": profile_route("F05", "B06"),
+            "architecture-defect": profile_route("F12", "B08"),
+            "threat-model-defect": profile_route("F13", "B05"),
+            "test-design-defect": profile_route("F15", "B07"),
             "implementation-defect": "D03",
             "security-implementation-defect": "D03",
             "build-defect": "D11",

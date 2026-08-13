@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import hashlib
+import json
+from copy import deepcopy
 from datetime import datetime, timezone
 
 import pytest
 from pydantic import ValidationError
 
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
-from project_workflow.v2 import PolicyEngineV2, load_default_catalog
+from project_workflow.v2 import PolicyEngineV2, WorkflowCatalogV2, load_default_catalog
 from project_workflow.v2.engine import ContractViolation, IdentityPolicy, ReplayConflict
 from project_workflow.v2.schemas import Decision, PhaseReportV2
 from project_workflow.v2.verifiers import VerificationResult, VerifierRegistry
@@ -185,6 +188,37 @@ def test_pass_advances_exactly_one_phase_and_replay_returns_receipt(engine):
     assert engine.current("AAT-101")["currentPhase"] == "C02"
     assert replay.receiptId == first.receiptId
     assert len(engine.history("AAT-101")) == 1
+
+
+def test_active_run_continues_on_its_pinned_catalog_after_packaged_revision_changes(engine):
+    started = engine.start("AAT-199", "feature")
+    old_revision = started["catalogRevision"]
+    old_purpose = engine.current("AAT-199")["contract"]["purpose"]
+
+    payload = deepcopy(engine.catalog.payload)
+    payload["phases"][0]["purpose"] = "new catalog revision"
+    payload["catalogRevision"] = ""
+    canonical = json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    payload["catalogRevision"] = hashlib.sha256(canonical).hexdigest()
+    new_catalog = WorkflowCatalogV2(payload)
+    new_catalog.validate()
+    upgraded = PolicyEngineV2(
+        engine.session,
+        catalog=new_catalog,
+        registry=engine.registry,
+        identity_policy=engine.identity_policy,
+        now=engine.now,
+    )
+
+    current = upgraded.current("AAT-199")
+    assert current["catalogRevision"] == old_revision
+    assert current["contract"]["purpose"] == old_purpose
+    assert upgraded.start("AAT-199", "feature")["catalogRevision"] == old_revision
+    decision = upgraded.submit(build_report(upgraded, "AAT-199", "old-catalog-c01"))
+    assert decision.decision == Decision.PASS
+    assert upgraded.current("AAT-199")["currentPhase"] == "C02"
 
 
 def test_conflicting_replay_is_rejected(engine):

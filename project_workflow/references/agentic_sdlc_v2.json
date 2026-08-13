@@ -1,7 +1,7 @@
 {
   "schemaVersion": "workflow-template/v2",
   "workflowVersion": "agentic-sdlc-v2",
-  "catalogRevision": "da1530eb4559b75b971c09c82b2961f92e5dbea63a178dc8017d531efd781b03",
+  "catalogRevision": "d84e36608275ad41a961d5a7be2df273bd9c0c00420146f3364dd433ce2ea76b",
   "profiles": {
     "feature": [
       "C01",
@@ -299,10 +299,22 @@
       "failureRoutes": {
         "phase-incomplete": "C01",
         "external-unavailable": "C01",
-        "change-scope": "B06",
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "B07",
+        "change-scope": {
+          "feature": "F05",
+          "bug": "B06"
+        },
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -648,10 +660,22 @@
       "failureRoutes": {
         "phase-incomplete": "C02",
         "external-unavailable": "C02",
-        "change-scope": "B06",
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "B07",
+        "change-scope": {
+          "feature": "F05",
+          "bug": "B06"
+        },
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -853,10 +877,22 @@
       "failureRoutes": {
         "phase-incomplete": "C03",
         "external-unavailable": "C03",
-        "change-scope": "B06",
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "B07",
+        "change-scope": {
+          "feature": "F05",
+          "bug": "B06"
+        },
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -1052,10 +1088,22 @@
       "failureRoutes": {
         "phase-incomplete": "C04",
         "external-unavailable": "C04",
-        "change-scope": "B06",
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "B07",
+        "change-scope": {
+          "feature": "F05",
+          "bug": "B06"
+        },
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -1257,10 +1305,22 @@
       "failureRoutes": {
         "phase-incomplete": "C05",
         "external-unavailable": "C05",
-        "change-scope": "B06",
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "B07",
+        "change-scope": {
+          "feature": "F05",
+          "bug": "B06"
+        },
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -1463,10 +1523,22 @@
       "failureRoutes": {
         "phase-incomplete": "C06",
         "external-unavailable": "C06",
-        "change-scope": "B06",
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "B07",
+        "change-scope": {
+          "feature": "F05",
+          "bug": "B06"
+        },
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -1668,10 +1740,22 @@
       "failureRoutes": {
         "phase-incomplete": "C07",
         "external-unavailable": "C07",
-        "change-scope": "B06",
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "B07",
+        "change-scope": {
+          "feature": "F05",
+          "bug": "B06"
+        },
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -1867,10 +1951,22 @@
       "failureRoutes": {
         "phase-incomplete": "C08",
         "external-unavailable": "C08",
-        "change-scope": "B06",
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "B07",
+        "change-scope": {
+          "feature": "F05",
+          "bug": "B06"
+        },
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -5338,8 +5434,8 @@
         "phase-incomplete": "B01",
         "external-unavailable": "B01",
         "change-scope": "B06",
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
+        "architecture-defect": "B08",
+        "threat-model-defect": "B05",
         "test-design-defect": "B07",
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
@@ -5537,8 +5633,8 @@
         "phase-incomplete": "B02",
         "external-unavailable": "B02",
         "change-scope": "B06",
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
+        "architecture-defect": "B08",
+        "threat-model-defect": "B05",
         "test-design-defect": "B07",
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
@@ -5742,8 +5838,8 @@
         "phase-incomplete": "B03",
         "external-unavailable": "B03",
         "change-scope": "B06",
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
+        "architecture-defect": "B08",
+        "threat-model-defect": "B05",
         "test-design-defect": "B07",
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
@@ -5947,8 +6043,8 @@
         "phase-incomplete": "B04",
         "external-unavailable": "B04",
         "change-scope": "B06",
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
+        "architecture-defect": "B08",
+        "threat-model-defect": "B05",
         "test-design-defect": "B07",
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
@@ -6152,8 +6248,8 @@
         "phase-incomplete": "B05",
         "external-unavailable": "B05",
         "change-scope": "B06",
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
+        "architecture-defect": "B08",
+        "threat-model-defect": "B05",
         "test-design-defect": "B07",
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
@@ -6358,8 +6454,8 @@
         "phase-incomplete": "B06",
         "external-unavailable": "B06",
         "change-scope": "B06",
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
+        "architecture-defect": "B08",
+        "threat-model-defect": "B05",
         "test-design-defect": "B07",
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
@@ -6563,8 +6659,8 @@
         "phase-incomplete": "B07",
         "external-unavailable": "B07",
         "change-scope": "B06",
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
+        "architecture-defect": "B08",
+        "threat-model-defect": "B05",
         "test-design-defect": "B07",
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
@@ -6768,8 +6864,8 @@
         "phase-incomplete": "B08",
         "external-unavailable": "B08",
         "change-scope": "B06",
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
+        "architecture-defect": "B08",
+        "threat-model-defect": "B05",
         "test-design-defect": "B07",
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
@@ -6973,8 +7069,8 @@
         "phase-incomplete": "B09",
         "external-unavailable": "B09",
         "change-scope": "B06",
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
+        "architecture-defect": "B08",
+        "threat-model-defect": "B05",
         "test-design-defect": "B07",
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
@@ -7185,8 +7281,8 @@
         "phase-incomplete": "B10",
         "external-unavailable": "B10",
         "change-scope": "B06",
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
+        "architecture-defect": "B08",
+        "threat-model-defect": "B05",
         "test-design-defect": "B07",
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
@@ -7393,9 +7489,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -7649,9 +7754,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -7857,9 +7971,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -8065,9 +8188,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -8273,9 +8405,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -8481,9 +8622,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -8689,9 +8839,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -8897,9 +9056,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -9105,9 +9273,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -9313,9 +9490,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -9525,9 +9711,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -9737,9 +9932,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -10194,9 +10398,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -10406,9 +10619,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -10612,9 +10834,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -10821,9 +11052,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -11030,9 +11270,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -11239,9 +11488,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -11448,9 +11706,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -11759,9 +12026,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -12069,9 +12345,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -12518,9 +12803,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -12729,9 +13023,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -12937,9 +13240,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -13386,9 +13698,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -13605,9 +13926,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -13818,9 +14148,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -14177,9 +14516,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -14536,9 +14884,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -14895,9 +15252,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -15298,9 +15664,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -15606,9 +15981,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "F15",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -15818,9 +16202,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "B07",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -16020,9 +16413,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "B07",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -16222,9 +16624,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "B07",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",
@@ -16424,9 +16835,18 @@
           "feature": "F05",
           "bug": "B06"
         },
-        "architecture-defect": "F12",
-        "threat-model-defect": "F13",
-        "test-design-defect": "B07",
+        "architecture-defect": {
+          "feature": "F12",
+          "bug": "B08"
+        },
+        "threat-model-defect": {
+          "feature": "F13",
+          "bug": "B05"
+        },
+        "test-design-defect": {
+          "feature": "F15",
+          "bug": "B07"
+        },
         "implementation-defect": "D03",
         "security-implementation-defect": "D03",
         "build-defect": "D11",

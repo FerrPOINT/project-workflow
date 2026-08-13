@@ -4,11 +4,18 @@ from __future__ import annotations
 
 import hashlib
 import json
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 DEFAULT_CATALOG = Path(__file__).resolve().parents[1] / "references" / "agentic_sdlc_v2.json"
+PROFILE_FAILURE_ROUTES = {
+    "change-scope": {"feature": "F05", "bug": "B06"},
+    "architecture-defect": {"feature": "F12", "bug": "B08"},
+    "threat-model-defect": {"feature": "F13", "bug": "B05"},
+    "test-design-defect": {"feature": "F15", "bug": "B07"},
+}
 
 
 class CatalogError(ValueError):
@@ -66,9 +73,24 @@ class WorkflowCatalogV2:
         route = self.phase(phase_id)["failureRoutes"].get(failure_class, phase_id)
         if isinstance(route, dict):
             route = route.get(profile)
+        if route not in self.path(profile) and failure_class in PROFILE_FAILURE_ROUTES:
+            # Compatibility correction for the first published v2 catalog, whose
+            # common phases serialized one branch target instead of both.
+            route = PROFILE_FAILURE_ROUTES[failure_class].get(profile)
         if not isinstance(route, str) or route not in self.path(profile):
             raise CatalogError(f"invalid route for {phase_id}/{failure_class}/{profile}: {route!r}")
         return route
+
+    def phase_contract(self, profile: str, phase_id: str) -> dict[str, Any]:
+        """Return the phase contract with every profile-dependent route resolved."""
+        if phase_id not in self.path(profile):
+            raise CatalogError(f"phase {phase_id} is not in {profile} path")
+        phase = deepcopy(self.phase(phase_id))
+        phase["failureRoutes"] = {
+            failure_class: self.resolve_route(profile, phase_id, failure_class)
+            for failure_class in phase["failureRoutes"]
+        }
+        return phase
 
     def validate(self) -> None:
         if self.payload.get("schemaVersion") != "workflow-template/v2":
@@ -96,6 +118,9 @@ class WorkflowCatalogV2:
             gates = [phase_id for phase_id in path if phase_map[phase_id].get("approvalRule")]
             if len(gates) != 5:
                 raise CatalogError(f"{profile} path must contain exactly 5 human gates")
+            for phase_id in path:
+                for failure_class in phase_map[phase_id].get("failureRoutes", {}):
+                    self.resolve_route(profile, phase_id, failure_class)
         instruction_ids: list[str] = []
         check_ids: list[str] = []
         evidence_ids: list[str] = []
