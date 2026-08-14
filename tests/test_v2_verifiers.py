@@ -101,6 +101,32 @@ def test_file_verifier_rejects_unsupported_absence_claim_even_with_valid_checksu
     assert result.details["claimId"] == "pii-absent"
 
 
+def test_file_verifier_rejects_risk_absence_even_with_agent_supplied_source(tmp_path):
+    document = _risk_document()
+    document["unknowns"] = [item for item in document["unknowns"] if item["topic"] != "pii"]
+    document["sources"] = [
+        {"evidenceRef": "agent-report", "uri": "file:///evidence/report.json", "revision": "baseline-1"}
+    ]
+    document["claims"] = [
+        {
+            "claimId": "pii-absent",
+            "topic": "pii",
+            "statement": "No PII is processed.",
+            "status": "verified_absent",
+            "evidenceRefs": ["agent-report"],
+        }
+    ]
+    path, digest = _write_document(tmp_path, document)
+
+    result = FileEvidenceVerifier([tmp_path]).verify(
+        _file_evidence(path, digest), _document_context()
+    )
+
+    assert result.status == "failed"
+    assert result.details["reason"] == "assurance absence or applicability cannot be established at this phase"
+    assert result.details["forbiddenTopics"] == ["pii"]
+
+
 def test_file_verifier_rejects_document_bound_to_another_task(tmp_path):
     document = _risk_document()
     document["taskKey"] = "AAT-7"

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "workflow-template/v2",
   "workflowVersion": "agentic-sdlc-v2",
-  "catalogRevision": "68d154a710c54e6cf1100aa8ff16b7bfd7ce6660ed7fbced505da09fa081fb16",
+  "catalogRevision": "728b20e0b386ec0e4d86573afe01cb5aa7ce2192aabae48e6398a137dad9490e",
   "profiles": {
     "feature": [
       "C01",
@@ -304,6 +304,10 @@
         "compliance",
         "vulnerabilities",
         "attack-surface"
+      ],
+      "forbiddenStatusesForRequiredTopics": [
+        "verified_absent",
+        "not_applicable"
       ]
     }
   },

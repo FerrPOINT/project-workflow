@@ -107,6 +107,7 @@ ARTIFACT_POLICIES: dict[str, Any] = {
         "evidenceRequiredStatuses": ["observed", "verified", "verified_absent", "not_applicable"],
         "unknownStatus": "unknown",
         "requiredTopics": ["pii", "compliance", "vulnerabilities", "attack-surface"],
+        "forbiddenStatusesForRequiredTopics": ["verified_absent", "not_applicable"],
     },
 }
 

@@ -197,6 +197,17 @@ class FileEvidenceVerifier:
                 )
         required_topics = set(policy.get("requiredTopics", []))
         if required_topics:
+            forbidden_statuses = set(policy.get("forbiddenStatusesForRequiredTopics", []))
+            forbidden_claims = {
+                item.get("topic")
+                for item in claims
+                if item.get("topic") in required_topics and item.get("status") in forbidden_statuses
+            }
+            if forbidden_claims:
+                return VerificationResult.failed(
+                    "assurance absence or applicability cannot be established at this phase",
+                    forbiddenTopics=sorted(forbidden_claims),
+                )
             claim_topics = {item.get("topic") for item in claims}
             missing_topics = required_topics - claim_topics - unknown_topics
             if missing_topics:
