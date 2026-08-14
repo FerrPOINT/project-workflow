@@ -151,7 +151,7 @@ flowchart TD
 - UI-пакет (`project_workflow/interfaces/ui/`) — чистое FastAPI-приложение с отдельными routes, services, dependencies.
 - `project_workflow/infrastructure/db/compat.py` — SQLAlchemy-реализация `WorkflowDB`, сохраняющая публичный API для CLI/wizard/tests.
 - Конфигурация централизована в `project_workflow.config` на Pydantic Settings; `DATABASE_URL` обязателен.
-- Легаси удалено: исходный `WorkflowDB`, `db/base.py`, `db_schema.sql`, `wartz-workflow-cli`, `wartz_ui` и устаревшие wizard endpoints больше не существуют.
+- Легаси удалено: исходный `WorkflowDB`, `db/base.py`, `db_schema.sql`, старые CLI/UI entrypoints и устаревшие wizard endpoints больше не существуют.
 
 <a name="quality"></a>
 ## 🛡️ Quality Bar
@@ -164,7 +164,7 @@ flowchart TD
 | Coverage | combined slices (`-p no:cov`) | **~97%** |
 | Systemd UI health | `curl http://localhost:8811/api/tasks` | **200** |
 
-> **Примечание:** `pytest -n auto` без `--forked` может зависнуть из-за FD exhaustion при SQLite WAL. В CI и на WARTZ используем `--forked`. Параллельный прогон без forked актуален только для PostgreSQL-бекенда.
+> **Примечание:** `pytest -n auto` без `--forked` может зависнуть из-за FD exhaustion при SQLite WAL. В CI и demo runtime используем `--forked`. Параллельный прогон без forked актуален только для PostgreSQL-бекенда.
 
 <a name="roadmap"></a>
 ## 🗺️ Roadmap
@@ -175,7 +175,7 @@ flowchart TD
 - [x] Docker Compose: Postgres + migrate + UI
 - [x] UI/API переведены на SQLAlchemy-сервисы
 - [x] `WorkflowDB` переписан на SQLAlchemy, `db/base.py` и `db_schema.sql` удалены
-- [x] Legacy `wartz-workflow-cli`, `wartz_ui` и старые wizard endpoints удалены
+- [x] Legacy CLI/UI entrypoints и старые wizard endpoints удалены
 - [x] 869 тестов green
 - [x] Postgres-интеграционные тесты
 - [x] `WizardEngine` и wizard-модули собраны в пакет `project_workflow/wizard/`
