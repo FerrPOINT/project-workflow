@@ -628,6 +628,14 @@ def make_phase(definition: tuple[str, str, str, str], order: int) -> dict[str, A
             "retryPolicy": {"maxAttempts": 1, "retryOn": []},
         },
     ]
+    # Jira state is a controlled side effect only for the execution instruction
+    # of the two lifecycle phases that own the board transition. Read/verify
+    # instructions remain read-only, and every write is followed by Jira
+    # readback before the controller can decide PASS.
+    if phase_id in {"C08", "X01"}:
+        instructions[1]["allowedTools"] = sorted(
+            {*instructions[1]["allowedTools"], "jira-write"}
+        )
     checks = [
         {
             "checkId": check_ids[0],

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "workflow-template/v2",
   "workflowVersion": "agentic-sdlc-v2",
-  "catalogRevision": "728b20e0b386ec0e4d86573afe01cb5aa7ce2192aabae48e6398a137dad9490e",
+  "catalogRevision": "57c451ef716c22db7402bd6bfebcac966f0f007ea7aa24c0b370957708223a32",
   "profiles": {
     "feature": [
       "C01",
@@ -2016,7 +2016,8 @@
           "allowedTools": [
             "file-read",
             "file-write",
-            "jira-read"
+            "jira-read",
+            "jira-write"
           ],
           "requiredInputs": [
             "input revision set"
@@ -16325,6 +16326,7 @@
             "file-write",
             "gitlab-read",
             "jira-read",
+            "jira-write",
             "runtime-read"
           ],
           "requiredInputs": [

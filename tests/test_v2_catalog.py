@@ -47,6 +47,19 @@ def test_phase_contract_contains_only_referenced_catalog_artifact_definitions():
     assert c08["artifactPolicies"] == {}
 
 
+def test_jira_board_writes_are_limited_to_c08_and_x01_execution():
+    catalog = load_default_catalog()
+
+    write_instructions = [
+        (phase_id, instruction["instructionId"])
+        for phase_id, phase in catalog.phases.items()
+        for instruction in phase["instructions"]
+        if "jira-write" in instruction["allowedTools"]
+    ]
+
+    assert write_instructions == [("C08", "c08-02-execute"), ("X01", "x01-02-execute")]
+
+
 def test_catalog_checksum_prevents_in_place_change(tmp_path):
     catalog = load_default_catalog()
     payload = json.loads(json.dumps(catalog.payload))
