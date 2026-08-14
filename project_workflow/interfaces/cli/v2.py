@@ -122,3 +122,17 @@ def history_command(ctx: click.Context, task_key: str) -> None:
         raise click.ClickException(str(exc)) from exc
     finally:
         uow.close()
+
+
+@v2_group.command("evidence-export")
+@click.option("--task", "task_key", required=True)
+@click.pass_context
+def evidence_export_command(ctx: click.Context, task_key: str) -> None:
+    """Export sanitized verified evidence for the privileged E2E collector."""
+    uow, engine = _engine()
+    try:
+        _emit(ctx, {"ok": True, **engine.evidence_export(task_key.upper())})
+    except V2PolicyError as exc:
+        raise click.ClickException(str(exc)) from exc
+    finally:
+        uow.close()

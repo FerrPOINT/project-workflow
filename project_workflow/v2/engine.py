@@ -9,6 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -70,6 +71,90 @@ class IdentityPolicy:
 
 def _canonical_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+_EXPORTED_METADATA_KEYS = frozenset(
+    {
+        "artifactDigest",
+        "builderIdentity",
+        "deploymentId",
+        "environment",
+        "health",
+        "gitSha",
+        "linkedBugRunId",
+        "linkedBugTaskKey",
+        "mediaType",
+        "mrIid",
+        "pipelineId",
+        "policyVersion",
+        "previousStableDigest",
+        "registryBaseUrl",
+        "repository",
+        "requiredJobs",
+        "runtimeBaseUrl",
+        "restoredDigest",
+        "sourceSha",
+        "state",
+        "status",
+        "successfulSamples",
+        "sampleCount",
+    }
+)
+_EXPORTED_URI_SCHEMES = frozenset(
+    {
+        "deployment",
+        "file",
+        "git",
+        "gitlab",
+        "gitlab-approval",
+        "http",
+        "https",
+        "jira",
+        "jira-comment",
+        "observation",
+        "oci",
+        "runtime",
+        "workflow",
+    }
+)
+_URI_METADATA_KEYS = frozenset({"registryBaseUrl", "runtimeBaseUrl"})
+
+
+def _sanitize_evidence_uri(value: str) -> str:
+    """Remove request credentials and mutable query data from exported refs."""
+
+    parsed = urlsplit(value)
+    if parsed.scheme.lower() not in _EXPORTED_URI_SCHEMES:
+        return "redacted:" + hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
+    hostname = parsed.hostname or ""
+    if ":" in hostname and not hostname.startswith("["):
+        hostname = f"[{hostname}]"
+    try:
+        port = parsed.port
+    except ValueError:
+        port = None
+    if port is not None:
+        hostname = f"{hostname}:{port}"
+    return urlunsplit((parsed.scheme, hostname, parsed.path, "", ""))
+
+
+def _safe_evidence_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    safe: dict[str, Any] = {}
+    for key in sorted(_EXPORTED_METADATA_KEYS & metadata.keys()):
+        value = metadata[key]
+        if key in _URI_METADATA_KEYS and isinstance(value, str):
+            safe[key] = _sanitize_evidence_uri(value)
+            continue
+        if isinstance(value, str | int | float | bool) or value is None:
+            if not isinstance(value, str) or len(value) <= 512:
+                safe[key] = value
+        elif (
+            isinstance(value, list)
+            and len(value) <= 100
+            and all(isinstance(item, str) and len(item) <= 256 for item in value)
+        ):
+            safe[key] = value
+    return safe
 
 
 def _unique_ids(values: list[Any], attribute: str, label: str) -> dict[str, Any]:
@@ -187,6 +272,141 @@ class PolicyEngineV2:
                 }
             )
         return history
+
+    def evidence_export(self, task_key: str) -> dict[str, Any]:
+        """Export verified audit facts without exposing raw reports or verifier secrets."""
+
+        run = self._get_run(task_key)
+        attempts = self.session.scalars(
+            select(PhaseAttemptV2)
+            .where(PhaseAttemptV2.workflow_run_id == run.id)
+            .order_by(PhaseAttemptV2.id)
+        ).all()
+        attempt_by_id = {attempt.id: attempt for attempt in attempts}
+        receipts = self.session.scalars(
+            select(EvidenceVerificationReceiptV2)
+            .where(EvidenceVerificationReceiptV2.attempt_id.in_(attempt_by_id))
+            .order_by(EvidenceVerificationReceiptV2.id)
+        ).all()
+        receipts_by_attempt: dict[int, list[EvidenceVerificationReceiptV2]] = {}
+        for receipt in receipts:
+            receipts_by_attempt.setdefault(receipt.attempt_id, []).append(receipt)
+
+        verified_evidence: list[dict[str, Any]] = []
+        exported_attempts: list[dict[str, Any]] = []
+        for attempt in attempts:
+            report = PhaseReportV2.model_validate_json(attempt.report_json)
+            evidence_by_id = {item.evidenceId: item for item in report.evidence}
+            attempt_receipts = receipts_by_attempt.get(attempt.id, [])
+            for receipt in attempt_receipts:
+                evidence = evidence_by_id.get(receipt.evidence_id)
+                if receipt.status != "passed" or evidence is None:
+                    continue
+                verified_evidence.append(
+                    {
+                        "evidenceId": evidence.evidenceId,
+                        "requirementId": evidence.requirementId,
+                        "phaseId": attempt.phase_id,
+                        "type": evidence.type,
+                        "uri": _sanitize_evidence_uri(evidence.uri),
+                        "sha256": evidence.sha256,
+                        "subjectRevision": evidence.subjectRevision,
+                        "producerIdentity": evidence.producerIdentity,
+                        "observedAt": evidence.observedAt.isoformat(),
+                        "metadata": _safe_evidence_metadata(evidence.metadata),
+                        "controllerReceiptId": attempt.receipt_id,
+                        "verificationReceiptId": f"evr-{receipt.id}",
+                        "verifierType": receipt.verifier_type,
+                        "verifiedAt": (
+                            receipt.observed_at.isoformat()
+                            if receipt.observed_at
+                            else attempt.created_at.isoformat() if attempt.created_at else None
+                        ),
+                    }
+                )
+            exported_attempts.append(
+                {
+                    "submissionId": attempt.submission_id,
+                    "phaseId": attempt.phase_id,
+                    "decision": attempt.decision,
+                    "reportSha256": attempt.report_sha256,
+                    "controllerReceiptId": attempt.receipt_id,
+                    "createdAt": attempt.created_at.isoformat() if attempt.created_at else None,
+                    "verificationReceipts": [
+                        {
+                            "verificationReceiptId": f"evr-{receipt.id}",
+                            "evidenceId": receipt.evidence_id,
+                            "verifierType": receipt.verifier_type,
+                            "status": receipt.status,
+                            "observedAt": receipt.observed_at.isoformat() if receipt.observed_at else None,
+                        }
+                        for receipt in attempt_receipts
+                    ],
+                }
+            )
+
+        approvals = self.session.scalars(
+            select(HumanApprovalV2)
+            .where(HumanApprovalV2.workflow_run_id == run.id)
+            .order_by(HumanApprovalV2.id)
+        ).all()
+        baselines = self.session.scalars(
+            select(BaselineRevisionV2)
+            .where(BaselineRevisionV2.workflow_run_id == run.id)
+            .order_by(BaselineRevisionV2.id)
+        ).all()
+        deployments = self.session.scalars(
+            select(ArtifactDeploymentLinkV2)
+            .where(ArtifactDeploymentLinkV2.workflow_run_id == run.id)
+            .order_by(ArtifactDeploymentLinkV2.id)
+        ).all()
+
+        return {
+            "schemaVersion": "evidence-export/v1",
+            "taskKey": run.task_key,
+            "profile": run.profile,
+            "workflowVersion": run.workflow_version,
+            "catalogRevision": run.catalog_revision,
+            "status": run.status,
+            "currentPhase": run.current_phase,
+            "attempts": exported_attempts,
+            "verifiedEvidence": verified_evidence,
+            "approvals": [
+                {
+                    "approvalId": item.approval_id,
+                    "phaseId": item.phase_id,
+                    "role": item.role,
+                    "identity": item.identity,
+                    "decision": item.decision,
+                    "subjectRevision": item.subject_revision,
+                    "externalRef": _sanitize_evidence_uri(item.external_ref),
+                    "approvedAt": item.approved_at.isoformat(),
+                    "controllerReceiptId": attempt_by_id[item.attempt_id].receipt_id,
+                }
+                for item in approvals
+            ],
+            "baselines": [
+                {
+                    "phaseId": item.phase_id,
+                    "kind": item.revision_kind,
+                    "value": item.revision_value,
+                    "invalidatedAt": item.invalidated_at.isoformat() if item.invalidated_at else None,
+                    "createdAt": item.created_at.isoformat() if item.created_at else None,
+                }
+                for item in baselines
+            ],
+            "deploymentLinks": [
+                {
+                    "artifactDigest": item.artifact_digest,
+                    "environment": item.environment,
+                    "deploymentId": item.deployment_id,
+                    "status": item.status,
+                    "evidenceId": item.evidence_id,
+                    "createdAt": item.created_at.isoformat() if item.created_at else None,
+                }
+                for item in deployments
+            ],
+        }
 
     def submit(self, report: PhaseReportV2 | dict[str, Any]) -> PhaseDecisionV2:
         if not isinstance(report, PhaseReportV2):

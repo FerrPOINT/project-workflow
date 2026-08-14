@@ -192,6 +192,91 @@ def test_pass_advances_exactly_one_phase_and_replay_returns_receipt(engine):
     assert engine.history("AAT-101")[0]["missingChecks"] == []
 
 
+def test_evidence_export_contains_only_sanitized_verified_records(engine):
+    engine.start("AAT-109", "feature")
+    payload = build_report(engine, "AAT-109", "export-c01")
+    payload["evidence"][0]["uri"] = "https://reader:password@example.test/evidence?access_token=hidden#fragment"
+    payload["evidence"][0]["metadata"] = {
+        "deploymentId": "deploy-17",
+        "requiredJobs": ["build", "test"],
+        "authorization": "Bearer hidden",
+        "nested": {"secret": "hidden"},
+    }
+    decision = engine.submit(payload)
+
+    exported = engine.evidence_export("AAT-109")
+
+    assert exported["schemaVersion"] == "evidence-export/v1"
+    assert exported["catalogRevision"] == engine.catalog.revision
+    assert exported["attempts"][0]["controllerReceiptId"] == decision.receiptId
+    item = exported["verifiedEvidence"][0]
+    assert item["uri"] == "https://example.test/evidence"
+    assert item["metadata"] == {"deploymentId": "deploy-17", "requiredJobs": ["build", "test"]}
+    assert item["verificationReceiptId"].startswith("evr-")
+    assert "hidden" not in json.dumps(exported)
+
+
+def test_evidence_export_does_not_promote_failed_receipts():
+    uow = SAUnitOfWork()
+    uow.init()
+    identities = IdentityPolicy(frozenset({"analyst"}), frozenset({"owner"}))
+    failing = PolicyEngineV2(uow.session, identity_policy=identities)
+    failing.start("AAT-110", "feature")
+    result = failing.submit(build_report(failing, "AAT-110", "failed-export"))
+
+    exported = failing.evidence_export("AAT-110")
+
+    assert result.decision != Decision.PASS
+    assert exported["attempts"][0]["verificationReceipts"]
+    assert exported["verifiedEvidence"] == []
+    uow.close()
+
+
+def test_evidence_export_replay_does_not_duplicate_attempts(engine):
+    engine.start("AAT-111", "feature")
+    payload = build_report(engine, "AAT-111", "same-export")
+    engine.submit(payload)
+    engine.submit(payload)
+
+    exported = engine.evidence_export("AAT-111")
+
+    assert len(exported["attempts"]) == 1
+    assert len({item["evidenceId"] for item in exported["verifiedEvidence"]}) == len(
+        exported["verifiedEvidence"]
+    )
+
+
+def test_evidence_export_supports_started_run_without_attempts(engine):
+    engine.start("AAT-112", "bug")
+
+    exported = engine.evidence_export("AAT-112")
+
+    assert exported["attempts"] == []
+    assert exported["verifiedEvidence"] == []
+
+
+def test_evidence_uri_sanitizer_drops_invalid_or_sensitive_authority_parts():
+    from project_workflow.v2.engine import _safe_evidence_metadata, _sanitize_evidence_uri
+
+    assert _sanitize_evidence_uri("https://user:secret@example.test:bad/path?q=token") == (
+        "https://example.test/path"
+    )
+    assert _sanitize_evidence_uri("https://user:secret@[::1]:8443/path#secret") == (
+        "https://[::1]:8443/path"
+    )
+    assert _sanitize_evidence_uri("Authorization: Bearer hidden") == (
+        "redacted:ef9ca4ea1b108d3d"
+    )
+    assert _safe_evidence_metadata(
+        {"runtimeBaseUrl": "https://user:secret@runtime.test/health?token=hidden"}
+    ) == {"runtimeBaseUrl": "https://runtime.test/health"}
+
+
+def test_evidence_export_unknown_task_is_rejected(engine):
+    with pytest.raises(ContractViolation, match="not found"):
+        engine.evidence_export("AAT-999")
+
+
 def test_active_run_continues_on_its_pinned_catalog_after_packaged_revision_changes(engine):
     started = engine.start("AAT-199", "feature")
     old_revision = started["catalogRevision"]
