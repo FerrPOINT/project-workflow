@@ -14,6 +14,8 @@ from jsonschema.exceptions import SchemaError
 
 DEFAULT_CATALOG = Path(__file__).resolve().parents[1] / "references" / "agentic_sdlc_v2.json"
 LEGACY_CATALOG_REVISIONS = {
+    # Initial CONTROL candidates already pinned on Relevanter Dev.
+    "da1530eb4559b75b971c09c82b2961f92e5dbea63a178dc8017d531efd781b03",
     # First deployed v2 catalog. Its checksum-only document evidence contract
     # remains loadable for pinned runs, but it cannot be selected for new runs.
     "d84e36608275ad41a961d5a7be2df273bd9c0c00420146f3364dd433ce2ea76b",

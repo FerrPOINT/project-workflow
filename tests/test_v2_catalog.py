@@ -92,6 +92,13 @@ def test_pinned_legacy_catalog_without_artifact_contract_remains_loadable(monkey
     assert catalog.phase_contract("feature", "C05")["artifactSchemas"] == {}
 
 
+def test_relevanter_dev_pinned_catalog_revisions_are_explicitly_allowlisted():
+    assert catalog_module.LEGACY_CATALOG_REVISIONS == {
+        "da1530eb4559b75b971c09c82b2961f92e5dbea63a178dc8017d531efd781b03",
+        "d84e36608275ad41a961d5a7be2df273bd9c0c00420146f3364dd433ce2ea76b",
+    }
+
+
 def test_common_failure_route_is_profile_specific():
     catalog = load_default_catalog()
 
