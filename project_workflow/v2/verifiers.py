@@ -109,7 +109,16 @@ class GitEvidenceVerifier:
             return VerificationResult.failed("repository is outside the verifier allowlist", repository=str(repo))
         try:
             result = subprocess.run(
-                ["git", "-C", str(repo), "rev-parse", "--verify", f"{context.expected_revision}^{{commit}}"],
+                [
+                    "git",
+                    "-c",
+                    f"safe.directory={repo}",
+                    "-C",
+                    str(repo),
+                    "rev-parse",
+                    "--verify",
+                    f"{context.expected_revision}^{{commit}}",
+                ],
                 check=False,
                 capture_output=True,
                 text=True,
