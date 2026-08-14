@@ -17,6 +17,100 @@ ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "project_workflow" / "references" / "agentic_sdlc_v2.json"
 
 
+ARTIFACT_SCHEMAS: dict[str, Any] = {
+    "agentic-sdlc-artifact/v1": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "catalog://agentic-sdlc-artifact/v1",
+        "type": "object",
+        "additionalProperties": False,
+        "anyOf": [
+            {"properties": {"claims": {"minItems": 1}}},
+            {"properties": {"unknowns": {"minItems": 1}}},
+        ],
+        "required": [
+            "schemaVersion",
+            "artifactType",
+            "taskKey",
+            "phaseId",
+            "subjectRevision",
+            "summary",
+            "claims",
+            "unknowns",
+            "sources",
+        ],
+        "properties": {
+            "schemaVersion": {"const": "agentic-sdlc-artifact/v1"},
+            "artifactType": {"type": "string", "minLength": 1},
+            "taskKey": {"type": "string", "pattern": "^AAT-[1-9][0-9]*$"},
+            "phaseId": {"type": "string", "pattern": "^[CFBDX][0-9]{2}$"},
+            "subjectRevision": {"type": "string", "minLength": 1},
+            "summary": {"type": "string", "minLength": 1},
+            "claims": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["claimId", "topic", "statement", "status", "evidenceRefs"],
+                    "properties": {
+                        "claimId": {"type": "string", "minLength": 1},
+                        "topic": {"type": "string", "minLength": 1},
+                        "statement": {"type": "string", "minLength": 1},
+                        "status": {
+                            "enum": ["observed", "verified", "verified_absent", "not_applicable", "unknown"]
+                        },
+                        "evidenceRefs": {
+                            "type": "array",
+                            "uniqueItems": True,
+                            "items": {"type": "string", "minLength": 1},
+                        },
+                    },
+                },
+            },
+            "unknowns": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["topic", "description", "nextAction"],
+                    "properties": {
+                        "topic": {"type": "string", "minLength": 1},
+                        "description": {"type": "string", "minLength": 1},
+                        "nextAction": {"type": "string", "minLength": 1},
+                    },
+                },
+            },
+            "sources": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["evidenceRef", "uri", "revision"],
+                    "properties": {
+                        "evidenceRef": {"type": "string", "minLength": 1},
+                        "uri": {"type": "string", "minLength": 1},
+                        "revision": {"type": "string", "minLength": 1},
+                    },
+                },
+            },
+        },
+    }
+}
+
+ARTIFACT_POLICIES: dict[str, Any] = {
+    "source-backed-claims/v1": {
+        "policyType": "source-backed-claims",
+        "evidenceRequiredStatuses": ["observed", "verified", "verified_absent", "not_applicable"],
+        "unknownStatus": "unknown",
+    },
+    "risk-classification/v1": {
+        "policyType": "source-backed-claims",
+        "evidenceRequiredStatuses": ["observed", "verified", "verified_absent", "not_applicable"],
+        "unknownStatus": "unknown",
+        "requiredTopics": ["pii", "compliance", "vulnerabilities", "attack-surface"],
+    },
+}
+
+
 COMMON = [
     ("C01", "Task Intake", "Business Analyst", "Capture the requested outcome, problem, requester and source links."),
     (
@@ -587,6 +681,11 @@ def make_phase(definition: tuple[str, str, str, str], order: int) -> dict[str, A
             "maxAgeSeconds": 86400,
         },
     ]
+    if subject_type == "document":
+        evidence[0]["schemaRef"] = "agentic-sdlc-artifact/v1"
+        evidence[0]["policyRef"] = (
+            "risk-classification/v1" if phase_id == "C05" else "source-backed-claims/v1"
+        )
     for index, control in enumerate(EXTRA_CONTROLS.get(phase_id, []), start=5):
         suffix, description, control_verifier, control_subject, control_binding, failure_class, *flags = control
         applicability = flags[0] if flags else "required"
@@ -692,6 +791,8 @@ def build_catalog() -> dict[str, Any]:
         "workflowVersion": "agentic-sdlc-v2",
         "catalogRevision": "",
         "profiles": {"feature": feature_path, "bug": bug_path},
+        "artifactSchemas": ARTIFACT_SCHEMAS,
+        "artifactPolicies": ARTIFACT_POLICIES,
         "phases": phases,
         "policy": {
             "taskKeyPattern": "^AAT-[1-9][0-9]*$",

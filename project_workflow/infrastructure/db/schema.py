@@ -38,7 +38,7 @@ def _normalized_url(uow: UnitOfWork) -> str:
         if url.startswith("sqlite:///"):
             from pathlib import Path as _Path
 
-            target = str(_Path(url[10:]).resolve())
+            target = _Path(url[10:]).resolve().as_posix()
             url = f"sqlite:///{target}"
         return url
     return ""
@@ -50,7 +50,7 @@ def mark_catalog_not_ensured(url: str | None = None) -> None:
         if url.startswith("sqlite:///"):
             from pathlib import Path as _Path
 
-            target = str(_Path(url[10:]).resolve())
+            target = _Path(url[10:]).resolve().as_posix()
             url = f"sqlite:///{target}"
         _CATALOG_ENSURED_URLS.discard(url)
     else:

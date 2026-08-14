@@ -143,8 +143,30 @@ class PolicyEngineV2:
     def current(self, task_key: str) -> dict[str, Any]:
         run = self._get_run(task_key)
         catalog = self._catalog_for_run(run)
+        latest_attempt = self.session.scalar(
+            select(PhaseAttemptV2)
+            .where(
+                PhaseAttemptV2.workflow_run_id == run.id,
+                PhaseAttemptV2.phase_id == run.current_phase,
+            )
+            .order_by(PhaseAttemptV2.id.desc())
+        )
+        revisions = {
+            item.revision_kind: item.revision_value
+            for item in self.session.scalars(
+                select(BaselineRevisionV2)
+                .where(
+                    BaselineRevisionV2.workflow_run_id == run.id,
+                    BaselineRevisionV2.invalidated_at.is_(None),
+                )
+                .order_by(BaselineRevisionV2.id)
+            ).all()
+        }
+        if latest_attempt:
+            revisions.update(json.loads(latest_attempt.report_json).get("inputRevisions", {}))
         return {
             **self._run_dict(run),
+            "revisions": revisions,
             "contract": catalog.phase_contract(run.profile, run.current_phase) if run.status == "active" else None,
         }
 
@@ -153,16 +175,18 @@ class PolicyEngineV2:
         attempts = self.session.scalars(
             select(PhaseAttemptV2).where(PhaseAttemptV2.workflow_run_id == run.id).order_by(PhaseAttemptV2.id)
         ).all()
-        return [
-            {
-                "submissionId": attempt.submission_id,
-                "phaseId": attempt.phase_id,
-                "decision": attempt.decision,
-                "receiptId": attempt.receipt_id,
-                "createdAt": attempt.created_at.isoformat() if attempt.created_at else None,
-            }
-            for attempt in attempts
-        ]
+        history: list[dict[str, Any]] = []
+        for attempt in attempts:
+            decision = json.loads(attempt.decision_json)
+            history.append(
+                {
+                    **decision,
+                    "submissionId": attempt.submission_id,
+                    "phaseId": attempt.phase_id,
+                    "createdAt": attempt.created_at.isoformat() if attempt.created_at else None,
+                }
+            )
+        return history
 
     def submit(self, report: PhaseReportV2 | dict[str, Any]) -> PhaseDecisionV2:
         if not isinstance(report, PhaseReportV2):
@@ -496,6 +520,11 @@ class PolicyEngineV2:
                 profile=run.profile,
                 expected_revision=expected_revision,
                 check_id=requirement["checkIds"][0],
+                requirement_id=requirement_id,
+                schema_ref=requirement.get("schemaRef"),
+                policy_ref=requirement.get("policyRef"),
+                artifact_schema=phase.get("artifactSchemas", {}).get(requirement.get("schemaRef")),
+                artifact_policy=phase.get("artifactPolicies", {}).get(requirement.get("policyRef")),
             )
             verified = self.registry.verify(verifier_type, item, context)
             if verified.status == "failed":

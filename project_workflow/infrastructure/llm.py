@@ -99,7 +99,7 @@ class OllamaClient:
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
-        payload = {
+        payload: dict[str, Any] = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": system},
@@ -127,7 +127,7 @@ class OllamaClient:
 
     def _chat_local(self, system: str, user: str, temperature: float) -> dict[str, Any]:
         """Native Ollama /api/chat endpoint."""
-        payload = {
+        payload: dict[str, Any] = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": system},

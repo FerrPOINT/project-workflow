@@ -1,7 +1,7 @@
 {
   "schemaVersion": "workflow-template/v2",
   "workflowVersion": "agentic-sdlc-v2",
-  "catalogRevision": "d84e36608275ad41a961d5a7be2df273bd9c0c00420146f3364dd433ce2ea76b",
+  "catalogRevision": "68d154a710c54e6cf1100aa8ff16b7bfd7ce6660ed7fbced505da09fa081fb16",
   "profiles": {
     "feature": [
       "C01",
@@ -121,6 +121,191 @@
       "X03",
       "X04"
     ]
+  },
+  "artifactSchemas": {
+    "agentic-sdlc-artifact/v1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "catalog://agentic-sdlc-artifact/v1",
+      "type": "object",
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "properties": {
+            "claims": {
+              "minItems": 1
+            }
+          }
+        },
+        {
+          "properties": {
+            "unknowns": {
+              "minItems": 1
+            }
+          }
+        }
+      ],
+      "required": [
+        "schemaVersion",
+        "artifactType",
+        "taskKey",
+        "phaseId",
+        "subjectRevision",
+        "summary",
+        "claims",
+        "unknowns",
+        "sources"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "agentic-sdlc-artifact/v1"
+        },
+        "artifactType": {
+          "type": "string",
+          "minLength": 1
+        },
+        "taskKey": {
+          "type": "string",
+          "pattern": "^AAT-[1-9][0-9]*$"
+        },
+        "phaseId": {
+          "type": "string",
+          "pattern": "^[CFBDX][0-9]{2}$"
+        },
+        "subjectRevision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "claims": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "claimId",
+              "topic",
+              "statement",
+              "status",
+              "evidenceRefs"
+            ],
+            "properties": {
+              "claimId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "topic": {
+                "type": "string",
+                "minLength": 1
+              },
+              "statement": {
+                "type": "string",
+                "minLength": 1
+              },
+              "status": {
+                "enum": [
+                  "observed",
+                  "verified",
+                  "verified_absent",
+                  "not_applicable",
+                  "unknown"
+                ]
+              },
+              "evidenceRefs": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        },
+        "unknowns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "topic",
+              "description",
+              "nextAction"
+            ],
+            "properties": {
+              "topic": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": {
+                "type": "string",
+                "minLength": 1
+              },
+              "nextAction": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "evidenceRef",
+              "uri",
+              "revision"
+            ],
+            "properties": {
+              "evidenceRef": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uri": {
+                "type": "string",
+                "minLength": 1
+              },
+              "revision": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "artifactPolicies": {
+    "source-backed-claims/v1": {
+      "policyType": "source-backed-claims",
+      "evidenceRequiredStatuses": [
+        "observed",
+        "verified",
+        "verified_absent",
+        "not_applicable"
+      ],
+      "unknownStatus": "unknown"
+    },
+    "risk-classification/v1": {
+      "policyType": "source-backed-claims",
+      "evidenceRequiredStatuses": [
+        "observed",
+        "verified",
+        "verified_absent",
+        "not_applicable"
+      ],
+      "unknownStatus": "unknown",
+      "requiredTopics": [
+        "pii",
+        "compliance",
+        "vulnerabilities",
+        "attack-surface"
+      ]
+    }
   },
   "phases": [
     {
@@ -268,7 +453,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "c01-e02-audit",
@@ -1057,7 +1244,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "c04-e02-audit",
@@ -1274,7 +1463,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "risk-classification/v1"
         },
         {
           "requirementId": "c05-e02-audit",
@@ -1485,7 +1676,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "c06-e02-audit",
@@ -1709,7 +1902,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "c07-e02-audit",
@@ -2131,7 +2326,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "f01-e02-audit",
@@ -2740,7 +2937,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "f04-e02-audit",
@@ -2939,7 +3138,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "f05-e02-audit",
@@ -3145,7 +3346,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "f06-e02-audit",
@@ -3350,7 +3553,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "f07-e02-audit",
@@ -3555,7 +3760,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "f08-e02-audit",
@@ -3760,7 +3967,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "f09-e02-audit",
@@ -3965,7 +4174,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "f10-e02-audit",
@@ -4164,7 +4375,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "f11-e02-audit",
@@ -4369,7 +4582,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "f12-e02-audit",
@@ -4574,7 +4789,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "f13-e02-audit",
@@ -4779,7 +4996,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "f14-e02-audit",
@@ -4984,7 +5203,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "f15-e02-audit",
@@ -5189,7 +5410,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "f16-e02-audit",
@@ -5601,7 +5824,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "b02-e02-audit",
@@ -5806,7 +6031,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "b03-e02-audit",
@@ -6011,7 +6238,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "b04-e02-audit",
@@ -6216,7 +6445,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "b05-e02-audit",
@@ -6415,7 +6646,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "b06-e02-audit",
@@ -6627,7 +6860,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "b07-e02-audit",
@@ -6832,7 +7067,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "b08-e02-audit",
@@ -7037,7 +7274,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "b09-e02-audit",
@@ -7242,7 +7481,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "b10-e02-audit",
@@ -7708,7 +7949,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "d02-e02-audit",
@@ -7936,7 +8179,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "d03-e02-audit",
@@ -8153,7 +8398,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "d04-e02-audit",
@@ -9021,7 +9268,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "d08-e02-audit",
@@ -10798,7 +11047,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "d15-e02-audit",
@@ -11016,7 +11267,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "d16-e02-audit",
@@ -11234,7 +11487,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "d17-e02-audit",
@@ -11452,7 +11707,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "d18-e02-audit",
@@ -11670,7 +11927,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "d19-e02-audit",
@@ -13607,7 +13866,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "d25-e02-audit",
@@ -16378,7 +16639,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "x02-e02-audit",
@@ -16589,7 +16852,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "x03-e02-audit",
@@ -16800,7 +17065,9 @@
           ],
           "required": true,
           "revisionBinding": "baselineRevision",
-          "maxAgeSeconds": 86400
+          "maxAgeSeconds": 86400,
+          "schemaRef": "agentic-sdlc-artifact/v1",
+          "policyRef": "source-backed-claims/v1"
         },
         {
           "requirementId": "x04-e02-audit",

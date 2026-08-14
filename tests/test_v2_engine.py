@@ -188,6 +188,8 @@ def test_pass_advances_exactly_one_phase_and_replay_returns_receipt(engine):
     assert engine.current("AAT-101")["currentPhase"] == "C02"
     assert replay.receiptId == first.receiptId
     assert len(engine.history("AAT-101")) == 1
+    assert engine.history("AAT-101")[0]["nextPhase"] == "C02"
+    assert engine.history("AAT-101")[0]["missingChecks"] == []
 
 
 def test_active_run_continues_on_its_pinned_catalog_after_packaged_revision_changes(engine):
@@ -405,6 +407,7 @@ def test_missing_one_role_bound_approval_is_incomplete(engine):
     assert result.decision == Decision.INCOMPLETE
     assert result.missingChecks == ["approval:business-owner"]
     assert engine.current("AAT-302")["currentPhase"] == "C06"
+    assert engine.current("AAT-302")["revisions"]["businessOutcomeRevision"] == "outcome-v1"
 
 
 def test_schema_rejects_agent_created_approval():

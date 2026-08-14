@@ -9,7 +9,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from jsonschema import Draft202012Validator
+from jsonschema.exceptions import SchemaError
+
 DEFAULT_CATALOG = Path(__file__).resolve().parents[1] / "references" / "agentic_sdlc_v2.json"
+LEGACY_CATALOG_REVISIONS = {
+    # First deployed v2 catalog. Its checksum-only document evidence contract
+    # remains loadable for pinned runs, but it cannot be selected for new runs.
+    "d84e36608275ad41a961d5a7be2df273bd9c0c00420146f3364dd433ce2ea76b",
+}
 PROFILE_FAILURE_ROUTES = {
     "change-scope": {"feature": "F05", "bug": "B06"},
     "architecture-defect": {"feature": "F12", "bug": "B08"},
@@ -90,6 +98,22 @@ class WorkflowCatalogV2:
             failure_class: self.resolve_route(profile, phase_id, failure_class)
             for failure_class in phase["failureRoutes"]
         }
+        schema_refs = {
+            requirement["schemaRef"]
+            for requirement in phase["evidenceRequirements"]
+            if requirement.get("schemaRef")
+        }
+        policy_refs = {
+            requirement["policyRef"]
+            for requirement in phase["evidenceRequirements"]
+            if requirement.get("policyRef")
+        }
+        phase["artifactSchemas"] = {
+            ref: deepcopy(self.payload.get("artifactSchemas", {})[ref]) for ref in sorted(schema_refs)
+        }
+        phase["artifactPolicies"] = {
+            ref: deepcopy(self.payload.get("artifactPolicies", {})[ref]) for ref in sorted(policy_refs)
+        }
         return phase
 
     def validate(self) -> None:
@@ -109,6 +133,25 @@ class WorkflowCatalogV2:
             raise CatalogError("catalog must contain exactly 70 unique phases")
         expected_path_lengths = {"feature": 60, "bug": 54}
         phase_map = self.phases
+        schemas = self.payload.get("artifactSchemas")
+        policies = self.payload.get("artifactPolicies")
+        is_legacy = self.revision in LEGACY_CATALOG_REVISIONS
+        if is_legacy and schemas is None and policies is None:
+            schemas = {}
+            policies = {}
+        if not isinstance(schemas, dict) or not schemas:
+            if not is_legacy:
+                raise CatalogError("artifactSchemas must be a non-empty catalog-owned mapping")
+            schemas = {}
+        if not isinstance(policies, dict) or not policies:
+            if not is_legacy:
+                raise CatalogError("artifactPolicies must be a non-empty catalog-owned mapping")
+            policies = {}
+        for schema_ref, schema in schemas.items():
+            try:
+                Draft202012Validator.check_schema(schema)
+            except SchemaError as exc:
+                raise CatalogError(f"invalid artifact schema {schema_ref}: {exc.message}") from exc
         for profile, expected_length in expected_path_lengths.items():
             path = self.path(profile)
             if len(path) != expected_length or len(set(path)) != expected_length:
@@ -128,6 +171,17 @@ class WorkflowCatalogV2:
             instruction_ids.extend(item["instructionId"] for item in phase["instructions"])
             check_ids.extend(item["checkId"] for item in phase["checks"])
             evidence_ids.extend(item["requirementId"] for item in phase["evidenceRequirements"])
+            for requirement in phase["evidenceRequirements"]:
+                schema_ref = requirement.get("schemaRef")
+                policy_ref = requirement.get("policyRef")
+                if requirement["type"] == "document" and (not schema_ref or not policy_ref) and not is_legacy:
+                    raise CatalogError(
+                        f"document evidence {requirement['requirementId']} requires schemaRef and policyRef"
+                    )
+                if schema_ref and schema_ref not in schemas:
+                    raise CatalogError(f"unknown schemaRef: {schema_ref}")
+                if policy_ref and policy_ref not in policies:
+                    raise CatalogError(f"unknown policyRef: {policy_ref}")
         for name, values, minimum in (
             ("instructions", instruction_ids, 260),
             ("checks", check_ids, 190),
