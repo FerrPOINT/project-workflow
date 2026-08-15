@@ -216,6 +216,38 @@ def test_evidence_export_contains_only_sanitized_verified_records(engine):
     assert "hidden" not in json.dumps(exported)
 
 
+@pytest.mark.parametrize(("profile", "expected_count"), [("feature", 60), ("bug", 54)])
+def test_evidence_export_v2_owns_expected_phase_path(engine, profile, expected_count):
+    task_key = "AAT-209" if profile == "feature" else "AAT-210"
+    engine.start(task_key, profile)
+
+    exported = engine.evidence_export(task_key, schema_version=2)
+
+    assert exported["schemaVersion"] == "evidence-export/v2"
+    assert len(exported["expectedPhasePath"]) == expected_count
+    assert exported["expectedPhasePath"] == engine.catalog.path(profile)
+
+
+def test_evidence_export_v2_exposes_sanitized_transition_shape_without_changing_v1(engine):
+    engine.start("AAT-212", "feature")
+    engine.submit(build_report(engine, "AAT-212", "export-transition-c01"))
+
+    legacy = engine.evidence_export("AAT-212")
+    versioned = engine.evidence_export("AAT-212", schema_version=2)
+
+    assert "nextPhase" not in legacy["attempts"][0]
+    assert "rollbackTarget" not in legacy["attempts"][0]
+    assert versioned["attempts"][0]["nextPhase"] == "C02"
+    assert versioned["attempts"][0]["rollbackTarget"] is None
+
+
+def test_evidence_export_rejects_unknown_schema_version(engine):
+    engine.start("AAT-211", "feature")
+
+    with pytest.raises(ContractViolation, match="schema version"):
+        engine.evidence_export("AAT-211", schema_version=3)
+
+
 def test_evidence_export_does_not_promote_failed_receipts():
     uow = SAUnitOfWork()
     uow.init()
@@ -407,7 +439,7 @@ def test_complete_profile_happy_paths(engine, profile, task_key, expected_phases
     assert len(engine.history(task_key)) == expected_phases
 
 
-def test_postdeploy_failure_requires_proven_recovery_then_starts_linked_bug(engine):
+def test_postdeploy_failure_requires_proven_recovery_without_creating_linked_bug(engine):
     engine.start("AAT-401", "feature")
     attempt = 0
     while engine.current("AAT-401")["currentPhase"] != "D31":
@@ -419,8 +451,6 @@ def test_postdeploy_failure_requires_proven_recovery_then_starts_linked_bug(engi
     next(item for item in incomplete["checkResults"] if item["checkId"] == "d31-runtime-version")[
         "status"
     ] = "failed"
-    incomplete["inputRevisions"]["linkedBugTaskKey"] = "AAT-402"
-
     pending = engine.submit(incomplete)
 
     assert pending.decision == Decision.INCOMPLETE
@@ -455,16 +485,13 @@ def test_postdeploy_failure_requires_proven_recovery_then_starts_linked_bug(engi
             "metadata": {"health": "UP"},
         }
     )
-    recovered["inputRevisions"]["linkedBugTaskKey"] = "AAT-402"
-
     rolled_back = engine.submit(recovered)
 
     assert rolled_back.decision == Decision.ROLLBACK
     assert rolled_back.rollbackTarget == "D31"
-    assert "linked bug run AAT-402 started at B01" in rolled_back.blockers
     assert engine.current("AAT-401")["status"] == "aborted"
-    assert engine.current("AAT-402")["profile"] == "bug"
-    assert engine.current("AAT-402")["currentPhase"] == "B01"
+    with pytest.raises(ContractViolation, match="v2 task run not found"):
+        engine.current("AAT-402")
 
 
 def test_same_person_can_fill_two_roles_only_as_separate_records(engine):

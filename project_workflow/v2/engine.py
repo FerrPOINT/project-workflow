@@ -273,10 +273,13 @@ class PolicyEngineV2:
             )
         return history
 
-    def evidence_export(self, task_key: str) -> dict[str, Any]:
+    def evidence_export(self, task_key: str, *, schema_version: int = 1) -> dict[str, Any]:
         """Export verified audit facts without exposing raw reports or verifier secrets."""
 
+        if schema_version not in {1, 2}:
+            raise ContractViolation("evidence export schema version must be 1 or 2")
         run = self._get_run(task_key)
+        catalog = self._catalog_for_run(run)
         attempts = self.session.scalars(
             select(PhaseAttemptV2)
             .where(PhaseAttemptV2.workflow_run_id == run.id)
@@ -324,26 +327,35 @@ class PolicyEngineV2:
                         ),
                     }
                 )
-            exported_attempts.append(
-                {
-                    "submissionId": attempt.submission_id,
-                    "phaseId": attempt.phase_id,
-                    "decision": attempt.decision,
-                    "reportSha256": attempt.report_sha256,
-                    "controllerReceiptId": attempt.receipt_id,
-                    "createdAt": attempt.created_at.isoformat() if attempt.created_at else None,
-                    "verificationReceipts": [
-                        {
-                            "verificationReceiptId": f"evr-{receipt.id}",
-                            "evidenceId": receipt.evidence_id,
-                            "verifierType": receipt.verifier_type,
-                            "status": receipt.status,
-                            "observedAt": receipt.observed_at.isoformat() if receipt.observed_at else None,
-                        }
-                        for receipt in attempt_receipts
-                    ],
-                }
-            )
+            exported_attempt = {
+                "submissionId": attempt.submission_id,
+                "phaseId": attempt.phase_id,
+                "decision": attempt.decision,
+                "reportSha256": attempt.report_sha256,
+                "controllerReceiptId": attempt.receipt_id,
+                "createdAt": attempt.created_at.isoformat() if attempt.created_at else None,
+                "verificationReceipts": [
+                    {
+                        "verificationReceiptId": f"evr-{receipt.id}",
+                        "evidenceId": receipt.evidence_id,
+                        "verifierType": receipt.verifier_type,
+                        "status": receipt.status,
+                        "observedAt": receipt.observed_at.isoformat()
+                        if receipt.observed_at
+                        else None,
+                    }
+                    for receipt in attempt_receipts
+                ],
+            }
+            if schema_version == 2:
+                stored_decision = json.loads(attempt.decision_json)
+                exported_attempt.update(
+                    {
+                        "nextPhase": stored_decision.get("nextPhase"),
+                        "rollbackTarget": stored_decision.get("rollbackTarget"),
+                    }
+                )
+            exported_attempts.append(exported_attempt)
 
         approvals = self.session.scalars(
             select(HumanApprovalV2)
@@ -361,8 +373,8 @@ class PolicyEngineV2:
             .order_by(ArtifactDeploymentLinkV2.id)
         ).all()
 
-        return {
-            "schemaVersion": "evidence-export/v1",
+        exported = {
+            "schemaVersion": f"evidence-export/v{schema_version}",
             "taskKey": run.task_key,
             "profile": run.profile,
             "workflowVersion": run.workflow_version,
@@ -407,6 +419,9 @@ class PolicyEngineV2:
                 for item in deployments
             ],
         }
+        if schema_version == 2:
+            exported["expectedPhasePath"] = list(catalog.path(run.profile))
+        return exported
 
     def submit(self, report: PhaseReportV2 | dict[str, Any]) -> PhaseDecisionV2:
         if not isinstance(report, PhaseReportV2):
@@ -464,10 +479,7 @@ class PolicyEngineV2:
         elif decision in {Decision.ROLLBACK, Decision.CHANGE_REQUEST}:
             if old_phase == "D31" and failure_class == "post-deploy-failure":
                 rollback_target = "D31"
-                linked_bug_key = report.inputRevisions["linkedBugTaskKey"]
-                self._start_linked_bug_run(run, linked_bug_key, catalog)
                 run.status = "aborted"
-                blockers.append(f"linked bug run {linked_bug_key} started at B01")
             else:
                 rollback_target = catalog.resolve_route(
                     run.profile, old_phase, failure_class or "phase-incomplete"
@@ -531,32 +543,6 @@ class PolicyEngineV2:
         ]
         if missing_bindings:
             raise ContractViolation(f"required revision bindings are missing: {missing_bindings}")
-
-    def _start_linked_bug_run(
-        self, source_run: WorkflowRunV2, task_key: str, catalog: WorkflowCatalogV2
-    ) -> None:
-        import re
-
-        pattern = catalog.payload["policy"]["taskKeyPattern"]
-        if task_key == source_run.task_key or not re.fullmatch(pattern, task_key):
-            raise ContractViolation("linkedBugTaskKey must identify a different allowed Jira task")
-        existing = self.session.scalar(select(WorkflowRunV2).where(WorkflowRunV2.task_key == task_key))
-        if existing:
-            if existing.profile != "bug" or existing.catalog_revision != source_run.catalog_revision:
-                raise ReplayConflict("linked bug task is pinned to another profile or catalog revision")
-            if existing.current_phase != "B01" or existing.status != "active":
-                raise ReplayConflict("linked bug run has already advanced or is no longer active")
-            return
-        self.session.add(
-            WorkflowRunV2(
-                task_key=task_key,
-                profile="bug",
-                workflow_version=source_run.workflow_version,
-                catalog_revision=source_run.catalog_revision,
-                current_phase="B01",
-                status="active",
-            )
-        )
 
     def _validate_revision_continuity(
         self, run: WorkflowRunV2, report: PhaseReportV2, catalog: WorkflowCatalogV2
@@ -842,10 +828,6 @@ class PolicyEngineV2:
             if recovery_action is None or recovery_action.status != ActionStatus.COMPLETED:
                 return Decision.INCOMPLETE, "rollback-recovery-pending", blockers + [
                     "previous stable digest compensating action is not complete"
-                ]
-            if not report.inputRevisions.get("linkedBugTaskKey"):
-                return Decision.INCOMPLETE, "linked-bug-required", blockers + [
-                    "linkedBugTaskKey is required after a post-deploy failure"
                 ]
         if report.phaseId == "D31" and not post_deploy_failed:
             recovery = checks.get("d31-rollback-restored")
