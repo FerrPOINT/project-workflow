@@ -71,7 +71,7 @@ def _path_from_uri(uri: str) -> Path:
 
 class FileEvidenceVerifier:
     def __init__(self, allowed_roots: list[Path] | None = None):
-        configured = os.getenv("PROJECT_WORKFLOW_V2_FILE_ROOTS", "")
+        configured = os.getenv("PROJECT_WORKFLOW_FILE_ROOTS", "")
         roots = allowed_roots
         if roots is None:
             roots = [Path(item).resolve() for item in configured.split(os.pathsep) if item]
@@ -230,7 +230,7 @@ class FileEvidenceVerifier:
 
 class GitEvidenceVerifier:
     def __init__(self, allowed_roots: list[Path] | None = None):
-        configured = os.getenv("PROJECT_WORKFLOW_V2_GIT_ROOTS", "")
+        configured = os.getenv("PROJECT_WORKFLOW_GIT_ROOTS", "")
         roots = allowed_roots
         if roots is None:
             roots = [Path(item).resolve() for item in configured.split(os.pathsep) if item]
@@ -280,7 +280,7 @@ class ExternalCommandVerifier:
 
     def __init__(self, verifier_type: str, command: str | None = None):
         self.verifier_type = verifier_type
-        env_name = f"PROJECT_WORKFLOW_V2_{verifier_type.upper().replace('-', '_')}_VERIFIER"
+        env_name = f"PROJECT_WORKFLOW_{verifier_type.upper().replace('-', '_')}_VERIFIER"
         self.command = command or os.getenv(env_name, "")
 
     def _invoke(self, payload: dict[str, Any]) -> VerificationResult:

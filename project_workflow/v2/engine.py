@@ -60,8 +60,8 @@ class IdentityPolicy:
             return frozenset(item.strip() for item in os.getenv(name, "").split(",") if item.strip())
 
         return cls(
-            agent_identities=values("PROJECT_WORKFLOW_V2_AGENT_IDENTITIES"),
-            human_identities=values("PROJECT_WORKFLOW_V2_HUMAN_IDENTITIES"),
+            agent_identities=values("PROJECT_WORKFLOW_AGENT_IDENTITIES"),
+            human_identities=values("PROJECT_WORKFLOW_HUMAN_IDENTITIES"),
         )
 
     def permits(self, actor_type: str, identity: str) -> bool:
