@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from project_workflow.infrastructure.db import schema
-
 if TYPE_CHECKING:
     from .uow import SAUnitOfWork
 
@@ -41,6 +39,7 @@ def bootstrap_smoke_project_and_workflow(uow: SAUnitOfWork) -> None:
 
 def ensure_smoke_phases(uow: SAUnitOfWork) -> None:
     from project_workflow import config
+    from project_workflow.infrastructure.db import schema
 
     smoke_wf = uow.workflows.get_by_name(config.SMOKE_WORKFLOW_NAME)
     if not smoke_wf:
