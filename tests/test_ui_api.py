@@ -105,11 +105,12 @@ class TestIndex:
     def test_settings_page_describes_cli_commands(self, client):
         resp = client.get("/settings")
         assert resp.status_code == 200
-        assert "project-workflow step" in resp.text
+        assert "project-workflow current" in resp.text
+        assert "project-workflow submit" in resp.text
         assert "project-workflow history" in resp.text
         assert "project-workflow ui" not in resp.text
         assert "--report" in resp.text
-        assert "--n" in resp.text
+        assert "--schema-version" in resp.text
         assert ">--repo<" not in resp.text
         assert ">--skip<" not in resp.text
 
@@ -146,7 +147,7 @@ class TestApiPhases:
         assert data["ok"] is True
         assert "commands" in data
         names = {cmd["name"] for cmd in data["commands"]}
-        assert {"step", "history"}.issubset(names)
+        assert names == {"catalog", "current", "evidence-export", "history", "start", "submit"}
         assert "ui" not in names
 
 

@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-# ── Import command modules (registers subcommands) ─────
-from . import ui as ui
+# Import the only supported controller commands.
 from . import v2 as v2
 from .core import cli
 

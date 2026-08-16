@@ -1,55 +1,13 @@
-"""CLI core — shared group, helpers, constants. No commands here.
-
-ПРАВИЛО ПРОЕКТА: этот файл содержит только общий click-group и хелперы.
-Никакие CLI-команды здесь не регистрируются. Все команды живут в
-`project_workflow/interfaces/cli/ui.py` и их ровно две: step, history.
-"""
+"""CLI core shared by the canonical controller commands."""
 
 from __future__ import annotations
-
-import json
-import sys
-from typing import Any
 
 import click
 from rich.console import Console
 
 from ... import __version__
-from ...domain import validation as task_validator
 
 console = Console()
-
-WARN = "[yellow]⚠️[/yellow]"
-
-
-def out_json(data: dict[str, Any]) -> None:
-    click.echo(json.dumps(data, indent=2, ensure_ascii=False))
-    sys.exit(0 if data.get("ok", True) else 1)
-
-
-def _get_task_key_validator(uow=None) -> task_validator.TaskKeyValidator:
-    from project_workflow.infrastructure.db import schema
-    from project_workflow.infrastructure.db.uow import SAUnitOfWork
-
-    if uow is None:
-        uow = SAUnitOfWork()
-    uow.init()
-    schema.ensure_phase_catalog(uow)
-    projects_raw = uow.projects.list()
-    projects = [p.to_dict() for p in projects_raw]
-    return task_validator.TaskKeyValidator.from_projects(projects)
-
-
-def _require_valid_key(task_key: str, uow=None) -> str:
-    """Проверить валидность ключа задачи. Вернуть normalized или выбросить Abort."""
-    if uow is None:
-        validated = _get_task_key_validator().validate(task_key)
-    else:
-        validated = _get_task_key_validator(uow=uow).validate(task_key)
-    if not validated.is_valid:
-        console.print(f"[red]❌[/red] [bold red]Invalid task key:[/bold red] {validated.error_message}")
-        raise click.Abort()
-    return validated.normalized or task_key
 
 
 @click.group()
@@ -64,4 +22,4 @@ def cli(ctx: click.Context, json_mode: bool) -> None:
     ctx.obj["json_mode"] = json_mode
 
 
-__all__ = ["cli", "out_json", "_require_valid_key", "console", "WARN"]
+__all__ = ["cli", "console"]

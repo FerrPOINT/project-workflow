@@ -112,7 +112,7 @@ async def v2_runs_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request=request,
         name="v2_runs.html",
-        context={"request": request, "runs": load_v2_runs(), "page": "v2", "ui_port": get_settings().UI_PORT},
+        context={"request": request, "runs": load_v2_runs(), "page": "runs", "ui_port": get_settings().UI_PORT},
     )
 
 
@@ -123,7 +123,7 @@ async def v2_run_detail_page(request: Request, task_key: str) -> HTMLResponse:
     return templates.TemplateResponse(
         request=request,
         name="v2_run_detail.html",
-        context={"request": request, "run": run, "page": "v2", "ui_port": get_settings().UI_PORT},
+        context={"request": request, "run": run, "page": "runs", "ui_port": get_settings().UI_PORT},
     )
 
 

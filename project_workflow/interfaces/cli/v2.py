@@ -1,4 +1,4 @@
-"""Contract-driven Agentic SDLC v2 CLI."""
+"""Contract-driven Agentic SDLC CLI."""
 
 from __future__ import annotations
 
@@ -30,12 +30,7 @@ def _engine() -> tuple[SAUnitOfWork, PolicyEngineV2]:
     return uow, PolicyEngineV2(uow.session)
 
 
-@cli.group("v2")
-def v2_group() -> None:
-    """Deterministic agentic-sdlc-v2 controller."""
-
-
-@v2_group.command("catalog")
+@cli.command("catalog")
 @click.pass_context
 def catalog_command(ctx: click.Context) -> None:
     """Validate and summarize the packaged immutable catalog."""
@@ -57,12 +52,12 @@ def catalog_command(ctx: click.Context) -> None:
     _emit(ctx, payload)
 
 
-@v2_group.command("start")
+@cli.command("start")
 @click.option("--task", "task_key", required=True)
 @click.option("--profile", type=click.Choice(["feature", "bug"]), required=True)
 @click.pass_context
 def start_command(ctx: click.Context, task_key: str, profile: str) -> None:
-    """Pin a new task to agentic-sdlc-v2 and its current catalog revision."""
+    """Pin a new task to the current immutable catalog revision."""
     uow, engine = _engine()
     try:
         result = engine.start(task_key.upper(), profile)
@@ -73,7 +68,7 @@ def start_command(ctx: click.Context, task_key: str, profile: str) -> None:
         uow.close()
 
 
-@v2_group.command("current")
+@cli.command("current")
 @click.option("--task", "task_key", required=True)
 @click.pass_context
 def current_command(ctx: click.Context, task_key: str) -> None:
@@ -87,12 +82,12 @@ def current_command(ctx: click.Context, task_key: str) -> None:
         uow.close()
 
 
-@v2_group.command("submit")
+@cli.command("submit")
 @click.option("--task", "task_key", required=True)
 @click.option("--report", "report_path", type=click.Path(exists=True, dir_okay=False, path_type=Path), required=True)
 @click.pass_context
 def submit_command(ctx: click.Context, task_key: str, report_path: Path) -> None:
-    """Verify a phase-report/v2 and atomically apply its controller decision."""
+    """Verify a structured phase report and atomically apply its controller decision."""
     try:
         report = PhaseReportV2.model_validate_json(report_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, ValidationError) as exc:
@@ -110,11 +105,11 @@ def submit_command(ctx: click.Context, task_key: str, report_path: Path) -> None
         uow.close()
 
 
-@v2_group.command("history")
+@cli.command("history")
 @click.option("--task", "task_key", required=True)
 @click.pass_context
 def history_command(ctx: click.Context, task_key: str) -> None:
-    """Read immutable v2 attempt receipts for restart and audit."""
+    """Read immutable attempt receipts for restart and audit."""
     uow, engine = _engine()
     try:
         _emit(ctx, {"ok": True, "taskKey": task_key.upper(), "attempts": engine.history(task_key.upper())})
@@ -124,7 +119,7 @@ def history_command(ctx: click.Context, task_key: str) -> None:
         uow.close()
 
 
-@v2_group.command("evidence-export")
+@cli.command("evidence-export")
 @click.option("--task", "task_key", required=True)
 @click.option("--schema-version", type=click.IntRange(1, 2), default=1, show_default=True)
 @click.pass_context

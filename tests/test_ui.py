@@ -1655,6 +1655,16 @@ class TestLegacyApiRemoved:
         assert response.status_code == 404
 
 
+class TestAgenticRunsPage:
+    def test_runs_page_uses_the_only_supported_route(self):
+        response = client.get("/runs")
+
+        assert response.status_code == 200
+        assert "Agentic SDLC" in response.text
+        assert client.get("/v2").status_code == 404
+        assert client.get("/api/v2/runs").status_code == 404
+
+
 class TestSettingsPage:
     """Tests for settings page and API."""
 
@@ -1664,16 +1674,16 @@ class TestSettingsPage:
         assert response.headers["content-type"] == "text/html; charset=utf-8"
         assert "Настройки" in response.text
         assert "CLI" in response.text
-        assert "project-workflow step" in response.text
+        assert "project-workflow current" in response.text
+        assert "project-workflow submit" in response.text
         assert "project-workflow history" in response.text
         assert "project-workflow ui" not in response.text
         assert "Web UI запускается отдельно" not in response.text
         assert "--report" in response.text
-        assert "--n" in response.text
+        assert "--schema-version" in response.text
         assert ">--repo<" not in response.text
         assert ">--skip<" not in response.text
-        assert "по умолчанию: все" in response.text
-        assert "default:" not in response.text
+        assert "default: 1" in response.text
 
     def test_api_settings_get_returns_json(self):
         response = client.get("/api/settings")
@@ -1682,7 +1692,7 @@ class TestSettingsPage:
         assert data["ok"] is True
         assert "commands" in data
         names = {cmd["name"] for cmd in data["commands"]}
-        assert {"step", "history"}.issubset(names)
+        assert names == {"catalog", "current", "evidence-export", "history", "start", "submit"}
         assert "ui" not in names
 
     def test_api_settings_put_and_delete_are_not_supported(self):
@@ -1708,18 +1718,17 @@ class TestSettingsPage:
     def test_settings_helper_exposes_only_meaningful_defaults(self):
         commands = _load_cli_reference()
 
-        step = next(cmd for cmd in commands if cmd["name"] == "step")
+        submit = next(cmd for cmd in commands if cmd["name"] == "submit")
         history = next(cmd for cmd in commands if cmd["name"] == "history")
 
-        step_options = {option["flags"]: option for option in step["options"]}
+        submit_options = {option["flags"]: option for option in submit["options"]}
         history_options = {option["flags"]: option for option in history["options"]}
 
-        assert set(step_options) == {"--task", "--report"}
-        assert set(history_options) == {"--task", "--n"}
-        assert "default" not in step_options["--task"]
-        assert "default" not in step_options["--report"]
-        assert "default" not in history_options["--n"]
-        assert "по умолчанию: все" in history_options["--n"]["help"]
+        assert set(submit_options) == {"--task", "--report"}
+        assert set(history_options) == {"--task"}
+        assert "default" not in submit_options["--task"]
+        assert "default" not in submit_options["--report"]
+        assert "default" not in history_options["--task"]
 
     def test_settings_helper_ignores_click_unset_default_sentinel(self):
         @click.command(name="temp-unset-default")

@@ -37,13 +37,10 @@
 
 ## Позиционирование
 
-Пофазовый движок управления задачами.
-Агент отчитывается через CLI, встроенный supervisor оценивает отчёт и выдаёт вердикт: **PASS**, **SOFT_FAIL**, **HARD_FAIL**, **ROLLBACK**, **BLOCKED** или **DELEGATE**.
-Всё управление шаблонами workflow, фазами, проектами, агентами и задачами ведётся через Web UI.
-
-Legacy CLI остаётся минимальным: `step` и `history`. Изолированный
-`agentic-sdlc-v2` использует namespaced-команды `v2`, не меняя существующие
-задачи и историю.
+Детерминированный пофазовый движок Agentic SDLC. Агент получает контракт
+текущей фазы и передаёт структурированный отчёт, а controller проверяет
+evidence, approvals и revision bindings и сам вычисляет решение. Старые
+`step`/wizard-команды и отдельный namespace `v2` в CLI не поддерживаются.
 
 В production используется **PostgreSQL**.
 
@@ -55,12 +52,12 @@ SQLite остаётся только для тестов (временные ф�
 | Feature | Описание |
 |---------|----------|
 | Пофазовый workflow | Каждая задача строго следует шаблону фаз с инструкциями, чек-листами и артефактами. |
-| Встроенный supervisor | Автоматическая оценка отчётов и решение о переходе на следующую фазу. |
+| Детерминированный controller | Проверка typed evidence и атомарное решение о переходе. |
 | Web UI | Управление шаблонами, фазами, проектами, задачами и агентами через браузер. |
-| CLI freeze | Только `step` и `history`; весь CRUD — через UI. |
+| Канонический CLI | `catalog`, `start`, `current`, `submit`, `history`, `evidence-export`. |
 | PostgreSQL | Единый production-стек: systemd UI и CLI используют тот же Postgres через `DATABASE_URL`. |
 | Автоматические миграции | `docker compose up` сам создаёт схему, таблицы и baseline. |
-| Agentic SDLC v2 | Детерминированный 70-фазный каталог, feature/bug profiles, typed verifiers, immutable receipts и human gates. |
+| Agentic SDLC | 70-фазный каталог, feature/bug profiles, typed verifiers, immutable receipts и human gates. |
 
 <a name="stack"></a>
 ## 🔧 Core Stack
@@ -72,26 +69,19 @@ SQLite остаётся только для тестов (временные ф�
 | ORM & migrations | SQLAlchemy 2 + Alembic | модели, репозитории, UoW, миграции |
 | API | FastAPI + Pydantic | UI и JSON API |
 | UI | Jinja2 + minimal JS | server-side HTML, без frontend-фреймворков |
-| LLM / Supervisor | OpenAI-compatible API, Ollama, OpenRouter | wizard reasoning и legacy report evaluation |
-| CLI | Click + Rich | `step` / `history` |
+| CLI | Click + Rich | контракт фазы, submit, history и evidence export |
 | Config | Pydantic Settings | `.env`, переменные окружения |
 
 <a name="cli"></a>
 ## 🖥️ CLI
 
 ```bash
-# Выполнить текущую фазу задачи и получить вердикт supervisor
-project-workflow step --task TASK-123 --report "Сделал X, проверил Y"
-
-# История фаз и supervisor-решений
-project-workflow history --task TASK-123 --n 10
-
-# Agentic SDLC v2: каталог, запуск, текущий контракт, submit и history
-project-workflow --json v2 catalog
-project-workflow --json v2 start --task AAT-123 --profile feature
-project-workflow --json v2 current --task AAT-123
-project-workflow --json v2 submit --task AAT-123 --report /absolute/path/phase-report-v2.json
-project-workflow --json v2 history --task AAT-123
+# Каталог, запуск, текущий контракт, submit и history
+project-workflow --json catalog
+project-workflow --json start --task AAT-123 --profile feature
+project-workflow --json current --task AAT-123
+project-workflow --json submit --task AAT-123 --report /absolute/path/phase-report-v2.json
+project-workflow --json history --task AAT-123
 ```
 
 CLI ожидает переменную окружения `DATABASE_URL`:
@@ -125,7 +115,7 @@ sudo systemctl restart project-workflow-ui.service
 
 При старте автоматически создаётся схема `project_workflow`, таблицы и baseline-версия Alembic.
 
-Для v2 dashboard откройте `/v2`. Он отображает pinned catalog revision,
+Dashboard `/runs` отображает pinned catalog revision,
 60/54-фазный профиль, controller decisions, verifier receipts и отдельные
 role-bound approval records. Dashboard read-only: переходы выполняет только
 policy engine через `phase-report/v2`.

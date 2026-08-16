@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% block title %}Agentic SDLC v2 — project-workflow{% endblock %}
-{% block header_title %}Agentic SDLC v2{% endblock %}
+{% block title %}Agentic SDLC — project-workflow{% endblock %}
+{% block header_title %}Agentic SDLC{% endblock %}
 {% block content %}
 <div class="kpi-grid">
   <div class="card"><div class="card-title">Запуски</div><div class="card-value">{{ runs|length }}</div></div>
@@ -14,13 +14,13 @@
     <tbody>
     {% for item in runs %}
       <tr>
-        <td><a href="/v2/{{ item.taskKey }}" style="font-family:'JetBrains Mono',monospace">{{ item.taskKey }}</a></td>
+        <td><a href="/runs/{{ item.taskKey }}" style="font-family:'JetBrains Mono',monospace">{{ item.taskKey }}</a></td>
         <td>{{ item.profile }}</td>
         <td><b>{{ item.currentPhase }}</b> · {{ item.currentPhaseName }}</td>
         <td style="min-width:180px"><div>{{ item.completed }}/{{ item.total }}</div><div class="progress-bg"><div class="progress-fill" style="width:{{ item.progress }}%"></div></div></td>
         <td>{{ item.lastDecision or '—' }}</td><td>{{ item.attempts }}</td><td>{{ item.status }}</td>
       </tr>
-    {% else %}<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-dim)">Запуски v2 ещё не созданы</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-dim)">Запуски ещё не созданы</td></tr>{% endfor %}
     </tbody>
   </table>
 </div>

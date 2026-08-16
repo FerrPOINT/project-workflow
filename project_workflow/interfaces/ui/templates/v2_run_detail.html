@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% block title %}{{ run.taskKey }} · Agentic SDLC v2{% endblock %}
+{% block title %}{{ run.taskKey }} · Agentic SDLC{% endblock %}
 {% block header_title %}{{ run.taskKey }} · {{ run.profile }}{% endblock %}
-{% block header_actions %}<a class="btn btn-secondary" href="/v2">← Все запуски v2</a>{% endblock %}
+{% block header_actions %}<a class="btn btn-secondary" href="/runs">← Все запуски</a>{% endblock %}
 {% block content %}
 <div class="phase-detail-header">
   <h2>{{ run.workflowVersion }} · {{ run.status }}</h2>
