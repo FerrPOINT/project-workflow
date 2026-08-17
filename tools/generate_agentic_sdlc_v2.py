@@ -41,7 +41,10 @@ ARTIFACT_SCHEMAS: dict[str, Any] = {
         "properties": {
             "schemaVersion": {"const": "agentic-sdlc-artifact/v1"},
             "artifactType": {"type": "string", "minLength": 1},
-            "taskKey": {"type": "string", "pattern": "^AAT-[1-9][0-9]*$"},
+            "taskKey": {
+                "type": "string",
+                "pattern": "^[A-Z][A-Z0-9_]{1,31}-[1-9][0-9]*$",
+            },
             "phaseId": {"type": "string", "pattern": "^[CFBDX][0-9]{2}$"},
             "subjectRevision": {"type": "string", "minLength": 1},
             "summary": {"type": "string", "minLength": 1},
@@ -804,7 +807,7 @@ def build_catalog() -> dict[str, Any]:
         "artifactPolicies": ARTIFACT_POLICIES,
         "phases": phases,
         "policy": {
-            "taskKeyPattern": "^AAT-[1-9][0-9]*$",
+            "taskKeyPattern": "^[A-Z][A-Z0-9_]{1,31}-[1-9][0-9]*$",
             "allowedActorTypes": ["agent", "human"],
             "samePersonMayApproveMultipleRoles": True,
             "controllerOwnsDecision": True,

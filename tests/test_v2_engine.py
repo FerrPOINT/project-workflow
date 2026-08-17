@@ -9,7 +9,9 @@ from datetime import datetime, timezone
 
 import pytest
 from pydantic import ValidationError
+from sqlalchemy import select
 
+from project_workflow.infrastructure.db.models import WorkflowRunV2
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.v2 import PolicyEngineV2, WorkflowCatalogV2, load_default_catalog
 from project_workflow.v2.engine import ContractViolation, IdentityPolicy, ReplayConflict
@@ -381,7 +383,7 @@ def test_evidence_export_unknown_task_is_rejected(engine):
         engine.evidence_export("AAT-999")
 
 
-def test_active_run_continues_on_its_pinned_catalog_after_packaged_revision_changes(engine):
+def test_active_run_on_another_catalog_is_blocked_without_rewriting_history(engine):
     started = engine.start("AAT-199", "feature")
     old_revision = started["catalogRevision"]
     old_purpose = engine.current("AAT-199")["contract"]["purpose"]
@@ -403,13 +405,17 @@ def test_active_run_continues_on_its_pinned_catalog_after_packaged_revision_chan
         now=engine.now,
     )
 
-    current = upgraded.current("AAT-199")
-    assert current["catalogRevision"] == old_revision
-    assert current["contract"]["purpose"] == old_purpose
-    assert upgraded.start("AAT-199", "feature")["catalogRevision"] == old_revision
-    decision = upgraded.submit(build_report(upgraded, "AAT-199", "old-catalog-c01"))
-    assert decision.decision == Decision.PASS
-    assert upgraded.current("AAT-199")["currentPhase"] == "C02"
+    with pytest.raises(ContractViolation, match="unsupported catalog revision"):
+        upgraded.current("AAT-199")
+    with pytest.raises(ContractViolation, match="unsupported catalog revision"):
+        upgraded.start("AAT-199", "feature")
+
+    stored = engine.session.scalar(
+        select(WorkflowRunV2).where(WorkflowRunV2.task_key == "AAT-199")
+    )
+    assert stored is not None
+    assert stored.catalog_revision == old_revision
+    assert old_purpose != "new catalog revision"
 
 
 def test_conflicting_replay_is_rejected(engine):

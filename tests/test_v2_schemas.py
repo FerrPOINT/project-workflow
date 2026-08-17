@@ -67,3 +67,21 @@ def test_secret_patterns_are_rejected():
 
     with pytest.raises(ValidationError, match="credential-like"):
         PhaseReportV2.model_validate(payload)
+
+
+def test_task_key_accepts_any_canonical_jira_project_key():
+    payload = minimal_payload()
+    payload["taskKey"] = "REL-360"
+
+    report = PhaseReportV2.model_validate(payload)
+
+    assert report.taskKey == "REL-360"
+
+
+@pytest.mark.parametrize("task_key", ["rel-360", "R-0", "-360", "REL 360"])
+def test_task_key_rejects_noncanonical_values(task_key):
+    payload = minimal_payload()
+    payload["taskKey"] = task_key
+
+    with pytest.raises(ValidationError, match="taskKey"):
+        PhaseReportV2.model_validate(payload)

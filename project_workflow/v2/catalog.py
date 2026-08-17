@@ -13,21 +13,6 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
 
 DEFAULT_CATALOG = Path(__file__).resolve().parents[1] / "references" / "agentic_sdlc_v2.json"
-LEGACY_CATALOG_REVISIONS = {
-    # Initial CONTROL candidates already pinned on Relevanter Dev.
-    "da1530eb4559b75b971c09c82b2961f92e5dbea63a178dc8017d531efd781b03",
-    # First deployed v2 catalog. Its checksum-only document evidence contract
-    # remains loadable for pinned runs, but it cannot be selected for new runs.
-    "d84e36608275ad41a961d5a7be2df273bd9c0c00420146f3364dd433ce2ea76b",
-}
-PROFILE_FAILURE_ROUTES = {
-    "change-scope": {"feature": "F05", "bug": "B06"},
-    "architecture-defect": {"feature": "F12", "bug": "B08"},
-    "threat-model-defect": {"feature": "F13", "bug": "B05"},
-    "test-design-defect": {"feature": "F15", "bug": "B07"},
-}
-
-
 class CatalogError(ValueError):
     """The catalog is internally inconsistent or has been modified in place."""
 
@@ -83,10 +68,6 @@ class WorkflowCatalogV2:
         route = self.phase(phase_id)["failureRoutes"].get(failure_class, phase_id)
         if isinstance(route, dict):
             route = route.get(profile)
-        if route not in self.path(profile) and failure_class in PROFILE_FAILURE_ROUTES:
-            # Compatibility correction for the first published v2 catalog, whose
-            # common phases serialized one branch target instead of both.
-            route = PROFILE_FAILURE_ROUTES[failure_class].get(profile)
         if not isinstance(route, str) or route not in self.path(profile):
             raise CatalogError(f"invalid route for {phase_id}/{failure_class}/{profile}: {route!r}")
         return route
@@ -137,18 +118,10 @@ class WorkflowCatalogV2:
         phase_map = self.phases
         schemas = self.payload.get("artifactSchemas")
         policies = self.payload.get("artifactPolicies")
-        is_legacy = self.revision in LEGACY_CATALOG_REVISIONS
-        if is_legacy and schemas is None and policies is None:
-            schemas = {}
-            policies = {}
         if not isinstance(schemas, dict) or not schemas:
-            if not is_legacy:
-                raise CatalogError("artifactSchemas must be a non-empty catalog-owned mapping")
-            schemas = {}
+            raise CatalogError("artifactSchemas must be a non-empty catalog-owned mapping")
         if not isinstance(policies, dict) or not policies:
-            if not is_legacy:
-                raise CatalogError("artifactPolicies must be a non-empty catalog-owned mapping")
-            policies = {}
+            raise CatalogError("artifactPolicies must be a non-empty catalog-owned mapping")
         for schema_ref, schema in schemas.items():
             try:
                 Draft202012Validator.check_schema(schema)
@@ -176,7 +149,7 @@ class WorkflowCatalogV2:
             for requirement in phase["evidenceRequirements"]:
                 schema_ref = requirement.get("schemaRef")
                 policy_ref = requirement.get("policyRef")
-                if requirement["type"] == "document" and (not schema_ref or not policy_ref) and not is_legacy:
+                if requirement["type"] == "document" and (not schema_ref or not policy_ref):
                     raise CatalogError(
                         f"document evidence {requirement['requirementId']} requires schemaRef and policyRef"
                     )

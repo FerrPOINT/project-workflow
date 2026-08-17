@@ -224,6 +224,7 @@ class PolicyEngineV2:
         if existing:
             if existing.profile != profile:
                 raise ReplayConflict("task is already pinned to a different profile")
+            self._catalog_for_run(existing)
             return self._run_dict(existing)
         run = WorkflowRunV2(
             task_key=task_key,
@@ -243,6 +244,7 @@ class PolicyEngineV2:
                 raise
             if existing.profile != profile:
                 raise ReplayConflict("task is already pinned to a different profile")
+            self._catalog_for_run(existing)
             self.session.commit()
             return self._run_dict(existing)
         self.session.commit()
@@ -1189,6 +1191,10 @@ class PolicyEngineV2:
     def _catalog_for_run(self, run: WorkflowRunV2) -> WorkflowCatalogV2:
         if run.catalog_revision == self.catalog.revision:
             return self.catalog
+        if run.status == "active":
+            raise ContractViolation(
+                "active run is pinned to an unsupported catalog revision; history remains read-only"
+            )
         record = self.session.scalar(
             select(WorkflowCatalogRecordV2).where(
                 WorkflowCatalogRecordV2.catalog_revision == run.catalog_revision

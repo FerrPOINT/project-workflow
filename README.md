@@ -76,12 +76,9 @@ SQLite остаётся только для тестов (временные ф�
 ## 🖥️ CLI
 
 ```bash
-# Каталог, запуск, текущий контракт, submit и history
-project-workflow --json catalog
-project-workflow --json start --task AAT-123 --profile feature
-project-workflow --json current --task AAT-123
-project-workflow --json submit --task AAT-123 --report /absolute/path/phase-report-v2.json
-project-workflow --json history --task AAT-123
+# Рабочий CLI агента: получить текущий контракт и отправить отчёт одной фазы
+project-workflow --json current --task REL-360
+project-workflow --json submit --task REL-360 --report /absolute/path/phase-report.json
 ```
 
 CLI ожидает переменную окружения `DATABASE_URL`:

@@ -5,7 +5,6 @@ import json
 
 import pytest
 
-from project_workflow.v2 import catalog as catalog_module
 from project_workflow.v2.catalog import CatalogError, WorkflowCatalogV2, load_default_catalog
 
 
@@ -85,7 +84,7 @@ def test_catalog_rejects_document_evidence_without_catalog_owned_policy(tmp_path
         WorkflowCatalogV2.load(path)
 
 
-def test_pinned_legacy_catalog_without_artifact_contract_remains_loadable(monkeypatch):
+def test_catalog_without_artifact_contract_is_rejected():
     payload = json.loads(json.dumps(load_default_catalog().payload))
     payload.pop("artifactSchemas")
     payload.pop("artifactPolicies")
@@ -97,19 +96,10 @@ def test_pinned_legacy_catalog_without_artifact_contract_remains_loadable(monkey
     payload["catalogRevision"] = hashlib.sha256(
         json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
-    monkeypatch.setattr(catalog_module, "LEGACY_CATALOG_REVISIONS", {payload["catalogRevision"]})
-
     catalog = WorkflowCatalogV2(payload)
-    catalog.validate()
 
-    assert catalog.phase_contract("feature", "C05")["artifactSchemas"] == {}
-
-
-def test_relevanter_dev_pinned_catalog_revisions_are_explicitly_allowlisted():
-    assert catalog_module.LEGACY_CATALOG_REVISIONS == {
-        "da1530eb4559b75b971c09c82b2961f92e5dbea63a178dc8017d531efd781b03",
-        "d84e36608275ad41a961d5a7be2df273bd9c0c00420146f3364dd433ce2ea76b",
-    }
+    with pytest.raises(CatalogError, match="artifactSchemas"):
+        catalog.validate()
 
 
 def test_common_failure_route_is_profile_specific():
@@ -128,7 +118,7 @@ def test_common_failure_route_is_profile_specific():
     assert all(isinstance(route, str) for route in contract["failureRoutes"].values())
 
 
-def test_first_published_catalog_common_routes_remain_compatible():
+def test_invalid_profile_route_is_rejected_without_runtime_correction():
     payload = json.loads(json.dumps(load_default_catalog().payload))
     routes = payload["phases"][0]["failureRoutes"]
     routes["change-scope"] = "B06"
@@ -142,8 +132,5 @@ def test_first_published_catalog_common_routes_remain_compatible():
     payload["catalogRevision"] = hashlib.sha256(canonical).hexdigest()
 
     catalog = WorkflowCatalogV2(payload)
-    catalog.validate()
-    assert catalog.phase_contract("feature", "C01")["failureRoutes"]["change-scope"] == "F05"
-    assert catalog.phase_contract("feature", "C01")["failureRoutes"]["test-design-defect"] == "F15"
-    assert catalog.phase_contract("bug", "C01")["failureRoutes"]["architecture-defect"] == "B08"
-    assert catalog.phase_contract("bug", "C01")["failureRoutes"]["threat-model-defect"] == "B05"
+    with pytest.raises(CatalogError, match="invalid route"):
+        catalog.validate()

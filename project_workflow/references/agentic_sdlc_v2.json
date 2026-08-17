@@ -1,7 +1,7 @@
 {
   "schemaVersion": "workflow-template/v2",
   "workflowVersion": "agentic-sdlc-v2",
-  "catalogRevision": "57c451ef716c22db7402bd6bfebcac966f0f007ea7aa24c0b370957708223a32",
+  "catalogRevision": "3e441888accd8950ea1b6cede4327f62280b0b8d390d7b67a8f5c28dba459c3f",
   "profiles": {
     "feature": [
       "C01",
@@ -165,7 +165,7 @@
         },
         "taskKey": {
           "type": "string",
-          "pattern": "^AAT-[1-9][0-9]*$"
+          "pattern": "^[A-Z][A-Z0-9_]{1,31}-[1-9][0-9]*$"
         },
         "phaseId": {
           "type": "string",
@@ -17141,7 +17141,7 @@
     }
   ],
   "policy": {
-    "taskKeyPattern": "^AAT-[1-9][0-9]*$",
+    "taskKeyPattern": "^[A-Z][A-Z0-9_]{1,31}-[1-9][0-9]*$",
     "allowedActorTypes": [
       "agent",
       "human"

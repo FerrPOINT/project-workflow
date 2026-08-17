@@ -110,7 +110,7 @@ class PhaseReportV2(StrictModel):
     schemaVersion: Literal["phase-report/v2"]
     workflowVersion: Literal["agentic-sdlc-v2"]
     catalogRevision: str = Field(pattern=r"^[0-9a-f]{64}$")
-    taskKey: str = Field(pattern=r"^AAT-[1-9][0-9]*$")
+    taskKey: str = Field(pattern=r"^[A-Z][A-Z0-9_]{1,31}-[1-9][0-9]*$")
     attemptId: str | None = Field(default=None, min_length=1, max_length=128)
     runId: str = Field(min_length=1, max_length=128)
     phaseId: str = Field(pattern=r"^[CFBDX][0-9]{2}$")
