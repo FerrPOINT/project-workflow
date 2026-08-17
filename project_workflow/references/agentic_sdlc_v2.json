@@ -1,7 +1,7 @@
 {
   "schemaVersion": "workflow-template/v2",
   "workflowVersion": "agentic-sdlc-v2",
-  "catalogRevision": "3e441888accd8950ea1b6cede4327f62280b0b8d390d7b67a8f5c28dba459c3f",
+  "catalogRevision": "34d8d6c71a88bc16746f96613250f8f06c0b3e54da474bf4bd122349ebdaaeb1",
   "profiles": {
     "feature": [
       "C01",
@@ -2898,6 +2898,31 @@
             "maxAttempts": 1,
             "retryOn": []
           }
+        },
+        {
+          "instructionId": "f04-milestone-report",
+          "description": "Summarize the verified research, constraints and remaining decisions. Publish it with `agentic-sdlc-jira report publish <taskKey> --file <absolute-json>`; use the current taskKey, runId, phaseId and attemptId. The JSON object contains exactly schemaVersion=`jira-phase-report/v1`, taskKey, runId, phaseId, attemptId, summary, completed[], evidence[], risks[] and nextStep.",
+          "allowedTools": [
+            "file-read",
+            "file-write",
+            "jira-read",
+            "jira-write"
+          ],
+          "requiredInputs": [
+            "verified phase evidence",
+            "current taskKey, runId, phaseId and attemptId"
+          ],
+          "expectedOutputs": [
+            "jira-phase-report"
+          ],
+          "sideEffectClass": "controlled-write",
+          "timeoutSeconds": 300,
+          "retryPolicy": {
+            "maxAttempts": 2,
+            "retryOn": [
+              "transient-unavailable"
+            ]
+          }
         }
       ],
       "checks": [
@@ -2930,6 +2955,16 @@
           "revisionBinding": "baselineRevision",
           "applicability": "required",
           "failureClass": "stale-revision"
+        },
+        {
+          "checkId": "f04-jira-report-readback",
+          "description": "The milestone report exists once in Jira, has the agent report marker, matches the current phase attempt and passes independent readback.",
+          "verifierType": "jira",
+          "subjectType": "jira-phase-report",
+          "requiredStatus": "passed",
+          "revisionBinding": "jiraRevision",
+          "applicability": "required",
+          "failureClass": "external-evidence-invalid"
         }
       ],
       "evidenceRequirements": [
@@ -2957,6 +2992,17 @@
           "required": true,
           "revisionBinding": "catalogRevision",
           "maxAgeSeconds": 86400
+        },
+        {
+          "requirementId": "f04-e-jira-report",
+          "description": "Read-back Jira milestone report for the current phase attempt.",
+          "type": "jira-phase-report",
+          "checkIds": [
+            "f04-jira-report-readback"
+          ],
+          "required": true,
+          "revisionBinding": "jiraRevision",
+          "maxAgeSeconds": 86400
         }
       ],
       "approvalRule": null,
@@ -2966,7 +3012,8 @@
       },
       "requiredRevisionBindings": [
         "baselineRevision",
-        "catalogRevision"
+        "catalogRevision",
+        "jiraRevision"
       ],
       "transitionRules": {
         "PASS": "next-profile-path-phase",
@@ -5371,6 +5418,31 @@
             "maxAttempts": 1,
             "retryOn": []
           }
+        },
+        {
+          "instructionId": "f16-milestone-report",
+          "description": "Publish the approved delivery baseline, plan and human-gate status. Publish it with `agentic-sdlc-jira report publish <taskKey> --file <absolute-json>`; use the current taskKey, runId, phaseId and attemptId. The JSON object contains exactly schemaVersion=`jira-phase-report/v1`, taskKey, runId, phaseId, attemptId, summary, completed[], evidence[], risks[] and nextStep.",
+          "allowedTools": [
+            "file-read",
+            "file-write",
+            "jira-read",
+            "jira-write"
+          ],
+          "requiredInputs": [
+            "verified phase evidence",
+            "current taskKey, runId, phaseId and attemptId"
+          ],
+          "expectedOutputs": [
+            "jira-phase-report"
+          ],
+          "sideEffectClass": "controlled-write",
+          "timeoutSeconds": 300,
+          "retryPolicy": {
+            "maxAttempts": 2,
+            "retryOn": [
+              "transient-unavailable"
+            ]
+          }
         }
       ],
       "checks": [
@@ -5403,6 +5475,16 @@
           "revisionBinding": "baselineRevision",
           "applicability": "required",
           "failureClass": "stale-revision"
+        },
+        {
+          "checkId": "f16-jira-report-readback",
+          "description": "The milestone report exists once in Jira, has the agent report marker, matches the current phase attempt and passes independent readback.",
+          "verifierType": "jira",
+          "subjectType": "jira-phase-report",
+          "requiredStatus": "passed",
+          "revisionBinding": "jiraRevision",
+          "applicability": "required",
+          "failureClass": "external-evidence-invalid"
         }
       ],
       "evidenceRequirements": [
@@ -5430,6 +5512,17 @@
           "required": true,
           "revisionBinding": "catalogRevision",
           "maxAgeSeconds": 86400
+        },
+        {
+          "requirementId": "f16-e-jira-report",
+          "description": "Read-back Jira milestone report for the current phase attempt.",
+          "type": "jira-phase-report",
+          "checkIds": [
+            "f16-jira-report-readback"
+          ],
+          "required": true,
+          "revisionBinding": "jiraRevision",
+          "maxAgeSeconds": 86400
         }
       ],
       "approvalRule": {
@@ -5447,7 +5540,8 @@
       },
       "requiredRevisionBindings": [
         "baselineRevision",
-        "catalogRevision"
+        "catalogRevision",
+        "jiraRevision"
       ],
       "transitionRules": {
         "PASS": "next-profile-path-phase",
@@ -6199,6 +6293,31 @@
             "maxAttempts": 1,
             "retryOn": []
           }
+        },
+        {
+          "instructionId": "b04-milestone-report",
+          "description": "Publish the reproduced symptom, root cause and affected scope. Publish it with `agentic-sdlc-jira report publish <taskKey> --file <absolute-json>`; use the current taskKey, runId, phaseId and attemptId. The JSON object contains exactly schemaVersion=`jira-phase-report/v1`, taskKey, runId, phaseId, attemptId, summary, completed[], evidence[], risks[] and nextStep.",
+          "allowedTools": [
+            "file-read",
+            "file-write",
+            "jira-read",
+            "jira-write"
+          ],
+          "requiredInputs": [
+            "verified phase evidence",
+            "current taskKey, runId, phaseId and attemptId"
+          ],
+          "expectedOutputs": [
+            "jira-phase-report"
+          ],
+          "sideEffectClass": "controlled-write",
+          "timeoutSeconds": 300,
+          "retryPolicy": {
+            "maxAttempts": 2,
+            "retryOn": [
+              "transient-unavailable"
+            ]
+          }
         }
       ],
       "checks": [
@@ -6231,6 +6350,16 @@
           "revisionBinding": "baselineRevision",
           "applicability": "required",
           "failureClass": "stale-revision"
+        },
+        {
+          "checkId": "b04-jira-report-readback",
+          "description": "The milestone report exists once in Jira, has the agent report marker, matches the current phase attempt and passes independent readback.",
+          "verifierType": "jira",
+          "subjectType": "jira-phase-report",
+          "requiredStatus": "passed",
+          "revisionBinding": "jiraRevision",
+          "applicability": "required",
+          "failureClass": "external-evidence-invalid"
         }
       ],
       "evidenceRequirements": [
@@ -6258,6 +6387,17 @@
           "required": true,
           "revisionBinding": "catalogRevision",
           "maxAgeSeconds": 86400
+        },
+        {
+          "requirementId": "b04-e-jira-report",
+          "description": "Read-back Jira milestone report for the current phase attempt.",
+          "type": "jira-phase-report",
+          "checkIds": [
+            "b04-jira-report-readback"
+          ],
+          "required": true,
+          "revisionBinding": "jiraRevision",
+          "maxAgeSeconds": 86400
         }
       ],
       "approvalRule": null,
@@ -6267,7 +6407,8 @@
       },
       "requiredRevisionBindings": [
         "baselineRevision",
-        "catalogRevision"
+        "catalogRevision",
+        "jiraRevision"
       ],
       "transitionRules": {
         "PASS": "next-profile-path-phase",
@@ -7442,6 +7583,31 @@
             "maxAttempts": 1,
             "retryOn": []
           }
+        },
+        {
+          "instructionId": "b10-milestone-report",
+          "description": "Publish the approved fix plan, risks and verification strategy. Publish it with `agentic-sdlc-jira report publish <taskKey> --file <absolute-json>`; use the current taskKey, runId, phaseId and attemptId. The JSON object contains exactly schemaVersion=`jira-phase-report/v1`, taskKey, runId, phaseId, attemptId, summary, completed[], evidence[], risks[] and nextStep.",
+          "allowedTools": [
+            "file-read",
+            "file-write",
+            "jira-read",
+            "jira-write"
+          ],
+          "requiredInputs": [
+            "verified phase evidence",
+            "current taskKey, runId, phaseId and attemptId"
+          ],
+          "expectedOutputs": [
+            "jira-phase-report"
+          ],
+          "sideEffectClass": "controlled-write",
+          "timeoutSeconds": 300,
+          "retryPolicy": {
+            "maxAttempts": 2,
+            "retryOn": [
+              "transient-unavailable"
+            ]
+          }
         }
       ],
       "checks": [
@@ -7474,6 +7640,16 @@
           "revisionBinding": "baselineRevision",
           "applicability": "required",
           "failureClass": "stale-revision"
+        },
+        {
+          "checkId": "b10-jira-report-readback",
+          "description": "The milestone report exists once in Jira, has the agent report marker, matches the current phase attempt and passes independent readback.",
+          "verifierType": "jira",
+          "subjectType": "jira-phase-report",
+          "requiredStatus": "passed",
+          "revisionBinding": "jiraRevision",
+          "applicability": "required",
+          "failureClass": "external-evidence-invalid"
         }
       ],
       "evidenceRequirements": [
@@ -7501,6 +7677,17 @@
           "required": true,
           "revisionBinding": "catalogRevision",
           "maxAgeSeconds": 86400
+        },
+        {
+          "requirementId": "b10-e-jira-report",
+          "description": "Read-back Jira milestone report for the current phase attempt.",
+          "type": "jira-phase-report",
+          "checkIds": [
+            "b10-jira-report-readback"
+          ],
+          "required": true,
+          "revisionBinding": "jiraRevision",
+          "maxAgeSeconds": 86400
         }
       ],
       "approvalRule": {
@@ -7517,7 +7704,8 @@
       },
       "requiredRevisionBindings": [
         "baselineRevision",
-        "catalogRevision"
+        "catalogRevision",
+        "jiraRevision"
       ],
       "transitionRules": {
         "PASS": "next-profile-path-phase",
@@ -9229,6 +9417,31 @@
             "maxAttempts": 1,
             "retryOn": []
           }
+        },
+        {
+          "instructionId": "d08-milestone-report",
+          "description": "Summarize the implemented change, red-test evidence and self-review. Publish it with `agentic-sdlc-jira report publish <taskKey> --file <absolute-json>`; use the current taskKey, runId, phaseId and attemptId. The JSON object contains exactly schemaVersion=`jira-phase-report/v1`, taskKey, runId, phaseId, attemptId, summary, completed[], evidence[], risks[] and nextStep.",
+          "allowedTools": [
+            "file-read",
+            "file-write",
+            "jira-read",
+            "jira-write"
+          ],
+          "requiredInputs": [
+            "verified phase evidence",
+            "current taskKey, runId, phaseId and attemptId"
+          ],
+          "expectedOutputs": [
+            "jira-phase-report"
+          ],
+          "sideEffectClass": "controlled-write",
+          "timeoutSeconds": 300,
+          "retryPolicy": {
+            "maxAttempts": 2,
+            "retryOn": [
+              "transient-unavailable"
+            ]
+          }
         }
       ],
       "checks": [
@@ -9261,6 +9474,16 @@
           "revisionBinding": "baselineRevision",
           "applicability": "required",
           "failureClass": "stale-revision"
+        },
+        {
+          "checkId": "d08-jira-report-readback",
+          "description": "The milestone report exists once in Jira, has the agent report marker, matches the current phase attempt and passes independent readback.",
+          "verifierType": "jira",
+          "subjectType": "jira-phase-report",
+          "requiredStatus": "passed",
+          "revisionBinding": "jiraRevision",
+          "applicability": "required",
+          "failureClass": "external-evidence-invalid"
         }
       ],
       "evidenceRequirements": [
@@ -9288,6 +9511,17 @@
           "required": true,
           "revisionBinding": "catalogRevision",
           "maxAgeSeconds": 86400
+        },
+        {
+          "requirementId": "d08-e-jira-report",
+          "description": "Read-back Jira milestone report for the current phase attempt.",
+          "type": "jira-phase-report",
+          "checkIds": [
+            "d08-jira-report-readback"
+          ],
+          "required": true,
+          "revisionBinding": "jiraRevision",
+          "maxAgeSeconds": 86400
         }
       ],
       "approvalRule": null,
@@ -9297,7 +9531,8 @@
       },
       "requiredRevisionBindings": [
         "baselineRevision",
-        "catalogRevision"
+        "catalogRevision",
+        "jiraRevision"
       ],
       "transitionRules": {
         "PASS": "next-profile-path-phase",
@@ -12110,6 +12345,31 @@
           }
         },
         {
+          "instructionId": "d20-milestone-report",
+          "description": "Publish the exact MR HEAD, independent review results and approval status. Publish it with `agentic-sdlc-jira report publish <taskKey> --file <absolute-json>`; use the current taskKey, runId, phaseId and attemptId. The JSON object contains exactly schemaVersion=`jira-phase-report/v1`, taskKey, runId, phaseId, attemptId, summary, completed[], evidence[], risks[] and nextStep.",
+          "allowedTools": [
+            "file-read",
+            "file-write",
+            "jira-read",
+            "jira-write"
+          ],
+          "requiredInputs": [
+            "verified phase evidence",
+            "current taskKey, runId, phaseId and attemptId"
+          ],
+          "expectedOutputs": [
+            "jira-phase-report"
+          ],
+          "sideEffectClass": "controlled-write",
+          "timeoutSeconds": 300,
+          "retryPolicy": {
+            "maxAttempts": 2,
+            "retryOn": [
+              "transient-unavailable"
+            ]
+          }
+        },
+        {
           "instructionId": "d20-05-approval-head",
           "description": "GitLab approval is bound to the current MR HEAD SHA.",
           "allowedTools": [
@@ -12196,6 +12456,16 @@
           "failureClass": "stale-revision"
         },
         {
+          "checkId": "d20-jira-report-readback",
+          "description": "The milestone report exists once in Jira, has the agent report marker, matches the current phase attempt and passes independent readback.",
+          "verifierType": "jira",
+          "subjectType": "jira-phase-report",
+          "requiredStatus": "passed",
+          "revisionBinding": "jiraRevision",
+          "applicability": "required",
+          "failureClass": "external-evidence-invalid"
+        },
+        {
           "checkId": "d20-approval-head",
           "description": "GitLab approval is bound to the current MR HEAD SHA.",
           "verifierType": "gitlab-approval",
@@ -12241,6 +12511,17 @@
           "maxAgeSeconds": 86400
         },
         {
+          "requirementId": "d20-e-jira-report",
+          "description": "Read-back Jira milestone report for the current phase attempt.",
+          "type": "jira-phase-report",
+          "checkIds": [
+            "d20-jira-report-readback"
+          ],
+          "required": true,
+          "revisionBinding": "jiraRevision",
+          "maxAgeSeconds": 86400
+        },
+        {
           "requirementId": "d20-e-approval-head",
           "description": "Deterministic evidence: GitLab approval is bound to the current MR HEAD SHA.",
           "type": "mr-approval",
@@ -12277,6 +12558,7 @@
       },
       "requiredRevisionBindings": [
         "catalogRevision",
+        "jiraRevision",
         "mrHeadSha"
       ],
       "transitionRules": {
@@ -13425,6 +13707,31 @@
             "maxAttempts": 1,
             "retryOn": []
           }
+        },
+        {
+          "instructionId": "d24-milestone-report",
+          "description": "Publish staging acceptance results and the verified release digest. Publish it with `agentic-sdlc-jira report publish <taskKey> --file <absolute-json>`; use the current taskKey, runId, phaseId and attemptId. The JSON object contains exactly schemaVersion=`jira-phase-report/v1`, taskKey, runId, phaseId, attemptId, summary, completed[], evidence[], risks[] and nextStep.",
+          "allowedTools": [
+            "file-read",
+            "file-write",
+            "jira-read",
+            "jira-write"
+          ],
+          "requiredInputs": [
+            "verified phase evidence",
+            "current taskKey, runId, phaseId and attemptId"
+          ],
+          "expectedOutputs": [
+            "jira-phase-report"
+          ],
+          "sideEffectClass": "controlled-write",
+          "timeoutSeconds": 300,
+          "retryPolicy": {
+            "maxAttempts": 2,
+            "retryOn": [
+              "transient-unavailable"
+            ]
+          }
         }
       ],
       "checks": [
@@ -13457,6 +13764,16 @@
           "revisionBinding": "artifactDigest",
           "applicability": "required",
           "failureClass": "stale-revision"
+        },
+        {
+          "checkId": "d24-jira-report-readback",
+          "description": "The milestone report exists once in Jira, has the agent report marker, matches the current phase attempt and passes independent readback.",
+          "verifierType": "jira",
+          "subjectType": "jira-phase-report",
+          "requiredStatus": "passed",
+          "revisionBinding": "jiraRevision",
+          "applicability": "required",
+          "failureClass": "external-evidence-invalid"
         }
       ],
       "evidenceRequirements": [
@@ -13482,6 +13799,17 @@
           "required": true,
           "revisionBinding": "catalogRevision",
           "maxAgeSeconds": 86400
+        },
+        {
+          "requirementId": "d24-e-jira-report",
+          "description": "Read-back Jira milestone report for the current phase attempt.",
+          "type": "jira-phase-report",
+          "checkIds": [
+            "d24-jira-report-readback"
+          ],
+          "required": true,
+          "revisionBinding": "jiraRevision",
+          "maxAgeSeconds": 86400
         }
       ],
       "approvalRule": null,
@@ -13491,7 +13819,8 @@
       },
       "requiredRevisionBindings": [
         "artifactDigest",
-        "catalogRevision"
+        "catalogRevision",
+        "jiraRevision"
       ],
       "transitionRules": {
         "PASS": "next-profile-path-phase",
@@ -15658,6 +15987,31 @@
           }
         },
         {
+          "instructionId": "d31-milestone-report",
+          "description": "Publish production verification or rollback evidence and runtime status. Publish it with `agentic-sdlc-jira report publish <taskKey> --file <absolute-json>`; use the current taskKey, runId, phaseId and attemptId. The JSON object contains exactly schemaVersion=`jira-phase-report/v1`, taskKey, runId, phaseId, attemptId, summary, completed[], evidence[], risks[] and nextStep.",
+          "allowedTools": [
+            "file-read",
+            "file-write",
+            "jira-read",
+            "jira-write"
+          ],
+          "requiredInputs": [
+            "verified phase evidence",
+            "current taskKey, runId, phaseId and attemptId"
+          ],
+          "expectedOutputs": [
+            "jira-phase-report"
+          ],
+          "sideEffectClass": "controlled-write",
+          "timeoutSeconds": 300,
+          "retryPolicy": {
+            "maxAttempts": 2,
+            "retryOn": [
+              "transient-unavailable"
+            ]
+          }
+        },
+        {
           "instructionId": "d31-05-runtime-version",
           "description": "Runtime health and version expose the deployed digest and source SHA.",
           "allowedTools": [
@@ -15800,6 +16154,16 @@
           "failureClass": "stale-revision"
         },
         {
+          "checkId": "d31-jira-report-readback",
+          "description": "The milestone report exists once in Jira, has the agent report marker, matches the current phase attempt and passes independent readback.",
+          "verifierType": "jira",
+          "subjectType": "jira-phase-report",
+          "requiredStatus": "passed",
+          "revisionBinding": "jiraRevision",
+          "applicability": "required",
+          "failureClass": "external-evidence-invalid"
+        },
+        {
           "checkId": "d31-runtime-version",
           "description": "Runtime health and version expose the deployed digest and source SHA.",
           "verifierType": "runtime",
@@ -15865,6 +16229,17 @@
           "maxAgeSeconds": 86400
         },
         {
+          "requirementId": "d31-e-jira-report",
+          "description": "Read-back Jira milestone report for the current phase attempt.",
+          "type": "jira-phase-report",
+          "checkIds": [
+            "d31-jira-report-readback"
+          ],
+          "required": true,
+          "revisionBinding": "jiraRevision",
+          "maxAgeSeconds": 86400
+        },
+        {
           "requirementId": "d31-e-runtime-version",
           "description": "Deterministic evidence: Runtime health and version expose the deployed digest and source SHA.",
           "type": "runtime-version",
@@ -15917,6 +16292,7 @@
       "requiredRevisionBindings": [
         "artifactDigest",
         "catalogRevision",
+        "jiraRevision",
         "previousStableDigest"
       ],
       "transitionRules": {
@@ -16389,6 +16765,31 @@
             "maxAttempts": 1,
             "retryOn": []
           }
+        },
+        {
+          "instructionId": "x01-milestone-report",
+          "description": "Publish the final handoff, outcome and links to the verified delivery evidence. Publish it with `agentic-sdlc-jira report publish <taskKey> --file <absolute-json>`; use the current taskKey, runId, phaseId and attemptId. The JSON object contains exactly schemaVersion=`jira-phase-report/v1`, taskKey, runId, phaseId, attemptId, summary, completed[], evidence[], risks[] and nextStep.",
+          "allowedTools": [
+            "file-read",
+            "file-write",
+            "jira-read",
+            "jira-write"
+          ],
+          "requiredInputs": [
+            "verified phase evidence",
+            "current taskKey, runId, phaseId and attemptId"
+          ],
+          "expectedOutputs": [
+            "jira-phase-report"
+          ],
+          "sideEffectClass": "controlled-write",
+          "timeoutSeconds": 300,
+          "retryPolicy": {
+            "maxAttempts": 2,
+            "retryOn": [
+              "transient-unavailable"
+            ]
+          }
         }
       ],
       "checks": [
@@ -16421,6 +16822,16 @@
           "revisionBinding": "jiraRevision",
           "applicability": "required",
           "failureClass": "stale-revision"
+        },
+        {
+          "checkId": "x01-jira-report-readback",
+          "description": "The milestone report exists once in Jira, has the agent report marker, matches the current phase attempt and passes independent readback.",
+          "verifierType": "jira",
+          "subjectType": "jira-phase-report",
+          "requiredStatus": "passed",
+          "revisionBinding": "jiraRevision",
+          "applicability": "required",
+          "failureClass": "external-evidence-invalid"
         }
       ],
       "evidenceRequirements": [
@@ -16445,6 +16856,17 @@
           ],
           "required": true,
           "revisionBinding": "catalogRevision",
+          "maxAgeSeconds": 86400
+        },
+        {
+          "requirementId": "x01-e-jira-report",
+          "description": "Read-back Jira milestone report for the current phase attempt.",
+          "type": "jira-phase-report",
+          "checkIds": [
+            "x01-jira-report-readback"
+          ],
+          "required": true,
+          "revisionBinding": "jiraRevision",
           "maxAgeSeconds": 86400
         }
       ],

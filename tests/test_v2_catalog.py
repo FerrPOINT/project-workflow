@@ -15,9 +15,9 @@ def test_agentic_sdlc_v2_catalog_exact_invariants():
     assert len(phases) == 70
     assert len(catalog.path("feature")) == 60
     assert len(catalog.path("bug")) == 54
-    assert sum(len(item["instructions"]) for item in phases.values()) == 318
-    assert sum(len(item["checks"]) for item in phases.values()) == 248
-    assert sum(len(item["evidenceRequirements"]) for item in phases.values()) == 178
+    assert sum(len(item["instructions"]) for item in phases.values()) == 327
+    assert sum(len(item["checks"]) for item in phases.values()) == 257
+    assert sum(len(item["evidenceRequirements"]) for item in phases.values()) == 187
     assert sum(bool(phases[item]["approvalRule"]) for item in catalog.path("feature")) == 5
     assert sum(bool(phases[item]["approvalRule"]) for item in catalog.path("bug")) == 5
     document_requirements = [
@@ -46,8 +46,9 @@ def test_phase_contract_contains_only_referenced_catalog_artifact_definitions():
     assert c08["artifactPolicies"] == {}
 
 
-def test_jira_board_writes_are_limited_to_c08_and_x01_execution():
+def test_jira_writes_are_limited_to_board_transitions_and_catalog_milestone_reports():
     catalog = load_default_catalog()
+    phases = catalog.phases
 
     write_instructions = [
         (phase_id, instruction["instructionId"])
@@ -56,7 +57,42 @@ def test_jira_board_writes_are_limited_to_c08_and_x01_execution():
         if "jira-write" in instruction["allowedTools"]
     ]
 
-    assert write_instructions == [("C08", "c08-02-execute"), ("X01", "x01-02-execute")]
+    assert write_instructions == [
+        ("C08", "c08-02-execute"),
+        ("F04", "f04-milestone-report"),
+        ("F16", "f16-milestone-report"),
+        ("B04", "b04-milestone-report"),
+        ("B10", "b10-milestone-report"),
+        ("D08", "d08-milestone-report"),
+        ("D20", "d20-milestone-report"),
+        ("D24", "d24-milestone-report"),
+        ("D31", "d31-milestone-report"),
+        ("X01", "x01-02-execute"),
+        ("X01", "x01-milestone-report"),
+    ]
+
+    report_phases = {"F04", "F16", "B04", "B10", "D08", "D20", "D24", "D31", "X01"}
+    for phase_id in report_phases:
+        phase = phases[phase_id]
+        report_checks = [
+            check for check in phase["checks"] if check["subjectType"] == "jira-phase-report"
+        ]
+        report_evidence = [
+            requirement
+            for requirement in phase["evidenceRequirements"]
+            if requirement["type"] == "jira-phase-report"
+        ]
+        assert len(report_checks) == 1
+        assert report_checks[0]["revisionBinding"] == "jiraRevision"
+        assert len(report_evidence) == 1
+        assert "jiraRevision" in phase["requiredRevisionBindings"]
+        report_instruction = next(
+            instruction
+            for instruction in phase["instructions"]
+            if instruction["instructionId"].endswith("-milestone-report")
+        )
+        assert "jira-phase-report/v1" in report_instruction["description"]
+        assert "agentic-sdlc-jira report publish" in report_instruction["description"]
 
 
 def test_catalog_checksum_prevents_in_place_change(tmp_path):

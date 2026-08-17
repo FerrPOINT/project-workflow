@@ -396,6 +396,21 @@ HUMAN_GATES = {
     },
 }
 
+# These are the customer-visible lifecycle milestones where the agent must
+# publish a concise Jira progress report.  The workflow catalog owns this
+# policy so neither the Hermes prompt nor its skill needs a phase list.
+JIRA_REPORT_PHASES = {
+    "F04": "Summarize the verified research, constraints and remaining decisions.",
+    "F16": "Publish the approved delivery baseline, plan and human-gate status.",
+    "B04": "Publish the reproduced symptom, root cause and affected scope.",
+    "B10": "Publish the approved fix plan, risks and verification strategy.",
+    "D08": "Summarize the implemented change, red-test evidence and self-review.",
+    "D20": "Publish the exact MR HEAD, independent review results and approval status.",
+    "D24": "Publish staging acceptance results and the verified release digest.",
+    "D31": "Publish production verification or rollback evidence and runtime status.",
+    "X01": "Publish the final handoff, outcome and links to the verified delivery evidence.",
+}
+
 REQUIRED_REVISION_BINDINGS = {
     "D11": ["gitSha"],
     "D12": ["gitSha", "pipelineId"],
@@ -698,6 +713,56 @@ def make_phase(definition: tuple[str, str, str, str], order: int) -> dict[str, A
         evidence[0]["policyRef"] = (
             "risk-classification/v1" if phase_id == "C05" else "source-backed-claims/v1"
         )
+    if phase_id in JIRA_REPORT_PHASES:
+        report_instruction_id = f"{prefix}-milestone-report"
+        report_check_id = f"{prefix}-jira-report-readback"
+        instructions.append(
+            {
+                "instructionId": report_instruction_id,
+                "description": (
+                    f"{JIRA_REPORT_PHASES[phase_id]} Publish it with "
+                    "`agentic-sdlc-jira report publish <taskKey> --file <absolute-json>`; "
+                    "use the current taskKey, runId, phaseId and attemptId. The JSON object "
+                    "contains exactly schemaVersion=`jira-phase-report/v1`, taskKey, runId, "
+                    "phaseId, attemptId, summary, completed[], evidence[], risks[] and nextStep."
+                ),
+                "allowedTools": ["file-read", "file-write", "jira-read", "jira-write"],
+                "requiredInputs": [
+                    "verified phase evidence",
+                    "current taskKey, runId, phaseId and attemptId",
+                ],
+                "expectedOutputs": ["jira-phase-report"],
+                "sideEffectClass": "controlled-write",
+                "timeoutSeconds": 300,
+                "retryPolicy": {"maxAttempts": 2, "retryOn": ["transient-unavailable"]},
+            }
+        )
+        checks.append(
+            {
+                "checkId": report_check_id,
+                "description": (
+                    "The milestone report exists once in Jira, has the agent report marker, "
+                    "matches the current phase attempt and passes independent readback."
+                ),
+                "verifierType": "jira",
+                "subjectType": "jira-phase-report",
+                "requiredStatus": "passed",
+                "revisionBinding": "jiraRevision",
+                "applicability": "required",
+                "failureClass": "external-evidence-invalid",
+            }
+        )
+        evidence.append(
+            {
+                "requirementId": f"{prefix}-e-jira-report",
+                "description": "Read-back Jira milestone report for the current phase attempt.",
+                "type": "jira-phase-report",
+                "checkIds": [report_check_id],
+                "required": True,
+                "revisionBinding": "jiraRevision",
+                "maxAgeSeconds": 86400,
+            }
+        )
     for index, control in enumerate(EXTRA_CONTROLS.get(phase_id, []), start=5):
         suffix, description, control_verifier, control_subject, control_binding, failure_class, *flags = control
         applicability = flags[0] if flags else "required"
@@ -764,7 +829,12 @@ def make_phase(definition: tuple[str, str, str, str], order: int) -> dict[str, A
         "approvalRule": approval,
         "applicabilityRules": {"default": "required", "tailoringPhase": "C07"},
         "requiredRevisionBindings": sorted(
-            {"catalogRevision", revision_binding, *REQUIRED_REVISION_BINDINGS.get(phase_id, [])}
+            {
+                "catalogRevision",
+                revision_binding,
+                *REQUIRED_REVISION_BINDINGS.get(phase_id, []),
+                *({"jiraRevision"} if phase_id in JIRA_REPORT_PHASES else set()),
+            }
         ),
         "transitionRules": {"PASS": "next-profile-path-phase", "ABORT": None},
         "failureRoutes": {
