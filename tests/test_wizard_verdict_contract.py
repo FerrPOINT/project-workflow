@@ -7,43 +7,11 @@ import pytest
 pytestmark = [pytest.mark.wizard]
 
 from project_workflow.domain.fsm import PhaseFSM
-from project_workflow.wizard.checks import build_verdict_message, determine_verdict
+from project_workflow.wizard.checks import build_verdict_message
 from project_workflow.wizard.core import format_result
 from project_workflow.wizard.types import VERDICT_LABELS, PhaseContract, WizardAssessment
 
 CORE_VERDICT_LABELS = VERDICT_LABELS
-
-
-class TestDeterministicVerdictContract:
-    def test_pass_when_nothing_missing(self):
-        assert determine_verdict(covered=["c1"], missing=[], blockers=[], report="done") == "pass"
-
-    def test_soft_fail_when_covered_but_missing(self):
-        assert determine_verdict(covered=["c1"], missing=["m1"], blockers=[], report="did part") == "soft_fail"
-
-    def test_hard_fail_when_nothing_covered(self):
-        assert determine_verdict(covered=[], missing=["m1"], blockers=[], report="nothing") == "hard_fail"
-
-    def test_blocked_takes_precedence_over_missing(self):
-        assert determine_verdict(covered=[], missing=["m1"], blockers=["b1"], report="blocked") == "blocked"
-
-    def test_rollback_when_target_and_signal(self):
-        assert (
-            determine_verdict(covered=[], missing=["m1"], blockers=[], report="rollback", rollback_target="0")
-            == "rollback"
-        )
-
-    def test_rollback_when_blockers_and_target(self):
-        assert (
-            determine_verdict(covered=["c1"], missing=["m1"], blockers=["b1"], report="x", rollback_target="0")
-            == "rollback"
-        )
-
-    def test_delegate_verdict_unchanged(self):
-        assert (
-            determine_verdict(covered=[], missing=["m1"], blockers=[], report="delegate this", is_delegated=True)
-            == "delegate"
-        )
 
 
 class TestVerdictLabels:

@@ -356,7 +356,8 @@ class TestEvaluateEdgeCases:
         assert result["verdict"] == "BLOCKED"
         assert result["blockers"] == ["phase-not-configured"]
 
-    def test_sync_evaluate_pass(self):
+    def test_sync_evaluate_pass(self, wizard_llm):
+        wizard_llm("PASS", covered=["deploy"])
         with patch("project_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             engine = WizardEngine("AAT-1", "/tmp")
@@ -384,7 +385,8 @@ class TestEvaluateEdgeCases:
         assert result["verdict"] == "PASS"
         assert "deploy" in result["covered"]
 
-    def test_parallel_evaluate_pass(self):
+    def test_parallel_evaluate_pass(self, wizard_llm):
+        wizard_llm("PASS", covered=["check-a", "check-b"])
         with patch("project_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             engine = WizardEngine("AAT-1", "/tmp")
@@ -439,7 +441,12 @@ class TestEvaluateEdgeCases:
         assert result["verdict"] == "PASS"
         assert result["phase_name"] == "Parallel group: 1, 2"
 
-    def test_parallel_evaluate_partial_stays(self):
+    def test_parallel_evaluate_partial_stays(self, wizard_llm):
+        wizard_llm(
+            "SOFT_FAIL",
+            covered=["deploy microservice"],
+            missing=["write unit tests"],
+        )
         with patch("project_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             engine = WizardEngine("AAT-1", "/tmp")

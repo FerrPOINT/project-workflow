@@ -6,15 +6,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from project_workflow.wizard.evaluate import _result_from_reasoning
-from project_workflow.wizard.models import Phase
 from project_workflow.wizard.prompt import (
     _format_contract,
     _format_verdicts,
     build_phase_prompt,
     format_current_phase_instructions,
 )
-from project_workflow.wizard.reasoning import ReasoningResult
 
 pytestmark = [pytest.mark.unit]
 
@@ -126,128 +123,6 @@ def test_format_current_phase_instructions_serial_with_contract_object():
             "T-1", {"p1": P()}, [P()], "p1", {}
         )
     assert "i2" in text
-
-
-def test_result_from_reasoning_blocked_no_blockers():
-    phase = Phase(
-        id=1,
-        code="p1",
-        name="P1",
-        description="d",
-        execution_type="sync",
-        rollback_target=None,
-        instructions=[],
-        checks=[],
-        evidence=[],
-    )
-    engine = MagicMock()
-    engine.task_key = "T-1"
-    engine.task = {"id": 1}
-    engine.phase_map = {}
-    engine.all_phases = []
-    engine.db.create_supervisor_run = MagicMock()
-
-    reasoning = ReasoningResult(
-        verdict="BLOCKED",
-        analysis="blocked",
-        claims=[],
-        missing=[],
-        blockers=[],
-        confidence=0.5,
-        next_steps=[],
-        raw={},
-    )
-    result = _result_from_reasoning(reasoning, "report", phase, engine)
-    assert result["verdict"] == "BLOCKED"
-    assert result["blockers"] == ["Reasoning identified blocker"]
-
-
-def test_result_from_reasoning_pass_with_next_phase():
-    phase = Phase(
-        id=1,
-        code="p1",
-        name="P1",
-        description="d",
-        execution_type="sync",
-        rollback_target=None,
-        instructions=[],
-        checks=[],
-        evidence=[],
-    )
-
-    class NextP:
-        code = "p2"
-        name = "P2"
-        id = 2
-
-    engine = MagicMock()
-    engine.task_key = "T-1"
-    engine.task = {"id": 1}
-    engine.phase_map = {"p2": NextP()}
-    engine.all_phases = [phase, NextP()]
-    engine.db.create_supervisor_run = MagicMock()
-
-    cb_mock = MagicMock()
-    cb_mock.get_next_phase.return_value = ("p2", "P2")
-
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setattr("project_workflow.wizard.evaluate.PhaseContractBuilder", lambda phases: cb_mock)
-        reasoning = ReasoningResult(
-            verdict="PASS",
-            analysis="ok",
-            claims=[],
-            missing=[],
-            blockers=[],
-            confidence=0.9,
-            next_steps=[],
-            raw={},
-        )
-        result = _result_from_reasoning(reasoning, "report", phase, engine)
-    assert result["verdict"] == "PASS"
-    assert result["next_phase"] == "p2"
-    assert engine.db.create_supervisor_run.call_args[0][0]["next_phase_id"] == 2
-
-
-def test_result_from_reasoning_rollback():
-    phase = Phase(
-        id=1,
-        code="p1",
-        name="P1",
-        description="d",
-        execution_type="sync",
-        rollback_target="p0",
-        instructions=[],
-        checks=[],
-        evidence=[],
-    )
-
-    class RollP:
-        code = "p0"
-        name = "P0"
-        id = 3
-
-    engine = MagicMock()
-    engine.task_key = "T-1"
-    engine.task = {"id": 1}
-    engine.phase_map = {"p0": RollP()}
-    engine.all_phases = [phase, RollP()]
-    engine.db.create_supervisor_run = MagicMock()
-
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setattr("project_workflow.wizard.evaluate.PhaseContractBuilder", lambda phases: MagicMock())
-        reasoning = ReasoningResult(
-            verdict="ROLLBACK",
-            analysis="rollback",
-            claims=[],
-            missing=[],
-            blockers=[],
-            confidence=0.4,
-            next_steps=[],
-            raw={},
-        )
-        result = _result_from_reasoning(reasoning, "report", phase, engine)
-    assert result["verdict"] == "ROLLBACK"
-    assert result["rollback_target"] == "p0"
 
 
 def test_wizard_store_save_with_legacy_uow():

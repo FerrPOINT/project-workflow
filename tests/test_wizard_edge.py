@@ -38,7 +38,8 @@ def test_existing_task_empty_current_phase(fresh_db):
 
 
 class TestWizardEvaluateEdge:
-    def test_evaluate_empty_report_with_no_checks_passes(self, fresh_db):
+    def test_evaluate_empty_report_with_no_checks_passes(self, fresh_db, wizard_llm):
+        wizard_llm("PASS")
         fresh_db.create_task({"task_key": "PROJ-42", "title": "x", "current_phase": "-1"})
         engine = _make_engine(fresh_db, "PROJ-42")
         result = engine.evaluate("")
@@ -51,13 +52,15 @@ class TestWizardEvaluateEdge:
         result = engine.evaluate("report")
         assert result["verdict"] == "BLOCKED"
 
-    def test_evaluate_no_history_for_first_phase(self, fresh_db):
+    def test_evaluate_no_history_for_first_phase(self, fresh_db, wizard_llm):
+        wizard_llm("PASS")
         fresh_db.create_task({"task_key": "PROJ-42", "title": "x", "current_phase": "-1"})
         engine = _make_engine(fresh_db, "PROJ-42")
         result = engine.evaluate("report")
         assert result["verdict"] in {"PASS", "SOFT_FAIL", "HARD_FAIL"}
 
-    def test_save_records_assessment(self, fresh_db):
+    def test_save_records_assessment(self, fresh_db, wizard_llm):
+        wizard_llm("SOFT_FAIL", missing=["evidence"])
         fresh_db.create_task({"task_key": "PROJ-42", "title": "x", "current_phase": "-1"})
         engine = _make_engine(fresh_db, "PROJ-42")
         engine.evaluate("report")

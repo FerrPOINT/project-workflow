@@ -1,153 +1,59 @@
 #!/usr/bin/env bash
-# Live CLI test script — executes WizardEngine end-to-end through real CLI.
-# Usage: bash scripts/test_cli_live.sh
-# Requires: project-workflow installed (pip install -e .)
+# Two real Wizard calls: complete and incomplete YAML workfiles.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-TASK_KEY="SMOKE-$(date +%s)"
-DB="${WORKFLOW_DB:-${WORKFLOW_DB_PATH:-$HOME/.project_workflow/workflow.db}}"
-API=0   # set to 1 for curl-based API tests (requires running UI server)
+CLI="${PROJECT_WORKFLOW_COMMAND:-project-workflow}"
+PYTHON="${PYTHON:-python3}"
+EXPECTED_MODEL="${OLLAMA_MODEL:?OLLAMA_MODEL is required}"
+: "${OLLAMA_API_KEY:?OLLAMA_API_KEY is required}"
 
-CLI="project-workflow"
-
-pass() { echo "✅ $1"; }
-fail() { echo "❌ $1"; exit 1; }
-
-step() {
-    local task="$1"
-    local report="${2:-}"
-    if [ -n "$report" ]; then
-        "$CLI" --json step --task "$task" --report "$report" || true
-    else
-        "$CLI" --json step --task "$task" || true
-    fi
+json_field() {
+  "$PYTHON" -c 'import json,sys; print(json.load(sys.stdin)[sys.argv[1]])' "$1"
 }
 
-step_json() {
-    local task="$1"
-    local report="$2"
-    "$CLI" --json step --task "$task" --report "$report"
+fill_report() {
+  local path="$1"
+  local mode="$2"
+  "$PYTHON" - "$path" "$mode" <<'PY'
+from pathlib import Path
+import sys
+import yaml
+
+path = Path(sys.argv[1])
+mode = sys.argv[2]
+data = yaml.safe_load(path.read_text(encoding="utf-8"))
+if mode == "complete":
+    for item in data["instructions"]:
+        item.update(done=True, result="live smoke completed")
+    for item in data["checks"]:
+        item.update(status="passed", evidence=["live-smoke://readback"])
+    for item in data["evidence"]:
+        item.update(status="passed", refs=["live-smoke://artifact"])
+    data["summary"] = "All current phase items completed for live smoke"
+else:
+    data["summary"] = "Current phase intentionally left incomplete"
+path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+PY
 }
 
-echo "═══════════════════════════════════════════════════════════════"
-echo "  Live Test — Task: $TASK_KEY"
-echo "═══════════════════════════════════════════════════════════════"
+run_smoke() {
+  local task="$1"
+  local mode="$2"
+  local expected="$3"
+  local current report_file result verdict model
+  current=$("$CLI" --json step --task "$task")
+  report_file=$(printf '%s' "$current" | json_field report_file)
+  fill_report "$report_file" "$mode"
+  result=$("$CLI" --json step --task "$task" --report "$report_file")
+  verdict=$(printf '%s' "$result" | json_field verdict)
+  model=$(printf '%s' "$result" | "$PYTHON" -c 'import json,sys; print(json.load(sys.stdin)["wizard"]["model"])')
+  [ "$model" = "$EXPECTED_MODEL" ] || { echo "unexpected model: $model" >&2; exit 1; }
+  printf '%s\n' "$expected" | grep -qw "$verdict" || { echo "unexpected verdict: $verdict" >&2; exit 1; }
+  "$CLI" --json history --task "$task" --n 20 >/dev/null
+  echo "$task: $verdict via $model"
+}
 
-# ═══════════════════════════════════════════════════════════════
-# 1. HAPPY PATH — 6 phases, all PASS
-# ═══════════════════════════════════════════════════════════════
-echo ""
-echo "▶ Scenario 1: Happy Path (6 phases)"
-
-step_json "$TASK_KEY" "smoke brief recorded and short workflow selected"
-step_json "$TASK_KEY" "parallel strategy selected and agent selection recorded"
-step_json "$TASK_KEY" "backend check prepared and подготовить backend check для короткого smoke workflow"
-step_json "$TASK_KEY" "ui check prepared and подготовить ui check для короткого smoke workflow"
-step_json "$TASK_KEY" "rollback path reviewed and history reviewed"
-step_json "$TASK_KEY" "cli smoke completed and зафиксировать что cli smoke completed и история доступна через history"
-
-FINAL_RESULT=$(step_json "$TASK_KEY" "cli smoke completed successfully")
-VERDICT=$(echo "$FINAL_RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['verdict'])" 2>/dev/null || echo "UNKNOWN")
-[ "$VERDICT" = "PASS" ] || fail "Expected PASS for final phase, got $VERDICT"
-
-STATUS=$(sqlite3 "$DB" "SELECT status FROM tasks WHERE task_key='$TASK_KEY';")
-[ "$STATUS" = "done" ] || fail "Expected task status 'done', got '$STATUS'"
-
-HISTORY_COUNT=$("$CLI" history --task "$TASK_KEY" --json | python3 -c "import sys,json; print(len(json.load(sys.stdin)['records']))")
-[ "$HISTORY_COUNT" -ge 6 ] || fail "Expected ≥6 history records, got $HISTORY_COUNT"
-
-pass "Happy Path: 6 phases → done, $HISTORY_COUNT history records"
-
-# ═══════════════════════════════════════════════════════════════
-# 2. PARTIAL — missing keywords
-# ═══════════════════════════════════════════════════════════════
-echo ""
-echo "▶ Scenario 2: PARTIAL verdict"
-
-TASK_PARTIAL="${TASK_KEY}-P"
-# First step with incomplete report
-RESULT=$(step_json "$TASK_PARTIAL" "Started but not finished" || true)
-VERDICT=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['verdict'])" 2>/dev/null || echo "UNKNOWN")
-[ "$VERDICT" = "PARTIAL" ] || fail "Expected PARTIAL, got $VERDICT"
-
-CURRENT=$(sqlite3 "$DB" "SELECT current_phase FROM tasks WHERE task_key='$TASK_PARTIAL';")
-[ "$CURRENT" = "smoke.intake" ] || fail "Expected current_phase to stay on smoke.intake, got '$CURRENT'"
-
-pass "PARTIAL: phase unchanged, missing items listed"
-
-# ═══════════════════════════════════════════════════════════════
-# 3. BLOCKED — explicit blocker, no rollback target
-# ═══════════════════════════════════════════════════════════════
-echo ""
-echo "▶ Scenario 3: BLOCKED verdict"
-
-TASK_BLOCKED="${TASK_KEY}-B"
-# Create task, then move to plan phase
-step_json "$TASK_BLOCKED" "Requirements gathered and intake complete"
-# Now on smoke.plan
-RESULT=$(step_json "$TASK_BLOCKED" "blocked by missing API spec, cannot proceed" || true)
-VERDICT=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['verdict'])" 2>/dev/null || echo "UNKNOWN")
-# Note: if smoke.plan has rollback_target, this may become ROLLBACK instead of BLOCKED
-[ "$VERDICT" = "BLOCKED" ] || [ "$VERDICT" = "ROLLBACK" ] || fail "Expected BLOCKED or ROLLBACK, got $VERDICT"
-
-STATUS=$(sqlite3 "$DB" "SELECT status FROM tasks WHERE task_key='$TASK_BLOCKED';")
-[ "$STATUS" = "blocked" ] || [ "$STATUS" = "active" ] || fail "Unexpected status: $STATUS"
-
-pass "BLOCKED: task status = $STATUS, verdict = $VERDICT"
-
-# ═══════════════════════════════════════════════════════════════
-# 4. ROLLBACK — rollback with target
-# ═══════════════════════════════════════════════════════════════
-echo ""
-echo "▶ Scenario 4: ROLLBACK verdict"
-
-TASK_ROLL="${TASK_KEY}-R"
-# Advance to review phase
-step_json "$TASK_ROLL" "Requirements gathered and intake complete"
-step_json "$TASK_ROLL" "Plan created with architecture"
-step_json "$TASK_ROLL" "Parallel agent A executed"
-step_json "$TASK_ROLL" "Parallel agent B executed"
-
-# Now on smoke.review which typically has rollback_target=smoke.plan
-RESULT=$(step_json "$TASK_ROLL" "Tests failed, must rollback to plan phase" || true)
-VERDICT=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['verdict'])" 2>/dev/null || echo "UNKNOWN")
-
-if [ "$VERDICT" = "ROLLBACK" ]; then
-    CURRENT=$(sqlite3 "$DB" "SELECT current_phase FROM tasks WHERE task_key='$TASK_ROLL';")
-    [ "$CURRENT" = "smoke.plan" ] || fail "Expected rollback to smoke.plan, got '$CURRENT'"
-    pass "ROLLBACK: rolled back to $CURRENT"
-else
-    echo "⚠️  ROLLBACK test: got $VERDICT (phase may not have rollback_target configured)"
-fi
-
-# ═══════════════════════════════════════════════════════════════
-# 5. COMMAND GUARD
-# ═══════════════════════════════════════════════════════════════
-echo ""
-echo "▶ Scenario 5: Command Guard"
-
-HELP=$("$CLI" --help)
-echo "$HELP" | grep -q "step" || fail "step command missing"
-echo "$HELP" | grep -q "history" || fail "history command missing"
-
-# Rejected options
-if "$CLI" step --task TEST-1 --skip 2>/dev/null; then
-    fail "Expected --skip to be rejected"
-fi
-echo "✅ --skip rejected"
-
-if "$CLI" step --task TEST-1 --repo /tmp 2>/dev/null; then
-    fail "Expected --repo to be rejected"
-fi
-echo "✅ --repo rejected"
-
-pass "Command Guard: only step + history available"
-
-# ═══════════════════════════════════════════════════════════════
-# Summary
-# ═══════════════════════════════════════════════════════════════
-echo ""
-echo "═══════════════════════════════════════════════════════════════"
-echo "  ✅ All live scenarios passed for task $TASK_KEY"
-echo "═══════════════════════════════════════════════════════════════"
+stamp=$(date +%s)
+run_smoke "SMOKE-$stamp" complete "PASS"
+run_smoke "SMOKE-$((stamp + 1))" incomplete "SOFT_FAIL BLOCKED"

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
 import pytest
 
 pytestmark = [pytest.mark.wizard]
@@ -61,7 +59,8 @@ class TestWizardEngineIntegration:
         assert engine.task["id"] == task_id
         assert str(engine.task["current_phase"]) == "-1"
 
-    def test_evaluate_partial_on_real_phase(self, wizard_db):
+    def test_evaluate_partial_on_real_phase(self, wizard_db, wizard_llm):
+        wizard_llm("SOFT_FAIL", missing=["evidence"])
         uow = SAUnitOfWork(wizard_db)
         project = uow.create_project({"code": "AAT", "name": "AAT", "key_prefixes": ["AAT"]})
         uow.create_task({"task_key": "AAT-PARTIAL", "title": "Partial", "project_id": project["id"]})
@@ -71,15 +70,15 @@ class TestWizardEngineIntegration:
         result = engine.evaluate("some progress but not everything")
         assert result["verdict"] in {"SOFT_FAIL", "HARD_FAIL", "BLOCKED"}
 
-    def test_evaluate_blocker_detected(self, wizard_db):
+    def test_evaluate_blocker_detected(self, wizard_db, wizard_llm):
+        wizard_llm("BLOCKED", blockers=["no api key"])
         uow = SAUnitOfWork(wizard_db)
         project = uow.create_project({"code": "AAT", "name": "AAT", "key_prefixes": ["AAT"]})
         uow.create_task({"task_key": "AAT-BLOCK", "title": "Block", "project_id": project["id"]})
         uow.close()
 
         engine = WizardEngine("AAT-BLOCK")
-        with patch("project_workflow.wizard.core.extract_blockers", return_value=["no api key"]):
-            result = engine.evaluate("blocked by missing api key")
+        result = engine.evaluate("blocked by missing api key")
         assert result["verdict"] == "BLOCKED"
 
     def test_format_result_pass(self):

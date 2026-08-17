@@ -111,9 +111,7 @@ def test_wizard_core_evaluate_report_no_task_blocked(monkeypatch):
     assert result["verdict"] == "BLOCKED"
 
 
-def test_wizard_core_persist_supervisor_run_no_task():
+def test_wizard_core_has_no_rule_based_persistence_path():
     from project_workflow.wizard.core import WizardEngine
 
-    engine = WizardEngine("TASK-1", repo="/tmp")
-    engine.task = None
-    engine._persist_supervisor_run(MagicMock(), None, None)
+    assert not hasattr(WizardEngine, "_persist_supervisor_run")

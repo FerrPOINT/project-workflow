@@ -6,13 +6,14 @@
 (см. test_ui.py::test_only_two_commands_allowed).
 
 Разрешённые команды:
-- step    --task TASK-KEY [--report TEXT]
+- step    --task TASK-KEY [--report /absolute/path/report.yaml]
 - history --task TASK-KEY [--n N]
 """
 
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 from typing import Any
 
 import click
@@ -20,6 +21,7 @@ import click
 from ... import wizard
 from ...infrastructure.db.uow import SAUnitOfWork
 from ...wizard import format_result
+from ...wizard.workfile import WorkfileError, create_workfile, load_workfile
 from .core import WARN, _require_valid_key, cli, console, out_json
 
 # ── Guard: новые команды запрещены ──────────────────────────────────────
@@ -34,18 +36,23 @@ from .core import WARN, _require_valid_key, cli, console, out_json
 
 @cli.command()
 @click.option("--task", required=True, help="Task key (e.g. TASK-42)")
-@click.option("--report", default=None, help="Отчёт исполнителя CLI (оценить и перейти)")
+@click.option(
+    "--report",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="YAML-файл отчёта по текущей фазе",
+)
 @click.pass_context
 def step_cmd(
     ctx: click.Context,
     task: str,
-    report: str | None,
+    report: Path | None,
 ) -> None:
     """🚶 Step — движение по workflow: показать текущую фазу или отчитаться и перейти.
 
     Usage:
       project-workflow step --task TASK-KEY                → текущие инструкции
-      project-workflow step --task TASK-KEY --report "..."  → оценить отчёт исполнителя CLI и перейти
+      project-workflow step --task TASK-KEY --report /path/report.yaml  → оценить отчёт и перейти
     """
     uow = SAUnitOfWork()
     task_key = _require_valid_key(task, uow)
@@ -55,7 +62,11 @@ def step_cmd(
 
     # --report : evaluate report
     if report:
-        result = engine.evaluate(report)
+        try:
+            report_text = load_workfile(engine, report)
+        except WorkfileError as exc:
+            raise click.ClickException(str(exc)) from exc
+        result = engine.evaluate(report_text)
         if jmode:
             out_json(result)
             return
@@ -78,10 +89,21 @@ def step_cmd(
                 }
             )
             return
-        out_json({"ok": True, "task_key": task_key, "phase": engine.current_phase, "prompt": prompt})
+        workfile = create_workfile(engine)
+        out_json(
+            {
+                "ok": True,
+                "task_key": task_key,
+                "phase": engine.current_phase,
+                "prompt": prompt,
+                "report_file": str(workfile),
+            }
+        )
         return
+    workfile = create_workfile(engine)
     instructions = engine.format_current_phase_instructions()
     console.print(instructions)
+    console.print(f"\n[bold]YAML report:[/bold] {workfile}")
     return
 
 
@@ -131,6 +153,11 @@ def history_cmd(ctx: click.Context, task: str, n: int | None) -> None:
                     {
                         "phase_code": r.get("phase_code"),
                         "verdict": r.get("verdict"),
+                        "report": r.get("report"),
+                        "covered": r.get("covered") or [],
+                        "missing": r.get("missing") or [],
+                        "blockers": r.get("blockers") or [],
+                        "feedback": (r.get("response") or {}).get("message"),
                         "next_phase": r.get("next_phase_code"),
                         "rollback_phase": r.get("rollback_phase_code"),
                         "created_at": r.get("created_at"),
@@ -153,3 +180,6 @@ def history_cmd(ctx: click.Context, task: str, n: int | None) -> None:
         rollback = r.get("rollback_phase_code", "-")
         created_at = r.get("created_at", "-")
         console.print(f"{verdict_icon} [{created_at}] Phase {phase} → {next_phase} (rollback: {rollback})")
+        feedback = (r.get("response") or {}).get("message")
+        if feedback:
+            console.print(f"   Wizard: {feedback}")

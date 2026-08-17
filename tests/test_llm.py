@@ -6,7 +6,6 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
-import requests
 
 pytestmark = [pytest.mark.unit]
 
@@ -115,6 +114,23 @@ class TestOllamaClient:
             assert payload["messages"][0]["role"] == "system"
             assert payload["messages"][1]["role"] == "user"
 
+    def test_native_cloud_sends_bearer_token(self):
+        client = OllamaClient(
+            model="kimi-k2.7-code:cloud",
+            base_url="https://ollama.com",
+            api_key="test-key",
+        )
+        with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
+            mock_post.return_value = MagicMock(
+                status_code=200,
+                json=lambda: {"message": {"content": '{"verdict":"PASS"}'}},
+                raise_for_status=lambda: None,
+            )
+            client.chat("sys", "usr")
+        assert mock_post.call_args.kwargs["headers"] == {
+            "Authorization": "Bearer test-key"
+        }
+
     def test_chat_empty_content_raises(self):
         client = OllamaClient()
         with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
@@ -185,14 +201,14 @@ class TestResponseParser:
         assert v.missing == ["Item 2"]
         assert v.blockers == []
         assert v.message == "All good"
-        assert v.next_phase == "2"
-        assert v.next_phase_name == "Next"
+        assert v.next_phase is None
+        assert v.next_phase_name is None
         assert v.confidence == 0.92
 
-    def test_parse_invalid_verdict_defaults_to_partial(self):
+    def test_parse_invalid_verdict_fails_closed(self):
         raw = {"verdict": "UNKNOWN", "covered": [], "missing": [], "blockers": []}
         v = ResponseParser.parse(raw)
-        assert v.verdict == "PARTIAL"
+        assert v.verdict == "BLOCKED"
 
     def test_parse_lowercase_verdict_normalised(self):
         raw = {"verdict": "pass", "covered": [], "missing": [], "blockers": []}
@@ -202,7 +218,7 @@ class TestResponseParser:
     def test_parse_missing_fields_get_defaults(self):
         raw = {}
         v = ResponseParser.parse(raw)
-        assert v.verdict == "PARTIAL"
+        assert v.verdict == "BLOCKED"
         assert v.covered == []
         assert v.missing == []
         assert v.blockers == []
@@ -254,7 +270,6 @@ class TestWizardEngineEvaluateLLM:
 
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
-        monkeypatch.setattr("project_workflow.wizard.SMART_EVALUATE", True)
         with patch("project_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             from project_workflow.wizard import WizardEngine
@@ -296,12 +311,6 @@ class TestWizardEngineEvaluateLLM:
         assert result["verdict"] == "BLOCKED"
         assert result["blockers"] == ["No access"]
 
-    def test_evaluate_llm_fallback_on_ollama_failure(self, engine):
-        """If evaluate_llm fails, evaluate() must fall back to rule-based."""
-        with patch.object(engine, "evaluate_llm", side_effect=requests.exceptions.ConnectionError("Ollama down")):
-            result = engine.evaluate("")
-        assert result["verdict"] in {"SOFT_FAIL", "HARD_FAIL"}
-
     def test_evaluate_llm_uses_previously_covered(self, engine):
         """LLM prompt includes previously covered items."""
         llm_response = {
@@ -321,29 +330,6 @@ class TestWizardEngineEvaluateLLM:
             # Here we just verify the prompt was built and sent.
             assert "Report" in kwargs["user"]
             assert "TASK-LLM-1" in kwargs["user"]
-
-
-class TestWizardEngineEvaluateLLMWithRule:
-    """Test that rule-based still works when SMART_EVALUATE is off."""
-
-    @pytest.fixture
-    def engine(self, tmp_path, monkeypatch):
-        test_db = tmp_path / "workflow.db"
-        import project_workflow.infrastructure.db as db_module
-
-        monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
-        monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
-            from project_workflow.wizard import WizardEngine
-
-            engine = WizardEngine("TASK-RULE-1", repo=str(tmp_path))
-        return engine
-
-    def test_rule_based_evaluate_without_smart(self, engine, monkeypatch):
-        monkeypatch.setattr("project_workflow.wizard.SMART_EVALUATE", False)
-        result = engine.evaluate("")
-        assert result["verdict"] in {"SOFT_FAIL", "HARD_FAIL"}
 
 
 class TestOllamaResponseParserEdgeCases:
@@ -415,7 +401,6 @@ class TestWizardEngineLLMIntegrationDB:
 
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
-        monkeypatch.setattr("project_workflow.wizard.SMART_EVALUATE", True)
         with patch("project_workflow.wizard.convo") as mock_convo:
             mock_convo.get_last_phase.return_value = None
             from project_workflow.wizard import WizardEngine
@@ -462,7 +447,8 @@ class TestWizardEngineLLMIntegrationDB:
             engine.evaluate("Report")
 
         task = engine.db.get_task(engine.task["id"])
-        assert task["current_phase"] == "2"
+        # The LLM-supplied "2" is ignored; the configured workflow owns order.
+        assert task["current_phase"] == "0.0a"
 
     def test_task_blocked_after_llm_blocked(self, engine):
         llm_response = {

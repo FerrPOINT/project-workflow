@@ -17,7 +17,7 @@ class TestPhaseHelpers:
     def test_get_next_phase_intake(self):
         # "-1" -> first real phase
         nxt = get_next_phase("-1")
-        assert isinstance(nxt, (str, type(None)))
+        assert isinstance(nxt, str | type(None))
 
     def test_get_next_phase_end(self):
         # last phase should return None

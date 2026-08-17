@@ -97,6 +97,7 @@ class WizardContextBuilder:
     def _build_recent_verdicts(self, limit: int = 5) -> list[dict[str, Any]]:
         verdicts: list[dict] = []
         for row in self.uow.get_supervisor_runs(task_id=self.task["id"], limit=limit):
+            response = row.get("response") if isinstance(row.get("response"), dict) else {}
             verdicts.append(
                 {
                     "phase_code": row.get("phase_code"),
@@ -105,6 +106,7 @@ class WizardContextBuilder:
                     "missing": row.get("missing") or [],
                     "next_phase": row.get("next_phase_code"),
                     "rollback_target": row.get("rollback_phase_code"),
+                    "feedback": response.get("message"),
                     "created_at": row.get("created_at"),
                 }
             )
@@ -122,9 +124,16 @@ class WizardContextBuilder:
             logger.warning("Failed to load conversation messages: %s", exc)
             messages = []
 
-        current_contract = (
-            self._contract_builder.build(phase) if phase else self._contract_builder.build_missing(self.current_phase)
-        )
+        if phase and phase.execution_type == "parallel":
+            current_contract = self._contract_builder.build_parallel(
+                self._contract_builder.get_parallel_group(phase)
+            )
+        else:
+            current_contract = (
+                self._contract_builder.build(phase)
+                if phase
+                else self._contract_builder.build_missing(self.current_phase)
+            )
 
         return {
             "task_key": self.task_key,
@@ -158,7 +167,7 @@ class WizardContextBuilder:
                 "и отправляет report по текущей фазе. Supervisor не предполагает конкретную модель, "
                 "Ollama или другого провайдера."
             ),
-            "entrypoint": "project-workflow step --task TASK-KEY [--report TEXT]",
+            "entrypoint": "project-workflow step --task TASK-KEY [--report /path/report.yaml]",
         }
 
     @staticmethod

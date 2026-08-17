@@ -99,7 +99,7 @@ def test_smoke_phase_prompt_surfaces_parallel_agent_and_rollback_metadata(tmp_pa
     assert "Делегировано агенту: critic" in review_prompt
 
 
-def test_parallel_group_pass_advances_all_phases(tmp_path: Path, monkeypatch):
+def test_parallel_group_pass_advances_all_phases(tmp_path: Path, monkeypatch, wizard_llm):
     """Full report on parallel group marks all phases done and advances past group."""
     workflow_db = _patch_runtime(monkeypatch, tmp_path)
     uow = SAUnitOfWork(str(workflow_db))
@@ -129,6 +129,7 @@ def test_parallel_group_pass_advances_all_phases(tmp_path: Path, monkeypatch):
         "Примеры структурных операций с моделью приложены. "
         "Скриншоты и логи демонстрации UI приложены."
     )
+    wizard_llm("PASS")
     result = engine.evaluate(report)
 
     assert result["verdict"] == "PASS"
@@ -146,7 +147,7 @@ def test_parallel_group_pass_advances_all_phases(tmp_path: Path, monkeypatch):
     assert task["current_phase"] == "smoke.review"
 
 
-def test_parallel_group_partial_stays_on_group(tmp_path: Path, monkeypatch):
+def test_parallel_group_partial_stays_on_group(tmp_path: Path, monkeypatch, wizard_llm):
     """Partial report does NOT advance or mark any parallel phase done."""
     workflow_db = _patch_runtime(monkeypatch, tmp_path)
     uow = SAUnitOfWork(str(workflow_db))
@@ -165,6 +166,7 @@ def test_parallel_group_partial_stays_on_group(tmp_path: Path, monkeypatch):
         "Round-trip unit-тесты проходят зелёными. "
         "UI не готов: дерево секций и структурные операции пока не реализованы."
     )
+    wizard_llm("SOFT_FAIL", missing=["UI branch"])
     result = engine.evaluate(report)
 
     assert result["verdict"] == "SOFT_FAIL"
@@ -182,7 +184,7 @@ def test_parallel_group_partial_stays_on_group(tmp_path: Path, monkeypatch):
     assert task["current_phase"] == "smoke.parallel-a"
 
 
-def test_parallel_group_blocked_stays_on_group(tmp_path: Path, monkeypatch):
+def test_parallel_group_blocked_stays_on_group(tmp_path: Path, monkeypatch, wizard_llm):
     """Blocked report does NOT advance or mark any parallel phase done."""
     workflow_db = _patch_runtime(monkeypatch, tmp_path)
     uow = SAUnitOfWork(str(workflow_db))
@@ -195,6 +197,7 @@ def test_parallel_group_blocked_stays_on_group(tmp_path: Path, monkeypatch):
     engine.current_phase = "smoke.parallel-a"
 
     report = "Blocker: dependency mismatch. Cannot proceed."
+    wizard_llm("BLOCKED", blockers=["dependency mismatch"])
     result = engine.evaluate(report)
 
     assert result["verdict"] == "BLOCKED"

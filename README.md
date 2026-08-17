@@ -38,7 +38,7 @@
 ## Позиционирование
 
 Пофазовый движок управления задачами.
-Агент отчитывается через CLI, встроенный supervisor оценивает отчёт и выдаёт вердикт: **PASS**, **SOFT_FAIL**, **HARD_FAIL**, **ROLLBACK**, **BLOCKED** или **DELEGATE**.
+Агент получает YAML-чек-лист текущей фазы через CLI, заполняет его, а встроенный Wizard обязательно проверяет отчёт через настроенную LLM и выдаёт вердикт: **PASS**, **SOFT_FAIL**, **ROLLBACK** или **BLOCKED**.
 Всё управление шаблонами workflow, фазами, проектами, агентами и задачами ведётся через Web UI.
 
 CLI остаётся минимальным: ровно две команды — `step` и `history`.
@@ -53,7 +53,8 @@ SQLite остаётся только для тестов (временные ф�
 | Feature | Описание |
 |---------|----------|
 | Пофазовый workflow | Каждая задача строго следует шаблону фаз с инструкциями, чек-листами и артефактами. |
-| Встроенный supervisor | Автоматическая оценка отчётов и решение о переходе на следующую фазу. |
+| Встроенный Wizard | Обязательная fail-closed LLM-оценка отчёта; следующую фазу выбирает workflow. |
+| YAML-чек-лист | Один сохраняемый рабочий файл на попытку фазы вне Git. |
 | Web UI | Управление шаблонами, фазами, проектами, задачами и агентами через браузер. |
 | CLI freeze | Только `step` и `history`; весь CRUD — через UI. |
 | PostgreSQL | Единый production-стек: systemd UI и CLI используют тот же Postgres через `DATABASE_URL`. |
@@ -69,7 +70,7 @@ SQLite остаётся только для тестов (временные ф�
 | ORM & migrations | SQLAlchemy 2 + Alembic | модели, репозитории, UoW, миграции |
 | API | FastAPI + Pydantic | UI и JSON API |
 | UI | Jinja2 + minimal JS | server-side HTML, без frontend-фреймворков |
-| LLM / Supervisor | OpenAI-compatible API, Ollama, OpenRouter | wizard reasoning и legacy report evaluation |
+| LLM / Wizard | Ollama-compatible API | обязательная семантическая проверка отчёта |
 | CLI | Click + Rich | `step` / `history` |
 | Config | Pydantic Settings | `.env`, переменные окружения |
 
@@ -77,18 +78,28 @@ SQLite остаётся только для тестов (временные ф�
 ## 🖥️ CLI
 
 ```bash
-# Выполнить текущую фазу задачи и получить вердикт supervisor
-project-workflow step --task TASK-123 --report "Сделал X, проверил Y"
+# Получить или повторно открыть YAML-чек-лист текущей попытки
+project-workflow step --task TASK-123
 
-# История фаз и supervisor-решений
+# После выполнения одной фазы заполнить этот же файл и отправить Wizard
+project-workflow step --task TASK-123 \
+  --report /var/lib/project-workflow/tasks/TASK-123/F01-001.yaml
+
+# История фаз, отчётов и решений Wizard
 project-workflow history --task TASK-123 --n 10
 ```
 
-CLI ожидает переменную окружения `DATABASE_URL`:
+CLI ожидает `DATABASE_URL`. Рабочая папка и единственная модель Wizard задаются серверной конфигурацией:
 
 ```bash
 export DATABASE_URL=postgresql+psycopg://project_workflow:project_workflow@localhost/project_workflow
+export PROJECT_WORKFLOW_WORK_ROOT=/var/lib/project-workflow/tasks
+export OLLAMA_BASE_URL=https://ollama.com
+export OLLAMA_MODEL=kimi-k2.7-code:cloud
+export OLLAMA_API_KEY=...
 ```
+
+Если LLM недоступна, истёк timeout или ответ не соответствует контракту, Wizard возвращает `BLOCKED` и workflow не переходит дальше. Строковый режим `--report "..."` не поддерживается: принимается только путь к текущему YAML-файлу.
 
 <a name="ui"></a>
 ## 🌐 Web UI
@@ -145,7 +156,7 @@ flowchart TD
 |---|---|---|
 | Lint | `ruff check .` | **green** |
 | Type check | `mypy project_workflow` | **green** |
-| Tests | `pytest -q --timeout=60` | **949 passed, 6 deselected** |
+| Tests | `pytest -q --timeout=60` | **green (см. актуальный CI)** |
 | Coverage | combined slices (`-p no:cov`) | **~97%** |
 | Systemd UI health | `curl http://localhost:8811/api/tasks` | **200** |
 

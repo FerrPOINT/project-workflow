@@ -137,11 +137,12 @@ def test_supervisor_context_contains_full_path_and_contract(tmp_path: Path, monk
     assert "Недавние сообщения:" in prompt
 
 
-def test_supervisor_evaluate_pass_updates_db_state_and_persists_run(tmp_path: Path, monkeypatch) -> None:
+def test_supervisor_evaluate_pass_updates_db_state_and_persists_run(tmp_path: Path, monkeypatch, wizard_llm) -> None:
     uow = _patch_runtime(monkeypatch, tmp_path)
     _bootstrap_supervisor_workflow(uow)
 
     engine = WizardEngine("SUP-2", repo="/repo", uow=uow)
+    wizard_llm("PASS", covered=["Plan is documented", "Plan file attached"])
     result = engine.evaluate(
         "summary: Created implementation plan. completed: Plan is documented. "
         "evidence: Plan file attached. blockers: none. next_step: move to review."
@@ -165,7 +166,7 @@ def test_supervisor_evaluate_pass_updates_db_state_and_persists_run(tmp_path: Pa
     assert runs[0].context_snapshot["current_contract"]["phase_code"] == "sup.intake"
 
 
-def test_supervisor_rolls_back_gate_phase_when_report_is_blocked(tmp_path: Path, monkeypatch) -> None:
+def test_supervisor_rolls_back_gate_phase_when_report_is_blocked(tmp_path: Path, monkeypatch, wizard_llm) -> None:
     uow = _patch_runtime(monkeypatch, tmp_path)
     _bootstrap_supervisor_workflow(uow)
 
@@ -187,6 +188,7 @@ def test_supervisor_rolls_back_gate_phase_when_report_is_blocked(tmp_path: Path,
     uow.tasks.add_history(task_id, review_id, "pending")
 
     engine = WizardEngine("SUP-3", repo="/repo", uow=uow, create_if_missing=False)
+    wizard_llm("ROLLBACK", blockers=["dependency mismatch"])
     result = engine.evaluate("Blocked by dependency mismatch. blocker remains and the gate cannot pass.")
 
     assert result["verdict"] == "ROLLBACK"

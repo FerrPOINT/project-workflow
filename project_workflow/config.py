@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     GITLAB_BASE_URL: str = "https://gt.wmtgroup.ru"
 
     WORKFLOW_DIR: str = os.getenv("WORKFLOW_DIR", str(Path.home() / ".project-workflow"))
+    PROJECT_WORKFLOW_WORK_ROOT: str = os.getenv(
+        "PROJECT_WORKFLOW_WORK_ROOT",
+        str(Path.home() / ".project-workflow" / "tasks"),
+    )
 
     @property
     def SETTINGS_PATH(self) -> str:
@@ -70,9 +74,6 @@ def get_settings() -> Settings:
 # Seed data paths (moved from schema.py)
 SEED_PATH = _pkg_dir / "references" / "seed.json"
 SMOKE_SEED_PATH = _pkg_dir / "references" / "smoke_seed.json"
-
-SMART_EVALUATE: bool = os.getenv("SMART_EVALUATE", "").lower() in ("1", "true", "yes", "on")
-SMART_REASONING: bool = os.getenv("SMART_REASONING", "").lower() in ("1", "true", "yes", "on")
 
 PHASE_ORDER = [
     "-1",  # Task Intake

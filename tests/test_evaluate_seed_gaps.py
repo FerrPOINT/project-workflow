@@ -76,7 +76,7 @@ class TestEvaluateGaps:
         ph = _phase()
         result = evaluate_llm_report("bad", ph, engine)
         assert result["verdict"] == "BLOCKED"
-        assert result["blockers"] == ["LLM identified blocker"]
+        assert result["blockers"] == ["Wizard identified a blocker"]
 
     @patch("project_workflow.wizard.evaluate.OllamaClient")
     @patch("project_workflow.wizard.evaluate.ResponseParser")
@@ -93,13 +93,16 @@ class TestEvaluateGaps:
     @patch("project_workflow.wizard.evaluate.OllamaClient")
     @patch("project_workflow.wizard.evaluate.ResponseParser")
     def test_evaluate_pass_next_phase_int(self, mock_parser, mock_client):
-        mock_parser.parse.return_value = MockLlmResponse(verdict="PASS", next_phase="2")
+        mock_parser.parse.return_value = MockLlmResponse(verdict="PASS", next_phase="invented")
         mock_client.return_value.chat.return_value = "{}"
         engine = self._engine()
         ph = _phase()
         next_ph = MagicMock(id=5)
         next_ph.code = "2"
+        next_ph.name = "Next"
+        next_ph.execution_type = "sync"
         engine.phase_map = {"2": next_ph}
+        engine.all_phases = [ph, next_ph]
         result = evaluate_llm_report("ok", ph, engine)
         assert result["next_phase"] == "2"
 

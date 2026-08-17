@@ -4,6 +4,7 @@ Uses click.testing.CliRunner with heavy mocking to avoid FS/DB side effects.
 """
 
 import json
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -32,8 +33,9 @@ def _validator() -> TaskKeyValidator:
 class TestStepCommand:
     """Test `project-workflow step --task TASK-1`"""
 
+    @patch("project_workflow.interfaces.cli.ui.create_workfile", return_value=Path("report.yaml"))
     @patch("project_workflow.wizard.WizardEngine")
-    def test_step_auto_init_creates_task(self, mock_engine_cls):
+    def test_step_auto_init_creates_task(self, mock_engine_cls, _mock_create):
         """WizardEngine auto-creates task in DB if missing."""
         mock_engine = mock_engine_cls.return_value
         mock_engine.current_phase = "0"
@@ -48,8 +50,9 @@ class TestStepCommand:
         assert first_call[0] == ("TASK-1",)
         mock_engine.format_current_phase_instructions.assert_called_once()
 
+    @patch("project_workflow.interfaces.cli.ui.create_workfile", return_value=Path("report.yaml"))
     @patch("project_workflow.wizard.WizardEngine")
-    def test_step_shows_phase(self, mock_engine_cls):
+    def test_step_shows_phase(self, mock_engine_cls, _mock_create):
         mock_engine = mock_engine_cls.return_value
         mock_engine.current_phase = "0.00"
         mock_engine.format_current_phase_instructions.return_value = "phase instructions"
@@ -60,8 +63,9 @@ class TestStepCommand:
         assert "phase instructions" in result.output
         mock_engine.format_current_phase_instructions.assert_called_once_with()
 
+    @patch("project_workflow.interfaces.cli.ui.load_workfile", return_value="Done")
     @patch("project_workflow.wizard.WizardEngine")
-    def test_step_report_pass(self, mock_engine_cls):
+    def test_step_report_pass(self, mock_engine_cls, _mock_load, tmp_path):
         mock_engine = mock_engine_cls.return_value
         mock_engine.evaluate.return_value = {
             "verdict": "PASS",
@@ -82,8 +86,10 @@ class TestStepCommand:
             },
         }
         runner = CliRunner()
+        report = tmp_path / "report.yaml"
+        report.write_text("task: TASK-1", encoding="utf-8")
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
-            result = runner.invoke(cli, ["step", "--task", "TASK-1", "--report", "Done"])
+            result = runner.invoke(cli, ["step", "--task", "TASK-1", "--report", str(report)])
         assert result.exit_code == 0
         mock_engine.evaluate.assert_called_once_with("Done")
         assert "Инструкции:" in result.output
@@ -93,8 +99,9 @@ class TestStepCommand:
         assert "Доказательства:" in result.output
         assert "e2" in result.output
 
+    @patch("project_workflow.interfaces.cli.ui.load_workfile", return_value="Bad")
     @patch("project_workflow.wizard.WizardEngine")
-    def test_step_report_fail_exits_one(self, mock_engine_cls):
+    def test_step_report_fail_exits_one(self, mock_engine_cls, _mock_load, tmp_path):
         mock_engine = mock_engine_cls.return_value
         mock_engine.evaluate.return_value = {
             "verdict": "BLOCKED",
@@ -111,14 +118,17 @@ class TestStepCommand:
             "description": "",
         }
         runner = CliRunner()
+        report = tmp_path / "report.yaml"
+        report.write_text("task: TASK-1", encoding="utf-8")
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
-            result = runner.invoke(cli, ["step", "--task", "TASK-1", "--report", "Bad"])
+            result = runner.invoke(cli, ["step", "--task", "TASK-1", "--report", str(report)])
         assert result.exit_code == 1
         assert "Чекапы:" in result.output
         assert "m1" in result.output
 
+    @patch("project_workflow.interfaces.cli.ui.load_workfile", return_value="Done")
     @patch("project_workflow.wizard.WizardEngine")
-    def test_step_report_json_mode(self, mock_engine_cls):
+    def test_step_report_json_mode(self, mock_engine_cls, _mock_load, tmp_path):
         mock_engine = mock_engine_cls.return_value
         mock_engine.evaluate.return_value = {
             "verdict": "PASS",
@@ -130,14 +140,17 @@ class TestStepCommand:
             "message": "ok",
         }
         runner = CliRunner()
+        report = tmp_path / "report.yaml"
+        report.write_text("task: TASK-1", encoding="utf-8")
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
-            result = runner.invoke(cli, ["--json", "step", "--task", "TASK-1", "--report", "Done"])
+            result = runner.invoke(cli, ["--json", "step", "--task", "TASK-1", "--report", str(report)])
         assert result.exit_code == 0
         parsed = json.loads(result.output)
         assert parsed["verdict"] == "PASS"
 
+    @patch("project_workflow.interfaces.cli.ui.create_workfile", return_value=Path("report.yaml"))
     @patch("project_workflow.wizard.WizardEngine")
-    def test_step_prompt_json_mode(self, mock_engine_cls):
+    def test_step_prompt_json_mode(self, mock_engine_cls, _mock_create):
         mock_engine = mock_engine_cls.return_value
         mock_engine.current_phase = "0.00"
         mock_engine.get_phase_prompt.return_value = "next steps"
@@ -150,6 +163,7 @@ class TestStepCommand:
         assert parsed["task_key"] == "TASK-1"
         assert parsed["phase"] == "0.00"
         assert parsed["prompt"] == "next steps"
+        assert parsed["report_file"] == "report.yaml"
 
     def test_step_skip_is_rejected(self):
         runner = CliRunner()
@@ -237,7 +251,7 @@ class TestCliGuard:
         result = runner.invoke(cli, ["step", "--help"])
         assert result.exit_code == 0
         assert "--task" in result.output
-        assert "Отчёт исполнителя CLI" in result.output
+        assert "YAML-файл отчёта" in result.output
         assert "\n  --repo TEXT" not in result.output
         assert "\n  --skip" not in result.output
 

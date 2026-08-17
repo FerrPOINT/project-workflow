@@ -284,9 +284,7 @@ class TestWizardCoreFinalGaps:
         phase = MagicMock()
         engine._record_transition(phase, "pass", None, None)
 
-    def test_evaluate_smart_exception(self, monkeypatch):
-        import project_workflow.wizard as wizard_pkg
-
+    def test_evaluate_always_calls_llm(self):
         engine = core_mod.WizardEngine("AAT-1", repo="/tmp")
         engine.task = {"id": 1, "project_id": 1, "current_phase": "1"}
         uow = MagicMock()
@@ -303,10 +301,10 @@ class TestWizardCoreFinalGaps:
         phase.evidence = []
         engine.all_phases = [phase]
         engine.current_phase = "1"
-        monkeypatch.setattr(wizard_pkg, "SMART_EVALUATE", True)
-        with patch.object(engine, "evaluate_llm", side_effect=Exception("boom")) as mock_llm:
-            engine.evaluate(report="ok")
+        with patch.object(engine, "evaluate_llm", return_value={"verdict": "BLOCKED"}) as mock_llm:
+            result = engine.evaluate(report="ok")
         mock_llm.assert_called_once()
+        assert result["verdict"] == "BLOCKED"
 
     def test_format_result_pass_parallel(self):
         text = core_mod.format_result(

@@ -28,19 +28,8 @@ OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "")
 
 
 def _load_api_key() -> str:
-    """Read OLLAMA_API_KEY from env or ~/.hermes/.env."""
-    if OLLAMA_API_KEY:
-        return OLLAMA_API_KEY
-    env_path = os.path.expanduser("~/.hermes/.env")
-    if os.path.exists(env_path):
-        try:
-            with open(env_path) as f:
-                for line in f:
-                    if line.startswith("OLLAMA_API_KEY="):
-                        return line.split("=", 1)[1].strip()
-        except (OSError, ValueError) as exc:
-            logger.warning("Failed to read OLLAMA_API_KEY from env file: %s", exc)
-    return ""
+    """Read the controller-owned Ollama credential from the process environment."""
+    return OLLAMA_API_KEY
 
 
 @dataclass(frozen=True)
@@ -75,11 +64,11 @@ class OllamaClient:
     def is_available(self) -> bool:
         """Quick health-check."""
         try:
+            headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
             if self.is_cloud:
-                headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
                 r = requests.get(f"{self.base_url}/models", headers=headers, timeout=5)
             else:
-                r = requests.get(f"{self.base_url}/api/tags", timeout=5)
+                r = requests.get(f"{self.base_url}/api/tags", headers=headers, timeout=5)
             return r.status_code == 200
         except (requests.RequestException, OSError) as exc:
             logger.warning("LLM health-check failed: %s", exc)
@@ -99,7 +88,7 @@ class OllamaClient:
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
-        payload = {
+        payload: dict[str, Any] = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": system},
@@ -126,8 +115,9 @@ class OllamaClient:
         return self._extract_json(content)
 
     def _chat_local(self, system: str, user: str, temperature: float) -> dict[str, Any]:
-        """Native Ollama /api/chat endpoint."""
-        payload = {
+        """Native Ollama /api/chat endpoint, local or remote."""
+        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+        payload: dict[str, Any] = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": system},
@@ -142,6 +132,7 @@ class OllamaClient:
         }
         resp = requests.post(
             f"{self.base_url}/api/chat",
+            headers=headers,
             json=payload,
             timeout=self.timeout,
         )
@@ -171,7 +162,7 @@ class OllamaClient:
                     return json.loads(match.group(1))
                 except json.JSONDecodeError:
                     pass
-            # Fallback: wrap raw text as a BLOCKED response so caller can proceed
+            # Invalid model output is a fail-closed Wizard decision.
             return {
                 "verdict": "BLOCKED",
                 "covered": [],
@@ -198,20 +189,18 @@ class PromptBuilder:
         "4. Identify real BLOCKERS with ROOT CAUSE — explain WHY it prevents progress. "
         "Words like 'ошибка'/'error'/'bug' alone are NOT blockers without root cause.\n"
         "5. Verify the worker did NOT break existing functionality, remove working code, or leave orphaned artifacts.\n"
-        "6. verdict = PASS    — all items done, no blockers, no regressions → advance.\n"
-        "7. verdict = PARTIAL — some items done → stay on phase.\n"
+        "6. verdict = PASS      — all items done, no blockers, no regressions → advance.\n"
+        "7. verdict = SOFT_FAIL — some items done → stay on phase.\n"
         "8. verdict = BLOCKED — real blocker → stay on phase.\n"
         "9. verdict = ROLLBACK — worker explicitly cannot/will not do this.\n"
-        "10. verdict = DELEGATE — worker delegates to another agent.\n\n"
+        "The Wizard never delegates work and never chooses the next phase.\n\n"
         "Output STRICT JSON with these keys:\n"
         "{\n"
-        '  "verdict": "PASS" | "PARTIAL" | "BLOCKED" | "ROLLBACK" | "DELEGATE",\n'
+        '  "verdict": "PASS" | "SOFT_FAIL" | "BLOCKED" | "ROLLBACK",\n'
         '  "covered": ["item description"],\n'
         '  "missing": ["item description"],\n'
         '  "blockers": ["specific blocker description"],\n'
         '  "message": "Human-readable summary in Russian",\n'
-        '  "next_phase": "phase_code or null",\n'
-        '  "next_phase_name": "phase_name or null",\n'
         '  "confidence": 0.0-1.0\n'
         "}\n"
     )
@@ -270,20 +259,20 @@ class PromptBuilder:
 class ResponseParser:
     """Validate + normalise raw LLM JSON into LlmVerdict."""
 
-    VALID_VERDICTS = {"PASS", "PARTIAL", "BLOCKED", "ROLLBACK", "DELEGATE"}
+    VALID_VERDICTS = {"PASS", "SOFT_FAIL", "BLOCKED", "ROLLBACK"}
 
     @classmethod
     def parse(cls, raw: dict[str, Any]) -> LlmVerdict:
         verdict = str(raw.get("verdict", "")).upper().strip()
-        if verdict not in cls.VALID_VERDICTS:
-            verdict = "PARTIAL"
+        if verdict == "PARTIAL":
+            verdict = "SOFT_FAIL"
+        elif verdict not in cls.VALID_VERDICTS:
+            verdict = "BLOCKED"
 
         covered = cls._to_str_list(raw.get("covered"))
         missing = cls._to_str_list(raw.get("missing"))
         blockers = cls._to_str_list(raw.get("blockers"))
         message = str(raw.get("message", "")).strip()
-        next_phase = raw.get("next_phase")
-        next_phase_name = raw.get("next_phase_name")
         confidence = raw.get("confidence", 0.5)
         if confidence is None:
             confidence = 0.5
@@ -295,8 +284,8 @@ class ResponseParser:
             missing=missing,
             blockers=blockers,
             message=message,
-            next_phase=next_phase if next_phase else None,
-            next_phase_name=next_phase_name if next_phase_name else None,
+            next_phase=None,
+            next_phase_name=None,
             confidence=max(0.0, min(1.0, confidence)),
             raw=raw,
         )

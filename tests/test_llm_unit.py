@@ -50,7 +50,7 @@ class TestEvaluateLlmReportVerdicts:
         ):
             result = evaluate_llm_report("r", phase, engine)
         assert result["verdict"] == "BLOCKED"
-        assert result["blockers"] == ["LLM identified blocker"]
+        assert result["blockers"] == ["Wizard identified a blocker"]
         engine._record_transition.assert_called_once()
 
     def test_rollback_uses_rollback_target(self):
@@ -73,9 +73,24 @@ class TestEvaluateLlmReportVerdicts:
             result = evaluate_llm_report("r", phase, engine)
         assert result["verdict"] == "ROLLBACK"
         assert result["rollback_target"] == "0"
-        assert result["next_phase"] is None
+        assert result["next_phase"] == "0"
 
-    def test_delegate_records_transition(self):
+    def test_rollback_without_configured_target_fails_closed(self):
+        engine = _make_engine()
+        phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[])
+        with patch.object(
+            OllamaClient,
+            "chat",
+            return_value={"verdict": "ROLLBACK", "message": "rollback"},
+        ):
+            result = evaluate_llm_report("r", phase, engine)
+        assert result["verdict"] == "BLOCKED"
+        assert result["next_phase"] is None
+        assert result["blockers"] == [
+            "rollback target is not configured for the current phase"
+        ]
+
+    def test_delegate_response_fails_closed(self):
         engine = _make_engine()
         phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[])
         with patch.object(
@@ -86,14 +101,14 @@ class TestEvaluateLlmReportVerdicts:
                 "covered": [],
                 "missing": [],
                 "blockers": [],
-                "message": "delegate",
+                "message": "unexpected delegate",
                 "next_phase": None,
                 "next_phase_name": None,
                 "confidence": 0.5,
             },
         ):
             result = evaluate_llm_report("r", phase, engine)
-        assert result["verdict"] == "DELEGATE"
+        assert result["verdict"] == "BLOCKED"
         engine._record_transition.assert_called_once()
 
     def test_pass_fills_next_phase_from_builder(self):
@@ -120,6 +135,18 @@ class TestEvaluateLlmReportVerdicts:
         assert result["verdict"] == "PASS"
         assert result["next_phase"] == "2"
         assert result["next_phase_name"] == "Two"
+        assert result["wizard"]["model"]
+
+    @pytest.mark.parametrize("failure", [TimeoutError("slow"), IndexError("bad response")])
+    def test_provider_failure_is_persisted_as_blocked(self, failure):
+        engine = _make_engine()
+        phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[])
+        with patch.object(OllamaClient, "chat", side_effect=failure):
+            result = evaluate_llm_report("r", phase, engine)
+        assert result["verdict"] == "BLOCKED"
+        assert result["next_phase"] is None
+        assert result["blockers"][0].startswith("Wizard LLM unavailable:")
+        engine.db.create_supervisor_run.assert_called_once()
 
 
 class TestLoadApiKey:
@@ -132,7 +159,7 @@ class TestLoadApiKey:
         importlib.reload(project_workflow.infrastructure.llm)
         assert project_workflow.infrastructure.llm._load_api_key() == "env-token"
 
-    def test_env_empty_reads_file(self, tmp_path, monkeypatch):
+    def test_env_empty_does_not_read_hermes_file(self, tmp_path, monkeypatch):
         monkeypatch.setenv("OLLAMA_API_KEY", "")
         env_file = Path.home() / ".hermes" / ".env"
         try:
@@ -143,7 +170,7 @@ class TestLoadApiKey:
             import project_workflow.infrastructure.llm
 
             importlib.reload(project_workflow.infrastructure.llm)
-            assert project_workflow.infrastructure.llm._load_api_key() == "file-token"
+            assert project_workflow.infrastructure.llm._load_api_key() == ""
         finally:
             if env_file.exists():
                 env_file.unlink()
@@ -183,10 +210,13 @@ class TestOllamaClientDetection:
 
 class TestOllamaClientIsAvailable:
     def test_local_available(self):
-        with patch("requests.get", return_value=MagicMock(status_code=200)) as mock:
+        with (
+            patch("project_workflow.infrastructure.llm._load_api_key", return_value=""),
+            patch("requests.get", return_value=MagicMock(status_code=200)) as mock,
+        ):
             client = OllamaClient(base_url="http://localhost:11434")
             assert client.is_available() is True
-            mock.assert_called_once_with("http://localhost:11434/api/tags", timeout=5)
+            mock.assert_called_once_with("http://localhost:11434/api/tags", headers={}, timeout=5)
 
     def test_cloud_available(self):
         with patch("requests.get", return_value=MagicMock(status_code=200)) as mock:
@@ -308,12 +338,12 @@ class TestResponseParser:
         v = ResponseParser.parse(raw)
         assert v.verdict == "PASS"
         assert v.covered == ["A"]
-        assert v.next_phase == "2"
+        assert v.next_phase is None
         assert v.confidence == 0.9
 
     def test_parse_invalid_verdict(self):
         v = ResponseParser.parse({"verdict": "UNKNOWN"})
-        assert v.verdict == "PARTIAL"
+        assert v.verdict == "BLOCKED"
 
     def test_parse_coerces_types(self):
         v = ResponseParser.parse(

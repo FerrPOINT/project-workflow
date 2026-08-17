@@ -95,7 +95,7 @@ class TestAppState:
 
     def test_database_url_normalized(self):
         state = _AppState("sqlite:///tmp/../test.db")
-        assert state._database_url_normalized().endswith("/test.db")
+        assert state._database_url_normalized().replace("\\", "/").endswith("/test.db")
 
     def test_reset(self):
         state = _AppState("sqlite:///reset.db")

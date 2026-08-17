@@ -151,53 +151,7 @@ class TestPromptAndModels:
         assert rendered == ["run prod"]
 
 
-class TestDeterministicChecks:
-    def test_extract_keywords_empty_input(self):
-        from project_workflow.wizard.checks import extract_keywords
-
-        assert extract_keywords("") == []
-
-    def test_extract_keywords_filters_short_words(self):
-        from project_workflow.wizard.checks import extract_keywords
-
-        assert extract_keywords("one two three four five six seven") == ["three", "four", "five", "seven"]
-
-    def test_check_coverage_with_previously_covered(self):
-        from project_workflow.wizard.checks import check_coverage
-
-        covered, missing = check_coverage("report", ["item one"], previously_covered={"item one"})
-        assert "item one" in covered
-        assert missing == []
-
-    def test_check_coverage_keyword_threshold(self):
-        from project_workflow.wizard.checks import check_coverage
-
-        covered, missing = check_coverage("alpha beta gamma", ["alpha beta", "delta echo"])
-        assert "alpha beta" in covered
-        assert "delta echo" in missing
-
-    def test_extract_blockers_negative_phrases(self):
-        from project_workflow.wizard.checks import extract_blockers
-
-        assert extract_blockers("no blockers, everything fine") == []
-        assert extract_blockers("blocked by dependency") == ["blocked by"]
-
-    def test_determine_verdict_rollback(self):
-        from project_workflow.wizard.checks import determine_verdict
-
-        assert (
-            determine_verdict(covered=[], missing=["m"], blockers=[], report="rollback", rollback_target="0")
-            == "rollback"
-        )
-
-    def test_determine_verdict_delegate(self):
-        from project_workflow.wizard.checks import determine_verdict
-
-        assert (
-            determine_verdict(covered=[], missing=["m"], blockers=[], report="delegated", is_delegated=True)
-            == "delegate"
-        )
-
+class TestVerdictMessages:
     def test_build_verdict_message_pass(self):
         from project_workflow.wizard.checks import build_verdict_message
 

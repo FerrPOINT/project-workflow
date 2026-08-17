@@ -39,16 +39,16 @@ class TestWizardEvaluate:
         engine.all_phases = [ph]
         engine.task = {"id": 1, "task_key": "AAT-1", "current_phase": "0"}
 
-        with (
-            patch.object(engine, "_build_checklist", return_value=["check"]),
-            patch("project_workflow.wizard.core.check_coverage", return_value=(["check"], [])),
-            patch.object(engine, "_get_next_phase", return_value=("1", "Next")),
-            patch.object(engine, "_record_transition"),
-        ):
+        with patch.object(
+            engine,
+            "evaluate_llm",
+            return_value={"verdict": "PASS", "next_phase": "1"},
+        ) as evaluate_llm:
             result = engine.evaluate("report ok")
 
         assert result["verdict"] == "PASS"
         assert result["next_phase"] == "1"
+        evaluate_llm.assert_called_once_with("report ok", ph)
 
     def test_evaluate_partial_when_items_missing(self):
         engine = WizardEngine("AAT-1", repo="/tmp")
@@ -58,14 +58,14 @@ class TestWizardEvaluate:
         engine.all_phases = [ph]
         engine.task = {"id": 1, "task_key": "AAT-1", "current_phase": "0"}
 
-        with (
-            patch.object(engine, "_build_checklist", return_value=["check"]),
-            patch("project_workflow.wizard.core.check_coverage", return_value=([], ["check"])),
-            patch.object(engine, "_record_transition"),
+        with patch.object(
+            engine,
+            "evaluate_llm",
+            return_value={"verdict": "SOFT_FAIL", "missing": ["check"]},
         ):
             result = engine.evaluate("report bad")
 
-        assert result["verdict"] == "HARD_FAIL"
+        assert result["verdict"] == "SOFT_FAIL"
         assert result["missing"] == ["check"]
 
     def test_get_phase_prompt(self):
