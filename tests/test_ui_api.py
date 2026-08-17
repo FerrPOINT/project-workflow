@@ -107,10 +107,10 @@ class TestIndex:
         assert resp.status_code == 200
         assert "project-workflow current" in resp.text
         assert "project-workflow submit" in resp.text
-        assert "project-workflow history" in resp.text
+        assert "project-workflow history" not in resp.text
         assert "project-workflow ui" not in resp.text
         assert "--report" in resp.text
-        assert "--schema-version" in resp.text
+        assert "--schema-version" not in resp.text
         assert ">--repo<" not in resp.text
         assert ">--skip<" not in resp.text
 
@@ -147,8 +147,21 @@ class TestApiPhases:
         assert data["ok"] is True
         assert "commands" in data
         names = {cmd["name"] for cmd in data["commands"]}
-        assert names == {"catalog", "current", "evidence-export", "history", "start", "submit"}
+        assert names == {"current", "submit"}
         assert "ui" not in names
+
+    def test_internal_catalog_api_keeps_service_operations_out_of_cli(self, client):
+        resp = client.get("/api/controller/catalog")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["phases"] == 70
+        assert data["featurePath"] == 60
+        assert data["bugPath"] == 54
+
+    def test_internal_evidence_api_rejects_unknown_task(self, client):
+        resp = client.get("/api/controller/runs/AAT-999999/evidence?schema_version=2")
+        assert resp.status_code == 404
 
 
 class TestRemovedLegacyApi:

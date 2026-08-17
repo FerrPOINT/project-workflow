@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from datetime import datetime, timezone
 
@@ -140,6 +142,7 @@ def build_report(engine: PolicyEngineV2, task_key: str, run_id: str) -> dict:
         "workflowVersion": "agentic-sdlc-v2",
         "catalogRevision": catalog_revision,
         "taskKey": task_key,
+        "attemptId": current["attemptId"],
         "runId": run_id,
         "phaseId": phase["phaseId"],
         "actor": {
@@ -192,6 +195,71 @@ def test_pass_advances_exactly_one_phase_and_replay_returns_receipt(engine):
     assert engine.history("AAT-101")[0]["missingChecks"] == []
 
 
+def test_current_returns_resume_context_and_stable_attempt_id(engine):
+    task = {
+        "taskKey": "AAT-113",
+        "summary": "Добавить аудит",
+        "description": "Сохранить историю решений",
+        "status": "Сделать",
+        "issueType": {"id": "10001", "name": "История"},
+        "jiraRevision": "jira-113-v1",
+        "labels": [],
+    }
+
+    first = engine.open_task(task, "feature")
+    repeated = engine.open_task(task, "feature")
+
+    assert first["attemptId"] == repeated["attemptId"]
+    assert first["task"] == task
+    assert first["progress"] == {"completed": 0, "remaining": 60, "total": 60}
+    assert first["recentHistory"] == []
+    assert first["artifactIndex"] == {"approvals": [], "deployments": []}
+    assert first["nextHumanGate"]["phaseId"] == "C06"
+    assert first["reportTemplate"]["attemptId"] == first["attemptId"]
+    assert first["reportTemplate"]["phaseId"] == "C01"
+    assert first["reportTemplate"]["inputRevisions"]["jiraRevision"] == "jira-113-v1"
+
+
+def test_concurrent_start_returns_one_workflow(tmp_path):
+    database = str(tmp_path / "concurrent-current.db")
+    seed = SAUnitOfWork(database)
+    seed.create_all()
+    PolicyEngineV2(seed.session).start("AAT-901", "feature")
+    seed.close()
+    barrier = threading.Barrier(2)
+
+    def start_once() -> dict:
+        uow = SAUnitOfWork(database)
+        try:
+            barrier.wait(timeout=5)
+            return PolicyEngineV2(uow.session).start("AAT-902", "feature")
+        finally:
+            uow.close()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: start_once(), range(2)))
+
+    assert {item["taskKey"] for item in results} == {"AAT-902"}
+    assert results[0] == results[1]
+
+
+def test_incomplete_creates_a_new_attempt_and_rejects_stale_attempt(engine):
+    engine.start("AAT-114", "feature")
+    incomplete = build_report(engine, "AAT-114", "run-114")
+    incomplete["checkResults"][0]["status"] = "failed"
+    first_attempt_id = incomplete["attemptId"]
+
+    result = engine.submit(incomplete)
+    assert result.decision in {Decision.INCOMPLETE, Decision.ROLLBACK}
+
+    current = engine.current("AAT-114")
+    assert current["attemptId"] != first_attempt_id
+    stale = build_report(engine, "AAT-114", "run-114")
+    stale["attemptId"] = first_attempt_id
+    with pytest.raises((ContractViolation, ReplayConflict), match="attemptId"):
+        engine.submit(stale)
+
+
 def test_evidence_export_contains_only_sanitized_verified_records(engine):
     engine.start("AAT-109", "feature")
     payload = build_report(engine, "AAT-109", "export-c01")
@@ -237,6 +305,10 @@ def test_evidence_export_v2_exposes_sanitized_transition_shape_without_changing_
 
     assert "nextPhase" not in legacy["attempts"][0]
     assert "rollbackTarget" not in legacy["attempts"][0]
+    assert legacy["attempts"][0]["submissionId"] == "export-transition-c01"
+    assert versioned["attempts"][0]["runId"] == "export-transition-c01"
+    assert versioned["attempts"][0]["attemptId"].startswith("attempt-")
+    assert "submissionId" not in versioned["attempts"][0]
     assert versioned["attempts"][0]["nextPhase"] == "C02"
     assert versioned["attempts"][0]["rollbackTarget"] is None
 

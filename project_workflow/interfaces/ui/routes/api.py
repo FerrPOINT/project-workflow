@@ -36,6 +36,8 @@ from project_workflow.interfaces.ui.skills import (
 )
 from project_workflow.interfaces.ui.state import _app_state
 from project_workflow.interfaces.ui.v2_views import load_v2_run, load_v2_runs
+from project_workflow.v2.engine import V2PolicyError
+from project_workflow.v2.internal import catalog_summary, evidence_export
 
 
 def _error(message: str, status: int) -> JSONResponse:
@@ -118,6 +120,19 @@ async def api_v2_run(task_key: str) -> dict[str, Any] | JSONResponse:
     if run is None:
         return _error(f"Agentic SDLC v2 run {task_key!r} not found", 404)
     return {"ok": True, "run": run}
+
+
+async def api_controller_catalog() -> dict[str, Any]:
+    return {"ok": True, **catalog_summary()}
+
+
+async def api_controller_evidence(
+    task_key: str, schema_version: int = Query(default=2, ge=1, le=2)
+) -> dict[str, Any] | JSONResponse:
+    try:
+        return {"ok": True, **evidence_export(task_key, schema_version)}
+    except V2PolicyError as exc:
+        return _error(str(exc), 404)
 
 
 async def api_task_delete(task_key: str) -> JSONResponse:

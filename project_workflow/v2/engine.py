@@ -5,13 +5,14 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from project_workflow.infrastructure.db.models import (
@@ -191,14 +192,25 @@ class PolicyEngineV2:
             if existing.catalog_json != serialized:
                 raise ContractViolation("stored catalog revision has different content")
             return
-        self.session.add(
-            WorkflowCatalogRecordV2(
-                workflow_version=self.catalog.workflow_version,
-                catalog_revision=self.catalog.revision,
-                catalog_json=serialized,
-            )
+        record = WorkflowCatalogRecordV2(
+            workflow_version=self.catalog.workflow_version,
+            catalog_revision=self.catalog.revision,
+            catalog_json=serialized,
         )
-        self.session.flush()
+        try:
+            with self.session.begin_nested():
+                self.session.add(record)
+                self.session.flush()
+        except IntegrityError:
+            existing = self.session.scalar(
+                select(WorkflowCatalogRecordV2).where(
+                    WorkflowCatalogRecordV2.catalog_revision == self.catalog.revision
+                )
+            )
+            if existing is None:
+                raise
+            if existing.catalog_json != serialized:
+                raise ContractViolation("stored catalog revision has different content")
 
     def start(self, task_key: str, profile: str) -> dict[str, Any]:
         pattern = self.catalog.payload["policy"]["taskKeyPattern"]
@@ -221,21 +233,44 @@ class PolicyEngineV2:
             current_phase=path[0],
             status="active",
         )
-        self.session.add(run)
+        try:
+            with self.session.begin_nested():
+                self.session.add(run)
+                self.session.flush()
+        except IntegrityError:
+            existing = self.session.scalar(select(WorkflowRunV2).where(WorkflowRunV2.task_key == task_key))
+            if existing is None:
+                raise
+            if existing.profile != profile:
+                raise ReplayConflict("task is already pinned to a different profile")
+            self.session.commit()
+            return self._run_dict(existing)
         self.session.commit()
         return self._run_dict(run)
+
+    def open_task(self, task: dict[str, Any], profile: str) -> dict[str, Any]:
+        """Create or resume the one workflow owned by an exact external task."""
+
+        task_key = str(task.get("taskKey") or "")
+        self.start(task_key, profile)
+        state = self.current(task_key)
+        state["task"] = task
+        state["revisions"]["jiraRevision"] = str(task.get("jiraRevision") or "")
+        if state["reportTemplate"] is not None:
+            state["reportTemplate"]["inputRevisions"]["jiraRevision"] = str(
+                task.get("jiraRevision") or ""
+            )
+        return state
 
     def current(self, task_key: str) -> dict[str, Any]:
         run = self._get_run(task_key)
         catalog = self._catalog_for_run(run)
-        latest_attempt = self.session.scalar(
+        attempts = self.session.scalars(
             select(PhaseAttemptV2)
-            .where(
-                PhaseAttemptV2.workflow_run_id == run.id,
-                PhaseAttemptV2.phase_id == run.current_phase,
-            )
-            .order_by(PhaseAttemptV2.id.desc())
-        )
+            .where(PhaseAttemptV2.workflow_run_id == run.id)
+            .order_by(PhaseAttemptV2.id)
+        ).all()
+        latest_attempt = attempts[-1] if attempts else None
         revisions = {
             item.revision_kind: item.revision_value
             for item in self.session.scalars(
@@ -247,31 +282,50 @@ class PolicyEngineV2:
                 .order_by(BaselineRevisionV2.id)
             ).all()
         }
-        if latest_attempt:
-            revisions.update(json.loads(latest_attempt.report_json).get("inputRevisions", {}))
-        return {
+        current_phase_attempts = [item for item in attempts if item.phase_id == run.current_phase]
+        if current_phase_attempts:
+            latest_current_attempt = current_phase_attempts[-1]
+            revisions.update(json.loads(latest_current_attempt.report_json).get("inputRevisions", {}))
+        path = catalog.path(run.profile)
+        current_index = path.index(run.current_phase)
+        completed_phase_ids = list(path if run.status == "done" else path[:current_index])
+        completed = len(completed_phase_ids)
+        recent_history = [self._attempt_dict(item) for item in attempts[-8:]]
+        contract = catalog.phase_contract(run.profile, run.current_phase) if run.status == "active" else None
+        attempt_id = self._attempt_id(run, attempts) if run.status == "active" else None
+        state = {
             **self._run_dict(run),
             "revisions": revisions,
-            "contract": catalog.phase_contract(run.profile, run.current_phase) if run.status == "active" else None,
+            "stage": catalog.phase(run.current_phase)["profile"],
+            "progress": {
+                "completed": completed,
+                "remaining": len(path) - completed,
+                "total": len(path),
+            },
+            "completedPhaseIds": completed_phase_ids,
+            "attemptCount": len(attempts),
+            "recentHistory": recent_history,
+            "lastAttempt": recent_history[-1] if recent_history else None,
+            "lastReceiptId": latest_attempt.receipt_id if latest_attempt else None,
+            "blockers": (
+                list(json.loads(latest_attempt.decision_json).get("blockers", []))
+                if latest_attempt
+                else []
+            ),
+            "artifactIndex": self._artifact_index(run),
+            "nextHumanGate": self._next_human_gate(catalog, run),
+            "contract": contract,
+            "attemptId": attempt_id,
         }
+        state["reportTemplate"] = self._report_template(run, contract, revisions, attempt_id)
+        return state
 
     def history(self, task_key: str) -> list[dict[str, Any]]:
         run = self._get_run(task_key)
         attempts = self.session.scalars(
             select(PhaseAttemptV2).where(PhaseAttemptV2.workflow_run_id == run.id).order_by(PhaseAttemptV2.id)
         ).all()
-        history: list[dict[str, Any]] = []
-        for attempt in attempts:
-            decision = json.loads(attempt.decision_json)
-            history.append(
-                {
-                    **decision,
-                    "submissionId": attempt.submission_id,
-                    "phaseId": attempt.phase_id,
-                    "createdAt": attempt.created_at.isoformat() if attempt.created_at else None,
-                }
-            )
-        return history
+        return [self._attempt_dict(attempt) for attempt in attempts]
 
     def evidence_export(self, task_key: str, *, schema_version: int = 1) -> dict[str, Any]:
         """Export verified audit facts without exposing raw reports or verifier secrets."""
@@ -328,7 +382,6 @@ class PolicyEngineV2:
                     }
                 )
             exported_attempt = {
-                "submissionId": attempt.submission_id,
                 "phaseId": attempt.phase_id,
                 "decision": attempt.decision,
                 "reportSha256": attempt.report_sha256,
@@ -351,10 +404,15 @@ class PolicyEngineV2:
                 stored_decision = json.loads(attempt.decision_json)
                 exported_attempt.update(
                     {
+                        "attemptId": attempt.submission_id,
+                        "runId": report.runId,
                         "nextPhase": stored_decision.get("nextPhase"),
                         "rollbackTarget": stored_decision.get("rollbackTarget"),
                     }
                 )
+            else:
+                # Preserve the v1 wire name and semantics for existing internal consumers.
+                exported_attempt["submissionId"] = report.runId
             exported_attempts.append(exported_attempt)
 
         approvals = self.session.scalars(
@@ -432,17 +490,27 @@ class PolicyEngineV2:
         run = self._get_run(report.taskKey, for_update=True)
         catalog = self._catalog_for_run(run)
 
+        if not report.attemptId:
+            raise ContractViolation("attemptId from current is required")
+
         replay = self.session.scalar(
             select(PhaseAttemptV2).where(
                 PhaseAttemptV2.workflow_run_id == run.id,
-                PhaseAttemptV2.submission_id == report.runId,
-                PhaseAttemptV2.phase_id == report.phaseId,
+                PhaseAttemptV2.submission_id == report.attemptId,
             )
         )
         if replay:
             if replay.report_sha256 != report_hash:
-                raise ReplayConflict("same task/run/phase key was reused with different report content")
+                raise ReplayConflict("attemptId was reused with different report content")
             return PhaseDecisionV2.model_validate_json(replay.decision_json)
+
+        attempts = self.session.scalars(
+            select(PhaseAttemptV2)
+            .where(PhaseAttemptV2.workflow_run_id == run.id)
+            .order_by(PhaseAttemptV2.id)
+        ).all()
+        if report.attemptId != self._attempt_id(run, attempts):
+            raise ContractViolation("attemptId is stale or does not belong to the current phase")
 
         phase = catalog.phase(report.phaseId)
         self._validate_envelope(run, report, phase)
@@ -491,7 +559,7 @@ class PolicyEngineV2:
         run.last_decision = decision.value
 
         receipt_id = hashlib.sha256(
-            f"{report.taskKey}\0{report.runId}\0{report.phaseId}\0{report_hash}".encode()
+            f"{report.taskKey}\0{report.attemptId}\0{report.phaseId}\0{report_hash}".encode()
         ).hexdigest()
         result = PhaseDecisionV2(
             decision=decision,
@@ -506,7 +574,7 @@ class PolicyEngineV2:
         )
         attempt = PhaseAttemptV2(
             workflow_run_id=run.id,
-            submission_id=report.runId,
+            submission_id=report.attemptId,
             phase_id=report.phaseId,
             report_sha256=report_hash,
             report_json=report_json,
@@ -543,6 +611,130 @@ class PolicyEngineV2:
         ]
         if missing_bindings:
             raise ContractViolation(f"required revision bindings are missing: {missing_bindings}")
+
+    @staticmethod
+    def _attempt_dict(attempt: PhaseAttemptV2) -> dict[str, Any]:
+        decision = json.loads(attempt.decision_json)
+        report = json.loads(attempt.report_json)
+        return {
+            **decision,
+            "attemptId": attempt.submission_id,
+            "runId": report.get("runId"),
+            "phaseId": attempt.phase_id,
+            "createdAt": attempt.created_at.isoformat() if attempt.created_at else None,
+        }
+
+    @staticmethod
+    def _attempt_id(run: WorkflowRunV2, attempts: Sequence[PhaseAttemptV2]) -> str:
+        latest_receipt = attempts[-1].receipt_id if attempts else "initial"
+        value = f"{run.task_key}\0{run.catalog_revision}\0{run.current_phase}\0{len(attempts)}\0{latest_receipt}"
+        return "attempt-" + hashlib.sha256(value.encode("utf-8")).hexdigest()[:32]
+
+    def _next_human_gate(self, catalog: WorkflowCatalogV2, run: WorkflowRunV2) -> dict[str, Any] | None:
+        if run.status != "active":
+            return None
+        path = catalog.path(run.profile)
+        for phase_id in path[path.index(run.current_phase) :]:
+            phase = catalog.phase(phase_id)
+            rule = phase.get("approvalRule")
+            if rule:
+                return {
+                    "phaseId": phase_id,
+                    "name": phase["name"],
+                    "roles": list(rule["roles"]),
+                    "revisionBinding": rule["revisionBinding"],
+                }
+        return None
+
+    def _artifact_index(self, run: WorkflowRunV2) -> dict[str, Any]:
+        approvals = self.session.scalars(
+            select(HumanApprovalV2)
+            .where(HumanApprovalV2.workflow_run_id == run.id)
+            .order_by(HumanApprovalV2.id)
+        ).all()
+        deployments = self.session.scalars(
+            select(ArtifactDeploymentLinkV2)
+            .where(ArtifactDeploymentLinkV2.workflow_run_id == run.id)
+            .order_by(ArtifactDeploymentLinkV2.id)
+        ).all()
+        return {
+            "approvals": [
+                {
+                    "phaseId": item.phase_id,
+                    "role": item.role,
+                    "decision": item.decision,
+                    "subjectRevision": item.subject_revision,
+                    "approvedAt": item.approved_at.isoformat(),
+                }
+                for item in approvals
+            ],
+            "deployments": [
+                {
+                    "environment": item.environment,
+                    "deploymentId": item.deployment_id,
+                    "artifactDigest": item.artifact_digest,
+                    "status": item.status,
+                }
+                for item in deployments
+            ],
+        }
+
+    @staticmethod
+    def _report_template(
+        run: WorkflowRunV2,
+        contract: dict[str, Any] | None,
+        revisions: dict[str, str],
+        attempt_id: str | None,
+    ) -> dict[str, Any] | None:
+        if contract is None or attempt_id is None:
+            return None
+        required_bindings = set(contract.get("requiredRevisionBindings", []))
+        required_bindings.update(item["revisionBinding"] for item in contract.get("checks", []))
+        required_bindings.update(
+            item["revisionBinding"] for item in contract.get("evidenceRequirements", [])
+        )
+        approval_rule = contract.get("approvalRule")
+        if approval_rule:
+            required_bindings.add(approval_rule["revisionBinding"])
+        input_revisions = {
+            binding: revisions.get(binding, "") for binding in sorted(required_bindings | {"catalogRevision"})
+        }
+        input_revisions["catalogRevision"] = run.catalog_revision
+        return {
+            "schemaVersion": "phase-report/v2",
+            "workflowVersion": run.workflow_version,
+            "catalogRevision": run.catalog_revision,
+            "taskKey": run.task_key,
+            "attemptId": attempt_id,
+            "runId": "",
+            "phaseId": run.current_phase,
+            "actor": {"identity": "", "role": contract["ownerRole"], "type": "agent"},
+            "inputRevisions": input_revisions,
+            "actionResults": [
+                {
+                    "instructionId": item["instructionId"],
+                    "status": None,
+                    "usedTools": [],
+                    "outputRefs": [],
+                    "details": {},
+                }
+                for item in contract["instructions"]
+            ],
+            "checkResults": [
+                {
+                    "checkId": item["checkId"],
+                    "status": None,
+                    "evidenceIds": [],
+                    "details": {},
+                    "notApplicableReason": None,
+                    "tailoringApprovalRef": None,
+                }
+                for item in contract["checks"]
+            ],
+            "evidence": [],
+            "approvals": [],
+            "blockers": [],
+        }
 
     def _validate_revision_continuity(
         self, run: WorkflowRunV2, report: PhaseReportV2, catalog: WorkflowCatalogV2

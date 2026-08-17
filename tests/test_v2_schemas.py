@@ -12,6 +12,7 @@ def minimal_payload() -> dict:
         "workflowVersion": "agentic-sdlc-v2",
         "catalogRevision": "0" * 64,
         "taskKey": "AAT-1",
+        "attemptId": "attempt-1",
         "runId": "run-1",
         "phaseId": "C01",
         "actor": {"identity": "hermes", "role": "Business Analyst", "type": "agent"},

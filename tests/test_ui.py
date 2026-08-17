@@ -1676,14 +1676,14 @@ class TestSettingsPage:
         assert "CLI" in response.text
         assert "project-workflow current" in response.text
         assert "project-workflow submit" in response.text
-        assert "project-workflow history" in response.text
+        assert "project-workflow history" not in response.text
         assert "project-workflow ui" not in response.text
         assert "Web UI запускается отдельно" not in response.text
         assert "--report" in response.text
-        assert "--schema-version" in response.text
+        assert "--schema-version" not in response.text
         assert ">--repo<" not in response.text
         assert ">--skip<" not in response.text
-        assert "default: 1" in response.text
+        assert "default: 1" not in response.text
 
     def test_api_settings_get_returns_json(self):
         response = client.get("/api/settings")
@@ -1692,7 +1692,7 @@ class TestSettingsPage:
         assert data["ok"] is True
         assert "commands" in data
         names = {cmd["name"] for cmd in data["commands"]}
-        assert names == {"catalog", "current", "evidence-export", "history", "start", "submit"}
+        assert names == {"current", "submit"}
         assert "ui" not in names
 
     def test_api_settings_put_and_delete_are_not_supported(self):
@@ -1719,16 +1719,12 @@ class TestSettingsPage:
         commands = _load_cli_reference()
 
         submit = next(cmd for cmd in commands if cmd["name"] == "submit")
-        history = next(cmd for cmd in commands if cmd["name"] == "history")
 
         submit_options = {option["flags"]: option for option in submit["options"]}
-        history_options = {option["flags"]: option for option in history["options"]}
 
         assert set(submit_options) == {"--task", "--report"}
-        assert set(history_options) == {"--task"}
         assert "default" not in submit_options["--task"]
         assert "default" not in submit_options["--report"]
-        assert "default" not in history_options["--task"]
 
     def test_settings_helper_ignores_click_unset_default_sentinel(self):
         @click.command(name="temp-unset-default")

@@ -110,6 +110,10 @@ def create_app() -> FastAPI:
     app.get("/api/tasks", response_model=None)(api.api_tasks)
     app.get("/api/runs", response_model=None)(api.api_v2_runs)
     app.get("/api/runs/{task_key}", response_model=None)(api.api_v2_run)
+    app.get("/api/controller/catalog", response_model=None)(api.api_controller_catalog)
+    app.get("/api/controller/runs/{task_key}/evidence", response_model=None)(
+        api.api_controller_evidence
+    )
     app.delete("/api/tasks/{task_key}", response_model=None)(api.api_task_delete)
     app.get("/api/workflows", response_model=None)(api.api_workflows)
     app.post("/api/workflows", response_model=None)(api.api_workflow_create)
