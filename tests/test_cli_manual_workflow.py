@@ -1,4 +1,4 @@
-"""Integration checks for the real CLI, workfiles, Wizard and existing FSM."""
+"""Integration checks for the text CLI, Wizard and existing FSM."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 import pytest
-import yaml
 from click.testing import CliRunner
 
 from project_workflow.config import get_settings
@@ -20,7 +19,6 @@ def manual_env(tmp_path, monkeypatch):
     workflow_dir.mkdir()
     monkeypatch.setenv("DATABASE_URL", "")
     monkeypatch.setenv("WORKFLOW_DIR", str(workflow_dir))
-    monkeypatch.setenv("PROJECT_WORKFLOW_WORK_ROOT", str(workflow_dir / "tasks"))
     monkeypatch.setattr("project_workflow.infrastructure.db.DB_PATH", workflow_dir / "workflow.db")
     get_settings.cache_clear()
 
@@ -71,27 +69,18 @@ def manual_env(tmp_path, monkeypatch):
     get_settings.cache_clear()
 
 
-def _workfile(runner: CliRunner, task: str) -> Path:
+def _phase_report(runner: CliRunner, task: str) -> str:
     result = runner.invoke(cli, ["--json", "step", "--task", task])
     assert result.exit_code == 0, result.output
     data = json.loads(result.output)
-    path = Path(data["report_file"])
-    document = yaml.safe_load(path.read_text(encoding="utf-8"))
-    for instruction in document["instructions"]:
-        instruction.update(done=True, result="completed")
-    for check in document["checks"]:
-        check.update(status="passed", evidence=["test://readback"])
-    for evidence in document["evidence"]:
-        evidence.update(status="passed", refs=["test://artifact"])
-    document["summary"] = "Phase contract completed"
-    path.write_text(
-        yaml.safe_dump(document, allow_unicode=True, sort_keys=False),
-        encoding="utf-8",
+    assert data["prompt"]
+    return (
+        f"task: {task}; phase: {data['phase']}; "
+        "instructions completed; checks passed; evidence: test://readback"
     )
-    return path
 
 
-def _submit(runner: CliRunner, task: str, report: Path) -> dict:
+def _submit(runner: CliRunner, task: str, report: str) -> dict:
     result = runner.invoke(
         cli,
         ["--json", "step", "--task", task, "--report", str(report)],
@@ -100,7 +89,7 @@ def _submit(runner: CliRunner, task: str, report: Path) -> dict:
     return json.loads(result.output)
 
 
-def test_full_workflow_uses_workfile_wizard_and_history(manual_env, wizard_llm):
+def test_full_workflow_uses_text_report_wizard_and_history(manual_env, wizard_llm):
     wizard_llm("PASS")
     runner = manual_env
     task = "MANUAL-1"
@@ -111,7 +100,7 @@ def test_full_workflow_uses_workfile_wizard_and_history(manual_env, wizard_llm):
         data = json.loads(current.output)
         if data.get("status") == "done":
             break
-        result = _submit(runner, task, _workfile(runner, task))
+        result = _submit(runner, task, _phase_report(runner, task))
         submitted.append(result["phase"])
     else:
         pytest.fail("workflow did not finish")
@@ -139,18 +128,18 @@ def test_full_workflow_uses_workfile_wizard_and_history(manual_env, wizard_llm):
     assert intake["next_phase"] == "manual.plan"
 
 
-def test_soft_fail_creates_new_attempt_without_overwriting_old_file(manual_env, wizard_llm):
+def test_soft_fail_keeps_current_phase_for_revised_text_report(manual_env, wizard_llm):
     runner = manual_env
     task = "MANUAL-2"
-    first = _workfile(runner, task)
     wizard_llm("SOFT_FAIL", missing=["more evidence"])
-    assert _submit(runner, task, first)["verdict"] == "SOFT_FAIL"
+    first = _submit(runner, task, _phase_report(runner, task))
+    assert first["verdict"] == "SOFT_FAIL"
+    assert first["phase"] == "manual.intake"
+    assert first["next_phase"] is None
 
-    second = _workfile(runner, task)
-    assert second.name == "manual.intake-002.yaml"
-    assert first.exists()
     wizard_llm("PASS")
-    assert _submit(runner, task, second)["next_phase"] == "manual.plan"
+    revised = _phase_report(runner, task) + "; additional evidence: test://artifact"
+    assert _submit(runner, task, revised)["next_phase"] == "manual.plan"
 
 
 def test_wizard_rollback_uses_configured_target(manual_env, wizard_llm):
@@ -158,9 +147,9 @@ def test_wizard_rollback_uses_configured_target(manual_env, wizard_llm):
     task = "MANUAL-3"
     wizard_llm("PASS")
     for _ in range(4):
-        _submit(runner, task, _workfile(runner, task))
+        _submit(runner, task, _phase_report(runner, task))
 
-    report = _workfile(runner, task)
+    report = _phase_report(runner, task)
     wizard_llm("ROLLBACK")
     result = _submit(runner, task, report)
     assert result["phase"] == "manual.rollback-demo"

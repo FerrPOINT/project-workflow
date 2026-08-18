@@ -40,10 +40,6 @@ class Settings(BaseSettings):
     GITLAB_BASE_URL: str = "https://gt.wmtgroup.ru"
 
     WORKFLOW_DIR: str = os.getenv("WORKFLOW_DIR", str(Path.home() / ".project-workflow"))
-    PROJECT_WORKFLOW_WORK_ROOT: str = os.getenv(
-        "PROJECT_WORKFLOW_WORK_ROOT",
-        str(Path.home() / ".project-workflow" / "tasks"),
-    )
 
     @property
     def SETTINGS_PATH(self) -> str:

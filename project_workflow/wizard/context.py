@@ -167,7 +167,7 @@ class WizardContextBuilder:
                 "и отправляет report по текущей фазе. Supervisor не предполагает конкретную модель, "
                 "Ollama или другого провайдера."
             ),
-            "entrypoint": "project-workflow step --task TASK-KEY [--report /path/report.yaml]",
+            "entrypoint": "project-workflow step --task TASK-KEY [--report TEXT]",
         }
 
     @staticmethod

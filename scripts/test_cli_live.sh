@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Two real Wizard calls: complete and incomplete YAML workfiles.
+# Two real Wizard calls: complete and incomplete text reports.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -12,40 +12,18 @@ json_field() {
   "$PYTHON" -c 'import json,sys; print(json.load(sys.stdin)[sys.argv[1]])' "$1"
 }
 
-fill_report() {
-  local path="$1"
-  local mode="$2"
-  "$PYTHON" - "$path" "$mode" <<'PY'
-from pathlib import Path
-import sys
-import yaml
-
-path = Path(sys.argv[1])
-mode = sys.argv[2]
-data = yaml.safe_load(path.read_text(encoding="utf-8"))
-if mode == "complete":
-    for item in data["instructions"]:
-        item.update(done=True, result="live smoke completed")
-    for item in data["checks"]:
-        item.update(status="passed", evidence=["live-smoke://readback"])
-    for item in data["evidence"]:
-        item.update(status="passed", refs=["live-smoke://artifact"])
-    data["summary"] = "All current phase items completed for live smoke"
-else:
-    data["summary"] = "Current phase intentionally left incomplete"
-path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
-PY
-}
-
 run_smoke() {
   local task="$1"
   local mode="$2"
   local expected="$3"
-  local current report_file result verdict model
-  current=$("$CLI" --json step --task "$task")
-  report_file=$(printf '%s' "$current" | json_field report_file)
-  fill_report "$report_file" "$mode"
-  result=$("$CLI" --json step --task "$task" --report "$report_file")
+  local report result verdict model
+  "$CLI" --json step --task "$task" >/dev/null
+  if [ "$mode" = "complete" ]; then
+    report='All current phase instructions completed; checks passed; evidence: live-smoke://readback, live-smoke://artifact'
+  else
+    report='Current phase is incomplete; required checks and evidence are missing'
+  fi
+  result=$("$CLI" --json step --task "$task" --report "$report")
   verdict=$(printf '%s' "$result" | json_field verdict)
   model=$(printf '%s' "$result" | "$PYTHON" -c 'import json,sys; print(json.load(sys.stdin)["wizard"]["model"])')
   [ "$model" = "$EXPECTED_MODEL" ] || { echo "unexpected model: $model" >&2; exit 1; }

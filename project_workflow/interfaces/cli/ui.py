@@ -6,14 +6,13 @@
 (см. test_ui.py::test_only_two_commands_allowed).
 
 Разрешённые команды:
-- step    --task TASK-KEY [--report /absolute/path/report.yaml]
+- step    --task TASK-KEY [--report TEXT]
 - history --task TASK-KEY [--n N]
 """
 
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 from typing import Any
 
 import click
@@ -21,7 +20,6 @@ import click
 from ... import wizard
 from ...infrastructure.db.uow import SAUnitOfWork
 from ...wizard import format_result
-from ...wizard.workfile import WorkfileError, create_workfile, load_workfile
 from .core import WARN, _require_valid_key, cli, console, out_json
 
 # ── Guard: новые команды запрещены ──────────────────────────────────────
@@ -36,23 +34,18 @@ from .core import WARN, _require_valid_key, cli, console, out_json
 
 @cli.command()
 @click.option("--task", required=True, help="Task key (e.g. TASK-42)")
-@click.option(
-    "--report",
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    default=None,
-    help="YAML-файл отчёта по текущей фазе",
-)
+@click.option("--report", default=None, help="Текстовый отчёт по текущей фазе")
 @click.pass_context
 def step_cmd(
     ctx: click.Context,
     task: str,
-    report: Path | None,
+    report: str | None,
 ) -> None:
     """🚶 Step — движение по workflow: показать текущую фазу или отчитаться и перейти.
 
     Usage:
       project-workflow step --task TASK-KEY                → текущие инструкции
-      project-workflow step --task TASK-KEY --report /path/report.yaml  → оценить отчёт и перейти
+      project-workflow step --task TASK-KEY --report "..."  → оценить отчёт и перейти
     """
     uow = SAUnitOfWork()
     task_key = _require_valid_key(task, uow)
@@ -62,11 +55,7 @@ def step_cmd(
 
     # --report : evaluate report
     if report:
-        try:
-            report_text = load_workfile(engine, report)
-        except WorkfileError as exc:
-            raise click.ClickException(str(exc)) from exc
-        result = engine.evaluate(report_text)
+        result = engine.evaluate(report)
         if jmode:
             out_json(result)
             return
@@ -89,21 +78,17 @@ def step_cmd(
                 }
             )
             return
-        workfile = create_workfile(engine)
         out_json(
             {
                 "ok": True,
                 "task_key": task_key,
                 "phase": engine.current_phase,
                 "prompt": prompt,
-                "report_file": str(workfile),
             }
         )
         return
-    workfile = create_workfile(engine)
     instructions = engine.format_current_phase_instructions()
     console.print(instructions)
-    console.print(f"\n[bold]YAML report:[/bold] {workfile}")
     return
 
 

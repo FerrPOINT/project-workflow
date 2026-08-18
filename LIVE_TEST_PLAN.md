@@ -9,7 +9,6 @@ fail-closed поведение существующего workflow. Полные
 ## Предусловия
 
 - `DATABASE_URL` указывает на тестовую project-workflow БД;
-- `PROJECT_WORKFLOW_WORK_ROOT` указывает на каталог вне Git;
 - существует обычный smoke workflow с разрешённым ключом `SMOKE-*`;
 - `OLLAMA_BASE_URL=https://ollama.com`;
 - `OLLAMA_MODEL=kimi-k2.7-code:cloud`;
@@ -17,13 +16,13 @@ fail-closed поведение существующего workflow. Полные
 
 ## Сценарии
 
-1. Полный YAML текущей фазы:
-   - `step --task` создаёт workfile;
-   - все инструкции, checks и evidence заполнены;
-   - `step --report` реально вызывает указанную модель;
+1. Полный текстовый отчёт текущей фазы:
+   - `step --task` возвращает инструкции, checks и evidence;
+   - `step --report` передаёт выполненные пункты и ссылки на evidence;
+   - Wizard реально вызывает указанную модель;
    - ожидается `PASS` и ровно один переход из существующей FSM.
-2. Неполный YAML новой задачи:
-   - contract items сохранены, но остаются незавершёнными;
+2. Неполный текстовый отчёт новой задачи:
+   - обязательные пункты явно остаются незавершёнными;
    - Wizard вызывается той же моделью;
    - ожидается `SOFT_FAIL` или `BLOCKED` без перехода вперёд.
 3. Отдельно отключить provider и повторить submit:
@@ -37,7 +36,7 @@ fail-closed поведение существующего workflow. Полные
 bash scripts/test_cli_live.sh
 ```
 
-Для каждого результата проверить поле `wizard.model`, YAML `report`, feedback и
+Для каждого результата проверить поле `wizard.model`, текст `report`, feedback и
 фактический transition через:
 
 ```bash

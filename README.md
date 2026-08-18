@@ -54,7 +54,7 @@ SQLite остаётся только для тестов (временные ф�
 |---------|----------|
 | Пофазовый workflow | Каждая задача строго следует шаблону фаз с инструкциями, чек-листами и артефактами. |
 | Встроенный Wizard | Обязательная fail-closed LLM-оценка отчёта; следующую фазу выбирает workflow. |
-| YAML-чек-лист | Один сохраняемый рабочий файл на попытку фазы вне Git. |
+| Чек-лист фазы | Wizard возвращает инструкции, checks и evidence; агент ведёт рабочий файл по правилам своего skill. |
 | Web UI | Управление шаблонами, фазами, проектами, задачами и агентами через браузер. |
 | CLI freeze | Только `step` и `history`; весь CRUD — через UI. |
 | PostgreSQL | Единый production-стек: systemd UI и CLI используют тот же Postgres через `DATABASE_URL`. |
@@ -78,28 +78,27 @@ SQLite остаётся только для тестов (временные ф�
 ## 🖥️ CLI
 
 ```bash
-# Получить или повторно открыть YAML-чек-лист текущей попытки
+# Получить инструкции и чек-лист текущей фазы
 project-workflow step --task TASK-123
 
-# После выполнения одной фазы заполнить этот же файл и отправить Wizard
+# После выполнения одной фазы отправить Wizard текстовый отчёт
 project-workflow step --task TASK-123 \
-  --report /var/lib/project-workflow/tasks/TASK-123/F01-001.yaml
+  --report "Выполнено: ...; проверки: ...; evidence: ..."
 
 # История фаз, отчётов и решений Wizard
 project-workflow history --task TASK-123 --n 10
 ```
 
-CLI ожидает `DATABASE_URL`. Рабочая папка и единственная модель Wizard задаются серверной конфигурацией:
+CLI ожидает `DATABASE_URL`. Единственная модель Wizard задаётся серверной конфигурацией:
 
 ```bash
 export DATABASE_URL=postgresql+psycopg://project_workflow:project_workflow@localhost/project_workflow
-export PROJECT_WORKFLOW_WORK_ROOT=/var/lib/project-workflow/tasks
 export OLLAMA_BASE_URL=https://ollama.com
 export OLLAMA_MODEL=kimi-k2.7-code:cloud
 export OLLAMA_API_KEY=...
 ```
 
-Если LLM недоступна, истёк timeout или ответ не соответствует контракту, Wizard возвращает `BLOCKED` и workflow не переходит дальше. Строковый режим `--report "..."` не поддерживается: принимается только путь к текущему YAML-файлу.
+Если LLM недоступна, истёк timeout или ответ не соответствует контракту, Wizard возвращает `BLOCKED` и workflow не переходит дальше. `project-workflow` не управляет рабочими файлами агента: skill агента может требовать сохранить полученный чек-лист и обновлять его, но в `--report` передаётся текст.
 
 <a name="ui"></a>
 ## 🌐 Web UI
