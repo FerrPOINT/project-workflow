@@ -118,13 +118,7 @@ def test_full_workflow_uses_text_report_wizard_and_history(manual_env, wizard_ll
     assert history.exit_code == 0
     history_data = json.loads(history.output)
     assert history_data["count"] == len(submitted)
-    intake = next(
-        record
-        for record in history_data["records"]
-        if record["phase_code"] == "manual.intake"
-    )
-    assert intake["report"].startswith("task: MANUAL-1")
-    assert intake["feedback"] == "Test Wizard verdict: PASS"
+    intake = next(record for record in history_data["records"] if record["phase_code"] == "manual.intake")
     assert intake["next_phase"] == "manual.plan"
 
 

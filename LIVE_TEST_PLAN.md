@@ -10,7 +10,7 @@ fail-closed поведение существующего workflow. Полные
 
 - `DATABASE_URL` указывает на тестовую project-workflow БД;
 - существует обычный smoke workflow с разрешённым ключом `SMOKE-*`;
-- `OLLAMA_BASE_URL=https://ollama.com`;
+- `OLLAMA_BASE_URL=https://ollama.com/v1`;
 - `OLLAMA_MODEL=kimi-k2.7-code:cloud`;
 - `OLLAMA_API_KEY` установлен в окружении сервиса.
 

@@ -38,7 +38,7 @@
 ## Позиционирование
 
 Пофазовый движок управления задачами.
-Агент получает YAML-чек-лист текущей фазы через CLI, заполняет его, а встроенный Wizard обязательно проверяет отчёт через настроенную LLM и выдаёт вердикт: **PASS**, **SOFT_FAIL**, **ROLLBACK** или **BLOCKED**.
+Агент получает инструкции текущей фазы через CLI, отправляет текстовый отчёт, а встроенный Wizard обязательно проверяет его через настроенную LLM и выдаёт вердикт: **PASS**, **SOFT_FAIL**, **ROLLBACK** или **BLOCKED**.
 Всё управление шаблонами workflow, фазами, проектами, агентами и задачами ведётся через Web UI.
 
 CLI остаётся минимальным: ровно две команды — `step` и `history`.
@@ -54,7 +54,6 @@ SQLite остаётся только для тестов (временные ф�
 |---------|----------|
 | Пофазовый workflow | Каждая задача строго следует шаблону фаз с инструкциями, чек-листами и артефактами. |
 | Встроенный Wizard | Обязательная fail-closed LLM-оценка отчёта; следующую фазу выбирает workflow. |
-| Чек-лист фазы | Wizard возвращает инструкции, checks и evidence; агент ведёт рабочий файл по правилам своего skill. |
 | Web UI | Управление шаблонами, фазами, проектами, задачами и агентами через браузер. |
 | CLI freeze | Только `step` и `history`; весь CRUD — через UI. |
 | PostgreSQL | Единый production-стек: systemd UI и CLI используют тот же Postgres через `DATABASE_URL`. |
@@ -93,7 +92,7 @@ CLI ожидает `DATABASE_URL`. Единственная модель Wizard 
 
 ```bash
 export DATABASE_URL=postgresql+psycopg://project_workflow:project_workflow@localhost/project_workflow
-export OLLAMA_BASE_URL=https://ollama.com
+export OLLAMA_BASE_URL=https://ollama.com/v1
 export OLLAMA_MODEL=kimi-k2.7-code:cloud
 export OLLAMA_API_KEY=...
 ```

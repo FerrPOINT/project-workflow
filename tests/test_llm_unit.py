@@ -158,12 +158,34 @@ class TestLoadApiKey:
         importlib.reload(project_workflow.infrastructure.llm)
         assert project_workflow.infrastructure.llm._load_api_key() == "env-token"
 
-    def test_env_empty_does_not_read_hermes_file(self, monkeypatch):
+    def test_env_empty_reads_file(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("OLLAMA_API_KEY", "")
+        env_file = tmp_path / ".hermes" / ".env"
+        env_file.parent.mkdir(parents=True)
+        env_file.write_text("OLLAMA_API_KEY=file-token\n", encoding="utf-8")
+        import importlib
+
+        import project_workflow.infrastructure.llm
+
+        monkeypatch.setattr(
+            project_workflow.infrastructure.llm.os.path,
+            "expanduser",
+            lambda _path: str(env_file),
+        )
+        importlib.reload(project_workflow.infrastructure.llm)
+        assert project_workflow.infrastructure.llm._load_api_key() == "file-token"
+
+    def test_no_key_returns_empty(self, tmp_path, monkeypatch):
         monkeypatch.setenv("OLLAMA_API_KEY", "")
         import importlib
 
         import project_workflow.infrastructure.llm
 
+        monkeypatch.setattr(
+            project_workflow.infrastructure.llm.os.path,
+            "expanduser",
+            lambda _path: str(tmp_path / "missing.env"),
+        )
         importlib.reload(project_workflow.infrastructure.llm)
         assert project_workflow.infrastructure.llm._load_api_key() == ""
 
@@ -190,13 +212,10 @@ class TestOllamaClientDetection:
 
 class TestOllamaClientIsAvailable:
     def test_local_available(self):
-        with (
-            patch("project_workflow.infrastructure.llm._load_api_key", return_value=""),
-            patch("requests.get", return_value=MagicMock(status_code=200)) as mock,
-        ):
+        with patch("requests.get", return_value=MagicMock(status_code=200)) as mock:
             client = OllamaClient(base_url="http://localhost:11434")
             assert client.is_available() is True
-            mock.assert_called_once_with("http://localhost:11434/api/tags", headers={}, timeout=5)
+            mock.assert_called_once_with("http://localhost:11434/api/tags", timeout=5)
 
     def test_cloud_available(self):
         with patch("requests.get", return_value=MagicMock(status_code=200)) as mock:

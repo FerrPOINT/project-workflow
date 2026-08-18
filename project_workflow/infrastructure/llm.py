@@ -28,8 +28,19 @@ OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "")
 
 
 def _load_api_key() -> str:
-    """Read the controller-owned Ollama credential from the process environment."""
-    return OLLAMA_API_KEY
+    """Read OLLAMA_API_KEY from env or ~/.hermes/.env."""
+    if OLLAMA_API_KEY:
+        return OLLAMA_API_KEY
+    env_path = os.path.expanduser("~/.hermes/.env")
+    if os.path.exists(env_path):
+        try:
+            with open(env_path) as f:
+                for line in f:
+                    if line.startswith("OLLAMA_API_KEY="):
+                        return line.split("=", 1)[1].strip()
+        except (OSError, ValueError) as exc:
+            logger.warning("Failed to read OLLAMA_API_KEY from env file: %s", exc)
+    return ""
 
 
 @dataclass(frozen=True)
@@ -64,11 +75,11 @@ class OllamaClient:
     def is_available(self) -> bool:
         """Quick health-check."""
         try:
-            headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
             if self.is_cloud:
+                headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
                 r = requests.get(f"{self.base_url}/models", headers=headers, timeout=5)
             else:
-                r = requests.get(f"{self.base_url}/api/tags", headers=headers, timeout=5)
+                r = requests.get(f"{self.base_url}/api/tags", timeout=5)
             return r.status_code == 200
         except (requests.RequestException, OSError) as exc:
             logger.warning("LLM health-check failed: %s", exc)
@@ -115,8 +126,7 @@ class OllamaClient:
         return self._extract_json(content)
 
     def _chat_local(self, system: str, user: str, temperature: float) -> dict[str, Any]:
-        """Native Ollama /api/chat endpoint, local or remote."""
-        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+        """Native Ollama /api/chat endpoint."""
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": [
@@ -132,7 +142,6 @@ class OllamaClient:
         }
         resp = requests.post(
             f"{self.base_url}/api/chat",
-            headers=headers,
             json=payload,
             timeout=self.timeout,
         )
@@ -162,7 +171,7 @@ class OllamaClient:
                     return json.loads(match.group(1))
                 except json.JSONDecodeError:
                     pass
-            # Invalid model output is a fail-closed Wizard decision.
+            # Fallback: wrap raw text as a BLOCKED response so caller can proceed
             return {
                 "verdict": "BLOCKED",
                 "covered": [],

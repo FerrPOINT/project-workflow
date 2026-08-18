@@ -34,7 +34,7 @@ from .core import WARN, _require_valid_key, cli, console, out_json
 
 @cli.command()
 @click.option("--task", required=True, help="Task key (e.g. TASK-42)")
-@click.option("--report", default=None, help="Текстовый отчёт по текущей фазе")
+@click.option("--report", default=None, help="Отчёт исполнителя CLI (оценить и перейти)")
 @click.pass_context
 def step_cmd(
     ctx: click.Context,
@@ -45,7 +45,7 @@ def step_cmd(
 
     Usage:
       project-workflow step --task TASK-KEY                → текущие инструкции
-      project-workflow step --task TASK-KEY --report "..."  → оценить отчёт и перейти
+      project-workflow step --task TASK-KEY --report "..."  → оценить отчёт исполнителя CLI и перейти
     """
     uow = SAUnitOfWork()
     task_key = _require_valid_key(task, uow)
@@ -78,14 +78,7 @@ def step_cmd(
                 }
             )
             return
-        out_json(
-            {
-                "ok": True,
-                "task_key": task_key,
-                "phase": engine.current_phase,
-                "prompt": prompt,
-            }
-        )
+        out_json({"ok": True, "task_key": task_key, "phase": engine.current_phase, "prompt": prompt})
         return
     instructions = engine.format_current_phase_instructions()
     console.print(instructions)
@@ -138,11 +131,6 @@ def history_cmd(ctx: click.Context, task: str, n: int | None) -> None:
                     {
                         "phase_code": r.get("phase_code"),
                         "verdict": r.get("verdict"),
-                        "report": r.get("report"),
-                        "covered": r.get("covered") or [],
-                        "missing": r.get("missing") or [],
-                        "blockers": r.get("blockers") or [],
-                        "feedback": (r.get("response") or {}).get("message"),
                         "next_phase": r.get("next_phase_code"),
                         "rollback_phase": r.get("rollback_phase_code"),
                         "created_at": r.get("created_at"),
@@ -165,6 +153,3 @@ def history_cmd(ctx: click.Context, task: str, n: int | None) -> None:
         rollback = r.get("rollback_phase_code", "-")
         created_at = r.get("created_at", "-")
         console.print(f"{verdict_icon} [{created_at}] Phase {phase} → {next_phase} (rollback: {rollback})")
-        feedback = (r.get("response") or {}).get("message")
-        if feedback:
-            console.print(f"   Wizard: {feedback}")

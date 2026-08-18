@@ -114,23 +114,6 @@ class TestOllamaClient:
             assert payload["messages"][0]["role"] == "system"
             assert payload["messages"][1]["role"] == "user"
 
-    def test_native_cloud_sends_bearer_token(self):
-        client = OllamaClient(
-            model="kimi-k2.7-code:cloud",
-            base_url="https://ollama.com",
-            api_key="test-key",
-        )
-        with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
-            mock_post.return_value = MagicMock(
-                status_code=200,
-                json=lambda: {"message": {"content": '{"verdict":"PASS"}'}},
-                raise_for_status=lambda: None,
-            )
-            client.chat("sys", "usr")
-        assert mock_post.call_args.kwargs["headers"] == {
-            "Authorization": "Bearer test-key"
-        }
-
     def test_chat_empty_content_raises(self):
         client = OllamaClient()
         with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:

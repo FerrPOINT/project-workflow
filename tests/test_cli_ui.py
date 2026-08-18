@@ -237,7 +237,7 @@ class TestCliGuard:
         result = runner.invoke(cli, ["step", "--help"])
         assert result.exit_code == 0
         assert "--task" in result.output
-        assert "Текстовый отчёт" in result.output
+        assert "Отчёт исполнителя CLI" in result.output
         assert "\n  --repo TEXT" not in result.output
         assert "\n  --skip" not in result.output
 
