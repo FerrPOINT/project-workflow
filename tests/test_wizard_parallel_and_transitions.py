@@ -443,7 +443,7 @@ class TestEvaluateEdgeCases:
 
     def test_parallel_evaluate_partial_stays(self, wizard_llm):
         wizard_llm(
-            "SOFT_FAIL",
+            "PARTIAL",
             covered=["deploy microservice"],
             missing=["write unit tests"],
         )
@@ -498,6 +498,6 @@ class TestEvaluateEdgeCases:
             engine.task = {"id": 7, "current_phase": "1", "status": "active", "project_id": 1}
             engine.db = MagicMock()
             result = engine.evaluate("microservice deployed")
-        assert result["verdict"] == "SOFT_FAIL"
+        assert result["verdict"] == "PARTIAL"
         assert result["next_phase"] is None  # non-pass: stay on group
         assert "write unit tests" in result["missing"]

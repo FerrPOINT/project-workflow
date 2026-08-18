@@ -182,6 +182,15 @@ class TestEvaluateLlmReportVerdicts:
         assert result["blockers"][0].startswith("Wizard LLM unavailable:")
         engine.db.create_supervisor_run.assert_called_once()
 
+    def test_invalid_response_is_persisted_as_blocked(self):
+        engine = _make_engine()
+        phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[])
+        with patch.object(OllamaClient, "chat", return_value={"verdict": "PASS"}):
+            result = evaluate_llm_report("r", phase, engine)
+        assert result["verdict"] == "BLOCKED"
+        assert result["next_phase"] is None
+        engine.db.create_supervisor_run.assert_called_once()
+
 
 class TestLoadApiKey:
     def test_env_key(self, monkeypatch):
@@ -303,26 +312,25 @@ class TestOllamaClientChatErrors:
 
 
 class TestExtractJson:
-    def test_extract_markdown_json(self):
+    def test_markdown_wrapper_is_rejected(self):
         text = '```json\n{"verdict": "PASS"}\n```'
-        result = OllamaClient._extract_json(text)
-        assert result["verdict"] == "PASS"
+        with pytest.raises(ValueError):
+            OllamaClient._extract_json(text)
 
     def test_extract_plain_json(self):
         text = '{"verdict": "BLOCKED"}'
         result = OllamaClient._extract_json(text)
         assert result["verdict"] == "BLOCKED"
 
-    def test_extract_nested_json(self):
+    def test_free_text_around_json_is_rejected(self):
         text = 'Some text {"verdict": "PARTIAL"} more text'
-        result = OllamaClient._extract_json(text)
-        assert result["verdict"] == "PARTIAL"
+        with pytest.raises(ValueError):
+            OllamaClient._extract_json(text)
 
-    def test_extract_invalid_json_fallback(self):
+    def test_invalid_json_is_rejected(self):
         text = "not json"
-        result = OllamaClient._extract_json(text)
-        assert result["verdict"] == "BLOCKED"
-        assert "LLM response was not valid JSON" in result["blockers"]
+        with pytest.raises(ValueError):
+            OllamaClient._extract_json(text)
 
 
 class TestPromptBuilder:
@@ -360,46 +368,47 @@ class TestPromptBuilder:
 class TestResponseParser:
     def test_parse_full(self):
         raw = {
-            "verdict": "pass",
+            "verdict": "PASS",
             "covered": ["A"],
-            "missing": ["B"],
-            "blockers": ["C"],
+            "missing": [],
+            "blockers": [],
             "message": "ok",
             "next_phase": "2",
             "next_phase_name": "Two",
             "confidence": 0.9,
         }
         v = ResponseParser.parse(raw)
-        assert v.verdict == "BLOCKED"
+        assert v.verdict == "PASS"
         assert v.covered == ["A"]
         assert v.next_phase is None
         assert v.confidence == 0.9
 
     def test_parse_invalid_verdict(self):
-        v = ResponseParser.parse({"verdict": "UNKNOWN"})
-        assert v.verdict == "BLOCKED"
+        with pytest.raises(ValueError):
+            ResponseParser.parse({"verdict": "UNKNOWN"})
 
-    def test_parse_coerces_types(self):
-        v = ResponseParser.parse(
-            {
-                "verdict": "blocked",
-                "covered": "single",
-                "missing": None,
-                "blockers": [],
-                "confidence": None,
-            }
-        )
-        assert v.covered == ["single"]
-        assert v.missing == []
-        assert v.confidence == 0.5
+    def test_parse_rejects_wrong_types(self):
+        with pytest.raises(ValueError):
+            ResponseParser.parse(
+                {
+                    "verdict": "BLOCKED",
+                    "covered": "single",
+                    "missing": [],
+                    "blockers": [],
+                    "message": "blocked",
+                    "confidence": 0.5,
+                }
+            )
 
-    def test_parse_clamps_confidence(self):
-        v = ResponseParser.parse({"verdict": "pass", "confidence": 1.5})
-        assert v.confidence == 1.0
-        v = ResponseParser.parse({"verdict": "pass", "confidence": -0.5})
-        assert v.confidence == 0.0
-
-    def test_to_str_list_skips_empty(self):
-        assert ResponseParser._to_str_list(["a", "", "b"]) == ["a", "b"]
-        assert ResponseParser._to_str_list(None) == []
-        assert ResponseParser._to_str_list(123) == []
+    def test_parse_rejects_out_of_range_confidence(self):
+        with pytest.raises(ValueError):
+            ResponseParser.parse(
+                {
+                    "verdict": "PASS",
+                    "covered": [],
+                    "missing": [],
+                    "blockers": [],
+                    "message": "ok",
+                    "confidence": 1.5,
+                }
+            )

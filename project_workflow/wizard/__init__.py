@@ -6,7 +6,7 @@ Public API re-exported from project_workflow.wizard subpackage.
 from __future__ import annotations
 
 from project_workflow.infrastructure import conversation as convo
-from project_workflow.wizard.checks import build_verdict_message, normalize_text
+from project_workflow.wizard.checks import build_verdict_message
 from project_workflow.wizard.context import WizardContextBuilder
 from project_workflow.wizard.contracts import (
     PhaseContractBuilder,
@@ -55,7 +55,6 @@ __all__ = [
     "evaluate_llm_report",
     "format_result",
     "main",
-    "normalize_text",
     "phase_to_dict",
     "text_from_check",
     "text_from_evidence",

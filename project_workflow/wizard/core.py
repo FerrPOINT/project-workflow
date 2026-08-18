@@ -225,9 +225,7 @@ class WizardEngine:
             covered = run.get("covered", [])
             for item in covered:
                 if isinstance(item, str):
-                    from .checks import normalize_text
-
-                    previously.add(normalize_text(item))
+                    previously.add(item.strip())
         return previously
 
     def _get_next_phase(self, phase_code):

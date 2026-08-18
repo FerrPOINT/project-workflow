@@ -122,12 +122,12 @@ def test_full_workflow_uses_text_report_wizard_and_history(manual_env, wizard_ll
     assert intake["next_phase"] == "manual.plan"
 
 
-def test_soft_fail_keeps_current_phase_for_revised_text_report(manual_env, wizard_llm):
+def test_partial_keeps_current_phase_for_revised_text_report(manual_env, wizard_llm):
     runner = manual_env
     task = "MANUAL-2"
-    wizard_llm("SOFT_FAIL", missing=["more evidence"])
+    wizard_llm("PARTIAL", missing=["more evidence"])
     first = _submit(runner, task, _phase_report(runner, task))
-    assert first["verdict"] == "SOFT_FAIL"
+    assert first["verdict"] == "PARTIAL"
     assert first["phase"] == "manual.intake"
     assert first["next_phase"] is None
 

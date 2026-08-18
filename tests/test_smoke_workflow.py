@@ -166,10 +166,10 @@ def test_parallel_group_partial_stays_on_group(tmp_path: Path, monkeypatch, wiza
         "Round-trip unit-тесты проходят зелёными. "
         "UI не готов: дерево секций и структурные операции пока не реализованы."
     )
-    wizard_llm("SOFT_FAIL", missing=["UI branch"])
+    wizard_llm("PARTIAL", missing=["UI branch"])
     result = engine.evaluate(report)
 
-    assert result["verdict"] == "SOFT_FAIL"
+    assert result["verdict"] == "PARTIAL"
     assert result["next_phase"] is None
     assert "Parallel group" in result["phase_name"]
 

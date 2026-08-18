@@ -188,12 +188,12 @@ class TestResponseParser:
         assert v.next_phase_name is None
         assert v.confidence == 0.92
 
-    def test_parse_invalid_verdict_fails_closed(self):
+    def test_parse_invalid_verdict_is_rejected(self):
         raw = {"verdict": "UNKNOWN", "covered": [], "missing": [], "blockers": []}
-        v = ResponseParser.parse(raw)
-        assert v.verdict == "BLOCKED"
+        with pytest.raises(ValueError):
+            ResponseParser.parse(raw)
 
-    def test_parse_lowercase_verdict_normalised(self):
+    def test_parse_lowercase_verdict_is_rejected(self):
         raw = {
             "verdict": "pass",
             "covered": [],
@@ -202,20 +202,15 @@ class TestResponseParser:
             "message": "ok",
             "confidence": 1.0,
         }
-        v = ResponseParser.parse(raw)
-        assert v.verdict == "PASS"
+        with pytest.raises(ValueError):
+            ResponseParser.parse(raw)
 
-    def test_parse_incomplete_pass_fails_closed(self):
+    def test_parse_incomplete_response_is_rejected(self):
         raw = {"verdict": "PASS"}
-        v = ResponseParser.parse(raw)
-        assert v.verdict == "BLOCKED"
-        assert v.covered == []
-        assert v.missing == []
-        assert v.blockers == ["Wizard response does not match the required JSON contract"]
-        assert v.message == ""
-        assert v.confidence == 0.5
+        with pytest.raises(ValueError):
+            ResponseParser.parse(raw)
 
-    def test_parse_confidence_clamped(self):
+    def test_parse_out_of_range_confidence_is_rejected(self):
         raw = {
             "verdict": "PASS",
             "covered": [],
@@ -224,23 +219,20 @@ class TestResponseParser:
             "message": "ok",
             "confidence": 1.5,
         }
-        v = ResponseParser.parse(raw)
-        assert v.confidence == 1.0
-        raw["confidence"] = -0.3
-        v = ResponseParser.parse(raw)
-        assert v.confidence == 0.0
+        with pytest.raises(ValueError):
+            ResponseParser.parse(raw)
 
-    def test_parse_string_list_coercion(self):
+    def test_parse_string_list_is_rejected(self):
         raw = {
-            "verdict": "SOFT_FAIL",
+            "verdict": "PARTIAL",
             "covered": "single item",
             "missing": ["a", "", "b"],
             "blockers": [],
+            "message": "incomplete",
+            "confidence": 0.5,
         }
-        v = ResponseParser.parse(raw)
-        assert v.verdict == "SOFT_FAIL"
-        assert v.covered == ["single item"]
-        assert v.missing == ["a", "b"]
+        with pytest.raises(ValueError):
+            ResponseParser.parse(raw)
 
     def test_llm_verdict_dataclass_immutable(self):
         v = LlmVerdict(
@@ -333,28 +325,59 @@ class TestWizardEngineEvaluateLLM:
 class TestOllamaResponseParserEdgeCases:
     """Edge-case parsing for LLM responses."""
 
-    def test_parse_confidence_none_defaults_to_half(self):
-        raw = {"verdict": "PASS", "confidence": None}
-        v = ResponseParser.parse(raw)
-        assert v.confidence == 0.5
+    def test_parse_confidence_none_is_rejected(self):
+        raw = {
+            "verdict": "PASS",
+            "covered": [],
+            "missing": [],
+            "blockers": [],
+            "message": "ok",
+            "confidence": None,
+        }
+        with pytest.raises(ValueError):
+            ResponseParser.parse(raw)
 
-    def test_parse_blockers_with_whitespace_strings(self):
-        raw = {"verdict": "BLOCKED", "blockers": ["  ", "real blocker", ""]}
+    def test_parse_preserves_declared_strings(self):
+        raw = {
+            "verdict": "BLOCKED",
+            "covered": [],
+            "missing": [],
+            "blockers": ["real blocker"],
+            "message": "blocked",
+            "confidence": 0.5,
+        }
         v = ResponseParser.parse(raw)
         assert v.blockers == ["real blocker"]
 
     def test_parse_next_phase_null_from_llm(self):
-        raw = {"verdict": "PASS", "next_phase": None, "next_phase_name": None}
+        raw = {
+            "verdict": "PASS",
+            "covered": [],
+            "missing": [],
+            "blockers": [],
+            "message": "ok",
+            "confidence": 1.0,
+            "next_phase": None,
+            "next_phase_name": None,
+        }
         v = ResponseParser.parse(raw)
         assert v.next_phase is None
         assert v.next_phase_name is None
 
     def test_parse_preserves_raw_response(self):
-        raw = {"verdict": "PASS", "extra_key": "preserved"}
+        raw = {
+            "verdict": "PASS",
+            "covered": [],
+            "missing": [],
+            "blockers": [],
+            "message": "ok",
+            "confidence": 1.0,
+            "extra_key": "preserved",
+        }
         v = ResponseParser.parse(raw)
         assert v.raw["extra_key"] == "preserved"
 
-    def test_parse_strip_verdict_whitespace(self):
+    def test_parse_verdict_whitespace_is_rejected(self):
         raw = {
             "verdict": "  pass  ",
             "covered": [],
@@ -363,8 +386,8 @@ class TestOllamaResponseParserEdgeCases:
             "message": "ok",
             "confidence": 1.0,
         }
-        v = ResponseParser.parse(raw)
-        assert v.verdict == "PASS"
+        with pytest.raises(ValueError):
+            ResponseParser.parse(raw)
 
 
 class TestPromptBuilderEdgeCases:

@@ -61,11 +61,11 @@ class TestWizardEvaluate:
         with patch.object(
             engine,
             "evaluate_llm",
-            return_value={"verdict": "SOFT_FAIL", "missing": ["check"]},
+            return_value={"verdict": "PARTIAL", "missing": ["check"]},
         ):
             result = engine.evaluate("report bad")
 
-        assert result["verdict"] == "SOFT_FAIL"
+        assert result["verdict"] == "PARTIAL"
         assert result["missing"] == ["check"]
 
     def test_get_phase_prompt(self):

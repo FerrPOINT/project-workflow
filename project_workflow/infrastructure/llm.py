@@ -13,11 +13,11 @@ from __future__ import annotations
 import json
 import logging
 import os
-import re
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 import requests
+from pydantic import BaseModel, ConfigDict, Field
 
 logger = logging.getLogger(__name__)
 
@@ -108,9 +108,7 @@ class OllamaClient:
             "temperature": temperature,
             "max_tokens": 2000,
         }
-        # Prefer structured output if supported
-        if self.model.startswith("kimi") or self.model.startswith("gpt"):
-            payload["response_format"] = {"type": "json_object"}
+        payload["response_format"] = {"type": "json_object"}
 
         resp = requests.post(
             f"{self.base_url}/chat/completions",
@@ -154,35 +152,11 @@ class OllamaClient:
 
     @staticmethod
     def _extract_json(text: str) -> dict[str, Any]:
-        """Strip markdown wrapper and parse JSON."""
-        text = text.strip()
-        # Remove markdown ```json ... ``` wrapper
-        match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
-        if match:
-            text = match.group(1).strip()
-        # Try direct JSON parse
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            # Try non-greedy extraction of the first JSON object
-            match = re.search(r"(\{.*?\})", text, re.DOTALL)
-            if match:
-                try:
-                    return json.loads(match.group(1))
-                except json.JSONDecodeError:
-                    pass
-            # Fallback: wrap raw text as a BLOCKED response so caller can proceed
-            return {
-                "verdict": "BLOCKED",
-                "covered": [],
-                "missing": [],
-                "blockers": ["LLM response was not valid JSON"],
-                "message": f"Raw response: {text[:500]}",
-                "next_phase": None,
-                "next_phase_name": None,
-                "confidence": 0.0,
-                "raw_text": text,
-            }
+        """Parse the structured response without repairing free-form text."""
+        parsed = json.loads(text)
+        if not isinstance(parsed, dict):
+            raise ValueError("Wizard response must be a JSON object")
+        return parsed
 
 
 class PromptBuilder:
@@ -199,14 +173,14 @@ class PromptBuilder:
         "Words like 'ошибка'/'error'/'bug' alone are NOT blockers without root cause.\n"
         "5. Verify the worker did NOT break existing functionality, remove working code, or leave orphaned artifacts.\n"
         "6. verdict = PASS      — all items done, no blockers, no regressions → advance.\n"
-        "7. verdict = SOFT_FAIL — some items done → stay on phase.\n"
+        "7. verdict = PARTIAL — some items done → stay on phase.\n"
         "8. verdict = BLOCKED — real blocker → stay on phase.\n"
         "9. verdict = ROLLBACK — worker explicitly cannot/will not do this.\n"
         "10. verdict = DELEGATE — worker delegates a configured delegated phase.\n"
         "The Wizard never chooses the next phase.\n\n"
         "Output STRICT JSON with these keys:\n"
         "{\n"
-        '  "verdict": "PASS" | "SOFT_FAIL" | "BLOCKED" | "ROLLBACK" | "DELEGATE",\n'
+        '  "verdict": "PASS" | "PARTIAL" | "BLOCKED" | "ROLLBACK" | "DELEGATE",\n'
         '  "covered": ["item description"],\n'
         '  "missing": ["item description"],\n'
         '  "blockers": ["specific blocker description"],\n'
@@ -266,57 +240,39 @@ class PromptBuilder:
         return "\n".join(lines)
 
 
-class ResponseParser:
-    """Validate + normalise raw LLM JSON into LlmVerdict."""
+class _LlmResponse(BaseModel):
+    """Strict wire contract for the Wizard response."""
 
-    VALID_VERDICTS = {"PASS", "SOFT_FAIL", "BLOCKED", "ROLLBACK", "DELEGATE"}
-    TRANSITION_VERDICTS = {"PASS", "ROLLBACK", "DELEGATE"}
+    model_config = ConfigDict(extra="ignore", strict=True)
+
+    verdict: Literal["PASS", "PARTIAL", "BLOCKED", "ROLLBACK", "DELEGATE"]
+    covered: list[str]
+    missing: list[str]
+    blockers: list[str]
+    message: str
+    confidence: float = Field(ge=0.0, le=1.0)
+
+
+class ResponseParser:
+    """Validate the LLM JSON response against its declared contract."""
 
     @classmethod
     def parse(cls, raw: dict[str, Any]) -> LlmVerdict:
-        verdict = str(raw.get("verdict", "")).upper().strip()
-        if verdict not in cls.VALID_VERDICTS:
+        response = _LlmResponse.model_validate(raw)
+        verdict = response.verdict
+        if verdict == "PASS" and response.blockers:
             verdict = "BLOCKED"
-
-        covered = cls._to_str_list(raw.get("covered"))
-        missing = cls._to_str_list(raw.get("missing"))
-        blockers = cls._to_str_list(raw.get("blockers"))
-        valid_transition_shape = (
-            all(key in raw for key in ("covered", "missing", "blockers", "message", "confidence"))
-            and all(isinstance(raw.get(key), list) for key in ("covered", "missing", "blockers"))
-            and isinstance(raw.get("message"), str)
-            and isinstance(raw.get("confidence"), (int, float))
-            and not isinstance(raw.get("confidence"), bool)
-        )
-        if verdict in cls.TRANSITION_VERDICTS and not valid_transition_shape:
-            verdict = "BLOCKED"
-            blockers = ["Wizard response does not match the required JSON contract"]
-        if verdict == "PASS" and blockers:
-            verdict = "BLOCKED"
-        elif verdict == "PASS" and missing:
-            verdict = "SOFT_FAIL"
-        message = str(raw.get("message", "")).strip()
-        confidence = raw.get("confidence", 0.5)
-        if confidence is None:
-            confidence = 0.5
-        confidence = float(confidence)
+        elif verdict == "PASS" and response.missing:
+            verdict = "PARTIAL"
 
         return LlmVerdict(
             verdict=verdict,
-            covered=covered,
-            missing=missing,
-            blockers=blockers,
-            message=message,
+            covered=response.covered,
+            missing=response.missing,
+            blockers=response.blockers,
+            message=response.message,
             next_phase=None,
             next_phase_name=None,
-            confidence=max(0.0, min(1.0, confidence)),
+            confidence=response.confidence,
             raw=raw,
         )
-
-    @staticmethod
-    def _to_str_list(val: Any) -> list[str]:
-        if isinstance(val, list):
-            return [str(v).strip() for v in val if str(v).strip()]
-        if isinstance(val, str):
-            return [val.strip()] if val.strip() else []
-        return []

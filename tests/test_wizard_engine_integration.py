@@ -60,7 +60,7 @@ class TestWizardEngineIntegration:
         assert str(engine.task["current_phase"]) == "-1"
 
     def test_evaluate_partial_on_real_phase(self, wizard_db, wizard_llm):
-        wizard_llm("SOFT_FAIL", missing=["evidence"])
+        wizard_llm("PARTIAL", missing=["evidence"])
         uow = SAUnitOfWork(wizard_db)
         project = uow.create_project({"code": "AAT", "name": "AAT", "key_prefixes": ["AAT"]})
         uow.create_task({"task_key": "AAT-PARTIAL", "title": "Partial", "project_id": project["id"]})
@@ -68,7 +68,7 @@ class TestWizardEngineIntegration:
 
         engine = WizardEngine("AAT-PARTIAL")
         result = engine.evaluate("some progress but not everything")
-        assert result["verdict"] in {"SOFT_FAIL", "HARD_FAIL", "BLOCKED"}
+        assert result["verdict"] == "PARTIAL"
 
     def test_evaluate_blocker_detected(self, wizard_db, wizard_llm):
         wizard_llm("BLOCKED", blockers=["no api key"])

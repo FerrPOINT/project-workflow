@@ -30,8 +30,6 @@ def _blocked(exc: Exception) -> LlmVerdict:
 def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any]:
     """Evaluate a report once; workflow order remains authoritative."""
 
-    from .checks import normalize_text
-
     builder = PhaseContractBuilder(engine.all_phases)
     group = builder.get_parallel_group(phase) if phase.execution_type == "parallel" else [phase]
     evaluation_phase = phase
@@ -51,7 +49,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
 
     previously = engine._get_previously_covered(phase.code)
     checklist = builder.build_parallel_checklist(group) if len(group) > 1 else builder.build_checklist(phase)
-    previously_items = [item for item in checklist if normalize_text(item) in previously]
+    previously_items = [item for item in checklist if item.strip() in previously]
     user = PromptBuilder.build_user_prompt(
         engine.task_key,
         evaluation_phase,

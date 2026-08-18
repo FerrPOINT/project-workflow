@@ -19,7 +19,7 @@ After any change to the SQLAlchemy layer, application services, UI state, or wiz
    ```bash
    pytest -q --timeout=60
    ```
-   Expected: 0 failed, 0 errors.
+   Expected: **949 passed, 6 deselected**, 0 failed, 0 errors.
 
 2. **Coverage**
    ```bash
@@ -37,7 +37,7 @@ After any change to the SQLAlchemy layer, application services, UI state, or wiz
    ```bash
    mypy project_workflow
    ```
-   Expected: `Success: no issues found`.
+   Expected: `Success: no issues found in 82 source files`.
 
 5. **UI service health**
    ```bash

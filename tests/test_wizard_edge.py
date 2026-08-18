@@ -43,7 +43,7 @@ class TestWizardEvaluateEdge:
         fresh_db.create_task({"task_key": "PROJ-42", "title": "x", "current_phase": "-1"})
         engine = _make_engine(fresh_db, "PROJ-42")
         result = engine.evaluate("")
-        assert result["verdict"] in {"PASS", "SOFT_FAIL", "HARD_FAIL"}
+        assert result["verdict"] == "PASS"
 
     def test_evaluate_nonexistent_phase_returns_blocked(self, fresh_db):
         fresh_db.create_task({"task_key": "PROJ-42", "title": "x", "current_phase": "-1"})
@@ -57,10 +57,10 @@ class TestWizardEvaluateEdge:
         fresh_db.create_task({"task_key": "PROJ-42", "title": "x", "current_phase": "-1"})
         engine = _make_engine(fresh_db, "PROJ-42")
         result = engine.evaluate("report")
-        assert result["verdict"] in {"PASS", "SOFT_FAIL", "HARD_FAIL"}
+        assert result["verdict"] == "PASS"
 
     def test_save_records_assessment(self, fresh_db, wizard_llm):
-        wizard_llm("SOFT_FAIL", missing=["evidence"])
+        wizard_llm("PARTIAL", missing=["evidence"])
         fresh_db.create_task({"task_key": "PROJ-42", "title": "x", "current_phase": "-1"})
         engine = _make_engine(fresh_db, "PROJ-42")
         engine.evaluate("report")
