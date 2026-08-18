@@ -39,16 +39,12 @@ class TestWizardEvaluate:
         engine.all_phases = [ph]
         engine.task = {"id": 1, "task_key": "AAT-1", "current_phase": "0"}
 
-        with patch.object(
-            engine,
-            "evaluate_llm",
-            return_value={"verdict": "PASS", "next_phase": "1"},
-        ) as evaluate_llm:
+        with patch.object(engine, "evaluate_llm", return_value={"verdict": "PASS", "next_phase": "1"}) as llm:
             result = engine.evaluate("report ok")
 
         assert result["verdict"] == "PASS"
         assert result["next_phase"] == "1"
-        evaluate_llm.assert_called_once_with("report ok", ph)
+        llm.assert_called_once_with("report ok", ph)
 
     def test_evaluate_partial_when_items_missing(self):
         engine = WizardEngine("AAT-1", repo="/tmp")

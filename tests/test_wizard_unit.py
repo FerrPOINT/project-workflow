@@ -1,6 +1,6 @@
-"""Tests for Wizard engine behavior."""
+"""Tests for wizard.py to boost coverage."""
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -11,14 +11,18 @@ from project_workflow.wizard import WizardEngine
 
 class TestWizard:
     def test_init(self):
-        engine = WizardEngine("AAT-1")
-        assert engine.task_key == "AAT-1"
+        with patch("project_workflow.wizard.convo") as mock_convo:
+            mock_convo.get_last_phase.return_value = None
+            engine = WizardEngine("AAT-1")
+            assert engine.task_key == "AAT-1"
 
     def test_init_bootstraps_phases_when_workflow_db_is_empty(self, tmp_path, monkeypatch):
         test_db = tmp_path / "workflow.db"
         monkeypatch.setattr("project_workflow.infrastructure.db.DB_PATH", test_db)
 
-        engine = WizardEngine("AAT-1")
+        with patch("project_workflow.wizard.convo") as mock_convo:
+            mock_convo.get_last_phase.return_value = None
+            engine = WizardEngine("AAT-1")
 
         assert engine.all_phases
         assert any(phase.code == "-1" for phase in engine.all_phases)
@@ -31,11 +35,13 @@ class TestWizard:
         ph.is_blocker = False
         ph.is_delegated = False
         ph.instructions = []
-        engine = WizardEngine("AAT-1")
-        engine.phase_map = {"0": ph}
-        engine.all_phases = [ph]
-        prompt = engine.get_phase_prompt("0")
-        assert "Test" in prompt
+        with patch("project_workflow.wizard.convo") as mock_convo:
+            mock_convo.get_last_phase.return_value = None
+            engine = WizardEngine("AAT-1")
+            engine.phase_map = {"0": ph}
+            engine.all_phases = [ph]
+            prompt = engine.get_phase_prompt("0")
+            assert "Test" in prompt
 
     def test_get_phase_prompt_parallel(self):
         """Parallel phases produce a single merged prompt with per-phase agents and partner."""
@@ -65,22 +71,26 @@ class TestWizard:
         ph_b.delegate = None
         ph_b.next_recommendation = "next"
 
-        engine = WizardEngine("AAT-1")
-        engine.phase_map = {"parallel-a": ph_a, "parallel-b": ph_b}
-        engine.all_phases = [ph_a, ph_b]
-        engine.current_phase = "parallel-a"
-        prompt = engine.get_phase_prompt("parallel-a")
-        assert "ПАРАЛЛЕЛЬНАЯ ГРУППА ФАЗ" in prompt
-        assert "Parallel A, Parallel B" in prompt
-        assert "параллельно с" in prompt
-        assert "Выполняются одновременно" in prompt
-        assert "Отчёт по этой группе присылается ОДНИМ сообщением" in prompt
+        with patch("project_workflow.wizard.convo") as mock_convo:
+            mock_convo.get_last_phase.return_value = None
+            engine = WizardEngine("AAT-1")
+            engine.phase_map = {"parallel-a": ph_a, "parallel-b": ph_b}
+            engine.all_phases = [ph_a, ph_b]
+            engine.current_phase = "parallel-a"
+            prompt = engine.get_phase_prompt("parallel-a")
+            assert "ПАРАЛЛЕЛЬНАЯ ГРУППА ФАЗ" in prompt
+            assert "Parallel A, Parallel B" in prompt
+            assert "параллельно с" in prompt
+            assert "Выполняются одновременно" in prompt
+            assert "Отчёт по этой группе присылается ОДНИМ сообщением" in prompt
 
     def test_get_full_context(self):
-        engine = WizardEngine("AAT-1")
-        ctx = engine.get_full_context()
-        assert "current_phase" in ctx
-        assert "all_phases" in ctx
+        with patch("project_workflow.wizard.convo") as mock_convo:
+            mock_convo.get_last_phase.return_value = None
+            engine = WizardEngine("AAT-1")
+            ctx = engine.get_full_context()
+            assert "current_phase" in ctx
+            assert "all_phases" in ctx
 
 
 class TestPromptAndModels:
@@ -139,3 +149,75 @@ class TestPromptAndModels:
         )
         rendered = phase.render_instructions({"env": "prod"})
         assert rendered == ["run prod"]
+
+
+class TestDeterministicChecks:
+    def test_extract_keywords_empty_input(self):
+        from project_workflow.wizard.checks import extract_keywords
+
+        assert extract_keywords("") == []
+
+    def test_extract_keywords_filters_short_words(self):
+        from project_workflow.wizard.checks import extract_keywords
+
+        assert extract_keywords("one two three four five six seven") == ["three", "four", "five", "seven"]
+
+    def test_check_coverage_with_previously_covered(self):
+        from project_workflow.wizard.checks import check_coverage
+
+        covered, missing = check_coverage("report", ["item one"], previously_covered={"item one"})
+        assert "item one" in covered
+        assert missing == []
+
+    def test_check_coverage_keyword_threshold(self):
+        from project_workflow.wizard.checks import check_coverage
+
+        covered, missing = check_coverage("alpha beta gamma", ["alpha beta", "delta echo"])
+        assert "alpha beta" in covered
+        assert "delta echo" in missing
+
+    def test_extract_blockers_negative_phrases(self):
+        from project_workflow.wizard.checks import extract_blockers
+
+        assert extract_blockers("no blockers, everything fine") == []
+        assert extract_blockers("blocked by dependency") == ["blocked by"]
+
+    def test_determine_verdict_rollback(self):
+        from project_workflow.wizard.checks import determine_verdict
+
+        assert (
+            determine_verdict(covered=[], missing=["m"], blockers=[], report="rollback", rollback_target="0")
+            == "rollback"
+        )
+
+    def test_determine_verdict_delegate(self):
+        from project_workflow.wizard.checks import determine_verdict
+
+        assert (
+            determine_verdict(covered=[], missing=["m"], blockers=[], report="delegated", is_delegated=True)
+            == "delegate"
+        )
+
+    def test_build_verdict_message_pass(self):
+        from project_workflow.wizard.checks import build_verdict_message
+
+        assert build_verdict_message("pass", "P", "1", [], [], "2", None) == "Phase accepted."
+
+    def test_build_verdict_message_blocked(self):
+        from project_workflow.wizard.checks import build_verdict_message
+
+        assert build_verdict_message("blocked", "P", "1", ["b"], [], None, None) == "Blocked: b. Fix and resubmit."
+
+    def test_build_verdict_message_rollback(self):
+        from project_workflow.wizard.checks import build_verdict_message
+
+        assert build_verdict_message("rollback", "P", "1", [], ["m"], None, "0") == "Roll back and fix: m."
+
+    def test_build_verdict_message_no_phase_codes(self):
+        from project_workflow.wizard.checks import build_verdict_message
+
+        result = build_verdict_message("soft_fail", "P", "1", [], ["m"], None, None)
+        assert "Phase 1" not in result
+        assert "HARD_FAIL" not in result
+        assert "SOFT_FAIL" not in result
+        assert "Incomplete" in result

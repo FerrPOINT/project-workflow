@@ -29,6 +29,17 @@ class TestEntryPoints:
         assert called
 
 
+class TestConfigRawSettings:
+    def test_read_raw_settings_invalid_json(self, tmp_path, monkeypatch):
+        from project_workflow import config as config_module
+
+        bad_file = tmp_path / "settings.json"
+        bad_file.write_text("not json")
+        monkeypatch.setenv("WORKFLOW_DIR", str(tmp_path))
+        config_module.get_settings.cache_clear()
+        assert config_module._read_raw_settings() == {}
+
+
 class TestSessionSQLiteBranches:
     def test_normalize_url_relative_path(self, tmp_path, monkeypatch):
         from project_workflow.infrastructure.db.session import _normalize_url

@@ -1,0 +1,353 @@
+[
+  {
+    "code": "smoke.intake",
+    "name": "Document Intake",
+    "description": "Понять, какие текстовые документы нужно редактировать, какая у них структура и какие ограничения у проекта.",
+    "phase_order": 1,
+    "parallel_with": null,
+    "rollback_target": null,
+    "next_recommendation": "Перейди к doc.plan — спроектировать схему документа и выбрать parallel strategy для parser + UI.",
+    "execution_type": "sync",
+    "instructions": [
+      {
+        "step_num": 1,
+        "description": "Зафиксировать входные форматы документов (Markdown, DOCX, reStructuredText, JSON) и примеры реальных файлов.",
+        "execution_type": "sync"
+      },
+      {
+        "step_num": 2,
+        "description": "Описать структуру документа: уровни заголовков, секции, таблицы, списки, метаданные, вложенность.",
+        "execution_type": "sync"
+      },
+      {
+        "step_num": 3,
+        "description": "Определить scope редактирования: какие операции обязательны (добавление/удаление/перемещение секций, изменение заголовков, правка таблиц), а что вне scope.",
+        "execution_type": "sync"
+      },
+      {
+        "step_num": 4,
+        "description": "Зафиксировать технические ограничения: Python версия, окружение CLI/TUI/GUI, библиотеки которые нельзя использовать, требования к сохранению форматирования.",
+        "execution_type": "sync"
+      }
+    ],
+    "checks": [
+      {
+        "description": "Входные форматы документов зафиксированы с примерами файлов"
+      },
+      {
+        "description": "Структура документа описана: заголовки, секции, таблицы, метаданные"
+      },
+      {
+        "description": "Scope редактирования и границы проекта определены"
+      },
+      {
+        "description": "Технические ограничения и требования к форматированию записаны"
+      }
+    ],
+    "evidence": [
+      {
+        "description": "Примеры входных документов или ссылки на них"
+      },
+      {
+        "description": "Описание структуры документа и допустимых операций"
+      },
+      {
+        "description": "Список ограничений и открытых вопросов"
+      }
+    ],
+    "selected_agent": "architect"
+  },
+  {
+    "code": "smoke.plan",
+    "name": "Schema & Architecture Plan",
+    "description": "Спроектировать внутреннюю модель документа, выбрать библиотеки и определить параллельную стратегию разработки parser и UI.",
+    "phase_order": 2,
+    "parallel_with": null,
+    "rollback_target": null,
+    "next_recommendation": "Перейди к doc.parallel-a (Parser) и doc.parallel-b (Editor UI) — обе ветки идут параллельно.",
+    "execution_type": "sync",
+    "instructions": [
+      {
+        "step_num": 1,
+        "description": "Спроектировать внутреннюю модель документа (AST или JSON schema): узлы для заголовков, секций, таблиц, списков и метаданных.",
+        "execution_type": "sync"
+      },
+      {
+        "step_num": 2,
+        "description": "Выбрать библиотеки для парсинга и рендеринга каждого входного формата с обоснованием.",
+        "execution_type": "sync"
+      },
+      {
+        "step_num": 3,
+        "description": "Определить контракт между parser и UI: как UI получает структуру документа и как передаёт изменения обратно.",
+        "execution_type": "sync"
+      },
+      {
+        "step_num": 4,
+        "description": "Зафиксировать параллельную стратегию: parser и editor UI разрабатываются независимо по общей модели, интеграция — на фазе review.",
+        "execution_type": "sync"
+      }
+    ],
+    "checks": [
+      {
+        "description": "Внутренняя модель документа зафиксирована в виде схемы или AST"
+      },
+      {
+        "description": "Библиотеки парсинга/рендеринга выбраны и обоснованы"
+      },
+      {
+        "description": "Контракт между parser и UI определён"
+      },
+      {
+        "description": "Parallel strategy для parser и UI зафиксирована"
+      }
+    ],
+    "evidence": [
+      {
+        "description": "Schema/AST документа в коде или markdown"
+      },
+      {
+        "description": "Список выбранных библиотек с обоснованием"
+      },
+      {
+        "description": "Описание контракта parser ↔ UI"
+      }
+    ],
+    "selected_agent": "architect"
+  },
+  {
+    "code": "smoke.parallel-a",
+    "name": "Parser & Data Layer",
+    "description": "Первая параллельная ветка: реализовать парсер входных форматов во внутреннюю модель и экспорт обратно.",
+    "phase_order": 3,
+    "parallel_with": "smoke.parallel-b",
+    "rollback_target": null,
+    "next_recommendation": "После готовности parser объединяемся с UI веткой на doc.review.",
+    "execution_type": "parallel",
+    "instructions": [
+      {
+        "step_num": 1,
+        "description": "Реализовать загрузку входного документа (Markdown/DOCX/JSON) в выбранную библиотеку и базовую валидацию файла.",
+        "execution_type": "parallel"
+      },
+      {
+        "step_num": 2,
+        "description": "Реализовать преобразование входного формата во внутреннюю модель документа: заголовки, секции, таблицы, списки, метаданные.",
+        "execution_type": "parallel"
+      },
+      {
+        "step_num": 3,
+        "description": "Реализовать сохранение внутренней модели обратно в исходный формат с сохранением структуры и форматирования.",
+        "execution_type": "parallel"
+      },
+      {
+        "step_num": 4,
+        "description": "Написать unit-тесты для round-trip: parse → model → render, включая edge cases (пустые секции, вложенные таблицы, метаданные).",
+        "execution_type": "parallel"
+      }
+    ],
+    "checks": [
+      {
+        "description": "Parser загружает входной документ без ошибок на примерах"
+      },
+      {
+        "description": "Внутренняя модель содержит все структурные элементы из примеров"
+      },
+      {
+        "description": "Экспорт обратно в формат сохраняет структуру и форматирование"
+      },
+      {
+        "description": "Round-trip unit-тесты проходят зелёными"
+      }
+    ],
+    "evidence": [
+      {
+        "description": "Код parser и модульные тесты"
+      },
+      {
+        "description": "Примеры round-trip: исходный файл → модель → файл"
+      },
+      {
+        "description": "Отчёт о покрытии edge cases"
+      }
+    ],
+    "selected_agent": "backend"
+  },
+  {
+    "code": "smoke.parallel-b",
+    "name": "Editor UI",
+    "description": "Вторая параллельная ветка: реализовать интерфейс для редактирования структуры документа по внутренней модели.",
+    "phase_order": 4,
+    "parallel_with": "smoke.parallel-a",
+    "rollback_target": null,
+    "next_recommendation": "После готовности UI объединяемся с parser веткой на doc.review.",
+    "execution_type": "parallel",
+    "instructions": [
+      {
+        "step_num": 1,
+        "description": "Реализовать отображение структуры документа: дерево секций/заголовков, панель метаданных, предпросмотр таблиц и списков.",
+        "execution_type": "parallel"
+      },
+      {
+        "step_num": 2,
+        "description": "Реализовать операции редактирования структуры: добавление/удаление/перемещение секций, изменение уровня заголовка, правка метаданных.",
+        "execution_type": "parallel"
+      },
+      {
+        "step_num": 3,
+        "description": "Реализовать редактирование содержимого секций: текст, таблицы, списки с валидацией на лету.",
+        "execution_type": "parallel"
+      },
+      {
+        "step_num": 4,
+        "description": "Написать UI/интеграционные тесты: загрузка модели, структурные операции, сохранение изменений в модель.",
+        "execution_type": "parallel"
+      }
+    ],
+    "checks": [
+      {
+        "description": "UI отображает дерево секций и метаданные документа"
+      },
+      {
+        "description": "Структурные операции (add/remove/move) работают и сохраняются в модель"
+      },
+      {
+        "description": "Редактирование содержимого секций работает для текста, таблиц и списков"
+      },
+      {
+        "description": "UI тесты проходят зелёными"
+      }
+    ],
+    "evidence": [
+      {
+        "description": "Код UI и интеграционные тесты"
+      },
+      {
+        "description": "Скриншоты или логи демонстрации UI"
+      },
+      {
+        "description": "Примеры структурных операций с моделью"
+      }
+    ],
+    "selected_agent": "frontend"
+  },
+  {
+    "code": "smoke.review",
+    "name": "Integration & Validation Gate",
+    "description": "Сквозная интеграция parser и UI: end-to-end тесты, ручной прогон, исправление дефектов, rollback к плану при необходимости.",
+    "phase_order": 5,
+    "parallel_with": null,
+    "rollback_target": "smoke.plan",
+    "next_recommendation": "Если review green — перейти к doc.done; если есть дефекты архитектуры — rollback к doc.plan.",
+    "execution_type": "sync",
+    "instructions": [
+      {
+        "step_num": 1,
+        "description": "Провести end-to-end тест: реальный входной документ → parser → UI → редактирование → экспорт → сравнение с ожидаемым результатом.",
+        "execution_type": "sync"
+      },
+      {
+        "step_num": 2,
+        "description": "Проверить, что round-trip через UI не ломает структуру и форматирование, включая таблицы и метаданные.",
+        "execution_type": "sync"
+      },
+      {
+        "step_num": 3,
+        "description": "Зафиксировать найденные дефекты: parser, UI, контракт, edge cases. Оценить, исправляются ли они в рамках review или требуют rollback к плану.",
+        "execution_type": "sync"
+      },
+      {
+        "step_num": 4,
+        "description": "Исправить дефекты в review или инициировать rollback к doc.plan, если ошибка в архитектуре/модели.",
+        "execution_type": "sync"
+      }
+    ],
+    "checks": [
+      {
+        "description": "End-to-end тест parser → UI → export проходит на реальном документе"
+      },
+      {
+        "description": "Round-trip через UI сохраняет структуру и форматирование"
+      },
+      {
+        "description": "Дефекты зафиксированы с классификацией parser/UI/contract"
+      },
+      {
+        "description": "Решение по rollback или продолжению принято"
+      }
+    ],
+    "evidence": [
+      {
+        "description": "Логи end-to-end теста"
+      },
+      {
+        "description": "Список дефектов и их классификация"
+      },
+      {
+        "description": "Исправления или rationale для rollback"
+      }
+    ],
+    "selected_agent": "critic"
+  },
+  {
+    "code": "smoke.done",
+    "name": "Release & Docs",
+    "description": "Финальная фаза: задокументировать проект, обновить README, смержить код и зафиксировать релиз.",
+    "phase_order": 6,
+    "parallel_with": null,
+    "rollback_target": null,
+    "next_recommendation": "Проект редактора структурированных документов завершён; можно публиковать release notes.",
+    "execution_type": "sync",
+    "instructions": [
+      {
+        "step_num": 1,
+        "description": "Обновить README: цель проекта, поддерживаемые форматы, установка, пример использования, известные ограничения.",
+        "execution_type": "sync"
+      },
+      {
+        "step_num": 2,
+        "description": "Добавить или обновить документацию по внутренней модели документа и API parser/UI.",
+        "execution_type": "sync"
+      },
+      {
+        "step_num": 3,
+        "description": "Убедиться, что весь код в git, тесты зелёные, CI проходит. Смержить в основную ветку.",
+        "execution_type": "sync"
+      },
+      {
+        "step_num": 4,
+        "description": "Зафиксировать release notes с перечнем фич, поддерживаемых форматов и ограничений.",
+        "execution_type": "sync"
+      }
+    ],
+    "checks": [
+      {
+        "description": "README обновлён и содержит пример использования"
+      },
+      {
+        "description": "Документация по модели и API актуальна"
+      },
+      {
+        "description": "Код в git, тесты зелёные, CI проходит"
+      },
+      {
+        "description": "Release notes зафиксированы"
+      }
+    ],
+    "evidence": [
+      {
+        "description": "README с примером использования"
+      },
+      {
+        "description": "Документация модели/API"
+      },
+      {
+        "description": "CI status и merge commit"
+      },
+      {
+        "description": "Release notes"
+      }
+    ],
+    "selected_agent": "ops"
+  }
+]

@@ -1,7 +1,7 @@
-"""Infrastructure layer — external concerns (database and LLM)."""
+"""Infrastructure layer — external concerns (DB, LLM, messaging)."""
 
 from __future__ import annotations
 
-from . import db, llm
+from . import conversation, db, llm
 
-__all__ = ["db", "llm"]
+__all__ = ["conversation", "db", "llm"]

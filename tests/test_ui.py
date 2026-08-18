@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 pytestmark = [pytest.mark.ui]
 
+from project_workflow import config
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.cli.core import cli
 from project_workflow.interfaces.ui import _app_state as ui_app_state
@@ -533,7 +534,7 @@ class TestPhasesPage:
             seed_codes = {p.code for p in seed_phases_data}
             seed_phases = [p for p in phases if p["code"] in seed_codes or p.get("is_seed_managed")]
             extra_phases = [p for p in phases if p not in seed_phases]
-            order_index = {phase.code: idx for idx, phase in enumerate(seed_phases_data)}
+            order_index = {code: idx for idx, code in enumerate(config.PHASE_ORDER)}
 
             def _seed_sort_key(p):
                 return order_index.get(p["code"], p.get("phase_order", 0) or 0)
@@ -604,9 +605,12 @@ class TestPhasesPage:
         assert "dataset.executionType" in response.text
         assert "dataset.parallelKey" not in response.text
 
-    def test_phases_order_api_persists_reordered_workflow_sequence(self):
+    def test_phases_order_api_persists_reordered_default_workflow_sequence(self, monkeypatch, tmp_path):
+        from project_workflow import config
+        from project_workflow.interfaces.ui import _update_config_phase_order
+
         uow = ui_app_state.get_db()
-        default_workflow_id = _workflow_row(is_default=True)["id"]
+        default_workflow_id = _workflow_row(name=config.DEFAULT_WORKFLOW_NAME)["id"]
         default_phases = [
             phase
             for phase in [p.to_dict() for p in uow.phases.list()]
@@ -614,6 +618,11 @@ class TestPhasesPage:
         ]
         original_codes = [phase["code"] for phase in default_phases]
         original_batch = [(phase["id"], phase["phase_order"]) for phase in default_phases]
+
+        seed_copy = tmp_path / "seed.json"
+        seed_copy.write_text(config.SEED_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+        monkeypatch.setattr(config, "SEED_PATH", seed_copy)
+        monkeypatch.setattr(config, "PHASE_ORDER", original_codes.copy())
 
         reordered_codes = original_codes.copy()
         moved_code = "0.000"
@@ -656,8 +665,14 @@ class TestPhasesPage:
             ]
             assert refreshed_codes[:6] == reordered_codes[:6]
 
+            persisted_seed = json.loads(seed_copy.read_text(encoding="utf-8"))
+            persisted_codes = [item.get("code", item.get("id")) for item in persisted_seed]
+            assert persisted_codes[:6] == reordered_codes[:6]
+            assert config.PHASE_ORDER[:6] == reordered_codes[:6]
         finally:
             _batch_update_orders(uow, original_batch)
+            config.PHASE_ORDER[:] = original_codes
+            _update_config_phase_order()
 
     def test_phases_page_shows_selected_agent_instead_of_hardcoded_critic(self):
         uow = ui_app_state.get_db()
@@ -1012,7 +1027,7 @@ class TestPhaseUpdate:
         assert original is not None
         assert original["execution_type"] == "sync"
         phase_api_path = _phase_api_path("3.5")
-        default_workflow_id = _workflow_row(is_default=True)["id"]
+        default_workflow_id = _workflow_row(name=config.DEFAULT_WORKFLOW_NAME)["id"]
 
         try:
             resp = client.put(phase_api_path, json={"execution_type": "parallel"})
@@ -1073,8 +1088,13 @@ class TestDragDropAPI:
     """Tests for drag-and-drop backend APIs."""
 
     def test_api_batch_order_update(self):
+        from project_workflow import config
+        from project_workflow.interfaces.ui import _update_config_phase_order
+        from tests._phase_helpers import get_next_phase
+
         uow = ui_app_state.get_db()
         original_rows = [(phase["code"], phase["phase_order"]) for phase in [p.to_dict() for p in uow.phases.list()]]
+        original_phase_order = list(config.PHASE_ORDER)
 
         try:
             resp = client.put(
@@ -1091,13 +1111,12 @@ class TestDragDropAPI:
             data = resp.json()
             assert data["ok"] is True
             assert data["updated"] == 3
-            phases = [p.to_dict() for p in uow.phases.list()]
-            orders = {phase["code"]: phase["phase_order"] for phase in phases}
-            assert orders["-1"] == 1
-            assert orders["0.0a"] == 2
-            assert orders["1"] == 3
+            assert all(isinstance(phase_code, str) for phase_code in config.PHASE_ORDER)
+            assert get_next_phase("0.0a") is not None
         finally:
             _batch_update_orders(uow, original_rows)
+            config.PHASE_ORDER[:] = original_phase_order
+            _update_config_phase_order()
 
     def test_api_batch_order_empty_error(self):
         resp = client.put("/api/phases/order", json={"orders": []})

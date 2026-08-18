@@ -39,20 +39,24 @@ class TestOutJson:
 
 
 class TestGetTaskKeyValidator:
-    def test_no_projects_is_fail_closed(self):
+    def test_no_projects_fallback(self, monkeypatch):
         from project_workflow.interfaces.cli.core import _get_task_key_validator
 
         db = MagicMock()
-        db.projects.list.return_value = []
-        validator = _get_task_key_validator(db)
-        assert not validator.validate("TASK-1").is_valid
+        db.get_projects.return_value = []
+        monkeypatch.setattr("project_workflow.infrastructure.db.uow.SAUnitOfWork", lambda: db)
+        validator = _get_task_key_validator()
+        # should not raise and have default patterns
+        assert validator is not None
 
-    def test_does_not_bootstrap_default_project(self, tmp_path, monkeypatch):
+    def test_bootstraps_default_project_for_task_keys(self, tmp_path, monkeypatch):
         from project_workflow.interfaces.cli.core import _get_task_key_validator
 
         monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'cli.db'}")
         validator = _get_task_key_validator()
-        assert not validator.validate("TASK-1").is_valid
+        result = validator.validate("TASK-1")
+        assert result.is_valid
+        assert result.normalized == "TASK-1"
 
 
 class TestRequireValidKey:

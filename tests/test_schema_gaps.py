@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -17,6 +18,8 @@ from project_workflow.infrastructure.db.schema import (
     load_phases_from_db,
     load_phases_from_seed,
     mark_catalog_not_ensured,
+    persist_phase_order_to_seed,
+    persist_phase_update_to_seed,
 )
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
@@ -43,14 +46,14 @@ class TestSchemaEdgeCases:
         mark_catalog_not_ensured()
         assert not schema._CATALOG_ENSURED_URLS
 
-    def test_load_phases_from_db_returns_empty_for_unknown_workflow(self, tmp_path, monkeypatch):
+    def test_load_phases_from_db_returns_fallback_intake(self, tmp_path, monkeypatch):
         url = f"sqlite:///{tmp_path / 'empty.db'}"
         uow = SAUnitOfWork(url)
         uow.create_all()
         monkeypatch.setattr(config, "SEED_PATH", _seed_path(tmp_path))
         ensure_phase_catalog(uow)
         phases = load_phases_from_db(uow, workflow_id=999999)
-        assert phases == []
+        assert any(p.code == "-1" for p in phases)
         uow.close()
 
     def test_load_phases_from_db_with_string_workflow_id(self, tmp_path, monkeypatch):
@@ -109,6 +112,44 @@ class TestSchemaEdgeCases:
         path = _seed_path(tmp_path)
         phases = load_phases_from_seed(path, workflow_id=42)
         assert len(phases) > 0
+
+    def test_persist_phase_order_to_seed(self, tmp_path, monkeypatch):
+        seed_path = _seed_path(tmp_path)
+        # Seed a custom phase that we will reorder to the front.
+        seed_data = _load_seed(seed_path)
+        seed_data.insert(0, {"code": "GAP-ORD", "name": "Order Gap"})
+        seed_path.write_text(json.dumps(seed_data), encoding="utf-8")
+        monkeypatch.setattr(config, "SEED_PATH", seed_path)
+
+        url = f"sqlite:///{tmp_path / 'persist.db'}"
+        uow = SAUnitOfWork(url)
+        uow.create_all()
+        ensure_phase_catalog(uow)
+
+        persist_phase_order_to_seed(uow, ["GAP-ORD"], seed_path=seed_path)
+        assert seed_path.exists()
+        data = _load_seed(seed_path)
+        codes = [p["code"] for p in data]
+        assert codes[0] == "GAP-ORD"
+        uow.close()
+
+    def test_persist_phase_update_to_seed_missing_file(self, tmp_path):
+        missing = tmp_path / "missing.yaml"
+        persist_phase_update_to_seed(MagicMock(), "1", {}, seed_path=missing)
+
+    def test_persist_phase_update_to_seed_skips_id_and_code(self, tmp_path):
+        seed_path = tmp_path / "seed.json"
+        seed_path.write_text('[{"code":"1","name":"A"}]', encoding="utf-8")
+        persist_phase_update_to_seed(
+            MagicMock(),
+            "1",
+            {"name": "B", "code": "2", "id": 99, "description": "d"},
+            seed_path=seed_path,
+        )
+        data = _load_seed(seed_path)
+        assert data[0]["name"] == "B"
+        assert data[0]["description"] == "d"
+        assert data[0]["code"] == "1"
 
     def test_ensure_phase_catalog_skip_already_ensured_url(self, tmp_path, monkeypatch):
         from project_workflow.infrastructure.db import schema as schema_mod

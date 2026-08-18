@@ -19,15 +19,6 @@ def fresh_db(tmp_path, monkeypatch):
     uow = SAUnitOfWork(str(tmp_path / "workflow.db"))
     uow.init()
     schema.ensure_phase_catalog(uow)
-    workflow = uow.get_workflows()[0]
-    uow.create_project(
-        {
-            "code": "PROJ",
-            "name": "Wizard edge project",
-            "key_prefixes": ["PROJ"],
-            "workflow_id": workflow["id"],
-        }
-    )
     return uow
 
 
@@ -48,9 +39,9 @@ def test_existing_task_empty_current_phase(fresh_db):
 
 class TestWizardEvaluateEdge:
     def test_evaluate_empty_report_with_no_checks_passes(self, fresh_db, wizard_llm):
-        wizard_llm("PASS")
         fresh_db.create_task({"task_key": "PROJ-42", "title": "x", "current_phase": "-1"})
         engine = _make_engine(fresh_db, "PROJ-42")
+        wizard_llm("PASS")
         result = engine.evaluate("")
         assert result["verdict"] == "PASS"
 
@@ -62,16 +53,16 @@ class TestWizardEvaluateEdge:
         assert result["verdict"] == "BLOCKED"
 
     def test_evaluate_no_history_for_first_phase(self, fresh_db, wizard_llm):
-        wizard_llm("PASS")
         fresh_db.create_task({"task_key": "PROJ-42", "title": "x", "current_phase": "-1"})
         engine = _make_engine(fresh_db, "PROJ-42")
+        wizard_llm("PARTIAL", missing=["evidence"])
         result = engine.evaluate("report")
-        assert result["verdict"] == "PASS"
+        assert result["verdict"] == "PARTIAL"
 
     def test_save_records_assessment(self, fresh_db, wizard_llm):
-        wizard_llm("PARTIAL", missing=["evidence"])
         fresh_db.create_task({"task_key": "PROJ-42", "title": "x", "current_phase": "-1"})
         engine = _make_engine(fresh_db, "PROJ-42")
+        wizard_llm("PARTIAL")
         engine.evaluate("report")
         # evaluate() itself records the supervisor run; _store removed as dead code
         assert len(fresh_db.get_supervisor_runs()) >= 1

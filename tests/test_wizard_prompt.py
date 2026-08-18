@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from project_workflow.wizard.prompt import _format_parallel_contract_human, build_phase_prompt
+from project_workflow.wizard.prompt import _format_messages, _format_parallel_contract_human, build_phase_prompt
 
 
 def _phase(code, execution_type="sync", name="N"):
@@ -13,6 +13,27 @@ def _phase(code, execution_type="sync", name="N"):
     p.name = name
     p.execution_type = execution_type
     return p
+
+
+def test_format_messages_dict_items():
+    result = _format_messages(
+        {"messages": [{"role": "cli", "content": "hello"}, {"actor": "user", "text": "world"}]}
+    )
+    assert "cli: hello" in result
+    assert "user: world" in result
+
+
+def test_format_messages_object_items():
+    class Msg:
+        role = "cli"
+        content = "object msg"
+
+    result = _format_messages({"messages": [Msg()]})
+    assert "cli: object msg" in result
+
+
+def test_format_messages_empty():
+    assert _format_messages({"messages": []}) == "Нет сообщений."
 
 
 def test_format_parallel_contract_human():

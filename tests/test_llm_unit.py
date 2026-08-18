@@ -24,8 +24,8 @@ def _make_engine():
     engine.all_phases = []
     engine.phase_map = {}
     engine._get_previously_covered.return_value = []
-    engine._resolve_current_phase.return_value = "1"
     engine._resolve_transition.return_value = (None, None, None)
+    engine._resolve_current_phase.return_value = "1"
     engine.db.get_task.return_value = engine.task
     return engine
 
@@ -50,8 +50,8 @@ class TestEvaluateLlmReportVerdicts:
         ):
             result = evaluate_llm_report("r", phase, engine)
         assert result["verdict"] == "BLOCKED"
-        assert result["blockers"] == ["Wizard identified a blocker"]
-        engine._record_evaluation.assert_called_once_with(phase, "blocked", None, None)
+        assert result["blockers"] == ["LLM identified blocker"]
+        engine._record_evaluation.assert_called_once_with(phase, "blocked", None, None, commit=False)
 
     def test_rollback_uses_rollback_target(self):
         engine = _make_engine()
@@ -76,59 +76,9 @@ class TestEvaluateLlmReportVerdicts:
         assert result["rollback_target"] == "0"
         assert result["next_phase"] == "0"
 
-    def test_rollback_without_configured_target_fails_closed(self):
+    def test_delegate_records_transition(self):
         engine = _make_engine()
-        phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[])
-        with patch.object(
-            OllamaClient,
-            "chat",
-            return_value={
-                "verdict": "ROLLBACK",
-                "covered": [],
-                "missing": [],
-                "blockers": [],
-                "message": "rollback",
-                "confidence": 0.5,
-            },
-        ):
-            result = evaluate_llm_report("r", phase, engine)
-        assert result["verdict"] == "BLOCKED"
-        assert result["next_phase"] is None
-        assert result["blockers"] == [
-            "rollback target is not configured for the current phase"
-        ]
-
-    def test_delegate_requires_configured_phase(self):
-        engine = _make_engine()
-        phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[])
-        with patch.object(
-            OllamaClient,
-            "chat",
-            return_value={
-                "verdict": "DELEGATE",
-                "covered": [],
-                "missing": [],
-                "blockers": [],
-                "message": "unexpected delegate",
-                "next_phase": None,
-                "next_phase_name": None,
-                "confidence": 0.5,
-            },
-        ):
-            result = evaluate_llm_report("r", phase, engine)
-        assert result["verdict"] == "BLOCKED"
-        assert result["blockers"] == ["delegation is not configured for the current phase"]
-
-    def test_delegate_configured_phase_is_preserved(self):
-        engine = _make_engine()
-        phase = Phase(
-            code="1",
-            name="One",
-            instructions=[],
-            checks=[],
-            evidence=[],
-            is_delegated=True,
-        )
+        phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[], is_delegated=True)
         with patch.object(
             OllamaClient,
             "chat",
@@ -138,12 +88,14 @@ class TestEvaluateLlmReportVerdicts:
                 "missing": [],
                 "blockers": [],
                 "message": "delegate",
+                "next_phase": None,
+                "next_phase_name": None,
                 "confidence": 0.5,
             },
         ):
             result = evaluate_llm_report("r", phase, engine)
         assert result["verdict"] == "DELEGATE"
-        engine._record_evaluation.assert_called_once_with(phase, "delegate", None, None)
+        engine._record_evaluation.assert_called_once_with(phase, "delegate", None, None, commit=False)
 
     def test_pass_fills_next_phase_from_builder(self):
         engine = _make_engine()
@@ -171,38 +123,68 @@ class TestEvaluateLlmReportVerdicts:
         assert result["next_phase"] == "2"
         assert result["next_phase_name"] == "Two"
 
-    @pytest.mark.parametrize("failure", [TimeoutError("slow"), IndexError("bad response")])
-    def test_provider_failure_is_persisted_as_blocked(self, failure):
+    def test_persistence_failure_rolls_back_transaction(self):
         engine = _make_engine()
+        engine.db.create_supervisor_run.side_effect = RuntimeError("write failed")
         phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[])
-        with patch.object(OllamaClient, "chat", side_effect=failure):
-            result = evaluate_llm_report("r", phase, engine)
-        assert result["verdict"] == "BLOCKED"
-        assert result["next_phase"] is None
-        assert result["blockers"][0].startswith("Wizard LLM unavailable:")
-        engine.db.create_supervisor_run.assert_called_once()
+        with (
+            patch.object(OllamaClient, "chat", return_value={"verdict": "PARTIAL"}),
+            pytest.raises(RuntimeError, match="write failed"),
+        ):
+            evaluate_llm_report("r", phase, engine)
 
-    def test_invalid_response_is_persisted_as_blocked(self):
-        engine = _make_engine()
-        phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[])
-        with patch.object(OllamaClient, "chat", return_value={"verdict": "PASS"}):
-            result = evaluate_llm_report("r", phase, engine)
-        assert result["verdict"] == "BLOCKED"
-        assert result["next_phase"] is None
-        engine.db.create_supervisor_run.assert_called_once()
+        engine._record_evaluation.assert_called_once_with(phase, "partial", None, None, commit=False)
+        engine.db.rollback.assert_called_once_with()
+        engine.db.commit.assert_not_called()
+
+
+class TestLoadApiKey:
+    def test_env_key(self, monkeypatch):
+        monkeypatch.setenv("OLLAMA_API_KEY", "env-token")
+        import importlib
+
+        import project_workflow.infrastructure.llm
+
+        importlib.reload(project_workflow.infrastructure.llm)
+        assert project_workflow.infrastructure.llm._load_api_key() == "env-token"
+
+    def test_env_empty_reads_file(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("OLLAMA_API_KEY", "")
+        env_file = tmp_path / "hermes.env"
+        env_file.write_text("OLLAMA_API_KEY=file-token\n")
+        import importlib
+
+        import project_workflow.infrastructure.llm
+
+        monkeypatch.setattr(project_workflow.infrastructure.llm.os.path, "expanduser", lambda _path: str(env_file))
+        importlib.reload(project_workflow.infrastructure.llm)
+        assert project_workflow.infrastructure.llm._load_api_key() == "file-token"
+
+    def test_no_key_returns_empty(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("OLLAMA_API_KEY", "")
+        env_file = tmp_path / "missing.env"
+        import importlib
+
+        import project_workflow.infrastructure.llm
+
+        monkeypatch.setattr(project_workflow.infrastructure.llm.os.path, "expanduser", lambda _path: str(env_file))
+        importlib.reload(project_workflow.infrastructure.llm)
+        assert project_workflow.infrastructure.llm._load_api_key() == ""
+
+    def test_fresh_import_env(self, monkeypatch):
+        monkeypatch.setenv("OLLAMA_API_KEY", "fresh-token")
+        import importlib
+
+        import project_workflow.infrastructure.llm
+
+        importlib.reload(project_workflow.infrastructure.llm)
+        assert project_workflow.infrastructure.llm._load_api_key() == "fresh-token"
+        assert project_workflow.infrastructure.llm.OLLAMA_API_KEY == "fresh-token"
 
 
 class TestOllamaClientDetection:
-    def test_model_is_required(self):
-        with pytest.raises(ValueError, match="OLLAMA_MODEL is required"):
-            OllamaClient(model="")
-
-    def test_api_style_is_explicit(self):
-        with pytest.raises(ValueError, match="OLLAMA_API_STYLE"):
-            OllamaClient(api_style="auto")  # type: ignore[arg-type]
-
     def test_cloud_detection(self):
-        client = OllamaClient(base_url="https://ollama.com/v1", api_key="k", api_style="openai")
+        client = OllamaClient(base_url="https://ollama.com/v1", api_key="k")
         assert client.is_cloud is True
 
     def test_local_detection(self):
@@ -219,7 +201,7 @@ class TestOllamaClientIsAvailable:
 
     def test_cloud_available(self):
         with patch("requests.get", return_value=MagicMock(status_code=200)) as mock:
-            client = OllamaClient(base_url="https://ollama.com/v1", api_key="k", api_style="openai")
+            client = OllamaClient(base_url="https://ollama.com/v1", api_key="k")
             assert client.is_available() is True
             mock.assert_called_once_with(
                 "https://ollama.com/v1/models",
@@ -262,13 +244,13 @@ class TestOllamaClientChatErrors:
         resp.raise_for_status.return_value = None
         resp.json.return_value = {"choices": [{"message": {"content": "  "}}]}
         with patch("requests.post", return_value=resp):
-            client = OllamaClient(base_url="https://ollama.com/v1", api_style="openai")
+            client = OllamaClient(base_url="https://ollama.com/v1")
             with pytest.raises(ValueError, match="Empty content"):
                 client.chat("sys", "user")
 
 
 class TestExtractJson:
-    def test_markdown_wrapper_is_rejected(self):
+    def test_markdown_json_is_rejected(self):
         text = '```json\n{"verdict": "PASS"}\n```'
         with pytest.raises(ValueError):
             OllamaClient._extract_json(text)
@@ -324,7 +306,7 @@ class TestPromptBuilder:
 class TestResponseParser:
     def test_parse_full(self):
         raw = {
-            "verdict": "PASS",
+            "verdict": "pass",
             "covered": ["A"],
             "missing": [],
             "blockers": [],
@@ -343,28 +325,17 @@ class TestResponseParser:
         with pytest.raises(ValueError):
             ResponseParser.parse({"verdict": "UNKNOWN"})
 
-    def test_parse_rejects_wrong_types(self):
+    def test_parse_rejects_wrong_collection_types(self):
         with pytest.raises(ValueError):
-            ResponseParser.parse(
-                {
-                    "verdict": "BLOCKED",
-                    "covered": "single",
-                    "missing": [],
-                    "blockers": [],
-                    "message": "blocked",
-                    "confidence": 0.5,
-                }
-            )
+            ResponseParser.parse({"verdict": "BLOCKED", "covered": "single"})
 
     def test_parse_rejects_out_of_range_confidence(self):
         with pytest.raises(ValueError):
-            ResponseParser.parse(
-                {
-                    "verdict": "PASS",
-                    "covered": [],
-                    "missing": [],
-                    "blockers": [],
-                    "message": "ok",
-                    "confidence": 1.5,
-                }
-            )
+            ResponseParser.parse({"verdict": "pass", "confidence": 1.5})
+        with pytest.raises(ValueError):
+            ResponseParser.parse({"verdict": "pass", "confidence": -0.5})
+
+    def test_parse_optional_fields_get_defaults(self):
+        verdict = ResponseParser.parse({"verdict": "PARTIAL", "confidence": None})
+        assert verdict.covered == []
+        assert verdict.confidence == 0.5

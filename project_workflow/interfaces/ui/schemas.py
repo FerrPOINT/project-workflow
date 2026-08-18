@@ -7,6 +7,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from project_workflow import config
+
 
 class OptionalIntMixin:
     """Normalize optional integer fields coming from HTML/JSON forms."""
@@ -104,6 +106,13 @@ class ProjectCreate(BaseModel, OptionalIntMixin):
         if isinstance(value, str):
             return [line.strip().upper() for line in value.splitlines() if line.strip()]
         return []
+
+    @field_validator("key_prefixes", mode="after")
+    @classmethod
+    def _ensure_prefixes_not_empty(cls, value: list[str]) -> list[str]:
+        if not value:
+            return list(config.DEFAULT_TASK_KEY_PREFIXES)
+        return value
 
     @field_validator("key_prefixes", mode="after")
     @classmethod

@@ -22,7 +22,26 @@ from project_workflow.interfaces.ui.services import (
     _load_cli_reference,
 )
 from project_workflow.wizard import core as core_mod
-from project_workflow.wizard.formatting import format_result
+from project_workflow.wizard.store import WizardAssessmentStore
+from project_workflow.wizard.types import WizardAssessment
+
+
+class TestConfigFinalGap:
+    def test_read_raw_settings_non_dict(self, tmp_path, monkeypatch):
+        from project_workflow import config as config_mod
+
+        path = tmp_path / "cfg.json"
+        path.write_text("[1, 2]")
+        bad_dir = tmp_path / "bad-cfg"
+        bad_dir.mkdir()
+        path.rename(bad_dir / "settings.json")
+        monkeypatch.setenv("WORKFLOW_DIR", str(bad_dir))
+        config_mod.get_settings.cache_clear()
+        try:
+            assert config_mod._read_raw_settings() == {}
+        finally:
+            monkeypatch.delenv("WORKFLOW_DIR")
+            config_mod.get_settings.cache_clear()
 
 
 def _mock_state(uow=None):
@@ -41,7 +60,7 @@ class TestSchemasFinalGaps:
 
     def test_project_create_key_prefixes_invalid_type(self):
         p = schemas.ProjectCreate(code="PRJ", key_prefixes=123)
-        assert p.key_prefixes == []
+        assert p.key_prefixes == list(schemas.config.DEFAULT_TASK_KEY_PREFIXES)
 
     def test_project_update_key_prefixes_str(self):
         p = schemas.ProjectUpdate(code="PRJ", key_prefixes="aa\nbb")
@@ -65,6 +84,16 @@ class TestDomainFinalGaps:
 
 
 class TestUiSeedSkillsFinalGaps:
+    def test_update_config_phase_order_no_rows(self, monkeypatch):
+        from project_workflow.interfaces.ui import seed as seed_mod
+
+        before = list(schemas.config.PHASE_ORDER)
+        uow = MagicMock()
+        uow.workflows.get_default.return_value = None
+        monkeypatch.setattr(seed_mod, "_get_app_state", lambda: _mock_state(uow))
+        seed_mod._update_config_phase_order(uow)
+        assert schemas.config.PHASE_ORDER == before
+
     def test_scan_hermes_skills_exception(self):
         from project_workflow.interfaces.ui import skills as skills_mod
 
@@ -123,12 +152,12 @@ class TestApplicationServiceFinalGaps:
     def test_task_service_creation_failed(self):
         uow = MagicMock()
         project = MagicMock()
-        project.to_dict.return_value = {"id": 5, "code": "PROJ", "key_prefixes": ["PROJ"]}
-        uow.projects.list.return_value = [project]
+        project.to_dict.return_value = {"id": 5}
+        uow.projects.get_by_code.return_value = project
         uow.tasks.create.return_value = 1
         uow.tasks.get_by_id.return_value = None
         with pytest.raises(RuntimeError, match="Task creation failed"):
-            TaskService(uow).create_task({"task_key": "PROJ-1"})
+            TaskService(uow).create_task({"task_key": "P-1"})
 
     def test_instruction_service_creation_failed(self):
         uow = MagicMock()
@@ -164,6 +193,22 @@ class TestSessionFinalGaps:
 
 
 class TestWorkflowServiceFinalGaps:
+    def test_get_or_create_smoke_workflow_existing(self):
+        uow = MagicMock()
+        wf = MagicMock()
+        wf.to_dict.return_value = {"id": 1, "name": "smoke"}
+        uow.workflows.get_by_name.return_value = wf
+        assert WorkflowService(uow).get_or_create_smoke_workflow()["id"] == 1
+
+    def test_get_or_create_smoke_workflow_create(self):
+        uow = MagicMock()
+        uow.workflows.get_by_name.return_value = None
+        created = MagicMock()
+        created.to_dict.return_value = {"id": 2, "name": "smoke"}
+        uow.workflows.get_by_id.return_value = created
+        result = WorkflowService(uow).get_or_create_smoke_workflow()
+        assert result["id"] == 2
+
     def test_get_workflow_by_name_none(self):
         uow = MagicMock()
         uow.workflows.get_by_name.return_value = None
@@ -177,12 +222,61 @@ class TestWorkflowServiceFinalGaps:
             WorkflowService(uow).create_workflow({"name": "x"})
 
 
+class TestWizardStoreFinalGaps:
+    def test_phase_id_else_branch(self):
+        uow = MagicMock()
+        uow.get_phase_by_code.return_value = {"id": 7}
+        store = WizardAssessmentStore(uow)
+        assert store._phase_id("x") == 7
+
+    def test_row_phase_code_dict(self):
+        assert WizardAssessmentStore._row_phase_code({"phase_code": "P1"}) == "P1"
+
+    def test_row_phase_code_object_no_attrs(self):
+        row = MagicMock()
+        del row.phase_code
+        del row.response
+        assert WizardAssessmentStore._row_phase_code(row) == ""
+
+    def test_save_else_branch(self):
+        uow = MagicMock()
+        uow.get_task_by_key.return_value = {"id": 5}
+        store = WizardAssessmentStore(uow)
+        store.save(
+            WizardAssessment(
+                task_key="A-1",
+                phase_code="P1",
+                phase_name="P",
+                verdict="pass",
+                next_phase="P2",
+                rollback_target="P0",
+            )
+        )
+        assert uow.create_supervisor_run.call_args[0][0]["task_id"] == 5
+
+    def test_get_latest_else_branch(self):
+        uow = MagicMock()
+        uow.get_supervisor_runs.return_value = [
+            {"verdict": "PASS", "phase_code": "P1", "response": '{"phase": "P1"}'},
+        ]
+        results = WizardAssessmentStore(uow).get_latest(1, limit=1)
+        assert results[0].phase_code == "P1"
+
+
 class TestWizardCoreFinalGaps:
-    def test_resolve_current_phase_does_not_invent_fallback(self):
+    def test_ensure_smoke_phases_no_workflow(self, monkeypatch):
+        engine = core_mod.WizardEngine("AAT-1", repo="/tmp")
+        uow = MagicMock()
+        uow.workflows.get_by_name.return_value = None
+        engine._uow = uow
+        engine._ensure_smoke_phases()
+        assert uow.phases.list.called is False
+
+    def test_resolve_current_phase_fallback_empty(self):
         engine = core_mod.WizardEngine("AAT-1", repo="/tmp")
         engine.task = {"id": 1, "current_phase": ""}
         engine.all_phases = []
-        assert engine._resolve_current_phase() == ""
+        assert engine._resolve_current_phase() == "-1"
 
     def test_record_transition_no_task(self):
         engine = core_mod.WizardEngine("AAT-1", repo="/tmp")
@@ -190,7 +284,7 @@ class TestWizardCoreFinalGaps:
         phase = MagicMock()
         engine._record_transition(phase, "pass", None, None)
 
-    def test_evaluate_always_calls_llm(self):
+    def test_evaluate_does_not_fall_back_when_llm_raises(self):
         engine = core_mod.WizardEngine("AAT-1", repo="/tmp")
         engine.task = {"id": 1, "project_id": 1, "current_phase": "1"}
         uow = MagicMock()
@@ -207,13 +301,13 @@ class TestWizardCoreFinalGaps:
         phase.evidence = []
         engine.all_phases = [phase]
         engine.current_phase = "1"
-        with patch.object(engine, "evaluate_llm", return_value={"verdict": "BLOCKED"}) as mock_llm:
-            result = engine.evaluate(report="ok")
+        with patch.object(engine, "evaluate_llm", side_effect=Exception("boom")) as mock_llm:
+            with pytest.raises(Exception, match="boom"):
+                engine.evaluate(report="ok")
         mock_llm.assert_called_once()
-        assert result["verdict"] == "BLOCKED"
 
     def test_format_result_pass_parallel(self):
-        text = format_result(
+        text = core_mod.format_result(
             {
                 "verdict": "PASS",
                 "phase_code": "1",
@@ -232,7 +326,7 @@ class TestWizardCoreFinalGaps:
         assert "Параллельная фаза" not in text
 
     def test_format_result_pass_sync_after_parallel(self):
-        text = format_result(
+        text = core_mod.format_result(
             {
                 "verdict": "PASS",
                 "phase_code": "parallel.end",

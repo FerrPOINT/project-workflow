@@ -7,6 +7,10 @@ from typing import Any
 from fastapi import Query
 from fastapi.responses import JSONResponse
 
+from project_workflow.infrastructure.db.schema import (
+    persist_phase_order_to_seed,
+    persist_phase_update_to_seed,
+)
 from project_workflow.interfaces.ui.schemas import (
     AgentCreate,
     AgentUpdate,
@@ -21,6 +25,7 @@ from project_workflow.interfaces.ui.schemas import (
     WorkflowCreate,
     WorkflowUpdate,
 )
+from project_workflow.interfaces.ui.seed import _update_config_phase_order
 from project_workflow.interfaces.ui.services import (
     _coerce_phase_db_id,
     _load_phase_detail,
@@ -132,6 +137,7 @@ async def api_agents() -> dict[str, Any] | JSONResponse:
 
 
 async def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONResponse:
+    uow = _app_state.get_db()
     workflow_id = payload.workflow_id
     if workflow_id is None:
         return _error("workflow_id обязателен", 400)
@@ -174,6 +180,7 @@ async def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONRespons
     if payload.code:
         data["code"] = payload.code
     phase = _app_state.phase_service().create_phase(data)
+    _update_config_phase_order(uow)
     return {"ok": True, "phase_id": phase["id"], "phase_order": new_order, "phase": phase}
 
 
@@ -219,6 +226,11 @@ async def api_phase_update(phase_id: int, payload: PhaseUpdate) -> dict[str, Any
     if payload.evidence is not None:
         ev_ids = srv.save_evidence(resolved_phase_id, payload.evidence)
 
+    uow = _app_state.get_db()
+    phase = _app_state.phase_service().get_phase(resolved_phase_id)
+    if phase:
+        persist_phase_update_to_seed(uow, phase["code"], payload.model_dump(exclude_unset=True))
+
     return {"ok": True, "ids": {"instructions": inst_ids, "checks": check_ids, "evidence": ev_ids}}
 
 
@@ -231,10 +243,12 @@ async def api_phase_delete(phase_id: int) -> dict[str, Any] | JSONResponse:
     if len(workflow_phases) <= 1:
         return _error("Нельзя удалить единственную фазу workflow", 409)
     _app_state.phase_service().delete_phase(phase_id)
+    _update_config_phase_order(_app_state.get_db())
     return {"ok": True}
 
 
 async def api_phase_batch_order(payload: PhaseOrderUpdate) -> dict[str, Any] | JSONResponse:
+    uow = _app_state.get_db()
     if not payload.orders:
         return _error("Список order пуст", 400)
 
@@ -268,6 +282,15 @@ async def api_phase_batch_order(payload: PhaseOrderUpdate) -> dict[str, Any] | J
     for phase_id, new_order in batch:
         _app_state.phase_service().update_phase(phase_id, {"phase_order": new_order})
 
+    if workflow_id is not None:
+        ordered_phase_ids = [phase_id for phase_id, _ in batch]
+        ordered_phases = []
+        for phase_id in ordered_phase_ids:
+            phase = _app_state.phase_service().get_phase(phase_id)
+            if phase:
+                ordered_phases.append(phase)
+        persist_phase_order_to_seed(uow, [p["code"] for p in ordered_phases])
+    _update_config_phase_order(uow)
     return {"ok": True, "updated": len(payload.orders)}
 
 
@@ -279,6 +302,7 @@ async def api_workflow_create(payload: WorkflowCreate) -> dict[str, Any] | JSONR
     service = _app_state.workflow_service()
     workflow = service.create_workflow({"name": payload.name, "description": payload.description or ""})
     workflow_id = workflow["id"]
+    _update_config_phase_order(_app_state.get_db())
     return {"ok": True, "workflow_id": workflow_id, "workflow": service.get_workflow(workflow_id)}
 
 

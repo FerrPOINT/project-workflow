@@ -161,6 +161,14 @@ class TestWorkflowService:
         svc.create_workflow({"name": "Flow", "_skip_default_phase": True})
         uow.phases.create.assert_not_called()
 
+    def test_get_or_create_smoke_workflow_existing(self):
+        uow = _make_uow()
+        uow.workflows.get_by_name.return_value = FakeWorkflow(2, "smoke")
+        svc = WorkflowService(uow)
+        result = svc.get_or_create_smoke_workflow()
+        assert result["id"] == 2
+        uow.workflows.create.assert_not_called()
+
     def test_list_get_update_delete(self):
         uow = _make_uow()
         uow.workflows.list.return_value = [FakeWorkflow(1, "W")]

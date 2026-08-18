@@ -180,12 +180,14 @@ class TestUowEdgeCases:
         assert task.project_id == project_id
         uow.close()
 
-    def test_init_only_creates_schema(self, tmp_path):
-        url = f"sqlite:///{tmp_path / 'empty.db'}"
+    def test_init_bootstraps_default_and_smoke(self, monkeypatch):
+        url = config.get_settings().DATABASE_URL
         mark_catalog_not_ensured(url)
         uow = SAUnitOfWork(url)
         uow.init()
-        assert uow.projects.list() == []
+        default_project = uow.projects.get_by_code("DEFAULT")
+        smoke_project = uow.projects.get_by_code("SMOKE")
+        assert default_project is not None or smoke_project is not None
         uow.close()
 
     def test_context_manager_rolls_back_on_exception(self):

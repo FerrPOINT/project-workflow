@@ -41,11 +41,11 @@ def step_cmd(
     task: str,
     report: str | None,
 ) -> None:
-    """Step — движение по workflow: показать текущую фазу или отчитаться и перейти.
+    """🚶 Step — движение по workflow: показать текущую фазу или отчитаться и перейти.
 
     Usage:
-      project-workflow step --task TASK-KEY                 - текущие инструкции
-      project-workflow step --task TASK-KEY --report "..." - оценить отчёт исполнителя CLI и перейти
+      project-workflow step --task TASK-KEY                → текущие инструкции
+      project-workflow step --task TASK-KEY --report "..."  → оценить отчёт исполнителя CLI и перейти
     """
     uow = SAUnitOfWork()
     task_key = _require_valid_key(task, uow)
@@ -95,11 +95,11 @@ def step_cmd(
 @click.option("--n", type=int, default=None, help="Количество записей (по умолчанию: все)")
 @click.pass_context
 def history_cmd(ctx: click.Context, task: str, n: int | None) -> None:
-    """History — история отчётов, переходов и статусов по задаче.
+    """📜 History — история отчётов, переходов и статусов по задаче.
 
     Usage:
-      project-workflow history --task TASK-KEY        - все записи
-      project-workflow history --task TASK-KEY --n 50 - последние 50 записей
+      project-workflow history --task TASK-KEY            → все записи
+      project-workflow history --task TASK-KEY --n 50     → последние 50 записей
     """
     task_key = _require_valid_key(task)
     jmode = ctx.obj.get("json_mode", False)
@@ -145,11 +145,11 @@ def history_cmd(ctx: click.Context, task: str, n: int | None) -> None:
         console.print(f"{WARN} История для {task_key} пуста.")
         return
 
-    console.print(f"[bold]History: {task_key}[/bold] (последние {len(runs)} записей)\n")
+    console.print(f"[bold]📜 History: {task_key}[/bold] (последние {len(runs)} записей)\n")
     for r in runs:
-        verdict_label = str(r.get("verdict", "unknown")).upper()
+        verdict_icon = "✅" if r.get("verdict") == "pass" else "⬅️ " if r.get("verdict") == "rollback" else "⚠️ "
         phase = r.get("phase_code", "-")
         next_phase = r.get("next_phase_code", "-")
         rollback = r.get("rollback_phase_code", "-")
         created_at = r.get("created_at", "-")
-        console.print(f"{verdict_label} [{created_at}] Phase {phase} -> {next_phase} (rollback: {rollback})")
+        console.print(f"{verdict_icon} [{created_at}] Phase {phase} → {next_phase} (rollback: {rollback})")

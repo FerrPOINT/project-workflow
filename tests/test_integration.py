@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 pytestmark = [pytest.mark.ui]
 
-from project_workflow.infrastructure.db import schema
+from project_workflow.infrastructure import conversation as convo
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui import app
 
@@ -20,19 +20,18 @@ client = TestClient(app)
 class TestEndToEndWorkflow:
     """Full cycle via direct DB + API checks."""
 
-    def test_explicit_catalog_setup_has_workflows_and_agents(self, tmp_path: Path):
-        """Explicit catalog setup creates workflow phases and agents."""
+    def test_seeded_db_has_workflows_and_agents(self, tmp_path: Path):
+        """Seed bootstrap + проверка workflow-aware фаз и agents."""
         db_path = tmp_path / "test.db"
         uow = SAUnitOfWork(str(db_path))
         uow.init()
-        assert uow.get_all_phases() == []
-        schema.ensure_phase_catalog(uow)
         phases = uow.get_all_phases()
         assert len(phases) > 0
         p = phases[0]
         assert "id" in p and "name" in p and "phase_order" in p
         assert "execution_type" in p
-        assert uow.get_workflows()
+        workflows = uow.get_workflows()
+        assert any(w["name"] == "Smoke Test Workflow" for w in workflows)
         agents = uow.get_agents()
         assert len(agents) > 0
 
@@ -97,6 +96,22 @@ class TestEndToEndWorkflow:
         data = resp.json()
         assert isinstance(data, dict)
         assert "phases" in data
+
+
+class TestConversationHistory:
+    def test_get_messages_without_limit_returns_all_records(self, tmp_path: Path, monkeypatch):
+        db_dir = tmp_path / ".project-workflow"
+        db_path = db_dir / "conversation.db"
+        monkeypatch.setattr("project_workflow.infrastructure.conversation.DB_DIR", db_dir)
+        monkeypatch.setattr("project_workflow.infrastructure.conversation.DB_PATH", db_path)
+
+        convo.add_message("99", "TASK-99", "user", "first")
+        convo.add_message("99", "TASK-99", "agent", "second")
+        convo.add_message("99", "TASK-99", "system", "third")
+
+        rows = convo.get_messages("99", limit=None)
+
+        assert [row.content for row in rows] == ["first", "second", "third"]
 
 
 class TestEdgeCases:

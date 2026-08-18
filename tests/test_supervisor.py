@@ -17,8 +17,12 @@ SUPERVISOR_PHASES = ["sup.intake", "sup.review", "sup.done"]
 
 def _patch_runtime(monkeypatch, tmp_path: Path) -> SAUnitOfWork:
     workflow_db = tmp_path / "workflow.db"
+    convo_dir = tmp_path / ".project-workflow"
+    convo_db = convo_dir / "conversation.db"
     monkeypatch.setattr("project_workflow.infrastructure.db.DB_PATH", workflow_db)
     monkeypatch.setattr("project_workflow.infrastructure.db.DB_PATH", workflow_db)
+    monkeypatch.setattr("project_workflow.infrastructure.conversation.DB_DIR", convo_dir)
+    monkeypatch.setattr("project_workflow.infrastructure.conversation.DB_PATH", convo_db)
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{workflow_db}")
     from project_workflow import config
 
@@ -127,10 +131,10 @@ def test_supervisor_context_contains_full_path_and_contract(tmp_path: Path, monk
     assert "Задача" in prompt
     assert "Формат отчёта" in prompt
     assert "Полный путь workflow" not in prompt
-    # Empty controller-owned history and verdict sections remain visible.
+    # Empty history/verdicts/messages sections are still present.
     assert "История выполнения:" in prompt
     assert "Недавние вердикты:" in prompt
-    assert "Недавние сообщения:" not in prompt
+    assert "Недавние сообщения:" in prompt
 
 
 def test_supervisor_evaluate_pass_updates_db_state_and_persists_run(tmp_path: Path, monkeypatch, wizard_llm) -> None:
@@ -184,7 +188,7 @@ def test_supervisor_rolls_back_gate_phase_when_report_is_blocked(tmp_path: Path,
     uow.tasks.add_history(task_id, review_id, "pending")
 
     engine = WizardEngine("SUP-3", repo="/repo", uow=uow, create_if_missing=False)
-    wizard_llm("ROLLBACK", blockers=["dependency mismatch"])
+    wizard_llm("ROLLBACK")
     result = engine.evaluate("Blocked by dependency mismatch. blocker remains and the gate cannot pass.")
 
     assert result["verdict"] == "ROLLBACK"

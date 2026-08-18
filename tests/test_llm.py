@@ -6,6 +6,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
 pytestmark = [pytest.mark.unit]
 
@@ -48,18 +49,16 @@ class TestOllamaClient:
 
     def test_default_env_vars(self, monkeypatch):
         monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
-        monkeypatch.setenv("OLLAMA_MODEL", "test-model")
         from importlib import reload
 
         import project_workflow.infrastructure.llm as llm_mod
 
         reload(llm_mod)
         assert llm_mod.OLLAMA_BASE_URL == "http://localhost:11434"
-        assert llm_mod.OLLAMA_MODEL == "test-model"
+        assert llm_mod.OLLAMA_MODEL == "kimi-k2.6"
 
     def test_chat_parses_json_response(self, monkeypatch):
         monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
-        monkeypatch.setenv("OLLAMA_MODEL", "test-model")
         from importlib import reload
 
         import project_workflow.infrastructure.llm as llm_mod
@@ -79,8 +78,6 @@ class TestOllamaClient:
     def test_chat_cloud_mode(self, monkeypatch):
         """Test cloud mode with OpenAI-compatible endpoint."""
         monkeypatch.setenv("OLLAMA_BASE_URL", "https://ollama.com/v1")
-        monkeypatch.setenv("OLLAMA_MODEL", "test-model")
-        monkeypatch.setenv("OLLAMA_API_STYLE", "openai")
         from importlib import reload
 
         import project_workflow.infrastructure.llm as llm_mod
@@ -197,43 +194,42 @@ class TestResponseParser:
         with pytest.raises(ValueError):
             ResponseParser.parse(raw)
 
-    def test_parse_lowercase_verdict_is_rejected(self):
-        raw = {
-            "verdict": "pass",
-            "covered": [],
-            "missing": [],
-            "blockers": [],
-            "message": "ok",
-            "confidence": 1.0,
-        }
+    def test_parse_lowercase_verdict_normalised(self):
+        raw = {"verdict": "pass", "covered": [], "missing": [], "blockers": []}
+        v = ResponseParser.parse(raw)
+        assert v.verdict == "PASS"
+
+    def test_pass_with_blockers_is_blocked(self):
+        v = ResponseParser.parse({"verdict": "PASS", "blockers": ["No access"]})
+        assert v.verdict == "BLOCKED"
+
+    def test_pass_with_missing_items_is_partial(self):
+        v = ResponseParser.parse({"verdict": "PASS", "missing": ["Run tests"]})
+        assert v.verdict == "PARTIAL"
+
+    def test_parse_optional_fields_get_defaults(self):
+        v = ResponseParser.parse({"verdict": "PARTIAL"})
+        assert v.verdict == "PARTIAL"
+        assert v.covered == []
+        assert v.missing == []
+        assert v.blockers == []
+        assert v.message == ""
+        assert v.confidence == 0.5
+
+    def test_parse_confidence_out_of_range_is_rejected(self):
+        raw = {"verdict": "PASS", "confidence": 1.5}
+        with pytest.raises(ValueError):
+            ResponseParser.parse(raw)
+        raw = {"verdict": "PASS", "confidence": -0.3}
         with pytest.raises(ValueError):
             ResponseParser.parse(raw)
 
-    def test_parse_incomplete_response_is_rejected(self):
-        raw = {"verdict": "PASS"}
-        with pytest.raises(ValueError):
-            ResponseParser.parse(raw)
-
-    def test_parse_out_of_range_confidence_is_rejected(self):
+    def test_parse_string_instead_of_list_is_rejected(self):
         raw = {
             "verdict": "PASS",
-            "covered": [],
-            "missing": [],
-            "blockers": [],
-            "message": "ok",
-            "confidence": 1.5,
-        }
-        with pytest.raises(ValueError):
-            ResponseParser.parse(raw)
-
-    def test_parse_string_list_is_rejected(self):
-        raw = {
-            "verdict": "PARTIAL",
             "covered": "single item",
             "missing": ["a", "", "b"],
             "blockers": [],
-            "message": "incomplete",
-            "confidence": 0.5,
         }
         with pytest.raises(ValueError):
             ResponseParser.parse(raw)
@@ -264,9 +260,11 @@ class TestWizardEngineEvaluateLLM:
 
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
-        from project_workflow.wizard import WizardEngine
+        with patch("project_workflow.wizard.convo") as mock_convo:
+            mock_convo.get_last_phase.return_value = None
+            from project_workflow.wizard import WizardEngine
 
-        engine = WizardEngine("TASK-101", repo=str(tmp_path))
+            engine = WizardEngine("TASK-LLM-1", repo=str(tmp_path))
         return engine
 
     def test_evaluate_llm_pass(self, engine):
@@ -303,6 +301,12 @@ class TestWizardEngineEvaluateLLM:
         assert result["verdict"] == "BLOCKED"
         assert result["blockers"] == ["No access"]
 
+    def test_evaluate_llm_fails_closed_on_ollama_failure(self, engine):
+        with patch("project_workflow.wizard.evaluate.OllamaClient.chat", side_effect=requests.ConnectionError("down")):
+            result = engine.evaluate("")
+        assert result["verdict"] == "BLOCKED"
+        assert result["next_phase"] is None
+
     def test_evaluate_llm_uses_previously_covered(self, engine):
         """LLM prompt includes previously covered items."""
         llm_response = {
@@ -321,75 +325,61 @@ class TestWizardEngineEvaluateLLM:
             # unless they were passed as previously_covered param.
             # Here we just verify the prompt was built and sent.
             assert "Report" in kwargs["user"]
-            assert "TASK-101" in kwargs["user"]
+            assert "TASK-LLM-1" in kwargs["user"]
+
+
+class TestWizardEngineMandatoryLLM:
+    """Report evaluation always uses the configured LLM."""
+
+    @pytest.fixture
+    def engine(self, tmp_path, monkeypatch):
+        test_db = tmp_path / "workflow.db"
+        import project_workflow.infrastructure.db as db_module
+
+        monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
+        monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
+        with patch("project_workflow.wizard.convo") as mock_convo:
+            mock_convo.get_last_phase.return_value = None
+            from project_workflow.wizard import WizardEngine
+
+            engine = WizardEngine("TASK-RULE-1", repo=str(tmp_path))
+        return engine
+
+    def test_evaluate_uses_llm(self, engine):
+        with patch.object(engine, "evaluate_llm", return_value={"verdict": "BLOCKED"}) as evaluate_llm:
+            result = engine.evaluate("report")
+        assert result["verdict"] == "BLOCKED"
+        evaluate_llm.assert_called_once_with("report", engine._get_current_phase_obj())
 
 
 class TestOllamaResponseParserEdgeCases:
     """Edge-case parsing for LLM responses."""
 
-    def test_parse_confidence_none_is_rejected(self):
-        raw = {
-            "verdict": "PASS",
-            "covered": [],
-            "missing": [],
-            "blockers": [],
-            "message": "ok",
-            "confidence": None,
-        }
-        with pytest.raises(ValueError):
-            ResponseParser.parse(raw)
+    def test_parse_confidence_none_defaults_to_half(self):
+        raw = {"verdict": "PASS", "confidence": None}
+        v = ResponseParser.parse(raw)
+        assert v.confidence == 0.5
 
-    def test_parse_preserves_declared_strings(self):
-        raw = {
-            "verdict": "BLOCKED",
-            "covered": [],
-            "missing": [],
-            "blockers": ["real blocker"],
-            "message": "blocked",
-            "confidence": 0.5,
-        }
+    def test_parse_blockers_with_whitespace_strings(self):
+        raw = {"verdict": "BLOCKED", "blockers": ["  ", "real blocker", ""]}
         v = ResponseParser.parse(raw)
         assert v.blockers == ["real blocker"]
 
     def test_parse_next_phase_null_from_llm(self):
-        raw = {
-            "verdict": "PASS",
-            "covered": [],
-            "missing": [],
-            "blockers": [],
-            "message": "ok",
-            "confidence": 1.0,
-            "next_phase": None,
-            "next_phase_name": None,
-        }
+        raw = {"verdict": "PASS", "next_phase": None, "next_phase_name": None}
         v = ResponseParser.parse(raw)
         assert v.next_phase is None
         assert v.next_phase_name is None
 
     def test_parse_preserves_raw_response(self):
-        raw = {
-            "verdict": "PASS",
-            "covered": [],
-            "missing": [],
-            "blockers": [],
-            "message": "ok",
-            "confidence": 1.0,
-            "extra_key": "preserved",
-        }
+        raw = {"verdict": "PASS", "extra_key": "preserved"}
         v = ResponseParser.parse(raw)
         assert v.raw["extra_key"] == "preserved"
 
-    def test_parse_verdict_whitespace_is_rejected(self):
-        raw = {
-            "verdict": "  pass  ",
-            "covered": [],
-            "missing": [],
-            "blockers": [],
-            "message": "ok",
-            "confidence": 1.0,
-        }
-        with pytest.raises(ValueError):
-            ResponseParser.parse(raw)
+    def test_parse_strip_verdict_whitespace(self):
+        raw = {"verdict": "  pass  ", "covered": [], "missing": [], "blockers": []}
+        v = ResponseParser.parse(raw)
+        assert v.verdict == "PASS"
 
 
 class TestPromptBuilderEdgeCases:
@@ -431,9 +421,11 @@ class TestWizardEngineLLMIntegrationDB:
 
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
-        from project_workflow.wizard import WizardEngine
+        with patch("project_workflow.wizard.convo") as mock_convo:
+            mock_convo.get_last_phase.return_value = None
+            from project_workflow.wizard import WizardEngine
 
-        engine = WizardEngine("DB-101", repo=str(tmp_path))
+            engine = WizardEngine("DB-LLM-1", repo=str(tmp_path))
         return engine
 
     def test_supervisor_run_recorded_after_llm_evaluate(self, engine):
@@ -451,7 +443,7 @@ class TestWizardEngineLLMIntegrationDB:
             mock_chat.return_value = llm_response
             engine.evaluate("Report")
 
-        runs = engine.db.get_supervisor_runs(task_key="DB-101", limit=5)
+        runs = engine.db.get_supervisor_runs(task_key="DB-LLM-1", limit=5)
         assert len(runs) == 1
         run = runs[0]
         assert run["verdict"] == "pass"
@@ -475,7 +467,6 @@ class TestWizardEngineLLMIntegrationDB:
             engine.evaluate("Report")
 
         task = engine.db.get_task(engine.task["id"])
-        # The LLM-supplied "2" is ignored; the configured workflow owns order.
         assert task["current_phase"] == "0.0a"
 
     def test_task_blocked_after_llm_blocked(self, engine):

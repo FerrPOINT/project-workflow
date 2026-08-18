@@ -22,10 +22,25 @@ from pydantic import BaseModel, ConfigDict, Field
 logger = logging.getLogger(__name__)
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "").strip()
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "kimi-k2.6")
 OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "120"))
 OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "")
-OLLAMA_API_STYLE = os.getenv("OLLAMA_API_STYLE", "native").strip().lower()
+
+
+def _load_api_key() -> str:
+    """Read OLLAMA_API_KEY from env or ~/.hermes/.env."""
+    if OLLAMA_API_KEY:
+        return OLLAMA_API_KEY
+    env_path = os.path.expanduser("~/.hermes/.env")
+    if os.path.exists(env_path):
+        try:
+            with open(env_path) as f:
+                for line in f:
+                    if line.startswith("OLLAMA_API_KEY="):
+                        return line.split("=", 1)[1].strip()
+        except (OSError, ValueError) as exc:
+            logger.warning("Failed to read OLLAMA_API_KEY from env file: %s", exc)
+    return ""
 
 
 @dataclass(frozen=True)
@@ -50,21 +65,12 @@ class OllamaClient:
         model: str | None = None,
         timeout: int | None = None,
         api_key: str | None = None,
-        api_style: Literal["native", "openai"] | None = None,
     ):
         self.base_url = (base_url or OLLAMA_BASE_URL).rstrip("/")
-        self.model = model if model is not None else OLLAMA_MODEL
-        if not self.model:
-            raise ValueError("OLLAMA_MODEL is required")
-        self.timeout = timeout if timeout is not None else OLLAMA_TIMEOUT
-        self.api_key = api_key if api_key is not None else OLLAMA_API_KEY
-        self.api_style = api_style or OLLAMA_API_STYLE
-        if self.api_style not in {"native", "openai"}:
-            raise ValueError("OLLAMA_API_STYLE must be 'native' or 'openai'")
-
-    @property
-    def is_cloud(self) -> bool:
-        return self.api_style == "openai"
+        self.model = model or OLLAMA_MODEL
+        self.timeout = timeout or OLLAMA_TIMEOUT
+        self.api_key = api_key or _load_api_key()
+        self.is_cloud = "/v1" in self.base_url  # OpenAI-compatible endpoint
 
     def is_available(self) -> bool:
         """Quick health-check."""
@@ -102,7 +108,9 @@ class OllamaClient:
             "temperature": temperature,
             "max_tokens": 2000,
         }
-        payload["response_format"] = {"type": "json_object"}
+        # Prefer structured output if supported
+        if self.model.startswith("kimi") or self.model.startswith("gpt"):
+            payload["response_format"] = {"type": "json_object"}
 
         resp = requests.post(
             f"{self.base_url}/chat/completions",
@@ -146,7 +154,7 @@ class OllamaClient:
 
     @staticmethod
     def _extract_json(text: str) -> dict[str, Any]:
-        """Parse the structured response without repairing free-form text."""
+        """Parse one JSON object without repairing free-form model output."""
         parsed = json.loads(text)
         if not isinstance(parsed, dict):
             raise ValueError("Wizard response must be a JSON object")
@@ -166,11 +174,11 @@ class PromptBuilder:
         "4. Identify real BLOCKERS with ROOT CAUSE — explain WHY it prevents progress. "
         "Words like 'ошибка'/'error'/'bug' alone are NOT blockers without root cause.\n"
         "5. Verify the worker did NOT break existing functionality, remove working code, or leave orphaned artifacts.\n"
-        "6. verdict = PASS      — all items done, no blockers, no regressions → advance.\n"
+        "6. verdict = PASS    — all items done, no blockers, no regressions → advance.\n"
         "7. verdict = PARTIAL — some items done → stay on phase.\n"
         "8. verdict = BLOCKED — real blocker → stay on phase.\n"
         "9. verdict = ROLLBACK — worker explicitly cannot/will not do this.\n"
-        "10. verdict = DELEGATE — worker delegates a configured delegated phase.\n"
+        "10. verdict = DELEGATE — worker delegates to another agent.\n"
         "The Wizard never chooses the next phase.\n\n"
         "Output STRICT JSON with these keys:\n"
         "{\n"
@@ -235,24 +243,34 @@ class PromptBuilder:
 
 
 class _LlmResponse(BaseModel):
-    """Strict wire contract for the Wizard response."""
+    """Wire contract: strict on decisions, tolerant on optional explanation."""
 
-    model_config = ConfigDict(extra="ignore", strict=True)
+    model_config = ConfigDict(extra="ignore")
 
     verdict: Literal["PASS", "PARTIAL", "BLOCKED", "ROLLBACK", "DELEGATE"]
-    covered: list[str]
-    missing: list[str]
-    blockers: list[str]
-    message: str
-    confidence: float = Field(ge=0.0, le=1.0)
+    covered: list[str] = Field(default_factory=list)
+    missing: list[str] = Field(default_factory=list)
+    blockers: list[str] = Field(default_factory=list)
+    message: str = ""
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
 
 
 class ResponseParser:
-    """Validate the LLM JSON response against its declared contract."""
+    """Validate the LLM response and keep workflow routing authoritative."""
 
     @classmethod
     def parse(cls, raw: dict[str, Any]) -> LlmVerdict:
-        response = _LlmResponse.model_validate(raw)
+        payload = dict(raw)
+        verdict_value = payload.get("verdict")
+        if isinstance(verdict_value, str):
+            payload["verdict"] = verdict_value.upper().strip()
+        if "confidence" in payload and payload["confidence"] is None:
+            payload.pop("confidence")
+        for field_name in ("covered", "missing", "blockers"):
+            values = payload.get(field_name)
+            if isinstance(values, list) and all(isinstance(item, str) for item in values):
+                payload[field_name] = [item.strip() for item in values if item.strip()]
+        response = _LlmResponse.model_validate(payload)
         verdict = response.verdict
         if verdict == "PASS" and response.blockers:
             verdict = "BLOCKED"

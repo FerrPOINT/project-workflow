@@ -278,6 +278,20 @@ class SAUnitOfWork(UnitOfWork):
 
     def init(self) -> None:
         self.create_all()
+        self._bootstrap_default_project()
+        self._bootstrap_smoke_project_and_workflow()
+
+    def _bootstrap_smoke_project_and_workflow(self) -> None:
+        from .uow_bootstrap import bootstrap_smoke_project_and_workflow
+        bootstrap_smoke_project_and_workflow(self)
+
+    def _ensure_smoke_phases(self) -> None:
+        from .uow_bootstrap import ensure_smoke_phases
+        ensure_smoke_phases(self)
+
+    def _bootstrap_default_project(self) -> None:
+        from .uow_bootstrap import bootstrap_default_project
+        bootstrap_default_project(self)
 
     def delete_phase(self, token: int | str) -> None:
         phase_id: int | None = None

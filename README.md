@@ -38,7 +38,7 @@
 ## Позиционирование
 
 Пофазовый движок управления задачами.
-Агент получает инструкции текущей фазы через CLI, отправляет текстовый отчёт, а встроенный Wizard обязательно проверяет его через настроенную LLM и выдаёт вердикт: **PASS**, **PARTIAL**, **ROLLBACK**, **BLOCKED** или **DELEGATE**.
+Агент отчитывается через CLI, встроенный supervisor оценивает отчёт и выдаёт вердикт: **PASS**, **SOFT_FAIL**, **HARD_FAIL**, **ROLLBACK**, **BLOCKED** или **DELEGATE**.
 Всё управление шаблонами workflow, фазами, проектами, агентами и задачами ведётся через Web UI.
 
 CLI остаётся минимальным: ровно две команды — `step` и `history`.
@@ -53,7 +53,7 @@ SQLite остаётся только для тестов (временные ф�
 | Feature | Описание |
 |---------|----------|
 | Пофазовый workflow | Каждая задача строго следует шаблону фаз с инструкциями, чек-листами и артефактами. |
-| Встроенный Wizard | Обязательная fail-closed LLM-оценка отчёта; следующую фазу выбирает workflow. |
+| Встроенный supervisor | Автоматическая оценка отчётов и решение о переходе на следующую фазу. |
 | Web UI | Управление шаблонами, фазами, проектами, задачами и агентами через браузер. |
 | CLI freeze | Только `step` и `history`; весь CRUD — через UI. |
 | PostgreSQL | Единый production-стек: systemd UI и CLI используют тот же Postgres через `DATABASE_URL`. |
@@ -69,7 +69,7 @@ SQLite остаётся только для тестов (временные ф�
 | ORM & migrations | SQLAlchemy 2 + Alembic | модели, репозитории, UoW, миграции |
 | API | FastAPI + Pydantic | UI и JSON API |
 | UI | Jinja2 + minimal JS | server-side HTML, без frontend-фреймворков |
-| LLM / Wizard | Ollama-compatible API | обязательная семантическая проверка отчёта |
+| LLM / Supervisor | OpenAI-compatible API, Ollama, OpenRouter | wizard reasoning и legacy report evaluation |
 | CLI | Click + Rich | `step` / `history` |
 | Config | Pydantic Settings | `.env`, переменные окружения |
 
@@ -77,28 +77,18 @@ SQLite остаётся только для тестов (временные ф�
 ## 🖥️ CLI
 
 ```bash
-# Получить инструкции и чек-лист текущей фазы
-project-workflow step --task TASK-123
+# Выполнить текущую фазу задачи и получить вердикт supervisor
+project-workflow step --task TASK-123 --report "Сделал X, проверил Y"
 
-# После выполнения одной фазы отправить Wizard текстовый отчёт
-project-workflow step --task TASK-123 \
-  --report "Выполнено: ...; проверки: ...; evidence: ..."
-
-# История фаз, отчётов и решений Wizard
+# История фаз и supervisor-решений
 project-workflow history --task TASK-123 --n 10
 ```
 
-CLI ожидает `DATABASE_URL`. Единственная модель Wizard задаётся серверной конфигурацией:
+CLI ожидает переменную окружения `DATABASE_URL`:
 
 ```bash
 export DATABASE_URL=postgresql+psycopg://project_workflow:project_workflow@localhost/project_workflow
-export OLLAMA_BASE_URL=<ollama-compatible-endpoint>
-export OLLAMA_API_STYLE=<native-or-openai>
-export OLLAMA_MODEL=<model-name>
-export OLLAMA_API_KEY=<api-key-if-required>
 ```
-
-Если LLM недоступна, истёк timeout или ответ не соответствует контракту, Wizard возвращает `BLOCKED` и workflow не переходит дальше.
 
 <a name="ui"></a>
 ## 🌐 Web UI
@@ -155,7 +145,7 @@ flowchart TD
 |---|---|---|
 | Lint | `ruff check .` | **green** |
 | Type check | `mypy project_workflow` | **green** |
-| Tests | `pytest -q --timeout=60` | основной test suite |
+| Tests | `pytest -q --timeout=60` | **949 passed, 6 deselected** |
 | Coverage | combined slices (`-p no:cov`) | **~97%** |
 | Systemd UI health | `curl http://localhost:8811/api/tasks` | **200** |
 
@@ -171,7 +161,7 @@ flowchart TD
 - [x] UI/API переведены на SQLAlchemy-сервисы
 - [x] `WorkflowDB` переписан на SQLAlchemy, `db/base.py` и `db_schema.sql` удалены
 - [x] Legacy `wartz-workflow-cli`, `wartz_ui` и старые wizard endpoints удалены
-- [x] Основной test suite green
+- [x] 869 тестов green
 - [x] Postgres-интеграционные тесты
 - [x] `WizardEngine` и wizard-модули собраны в пакет `project_workflow/wizard/`
 - [x] API-тесты на все UI routes
@@ -180,6 +170,7 @@ flowchart TD
 - [x] mypy `--check-untyped-defs` для wizard/core.py
 - [x] UI-доработки: execution_type на отдельной строке, русское склонение счётчиков, очистка рабочей БД от мусора
 - [x] Wizard evaluate: stateful prompt, три секции в CLI output, явный parallel rendering
+- [x] Smoke seed: real structured-document editor workflow, synced to PostgreSQL UI
 
 Подробный план: [`docs/plans/2026-06-21-detailed-roadmap.md`](docs/plans/2026-06-21-detailed-roadmap.md).
 

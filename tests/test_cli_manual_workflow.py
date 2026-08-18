@@ -1,14 +1,16 @@
-"""Integration checks for the text CLI, Wizard and existing FSM."""
+"""End-to-end CLI test for a custom workflow with parallel phases/instructions.
+
+Runs in dumb-evaluate mode so no LLM is required.
+"""
 
 from __future__ import annotations
 
 import json
-from pathlib import Path
+import os
 
 import pytest
 from click.testing import CliRunner
 
-from project_workflow.config import get_settings
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.cli.ui import cli
 
@@ -17,135 +19,328 @@ from project_workflow.interfaces.cli.ui import cli
 def manual_env(tmp_path, monkeypatch):
     workflow_dir = tmp_path / "manual_workflow"
     workflow_dir.mkdir()
+    monkeypatch.setenv("SMART_EVALUATE", "false")
     monkeypatch.setenv("DATABASE_URL", "")
     monkeypatch.setenv("WORKFLOW_DIR", str(workflow_dir))
-    monkeypatch.setattr("project_workflow.infrastructure.db.DB_PATH", workflow_dir / "workflow.db")
-    get_settings.cache_clear()
+    # DB_PATH import-time fallback is kept for compatibility, but SAUnitOfWork
+    # now calls get_db_path() at runtime. Monkeypatch both to be safe.
+    db_path = workflow_dir / "workflow.db"
+    monkeypatch.setattr("project_workflow.infrastructure.db.DB_PATH", db_path)
 
-    seed = json.loads(
-        (Path(__file__).parent / "manual_workflow_seed.json").read_text(encoding="utf-8")
-    )
+    seed_path = os.path.join(os.path.dirname(__file__), "manual_workflow_seed.json")
+    with open(seed_path, encoding="utf-8") as f:
+        seed = json.load(f)
+
     uow = SAUnitOfWork()
     uow.init()
-    workflow_id = uow.workflows.create(
+    wf_id = uow.workflows.create(
         {
             "name": "Manual Test Workflow",
-            "description": "CLI integration workflow",
+            "description": "CLI manual test workflow",
             "_skip_default_phase": True,
         }
     )
     uow.projects.create(
         {
-            "workflow_id": workflow_id,
+            "workflow_id": wf_id,
             "code": "MANUAL",
             "name": "Manual Test Project",
             "key_prefixes": ["MANUAL"],
         }
     )
-    for phase in seed:
+    uow.commit()
+
+    for p in seed:
         phase_id = uow.phases.create(
             {
-                "workflow_id": workflow_id,
-                "phase_order": phase["phase_order"],
-                "code": phase["code"],
-                "name": phase["name"],
-                "description": phase["description"],
-                "execution_type": phase["execution_type"],
-                "parallel_with": phase.get("parallel_with"),
-                "rollback_target": phase.get("rollback_target"),
-                "is_delegated": phase.get("is_delegated", False),
+                "workflow_id": wf_id,
+                "phase_order": p["phase_order"],
+                "code": p["code"],
+                "name": p["name"],
+                "description": p["description"],
+                "execution_type": p["execution_type"],
+                "parallel_with": p.get("parallel_with"),
+                "rollback_target": p.get("rollback_target"),
+                "is_delegated": p.get("is_delegated", False),
+                "is_blocker": p.get("is_blocker", False),
+                "is_critic": p.get("is_critic", False),
+                "is_seed_managed": p.get("is_seed_managed", False),
             }
         )
-        for instruction in phase.get("instructions", []):
-            uow.instructions.create(phase_id, {"description": instruction["description"]})
-        for check in phase.get("checks", []):
-            uow.checks.create(phase_id, {"description": check["description"]})
-        for evidence in phase.get("evidence", []):
-            uow.evidence.create(phase_id, {"description": evidence["description"]})
+        for inst in p.get("instructions", []):
+            uow.instructions.create(
+                phase_id,
+                {
+                    "description": inst["description"],
+                    "execution_type": inst.get("execution_type", "sync"),
+                },
+            )
+        for chk in p.get("checks", []):
+            uow.checks.create(phase_id, {"description": chk["description"]})
+        for ev in p.get("evidence", []):
+            uow.evidence.create(phase_id, {"description": ev["description"]})
     uow.commit()
     uow.close()
 
-    yield CliRunner()
-    get_settings.cache_clear()
+    return str(workflow_dir)
 
 
-def _phase_report(runner: CliRunner, task: str) -> str:
-    result = runner.invoke(cli, ["--json", "step", "--task", task])
-    assert result.exit_code == 0, result.output
-    data = json.loads(result.output)
-    assert data["prompt"]
-    return (
-        f"task: {task}; phase: {data['phase']}; "
-        "instructions completed; checks passed; evidence: test://readback"
-    )
+class TestManualWorkflowEndToEnd:
+    def test_sync_phase_passes_and_advances(self, manual_env, wizard_llm):
+        runner = CliRunner(env={"SMART_EVALUATE": "false", "DATABASE_URL": "", "WORKFLOW_DIR": manual_env})
+        wizard_llm("PASS")
+        report = (
+            "Цель задачи MANUAL-1 зафиксирована. Входные данные зафиксированы. "
+            "Описание цели приложено. Список входных данных приложен."
+        )
+        result = runner.invoke(cli, ["--json", "step", "--task", "MANUAL-1", "--report", report])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["verdict"] == "PASS"
+        assert data["phase"] == "manual.intake"
+        assert data["next_phase"] == "manual.plan"
+        assert data["missing"] == []
 
+    def test_plan_passes_then_parallel_group(self, manual_env, wizard_llm):
+        runner = CliRunner(env={"SMART_EVALUATE": "false", "DATABASE_URL": "", "WORKFLOW_DIR": manual_env})
+        wizard_llm("PASS")
+        runner.invoke(
+            cli,
+            [
+                "--json",
+                "step",
+                "--task",
+                "MANUAL-2",
+                "--report",
+                (
+                    "Цель задачи MANUAL-2 зафиксирована. Входные данные зафиксированы. "
+                    "Описание цели приложено. Список входных данных приложен."
+                ),
+            ],
+        )
+        report = "Архитектура определена. Библиотеки выбраны. Документ архитектуры приложен. Список библиотек приложен."
+        result = runner.invoke(cli, ["--json", "step", "--task", "MANUAL-2", "--report", report])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["verdict"] == "PASS"
+        assert data["phase"] == "manual.plan"
+        assert data["next_phase"] == "manual.parallel-a"
 
-def _submit(runner: CliRunner, task: str, report: str) -> dict:
-    result = runner.invoke(
-        cli,
-        ["--json", "step", "--task", task, "--report", str(report)],
-    )
-    assert result.exit_code == 0, result.output
-    return json.loads(result.output)
+    def test_parallel_group_partial_then_full(self, manual_env, wizard_llm):
+        runner = CliRunner(env={"SMART_EVALUATE": "false", "DATABASE_URL": "", "WORKFLOW_DIR": manual_env})
+        wizard_llm("PASS")
+        # Advance to parallel group
+        runner.invoke(
+            cli,
+            [
+                "--json",
+                "step",
+                "--task",
+                "MANUAL-3",
+                "--report",
+                (
+                    "Цель задачи MANUAL-3 зафиксирована. Входные данные зафиксированы. "
+                    "Описание цели приложено. Список входных данных приложен."
+                ),
+            ],
+        )
+        runner.invoke(
+            cli,
+            [
+                "--json",
+                "step",
+                "--task",
+                "MANUAL-3",
+                "--report",
+                (
+                    "Архитектура определена. Библиотеки выбраны. "
+                    "Документ архитектуры приложен. Список библиотек приложен."
+                ),
+            ],
+        )
 
+        partial = (
+            "Backend endpoint работает. Unit-тесты backend проходят. Код backend приложен. Тесты backend приложены."
+        )
+        wizard_llm("PARTIAL", covered=["Backend"], missing=["Frontend"])
+        result = runner.invoke(cli, ["--json", "step", "--task", "MANUAL-3", "--report", partial])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["verdict"] == "PARTIAL"
+        assert "manual.parallel-a" in data["phase"]
+        assert "Parallel group" in data["phase_name"]
+        assert data["next_phase"] is None
+        assert any("Frontend" in m for m in data["missing"])
 
-def test_full_workflow_uses_text_report_wizard_and_history(manual_env, wizard_llm):
-    wizard_llm("PASS")
-    runner = manual_env
-    task = "MANUAL-1"
-    submitted = []
+        full = (
+            "Backend endpoint работает. Unit-тесты backend проходят. "
+            "Frontend компонент работает. UI-тесты frontend проходят. "
+            "Код backend приложен. Тесты backend приложены. "
+            "Код frontend приложен. Тесты frontend приложены."
+        )
+        wizard_llm("PASS")
+        result = runner.invoke(cli, ["--json", "step", "--task", "MANUAL-3", "--report", full])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["verdict"] == "PASS"
+        assert "Parallel group" in data["phase_name"]
+        assert data["next_phase"] == "manual.seq-instr"
+        assert data["missing"] == []
 
-    for _ in range(8):
-        current = runner.invoke(cli, ["--json", "step", "--task", task])
-        data = json.loads(current.output)
-        if data.get("status") == "done":
-            break
-        result = _submit(runner, task, _phase_report(runner, task))
-        submitted.append(result["phase"])
-    else:
-        pytest.fail("workflow did not finish")
+    def test_mixed_instructions_phase(self, manual_env, wizard_llm):
+        runner = CliRunner(env={"SMART_EVALUATE": "false", "DATABASE_URL": "", "WORKFLOW_DIR": manual_env})
+        wizard_llm("PASS")
+        # Advance through intake, plan, parallel
+        for report in [
+            (
+                "Цель задачи MANUAL-4 зафиксирована. Входные данные зафиксированы. "
+                "Описание цели приложено. Список входных данных приложен."
+            ),
+            ("Архитектура определена. Библиотеки выбраны. Документ архитектуры приложен. Список библиотек приложен."),
+            (
+                "Backend endpoint работает. Unit-тесты backend проходят. "
+                "Frontend компонент работает. UI-тесты frontend проходят. "
+                "Код backend приложен. Тесты backend приложены. "
+                "Код frontend приложен. Тесты frontend приложены."
+            ),
+        ]:
+            runner.invoke(cli, ["--json", "step", "--task", "MANUAL-4", "--report", report])
 
-    assert submitted == [
-        "manual.intake",
-        "manual.plan",
-        "manual.parallel-a",
-        "manual.seq-instr",
-        "manual.rollback-demo",
-        "manual.delegate-demo",
-        "manual.done",
-    ]
-    history = runner.invoke(cli, ["--json", "history", "--task", task])
-    assert history.exit_code == 0
-    history_data = json.loads(history.output)
-    assert history_data["count"] == len(submitted)
-    intake = next(record for record in history_data["records"] if record["phase_code"] == "manual.intake")
-    assert intake["next_phase"] == "manual.plan"
+        # Partial on seq-instr
+        partial = "Окружение подготовлено. CI настроен."
+        wizard_llm("PARTIAL", missing=["Линтер", "Итоговый отчёт"])
+        result = runner.invoke(cli, ["--json", "step", "--task", "MANUAL-4", "--report", partial])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["verdict"] == "PARTIAL"
+        assert data["phase"] == "manual.seq-instr"
+        assert data["next_phase"] is None
+        assert len(data["missing"]) > 0
 
+        full = (
+            "Окружение подготовлено. CI настроен. Линтер настроен. Итоговый отчёт собран. "
+            "Конфиг окружения приложен. Конфиг CI приложен. Конфиг линтера приложен. "
+            "Итоговый отчёт приложен."
+        )
+        wizard_llm("PASS")
+        result = runner.invoke(cli, ["--json", "step", "--task", "MANUAL-4", "--report", full])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["verdict"] == "PASS"
+        assert data["phase"] == "manual.seq-instr"
+        assert data["next_phase"] == "manual.rollback-demo"
+        assert data["missing"] == []
 
-def test_partial_keeps_current_phase_for_revised_text_report(manual_env, wizard_llm):
-    runner = manual_env
-    task = "MANUAL-2"
-    wizard_llm("PARTIAL", missing=["more evidence"])
-    first = _submit(runner, task, _phase_report(runner, task))
-    assert first["verdict"] == "PARTIAL"
-    assert first["phase"] == "manual.intake"
-    assert first["next_phase"] is None
+    def test_rollback_phase_response(self, manual_env, wizard_llm):
+        runner = CliRunner(env={"SMART_EVALUATE": "false", "DATABASE_URL": "", "WORKFLOW_DIR": manual_env})
+        wizard_llm("PASS")
+        for report in [
+            (
+                "Цель задачи MANUAL-6 зафиксирована. Входные данные зафиксированы. "
+                "Описание цели приложено. Список входных данных приложен."
+            ),
+            ("Архитектура определена. Библиотеки выбраны. Документ архитектуры приложен. Список библиотек приложен."),
+            (
+                "Backend endpoint работает. Unit-тесты backend проходят. "
+                "Frontend компонент работает. UI-тесты frontend проходят. "
+                "Код backend приложен. Тесты backend приложены. "
+                "Код frontend приложен. Тесты frontend приложены."
+            ),
+            (
+                "Окружение подготовлено. CI настроен. Линтер настроен. Итоговый отчёт собран. "
+                "Конфиг окружения приложен. Конфиг CI приложен. Конфиг линтера приложен. "
+                "Итоговый отчёт приложен."
+            ),
+        ]:
+            result = runner.invoke(cli, ["--json", "step", "--task", "MANUAL-6", "--report", report])
+            assert result.exit_code == 0, result.output
+            data = json.loads(result.output)
+            assert data["verdict"] == "PASS", data
 
-    wizard_llm("PASS")
-    revised = _phase_report(runner, task) + "; additional evidence: test://artifact"
-    assert _submit(runner, task, revised)["next_phase"] == "manual.plan"
+        # Rollback: report contains "rollback" and phase has rollback_target
+        wizard_llm("ROLLBACK")
+        result = runner.invoke(
+            cli,
+            ["--json", "step", "--task", "MANUAL-6", "--report", "Integration failed. rollback."],
+        )
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["verdict"] == "ROLLBACK"
+        assert data["phase"] == "manual.rollback-demo"
+        assert data["rollback_target"] == "manual.seq-instr"
 
+    def test_delegate_phase_response(self, manual_env, wizard_llm):
+        runner = CliRunner(env={"SMART_EVALUATE": "false", "DATABASE_URL": "", "WORKFLOW_DIR": manual_env})
+        wizard_llm("PASS")
+        for report in [
+            (
+                "Цель задачи MANUAL-7 зафиксирована. Входные данные зафиксированы. "
+                "Описание цели приложено. Список входных данных приложен."
+            ),
+            ("Архитектура определена. Библиотеки выбраны. Документ архитектуры приложен. Список библиотек приложен."),
+            (
+                "Backend endpoint работает. Unit-тесты backend проходят. "
+                "Frontend компонент работает. UI-тесты frontend проходят. "
+                "Код backend приложен. Тесты backend приложены. "
+                "Код frontend приложен. Тесты frontend приложены."
+            ),
+            (
+                "Окружение подготовлено. CI настроен. Линтер настроен. Итоговый отчёт собран. "
+                "Конфиг окружения приложен. Конфиг CI приложен. Конфиг линтера приложен. "
+                "Итоговый отчёт приложен."
+            ),
+            "Attempt integration. Integration passed. Integration log attached.",
+        ]:
+            result = runner.invoke(cli, ["--json", "step", "--task", "MANUAL-7", "--report", report])
+            assert result.exit_code == 0, result.output
+            data = json.loads(result.output)
+            assert data["verdict"] == "PASS", data
 
-def test_wizard_rollback_uses_configured_target(manual_env, wizard_llm):
-    runner = manual_env
-    task = "MANUAL-3"
-    wizard_llm("PASS")
-    for _ in range(4):
-        _submit(runner, task, _phase_report(runner, task))
+        # Delegate: report contains delegate signal and phase is_delegated=True
+        wizard_llm("DELEGATE")
+        result = runner.invoke(
+            cli,
+            ["--json", "step", "--task", "MANUAL-7", "--report", "delegate this review to senior engineer"],
+        )
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["verdict"] == "DELEGATE"
+        assert data["phase"] == "manual.delegate-demo"
+        assert data["next_phase"] is None
 
-    report = _phase_report(runner, task)
-    wizard_llm("ROLLBACK")
-    result = _submit(runner, task, report)
-    assert result["phase"] == "manual.rollback-demo"
-    assert result["rollback_target"] == "manual.seq-instr"
-    assert result["next_phase"] == "manual.seq-instr"
+    def test_full_workflow_to_done(self, manual_env, wizard_llm):
+        runner = CliRunner(env={"SMART_EVALUATE": "false", "DATABASE_URL": "", "WORKFLOW_DIR": manual_env})
+        wizard_llm("PASS")
+        reports = [
+            (
+                "Цель задачи MANUAL-5 зафиксирована. Входные данные зафиксированы. "
+                "Описание цели приложено. Список входных данных приложен."
+            ),
+            ("Архитектура определена. Библиотеки выбраны. Документ архитектуры приложен. Список библиотек приложен."),
+            (
+                "Backend endpoint работает. Unit-тесты backend проходят. "
+                "Frontend компонент работает. UI-тесты frontend проходят. "
+                "Код backend приложен. Тесты backend приложены. "
+                "Код frontend приложен. Тесты frontend приложены."
+            ),
+            (
+                "Окружение подготовлено. CI настроен. Линтер настроен. Итоговый отчёт собран. "
+                "Конфиг окружения приложен. Конфиг CI приложен. Конфиг линтера приложен. "
+                "Итоговый отчёт приложен."
+            ),
+            "Attempt integration. Integration passed. Integration log attached.",
+            ("Senior review delegated. Delegation record. Delegation handoff email attached."),
+            ("README обновлён. MR смержен. README приложен. Merge commit приложен."),
+        ]
+        for report in reports:
+            result = runner.invoke(cli, ["--json", "step", "--task", "MANUAL-5", "--report", report])
+            assert result.exit_code == 0, result.output
+            data = json.loads(result.output)
+            assert data["verdict"] in ("PASS", "DELEGATE"), data
+        result = runner.invoke(cli, ["--json", "step", "--task", "MANUAL-5"])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["phase"] == "manual.done"
+        assert data["status"] == "done"
+
+        assert "prompt" not in data

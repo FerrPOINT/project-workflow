@@ -9,6 +9,7 @@ import pytest
 
 pytestmark = [pytest.mark.unit]
 
+from project_workflow import config
 from project_workflow.infrastructure.db import schema
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
@@ -48,6 +49,16 @@ def _phase_by_code(code: str) -> dict:
     raise AssertionError(f"Phase {code} not found in seed catalog")
 
 
+def test_default_bootstrap_project_prefixes_are_project_specific(tmp_path):
+    uow = SAUnitOfWork(str(tmp_path / "workflow.db"))
+    uow.init()
+
+    project = next((p for p in uow.get_projects() if p["code"] == "TASK"), None)
+    assert project is not None
+    assert project["key_prefixes"] == config.DEFAULT_TASK_KEY_PREFIXES
+    assert project["key_prefixes"] == ["TASK"]
+
+
 def test_seed_catalog_task_intake_and_preflight_have_real_content():
     for code in ("-1", "1"):
         phase = _phase_by_code(code)
@@ -67,8 +78,7 @@ def test_seed_catalog_task_intake_and_preflight_have_real_content():
 def test_seed_catalog_order_matches_config_phase_order():
     phases = json.loads(SEED_PATH.read_text(encoding="utf-8"))
     codes = [str(phase.get("code", phase.get("id", ""))).strip() for phase in phases]
-    expected = [str(item["code"]) for item in json.loads(SEED_PATH.read_text(encoding="utf-8"))]
-    assert codes == expected
+    assert codes == config.PHASE_ORDER
 
 
 def test_seed_catalog_names_match_runtime_progress_template():
