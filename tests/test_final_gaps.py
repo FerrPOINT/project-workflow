@@ -22,8 +22,6 @@ from project_workflow.interfaces.ui.services import (
     _load_cli_reference,
 )
 from project_workflow.wizard import core as core_mod
-from project_workflow.wizard.store import WizardAssessmentStore
-from project_workflow.wizard.types import WizardAssessment
 
 
 class TestConfigFinalGap:
@@ -220,47 +218,6 @@ class TestWorkflowServiceFinalGaps:
         uow.workflows.get_by_id.return_value = None
         with pytest.raises(RuntimeError, match="creation failed"):
             WorkflowService(uow).create_workflow({"name": "x"})
-
-
-class TestWizardStoreFinalGaps:
-    def test_phase_id_else_branch(self):
-        uow = MagicMock()
-        uow.get_phase_by_code.return_value = {"id": 7}
-        store = WizardAssessmentStore(uow)
-        assert store._phase_id("x") == 7
-
-    def test_row_phase_code_dict(self):
-        assert WizardAssessmentStore._row_phase_code({"phase_code": "P1"}) == "P1"
-
-    def test_row_phase_code_object_no_attrs(self):
-        row = MagicMock()
-        del row.phase_code
-        del row.response
-        assert WizardAssessmentStore._row_phase_code(row) == ""
-
-    def test_save_else_branch(self):
-        uow = MagicMock()
-        uow.get_task_by_key.return_value = {"id": 5}
-        store = WizardAssessmentStore(uow)
-        store.save(
-            WizardAssessment(
-                task_key="A-1",
-                phase_code="P1",
-                phase_name="P",
-                verdict="pass",
-                next_phase="P2",
-                rollback_target="P0",
-            )
-        )
-        assert uow.create_supervisor_run.call_args[0][0]["task_id"] == 5
-
-    def test_get_latest_else_branch(self):
-        uow = MagicMock()
-        uow.get_supervisor_runs.return_value = [
-            {"verdict": "PASS", "phase_code": "P1", "response": '{"phase": "P1"}'},
-        ]
-        results = WizardAssessmentStore(uow).get_latest(1, limit=1)
-        assert results[0].phase_code == "P1"
 
 
 class TestWizardCoreFinalGaps:

@@ -173,11 +173,10 @@ def test_parallel_group_partial_stays_on_group(tmp_path: Path, monkeypatch, wiza
     assert result["next_phase"] is None
     assert "Parallel group" in result["phase_name"]
 
-    # No parallel phases in history yet
     history = uow.get_task_history(engine.task["id"])
-    codes = {uow.get_phase(h["phase_id"])["code"] for h in history}
-    assert "smoke.parallel-a" not in codes
-    assert "smoke.parallel-b" not in codes
+    statuses = {uow.get_phase(row["phase_id"])["code"]: row["status"] for row in history}
+    assert statuses["smoke.parallel-a"] == "partial"
+    assert statuses["smoke.parallel-b"] == "partial"
 
     # Current phase stays on parallel-a
     task = uow.get_task_by_key("SMOKE-102")
@@ -203,11 +202,10 @@ def test_parallel_group_blocked_stays_on_group(tmp_path: Path, monkeypatch):
     assert result["next_phase"] is None
     assert "Parallel group" in result["phase_name"]
 
-    # No parallel phases in history
     history = uow.get_task_history(engine.task["id"])
-    codes = {uow.get_phase(h["phase_id"])["code"] for h in history}
-    assert "smoke.parallel-a" not in codes
-    assert "smoke.parallel-b" not in codes
+    statuses = {uow.get_phase(row["phase_id"])["code"]: row["status"] for row in history}
+    assert statuses["smoke.parallel-a"] == "blocked"
+    assert statuses["smoke.parallel-b"] == "blocked"
 
     # Current phase stays
     task = uow.get_task_by_key("SMOKE-103")

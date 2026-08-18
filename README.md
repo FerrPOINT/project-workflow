@@ -38,7 +38,7 @@
 ## Позиционирование
 
 Пофазовый движок управления задачами.
-Агент отчитывается через CLI, встроенный supervisor оценивает отчёт и выдаёт вердикт: **PASS**, **SOFT_FAIL**, **HARD_FAIL**, **ROLLBACK**, **BLOCKED** или **DELEGATE**.
+Агент отчитывается через CLI, обязательный LLM-supervisor оценивает отчёт и выдаёт вердикт: **PASS**, **PARTIAL**, **ROLLBACK**, **BLOCKED** или **DELEGATE**.
 Всё управление шаблонами workflow, фазами, проектами, агентами и задачами ведётся через Web UI.
 
 CLI остаётся минимальным: ровно две команды — `step` и `history`.
@@ -69,7 +69,7 @@ SQLite остаётся только для тестов (временные ф�
 | ORM & migrations | SQLAlchemy 2 + Alembic | модели, репозитории, UoW, миграции |
 | API | FastAPI + Pydantic | UI и JSON API |
 | UI | Jinja2 + minimal JS | server-side HTML, без frontend-фреймворков |
-| LLM / Supervisor | OpenAI-compatible API, Ollama, OpenRouter | wizard reasoning и legacy report evaluation |
+| LLM / Supervisor | Ollama local или Ollama-compatible `/v1` | единственный evaluator отчётов; маршрутизацией владеет workflow |
 | CLI | Click + Rich | `step` / `history` |
 | Config | Pydantic Settings | `.env`, переменные окружения |
 
@@ -84,11 +84,18 @@ project-workflow step --task TASK-123 --report "Сделал X, проверил
 project-workflow history --task TASK-123 --n 10
 ```
 
-CLI ожидает переменную окружения `DATABASE_URL`:
+CLI ожидает `DATABASE_URL` и доступный Ollama evaluator:
 
 ```bash
 export DATABASE_URL=postgresql+psycopg://project_workflow:project_workflow@localhost/project_workflow
+export OLLAMA_BASE_URL=http://localhost:11434
+export OLLAMA_MODEL=kimi-k2.6
+export OLLAMA_TIMEOUT=120
+# Для локального Ollama ключ оставьте пустым; для cloud endpoint задайте секрет через окружение.
+export OLLAMA_API_KEY=
 ```
+
+Fallback evaluator отсутствует: если Ollama недоступен или вернул некорректный JSON, команда остаётся на текущей фазе, возвращает `BLOCKED` и exit code `1`.
 
 <a name="ui"></a>
 ## 🌐 Web UI
@@ -133,6 +140,7 @@ flowchart TD
 ### Принципы
 
 - Единый data layer: все операции через SQLAlchemy-модели и репозитории.
+- Единственный evaluator — обязательный LLM; deterministic/reasoning compatibility runtime удалён.
 - UI-пакет (`project_workflow/interfaces/ui/`) — чистое FastAPI-приложение с отдельными routes, services, dependencies.
 - `project_workflow/infrastructure/db/compat.py` — SQLAlchemy-реализация `WorkflowDB`, сохраняющая публичный API для CLI/wizard/tests.
 - Конфигурация централизована в `project_workflow.config` на Pydantic Settings; `DATABASE_URL` обязателен.
@@ -145,8 +153,8 @@ flowchart TD
 |---|---|---|
 | Lint | `ruff check .` | **green** |
 | Type check | `mypy project_workflow` | **green** |
-| Tests | `pytest -q --timeout=60` | **949 passed, 6 deselected** |
-| Coverage | combined slices (`-p no:cov`) | **~97%** |
+| Tests | `pytest -q --timeout=60` | **859 passed, 6 deselected** |
+| Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` | **96.48%** |
 | Systemd UI health | `curl http://localhost:8811/api/tasks` | **200** |
 
 > **Примечание:** `pytest -n auto` без `--forked` может зависнуть из-за FD exhaustion при SQLite WAL. В CI и на WARTZ используем `--forked`. Параллельный прогон без forked актуален только для PostgreSQL-бекенда.
@@ -161,7 +169,7 @@ flowchart TD
 - [x] UI/API переведены на SQLAlchemy-сервисы
 - [x] `WorkflowDB` переписан на SQLAlchemy, `db/base.py` и `db_schema.sql` удалены
 - [x] Legacy `wartz-workflow-cli`, `wartz_ui` и старые wizard endpoints удалены
-- [x] 869 тестов green
+- [x] Полный suite: 859 тестов green
 - [x] Postgres-интеграционные тесты
 - [x] `WizardEngine` и wizard-модули собраны в пакет `project_workflow/wizard/`
 - [x] API-тесты на все UI routes

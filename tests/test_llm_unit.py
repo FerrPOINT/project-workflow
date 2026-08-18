@@ -329,11 +329,10 @@ class TestResponseParser:
         with pytest.raises(ValueError):
             ResponseParser.parse({"verdict": "BLOCKED", "covered": "single"})
 
-    def test_parse_rejects_out_of_range_confidence(self):
-        with pytest.raises(ValueError):
-            ResponseParser.parse({"verdict": "pass", "confidence": 1.5})
-        with pytest.raises(ValueError):
-            ResponseParser.parse({"verdict": "pass", "confidence": -0.5})
+    def test_parse_invalid_optional_fields_use_defaults(self):
+        verdict = ResponseParser.parse({"verdict": "pass", "confidence": 1.5, "message": None})
+        assert verdict.confidence == 0.5
+        assert verdict.message == ""
 
     def test_parse_optional_fields_get_defaults(self):
         verdict = ResponseParser.parse({"verdict": "PARTIAL", "confidence": None})

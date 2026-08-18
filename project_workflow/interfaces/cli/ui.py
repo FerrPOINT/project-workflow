@@ -60,8 +60,7 @@ def step_cmd(
             out_json(result)
             return
         console.print(format_result(result))
-        # Recoverable verdicts (PASS / SOFT_FAIL) should not produce a CLI error exit code.
-        sys.exit(0 if result["verdict"] in ("PASS", "SOFT_FAIL") else 1)
+        sys.exit(1 if result["verdict"] == "BLOCKED" else 0)
 
     # default: show phase prompt/instructions
     prompt = engine.get_phase_prompt()

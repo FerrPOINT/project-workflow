@@ -3,7 +3,6 @@
 ## Окружение
 
 ```bash
-export SMART_EVALUATE=false
 export DATABASE_URL=''
 export WORKFLOW_DIR=/tmp/pw_manual_cli
 ```
@@ -61,6 +60,5 @@ export WORKFLOW_DIR=/tmp/pw_manual_cli
 ## Результаты автотестов
 
 ```bash
-SMART_EVALUATE=false DATABASE_URL='' python -m pytest tests/test_cli_manual_workflow.py tests/test_cli_core.py tests/test_wizard_unit.py tests/test_wizard_verdict_contract.py tests/test_wizard_coverage.py tests/test_phase_fsm.py tests/test_wizard_core_gaps.py tests/test_wizard_fk_types.py -q --tb=short
-# 124 passed in 81.12s
+DATABASE_URL='' python -m pytest tests/test_cli_manual_workflow.py tests/test_cli_core.py tests/test_wizard_unit.py tests/test_wizard_coverage.py tests/test_phase_fsm.py tests/test_wizard_core_gaps.py tests/test_wizard_fk_types.py -q --tb=short
 ```

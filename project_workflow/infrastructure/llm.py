@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -264,8 +265,19 @@ class ResponseParser:
         verdict_value = payload.get("verdict")
         if isinstance(verdict_value, str):
             payload["verdict"] = verdict_value.upper().strip()
-        if "confidence" in payload and payload["confidence"] is None:
-            payload.pop("confidence")
+        if not isinstance(payload.get("message", ""), str):
+            payload["message"] = ""
+        else:
+            payload["message"] = payload.get("message", "").strip()
+
+        confidence = payload.get("confidence", 0.5)
+        try:
+            confidence = float(confidence) if not isinstance(confidence, bool) else 0.5
+        except (TypeError, ValueError):
+            confidence = 0.5
+        if not math.isfinite(confidence) or not 0.0 <= confidence <= 1.0:
+            confidence = 0.5
+        payload["confidence"] = confidence
         for field_name in ("covered", "missing", "blockers"):
             values = payload.get(field_name)
             if isinstance(values, list) and all(isinstance(item, str) for item in values):

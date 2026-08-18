@@ -146,7 +146,7 @@ class TestWizardCoreGaps:
         engine.phase_map = {"1": ph, "0": self._phase(id=2, code="0")}
         db = MagicMock()
         engine.db = db
-        engine._record_parallel_transition([ph], "rollback", "0")
+        engine._record_parallel_transition([ph], "rollback", None, "0")
         db.update_task.assert_called_once()
 
     def test_ensure_task_updates_empty_current_phase(self, monkeypatch):

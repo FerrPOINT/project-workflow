@@ -216,13 +216,13 @@ class TestResponseParser:
         assert v.message == ""
         assert v.confidence == 0.5
 
-    def test_parse_confidence_out_of_range_is_rejected(self):
-        raw = {"verdict": "PASS", "confidence": 1.5}
-        with pytest.raises(ValueError):
-            ResponseParser.parse(raw)
-        raw = {"verdict": "PASS", "confidence": -0.3}
-        with pytest.raises(ValueError):
-            ResponseParser.parse(raw)
+    @pytest.mark.parametrize("value", [1.5, -0.3, None, "unknown", float("nan"), True])
+    def test_parse_invalid_confidence_uses_default(self, value):
+        assert ResponseParser.parse({"verdict": "PASS", "confidence": value}).confidence == 0.5
+
+    @pytest.mark.parametrize("value", [None, 42, [], {}])
+    def test_parse_invalid_message_uses_default(self, value):
+        assert ResponseParser.parse({"verdict": "PASS", "message": value}).message == ""
 
     def test_parse_string_instead_of_list_is_rejected(self):
         raw = {
@@ -505,6 +505,33 @@ class TestWizardEngineLLMIntegrationDB:
         # History should contain at least one entry
         history = engine.db.get_task_history(engine.task["id"])
         assert len(history) >= 1
+
+    def test_supervisor_run_failure_rolls_back_db_and_engine_state(self, engine, monkeypatch):
+        task_id = engine.task["id"]
+        original_task = dict(engine.task)
+        original_phase = engine.current_phase
+        monkeypatch.setattr(
+            engine.db,
+            "create_supervisor_run",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("supervisor write failed")),
+        )
+
+        with (
+            patch(
+                "project_workflow.wizard.evaluate.OllamaClient.chat",
+                return_value={"verdict": "PASS", "covered": [], "missing": [], "blockers": []},
+            ),
+            pytest.raises(RuntimeError, match="supervisor write failed"),
+        ):
+            engine.evaluate("Report")
+
+        persisted = engine.db.get_task(task_id)
+        assert persisted["current_phase"] == original_task["current_phase"]
+        assert persisted["status"] == original_task["status"]
+        assert engine.task == original_task
+        assert engine.current_phase == original_phase
+        assert engine.db.get_task_history(task_id) == []
+        assert engine.db.get_supervisor_runs(task_key=engine.task_key, limit=5) == []
 
 
 class TestOllamaClientEnvOverrides:

@@ -79,6 +79,7 @@ def record_parallel_transition(
     phase_map: dict[str, Phase],
     verdict: str,
     next_phase: str | None,
+    rollback_target: str | None = None,
     commit: bool = True,
 ) -> None:
     """Record a parallel-group FSM transition in the DB."""
@@ -105,16 +106,32 @@ def record_parallel_transition(
             db.commit()
         return
     if new_state == "blocked":
+        for phase in group:
+            add_history(task_id, phase.id, "blocked")
         db.update_task(task_id, {"current_phase": group[0].code, "status": "blocked"})
         if commit:
             db.commit()
         return
     if new_state == "rollback":
-        target_phase = phase_map.get(next_phase) if next_phase else None
-        target_code = target_phase.code if target_phase else group[-1].code
+        for phase in group:
+            add_history(task_id, phase.id, "rollback")
+        target_phase = phase_map.get(rollback_target) if rollback_target else None
+        target_code = target_phase.code if target_phase else group[0].code
+        if target_phase:
+            add_history(task_id, target_phase.id, "pending")
         db.update_task(task_id, {"current_phase": target_code, "status": "active"})
         if commit:
             db.commit()
         return
-    # partial: legacy tests expect no DB side effects at all.
-    return
+    if new_state == "delegated":
+        for phase in group:
+            add_history(task_id, phase.id, "delegated")
+        db.update_task(task_id, {"current_phase": group[0].code, "status": "active"})
+        if commit:
+            db.commit()
+        return
+    for phase in group:
+        add_history(task_id, phase.id, "partial")
+    db.update_task(task_id, {"current_phase": group[0].code, "status": "active"})
+    if commit:
+        db.commit()

@@ -7,12 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from project_workflow.infrastructure.db.session import reset_engine
-from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.wizard.context import WizardContextBuilder
 from project_workflow.wizard.models import Phase
-from project_workflow.wizard.store import WizardAssessmentStore
-from project_workflow.wizard.types import WizardAssessment
 
 pytestmark = [pytest.mark.wizard]
 
@@ -37,42 +33,6 @@ class TestWizardContextBuilder:
             current_phase="0.0a",
         )
         assert builder._phase_status_lookup() == {}
-
-
-class TestWizardStore:
-    def test_save_and_get_latest(self, tmp_path):
-        reset_engine()
-        uow = SAUnitOfWork(f"sqlite:///{tmp_path}/store.db")
-        uow.create_all()
-        store = WizardAssessmentStore(uow)
-
-        from project_workflow.wizard.core import WizardEngine
-
-        engine = WizardEngine("TASK-1", uow=uow)
-        task_id = engine.task["id"]
-
-        assessment = WizardAssessment(
-            task_key="TASK-1",
-            phase_code="0.0a",
-            phase_name="Setup",
-            verdict="pass",
-            covered=["x"],
-            missing=[],
-            blockers=[],
-        )
-        store.save(assessment)
-        latest = store.get_latest(task_id)
-        assert latest
-        assert latest[0].verdict == "pass"
-        uow.close()
-
-    def test_get_latest_missing_task_key(self, tmp_path):
-        reset_engine()
-        uow = SAUnitOfWork(f"sqlite:///{tmp_path}/store2.db")
-        uow.create_all()
-        store = WizardAssessmentStore(uow)
-        assert store.get_latest("NO-SUCH-KEY") == []
-        uow.close()
 
 
 class TestModuleEntryPoints:

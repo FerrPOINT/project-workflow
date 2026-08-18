@@ -76,6 +76,7 @@
     "description": "Параллельная работа A.",
     "execution_type": "parallel",
     "parallel_with": "manual.parallel-b",
+    "rollback_target": "manual.plan",
     "instructions": [
       {
         "step_num": 1,

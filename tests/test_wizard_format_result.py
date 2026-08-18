@@ -140,7 +140,8 @@ class TestFormatResult:
     def test_blocked_shows_only_not_done(self):
         out = format_result(self._blocked())
         assert "  · m1" in out
-        assert "Blocked msg" not in out
+        assert "Причина:" in out
+        assert "Blocked msg" in out
 
     # ── PARALLEL GROUP ─────────────────────────────────────────────────
     def _pass_parallel(self):

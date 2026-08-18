@@ -314,15 +314,15 @@ class TestRecordParallelTransition:
         mock_hist.assert_called_once_with(7, 5, "done")
         mock_upd.assert_called_once_with(7, {"current_phase": "3", "status": "done"})
 
-    def test_partial_does_not_touch_history(self, engine):
+    def test_partial_records_group_history(self, engine):
         group = [engine.phase_map["1"], engine.phase_map["2"]]
         with (
             patch.object(engine.db, "add_task_history") as mock_hist,
             patch.object(engine.db, "update_task") as mock_upd,
         ):
-            engine._record_parallel_transition(group, "soft_fail", "3")
-        mock_hist.assert_not_called()
-        mock_upd.assert_not_called()
+            engine._record_parallel_transition(group, "partial", "3")
+        assert [call.args for call in mock_hist.call_args_list] == [(7, 3, "partial"), (7, 4, "partial")]
+        mock_upd.assert_called_once_with(7, {"current_phase": "1", "status": "active"})
 
     def test_blocked_sets_status(self, engine):
         group = [engine.phase_map["1"], engine.phase_map["2"]]
@@ -331,10 +331,24 @@ class TestRecordParallelTransition:
             patch.object(engine.db, "update_task") as mock_upd,
         ):
             engine._record_parallel_transition(group, "blocked", "3")
-        mock_hist.assert_not_called()
+        assert [call.args for call in mock_hist.call_args_list] == [(7, 3, "blocked"), (7, 4, "blocked")]
         call = mock_upd.call_args[0][1]
         assert call["status"] == "blocked"
         assert call["current_phase"] == "1"
+
+    def test_rollback_records_group_and_target(self, engine):
+        group = [engine.phase_map["1"], engine.phase_map["2"]]
+        with (
+            patch.object(engine.db, "add_task_history") as mock_hist,
+            patch.object(engine.db, "update_task") as mock_upd,
+        ):
+            engine._record_parallel_transition(group, "rollback", None, "0")
+        assert [call.args for call in mock_hist.call_args_list] == [
+            (7, 3, "rollback"),
+            (7, 4, "rollback"),
+            (7, 2, "pending"),
+        ]
+        mock_upd.assert_called_once_with(7, {"current_phase": "0", "status": "active"})
 
 
 # ═══════════════════════════════════════════════════════════════════════

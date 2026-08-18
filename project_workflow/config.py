@@ -71,9 +71,6 @@ def get_settings() -> Settings:
 SEED_PATH = _pkg_dir / "references" / "seed.json"
 SMOKE_SEED_PATH = _pkg_dir / "references" / "smoke_seed.json"
 
-SMART_EVALUATE: bool = os.getenv("SMART_EVALUATE", "").lower() in ("1", "true", "yes", "on")
-SMART_REASONING: bool = os.getenv("SMART_REASONING", "").lower() in ("1", "true", "yes", "on")
-
 PHASE_ORDER = [
     "-1",  # Task Intake
     "0.0a",  # Suite Verification
