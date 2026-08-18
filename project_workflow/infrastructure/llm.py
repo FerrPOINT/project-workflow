@@ -272,6 +272,10 @@ class ResponseParser:
         covered = cls._to_str_list(raw.get("covered"))
         missing = cls._to_str_list(raw.get("missing"))
         blockers = cls._to_str_list(raw.get("blockers"))
+        if verdict == "PASS" and blockers:
+            verdict = "BLOCKED"
+        elif verdict == "PASS" and missing:
+            verdict = "SOFT_FAIL"
         message = str(raw.get("message", "")).strip()
         confidence = raw.get("confidence", 0.5)
         if confidence is None:

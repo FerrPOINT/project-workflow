@@ -188,7 +188,7 @@ class TestResponseParser:
         raw = {
             "verdict": "PASS",
             "covered": ["Item 1"],
-            "missing": ["Item 2"],
+            "missing": [],
             "blockers": [],
             "message": "All good",
             "next_phase": "2",
@@ -198,7 +198,7 @@ class TestResponseParser:
         v = ResponseParser.parse(raw)
         assert v.verdict == "PASS"
         assert v.covered == ["Item 1"]
-        assert v.missing == ["Item 2"]
+        assert v.missing == []
         assert v.blockers == []
         assert v.message == "All good"
         assert v.next_phase is None
@@ -241,6 +241,7 @@ class TestResponseParser:
             "blockers": [],
         }
         v = ResponseParser.parse(raw)
+        assert v.verdict == "SOFT_FAIL"
         assert v.covered == ["single item"]
         assert v.missing == ["a", "b"]
 

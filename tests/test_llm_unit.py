@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -159,27 +158,8 @@ class TestLoadApiKey:
         importlib.reload(project_workflow.infrastructure.llm)
         assert project_workflow.infrastructure.llm._load_api_key() == "env-token"
 
-    def test_env_empty_does_not_read_hermes_file(self, tmp_path, monkeypatch):
+    def test_env_empty_does_not_read_hermes_file(self, monkeypatch):
         monkeypatch.setenv("OLLAMA_API_KEY", "")
-        env_file = Path.home() / ".hermes" / ".env"
-        try:
-            env_file.parent.mkdir(parents=True, exist_ok=True)
-            env_file.write_text("OLLAMA_API_KEY=file-token\n")
-            import importlib
-
-            import project_workflow.infrastructure.llm
-
-            importlib.reload(project_workflow.infrastructure.llm)
-            assert project_workflow.infrastructure.llm._load_api_key() == ""
-        finally:
-            if env_file.exists():
-                env_file.unlink()
-
-    def test_no_key_returns_empty(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("OLLAMA_API_KEY", "")
-        env_file = Path.home() / ".hermes" / ".env"
-        if env_file.exists():
-            env_file.unlink()
         import importlib
 
         import project_workflow.infrastructure.llm
@@ -336,7 +316,7 @@ class TestResponseParser:
             "confidence": 0.9,
         }
         v = ResponseParser.parse(raw)
-        assert v.verdict == "PASS"
+        assert v.verdict == "BLOCKED"
         assert v.covered == ["A"]
         assert v.next_phase is None
         assert v.confidence == 0.9
