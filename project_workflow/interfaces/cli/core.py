@@ -19,7 +19,7 @@ from ...domain import validation as task_validator
 
 console = Console()
 
-WARN = "[yellow]⚠️[/yellow]"
+WARN = "[yellow]WARNING:[/yellow]"
 
 
 def out_json(data: dict[str, Any]) -> None:
@@ -31,13 +31,17 @@ def _get_task_key_validator(uow=None) -> task_validator.TaskKeyValidator:
     from project_workflow.infrastructure.db import schema
     from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
-    if uow is None:
+    owns_uow = uow is None
+    if owns_uow:
         uow = SAUnitOfWork()
-    uow.init()
-    schema.ensure_phase_catalog(uow)
-    projects_raw = uow.projects.list()
-    projects = [p.to_dict() for p in projects_raw]
-    return task_validator.TaskKeyValidator.from_projects(projects)
+    try:
+        uow.init()
+        schema.ensure_phase_catalog(uow)
+        projects = [project.to_dict() for project in uow.projects.list()]
+        return task_validator.TaskKeyValidator.from_projects(projects)
+    finally:
+        if owns_uow:
+            uow.close()
 
 
 def _require_valid_key(task_key: str, uow=None) -> str:
@@ -47,7 +51,7 @@ def _require_valid_key(task_key: str, uow=None) -> str:
     else:
         validated = _get_task_key_validator(uow=uow).validate(task_key)
     if not validated.is_valid:
-        console.print(f"[red]❌[/red] [bold red]Invalid task key:[/bold red] {validated.error_message}")
+        console.print(f"[bold red]Invalid task key:[/bold red] {validated.error_message}")
         raise click.Abort()
     return validated.normalized or task_key
 

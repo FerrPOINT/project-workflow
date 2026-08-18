@@ -1,26 +1,16 @@
-"""Task Key Validator — configurable prefix-based validation.
-
-Features:
-  • Multi-format validation (Jira, internal)
-  • Configurable via YAML/constructor for UI flexibility
-"""
+"""Validation and project resolution for configured Jira task keys."""
 
 from __future__ import annotations
 
-import json
-import logging
 import re
 from dataclasses import dataclass
-from re import Pattern
 from typing import Any
 
-logger = logging.getLogger(__name__)
+TASK_KEY_RE = re.compile(r"^(?P<prefix>[A-Z][A-Z0-9]+)-(?P<number>[0-9]+)$")
 
 
 @dataclass(frozen=True)
 class ValidatedTaskKey:
-    """Результат валидации ключа задачи."""
-
     raw: str
     is_valid: bool
     project: str | None = None
@@ -33,239 +23,90 @@ class ValidatedTaskKey:
         return self.normalized or self.raw
 
 
-class TaskKeyValidationError(Exception):
-    """Выбрасывается при невалидном ключе задачи."""
-
+class TaskKeyValidationError(ValueError):
     def __init__(self, key: str, reason: str):
         self.key = key
         self.reason = reason
         super().__init__(f"Invalid task key '{key}': {reason}")
 
 
-# ── Defaults ────────────────────────────────────────────────────────────
-
-DEFAULT_PREFIXES = ["AAT", "TASK"]
-
-# Minimum lengths to prevent false positives like "X-1"
-MIN_PREFIX_LEN = 2
-MIN_NUMBER_LEN = 1
-
-# Valid prefix characters: uppercase letters and digits
-PREFIX_RE = re.compile(r"^[A-Z][A-Z0-9]*$")
-
-
-def _prefixes_to_regex(prefixes: list[str]) -> str:
-    """Build a regex from plain prefixes that captures prefix and number."""
-    escaped = [re.escape(p) for p in prefixes if p]
-    if not escaped:
-        # Match nothing
-        return r"$^"
-    return r"^(?P<prefix>" + "|".join(escaped) + r")-(?P<number>[0-9]+)$"
-
-
-def _compile_raw_pattern(raw: str) -> tuple[str, Pattern]:
-    """Compile a raw regex string, ensuring prefix/number groups exist."""
-    return (raw, re.compile(raw))
-
-
 class TaskKeyValidator:
-    """Валидатор ключей задач с configurable prefixes."""
-
-    REJECT_PATTERNS = [
-        (r"^-", "Ключ не может начинаться с дефиса"),
-        (r"[ _+]", "Пробелы и подчёркивания запрещены -- используй дефис"),
-        (r"^\\d+$", "Только номер без префикса недопустим"),
-    ]
+    """Validate Jira keys against the exact prefixes configured for projects."""
 
     def __init__(
         self,
         prefixes: list[str] | None = None,
-        patterns: list[str] | None = None,
-        project_prefixes: list[dict] | None = None,
-        strict: bool = True,
-        min_prefix_len: int = MIN_PREFIX_LEN,
-        min_number_len: int = MIN_NUMBER_LEN,
-        reject_patterns: list[tuple] | None = None,
-    ):
-        self.project_prefixes = project_prefixes or []
-        self.raw_patterns = patterns or []
-        if self.project_prefixes:
-            self.pattern_sources: list[tuple[str | None, str, Pattern]] = []
-            self.project_prefix_lists: list[tuple[str | None, list[str]]] = []
-            for project in self.project_prefixes:
-                project_code = project.get("code")
-                raw_project_prefixes = project.get("key_prefixes") or project.get("prefixes") or []
-                if isinstance(raw_project_prefixes, str):
-                    try:
-                        parsed = json.loads(raw_project_prefixes)
-                        raw_project_prefixes = parsed if isinstance(parsed, list) else [raw_project_prefixes]
-                    except (json.JSONDecodeError, TypeError) as exc:
-                        logger.warning("Failed to parse project prefixes: %s", exc)
-                        raw_project_prefixes = [raw_project_prefixes]
-                project_prefixes_list = [str(p) for p in raw_project_prefixes if str(p).strip()]
-                if project_prefixes_list:
-                    regex_text = _prefixes_to_regex(project_prefixes_list)
-                    self.pattern_sources.append((project_code, regex_text, re.compile(regex_text)))
-                    self.project_prefix_lists.append((project_code, project_prefixes_list))
-            self.raw_prefixes = [raw for _, raw, _ in self.pattern_sources]
-        elif prefixes is not None or self.raw_patterns:
-            self.raw_prefixes = prefixes or []
-            regex_text = _prefixes_to_regex(self.raw_prefixes)
-            self.pattern_sources = [(None, regex_text, re.compile(regex_text))]
-            self.project_prefix_lists = []
-            for raw in self.raw_patterns:
-                self.pattern_sources.append((None, raw, re.compile(raw)))
-        else:
-            self.raw_prefixes = DEFAULT_PREFIXES
-            regex_text = _prefixes_to_regex(self.raw_prefixes)
-            self.pattern_sources = [(None, regex_text, re.compile(regex_text))]
-            self.project_prefix_lists = []
-        self.strict = strict
-        self.min_prefix_len = min_prefix_len
-        self.min_number_len = min_number_len
-        self.reject_patterns = reject_patterns or self.REJECT_PATTERNS
-        self.skip_uppercase = False
+        project_prefixes: list[dict[str, Any]] | None = None,
+    ) -> None:
+        self._projects_by_prefix: dict[str, str | None] = {}
+        for prefix in prefixes or []:
+            self._add_prefix(str(prefix), None)
+        for project in project_prefixes or []:
+            project_code = str(project.get("code") or "").strip() or None
+            raw_prefixes = project.get("key_prefixes") or []
+            if not isinstance(raw_prefixes, list):
+                raise ValueError(f"Project {project_code or '<unknown>'} key_prefixes must be a list")
+            for prefix in raw_prefixes:
+                self._add_prefix(str(prefix), project_code)
 
-    # ── Public API ──────────────────────────────────────────────────────
+    def _add_prefix(self, raw_prefix: str, project_code: str | None) -> None:
+        prefix = raw_prefix.strip().upper()
+        if not re.fullmatch(r"[A-Z][A-Z0-9]+", prefix):
+            raise ValueError(f"Invalid task key prefix: {raw_prefix!r}")
+        previous = self._projects_by_prefix.get(prefix)
+        if prefix in self._projects_by_prefix and previous != project_code:
+            raise ValueError(f"Task key prefix {prefix} is configured for multiple projects")
+        self._projects_by_prefix[prefix] = project_code
 
     def validate(self, key: str, raise_on_invalid: bool = False) -> ValidatedTaskKey:
-        """Валидировать ключ задачи.
+        raw = str(key)
+        stripped = key.strip() if isinstance(key, str) else ""
+        match = TASK_KEY_RE.fullmatch(stripped)
+        if not match:
+            return self._invalid(raw, "Expected an uppercase Jira key in PREFIX-NUMBER format", raise_on_invalid)
 
-        Args:
-            key: Raw task key string (e.g. "AAT-123")
-            raise_on_invalid: If True -- raise TaskKeyValidationError on failure
+        prefix = match.group("prefix")
+        if prefix not in self._projects_by_prefix:
+            allowed = ", ".join(sorted(self._projects_by_prefix)) or "none configured"
+            message = f"Prefix {prefix} is not configured; allowed prefixes: {allowed}"
+            return self._invalid(raw, message, raise_on_invalid)
 
-        Returns:
-            ValidatedTaskKey
-        """
-        if not key or not isinstance(key, str):
-            result = ValidatedTaskKey(
-                raw=str(key),
-                is_valid=False,
-                error_message="Key is empty or not a string",
-            )
-            if raise_on_invalid:
-                raise TaskKeyValidationError(str(key), result.error_message or "empty")
-            return result
-
-        stripped = key.strip()
-
-        # 1. Uppercase check (skip for lenient mode)
-        if not getattr(self, "skip_uppercase", False) and stripped.upper() != stripped:
-            error_msg = f"Key '{key}' содержит строчные буквы. Ключ задаётся В ВЕРХНЕМ РЕГИСТРЕ (например: AAT-123)"
-            result = ValidatedTaskKey(raw=key, is_valid=False, error_message=error_msg)
-            if raise_on_invalid:
-                raise TaskKeyValidationError(key, error_msg)
-            return result
-
-        # 2. Reject patterns (spaces, underscores, etc.)
-        for pat, reason in self.reject_patterns:
-            if re.search(pat, stripped):
-                error_msg = f"Key '{key}' не прошёл проверку: {reason}"
-                result = ValidatedTaskKey(raw=key, is_valid=False, error_message=error_msg)
-                if raise_on_invalid:
-                    raise TaskKeyValidationError(key, error_msg)
-                return result
-
-        # 3. Try each allowed pattern
-        for project_code, raw_pat, compiled_pat in self.pattern_sources:
-            match = compiled_pat.match(stripped)
-            if match:
-                prefix = match.group("prefix")
-                number = match.group("number")
-
-                # Check minimum lengths
-                if len(prefix) < self.min_prefix_len or len(number) < self.min_number_len:
-                    continue
-
-                normalized = f"{prefix}-{number}"
-                result = ValidatedTaskKey(
-                    raw=key,
-                    is_valid=True,
-                    project=project_code or prefix,
-                    prefix=prefix,
-                    issue_number=number,
-                    normalized=normalized,
-                )
-                return result
-
-        # No match
-        allowed = ", ".join(self.raw_prefixes)
-        error_msg = (
-            f"Key '{stripped}' does not match any allowed prefix. "
-            f"Expected: PREFIX-NUMBER (e.g. {allowed}-123). "
-            f"Prefixes: {allowed}"
+        number = match.group("number")
+        normalized = f"{prefix}-{number}"
+        return ValidatedTaskKey(
+            raw=raw,
+            is_valid=True,
+            project=self._projects_by_prefix[prefix] or prefix,
+            prefix=prefix,
+            issue_number=number,
+            normalized=normalized,
         )
-        result = ValidatedTaskKey(raw=key, is_valid=False, error_message=error_msg)
+
+    @staticmethod
+    def _invalid(raw: str, reason: str, raise_on_invalid: bool) -> ValidatedTaskKey:
         if raise_on_invalid:
-            raise TaskKeyValidationError(key, error_msg)
-        return result
+            raise TaskKeyValidationError(raw, reason)
+        return ValidatedTaskKey(raw=raw, is_valid=False, error_message=reason)
 
     def validate_or_die(self, key: str) -> ValidatedTaskKey:
-        """Строгая валидация — выбрасывает исключение при ошибке."""
         return self.validate(key, raise_on_invalid=True)
 
     def is_valid(self, key: str) -> bool:
         return self.validate(key).is_valid
 
-    # ── Factory Methods ─────────────────────────────────────────────────
-
     @classmethod
     def from_prefixes(cls, prefixes: list[str]) -> TaskKeyValidator:
-        """Создать валидатор из списка plain prefixes (для UI конфигурации)."""
         return cls(prefixes=prefixes)
 
     @classmethod
-    def from_projects(cls, projects: list[dict]) -> TaskKeyValidator:
-        """Создать валидатор из project rows с key_prefixes."""
+    def from_projects(cls, projects: list[dict[str, Any]]) -> TaskKeyValidator:
         return cls(project_prefixes=projects)
-
-    @classmethod
-    def jira_only(cls) -> TaskKeyValidator:
-        """Валидатор только для чистых Jira-ключей (AAT-123), без internal prefixes."""
-        return cls(prefixes=["AAT"], reject_patterns=cls.REJECT_PATTERNS)
-
-    @classmethod
-    def lenient(cls) -> TaskKeyValidator:
-        """Разрешительный валидатор — минимальные проверки."""
-        v = cls(
-            prefixes=[],
-            patterns=[r"^(?P<prefix>[A-Za-z]+)-(?P<number>[0-9]+)$"],
-            min_prefix_len=1,
-        )
-        v.skip_uppercase = True
-        return v
-
-
-# ── Module-level convenience ──────────────────────────────────────────
-
-_default_validator = TaskKeyValidator()
-
-
-def validate(key: str, raise_on_invalid: bool = False) -> ValidatedTaskKey:
-    """Глобальная функция валидации (использует default prefixes)."""
-    return _default_validator.validate(key, raise_on_invalid)
-
-
-def validate_or_die(key: str) -> ValidatedTaskKey:
-    return _default_validator.validate_or_die(key)
 
 
 def get_project_for_task_key(uow: Any, task_key: str) -> dict[str, Any] | None:
-    """Resolve a project row from a task key using configured project prefixes."""
-    validated = _default_validator.validate(task_key)
-    prefix = validated.prefix
-    if not prefix:
+    """Resolve a task key through the configured project prefix mapping."""
+    projects = [row.to_dict() if hasattr(row, "to_dict") else dict(row) for row in uow.projects.list()]
+    validated = TaskKeyValidator.from_projects(projects).validate(task_key)
+    if not validated.is_valid:
         return None
-    for project in uow.projects.list():
-        project_dict = project.to_dict() if hasattr(project, "to_dict") else dict(project)
-        key_prefixes = project_dict.get("key_prefixes", []) or []
-        if isinstance(key_prefixes, str):
-            try:
-                key_prefixes = json.loads(key_prefixes)
-            except (json.JSONDecodeError, TypeError) as exc:
-                logger.warning("Failed to parse project key_prefixes: %s", exc)
-                key_prefixes = []
-        if prefix in key_prefixes:
-            return project_dict
-    return None
+    return next((project for project in projects if project.get("code") == validated.project), None)

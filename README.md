@@ -93,6 +93,7 @@ CLI ожидает `DATABASE_URL`. Единственная модель Wizard 
 ```bash
 export DATABASE_URL=postgresql+psycopg://project_workflow:project_workflow@localhost/project_workflow
 export OLLAMA_BASE_URL=<ollama-compatible-endpoint>
+export OLLAMA_API_STYLE=<native-or-openai>
 export OLLAMA_MODEL=<model-name>
 export OLLAMA_API_KEY=<api-key-if-required>
 ```
@@ -170,7 +171,7 @@ flowchart TD
 - [x] UI/API переведены на SQLAlchemy-сервисы
 - [x] `WorkflowDB` переписан на SQLAlchemy, `db/base.py` и `db_schema.sql` удалены
 - [x] Legacy `wartz-workflow-cli`, `wartz_ui` и старые wizard endpoints удалены
-- [x] 869 тестов green
+- [x] Основной test suite green
 - [x] Postgres-интеграционные тесты
 - [x] `WizardEngine` и wizard-модули собраны в пакет `project_workflow/wizard/`
 - [x] API-тесты на все UI routes
@@ -179,7 +180,6 @@ flowchart TD
 - [x] mypy `--check-untyped-defs` для wizard/core.py
 - [x] UI-доработки: execution_type на отдельной строке, русское склонение счётчиков, очистка рабочей БД от мусора
 - [x] Wizard evaluate: stateful prompt, три секции в CLI output, явный parallel rendering
-- [x] Smoke seed: real structured-document editor workflow, synced to PostgreSQL UI
 
 Подробный план: [`docs/plans/2026-06-21-detailed-roadmap.md`](docs/plans/2026-06-21-detailed-roadmap.md).
 

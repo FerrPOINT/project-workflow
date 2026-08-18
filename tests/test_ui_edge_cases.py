@@ -19,7 +19,6 @@ from project_workflow.interfaces.ui import (
     _parse_optional_int,
     _resolve_task_phase,
     _scan_hermes_skills,
-    _update_config_phase_order,
     _workflow_form_payload,
     app,
 )
@@ -461,20 +460,3 @@ class TestWorkflowFormPayload:
     def test_empty(self):
         payload = _workflow_form_payload({})
         assert payload["name"] == ""
-
-
-# ═══════════════════════════════════════════════════════════
-# Update config phase order
-# ═══════════════════════════════════════════════════════════
-
-
-class TestUpdateConfigPhaseOrder:
-    def test_empty_phases(self, monkeypatch):
-        db = MagicMock()
-        db.get_phases.return_value = []
-        monkeypatch.setattr("project_workflow.interfaces.ui._app_state", MagicMock(get_db=lambda: db))
-        from project_workflow import config
-
-        original = config.PHASE_ORDER[:]
-        _update_config_phase_order()
-        assert config.PHASE_ORDER == original

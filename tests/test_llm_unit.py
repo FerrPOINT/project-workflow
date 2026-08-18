@@ -192,61 +192,17 @@ class TestEvaluateLlmReportVerdicts:
         engine.db.create_supervisor_run.assert_called_once()
 
 
-class TestLoadApiKey:
-    def test_env_key(self, monkeypatch):
-        monkeypatch.setenv("OLLAMA_API_KEY", "env-token")
-        import importlib
-
-        import project_workflow.infrastructure.llm
-
-        importlib.reload(project_workflow.infrastructure.llm)
-        assert project_workflow.infrastructure.llm._load_api_key() == "env-token"
-
-    def test_env_empty_reads_file(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("OLLAMA_API_KEY", "")
-        env_file = tmp_path / ".hermes" / ".env"
-        env_file.parent.mkdir(parents=True)
-        env_file.write_text("OLLAMA_API_KEY=file-token\n", encoding="utf-8")
-        import importlib
-
-        import project_workflow.infrastructure.llm
-
-        monkeypatch.setattr(
-            project_workflow.infrastructure.llm.os.path,
-            "expanduser",
-            lambda _path: str(env_file),
-        )
-        importlib.reload(project_workflow.infrastructure.llm)
-        assert project_workflow.infrastructure.llm._load_api_key() == "file-token"
-
-    def test_no_key_returns_empty(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("OLLAMA_API_KEY", "")
-        import importlib
-
-        import project_workflow.infrastructure.llm
-
-        monkeypatch.setattr(
-            project_workflow.infrastructure.llm.os.path,
-            "expanduser",
-            lambda _path: str(tmp_path / "missing.env"),
-        )
-        importlib.reload(project_workflow.infrastructure.llm)
-        assert project_workflow.infrastructure.llm._load_api_key() == ""
-
-    def test_fresh_import_env(self, monkeypatch):
-        monkeypatch.setenv("OLLAMA_API_KEY", "fresh-token")
-        import importlib
-
-        import project_workflow.infrastructure.llm
-
-        importlib.reload(project_workflow.infrastructure.llm)
-        assert project_workflow.infrastructure.llm._load_api_key() == "fresh-token"
-        assert project_workflow.infrastructure.llm.OLLAMA_API_KEY == "fresh-token"
-
-
 class TestOllamaClientDetection:
+    def test_model_is_required(self):
+        with pytest.raises(ValueError, match="OLLAMA_MODEL is required"):
+            OllamaClient(model="")
+
+    def test_api_style_is_explicit(self):
+        with pytest.raises(ValueError, match="OLLAMA_API_STYLE"):
+            OllamaClient(api_style="auto")  # type: ignore[arg-type]
+
     def test_cloud_detection(self):
-        client = OllamaClient(base_url="https://ollama.com/v1", api_key="k")
+        client = OllamaClient(base_url="https://ollama.com/v1", api_key="k", api_style="openai")
         assert client.is_cloud is True
 
     def test_local_detection(self):
@@ -263,7 +219,7 @@ class TestOllamaClientIsAvailable:
 
     def test_cloud_available(self):
         with patch("requests.get", return_value=MagicMock(status_code=200)) as mock:
-            client = OllamaClient(base_url="https://ollama.com/v1", api_key="k")
+            client = OllamaClient(base_url="https://ollama.com/v1", api_key="k", api_style="openai")
             assert client.is_available() is True
             mock.assert_called_once_with(
                 "https://ollama.com/v1/models",
@@ -306,7 +262,7 @@ class TestOllamaClientChatErrors:
         resp.raise_for_status.return_value = None
         resp.json.return_value = {"choices": [{"message": {"content": "  "}}]}
         with patch("requests.post", return_value=resp):
-            client = OllamaClient(base_url="https://ollama.com/v1")
+            client = OllamaClient(base_url="https://ollama.com/v1", api_style="openai")
             with pytest.raises(ValueError, match="Empty content"):
                 client.chat("sys", "user")
 

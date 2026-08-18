@@ -1,4 +1,4 @@
-"""Schema loader — reads Phase models from SQLite DB with YAML fallback.
+"""Schema loader — reads Phase models from the database and catalog seed.
 
 Все данные — только из БД (phases, instructions, checks, evidence).
 """
@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import json
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -135,30 +134,7 @@ def load_phases_from_db(
     if isinstance(workflow_id, str):
         workflow_id = int(workflow_id) if workflow_id.isdigit() else None
     rows = uow.phases.list(workflow_id)
-    phases = [_build_phase_from_db(r, uow) for r in rows]
-    if not phases:
-        # Fallback intake phase so the wizard always has a current phase.
-        phases = [
-            Phase(
-                id=None,
-                code="-1",
-                name="Task Intake",
-                description="Initial task intake before workflow catalog is configured.",
-                min_time_min=0,
-                is_blocker=False,
-                is_delegated=False,
-                is_critic=False,
-                checks=[],
-                evidence=[],
-                instructions=[],
-                delegate=None,
-                next_recommendation="",
-                parallel_with=None,
-                rollback_target=None,
-                execution_type="sync",
-            )
-        ]
-    return phases
+    return [_build_phase_from_db(r, uow) for r in rows]
 
 
 def get_phase_from_db(
@@ -175,7 +151,7 @@ def get_phase_from_db(
     return None
 
 
-# ── JSON Seed fallback ───────────
+# ── Seed catalog loading ───────────
 
 
 def _load_seed(path: Path | str | None = None) -> list[dict[str, Any]]:
@@ -397,59 +373,3 @@ def ensure_phase_catalog(
 
     if url:
         _CATALOG_ENSURED_URLS.add(url)
-
-
-def persist_phase_order_to_seed(
-    uow: UnitOfWork,
-    ordered_phase_codes: list[str],
-    seed_path: Path | str | None = None,
-) -> None:
-    """Persist current DB phase order into the seed file."""
-    seed_path = Path(seed_path) if seed_path else config.SEED_PATH
-    with uow:
-        default_workflow = uow.workflows.get_default()
-        if default_workflow:
-            workflow_id = default_workflow.id
-            load_phases_from_db(uow, workflow_id=workflow_id)
-
-        # Reorder seed entries to match DB order; drop unknown codes.
-    code_to_entry: dict[str, dict[str, Any]] = {p["code"]: p for p in _load_seed(seed_path) if isinstance(p, dict)}
-    ordered_entries = [code_to_entry[code] for code in ordered_phase_codes if code in code_to_entry]
-    for code in code_to_entry:
-        if code not in ordered_phase_codes:
-            ordered_entries.append(code_to_entry[code])
-
-    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".json", delete=False) as tmp:
-        json.dump(ordered_entries, tmp, ensure_ascii=False, indent=2)
-        tmp_path = Path(tmp.name)
-    tmp_path.replace(seed_path)
-
-
-def persist_phase_update_to_seed(
-    uow: UnitOfWork,
-    updated_phase_code: str,
-    data: dict[str, Any],
-    seed_path: Path | str | None = None,
-) -> None:
-    """Update a single phase's metadata in the seed file."""
-    seed_path = Path(seed_path) if seed_path else config.SEED_PATH
-    if not seed_path.exists():
-        return
-
-    with seed_path.open(encoding="utf-8") as f:
-        seed_data = yaml.safe_load(f) or []
-
-    for item in seed_data:
-        if isinstance(item, dict) and item.get("code") == updated_phase_code:
-            for key, value in data.items():
-                if key in ("code", "id"):
-                    continue
-                item[key] = value
-            break
-    else:
-        return
-
-    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".json", delete=False) as tmp:
-        json.dump(seed_data, tmp, ensure_ascii=False, indent=2)
-        tmp_path = Path(tmp.name)
-    tmp_path.replace(seed_path)

@@ -125,58 +125,6 @@ def test_format_current_phase_instructions_serial_with_contract_object():
     assert "i2" in text
 
 
-def test_wizard_store_save_with_legacy_uow():
-    from project_workflow.wizard.store import WizardAssessmentStore
-
-    class LegacyUow:
-        def __init__(self):
-            self.task = None
-            self.run_payloads = []
-
-        def get_task_by_key(self, key):
-            return {"id": 1}
-
-        def get_phase_by_code(self, code):
-            class Ph:
-                id = 5
-
-            return Ph()
-
-        def create_supervisor_run(self, payload):
-            self.run_payloads.append(payload)
-
-        def commit(self):
-            pass
-
-    uow = LegacyUow()
-    store = WizardAssessmentStore(uow)
-    store.save({"task_key": "T-1", "phase_code": "p1", "verdict": "pass"})
-    assert len(uow.run_payloads) == 1
-    assert uow.run_payloads[0]["phase_id"] == 5
-
-
-def test_wizard_store_get_latest_with_legacy_uow():
-    from project_workflow.wizard.store import WizardAssessmentStore
-
-    class LegacyUow:
-        def get_supervisor_runs(self, task_id, limit):
-            return [
-                {
-                    "response": '{"phase": "p1"}',
-                    "verdict": "pass",
-                    "covered": [],
-                    "missing": [],
-                    "blockers": [],
-                    "phase_code": "p1",
-                }
-            ]
-
-    store = WizardAssessmentStore(LegacyUow())
-    results = store.get_latest(1, limit=1)
-    assert len(results) == 1
-    assert results[0].phase_code == "p1"
-
-
 def test_repositories_compat_module():
     from project_workflow.infrastructure.db import repositories
 

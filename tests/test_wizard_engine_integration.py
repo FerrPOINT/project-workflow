@@ -23,6 +23,10 @@ def wizard_db(tmp_path, monkeypatch):
     uow = SAUnitOfWork(url)
     uow.init()
     ensure_phase_catalog(uow)
+    workflow = uow.workflows.get_default()
+    assert workflow is not None
+    uow.projects.create({"workflow_id": workflow.id, "code": "AAT", "name": "AAT", "key_prefixes": ["AAT"]})
+    uow.commit()
     uow.close()
     from project_workflow.infrastructure import db as db_module
 
@@ -32,13 +36,13 @@ def wizard_db(tmp_path, monkeypatch):
 
 class TestWizardEngineIntegration:
     def test_create_if_missing_true_creates_task_and_project(self, wizard_db):
-        engine = WizardEngine("AAT-NEW", create_if_missing=True)
+        engine = WizardEngine("AAT-101", create_if_missing=True)
         assert engine.task is not None
-        assert engine.task["task_key"] == "AAT-NEW"
+        assert engine.task["task_key"] == "AAT-101"
 
     def test_create_if_missing_false_raises_when_task_missing(self, wizard_db):
-        with pytest.raises(ValueError, match="Task AAT-MISSING not found"):
-            WizardEngine("AAT-MISSING", create_if_missing=False)
+        with pytest.raises(ValueError, match="Task AAT-102 not found"):
+            WizardEngine("AAT-102", create_if_missing=False)
 
     def test_resolve_project_unknown_monkeypatched(self, wizard_db, monkeypatch):
         engine = WizardEngine("AAT-1", create_if_missing=True)
@@ -49,40 +53,43 @@ class TestWizardEngineIntegration:
 
     def test_existing_task_with_empty_current_phase_gets_first_phase(self, wizard_db):
         uow = SAUnitOfWork(wizard_db)
-        project = uow.create_project({"code": "AAT", "name": "AAT", "key_prefixes": ["AAT"]})
+        project = uow.projects.get_by_code("AAT")
+        assert project is not None
         task_id = uow.create_task(
-            {"task_key": "AAT-EMPTY", "title": "Empty", "current_phase": "", "project_id": project["id"]}
+            {"task_key": "AAT-103", "title": "Empty", "current_phase": "", "project_id": project.id}
         )
         uow.close()
 
-        engine = WizardEngine("AAT-EMPTY", create_if_missing=False)
+        engine = WizardEngine("AAT-103", create_if_missing=False)
         assert engine.task["id"] == task_id
         assert str(engine.task["current_phase"]) == "-1"
 
     def test_evaluate_partial_on_real_phase(self, wizard_db, wizard_llm):
         wizard_llm("PARTIAL", missing=["evidence"])
         uow = SAUnitOfWork(wizard_db)
-        project = uow.create_project({"code": "AAT", "name": "AAT", "key_prefixes": ["AAT"]})
-        uow.create_task({"task_key": "AAT-PARTIAL", "title": "Partial", "project_id": project["id"]})
+        project = uow.projects.get_by_code("AAT")
+        assert project is not None
+        uow.create_task({"task_key": "AAT-104", "title": "Partial", "project_id": project.id})
         uow.close()
 
-        engine = WizardEngine("AAT-PARTIAL")
+        engine = WizardEngine("AAT-104")
         result = engine.evaluate("some progress but not everything")
         assert result["verdict"] == "PARTIAL"
 
     def test_evaluate_blocker_detected(self, wizard_db, wizard_llm):
         wizard_llm("BLOCKED", blockers=["no api key"])
         uow = SAUnitOfWork(wizard_db)
-        project = uow.create_project({"code": "AAT", "name": "AAT", "key_prefixes": ["AAT"]})
-        uow.create_task({"task_key": "AAT-BLOCK", "title": "Block", "project_id": project["id"]})
+        project = uow.projects.get_by_code("AAT")
+        assert project is not None
+        uow.create_task({"task_key": "AAT-105", "title": "Block", "project_id": project.id})
         uow.close()
 
-        engine = WizardEngine("AAT-BLOCK")
+        engine = WizardEngine("AAT-105")
         result = engine.evaluate("blocked by missing api key")
         assert result["verdict"] == "BLOCKED"
 
     def test_format_result_pass(self):
-        from project_workflow.wizard.core import format_result
+        from project_workflow.wizard.formatting import format_result
 
         text = format_result(
             {
@@ -97,7 +104,7 @@ class TestWizardEngineIntegration:
         assert "Инструкции" in text
 
     def test_format_result_partial(self):
-        from project_workflow.wizard.core import format_result
+        from project_workflow.wizard.formatting import format_result
 
         text = format_result(
             {"verdict": "PARTIAL", "instructions": ["i"], "required_checks": ["c"], "required_evidence": ["e"]}
@@ -107,7 +114,7 @@ class TestWizardEngineIntegration:
         assert "  · c" in text
 
     def test_format_result_blocked(self):
-        from project_workflow.wizard.core import format_result
+        from project_workflow.wizard.formatting import format_result
 
         text = format_result(
             {"verdict": "BLOCKED", "instructions": ["i"], "required_checks": ["c"], "required_evidence": ["e"]}

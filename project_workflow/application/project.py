@@ -21,7 +21,7 @@ class ProjectService:
             payload["workflow_id"] = default_wf.id if default_wf else None
         if "name" not in payload or not payload["name"]:
             payload["name"] = payload["code"]
-        if "key_prefixes" not in payload:
+        if not payload.get("key_prefixes"):
             payload["key_prefixes"] = [payload["code"]]
         pid = self._uow.projects.create(payload)
         project = self._uow.projects.get_by_id(pid)

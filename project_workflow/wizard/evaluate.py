@@ -57,8 +57,8 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         previously_covered=previously_items or None,
     )
 
-    client = OllamaClient()
     try:
+        client = OllamaClient()
         raw = client.chat(system=PromptBuilder.SYSTEM_PROMPT, user=user, temperature=0.1)
         llm = ResponseParser.parse(raw)
     except (

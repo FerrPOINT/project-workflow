@@ -32,8 +32,6 @@ class PhaseFSM:
     TRANSITIONS: list[dict[str, Any]] = [
         {"trigger": "succeed", "source": "in_progress", "dest": "done"},
         {"trigger": "partial_pass", "source": "in_progress", "dest": "in_progress"},
-        {"trigger": "soft_fail", "source": "in_progress", "dest": "in_progress"},
-        {"trigger": "hard_fail", "source": "in_progress", "dest": "in_progress"},
         {"trigger": "block", "source": "in_progress", "dest": "blocked"},
         {"trigger": "rollback", "source": "in_progress", "dest": "rollback"},
         {"trigger": "delegate", "source": "in_progress", "dest": "delegated"},
@@ -42,8 +40,6 @@ class PhaseFSM:
     VERDICT_TO_TRIGGER: dict[str, str] = {
         "pass": "succeed",
         "partial": "partial_pass",
-        "soft_fail": "soft_fail",
-        "hard_fail": "hard_fail",
         "blocked": "block",
         "rollback": "rollback",
         "delegate": "delegate",

@@ -64,12 +64,11 @@ class TestPhaseFSM:
         assert "Фаза nonexistent" in captured.out
 
     def test_show_all_phases(self, capsys):
-        from project_workflow import config
         from tests._phase_helpers import show_all_phases
 
         show_all_phases()
         captured = capsys.readouterr()
-        assert config.PHASE_ORDER[0] in captured.out
+        assert "-1" in captured.out
         assert "BLOCKER" in captured.out
 
     def test_get_phase_checklist_raw_empty_on_missing(self):

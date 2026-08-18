@@ -19,11 +19,7 @@ class TaskService:
         if "project_id" not in payload or payload["project_id"] is None:
             project = get_project_for_task_key(self._uow, payload.get("task_key", ""))
             if project is None:
-                key = payload.get("task_key", "")
-                prefix = key.split("-")[0] if "-" in key else key
-                from project_workflow.application.project import ProjectService
-
-                project = ProjectService(self._uow).create_project({"name": prefix, "code": prefix})
+                raise ValueError(f"No configured project matches task key {payload.get('task_key', '')}")
             payload["project_id"] = project["id"]
         tid = self._uow.tasks.create(payload)
         task = self._uow.tasks.get_by_id(tid)

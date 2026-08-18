@@ -2,20 +2,26 @@
 
 from __future__ import annotations
 
+import json
+
 from project_workflow import config
 from project_workflow.infrastructure.db import schema
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+
+_SEED = json.loads(config.SEED_PATH.read_text(encoding="utf-8"))
+PHASE_ORDER = [str(item["code"]) for item in _SEED]
+PHASE_NAMES = {str(item["code"]): str(item["name"]) for item in _SEED}
 
 
 def get_next_phase(current_phase: str) -> str | None:
     """Return the next phase code in configured order."""
     try:
-        idx = config.PHASE_ORDER.index(current_phase)
+        idx = PHASE_ORDER.index(current_phase)
     except ValueError:
         return None
 
-    if idx + 1 < len(config.PHASE_ORDER):
-        return config.PHASE_ORDER[idx + 1]
+    if idx + 1 < len(PHASE_ORDER):
+        return PHASE_ORDER[idx + 1]
     return None
 
 
@@ -72,37 +78,8 @@ def show_all_phases() -> None:
     table.add_column("#", style="cyan", width=6)
     table.add_column("Название", style="white")
 
-    names = {
-        "-1": "Task Intake",
-        "0.0a": "Suite Verification",
-        "0.01": "Task Docs Setup",
-        "0.000": "Workspace",
-        "0.00": "Git Identity",
-        "0.7": "Repo Sync",
-        "0.9": "CriticGate-PreFlight",
-        "0.5": "Jira Transition",
-        "0.6": "Researcher #1",
-        "1": "Preflight",
-        "1.5": "Deep Research",
-        "2": "Research Synthesis",
-        "3": "Plan",
-        "3.5": "CriticGate-PrePlan",
-        "4": "Implement",
-        "4.5": "CriticGate-PreCommit",
-        "5": "Validate",
-        "5.5": "Self-Test",
-        "6": "Commit",
-        "7": "MR Draft",
-        "7.5": "Code Review",
-        "7.6": "QA Testing",
-        "7.6.R": "DVR",
-        "7.7": "CriticGate-PostQA",
-        "8": "Jira Done",
-        "9": "Retro",
-        "10": "Auto-Improve",
-    }
-    for code in config.PHASE_ORDER:
-        table.add_row(code, names.get(code, ""))
+    for code in PHASE_ORDER:
+        table.add_row(code, PHASE_NAMES.get(code, ""))
     console.print(table)
     console.print("\n[dim]BLOCKER — если FAIL, workflow останавливается[/dim]")
     console.print("[dim]delegate — запускается через delegate_task[/dim]")

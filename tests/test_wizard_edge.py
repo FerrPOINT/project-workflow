@@ -19,6 +19,15 @@ def fresh_db(tmp_path, monkeypatch):
     uow = SAUnitOfWork(str(tmp_path / "workflow.db"))
     uow.init()
     schema.ensure_phase_catalog(uow)
+    workflow = uow.get_workflows()[0]
+    uow.create_project(
+        {
+            "code": "PROJ",
+            "name": "Wizard edge project",
+            "key_prefixes": ["PROJ"],
+            "workflow_id": workflow["id"],
+        }
+    )
     return uow
 
 

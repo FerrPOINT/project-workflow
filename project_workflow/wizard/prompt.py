@@ -1,9 +1,4 @@
-"""Prompt assembly for WizardEngine phase contracts.
-
-The prompt is stateful: it includes task history, recent verdicts, and recent
-conversation messages already collected by WizardContextBuilder. This gives the
-LLM (or deterministic consumer) enough context to avoid repeating failures.
-"""
+"""Prompt assembly for WizardEngine phase contracts."""
 
 from __future__ import annotations
 
@@ -42,23 +37,6 @@ def _format_verdicts(ctx: dict[str, Any], limit: int = 3) -> str:
         if blockers:
             parts.append(f"  blockers: {', '.join(str(b) for b in blockers[:3])}")
         lines.extend(parts)
-    return "\n".join(lines)
-
-
-def _format_messages(ctx: dict[str, Any], limit: int = 5) -> str:
-    items = ctx.get("messages") or []
-    if not items:
-        return "Нет сообщений."
-    lines: list[str] = []
-    for item in items[-limit:]:
-        if isinstance(item, dict):
-            role = item.get("role") or item.get("actor") or "-"
-            text = item.get("content") or item.get("text") or ""
-        else:
-            role = getattr(item, "role", getattr(item, "actor", "-"))
-            text = getattr(item, "content", getattr(item, "text", ""))
-        preview = str(text).replace("\n", " ")[:120]
-        lines.append(f"- {role}: {preview}")
     return "\n".join(lines)
 
 
@@ -233,8 +211,6 @@ def build_phase_prompt(
         f"{_format_history(ctx)}\n\n"
         f"Недавние вердикты:\n"
         f"{_format_verdicts(ctx)}\n\n"
-        f"Недавние сообщения:\n"
-        f"{_format_messages(ctx)}\n\n"
         f"Формат отчёта:\n"
         f"- summary: {report_template['summary']}\n"
         f"- completed: {report_template['completed']}\n"

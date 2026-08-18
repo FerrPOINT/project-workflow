@@ -14,7 +14,6 @@ from project_workflow.infrastructure.db.schema import (
     get_phase_from_db,
     load_phases_from_db,
     load_phases_from_seed,
-    persist_phase_update_to_seed,
 )
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.wizard.models import Phase
@@ -35,7 +34,8 @@ class TestEnsurePhaseCatalog:
         phases = load_phases_from_db(fresh_db)
         codes = [p.code for p in phases]
         assert len(codes) > 0
-        for code in config.PHASE_ORDER:
+        expected_codes = [str(item["code"]) for item in json.loads(config.SEED_PATH.read_text(encoding="utf-8"))]
+        for code in expected_codes:
             assert code in codes
 
     def test_idempotent_rerun(self, fresh_db):
@@ -43,31 +43,6 @@ class TestEnsurePhaseCatalog:
         first_count = len(load_phases_from_db(fresh_db))
         ensure_phase_catalog(fresh_db)
         assert len(load_phases_from_db(fresh_db)) == first_count
-
-
-class TestSeedPersistence:
-    def test_persist_phase_update_to_seed(self, fresh_db, tmp_path, monkeypatch):
-        seed_path = tmp_path / "seed.json"
-        seed_path.write_text(
-            json.dumps(
-                [
-                    {
-                        "code": "1",
-                        "name": "One",
-                        "next_recommendation": "Old",
-                        "instructions": [],
-                        "checks": [],
-                        "evidence": [],
-                    }
-                ],
-                ensure_ascii=False,
-            )
-        )
-        monkeypatch.setattr(config, "SEED_PATH", seed_path)
-        ensure_phase_catalog(fresh_db, seed_path=seed_path)
-        persist_phase_update_to_seed(fresh_db, "1", {"next_recommendation": "New"}, seed_path=seed_path)
-        reloaded = json.loads(seed_path.read_text(encoding="utf-8"))
-        assert reloaded[0]["next_recommendation"] == "New"
 
 
 class TestGenerateProgressJson:

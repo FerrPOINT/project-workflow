@@ -10,14 +10,6 @@ from typing import Any
 
 
 @dataclass
-class ArtifactSnapshot:
-    """Snapshot of a task artifact file."""
-
-    path: str
-    exists: bool
-
-
-@dataclass
 class PhaseContract:
     """Expected deliverables for a single phase (or parallel group)."""
 
@@ -53,61 +45,9 @@ class PhaseContract:
         }
 
 
-@dataclass
-class WizardAssessment:
-    """Complete assessment for a phase evaluation."""
-
-    task_key: str
-    phase_code: str
-    phase_name: str
-    verdict: str  # pass, partial, blocked, rollback, delegate
-    covered: list[str] = field(default_factory=list)
-    missing: list[str] = field(default_factory=list)
-    blockers: list[str] = field(default_factory=list)
-    next_phase: str | None = None
-    next_phase_name: str | None = None
-    rollback_target: str | None = None
-    next_phase_contract: PhaseContract | None = None
-    instructions: list[str] = field(default_factory=list)
-    required_checks: list[str] = field(default_factory=list)
-    required_evidence: list[str] = field(default_factory=list)
-    message: str = ""
-    group_phases: list[str] | None = None  # set for parallel blocks
-
-    def to_result_dict(self) -> dict[str, Any]:
-        """Legacy-compatible result dict for CLI / UI consumers."""
-        next_contract_dict = self.next_phase_contract.to_dict() if self.next_phase_contract else None
-        result = {
-            "verdict": self.verdict.upper() if self.verdict else "UNKNOWN",
-            "task_key": self.task_key,
-            "phase": self.phase_code,
-            "phase_name": self.phase_name,
-            "covered": self.covered,
-            "missing": self.missing,
-            "blockers": self.blockers,
-            "current_phase": self.phase_code,
-            "next_phase": self.next_phase,
-            "next_phase_name": self.next_phase_name,
-            "rollback_target": self.rollback_target,
-            "required_evidence": self.required_evidence,
-            "required_checks": self.required_checks,
-            "instructions": self.instructions,
-            "next_step": self.next_phase or self.rollback_target or self.phase_code,
-            "next_phase_contract": next_contract_dict,
-            "message": self.message,
-        }
-        if self.group_phases:
-            result["group_phases"] = self.group_phases
-            if next_contract_dict:
-                result["group_details"] = next_contract_dict.get("group_details") or []
-        return result
-
-
 VERDICT_LABELS: dict[str, str] = {
     "pass": "PASS",
     "partial": "PARTIAL",
-    "soft_fail": "SOFT_FAIL",
-    "hard_fail": "HARD_FAIL",
     "blocked": "BLOCKED",
     "rollback": "ROLLBACK",
     "delegate": "DELEGATE",

@@ -17,12 +17,8 @@ SUPERVISOR_PHASES = ["sup.intake", "sup.review", "sup.done"]
 
 def _patch_runtime(monkeypatch, tmp_path: Path) -> SAUnitOfWork:
     workflow_db = tmp_path / "workflow.db"
-    convo_dir = tmp_path / ".project-workflow"
-    convo_db = convo_dir / "conversation.db"
     monkeypatch.setattr("project_workflow.infrastructure.db.DB_PATH", workflow_db)
     monkeypatch.setattr("project_workflow.infrastructure.db.DB_PATH", workflow_db)
-    monkeypatch.setattr("project_workflow.infrastructure.conversation.DB_DIR", convo_dir)
-    monkeypatch.setattr("project_workflow.infrastructure.conversation.DB_PATH", convo_db)
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{workflow_db}")
     from project_workflow import config
 
@@ -131,10 +127,10 @@ def test_supervisor_context_contains_full_path_and_contract(tmp_path: Path, monk
     assert "Задача" in prompt
     assert "Формат отчёта" in prompt
     assert "Полный путь workflow" not in prompt
-    # Empty history/verdicts/messages sections are still present.
+    # Empty controller-owned history and verdict sections remain visible.
     assert "История выполнения:" in prompt
     assert "Недавние вердикты:" in prompt
-    assert "Недавние сообщения:" in prompt
+    assert "Недавние сообщения:" not in prompt
 
 
 def test_supervisor_evaluate_pass_updates_db_state_and_persists_run(tmp_path: Path, monkeypatch, wizard_llm) -> None:

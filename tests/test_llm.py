@@ -48,16 +48,18 @@ class TestOllamaClient:
 
     def test_default_env_vars(self, monkeypatch):
         monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        monkeypatch.setenv("OLLAMA_MODEL", "test-model")
         from importlib import reload
 
         import project_workflow.infrastructure.llm as llm_mod
 
         reload(llm_mod)
         assert llm_mod.OLLAMA_BASE_URL == "http://localhost:11434"
-        assert llm_mod.OLLAMA_MODEL == "kimi-k2.6"
+        assert llm_mod.OLLAMA_MODEL == "test-model"
 
     def test_chat_parses_json_response(self, monkeypatch):
         monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        monkeypatch.setenv("OLLAMA_MODEL", "test-model")
         from importlib import reload
 
         import project_workflow.infrastructure.llm as llm_mod
@@ -77,6 +79,8 @@ class TestOllamaClient:
     def test_chat_cloud_mode(self, monkeypatch):
         """Test cloud mode with OpenAI-compatible endpoint."""
         monkeypatch.setenv("OLLAMA_BASE_URL", "https://ollama.com/v1")
+        monkeypatch.setenv("OLLAMA_MODEL", "test-model")
+        monkeypatch.setenv("OLLAMA_API_STYLE", "openai")
         from importlib import reload
 
         import project_workflow.infrastructure.llm as llm_mod
@@ -260,11 +264,9 @@ class TestWizardEngineEvaluateLLM:
 
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
-            from project_workflow.wizard import WizardEngine
+        from project_workflow.wizard import WizardEngine
 
-            engine = WizardEngine("TASK-LLM-1", repo=str(tmp_path))
+        engine = WizardEngine("TASK-101", repo=str(tmp_path))
         return engine
 
     def test_evaluate_llm_pass(self, engine):
@@ -319,7 +321,7 @@ class TestWizardEngineEvaluateLLM:
             # unless they were passed as previously_covered param.
             # Here we just verify the prompt was built and sent.
             assert "Report" in kwargs["user"]
-            assert "TASK-LLM-1" in kwargs["user"]
+            assert "TASK-101" in kwargs["user"]
 
 
 class TestOllamaResponseParserEdgeCases:
@@ -429,11 +431,9 @@ class TestWizardEngineLLMIntegrationDB:
 
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
         monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
-            from project_workflow.wizard import WizardEngine
+        from project_workflow.wizard import WizardEngine
 
-            engine = WizardEngine("DB-LLM-1", repo=str(tmp_path))
+        engine = WizardEngine("DB-101", repo=str(tmp_path))
         return engine
 
     def test_supervisor_run_recorded_after_llm_evaluate(self, engine):
@@ -451,7 +451,7 @@ class TestWizardEngineLLMIntegrationDB:
             mock_chat.return_value = llm_response
             engine.evaluate("Report")
 
-        runs = engine.db.get_supervisor_runs(task_key="DB-LLM-1", limit=5)
+        runs = engine.db.get_supervisor_runs(task_key="DB-101", limit=5)
         assert len(runs) == 1
         run = runs[0]
         assert run["verdict"] == "pass"

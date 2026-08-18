@@ -1,12 +1,13 @@
 """Tests for parallel group logic, record transitions, result builders, and edge cases."""
 
+from contextlib import nullcontext
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 pytestmark = [pytest.mark.wizard]
 
-from project_workflow.wizard import PromptCache, WizardEngine
+from project_workflow.wizard import WizardEngine
 from project_workflow.wizard.models import Phase, PhaseCheck, PhaseEvidence, PhaseInstruction
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -16,8 +17,7 @@ from project_workflow.wizard.models import Phase, PhaseCheck, PhaseEvidence, Pha
 
 @pytest.fixture
 def engine():
-    with patch("project_workflow.wizard.convo") as mock_convo:
-        mock_convo.get_last_phase.return_value = None
+    with nullcontext():
         eng = WizardEngine("AAT-1", "/tmp")
         eng.all_phases = [
             Phase(
@@ -105,36 +105,6 @@ def engine():
         eng.current_phase = "-1"
         eng.task = {"id": 7, "current_phase": "-1", "status": "active", "project_id": 1}
         yield eng
-
-
-# ═══════════════════════════════════════════════════════════════════════
-#  PromptCache
-# ═══════════════════════════════════════════════════════════════════════
-
-
-class TestPromptCache:
-    def test_get_set_hit(self):
-        cache = PromptCache()
-        cache.set("T-1", "-1", {"data": 42})
-        assert cache.get("T-1", "-1") == {"data": 42}
-
-    def test_get_miss(self):
-        cache = PromptCache()
-        assert cache.get("T-1", "-1") is None
-
-    def test_invalidation_bumps_generation(self):
-        cache = PromptCache()
-        cache.set("T-1", "-1", {"data": 42})
-        cache.invalidate()
-        assert cache.get("T-1", "-1") is None
-
-    def test_invalidation_resets_after_1000(self):
-        cache = PromptCache()
-        cache._gen = 1000
-        cache.set("T-1", "-1", {"data": 42})
-        cache.invalidate()
-        assert cache._gen == 0
-        assert cache.get("T-1", "-1") is None
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -238,7 +208,7 @@ class TestRecordTransition:
             patch.object(engine.db, "add_task_history") as mock_hist,
             patch.object(engine.db, "update_task") as mock_upd,
         ):
-            engine._record_transition(ph, "soft_fail", None, None)
+            engine._record_transition(ph, "partial", None, None)
         mock_hist.assert_called_once_with(7, 1, "partial")
         mock_upd.assert_called_once_with(7, {"current_phase": "-1", "status": "active"})
 
@@ -320,7 +290,7 @@ class TestRecordParallelTransition:
             patch.object(engine.db, "add_task_history") as mock_hist,
             patch.object(engine.db, "update_task") as mock_upd,
         ):
-            engine._record_parallel_transition(group, "soft_fail", "3")
+            engine._record_parallel_transition(group, "partial", "3")
         mock_hist.assert_not_called()
         mock_upd.assert_not_called()
 
@@ -344,8 +314,7 @@ class TestRecordParallelTransition:
 
 class TestEvaluateEdgeCases:
     def test_orphan_phase_returns_blocked(self):
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
+        with nullcontext():
             engine = WizardEngine("AAT-1", "/tmp")
             engine.current_phase = "orphan"
             engine.phase_map = {}
@@ -358,8 +327,7 @@ class TestEvaluateEdgeCases:
 
     def test_sync_evaluate_pass(self, wizard_llm):
         wizard_llm("PASS", covered=["deploy"])
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
+        with nullcontext():
             engine = WizardEngine("AAT-1", "/tmp")
             ph = Phase(
                 id=1,
@@ -387,8 +355,7 @@ class TestEvaluateEdgeCases:
 
     def test_parallel_evaluate_pass(self, wizard_llm):
         wizard_llm("PASS", covered=["check-a", "check-b"])
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
+        with nullcontext():
             engine = WizardEngine("AAT-1", "/tmp")
             ph_a = Phase(
                 id=1,
@@ -447,8 +414,7 @@ class TestEvaluateEdgeCases:
             covered=["deploy microservice"],
             missing=["write unit tests"],
         )
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
+        with nullcontext():
             engine = WizardEngine("AAT-1", "/tmp")
             ph_a = Phase(
                 id=1,

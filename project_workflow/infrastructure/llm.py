@@ -22,25 +22,10 @@ from pydantic import BaseModel, ConfigDict, Field
 logger = logging.getLogger(__name__)
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "kimi-k2.6")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "").strip()
 OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "120"))
 OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "")
-
-
-def _load_api_key() -> str:
-    """Read OLLAMA_API_KEY from env or ~/.hermes/.env."""
-    if OLLAMA_API_KEY:
-        return OLLAMA_API_KEY
-    env_path = os.path.expanduser("~/.hermes/.env")
-    if os.path.exists(env_path):
-        try:
-            with open(env_path) as f:
-                for line in f:
-                    if line.startswith("OLLAMA_API_KEY="):
-                        return line.split("=", 1)[1].strip()
-        except (OSError, ValueError) as exc:
-            logger.warning("Failed to read OLLAMA_API_KEY from env file: %s", exc)
-    return ""
+OLLAMA_API_STYLE = os.getenv("OLLAMA_API_STYLE", "native").strip().lower()
 
 
 @dataclass(frozen=True)
@@ -65,12 +50,21 @@ class OllamaClient:
         model: str | None = None,
         timeout: int | None = None,
         api_key: str | None = None,
+        api_style: Literal["native", "openai"] | None = None,
     ):
         self.base_url = (base_url or OLLAMA_BASE_URL).rstrip("/")
-        self.model = model or OLLAMA_MODEL
-        self.timeout = timeout or OLLAMA_TIMEOUT
-        self.api_key = api_key or _load_api_key()
-        self.is_cloud = "/v1" in self.base_url  # OpenAI-compatible endpoint
+        self.model = model if model is not None else OLLAMA_MODEL
+        if not self.model:
+            raise ValueError("OLLAMA_MODEL is required")
+        self.timeout = timeout if timeout is not None else OLLAMA_TIMEOUT
+        self.api_key = api_key if api_key is not None else OLLAMA_API_KEY
+        self.api_style = api_style or OLLAMA_API_STYLE
+        if self.api_style not in {"native", "openai"}:
+            raise ValueError("OLLAMA_API_STYLE must be 'native' or 'openai'")
+
+    @property
+    def is_cloud(self) -> bool:
+        return self.api_style == "openai"
 
     def is_available(self) -> bool:
         """Quick health-check."""

@@ -1,4 +1,4 @@
-"""Coverage gaps for wizard/evaluate.py and ui/seed.py."""
+"""Coverage gaps for Wizard LLM evaluation."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ import pytest
 
 pytestmark = [pytest.mark.wizard]
 
-from project_workflow import config
 from project_workflow.wizard.evaluate import evaluate_llm_report
 from project_workflow.wizard.models import Phase
 
@@ -108,19 +107,3 @@ class TestEvaluateGaps:
         engine.all_phases = [ph, next_ph]
         result = evaluate_llm_report("ok", ph, engine)
         assert result["next_phase"] == "2"
-
-
-class TestSeedGaps:
-    def test_update_config_phase_order_no_rows(self, monkeypatch):
-        from project_workflow.interfaces.ui import seed as seed_mod
-
-        before = list(config.PHASE_ORDER)
-        uow = MagicMock()
-        uow.workflows.get_default.return_value = MagicMock(id=1)
-        PhaseServiceApp = MagicMock()
-        PhaseServiceApp.return_value.list_phases.return_value = []
-        monkeypatch.setattr(seed_mod, "PhaseServiceApp", PhaseServiceApp)
-        with patch.object(seed_mod, "_get_app_state") as mock_state:
-            mock_state.return_value.get_uow.return_value = uow
-            seed_mod._update_config_phase_order(uow)
-        assert config.PHASE_ORDER == before

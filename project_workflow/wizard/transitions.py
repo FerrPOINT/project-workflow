@@ -104,5 +104,5 @@ def record_parallel_transition(
         db.update_task(task_id, {"current_phase": target_code, "status": "active"})
         db.commit()
         return
-    # partial: legacy tests expect no DB side effects at all.
+    # A partial report keeps the task in the current phase.
     return

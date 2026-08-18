@@ -1,63 +1,19 @@
-"""DB-backed workflow supervisor over the phase catalog.
-
-Thin facade — orchestrates context → contract → checks → store.
-Public surface kept compatible:
-- WizardEngine(task_key, repo)
-- WizardEngine.get_full_context()
-- WizardEngine.get_phase_prompt()
-- WizardEngine.evaluate(report)
-- evaluate_report(...), main(...)
-"""
+"""DB-backed workflow supervisor over the phase catalog."""
 
 from __future__ import annotations
 
-import json
-import threading
 from typing import Any
 
 from ..application.project import ProjectService
 from ..application.task import TaskService
 from ..application.workflow import WorkflowService
+from ..domain.validation import get_project_for_task_key
 from ..infrastructure.db import schema
 from ..infrastructure.db.uow import SAUnitOfWork
-from ..infrastructure.db.uow_bootstrap import (
-    bootstrap_smoke_project_and_workflow,
-    ensure_smoke_phases,
-)
-
-# Re-exports kept for existing tests importing from wizard.core directly.
 from .context import WizardContextBuilder
 from .contracts import PhaseContractBuilder
-from .formatting import format_result  # noqa: F401
 from .models import Phase
 from .prompt import build_phase_prompt
-
-
-class PromptCache:
-    """Thread-safe prompt context cache with generation-based invalidation."""
-
-    def __init__(self) -> None:
-        self._cache: dict[str, dict] = {}
-        self._lock = threading.Lock()
-        self._gen = 0
-
-    def key(self, task_key: str, current_phase: str, gen: int) -> str:
-        return f"{task_key}:{current_phase}:{gen}"
-
-    def get(self, task_key: str, current_phase: str) -> dict | None:
-        with self._lock:
-            return self._cache.get(self.key(task_key, current_phase, self._gen))
-
-    def set(self, task_key: str, current_phase: str, value: dict) -> None:
-        with self._lock:
-            self._cache[self.key(task_key, current_phase, self._gen)] = value
-
-    def invalidate(self) -> None:
-        with self._lock:
-            self._gen += 1
-            if self._gen > 1000:
-                self._cache.clear()
-                self._gen = 0
 
 
 class WizardEngine:
@@ -72,9 +28,7 @@ class WizardEngine:
         self._uow = uow if uow is not None else SAUnitOfWork()
 
         self._uow.create_all()
-        bootstrap_smoke_project_and_workflow(self._uow)
         schema.ensure_phase_catalog(self._uow)
-        self._ensure_smoke_phases()
 
         self._workflow_service = WorkflowService(self._uow)
         self._project_service = ProjectService(self._uow)
@@ -94,7 +48,6 @@ class WizardEngine:
         self._all_phases: list[Phase] | None = None
         self._phase_map: dict[str, Phase] | None = None
         self.current_phase = self._resolve_current_phase()
-        self._cache = PromptCache()
 
     @property
     def db(self):
@@ -161,47 +114,21 @@ class WizardEngine:
         return task
 
     def _resolve_project(self) -> dict[str, Any] | None:
-        # Try matching via project key prefixes first.
-        for project in self._project_service.list_projects():
-            for prefix in project.get("key_prefixes", []):
-                if self.task_key.startswith(prefix + "-") or self.task_key == prefix:
-                    return project
-        # Fall back to the default workflow/project.
-        default_wf = self._workflow_service.ensure_default_exists()
-        default_wf_id = default_wf.get("id") if default_wf else None
-        for project in self._project_service.list_projects():
-            if default_wf_id and project.get("workflow_id") == default_wf_id:
-                return project
-        # Create a default project under the default workflow.
-        return self._project_service.create_project(
-            {
-                "code": "default",
-                "name": "Default Project",
-            }
-        )
-
-    def _ensure_smoke_phases(self) -> None:
-        ensure_smoke_phases(self._uow)
+        return get_project_for_task_key(self._uow, self.task_key)
 
     def _first_phase_code_for_project(self, project_id: int) -> str:
         project = self._project_service.get_project(project_id)
         workflow_id = project["workflow_id"] if project else None
         phases = schema.load_phases_from_db(self._uow, workflow_id=workflow_id)
-        return phases[0].code if phases else "-1"
+        if not phases:
+            raise ValueError(f"Project {project_id} has no configured workflow phases")
+        return phases[0].code
 
     def _resolve_current_phase(self) -> str:
         if not self.task:
-            return "-1"
+            return ""
         current = str(self.task.get("current_phase") or "").strip()
-        if current and current in self.phase_map:
-            return current
-        if self.all_phases:
-            fallback = self.all_phases[0].code
-            if current != fallback:
-                self._task_service.update_task(self.task["id"], {"current_phase": fallback})
-                self.task = self._task_service.get_task(self.task["id"]) or self.task
-            return fallback
-        return current or "-1"
+        return current
 
     def _get_current_phase_obj(self) -> Phase | None:
         return self.phase_map.get(self.current_phase)
@@ -240,14 +167,6 @@ class WizardEngine:
         cb = PhaseContractBuilder(self.all_phases)
         return cb._next_after_group(group)
 
-    def _build_checklist(self, phase):
-        cb = PhaseContractBuilder(self.all_phases)
-        return cb.build_checklist(phase)
-
-    def _build_parallel_checklist(self, group):
-        cb = PhaseContractBuilder(self.all_phases)
-        return cb.build_parallel_checklist(group)
-
     def _record_transition(
         self, phase: Phase, verdict: str, next_phase: str | None, rollback_target: str | None
     ) -> None:
@@ -275,11 +194,7 @@ class WizardEngine:
 
     # ── Context / Prompt ─────────────────────────────────────────────────────
 
-    def get_full_context(self, use_cache: bool = True) -> dict:
-        if use_cache:
-            cached = self._cache.get(self.task_key, self.current_phase)
-            if cached:
-                return cached
+    def get_full_context(self) -> dict:
         builder = WizardContextBuilder(
             uow=self._uow,
             task=self.task,
@@ -290,9 +205,7 @@ class WizardEngine:
             task_key=self.task_key,
             repo=self.repo,
         )
-        ctx = builder.build()
-        self._cache.set(self.task_key, self.current_phase, ctx)
-        return ctx
+        return builder.build()
 
     def get_phase_prompt(self, phase_id: str | None = None) -> str:
         ctx = self.get_full_context()
@@ -379,28 +292,3 @@ class WizardEngine:
         from .evaluate import evaluate_llm_report
 
         return evaluate_llm_report(report, phase, self)
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# Public wrappers / CLI entrypoints
-# ═══════════════════════════════════════════════════════════════════════
-
-
-def evaluate_report(task_key: str, report: str, repo: str | None = None) -> dict:
-    import project_workflow.wizard as _wizard_pkg
-
-    engine = _wizard_pkg.WizardEngine(task_key, repo)
-    return engine.evaluate(report)
-
-
-def main(task_key: str, repo: str | None = None, report: str | None = None) -> None:
-    """CLI entrypoint kept for existing scripts/tests that call wizard.main() directly."""
-    import sys
-
-    import project_workflow.wizard as _wizard_pkg
-
-    if report:
-        result = evaluate_report(task_key, report, repo)
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-        sys.exit(0 if result["verdict"] == "PASS" else 1)
-    print(_wizard_pkg.WizardEngine(task_key, repo).get_phase_prompt())
