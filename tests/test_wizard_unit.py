@@ -149,29 +149,3 @@ class TestPromptAndModels:
         )
         rendered = phase.render_instructions({"env": "prod"})
         assert rendered == ["run prod"]
-
-
-class TestVerdictMessages:
-    def test_build_verdict_message_pass(self):
-        from project_workflow.wizard.checks import build_verdict_message
-
-        assert build_verdict_message("pass", "P", "1", [], [], "2", None) == "Phase accepted."
-
-    def test_build_verdict_message_blocked(self):
-        from project_workflow.wizard.checks import build_verdict_message
-
-        assert build_verdict_message("blocked", "P", "1", ["b"], [], None, None) == "Blocked: b. Fix and resubmit."
-
-    def test_build_verdict_message_rollback(self):
-        from project_workflow.wizard.checks import build_verdict_message
-
-        assert build_verdict_message("rollback", "P", "1", [], ["m"], None, "0") == "Roll back and fix: m."
-
-    def test_build_verdict_message_no_phase_codes(self):
-        from project_workflow.wizard.checks import build_verdict_message
-
-        result = build_verdict_message("soft_fail", "P", "1", [], ["m"], None, None)
-        assert "Phase 1" not in result
-        assert "HARD_FAIL" not in result
-        assert "SOFT_FAIL" not in result
-        assert "Incomplete" in result

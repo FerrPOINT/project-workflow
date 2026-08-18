@@ -6,7 +6,6 @@ Public API re-exported from project_workflow.wizard subpackage.
 from __future__ import annotations
 
 from project_workflow.infrastructure import conversation as convo
-from project_workflow.wizard.checks import build_verdict_message
 from project_workflow.wizard.context import WizardContextBuilder
 from project_workflow.wizard.contracts import (
     PhaseContractBuilder,
@@ -49,7 +48,6 @@ __all__ = [
     "WizardContextBuilder",
     "WizardEngine",
     "build_phase_prompt",
-    "build_verdict_message",
     "convo",
     "evaluate_report",
     "evaluate_llm_report",

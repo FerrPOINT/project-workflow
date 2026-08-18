@@ -7,7 +7,6 @@ import pytest
 pytestmark = [pytest.mark.wizard]
 
 from project_workflow.domain.fsm import PhaseFSM
-from project_workflow.wizard.checks import build_verdict_message
 from project_workflow.wizard.core import format_result
 from project_workflow.wizard.types import VERDICT_LABELS, PhaseContract, WizardAssessment
 
@@ -19,17 +18,6 @@ class TestVerdictLabels:
         for v in ("pass", "soft_fail", "hard_fail", "blocked", "rollback", "delegate"):
             assert v in VERDICT_LABELS
             assert v in CORE_VERDICT_LABELS
-
-
-class TestVerdictMessages:
-    def test_soft_fail_message(self):
-        msg = build_verdict_message("soft_fail", "Plan", "1", [], ["missing item"], None, None)
-        assert "Incomplete" in msg
-        assert "missing item" in msg
-
-    def test_hard_fail_message(self):
-        msg = build_verdict_message("hard_fail", "Plan", "1", [], ["missing item"], None, None)
-        assert "Cannot proceed" in msg or "missing item" in msg
 
 
 class TestFSMAcceptsNewVerdicts:
