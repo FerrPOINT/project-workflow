@@ -79,16 +79,20 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
             verdict="BLOCKED",
             blockers=["rollback target is not configured for the current phase"],
         )
+    if llm.verdict == "DELEGATE" and not (phase.is_delegated or phase.delegate):
+        llm = replace(
+            llm,
+            verdict="BLOCKED",
+            blockers=["delegation is not configured for the current phase"],
+        )
 
     verdict_key = llm.verdict.lower()
-    next_phase = None
-    next_phase_name = None
-    if verdict_key == "pass":
-        if len(group) > 1:
-            next_phase, next_phase_name = builder._next_after_group(group)
-        else:
-            next_phase, next_phase_name = builder.get_next_phase(phase.code)
-    rollback_target = phase.rollback_target if verdict_key == "rollback" else None
+    next_phase, next_phase_name, rollback_target = engine._resolve_transition(
+        phase, verdict_key, group
+    )
+    if verdict_key != "pass":
+        next_phase = None
+        next_phase_name = None
     blockers = llm.blockers
     if verdict_key == "blocked" and not blockers:
         blockers = ["Wizard identified a blocker"]
@@ -107,25 +111,10 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         "rollback_target": rollback_target,
         "message": llm.message,
         "confidence": llm.confidence,
-        "wizard": {"provider": "ollama", "model": client.model},
     }
 
-    if len(group) > 1:
-        engine._record_parallel_transition(
-            group,
-            verdict_key,
-            next_phase if verdict_key == "pass" else rollback_target,
-        )
-    elif verdict_key == "pass":
-        engine._record_transition(phase, "pass", next_phase, None)
-    elif verdict_key == "rollback":
-        engine._record_transition(phase, "rollback", None, rollback_target)
-    else:
-        engine._record_transition(phase, verdict_key, None, None)
-
+    engine._record_evaluation(phase, verdict_key, next_phase, rollback_target)
     task_id = engine.task["id"]
-    engine.task = engine.db.get_task(task_id) or engine.task
-    engine.current_phase = engine._resolve_current_phase()
 
     next_phase_obj = engine.phase_map.get(next_phase) if next_phase else None
     rollback_phase_obj = engine.phase_map.get(rollback_target) if rollback_target else None

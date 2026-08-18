@@ -202,10 +202,11 @@ class PromptBuilder:
         "7. verdict = SOFT_FAIL — some items done → stay on phase.\n"
         "8. verdict = BLOCKED — real blocker → stay on phase.\n"
         "9. verdict = ROLLBACK — worker explicitly cannot/will not do this.\n"
-        "The Wizard never delegates work and never chooses the next phase.\n\n"
+        "10. verdict = DELEGATE — worker delegates a configured delegated phase.\n"
+        "The Wizard never chooses the next phase.\n\n"
         "Output STRICT JSON with these keys:\n"
         "{\n"
-        '  "verdict": "PASS" | "SOFT_FAIL" | "BLOCKED" | "ROLLBACK",\n'
+        '  "verdict": "PASS" | "SOFT_FAIL" | "BLOCKED" | "ROLLBACK" | "DELEGATE",\n'
         '  "covered": ["item description"],\n'
         '  "missing": ["item description"],\n'
         '  "blockers": ["specific blocker description"],\n'
@@ -268,19 +269,28 @@ class PromptBuilder:
 class ResponseParser:
     """Validate + normalise raw LLM JSON into LlmVerdict."""
 
-    VALID_VERDICTS = {"PASS", "SOFT_FAIL", "BLOCKED", "ROLLBACK"}
+    VALID_VERDICTS = {"PASS", "SOFT_FAIL", "BLOCKED", "ROLLBACK", "DELEGATE"}
+    TRANSITION_VERDICTS = {"PASS", "ROLLBACK", "DELEGATE"}
 
     @classmethod
     def parse(cls, raw: dict[str, Any]) -> LlmVerdict:
         verdict = str(raw.get("verdict", "")).upper().strip()
-        if verdict == "PARTIAL":
-            verdict = "SOFT_FAIL"
-        elif verdict not in cls.VALID_VERDICTS:
+        if verdict not in cls.VALID_VERDICTS:
             verdict = "BLOCKED"
 
         covered = cls._to_str_list(raw.get("covered"))
         missing = cls._to_str_list(raw.get("missing"))
         blockers = cls._to_str_list(raw.get("blockers"))
+        valid_transition_shape = (
+            all(key in raw for key in ("covered", "missing", "blockers", "message", "confidence"))
+            and all(isinstance(raw.get(key), list) for key in ("covered", "missing", "blockers"))
+            and isinstance(raw.get("message"), str)
+            and isinstance(raw.get("confidence"), (int, float))
+            and not isinstance(raw.get("confidence"), bool)
+        )
+        if verdict in cls.TRANSITION_VERDICTS and not valid_transition_shape:
+            verdict = "BLOCKED"
+            blockers = ["Wizard response does not match the required JSON contract"]
         if verdict == "PASS" and blockers:
             verdict = "BLOCKED"
         elif verdict == "PASS" and missing:

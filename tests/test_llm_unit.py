@@ -25,6 +25,7 @@ def _make_engine():
     engine.phase_map = {}
     engine._get_previously_covered.return_value = []
     engine._resolve_current_phase.return_value = "1"
+    engine._resolve_transition.return_value = (None, None, None)
     engine.db.get_task.return_value = engine.task
     return engine
 
@@ -50,10 +51,11 @@ class TestEvaluateLlmReportVerdicts:
             result = evaluate_llm_report("r", phase, engine)
         assert result["verdict"] == "BLOCKED"
         assert result["blockers"] == ["Wizard identified a blocker"]
-        engine._record_transition.assert_called_once()
+        engine._record_evaluation.assert_called_once_with(phase, "blocked", None, None)
 
     def test_rollback_uses_rollback_target(self):
         engine = _make_engine()
+        engine._resolve_transition.return_value = (None, None, "0")
         phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[], rollback_target="0")
         with patch.object(
             OllamaClient,
@@ -80,7 +82,14 @@ class TestEvaluateLlmReportVerdicts:
         with patch.object(
             OllamaClient,
             "chat",
-            return_value={"verdict": "ROLLBACK", "message": "rollback"},
+            return_value={
+                "verdict": "ROLLBACK",
+                "covered": [],
+                "missing": [],
+                "blockers": [],
+                "message": "rollback",
+                "confidence": 0.5,
+            },
         ):
             result = evaluate_llm_report("r", phase, engine)
         assert result["verdict"] == "BLOCKED"
@@ -89,7 +98,7 @@ class TestEvaluateLlmReportVerdicts:
             "rollback target is not configured for the current phase"
         ]
 
-    def test_delegate_response_fails_closed(self):
+    def test_delegate_requires_configured_phase(self):
         engine = _make_engine()
         phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[])
         with patch.object(
@@ -108,10 +117,37 @@ class TestEvaluateLlmReportVerdicts:
         ):
             result = evaluate_llm_report("r", phase, engine)
         assert result["verdict"] == "BLOCKED"
-        engine._record_transition.assert_called_once()
+        assert result["blockers"] == ["delegation is not configured for the current phase"]
+
+    def test_delegate_configured_phase_is_preserved(self):
+        engine = _make_engine()
+        phase = Phase(
+            code="1",
+            name="One",
+            instructions=[],
+            checks=[],
+            evidence=[],
+            is_delegated=True,
+        )
+        with patch.object(
+            OllamaClient,
+            "chat",
+            return_value={
+                "verdict": "DELEGATE",
+                "covered": [],
+                "missing": [],
+                "blockers": [],
+                "message": "delegate",
+                "confidence": 0.5,
+            },
+        ):
+            result = evaluate_llm_report("r", phase, engine)
+        assert result["verdict"] == "DELEGATE"
+        engine._record_evaluation.assert_called_once_with(phase, "delegate", None, None)
 
     def test_pass_fills_next_phase_from_builder(self):
         engine = _make_engine()
+        engine._resolve_transition.return_value = ("2", "Two", None)
         next_phase = Phase(code="2", name="Two", instructions=[], checks=[], evidence=[])
         engine.all_phases = [Phase(code="1", name="One", instructions=[], checks=[], evidence=[]), next_phase]
         engine.phase_map = {"2": next_phase}
@@ -134,7 +170,6 @@ class TestEvaluateLlmReportVerdicts:
         assert result["verdict"] == "PASS"
         assert result["next_phase"] == "2"
         assert result["next_phase_name"] == "Two"
-        assert result["wizard"]["model"]
 
     @pytest.mark.parametrize("failure", [TimeoutError("slow"), IndexError("bad response")])
     def test_provider_failure_is_persisted_as_blocked(self, failure):

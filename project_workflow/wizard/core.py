@@ -332,6 +332,41 @@ class WizardEngine:
             "next_phase": None,
         }
 
+    def _resolve_transition(
+        self, phase: Phase, verdict: str, group: list[Phase]
+    ) -> tuple[str | None, str | None, str | None]:
+        """Return (next_phase_code, next_phase_name, rollback_target_code)."""
+        is_parallel = len(group) > 1
+        if is_parallel:
+            next_phase, next_phase_name = self._get_next_phase_after_group(group)
+            rollback_target = group[0].rollback_target if verdict == "rollback" else None
+            if verdict != "pass":
+                next_phase = None
+                next_phase_name = None
+        else:
+            next_phase, next_phase_name = self._get_next_phase(phase.code)
+            rollback_target = phase.rollback_target if verdict == "rollback" else None
+
+        if verdict == "pass" and next_phase:
+            next_phase_obj = self.phase_map.get(next_phase)
+            next_phase_name = next_phase_obj.name if next_phase_obj else next_phase_name
+        return next_phase, next_phase_name, rollback_target
+
+    def _record_evaluation(
+        self, phase: Phase, verdict: str, next_phase: str | None, rollback_target: str | None
+    ) -> None:
+        is_parallel = phase.execution_type == "parallel"
+        if is_parallel:
+            group = self._get_parallel_group(phase)
+            target = next_phase if verdict == "pass" else rollback_target
+            self._record_parallel_transition(group, verdict, target)
+        else:
+            self._record_transition(phase, verdict, next_phase, rollback_target)
+        self._uow.commit()
+        if self.task:
+            self.task = self._task_service.get_task(self.task["id"]) or self.task
+            self.current_phase = self._resolve_current_phase()
+
     def evaluate(self, report: str) -> dict:
         phase = self._get_current_phase_obj()
         if not phase:

@@ -194,31 +194,45 @@ class TestResponseParser:
         assert v.verdict == "BLOCKED"
 
     def test_parse_lowercase_verdict_normalised(self):
-        raw = {"verdict": "pass", "covered": [], "missing": [], "blockers": []}
+        raw = {
+            "verdict": "pass",
+            "covered": [],
+            "missing": [],
+            "blockers": [],
+            "message": "ok",
+            "confidence": 1.0,
+        }
         v = ResponseParser.parse(raw)
         assert v.verdict == "PASS"
 
-    def test_parse_missing_fields_get_defaults(self):
-        raw = {}
+    def test_parse_incomplete_pass_fails_closed(self):
+        raw = {"verdict": "PASS"}
         v = ResponseParser.parse(raw)
         assert v.verdict == "BLOCKED"
         assert v.covered == []
         assert v.missing == []
-        assert v.blockers == []
+        assert v.blockers == ["Wizard response does not match the required JSON contract"]
         assert v.message == ""
         assert v.confidence == 0.5
 
     def test_parse_confidence_clamped(self):
-        raw = {"verdict": "PASS", "confidence": 1.5}
+        raw = {
+            "verdict": "PASS",
+            "covered": [],
+            "missing": [],
+            "blockers": [],
+            "message": "ok",
+            "confidence": 1.5,
+        }
         v = ResponseParser.parse(raw)
         assert v.confidence == 1.0
-        raw = {"verdict": "PASS", "confidence": -0.3}
+        raw["confidence"] = -0.3
         v = ResponseParser.parse(raw)
         assert v.confidence == 0.0
 
     def test_parse_string_list_coercion(self):
         raw = {
-            "verdict": "PASS",
+            "verdict": "SOFT_FAIL",
             "covered": "single item",
             "missing": ["a", "", "b"],
             "blockers": [],
@@ -341,7 +355,14 @@ class TestOllamaResponseParserEdgeCases:
         assert v.raw["extra_key"] == "preserved"
 
     def test_parse_strip_verdict_whitespace(self):
-        raw = {"verdict": "  pass  ", "covered": [], "missing": [], "blockers": []}
+        raw = {
+            "verdict": "  pass  ",
+            "covered": [],
+            "missing": [],
+            "blockers": [],
+            "message": "ok",
+            "confidence": 1.0,
+        }
         v = ResponseParser.parse(raw)
         assert v.verdict == "PASS"
 

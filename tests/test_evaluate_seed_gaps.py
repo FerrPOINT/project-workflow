@@ -65,6 +65,7 @@ class TestEvaluateGaps:
         engine.task_key = "TASK-1"
         engine.task = {"id": 1}
         engine.phase_map = {}
+        engine._resolve_transition.return_value = (None, None, None)
         return engine
 
     @patch("project_workflow.wizard.evaluate.OllamaClient")
@@ -84,6 +85,7 @@ class TestEvaluateGaps:
         mock_parser.parse.return_value = MockLlmResponse(verdict="ROLLBACK")
         mock_client.return_value.chat.return_value = "{}"
         engine = self._engine()
+        engine._resolve_transition.return_value = (None, None, "0")
         ph = _phase(rollback_target="0")
         engine.phase_map = {"0": MagicMock(id=2)}
         result = evaluate_llm_report("rollback", ph, engine)
@@ -96,6 +98,7 @@ class TestEvaluateGaps:
         mock_parser.parse.return_value = MockLlmResponse(verdict="PASS", next_phase="invented")
         mock_client.return_value.chat.return_value = "{}"
         engine = self._engine()
+        engine._resolve_transition.return_value = ("2", "Next", None)
         ph = _phase()
         next_ph = MagicMock(id=5)
         next_ph.code = "2"

@@ -38,7 +38,7 @@
 ## Позиционирование
 
 Пофазовый движок управления задачами.
-Агент получает инструкции текущей фазы через CLI, отправляет текстовый отчёт, а встроенный Wizard обязательно проверяет его через настроенную LLM и выдаёт вердикт: **PASS**, **SOFT_FAIL**, **ROLLBACK** или **BLOCKED**.
+Агент получает инструкции текущей фазы через CLI, отправляет текстовый отчёт, а встроенный Wizard обязательно проверяет его через настроенную LLM и выдаёт вердикт: **PASS**, **SOFT_FAIL**, **ROLLBACK**, **BLOCKED** или **DELEGATE**.
 Всё управление шаблонами workflow, фазами, проектами, агентами и задачами ведётся через Web UI.
 
 CLI остаётся минимальным: ровно две команды — `step` и `history`.
@@ -92,12 +92,12 @@ CLI ожидает `DATABASE_URL`. Единственная модель Wizard 
 
 ```bash
 export DATABASE_URL=postgresql+psycopg://project_workflow:project_workflow@localhost/project_workflow
-export OLLAMA_BASE_URL=https://ollama.com/v1
-export OLLAMA_MODEL=kimi-k2.7-code:cloud
-export OLLAMA_API_KEY=...
+export OLLAMA_BASE_URL=<ollama-compatible-endpoint>
+export OLLAMA_MODEL=<model-name>
+export OLLAMA_API_KEY=<api-key-if-required>
 ```
 
-Если LLM недоступна, истёк timeout или ответ не соответствует контракту, Wizard возвращает `BLOCKED` и workflow не переходит дальше. `project-workflow` не управляет рабочими файлами агента: skill агента может требовать сохранить полученный чек-лист и обновлять его, но в `--report` передаётся текст.
+Если LLM недоступна, истёк timeout или ответ не соответствует контракту, Wizard возвращает `BLOCKED` и workflow не переходит дальше.
 
 <a name="ui"></a>
 ## 🌐 Web UI
@@ -154,7 +154,7 @@ flowchart TD
 |---|---|---|
 | Lint | `ruff check .` | **green** |
 | Type check | `mypy project_workflow` | **green** |
-| Tests | `pytest -q --timeout=60` | **green локально** |
+| Tests | `pytest -q --timeout=60` | основной test suite |
 | Coverage | combined slices (`-p no:cov`) | **~97%** |
 | Systemd UI health | `curl http://localhost:8811/api/tasks` | **200** |
 
