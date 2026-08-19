@@ -5,10 +5,7 @@ from project_workflow.config import get_settings
 from project_workflow.infrastructure.db import schema
 from project_workflow.infrastructure.db.session import ensure_migrated, get_engine
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
-from project_workflow.infrastructure.db.uow_bootstrap import (
-    bootstrap_default_project,
-    bootstrap_smoke_project_and_workflow,
-)
+from project_workflow.infrastructure.db.uow_bootstrap import bootstrap_default_project
 
 __doc__ = """Upgrade the database and bootstrap packaged catalogs once."""
 
@@ -23,7 +20,6 @@ def main() -> int:
     uow = SAUnitOfWork(engine)
     schema.ensure_phase_catalog(uow)
     bootstrap_default_project(uow)
-    bootstrap_smoke_project_and_workflow(uow)
     uow.close()
     print("Initial catalogs ensured")
     return 0

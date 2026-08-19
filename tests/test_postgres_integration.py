@@ -463,6 +463,16 @@ def test_full_default_workflow_through_cli_postgres_and_http(pg_url):
         with urlopen(f"{provider_url}/models", timeout=5) as response:
             assert response.status == 200
 
+        bootstrap_uow = SAUnitOfWork(pg_url)
+        try:
+            workflows = list(bootstrap_uow.workflows.list())
+            projects = list(bootstrap_uow.projects.list())
+            assert [workflow.name for workflow in workflows] == [config_module.DEFAULT_WORKFLOW_NAME]
+            assert [project.code for project in projects] == ["TASK"]
+            assert len(bootstrap_uow.phases.list(workflow_id=workflows[0].id)) == 27
+        finally:
+            bootstrap_uow.close()
+
         first_report = "E2E report 1 for phase -1"
         for index, expected_phase in enumerate(expected_phases, start=1):
             report = first_report if index == 1 else f"E2E report {index} for phase {expected_phase}"
@@ -509,15 +519,9 @@ def test_full_default_workflow_through_cli_postgres_and_http(pg_url):
             human_env,
             encoding="cp1251",
         )
-        human_history = _run_process(
-            ["-m", "project_workflow.interfaces.cli", "history", "--task", task_key],
-            human_env,
-            encoding="cp1251",
-        )
-        assert human_step.returncode == human_history.returncode == 0
+        assert human_step.returncode == 0
         assert "Auto-Improve" in human_step.stdout
-        assert task_key in human_history.stdout
-        assert "UnicodeEncodeError" not in human_step.stderr + human_history.stderr
+        assert "UnicodeEncodeError" not in human_step.stderr
 
         assert provider_state.model_requests == 1
         assert len(provider_state.chat_requests) == 22

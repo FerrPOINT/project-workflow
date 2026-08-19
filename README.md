@@ -180,7 +180,7 @@ flowchart TD
 - [x] mypy `--check-untyped-defs` для wizard/core.py
 - [x] UI-доработки: execution_type на отдельной строке, русское склонение счётчиков, очистка рабочей БД от мусора
 - [x] Wizard evaluate: stateful prompt, три секции в CLI output, явный parallel rendering
-- [x] Smoke seed: real structured-document editor workflow, bootstrapped into PostgreSQL
+- [x] Packaged 27-phase catalog bootstrapped once into an empty PostgreSQL database
 
 Подробный план: [`docs/plans/2026-06-21-detailed-roadmap.md`](docs/plans/2026-06-21-detailed-roadmap.md).
 
