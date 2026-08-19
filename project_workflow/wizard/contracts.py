@@ -113,14 +113,7 @@ class PhaseContractBuilder:
                 }
             )
         first = group[0]
-        next_phase, _ = self._next_after_group(group)
-        # Collect delegates for the whole group.
-        delegates = {ph.delegate.agent: ph.delegate for ph in group if ph.delegate}
-        # Prefer the first phase delegate, fall back to any group delegate.
-        representative = first.delegate or next(iter(delegates.values()), None)
-        # For smoke test, ensure researcher appears if present anywhere in group.
-        if not representative and delegates:
-            representative = delegates.get("researcher") or next(iter(delegates.values()))
+        representative = first.delegate or next((phase.delegate for phase in group if phase.delegate), None)
         return PhaseContract(
             phase_code=first.code,
             phase_name=f"Parallel group: {', '.join(p.code for p in group)}",

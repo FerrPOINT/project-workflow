@@ -19,11 +19,8 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
     runtime_dir.mkdir(parents=True, exist_ok=True)
     test_db = runtime_dir / "workflow.db"
     seed_path = runtime_dir / "seed.json"
-    smoke_seed_path = runtime_dir / "smoke_seed.json"
     repo_seed = Path(__file__).resolve().parents[1] / "project_workflow" / "references" / "seed.json"
-    repo_smoke_seed = Path(__file__).resolve().parents[1] / "project_workflow" / "references" / "smoke_seed.json"
     seed_path.write_text(repo_seed.read_text(encoding="utf-8"), encoding="utf-8")
-    smoke_seed_path.write_text(repo_smoke_seed.read_text(encoding="utf-8"), encoding="utf-8")
 
     database_url = f"sqlite:///{test_db}"
     monkeypatch.setenv("DATABASE_URL", database_url)
@@ -31,7 +28,6 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
     config.get_settings.cache_clear()
 
     monkeypatch.setattr(config, "SEED_PATH", seed_path)
-    monkeypatch.setattr(config, "SMOKE_SEED_PATH", smoke_seed_path)
 
     from project_workflow.infrastructure import db as db_module
 
@@ -81,8 +77,8 @@ def wizard_llm(monkeypatch):
             items: list[tuple[str, str]] = []
             for line in str(kwargs.get("user", "")).splitlines():
                 stripped = line.strip()
-                if stripped.startswith("[") and "] " in stripped:
-                    item_id, text = stripped[1:].split("] ", 1)
+                if stripped.startswith('ID: "') and '" — ' in stripped:
+                    item_id, text = stripped[5:].split('" — ', 1)
                     items.append((item_id, text))
             ids = [item_id for item_id, _ in items]
             by_text = {text: item_id for item_id, text in items}

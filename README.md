@@ -92,9 +92,12 @@ export OPENAI_BASE_URL=https://ollama.com/v1
 export OPENAI_MODEL=qwen3.5:397b
 export OPENAI_TIMEOUT=120
 export OPENAI_API_KEY=<ollama-api-key>
+export OPENAI_REASONING_EFFORT=none
 ```
 
 Для другого совместимого провайдера достаточно заменить `OPENAI_BASE_URL`, `OPENAI_MODEL` и `OPENAI_API_KEY`.
+Если endpoint не поддерживает `reasoning_effort`, задайте `OPENAI_REASONING_EFFORT=`.
+Ollama Online поддерживает это поле, а значение `none` оставляет token budget финальному JSON.
 Локальный Ollama также подключается через совместимый endpoint `http://localhost:11434/v1`.
 
 Fallback evaluator отсутствует: если провайдер недоступен или вернул некорректный JSON, команда остаётся на текущей фазе, возвращает `BLOCKED` и exit code `1`.
@@ -145,7 +148,6 @@ flowchart TD
 - Единый data layer: все операции через SQLAlchemy-модели и репозитории.
 - Единственный evaluator — обязательный LLM; deterministic/reasoning compatibility runtime удалён.
 - UI-пакет (`project_workflow/interfaces/ui/`) — чистое FastAPI-приложение с отдельными routes, services, dependencies.
-- `project_workflow/infrastructure/db/compat.py` — SQLAlchemy-реализация `WorkflowDB`, сохраняющая публичный API для CLI/wizard/tests.
 - Конфигурация централизована в `project_workflow.config` на Pydantic Settings; `DATABASE_URL` обязателен.
 - Легаси удалено: исходный `WorkflowDB`, `db/base.py`, `db_schema.sql`, `wartz-workflow-cli`, `wartz_ui` и устаревшие wizard endpoints больше не существуют.
 
@@ -156,9 +158,9 @@ flowchart TD
 |---|---|---|
 | Lint | `ruff check .` | **green** |
 | Type check | `mypy project_workflow` | **green** |
-| Tests | `pytest -q --timeout=60` | **874 passed, 11 integration deselected** |
+| Tests | `pytest -q --timeout=60` | **865 passed, 11 integration deselected** |
 | PostgreSQL integration | `pytest -q -m integration tests/test_postgres_integration.py --timeout=60` | **11 passed** |
-| Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` | **96.32%** |
+| Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` | **96.16%** |
 | Systemd UI health | `curl http://localhost:8811/api/tasks` | **200** |
 
 <a name="roadmap"></a>
@@ -171,7 +173,7 @@ flowchart TD
 - [x] UI/API переведены на SQLAlchemy-сервисы
 - [x] `WorkflowDB` переписан на SQLAlchemy, `db/base.py` и `db_schema.sql` удалены
 - [x] Legacy `wartz-workflow-cli`, `wartz_ui` и старые wizard endpoints удалены
-- [x] Полный suite: 874 теста green + 11 PostgreSQL integration tests
+- [x] Полный suite: 865 тестов green + 11 PostgreSQL integration tests
 - [x] Postgres-интеграционные тесты
 - [x] `WizardEngine` и wizard-модули собраны в пакет `project_workflow/wizard/`
 - [x] API-тесты на все UI routes

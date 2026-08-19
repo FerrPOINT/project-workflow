@@ -48,7 +48,13 @@ class TestOpenAICompatibleClient:
     def test_ollama_online_defaults(self, monkeypatch):
         from project_workflow.config import get_settings
 
-        for name in ("OPENAI_BASE_URL", "OPENAI_MODEL", "OPENAI_TIMEOUT", "OPENAI_API_KEY"):
+        for name in (
+            "OPENAI_BASE_URL",
+            "OPENAI_MODEL",
+            "OPENAI_TIMEOUT",
+            "OPENAI_API_KEY",
+            "OPENAI_REASONING_EFFORT",
+        ):
             monkeypatch.delenv(name, raising=False)
         get_settings.cache_clear()
         client = OpenAICompatibleClient()
@@ -56,6 +62,7 @@ class TestOpenAICompatibleClient:
         assert client.model == "qwen3.5:397b"
         assert client.timeout == 120
         assert client.api_key == ""
+        assert client.reasoning_effort == "none"
 
     def test_env_overrides(self, monkeypatch):
         from project_workflow.config import get_settings
@@ -64,17 +71,25 @@ class TestOpenAICompatibleClient:
         monkeypatch.setenv("OPENAI_MODEL", "provider-model")
         monkeypatch.setenv("OPENAI_TIMEOUT", "45")
         monkeypatch.setenv("OPENAI_API_KEY", "secret")
+        monkeypatch.setenv("OPENAI_REASONING_EFFORT", "low")
         get_settings.cache_clear()
         client = OpenAICompatibleClient()
         assert client.base_url == "https://provider.example/v1"
         assert client.model == "provider-model"
         assert client.timeout == 45
         assert client.api_key == "secret"
+        assert client.reasoning_effort == "low"
 
     def test_dotenv_overrides(self, tmp_path, monkeypatch):
         from project_workflow.config import get_settings
 
-        for name in ("OPENAI_BASE_URL", "OPENAI_MODEL", "OPENAI_TIMEOUT", "OPENAI_API_KEY"):
+        for name in (
+            "OPENAI_BASE_URL",
+            "OPENAI_MODEL",
+            "OPENAI_TIMEOUT",
+            "OPENAI_API_KEY",
+            "OPENAI_REASONING_EFFORT",
+        ):
             monkeypatch.delenv(name, raising=False)
         monkeypatch.chdir(tmp_path)
         (tmp_path / ".env").write_text(
@@ -92,6 +107,7 @@ class TestOpenAICompatibleClient:
         assert client.model == "dotenv-model"
         assert client.timeout == 35
         assert client.api_key == "dotenv-secret"
+        assert client.reasoning_effort == "none"
 
     def test_chat_parses_json_response(self):
         client = OpenAICompatibleClient(api_key="test-key")
@@ -121,11 +137,23 @@ class TestOpenAICompatibleClient:
             payload = kwargs["json"]
             assert payload["model"] == "test-model"
             assert payload["temperature"] == 0.5
-            assert payload["max_tokens"] == 2000
+            assert payload["max_tokens"] == 4000
+            assert payload["reasoning_effort"] == "none"
             assert "response_format" not in payload
             assert len(payload["messages"]) == 2
             assert payload["messages"][0]["role"] == "system"
             assert payload["messages"][1]["role"] == "user"
+
+    def test_chat_omits_reasoning_effort_when_disabled(self):
+        client = OpenAICompatibleClient(reasoning_effort="")
+        with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
+            mock_post.return_value = MagicMock(
+                json=lambda: {"choices": [{"message": {"content": "{}"}}]},
+                raise_for_status=lambda: None,
+            )
+            client.chat("sys", "usr")
+
+        assert "reasoning_effort" not in mock_post.call_args.kwargs["json"]
 
     def test_chat_empty_content_raises(self):
         client = OpenAICompatibleClient()
@@ -170,10 +198,23 @@ class TestPromptBuilder:
         assert "ALREADY COMPLETED" in prompt
         assert "Run tests" in prompt
 
+    def test_build_user_prompt_marks_ids_without_decorative_brackets(self):
+        phase = FakePhase()
+        prompt = PromptBuilder.build_user_prompt(
+            "T-1",
+            phase,
+            "done",
+            evaluation_items=[("-1:check:1", "Task is clear")],
+        )
+
+        assert 'ID: "-1:check:1"' in prompt
+        assert "[-1:check:1]" not in prompt
+
     def test_system_prompt_is_not_empty(self):
         assert "strict workflow supervisor" in PromptBuilder.SYSTEM_PROMPT
         assert "verdict" in PromptBuilder.SYSTEM_PROMPT
         assert "covered" in PromptBuilder.SYSTEM_PROMPT
+        assert "do not add brackets" in PromptBuilder.SYSTEM_PROMPT
         assert "missing" in PromptBuilder.SYSTEM_PROMPT
 
 

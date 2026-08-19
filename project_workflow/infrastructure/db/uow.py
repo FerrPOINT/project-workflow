@@ -277,17 +277,11 @@ class SAUnitOfWork(UnitOfWork):
         return rows_to_dicts(self.supervisor_runs.list(**kwargs))
 
     def init(self) -> None:
+        from . import schema
+
         self.create_all()
         self._bootstrap_default_project()
-        self._bootstrap_smoke_project_and_workflow()
-
-    def _bootstrap_smoke_project_and_workflow(self) -> None:
-        from .uow_bootstrap import bootstrap_smoke_project_and_workflow
-        bootstrap_smoke_project_and_workflow(self)
-
-    def _ensure_smoke_phases(self) -> None:
-        from .uow_bootstrap import ensure_smoke_phases
-        ensure_smoke_phases(self)
+        schema.ensure_phase_catalog(self)
 
     def _bootstrap_default_project(self) -> None:
         from .uow_bootstrap import bootstrap_default_project

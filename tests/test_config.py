@@ -75,6 +75,3 @@ class TestSettingsHelpers:
 
     def test_default_task_key_prefixes(self):
         assert cfg_module.DEFAULT_TASK_KEY_PREFIXES == ["TASK"]
-
-    def test_smoke_task_key_prefixes(self):
-        assert cfg_module.SMOKE_TASK_KEY_PREFIXES == ["SMOKE"]

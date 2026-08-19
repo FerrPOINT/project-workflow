@@ -31,7 +31,8 @@ class TestEndToEndWorkflow:
         assert "id" in p and "name" in p and "phase_order" in p
         assert "execution_type" in p
         workflows = uow.get_workflows()
-        assert any(w["name"] == "Smoke Test Workflow" for w in workflows)
+        assert [w["name"] for w in workflows] == ["Default Workflow"]
+        assert len(phases) == 27
         agents = uow.get_agents()
         assert len(agents) > 0
 
@@ -84,10 +85,10 @@ class TestEndToEndWorkflow:
             }
         )
         rows = uow.get_phases()
-        assert len(rows) == 1
-        assert "group_id" not in rows[0]
-        assert rows[0]["agent_id"] == agent_id
-        assert rows[0]["execution_type"] == "parallel"
+        phase = next(row for row in rows if row["code"] == "p2")
+        assert "group_id" not in phase
+        assert phase["agent_id"] == agent_id
+        assert phase["execution_type"] == "parallel"
 
     def test_api_serves_phases(self):
         """GET /api/phases отдаёт JSON объект с phases."""

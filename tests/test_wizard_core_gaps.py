@@ -170,7 +170,7 @@ class TestWizardCoreGaps:
             engine._ensure_task()
 
     def test_format_result_pass_sync_after_parallel(self):
-        from project_workflow.wizard.core import format_result
+        from project_workflow.wizard import format_result
 
         text = format_result(
             {
@@ -190,7 +190,7 @@ class TestWizardCoreGaps:
         assert "параллельного блока" not in text
 
     def test_format_result_pass_parallel(self):
-        from project_workflow.wizard.core import format_result
+        from project_workflow.wizard import format_result
 
         text = format_result(
             {

@@ -26,7 +26,7 @@ class TestCoverageAccumulation:
         return engine
 
     def test_get_previously_covered_reads_runs(self, tmp_path, monkeypatch):
-        engine = self._make_engine(tmp_path, monkeypatch, "SMOKE-9999", "0")
+        engine = self._make_engine(tmp_path, monkeypatch, "TASK-9999", "0")
         tid = engine.task["id"]
         pid = engine.db.create_phase(
             {
@@ -80,7 +80,7 @@ class TestEvaluateAccumulationEndToEnd:
         return engine
 
     def test_evaluate_across_reports(self, tmp_path, monkeypatch, wizard_llm):
-        engine = self._make_engine(tmp_path, monkeypatch, "SMOKE-9996", "0")
+        engine = self._make_engine(tmp_path, monkeypatch, "TASK-9996", "0")
         tid = engine.task["id"]
 
         class Check:

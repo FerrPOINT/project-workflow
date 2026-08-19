@@ -82,7 +82,7 @@ class TestWizardEngineIntegration:
         assert result["verdict"] == "BLOCKED"
 
     def test_format_result_pass(self):
-        from project_workflow.wizard.core import format_result
+        from project_workflow.wizard import format_result
 
         text = format_result(
             {
@@ -97,7 +97,7 @@ class TestWizardEngineIntegration:
         assert "Инструкции" in text
 
     def test_format_result_partial(self):
-        from project_workflow.wizard.core import format_result
+        from project_workflow.wizard import format_result
 
         text = format_result(
             {"verdict": "PARTIAL", "instructions": ["i"], "required_checks": ["c"], "required_evidence": ["e"]}
@@ -107,7 +107,7 @@ class TestWizardEngineIntegration:
         assert "  · c" in text
 
     def test_format_result_blocked(self):
-        from project_workflow.wizard.core import format_result
+        from project_workflow.wizard import format_result
 
         text = format_result(
             {"verdict": "BLOCKED", "instructions": ["i"], "required_checks": ["c"], "required_evidence": ["e"]}

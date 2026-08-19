@@ -180,14 +180,16 @@ class TestUowEdgeCases:
         assert task.project_id == project_id
         uow.close()
 
-    def test_init_bootstraps_default_and_smoke(self, monkeypatch):
+    def test_init_bootstraps_only_default_catalog(self, monkeypatch):
         url = config.get_settings().DATABASE_URL
         mark_catalog_not_ensured(url)
         uow = SAUnitOfWork(url)
         uow.init()
-        default_project = uow.projects.get_by_code("DEFAULT")
-        smoke_project = uow.projects.get_by_code("SMOKE")
-        assert default_project is not None or smoke_project is not None
+        projects = list(uow.projects.list())
+        workflows = list(uow.workflows.list())
+        assert [project.code for project in projects] == ["TASK"]
+        assert [workflow.name for workflow in workflows] == ["Default Workflow"]
+        assert len(uow.phases.list(workflow_id=workflows[0].id)) == 27
         uow.close()
 
     def test_context_manager_rolls_back_on_exception(self):

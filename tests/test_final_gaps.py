@@ -22,6 +22,7 @@ from project_workflow.interfaces.ui.services import (
     _load_cli_reference,
 )
 from project_workflow.wizard import core as core_mod
+from project_workflow.wizard import format_result
 
 
 class TestConfigFinalGap:
@@ -191,22 +192,6 @@ class TestSessionFinalGaps:
 
 
 class TestWorkflowServiceFinalGaps:
-    def test_get_or_create_smoke_workflow_existing(self):
-        uow = MagicMock()
-        wf = MagicMock()
-        wf.to_dict.return_value = {"id": 1, "name": "smoke"}
-        uow.workflows.get_by_name.return_value = wf
-        assert WorkflowService(uow).get_or_create_smoke_workflow()["id"] == 1
-
-    def test_get_or_create_smoke_workflow_create(self):
-        uow = MagicMock()
-        uow.workflows.get_by_name.return_value = None
-        created = MagicMock()
-        created.to_dict.return_value = {"id": 2, "name": "smoke"}
-        uow.workflows.get_by_id.return_value = created
-        result = WorkflowService(uow).get_or_create_smoke_workflow()
-        assert result["id"] == 2
-
     def test_get_workflow_by_name_none(self):
         uow = MagicMock()
         uow.workflows.get_by_name.return_value = None
@@ -221,14 +206,6 @@ class TestWorkflowServiceFinalGaps:
 
 
 class TestWizardCoreFinalGaps:
-    def test_ensure_smoke_phases_no_workflow(self, monkeypatch):
-        engine = core_mod.WizardEngine("AAT-1", repo="/tmp")
-        uow = MagicMock()
-        uow.workflows.get_by_name.return_value = None
-        engine._uow = uow
-        engine._ensure_smoke_phases()
-        assert uow.phases.list.called is False
-
     def test_resolve_current_phase_fallback_empty(self):
         engine = core_mod.WizardEngine("AAT-1", repo="/tmp")
         engine.task = {"id": 1, "current_phase": ""}
@@ -264,7 +241,7 @@ class TestWizardCoreFinalGaps:
         mock_llm.assert_called_once()
 
     def test_format_result_pass_parallel(self):
-        text = core_mod.format_result(
+        text = format_result(
             {
                 "verdict": "PASS",
                 "phase_code": "1",
@@ -283,7 +260,7 @@ class TestWizardCoreFinalGaps:
         assert "Параллельная фаза" not in text
 
     def test_format_result_pass_sync_after_parallel(self):
-        text = core_mod.format_result(
+        text = format_result(
             {
                 "verdict": "PASS",
                 "phase_code": "parallel.end",

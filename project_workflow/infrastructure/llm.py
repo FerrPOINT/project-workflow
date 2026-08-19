@@ -44,12 +44,16 @@ class OpenAICompatibleClient:
         model: str | None = None,
         timeout: int | None = None,
         api_key: str | None = None,
+        reasoning_effort: str | None = None,
     ):
         settings = config.get_settings()
         self.base_url = (base_url or settings.OPENAI_BASE_URL).rstrip("/")
         self.model = model or settings.OPENAI_MODEL
         self.timeout = timeout or settings.OPENAI_TIMEOUT
         self.api_key = api_key if api_key is not None else settings.OPENAI_API_KEY
+        self.reasoning_effort = (
+            settings.OPENAI_REASONING_EFFORT if reasoning_effort is None else reasoning_effort
+        ).strip()
 
     def is_available(self) -> bool:
         """Quick health-check."""
@@ -76,8 +80,12 @@ class OpenAICompatibleClient:
                 {"role": "user", "content": user},
             ],
             "temperature": temperature,
-            "max_tokens": 2000,
+            # Reasoning-capable OpenAI-compatible models may spend part of this
+            # budget before emitting the small JSON verdict.
+            "max_tokens": 4000,
         }
+        if self.reasoning_effort:
+            payload["reasoning_effort"] = self.reasoning_effort
 
         resp = requests.post(
             f"{self.base_url}/chat/completions",
@@ -104,7 +112,7 @@ class OpenAICompatibleClient:
 class PromptBuilder:
     """Build prompts from phase contracts + task context."""
 
-    PROMPT_VERSION = "wizard-evaluator-v2"
+    PROMPT_VERSION = "wizard-evaluator-v3"
 
     SYSTEM_PROMPT = (
         "You are a strict workflow supervisor. "
@@ -112,7 +120,8 @@ class PromptBuilder:
         "Rules:\n"
         "1. Read the phase contract (instructions, checks, evidence).\n"
         "2. Analyze the worker report against EACH contract item individually. Do not skip checks.\n"
-        "3. Return every required item ID exactly once in either covered or missing.\n"
+        "3. Return every required item ID exactly once in either covered or missing. "
+        "Copy the ID value exactly: do not add brackets, quotes, prefixes, or suffixes.\n"
         "4. Identify real BLOCKERS with ROOT CAUSE — explain WHY it prevents progress. "
         "Words like 'ошибка'/'error'/'bug' alone are NOT blockers without root cause.\n"
         "5. Verify the worker did NOT break existing functionality, remove working code, or leave orphaned artifacts.\n"
@@ -153,9 +162,9 @@ class PromptBuilder:
                 desc = getattr(inst, "step", "") or getattr(inst, "description", "")
                 lines.append(f"  • {desc}")
         if evaluation_items is not None:
-            lines.append("Required checks and evidence (return these IDs):")
+            lines.append("Required checks and evidence (copy only each quoted ID value into JSON):")
             for item_id, description in evaluation_items:
-                lines.append(f"  [{item_id}] {description}")
+                lines.append(f'  ID: "{item_id}" — {description}')
         else:
             if phase.checks:
                 lines.append("Checks:")

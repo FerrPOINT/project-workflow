@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     OPENAI_MODEL: str = "qwen3.5:397b"
     OPENAI_TIMEOUT: int = 120
     OPENAI_API_KEY: str = ""
+    OPENAI_REASONING_EFFORT: str = "none"
 
     SUITES_DIR: str = os.getenv("SUITES_DIR", str(Path.home() / ".hermes" / "skills" / "software-development"))
 
@@ -74,7 +75,6 @@ def get_settings() -> Settings:
 
 # Seed data paths (moved from schema.py)
 SEED_PATH = _pkg_dir / "references" / "seed.json"
-SMOKE_SEED_PATH = _pkg_dir / "references" / "smoke_seed.json"
 
 PHASE_ORDER = [
     "-1",  # Task Intake
@@ -125,10 +125,6 @@ REVIEWER_PHASES = ["7.5", "7.6"]
 TOKEN_REQUIRED_PHASES = ["8"]
 
 DEFAULT_WORKFLOW_NAME = "Default Workflow"
-SMOKE_WORKFLOW_NAME = "Smoke Test Workflow"
-SMOKE_PROJECT_CODE = "SMOKE"
-SMOKE_PROJECT_NAME = "Smoke CLI Test Project"
-SMOKE_TASK_KEY_PREFIXES = ["SMOKE"]
 DEFAULT_TASK_KEY_PREFIXES = ["TASK"]
 
 

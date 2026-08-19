@@ -51,8 +51,8 @@ python -m project_workflow.interfaces.cli --help
    миграции и bootstrap идемпотентны.
 3. Проверить каталог: ровно 27 фаз, `phase_order` равен `1..27`, а четыре параллельные
    группы совпадают со списком выше. При расхождении остановиться без записи.
-4. Настроить `OPENAI_API_KEY`; значения по умолчанию — `OPENAI_BASE_URL=https://ollama.com/v1`
-   и `OPENAI_MODEL=qwen3.5:397b`. Проверить `/v1/models`, не выводя ключ.
+4. Настроить `OPENAI_API_KEY`; значения по умолчанию — `OPENAI_BASE_URL=https://ollama.com/v1`,
+   `OPENAI_MODEL=qwen3.5:397b` и `OPENAI_REASONING_EFFORT=none`. Проверить `/v1/models`, не выводя ключ.
 5. Создать новый ключ `TASK-<timestamp>` и через `project-workflow --json step` подать
    22 полных отчёта по ID checks/evidence текущего контракта.
 6. После отчёта для `0.6 + 1` убедиться, что текущая группа — `1.5 + 2`, а эти фазы ещё

@@ -20,14 +20,8 @@ from ..application.task import TaskService
 from ..application.workflow import WorkflowService
 from ..infrastructure.db import schema
 from ..infrastructure.db.uow import SAUnitOfWork
-from ..infrastructure.db.uow_bootstrap import (
-    ensure_smoke_phases,
-)
 from .context import WizardContextBuilder
 from .contracts import PhaseContractBuilder
-
-# Backward-compatible re-exports moved to dedicated modules.
-from .formatting import format_result  # noqa: F401
 from .models import Phase
 from .prompt import build_phase_prompt
 
@@ -178,9 +172,6 @@ class WizardEngine:
                 "name": "Default Project",
             }
         )
-
-    def _ensure_smoke_phases(self) -> None:
-        ensure_smoke_phases(self._uow)
 
     def _first_phase_code_for_project(self, project_id: int) -> str:
         project = self._project_service.get_project(project_id)

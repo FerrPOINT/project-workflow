@@ -19,7 +19,7 @@ After any change to the SQLAlchemy layer, application services, UI state, or wiz
    ```bash
    pytest -q --timeout=60
    ```
-   Expected: **874 passed, 11 deselected**, 0 failed, 0 errors. Integration tests
+   Expected: **865 passed, 11 deselected**, 0 failed, 0 errors. Integration tests
    are intentionally deselected here; run them separately as described below.
 
 2. **PostgreSQL integration**
@@ -33,7 +33,7 @@ After any change to the SQLAlchemy layer, application services, UI state, or wiz
    ```bash
    pytest --cov=project_workflow --cov-report=term --timeout=60
    ```
-   Expected: total coverage >= 90%.
+   Expected: total coverage >= 90%. Current baseline: **96.16%**.
 
 4. **Lint**
    ```bash
