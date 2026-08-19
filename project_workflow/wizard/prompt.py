@@ -2,7 +2,7 @@
 
 The prompt is stateful: it includes task history, recent verdicts, and recent
 conversation messages already collected by WizardContextBuilder. This gives the
-LLM (or deterministic consumer) enough context to avoid repeating failures.
+LLM evaluator enough context to avoid repeating failures.
 """
 
 from __future__ import annotations

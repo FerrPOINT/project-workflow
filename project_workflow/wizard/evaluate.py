@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+import hashlib
 from typing import Any
 
 import requests
+from sqlalchemy.exc import IntegrityError
 
+from ..domain.exceptions import ConcurrentTransitionError
 from ..infrastructure.llm import LlmVerdict, OllamaClient, PromptBuilder, ResponseParser
 from .checks import normalize_text
 from .contracts import PhaseContractBuilder
@@ -14,7 +16,12 @@ from .models import Phase
 from .types import VERDICT_LABELS
 
 
-def _blocked(exc: Exception) -> LlmVerdict:
+def _report_fingerprint(task_id: int, report: str) -> str:
+    normalized = normalize_text(report)
+    return hashlib.sha256(f"{task_id}\0{normalized}".encode()).hexdigest()
+
+
+def _blocked(exc: Exception, raw: dict[str, Any] | None = None) -> LlmVerdict:
     return LlmVerdict(
         verdict="BLOCKED",
         covered=[],
@@ -24,8 +31,36 @@ def _blocked(exc: Exception) -> LlmVerdict:
         next_phase=None,
         next_phase_name=None,
         confidence=0.0,
-        raw={"error": type(exc).__name__},
+        raw=raw or {"error": type(exc).__name__},
     )
+
+
+def _replay(engine: Any, task_id: int, fingerprint: str) -> dict[str, Any] | None:
+    run = engine.db.supervisor_runs.get_by_fingerprint(task_id, fingerprint)
+    response = getattr(run, "response", None) if run is not None else None
+    if not isinstance(response, dict):
+        return None
+    result = dict(response)
+    result["replayed"] = True
+    return result
+
+
+def _concurrent_result(result: dict[str, Any]) -> dict[str, Any]:
+    blocked = dict(result)
+    blocked.update(
+        {
+            "verdict": "BLOCKED",
+            "next_phase": None,
+            "next_phase_name": None,
+            "rollback_target": None,
+            "blockers": ["Задача была изменена другим параллельным запуском Wizard."],
+            "message": "Повторите отчёт для актуальной фазы задачи.",
+            "retryable": True,
+            "replayed": False,
+        }
+    )
+    blocked.pop("next_phase_contract", None)
+    return blocked
 
 
 def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any]:
@@ -47,19 +82,43 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
             rollback_target=phase.rollback_target,
         )
 
+    task_id = int(engine.task["id"])
+    fingerprint = _report_fingerprint(task_id, report)
+    replayed = _replay(engine, task_id, fingerprint)
+    if replayed is not None:
+        return replayed
+
+    evaluation_items = (
+        builder.build_parallel_evaluation_items(group) if len(group) > 1 else builder.build_evaluation_items(phase)
+    )
+    item_ids = [item_id for item_id, _ in evaluation_items]
+    item_text = dict(evaluation_items)
     previously = engine._get_previously_covered(phase.code)
-    checklist = builder.build_parallel_checklist(group) if len(group) > 1 else builder.build_checklist(phase)
-    previously_items = [item for item in checklist if normalize_text(item) in previously]
+    previously_ids = {
+        item_id for item_id, text in evaluation_items if item_id in previously or normalize_text(text) in previously
+    }
     user = PromptBuilder.build_user_prompt(
         engine.task_key,
         evaluation_phase,
         report,
-        previously_covered=previously_items or None,
+        previously_covered=sorted(previously_ids) or None,
+        evaluation_items=evaluation_items,
     )
 
+    client = OllamaClient()
+    raw: dict[str, Any] | None = None
+    technical_error = False
     try:
-        raw = OllamaClient().chat(system=PromptBuilder.SYSTEM_PROMPT, user=user, temperature=0.1)
-        llm = ResponseParser.parse(raw)
+        raw = client.chat(system=PromptBuilder.SYSTEM_PROMPT, user=user, temperature=0.1)
+        llm = ResponseParser.parse(
+            raw,
+            required_item_ids=item_ids,
+            previously_covered_ids=previously_ids,
+        )
+        if llm.verdict == "ROLLBACK" and not phase.rollback_target:
+            raise ValueError("rollback target is not configured for the current phase")
+        if llm.verdict == "DELEGATE" and not (phase.is_delegated or phase.delegate):
+            raise ValueError("delegation is not configured for the current phase")
     except (
         requests.RequestException,
         OSError,
@@ -69,35 +128,31 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         IndexError,
         AttributeError,
     ) as exc:
-        llm = _blocked(exc)
+        technical_error = True
+        llm = _blocked(exc, raw)
 
-    if llm.verdict == "ROLLBACK" and not phase.rollback_target:
-        llm = replace(
-            llm,
-            verdict="BLOCKED",
-            blockers=["rollback target is not configured for the current phase"],
-        )
-    if llm.verdict == "DELEGATE" and not (phase.is_delegated or phase.delegate):
-        llm = replace(
-            llm,
-            verdict="BLOCKED",
-            blockers=["delegation is not configured for the current phase"],
-        )
+    covered_ids = llm.covered if not technical_error else [item_id for item_id in item_ids if item_id in previously_ids]
+    missing_ids = (
+        llm.missing if not technical_error else [item_id for item_id in item_ids if item_id not in previously_ids]
+    )
+    covered = [item_text[item_id] for item_id in covered_ids]
+    missing = [item_text[item_id] for item_id in missing_ids]
 
     verdict_key = llm.verdict.lower()
+    blockers = llm.blockers or (["LLM identified blocker"] if verdict_key == "blocked" else [])
     next_phase, next_phase_name, rollback_target = engine._resolve_transition(phase, verdict_key, group)
-    if verdict_key != "pass":
+    if verdict_key != "pass" or technical_error:
         next_phase = None
         next_phase_name = None
-    blockers = llm.blockers or (["LLM identified blocker"] if verdict_key == "blocked" else [])
+        rollback_target = None if technical_error else rollback_target
 
     result: dict[str, Any] = {
         "verdict": VERDICT_LABELS.get(verdict_key, llm.verdict),
         "task_key": engine.task_key,
         "phase": phase.code,
         "phase_name": evaluation_phase.name,
-        "covered": llm.covered,
-        "missing": llm.missing,
+        "covered": covered,
+        "missing": missing,
         "blockers": blockers,
         "current_phase": phase.code,
         "next_phase": rollback_target if verdict_key == "rollback" else next_phase,
@@ -110,38 +165,60 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         "required_evidence": current_contract.required_evidence,
         "group_phases": current_contract.group_phases,
         "group_details": current_contract.group_details,
+        "replayed": False,
+        "retryable": technical_error,
     }
     next_phase_contract = builder.build_next_contract(next_phase) if verdict_key == "pass" else None
     if next_phase_contract is not None:
         result["next_phase_contract"] = next_phase_contract.to_dict()
 
-    task_id = engine.task["id"]
     next_phase_obj = engine.phase_map.get(next_phase) if next_phase else None
     rollback_phase_obj = engine.phase_map.get(rollback_target) if rollback_target else None
+    raw_evaluator = raw if raw is not None else llm.raw
+    run_data = {
+        "task_id": task_id,
+        "phase_id": phase.id,
+        "verdict": verdict_key,
+        "report": report,
+        "covered": covered,
+        "missing": missing,
+        "blockers": blockers,
+        "next_phase_id": next_phase_obj.id if next_phase_obj else None,
+        "rollback_phase_id": rollback_phase_obj.id if rollback_phase_obj else None,
+        "report_fingerprint": None if technical_error else fingerprint,
+        "context_snapshot": {
+            "phase": phase.code,
+            "phase_name": evaluation_phase.name,
+            "model": client.model,
+            "endpoint_mode": "openai-compatible" if client.is_cloud else "ollama-native",
+            "prompt_version": PromptBuilder.PROMPT_VERSION,
+            "contract_snapshot": {
+                **current_contract.to_dict(),
+                "evaluation_items": [{"id": item_id, "text": text} for item_id, text in evaluation_items],
+            },
+            "covered_item_ids": covered_ids,
+            "raw_evaluator": raw_evaluator,
+        },
+        "response": result,
+    }
+
     try:
-        engine._record_evaluation(phase, verdict_key, next_phase, rollback_target, commit=False)
-        engine.db.create_supervisor_run(
-            {
-                "task_id": task_id,
-                "phase_id": phase.id,
-                "verdict": verdict_key,
-                "report": report,
-                "covered": llm.covered,
-                "missing": llm.missing,
-                "blockers": blockers,
-                "next_phase_id": next_phase_obj.id if next_phase_obj else None,
-                "rollback_phase_id": rollback_phase_obj.id if rollback_phase_obj else None,
-                "context_snapshot": {
-                    "phase": phase.code,
-                    "phase_name": evaluation_phase.name,
-                    "current_contract": current_contract.to_dict(),
-                },
-                "response": result,
-            }
-        )
+        engine.db.create_supervisor_run(run_data)
+        if not technical_error:
+            engine._record_evaluation(phase, verdict_key, next_phase, rollback_target, commit=False)
         engine.db.commit()
+    except IntegrityError:
+        engine.db.rollback()
+        replayed = _replay(engine, task_id, fingerprint)
+        if replayed is not None:
+            return replayed
+        raise
+    except ConcurrentTransitionError:
+        engine.db.rollback()
+        return _concurrent_result(result)
     except Exception:
         engine.db.rollback()
         raise
+
     engine._refresh_task_state()
     return result

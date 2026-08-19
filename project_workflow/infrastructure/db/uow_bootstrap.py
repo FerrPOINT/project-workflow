@@ -45,6 +45,8 @@ def ensure_smoke_phases(uow: SAUnitOfWork) -> None:
     smoke_wf = uow.workflows.get_by_name(config.SMOKE_WORKFLOW_NAME)
     if not smoke_wf:
         return
+    if uow.phases.list(workflow_id=smoke_wf.id):
+        return
     seed_phases = schema.load_phases_from_seed(config.SMOKE_SEED_PATH)
     # Ensure agents referenced by selected_agent exist first.
     for phase in seed_phases:
@@ -53,7 +55,6 @@ def ensure_smoke_phases(uow: SAUnitOfWork) -> None:
             uow.agents.create({"name": agent_name, "description": f"Smoke seed agent for {phase.code}"})
     uow.commit()
 
-    existing_by_code = {p.code: p for p in uow.phases.list(workflow_id=smoke_wf.id)}
     for order, phase in enumerate(seed_phases, start=1):
         data = {
             "workflow_id": smoke_wf.id,
@@ -72,16 +73,10 @@ def ensure_smoke_phases(uow: SAUnitOfWork) -> None:
             agent = uow.agents.get_by_name(phase.delegate.agent)
             if agent:
                 data["agent_id"] = agent.id
-        existing = existing_by_code.get(phase.code)
-        if existing:
-            assert existing.id is not None
-            uow.phases.update(existing.id, data)
-            phase_id = existing.id
-        else:
-            phase_id = uow.phases.create(data)
+        phase_id = uow.phases.create(data)
 
         assert phase_id is not None
-        # Sync instructions, checks, evidence from seed (idempotent upsert)
+        # Populate content for this newly created catalog phase.
         uow.instructions.delete_for_phase(int(phase_id))
         for idx, instr in enumerate(phase.instructions, start=1):
             uow.instructions.create(

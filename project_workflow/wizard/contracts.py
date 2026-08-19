@@ -151,6 +151,26 @@ class PhaseContractBuilder:
                 deduped.append(item.strip())
         return deduped
 
+    def build_evaluation_items(self, phase: Phase) -> list[tuple[str, str]]:
+        """Stable internal IDs paired with public checklist text."""
+        items: list[tuple[str, str]] = []
+        for index, check in enumerate(phase.checks, start=1):
+            text = text_from_check(check)
+            if text:
+                item_id = getattr(check, "id", None)
+                token = item_id if item_id is not None else index
+                items.append((f"{phase.code}:check:{token}", text))
+        for index, evidence in enumerate(phase.evidence, start=1):
+            text = text_from_evidence(evidence)
+            if text:
+                item_id = getattr(evidence, "id", None)
+                token = item_id if item_id is not None else index
+                items.append((f"{phase.code}:evidence:{token}", text))
+        return items
+
+    def build_parallel_evaluation_items(self, group: list[Phase]) -> list[tuple[str, str]]:
+        return [item for phase in group for item in self.build_evaluation_items(phase)]
+
     def build_parallel_checklist(self, group: list[Phase]) -> list[str]:
         items: list[str] = []
         for ph in group:

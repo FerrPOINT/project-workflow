@@ -120,7 +120,8 @@ sudo systemctl daemon-reload
 sudo systemctl restart project-workflow-ui.service
 ```
 
-При старте автоматически создаётся схема `project_workflow`, таблицы и baseline-версия Alembic.
+Перед первым запуском `scripts/init_db.py` применяет `alembic upgrade head` и заполняет
+каталоги только в пустой БД. Последующие запуски не перезаписывают изменения из UI.
 
 <a name="architecture"></a>
 ## 🏗️ Architecture
@@ -134,7 +135,7 @@ flowchart TD
     Repo --> DB[(PostgreSQL)]
     WE --> SV[Supervisor / LLM checks]
     SV -->|verdict| WE
-    Seed[schema.py seed loader] --> DB
+    Seed[packaged seed, empty DB only] --> DB
 ```
 
 ### Принципы
@@ -153,11 +154,10 @@ flowchart TD
 |---|---|---|
 | Lint | `ruff check .` | **green** |
 | Type check | `mypy project_workflow` | **green** |
-| Tests | `pytest -q --timeout=60` | **859 passed, 6 deselected** |
-| Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` | **96.48%** |
+| Tests | `pytest -q --timeout=60` | **871 passed, 9 deselected** |
+| PostgreSQL integration | `pytest -q -m integration tests/test_postgres_integration.py --timeout=60` | **9 passed** |
+| Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` | **96.33%** |
 | Systemd UI health | `curl http://localhost:8811/api/tasks` | **200** |
-
-> **Примечание:** `pytest -n auto` без `--forked` может зависнуть из-за FD exhaustion при SQLite WAL. В CI и на WARTZ используем `--forked`. Параллельный прогон без forked актуален только для PostgreSQL-бекенда.
 
 <a name="roadmap"></a>
 ## 🗺️ Roadmap
@@ -169,7 +169,7 @@ flowchart TD
 - [x] UI/API переведены на SQLAlchemy-сервисы
 - [x] `WorkflowDB` переписан на SQLAlchemy, `db/base.py` и `db_schema.sql` удалены
 - [x] Legacy `wartz-workflow-cli`, `wartz_ui` и старые wizard endpoints удалены
-- [x] Полный suite: 859 тестов green
+- [x] Полный suite: 871 тест green + 9 PostgreSQL integration tests
 - [x] Postgres-интеграционные тесты
 - [x] `WizardEngine` и wizard-модули собраны в пакет `project_workflow/wizard/`
 - [x] API-тесты на все UI routes
@@ -178,7 +178,7 @@ flowchart TD
 - [x] mypy `--check-untyped-defs` для wizard/core.py
 - [x] UI-доработки: execution_type на отдельной строке, русское склонение счётчиков, очистка рабочей БД от мусора
 - [x] Wizard evaluate: stateful prompt, три секции в CLI output, явный parallel rendering
-- [x] Smoke seed: real structured-document editor workflow, synced to PostgreSQL UI
+- [x] Smoke seed: real structured-document editor workflow, bootstrapped into PostgreSQL
 
 Подробный план: [`docs/plans/2026-06-21-detailed-roadmap.md`](docs/plans/2026-06-21-detailed-roadmap.md).
 

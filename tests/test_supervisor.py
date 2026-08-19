@@ -163,7 +163,7 @@ def test_supervisor_evaluate_pass_updates_db_state_and_persists_run(tmp_path: Pa
     assert len(runs) == 1
     assert runs[0].verdict == "pass"
     assert runs[0].response["next_phase"] == "sup.review"
-    assert runs[0].context_snapshot["current_contract"]["phase_code"] == "sup.intake"
+    assert runs[0].context_snapshot["contract_snapshot"]["phase_code"] == "sup.intake"
 
 
 def test_supervisor_rolls_back_gate_phase_when_report_is_blocked(tmp_path: Path, monkeypatch, wizard_llm) -> None:

@@ -110,6 +110,7 @@ def test_parallel_group_pass_advances_all_phases(tmp_path: Path, monkeypatch, wi
     # Move to parallel-a
     uow.update_task(engine.task["id"], {"current_phase": "smoke.parallel-a"})
     uow.commit()
+    engine.task = engine.db.get_task(engine.task["id"])
     engine.current_phase = "smoke.parallel-a"
 
     # Full report covering both parallel branches
@@ -157,6 +158,7 @@ def test_parallel_group_partial_stays_on_group(tmp_path: Path, monkeypatch, wiza
     engine = WizardEngine("SMOKE-102")
     uow.update_task(engine.task["id"], {"current_phase": "smoke.parallel-a"})
     uow.commit()
+    engine.task = engine.db.get_task(engine.task["id"])
     engine.current_phase = "smoke.parallel-a"
 
     # Only parser branch covered → soft_fail
@@ -183,7 +185,7 @@ def test_parallel_group_partial_stays_on_group(tmp_path: Path, monkeypatch, wiza
     assert task["current_phase"] == "smoke.parallel-a"
 
 
-def test_parallel_group_blocked_stays_on_group(tmp_path: Path, monkeypatch):
+def test_parallel_group_blocked_stays_on_group(tmp_path: Path, monkeypatch, wizard_llm):
     """Blocked report does NOT advance or mark any parallel phase done."""
     workflow_db = _patch_runtime(monkeypatch, tmp_path)
     uow = SAUnitOfWork(str(workflow_db))
@@ -193,9 +195,11 @@ def test_parallel_group_blocked_stays_on_group(tmp_path: Path, monkeypatch):
     engine = WizardEngine("SMOKE-103")
     uow.update_task(engine.task["id"], {"current_phase": "smoke.parallel-a"})
     uow.commit()
+    engine.task = engine.db.get_task(engine.task["id"])
     engine.current_phase = "smoke.parallel-a"
 
     report = "Blocker: dependency mismatch. Cannot proceed."
+    wizard_llm("BLOCKED", blockers=["dependency mismatch"])
     result = engine.evaluate(report)
 
     assert result["verdict"] == "BLOCKED"

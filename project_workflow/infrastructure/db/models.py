@@ -13,6 +13,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     String,
     Text,
     UniqueConstraint,
@@ -248,10 +249,17 @@ class SupervisorRun(Base):
     blockers: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
     next_phase_id: Mapped[int | None] = mapped_column(ForeignKey("phases.id"), nullable=True)
     rollback_phase_id: Mapped[int | None] = mapped_column(ForeignKey("phases.id"), nullable=True)
+    report_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
     context_snapshot: Mapped[str] = mapped_column(Text, nullable=False, default="{}", server_default="{}")
     response: Mapped[str] = mapped_column(Text, nullable=False, default="{}", server_default="{}")
     created_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
     __table_args__ = (
+        Index(
+            "uq_supervisor_runs_task_report_fingerprint",
+            "task_id",
+            "report_fingerprint",
+            unique=True,
+        ),
         CheckConstraint(
             "verdict IN ('pass', 'partial', 'soft_fail', 'hard_fail', 'blocked', 'rollback', 'delegate')",
             name="ck_supervisor_runs_verdict",

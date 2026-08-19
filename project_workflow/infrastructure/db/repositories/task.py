@@ -7,7 +7,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from project_workflow.domain import Task
@@ -80,6 +80,24 @@ class SATaskRepository(TaskRepository):
         for key, val in data.items():
             if hasattr(row, key):
                 setattr(row, key, val)
+
+    def update_if_state(
+        self,
+        task_id: int,
+        expected_phase: str,
+        expected_status: str,
+        data: dict[str, Any],
+    ) -> bool:
+        result = self._session.execute(
+            update(m.Task)
+            .where(
+                m.Task.id == task_id,
+                m.Task.current_phase == expected_phase,
+                m.Task.status == expected_status,
+            )
+            .values(**data)
+        )
+        return getattr(result, "rowcount", 0) == 1
 
     def add_history(self, task_id: int, phase_id: int, status: str) -> None:
         # Check pending objects first to avoid duplicate inserts inside the same session.

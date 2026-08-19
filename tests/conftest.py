@@ -77,17 +77,51 @@ def wizard_llm(monkeypatch):
         missing: list[str] | None = None,
         blockers: list[str] | None = None,
     ) -> None:
+        def chat(*_args, **kwargs):
+            items: list[tuple[str, str]] = []
+            for line in str(kwargs.get("user", "")).splitlines():
+                stripped = line.strip()
+                if stripped.startswith("[") and "] " in stripped:
+                    item_id, text = stripped[1:].split("] ", 1)
+                    items.append((item_id, text))
+            ids = [item_id for item_id, _ in items]
+            by_text = {text: item_id for item_id, text in items}
+
+            def resolve(values: list[str] | None, available: list[str]) -> list[str]:
+                resolved: list[str] = []
+                for value in values or []:
+                    item_id = value if value in ids else by_text.get(value)
+                    if item_id is None and available:
+                        item_id = available.pop(0)
+                    if item_id is not None and item_id not in resolved:
+                        resolved.append(item_id)
+                return resolved
+
+            available = list(ids)
+            covered_ids = resolve(covered, available)
+            available = [item_id for item_id in available if item_id not in covered_ids]
+            missing_ids = resolve(missing, available)
+            if verdict == "PASS":
+                covered_ids = ids
+                missing_ids = []
+            else:
+                missing_ids.extend(
+                    item_id for item_id in ids if item_id not in covered_ids and item_id not in missing_ids
+                )
+
+            return {
+                "verdict": verdict,
+                "covered": covered_ids,
+                "missing": missing_ids,
+                "blockers": blockers or (["Test blocker"] if verdict == "BLOCKED" else []),
+                "message": f"Test Wizard verdict: {verdict}",
+                "confidence": 1.0,
+            }
+
         monkeypatch.setattr(
             OllamaClient,
             "chat",
-            lambda *_args, **_kwargs: {
-                "verdict": verdict,
-                "covered": covered or [],
-                "missing": missing or [],
-                "blockers": blockers or [],
-                "message": f"Test Wizard verdict: {verdict}",
-                "confidence": 1.0,
-            },
+            chat,
         )
 
     return install

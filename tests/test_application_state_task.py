@@ -100,14 +100,11 @@ class TestAppState:
     def test_reset(self):
         state = _AppState("sqlite:///reset.db")
         url = state._database_url_normalized()
-        from project_workflow.application.state import _MIGRATED_URLS
         from project_workflow.infrastructure.db.schema import _CATALOG_ENSURED_URLS
 
         _CATALOG_ENSURED_URLS.add(url)
-        _MIGRATED_URLS.add(url)
         state.reset()
         assert url not in _CATALOG_ENSURED_URLS
-        assert url not in _MIGRATED_URLS
 
     def test_service_factories(self):
         state = MagicMock(spec=_AppState)

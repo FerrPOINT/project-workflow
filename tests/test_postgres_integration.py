@@ -8,9 +8,13 @@ Run them explicitly with:
 from __future__ import annotations
 
 import os
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+from unittest.mock import patch
 
 import psycopg
 import pytest
+from sqlalchemy import inspect
 
 from project_workflow import config as config_module
 from project_workflow.infrastructure.db.session import (
@@ -18,6 +22,7 @@ from project_workflow.infrastructure.db.session import (
     ensure_schema,
     get_engine,
     reset_engine,
+    run_alembic_command,
 )
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
@@ -49,6 +54,9 @@ def pg_url(monkeypatch):
     monkeypatch.setenv("DB_SCHEMA", "project_workflow")
     config_module.get_settings.cache_clear()
     reset_engine()
+    from project_workflow.infrastructure.db.schema import mark_catalog_not_ensured
+
+    mark_catalog_not_ensured()
 
     yield base_url
 
@@ -90,6 +98,45 @@ class TestPostgresSession:
 
             version = conn.execute(text("SELECT version_num FROM project_workflow.alembic_version")).scalar()
         assert version is not None
+
+    def test_upgrade_preserves_existing_run_and_creates_unique_index(self, pg_url):
+        from project_workflow.infrastructure.db import schema
+        from project_workflow.infrastructure.db.uow_bootstrap import bootstrap_default_project
+
+        engine = get_engine(pg_url)
+        ensure_migrated(engine)
+        uow = SAUnitOfWork(engine)
+        schema.ensure_phase_catalog(uow)
+        bootstrap_default_project(uow)
+        project = uow.projects.get_by_code("TASK")
+        phase = uow.phases.list(workflow_id=project.workflow_id)[0]
+        task_id = uow.tasks.create(
+            {"project_id": project.id, "task_key": "TASK-MIGRATION", "current_phase": phase.code}
+        )
+        run_id = uow.supervisor_runs.create(
+            {"task_id": task_id, "phase_id": phase.id, "verdict": "partial", "report": "old"}
+        )
+        uow.commit()
+        uow.close()
+
+        run_alembic_command("downgrade", engine, "becf90549ae1")
+        assert "report_fingerprint" not in {
+            column["name"] for column in inspect(engine).get_columns("supervisor_runs", schema="project_workflow")
+        }
+        ensure_migrated(engine)
+        ensure_migrated(engine)
+
+        columns = {
+            column["name"] for column in inspect(engine).get_columns("supervisor_runs", schema="project_workflow")
+        }
+        indexes = {index["name"] for index in inspect(engine).get_indexes("supervisor_runs", schema="project_workflow")}
+        assert "report_fingerprint" in columns
+        assert "uq_supervisor_runs_task_report_fingerprint" in indexes
+        check_uow = SAUnitOfWork(engine)
+        try:
+            assert check_uow.supervisor_runs.list(task_id=task_id)[0].id == run_id
+        finally:
+            check_uow.close()
 
 
 @pytest.mark.integration
@@ -145,3 +192,78 @@ class TestPostgresUoW:
         with uow:
             ids = {w.id for w in uow.workflows.list()}
             assert wf_id not in ids
+
+
+def _pass_response(user_prompt: str) -> dict:
+    item_ids = []
+    for line in user_prompt.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("[") and "] " in stripped:
+            item_ids.append(stripped[1:].split("] ", 1)[0])
+    return {
+        "verdict": "PASS",
+        "covered": item_ids,
+        "missing": [],
+        "blockers": [],
+        "message": "ok",
+        "confidence": 1.0,
+    }
+
+
+def _prepare_concurrent_task(pg_url: str, task_key: str) -> None:
+    from project_workflow.infrastructure.db import schema
+    from project_workflow.infrastructure.db.uow_bootstrap import bootstrap_default_project
+
+    engine = get_engine(pg_url)
+    ensure_migrated(engine)
+    uow = SAUnitOfWork(engine)
+    schema.ensure_phase_catalog(uow)
+    bootstrap_default_project(uow)
+    project = uow.projects.get_by_code("TASK")
+    phase = uow.phases.list(workflow_id=project.workflow_id)[0]
+    uow.tasks.create({"project_id": project.id, "task_key": task_key, "current_phase": phase.code})
+    uow.commit()
+    uow.close()
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("same_report", [True, False])
+def test_concurrent_reports_create_one_transition_and_run(pg_url, same_report):
+    from project_workflow.wizard import WizardEngine
+
+    task_key = "TASK-CONCURRENT"
+    _prepare_concurrent_task(pg_url, task_key)
+    barrier = Barrier(2)
+
+    def evaluate(report: str):
+        uow = SAUnitOfWork(pg_url)
+        engine = WizardEngine(task_key, uow=uow, create_if_missing=False)
+        barrier.wait()
+        try:
+            return engine.evaluate(report)
+        finally:
+            uow.close()
+
+    reports = ["same report", "same report" if same_report else "different report"]
+    with (
+        patch(
+            "project_workflow.wizard.evaluate.OllamaClient.chat",
+            side_effect=lambda *_args, **kwargs: _pass_response(kwargs["user"]),
+        ),
+        ThreadPoolExecutor(max_workers=2) as pool,
+    ):
+        results = list(pool.map(evaluate, reports))
+
+    uow = SAUnitOfWork(pg_url)
+    task = uow.tasks.get_by_key(task_key)
+    runs = uow.supervisor_runs.list(task_id=task.id)
+    history = uow.tasks.get_history(task.id)
+    uow.close()
+
+    assert len(runs) == 1
+    assert history
+    assert sum(result["verdict"] == "PASS" for result in results) == (2 if same_report else 1)
+    if same_report:
+        assert sum(result["replayed"] is True for result in results) == 1
+    else:
+        assert sum(result["verdict"] == "BLOCKED" and result["retryable"] is True for result in results) == 1

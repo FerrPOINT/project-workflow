@@ -199,30 +199,34 @@ class TestResponseParser:
         v = ResponseParser.parse(raw)
         assert v.verdict == "PASS"
 
-    def test_pass_with_blockers_is_blocked(self):
-        v = ResponseParser.parse({"verdict": "PASS", "blockers": ["No access"]})
-        assert v.verdict == "BLOCKED"
+    def test_pass_with_blockers_is_rejected(self):
+        with pytest.raises(ValueError):
+            ResponseParser.parse({"verdict": "PASS", "covered": [], "missing": [], "blockers": ["No access"]})
 
-    def test_pass_with_missing_items_is_partial(self):
-        v = ResponseParser.parse({"verdict": "PASS", "missing": ["Run tests"]})
-        assert v.verdict == "PARTIAL"
+    def test_pass_with_missing_items_is_rejected(self):
+        with pytest.raises(ValueError):
+            ResponseParser.parse(
+                {"verdict": "PASS", "covered": [], "missing": ["Run tests"], "blockers": []}
+            )
 
     def test_parse_optional_fields_get_defaults(self):
-        v = ResponseParser.parse({"verdict": "PARTIAL"})
+        v = ResponseParser.parse({"verdict": "PARTIAL", "covered": [], "missing": ["item"], "blockers": []})
         assert v.verdict == "PARTIAL"
         assert v.covered == []
-        assert v.missing == []
+        assert v.missing == ["item"]
         assert v.blockers == []
         assert v.message == ""
         assert v.confidence == 0.5
 
     @pytest.mark.parametrize("value", [1.5, -0.3, None, "unknown", float("nan"), True])
     def test_parse_invalid_confidence_uses_default(self, value):
-        assert ResponseParser.parse({"verdict": "PASS", "confidence": value}).confidence == 0.5
+        raw = {"verdict": "PASS", "covered": [], "missing": [], "blockers": [], "confidence": value}
+        assert ResponseParser.parse(raw).confidence == 0.5
 
     @pytest.mark.parametrize("value", [None, 42, [], {}])
     def test_parse_invalid_message_uses_default(self, value):
-        assert ResponseParser.parse({"verdict": "PASS", "message": value}).message == ""
+        raw = {"verdict": "PASS", "covered": [], "missing": [], "blockers": [], "message": value}
+        assert ResponseParser.parse(raw).message == ""
 
     def test_parse_string_instead_of_list_is_rejected(self):
         raw = {
@@ -267,37 +271,17 @@ class TestWizardEngineEvaluateLLM:
             engine = WizardEngine("TASK-LLM-1", repo=str(tmp_path))
         return engine
 
-    def test_evaluate_llm_pass(self, engine):
-        llm_response = {
-            "verdict": "PASS",
-            "covered": ["Check git"],
-            "missing": [],
-            "blockers": [],
-            "message": "✅ Good",
-            "next_phase": "2",
-            "next_phase_name": "Next",
-            "confidence": 0.95,
-        }
-        with patch("project_workflow.wizard.evaluate.OllamaClient.chat") as mock_chat:
-            mock_chat.return_value = llm_response
-            result = engine.evaluate_llm("I checked git", engine._get_current_phase_obj())
+    def test_evaluate_llm_pass(self, engine, wizard_llm):
+        wizard_llm("PASS")
+        result = engine.evaluate_llm("I checked git", engine._get_current_phase_obj())
         assert result["verdict"] == "PASS"
         assert result["phase"] == "-1"
-        assert result["covered"] == ["Check git"]
+        assert result["covered"]
         assert result["missing"] == []
 
-    def test_evaluate_llm_blocked(self, engine):
-        llm_response = {
-            "verdict": "BLOCKED",
-            "covered": [],
-            "missing": ["Check git"],
-            "blockers": ["No access"],
-            "message": "🔴 Blocked",
-            "confidence": 0.9,
-        }
-        with patch("project_workflow.wizard.evaluate.OllamaClient.chat") as mock_chat:
-            mock_chat.return_value = llm_response
-            result = engine.evaluate_llm("Cannot access", engine._get_current_phase_obj())
+    def test_evaluate_llm_blocked(self, engine, wizard_llm):
+        wizard_llm("BLOCKED", blockers=["No access"])
+        result = engine.evaluate_llm("Cannot access", engine._get_current_phase_obj())
         assert result["verdict"] == "BLOCKED"
         assert result["blockers"] == ["No access"]
 
@@ -307,18 +291,12 @@ class TestWizardEngineEvaluateLLM:
         assert result["verdict"] == "BLOCKED"
         assert result["next_phase"] is None
 
-    def test_evaluate_llm_uses_previously_covered(self, engine):
+    def test_evaluate_llm_uses_previously_covered(self, engine, wizard_llm):
         """LLM prompt includes previously covered items."""
-        llm_response = {
-            "verdict": "PASS",
-            "covered": ["Item A", "Item B"],
-            "missing": [],
-            "blockers": [],
-            "message": "Done",
-            "confidence": 0.9,
-        }
+        wizard_llm("PASS")
+        fixture_chat = OllamaClient.chat
         with patch("project_workflow.wizard.evaluate.OllamaClient.chat") as mock_chat:
-            mock_chat.return_value = llm_response
+            mock_chat.side_effect = fixture_chat
             engine.evaluate_llm("Report", engine._get_current_phase_obj())
             args, kwargs = mock_chat.call_args
             # The prompt builder does NOT include previously covered items
@@ -356,23 +334,35 @@ class TestOllamaResponseParserEdgeCases:
     """Edge-case parsing for LLM responses."""
 
     def test_parse_confidence_none_defaults_to_half(self):
-        raw = {"verdict": "PASS", "confidence": None}
+        raw = {"verdict": "PASS", "covered": [], "missing": [], "blockers": [], "confidence": None}
         v = ResponseParser.parse(raw)
         assert v.confidence == 0.5
 
     def test_parse_blockers_with_whitespace_strings(self):
-        raw = {"verdict": "BLOCKED", "blockers": ["  ", "real blocker", ""]}
+        raw = {
+            "verdict": "BLOCKED",
+            "covered": [],
+            "missing": [],
+            "blockers": ["  ", "real blocker", ""],
+        }
         v = ResponseParser.parse(raw)
         assert v.blockers == ["real blocker"]
 
     def test_parse_next_phase_null_from_llm(self):
-        raw = {"verdict": "PASS", "next_phase": None, "next_phase_name": None}
+        raw = {
+            "verdict": "PASS",
+            "covered": [],
+            "missing": [],
+            "blockers": [],
+            "next_phase": None,
+            "next_phase_name": None,
+        }
         v = ResponseParser.parse(raw)
         assert v.next_phase is None
         assert v.next_phase_name is None
 
     def test_parse_preserves_raw_response(self):
-        raw = {"verdict": "PASS", "extra_key": "preserved"}
+        raw = {"verdict": "PASS", "covered": [], "missing": [], "blockers": [], "extra_key": "preserved"}
         v = ResponseParser.parse(raw)
         assert v.raw["extra_key"] == "preserved"
 
@@ -428,85 +418,45 @@ class TestWizardEngineLLMIntegrationDB:
             engine = WizardEngine("DB-LLM-1", repo=str(tmp_path))
         return engine
 
-    def test_supervisor_run_recorded_after_llm_evaluate(self, engine):
-        llm_response = {
-            "verdict": "PASS",
-            "covered": ["Done"],
-            "missing": [],
-            "blockers": [],
-            "message": "All good",
-            "next_phase": "2",
-            "next_phase_name": "Next",
-            "confidence": 0.95,
-        }
-        with patch("project_workflow.wizard.evaluate.OllamaClient.chat") as mock_chat:
-            mock_chat.return_value = llm_response
-            engine.evaluate("Report")
+    def test_supervisor_run_recorded_after_llm_evaluate(self, engine, wizard_llm):
+        wizard_llm("PASS")
+        engine.evaluate("Report")
 
         runs = engine.db.get_supervisor_runs(task_key="DB-LLM-1", limit=5)
         assert len(runs) == 1
         run = runs[0]
         assert run["verdict"] == "pass"
         assert run["report"] == "Report"
-        assert run["covered"] == ["Done"]
+        assert run["covered"]
         assert run["missing"] == []
+        assert run["report_fingerprint"]
 
-    def test_task_phase_advanced_after_llm_pass(self, engine):
-        llm_response = {
-            "verdict": "PASS",
-            "covered": ["Done"],
-            "missing": [],
-            "blockers": [],
-            "message": "All good",
-            "next_phase": "2",
-            "next_phase_name": "Next",
-            "confidence": 0.95,
-        }
-        with patch("project_workflow.wizard.evaluate.OllamaClient.chat") as mock_chat:
-            mock_chat.return_value = llm_response
-            engine.evaluate("Report")
+    def test_task_phase_advanced_after_llm_pass(self, engine, wizard_llm):
+        wizard_llm("PASS")
+        engine.evaluate("Report")
 
         task = engine.db.get_task(engine.task["id"])
         assert task["current_phase"] == "0.0a"
 
-    def test_task_blocked_after_llm_blocked(self, engine):
-        llm_response = {
-            "verdict": "BLOCKED",
-            "covered": [],
-            "missing": ["Need X"],
-            "blockers": ["No access"],
-            "message": "Blocked",
-            "confidence": 0.9,
-        }
-        with patch("project_workflow.wizard.evaluate.OllamaClient.chat") as mock_chat:
-            mock_chat.return_value = llm_response
-            engine.evaluate("Report")
+    def test_task_blocked_after_llm_blocked(self, engine, wizard_llm):
+        wizard_llm("BLOCKED", blockers=["No access"])
+        engine.evaluate("Report")
 
         task = engine.db.get_task(engine.task["id"])
         assert task["current_phase"] == "-1"
         assert task["status"] == "blocked"
 
-    def test_llm_rollback_records_history(self, engine):
-        llm_response = {
-            "verdict": "ROLLBACK",
-            "covered": [],
-            "missing": [],
-            "blockers": [],
-            "message": "Rollback",
-            "confidence": 0.8,
-        }
-        with patch("project_workflow.wizard.evaluate.OllamaClient.chat") as mock_chat:
-            mock_chat.return_value = llm_response
-            _ = engine.evaluate("Report")
+    def test_rollback_without_config_is_retryable_and_has_no_transition(self, engine, wizard_llm):
+        wizard_llm("ROLLBACK")
+        result = engine.evaluate("Report")
 
-        # Check that task remains in a valid state after rollback
+        assert result["verdict"] == "BLOCKED"
+        assert result["retryable"] is True
         task = engine.db.get_task(engine.task["id"])
-        assert task["status"] in ("active", "blocked")
-        # History should contain at least one entry
-        history = engine.db.get_task_history(engine.task["id"])
-        assert len(history) >= 1
+        assert task["status"] == "active"
+        assert engine.db.get_task_history(engine.task["id"]) == []
 
-    def test_supervisor_run_failure_rolls_back_db_and_engine_state(self, engine, monkeypatch):
+    def test_supervisor_run_failure_rolls_back_db_and_engine_state(self, engine, monkeypatch, wizard_llm):
         task_id = engine.task["id"]
         original_task = dict(engine.task)
         original_phase = engine.current_phase
@@ -516,13 +466,8 @@ class TestWizardEngineLLMIntegrationDB:
             lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("supervisor write failed")),
         )
 
-        with (
-            patch(
-                "project_workflow.wizard.evaluate.OllamaClient.chat",
-                return_value={"verdict": "PASS", "covered": [], "missing": [], "blockers": []},
-            ),
-            pytest.raises(RuntimeError, match="supervisor write failed"),
-        ):
+        wizard_llm("PASS")
+        with pytest.raises(RuntimeError, match="supervisor write failed"):
             engine.evaluate("Report")
 
         persisted = engine.db.get_task(task_id)

@@ -22,9 +22,9 @@ console = Console()
 WARN = "[yellow]⚠️[/yellow]"
 
 
-def out_json(data: dict[str, Any]) -> None:
+def out_json(data: dict[str, Any], exit_code: int | None = None) -> None:
     click.echo(json.dumps(data, indent=2, ensure_ascii=False))
-    sys.exit(0 if data.get("ok", True) else 1)
+    sys.exit(exit_code if exit_code is not None else (0 if data.get("ok", True) else 1))
 
 
 def _get_task_key_validator(uow=None) -> task_validator.TaskKeyValidator:
@@ -33,8 +33,10 @@ def _get_task_key_validator(uow=None) -> task_validator.TaskKeyValidator:
 
     if uow is None:
         uow = SAUnitOfWork()
-    uow.init()
-    schema.ensure_phase_catalog(uow)
+    bind = uow.session.get_bind()
+    if bind.dialect.name == "sqlite":
+        uow.init()
+        schema.ensure_phase_catalog(uow)
     projects_raw = uow.projects.list()
     projects = [p.to_dict() for p in projects_raw]
     return task_validator.TaskKeyValidator.from_projects(projects)

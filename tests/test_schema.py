@@ -14,7 +14,7 @@ from project_workflow.infrastructure.db.schema import (
     get_phase_from_db,
     load_phases_from_db,
     load_phases_from_seed,
-    persist_phase_update_to_seed,
+    mark_catalog_not_ensured,
 )
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.wizard.models import Phase
@@ -44,30 +44,19 @@ class TestEnsurePhaseCatalog:
         ensure_phase_catalog(fresh_db)
         assert len(load_phases_from_db(fresh_db)) == first_count
 
-
-class TestSeedPersistence:
-    def test_persist_phase_update_to_seed(self, fresh_db, tmp_path, monkeypatch):
+    def test_existing_catalog_is_not_overwritten_after_restart(self, fresh_db, tmp_path):
         seed_path = tmp_path / "seed.json"
-        seed_path.write_text(
-            json.dumps(
-                [
-                    {
-                        "code": "1",
-                        "name": "One",
-                        "next_recommendation": "Old",
-                        "instructions": [],
-                        "checks": [],
-                        "evidence": [],
-                    }
-                ],
-                ensure_ascii=False,
-            )
-        )
-        monkeypatch.setattr(config, "SEED_PATH", seed_path)
+        seed_path.write_text(json.dumps([{"code": "1", "name": "Seed name"}]), encoding="utf-8")
         ensure_phase_catalog(fresh_db, seed_path=seed_path)
-        persist_phase_update_to_seed(fresh_db, "1", {"next_recommendation": "New"}, seed_path=seed_path)
-        reloaded = json.loads(seed_path.read_text(encoding="utf-8"))
-        assert reloaded[0]["next_recommendation"] == "New"
+        phase = fresh_db.phases.get_by_code("1")
+        fresh_db.phases.update(phase.id, {"name": "Edited in UI"})
+        fresh_db.commit()
+
+        seed_path.write_text(json.dumps([{"code": "1", "name": "Changed seed"}]), encoding="utf-8")
+        mark_catalog_not_ensured(str(fresh_db.session.bind.url))
+        ensure_phase_catalog(fresh_db, seed_path=seed_path)
+
+        assert fresh_db.phases.get_by_code("1").name == "Edited in UI"
 
 
 class TestGenerateProgressJson:
@@ -139,36 +128,6 @@ class TestReadSeedItems:
         items = load_phases_from_seed(seed_path)
         codes = {p.code for p in items}
         assert codes == {"1", "2"}
-
-
-class TestSerializeHelpers:
-    def test_serialize_seed_instructions(self):
-        from project_workflow.infrastructure.db.schema import _phase_to_seed_dict
-        from project_workflow.wizard.models import Phase, PhaseInstruction
-
-        phase = Phase(
-            code="1",
-            name="One",
-            instructions=[PhaseInstruction(step="Do it")],
-        )
-        data = _phase_to_seed_dict(phase)
-        assert data["instructions"] == [{"step": "Do it", "execution_type": "sync", "skills": [], "example": None}]
-
-    def test_serialize_seed_checks(self):
-        from project_workflow.infrastructure.db.schema import _phase_to_seed_dict
-        from project_workflow.wizard.models import Phase, PhaseCheck
-
-        phase = Phase(code="1", name="One", checks=[PhaseCheck(description="Check it")])
-        data = _phase_to_seed_dict(phase)
-        assert data["checks"] == [{"description": "Check it"}]
-
-    def test_serialize_seed_evidence(self):
-        from project_workflow.infrastructure.db.schema import _phase_to_seed_dict
-        from project_workflow.wizard.models import Phase, PhaseEvidence
-
-        phase = Phase(code="1", name="One", evidence=[PhaseEvidence(item="Show it")])
-        data = _phase_to_seed_dict(phase)
-        assert data["evidence"] == [{"description": "Show it"}]
 
 
 class TestGetPhase:

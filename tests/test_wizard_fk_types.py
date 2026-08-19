@@ -23,7 +23,7 @@ class TestRecordTransitionTypes:
 
         engine.task = {"id": 7, "current_phase": engine.current_phase, "status": "active", "project_id": 1}
         engine.db = MagicMock()
-        with patch.object(engine.db, "add_task_history") as mock_history, patch.object(engine.db, "update_task") as _:
+        with patch.object(engine.db.tasks, "add_history") as mock_history:
             engine._record_transition(ph, "pass", "2", None)
 
         # First call: mark current phase done
@@ -43,7 +43,7 @@ class TestRecordTransitionTypes:
 
         engine.task = {"id": 7, "current_phase": engine.current_phase, "status": "active", "project_id": 1}
         engine.db = MagicMock()
-        with patch.object(engine.db, "add_task_history") as mock_history, patch.object(engine.db, "update_task") as _:
+        with patch.object(engine.db.tasks, "add_history") as mock_history:
             engine._record_transition(ph_current, "pass", "2", None)
 
         # Second call: next phase pending
@@ -63,7 +63,7 @@ class TestRecordTransitionTypes:
 
         engine.task = {"id": 7, "current_phase": engine.current_phase, "status": "active", "project_id": 1}
         engine.db = MagicMock()
-        with patch.object(engine.db, "add_task_history") as mock_history, patch.object(engine.db, "update_task") as _:
+        with patch.object(engine.db.tasks, "add_history") as mock_history:
             engine._record_transition(ph, "rollback", None, "0")
 
         # Second call: rollback target pending

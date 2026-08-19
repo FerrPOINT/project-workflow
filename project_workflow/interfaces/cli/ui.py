@@ -57,7 +57,7 @@ def step_cmd(
     if report:
         result = engine.evaluate(report)
         if jmode:
-            out_json(result)
+            out_json(result, exit_code=1 if result["verdict"] == "BLOCKED" else 0)
             return
         console.print(format_result(result))
         sys.exit(1 if result["verdict"] == "BLOCKED" else 0)

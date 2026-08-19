@@ -27,7 +27,17 @@ _TABLES_COLUMNS = [
 ]
 
 
+def _column_type(table: str, column: str) -> sa.types.TypeEngine | None:
+    inspector = sa.inspect(op.get_bind())
+    if not inspector.has_table(table):
+        return None
+    return next((item["type"] for item in inspector.get_columns(table) if item["name"] == column), None)
+
+
 def _convert_text_to_timestamp(table: str, column: str) -> None:
+    column_type = _column_type(table, column)
+    if column_type is None or isinstance(column_type, sa.DateTime):
+        return
     dialect = op.get_context().dialect.name
     if dialect == "postgresql":
         # Drop the old text default first; it cannot be cast to timestamp.
@@ -67,6 +77,9 @@ def _convert_text_to_timestamp(table: str, column: str) -> None:
 
 
 def _revert_timestamp_to_text(table: str, column: str) -> None:
+    column_type = _column_type(table, column)
+    if column_type is None or isinstance(column_type, sa.String):
+        return
     dialect = op.get_context().dialect.name
     if dialect == "postgresql":
         op.alter_column(

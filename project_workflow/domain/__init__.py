@@ -172,6 +172,7 @@ class SupervisorRun:
     blockers: list[str] = field(default_factory=list)
     next_phase_id: int | None = None
     rollback_phase_id: int | None = None
+    report_fingerprint: str | None = None
     context_snapshot: dict[str, Any] = field(default_factory=dict)
     response: dict[str, Any] = field(default_factory=dict)
     created_at: str | None = None
@@ -188,6 +189,7 @@ class SupervisorRun:
             "blockers": self.blockers,
             "next_phase_id": self.next_phase_id,
             "rollback_phase_id": self.rollback_phase_id,
+            "report_fingerprint": self.report_fingerprint,
             "context_snapshot": self.context_snapshot,
             "response": self.response,
             "created_at": self.created_at,

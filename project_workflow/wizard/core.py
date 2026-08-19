@@ -21,7 +21,6 @@ from ..application.workflow import WorkflowService
 from ..infrastructure.db import schema
 from ..infrastructure.db.uow import SAUnitOfWork
 from ..infrastructure.db.uow_bootstrap import (
-    bootstrap_smoke_project_and_workflow,
     ensure_smoke_phases,
 )
 from .context import WizardContextBuilder
@@ -71,10 +70,10 @@ class WizardEngine:
         self.create_if_missing = create_if_missing
         self._uow = uow if uow is not None else SAUnitOfWork()
 
-        self._uow.create_all()
-        bootstrap_smoke_project_and_workflow(self._uow)
-        schema.ensure_phase_catalog(self._uow)
-        self._ensure_smoke_phases()
+        bind = self._uow.session.get_bind()
+        if bind.dialect.name == "sqlite":
+            self._uow.init()
+            schema.ensure_phase_catalog(self._uow)
 
         self._workflow_service = WorkflowService(self._uow)
         self._project_service = ProjectService(self._uow)
@@ -214,7 +213,7 @@ class WizardEngine:
         task_id = int(self.task.get("id", 0))
         if not task_id:
             return previously
-        runs = [r.to_dict() for r in self._uow.supervisor_runs.list(task_id=task_id, limit=20)]
+        runs = [r.to_dict() for r in self._uow.supervisor_runs.list(task_id=task_id, limit=200)]
         for run in runs:
             run_phase_id = run.get("phase_id")
             if run_phase_id is None:
@@ -228,6 +227,11 @@ class WizardEngine:
                     from .checks import normalize_text
 
                     previously.add(normalize_text(item))
+            snapshot = run.get("context_snapshot", {})
+            if isinstance(snapshot, dict):
+                for item_id in snapshot.get("covered_item_ids", []):
+                    if isinstance(item_id, str):
+                        previously.add(item_id)
         return previously
 
     def _get_next_phase(self, phase_code):
@@ -347,6 +351,8 @@ class WizardEngine:
             "blockers": ["phase-not-configured"],
             "current_phase": self.current_phase,
             "next_phase": None,
+            "replayed": False,
+            "retryable": True,
         }
 
     def _resolve_transition(

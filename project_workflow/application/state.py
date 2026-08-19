@@ -12,7 +12,7 @@ from typing import Any
 
 from ..application.phase_service import PhaseService
 from ..config import get_settings
-from ..infrastructure.db.session import ensure_migrated, ensure_schema, get_engine
+from ..infrastructure.db.session import ensure_schema, get_engine
 from ..infrastructure.db.uow import SAUnitOfWork
 from . import (
     AgentService,
@@ -22,8 +22,6 @@ from . import (
     TaskService,
     WorkflowService,
 )
-
-_MIGRATED_URLS: set[str] = set()
 
 
 class _AppState:
@@ -42,14 +40,13 @@ class _AppState:
         return target
 
     def get_db(self) -> SAUnitOfWork:
-        """Return a fresh SQLAlchemy UnitOfWork and ensure seed catalog is loaded."""
+        """Return a fresh SQLAlchemy UnitOfWork."""
         return self.get_uow()
 
     def reset(self) -> None:
         from ..infrastructure.db import schema
 
         schema.mark_catalog_not_ensured(self._database_url_normalized())
-        _MIGRATED_URLS.discard(self._database_url_normalized())
 
     def get_service(self) -> PhaseService:
         """PhaseService helper for UI detail/edit routes."""
@@ -57,16 +54,13 @@ class _AppState:
 
     def get_uow(self) -> SAUnitOfWork:
         engine = get_engine(self._database_url_normalized())
-        url = self._database_url_normalized()
         if engine.dialect.name == "sqlite":
             ensure_schema(engine)
-        elif url not in _MIGRATED_URLS:
-            ensure_migrated(engine)
-            _MIGRATED_URLS.add(url)
         uow = SAUnitOfWork(engine)
-        from ..infrastructure.db import schema
+        if engine.dialect.name == "sqlite":
+            from ..infrastructure.db import schema
 
-        schema.ensure_phase_catalog(uow)
+            schema.ensure_phase_catalog(uow)
         return uow
 
     def workflow_service(self) -> WorkflowService:

@@ -31,7 +31,7 @@ def _make_engine():
 
 
 class TestEvaluateLlmReportVerdicts:
-    def test_blocked_sets_default_blocker(self):
+    def test_invalid_blocked_is_retryable_without_transition(self):
         engine = _make_engine()
         phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[])
         with patch.object(
@@ -50,8 +50,9 @@ class TestEvaluateLlmReportVerdicts:
         ):
             result = evaluate_llm_report("r", phase, engine)
         assert result["verdict"] == "BLOCKED"
-        assert result["blockers"] == ["LLM identified blocker"]
-        engine._record_evaluation.assert_called_once_with(phase, "blocked", None, None, commit=False)
+        assert result["retryable"] is True
+        assert result["blockers"] == ["Wizard LLM unavailable: ValueError"]
+        engine._record_evaluation.assert_not_called()
 
     def test_rollback_uses_rollback_target(self):
         engine = _make_engine()
@@ -109,7 +110,7 @@ class TestEvaluateLlmReportVerdicts:
             "chat",
             return_value={
                 "verdict": "PASS",
-                "covered": ["a"],
+                "covered": [],
                 "missing": [],
                 "blockers": [],
                 "message": "ok",
@@ -128,12 +129,16 @@ class TestEvaluateLlmReportVerdicts:
         engine.db.create_supervisor_run.side_effect = RuntimeError("write failed")
         phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[])
         with (
-            patch.object(OllamaClient, "chat", return_value={"verdict": "PARTIAL"}),
+            patch.object(
+                OllamaClient,
+                "chat",
+                return_value={"verdict": "PASS", "covered": [], "missing": [], "blockers": []},
+            ),
             pytest.raises(RuntimeError, match="write failed"),
         ):
             evaluate_llm_report("r", phase, engine)
 
-        engine._record_evaluation.assert_called_once_with(phase, "partial", None, None, commit=False)
+        engine._record_evaluation.assert_not_called()
         engine.db.rollback.assert_called_once_with()
         engine.db.commit.assert_not_called()
 
@@ -330,11 +335,12 @@ class TestResponseParser:
             ResponseParser.parse({"verdict": "BLOCKED", "covered": "single"})
 
     def test_parse_invalid_optional_fields_use_defaults(self):
-        verdict = ResponseParser.parse({"verdict": "pass", "confidence": 1.5, "message": None})
+        verdict = ResponseParser.parse(
+            {"verdict": "pass", "covered": [], "missing": [], "blockers": [], "confidence": 1.5, "message": None}
+        )
         assert verdict.confidence == 0.5
         assert verdict.message == ""
 
-    def test_parse_optional_fields_get_defaults(self):
-        verdict = ResponseParser.parse({"verdict": "PARTIAL", "confidence": None})
-        assert verdict.covered == []
-        assert verdict.confidence == 0.5
+    def test_parse_missing_control_fields_is_rejected(self):
+        with pytest.raises(ValueError):
+            ResponseParser.parse({"verdict": "PARTIAL", "confidence": None})

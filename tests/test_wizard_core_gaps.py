@@ -117,7 +117,7 @@ class TestWizardCoreGaps:
         db = MagicMock()
         engine.db = db
         engine._record_transition(ph, "delegate", None, None)
-        db.add_task_history.assert_called_once()
+        db.tasks.add_history.assert_called_once()
 
     def test_record_transition_partial(self):
         engine = WizardEngine("AAT-1", repo="/tmp")
@@ -127,7 +127,7 @@ class TestWizardCoreGaps:
         db = MagicMock()
         engine.db = db
         engine._record_transition(ph, "partial", None, None)
-        db.add_task_history.assert_called_once()
+        db.tasks.add_history.assert_called_once()
 
     def test_record_parallel_transition_blocked(self):
         engine = WizardEngine("AAT-1", repo="/tmp")
@@ -137,7 +137,7 @@ class TestWizardCoreGaps:
         db = MagicMock()
         engine.db = db
         engine._record_parallel_transition([ph], "blocked", None)
-        db.update_task.assert_called_once()
+        db.tasks.update_if_state.assert_called_once()
 
     def test_record_parallel_transition_rollback(self):
         engine = WizardEngine("AAT-1", repo="/tmp")
@@ -147,7 +147,7 @@ class TestWizardCoreGaps:
         db = MagicMock()
         engine.db = db
         engine._record_parallel_transition([ph], "rollback", None, "0")
-        db.update_task.assert_called_once()
+        db.tasks.update_if_state.assert_called_once()
 
     def test_ensure_task_updates_empty_current_phase(self, monkeypatch):
         engine = WizardEngine("AAT-1", repo="/tmp")

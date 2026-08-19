@@ -10,6 +10,7 @@ class PhaseCheck:
     """Проверка которую CLI выполняет для фазы."""
 
     description: str = ""
+    id: int | None = None
 
 
 @dataclass
@@ -17,6 +18,7 @@ class PhaseEvidence:
     """Evidence, которое должен собрать исполнитель текущей CLI-фазы."""
 
     item: str = ""
+    id: int | None = None
 
 
 @dataclass

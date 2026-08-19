@@ -136,6 +136,7 @@ def _row_to_supervisor_run(row: m.SupervisorRun) -> SupervisorRun:
         blockers=_parse(row.blockers),
         next_phase_id=row.next_phase_id,
         rollback_phase_id=row.rollback_phase_id,
+        report_fingerprint=row.report_fingerprint,
         context_snapshot=_parse_obj(row.context_snapshot),
         response=_parse_obj(row.response),
         created_at=_iso(row.created_at),

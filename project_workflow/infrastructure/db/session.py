@@ -161,7 +161,7 @@ def ensure_schema(engine: Engine | Connection | None = None) -> None:
             Base.metadata.create_all(conn)
 
 
-def run_alembic_command(cmd: str, engine: Engine | None = None) -> None:
+def run_alembic_command(cmd: str, engine: Engine | None = None, revision: str = "head") -> None:
     """Run an Alembic command using the configured engine."""
     engine = engine or get_engine()
     here = Path(__file__).resolve().parent.parent.parent.parent
@@ -170,7 +170,7 @@ def run_alembic_command(cmd: str, engine: Engine | None = None) -> None:
     # so configparser interpolation does not treat them as substitution syntax.
     url = engine.url.render_as_string(hide_password=False).replace("%", "%%")
     alembic_cfg.set_main_option("sqlalchemy.url", url)
-    getattr(command, cmd)(alembic_cfg, "head")
+    getattr(command, cmd)(alembic_cfg, revision)
     # Alembic leaves the engine pool open; close it so migrations do not hold
     # connections that can block test database teardown.
     engine.dispose()

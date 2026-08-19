@@ -165,13 +165,15 @@ class OllamaClient:
 class PromptBuilder:
     """Build prompts from phase contracts + task context."""
 
+    PROMPT_VERSION = "wizard-evaluator-v2"
+
     SYSTEM_PROMPT = (
         "You are a strict workflow supervisor. "
         "Evaluate the worker's report against the phase contract below.\n\n"
         "Rules:\n"
         "1. Read the phase contract (instructions, checks, evidence).\n"
         "2. Analyze the worker report against EACH contract item individually. Do not skip checks.\n"
-        "3. Decide which items are DONE, PARTIALLY done, or MISSING.\n"
+        "3. Return every required item ID exactly once in either covered or missing.\n"
         "4. Identify real BLOCKERS with ROOT CAUSE — explain WHY it prevents progress. "
         "Words like 'ошибка'/'error'/'bug' alone are NOT blockers without root cause.\n"
         "5. Verify the worker did NOT break existing functionality, remove working code, or leave orphaned artifacts.\n"
@@ -184,8 +186,8 @@ class PromptBuilder:
         "Output STRICT JSON with these keys:\n"
         "{\n"
         '  "verdict": "PASS" | "PARTIAL" | "BLOCKED" | "ROLLBACK" | "DELEGATE",\n'
-        '  "covered": ["item description"],\n'
-        '  "missing": ["item description"],\n'
+        '  "covered": ["required item ID"],\n'
+        '  "missing": ["required item ID"],\n'
         '  "blockers": ["specific blocker description"],\n'
         '  "message": "Human-readable summary in Russian",\n'
         '  "confidence": 0.0-1.0\n'
@@ -198,6 +200,7 @@ class PromptBuilder:
         phase: Any,
         report: str,
         previously_covered: list[str] | None = None,
+        evaluation_items: list[tuple[str, str]] | None = None,
     ) -> str:
         lines: list[str] = [
             f"TASK: {task_key}",
@@ -210,22 +213,27 @@ class PromptBuilder:
             for inst in phase.instructions:
                 desc = getattr(inst, "step", "") or getattr(inst, "description", "")
                 lines.append(f"  • {desc}")
-        if phase.checks:
-            lines.append("Checks:")
-            for chk in phase.checks:
-                desc = getattr(chk, "description", "")
-                lines.append(f"  • {desc}")
-        if phase.evidence:
-            lines.append("Evidence:")
-            for ev in phase.evidence:
-                desc = getattr(ev, "item", "") or getattr(ev, "description", "")
-                lines.append(f"  • {desc}")
+        if evaluation_items is not None:
+            lines.append("Required checks and evidence (return these IDs):")
+            for item_id, description in evaluation_items:
+                lines.append(f"  [{item_id}] {description}")
+        else:
+            if phase.checks:
+                lines.append("Checks:")
+                for chk in phase.checks:
+                    desc = getattr(chk, "description", "")
+                    lines.append(f"  • {desc}")
+            if phase.evidence:
+                lines.append("Evidence:")
+                for ev in phase.evidence:
+                    desc = getattr(ev, "item", "") or getattr(ev, "description", "")
+                    lines.append(f"  • {desc}")
 
         if previously_covered:
             lines.extend(
                 [
                     "",
-                    "ALREADY COMPLETED IN PREVIOUS REPORTS (count as done):",
+                    "ALREADY COMPLETED IDS (keep them in covered):",
                 ]
             )
             for item in previously_covered:
@@ -249,9 +257,9 @@ class _LlmResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     verdict: Literal["PASS", "PARTIAL", "BLOCKED", "ROLLBACK", "DELEGATE"]
-    covered: list[str] = Field(default_factory=list)
-    missing: list[str] = Field(default_factory=list)
-    blockers: list[str] = Field(default_factory=list)
+    covered: list[str]
+    missing: list[str]
+    blockers: list[str]
     message: str = ""
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
 
@@ -260,7 +268,13 @@ class ResponseParser:
     """Validate the LLM response and keep workflow routing authoritative."""
 
     @classmethod
-    def parse(cls, raw: dict[str, Any]) -> LlmVerdict:
+    def parse(
+        cls,
+        raw: dict[str, Any],
+        *,
+        required_item_ids: list[str] | None = None,
+        previously_covered_ids: set[str] | None = None,
+    ) -> LlmVerdict:
         payload = dict(raw)
         verdict_value = payload.get("verdict")
         if isinstance(verdict_value, str):
@@ -283,16 +297,50 @@ class ResponseParser:
             if isinstance(values, list) and all(isinstance(item, str) for item in values):
                 payload[field_name] = [item.strip() for item in values if item.strip()]
         response = _LlmResponse.model_validate(payload)
-        verdict = response.verdict
-        if verdict == "PASS" and response.blockers:
-            verdict = "BLOCKED"
-        elif verdict == "PASS" and response.missing:
-            verdict = "PARTIAL"
+
+        covered = response.covered
+        missing = response.missing
+        if len(covered) != len(set(covered)) or len(missing) != len(set(missing)):
+            raise ValueError("covered and missing must not contain duplicate IDs")
+        if set(covered) & set(missing):
+            raise ValueError("covered and missing must not overlap")
+
+        if required_item_ids is not None:
+            required = set(required_item_ids)
+            classified = set(covered) | set(missing)
+            if classified != required:
+                unknown = sorted(classified - required)
+                omitted = sorted(required - classified)
+                raise ValueError(f"invalid item IDs: unknown={unknown}, omitted={omitted}")
+            effective_covered = set(covered) | (previously_covered_ids or set())
+            covered = [item_id for item_id in required_item_ids if item_id in effective_covered]
+            missing = [item_id for item_id in required_item_ids if item_id not in effective_covered]
+
+            if response.verdict == "PASS" and (missing or response.blockers):
+                raise ValueError("PASS requires full coverage and empty missing/blockers")
+            if response.verdict == "PARTIAL" and (not missing or response.blockers):
+                raise ValueError("PARTIAL requires missing items and no blockers")
+            if response.verdict == "BLOCKED" and not response.blockers:
+                raise ValueError("BLOCKED requires a blocker reason")
+            if response.verdict in {"ROLLBACK", "DELEGATE"}:
+                if response.blockers:
+                    raise ValueError(f"{response.verdict} must not contain blockers")
+                if required and not missing:
+                    raise ValueError(f"{response.verdict} cannot claim full coverage")
+        else:
+            if response.verdict == "PASS" and (missing or response.blockers):
+                raise ValueError("PASS requires empty missing/blockers")
+            if response.verdict == "PARTIAL" and (not missing or response.blockers):
+                raise ValueError("PARTIAL requires missing items and no blockers")
+            if response.verdict == "BLOCKED" and not response.blockers:
+                raise ValueError("BLOCKED requires a blocker reason")
+            if response.verdict in {"ROLLBACK", "DELEGATE"} and response.blockers:
+                raise ValueError(f"{response.verdict} must not contain blockers")
 
         return LlmVerdict(
-            verdict=verdict,
-            covered=response.covered,
-            missing=response.missing,
+            verdict=response.verdict,
+            covered=covered,
+            missing=missing,
             blockers=response.blockers,
             message=response.message,
             next_phase=None,
