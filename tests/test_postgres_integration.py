@@ -7,10 +7,17 @@ Run them explicitly with:
 
 from __future__ import annotations
 
+import json
 import os
+import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor
-from threading import Barrier
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from threading import Barrier, Thread
 from unittest.mock import patch
+from urllib.request import urlopen
 
 import psycopg
 import pytest
@@ -25,6 +32,8 @@ from project_workflow.infrastructure.db.session import (
     run_alembic_command,
 )
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 PG_HOST = os.environ.get("PGHOST", "localhost")
 PG_PORT = int(os.environ.get("PGPORT", "5432"))
@@ -267,3 +276,340 @@ def test_concurrent_reports_create_one_transition_and_run(pg_url, same_report):
         assert sum(result["replayed"] is True for result in results) == 1
     else:
         assert sum(result["verdict"] == "BLOCKED" and result["retryable"] is True for result in results) == 1
+
+
+class _ProviderState:
+    def __init__(self) -> None:
+        self.chat_requests: list[dict] = []
+        self.chat_phases: list[str] = []
+        self.model_requests = 0
+
+
+@contextmanager
+def _openai_compatible_server():
+    state = _ProviderState()
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, _format, *_args):
+            return
+
+        def _send_json(self, status: int, payload: dict) -> None:
+            body = json.dumps(payload).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            if self.path != "/v1/models":
+                self._send_json(404, {"error": "not found"})
+                return
+            state.model_requests += 1
+            self._send_json(200, {"object": "list", "data": [{"id": "e2e-contract-model"}]})
+
+        def do_POST(self):
+            if self.path != "/v1/chat/completions":
+                self._send_json(404, {"error": "not found"})
+                return
+            content_length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+            state.chat_requests.append(payload)
+            user_prompt = str(payload["messages"][-1]["content"])
+            phase_line = next(line for line in user_prompt.splitlines() if line.startswith("CURRENT PHASE:"))
+            state.chat_phases.append(phase_line.split(":", 1)[1].split(" — ", 1)[0].strip())
+            item_ids = [
+                line.strip()[1:].split("] ", 1)[0]
+                for line in user_prompt.splitlines()
+                if line.strip().startswith("[") and "] " in line
+            ]
+
+            if "MODE=HTTP_ERROR" in user_prompt:
+                self._send_json(503, {"error": "provider unavailable"})
+                return
+            if "MODE=INVALID" in user_prompt:
+                content = "not-json"
+            else:
+                verdict = "PASS"
+                covered = item_ids
+                missing: list[str] = []
+                blockers: list[str] = []
+                if "MODE=PARTIAL" in user_prompt:
+                    verdict, covered, missing = "PARTIAL", item_ids[:1], item_ids[1:] or item_ids
+                elif "MODE=BLOCKED" in user_prompt:
+                    verdict, covered, missing, blockers = "BLOCKED", [], item_ids, ["Controlled test blocker"]
+                elif "MODE=ROLLBACK" in user_prompt:
+                    verdict, covered, missing = "ROLLBACK", [], item_ids
+                elif "MODE=DELEGATE" in user_prompt:
+                    verdict, covered, missing = "DELEGATE", [], item_ids
+                content = json.dumps(
+                    {
+                        "verdict": verdict,
+                        "covered": covered,
+                        "missing": missing,
+                        "blockers": blockers,
+                        "message": f"Controlled {verdict}",
+                        "confidence": 1.0,
+                    }
+                )
+            self._send_json(
+                200,
+                {
+                    "id": "chatcmpl-e2e",
+                    "object": "chat.completion",
+                    "choices": [{"index": 0, "message": {"role": "assistant", "content": content}}],
+                },
+            )
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}/v1", state
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def _cli_env(pg_url: str, provider_url: str) -> dict[str, str]:
+    env = os.environ.copy()
+    env.update(
+        {
+            "DATABASE_URL": pg_url,
+            "DB_SCHEMA": "project_workflow",
+            "OPENAI_BASE_URL": provider_url,
+            "OPENAI_MODEL": "e2e-contract-model",
+            "OPENAI_TIMEOUT": "10",
+            "OPENAI_API_KEY": "integration-test-key",
+            "PYTHONUTF8": "1",
+        }
+    )
+    env.pop("PYTHONIOENCODING", None)
+    env.pop("WORKFLOW_DIR", None)
+    return env
+
+
+def _run_process(
+    args: list[str], env: dict[str, str], *, encoding: str = "utf-8"
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, *args],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        encoding=encoding,
+        timeout=30,
+        check=False,
+    )
+
+
+def _run_cli(env: dict[str, str], *args: str) -> tuple[subprocess.CompletedProcess[str], dict]:
+    result = _run_process(["-m", "project_workflow.interfaces.cli", *args], env)
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise AssertionError(f"CLI did not return JSON: stdout={result.stdout!r}, stderr={result.stderr!r}") from exc
+    return result, payload
+
+
+def _initialize_cli_database(env: dict[str, str]) -> None:
+    result = _run_process(["scripts/init_db.py"], env)
+    assert result.returncode == 0, result.stderr or result.stdout
+
+
+def _step(env: dict[str, str], task_key: str, report: str) -> tuple[subprocess.CompletedProcess[str], dict]:
+    return _run_cli(env, "--json", "step", "--task", task_key, "--report", report)
+
+
+@pytest.mark.integration
+def test_full_default_workflow_through_cli_postgres_and_http(pg_url):
+    expected_phases = [
+        "-1",
+        "0.0a",
+        "0.01",
+        "0.000",
+        "0.00",
+        "0.7",
+        "0.9",
+        "0.5",
+        "0.6",
+        "1.5",
+        "3",
+        "3.5",
+        "4",
+        "4.5",
+        "5.5",
+        "6",
+        "7",
+        "7.5",
+        "7.7",
+        "8",
+        "9",
+        "10",
+    ]
+    expected_groups = {
+        "0.6": ["0.6", "1"],
+        "1.5": ["1.5", "2"],
+        "4.5": ["4.5", "5"],
+        "7.5": ["7.5", "7.6", "7.6.R"],
+    }
+    task_key = "TASK-82001"
+
+    with _openai_compatible_server() as (provider_url, provider_state):
+        env = _cli_env(pg_url, provider_url)
+        _initialize_cli_database(env)
+        with urlopen(f"{provider_url}/models", timeout=5) as response:
+            assert response.status == 200
+
+        first_report = "E2E report 1 for phase -1"
+        for index, expected_phase in enumerate(expected_phases, start=1):
+            report = first_report if index == 1 else f"E2E report {index} for phase {expected_phase}"
+            result, payload = _step(env, task_key, report)
+            assert result.returncode == 0, result.stderr or result.stdout
+            assert payload["verdict"] == "PASS"
+            assert payload["phase"] == expected_phase
+            assert payload["group_phases"] == expected_groups.get(expected_phase)
+
+            if index == 1:
+                request_count = len(provider_state.chat_requests)
+                replay_result, replay = _step(env, task_key, first_report)
+                assert replay_result.returncode == 0
+                assert replay["replayed"] is True
+                assert len(provider_state.chat_requests) == request_count
+
+            if expected_phase == "0.6":
+                assert payload["next_phase"] == "1.5"
+                assert payload["next_phase_contract"]["group_phases"] == ["1.5", "2"]
+                uow = SAUnitOfWork(pg_url)
+                task = uow.tasks.get_by_key(task_key)
+                project = uow.projects.get_by_id(task.project_id)
+                phases = {phase.id: phase.code for phase in uow.phases.list(workflow_id=project.workflow_id)}
+                statuses = {phases[row["phase_id"]]: row["status"] for row in uow.tasks.get_history(task.id)}
+                assert task.current_phase == "1.5"
+                assert statuses["1.5"] == "pending"
+                assert statuses.get("2") != "done"
+                uow.close()
+
+            if expected_phase == "1.5":
+                assert payload["next_phase"] == "3"
+
+        terminal_result, terminal = _run_cli(env, "--json", "step", "--task", task_key)
+        history_result, history_payload = _run_cli(env, "--json", "history", "--task", task_key)
+        assert terminal_result.returncode == history_result.returncode == 0
+        assert terminal["phase"] == "10"
+        assert terminal["status"] == "done"
+        assert history_payload["count"] == 22
+
+        human_env = env.copy()
+        human_env.update({"PYTHONUTF8": "0", "PYTHONIOENCODING": "cp1251"})
+        human_step = _run_process(
+            ["-m", "project_workflow.interfaces.cli", "step", "--task", task_key],
+            human_env,
+            encoding="cp1251",
+        )
+        human_history = _run_process(
+            ["-m", "project_workflow.interfaces.cli", "history", "--task", task_key],
+            human_env,
+            encoding="cp1251",
+        )
+        assert human_step.returncode == human_history.returncode == 0
+        assert "Auto-Improve" in human_step.stdout
+        assert task_key in human_history.stdout
+        assert "UnicodeEncodeError" not in human_step.stderr + human_history.stderr
+
+        assert provider_state.model_requests == 1
+        assert len(provider_state.chat_requests) == 22
+        assert provider_state.chat_phases == expected_phases
+        assert all(request["model"] == "e2e-contract-model" for request in provider_state.chat_requests)
+
+    uow = SAUnitOfWork(pg_url)
+    task = uow.tasks.get_by_key(task_key)
+    runs = list(uow.supervisor_runs.list(task_id=task.id, limit=100))
+    task_history = list(uow.tasks.get_history(task.id))
+    assert task.current_phase == "10"
+    assert task.status == "done"
+    assert len(runs) == 22
+    assert len(task_history) == 27
+    assert all(row["status"] == "done" for row in task_history)
+    fingerprints = [run.report_fingerprint for run in runs]
+    assert all(fingerprints)
+    assert len(set(fingerprints)) == 22
+    assert all(run.context_snapshot["model"] == "e2e-contract-model" for run in runs)
+    assert all(run.context_snapshot["endpoint_mode"] == "openai-compatible" for run in runs)
+    assert all(run.context_snapshot["prompt_version"] == "wizard-evaluator-v2" for run in runs)
+    assert all(run.context_snapshot["raw_evaluator"]["verdict"] == "PASS" for run in runs)
+    uow.close()
+
+
+def _advance_to_phase(env: dict[str, str], task_key: str, phases: list[str]) -> None:
+    for index, phase in enumerate(phases, start=1):
+        result, payload = _step(env, task_key, f"Advance {index} through {phase}")
+        assert result.returncode == 0
+        assert payload["verdict"] == "PASS"
+        assert payload["phase"] == phase
+
+
+@pytest.mark.integration
+def test_cli_verdicts_replay_and_fail_closed_through_postgres_and_http(pg_url):
+    with _openai_compatible_server() as (provider_url, provider_state):
+        env = _cli_env(pg_url, provider_url)
+        _initialize_cli_database(env)
+
+        partial_result, partial = _step(env, "TASK-82002", "MODE=PARTIAL incomplete report")
+        request_count = len(provider_state.chat_requests)
+        replay_result, replay = _step(env, "TASK-82002", "MODE=PARTIAL incomplete report")
+        assert partial_result.returncode == replay_result.returncode == 0
+        assert partial["verdict"] == replay["verdict"] == "PARTIAL"
+        assert replay["replayed"] is True
+        assert len(provider_state.chat_requests) == request_count
+
+        blocked_result, blocked = _step(env, "TASK-82003", "MODE=BLOCKED blocked report")
+        assert blocked_result.returncode == 1
+        assert blocked["verdict"] == "BLOCKED"
+        assert blocked["retryable"] is False
+
+        invalid_result, invalid = _step(env, "TASK-82004", "MODE=INVALID invalid response")
+        invalid_retry_result, invalid_retry = _step(env, "TASK-82004", "MODE=INVALID invalid response")
+        assert invalid_result.returncode == invalid_retry_result.returncode == 1
+        assert invalid["verdict"] == invalid_retry["verdict"] == "BLOCKED"
+        assert invalid["retryable"] is invalid_retry["retryable"] is True
+        assert invalid["replayed"] is invalid_retry["replayed"] is False
+
+        http_result, http_error = _step(env, "TASK-82005", "MODE=HTTP_ERROR provider error")
+        assert http_result.returncode == 1
+        assert http_error["verdict"] == "BLOCKED"
+        assert http_error["retryable"] is True
+
+        phases_before_rollback = ["-1", "0.0a", "0.01", "0.000", "0.00", "0.7"]
+        _advance_to_phase(env, "TASK-82006", phases_before_rollback)
+        rollback_result, rollback = _step(env, "TASK-82006", "MODE=ROLLBACK return to suite verification")
+        assert rollback_result.returncode == 0
+        assert rollback["verdict"] == "ROLLBACK"
+        assert rollback["rollback_target"] == "0.0a"
+
+        _advance_to_phase(env, "TASK-82007", phases_before_rollback)
+        delegate_result, delegate = _step(env, "TASK-82007", "MODE=DELEGATE hand off review")
+        assert delegate_result.returncode == 0
+        assert delegate["verdict"] == "DELEGATE"
+
+    uow = SAUnitOfWork(pg_url)
+    partial_task = uow.tasks.get_by_key("TASK-82002")
+    blocked_task = uow.tasks.get_by_key("TASK-82003")
+    invalid_task = uow.tasks.get_by_key("TASK-82004")
+    http_task = uow.tasks.get_by_key("TASK-82005")
+    rollback_task = uow.tasks.get_by_key("TASK-82006")
+    delegate_task = uow.tasks.get_by_key("TASK-82007")
+    assert (partial_task.current_phase, partial_task.status) == ("-1", "active")
+    assert (blocked_task.current_phase, blocked_task.status) == ("-1", "blocked")
+    assert (invalid_task.current_phase, invalid_task.status) == ("-1", "active")
+    assert (http_task.current_phase, http_task.status) == ("-1", "active")
+    assert (rollback_task.current_phase, rollback_task.status) == ("0.0a", "active")
+    assert (delegate_task.current_phase, delegate_task.status) == ("0.9", "active")
+    invalid_runs = list(uow.supervisor_runs.list(task_id=invalid_task.id, limit=10))
+    assert len(invalid_runs) == 2
+    assert all(run.report_fingerprint is None for run in invalid_runs)
+    assert uow.tasks.get_history(invalid_task.id) == []
+    assert uow.tasks.get_history(http_task.id) == []
+    uow.close()

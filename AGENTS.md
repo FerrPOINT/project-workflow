@@ -19,42 +19,50 @@ After any change to the SQLAlchemy layer, application services, UI state, or wiz
    ```bash
    pytest -q --timeout=60
    ```
-   Expected: **866 passed, 9 deselected**, 0 failed, 0 errors.
+   Expected: **874 passed, 11 deselected**, 0 failed, 0 errors. Integration tests
+   are intentionally deselected here; run them separately as described below.
 
-2. **Coverage**
+2. **PostgreSQL integration**
+   ```bash
+   pytest -q -m integration tests/test_postgres_integration.py --timeout=60
+   ```
+   Expected: **11 passed**, 0 failed, 0 errors. This includes the real CLI
+   subprocess -> PostgreSQL -> OpenAI-compatible HTTP workflow path.
+
+3. **Coverage**
    ```bash
    pytest --cov=project_workflow --cov-report=term --timeout=60
    ```
    Expected: total coverage >= 90%.
 
-3. **Lint**
+4. **Lint**
    ```bash
    ruff check project_workflow tests
    ```
    Expected: `All checks passed!`
 
-4. **Type check**
+5. **Type check**
    ```bash
    mypy project_workflow
    ```
    Expected: `Success: no issues found in 81 source files`.
 
-5. **UI service health**
+6. **UI service health**
    ```bash
    systemctl restart project-workflow-ui.service
    curl -s -o /dev/null -w "%{http_code}" http://localhost:8811/api/tasks
    ```
    Expected: `200`.
 
-6. **Browser check** for UI changes
+7. **Browser check** for UI changes
    - Open `http://localhost:8811/` and `http://localhost:8811/phases`.
    - Capture a screenshot.
 
 ## Notes
 
 - Use `pytest -q --timeout=60` for the standard full suite. `--forked` is no longer required for stability; coverage reports are inaccurate under `--forked`.
-- `SAUnitOfWork()` with no arguments resolves PostgreSQL `DATABASE_URL` first, then falls back to SQLite `DB_PATH`. This is intentional to keep CLI/UI/test paths aligned.
-- The in-repo skill `project-workflow-test-suite-recovery` contains the full checklist and failure-symptom table.
+- `DATABASE_URL` is required in runtime. SQLite is used only by isolated tests.
+- The repeatable CLI workflow acceptance process is documented in `LIVE_TEST_PLAN.md`.
 
 ## Production-readiness — what we deliberately skip
 

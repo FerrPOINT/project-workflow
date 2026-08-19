@@ -281,7 +281,7 @@
   {
     "name": "Workspace",
     "description": "Проверить рабочее окружение",
-    "phase_order": 8,
+    "phase_order": 4,
     "delegate_agent": null,
     "delegate_timeout": null,
     "delegate_max_cycles": null,
@@ -349,7 +349,7 @@
   {
     "name": "Git Identity",
     "description": "Проверить git identity перед коммитами",
-    "phase_order": 7,
+    "phase_order": 5,
     "delegate_agent": null,
     "delegate_timeout": null,
     "delegate_max_cycles": null,
@@ -411,7 +411,7 @@
   {
     "name": "Repo Sync",
     "description": "Синхронизировать репозиторий с origin",
-    "phase_order": 9,
+    "phase_order": 6,
     "delegate_agent": null,
     "delegate_timeout": null,
     "delegate_max_cycles": null,
@@ -501,7 +501,7 @@
   {
     "name": "CriticGate-PreFlight",
     "description": "Проверка перед стартом разработки",
-    "phase_order": 10,
+    "phase_order": 7,
     "delegate_agent": null,
     "delegate_timeout": null,
     "delegate_max_cycles": null,
@@ -574,7 +574,7 @@
   {
     "name": "Jira Transition",
     "description": "Перевести тикет в 'В работе'",
-    "phase_order": 11,
+    "phase_order": 8,
     "delegate_agent": null,
     "delegate_timeout": null,
     "delegate_max_cycles": null,
@@ -657,7 +657,7 @@
   {
     "name": "Researcher #1",
     "description": "Dataflow исследование — что уже есть в коде",
-    "phase_order": 12,
+    "phase_order": 9,
     "delegate_agent": "workflow_researcher",
     "delegate_timeout": 15,
     "delegate_max_cycles": 3,
@@ -718,7 +718,7 @@
   {
     "name": "Preflight",
     "description": "Определить рабочий repo, ветку и стартовое состояние перед разработкой",
-    "phase_order": 13,
+    "phase_order": 10,
     "delegate_agent": null,
     "delegate_timeout": null,
     "delegate_max_cycles": null,
@@ -801,7 +801,7 @@
   {
     "name": "Deep Research",
     "description": "Архитектура, API, типы и существующие реализации",
-    "phase_order": 14,
+    "phase_order": 11,
     "delegate_agent": "workflow_researcher",
     "delegate_timeout": 20,
     "delegate_max_cycles": 3,
@@ -862,7 +862,7 @@
   {
     "name": "Research Synthesis",
     "description": "Собрать единый вывод по результатам исследований 0.6 и 1.5",
-    "phase_order": 15,
+    "phase_order": 12,
     "delegate_agent": null,
     "delegate_timeout": null,
     "delegate_max_cycles": null,
@@ -946,7 +946,7 @@
   {
     "name": "Plan",
     "description": "Написать детальный план реализации",
-    "phase_order": 16,
+    "phase_order": 13,
     "delegate_agent": null,
     "delegate_timeout": null,
     "delegate_max_cycles": null,
@@ -1037,7 +1037,7 @@
   {
     "name": "CriticGate-PrePlan",
     "description": "Ревью плана перед реализацией",
-    "phase_order": 17,
+    "phase_order": 14,
     "delegate_agent": "workflow_critic",
     "delegate_timeout": 10,
     "delegate_max_cycles": 3,
@@ -1115,7 +1115,7 @@
   {
     "name": "Implement",
     "description": "Реализовать по плану",
-    "phase_order": 18,
+    "phase_order": 15,
     "delegate_agent": null,
     "delegate_timeout": null,
     "delegate_max_cycles": null,
@@ -1206,7 +1206,7 @@
   {
     "name": "CriticGate-PreCommit",
     "description": "Ревью кода перед коммитом",
-    "phase_order": 19,
+    "phase_order": 16,
     "delegate_agent": "workflow_critic",
     "delegate_timeout": 10,
     "delegate_max_cycles": 3,
@@ -1281,7 +1281,7 @@
   {
     "name": "Validate",
     "description": "Линтер, типы, unit тесты",
-    "phase_order": 20,
+    "phase_order": 17,
     "delegate_agent": null,
     "delegate_timeout": null,
     "delegate_max_cycles": null,
@@ -1416,7 +1416,7 @@
   {
     "name": "Self-Test",
     "description": "E2E, UI-тесты, ручное тестирование",
-    "phase_order": 21,
+    "phase_order": 18,
     "delegate_agent": null,
     "delegate_timeout": null,
     "delegate_max_cycles": null,
@@ -1521,7 +1521,7 @@
   {
     "name": "Commit",
     "description": "git commit, push",
-    "phase_order": 22,
+    "phase_order": 19,
     "delegate_agent": null,
     "delegate_timeout": null,
     "delegate_max_cycles": null,
@@ -1626,7 +1626,7 @@
   {
     "name": "MR Draft",
     "description": "Создать MR через GitLab UI",
-    "phase_order": 23,
+    "phase_order": 20,
     "delegate_agent": null,
     "delegate_timeout": null,
     "delegate_max_cycles": null,
@@ -1739,7 +1739,7 @@
   {
     "name": "Code Review",
     "description": "Ревью кода другим агентом",
-    "phase_order": 24,
+    "phase_order": 21,
     "delegate_agent": "workflow_reviewer",
     "delegate_timeout": 15,
     "delegate_max_cycles": 3,
@@ -1798,7 +1798,7 @@
   {
     "name": "QA Testing",
     "description": "Функциональное тестирование",
-    "phase_order": 25,
+    "phase_order": 22,
     "delegate_agent": "workflow_reviewer",
     "delegate_timeout": 15,
     "delegate_max_cycles": 3,
@@ -1851,7 +1851,7 @@
   {
     "name": "DVR",
     "description": "Проверка потоков данных и согласованности интеграций",
-    "phase_order": 26,
+    "phase_order": 23,
     "delegate_agent": "workflow_researcher",
     "delegate_timeout": 10,
     "delegate_max_cycles": 3,
@@ -1901,7 +1901,7 @@
   {
     "name": "CriticGate-PostQA",
     "description": "Финальный gate перед merge",
-    "phase_order": 27,
+    "phase_order": 24,
     "delegate_agent": "workflow_critic",
     "delegate_timeout": 5,
     "delegate_max_cycles": 3,
@@ -1976,7 +1976,7 @@
   {
     "name": "Jira Done",
     "description": "Перевести Jira в 'Выполнено', прикрепить MR",
-    "phase_order": 28,
+    "phase_order": 25,
     "delegate_agent": "workflow_ops",
     "delegate_timeout": 10,
     "delegate_max_cycles": 3,
@@ -2074,7 +2074,7 @@
   {
     "name": "Retro",
     "description": "Ретроспектива, метрики, project-knowledge",
-    "phase_order": 29,
+    "phase_order": 26,
     "delegate_agent": "workflow_coder",
     "delegate_timeout": 10,
     "delegate_max_cycles": 3,
@@ -2142,7 +2142,7 @@
   {
     "name": "Auto-Improve",
     "description": "Сгенерировать Improvement Proposals из retro",
-    "phase_order": 30,
+    "phase_order": 27,
     "delegate_agent": null,
     "delegate_timeout": null,
     "delegate_max_cycles": null,

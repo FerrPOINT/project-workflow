@@ -79,6 +79,22 @@ def test_seed_catalog_order_matches_config_phase_order():
     phases = json.loads(SEED_PATH.read_text(encoding="utf-8"))
     codes = [str(phase.get("code", phase.get("id", ""))).strip() for phase in phases]
     assert codes == config.PHASE_ORDER
+    assert [phase.get("phase_order") for phase in phases] == list(range(1, len(phases) + 1))
+
+
+def test_seed_catalog_parallel_links_form_expected_groups():
+    phases = json.loads(SEED_PATH.read_text(encoding="utf-8"))
+    by_code = {str(phase["code"]): phase for phase in phases}
+    expected_groups = [
+        {"0.6", "1"},
+        {"1.5", "2"},
+        {"4.5", "5"},
+        {"7.5", "7.6", "7.6.R"},
+    ]
+
+    for group in expected_groups:
+        assert all(by_code[code]["execution_type"] == "parallel" for code in group)
+        assert all(by_code[code].get("parallel_with") in group for code in group)
 
 
 def test_seed_catalog_names_match_runtime_progress_template():

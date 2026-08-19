@@ -192,6 +192,21 @@ class TestGetParallelGroup:
         group = engine._get_parallel_group(orphan)
         assert group == [orphan]
 
+    def test_adjacent_parallel_pairs_have_independent_next_phases(self, engine):
+        pair_c = Phase(id=5, code="3", name="Parallel C", execution_type="parallel", parallel_with="4")
+        pair_d = Phase(id=6, code="4", name="Parallel D", execution_type="parallel", parallel_with="3")
+        done = Phase(id=7, code="5", name="Done", execution_type="sync")
+        engine.all_phases = [*engine.all_phases[:-1], pair_c, pair_d, done]
+        engine.phase_map = {phase.code: phase for phase in engine.all_phases}
+
+        first = engine._get_parallel_group(engine.phase_map["1"])
+        second = engine._get_parallel_group(engine.phase_map["3"])
+
+        assert [phase.code for phase in first] == ["1", "2"]
+        assert engine._get_next_phase_after_group(first) == ("3", "Parallel C")
+        assert [phase.code for phase in second] == ["3", "4"]
+        assert engine._get_next_phase_after_group(second) == ("5", "Done")
+
 
 # ═══════════════════════════════════════════════════════════════════════
 #  _get_next_phase_after_group

@@ -156,9 +156,9 @@ flowchart TD
 |---|---|---|
 | Lint | `ruff check .` | **green** |
 | Type check | `mypy project_workflow` | **green** |
-| Tests | `pytest -q --timeout=60` | **866 passed, 9 deselected** |
-| PostgreSQL integration | `pytest -q -m integration tests/test_postgres_integration.py --timeout=60` | **9 passed** |
-| Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` | **96.35%** |
+| Tests | `pytest -q --timeout=60` | **874 passed, 11 integration deselected** |
+| PostgreSQL integration | `pytest -q -m integration tests/test_postgres_integration.py --timeout=60` | **11 passed** |
+| Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` | **96.32%** |
 | Systemd UI health | `curl http://localhost:8811/api/tasks` | **200** |
 
 <a name="roadmap"></a>
@@ -171,7 +171,7 @@ flowchart TD
 - [x] UI/API переведены на SQLAlchemy-сервисы
 - [x] `WorkflowDB` переписан на SQLAlchemy, `db/base.py` и `db_schema.sql` удалены
 - [x] Legacy `wartz-workflow-cli`, `wartz_ui` и старые wizard endpoints удалены
-- [x] Полный suite: 866 тестов green + 9 PostgreSQL integration tests
+- [x] Полный suite: 874 теста green + 11 PostgreSQL integration tests
 - [x] Postgres-интеграционные тесты
 - [x] `WizardEngine` и wizard-модули собраны в пакет `project_workflow/wizard/`
 - [x] API-тесты на все UI routes

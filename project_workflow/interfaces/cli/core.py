@@ -19,7 +19,7 @@ from ...domain import validation as task_validator
 
 console = Console()
 
-WARN = "[yellow]⚠️[/yellow]"
+WARN = "[yellow]WARN[/yellow]"
 
 
 def out_json(data: dict[str, Any], exit_code: int | None = None) -> None:
@@ -49,7 +49,7 @@ def _require_valid_key(task_key: str, uow=None) -> str:
     else:
         validated = _get_task_key_validator(uow=uow).validate(task_key)
     if not validated.is_valid:
-        console.print(f"[red]❌[/red] [bold red]Invalid task key:[/bold red] {validated.error_message}")
+        console.print(f"[red]ERROR[/red] [bold red]Invalid task key:[/bold red] {validated.error_message}")
         raise click.Abort()
     return validated.normalized or task_key
 

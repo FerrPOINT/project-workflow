@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import click
@@ -9,6 +13,8 @@ import pytest
 from click.testing import CliRunner
 
 from project_workflow.interfaces.cli.core import _require_valid_key, cli, out_json
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_cli_group_sets_json_mode():
@@ -57,3 +63,22 @@ def test_require_valid_key_invalid():
     with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=validator):
         with pytest.raises(click.Abort):
             _require_valid_key("bad")
+
+
+@pytest.mark.parametrize("args", [["--help"], ["step", "--help"], ["history", "--help"]])
+def test_cli_help_is_cp1251_safe(args):
+    env = os.environ.copy()
+    env.update({"PYTHONUTF8": "0", "PYTHONIOENCODING": "cp1251"})
+
+    result = subprocess.run(
+        [sys.executable, "-m", "project_workflow.interfaces.cli", *args],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        encoding="cp1251",
+        timeout=20,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
