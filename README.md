@@ -89,7 +89,7 @@ CLI ожидает `DATABASE_URL` и доступный OpenAI-compatible evalua
 ```bash
 export DATABASE_URL=postgresql+psycopg://project_workflow:project_workflow@localhost/project_workflow
 export OPENAI_BASE_URL=https://ollama.com/v1
-export OPENAI_MODEL=kimi-k2.6
+export OPENAI_MODEL=qwen3.5:397b
 export OPENAI_TIMEOUT=120
 export OPENAI_API_KEY=<ollama-api-key>
 ```

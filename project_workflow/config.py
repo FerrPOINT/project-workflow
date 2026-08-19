@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
 
     OPENAI_BASE_URL: str = "https://ollama.com/v1"
-    OPENAI_MODEL: str = "kimi-k2.6"
+    OPENAI_MODEL: str = "qwen3.5:397b"
     OPENAI_TIMEOUT: int = 120
     OPENAI_API_KEY: str = ""
 

@@ -53,7 +53,7 @@ class TestOpenAICompatibleClient:
         get_settings.cache_clear()
         client = OpenAICompatibleClient()
         assert client.base_url == "https://ollama.com/v1"
-        assert client.model == "kimi-k2.6"
+        assert client.model == "qwen3.5:397b"
         assert client.timeout == 120
         assert client.api_key == ""
 
