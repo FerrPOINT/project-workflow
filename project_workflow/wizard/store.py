@@ -74,7 +74,9 @@ class WizardAssessmentStore:
 
         next_phase_id = self._phase_id(next_phase)
         rollback_phase_id = self._phase_id(rollback_target)
-        phase_id = self._phase_id(phase_code) or phase_code
+        # Unresolved phase codes are NOT valid supervisor_runs.phase_id values
+        # (Integer FK) — store NULL instead of crashing on insert.
+        phase_id = self._phase_id(phase_code)
 
         context_snapshot = {
             "phase": phase_code,

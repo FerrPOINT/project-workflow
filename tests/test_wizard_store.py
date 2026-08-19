@@ -78,7 +78,10 @@ class TestWizardAssessmentStore:
         )
         store.save(assessment)
         payload = db.create_supervisor_run.call_args[0][0]
-        assert payload["phase_id"] == "unknown"
+        # Unknown codes persist as NULL phase_id (Integer FK column); the code
+        # itself is kept in context_snapshot.phase.
+        assert payload["phase_id"] is None
+        assert payload["context_snapshot"]["phase"] == "unknown"
 
     def test_get_latest_empty(self):
         db = self._make_db()

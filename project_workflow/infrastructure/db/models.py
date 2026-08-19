@@ -244,7 +244,9 @@ class SupervisorRun(Base):
         ForeignKey("tasks.id", ondelete="CASCADE"),
         nullable=False,
     )
-    phase_id: Mapped[int] = mapped_column(ForeignKey("phases.id"), nullable=False)
+    # Nullable: assessments can reference phase codes that are not in the DB yet
+    # (the code itself is preserved in context_snapshot).
+    phase_id: Mapped[int | None] = mapped_column(ForeignKey("phases.id"), nullable=True)
     verdict: Mapped[str] = mapped_column(String, nullable=False)
     report: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     covered: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")

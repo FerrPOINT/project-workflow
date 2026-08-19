@@ -114,3 +114,26 @@ class TestReasoningConfidence:
             text = f"Verdict: PASS\nConfidence: {raw}\n"
             result = ReasoningEngine.parse(text)
             assert result.confidence == expected, f"Confidence {raw!r} -> {result.confidence}"
+
+
+class TestAssessmentStoreUnknownPhase:
+    def test_save_with_unknown_phase_code_does_not_crash(self, uow):
+        """phase_id FK is Integer; an unresolved phase code must not be inserted."""
+        from project_workflow.wizard.store import WizardAssessmentStore
+
+        store = WizardAssessmentStore(uow)
+        store.save(
+            {
+                "task_key": "P-1",
+                "phase_code": "0.9",  # not in DB
+                "phase_name": "X",
+                "verdict": "pass",
+                "covered": [],
+                "missing": [],
+                "blockers": [],
+            }
+        )
+        uow.commit()
+        runs = uow.supervisor_runs.list(task_id=uow.tid)
+        assert len(runs) == 1
+        assert runs[0].phase_id is None
