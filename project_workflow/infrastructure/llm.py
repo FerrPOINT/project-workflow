@@ -1,8 +1,7 @@
-"""LLM adapter for smart workflow evaluation via Ollama.
+"""OpenAI-compatible LLM adapter for Wizard evaluation.
 
-Supports BOTH:
-  • Local Ollama  — http://localhost:11434/api/chat  (native)
-  • Ollama Cloud  — https://ollama.com/v1/chat/completions  (OpenAI-compatible)
+Ollama Online is the default provider. Any OpenAI-compatible endpoint can be
+selected through environment variables without changing Wizard code.
 
 PromptBuilder — assembles system + user prompts from phase contracts
 ResponseParser — validates and normalises LLM JSON responses
@@ -13,36 +12,15 @@ from __future__ import annotations
 import json
 import logging
 import math
-import os
 from dataclasses import dataclass
 from typing import Any, Literal
 
 import requests
 from pydantic import BaseModel, ConfigDict, Field
 
+from project_workflow import config
+
 logger = logging.getLogger(__name__)
-
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "kimi-k2.6")
-OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "120"))
-OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "")
-
-
-def _load_api_key() -> str:
-    """Read OLLAMA_API_KEY from env or ~/.hermes/.env."""
-    if OLLAMA_API_KEY:
-        return OLLAMA_API_KEY
-    env_path = os.path.expanduser("~/.hermes/.env")
-    if os.path.exists(env_path):
-        try:
-            with open(env_path) as f:
-                for line in f:
-                    if line.startswith("OLLAMA_API_KEY="):
-                        return line.split("=", 1)[1].strip()
-        except (OSError, ValueError) as exc:
-            logger.warning("Failed to read OLLAMA_API_KEY from env file: %s", exc)
-    return ""
-
 
 @dataclass(frozen=True)
 class LlmVerdict:
@@ -57,8 +35,8 @@ class LlmVerdict:
     raw: dict[str, Any]
 
 
-class OllamaClient:
-    """Ollama HTTP client — supports local /api/chat and cloud /v1/chat/completions."""
+class OpenAICompatibleClient:
+    """Small Chat Completions client for any OpenAI-compatible provider."""
 
     def __init__(
         self,
@@ -67,20 +45,17 @@ class OllamaClient:
         timeout: int | None = None,
         api_key: str | None = None,
     ):
-        self.base_url = (base_url or OLLAMA_BASE_URL).rstrip("/")
-        self.model = model or OLLAMA_MODEL
-        self.timeout = timeout or OLLAMA_TIMEOUT
-        self.api_key = api_key or _load_api_key()
-        self.is_cloud = "/v1" in self.base_url  # OpenAI-compatible endpoint
+        settings = config.get_settings()
+        self.base_url = (base_url or settings.OPENAI_BASE_URL).rstrip("/")
+        self.model = model or settings.OPENAI_MODEL
+        self.timeout = timeout or settings.OPENAI_TIMEOUT
+        self.api_key = api_key if api_key is not None else settings.OPENAI_API_KEY
 
     def is_available(self) -> bool:
         """Quick health-check."""
         try:
-            if self.is_cloud:
-                headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
-                r = requests.get(f"{self.base_url}/models", headers=headers, timeout=5)
-            else:
-                r = requests.get(f"{self.base_url}/api/tags", timeout=5)
+            headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+            r = requests.get(f"{self.base_url}/models", headers=headers, timeout=5)
             return r.status_code == 200
         except (requests.RequestException, OSError) as exc:
             logger.warning("LLM health-check failed: %s", exc)
@@ -88,12 +63,6 @@ class OllamaClient:
 
     def chat(self, system: str, user: str, temperature: float = 0.1) -> dict[str, Any]:
         """Send chat request, return parsed JSON content."""
-        if self.is_cloud:
-            return self._chat_cloud(system, user, temperature)
-        return self._chat_local(system, user, temperature)
-
-    def _chat_cloud(self, system: str, user: str, temperature: float) -> dict[str, Any]:
-        """OpenAI-compatible endpoint (Ollama Cloud, etc.)."""
         headers = {
             "Content-Type": "application/json",
         }
@@ -109,9 +78,6 @@ class OllamaClient:
             "temperature": temperature,
             "max_tokens": 2000,
         }
-        # Prefer structured output if supported
-        if self.model.startswith("kimi") or self.model.startswith("gpt"):
-            payload["response_format"] = {"type": "json_object"}
 
         resp = requests.post(
             f"{self.base_url}/chat/completions",
@@ -124,33 +90,6 @@ class OllamaClient:
         content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
         if not content.strip():
             raise ValueError("Empty content from LLM")
-        return self._extract_json(content)
-
-    def _chat_local(self, system: str, user: str, temperature: float) -> dict[str, Any]:
-        """Native Ollama /api/chat endpoint."""
-        payload: dict[str, Any] = {
-            "model": self.model,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-            "format": "json",
-            "options": {
-                "temperature": temperature,
-                "num_ctx": 32000,
-            },
-            "stream": False,
-        }
-        resp = requests.post(
-            f"{self.base_url}/api/chat",
-            json=payload,
-            timeout=self.timeout,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        content = data.get("message", {}).get("content", "")
-        if not content.strip():
-            raise ValueError("Empty content from Ollama")
         return self._extract_json(content)
 
     @staticmethod

@@ -34,6 +34,11 @@ class Settings(BaseSettings):
 
     LOG_LEVEL: str = "INFO"
 
+    OPENAI_BASE_URL: str = "https://ollama.com/v1"
+    OPENAI_MODEL: str = "kimi-k2.6"
+    OPENAI_TIMEOUT: int = 120
+    OPENAI_API_KEY: str = ""
+
     SUITES_DIR: str = os.getenv("SUITES_DIR", str(Path.home() / ".hermes" / "skills" / "software-development"))
 
     JIRA_BASE_URL: str = "https://task.wemakedev.ru"

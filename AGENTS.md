@@ -19,7 +19,7 @@ After any change to the SQLAlchemy layer, application services, UI state, or wiz
    ```bash
    pytest -q --timeout=60
    ```
-   Expected: **871 passed, 9 deselected**, 0 failed, 0 errors.
+   Expected: **866 passed, 9 deselected**, 0 failed, 0 errors.
 
 2. **Coverage**
    ```bash

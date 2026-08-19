@@ -68,7 +68,7 @@ class TestEvaluateGaps:
         engine._resolve_transition.return_value = (None, None, None)
         return engine
 
-    @patch("project_workflow.wizard.evaluate.OllamaClient")
+    @patch("project_workflow.wizard.evaluate.OpenAICompatibleClient")
     @patch("project_workflow.wizard.evaluate.ResponseParser")
     def test_evaluate_blocked_default_blocker(self, mock_parser, mock_client):
         mock_parser.parse.return_value = MockLlmResponse(verdict="BLOCKED")
@@ -79,7 +79,7 @@ class TestEvaluateGaps:
         assert result["verdict"] == "BLOCKED"
         assert result["blockers"] == ["LLM identified blocker"]
 
-    @patch("project_workflow.wizard.evaluate.OllamaClient")
+    @patch("project_workflow.wizard.evaluate.OpenAICompatibleClient")
     @patch("project_workflow.wizard.evaluate.ResponseParser")
     def test_evaluate_rollback(self, mock_parser, mock_client):
         mock_parser.parse.return_value = MockLlmResponse(verdict="ROLLBACK")
@@ -92,7 +92,7 @@ class TestEvaluateGaps:
         assert result["verdict"] == "ROLLBACK"
         assert result["rollback_target"] == "0"
 
-    @patch("project_workflow.wizard.evaluate.OllamaClient")
+    @patch("project_workflow.wizard.evaluate.OpenAICompatibleClient")
     @patch("project_workflow.wizard.evaluate.ResponseParser")
     def test_evaluate_pass_next_phase_int(self, mock_parser, mock_client):
         mock_parser.parse.return_value = MockLlmResponse(verdict="PASS", next_phase="2")

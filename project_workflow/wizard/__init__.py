@@ -22,7 +22,7 @@ from project_workflow.wizard.core import (
     main,
 )
 from project_workflow.wizard.evaluate import (
-    OllamaClient,
+    OpenAICompatibleClient,
     PromptBuilder,
     ResponseParser,
     evaluate_llm_report,
@@ -36,7 +36,7 @@ from project_workflow.wizard.types import (
 
 __all__ = [
     "ArtifactSnapshot",
-    "OllamaClient",
+    "OpenAICompatibleClient",
     "PhaseContract",
     "PhaseContractBuilder",
     "PromptBuilder",

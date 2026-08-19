@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 import requests
 
-from project_workflow.infrastructure.llm import OllamaClient, ResponseParser
+from project_workflow.infrastructure.llm import OpenAICompatibleClient, ResponseParser
 from project_workflow.wizard import WizardEngine
 
 pytestmark = [pytest.mark.wizard]
@@ -65,8 +65,8 @@ class TestStrictEvaluatorContract:
 def test_valid_report_is_replayed_once(verdict, wizard_llm):
     engine = WizardEngine(f"TASK-90{['PASS', 'PARTIAL', 'BLOCKED'].index(verdict)}")
     wizard_llm(verdict)
-    fixture_chat = OllamaClient.chat
-    with patch.object(OllamaClient, "chat", side_effect=fixture_chat) as chat:
+    fixture_chat = OpenAICompatibleClient.chat
+    with patch.object(OpenAICompatibleClient, "chat", side_effect=fixture_chat) as chat:
         first = engine.evaluate(f"report {verdict}")
         history_after_first = engine.db.get_task_history(engine.task["id"])
         second = engine.evaluate(f"  REPORT   {verdict}! ")
@@ -83,7 +83,7 @@ def test_valid_report_is_replayed_once(verdict, wizard_llm):
 def test_retryable_provider_error_has_no_fingerprint_or_transition():
     engine = WizardEngine("TASK-910")
     original_task = dict(engine.task)
-    with patch.object(OllamaClient, "chat", side_effect=requests.ConnectionError("down")) as chat:
+    with patch.object(OpenAICompatibleClient, "chat", side_effect=requests.ConnectionError("down")) as chat:
         first = engine.evaluate("same report")
         second = engine.evaluate("same report")
 
@@ -120,7 +120,7 @@ def test_audit_snapshot_contains_contract_and_provider_metadata(wizard_llm):
     run = engine.db.supervisor_runs.list(task_key=engine.task_key)[0]
     snapshot = run.context_snapshot
     assert snapshot["model"]
-    assert snapshot["endpoint_mode"] in {"ollama-native", "openai-compatible"}
+    assert snapshot["endpoint_mode"] == "openai-compatible"
     assert snapshot["prompt_version"] == "wizard-evaluator-v2"
     assert snapshot["contract_snapshot"]["evaluation_items"]
     assert snapshot["raw_evaluator"]["verdict"] == "PARTIAL"

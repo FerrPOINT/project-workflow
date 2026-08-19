@@ -156,7 +156,7 @@ class WizardContextBuilder:
             "description": (
                 "Любой пользователь или автоматизация, которая вызывает project-workflow CLI "
                 "и отправляет report по текущей фазе. Supervisor не предполагает конкретную модель, "
-                "Ollama или другого провайдера."
+                "OpenAI-compatible провайдера."
             ),
             "entrypoint": "project-workflow step --task TASK-KEY [--report TEXT]",
         }

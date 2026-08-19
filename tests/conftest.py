@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from project_workflow import config
-from project_workflow.infrastructure.llm import OllamaClient
+from project_workflow.infrastructure.llm import OpenAICompatibleClient
 
 _ORIGINAL_PHASE_ORDER = list(config.PHASE_ORDER)
 
@@ -119,7 +119,7 @@ def wizard_llm(monkeypatch):
             }
 
         monkeypatch.setattr(
-            OllamaClient,
+            OpenAICompatibleClient,
             "chat",
             chat,
         )

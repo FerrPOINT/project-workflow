@@ -247,7 +247,7 @@ def test_concurrent_reports_create_one_transition_and_run(pg_url, same_report):
     reports = ["same report", "same report" if same_report else "different report"]
     with (
         patch(
-            "project_workflow.wizard.evaluate.OllamaClient.chat",
+            "project_workflow.wizard.evaluate.OpenAICompatibleClient.chat",
             side_effect=lambda *_args, **kwargs: _pass_response(kwargs["user"]),
         ),
         ThreadPoolExecutor(max_workers=2) as pool,

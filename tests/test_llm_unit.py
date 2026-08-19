@@ -9,7 +9,7 @@ import pytest
 pytestmark = [pytest.mark.unit]
 
 from project_workflow.infrastructure.llm import (
-    OllamaClient,
+    OpenAICompatibleClient,
     PromptBuilder,
     ResponseParser,
 )
@@ -35,7 +35,7 @@ class TestEvaluateLlmReportVerdicts:
         engine = _make_engine()
         phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[])
         with patch.object(
-            OllamaClient,
+            OpenAICompatibleClient,
             "chat",
             return_value={
                 "verdict": "BLOCKED",
@@ -59,7 +59,7 @@ class TestEvaluateLlmReportVerdicts:
         engine._resolve_transition.return_value = (None, None, "0")
         phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[], rollback_target="0")
         with patch.object(
-            OllamaClient,
+            OpenAICompatibleClient,
             "chat",
             return_value={
                 "verdict": "ROLLBACK",
@@ -81,7 +81,7 @@ class TestEvaluateLlmReportVerdicts:
         engine = _make_engine()
         phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[], is_delegated=True)
         with patch.object(
-            OllamaClient,
+            OpenAICompatibleClient,
             "chat",
             return_value={
                 "verdict": "DELEGATE",
@@ -106,7 +106,7 @@ class TestEvaluateLlmReportVerdicts:
         engine.phase_map = {"2": next_phase}
         phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[])
         with patch.object(
-            OllamaClient,
+            OpenAICompatibleClient,
             "chat",
             return_value={
                 "verdict": "PASS",
@@ -130,7 +130,7 @@ class TestEvaluateLlmReportVerdicts:
         phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[])
         with (
             patch.object(
-                OllamaClient,
+                OpenAICompatibleClient,
                 "chat",
                 return_value={"verdict": "PASS", "covered": [], "missing": [], "blockers": []},
             ),
@@ -143,87 +143,33 @@ class TestEvaluateLlmReportVerdicts:
         engine.db.commit.assert_not_called()
 
 
-class TestLoadApiKey:
-    def test_env_key(self, monkeypatch):
-        monkeypatch.setenv("OLLAMA_API_KEY", "env-token")
-        import importlib
-
-        import project_workflow.infrastructure.llm
-
-        importlib.reload(project_workflow.infrastructure.llm)
-        assert project_workflow.infrastructure.llm._load_api_key() == "env-token"
-
-    def test_env_empty_reads_file(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("OLLAMA_API_KEY", "")
-        env_file = tmp_path / "hermes.env"
-        env_file.write_text("OLLAMA_API_KEY=file-token\n")
-        import importlib
-
-        import project_workflow.infrastructure.llm
-
-        monkeypatch.setattr(project_workflow.infrastructure.llm.os.path, "expanduser", lambda _path: str(env_file))
-        importlib.reload(project_workflow.infrastructure.llm)
-        assert project_workflow.infrastructure.llm._load_api_key() == "file-token"
-
-    def test_no_key_returns_empty(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("OLLAMA_API_KEY", "")
-        env_file = tmp_path / "missing.env"
-        import importlib
-
-        import project_workflow.infrastructure.llm
-
-        monkeypatch.setattr(project_workflow.infrastructure.llm.os.path, "expanduser", lambda _path: str(env_file))
-        importlib.reload(project_workflow.infrastructure.llm)
-        assert project_workflow.infrastructure.llm._load_api_key() == ""
-
-    def test_fresh_import_env(self, monkeypatch):
-        monkeypatch.setenv("OLLAMA_API_KEY", "fresh-token")
-        import importlib
-
-        import project_workflow.infrastructure.llm
-
-        importlib.reload(project_workflow.infrastructure.llm)
-        assert project_workflow.infrastructure.llm._load_api_key() == "fresh-token"
-        assert project_workflow.infrastructure.llm.OLLAMA_API_KEY == "fresh-token"
-
-
-class TestOllamaClientDetection:
-    def test_cloud_detection(self):
-        client = OllamaClient(base_url="https://ollama.com/v1", api_key="k")
-        assert client.is_cloud is True
-
-    def test_local_detection(self):
-        client = OllamaClient(base_url="http://localhost:11434")
-        assert client.is_cloud is False
-
-
-class TestOllamaClientIsAvailable:
-    def test_local_available(self):
+class TestOpenAICompatibleClientIsAvailable:
+    def test_local_endpoint_available_without_key(self):
         with patch("requests.get", return_value=MagicMock(status_code=200)) as mock:
-            client = OllamaClient(base_url="http://localhost:11434")
+            client = OpenAICompatibleClient(base_url="http://localhost:11434/v1", api_key="")
             assert client.is_available() is True
-            mock.assert_called_once_with("http://localhost:11434/api/tags", timeout=5)
+            mock.assert_called_once_with("http://localhost:11434/v1/models", headers={}, timeout=5)
 
-    def test_cloud_available(self):
+    def test_provider_available_with_bearer_key(self):
         with patch("requests.get", return_value=MagicMock(status_code=200)) as mock:
-            client = OllamaClient(base_url="https://ollama.com/v1", api_key="k")
+            client = OpenAICompatibleClient(base_url="https://provider.example/v1", api_key="k")
             assert client.is_available() is True
             mock.assert_called_once_with(
-                "https://ollama.com/v1/models",
+                "https://provider.example/v1/models",
                 headers={"Authorization": "Bearer k"},
                 timeout=5,
             )
 
     def test_unavailable(self):
         with patch("requests.get", side_effect=ConnectionError("no")):
-            client = OllamaClient(base_url="http://localhost:11434")
+            client = OpenAICompatibleClient(base_url="http://localhost:11434/v1")
             assert client.is_available() is False
 
 
-class TestOllamaClientChatErrors:
+class TestOpenAICompatibleClientChatErrors:
     def test_timeout(self):
         with patch("requests.post", side_effect=TimeoutError("slow")):
-            client = OllamaClient()
+            client = OpenAICompatibleClient()
             with pytest.raises(TimeoutError):
                 client.chat("sys", "user")
 
@@ -231,25 +177,25 @@ class TestOllamaClientChatErrors:
         resp = MagicMock()
         resp.raise_for_status.side_effect = Exception("bad")
         with patch("requests.post", return_value=resp):
-            client = OllamaClient()
+            client = OpenAICompatibleClient()
             with pytest.raises(Exception, match="bad"):
                 client.chat("sys", "user")
 
     def test_empty_content(self):
         resp = MagicMock()
         resp.raise_for_status.return_value = None
-        resp.json.return_value = {"message": {"content": ""}}
+        resp.json.return_value = {"choices": [{"message": {"content": ""}}]}
         with patch("requests.post", return_value=resp):
-            client = OllamaClient()
+            client = OpenAICompatibleClient()
             with pytest.raises(ValueError, match="Empty content"):
                 client.chat("sys", "user")
 
-    def test_cloud_empty_content(self):
+    def test_whitespace_content(self):
         resp = MagicMock()
         resp.raise_for_status.return_value = None
         resp.json.return_value = {"choices": [{"message": {"content": "  "}}]}
         with patch("requests.post", return_value=resp):
-            client = OllamaClient(base_url="https://ollama.com/v1")
+            client = OpenAICompatibleClient(base_url="https://provider.example/v1")
             with pytest.raises(ValueError, match="Empty content"):
                 client.chat("sys", "user")
 
@@ -258,22 +204,22 @@ class TestExtractJson:
     def test_markdown_json_is_rejected(self):
         text = '```json\n{"verdict": "PASS"}\n```'
         with pytest.raises(ValueError):
-            OllamaClient._extract_json(text)
+            OpenAICompatibleClient._extract_json(text)
 
     def test_extract_plain_json(self):
         text = '{"verdict": "BLOCKED"}'
-        result = OllamaClient._extract_json(text)
+        result = OpenAICompatibleClient._extract_json(text)
         assert result["verdict"] == "BLOCKED"
 
     def test_free_text_around_json_is_rejected(self):
         text = 'Some text {"verdict": "PARTIAL"} more text'
         with pytest.raises(ValueError):
-            OllamaClient._extract_json(text)
+            OpenAICompatibleClient._extract_json(text)
 
     def test_invalid_json_is_rejected(self):
         text = "not json"
         with pytest.raises(ValueError):
-            OllamaClient._extract_json(text)
+            OpenAICompatibleClient._extract_json(text)
 
 
 class TestPromptBuilder:

@@ -9,7 +9,7 @@ import requests
 from sqlalchemy.exc import IntegrityError
 
 from ..domain.exceptions import ConcurrentTransitionError
-from ..infrastructure.llm import LlmVerdict, OllamaClient, PromptBuilder, ResponseParser
+from ..infrastructure.llm import LlmVerdict, OpenAICompatibleClient, PromptBuilder, ResponseParser
 from .checks import normalize_text
 from .contracts import PhaseContractBuilder
 from .models import Phase
@@ -105,7 +105,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         evaluation_items=evaluation_items,
     )
 
-    client = OllamaClient()
+    client = OpenAICompatibleClient()
     raw: dict[str, Any] | None = None
     technical_error = False
     try:
@@ -190,7 +190,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
             "phase": phase.code,
             "phase_name": evaluation_phase.name,
             "model": client.model,
-            "endpoint_mode": "openai-compatible" if client.is_cloud else "ollama-native",
+            "endpoint_mode": "openai-compatible",
             "prompt_version": PromptBuilder.PROMPT_VERSION,
             "contract_snapshot": {
                 **current_contract.to_dict(),

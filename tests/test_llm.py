@@ -1,6 +1,4 @@
-"""Tests for LLM-based evaluate (OllamaClient, PromptBuilder, ResponseParser)."""
-
-"""Tests for LLM-based evaluate (OllamaClient, PromptBuilder, ResponseParser)."""
+"""Tests for OpenAI-compatible evaluation and response parsing."""
 
 import json
 from unittest.mock import MagicMock, patch
@@ -12,7 +10,7 @@ pytestmark = [pytest.mark.unit]
 
 from project_workflow.infrastructure.llm import (
     LlmVerdict,
-    OllamaClient,
+    OpenAICompatibleClient,
     PromptBuilder,
     ResponseParser,
 )
@@ -44,47 +42,59 @@ class FakeEvidence:
         self.item = item
 
 
-class TestOllamaClient:
-    """Unit tests for Ollama HTTP wrapper."""
+class TestOpenAICompatibleClient:
+    """Unit tests for the provider-neutral Chat Completions wrapper."""
 
-    def test_default_env_vars(self, monkeypatch):
-        monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
-        from importlib import reload
+    def test_ollama_online_defaults(self, monkeypatch):
+        from project_workflow.config import get_settings
 
-        import project_workflow.infrastructure.llm as llm_mod
+        for name in ("OPENAI_BASE_URL", "OPENAI_MODEL", "OPENAI_TIMEOUT", "OPENAI_API_KEY"):
+            monkeypatch.delenv(name, raising=False)
+        get_settings.cache_clear()
+        client = OpenAICompatibleClient()
+        assert client.base_url == "https://ollama.com/v1"
+        assert client.model == "kimi-k2.6"
+        assert client.timeout == 120
+        assert client.api_key == ""
 
-        reload(llm_mod)
-        assert llm_mod.OLLAMA_BASE_URL == "http://localhost:11434"
-        assert llm_mod.OLLAMA_MODEL == "kimi-k2.6"
+    def test_env_overrides(self, monkeypatch):
+        from project_workflow.config import get_settings
 
-    def test_chat_parses_json_response(self, monkeypatch):
-        monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
-        from importlib import reload
+        monkeypatch.setenv("OPENAI_BASE_URL", "https://provider.example/v1/")
+        monkeypatch.setenv("OPENAI_MODEL", "provider-model")
+        monkeypatch.setenv("OPENAI_TIMEOUT", "45")
+        monkeypatch.setenv("OPENAI_API_KEY", "secret")
+        get_settings.cache_clear()
+        client = OpenAICompatibleClient()
+        assert client.base_url == "https://provider.example/v1"
+        assert client.model == "provider-model"
+        assert client.timeout == 45
+        assert client.api_key == "secret"
 
-        import project_workflow.infrastructure.llm as llm_mod
+    def test_dotenv_overrides(self, tmp_path, monkeypatch):
+        from project_workflow.config import get_settings
 
-        reload(llm_mod)
-        client = llm_mod.OllamaClient()
-        expected = {"verdict": "PASS", "confidence": 0.95}
-        with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
-            mock_post.return_value = MagicMock(
-                status_code=200,
-                json=lambda: {"message": {"content": json.dumps(expected)}},
-                raise_for_status=lambda: None,
-            )
-            result = client.chat("system text", "user text")
-        assert result == expected
+        for name in ("OPENAI_BASE_URL", "OPENAI_MODEL", "OPENAI_TIMEOUT", "OPENAI_API_KEY"):
+            monkeypatch.delenv(name, raising=False)
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".env").write_text(
+            "OPENAI_BASE_URL=https://dotenv.example/v1\n"
+            "OPENAI_MODEL=dotenv-model\n"
+            "OPENAI_TIMEOUT=35\n"
+            "OPENAI_API_KEY=dotenv-secret\n",
+            encoding="utf-8",
+        )
+        get_settings.cache_clear()
 
-    def test_chat_cloud_mode(self, monkeypatch):
-        """Test cloud mode with OpenAI-compatible endpoint."""
-        monkeypatch.setenv("OLLAMA_BASE_URL", "https://ollama.com/v1")
-        from importlib import reload
+        client = OpenAICompatibleClient()
 
-        import project_workflow.infrastructure.llm as llm_mod
+        assert client.base_url == "https://dotenv.example/v1"
+        assert client.model == "dotenv-model"
+        assert client.timeout == 35
+        assert client.api_key == "dotenv-secret"
 
-        reload(llm_mod)
-        client = llm_mod.OllamaClient(api_key="test-key")
-        assert client.is_cloud is True
+    def test_chat_parses_json_response(self):
+        client = OpenAICompatibleClient(api_key="test-key")
         expected = {"verdict": "PASS", "confidence": 0.95}
         with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
             mock_post.return_value = MagicMock(
@@ -92,35 +102,37 @@ class TestOllamaClient:
                 json=lambda: {"choices": [{"message": {"content": json.dumps(expected)}}]},
                 raise_for_status=lambda: None,
             )
-            result = client.chat("system", "user")
+            result = client.chat("system text", "user text")
         assert result == expected
+        mock_post.assert_called_once()
+        assert mock_post.call_args.args[0] == "https://ollama.com/v1/chat/completions"
+        assert mock_post.call_args.kwargs["headers"]["Authorization"] == "Bearer test-key"
 
     def test_chat_payload_structure(self):
-        client = OllamaClient(model="test-model", base_url="http://host:1234")
+        client = OpenAICompatibleClient(model="test-model", base_url="http://host:1234/v1")
         with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
             mock_post.return_value = MagicMock(
                 status_code=200,
-                json=lambda: {"message": {"content": "{}"}},
+                json=lambda: {"choices": [{"message": {"content": "{}"}}]},
                 raise_for_status=lambda: None,
             )
             client.chat("sys", "usr", temperature=0.5)
-            args, kwargs = mock_post.call_args
+            _, kwargs = mock_post.call_args
             payload = kwargs["json"]
             assert payload["model"] == "test-model"
-            assert payload["format"] == "json"
-            assert payload["options"]["temperature"] == 0.5
-            assert payload["options"]["num_ctx"] == 32000
-            assert payload["stream"] is False
+            assert payload["temperature"] == 0.5
+            assert payload["max_tokens"] == 2000
+            assert "response_format" not in payload
             assert len(payload["messages"]) == 2
             assert payload["messages"][0]["role"] == "system"
             assert payload["messages"][1]["role"] == "user"
 
     def test_chat_empty_content_raises(self):
-        client = OllamaClient()
+        client = OpenAICompatibleClient()
         with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
             mock_post.return_value = MagicMock(
                 status_code=200,
-                json=lambda: {"message": {"content": ""}},
+                json=lambda: {"choices": [{"message": {"content": ""}}]},
                 raise_for_status=lambda: None,
             )
             with pytest.raises(ValueError, match="Empty content"):
@@ -255,7 +267,7 @@ class TestResponseParser:
 
 
 class TestWizardEngineEvaluateLLM:
-    """Integration tests for WizardEngine.evaluate_llm with mocked Ollama."""
+    """Integration tests for WizardEngine.evaluate_llm with a mocked provider."""
 
     @pytest.fixture
     def engine(self, tmp_path, monkeypatch):
@@ -285,8 +297,11 @@ class TestWizardEngineEvaluateLLM:
         assert result["verdict"] == "BLOCKED"
         assert result["blockers"] == ["No access"]
 
-    def test_evaluate_llm_fails_closed_on_ollama_failure(self, engine):
-        with patch("project_workflow.wizard.evaluate.OllamaClient.chat", side_effect=requests.ConnectionError("down")):
+    def test_evaluate_llm_fails_closed_on_provider_failure(self, engine):
+        with patch(
+            "project_workflow.wizard.evaluate.OpenAICompatibleClient.chat",
+            side_effect=requests.ConnectionError("down"),
+        ):
             result = engine.evaluate("")
         assert result["verdict"] == "BLOCKED"
         assert result["next_phase"] is None
@@ -294,11 +309,11 @@ class TestWizardEngineEvaluateLLM:
     def test_evaluate_llm_uses_previously_covered(self, engine, wizard_llm):
         """LLM prompt includes previously covered items."""
         wizard_llm("PASS")
-        fixture_chat = OllamaClient.chat
-        with patch("project_workflow.wizard.evaluate.OllamaClient.chat") as mock_chat:
+        fixture_chat = OpenAICompatibleClient.chat
+        with patch("project_workflow.wizard.evaluate.OpenAICompatibleClient.chat") as mock_chat:
             mock_chat.side_effect = fixture_chat
             engine.evaluate_llm("Report", engine._get_current_phase_obj())
-            args, kwargs = mock_chat.call_args
+            _, kwargs = mock_chat.call_args
             # The prompt builder does NOT include previously covered items
             # unless they were passed as previously_covered param.
             # Here we just verify the prompt was built and sent.
@@ -330,7 +345,7 @@ class TestWizardEngineMandatoryLLM:
         evaluate_llm.assert_called_once_with("report", engine._get_current_phase_obj())
 
 
-class TestOllamaResponseParserEdgeCases:
+class TestResponseParserEdgeCases:
     """Edge-case parsing for LLM responses."""
 
     def test_parse_confidence_none_defaults_to_half(self):
@@ -479,17 +494,17 @@ class TestWizardEngineLLMIntegrationDB:
         assert engine.db.get_supervisor_runs(task_key=engine.task_key, limit=5) == []
 
 
-class TestOllamaClientEnvOverrides:
+class TestOpenAICompatibleClientOverrides:
     """Custom env configuration."""
 
     def test_custom_base_url(self):
-        client = OllamaClient(base_url="http://custom:1234")
-        assert client.base_url == "http://custom:1234"
+        client = OpenAICompatibleClient(base_url="http://custom:1234/v1")
+        assert client.base_url == "http://custom:1234/v1"
 
     def test_custom_model(self):
-        client = OllamaClient(model="other-model")
+        client = OpenAICompatibleClient(model="other-model")
         assert client.model == "other-model"
 
     def test_custom_timeout(self):
-        client = OllamaClient(timeout=300)
+        client = OpenAICompatibleClient(timeout=300)
         assert client.timeout == 300

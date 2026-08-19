@@ -1,6 +1,6 @@
 """End-to-end CLI test for a custom workflow with parallel phases/instructions.
 
-Uses a deterministic Ollama response stub while exercising the real evaluator path.
+Uses a deterministic provider response stub while exercising the real evaluator path.
 """
 
 from __future__ import annotations
@@ -326,11 +326,11 @@ class TestManualWorkflowEndToEnd:
     def test_provider_failure_is_visible_and_exits_one(self, manual_env, monkeypatch):
         import requests
 
-        from project_workflow.infrastructure.llm import OllamaClient
+        from project_workflow.infrastructure.llm import OpenAICompatibleClient
 
         runner = CliRunner(env={"DATABASE_URL": "", "WORKFLOW_DIR": manual_env})
         monkeypatch.setattr(
-            OllamaClient,
+            OpenAICompatibleClient,
             "chat",
             lambda *_args, **_kwargs: (_ for _ in ()).throw(requests.ConnectionError()),
         )

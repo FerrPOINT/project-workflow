@@ -69,7 +69,7 @@ SQLite остаётся только для тестов (временные ф�
 | ORM & migrations | SQLAlchemy 2 + Alembic | модели, репозитории, UoW, миграции |
 | API | FastAPI + Pydantic | UI и JSON API |
 | UI | Jinja2 + minimal JS | server-side HTML, без frontend-фреймворков |
-| LLM / Supervisor | Ollama local или Ollama-compatible `/v1` | единственный evaluator отчётов; маршрутизацией владеет workflow |
+| LLM / Supervisor | OpenAI-compatible Chat Completions | единственный evaluator отчётов; по умолчанию Ollama Online |
 | CLI | Click + Rich | `step` / `history` |
 | Config | Pydantic Settings | `.env`, переменные окружения |
 
@@ -84,18 +84,20 @@ project-workflow step --task TASK-123 --report "Сделал X, проверил
 project-workflow history --task TASK-123 --n 10
 ```
 
-CLI ожидает `DATABASE_URL` и доступный Ollama evaluator:
+CLI ожидает `DATABASE_URL` и доступный OpenAI-compatible evaluator. По умолчанию используется Ollama Online:
 
 ```bash
 export DATABASE_URL=postgresql+psycopg://project_workflow:project_workflow@localhost/project_workflow
-export OLLAMA_BASE_URL=http://localhost:11434
-export OLLAMA_MODEL=kimi-k2.6
-export OLLAMA_TIMEOUT=120
-# Для локального Ollama ключ оставьте пустым; для cloud endpoint задайте секрет через окружение.
-export OLLAMA_API_KEY=
+export OPENAI_BASE_URL=https://ollama.com/v1
+export OPENAI_MODEL=kimi-k2.6
+export OPENAI_TIMEOUT=120
+export OPENAI_API_KEY=<ollama-api-key>
 ```
 
-Fallback evaluator отсутствует: если Ollama недоступен или вернул некорректный JSON, команда остаётся на текущей фазе, возвращает `BLOCKED` и exit code `1`.
+Для другого совместимого провайдера достаточно заменить `OPENAI_BASE_URL`, `OPENAI_MODEL` и `OPENAI_API_KEY`.
+Локальный Ollama также подключается через совместимый endpoint `http://localhost:11434/v1`.
+
+Fallback evaluator отсутствует: если провайдер недоступен или вернул некорректный JSON, команда остаётся на текущей фазе, возвращает `BLOCKED` и exit code `1`.
 
 <a name="ui"></a>
 ## 🌐 Web UI
@@ -154,9 +156,9 @@ flowchart TD
 |---|---|---|
 | Lint | `ruff check .` | **green** |
 | Type check | `mypy project_workflow` | **green** |
-| Tests | `pytest -q --timeout=60` | **871 passed, 9 deselected** |
+| Tests | `pytest -q --timeout=60` | **866 passed, 9 deselected** |
 | PostgreSQL integration | `pytest -q -m integration tests/test_postgres_integration.py --timeout=60` | **9 passed** |
-| Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` | **96.33%** |
+| Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` | **96.35%** |
 | Systemd UI health | `curl http://localhost:8811/api/tasks` | **200** |
 
 <a name="roadmap"></a>
@@ -169,7 +171,7 @@ flowchart TD
 - [x] UI/API переведены на SQLAlchemy-сервисы
 - [x] `WorkflowDB` переписан на SQLAlchemy, `db/base.py` и `db_schema.sql` удалены
 - [x] Legacy `wartz-workflow-cli`, `wartz_ui` и старые wizard endpoints удалены
-- [x] Полный suite: 871 тест green + 9 PostgreSQL integration tests
+- [x] Полный suite: 866 тестов green + 9 PostgreSQL integration tests
 - [x] Postgres-интеграционные тесты
 - [x] `WizardEngine` и wizard-модули собраны в пакет `project_workflow/wizard/`
 - [x] API-тесты на все UI routes
