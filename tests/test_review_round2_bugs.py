@@ -159,3 +159,17 @@ class TestExtractJsonNested:
 
         result = OllamaClient._extract_json("no json at all { broken")
         assert result["verdict"] == "BLOCKED"
+
+
+class TestResponseParserConfidence:
+    def test_malformed_confidence_does_not_crash(self):
+        from project_workflow.infrastructure.llm import ResponseParser
+
+        for bad in ["85%", "high", "0.8\nextra", {"a": 1}, [0.5]]:
+            verdict = ResponseParser.parse({"verdict": "PASS", "confidence": bad})
+            assert 0.0 <= verdict.confidence <= 1.0, f"crashed or out of range: {bad!r}"
+
+    def test_percent_confidence_normalized(self):
+        from project_workflow.infrastructure.llm import ResponseParser
+
+        assert ResponseParser.parse({"verdict": "PASS", "confidence": "85%"}).confidence == 0.85

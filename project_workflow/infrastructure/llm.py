@@ -315,10 +315,7 @@ class ResponseParser:
         message = str(raw.get("message", "")).strip()
         next_phase = raw.get("next_phase")
         next_phase_name = raw.get("next_phase_name")
-        confidence = raw.get("confidence", 0.5)
-        if confidence is None:
-            confidence = 0.5
-        confidence = float(confidence)
+        confidence = ResponseParser._to_confidence(raw.get("confidence"), default=0.5)
 
         return LlmVerdict(
             verdict=verdict,
@@ -331,6 +328,27 @@ class ResponseParser:
             confidence=max(0.0, min(1.0, confidence)),
             raw=raw,
         )
+
+    @staticmethod
+    def _to_confidence(value: Any, default: float = 0.5) -> float:
+        """Parse an LLM confidence value without crashing on junk.
+
+        Handles numbers, "0.8", "85%", multiline text; falls back to default.
+        """
+        if value is None:
+            return default
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            parsed = float(value)
+        else:
+            import re as _re
+
+            match = _re.search(r"-?\d+(?:\.\d+)?", str(value))
+            if not match:
+                return default
+            parsed = float(match.group())
+            if "%" in str(value) and parsed > 1:
+                parsed = parsed / 100.0
+        return max(0.0, min(1.0, parsed))
 
     @staticmethod
     def _to_str_list(val: Any) -> list[str]:
