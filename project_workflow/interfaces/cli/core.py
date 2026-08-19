@@ -16,6 +16,7 @@ from rich.console import Console
 
 from ... import __version__
 from ...domain import validation as task_validator
+from ...domain.validation import TaskKeyValidationError
 
 console = Console()
 
@@ -28,30 +29,41 @@ def out_json(data: dict[str, Any], exit_code: int | None = None) -> None:
 
 
 def _get_task_key_validator(uow=None) -> task_validator.TaskKeyValidator:
-    from project_workflow.infrastructure.db import schema
     from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
     if uow is None:
         uow = SAUnitOfWork()
-    bind = uow.session.get_bind()
-    if bind.dialect.name == "sqlite":
-        uow.init()
-        schema.ensure_phase_catalog(uow)
     projects_raw = uow.projects.list()
     projects = [p.to_dict() for p in projects_raw]
     return task_validator.TaskKeyValidator.from_projects(projects)
 
 
 def _require_valid_key(task_key: str, uow=None) -> str:
-    """Проверить валидность ключа задачи. Вернуть normalized или выбросить Abort."""
+    """Проверить валидность ключа задачи по проектам из БД."""
     if uow is None:
         validated = _get_task_key_validator().validate(task_key)
     else:
         validated = _get_task_key_validator(uow=uow).validate(task_key)
     if not validated.is_valid:
-        console.print(f"[red]ERROR[/red] [bold red]Invalid task key:[/bold red] {validated.error_message}")
-        raise click.Abort()
+        raise TaskKeyValidationError(task_key, validated.error_message or "unknown project prefix")
     return validated.normalized or task_key
+
+
+def blocked_result(task_key: str, message: str, phase: str = "") -> dict[str, Any]:
+    """Return the single fail-closed CLI error shape."""
+    return {
+        "verdict": "BLOCKED",
+        "task_key": task_key,
+        "phase": phase,
+        "message": message,
+        "covered": [],
+        "missing": [],
+        "blockers": ["configuration-error"],
+        "current_phase": phase,
+        "next_phase": None,
+        "replayed": False,
+        "retryable": True,
+    }
 
 
 @click.group()
@@ -66,4 +78,4 @@ def cli(ctx: click.Context, json_mode: bool) -> None:
     ctx.obj["json_mode"] = json_mode
 
 
-__all__ = ["cli", "out_json", "_require_valid_key", "console", "WARN"]
+__all__ = ["cli", "out_json", "_require_valid_key", "blocked_result", "console", "WARN"]

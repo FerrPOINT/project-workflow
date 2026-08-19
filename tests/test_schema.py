@@ -8,7 +8,6 @@ import pytest
 
 pytestmark = [pytest.mark.unit]
 
-from project_workflow import config
 from project_workflow.infrastructure.db.schema import (
     ensure_phase_catalog,
     get_phase_from_db,
@@ -24,7 +23,7 @@ from project_workflow.wizard.models import Phase
 def fresh_db(tmp_path, monkeypatch):
     db_path = tmp_path / "workflow.db"
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path}")
-    uow = SAUnitOfWork(str(db_path))
+    uow = SAUnitOfWork(f"sqlite:///{db_path}")
     uow.create_all()
     return uow
 
@@ -35,7 +34,7 @@ class TestEnsurePhaseCatalog:
         phases = load_phases_from_db(fresh_db)
         codes = [p.code for p in phases]
         assert len(codes) > 0
-        for code in config.PHASE_ORDER:
+        for code in (phase.code for phase in load_phases_from_seed()):
             assert code in codes
 
     def test_idempotent_rerun(self, fresh_db):
@@ -60,7 +59,7 @@ class TestEnsurePhaseCatalog:
 
 
 class TestGenerateProgressJson:
-    def test_progress_json_structure(self, fresh_db, tmp_path, monkeypatch):
+    def test_progress_json_structure(self, fresh_db, tmp_path):
         seed_path = tmp_path / "seed.json"
         seed_path.write_text(
             json.dumps(
@@ -76,7 +75,6 @@ class TestGenerateProgressJson:
                 ensure_ascii=False,
             )
         )
-        monkeypatch.setattr(config, "SEED_PATH", seed_path)
         ensure_phase_catalog(fresh_db, seed_path=seed_path)
         phase = get_phase_from_db(fresh_db, "-1")
         assert phase is not None

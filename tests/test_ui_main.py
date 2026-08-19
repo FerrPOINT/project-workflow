@@ -14,7 +14,7 @@ def test_main_defaults():
             ui_main.main()
     args = mock_uvicorn.run.call_args.kwargs
     assert args["host"] == "0.0.0.0"
-    assert args["port"] == ui_main.DEFAULT_UI_PORT
+    assert args["port"] == 8811
     assert args["log_level"] == "info"
 
 

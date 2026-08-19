@@ -33,7 +33,7 @@ class ValidatedTaskKey:
         return self.normalized or self.raw
 
 
-class TaskKeyValidationError(Exception):
+class TaskKeyValidationError(ValueError):
     """Выбрасывается при невалидном ключе задачи."""
 
     def __init__(self, key: str, reason: str):
@@ -218,7 +218,7 @@ class TaskKeyValidator:
     @classmethod
     def from_projects(cls, projects: list[dict]) -> TaskKeyValidator:
         """Создать валидатор из project rows с key_prefixes."""
-        return cls(project_prefixes=projects)
+        return cls(project_prefixes=projects) if projects else cls(prefixes=[])
 
     @classmethod
     def jira_only(cls) -> TaskKeyValidator:
@@ -253,10 +253,10 @@ def validate_or_die(key: str) -> ValidatedTaskKey:
 
 def get_project_for_task_key(uow: Any, task_key: str) -> dict[str, Any] | None:
     """Resolve a project row from a task key using configured project prefixes."""
-    validated = _default_validator.validate(task_key)
-    prefix = validated.prefix
-    if not prefix:
+    match = re.fullmatch(r"(?P<prefix>[A-Z][A-Z0-9]*)-(?P<number>[0-9]+)", str(task_key).strip())
+    if match is None:
         return None
+    prefix = match.group("prefix")
     for project in uow.projects.list():
         project_dict = project.to_dict() if hasattr(project, "to_dict") else dict(project)
         key_prefixes = project_dict.get("key_prefixes", []) or []

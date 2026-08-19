@@ -45,7 +45,7 @@ CLI остаётся минимальным: ровно две команды �
 
 В production используется **PostgreSQL**.
 
-SQLite остаётся только для тестов (временные файлы, monkeypatch `DATABASE_URL`).
+SQLite остаётся только для изолированных тестов с явно заданным DSN/engine.
 
 <a name="features"></a>
 ## ✨ Features
@@ -146,10 +146,10 @@ flowchart TD
 ### Принципы
 
 - Единый data layer: все операции через SQLAlchemy-модели и репозитории.
-- Единственный evaluator — обязательный LLM; deterministic/reasoning compatibility runtime удалён.
+- Единственный evaluator — обязательный OpenAI-compatible LLM.
 - UI-пакет (`project_workflow/interfaces/ui/`) — чистое FastAPI-приложение с отдельными routes, services, dependencies.
 - Конфигурация централизована в `project_workflow.config` на Pydantic Settings; `DATABASE_URL` обязателен.
-- Легаси удалено: исходный `WorkflowDB`, `db/base.py`, `db_schema.sql`, `wartz-workflow-cli`, `wartz_ui` и устаревшие wizard endpoints больше не существуют.
+- PostgreSQL хранит каталог, задачи, историю, fingerprints и audit; packaged seed используется только для пустой БД.
 
 <a name="quality"></a>
 ## 🛡️ Quality Bar
@@ -158,9 +158,9 @@ flowchart TD
 |---|---|---|
 | Lint | `ruff check .` | **green** |
 | Type check | `mypy project_workflow` | **green** |
-| Tests | `pytest -q --timeout=60` | **865 passed, 11 integration deselected** |
+| Tests | `pytest -q --timeout=60` | **824 passed, 11 integration deselected** |
 | PostgreSQL integration | `pytest -q -m integration tests/test_postgres_integration.py --timeout=60` | **11 passed** |
-| Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` | **96.16%** |
+| Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` | **95.67%** |
 | Systemd UI health | `curl http://localhost:8811/api/tasks` | **200** |
 
 <a name="roadmap"></a>
@@ -171,9 +171,8 @@ flowchart TD
 - [x] Alembic-миграции + `scripts/init_db.py` для автоматического baseline
 - [x] Docker Compose: Postgres + migrate + UI
 - [x] UI/API переведены на SQLAlchemy-сервисы
-- [x] `WorkflowDB` переписан на SQLAlchemy, `db/base.py` и `db_schema.sql` удалены
-- [x] Legacy `wartz-workflow-cli`, `wartz_ui` и старые wizard endpoints удалены
-- [x] Полный suite: 865 тестов green + 11 PostgreSQL integration tests
+- [x] Один runtime dataflow: CLI/UI → Wizard → OpenAI-compatible evaluator → PostgreSQL
+- [x] Полный suite: 824 теста green + 11 PostgreSQL integration tests
 - [x] Postgres-интеграционные тесты
 - [x] `WizardEngine` и wizard-модули собраны в пакет `project_workflow/wizard/`
 - [x] API-тесты на все UI routes
@@ -181,7 +180,7 @@ flowchart TD
 - [x] Coverage > 95%
 - [x] mypy `--check-untyped-defs` для wizard/core.py
 - [x] UI-доработки: execution_type на отдельной строке, русское склонение счётчиков, очистка рабочей БД от мусора
-- [x] Wizard evaluate: stateful prompt, три секции в CLI output, явный parallel rendering
+- [x] Wizard evaluate: DB-backed history/audit, idempotent replay и явный parallel rendering
 - [x] Packaged 27-phase catalog bootstrapped once into an empty PostgreSQL database
 
 Подробный план: [`docs/plans/2026-06-21-detailed-roadmap.md`](docs/plans/2026-06-21-detailed-roadmap.md).

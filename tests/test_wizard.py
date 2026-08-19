@@ -32,7 +32,7 @@ class TestWizardEvaluate:
         )
 
     def test_evaluate_pass(self):
-        engine = WizardEngine("AAT-1", repo="/tmp")
+        engine = WizardEngine("TASK-1")
         ph = self._phase()
         engine.current_phase = "0"
         engine.phase_map = {"0": ph}
@@ -47,7 +47,7 @@ class TestWizardEvaluate:
         llm.assert_called_once_with("report ok", ph)
 
     def test_evaluate_partial_when_items_missing(self):
-        engine = WizardEngine("AAT-1", repo="/tmp")
+        engine = WizardEngine("TASK-1")
         ph = self._phase()
         engine.current_phase = "0"
         engine.phase_map = {"0": ph}
@@ -65,7 +65,7 @@ class TestWizardEvaluate:
         assert result["missing"] == ["check"]
 
     def test_get_phase_prompt(self):
-        engine = WizardEngine("AAT-1", repo="/tmp")
+        engine = WizardEngine("TASK-1")
         ph = self._phase()
         engine.current_phase = "0"
         engine.phase_map = {"0": ph}

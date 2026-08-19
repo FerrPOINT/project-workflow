@@ -1,15 +1,11 @@
-"""Wizard context builder — assembles task dossier from DB + artifacts."""
+"""Wizard context builder — assembles the task dossier from PostgreSQL."""
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
-from ..infrastructure import conversation as convo
 from .contracts import PhaseContractBuilder, phase_to_dict
 from .models import Phase
-
-logger = logging.getLogger(__name__)
 
 
 class WizardContextBuilder:
@@ -24,7 +20,6 @@ class WizardContextBuilder:
         all_phases: list[Phase] | None = None,
         current_phase: str = "",
         task_key: str = "",
-        repo: str | None = None,
     ):
         self.uow = uow
         self.task = task or {}
@@ -33,7 +28,6 @@ class WizardContextBuilder:
         self.all_phases = all_phases or []
         self.current_phase = current_phase
         self.task_key = task_key
-        self.repo = repo
         self._contract_builder = PhaseContractBuilder(self.all_phases)
         self._phase_map: dict[str, Phase] | None = None
 
@@ -115,20 +109,12 @@ class WizardContextBuilder:
         workflow_path = self._build_workflow_path()
         completed_phases = [item["code"] for item in workflow_path if item["status"] == "done"]
 
-        messages = []
-        try:
-            messages = convo.get_messages(self.task_key, limit=20)
-        except (OSError, ValueError, TypeError) as exc:
-            logger.warning("Failed to load conversation messages: %s", exc)
-            messages = []
-
         current_contract = (
             self._contract_builder.build(phase) if phase else self._contract_builder.build_missing(self.current_phase)
         )
 
         return {
             "task_key": self.task_key,
-            "repo": self.repo,
             "project_code": self.project.get("code") if self.project else None,
             "project_name": self.project.get("name") if self.project else None,
             "workflow_name": self.workflow.get("name") if self.workflow else None,
@@ -144,7 +130,6 @@ class WizardContextBuilder:
             "current_contract": current_contract.to_dict(),
             "cli_actor": self._cli_actor(),
             "report_template": self._report_template(),
-            "messages": messages,
             "total_phases": len(self.all_phases),
             "completed_count": len(completed_phases),
         }

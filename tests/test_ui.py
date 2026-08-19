@@ -252,24 +252,6 @@ class TestIndexPage:
         assert "Активные задачи" in response.text
         assert "Проекты" in response.text
 
-    def test_index_recovers_from_legacy_singleton_workflow_code_in_runtime_db(self):
-        from project_workflow.infrastructure import db as db_module
-        from project_workflow.interfaces import ui as ui_module
-
-        ui_module._app_state.reset()
-        with sqlite3.connect(str(db_module.DB_PATH)) as conn:
-            conn.execute(
-                "UPDATE workflows SET name = ?, description = ?, is_default = 0 "
-                "WHERE id = (SELECT id FROM workflows ORDER BY id LIMIT 1)",
-                ("Legacy Workflow", "Old bootstrap workflow"),
-            )
-            conn.commit()
-
-        response = client.get("/")
-        assert response.status_code == 200
-        assert "Дашборд" in response.text
-        assert any(workflow["is_default"] for workflow in client.get("/api/workflows").json()["workflows"])
-
     def test_index_has_nav(self):
         response = client.get("/")
         assert response.status_code == 200
@@ -534,7 +516,7 @@ class TestPhasesPage:
             seed_codes = {p.code for p in seed_phases_data}
             seed_phases = [p for p in phases if p["code"] in seed_codes or p.get("is_seed_managed")]
             extra_phases = [p for p in phases if p not in seed_phases]
-            order_index = {code: idx for idx, code in enumerate(config.PHASE_ORDER)}
+            order_index = {phase.code: idx for idx, phase in enumerate(seed_phases_data)}
 
             def _seed_sort_key(p):
                 return order_index.get(p["code"], p.get("phase_order", 0) or 0)
@@ -605,9 +587,8 @@ class TestPhasesPage:
         assert "dataset.executionType" in response.text
         assert "dataset.parallelKey" not in response.text
 
-    def test_phases_order_api_persists_reordered_default_workflow_sequence(self, monkeypatch, tmp_path):
+    def test_phases_order_api_persists_only_in_database(self):
         from project_workflow import config
-        from project_workflow.interfaces.ui import _update_config_phase_order
 
         uow = ui_app_state.get_db()
         default_workflow_id = _workflow_row(name=config.DEFAULT_WORKFLOW_NAME)["id"]
@@ -619,10 +600,7 @@ class TestPhasesPage:
         original_codes = [phase["code"] for phase in default_phases]
         original_batch = [(phase["id"], phase["phase_order"]) for phase in default_phases]
 
-        seed_copy = tmp_path / "seed.json"
-        seed_copy.write_text(config.SEED_PATH.read_text(encoding="utf-8"), encoding="utf-8")
-        monkeypatch.setattr(config, "SEED_PATH", seed_copy)
-        monkeypatch.setattr(config, "PHASE_ORDER", original_codes.copy())
+        original_seed = config.SEED_PATH.read_text(encoding="utf-8")
 
         reordered_codes = original_codes.copy()
         moved_code = "0.000"
@@ -665,14 +643,9 @@ class TestPhasesPage:
             ]
             assert refreshed_codes[:6] == reordered_codes[:6]
 
-            persisted_seed = json.loads(seed_copy.read_text(encoding="utf-8"))
-            persisted_codes = [item.get("code", item.get("id")) for item in persisted_seed]
-            assert persisted_codes[:6] == reordered_codes[:6]
-            assert config.PHASE_ORDER[:6] == reordered_codes[:6]
+            assert config.SEED_PATH.read_text(encoding="utf-8") == original_seed
         finally:
             _batch_update_orders(uow, original_batch)
-            config.PHASE_ORDER[:] = original_codes
-            _update_config_phase_order()
 
     def test_phases_page_shows_selected_agent_instead_of_hardcoded_critic(self):
         uow = ui_app_state.get_db()
@@ -827,13 +800,11 @@ class TestPhaseDetail:
             assert response.status_code == 200
             assert (
                 f'<span class="badge" style="background:var(--accent-soft);color:var(--accent)">'
-                f'\n            {skills[0]["name"]}'
-                in response.text
+                f"\n            {skills[0]['name']}" in response.text
             )
             assert (
                 f'<span class="badge" style="background:var(--accent-soft);color:var(--accent)">'
-                f'\n            {skills[2]["name"]}'
-                in response.text
+                f"\n            {skills[2]['name']}" in response.text
             )
 
             add_select_match = re.search(
@@ -1088,13 +1059,8 @@ class TestDragDropAPI:
     """Tests for drag-and-drop backend APIs."""
 
     def test_api_batch_order_update(self):
-        from project_workflow import config
-        from project_workflow.interfaces.ui import _update_config_phase_order
-        from tests._phase_helpers import get_next_phase
-
         uow = ui_app_state.get_db()
         original_rows = [(phase["code"], phase["phase_order"]) for phase in [p.to_dict() for p in uow.phases.list()]]
-        original_phase_order = list(config.PHASE_ORDER)
 
         try:
             resp = client.put(
@@ -1111,12 +1077,11 @@ class TestDragDropAPI:
             data = resp.json()
             assert data["ok"] is True
             assert data["updated"] == 3
-            assert all(isinstance(phase_code, str) for phase_code in config.PHASE_ORDER)
-            assert get_next_phase("0.0a") is not None
+            reordered = [phase.to_dict() for phase in uow.phases.list()]
+            by_code = {phase["code"]: phase["phase_order"] for phase in reordered}
+            assert by_code == {**by_code, "-1": 1, "0.0a": 2, "1": 3}
         finally:
             _batch_update_orders(uow, original_rows)
-            config.PHASE_ORDER[:] = original_phase_order
-            _update_config_phase_order()
 
     def test_api_batch_order_empty_error(self):
         resp = client.put("/api/phases/order", json={"orders": []})
@@ -1505,46 +1470,6 @@ class TestWorkflowsPage:
         default_workflow = next(item for item in workflows if item["id"] == workflow["id"])
         assert "code" not in default_workflow
         assert default_workflow["is_default"] is True
-
-    def test_workflows_api_recovers_from_arbitrary_singleton_workflow_code_in_runtime_db(self):
-        from project_workflow.infrastructure import db as db_module
-        from project_workflow.interfaces import ui as ui_module
-
-        ui_module._app_state.reset()
-        with sqlite3.connect(str(db_module.DB_PATH)) as conn:
-            conn.execute(
-                "UPDATE workflows SET name = ?, description = ?, is_default = 0 "
-                "WHERE id = (SELECT id FROM workflows ORDER BY id LIMIT 1)",
-                ("Renamed Workflow", "Broken runtime workflow"),
-            )
-            conn.commit()
-
-        response = client.get("/api/workflows")
-        assert response.status_code == 200
-        payload = response.json()
-        assert payload["ok"] is True
-        assert any(workflow["is_default"] for workflow in payload["workflows"])
-        assert all("code" not in workflow for workflow in payload["workflows"])
-
-    def test_workflows_api_recovers_without_resetting_ui_singletons_after_runtime_code_mutation(self):
-        from project_workflow.infrastructure import db as db_module
-        from project_workflow.interfaces import ui as ui_module
-
-        ui_module._app_state.reset()
-        with sqlite3.connect(str(db_module.DB_PATH)) as conn:
-            conn.execute(
-                "UPDATE workflows SET name = ?, description = ?, is_default = 0 "
-                "WHERE id = (SELECT id FROM workflows ORDER BY id LIMIT 1)",
-                ("Singleton Workflow", "Broken live singleton workflow"),
-            )
-            conn.commit()
-
-        response = client.get("/api/workflows")
-        assert response.status_code == 200
-        payload = response.json()
-        assert payload["ok"] is True
-        assert any(workflow["is_default"] for workflow in payload["workflows"])
-        assert all("code" not in workflow for workflow in payload["workflows"])
 
     def test_workflows_api_prevents_deleting_workflow_with_projects_or_phases(self):
         workflow = _workflow_row("default")

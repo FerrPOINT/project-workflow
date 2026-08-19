@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
 import pytest
 
 pytestmark = [pytest.mark.wizard]
@@ -15,22 +13,15 @@ from project_workflow.wizard.checks import normalize_text
 class TestCoverageAccumulation:
     """Test retrieval of coverage saved by previous LLM runs."""
 
-    def _make_engine(self, tmp_path, monkeypatch, task_key="AAT-1", current_phase="0"):
-        test_db = tmp_path / "workflow.db"
-        import project_workflow.infrastructure.db as db_module
-
-        monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
-            engine = WizardEngine(task_key)
-        return engine
+    def _make_engine(self, task_key="TASK-1"):
+        return WizardEngine(task_key)
 
     def test_get_previously_covered_reads_runs(self, tmp_path, monkeypatch):
-        engine = self._make_engine(tmp_path, monkeypatch, "TASK-9999", "0")
+        engine = self._make_engine("TASK-9999")
         tid = engine.task["id"]
         pid = engine.db.create_phase(
             {
-                "code": "0",
+                "code": "coverage.test",
                 "workflow_id": 1,
                 "name": "Test",
                 "phase_order": 1,
@@ -42,7 +33,7 @@ class TestCoverageAccumulation:
             {
                 "task_id": tid,
                 "phase_id": pid,
-                "verdict": "soft_fail",
+                "verdict": "partial",
                 "report": "report1",
                 "covered": ["Item A", "Item B"],
                 "missing": ["Item C"],
@@ -57,30 +48,24 @@ class TestCoverageAccumulation:
 
         class FakePhase:
             id = pid
-            code = "0"
+            code = "coverage.test"
 
         engine.all_phases = [FakePhase()]
-        engine.phase_map = {"0": FakePhase()}
+        engine.phase_map = {"coverage.test": FakePhase()}
 
-        prev = engine._get_previously_covered("0")
+        prev = engine._get_previously_covered("coverage.test")
         assert normalize_text("Item A") in prev
         assert normalize_text("Item B") in prev
+
 
 class TestEvaluateAccumulationEndToEnd:
     """Test evaluate() accumulates coverage across multiple reports for the same phase."""
 
-    def _make_engine(self, tmp_path, monkeypatch, task_key="AAT-1", current_phase="0"):
-        test_db = tmp_path / "workflow.db"
-        import project_workflow.infrastructure.db as db_module
-
-        monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
-            engine = WizardEngine(task_key)
-        return engine
+    def _make_engine(self, task_key="TASK-1"):
+        return WizardEngine(task_key)
 
     def test_evaluate_across_reports(self, tmp_path, monkeypatch, wizard_llm):
-        engine = self._make_engine(tmp_path, monkeypatch, "TASK-9996", "0")
+        engine = self._make_engine("TASK-9996")
         tid = engine.task["id"]
 
         class Check:
@@ -93,7 +78,7 @@ class TestEvaluateAccumulationEndToEnd:
 
         pid = engine.db.create_phase(
             {
-                "code": "0",
+                "code": "coverage.test",
                 "workflow_id": 1,
                 "name": "Test",
                 "phase_order": 1,
@@ -111,7 +96,7 @@ class TestEvaluateAccumulationEndToEnd:
         # Mock phase map
         class FakePhase:
             id = pid
-            code = "0"
+            code = "coverage.test"
             name = "Test"
             description = ""
             execution_type = "sync"
@@ -125,8 +110,8 @@ class TestEvaluateAccumulationEndToEnd:
             is_delegated = False
 
         engine.all_phases = [FakePhase()]
-        engine.phase_map = {"0": FakePhase()}
-        engine.current_phase = "0"
+        engine.phase_map = {"coverage.test": FakePhase()}
+        engine.current_phase = "coverage.test"
         engine.task = engine.db.get_task(tid)
 
         # First report: covers only check 1

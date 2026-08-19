@@ -10,14 +10,6 @@ from typing import Any
 
 
 @dataclass
-class ArtifactSnapshot:
-    """Snapshot of a task artifact file."""
-
-    path: str
-    exists: bool
-
-
-@dataclass
 class PhaseContract:
     """Expected deliverables for a single phase (or parallel group)."""
 
@@ -56,8 +48,6 @@ class PhaseContract:
 VERDICT_LABELS: dict[str, str] = {
     "pass": "PASS",
     "partial": "PARTIAL",
-    "soft_fail": "SOFT_FAIL",
-    "hard_fail": "HARD_FAIL",
     "blocked": "BLOCKED",
     "rollback": "ROLLBACK",
     "delegate": "DELEGATE",

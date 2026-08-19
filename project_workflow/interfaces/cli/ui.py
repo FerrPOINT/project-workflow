@@ -12,7 +12,6 @@
 
 from __future__ import annotations
 
-import sys
 from typing import Any
 
 import click
@@ -20,7 +19,7 @@ import click
 from ... import wizard
 from ...infrastructure.db.uow import SAUnitOfWork
 from ...wizard import format_result
-from .core import WARN, _require_valid_key, cli, console, out_json
+from .core import WARN, _require_valid_key, blocked_result, cli, console, out_json
 
 # ── Guard: новые команды запрещены ──────────────────────────────────────
 # Если кто-то добавит @cli.command() сюда — тесты поймают.
@@ -47,11 +46,26 @@ def step_cmd(
       project-workflow step --task TASK-KEY                -> текущие инструкции
       project-workflow step --task TASK-KEY --report "..."  -> оценить отчёт исполнителя CLI и перейти
     """
-    uow = SAUnitOfWork()
-    task_key = _require_valid_key(task, uow)
     jmode = ctx.obj.get("json_mode", False)
+    try:
+        uow = SAUnitOfWork()
+        task_key = _require_valid_key(task, uow)
+        engine = wizard.WizardEngine(task_key, uow=uow)
+    except (RuntimeError, ValueError) as exc:
+        result = blocked_result(task, str(exc))
+        if jmode:
+            out_json(result, exit_code=1)
+            return
+        console.print(format_result(result))
+        raise click.exceptions.Exit(1) from exc
 
-    engine = wizard.WizardEngine(task_key, uow=uow)
+    if engine._get_current_phase_obj() is None:
+        result = engine._blocked_result()
+        if jmode:
+            out_json(result, exit_code=1)
+            return
+        console.print(format_result(result))
+        raise click.exceptions.Exit(1)
 
     # --report : evaluate report
     if report:
@@ -60,7 +74,7 @@ def step_cmd(
             out_json(result, exit_code=1 if result["verdict"] == "BLOCKED" else 0)
             return
         console.print(format_result(result))
-        sys.exit(1 if result["verdict"] == "BLOCKED" else 0)
+        raise click.exceptions.Exit(1 if result["verdict"] == "BLOCKED" else 0)
 
     # default: show phase prompt/instructions
     prompt = engine.get_phase_prompt()
@@ -100,25 +114,32 @@ def history_cmd(ctx: click.Context, task: str, n: int | None) -> None:
       project-workflow history --task TASK-KEY            -> все записи
       project-workflow history --task TASK-KEY --n 50     -> последние 50 записей
     """
-    task_key = _require_valid_key(task)
     jmode = ctx.obj.get("json_mode", False)
-
-    with SAUnitOfWork() as uow:
-        task_obj = uow.tasks.get_by_key(task_key)
-        task_id = task_obj.id if task_obj else None
-        runs_raw = uow.supervisor_runs.list(task_id=task_id, task_key=task_key, limit=n or 200)
-        runs: list[dict[str, Any]] = []
-        for raw in runs_raw:
-            rd: dict[str, Any] = raw.to_dict()
-            next_phase_id = rd.get("next_phase_id")
-            rollback_phase_id = rd.get("rollback_phase_id")
-            phase = uow.phases.get_by_id(int(rd.get("phase_id") or 0))
-            next_phase = uow.phases.get_by_id(int(next_phase_id)) if next_phase_id is not None else None
-            rollback_phase = uow.phases.get_by_id(int(rollback_phase_id)) if rollback_phase_id is not None else None
-            rd["phase_code"] = phase.code if phase else "-"
-            rd["next_phase_code"] = next_phase.code if next_phase else "-"
-            rd["rollback_phase_code"] = rollback_phase.code if rollback_phase else "-"
-            runs.append(rd)
+    try:
+        with SAUnitOfWork() as uow:
+            task_key = _require_valid_key(task, uow)
+            task_obj = uow.tasks.get_by_key(task_key)
+            task_id = task_obj.id if task_obj else None
+            runs_raw = uow.supervisor_runs.list(task_id=task_id, task_key=task_key, limit=n or 200)
+            runs: list[dict[str, Any]] = []
+            for raw in runs_raw:
+                rd: dict[str, Any] = raw.to_dict()
+                next_phase_id = rd.get("next_phase_id")
+                rollback_phase_id = rd.get("rollback_phase_id")
+                phase = uow.phases.get_by_id(int(rd.get("phase_id") or 0))
+                next_phase = uow.phases.get_by_id(int(next_phase_id)) if next_phase_id is not None else None
+                rollback_phase = uow.phases.get_by_id(int(rollback_phase_id)) if rollback_phase_id is not None else None
+                rd["phase_code"] = phase.code if phase else "-"
+                rd["next_phase_code"] = next_phase.code if next_phase else "-"
+                rd["rollback_phase_code"] = rollback_phase.code if rollback_phase else "-"
+                runs.append(rd)
+    except (RuntimeError, ValueError) as exc:
+        result = blocked_result(task, str(exc))
+        if jmode:
+            out_json(result, exit_code=1)
+            return
+        console.print(format_result(result))
+        raise click.exceptions.Exit(1) from exc
 
     if jmode:
         out_json(

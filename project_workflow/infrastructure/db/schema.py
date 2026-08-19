@@ -1,4 +1,4 @@
-"""Schema loader — reads Phase models from SQLite DB with YAML fallback.
+"""Phase catalog loading and empty-database bootstrap.
 
 Все данные — только из БД (phases, instructions, checks, evidence).
 """
@@ -136,30 +136,7 @@ def load_phases_from_db(
     if isinstance(workflow_id, str):
         workflow_id = int(workflow_id) if workflow_id.isdigit() else None
     rows = uow.phases.list(workflow_id)
-    phases = [_build_phase_from_db(r, uow) for r in rows]
-    if not phases:
-        # Fallback intake phase so the wizard always has a current phase.
-        phases = [
-            Phase(
-                id=None,
-                code="-1",
-                name="Task Intake",
-                description="Initial task intake before workflow catalog is configured.",
-                min_time_min=0,
-                is_blocker=False,
-                is_delegated=False,
-                is_critic=False,
-                checks=[],
-                evidence=[],
-                instructions=[],
-                delegate=None,
-                next_recommendation="",
-                parallel_with=None,
-                rollback_target=None,
-                execution_type="sync",
-            )
-        ]
-    return phases
+    return [_build_phase_from_db(r, uow) for r in rows]
 
 
 def get_phase_from_db(
@@ -176,7 +153,7 @@ def get_phase_from_db(
     return None
 
 
-# ── JSON Seed fallback ───────────
+# ── Bootstrap seed ───────────
 
 
 def _load_seed(path: Path | str | None = None) -> list[dict[str, Any]]:
@@ -281,6 +258,10 @@ def ensure_phase_catalog(
         return
 
     with uow:
+        if uow.workflows.list():
+            if url:
+                _CATALOG_ENSURED_URLS.add(url)
+            return
         default_workflow = uow.workflows.ensure_default_exists()
         workflow_id = default_workflow.id
         assert workflow_id is not None

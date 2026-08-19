@@ -32,10 +32,10 @@ class TestSessionHelpers:
         assert _normalize_url("postgresql://u:***@h/d") == "postgresql://u:***@h/d"
         assert _normalize_url("sqlite:///tmp/db.sqlite") == "sqlite:///tmp/db.sqlite"
 
-    def test_normalize_url_converts_path_to_sqlite(self):
-        assert _normalize_url("/tmp/db.sqlite") == "sqlite:////tmp/db.sqlite"
-        assert _normalize_url("relative.db") == "sqlite:///relative.db"
-        assert _normalize_url(":memory:") == "sqlite:///:memory:"
+    def test_normalize_url_does_not_invent_sqlite_dsn(self):
+        assert _normalize_url("/tmp/db.sqlite") == "/tmp/db.sqlite"
+        assert _normalize_url("relative.db") == "relative.db"
+        assert _normalize_url(":memory:") == ":memory:"
 
     def test_get_engine_returns_same_instance_for_same_url(self, tmp_path):
         reset_engine()

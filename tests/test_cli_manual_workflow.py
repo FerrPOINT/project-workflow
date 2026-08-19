@@ -11,6 +11,8 @@ import os
 import pytest
 from click.testing import CliRunner
 
+from project_workflow import config
+from project_workflow.infrastructure.db.session import reset_engine
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.cli.ui import cli
 
@@ -19,12 +21,11 @@ from project_workflow.interfaces.cli.ui import cli
 def manual_env(tmp_path, monkeypatch):
     workflow_dir = tmp_path / "manual_workflow"
     workflow_dir.mkdir()
-    monkeypatch.setenv("DATABASE_URL", "")
-    monkeypatch.setenv("WORKFLOW_DIR", str(workflow_dir))
-    # DB_PATH import-time fallback is kept for compatibility, but SAUnitOfWork
-    # now calls get_db_path() at runtime. Monkeypatch both to be safe.
     db_path = workflow_dir / "workflow.db"
-    monkeypatch.setattr("project_workflow.infrastructure.db.DB_PATH", db_path)
+    database_url = f"sqlite:///{db_path}"
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    config.get_settings.cache_clear()
+    reset_engine()
 
     seed_path = os.path.join(os.path.dirname(__file__), "manual_workflow_seed.json")
     with open(seed_path, encoding="utf-8") as f:
@@ -81,12 +82,15 @@ def manual_env(tmp_path, monkeypatch):
     uow.commit()
     uow.close()
 
-    return str(workflow_dir)
+    yield database_url
+
+    reset_engine()
+    config.get_settings.cache_clear()
 
 
 class TestManualWorkflowEndToEnd:
     def test_sync_phase_passes_and_advances(self, manual_env, wizard_llm):
-        runner = CliRunner(env={"DATABASE_URL": "", "WORKFLOW_DIR": manual_env})
+        runner = CliRunner(env={"DATABASE_URL": manual_env})
         wizard_llm("PASS")
         report = (
             "Цель задачи MANUAL-1 зафиксирована. Входные данные зафиксированы. "
@@ -103,7 +107,7 @@ class TestManualWorkflowEndToEnd:
         assert data["next_phase_contract"]["instructions"]
 
     def test_plan_passes_then_parallel_group(self, manual_env, wizard_llm):
-        runner = CliRunner(env={"DATABASE_URL": "", "WORKFLOW_DIR": manual_env})
+        runner = CliRunner(env={"DATABASE_URL": manual_env})
         wizard_llm("PASS")
         runner.invoke(
             cli,
@@ -128,7 +132,7 @@ class TestManualWorkflowEndToEnd:
         assert data["next_phase"] == "manual.parallel-a"
 
     def test_parallel_group_partial_then_full(self, manual_env, wizard_llm):
-        runner = CliRunner(env={"DATABASE_URL": "", "WORKFLOW_DIR": manual_env})
+        runner = CliRunner(env={"DATABASE_URL": manual_env})
         wizard_llm("PASS")
         # Advance to parallel group
         runner.invoke(
@@ -192,7 +196,7 @@ class TestManualWorkflowEndToEnd:
         assert data["missing"] == []
 
     def test_mixed_instructions_phase(self, manual_env, wizard_llm):
-        runner = CliRunner(env={"DATABASE_URL": "", "WORKFLOW_DIR": manual_env})
+        runner = CliRunner(env={"DATABASE_URL": manual_env})
         wizard_llm("PASS")
         # Advance through intake, plan, parallel
         for report in [
@@ -236,7 +240,7 @@ class TestManualWorkflowEndToEnd:
         assert data["missing"] == []
 
     def test_rollback_phase_response(self, manual_env, wizard_llm):
-        runner = CliRunner(env={"DATABASE_URL": "", "WORKFLOW_DIR": manual_env})
+        runner = CliRunner(env={"DATABASE_URL": manual_env})
         wizard_llm("PASS")
         for report in [
             (
@@ -268,7 +272,7 @@ class TestManualWorkflowEndToEnd:
         assert "Вернись к шагу: manual.seq-instr" in result.output
 
     def test_delegate_phase_response(self, manual_env, wizard_llm):
-        runner = CliRunner(env={"DATABASE_URL": "", "WORKFLOW_DIR": manual_env})
+        runner = CliRunner(env={"DATABASE_URL": manual_env})
         wizard_llm("PASS")
         for report in [
             (
@@ -301,7 +305,7 @@ class TestManualWorkflowEndToEnd:
         assert "Test Wizard verdict: DELEGATE" in result.output
 
     def test_human_pass_shows_next_phase_contract(self, manual_env, wizard_llm):
-        runner = CliRunner(env={"DATABASE_URL": "", "WORKFLOW_DIR": manual_env})
+        runner = CliRunner(env={"DATABASE_URL": manual_env})
         wizard_llm("PASS")
 
         result = runner.invoke(cli, ["step", "--task", "MANUAL-8", "--report", "intake complete"])
@@ -313,7 +317,7 @@ class TestManualWorkflowEndToEnd:
         assert "Документ архитектуры" in result.output
 
     def test_human_partial_shows_current_phase_contract(self, manual_env, wizard_llm):
-        runner = CliRunner(env={"DATABASE_URL": "", "WORKFLOW_DIR": manual_env})
+        runner = CliRunner(env={"DATABASE_URL": manual_env})
         wizard_llm("PARTIAL", covered=["Цель задачи зафиксирована"], missing=["Входные данные зафиксированы"])
 
         result = runner.invoke(cli, ["step", "--task", "MANUAL-9", "--report", "partly complete"])
@@ -328,7 +332,7 @@ class TestManualWorkflowEndToEnd:
 
         from project_workflow.infrastructure.llm import OpenAICompatibleClient
 
-        runner = CliRunner(env={"DATABASE_URL": "", "WORKFLOW_DIR": manual_env})
+        runner = CliRunner(env={"DATABASE_URL": manual_env})
         monkeypatch.setattr(
             OpenAICompatibleClient,
             "chat",
@@ -342,7 +346,7 @@ class TestManualWorkflowEndToEnd:
         assert "Wizard не смог проверить отчёт" in result.output
 
     def test_parallel_rollback_persists_target_history_and_run(self, manual_env, wizard_llm):
-        runner = CliRunner(env={"DATABASE_URL": "", "WORKFLOW_DIR": manual_env})
+        runner = CliRunner(env={"DATABASE_URL": manual_env})
         wizard_llm("PASS")
         for report in ("intake", "plan"):
             result = runner.invoke(cli, ["--json", "step", "--task", "MANUAL-11", "--report", report])
@@ -372,7 +376,7 @@ class TestManualWorkflowEndToEnd:
             assert rollback_phase.code == "manual.plan"
 
     def test_full_workflow_to_done(self, manual_env, wizard_llm):
-        runner = CliRunner(env={"DATABASE_URL": "", "WORKFLOW_DIR": manual_env})
+        runner = CliRunner(env={"DATABASE_URL": manual_env})
         wizard_llm("PASS")
         reports = [
             (

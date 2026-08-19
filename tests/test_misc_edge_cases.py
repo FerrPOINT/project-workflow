@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import click
 import pytest
 
 pytestmark = [pytest.mark.cli]
@@ -49,14 +48,14 @@ class TestGetTaskKeyValidator:
         # should not raise and have default patterns
         assert validator is not None
 
-    def test_bootstraps_default_project_for_task_keys(self, tmp_path, monkeypatch):
+    def test_empty_database_does_not_invent_task_prefixes(self):
         from project_workflow.interfaces.cli.core import _get_task_key_validator
 
-        monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'cli.db'}")
-        validator = _get_task_key_validator()
+        uow = MagicMock()
+        uow.projects.list.return_value = []
+        validator = _get_task_key_validator(uow=uow)
         result = validator.validate("TASK-1")
-        assert result.is_valid
-        assert result.normalized == "TASK-1"
+        assert not result.is_valid
 
 
 class TestRequireValidKey:
@@ -69,12 +68,13 @@ class TestRequireValidKey:
         )
         assert _require_valid_key("tst-1") == "TST-1"
 
-    def test_invalid_raises_abort(self, monkeypatch):
+    def test_invalid_raises_validation_error(self, monkeypatch):
+        from project_workflow.domain.validation import TaskKeyValidationError
         from project_workflow.interfaces.cli.core import _require_valid_key
 
         monkeypatch.setattr(
             "project_workflow.interfaces.cli.core._get_task_key_validator",
             lambda: MagicMock(validate=lambda k: MagicMock(is_valid=False, normalized=None, error_message="bad")),
         )
-        with pytest.raises(click.Abort):
+        with pytest.raises(TaskKeyValidationError, match="bad"):
             _require_valid_key("bad")

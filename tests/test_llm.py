@@ -258,9 +258,7 @@ class TestResponseParser:
 
     def test_pass_with_missing_items_is_rejected(self):
         with pytest.raises(ValueError):
-            ResponseParser.parse(
-                {"verdict": "PASS", "covered": [], "missing": ["Run tests"], "blockers": []}
-            )
+            ResponseParser.parse({"verdict": "PASS", "covered": [], "missing": ["Run tests"], "blockers": []})
 
     def test_parse_optional_fields_get_defaults(self):
         v = ResponseParser.parse({"verdict": "PARTIAL", "covered": [], "missing": ["item"], "blockers": []})
@@ -311,18 +309,10 @@ class TestWizardEngineEvaluateLLM:
     """Integration tests for WizardEngine.evaluate_llm with a mocked provider."""
 
     @pytest.fixture
-    def engine(self, tmp_path, monkeypatch):
-        test_db = tmp_path / "workflow.db"
-        import project_workflow.infrastructure.db as db_module
+    def engine(self):
+        from project_workflow.wizard import WizardEngine
 
-        monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
-        monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
-            from project_workflow.wizard import WizardEngine
-
-            engine = WizardEngine("TASK-LLM-1", repo=str(tmp_path))
-        return engine
+        return WizardEngine("TASK-1001")
 
     def test_evaluate_llm_pass(self, engine, wizard_llm):
         wizard_llm("PASS")
@@ -359,25 +349,17 @@ class TestWizardEngineEvaluateLLM:
             # unless they were passed as previously_covered param.
             # Here we just verify the prompt was built and sent.
             assert "Report" in kwargs["user"]
-            assert "TASK-LLM-1" in kwargs["user"]
+            assert "TASK-1001" in kwargs["user"]
 
 
 class TestWizardEngineMandatoryLLM:
     """Report evaluation always uses the configured LLM."""
 
     @pytest.fixture
-    def engine(self, tmp_path, monkeypatch):
-        test_db = tmp_path / "workflow.db"
-        import project_workflow.infrastructure.db as db_module
+    def engine(self):
+        from project_workflow.wizard import WizardEngine
 
-        monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
-        monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
-            from project_workflow.wizard import WizardEngine
-
-            engine = WizardEngine("TASK-RULE-1", repo=str(tmp_path))
-        return engine
+        return WizardEngine("TASK-1002")
 
     def test_evaluate_uses_llm(self, engine):
         with patch.object(engine, "evaluate_llm", return_value={"verdict": "BLOCKED"}) as evaluate_llm:
@@ -461,24 +443,16 @@ class TestWizardEngineLLMIntegrationDB:
     """DB state after LLM evaluate."""
 
     @pytest.fixture
-    def engine(self, tmp_path, monkeypatch):
-        test_db = tmp_path / "workflow.db"
-        import project_workflow.infrastructure.db as db_module
+    def engine(self):
+        from project_workflow.wizard import WizardEngine
 
-        monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
-        monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
-            from project_workflow.wizard import WizardEngine
-
-            engine = WizardEngine("DB-LLM-1", repo=str(tmp_path))
-        return engine
+        return WizardEngine("TASK-1003")
 
     def test_supervisor_run_recorded_after_llm_evaluate(self, engine, wizard_llm):
         wizard_llm("PASS")
         engine.evaluate("Report")
 
-        runs = engine.db.get_supervisor_runs(task_key="DB-LLM-1", limit=5)
+        runs = engine.db.get_supervisor_runs(task_key="TASK-1003", limit=5)
         assert len(runs) == 1
         run = runs[0]
         assert run["verdict"] == "pass"

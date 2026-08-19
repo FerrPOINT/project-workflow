@@ -44,19 +44,7 @@ class SAUnitOfWork(UnitOfWork):
         if isinstance(db_path_or_engine, Engine):
             self._session = Session(bind=db_path_or_engine, expire_on_commit=False)
         elif db_path_or_engine is None:
-            from ... import config
-
-            url = config.get_settings().DATABASE_URL
-            target: str | None
-            if url and "://" in url:
-                target = url
-            else:
-                from project_workflow.infrastructure import db
-
-                target = str(getattr(db, "get_db_path", lambda: getattr(db, "DB_PATH", ""))())
-            if not target:
-                target = None
-            self._session = get_session(target)
+            self._session = get_session()
         else:
             self._session = get_session(db_path_or_engine)
         self._init_repositories()
@@ -150,8 +138,7 @@ class SAUnitOfWork(UnitOfWork):
         if "agent_id" in data and isinstance(data["agent_id"], dict):
             data["agent_id"] = data["agent_id"].get("id")
         if "workflow_id" not in data or data["workflow_id"] is None:
-            default_wf = self.workflows.ensure_default_exists()
-            data["workflow_id"] = default_wf.id if default_wf else None
+            raise ValueError("create_phase requires workflow_id")
         if "code" not in data:
             data["code"] = str(data.get("id")) if data.get("id") is not None else str(data.get("phase_order", "0"))
         result = PhaseServiceApp(self).create_phase(data)
@@ -235,8 +222,10 @@ class SAUnitOfWork(UnitOfWork):
 
     def get_phases(self, workflow_id: int | None = None) -> list[Any]:
         if workflow_id is None:
-            default_wf = self.workflows.ensure_default_exists()
-            workflow_id = default_wf.id if default_wf else None
+            default_wf = self.workflows.get_default()
+            if default_wf is None:
+                return []
+            workflow_id = default_wf.id
         return rows_to_dicts(self.phases.list(workflow_id=workflow_id))
 
     def get_all_phases(self) -> list[Any]:
@@ -279,9 +268,12 @@ class SAUnitOfWork(UnitOfWork):
     def init(self) -> None:
         from . import schema
 
+        bind = self._session.bind
+        if bind is None or bind.dialect.name != "sqlite":
+            raise RuntimeError("SAUnitOfWork.init is only available for isolated SQLite tests")
         self.create_all()
-        self._bootstrap_default_project()
         schema.ensure_phase_catalog(self)
+        self._bootstrap_default_project()
 
     def _bootstrap_default_project(self) -> None:
         from .uow_bootstrap import bootstrap_default_project

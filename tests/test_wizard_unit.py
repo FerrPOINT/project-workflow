@@ -1,6 +1,6 @@
 """Tests for wizard.py to boost coverage."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -11,21 +11,21 @@ from project_workflow.wizard import WizardEngine
 
 class TestWizard:
     def test_init(self):
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
-            engine = WizardEngine("AAT-1")
-            assert engine.task_key == "AAT-1"
+        engine = WizardEngine("TASK-1")
+        assert engine.task_key == "TASK-1"
 
-    def test_init_bootstraps_phases_when_workflow_db_is_empty(self, tmp_path, monkeypatch):
+    def test_init_does_not_bootstrap_empty_workflow(self, tmp_path):
+        from project_workflow.infrastructure.db.uow import SAUnitOfWork
+
         test_db = tmp_path / "workflow.db"
-        monkeypatch.setattr("project_workflow.infrastructure.db.DB_PATH", test_db)
-
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
-            engine = WizardEngine("AAT-1")
-
-        assert engine.all_phases
-        assert any(phase.code == "-1" for phase in engine.all_phases)
+        uow = SAUnitOfWork(f"sqlite:///{test_db}")
+        uow.create_all()
+        workflow_id = uow.workflows.create({"name": "Empty", "description": ""})
+        uow.projects.create({"workflow_id": workflow_id, "code": "task", "name": "Task", "key_prefixes": ["TASK"]})
+        uow.commit()
+        with pytest.raises(ValueError, match="catalog is empty"):
+            WizardEngine("TASK-1", uow=uow)
+        assert uow.phases.list(workflow_id) == []
 
     def test_get_phase_prompt(self):
         ph = MagicMock()
@@ -35,13 +35,11 @@ class TestWizard:
         ph.is_blocker = False
         ph.is_delegated = False
         ph.instructions = []
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
-            engine = WizardEngine("AAT-1")
-            engine.phase_map = {"0": ph}
-            engine.all_phases = [ph]
-            prompt = engine.get_phase_prompt("0")
-            assert "Test" in prompt
+        engine = WizardEngine("TASK-1")
+        engine.phase_map = {"0": ph}
+        engine.all_phases = [ph]
+        prompt = engine.get_phase_prompt("0")
+        assert "Test" in prompt
 
     def test_get_phase_prompt_parallel(self):
         """Parallel phases produce a single merged prompt with per-phase agents and partner."""
@@ -71,26 +69,23 @@ class TestWizard:
         ph_b.delegate = None
         ph_b.next_recommendation = "next"
 
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
-            engine = WizardEngine("AAT-1")
-            engine.phase_map = {"parallel-a": ph_a, "parallel-b": ph_b}
-            engine.all_phases = [ph_a, ph_b]
-            engine.current_phase = "parallel-a"
-            prompt = engine.get_phase_prompt("parallel-a")
-            assert "ПАРАЛЛЕЛЬНАЯ ГРУППА ФАЗ" in prompt
-            assert "Parallel A, Parallel B" in prompt
-            assert "параллельно с" in prompt
-            assert "Выполняются одновременно" in prompt
-            assert "Отчёт по этой группе присылается ОДНИМ сообщением" in prompt
+        engine = WizardEngine("TASK-1")
+        engine.phase_map = {"parallel-a": ph_a, "parallel-b": ph_b}
+        engine.all_phases = [ph_a, ph_b]
+        engine.current_phase = "parallel-a"
+        prompt = engine.get_phase_prompt("parallel-a")
+        assert "ПАРАЛЛЕЛЬНАЯ ГРУППА ФАЗ" in prompt
+        assert "Parallel A, Parallel B" in prompt
+        assert "параллельно с" in prompt
+        assert "Выполняются одновременно" in prompt
+        assert "Отчёт по этой группе присылается ОДНИМ сообщением" in prompt
 
     def test_get_full_context(self):
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
-            engine = WizardEngine("AAT-1")
-            ctx = engine.get_full_context()
-            assert "current_phase" in ctx
-            assert "all_phases" in ctx
+        engine = WizardEngine("TASK-1")
+        ctx = engine.get_full_context()
+        assert "current_phase" in ctx
+        assert "all_phases" in ctx
+        assert "messages" not in ctx
 
 
 class TestPromptAndModels:

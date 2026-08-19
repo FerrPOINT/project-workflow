@@ -71,7 +71,7 @@ class TestWizardContextBuilder:
         assert len(verdicts) == 1
         assert verdicts[0]["verdict"] == "PASS"
 
-    def test_build_catches_conversation_exception(self):
+    def test_build_has_no_file_conversation_messages(self):
         uow = MagicMock()
         uow.get_task_history.return_value = []
         uow.get_supervisor_runs.return_value = []
@@ -84,9 +84,5 @@ class TestWizardContextBuilder:
             current_phase="1",
             task_key="PRJ-1",
         )
-        with pytest.MonkeyPatch().context() as mp:
-            import project_workflow.infrastructure.conversation as convo
-
-            mp.setattr(convo, "get_messages", lambda *a, **kw: (_ for _ in ()).throw(OSError("boom")))
-            result = builder.build()
-        assert result["messages"] == []
+        result = builder.build()
+        assert "messages" not in result

@@ -21,7 +21,8 @@ from urllib.request import urlopen
 
 import psycopg
 import pytest
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
+from sqlalchemy.exc import IntegrityError
 
 from project_workflow import config as config_module
 from project_workflow.infrastructure.db.session import (
@@ -132,6 +133,16 @@ class TestPostgresSession:
         assert "report_fingerprint" not in {
             column["name"] for column in inspect(engine).get_columns("supervisor_runs", schema="project_workflow")
         }
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO project_workflow.supervisor_runs "
+                    "(task_id, phase_id, verdict, report) VALUES "
+                    "(:task_id, :phase_id, 'soft_fail', 'legacy soft'), "
+                    "(:task_id, :phase_id, 'hard_fail', 'legacy hard')"
+                ),
+                {"task_id": task_id, "phase_id": phase.id},
+            )
         ensure_migrated(engine)
         ensure_migrated(engine)
 
@@ -143,9 +154,22 @@ class TestPostgresSession:
         assert "uq_supervisor_runs_task_report_fingerprint" in indexes
         check_uow = SAUnitOfWork(engine)
         try:
-            assert check_uow.supervisor_runs.list(task_id=task_id)[0].id == run_id
+            runs = check_uow.supervisor_runs.list(task_id=task_id)
+            assert any(run.id == run_id for run in runs)
+            assert {run.verdict for run in runs} == {"partial", "blocked"}
         finally:
             check_uow.close()
+
+        with pytest.raises(IntegrityError):
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.supervisor_runs "
+                        "(task_id, phase_id, verdict, report) "
+                        "VALUES (:task_id, :phase_id, 'soft_fail', 'rejected')"
+                    ),
+                    {"task_id": task_id, "phase_id": phase.id},
+                )
 
 
 @pytest.mark.integration
@@ -174,7 +198,7 @@ class TestPostgresUoW:
             assert tasks.get("TST-1") == task_id
             uow.commit()
 
-    def test_ensure_phase_catalog_seeds_phases(self, pg_url):
+    def test_ensure_phase_catalog_does_not_overwrite_existing_workflow(self, pg_url):
         from project_workflow.infrastructure.db import schema as schema_module
 
         uow = SAUnitOfWork(pg_url)
@@ -188,8 +212,7 @@ class TestPostgresUoW:
         with uow:
             default_wf = uow.workflows.get_default()
             phases = uow.phases.list(workflow_id=default_wf.id)
-            codes = {p.code for p in phases}
-            assert "0.5" in codes
+            assert phases == []
 
     def test_uow_commit_and_rollback(self, pg_url):
         uow = SAUnitOfWork(pg_url)
@@ -386,7 +409,6 @@ def _cli_env(pg_url: str, provider_url: str) -> dict[str, str]:
         }
     )
     env.pop("PYTHONIOENCODING", None)
-    env.pop("WORKFLOW_DIR", None)
     return env
 
 

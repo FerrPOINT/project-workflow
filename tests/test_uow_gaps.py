@@ -65,28 +65,24 @@ class TestUowEdgeCases:
         assert isinstance(run_id, int)
         uow.close()
 
-    def test_create_phase_without_workflow_id_uses_default(self):
+    def test_create_phase_without_workflow_id_is_rejected(self):
         uow = _fresh_uow()
-        with uow:
-            uow.workflows.ensure_default_exists()
-            uow.commit()
-        phase_id = uow.create_phase(
-            {
-                "code": "GAP-AUTO",
-                "name": "Auto WF Phase",
-                "phase_order": 9001,
-            }
-        )
-        assert isinstance(phase_id, int)
-        phase = uow.phases.get_by_id(phase_id)
-        assert phase is not None
-        assert phase.workflow_id is not None
+        with pytest.raises(ValueError, match="workflow_id"):
+            uow.create_phase(
+                {
+                    "code": "GAP-AUTO",
+                    "name": "Auto WF Phase",
+                    "phase_order": 9001,
+                }
+            )
         uow.close()
 
     def test_create_phase_without_code_generates_code(self):
         uow = _fresh_uow()
+        workflow_id = uow.workflows.ensure_default_exists().id
         phase_id = uow.create_phase(
             {
+                "workflow_id": workflow_id,
                 "name": "No Code Phase",
                 "phase_order": 9002,
             }

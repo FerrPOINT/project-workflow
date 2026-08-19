@@ -24,30 +24,27 @@ def wizard_db(tmp_path, monkeypatch):
     uow.init()
     ensure_phase_catalog(uow)
     uow.close()
-    from project_workflow.infrastructure import db as db_module
-
-    monkeypatch.setattr(db_module, "DB_PATH", db_path)
     return url
 
 
 class TestWizardEngineIntegration:
-    def test_create_if_missing_true_creates_task_and_project(self, wizard_db):
-        engine = WizardEngine("AAT-NEW", create_if_missing=True)
+    def test_create_if_missing_true_creates_task_for_known_project(self, wizard_db):
+        engine = WizardEngine("TASK-NEW", create_if_missing=True)
         assert engine.task is not None
-        assert engine.task["task_key"] == "AAT-NEW"
+        assert engine.task["task_key"] == "TASK-NEW"
 
     def test_create_if_missing_false_raises_when_task_missing(self, wizard_db):
-        with pytest.raises(ValueError, match="Task AAT-MISSING not found"):
-            WizardEngine("AAT-MISSING", create_if_missing=False)
+        with pytest.raises(ValueError, match="Task TASK-MISSING not found"):
+            WizardEngine("TASK-MISSING", create_if_missing=False)
 
     def test_resolve_project_unknown_monkeypatched(self, wizard_db, monkeypatch):
-        engine = WizardEngine("AAT-1", create_if_missing=True)
+        engine = WizardEngine("TASK-1", create_if_missing=True)
         monkeypatch.setattr(engine._task_service, "get_task_by_key", lambda *_a, **_kw: None)
         monkeypatch.setattr(engine, "_resolve_project", lambda: None)
         with pytest.raises(ValueError, match="Cannot resolve project"):
             engine._ensure_task()
 
-    def test_existing_task_with_empty_current_phase_gets_first_phase(self, wizard_db):
+    def test_new_task_with_empty_current_phase_starts_at_first_phase(self, wizard_db):
         uow = SAUnitOfWork(wizard_db)
         project = uow.create_project({"code": "AAT", "name": "AAT", "key_prefixes": ["AAT"]})
         task_id = uow.create_task(

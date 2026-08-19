@@ -1,12 +1,14 @@
 """Tests for parallel group logic, record transitions, result builders, and edge cases."""
 
+from contextlib import nullcontext
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 pytestmark = [pytest.mark.wizard]
 
-from project_workflow.wizard import PromptCache, WizardEngine
+from project_workflow.wizard import WizardEngine
+from project_workflow.wizard.core import PromptCache
 from project_workflow.wizard.models import Phase, PhaseCheck, PhaseEvidence, PhaseInstruction
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -16,9 +18,8 @@ from project_workflow.wizard.models import Phase, PhaseCheck, PhaseEvidence, Pha
 
 @pytest.fixture
 def engine():
-    with patch("project_workflow.wizard.convo") as mock_convo:
-        mock_convo.get_last_phase.return_value = None
-        eng = WizardEngine("AAT-1", "/tmp")
+    with nullcontext():
+        eng = WizardEngine("TASK-1")
         eng.all_phases = [
             Phase(
                 id=1,
@@ -253,7 +254,7 @@ class TestRecordTransition:
 
     @pytest.mark.parametrize(
         ("verdict", "status", "task_status"),
-        [("soft_fail", "partial", "active"), ("blocked", "blocked", "blocked"), ("delegate", "delegated", "active")],
+        [("partial", "partial", "active"), ("blocked", "blocked", "blocked"), ("delegate", "delegated", "active")],
     )
     def test_stays_on_phase(self, engine, verdict, status, task_status):
         ph = engine.phase_map["-1"]
@@ -318,9 +319,8 @@ class TestRecordParallelTransition:
 
 class TestEvaluateEdgeCases:
     def test_orphan_phase_returns_blocked(self):
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
-            engine = WizardEngine("AAT-1", "/tmp")
+        with nullcontext():
+            engine = WizardEngine("TASK-1")
             engine.current_phase = "orphan"
             engine.phase_map = {}
             engine.all_phases = []
@@ -331,9 +331,8 @@ class TestEvaluateEdgeCases:
         assert result["blockers"] == ["phase-not-configured"]
 
     def test_sync_evaluate_pass(self, wizard_llm):
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
-            engine = WizardEngine("AAT-1", "/tmp")
+        with nullcontext():
+            engine = WizardEngine("TASK-1")
             ph = Phase(
                 id=1,
                 code="-1",
@@ -360,9 +359,8 @@ class TestEvaluateEdgeCases:
         assert "deploy" in result["covered"]
 
     def test_parallel_evaluate_pass(self, wizard_llm):
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
-            engine = WizardEngine("AAT-1", "/tmp")
+        with nullcontext():
+            engine = WizardEngine("TASK-1")
             ph_a = Phase(
                 id=1,
                 code="1",
@@ -416,9 +414,8 @@ class TestEvaluateEdgeCases:
         assert result["phase_name"] == "Parallel group: 1, 2"
 
     def test_parallel_evaluate_partial_stays(self, wizard_llm):
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
-            engine = WizardEngine("AAT-1", "/tmp")
+        with nullcontext():
+            engine = WizardEngine("TASK-1")
             ph_a = Phase(
                 id=1,
                 code="1",

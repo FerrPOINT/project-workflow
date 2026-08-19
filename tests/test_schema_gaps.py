@@ -43,14 +43,14 @@ class TestSchemaEdgeCases:
         mark_catalog_not_ensured()
         assert not schema._CATALOG_ENSURED_URLS
 
-    def test_load_phases_from_db_returns_fallback_intake(self, tmp_path, monkeypatch):
+    def test_load_phases_from_db_unknown_workflow_is_empty(self, tmp_path, monkeypatch):
         url = f"sqlite:///{tmp_path / 'empty.db'}"
         uow = SAUnitOfWork(url)
         uow.create_all()
         monkeypatch.setattr(config, "SEED_PATH", _seed_path(tmp_path))
         ensure_phase_catalog(uow)
         phases = load_phases_from_db(uow, workflow_id=999999)
-        assert any(p.code == "-1" for p in phases)
+        assert phases == []
         uow.close()
 
     def test_load_phases_from_db_with_string_workflow_id(self, tmp_path, monkeypatch):

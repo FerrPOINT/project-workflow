@@ -3,6 +3,8 @@ FROM python:3.11-slim-bookworm AS builder
 
 WORKDIR /app
 
+ENV PYTHONDONTWRITEBYTECODE=1
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential libpq-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -11,9 +13,12 @@ COPY pyproject.toml README.md alembic.ini ./
 COPY scripts/ ./scripts/
 COPY project_workflow/ ./project_workflow/
 
-RUN pip install --no-cache-dir -e ".[ui]" psycopg[binary]
+RUN pip install --no-cache-dir --no-compile -e ".[ui]" psycopg[binary]
 
 FROM python:3.11-slim-bookworm AS runtime
+
+ARG VCS_REF=unknown
+LABEL org.opencontainers.image.revision=$VCS_REF
 
 WORKDIR /app
 

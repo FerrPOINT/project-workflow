@@ -9,8 +9,6 @@ import pytest
 from project_workflow import config
 from project_workflow.infrastructure.llm import OpenAICompatibleClient
 
-_ORIGINAL_PHASE_ORDER = list(config.PHASE_ORDER)
-
 
 @pytest.fixture(autouse=True)
 def isolate_ui_runtime_state(tmp_path, monkeypatch):
@@ -24,14 +22,9 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
 
     database_url = f"sqlite:///{test_db}"
     monkeypatch.setenv("DATABASE_URL", database_url)
-    monkeypatch.setenv("WORKFLOW_DIR", str(runtime_dir))
     config.get_settings.cache_clear()
 
     monkeypatch.setattr(config, "SEED_PATH", seed_path)
-
-    from project_workflow.infrastructure import db as db_module
-
-    monkeypatch.setattr(db_module, "DB_PATH", test_db)
 
     from project_workflow.application import state as app_state
     from project_workflow.infrastructure.db.session import reset_engine
@@ -46,10 +39,12 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
 
     from project_workflow.infrastructure.db.schema import ensure_phase_catalog
     from project_workflow.infrastructure.db.uow import SAUnitOfWork
+    from project_workflow.infrastructure.db.uow_bootstrap import bootstrap_default_project
 
     uow = SAUnitOfWork(database_url)
     uow.create_all()
     ensure_phase_catalog(uow)
+    bootstrap_default_project(uow)
     uow.close()
 
     yield
@@ -59,7 +54,6 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
     ui_state._app_state = original_ui_app_state
     reset_engine()
     config.get_settings.cache_clear()
-    config.PHASE_ORDER[:] = list(_ORIGINAL_PHASE_ORDER)
 
 
 @pytest.fixture

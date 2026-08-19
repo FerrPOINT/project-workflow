@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+
+import pytest
 
 from project_workflow.application.state import _AppState
 from project_workflow.application.task import TaskService
@@ -17,7 +19,7 @@ class FakeProject:
     code: str
 
     def to_dict(self) -> dict[str, Any]:
-        return {"id": self.id, "code": self.code}
+        return {"id": self.id, "code": self.code, "key_prefixes": [self.code]}
 
 
 @dataclass
@@ -50,25 +52,20 @@ class TestTaskService:
 
     def test_create_task_without_project_id(self):
         uow = _make_uow()
-        uow.projects.get_by_code.return_value = FakeProject(4, "PRJ")
+        uow.projects.list.return_value = [FakeProject(4, "PRJ")]
         uow.tasks.create.return_value = 8
         uow.tasks.get_by_id.return_value = FakeTask(8, "PRJ-1", 4)
         svc = TaskService(uow)
         result = svc.create_task({"task_key": "PRJ-1"})
         assert result["project_id"] == 4
 
-    def test_create_task_auto_project(self):
+    def test_create_task_unknown_prefix_fails_without_writes(self):
         uow = _make_uow()
-        uow.projects.get_by_code.return_value = None
-        uow.tasks.create.return_value = 9
-        uow.tasks.get_by_id.return_value = FakeTask(9, "NEW-1", 10)
-        with patch("project_workflow.application.project.ProjectService") as ps_cls:
-            ps_cls.return_value.create_project.return_value = {"id": 10, "code": "NEW"}
-            svc = TaskService(uow)
-            result = svc.create_task({"task_key": "NEW-1"})
-            assert result["project_id"] == 10
-            ps_cls.assert_called_once_with(uow)
-            ps_cls.return_value.create_project.assert_called_once_with({"name": "NEW", "code": "NEW"})
+        uow.projects.list.return_value = []
+        with pytest.raises(ValueError, match="No project is configured"):
+            TaskService(uow).create_task({"task_key": "NEW-1"})
+        uow.projects.create.assert_not_called()
+        uow.tasks.create.assert_not_called()
 
     def test_get_update_list_delete(self):
         uow = _make_uow()
@@ -91,7 +88,8 @@ class TestAppState:
 
         get_settings.cache_clear()
         state = _AppState()
-        assert state._database_url == "sqlite:///env.db"
+        assert state._database_url is None
+        assert state._database_url_normalized().endswith("env.db")
 
     def test_database_url_normalized(self):
         state = _AppState("sqlite:///tmp/../test.db")

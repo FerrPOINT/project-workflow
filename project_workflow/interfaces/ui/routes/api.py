@@ -21,7 +21,6 @@ from project_workflow.interfaces.ui.schemas import (
     WorkflowCreate,
     WorkflowUpdate,
 )
-from project_workflow.interfaces.ui.seed import _update_config_phase_order
 from project_workflow.interfaces.ui.services import (
     _coerce_phase_db_id,
     _load_phase_detail,
@@ -133,7 +132,6 @@ async def api_agents() -> dict[str, Any] | JSONResponse:
 
 
 async def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONResponse:
-    uow = _app_state.get_db()
     workflow_id = payload.workflow_id
     if workflow_id is None:
         return _error("workflow_id обязателен", 400)
@@ -176,7 +174,6 @@ async def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONRespons
     if payload.code:
         data["code"] = payload.code
     phase = _app_state.phase_service().create_phase(data)
-    _update_config_phase_order(uow)
     return {"ok": True, "phase_id": phase["id"], "phase_order": new_order, "phase": phase}
 
 
@@ -234,12 +231,10 @@ async def api_phase_delete(phase_id: int) -> dict[str, Any] | JSONResponse:
     if len(workflow_phases) <= 1:
         return _error("Нельзя удалить единственную фазу workflow", 409)
     _app_state.phase_service().delete_phase(phase_id)
-    _update_config_phase_order(_app_state.get_db())
     return {"ok": True}
 
 
 async def api_phase_batch_order(payload: PhaseOrderUpdate) -> dict[str, Any] | JSONResponse:
-    uow = _app_state.get_db()
     if not payload.orders:
         return _error("Список order пуст", 400)
 
@@ -273,7 +268,6 @@ async def api_phase_batch_order(payload: PhaseOrderUpdate) -> dict[str, Any] | J
     for phase_id, new_order in batch:
         _app_state.phase_service().update_phase(phase_id, {"phase_order": new_order})
 
-    _update_config_phase_order(uow)
     return {"ok": True, "updated": len(payload.orders)}
 
 
@@ -285,7 +279,6 @@ async def api_workflow_create(payload: WorkflowCreate) -> dict[str, Any] | JSONR
     service = _app_state.workflow_service()
     workflow = service.create_workflow({"name": payload.name, "description": payload.description or ""})
     workflow_id = workflow["id"]
-    _update_config_phase_order(_app_state.get_db())
     return {"ok": True, "workflow_id": workflow_id, "workflow": service.get_workflow(workflow_id)}
 
 

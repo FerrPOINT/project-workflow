@@ -1,17 +1,15 @@
 """DB-backed workflow supervisor over the phase catalog.
 
 Thin facade — orchestrates context → contract → checks → store.
-Public surface kept compatible:
-- WizardEngine(task_key, repo)
+Public surface:
+- WizardEngine(task_key)
 - WizardEngine.get_full_context()
 - WizardEngine.get_phase_prompt()
 - WizardEngine.evaluate(report)
-- evaluate_report(...), main(...)
 """
 
 from __future__ import annotations
 
-import json
 import threading
 from typing import Any
 
@@ -57,17 +55,11 @@ class WizardEngine:
     """Internal supervisor that evaluates workflow progress against DB phase contracts."""
 
     def __init__(
-        self, task_key: str, repo: str | None = None, uow: SAUnitOfWork | None = None, create_if_missing: bool = True
+        self, task_key: str, uow: SAUnitOfWork | None = None, create_if_missing: bool = True
     ):
         self.task_key = task_key
-        self.repo = repo
         self.create_if_missing = create_if_missing
         self._uow = uow if uow is not None else SAUnitOfWork()
-
-        bind = self._uow.session.get_bind()
-        if bind.dialect.name == "sqlite":
-            self._uow.init()
-            schema.ensure_phase_catalog(self._uow)
 
         self._workflow_service = WorkflowService(self._uow)
         self._project_service = ProjectService(self._uow)
@@ -127,11 +119,6 @@ class WizardEngine:
     def _ensure_task(self) -> dict:
         existing = self._task_service.get_task_by_key(self.task_key)
         if existing:
-            if str(existing.get("current_phase") or "").strip() == "":
-                current_phase = self._first_phase_code_for_project(existing["project_id"])
-                self._task_service.update_task(existing["id"], {"current_phase": current_phase})
-                self._uow.commit()
-                return self._task_service.get_task(existing["id"]) or existing
             return existing
 
         if not self.create_if_missing:
@@ -159,39 +146,21 @@ class WizardEngine:
             for prefix in project.get("key_prefixes", []):
                 if self.task_key.startswith(prefix + "-") or self.task_key == prefix:
                     return project
-        # Fall back to the default workflow/project.
-        default_wf = self._workflow_service.ensure_default_exists()
-        default_wf_id = default_wf.get("id") if default_wf else None
-        for project in self._project_service.list_projects():
-            if default_wf_id and project.get("workflow_id") == default_wf_id:
-                return project
-        # Create a default project under the default workflow.
-        return self._project_service.create_project(
-            {
-                "code": "default",
-                "name": "Default Project",
-            }
-        )
+        return None
 
     def _first_phase_code_for_project(self, project_id: int) -> str:
         project = self._project_service.get_project(project_id)
         workflow_id = project["workflow_id"] if project else None
         phases = schema.load_phases_from_db(self._uow, workflow_id=workflow_id)
-        return phases[0].code if phases else "-1"
+        if not phases:
+            raise ValueError("Workflow phase catalog is empty")
+        return phases[0].code
 
     def _resolve_current_phase(self) -> str:
         if not self.task:
-            return "-1"
+            return ""
         current = str(self.task.get("current_phase") or "").strip()
-        if current and current in self.phase_map:
-            return current
-        if self.all_phases:
-            fallback = self.all_phases[0].code
-            if current != fallback:
-                self._task_service.update_task(self.task["id"], {"current_phase": fallback})
-                self.task = self._task_service.get_task(self.task["id"]) or self.task
-            return fallback
-        return current or "-1"
+        return current
 
     def _get_current_phase_obj(self) -> Phase | None:
         return self.phase_map.get(self.current_phase)
@@ -302,7 +271,6 @@ class WizardEngine:
             all_phases=self.all_phases,
             current_phase=self.current_phase,
             task_key=self.task_key,
-            repo=self.repo,
         )
         ctx = builder.build()
         self._cache.set(self.task_key, self.current_phase, ctx)
@@ -332,11 +300,16 @@ class WizardEngine:
         )
 
     def _blocked_result(self) -> dict[str, Any]:
+        message = (
+            "Workflow phase catalog is empty."
+            if not self.all_phases
+            else "Current phase is not configured in the workflow catalog."
+        )
         return {
             "verdict": "BLOCKED",
             "task_key": self.task_key,
             "phase": self.current_phase,
-            "message": "Current phase is not configured in the workflow catalog.",
+            "message": message,
             "covered": [],
             "missing": [],
             "blockers": ["phase-not-configured"],
@@ -405,28 +378,3 @@ class WizardEngine:
         from .evaluate import evaluate_llm_report
 
         return evaluate_llm_report(report, phase, self)
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# Public wrappers / CLI entrypoints
-# ═══════════════════════════════════════════════════════════════════════
-
-
-def evaluate_report(task_key: str, report: str, repo: str | None = None) -> dict:
-    import project_workflow.wizard as _wizard_pkg
-
-    engine = _wizard_pkg.WizardEngine(task_key, repo)
-    return engine.evaluate(report)
-
-
-def main(task_key: str, repo: str | None = None, report: str | None = None) -> None:
-    """CLI entrypoint kept for existing scripts/tests that call wizard.main() directly."""
-    import sys
-
-    import project_workflow.wizard as _wizard_pkg
-
-    if report:
-        result = evaluate_report(task_key, report, repo)
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-        sys.exit(1 if result["verdict"] == "BLOCKED" else 0)
-    print(_wizard_pkg.WizardEngine(task_key, repo).get_phase_prompt())

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
 import pytest
 
 from project_workflow.wizard import WizardEngine
@@ -15,9 +13,7 @@ pytestmark = [pytest.mark.wizard]
 
 class TestBuildChecklist:
     def _make_engine(self) -> WizardEngine:
-        with patch("project_workflow.wizard.WizardContextBuilder") as mock_ctx:
-            mock_ctx.return_value.build.return_value = {"task_key": "AAT-1", "current_phase": "1"}
-            return WizardEngine("AAT-1")
+        return WizardEngine("TASK-1")
 
     def test_deduplicates_and_preserves_order(self):
         engine = self._make_engine()

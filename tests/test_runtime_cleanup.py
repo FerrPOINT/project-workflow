@@ -50,7 +50,7 @@ def _phase_by_code(code: str) -> dict:
 
 
 def test_default_bootstrap_project_prefixes_are_project_specific(tmp_path):
-    uow = SAUnitOfWork(str(tmp_path / "workflow.db"))
+    uow = SAUnitOfWork(f"sqlite:///{tmp_path / 'workflow.db'}")
     uow.init()
 
     project = next((p for p in uow.get_projects() if p["code"] == "TASK"), None)
@@ -75,10 +75,10 @@ def test_seed_catalog_task_intake_and_preflight_have_real_content():
         assert "Evidence 1" not in evidence_descriptions
 
 
-def test_seed_catalog_order_matches_config_phase_order():
+def test_seed_catalog_order_is_self_consistent():
     phases = json.loads(SEED_PATH.read_text(encoding="utf-8"))
     codes = [str(phase.get("code", phase.get("id", ""))).strip() for phase in phases]
-    assert codes == config.PHASE_ORDER
+    assert len(codes) == len(set(codes)) == 27
     assert [phase.get("phase_order") for phase in phases] == list(range(1, len(phases) + 1))
 
 
@@ -217,7 +217,7 @@ def test_seed_catalog_role_bound_phases_are_fully_filled_with_agents_skills_and_
 
 
 def test_db_init_assigns_selected_agents_to_role_bound_default_phases(tmp_path):
-    uow = SAUnitOfWork(str(tmp_path / "workflow.db"))
+    uow = SAUnitOfWork(f"sqlite:///{tmp_path / 'workflow.db'}")
     uow.init()
     schema.ensure_phase_catalog(uow)
 

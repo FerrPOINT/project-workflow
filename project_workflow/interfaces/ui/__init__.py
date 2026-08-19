@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from .app import app
 from .main import main
-from .seed import _update_config_phase_order
 from .services import (
     _build_parallel_phase_blocks,
     _coerce_phase_db_id,
@@ -53,7 +52,6 @@ __all__ = [
     "_phase_create_payload",
     "_resolve_task_phase",
     "_scan_hermes_skills",
-    "_update_config_phase_order",
     "_workflow_form_payload",
     "_templates_env",
 ]

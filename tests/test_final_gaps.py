@@ -25,24 +25,6 @@ from project_workflow.wizard import core as core_mod
 from project_workflow.wizard import format_result
 
 
-class TestConfigFinalGap:
-    def test_read_raw_settings_non_dict(self, tmp_path, monkeypatch):
-        from project_workflow import config as config_mod
-
-        path = tmp_path / "cfg.json"
-        path.write_text("[1, 2]")
-        bad_dir = tmp_path / "bad-cfg"
-        bad_dir.mkdir()
-        path.rename(bad_dir / "settings.json")
-        monkeypatch.setenv("WORKFLOW_DIR", str(bad_dir))
-        config_mod.get_settings.cache_clear()
-        try:
-            assert config_mod._read_raw_settings() == {}
-        finally:
-            monkeypatch.delenv("WORKFLOW_DIR")
-            config_mod.get_settings.cache_clear()
-
-
 def _mock_state(uow=None):
     state = MagicMock()
     state.get_db.return_value = uow or MagicMock()
@@ -82,17 +64,7 @@ class TestDomainFinalGaps:
         assert str(PhaseCode("1")) == "1"
 
 
-class TestUiSeedSkillsFinalGaps:
-    def test_update_config_phase_order_no_rows(self, monkeypatch):
-        from project_workflow.interfaces.ui import seed as seed_mod
-
-        before = list(schemas.config.PHASE_ORDER)
-        uow = MagicMock()
-        uow.workflows.get_default.return_value = None
-        monkeypatch.setattr(seed_mod, "_get_app_state", lambda: _mock_state(uow))
-        seed_mod._update_config_phase_order(uow)
-        assert schemas.config.PHASE_ORDER == before
-
+class TestUiSkillsFinalGaps:
     def test_scan_hermes_skills_exception(self):
         from project_workflow.interfaces.ui import skills as skills_mod
 
@@ -156,7 +128,7 @@ class TestApplicationServiceFinalGaps:
         uow.tasks.create.return_value = 1
         uow.tasks.get_by_id.return_value = None
         with pytest.raises(RuntimeError, match="Task creation failed"):
-            TaskService(uow).create_task({"task_key": "P-1"})
+            TaskService(uow).create_task({"task_key": "P-1", "project_id": 5})
 
     def test_instruction_service_creation_failed(self):
         uow = MagicMock()
@@ -176,8 +148,9 @@ class TestCliFinalGap:
 
 
 class TestSessionFinalGaps:
-    def test_normalize_db_file(self):
-        assert _normalize_url("data.db").startswith("sqlite:///")
+    def test_normalize_explicit_url_only(self):
+        assert _normalize_url("sqlite:///data.db") == "sqlite:///data.db"
+        assert _normalize_url("data.db") == "data.db"
 
     def test_ensure_schema_postgresql_engine(self):
         engine = MagicMock()
@@ -207,19 +180,19 @@ class TestWorkflowServiceFinalGaps:
 
 class TestWizardCoreFinalGaps:
     def test_resolve_current_phase_fallback_empty(self):
-        engine = core_mod.WizardEngine("AAT-1", repo="/tmp")
+        engine = core_mod.WizardEngine("TASK-1")
         engine.task = {"id": 1, "current_phase": ""}
         engine.all_phases = []
-        assert engine._resolve_current_phase() == "-1"
+        assert engine._resolve_current_phase() == ""
 
     def test_record_transition_no_task(self):
-        engine = core_mod.WizardEngine("AAT-1", repo="/tmp")
+        engine = core_mod.WizardEngine("TASK-1")
         engine.task = None
         phase = MagicMock()
         engine._record_transition(phase, "pass", None, None)
 
     def test_evaluate_does_not_fall_back_when_llm_raises(self):
-        engine = core_mod.WizardEngine("AAT-1", repo="/tmp")
+        engine = core_mod.WizardEngine("TASK-1")
         engine.task = {"id": 1, "project_id": 1, "current_phase": "1"}
         uow = MagicMock()
         uow.projects.get.return_value = {"id": 1}

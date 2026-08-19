@@ -19,7 +19,7 @@ After any change to the SQLAlchemy layer, application services, UI state, or wiz
    ```bash
    pytest -q --timeout=60
    ```
-   Expected: **865 passed, 11 deselected**, 0 failed, 0 errors. Integration tests
+   Expected: **824 passed, 11 deselected**, 0 failed, 0 errors. Integration tests
    are intentionally deselected here; run them separately as described below.
 
 2. **PostgreSQL integration**
@@ -33,19 +33,19 @@ After any change to the SQLAlchemy layer, application services, UI state, or wiz
    ```bash
    pytest --cov=project_workflow --cov-report=term --timeout=60
    ```
-   Expected: total coverage >= 90%. Current baseline: **96.16%**.
+   Expected: total coverage >= 90%. Current baseline: **95.67%**.
 
 4. **Lint**
    ```bash
-   ruff check project_workflow tests
+   ruff check .
    ```
    Expected: `All checks passed!`
 
 5. **Type check**
    ```bash
-   mypy project_workflow
+   mypy project_workflow scripts
    ```
-   Expected: `Success: no issues found in 81 source files`.
+   Expected: `Success: no issues found in 79 source files`.
 
 6. **UI service health**
    ```bash
@@ -76,8 +76,6 @@ This project is an internal lightweight agent utility, not a customer-facing pro
 | Observability / metrics / structured JSON logs | **Skip** | Request logging middleware and `/health` endpoint provide enough visibility for an internal tool. |
 | Input validation / sanitization hardening audit | **Skip** | API uses Pydantic schemas and SQLAlchemy ORM; raw SQL is limited to migration/admin scripts. |
 | Graceful connection draining beyond lifespan dispose | **Skip** | Internal tool tolerance for brief connection drops is acceptable. |
-| Backup/restore runbook | **Skip** | Data is seed-reproducible and task-level state is not business-critical. |
 | Bandit/safety/pre-commit hooks | **Skip** | `ruff` + `mypy` + `pytest` coverage gate is the agreed quality bar. |
-| Hardcoded internal URLs (`JIRA_BASE_URL`, `GITLAB_BASE_URL`) | **Accept** | These are stable internal endpoints; still overridable via env if needed in the future. |
 
 If any of these assumptions change (e.g. external exposure, multi-user access, customer data), revisit this section before expanding scope.
