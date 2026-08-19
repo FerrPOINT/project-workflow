@@ -75,12 +75,17 @@ class SATaskRepository(TaskRepository):
         self._session.flush()
         return int(item.id)
 
+    # Immutable columns: identity/ownership must never change through update().
+    _IMMUTABLE_FIELDS = frozenset({"id", "project_id"})
+
     def update(self, task_id: int, data: dict[str, Any]) -> None:
         with self._session.no_autoflush:
             row = self._session.get(m.Task, task_id)
         if row is None:
             raise NotFoundError(f"Task {task_id} not found")
         for key, val in data.items():
+            if key in self._IMMUTABLE_FIELDS:
+                continue
             if hasattr(row, key):
                 setattr(row, key, val)
 

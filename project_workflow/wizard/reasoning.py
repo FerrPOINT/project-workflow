@@ -110,10 +110,19 @@ class ReasoningEngine:
     def _to_float(value: Any, default: float = 0.0) -> float:
         if value is None:
             return default
-        try:
-            return float(value)
-        except (ValueError, TypeError):
+        text = str(value).strip()
+        if not text:
             return default
+        # Extract the first numeric token — text blocks can be multiline
+        # ("0.8\nNext steps: ...") when labels span several lines.
+        match = re.search(r"-?\d+(?:\.\d+)?", text)
+        if not match:
+            return default
+        parsed = float(match.group())
+        # Percent form ("85%") normalizes to 0..1
+        if "%" in text and parsed > 1:
+            parsed = parsed / 100.0
+        return parsed
 
     @staticmethod
     def _to_list(value: Any) -> list[Any]:

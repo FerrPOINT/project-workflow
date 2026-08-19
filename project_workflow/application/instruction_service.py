@@ -41,8 +41,14 @@ class InstructionService:
         """Persist a new instruction order: listed ids first, remaining ids appended."""
         existing_rows = self._uow.instructions.list(phase_id)
         existing_ids = [cast(int, row["id"]) for row in existing_rows]
-        seen: set[int] = set(instruction_ids)
-        full_order = list(instruction_ids) + [iid for iid in existing_ids if iid not in seen]
+        # Dedupe while preserving order: duplicate ids in the payload must not
+        # create gaps in the final step numbering.
+        ordered_unique: list[int] = list(dict.fromkeys(instruction_ids))
+        # Ignore ids that do not belong to this phase (defensive).
+        valid = set(existing_ids)
+        ordered_unique = [iid for iid in ordered_unique if iid in valid]
+        seen: set[int] = set(ordered_unique)
+        full_order = ordered_unique + [iid for iid in existing_ids if iid not in seen]
         orders = [(iid, idx + 1) for idx, iid in enumerate(full_order)]
         self._uow.instructions.reorder(phase_id, orders)
         self._uow.commit()

@@ -124,10 +124,31 @@ class SAInstructionRepository(InstructionRepository):
             {"offset": offset, "phase_id": phase_id},
         )
         for instruction_id, new_step in orders:
+            # Phase-scoped: an id from another phase must never be mutated here.
             self._session.execute(
-                text("UPDATE instructions SET step_num = :step WHERE id = :id"),
-                {"step": new_step, "id": instruction_id},
+                text("UPDATE instructions SET step_num = :step WHERE id = :id AND phase_id = :phase_id"),
+                {"step": new_step, "id": instruction_id, "phase_id": phase_id},
             )
+        # Unlisted instructions were shifted by the offset; renumber them
+        # sequentially after the explicitly ordered ones so no row keeps an
+        # inflated step_num when `orders` is a partial list.
+        shifted = (
+            self._session.execute(
+                select(m.Instruction.id)
+                .where(m.Instruction.phase_id == phase_id, m.Instruction.step_num >= offset)
+                .order_by(m.Instruction.step_num)
+            )
+            .scalars()
+            .all()
+        )
+        explicit_steps = [new_step for _, new_step in orders]
+        next_step = max(explicit_steps, default=0) + 1
+        for row_id in shifted:
+            self._session.execute(
+                text("UPDATE instructions SET step_num = :step WHERE id = :id AND phase_id = :phase_id"),
+                {"step": next_step, "id": row_id, "phase_id": phase_id},
+            )
+            next_step += 1
         self._session.flush()
 
     def _next_step_num(self, phase_id: int) -> int:
