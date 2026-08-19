@@ -54,3 +54,4 @@ data/workflow.db
 **/data/workflow.db
 data/workflow.db-*
 tmp/
+coverage.json
