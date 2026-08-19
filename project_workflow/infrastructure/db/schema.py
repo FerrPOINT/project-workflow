@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -399,6 +400,29 @@ def ensure_phase_catalog(
         _CATALOG_ENSURED_URLS.add(url)
 
 
+
+
+def _atomic_write_json(path: Path, payload: Any) -> None:
+    """Atomically overwrite `path` with JSON payload.
+
+    The temp file is created in the target's own directory: tempfile defaults to
+    /tmp which may live on another filesystem, making os.replace() fail with
+    EXDEV ("Invalid cross-device link") when the package dir is on a different
+    mount (systemd installs, containers).
+    """
+    fd, tmp_name = tempfile.mkstemp(
+        dir=str(path.parent), prefix=path.name + ".", suffix=".tmp"
+    )
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as tmp:
+            json.dump(payload, tmp, ensure_ascii=False, indent=2)
+        tmp_path.replace(path)
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
+
+
 def persist_phase_order_to_seed(
     uow: UnitOfWork,
     ordered_phase_codes: list[str],
@@ -414,15 +438,15 @@ def persist_phase_order_to_seed(
 
         # Reorder seed entries to match DB order; drop unknown codes.
     code_to_entry: dict[str, dict[str, Any]] = {p["code"]: p for p in _load_seed(seed_path) if isinstance(p, dict)}
-    ordered_entries = [code_to_entry[code] for code in ordered_phase_codes if code in code_to_entry]
+    # Dedupe while preserving order: duplicate codes in the payload would write
+    # duplicate entries into the seed file.
+    unique_codes = list(dict.fromkeys(ordered_phase_codes))
+    ordered_entries = [code_to_entry[code] for code in unique_codes if code in code_to_entry]
     for code in code_to_entry:
-        if code not in ordered_phase_codes:
+        if code not in unique_codes:
             ordered_entries.append(code_to_entry[code])
 
-    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".json", delete=False) as tmp:
-        json.dump(ordered_entries, tmp, ensure_ascii=False, indent=2)
-        tmp_path = Path(tmp.name)
-    tmp_path.replace(seed_path)
+    _atomic_write_json(seed_path, ordered_entries)
 
 
 def persist_phase_update_to_seed(
@@ -449,7 +473,4 @@ def persist_phase_update_to_seed(
     else:
         return
 
-    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".json", delete=False) as tmp:
-        json.dump(seed_data, tmp, ensure_ascii=False, indent=2)
-        tmp_path = Path(tmp.name)
-    tmp_path.replace(seed_path)
+    _atomic_write_json(seed_path, seed_data)
