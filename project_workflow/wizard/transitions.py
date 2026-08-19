@@ -38,12 +38,10 @@ def record_transition(
             db.update_task(task_id, {"current_phase": next_phase, "status": "active"})
         else:
             db.update_task(task_id, {"current_phase": phase.code, "status": "done"})
-        db.commit()
         return
     if new_state == "blocked":
         db.add_task_history(task_id, phase.id, "blocked")
         db.update_task(task_id, {"current_phase": phase.code, "status": "blocked"})
-        db.commit()
         return
     if new_state == "rollback":
         target_phase = phase_map.get(rollback_target) if rollback_target else None
@@ -51,17 +49,14 @@ def record_transition(
         db.add_task_history(task_id, phase.id, "rollback")
         db.add_task_history(task_id, target_id, "pending")
         db.update_task(task_id, {"current_phase": rollback_target or phase.code, "status": "active"})
-        db.commit()
         return
     if new_state == "delegated":
         db.add_task_history(task_id, phase.id, "delegated")
         db.update_task(task_id, {"current_phase": phase.code, "status": "active"})
-        db.commit()
         return
     # partial or in_progress
     db.add_task_history(task_id, phase.id, "partial")
     db.update_task(task_id, {"current_phase": phase.code, "status": "active"})
-    db.commit()
 
 
 def record_parallel_transition(
@@ -92,17 +87,14 @@ def record_parallel_transition(
             db.update_task(task_id, {"current_phase": next_phase, "status": "active"})
         else:
             db.update_task(task_id, {"current_phase": group[-1].code, "status": "done"})
-        db.commit()
         return
     if new_state == "blocked":
         db.update_task(task_id, {"current_phase": group[0].code, "status": "blocked"})
-        db.commit()
         return
     if new_state == "rollback":
         target_phase = phase_map.get(next_phase) if next_phase else None
         target_code = target_phase.code if target_phase else group[-1].code
         db.update_task(task_id, {"current_phase": target_code, "status": "active"})
-        db.commit()
         return
     # partial: legacy tests expect no DB side effects at all.
     return

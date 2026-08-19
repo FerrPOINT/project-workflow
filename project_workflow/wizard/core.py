@@ -433,7 +433,6 @@ class WizardEngine:
             self._record_parallel_transition(group, verdict, next_phase)
         else:
             self._record_transition(phase, verdict, next_phase, rollback_target)
-        self._uow.commit()
         if self.task:
             self.task = self._task_service.get_task(self.task["id"]) or self.task
             self.current_phase = self._resolve_current_phase()
@@ -467,7 +466,6 @@ class WizardEngine:
             },
             response=assessment.to_result_dict(),
         )
-        self._uow.commit()
 
     def evaluate(self, report: str) -> dict:
         phase = self._get_current_phase_obj()
@@ -481,6 +479,7 @@ class WizardEngine:
         assessment, next_phase, rollback_target, result = self._build_assessment(phase, report)
         self._record_evaluation(phase, assessment.verdict, next_phase, rollback_target)
         self._persist_supervisor_run(assessment, next_phase, rollback_target)
+        self._uow.commit()
         return result
 
     # ── LLM evaluate (optional) ──────────────────────────────────────
