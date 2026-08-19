@@ -60,8 +60,10 @@ def step_cmd(
             out_json(result)
             return
         console.print(format_result(result))
-        # Recoverable verdicts (PASS / SOFT_FAIL) should not produce a CLI error exit code.
-        sys.exit(0 if result["verdict"] in ("PASS", "SOFT_FAIL") else 1)
+        # Recoverable verdicts (PASS / SOFT_FAIL / PARTIAL / DELEGATE) should not
+        # produce a CLI error exit code: PARTIAL means "work continues next run",
+        # DELEGATE means "handed off successfully" — neither is a CLI failure.
+        sys.exit(0 if result["verdict"] in ("PASS", "SOFT_FAIL", "PARTIAL", "DELEGATE") else 1)
 
     # default: show phase prompt/instructions
     prompt = engine.get_phase_prompt()
