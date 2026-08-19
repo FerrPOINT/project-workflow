@@ -68,6 +68,22 @@ async def api_skills(refresh: int = Query(default=0)) -> dict[str, Any] | JSONRe
     return {"ok": True, "skills": _load_skills_catalog_direct(refresh=bool(refresh))}
 
 
+
+def _sync_instructions_to_seed(phase_id: int) -> None:
+    uow = _app_state.get_db()
+    phase = _app_state.phase_service().get_phase(phase_id)
+    if not phase:
+        return
+    instructions = _app_state.instruction_service().list_instructions(phase_id)
+    # Exclude ID and phase_id if we want clean seed? Yes, usually seed has no ID.
+    clean_instrs = []
+    for i in instructions:
+        clean = dict(i)
+        clean.pop("id", None)
+        clean.pop("phase_id", None)
+        clean_instrs.append(clean)
+    persist_phase_update_to_seed(uow, phase["code"], {"instructions": clean_instrs})
+
 async def api_phases(workflow_id: int | None = Query(default=None)) -> dict[str, Any] | JSONResponse:
     workflows = _app_state.workflow_service().list_workflows()
     selected_workflow = next((item for item in workflows if item["id"] == workflow_id), None)
@@ -436,6 +452,7 @@ async def api_instruction_create(payload: InstructionCreate) -> dict[str, Any] |
             "skills": payload.skills,
         },
     )
+    _sync_instructions_to_seed(payload.phase_id)
     return {"ok": True, "instruction": item}
 
 
@@ -448,6 +465,7 @@ async def api_instruction_update(instruction_id: int, payload: InstructionUpdate
         updates["skills"] = _normalize_skills(payload.skills)
     if updates:
         _app_state.instruction_service().update_instruction(instruction_id, updates)
+    _sync_instructions_to_seed(existing.get("phase_id")) if existing.get("phase_id") is not None else None
     return {"ok": True, "instruction": _app_state.instruction_service().get_instruction(instruction_id)}
 
 
@@ -458,6 +476,7 @@ async def api_instruction_update_skills(instruction_id: int, payload: dict[str, 
     _app_state.instruction_service().update_instruction(
         instruction_id, {"skills": _normalize_skills(payload.get("skills", []))}
     )
+    _sync_instructions_to_seed(existing.get("phase_id")) if existing.get("phase_id") is not None else None
     return {"ok": True, "instruction": _app_state.instruction_service().get_instruction(instruction_id)}
 
 
@@ -466,6 +485,7 @@ async def api_instruction_delete(instruction_id: int) -> dict[str, Any] | JSONRe
     if existing is None:
         return _error(f"Инструкция {instruction_id} не найдена", 404)
     _app_state.instruction_service().delete_instruction(instruction_id)
+    _sync_instructions_to_seed(existing.get("phase_id")) if existing.get("phase_id") is not None else None
     return {"ok": True}
 
 
@@ -474,6 +494,7 @@ async def api_instructions_reorder(phase_id: int, payload: InstructionReorder) -
     if phase is None:
         return _error(f"Фаза {phase_id} не найдена", 404)
     _app_state.instruction_service().reorder_instructions(phase_id, payload.instruction_ids)
+    _sync_instructions_to_seed(phase_id)
     return {"ok": True}
 
 
