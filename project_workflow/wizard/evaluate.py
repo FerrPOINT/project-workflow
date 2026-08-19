@@ -40,8 +40,12 @@ def _result_from_reasoning(
     engine: Any,
 ) -> dict[str, Any]:
     """Build evaluate result from a ReasoningResult and persist it."""
-    verdict_label = VERDICT_LABELS.get(reasoning.verdict.lower(), reasoning.verdict)
     verdict_key = reasoning.verdict.lower()
+    if verdict_key not in ("pass", "partial", "soft_fail", "hard_fail", "blocked", "rollback", "delegate"):
+        # Unknown verdicts (LLM junk) degrade to soft_fail — a recoverable
+        # "incomplete" outcome — instead of crashing the DB write.
+        verdict_key = "soft_fail"
+    verdict_label = VERDICT_LABELS.get(verdict_key, verdict_key)
 
     cb = PhaseContractBuilder(engine.all_phases)
     next_phase = None

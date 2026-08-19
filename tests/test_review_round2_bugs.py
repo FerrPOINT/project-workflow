@@ -173,3 +173,34 @@ class TestResponseParserConfidence:
         from project_workflow.infrastructure.llm import ResponseParser
 
         assert ResponseParser.parse({"verdict": "PASS", "confidence": "85%"}).confidence == 0.85
+
+
+class TestUnknownVerdictDegrades:
+    def test_unknown_reasoning_verdict_persists_as_soft_fail(self, uow):
+        """LLM junk verdict must not crash supervisor_runs insert (strict enum)."""
+        from unittest.mock import MagicMock, patch
+
+        from project_workflow.wizard import evaluate as ev
+        from project_workflow.wizard.reasoning import ReasoningResult
+
+        real_phase = uow.phases.create(
+            {"workflow_id": uow.wf, "code": "1", "name": "P1", "phase_order": 1}
+        )
+        uow.commit()
+
+        phase = MagicMock()
+        phase.code = "1"
+        phase.name = "P1"
+        phase.id = real_phase
+        phase.rollback_target = None
+
+        engine = MagicMock()
+        engine.task_key = "P-1"
+        engine.task = {"id": uow.tid}
+        engine.phase_map = {}
+        engine.db = uow
+
+        junk = ReasoningResult(verdict="unknown", analysis="junk")
+        with patch.object(ev, "VERDICT_LABELS", {"soft_fail": "SOFT_FAIL"}):
+            result = ev._result_from_reasoning(junk, "report", phase, engine)
+        assert result["verdict"] == "SOFT_FAIL"
