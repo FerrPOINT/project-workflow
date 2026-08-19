@@ -44,11 +44,24 @@ class WizardContextBuilder:
         return self._phase_map
 
     def _phase_by_id(self, phase_id: int | str | None) -> Phase | None:
+        """Resolve a history row's phase reference to a Phase.
+
+        task_history.phase_id may store either a numeric phase id or a phase
+        code (incl. float-like sentinels "0.7" and "-1"); never raise.
+        """
         if phase_id is None:
             return None
-        needle = int(phase_id)
+        try:
+            needle = int(phase_id)
+        except (TypeError, ValueError):
+            needle = None
         for phase in self.all_phases:
-            if phase.id is not None and int(phase.id) == needle:
+            if needle is not None and phase.id is not None and int(phase.id) == needle:
+                return phase
+        # Fall back to code matching for non-numeric references
+        code = str(phase_id)
+        for phase in self.all_phases:
+            if phase.code == code:
                 return phase
         return None
 

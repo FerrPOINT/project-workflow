@@ -204,3 +204,25 @@ class TestUnknownVerdictDegrades:
         with patch.object(ev, "VERDICT_LABELS", {"soft_fail": "SOFT_FAIL"}):
             result = ev._result_from_reasoning(junk, "report", phase, engine)
         assert result["verdict"] == "SOFT_FAIL"
+
+
+class TestPhaseByCodeHistory:
+    def test_history_with_code_sentinels_does_not_crash(self, uow):
+        """task_history rows keyed by phase codes must resolve or skip, not raise."""
+        from project_workflow.wizard.models import Phase
+        builder = type("B", (), {})()
+        from project_workflow.wizard.context import WizardContextBuilder
+
+        phases = [
+            Phase(id=1, code="0.7", name="Seventy"),
+            Phase(id=2, code="2", name="Two"),
+        ]
+        b = WizardContextBuilder.__new__(WizardContextBuilder)
+        b.all_phases = phases
+        # numeric id lookup
+        assert b._phase_by_id(1).name == "Seventy"
+        # code lookup (float-like sentinel previously raised ValueError)
+        assert b._phase_by_id("0.7").name == "Seventy"
+        # unknown -> None, no crash
+        assert b._phase_by_id("-1") is None
+        assert b._phase_by_id(None) is None
