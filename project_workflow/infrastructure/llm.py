@@ -153,6 +153,35 @@ class OllamaClient:
         return self._extract_json(content)
 
     @staticmethod
+    def _first_json_object(text: str) -> str | None:
+        """Return the first brace-balanced top-level {...} substring, or None."""
+        start = text.find("{")
+        while start != -1:
+            depth = 0
+            in_string = False
+            escape = False
+            for i in range(start, len(text)):
+                ch = text[i]
+                if in_string:
+                    if escape:
+                        escape = False
+                    elif ch == "\\":
+                        escape = True
+                    elif ch == '"':
+                        in_string = False
+                    continue
+                if ch == '"':
+                    in_string = True
+                elif ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        return text[start : i + 1]
+            start = text.find("{", start + 1)
+        return None
+
+    @staticmethod
     def _extract_json(text: str) -> dict[str, Any]:
         """Strip markdown wrapper and parse JSON."""
         text = text.strip()
@@ -164,11 +193,13 @@ class OllamaClient:
         try:
             return json.loads(text)
         except json.JSONDecodeError:
-            # Try non-greedy extraction of the first JSON object
-            match = re.search(r"(\{.*?\})", text, re.DOTALL)
-            if match:
+            # Brace-balanced extraction of the first complete JSON object.
+            # A non-greedy regex stops at the first '}' and breaks on nested
+            # objects ({"details": {...}}), falsely falling back to BLOCKED.
+            candidate = OllamaClient._first_json_object(text)
+            if candidate is not None:
                 try:
-                    return json.loads(match.group(1))
+                    return json.loads(candidate)
                 except json.JSONDecodeError:
                     pass
             # Fallback: wrap raw text as a BLOCKED response so caller can proceed

@@ -137,3 +137,25 @@ class TestAssessmentStoreUnknownPhase:
         runs = uow.supervisor_runs.list(task_id=uow.tid)
         assert len(runs) == 1
         assert runs[0].phase_id is None
+
+
+class TestExtractJsonNested:
+    def test_nested_json_object_is_parsed(self):
+        from project_workflow.infrastructure.llm import OllamaClient
+
+        text = 'Evaluation: {"verdict": "PASS", "details": {"covered": ["a"], "nested": {"x": 1}}}'
+        result = OllamaClient._extract_json(text)
+        assert result.get("verdict") == "PASS", f"nested JSON falsely BLOCKED: {result.get('blockers')}"
+        assert result["details"]["covered"] == ["a"]
+
+    def test_first_object_wins_when_multiple(self):
+        from project_workflow.infrastructure.llm import OllamaClient
+
+        text = '{"first": 1} trailing {"second": 2}'
+        assert OllamaClient._extract_json(text) == {"first": 1}
+
+    def test_invalid_json_falls_back_to_blocked(self):
+        from project_workflow.infrastructure.llm import OllamaClient
+
+        result = OllamaClient._extract_json("no json at all { broken")
+        assert result["verdict"] == "BLOCKED"
