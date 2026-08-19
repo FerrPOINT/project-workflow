@@ -7,6 +7,7 @@ circular imports.
 
 from __future__ import annotations
 
+import contextvars
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,8 @@ from . import (
 
 _MIGRATED_URLS: set[str] = set()
 
+
+_uow_ctx: contextvars.ContextVar[SAUnitOfWork | None] = contextvars.ContextVar("_uow_ctx", default=None)
 
 class _AppState:
     """Application state holder (replaces module-level globals)."""
@@ -55,7 +58,7 @@ class _AppState:
         """PhaseService helper for UI detail/edit routes."""
         return PhaseService(self)
 
-    def get_uow(self) -> SAUnitOfWork:
+    def create_uow(self) -> SAUnitOfWork:
         engine = get_engine(self._database_url_normalized())
         url = self._database_url_normalized()
         if engine.dialect.name == "sqlite":
@@ -68,6 +71,12 @@ class _AppState:
 
         schema.ensure_phase_catalog(uow)
         return uow
+
+    def get_uow(self) -> SAUnitOfWork:
+        ctx_uow = _uow_ctx.get()
+        if ctx_uow is not None:
+            return ctx_uow
+        return self.create_uow()
 
     def workflow_service(self) -> WorkflowService:
         return WorkflowService(self.get_uow())
