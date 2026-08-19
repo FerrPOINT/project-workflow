@@ -10,6 +10,7 @@ import datetime
 from typing import Any
 
 from sqlalchemy import (
+    Integer,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -216,7 +217,10 @@ class TaskHistory(Base):
         ForeignKey("tasks.id", ondelete="CASCADE"),
         nullable=False,
     )
-    phase_id: Mapped[int] = mapped_column(ForeignKey("phases.id"), nullable=False)
+    # NOTE: no FK on purpose — this column stores phase codes/sentinels
+    # (e.g. "-1", "0.7", or a numeric phase id) per the app convention
+    # (see tasks.current_phase, uow.add_task_history(phase_id: int | str)).
+    phase_id: Mapped[int | str] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(
         String,
         default="pending",

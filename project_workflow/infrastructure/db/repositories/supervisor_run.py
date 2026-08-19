@@ -55,10 +55,16 @@ class SASupervisorRunRepository(SupervisorRunRepository):
         return [_row_to_supervisor_run(r) for r in rows]
 
     def create(self, data: dict[str, Any]) -> int:
+        # Defense-in-depth: verdict must satisfy ck_supervisor_runs_verdict.
+        from project_workflow.wizard.reasoning import _coerce_verdict
+
+        verdict = _coerce_verdict(str(data["verdict"]))
+        if verdict == "unknown":
+            raise ValueError(f"Invalid supervisor verdict: {data['verdict']!r}")
         item = m.SupervisorRun(
             task_id=data["task_id"],
             phase_id=data["phase_id"],
-            verdict=data["verdict"],
+            verdict=verdict,
             report=data.get("report", ""),
             covered=json.dumps(data.get("covered", []), ensure_ascii=False),
             missing=json.dumps(data.get("missing", []), ensure_ascii=False),

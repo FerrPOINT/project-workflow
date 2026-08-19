@@ -120,7 +120,10 @@ def get_session(url: str | None = None) -> Session:
 @event.listens_for(Engine, "connect")
 def _set_sqlite_pragma(dbapi_conn: Any, connection_record: Any) -> None:
     """Apply performance and correctness pragmas to SQLite connections."""
-    if getattr(connection_record, "dialect", None) is None or connection_record.dialect.name != "sqlite":
+    # In SQLAlchemy 2.0 ConnectionRecord has no `dialect` attribute; detect the
+    # SQLite driver via the DBAPI connection module instead of the record.
+    dbapi_module = type(dbapi_conn).__module__ or ""
+    if "sqlite" not in dbapi_module:
         return
     try:
         cursor = dbapi_conn.cursor()

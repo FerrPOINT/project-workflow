@@ -22,6 +22,42 @@ class ReasoningResult:
     raw: dict[str, Any] = field(default_factory=dict)
 
 
+# Verdicts accepted by the supervisor_runs DB CHECK constraint.
+ALLOWED_VERDICTS = {"pass", "partial", "soft_fail", "hard_fail", "blocked", "rollback", "delegate"}
+
+
+def _coerce_verdict(raw_verdict: str) -> str:
+    """Coerce a free-form LLM verdict into the strict DB enum.
+
+    Examples:
+        "PASS (ALMOST)" -> "soft_fail" is wrong; we keep the closest strict value:
+        any "PASS"-prefixed verdict without failure markers becomes "pass".
+    """
+    v = (raw_verdict or "").strip().lower()
+    if not v:
+        return "unknown"
+    if v in ALLOWED_VERDICTS:
+        return v
+    # Fuzzy coercion for common LLM variants
+    if "hard" in v and "fail" in v:
+        return "hard_fail"
+    if "soft" in v and "fail" in v:
+        return "soft_fail"
+    if "fail" in v:
+        return "soft_fail"
+    if "block" in v:
+        return "blocked"
+    if "roll" in v:
+        return "rollback"
+    if "deleg" in v:
+        return "delegate"
+    if "partial" in v:
+        return "partial"
+    if "pass" in v:
+        return "pass"
+    return "unknown"
+
+
 class ReasoningEngine:
     """Parse structured reasoning output from LLM or deterministic generator."""
 
@@ -34,7 +70,8 @@ class ReasoningEngine:
 
     @staticmethod
     def _from_dict(data: dict[str, Any]) -> ReasoningResult:
-        verdict = str(data.get("verdict") or "UNKNOWN").strip().upper()
+        raw_verdict = str(data.get("verdict") or "")
+        verdict = (_coerce_verdict(raw_verdict).upper()) if raw_verdict else "UNKNOWN"
         confidence = ReasoningEngine._to_float(data.get("confidence"), default=0.0)
         return ReasoningResult(
             analysis=str(data.get("analysis") or "").strip(),

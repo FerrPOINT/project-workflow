@@ -39,10 +39,24 @@ def check_coverage(
     covered: list[str] = []
     missing: list[str] = []
     previously_covered = previously_covered or set()
+    # An empty/whitespace report is not a submission: nothing counts as covered,
+    # even if items were previously covered. Prevents empty-report bypass.
+    if not normalized_report:
+        return [], list(checklist)
     for item in checklist:
         normalized_item = normalize_text(item)
         keywords = extract_keywords(item)
-        keyword_hits = sum(1 for keyword in keywords if keyword in normalized_report)
+        report_words = set(normalized_report.split())
+        def _matches(keyword: str) -> bool:
+            if keyword in report_words:
+                return True
+            # Light morphological tolerance: "updated" matches "update".
+            return any(
+                w.startswith(keyword) or keyword.startswith(w)
+                for w in report_words
+                if abs(len(w) - len(keyword)) <= 3 and len(w) >= 4
+            )
+        keyword_hits = sum(1 for keyword in keywords if _matches(keyword))
         exact_match = normalized_item and normalized_item in normalized_report
         already_covered = normalized_item in previously_covered
         enough_keywords = False
@@ -60,7 +74,17 @@ def extract_blockers(report: str) -> list[str]:
     lowered = report.lower()
     lowered = re.sub(r"\bblockers?\s*:\s*(none|no|нет)\b", " ", lowered)
     lowered = re.sub(r"\b(no blockers?|without blockers?|нет блокеров|без блокеров)\b", " ", lowered)
-    found = [pattern for pattern in BLOCKER_PATTERNS if pattern in lowered]
+    # Normalize punctuation to spaces so patterns match on word boundaries,
+    # not substrings inside other words ("flint" must not match "cannot", etc.).
+    tokenized = re.sub(r"[^\w\s]", " ", lowered)
+    tokens = set(tokenized.split())
+    found: list[str] = []
+    for pattern in BLOCKER_PATTERNS:
+        if " " in pattern:
+            if pattern in tokenized:
+                found.append(pattern)
+        elif pattern in tokens:
+            found.append(pattern)
     return list(dict.fromkeys(found))
 
 
@@ -82,7 +106,10 @@ def determine_verdict(
         return "pass"
     if has_delegate_signal(report) and is_delegated:
         return "delegate"
-    if (blockers or "rollback" in report.lower()) and rollback_target:
+    rollback_mentioned = bool(re.search(r"\brollback\b", report.lower()))
+    # Negated mentions ("no rollback needed") must not trigger a rollback verdict.
+    negated = bool(re.search(r"\b(no|without|not?)\s+(any\s+)?rollback\b", report.lower()))
+    if (blockers or (rollback_mentioned and not negated)) and rollback_target:
         return "rollback"
     if blockers:
         return "blocked"
