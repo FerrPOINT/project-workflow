@@ -107,3 +107,22 @@ Baseline: 949 tests passed
 
 29. **Dead Code in Contracts**
     - `wizard/contracts.py:120`: Fallback logic for "researcher" delegate is dead code.
+
+## Fix Status (review/full-audit)
+
+| # | Finding | Severity | Status |
+|---|---------|----------|--------|
+| 1 | Missing transaction rollbacks / UoW per request (app services, api routes) | HIGH | FIXED (07236ef) |
+| 2 | Partial updates: disjoint commits in wizard evaluate() | HIGH | FIXED (f739c53) |
+| 3 | XSS in phase_detail.html JS string interpolation | HIGH | FIXED (5054858) |
+| 4 | PK corruption: phase update() allows id/workflow_id overwrite | HIGH | FIXED (fecdad6) |
+| 5 | N+1: task/phase/project list without eager loading | HIGH | FIXED (fecdad6) |
+| 6 | Instruction edits not persisted to seed | HIGH | FIXED (fecdad6) |
+| 7 | Empty report bypasses coverage via previously_covered | HIGH | FIXED (45e4650) |
+| 8 | False positive blockers/keywords via substring match | HIGH | FIXED (45e4650) |
+| 9 | LLM verdict not coerced to DB enum before insert | HIGH | FIXED (45e4650) |
+| 10 | Dead SQLite pragma listener (SA 2.0 API mismatch) | MEDIUM | FIXED (45e4650) |
+| 11 | task_history FK mismatch with phase-code convention | HIGH | FIXED (45e4650) — exposed by pragma fix |
+| 12 | Digit-only reject regex never fired (over-escaped) | MEDIUM | FIXED (45e4650) |
+| 13 | api_phase_create 500 on missing workflow_id | MEDIUM | FIXED (45e4650) |
+| 14 | CLI exit codes treat PARTIAL/DELEGATE as errors | MEDIUM | FIXED (6eb6a9a) |
