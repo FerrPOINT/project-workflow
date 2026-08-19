@@ -157,7 +157,7 @@
           {% for s in i.skills or [] %}
           <span class="badge" style="background:var(--accent-soft);color:var(--accent)">
             {{ s }}
-            <button type="button" class="skill-remove-btn" onclick="removeSkillFromInstruction(this, '{{ s }}')" aria-label="Убрать {{ s }}">×</button>
+            <button type="button" class="skill-remove-btn" onclick="removeSkillFromInstruction(this, {{ s | tojson }})" aria-label="Убрать {{ s }}">×</button>
           </span>
           {% endfor %}
           <select class="skill-candidate" data-field="skill-candidate" onchange="addSkillToInstruction(this)" {% if not i.available_skills %}disabled{% endif %}>
@@ -577,7 +577,7 @@ async function savePhase() {
   });
 
   const data = {
-    name: meta.name || '{{ phase.name }}',
+    name: meta.name || {{ phase.name | tojson }},
     description: meta.description || '',
     checks: [],
     evidence: [],
