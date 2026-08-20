@@ -45,8 +45,6 @@ class TestPhaseHelpers:
 class TestPhaseExecution:
     def test_run_phase_removed(self):
         """run_phase was removed in Task 5 — assert it's gone."""
-        from project_workflow.domain import fsm as phases_mod
+        import importlib.util
 
-        assert not hasattr(phases_mod, "run_phase")
-        assert not hasattr(phases_mod, "check_previous_phase")
-        assert not hasattr(phases_mod, "conditional_delegate_jump")
+        assert importlib.util.find_spec("project_workflow.domain.fsm") is None

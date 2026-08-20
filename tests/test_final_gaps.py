@@ -22,26 +22,7 @@ from project_workflow.interfaces.ui.services import (
     _load_cli_reference,
 )
 from project_workflow.wizard import core as core_mod
-from project_workflow.wizard.store import WizardAssessmentStore
-from project_workflow.wizard.types import WizardAssessment
-
-
-class TestConfigFinalGap:
-    def test_read_raw_settings_non_dict(self, tmp_path, monkeypatch):
-        from project_workflow import config as config_mod
-
-        path = tmp_path / "cfg.json"
-        path.write_text("[1, 2]")
-        bad_dir = tmp_path / "bad-cfg"
-        bad_dir.mkdir()
-        path.rename(bad_dir / "settings.json")
-        monkeypatch.setenv("WORKFLOW_DIR", str(bad_dir))
-        config_mod.get_settings.cache_clear()
-        try:
-            assert config_mod._read_raw_settings() == {}
-        finally:
-            monkeypatch.delenv("WORKFLOW_DIR")
-            config_mod.get_settings.cache_clear()
+from project_workflow.wizard import format_result
 
 
 def _mock_state(uow=None):
@@ -83,31 +64,7 @@ class TestDomainFinalGaps:
         assert str(PhaseCode("1")) == "1"
 
 
-class TestUiSeedSkillsFinalGaps:
-    def test_update_config_phase_order_no_rows(self, monkeypatch):
-        from project_workflow.interfaces.ui import seed as seed_mod
-
-        before = list(schemas.config.PHASE_ORDER)
-        uow = MagicMock()
-        uow.workflows.get_default.return_value = None
-        monkeypatch.setattr(seed_mod, "_get_app_state", lambda: _mock_state(uow))
-        seed_mod._update_config_phase_order(uow)
-        assert schemas.config.PHASE_ORDER == before
-
-    def test_scan_hermes_skills_exception(self):
-        from project_workflow.interfaces.ui import skills as skills_mod
-
-        with patch("importlib.import_module", side_effect=ImportError("boom")):
-            assert skills_mod._scan_hermes_skills() == []
-
-
 class TestWizardModelContractFinalGaps:
-    def test_phase_selected_agent(self):
-        from project_workflow.wizard.models import Phase
-
-        phase = Phase(code="1", name="T", selected_agent="ag", description="D")
-        assert phase.delegate.agent == "ag"
-
     def test_parallel_contract_researcher_fallback(self):
         from project_workflow.wizard.contracts import PhaseContractBuilder
         from project_workflow.wizard.models import Phase, PhaseDelegate
@@ -157,7 +114,7 @@ class TestApplicationServiceFinalGaps:
         uow.tasks.create.return_value = 1
         uow.tasks.get_by_id.return_value = None
         with pytest.raises(RuntimeError, match="Task creation failed"):
-            TaskService(uow).create_task({"task_key": "P-1"})
+            TaskService(uow).create_task({"task_key": "P-1", "project_id": 5})
 
     def test_instruction_service_creation_failed(self):
         uow = MagicMock()
@@ -177,8 +134,9 @@ class TestCliFinalGap:
 
 
 class TestSessionFinalGaps:
-    def test_normalize_db_file(self):
-        assert _normalize_url("data.db").startswith("sqlite:///")
+    def test_normalize_explicit_url_only(self):
+        assert _normalize_url("sqlite:///data.db") == "sqlite:///data.db"
+        assert _normalize_url("data.db") == "data.db"
 
     def test_ensure_schema_postgresql_engine(self):
         engine = MagicMock()
@@ -193,22 +151,6 @@ class TestSessionFinalGaps:
 
 
 class TestWorkflowServiceFinalGaps:
-    def test_get_or_create_smoke_workflow_existing(self):
-        uow = MagicMock()
-        wf = MagicMock()
-        wf.to_dict.return_value = {"id": 1, "name": "smoke"}
-        uow.workflows.get_by_name.return_value = wf
-        assert WorkflowService(uow).get_or_create_smoke_workflow()["id"] == 1
-
-    def test_get_or_create_smoke_workflow_create(self):
-        uow = MagicMock()
-        uow.workflows.get_by_name.return_value = None
-        created = MagicMock()
-        created.to_dict.return_value = {"id": 2, "name": "smoke"}
-        uow.workflows.get_by_id.return_value = created
-        result = WorkflowService(uow).get_or_create_smoke_workflow()
-        assert result["id"] == 2
-
     def test_get_workflow_by_name_none(self):
         uow = MagicMock()
         uow.workflows.get_by_name.return_value = None
@@ -222,72 +164,21 @@ class TestWorkflowServiceFinalGaps:
             WorkflowService(uow).create_workflow({"name": "x"})
 
 
-class TestWizardStoreFinalGaps:
-    def test_phase_id_else_branch(self):
-        uow = MagicMock()
-        uow.get_phase_by_code.return_value = {"id": 7}
-        store = WizardAssessmentStore(uow)
-        assert store._phase_id("x") == 7
-
-    def test_row_phase_code_dict(self):
-        assert WizardAssessmentStore._row_phase_code({"phase_code": "P1"}) == "P1"
-
-    def test_row_phase_code_object_no_attrs(self):
-        row = MagicMock()
-        del row.phase_code
-        del row.response
-        assert WizardAssessmentStore._row_phase_code(row) == ""
-
-    def test_save_else_branch(self):
-        uow = MagicMock()
-        uow.get_task_by_key.return_value = {"id": 5}
-        store = WizardAssessmentStore(uow)
-        store.save(
-            WizardAssessment(
-                task_key="A-1",
-                phase_code="P1",
-                phase_name="P",
-                verdict="pass",
-                next_phase="P2",
-                rollback_target="P0",
-            )
-        )
-        assert uow.create_supervisor_run.call_args[0][0]["task_id"] == 5
-
-    def test_get_latest_else_branch(self):
-        uow = MagicMock()
-        uow.get_supervisor_runs.return_value = [
-            {"verdict": "PASS", "phase_code": "P1", "response": '{"phase": "P1"}'},
-        ]
-        results = WizardAssessmentStore(uow).get_latest(1, limit=1)
-        assert results[0].phase_code == "P1"
-
-
 class TestWizardCoreFinalGaps:
-    def test_ensure_smoke_phases_no_workflow(self, monkeypatch):
-        engine = core_mod.WizardEngine("AAT-1", repo="/tmp")
-        uow = MagicMock()
-        uow.workflows.get_by_name.return_value = None
-        engine._uow = uow
-        engine._ensure_smoke_phases()
-        assert uow.phases.list.called is False
-
     def test_resolve_current_phase_fallback_empty(self):
-        engine = core_mod.WizardEngine("AAT-1", repo="/tmp")
+        engine = core_mod.WizardEngine("TASK-1")
         engine.task = {"id": 1, "current_phase": ""}
         engine.all_phases = []
-        assert engine._resolve_current_phase() == "-1"
+        assert engine._resolve_current_phase() == ""
 
     def test_record_transition_no_task(self):
-        engine = core_mod.WizardEngine("AAT-1", repo="/tmp")
+        engine = core_mod.WizardEngine("TASK-1")
         engine.task = None
         phase = MagicMock()
         engine._record_transition(phase, "pass", None, None)
 
-    def test_evaluate_smart_exception(self, monkeypatch):
-        import project_workflow.wizard as wizard_pkg
-
-        engine = core_mod.WizardEngine("AAT-1", repo="/tmp")
+    def test_evaluate_does_not_fall_back_when_llm_raises(self):
+        engine = core_mod.WizardEngine("TASK-1")
         engine.task = {"id": 1, "project_id": 1, "current_phase": "1"}
         uow = MagicMock()
         uow.projects.get.return_value = {"id": 1}
@@ -303,13 +194,13 @@ class TestWizardCoreFinalGaps:
         phase.evidence = []
         engine.all_phases = [phase]
         engine.current_phase = "1"
-        monkeypatch.setattr(wizard_pkg, "SMART_EVALUATE", True)
         with patch.object(engine, "evaluate_llm", side_effect=Exception("boom")) as mock_llm:
-            engine.evaluate(report="ok")
+            with pytest.raises(Exception, match="boom"):
+                engine.evaluate(report="ok")
         mock_llm.assert_called_once()
 
     def test_format_result_pass_parallel(self):
-        text = core_mod.format_result(
+        text = format_result(
             {
                 "verdict": "PASS",
                 "phase_code": "1",
@@ -328,7 +219,7 @@ class TestWizardCoreFinalGaps:
         assert "Параллельная фаза" not in text
 
     def test_format_result_pass_sync_after_parallel(self):
-        text = core_mod.format_result(
+        text = format_result(
             {
                 "verdict": "PASS",
                 "phase_code": "parallel.end",

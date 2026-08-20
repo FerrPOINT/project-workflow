@@ -15,5 +15,9 @@ class ConflictError(WorkflowCliError):
     """Unique constraint or business conflict."""
 
 
+class ConcurrentTransitionError(ConflictError):
+    """Task state changed while a Wizard transition was being committed."""
+
+
 class LastPhaseError(WorkflowCliError):
     """Attempt to delete the last phase of a workflow."""

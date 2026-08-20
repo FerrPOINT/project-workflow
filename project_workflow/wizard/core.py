@@ -1,18 +1,15 @@
 """DB-backed workflow supervisor over the phase catalog.
 
 Thin facade — orchestrates context → contract → checks → store.
-Public surface kept compatible:
-- WizardEngine(task_key, repo)
+Public surface:
+- WizardEngine(task_key)
 - WizardEngine.get_full_context()
 - WizardEngine.get_phase_prompt()
 - WizardEngine.evaluate(report)
-- evaluate_report(...), main(...)
 """
 
 from __future__ import annotations
 
-import json
-import logging
 import threading
 from typing import Any
 
@@ -20,24 +17,11 @@ from ..application.project import ProjectService
 from ..application.task import TaskService
 from ..application.workflow import WorkflowService
 from ..infrastructure.db import schema
-from ..infrastructure.db.row_utils import row_to_dict
 from ..infrastructure.db.uow import SAUnitOfWork
-from ..infrastructure.db.uow_bootstrap import (
-    bootstrap_smoke_project_and_workflow,
-    ensure_smoke_phases,
-)
-
-# Re-exports kept for existing tests importing from wizard.core directly.
-from .checks import check_coverage, determine_verdict, extract_blockers
 from .context import WizardContextBuilder
 from .contracts import PhaseContractBuilder
-
-# Backward-compatible re-exports moved to dedicated modules.
-from .formatting import format_result  # noqa: F401
 from .models import Phase
 from .prompt import build_phase_prompt
-
-logger = logging.getLogger(__name__)
 
 
 class PromptCache:
@@ -71,17 +55,11 @@ class WizardEngine:
     """Internal supervisor that evaluates workflow progress against DB phase contracts."""
 
     def __init__(
-        self, task_key: str, repo: str | None = None, uow: SAUnitOfWork | None = None, create_if_missing: bool = True
+        self, task_key: str, uow: SAUnitOfWork | None = None, create_if_missing: bool = True
     ):
         self.task_key = task_key
-        self.repo = repo
         self.create_if_missing = create_if_missing
         self._uow = uow if uow is not None else SAUnitOfWork()
-
-        self._uow.create_all()
-        bootstrap_smoke_project_and_workflow(self._uow)
-        schema.ensure_phase_catalog(self._uow)
-        self._ensure_smoke_phases()
 
         self._workflow_service = WorkflowService(self._uow)
         self._project_service = ProjectService(self._uow)
@@ -141,11 +119,6 @@ class WizardEngine:
     def _ensure_task(self) -> dict:
         existing = self._task_service.get_task_by_key(self.task_key)
         if existing:
-            if str(existing.get("current_phase") or "").strip() == "":
-                current_phase = self._first_phase_code_for_project(existing["project_id"])
-                self._task_service.update_task(existing["id"], {"current_phase": current_phase})
-                self._uow.commit()
-                return self._task_service.get_task(existing["id"]) or existing
             return existing
 
         if not self.create_if_missing:
@@ -173,42 +146,21 @@ class WizardEngine:
             for prefix in project.get("key_prefixes", []):
                 if self.task_key.startswith(prefix + "-") or self.task_key == prefix:
                     return project
-        # Fall back to the default workflow/project.
-        default_wf = self._workflow_service.ensure_default_exists()
-        default_wf_id = default_wf.get("id") if default_wf else None
-        for project in self._project_service.list_projects():
-            if default_wf_id and project.get("workflow_id") == default_wf_id:
-                return project
-        # Create a default project under the default workflow.
-        return self._project_service.create_project(
-            {
-                "code": "default",
-                "name": "Default Project",
-            }
-        )
-
-    def _ensure_smoke_phases(self) -> None:
-        ensure_smoke_phases(self._uow)
+        return None
 
     def _first_phase_code_for_project(self, project_id: int) -> str:
         project = self._project_service.get_project(project_id)
         workflow_id = project["workflow_id"] if project else None
         phases = schema.load_phases_from_db(self._uow, workflow_id=workflow_id)
-        return phases[0].code if phases else "-1"
+        if not phases:
+            raise ValueError("Workflow phase catalog is empty")
+        return phases[0].code
 
     def _resolve_current_phase(self) -> str:
         if not self.task:
-            return "-1"
+            return ""
         current = str(self.task.get("current_phase") or "").strip()
-        if current and current in self.phase_map:
-            return current
-        if self.all_phases:
-            fallback = self.all_phases[0].code
-            if current != fallback:
-                self._task_service.update_task(self.task["id"], {"current_phase": fallback})
-                self.task = self._task_service.get_task(self.task["id"]) or self.task
-            return fallback
-        return current or "-1"
+        return current
 
     def _get_current_phase_obj(self) -> Phase | None:
         return self.phase_map.get(self.current_phase)
@@ -221,7 +173,7 @@ class WizardEngine:
         task_id = int(self.task.get("id", 0))
         if not task_id:
             return previously
-        runs = [r.to_dict() for r in self._uow.supervisor_runs.list(task_id=task_id, limit=20)]
+        runs = [r.to_dict() for r in self._uow.supervisor_runs.list(task_id=task_id, limit=200)]
         for run in runs:
             run_phase_id = run.get("phase_id")
             if run_phase_id is None:
@@ -235,17 +187,12 @@ class WizardEngine:
                     from .checks import normalize_text
 
                     previously.add(normalize_text(item))
+            snapshot = run.get("context_snapshot", {})
+            if isinstance(snapshot, dict):
+                for item_id in snapshot.get("covered_item_ids", []):
+                    if isinstance(item_id, str):
+                        previously.add(item_id)
         return previously
-
-    def _determine_verdict(self, phase, covered, missing, blockers, report):
-        return determine_verdict(
-            covered=covered,
-            missing=missing,
-            blockers=blockers,
-            report=report,
-            is_delegated=getattr(phase, "is_delegated", False),
-            rollback_target=getattr(phase, "rollback_target", None),
-        )
 
     def _get_next_phase(self, phase_code):
         cb = PhaseContractBuilder(self.all_phases)
@@ -268,7 +215,13 @@ class WizardEngine:
         return cb.build_parallel_checklist(group)
 
     def _record_transition(
-        self, phase: Phase, verdict: str, next_phase: str | None, rollback_target: str | None
+        self,
+        phase: Phase,
+        verdict: str,
+        next_phase: str | None,
+        rollback_target: str | None,
+        *,
+        commit: bool = True,
     ) -> None:
         from .transitions import record_transition
         record_transition(
@@ -279,9 +232,18 @@ class WizardEngine:
             next_phase=next_phase,
             rollback_target=rollback_target,
             phase_map=self.phase_map,
+            commit=commit,
         )
 
-    def _record_parallel_transition(self, group: list[Phase], verdict: str, next_phase: str | None) -> None:
+    def _record_parallel_transition(
+        self,
+        group: list[Phase],
+        verdict: str,
+        next_phase: str | None,
+        rollback_target: str | None = None,
+        *,
+        commit: bool = True,
+    ) -> None:
         from .transitions import record_parallel_transition
         record_parallel_transition(
             db=self.db,
@@ -290,6 +252,8 @@ class WizardEngine:
             phase_map=self.phase_map,
             verdict=verdict,
             next_phase=next_phase,
+            rollback_target=rollback_target,
+            commit=commit,
         )
 
     # ── Context / Prompt ─────────────────────────────────────────────────────
@@ -307,7 +271,6 @@ class WizardEngine:
             all_phases=self.all_phases,
             current_phase=self.current_phase,
             task_key=self.task_key,
-            repo=self.repo,
         )
         ctx = builder.build()
         self._cache.set(self.task_key, self.current_phase, ctx)
@@ -337,28 +300,51 @@ class WizardEngine:
         )
 
     def _blocked_result(self) -> dict[str, Any]:
+        message = (
+            "Workflow phase catalog is empty."
+            if not self.all_phases
+            else "Current phase is not configured in the workflow catalog."
+        )
         return {
             "verdict": "BLOCKED",
             "task_key": self.task_key,
             "phase": self.current_phase,
-            "message": "Current phase is not configured in the workflow catalog.",
+            "message": message,
             "covered": [],
             "missing": [],
             "blockers": ["phase-not-configured"],
             "current_phase": self.current_phase,
             "next_phase": None,
+            "replayed": False,
+            "retryable": True,
         }
 
-    def _try_llm_evaluate(self, report: str, phase: Phase) -> dict | None:
-        import project_workflow.wizard as _wizard_mod
-
-        if not _wizard_mod.SMART_EVALUATE:
-            return None
-        try:
-            return self.evaluate_llm(report, phase)
-        except Exception as exc:
-            logger.warning("LLM evaluate failed: %s", exc)
-            return None
+    def _completed_result(self, phase: Phase | None) -> dict[str, Any]:
+        contract = PhaseContractBuilder(self.all_phases).build(phase) if phase else None
+        phase_code = phase.code if phase else self.current_phase
+        return {
+            "verdict": "PASS",
+            "task_key": self.task_key,
+            "phase": phase_code,
+            "phase_name": phase.name if phase else None,
+            "status": "done",
+            "covered": [],
+            "missing": [],
+            "blockers": [],
+            "current_phase": phase_code,
+            "next_phase": None,
+            "next_phase_name": None,
+            "rollback_target": None,
+            "message": "Workflow уже завершён; новый отчёт не оценивался.",
+            "confidence": 1.0,
+            "instructions": contract.instructions if contract else [],
+            "required_checks": contract.required_checks if contract else [],
+            "required_evidence": contract.required_evidence if contract else [],
+            "group_phases": contract.group_phases if contract else None,
+            "group_details": contract.group_details if contract else [],
+            "replayed": False,
+            "retryable": False,
+        }
 
     def _resolve_transition(
         self, phase: Phase, verdict: str, group: list[Phase]
@@ -380,138 +366,45 @@ class WizardEngine:
             next_phase_name = next_phase_obj.name if next_phase_obj else next_phase_name
         return next_phase, next_phase_name, rollback_target
 
-    def _build_assessment(
+    def _record_evaluation(
         self,
         phase: Phase,
-        report: str,
-    ) -> tuple[Any, str | None, str | None, dict]:
-        from .result_builder import build_assessment
-
-        is_parallel = phase.execution_type == "parallel"
-        if is_parallel:
-            group = self._get_parallel_group(phase)
-            checklist = self._build_parallel_checklist(group)
-        else:
-            group = [phase]
-            checklist = self._build_checklist(phase)
-
-        previously_covered = self._get_previously_covered(phase.code)
-        covered, missing = check_coverage(report, checklist, previously_covered)
-        blockers = extract_blockers(report)
-        verdict = self._determine_verdict(phase, covered, missing, blockers, report)
-
-        next_phase, next_phase_name, rollback_target = self._resolve_transition(phase, verdict, group)
-
-        cb = PhaseContractBuilder(self.all_phases)
-        next_phase_contract = cb.build_next_contract(next_phase) if verdict == "pass" else None
-
-        assessment = build_assessment(
-            task_key=self.task_key,
-            phase=phase,
-            group=group,
-            verdict=verdict,
-            covered=covered,
-            missing=missing,
-            blockers=blockers,
-            next_phase=next_phase,
-            next_phase_name=next_phase_name,
-            rollback_target=rollback_target,
-            next_phase_contract=next_phase_contract,
-        )
-
-        result = assessment.to_result_dict()
-        if next_phase_contract is not None:
-            result["next_phase_contract"] = row_to_dict(next_phase_contract)
-        return assessment, next_phase, rollback_target, result
-
-    def _record_evaluation(
-        self, phase: Phase, verdict: str, next_phase: str | None, rollback_target: str | None
-    ) -> None:
-        is_parallel = phase.execution_type == "parallel"
-        if is_parallel:
-            group = self._get_parallel_group(phase)
-            self._record_parallel_transition(group, verdict, next_phase)
-        else:
-            self._record_transition(phase, verdict, next_phase, rollback_target)
-        self._uow.commit()
-        if self.task:
-            self.task = self._task_service.get_task(self.task["id"]) or self.task
-            self.current_phase = self._resolve_current_phase()
-
-    def _persist_supervisor_run(
-        self,
-        assessment: Any,
+        verdict: str,
         next_phase: str | None,
         rollback_target: str | None,
+        *,
+        commit: bool = True,
     ) -> None:
+        is_parallel = phase.execution_type == "parallel"
+        if is_parallel:
+            group = self._get_parallel_group(phase)
+            self._record_parallel_transition(group, verdict, next_phase, rollback_target, commit=False)
+        else:
+            self._record_transition(phase, verdict, next_phase, rollback_target, commit=False)
+        if commit:
+            self._uow.commit()
+            self._refresh_task_state()
+
+    def _refresh_task_state(self) -> None:
         if not self.task:
             return
-        next_phase_obj = self.phase_map.get(next_phase) if next_phase and next_phase in self.phase_map else None
-        rollback_phase_obj = (
-            self.phase_map.get(rollback_target) if rollback_target and rollback_target in self.phase_map else None
-        )
-        self.db.create_supervisor_run(
-            task_id=self.task["id"],
-            phase_id=getattr(self.phase_map.get(assessment.phase_code), "id", None),
-            verdict=assessment.verdict,
-            report=assessment.message or "",
-            covered=assessment.covered,
-            missing=assessment.missing,
-            blockers=assessment.blockers,
-            next_phase_id=next_phase_obj.id if next_phase_obj else None,
-            rollback_phase_id=rollback_phase_obj.id if rollback_phase_obj else None,
-            context_snapshot={
-                "phase": assessment.phase_code,
-                "phase_name": assessment.phase_name,
-                "current_contract": {"phase_code": assessment.phase_code},
-            },
-            response=assessment.to_result_dict(),
-        )
-        self._uow.commit()
+        self.task = self._task_service.get_task(self.task["id"]) or self.task
+        self.current_phase = self._resolve_current_phase()
 
     def evaluate(self, report: str) -> dict:
+        if self.task and self.task.get("status") == "done":
+            return self._completed_result(self._get_current_phase_obj())
+
         phase = self._get_current_phase_obj()
         if not phase:
             return self._blocked_result()
 
-        llm_result = self._try_llm_evaluate(report, phase)
-        if llm_result is not None:
-            return llm_result
+        return self.evaluate_llm(report, phase)
 
-        assessment, next_phase, rollback_target, result = self._build_assessment(phase, report)
-        self._record_evaluation(phase, assessment.verdict, next_phase, rollback_target)
-        self._persist_supervisor_run(assessment, next_phase, rollback_target)
-        return result
-
-    # ── LLM evaluate (optional) ──────────────────────────────────────
+    # ── LLM evaluate ─────────────────────────────────────────────────
 
     def evaluate_llm(self, report: str, phase: Phase) -> dict:
-        """LLM-based evaluate via Ollama + Kimi K2.5."""
+        """Evaluate through the configured LLM without a local fallback."""
         from .evaluate import evaluate_llm_report
 
         return evaluate_llm_report(report, phase, self)
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# Public wrappers / CLI entrypoints
-# ═══════════════════════════════════════════════════════════════════════
-
-
-def evaluate_report(task_key: str, report: str, repo: str | None = None) -> dict:
-    import project_workflow.wizard as _wizard_pkg
-
-    engine = _wizard_pkg.WizardEngine(task_key, repo)
-    return engine.evaluate(report)
-
-
-def main(task_key: str, repo: str | None = None, report: str | None = None) -> None:
-    """CLI entrypoint kept for existing scripts/tests that call wizard.main() directly."""
-    import sys
-
-    import project_workflow.wizard as _wizard_pkg
-
-    if report:
-        result = evaluate_report(task_key, report, repo)
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-        sys.exit(0 if result["verdict"] == "PASS" else 1)
-    print(_wizard_pkg.WizardEngine(task_key, repo).get_phase_prompt())

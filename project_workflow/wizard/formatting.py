@@ -11,8 +11,8 @@ from typing import Any
 def format_result(result: dict) -> str:
     """CLI evaluate → человекочитаемый вывод.
 
-    Только три секции: Инструкции, Чекапы, Доказательства.
-    Никаких эмодзи, verdict-заголовков, internal phase codes, boilerplate.
+    Основные секции: Инструкции, Чекапы, Доказательства.
+    BLOCKED дополнительно показывает причину блокировки.
     PASS: показываем контракт следующей фазы со статусом pending (·).
     Не-PASS: показываем только недоделанные пункты текущей фазы.
     Для parallel групп перечисляем все фазы с агентами и параллельными партнёрами.
@@ -26,7 +26,7 @@ def format_result(result: dict) -> str:
         contract = result.get("next_phase_contract") or {}
         group_details = contract.get("group_details") or []
         if group_details:
-            instructions, checks, evidence = _flatten_parallel_contract(contract, covered_set)
+            instructions, checks, evidence = _flatten_parallel_contract(contract, set())
         else:
             instructions = list(contract.get("instructions", []) or [])
             checks = list(contract.get("required_checks", []) or [])
@@ -49,6 +49,26 @@ def format_result(result: dict) -> str:
 
     lines: list[str] = []
 
+    if is_pass and not result.get("next_phase"):
+        lines.append("Workflow завершён: задача уже прошла все фазы.")
+
+    if verdict == "BLOCKED":
+        reasons = [str(item) for item in (result.get("blockers") or []) if str(item).strip()]
+        message = str(result.get("message") or "").strip()
+        if message and message not in reasons:
+            reasons.insert(0, message)
+        lines.append("Причина:")
+        for reason in reasons or ["Проверка отчёта заблокирована."]:
+            lines.append(f"  · {reason}")
+
+    if verdict == "ROLLBACK":
+        target = result.get("rollback_target") or result.get("next_phase")
+        if target:
+            instructions.insert(0, f"Вернись к шагу: {target}")
+    elif verdict == "DELEGATE":
+        message = str(result.get("message") or "").strip()
+        instructions.insert(0, message or "Передай выполнение настроенному агенту.")
+
     # PASS: first instruction becomes the actionable next step.
     if is_pass:
         next_name = result.get("next_phase_name") or result.get("next_phase") or ""
@@ -58,6 +78,8 @@ def format_result(result: dict) -> str:
             instructions.insert(0, f"Перейди к шагу: {next_name}")
 
     if instructions:
+        if lines:
+            lines.append("")
         lines.append("Инструкции:")
         for item in instructions:
             lines.append(f"  · {item}")

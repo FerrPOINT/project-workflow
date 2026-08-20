@@ -54,6 +54,15 @@ class SASupervisorRunRepository(SupervisorRunRepository):
         rows = self._session.execute(stmt).scalars().all()
         return [_row_to_supervisor_run(r) for r in rows]
 
+    def get_by_fingerprint(self, task_id: int, report_fingerprint: str) -> SupervisorRun | None:
+        row = self._session.execute(
+            select(m.SupervisorRun).where(
+                m.SupervisorRun.task_id == task_id,
+                m.SupervisorRun.report_fingerprint == report_fingerprint,
+            )
+        ).scalar_one_or_none()
+        return _row_to_supervisor_run(row) if row is not None else None
+
     def create(self, data: dict[str, Any]) -> int:
         item = m.SupervisorRun(
             task_id=data["task_id"],
@@ -65,6 +74,7 @@ class SASupervisorRunRepository(SupervisorRunRepository):
             blockers=json.dumps(data.get("blockers", []), ensure_ascii=False),
             next_phase_id=data.get("next_phase_id"),
             rollback_phase_id=data.get("rollback_phase_id"),
+            report_fingerprint=data.get("report_fingerprint"),
             context_snapshot=json.dumps(data.get("context_snapshot", {}), ensure_ascii=False),
             response=json.dumps(data.get("response", {}), ensure_ascii=False),
         )

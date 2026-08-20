@@ -95,6 +95,13 @@ class TestFormatResult:
         assert "Доказательства:" in out
         assert "  · e1" in out
 
+    def test_terminal_pass_reports_workflow_completion(self):
+        result = self._pass()
+        result["next_phase"] = None
+        result["next_phase_name"] = None
+        result.pop("next_phase_contract", None)
+        assert "Workflow завершён" in format_result(result)
+
     def test_pass_no_message_hint(self):
         """Message field from JSON must NOT leak into formatted output."""
         out = format_result(self._pass())
@@ -140,7 +147,8 @@ class TestFormatResult:
     def test_blocked_shows_only_not_done(self):
         out = format_result(self._blocked())
         assert "  · m1" in out
-        assert "Blocked msg" not in out
+        assert "Причина:" in out
+        assert "Blocked msg" in out
 
     # ── PARALLEL GROUP ─────────────────────────────────────────────────
     def _pass_parallel(self):

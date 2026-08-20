@@ -137,6 +137,19 @@ class TestStepCommand:
         assert parsed["verdict"] == "PASS"
 
     @patch("project_workflow.wizard.WizardEngine")
+    def test_step_report_json_blocked_exits_one(self, mock_engine_cls):
+        mock_engine_cls.return_value.evaluate.return_value = {
+            "verdict": "BLOCKED",
+            "blockers": ["provider unavailable"],
+            "retryable": True,
+        }
+        runner = CliRunner()
+        with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
+            result = runner.invoke(cli, ["--json", "step", "--task", "TASK-1", "--report", "Done"])
+        assert result.exit_code == 1
+        assert json.loads(result.output)["verdict"] == "BLOCKED"
+
+    @patch("project_workflow.wizard.WizardEngine")
     def test_step_prompt_json_mode(self, mock_engine_cls):
         mock_engine = mock_engine_cls.return_value
         mock_engine.current_phase = "0.00"

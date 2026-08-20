@@ -17,17 +17,11 @@ SUPERVISOR_PHASES = ["sup.intake", "sup.review", "sup.done"]
 
 def _patch_runtime(monkeypatch, tmp_path: Path) -> SAUnitOfWork:
     workflow_db = tmp_path / "workflow.db"
-    convo_dir = tmp_path / ".project-workflow"
-    convo_db = convo_dir / "conversation.db"
-    monkeypatch.setattr("project_workflow.infrastructure.db.DB_PATH", workflow_db)
-    monkeypatch.setattr("project_workflow.infrastructure.db.DB_PATH", workflow_db)
-    monkeypatch.setattr("project_workflow.infrastructure.conversation.DB_DIR", convo_dir)
-    monkeypatch.setattr("project_workflow.infrastructure.conversation.DB_PATH", convo_db)
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{workflow_db}")
     from project_workflow import config
 
     config.get_settings.cache_clear()
-    uow = SAUnitOfWork(str(workflow_db))
+    uow = SAUnitOfWork(f"sqlite:///{workflow_db}")
     uow.create_all()
     return uow
 
@@ -111,7 +105,7 @@ def _bootstrap_supervisor_workflow(uow: SAUnitOfWork) -> None:
 def test_supervisor_context_contains_full_path_and_contract(tmp_path: Path, monkeypatch) -> None:
     uow = _patch_runtime(monkeypatch, tmp_path)
     _bootstrap_supervisor_workflow(uow)
-    engine = WizardEngine("SUP-1", repo="/repo", uow=uow)
+    engine = WizardEngine("SUP-1", uow=uow)
     task = uow.tasks.get_by_key("SUP-1")
 
     assert task is not None
@@ -131,17 +125,18 @@ def test_supervisor_context_contains_full_path_and_contract(tmp_path: Path, monk
     assert "Задача" in prompt
     assert "Формат отчёта" in prompt
     assert "Полный путь workflow" not in prompt
-    # Empty history/verdicts/messages sections are still present.
+    # Empty history/verdict sections are still present.
     assert "История выполнения:" in prompt
     assert "Недавние вердикты:" in prompt
-    assert "Недавние сообщения:" in prompt
+    assert "Недавние сообщения:" not in prompt
 
 
-def test_supervisor_evaluate_pass_updates_db_state_and_persists_run(tmp_path: Path, monkeypatch) -> None:
+def test_supervisor_evaluate_pass_updates_db_state_and_persists_run(tmp_path: Path, monkeypatch, wizard_llm) -> None:
     uow = _patch_runtime(monkeypatch, tmp_path)
     _bootstrap_supervisor_workflow(uow)
 
-    engine = WizardEngine("SUP-2", repo="/repo", uow=uow)
+    engine = WizardEngine("SUP-2", uow=uow)
+    wizard_llm("PASS", covered=["Plan is documented", "Plan file attached"])
     result = engine.evaluate(
         "summary: Created implementation plan. completed: Plan is documented. "
         "evidence: Plan file attached. blockers: none. next_step: move to review."
@@ -162,10 +157,10 @@ def test_supervisor_evaluate_pass_updates_db_state_and_persists_run(tmp_path: Pa
     assert len(runs) == 1
     assert runs[0].verdict == "pass"
     assert runs[0].response["next_phase"] == "sup.review"
-    assert runs[0].context_snapshot["current_contract"]["phase_code"] == "sup.intake"
+    assert runs[0].context_snapshot["contract_snapshot"]["phase_code"] == "sup.intake"
 
 
-def test_supervisor_rolls_back_gate_phase_when_report_is_blocked(tmp_path: Path, monkeypatch) -> None:
+def test_supervisor_rolls_back_gate_phase_when_report_is_blocked(tmp_path: Path, monkeypatch, wizard_llm) -> None:
     uow = _patch_runtime(monkeypatch, tmp_path)
     _bootstrap_supervisor_workflow(uow)
 
@@ -186,7 +181,8 @@ def test_supervisor_rolls_back_gate_phase_when_report_is_blocked(tmp_path: Path,
     uow.tasks.add_history(task_id, intake_id, "done")
     uow.tasks.add_history(task_id, review_id, "pending")
 
-    engine = WizardEngine("SUP-3", repo="/repo", uow=uow, create_if_missing=False)
+    engine = WizardEngine("SUP-3", uow=uow, create_if_missing=False)
+    wizard_llm("ROLLBACK")
     result = engine.evaluate("Blocked by dependency mismatch. blocker remains and the gate cannot pass.")
 
     assert result["verdict"] == "ROLLBACK"

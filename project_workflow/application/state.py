@@ -12,7 +12,7 @@ from typing import Any
 
 from ..application.phase_service import PhaseService
 from ..config import get_settings
-from ..infrastructure.db.session import ensure_migrated, ensure_schema, get_engine
+from ..infrastructure.db.session import get_engine
 from ..infrastructure.db.uow import SAUnitOfWork
 from . import (
     AgentService,
@@ -23,8 +23,6 @@ from . import (
     WorkflowService,
 )
 
-_MIGRATED_URLS: set[str] = set()
-
 
 class _AppState:
     """Application state holder (replaces module-level globals)."""
@@ -32,24 +30,26 @@ class _AppState:
     __slots__ = ("_database_url",)
 
     def __init__(self, database_url: str | None = None) -> None:
-        self._database_url: str = database_url or get_settings().DATABASE_URL
+        self._database_url = database_url
 
     def _database_url_normalized(self) -> str:
-        target = self._database_url
+        target = self._database_url or get_settings().DATABASE_URL
         if target.startswith("sqlite:///"):
             target = str(Path(target[10:]).resolve())
             target = f"sqlite:///{target}"
         return target
 
     def get_db(self) -> SAUnitOfWork:
-        """Return a fresh SQLAlchemy UnitOfWork and ensure seed catalog is loaded."""
+        """Return a fresh SQLAlchemy UnitOfWork."""
         return self.get_uow()
 
     def reset(self) -> None:
         from ..infrastructure.db import schema
 
-        schema.mark_catalog_not_ensured(self._database_url_normalized())
-        _MIGRATED_URLS.discard(self._database_url_normalized())
+        if self._database_url:
+            schema.mark_catalog_not_ensured(self._database_url_normalized())
+        else:
+            schema.mark_catalog_not_ensured()
 
     def get_service(self) -> PhaseService:
         """PhaseService helper for UI detail/edit routes."""
@@ -57,17 +57,7 @@ class _AppState:
 
     def get_uow(self) -> SAUnitOfWork:
         engine = get_engine(self._database_url_normalized())
-        url = self._database_url_normalized()
-        if engine.dialect.name == "sqlite":
-            ensure_schema(engine)
-        elif url not in _MIGRATED_URLS:
-            ensure_migrated(engine)
-            _MIGRATED_URLS.add(url)
-        uow = SAUnitOfWork(engine)
-        from ..infrastructure.db import schema
-
-        schema.ensure_phase_catalog(uow)
-        return uow
+        return SAUnitOfWork(engine)
 
     def workflow_service(self) -> WorkflowService:
         return WorkflowService(self.get_uow())

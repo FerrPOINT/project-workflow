@@ -1,8 +1,7 @@
-"""LLM adapter for smart workflow evaluation via Ollama.
+"""OpenAI-compatible LLM adapter for Wizard evaluation.
 
-Supports BOTH:
-  • Local Ollama  — http://localhost:11434/api/chat  (native)
-  • Ollama Cloud  — https://ollama.com/v1/chat/completions  (OpenAI-compatible)
+Ollama Online is the default provider. Any OpenAI-compatible endpoint can be
+selected through environment variables without changing Wizard code.
 
 PromptBuilder — assembles system + user prompts from phase contracts
 ResponseParser — validates and normalises LLM JSON responses
@@ -12,36 +11,16 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-import re
+import math
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 import requests
+from pydantic import BaseModel, ConfigDict, Field
+
+from project_workflow import config
 
 logger = logging.getLogger(__name__)
-
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "kimi-k2.6")
-OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "120"))
-OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "")
-
-
-def _load_api_key() -> str:
-    """Read OLLAMA_API_KEY from env or ~/.hermes/.env."""
-    if OLLAMA_API_KEY:
-        return OLLAMA_API_KEY
-    env_path = os.path.expanduser("~/.hermes/.env")
-    if os.path.exists(env_path):
-        try:
-            with open(env_path) as f:
-                for line in f:
-                    if line.startswith("OLLAMA_API_KEY="):
-                        return line.split("=", 1)[1].strip()
-        except (OSError, ValueError) as exc:
-            logger.warning("Failed to read OLLAMA_API_KEY from env file: %s", exc)
-    return ""
-
 
 @dataclass(frozen=True)
 class LlmVerdict:
@@ -56,8 +35,8 @@ class LlmVerdict:
     raw: dict[str, Any]
 
 
-class OllamaClient:
-    """Ollama HTTP client — supports local /api/chat and cloud /v1/chat/completions."""
+class OpenAICompatibleClient:
+    """Small Chat Completions client for any OpenAI-compatible provider."""
 
     def __init__(
         self,
@@ -65,21 +44,22 @@ class OllamaClient:
         model: str | None = None,
         timeout: int | None = None,
         api_key: str | None = None,
+        reasoning_effort: str | None = None,
     ):
-        self.base_url = (base_url or OLLAMA_BASE_URL).rstrip("/")
-        self.model = model or OLLAMA_MODEL
-        self.timeout = timeout or OLLAMA_TIMEOUT
-        self.api_key = api_key or _load_api_key()
-        self.is_cloud = "/v1" in self.base_url  # OpenAI-compatible endpoint
+        settings = config.get_settings()
+        self.base_url = (base_url or settings.OPENAI_BASE_URL).rstrip("/")
+        self.model = model or settings.OPENAI_MODEL
+        self.timeout = timeout or settings.OPENAI_TIMEOUT
+        self.api_key = api_key if api_key is not None else settings.OPENAI_API_KEY
+        self.reasoning_effort = (
+            settings.OPENAI_REASONING_EFFORT if reasoning_effort is None else reasoning_effort
+        ).strip()
 
     def is_available(self) -> bool:
         """Quick health-check."""
         try:
-            if self.is_cloud:
-                headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
-                r = requests.get(f"{self.base_url}/models", headers=headers, timeout=5)
-            else:
-                r = requests.get(f"{self.base_url}/api/tags", timeout=5)
+            headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+            r = requests.get(f"{self.base_url}/models", headers=headers, timeout=5)
             return r.status_code == 200
         except (requests.RequestException, OSError) as exc:
             logger.warning("LLM health-check failed: %s", exc)
@@ -87,30 +67,25 @@ class OllamaClient:
 
     def chat(self, system: str, user: str, temperature: float = 0.1) -> dict[str, Any]:
         """Send chat request, return parsed JSON content."""
-        if self.is_cloud:
-            return self._chat_cloud(system, user, temperature)
-        return self._chat_local(system, user, temperature)
-
-    def _chat_cloud(self, system: str, user: str, temperature: float) -> dict[str, Any]:
-        """OpenAI-compatible endpoint (Ollama Cloud, etc.)."""
         headers = {
             "Content-Type": "application/json",
         }
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
-        payload = {
+        payload: dict[str, Any] = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
             "temperature": temperature,
-            "max_tokens": 2000,
+            # Reasoning-capable OpenAI-compatible models may spend part of this
+            # budget before emitting the small JSON verdict.
+            "max_tokens": 4000,
         }
-        # Prefer structured output if supported
-        if self.model.startswith("kimi") or self.model.startswith("gpt"):
-            payload["response_format"] = {"type": "json_object"}
+        if self.reasoning_effort:
+            payload["reasoning_effort"] = self.reasoning_effort
 
         resp = requests.post(
             f"{self.base_url}/chat/completions",
@@ -125,68 +100,19 @@ class OllamaClient:
             raise ValueError("Empty content from LLM")
         return self._extract_json(content)
 
-    def _chat_local(self, system: str, user: str, temperature: float) -> dict[str, Any]:
-        """Native Ollama /api/chat endpoint."""
-        payload = {
-            "model": self.model,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-            "format": "json",
-            "options": {
-                "temperature": temperature,
-                "num_ctx": 32000,
-            },
-            "stream": False,
-        }
-        resp = requests.post(
-            f"{self.base_url}/api/chat",
-            json=payload,
-            timeout=self.timeout,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        content = data.get("message", {}).get("content", "")
-        if not content.strip():
-            raise ValueError("Empty content from Ollama")
-        return self._extract_json(content)
-
     @staticmethod
     def _extract_json(text: str) -> dict[str, Any]:
-        """Strip markdown wrapper and parse JSON."""
-        text = text.strip()
-        # Remove markdown ```json ... ``` wrapper
-        match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
-        if match:
-            text = match.group(1).strip()
-        # Try direct JSON parse
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            # Try non-greedy extraction of the first JSON object
-            match = re.search(r"(\{.*?\})", text, re.DOTALL)
-            if match:
-                try:
-                    return json.loads(match.group(1))
-                except json.JSONDecodeError:
-                    pass
-            # Fallback: wrap raw text as a BLOCKED response so caller can proceed
-            return {
-                "verdict": "BLOCKED",
-                "covered": [],
-                "missing": [],
-                "blockers": ["LLM response was not valid JSON"],
-                "message": f"Raw response: {text[:500]}",
-                "next_phase": None,
-                "next_phase_name": None,
-                "confidence": 0.0,
-                "raw_text": text,
-            }
+        """Parse one JSON object without repairing free-form model output."""
+        parsed = json.loads(text)
+        if not isinstance(parsed, dict):
+            raise ValueError("Wizard response must be a JSON object")
+        return parsed
 
 
 class PromptBuilder:
     """Build prompts from phase contracts + task context."""
+
+    PROMPT_VERSION = "wizard-evaluator-v3"
 
     SYSTEM_PROMPT = (
         "You are a strict workflow supervisor. "
@@ -194,7 +120,8 @@ class PromptBuilder:
         "Rules:\n"
         "1. Read the phase contract (instructions, checks, evidence).\n"
         "2. Analyze the worker report against EACH contract item individually. Do not skip checks.\n"
-        "3. Decide which items are DONE, PARTIALLY done, or MISSING.\n"
+        "3. Return every required item ID exactly once in either covered or missing. "
+        "Copy the ID value exactly: do not add brackets, quotes, prefixes, or suffixes.\n"
         "4. Identify real BLOCKERS with ROOT CAUSE — explain WHY it prevents progress. "
         "Words like 'ошибка'/'error'/'bug' alone are NOT blockers without root cause.\n"
         "5. Verify the worker did NOT break existing functionality, remove working code, or leave orphaned artifacts.\n"
@@ -202,16 +129,15 @@ class PromptBuilder:
         "7. verdict = PARTIAL — some items done → stay on phase.\n"
         "8. verdict = BLOCKED — real blocker → stay on phase.\n"
         "9. verdict = ROLLBACK — worker explicitly cannot/will not do this.\n"
-        "10. verdict = DELEGATE — worker delegates to another agent.\n\n"
+        "10. verdict = DELEGATE — worker delegates to another agent.\n"
+        "The Wizard never chooses the next phase.\n\n"
         "Output STRICT JSON with these keys:\n"
         "{\n"
         '  "verdict": "PASS" | "PARTIAL" | "BLOCKED" | "ROLLBACK" | "DELEGATE",\n'
-        '  "covered": ["item description"],\n'
-        '  "missing": ["item description"],\n'
+        '  "covered": ["required item ID"],\n'
+        '  "missing": ["required item ID"],\n'
         '  "blockers": ["specific blocker description"],\n'
         '  "message": "Human-readable summary in Russian",\n'
-        '  "next_phase": "phase_code or null",\n'
-        '  "next_phase_name": "phase_name or null",\n'
         '  "confidence": 0.0-1.0\n'
         "}\n"
     )
@@ -222,6 +148,7 @@ class PromptBuilder:
         phase: Any,
         report: str,
         previously_covered: list[str] | None = None,
+        evaluation_items: list[tuple[str, str]] | None = None,
     ) -> str:
         lines: list[str] = [
             f"TASK: {task_key}",
@@ -234,22 +161,27 @@ class PromptBuilder:
             for inst in phase.instructions:
                 desc = getattr(inst, "step", "") or getattr(inst, "description", "")
                 lines.append(f"  • {desc}")
-        if phase.checks:
-            lines.append("Checks:")
-            for chk in phase.checks:
-                desc = getattr(chk, "description", "")
-                lines.append(f"  • {desc}")
-        if phase.evidence:
-            lines.append("Evidence:")
-            for ev in phase.evidence:
-                desc = getattr(ev, "item", "") or getattr(ev, "description", "")
-                lines.append(f"  • {desc}")
+        if evaluation_items is not None:
+            lines.append("Required checks and evidence (copy only each quoted ID value into JSON):")
+            for item_id, description in evaluation_items:
+                lines.append(f'  ID: "{item_id}" — {description}')
+        else:
+            if phase.checks:
+                lines.append("Checks:")
+                for chk in phase.checks:
+                    desc = getattr(chk, "description", "")
+                    lines.append(f"  • {desc}")
+            if phase.evidence:
+                lines.append("Evidence:")
+                for ev in phase.evidence:
+                    desc = getattr(ev, "item", "") or getattr(ev, "description", "")
+                    lines.append(f"  • {desc}")
 
         if previously_covered:
             lines.extend(
                 [
                     "",
-                    "ALREADY COMPLETED IN PREVIOUS REPORTS (count as done):",
+                    "ALREADY COMPLETED IDS (keep them in covered):",
                 ]
             )
             for item in previously_covered:
@@ -267,44 +199,100 @@ class PromptBuilder:
         return "\n".join(lines)
 
 
-class ResponseParser:
-    """Validate + normalise raw LLM JSON into LlmVerdict."""
+class _LlmResponse(BaseModel):
+    """Wire contract: strict on decisions, tolerant on optional explanation."""
 
-    VALID_VERDICTS = {"PASS", "PARTIAL", "BLOCKED", "ROLLBACK", "DELEGATE"}
+    model_config = ConfigDict(extra="ignore")
+
+    verdict: Literal["PASS", "PARTIAL", "BLOCKED", "ROLLBACK", "DELEGATE"]
+    covered: list[str]
+    missing: list[str]
+    blockers: list[str]
+    message: str = ""
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+
+
+class ResponseParser:
+    """Validate the LLM response and keep workflow routing authoritative."""
 
     @classmethod
-    def parse(cls, raw: dict[str, Any]) -> LlmVerdict:
-        verdict = str(raw.get("verdict", "")).upper().strip()
-        if verdict not in cls.VALID_VERDICTS:
-            verdict = "PARTIAL"
+    def parse(
+        cls,
+        raw: dict[str, Any],
+        *,
+        required_item_ids: list[str] | None = None,
+        previously_covered_ids: set[str] | None = None,
+    ) -> LlmVerdict:
+        payload = dict(raw)
+        verdict_value = payload.get("verdict")
+        if isinstance(verdict_value, str):
+            payload["verdict"] = verdict_value.upper().strip()
+        if not isinstance(payload.get("message", ""), str):
+            payload["message"] = ""
+        else:
+            payload["message"] = payload.get("message", "").strip()
 
-        covered = cls._to_str_list(raw.get("covered"))
-        missing = cls._to_str_list(raw.get("missing"))
-        blockers = cls._to_str_list(raw.get("blockers"))
-        message = str(raw.get("message", "")).strip()
-        next_phase = raw.get("next_phase")
-        next_phase_name = raw.get("next_phase_name")
-        confidence = raw.get("confidence", 0.5)
-        if confidence is None:
+        confidence = payload.get("confidence", 0.5)
+        try:
+            confidence = float(confidence) if not isinstance(confidence, bool) else 0.5
+        except (TypeError, ValueError):
             confidence = 0.5
-        confidence = float(confidence)
+        if not math.isfinite(confidence) or not 0.0 <= confidence <= 1.0:
+            confidence = 0.5
+        payload["confidence"] = confidence
+        for field_name in ("covered", "missing", "blockers"):
+            values = payload.get(field_name)
+            if isinstance(values, list) and all(isinstance(item, str) for item in values):
+                payload[field_name] = [item.strip() for item in values if item.strip()]
+        response = _LlmResponse.model_validate(payload)
+
+        covered = response.covered
+        missing = response.missing
+        if len(covered) != len(set(covered)) or len(missing) != len(set(missing)):
+            raise ValueError("covered and missing must not contain duplicate IDs")
+        if set(covered) & set(missing):
+            raise ValueError("covered and missing must not overlap")
+
+        if required_item_ids is not None:
+            required = set(required_item_ids)
+            classified = set(covered) | set(missing)
+            if classified != required:
+                unknown = sorted(classified - required)
+                omitted = sorted(required - classified)
+                raise ValueError(f"invalid item IDs: unknown={unknown}, omitted={omitted}")
+            effective_covered = set(covered) | (previously_covered_ids or set())
+            covered = [item_id for item_id in required_item_ids if item_id in effective_covered]
+            missing = [item_id for item_id in required_item_ids if item_id not in effective_covered]
+
+            if response.verdict == "PASS" and (missing or response.blockers):
+                raise ValueError("PASS requires full coverage and empty missing/blockers")
+            if response.verdict == "PARTIAL" and (not missing or response.blockers):
+                raise ValueError("PARTIAL requires missing items and no blockers")
+            if response.verdict == "BLOCKED" and not response.blockers:
+                raise ValueError("BLOCKED requires a blocker reason")
+            if response.verdict in {"ROLLBACK", "DELEGATE"}:
+                if response.blockers:
+                    raise ValueError(f"{response.verdict} must not contain blockers")
+                if required and not missing:
+                    raise ValueError(f"{response.verdict} cannot claim full coverage")
+        else:
+            if response.verdict == "PASS" and (missing or response.blockers):
+                raise ValueError("PASS requires empty missing/blockers")
+            if response.verdict == "PARTIAL" and (not missing or response.blockers):
+                raise ValueError("PARTIAL requires missing items and no blockers")
+            if response.verdict == "BLOCKED" and not response.blockers:
+                raise ValueError("BLOCKED requires a blocker reason")
+            if response.verdict in {"ROLLBACK", "DELEGATE"} and response.blockers:
+                raise ValueError(f"{response.verdict} must not contain blockers")
 
         return LlmVerdict(
-            verdict=verdict,
+            verdict=response.verdict,
             covered=covered,
             missing=missing,
-            blockers=blockers,
-            message=message,
-            next_phase=next_phase if next_phase else None,
-            next_phase_name=next_phase_name if next_phase_name else None,
-            confidence=max(0.0, min(1.0, confidence)),
+            blockers=response.blockers,
+            message=response.message,
+            next_phase=None,
+            next_phase_name=None,
+            confidence=response.confidence,
             raw=raw,
         )
-
-    @staticmethod
-    def _to_str_list(val: Any) -> list[str]:
-        if isinstance(val, list):
-            return [str(v).strip() for v in val if str(v).strip()]
-        if isinstance(val, str):
-            return [val.strip()] if val.strip() else []
-        return []

@@ -10,7 +10,6 @@ from fastapi.testclient import TestClient
 
 pytestmark = [pytest.mark.ui]
 
-from project_workflow.infrastructure import conversation as convo
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui import app
 
@@ -23,7 +22,7 @@ class TestEndToEndWorkflow:
     def test_seeded_db_has_workflows_and_agents(self, tmp_path: Path):
         """Seed bootstrap + проверка workflow-aware фаз и agents."""
         db_path = tmp_path / "test.db"
-        uow = SAUnitOfWork(str(db_path))
+        uow = SAUnitOfWork(f"sqlite:///{db_path}")
         uow.init()
         phases = uow.get_all_phases()
         assert len(phases) > 0
@@ -31,14 +30,15 @@ class TestEndToEndWorkflow:
         assert "id" in p and "name" in p and "phase_order" in p
         assert "execution_type" in p
         workflows = uow.get_workflows()
-        assert any(w["name"] == "Smoke Test Workflow" for w in workflows)
+        assert [w["name"] for w in workflows] == ["Default Workflow"]
+        assert len(phases) == 27
         agents = uow.get_agents()
         assert len(agents) > 0
 
     def test_create_task_and_history(self, tmp_path: Path):
         """Создание таски + запись истории."""
         db_path = tmp_path / "test2.db"
-        uow = SAUnitOfWork(str(db_path))
+        uow = SAUnitOfWork(f"sqlite:///{db_path}")
         uow.init()
         uow.create_project(
             {
@@ -51,7 +51,8 @@ class TestEndToEndWorkflow:
         task = uow.get_task_by_key("AAT-99")
         assert task is not None
         assert int(task["current_phase"]) == -1
-        uow.create_phase({"id": "0", "name": "Setup", "phase_order": 0})
+        workflow_id = uow.workflows.get_default().id
+        uow.create_phase({"workflow_id": workflow_id, "id": "0", "name": "Setup", "phase_order": 0})
         uow.add_task_history(task["id"], "0", "done")
         hist = uow.get_task_history(task["id"])
         assert len(hist) == 1
@@ -60,7 +61,7 @@ class TestEndToEndWorkflow:
     def test_agents_crud(self, tmp_path: Path):
         """Полный CRUD агентов."""
         db_path = tmp_path / "test3.db"
-        uow = SAUnitOfWork(str(db_path))
+        uow = SAUnitOfWork(f"sqlite:///{db_path}")
         uow.init()
         uow.create_agent({"name": "coder", "description": "Пишет код"})
         agents = uow.get_agents()
@@ -71,11 +72,13 @@ class TestEndToEndWorkflow:
     def test_phase_with_agent(self, tmp_path: Path):
         """Фаза с agent_id без legacy group_id."""
         db_path = tmp_path / "test5.db"
-        uow = SAUnitOfWork(str(db_path))
+        uow = SAUnitOfWork(f"sqlite:///{db_path}")
         uow.init()
         agent_id = uow.create_agent({"name": "test-bot", "description": "Executes delegated work"})
+        workflow_id = uow.workflows.get_default().id
         uow.create_phase(
             {
+                "workflow_id": workflow_id,
                 "id": "p2",
                 "name": "P2",
                 "phase_order": 0,
@@ -84,10 +87,10 @@ class TestEndToEndWorkflow:
             }
         )
         rows = uow.get_phases()
-        assert len(rows) == 1
-        assert "group_id" not in rows[0]
-        assert rows[0]["agent_id"] == agent_id
-        assert rows[0]["execution_type"] == "parallel"
+        phase = next(row for row in rows if row["code"] == "p2")
+        assert "group_id" not in phase
+        assert phase["agent_id"] == agent_id
+        assert phase["execution_type"] == "parallel"
 
     def test_api_serves_phases(self):
         """GET /api/phases отдаёт JSON объект с phases."""
@@ -97,31 +100,14 @@ class TestEndToEndWorkflow:
         assert isinstance(data, dict)
         assert "phases" in data
 
-
-class TestConversationHistory:
-    def test_get_messages_without_limit_returns_all_records(self, tmp_path: Path, monkeypatch):
-        db_dir = tmp_path / ".project-workflow"
-        db_path = db_dir / "conversation.db"
-        monkeypatch.setattr("project_workflow.infrastructure.conversation.DB_DIR", db_dir)
-        monkeypatch.setattr("project_workflow.infrastructure.conversation.DB_PATH", db_path)
-
-        convo.add_message("99", "TASK-99", "user", "first")
-        convo.add_message("99", "TASK-99", "agent", "second")
-        convo.add_message("99", "TASK-99", "system", "third")
-
-        rows = convo.get_messages("99", limit=None)
-
-        assert [row.content for row in rows] == ["first", "second", "third"]
-
-
 class TestEdgeCases:
     """Граничные случаи."""
 
     def test_phase_delete_cascades_instructions(self, tmp_path: Path):
         db_path = tmp_path / "test6.db"
-        uow = SAUnitOfWork(str(db_path))
+        uow = SAUnitOfWork(f"sqlite:///{db_path}")
         uow.init()
-        wid = uow.workflows.ensure_default_exists().id
+        wid = uow.workflows.ensure_default_exists("Default Workflow").id
         uow.create_phase({"workflow_id": wid, "id": "p3", "name": "P3", "phase_order": 0})
         uow.create_phase({"workflow_id": wid, "id": "p4", "name": "P4", "phase_order": 1})
         uow.create_instruction({"phase_id": "p3", "step_num": 1, "description": "Step"})
@@ -134,9 +120,10 @@ class TestEdgeCases:
     def test_task_history_no_skipped_status(self, tmp_path: Path):
         """В task_history статус skipped не должен использоваться, но DB его принимает."""
         db_path = tmp_path / "test8.db"
-        uow = SAUnitOfWork(str(db_path))
+        uow = SAUnitOfWork(f"sqlite:///{db_path}")
         uow.init()
-        uow.create_phase({"id": "0", "name": "Phase 0", "phase_order": 1})
+        workflow_id = uow.workflows.get_default().id
+        uow.create_phase({"workflow_id": workflow_id, "id": "0", "name": "Phase 0", "phase_order": 1})
         uow.create_project(
             {
                 "code": "AATSK",

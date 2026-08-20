@@ -19,42 +19,52 @@ After any change to the SQLAlchemy layer, application services, UI state, or wiz
    ```bash
    pytest -q --timeout=60
    ```
-   Expected: **949 passed, 6 deselected**, 0 failed, 0 errors.
+   Expected: **806 passed, 13 deselected**, 0 failed, 0 errors. Integration tests
+   are intentionally deselected here; run them separately as described below.
 
-2. **Coverage**
+2. **PostgreSQL integration**
+   ```bash
+   pytest -q -m integration tests/test_postgres_integration.py --timeout=180
+   ```
+   Expected: **13 passed**, 0 failed, 0 errors. This includes the real CLI
+   subprocess -> PostgreSQL -> OpenAI-compatible HTTP workflow path.
+
+3. **Coverage**
    ```bash
    pytest --cov=project_workflow --cov-report=term --timeout=60
    ```
-   Expected: total coverage >= 90%.
+   Expected: total coverage >= 90%. Current baseline: **95.17%**.
 
-3. **Lint**
+4. **Lint**
    ```bash
-   ruff check project_workflow tests
+   ruff check .
    ```
    Expected: `All checks passed!`
 
-4. **Type check**
+5. **Type check**
    ```bash
-   mypy project_workflow
+   mypy project_workflow scripts
    ```
-   Expected: `Success: no issues found in 82 source files`.
+   Expected: `Success: no issues found in 81 source files`.
 
-5. **UI service health**
+6. **UI service health**
    ```bash
    systemctl restart project-workflow-ui.service
    curl -s -o /dev/null -w "%{http_code}" http://localhost:8811/api/tasks
    ```
    Expected: `200`.
 
-6. **Browser check** for UI changes
+7. **Browser check** for UI changes
    - Open `http://localhost:8811/` and `http://localhost:8811/phases`.
    - Capture a screenshot.
 
 ## Notes
 
 - Use `pytest -q --timeout=60` for the standard full suite. `--forked` is no longer required for stability; coverage reports are inaccurate under `--forked`.
-- `SAUnitOfWork()` with no arguments resolves PostgreSQL `DATABASE_URL` first, then falls back to SQLite `DB_PATH`. This is intentional to keep CLI/UI/test paths aligned.
-- The in-repo skill `project-workflow-test-suite-recovery` contains the full checklist and failure-symptom table.
+- `DATABASE_URL` is required in runtime. SQLite is used only by isolated tests.
+- `project-workflow` stores only skill names; canonical skill files live in
+  `https://gt.wmtgroup.ru/relevanter/agent-skills` and are loaded by the executor.
+- The repeatable CLI workflow acceptance process is documented in `LIVE_TEST_PLAN.md`.
 
 ## Production-readiness — what we deliberately skip
 
@@ -68,8 +78,6 @@ This project is an internal lightweight agent utility, not a customer-facing pro
 | Observability / metrics / structured JSON logs | **Skip** | Request logging middleware and `/health` endpoint provide enough visibility for an internal tool. |
 | Input validation / sanitization hardening audit | **Skip** | API uses Pydantic schemas and SQLAlchemy ORM; raw SQL is limited to migration/admin scripts. |
 | Graceful connection draining beyond lifespan dispose | **Skip** | Internal tool tolerance for brief connection drops is acceptable. |
-| Backup/restore runbook | **Skip** | Data is seed-reproducible and task-level state is not business-critical. |
 | Bandit/safety/pre-commit hooks | **Skip** | `ruff` + `mypy` + `pytest` coverage gate is the agreed quality bar. |
-| Hardcoded internal URLs (`JIRA_BASE_URL`, `GITLAB_BASE_URL`) | **Accept** | These are stable internal endpoints; still overridable via env if needed in the future. |
 
 If any of these assumptions change (e.g. external exposure, multi-user access, customer data), revisit this section before expanding scope.

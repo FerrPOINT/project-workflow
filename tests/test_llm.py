@@ -1,6 +1,4 @@
-"""Tests for LLM-based evaluate (OllamaClient, PromptBuilder, ResponseParser)."""
-
-"""Tests for LLM-based evaluate (OllamaClient, PromptBuilder, ResponseParser)."""
+"""Tests for OpenAI-compatible evaluation and response parsing."""
 
 import json
 from unittest.mock import MagicMock, patch
@@ -12,7 +10,7 @@ pytestmark = [pytest.mark.unit]
 
 from project_workflow.infrastructure.llm import (
     LlmVerdict,
-    OllamaClient,
+    OpenAICompatibleClient,
     PromptBuilder,
     ResponseParser,
 )
@@ -44,47 +42,75 @@ class FakeEvidence:
         self.item = item
 
 
-class TestOllamaClient:
-    """Unit tests for Ollama HTTP wrapper."""
+class TestOpenAICompatibleClient:
+    """Unit tests for the provider-neutral Chat Completions wrapper."""
 
-    def test_default_env_vars(self, monkeypatch):
-        monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
-        from importlib import reload
+    def test_ollama_online_defaults(self, monkeypatch):
+        from project_workflow.config import get_settings
 
-        import project_workflow.infrastructure.llm as llm_mod
+        for name in (
+            "OPENAI_BASE_URL",
+            "OPENAI_MODEL",
+            "OPENAI_TIMEOUT",
+            "OPENAI_API_KEY",
+            "OPENAI_REASONING_EFFORT",
+        ):
+            monkeypatch.delenv(name, raising=False)
+        get_settings.cache_clear()
+        client = OpenAICompatibleClient()
+        assert client.base_url == "https://ollama.com/v1"
+        assert client.model == "qwen3.5:397b"
+        assert client.timeout == 120
+        assert client.api_key == ""
+        assert client.reasoning_effort == "none"
 
-        reload(llm_mod)
-        assert llm_mod.OLLAMA_BASE_URL == "http://localhost:11434"
-        assert llm_mod.OLLAMA_MODEL == "kimi-k2.6"
+    def test_env_overrides(self, monkeypatch):
+        from project_workflow.config import get_settings
 
-    def test_chat_parses_json_response(self, monkeypatch):
-        monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
-        from importlib import reload
+        monkeypatch.setenv("OPENAI_BASE_URL", "https://provider.example/v1/")
+        monkeypatch.setenv("OPENAI_MODEL", "provider-model")
+        monkeypatch.setenv("OPENAI_TIMEOUT", "45")
+        monkeypatch.setenv("OPENAI_API_KEY", "secret")
+        monkeypatch.setenv("OPENAI_REASONING_EFFORT", "low")
+        get_settings.cache_clear()
+        client = OpenAICompatibleClient()
+        assert client.base_url == "https://provider.example/v1"
+        assert client.model == "provider-model"
+        assert client.timeout == 45
+        assert client.api_key == "secret"
+        assert client.reasoning_effort == "low"
 
-        import project_workflow.infrastructure.llm as llm_mod
+    def test_dotenv_overrides(self, tmp_path, monkeypatch):
+        from project_workflow.config import get_settings
 
-        reload(llm_mod)
-        client = llm_mod.OllamaClient()
-        expected = {"verdict": "PASS", "confidence": 0.95}
-        with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
-            mock_post.return_value = MagicMock(
-                status_code=200,
-                json=lambda: {"message": {"content": json.dumps(expected)}},
-                raise_for_status=lambda: None,
-            )
-            result = client.chat("system text", "user text")
-        assert result == expected
+        for name in (
+            "OPENAI_BASE_URL",
+            "OPENAI_MODEL",
+            "OPENAI_TIMEOUT",
+            "OPENAI_API_KEY",
+            "OPENAI_REASONING_EFFORT",
+        ):
+            monkeypatch.delenv(name, raising=False)
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".env").write_text(
+            "OPENAI_BASE_URL=https://dotenv.example/v1\n"
+            "OPENAI_MODEL=dotenv-model\n"
+            "OPENAI_TIMEOUT=35\n"
+            "OPENAI_API_KEY=dotenv-secret\n",
+            encoding="utf-8",
+        )
+        get_settings.cache_clear()
 
-    def test_chat_cloud_mode(self, monkeypatch):
-        """Test cloud mode with OpenAI-compatible endpoint."""
-        monkeypatch.setenv("OLLAMA_BASE_URL", "https://ollama.com/v1")
-        from importlib import reload
+        client = OpenAICompatibleClient()
 
-        import project_workflow.infrastructure.llm as llm_mod
+        assert client.base_url == "https://dotenv.example/v1"
+        assert client.model == "dotenv-model"
+        assert client.timeout == 35
+        assert client.api_key == "dotenv-secret"
+        assert client.reasoning_effort == "none"
 
-        reload(llm_mod)
-        client = llm_mod.OllamaClient(api_key="test-key")
-        assert client.is_cloud is True
+    def test_chat_parses_json_response(self):
+        client = OpenAICompatibleClient(api_key="test-key")
         expected = {"verdict": "PASS", "confidence": 0.95}
         with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
             mock_post.return_value = MagicMock(
@@ -92,35 +118,49 @@ class TestOllamaClient:
                 json=lambda: {"choices": [{"message": {"content": json.dumps(expected)}}]},
                 raise_for_status=lambda: None,
             )
-            result = client.chat("system", "user")
+            result = client.chat("system text", "user text")
         assert result == expected
+        mock_post.assert_called_once()
+        assert mock_post.call_args.args[0] == "https://ollama.com/v1/chat/completions"
+        assert mock_post.call_args.kwargs["headers"]["Authorization"] == "Bearer test-key"
 
     def test_chat_payload_structure(self):
-        client = OllamaClient(model="test-model", base_url="http://host:1234")
+        client = OpenAICompatibleClient(model="test-model", base_url="http://host:1234/v1")
         with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
             mock_post.return_value = MagicMock(
                 status_code=200,
-                json=lambda: {"message": {"content": "{}"}},
+                json=lambda: {"choices": [{"message": {"content": "{}"}}]},
                 raise_for_status=lambda: None,
             )
             client.chat("sys", "usr", temperature=0.5)
-            args, kwargs = mock_post.call_args
+            _, kwargs = mock_post.call_args
             payload = kwargs["json"]
             assert payload["model"] == "test-model"
-            assert payload["format"] == "json"
-            assert payload["options"]["temperature"] == 0.5
-            assert payload["options"]["num_ctx"] == 32000
-            assert payload["stream"] is False
+            assert payload["temperature"] == 0.5
+            assert payload["max_tokens"] == 4000
+            assert payload["reasoning_effort"] == "none"
+            assert "response_format" not in payload
             assert len(payload["messages"]) == 2
             assert payload["messages"][0]["role"] == "system"
             assert payload["messages"][1]["role"] == "user"
 
+    def test_chat_omits_reasoning_effort_when_disabled(self):
+        client = OpenAICompatibleClient(reasoning_effort="")
+        with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
+            mock_post.return_value = MagicMock(
+                json=lambda: {"choices": [{"message": {"content": "{}"}}]},
+                raise_for_status=lambda: None,
+            )
+            client.chat("sys", "usr")
+
+        assert "reasoning_effort" not in mock_post.call_args.kwargs["json"]
+
     def test_chat_empty_content_raises(self):
-        client = OllamaClient()
+        client = OpenAICompatibleClient()
         with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
             mock_post.return_value = MagicMock(
                 status_code=200,
-                json=lambda: {"message": {"content": ""}},
+                json=lambda: {"choices": [{"message": {"content": ""}}]},
                 raise_for_status=lambda: None,
             )
             with pytest.raises(ValueError, match="Empty content"):
@@ -158,10 +198,23 @@ class TestPromptBuilder:
         assert "ALREADY COMPLETED" in prompt
         assert "Run tests" in prompt
 
+    def test_build_user_prompt_marks_ids_without_decorative_brackets(self):
+        phase = FakePhase()
+        prompt = PromptBuilder.build_user_prompt(
+            "T-1",
+            phase,
+            "done",
+            evaluation_items=[("-1:check:1", "Task is clear")],
+        )
+
+        assert 'ID: "-1:check:1"' in prompt
+        assert "[-1:check:1]" not in prompt
+
     def test_system_prompt_is_not_empty(self):
         assert "strict workflow supervisor" in PromptBuilder.SYSTEM_PROMPT
         assert "verdict" in PromptBuilder.SYSTEM_PROMPT
         assert "covered" in PromptBuilder.SYSTEM_PROMPT
+        assert "do not add brackets" in PromptBuilder.SYSTEM_PROMPT
         assert "missing" in PromptBuilder.SYSTEM_PROMPT
 
 
@@ -172,7 +225,7 @@ class TestResponseParser:
         raw = {
             "verdict": "PASS",
             "covered": ["Item 1"],
-            "missing": ["Item 2"],
+            "missing": [],
             "blockers": [],
             "message": "All good",
             "next_phase": "2",
@@ -182,51 +235,59 @@ class TestResponseParser:
         v = ResponseParser.parse(raw)
         assert v.verdict == "PASS"
         assert v.covered == ["Item 1"]
-        assert v.missing == ["Item 2"]
+        assert v.missing == []
         assert v.blockers == []
         assert v.message == "All good"
-        assert v.next_phase == "2"
-        assert v.next_phase_name == "Next"
+        assert v.next_phase is None
+        assert v.next_phase_name is None
         assert v.confidence == 0.92
 
-    def test_parse_invalid_verdict_defaults_to_partial(self):
+    def test_parse_invalid_verdict_is_rejected(self):
         raw = {"verdict": "UNKNOWN", "covered": [], "missing": [], "blockers": []}
-        v = ResponseParser.parse(raw)
-        assert v.verdict == "PARTIAL"
+        with pytest.raises(ValueError):
+            ResponseParser.parse(raw)
 
     def test_parse_lowercase_verdict_normalised(self):
         raw = {"verdict": "pass", "covered": [], "missing": [], "blockers": []}
         v = ResponseParser.parse(raw)
         assert v.verdict == "PASS"
 
-    def test_parse_missing_fields_get_defaults(self):
-        raw = {}
-        v = ResponseParser.parse(raw)
+    def test_pass_with_blockers_is_rejected(self):
+        with pytest.raises(ValueError):
+            ResponseParser.parse({"verdict": "PASS", "covered": [], "missing": [], "blockers": ["No access"]})
+
+    def test_pass_with_missing_items_is_rejected(self):
+        with pytest.raises(ValueError):
+            ResponseParser.parse({"verdict": "PASS", "covered": [], "missing": ["Run tests"], "blockers": []})
+
+    def test_parse_optional_fields_get_defaults(self):
+        v = ResponseParser.parse({"verdict": "PARTIAL", "covered": [], "missing": ["item"], "blockers": []})
         assert v.verdict == "PARTIAL"
         assert v.covered == []
-        assert v.missing == []
+        assert v.missing == ["item"]
         assert v.blockers == []
         assert v.message == ""
         assert v.confidence == 0.5
 
-    def test_parse_confidence_clamped(self):
-        raw = {"verdict": "PASS", "confidence": 1.5}
-        v = ResponseParser.parse(raw)
-        assert v.confidence == 1.0
-        raw = {"verdict": "PASS", "confidence": -0.3}
-        v = ResponseParser.parse(raw)
-        assert v.confidence == 0.0
+    @pytest.mark.parametrize("value", [1.5, -0.3, None, "unknown", float("nan"), True])
+    def test_parse_invalid_confidence_uses_default(self, value):
+        raw = {"verdict": "PASS", "covered": [], "missing": [], "blockers": [], "confidence": value}
+        assert ResponseParser.parse(raw).confidence == 0.5
 
-    def test_parse_string_list_coercion(self):
+    @pytest.mark.parametrize("value", [None, 42, [], {}])
+    def test_parse_invalid_message_uses_default(self, value):
+        raw = {"verdict": "PASS", "covered": [], "missing": [], "blockers": [], "message": value}
+        assert ResponseParser.parse(raw).message == ""
+
+    def test_parse_string_instead_of_list_is_rejected(self):
         raw = {
             "verdict": "PASS",
             "covered": "single item",
             "missing": ["a", "", "b"],
             "blockers": [],
         }
-        v = ResponseParser.parse(raw)
-        assert v.covered == ["single item"]
-        assert v.missing == ["a", "b"]
+        with pytest.raises(ValueError):
+            ResponseParser.parse(raw)
 
     def test_llm_verdict_dataclass_immutable(self):
         v = LlmVerdict(
@@ -245,128 +306,101 @@ class TestResponseParser:
 
 
 class TestWizardEngineEvaluateLLM:
-    """Integration tests for WizardEngine.evaluate_llm with mocked Ollama."""
+    """Integration tests for WizardEngine.evaluate_llm with a mocked provider."""
 
     @pytest.fixture
-    def engine(self, tmp_path, monkeypatch):
-        test_db = tmp_path / "workflow.db"
-        import project_workflow.infrastructure.db as db_module
+    def engine(self):
+        from project_workflow.wizard import WizardEngine
 
-        monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
-        monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
-        monkeypatch.setattr("project_workflow.wizard.SMART_EVALUATE", True)
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
-            from project_workflow.wizard import WizardEngine
+        return WizardEngine("TASK-1001")
 
-            engine = WizardEngine("TASK-LLM-1", repo=str(tmp_path))
-        return engine
-
-    def test_evaluate_llm_pass(self, engine):
-        llm_response = {
-            "verdict": "PASS",
-            "covered": ["Check git"],
-            "missing": [],
-            "blockers": [],
-            "message": "✅ Good",
-            "next_phase": "2",
-            "next_phase_name": "Next",
-            "confidence": 0.95,
-        }
-        with patch("project_workflow.wizard.evaluate.OllamaClient.chat") as mock_chat:
-            mock_chat.return_value = llm_response
-            result = engine.evaluate_llm("I checked git", engine._get_current_phase_obj())
+    def test_evaluate_llm_pass(self, engine, wizard_llm):
+        wizard_llm("PASS")
+        result = engine.evaluate_llm("I checked git", engine._get_current_phase_obj())
         assert result["verdict"] == "PASS"
         assert result["phase"] == "-1"
-        assert result["covered"] == ["Check git"]
+        assert result["covered"]
         assert result["missing"] == []
 
-    def test_evaluate_llm_blocked(self, engine):
-        llm_response = {
-            "verdict": "BLOCKED",
-            "covered": [],
-            "missing": ["Check git"],
-            "blockers": ["No access"],
-            "message": "🔴 Blocked",
-            "confidence": 0.9,
-        }
-        with patch("project_workflow.wizard.evaluate.OllamaClient.chat") as mock_chat:
-            mock_chat.return_value = llm_response
-            result = engine.evaluate_llm("Cannot access", engine._get_current_phase_obj())
+    def test_evaluate_llm_blocked(self, engine, wizard_llm):
+        wizard_llm("BLOCKED", blockers=["No access"])
+        result = engine.evaluate_llm("Cannot access", engine._get_current_phase_obj())
         assert result["verdict"] == "BLOCKED"
         assert result["blockers"] == ["No access"]
 
-    def test_evaluate_llm_fallback_on_ollama_failure(self, engine):
-        """If evaluate_llm fails, evaluate() must fall back to rule-based."""
-        with patch.object(engine, "evaluate_llm", side_effect=requests.exceptions.ConnectionError("Ollama down")):
+    def test_evaluate_llm_fails_closed_on_provider_failure(self, engine):
+        with patch(
+            "project_workflow.wizard.evaluate.OpenAICompatibleClient.chat",
+            side_effect=requests.ConnectionError("down"),
+        ):
             result = engine.evaluate("")
-        assert result["verdict"] in {"SOFT_FAIL", "HARD_FAIL"}
+        assert result["verdict"] == "BLOCKED"
+        assert result["next_phase"] is None
 
-    def test_evaluate_llm_uses_previously_covered(self, engine):
+    def test_evaluate_llm_uses_previously_covered(self, engine, wizard_llm):
         """LLM prompt includes previously covered items."""
-        llm_response = {
-            "verdict": "PASS",
-            "covered": ["Item A", "Item B"],
-            "missing": [],
-            "blockers": [],
-            "message": "Done",
-            "confidence": 0.9,
-        }
-        with patch("project_workflow.wizard.evaluate.OllamaClient.chat") as mock_chat:
-            mock_chat.return_value = llm_response
+        wizard_llm("PASS")
+        fixture_chat = OpenAICompatibleClient.chat
+        with patch("project_workflow.wizard.evaluate.OpenAICompatibleClient.chat") as mock_chat:
+            mock_chat.side_effect = fixture_chat
             engine.evaluate_llm("Report", engine._get_current_phase_obj())
-            args, kwargs = mock_chat.call_args
+            _, kwargs = mock_chat.call_args
             # The prompt builder does NOT include previously covered items
             # unless they were passed as previously_covered param.
             # Here we just verify the prompt was built and sent.
             assert "Report" in kwargs["user"]
-            assert "TASK-LLM-1" in kwargs["user"]
+            assert "TASK-1001" in kwargs["user"]
 
 
-class TestWizardEngineEvaluateLLMWithRule:
-    """Test that rule-based still works when SMART_EVALUATE is off."""
+class TestWizardEngineMandatoryLLM:
+    """Report evaluation always uses the configured LLM."""
 
     @pytest.fixture
-    def engine(self, tmp_path, monkeypatch):
-        test_db = tmp_path / "workflow.db"
-        import project_workflow.infrastructure.db as db_module
+    def engine(self):
+        from project_workflow.wizard import WizardEngine
 
-        monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
-        monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
-            from project_workflow.wizard import WizardEngine
+        return WizardEngine("TASK-1002")
 
-            engine = WizardEngine("TASK-RULE-1", repo=str(tmp_path))
-        return engine
-
-    def test_rule_based_evaluate_without_smart(self, engine, monkeypatch):
-        monkeypatch.setattr("project_workflow.wizard.SMART_EVALUATE", False)
-        result = engine.evaluate("")
-        assert result["verdict"] in {"SOFT_FAIL", "HARD_FAIL"}
+    def test_evaluate_uses_llm(self, engine):
+        with patch.object(engine, "evaluate_llm", return_value={"verdict": "BLOCKED"}) as evaluate_llm:
+            result = engine.evaluate("report")
+        assert result["verdict"] == "BLOCKED"
+        evaluate_llm.assert_called_once_with("report", engine._get_current_phase_obj())
 
 
-class TestOllamaResponseParserEdgeCases:
+class TestResponseParserEdgeCases:
     """Edge-case parsing for LLM responses."""
 
     def test_parse_confidence_none_defaults_to_half(self):
-        raw = {"verdict": "PASS", "confidence": None}
+        raw = {"verdict": "PASS", "covered": [], "missing": [], "blockers": [], "confidence": None}
         v = ResponseParser.parse(raw)
         assert v.confidence == 0.5
 
     def test_parse_blockers_with_whitespace_strings(self):
-        raw = {"verdict": "BLOCKED", "blockers": ["  ", "real blocker", ""]}
+        raw = {
+            "verdict": "BLOCKED",
+            "covered": [],
+            "missing": [],
+            "blockers": ["  ", "real blocker", ""],
+        }
         v = ResponseParser.parse(raw)
         assert v.blockers == ["real blocker"]
 
     def test_parse_next_phase_null_from_llm(self):
-        raw = {"verdict": "PASS", "next_phase": None, "next_phase_name": None}
+        raw = {
+            "verdict": "PASS",
+            "covered": [],
+            "missing": [],
+            "blockers": [],
+            "next_phase": None,
+            "next_phase_name": None,
+        }
         v = ResponseParser.parse(raw)
         assert v.next_phase is None
         assert v.next_phase_name is None
 
     def test_parse_preserves_raw_response(self):
-        raw = {"verdict": "PASS", "extra_key": "preserved"}
+        raw = {"verdict": "PASS", "covered": [], "missing": [], "blockers": [], "extra_key": "preserved"}
         v = ResponseParser.parse(raw)
         assert v.raw["extra_key"] == "preserved"
 
@@ -409,110 +443,83 @@ class TestWizardEngineLLMIntegrationDB:
     """DB state after LLM evaluate."""
 
     @pytest.fixture
-    def engine(self, tmp_path, monkeypatch):
-        test_db = tmp_path / "workflow.db"
-        import project_workflow.infrastructure.db as db_module
+    def engine(self):
+        from project_workflow.wizard import WizardEngine
 
-        monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
-        monkeypatch.setattr(db_module, "DB_PATH", str(test_db))
-        monkeypatch.setattr("project_workflow.wizard.SMART_EVALUATE", True)
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
-            from project_workflow.wizard import WizardEngine
+        return WizardEngine("TASK-1003")
 
-            engine = WizardEngine("DB-LLM-1", repo=str(tmp_path))
-        return engine
+    def test_supervisor_run_recorded_after_llm_evaluate(self, engine, wizard_llm):
+        wizard_llm("PASS")
+        engine.evaluate("Report")
 
-    def test_supervisor_run_recorded_after_llm_evaluate(self, engine):
-        llm_response = {
-            "verdict": "PASS",
-            "covered": ["Done"],
-            "missing": [],
-            "blockers": [],
-            "message": "All good",
-            "next_phase": "2",
-            "next_phase_name": "Next",
-            "confidence": 0.95,
-        }
-        with patch("project_workflow.wizard.evaluate.OllamaClient.chat") as mock_chat:
-            mock_chat.return_value = llm_response
-            engine.evaluate("Report")
-
-        runs = engine.db.get_supervisor_runs(task_key="DB-LLM-1", limit=5)
+        runs = engine.db.get_supervisor_runs(task_key="TASK-1003", limit=5)
         assert len(runs) == 1
         run = runs[0]
         assert run["verdict"] == "pass"
         assert run["report"] == "Report"
-        assert run["covered"] == ["Done"]
+        assert run["covered"]
         assert run["missing"] == []
+        assert run["report_fingerprint"]
 
-    def test_task_phase_advanced_after_llm_pass(self, engine):
-        llm_response = {
-            "verdict": "PASS",
-            "covered": ["Done"],
-            "missing": [],
-            "blockers": [],
-            "message": "All good",
-            "next_phase": "2",
-            "next_phase_name": "Next",
-            "confidence": 0.95,
-        }
-        with patch("project_workflow.wizard.evaluate.OllamaClient.chat") as mock_chat:
-            mock_chat.return_value = llm_response
-            engine.evaluate("Report")
+    def test_task_phase_advanced_after_llm_pass(self, engine, wizard_llm):
+        wizard_llm("PASS")
+        engine.evaluate("Report")
 
         task = engine.db.get_task(engine.task["id"])
-        assert task["current_phase"] == "2"
+        assert task["current_phase"] == "0.0a"
 
-    def test_task_blocked_after_llm_blocked(self, engine):
-        llm_response = {
-            "verdict": "BLOCKED",
-            "covered": [],
-            "missing": ["Need X"],
-            "blockers": ["No access"],
-            "message": "Blocked",
-            "confidence": 0.9,
-        }
-        with patch("project_workflow.wizard.evaluate.OllamaClient.chat") as mock_chat:
-            mock_chat.return_value = llm_response
-            engine.evaluate("Report")
+    def test_task_blocked_after_llm_blocked(self, engine, wizard_llm):
+        wizard_llm("BLOCKED", blockers=["No access"])
+        engine.evaluate("Report")
 
         task = engine.db.get_task(engine.task["id"])
         assert task["current_phase"] == "-1"
         assert task["status"] == "blocked"
 
-    def test_llm_rollback_records_history(self, engine):
-        llm_response = {
-            "verdict": "ROLLBACK",
-            "covered": [],
-            "missing": [],
-            "blockers": [],
-            "message": "Rollback",
-            "confidence": 0.8,
-        }
-        with patch("project_workflow.wizard.evaluate.OllamaClient.chat") as mock_chat:
-            mock_chat.return_value = llm_response
-            _ = engine.evaluate("Report")
+    def test_rollback_without_config_is_retryable_and_has_no_transition(self, engine, wizard_llm):
+        wizard_llm("ROLLBACK")
+        result = engine.evaluate("Report")
 
-        # Check that task remains in a valid state after rollback
+        assert result["verdict"] == "BLOCKED"
+        assert result["retryable"] is True
         task = engine.db.get_task(engine.task["id"])
-        assert task["status"] in ("active", "blocked")
-        # History should contain at least one entry
-        history = engine.db.get_task_history(engine.task["id"])
-        assert len(history) >= 1
+        assert task["status"] == "active"
+        assert engine.db.get_task_history(engine.task["id"]) == []
+
+    def test_supervisor_run_failure_rolls_back_db_and_engine_state(self, engine, monkeypatch, wizard_llm):
+        task_id = engine.task["id"]
+        original_task = dict(engine.task)
+        original_phase = engine.current_phase
+        monkeypatch.setattr(
+            engine.db,
+            "create_supervisor_run",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("supervisor write failed")),
+        )
+
+        wizard_llm("PASS")
+        with pytest.raises(RuntimeError, match="supervisor write failed"):
+            engine.evaluate("Report")
+
+        persisted = engine.db.get_task(task_id)
+        assert persisted["current_phase"] == original_task["current_phase"]
+        assert persisted["status"] == original_task["status"]
+        assert engine.task == original_task
+        assert engine.current_phase == original_phase
+        assert engine.db.get_task_history(task_id) == []
+        assert engine.db.get_supervisor_runs(task_key=engine.task_key, limit=5) == []
 
 
-class TestOllamaClientEnvOverrides:
+class TestOpenAICompatibleClientOverrides:
     """Custom env configuration."""
 
     def test_custom_base_url(self):
-        client = OllamaClient(base_url="http://custom:1234")
-        assert client.base_url == "http://custom:1234"
+        client = OpenAICompatibleClient(base_url="http://custom:1234/v1")
+        assert client.base_url == "http://custom:1234/v1"
 
     def test_custom_model(self):
-        client = OllamaClient(model="other-model")
+        client = OpenAICompatibleClient(model="other-model")
         assert client.model == "other-model"
 
     def test_custom_timeout(self):
-        client = OllamaClient(timeout=300)
+        client = OpenAICompatibleClient(timeout=300)
         assert client.timeout == 300

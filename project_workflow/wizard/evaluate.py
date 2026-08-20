@@ -1,218 +1,224 @@
-"""LLM evaluate logic — extracted from wizard.py.
-
-Public API: evaluate_llm_report(report, phase, engine).
-"""
+"""Fail-closed LLM evaluation for one workflow phase report."""
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
-from .. import config as _config
-from ..infrastructure.llm import OllamaClient, PromptBuilder, ResponseParser
+import requests
+from sqlalchemy.exc import IntegrityError
+
+from ..domain.exceptions import ConcurrentTransitionError
+from ..infrastructure.llm import LlmVerdict, OpenAICompatibleClient, PromptBuilder, ResponseParser
+from .checks import normalize_text
 from .contracts import PhaseContractBuilder
 from .models import Phase
-from .prompt import build_reasoning_prompt
-from .reasoning import ReasoningEngine, ReasoningResult
 from .types import VERDICT_LABELS
 
 
-def _build_contract_for_reasoning(phase: Phase, engine: Any) -> dict[str, Any]:
-    """Flatten current phase contract into a dict for the reasoning prompt."""
-    from .contracts import text_from_check, text_from_evidence, text_from_instruction
-
-    return {
-        "phase_code": phase.code,
-        "phase_name": phase.name,
-        "description": phase.description or "",
-        "execution_type": phase.execution_type,
-        "parallel_with": phase.parallel_with,
-        "rollback_target": phase.rollback_target,
-        "instructions": [text_from_instruction(i) for i in phase.instructions],
-        "required_checks": [text_from_check(c) for c in phase.checks],
-        "required_evidence": [text_from_evidence(e) for e in phase.evidence],
-    }
+def _report_fingerprint(task_id: int, report: str) -> str:
+    normalized = normalize_text(report)
+    return hashlib.sha256(f"{task_id}\0{normalized}".encode()).hexdigest()
 
 
-def _result_from_reasoning(
-    reasoning: ReasoningResult,
-    report: str,
-    phase: Phase,
-    engine: Any,
-) -> dict[str, Any]:
-    """Build evaluate result from a ReasoningResult and persist it."""
-    verdict_label = VERDICT_LABELS.get(reasoning.verdict.lower(), reasoning.verdict)
-    verdict_key = reasoning.verdict.lower()
-
-    cb = PhaseContractBuilder(engine.all_phases)
-    next_phase = None
-    next_phase_name = None
-    if reasoning.verdict == "PASS":
-        next_phase, next_phase_name = cb.get_next_phase(phase.code)
-
-    rollback_target = phase.rollback_target if verdict_key == "rollback" else None
-
-    if verdict_key == "blocked" and not reasoning.blockers:
-        blockers = ["Reasoning identified blocker"]
-    else:
-        blockers = reasoning.blockers
-
-    result: dict[str, Any] = {
-        "verdict": verdict_label,
-        "task_key": engine.task_key,
-        "phase": phase.code,
-        "phase_name": phase.name,
-        "covered": [c.get("item") for c in reasoning.claims if c.get("valid")],
-        "missing": reasoning.missing,
-        "blockers": blockers,
-        "current_phase": phase.code,
-        "next_phase": next_phase,
-        "next_phase_name": next_phase_name,
-        "rollback_target": rollback_target,
-        "message": reasoning.analysis or "",
-        "confidence": reasoning.confidence,
-        "next_steps": reasoning.next_steps,
-        "reasoning": reasoning.raw,
-    }
-
-    if verdict_key == "pass":
-        engine._record_transition(phase, "pass", next_phase, None)
-    elif verdict_key == "rollback":
-        engine._record_transition(phase, "rollback", None, rollback_target)
-    else:
-        engine._record_transition(phase, verdict_key, None, None)
-
-    engine.task = engine.db.get_task(engine.task["id"]) or engine.task
-    engine.current_phase = engine._resolve_current_phase()
-
-    next_phase_int = None
-    if next_phase:
-        npo = engine.phase_map.get(next_phase)
-        next_phase_int = npo.id if npo else None
-    rollback_int = None
-    if rollback_target:
-        rpo = engine.phase_map.get(rollback_target)
-        rollback_int = rpo.id if rpo else None
-
-    engine.db.create_supervisor_run(
-        {
-            "task_id": engine.task["id"],
-            "phase_id": phase.id,
-            "verdict": verdict_key,
-            "report": report,
-            "covered": result["covered"],
-            "missing": reasoning.missing,
-            "blockers": blockers,
-            "next_phase_id": next_phase_int if verdict_key == "pass" else None,
-            "rollback_phase_id": rollback_int if verdict_key == "rollback" else None,
-            "context_snapshot": {
-                "phase": phase.code,
-                "phase_name": phase.name,
-                "current_contract": {"phase_code": phase.code},
-            },
-            "response": result,
-        }
+def _blocked(exc: Exception, raw: dict[str, Any] | None = None) -> LlmVerdict:
+    return LlmVerdict(
+        verdict="BLOCKED",
+        covered=[],
+        missing=[],
+        blockers=[f"Wizard LLM unavailable: {type(exc).__name__}"],
+        message="Wizard не смог проверить отчёт; переход заблокирован.",
+        next_phase=None,
+        next_phase_name=None,
+        confidence=0.0,
+        raw=raw or {"error": type(exc).__name__},
     )
+
+
+def _replay(engine: Any, task_id: int, fingerprint: str) -> dict[str, Any] | None:
+    run = engine.db.supervisor_runs.get_by_fingerprint(task_id, fingerprint)
+    response = getattr(run, "response", None) if run is not None else None
+    if not isinstance(response, dict):
+        return None
+    result = dict(response)
+    result["replayed"] = True
     return result
 
 
-def _evaluate_llm_report_legacy(report: str, phase: Phase, engine: Any) -> dict:
-    """Original LLM-based evaluate via Ollama + Kimi K2.5."""
-    from .checks import normalize_text
+def _concurrent_result(result: dict[str, Any]) -> dict[str, Any]:
+    blocked = dict(result)
+    blocked.update(
+        {
+            "verdict": "BLOCKED",
+            "next_phase": None,
+            "next_phase_name": None,
+            "rollback_target": None,
+            "blockers": ["Задача была изменена другим параллельным запуском Wizard."],
+            "message": "Повторите отчёт для актуальной фазы задачи.",
+            "retryable": True,
+            "replayed": False,
+        }
+    )
+    blocked.pop("next_phase_contract", None)
+    return blocked
 
+
+def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any]:
+    """Evaluate once; the workflow remains the only owner of routing."""
+    builder = PhaseContractBuilder(engine.all_phases)
+    group = builder.get_parallel_group(phase) if phase.execution_type == "parallel" else [phase]
+    current_contract = builder.build_parallel(group) if len(group) > 1 else builder.build(phase)
+    evaluation_phase = phase
+    if len(group) > 1:
+        evaluation_phase = Phase(
+            id=phase.id,
+            code=phase.code,
+            name=current_contract.phase_name,
+            description=current_contract.description,
+            instructions=[item for member in group for item in member.instructions],
+            checks=[item for member in group for item in member.checks],
+            evidence=[item for member in group for item in member.evidence],
+            execution_type="parallel",
+            rollback_target=phase.rollback_target,
+        )
+
+    task_id = int(engine.task["id"])
+    fingerprint = _report_fingerprint(task_id, report)
+    replayed = _replay(engine, task_id, fingerprint)
+    if replayed is not None:
+        return replayed
+
+    evaluation_items = (
+        builder.build_parallel_evaluation_items(group) if len(group) > 1 else builder.build_evaluation_items(phase)
+    )
+    item_ids = [item_id for item_id, _ in evaluation_items]
+    item_text = dict(evaluation_items)
     previously = engine._get_previously_covered(phase.code)
-    checklist = PhaseContractBuilder(engine.all_phases).build_checklist(phase)
-    previously_items = [item for item in checklist if normalize_text(item) in previously]
-
-    system = PromptBuilder.SYSTEM_PROMPT
-    user = PromptBuilder.build_user_prompt(engine.task_key, phase, report, previously_covered=previously_items or None)
-
-    client = OllamaClient()
-    raw = client.chat(system=system, user=user, temperature=0.1)
-    llm = ResponseParser.parse(raw)
-
-    next_phase = llm.next_phase
-    next_phase_name = llm.next_phase_name
-    if llm.verdict == "PASS" and not next_phase:
-        cb = PhaseContractBuilder(engine.all_phases)
-        next_phase, next_phase_name = cb.get_next_phase(phase.code)
-
-    blockers = llm.blockers if llm.blockers else []
-    if llm.verdict == "BLOCKED":
-        blockers = llm.blockers if llm.blockers else ["LLM identified blocker"]
-
-    result = {
-        "verdict": VERDICT_LABELS.get(llm.verdict.lower(), llm.verdict),
-        "task_key": engine.task_key,
-        "phase": phase.code,
-        "phase_name": phase.name,
-        "covered": llm.covered,
-        "missing": llm.missing,
-        "blockers": blockers,
-        "current_phase": phase.code,
-        "next_phase": next_phase,
-        "next_phase_name": next_phase_name,
-        "rollback_target": phase.rollback_target if llm.verdict == "ROLLBACK" else None,
-        "message": llm.message,
-        "confidence": llm.confidence,
+    previously_ids = {
+        item_id for item_id, text in evaluation_items if item_id in previously or normalize_text(text) in previously
     }
+    user = PromptBuilder.build_user_prompt(
+        engine.task_key,
+        evaluation_phase,
+        report,
+        previously_covered=sorted(previously_ids) or None,
+        evaluation_items=evaluation_items,
+    )
+
+    client = OpenAICompatibleClient()
+    raw: dict[str, Any] | None = None
+    technical_error = False
+    try:
+        raw = client.chat(system=PromptBuilder.SYSTEM_PROMPT, user=user, temperature=0.1)
+        llm = ResponseParser.parse(
+            raw,
+            required_item_ids=item_ids,
+            previously_covered_ids=previously_ids,
+        )
+        if llm.verdict == "ROLLBACK" and not phase.rollback_target:
+            raise ValueError("rollback target is not configured for the current phase")
+        if llm.verdict == "DELEGATE" and not (phase.is_delegated or phase.delegate):
+            raise ValueError("delegation is not configured for the current phase")
+    except (
+        requests.RequestException,
+        OSError,
+        TypeError,
+        ValueError,
+        KeyError,
+        IndexError,
+        AttributeError,
+    ) as exc:
+        technical_error = True
+        llm = _blocked(exc, raw)
+
+    covered_ids = llm.covered if not technical_error else [item_id for item_id in item_ids if item_id in previously_ids]
+    missing_ids = (
+        llm.missing if not technical_error else [item_id for item_id in item_ids if item_id not in previously_ids]
+    )
+    covered = [item_text[item_id] for item_id in covered_ids]
+    missing = [item_text[item_id] for item_id in missing_ids]
 
     verdict_key = llm.verdict.lower()
-    if verdict_key == "pass":
-        engine._record_transition(phase, "pass", next_phase, None)
-    elif verdict_key == "rollback":
-        engine._record_transition(phase, "rollback", None, phase.rollback_target)
-    else:
-        engine._record_transition(phase, verdict_key, None, None)
+    blockers = llm.blockers or (["LLM identified blocker"] if verdict_key == "blocked" else [])
+    next_phase, next_phase_name, rollback_target = engine._resolve_transition(phase, verdict_key, group)
+    if verdict_key != "pass" or technical_error:
+        next_phase = None
+        next_phase_name = None
+        rollback_target = None if technical_error else rollback_target
 
-    engine.task = engine.db.get_task(engine.task["id"]) or engine.task
-    engine.current_phase = engine._resolve_current_phase()
-
-    context_snapshot = {
+    result: dict[str, Any] = {
+        "verdict": VERDICT_LABELS.get(verdict_key, llm.verdict),
+        "task_key": engine.task_key,
         "phase": phase.code,
-        "phase_name": phase.name,
-        "current_contract": {"phase_code": phase.code},
+        "phase_name": evaluation_phase.name,
+        "covered": covered,
+        "missing": missing,
+        "blockers": blockers,
+        "current_phase": phase.code,
+        "next_phase": rollback_target if verdict_key == "rollback" else next_phase,
+        "next_phase_name": next_phase_name,
+        "rollback_target": rollback_target,
+        "message": llm.message,
+        "confidence": llm.confidence,
+        "instructions": current_contract.instructions,
+        "required_checks": current_contract.required_checks,
+        "required_evidence": current_contract.required_evidence,
+        "group_phases": current_contract.group_phases,
+        "group_details": current_contract.group_details,
+        "replayed": False,
+        "retryable": technical_error,
+    }
+    next_phase_contract = builder.build_next_contract(next_phase) if verdict_key == "pass" else None
+    if next_phase_contract is not None:
+        result["next_phase_contract"] = next_phase_contract.to_dict()
+
+    next_phase_obj = engine.phase_map.get(next_phase) if next_phase else None
+    rollback_phase_obj = engine.phase_map.get(rollback_target) if rollback_target else None
+    raw_evaluator = raw if raw is not None else llm.raw
+    run_data = {
+        "task_id": task_id,
+        "phase_id": phase.id,
+        "verdict": verdict_key,
+        "report": report,
+        "covered": covered,
+        "missing": missing,
+        "blockers": blockers,
+        "next_phase_id": next_phase_obj.id if next_phase_obj else None,
+        "rollback_phase_id": rollback_phase_obj.id if rollback_phase_obj else None,
+        "report_fingerprint": None if technical_error else fingerprint,
+        "context_snapshot": {
+            "phase": phase.code,
+            "phase_name": evaluation_phase.name,
+            "model": client.model,
+            "endpoint_mode": "openai-compatible",
+            "prompt_version": PromptBuilder.PROMPT_VERSION,
+            "contract_snapshot": {
+                **current_contract.to_dict(),
+                "evaluation_items": [{"id": item_id, "text": text} for item_id, text in evaluation_items],
+            },
+            "covered_item_ids": covered_ids,
+            "raw_evaluator": raw_evaluator,
+        },
+        "response": result,
     }
 
-    next_phase_int = None
-    if next_phase:
-        npo = engine.phase_map.get(next_phase)
-        next_phase_int = npo.id if npo else None
-    rollback_int = None
-    if phase.rollback_target:
-        rpo = engine.phase_map.get(phase.rollback_target)
-        rollback_int = rpo.id if rpo else None
+    try:
+        engine.db.create_supervisor_run(run_data)
+        if not technical_error:
+            engine._record_evaluation(phase, verdict_key, next_phase, rollback_target, commit=False)
+        engine.db.commit()
+    except IntegrityError:
+        engine.db.rollback()
+        replayed = _replay(engine, task_id, fingerprint)
+        if replayed is not None:
+            return replayed
+        raise
+    except ConcurrentTransitionError:
+        engine.db.rollback()
+        return _concurrent_result(result)
+    except Exception:
+        engine.db.rollback()
+        raise
 
-    engine.db.create_supervisor_run(
-        {
-            "task_id": engine.task["id"],
-            "phase_id": phase.id,
-            "verdict": verdict_key,
-            "report": report,
-            "covered": llm.covered,
-            "missing": llm.missing,
-            "blockers": blockers,
-            "next_phase_id": next_phase_int if verdict_key == "pass" else None,
-            "rollback_phase_id": rollback_int if verdict_key == "rollback" else None,
-            "context_snapshot": context_snapshot,
-            "response": result,
-        }
-    )
+    engine._refresh_task_state()
     return result
-
-
-def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict:
-    """LLM-based evaluate with optional chain-of-thought reasoning."""
-    if _config.SMART_REASONING:
-        contract = _build_contract_for_reasoning(phase, engine)
-        system = (
-            "Ты — внутренний рецензент отчёта об исполнении фазы workflow. "
-            "Проанализируй отчёт, сопоставь каждое утверждение с пунктами контракта фазы, "
-            "выяви противоречия и расплывчатые формулировки. Верди ТОЛЬКО JSON."
-        )
-        user = build_reasoning_prompt(report, contract)
-        client = OllamaClient()
-        raw = client.chat(system=system, user=user, temperature=0.1)
-        reasoning = ReasoningEngine.parse(raw)
-        return _result_from_reasoning(reasoning, report, phase, engine)
-
-    return _evaluate_llm_report_legacy(report, phase, engine)

@@ -27,7 +27,7 @@ class TestUowEdgeCases:
     def test_create_supervisor_run_with_positional_dict(self):
         uow = _fresh_uow()
         with uow:
-            default_wf = uow.workflows.ensure_default_exists()
+            default_wf = uow.workflows.ensure_default_exists("Default Workflow")
             project_id = uow.projects.create(
                 {"code": "RUN", "name": "Run", "workflow_id": default_wf.id}
             )
@@ -65,28 +65,24 @@ class TestUowEdgeCases:
         assert isinstance(run_id, int)
         uow.close()
 
-    def test_create_phase_without_workflow_id_uses_default(self):
+    def test_create_phase_without_workflow_id_is_rejected(self):
         uow = _fresh_uow()
-        with uow:
-            uow.workflows.ensure_default_exists()
-            uow.commit()
-        phase_id = uow.create_phase(
-            {
-                "code": "GAP-AUTO",
-                "name": "Auto WF Phase",
-                "phase_order": 9001,
-            }
-        )
-        assert isinstance(phase_id, int)
-        phase = uow.phases.get_by_id(phase_id)
-        assert phase is not None
-        assert phase.workflow_id is not None
+        with pytest.raises(ValueError, match="workflow_id"):
+            uow.create_phase(
+                {
+                    "code": "GAP-AUTO",
+                    "name": "Auto WF Phase",
+                    "phase_order": 9001,
+                }
+            )
         uow.close()
 
     def test_create_phase_without_code_generates_code(self):
         uow = _fresh_uow()
+        workflow_id = uow.workflows.ensure_default_exists("Default Workflow").id
         phase_id = uow.create_phase(
             {
+                "workflow_id": workflow_id,
                 "name": "No Code Phase",
                 "phase_order": 9002,
             }
@@ -99,7 +95,7 @@ class TestUowEdgeCases:
     def test_create_instruction_with_phase_code(self):
         uow = _fresh_uow()
         with uow:
-            default_wf = uow.workflows.ensure_default_exists()
+            default_wf = uow.workflows.ensure_default_exists("Default Workflow")
             uow.phases.create(
                 {
                     "workflow_id": default_wf.id,
@@ -145,7 +141,7 @@ class TestUowEdgeCases:
     def test_delete_phase_by_code(self):
         uow = _fresh_uow()
         with uow:
-            default_wf = uow.workflows.ensure_default_exists()
+            default_wf = uow.workflows.ensure_default_exists("Default Workflow")
             uow.phases.create(
                 {
                     "workflow_id": default_wf.id,
@@ -162,7 +158,7 @@ class TestUowEdgeCases:
     def test_create_task_with_project_id_dict(self):
         uow = _fresh_uow()
         with uow:
-            default_wf = uow.workflows.ensure_default_exists()
+            default_wf = uow.workflows.ensure_default_exists("Default Workflow")
             project_id = uow.projects.create(
                 {"code": "DICT", "name": "Dict", "workflow_id": default_wf.id}
             )
@@ -180,14 +176,16 @@ class TestUowEdgeCases:
         assert task.project_id == project_id
         uow.close()
 
-    def test_init_bootstraps_default_and_smoke(self, monkeypatch):
+    def test_init_bootstraps_only_default_catalog(self, monkeypatch):
         url = config.get_settings().DATABASE_URL
         mark_catalog_not_ensured(url)
         uow = SAUnitOfWork(url)
         uow.init()
-        default_project = uow.projects.get_by_code("DEFAULT")
-        smoke_project = uow.projects.get_by_code("SMOKE")
-        assert default_project is not None or smoke_project is not None
+        projects = list(uow.projects.list())
+        workflows = list(uow.workflows.list())
+        assert [project.code for project in projects] == ["TASK"]
+        assert [workflow.name for workflow in workflows] == ["Default Workflow"]
+        assert len(uow.phases.list(workflow_id=workflows[0].id)) == 27
         uow.close()
 
     def test_context_manager_rolls_back_on_exception(self):

@@ -18,8 +18,6 @@ from project_workflow.interfaces.ui import (
     _load_workflows,
     _parse_optional_int,
     _resolve_task_phase,
-    _scan_hermes_skills,
-    _update_config_phase_order,
     _workflow_form_payload,
     app,
 )
@@ -147,26 +145,6 @@ class TestResolveTaskPhase:
         assert phase is None
 
 
-class TestScanHermesSkills:
-    def test_find_all_skills_fails(self, monkeypatch):
-        fake_mod = MagicMock()
-        fake_mod._find_all_skills.side_effect = AttributeError("boom")
-        monkeypatch.setattr(
-            "importlib.import_module", lambda name, *a, **kw: fake_mod if name == "tools.skills_tool" else MagicMock()
-        )
-        assert _scan_hermes_skills() == []
-
-    def test_filters_non_dict_items(self, monkeypatch):
-        fake_mod = MagicMock()
-        fake_mod._find_all_skills.return_value = ["string", {"name": "a"}, {"name": ""}]
-        monkeypatch.setattr(
-            "importlib.import_module", lambda name, *a, **kw: fake_mod if name == "tools.skills_tool" else MagicMock()
-        )
-        result = _scan_hermes_skills()
-        assert len(result) == 1
-        assert result[0]["name"] == "a"
-
-
 class TestLoadWorkflows:
     def test_empty(self, monkeypatch):
         db = MagicMock()
@@ -184,7 +162,6 @@ class TestLoadTasks:
         db.get_phases.return_value = []
         monkeypatch.setattr("project_workflow.interfaces.ui._app_state", MagicMock(get_db=lambda: db))
         assert _load_tasks() == []
-
 
     def test_task_done_with_history(self, monkeypatch):
         db = MagicMock()
@@ -379,10 +356,6 @@ class TestApiErrorPaths:
         response = client.get("/api/agents")
         assert response.status_code == 200
 
-    def test_api_skills(self):
-        response = client.get("/api/skills")
-        assert response.status_code == 200
-
     def test_api_project_tasks(self):
         response = client.get("/api/projects")
         assert response.status_code == 200
@@ -413,10 +386,6 @@ class TestPageEdgeCases:
 
     def test_settings_page(self):
         response = client.get("/settings")
-        assert response.status_code == 200
-
-    def test_skills_page(self):
-        response = client.get("/skills")
         assert response.status_code == 200
 
     def test_agents_page(self):
@@ -461,20 +430,3 @@ class TestWorkflowFormPayload:
     def test_empty(self):
         payload = _workflow_form_payload({})
         assert payload["name"] == ""
-
-
-# ═══════════════════════════════════════════════════════════
-# Update config phase order
-# ═══════════════════════════════════════════════════════════
-
-
-class TestUpdateConfigPhaseOrder:
-    def test_empty_phases(self, monkeypatch):
-        db = MagicMock()
-        db.get_phases.return_value = []
-        monkeypatch.setattr("project_workflow.interfaces.ui._app_state", MagicMock(get_db=lambda: db))
-        from project_workflow import config
-
-        original = config.PHASE_ORDER[:]
-        _update_config_phase_order()
-        assert config.PHASE_ORDER == original

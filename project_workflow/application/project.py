@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from project_workflow import config
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.repositories import UnitOfWork
 
@@ -17,7 +18,7 @@ class ProjectService:
     def create_project(self, data: dict[str, Any]) -> dict[str, Any]:
         payload = dict(data)
         if "workflow_id" not in payload or payload["workflow_id"] is None:
-            default_wf = self._uow.workflows.ensure_default_exists()
+            default_wf = self._uow.workflows.ensure_default_exists(config.DEFAULT_WORKFLOW_NAME)
             payload["workflow_id"] = default_wf.id if default_wf else None
         if "name" not in payload or not payload["name"]:
             payload["name"] = payload["code"]

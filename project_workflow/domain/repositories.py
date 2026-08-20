@@ -35,7 +35,7 @@ class WorkflowRepository(ABC):
     def delete(self, workflow_id: int) -> None: ...
 
     @abstractmethod
-    def ensure_default_exists(self, name: str = "Default Workflow") -> Workflow: ...
+    def ensure_default_exists(self, name: str) -> Workflow: ...
 
 
 class PhaseRepository(ABC):
@@ -144,6 +144,15 @@ class TaskRepository(ABC):
     def update(self, task_id: int, data: dict[str, Any]) -> None: ...
 
     @abstractmethod
+    def update_if_state(
+        self,
+        task_id: int,
+        expected_phase: str,
+        expected_status: str,
+        data: dict[str, Any],
+    ) -> bool: ...
+
+    @abstractmethod
     def add_history(self, task_id: int, phase_id: int, status: str) -> None: ...
 
     @abstractmethod
@@ -191,6 +200,9 @@ class SupervisorRunRepository(ABC):
 
     @abstractmethod
     def latest_for_tasks(self, task_ids: Sequence[int]) -> Sequence[SupervisorRun]: ...
+
+    @abstractmethod
+    def get_by_fingerprint(self, task_id: int, report_fingerprint: str) -> SupervisorRun | None: ...
 
     @abstractmethod
     def create(self, data: dict[str, Any]) -> int: ...

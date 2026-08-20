@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from .. import config
 from ..infrastructure.db.row_utils import row_to_dict
 from ..interfaces.ui.helpers import _resolve_task_phase, _resolve_task_phase_local, _run_to_dict
 from .state import _AppState
@@ -51,7 +50,7 @@ class UIDataService:
         result = []
         for p in rows:
             delegate_agent = p.get("delegate_agent")
-            selected_agent = agents_by_id.get(p.get("agent_id")) if p.get("agent_id") else None
+            assigned_agent = agents_by_id.get(p.get("agent_id")) if p.get("agent_id") else None
             result.append(
                 {
                     "id": p["id"],
@@ -64,7 +63,7 @@ class UIDataService:
                     "description": p["description"],
                     "is_delegated": bool(delegate_agent),
                     "agent_id": p.get("agent_id"),
-                    "agent_name": selected_agent.get("name") if selected_agent else None,
+                    "agent_name": assigned_agent.get("name") if assigned_agent else None,
                     "execution_type": p.get("execution_type", "sync"),
                     "parallel_with": p.get("parallel_with"),
                 }
@@ -145,7 +144,7 @@ class UIDataService:
                 if workflow_id is not None
                 else 0
             )
-            total_phases = workflow_phase_count or len(config.PHASE_ORDER)
+            total_phases = workflow_phase_count
 
             current_phase_id, current = _resolve_task_phase_local(
                 t.get("current_phase", "-1"),
@@ -399,7 +398,7 @@ class UIDataService:
 
         workflow_id, workflow_phases = self._resolve_task_workflow_id(task, wdb)
         task["workflow_phase_count"] = len(workflow_phases)
-        task["total_phases"] = len(workflow_phases) or len(config.PHASE_ORDER)
+        task["total_phases"] = len(workflow_phases)
 
         history = wdb.get_task_history(task["id"])
         task["completed"] = sum(1 for h in history if h.get("status") == "done")
@@ -413,7 +412,7 @@ class UIDataService:
         task["completed"] = sum(
             1 for block in task["phase_history_blocks"] for p in block["phases"] if p.get("status") == "done"
         )
-        task["total_phases"] = task.get("workflow_phase_count", len(config.PHASE_ORDER))
+        task["total_phases"] = task.get("workflow_phase_count", 0)
 
         supervisor_runs = wdb.get_supervisor_runs(task_key=task_key, limit=200)
         task["supervisor_runs"] = self._decorate_supervisor_runs(supervisor_runs, wdb)

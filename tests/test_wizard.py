@@ -32,44 +32,79 @@ class TestWizardEvaluate:
         )
 
     def test_evaluate_pass(self):
-        engine = WizardEngine("AAT-1", repo="/tmp")
+        engine = WizardEngine("TASK-1")
         ph = self._phase()
         engine.current_phase = "0"
         engine.phase_map = {"0": ph}
         engine.all_phases = [ph]
         engine.task = {"id": 1, "task_key": "AAT-1", "current_phase": "0"}
 
-        with (
-            patch.object(engine, "_build_checklist", return_value=["check"]),
-            patch("project_workflow.wizard.core.check_coverage", return_value=(["check"], [])),
-            patch.object(engine, "_get_next_phase", return_value=("1", "Next")),
-            patch.object(engine, "_record_transition"),
-        ):
+        with patch.object(engine, "evaluate_llm", return_value={"verdict": "PASS", "next_phase": "1"}) as llm:
             result = engine.evaluate("report ok")
 
         assert result["verdict"] == "PASS"
         assert result["next_phase"] == "1"
+        llm.assert_called_once_with("report ok", ph)
 
     def test_evaluate_partial_when_items_missing(self):
-        engine = WizardEngine("AAT-1", repo="/tmp")
+        engine = WizardEngine("TASK-1")
         ph = self._phase()
         engine.current_phase = "0"
         engine.phase_map = {"0": ph}
         engine.all_phases = [ph]
         engine.task = {"id": 1, "task_key": "AAT-1", "current_phase": "0"}
 
-        with (
-            patch.object(engine, "_build_checklist", return_value=["check"]),
-            patch("project_workflow.wizard.core.check_coverage", return_value=([], ["check"])),
-            patch.object(engine, "_record_transition"),
+        with patch.object(
+            engine,
+            "evaluate_llm",
+            return_value={"verdict": "PARTIAL", "missing": ["check"]},
         ):
             result = engine.evaluate("report bad")
 
-        assert result["verdict"] == "HARD_FAIL"
+        assert result["verdict"] == "PARTIAL"
         assert result["missing"] == ["check"]
 
+    def test_evaluate_completed_task_does_not_call_llm(self):
+        engine = WizardEngine("TASK-1")
+        ph = self._phase()
+        engine.current_phase = "0"
+        engine.phase_map = {"0": ph}
+        engine.all_phases = [ph]
+        engine.task = {"id": 1, "task_key": "TASK-1", "current_phase": "0", "status": "done"}
+
+        with patch.object(engine, "evaluate_llm") as llm:
+            result = engine.evaluate("new report after completion")
+
+        llm.assert_not_called()
+        assert result["verdict"] == "PASS"
+        assert result["status"] == "done"
+        assert result["next_phase"] is None
+        assert result["replayed"] is False
+        assert "уже завершён" in result["message"]
+
+    def test_evaluate_completed_task_survives_missing_catalog_phase(self):
+        engine = WizardEngine("TASK-1")
+        engine.current_phase = "retired-phase"
+        engine.phase_map = {}
+        engine.all_phases = []
+        engine.task = {
+            "id": 1,
+            "task_key": "TASK-1",
+            "current_phase": "retired-phase",
+            "status": "done",
+        }
+
+        with patch.object(engine, "evaluate_llm") as llm:
+            result = engine.evaluate("new report after completion")
+
+        llm.assert_not_called()
+        assert result["verdict"] == "PASS"
+        assert result["status"] == "done"
+        assert result["phase"] == "retired-phase"
+        assert result["instructions"] == []
+
     def test_get_phase_prompt(self):
-        engine = WizardEngine("AAT-1", repo="/tmp")
+        engine = WizardEngine("TASK-1")
         ph = self._phase()
         engine.current_phase = "0"
         engine.phase_map = {"0": ph}

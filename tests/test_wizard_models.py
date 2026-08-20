@@ -7,23 +7,7 @@ from project_workflow.wizard.models import (
     PhaseCheck,
     PhaseDelegate,
     PhaseEvidence,
-    PhaseInstruction,
 )
-
-
-def test_phase_delegate_from_selected_agent():
-    p = Phase(code="1", name="A", selected_agent="researcher")
-    assert p.delegate is not None
-    assert p.delegate.agent == "researcher"
-
-
-def test_phase_render_instructions():
-    p = Phase(
-        code="1",
-        instructions=[PhaseInstruction(step="use {tool} for {repo}")],
-    )
-    rendered = p.render_instructions({"tool": "git", "repo": "x"})
-    assert rendered == ["use git for x"]
 
 
 def test_phase_defaults():

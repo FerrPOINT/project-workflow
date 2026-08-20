@@ -73,7 +73,7 @@
 /* Skill remove inside badge */
 .timeline-badges .badge .skill-remove-btn{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border:none;border-radius:999px;background:transparent;color:var(--text-dim);cursor:pointer;font-size:12px;line-height:1;padding:0;margin-left:2px}
 .timeline-badges .badge .skill-remove-btn:hover{color:var(--red);background:rgba(239,68,68,.12)}
-.timeline-badges select.skill-candidate{width:auto;max-width:180px;height:24px;font-size:11px;padding:0 4px;background:var(--panel);border:1px solid var(--border);border-radius:4px;color:var(--text-secondary)}
+.timeline-badges input.skill-candidate{width:180px;height:24px;font-size:11px;padding:0 6px;background:var(--panel);border:1px solid var(--border);border-radius:4px;color:var(--text-secondary)}
 
 {% endblock %}
 
@@ -152,26 +152,15 @@
             {% if i.execution_type == 'parallel' %}⚡ parallel{% else %}⏱ sync{% endif %}
           </button>
         </div>
-        {% if (i.skills or []) or i.available_skills %}
         <div class="timeline-badges">
           {% for s in i.skills or [] %}
           <span class="badge" style="background:var(--accent-soft);color:var(--accent)">
             {{ s }}
-            <button type="button" class="skill-remove-btn" onclick="removeSkillFromInstruction(this, '{{ s }}')" aria-label="Убрать {{ s }}">×</button>
+            <button type="button" class="skill-remove-btn" data-skill="{{ s }}" onclick="removeSkillFromInstruction(this)" aria-label="Убрать {{ s }}">×</button>
           </span>
           {% endfor %}
-          <select class="skill-candidate" data-field="skill-candidate" onchange="addSkillToInstruction(this)" {% if not i.available_skills %}disabled{% endif %}>
-            {% if i.available_skills %}
-            <option value="">+ skill</option>
-              {% for skill in i.available_skills %}
-              <option value="{{ skill.name }}">{{ skill.name }}</option>
-              {% endfor %}
-            {% else %}
-            <option value="">Все skills выбраны</option>
-            {% endif %}
-          </select>
+          <input class="skill-candidate" type="text" placeholder="Добавить skill" onchange="addSkillToInstruction(this)">
         </div>
-        {% endif %}
       </div>
     </div>
     {% endmacro %}
@@ -252,7 +241,6 @@
 {% endblock %}
 
 {% block extra_script %}
-const skillCatalog = {{ skills_catalog | tojson }};
 const phaseId = {{ phase.id }};
 
 function escapeHtml(value) {
@@ -480,16 +468,16 @@ async function saveInstructionDescription(input) {
   if (!resp.ok) showToast('Не удалось сохранить описание', 'error');
 }
 
-async function addSkillToInstruction(selectEl) {
-  const card = selectEl.closest('.timeline-card');
+async function addSkillToInstruction(input) {
+  const card = input.closest('.timeline-card');
   const id = card.dataset.instructionId;
-  const skill = String(selectEl.value || '').trim();
+  const skill = String(input.value || '').trim();
   if (!skill) return;
   const existing = Array.from(card.querySelectorAll('.timeline-badges .badge'))
     .filter((b) => !b.classList.contains('badge-sync') && !b.classList.contains('badge-parallel'))
     .map((b) => b.textContent.replace('×', '').trim());
   const skills = normalizeSkillNames([...existing, skill]);
-  selectEl.disabled = true;
+  input.disabled = true;
   try {
     const resp = await fetch('/api/instructions/' + id, {
       method: 'PUT',
@@ -502,13 +490,14 @@ async function addSkillToInstruction(selectEl) {
     }
     window.location.reload();
   } finally {
-    selectEl.disabled = false;
+    input.disabled = false;
   }
 }
 
-async function removeSkillFromInstruction(button, skillName) {
+async function removeSkillFromInstruction(button) {
   const card = button.closest('.timeline-card');
   const id = card.dataset.instructionId;
+  const skillName = button.dataset.skill;
   const existing = Array.from(card.querySelectorAll('.timeline-badges .badge'))
     .filter((b) => !b.classList.contains('badge-sync') && !b.classList.contains('badge-parallel'))
     .map((b) => b.textContent.replace('×', '').trim());

@@ -1,12 +1,14 @@
 """Tests for parallel group logic, record transitions, result builders, and edge cases."""
 
+from contextlib import nullcontext
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 pytestmark = [pytest.mark.wizard]
 
-from project_workflow.wizard import PromptCache, WizardEngine
+from project_workflow.wizard import WizardEngine
+from project_workflow.wizard.core import PromptCache
 from project_workflow.wizard.models import Phase, PhaseCheck, PhaseEvidence, PhaseInstruction
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -16,9 +18,8 @@ from project_workflow.wizard.models import Phase, PhaseCheck, PhaseEvidence, Pha
 
 @pytest.fixture
 def engine():
-    with patch("project_workflow.wizard.convo") as mock_convo:
-        mock_convo.get_last_phase.return_value = None
-        eng = WizardEngine("AAT-1", "/tmp")
+    with nullcontext():
+        eng = WizardEngine("TASK-1")
         eng.all_phases = [
             Phase(
                 id=1,
@@ -192,6 +193,21 @@ class TestGetParallelGroup:
         group = engine._get_parallel_group(orphan)
         assert group == [orphan]
 
+    def test_adjacent_parallel_pairs_have_independent_next_phases(self, engine):
+        pair_c = Phase(id=5, code="3", name="Parallel C", execution_type="parallel", parallel_with="4")
+        pair_d = Phase(id=6, code="4", name="Parallel D", execution_type="parallel", parallel_with="3")
+        done = Phase(id=7, code="5", name="Done", execution_type="sync")
+        engine.all_phases = [*engine.all_phases[:-1], pair_c, pair_d, done]
+        engine.phase_map = {phase.code: phase for phase in engine.all_phases}
+
+        first = engine._get_parallel_group(engine.phase_map["1"])
+        second = engine._get_parallel_group(engine.phase_map["3"])
+
+        assert [phase.code for phase in first] == ["1", "2"]
+        assert engine._get_next_phase_after_group(first) == ("3", "Parallel C")
+        assert [phase.code for phase in second] == ["3", "4"]
+        assert engine._get_next_phase_after_group(second) == ("5", "Done")
+
 
 # ═══════════════════════════════════════════════════════════════════════
 #  _get_next_phase_after_group
@@ -220,70 +236,43 @@ class TestGetNextPhaseAfterGroup:
 # ═══════════════════════════════════════════════════════════════════════
 
 
+def _record_calls(engine, callback):
+    with (
+        patch.object(engine.db.tasks, "add_history") as history,
+        patch.object(engine.db.tasks, "update_if_state", return_value=True) as update,
+    ):
+        callback()
+    return [call.args for call in history.call_args_list], update.call_args.args
+
+
 class TestRecordTransition:
     def test_pass(self, engine):
         ph = engine.phase_map["-1"]
-        with (
-            patch.object(engine.db, "add_task_history") as mock_hist,
-            patch.object(engine.db, "update_task") as mock_upd,
-        ):
-            engine._record_transition(ph, "pass", "0", None)
-        calls = [c.args for c in mock_hist.call_args_list]
-        assert calls == [(7, 1, "done"), (7, 2, "pending")]
-        mock_upd.assert_called_once_with(7, {"current_phase": "0", "status": "active"})
+        history, update = _record_calls(engine, lambda: engine._record_transition(ph, "pass", "0", None))
+        assert history == [(7, 1, "done"), (7, 2, "pending")]
+        assert update == (7, "-1", "active", {"current_phase": "0", "status": "active"})
 
-    def test_partial(self, engine):
+    @pytest.mark.parametrize(
+        ("verdict", "status", "task_status"),
+        [("partial", "partial", "active"), ("blocked", "blocked", "blocked"), ("delegate", "delegated", "active")],
+    )
+    def test_stays_on_phase(self, engine, verdict, status, task_status):
         ph = engine.phase_map["-1"]
-        with (
-            patch.object(engine.db, "add_task_history") as mock_hist,
-            patch.object(engine.db, "update_task") as mock_upd,
-        ):
-            engine._record_transition(ph, "soft_fail", None, None)
-        mock_hist.assert_called_once_with(7, 1, "partial")
-        mock_upd.assert_called_once_with(7, {"current_phase": "-1", "status": "active"})
-
-    def test_blocked(self, engine):
-        ph = engine.phase_map["-1"]
-        with (
-            patch.object(engine.db, "add_task_history") as mock_hist,
-            patch.object(engine.db, "update_task") as mock_upd,
-        ):
-            engine._record_transition(ph, "blocked", None, None)
-        mock_hist.assert_called_once_with(7, 1, "blocked")
-        mock_upd.assert_called_once_with(7, {"current_phase": "-1", "status": "blocked"})
+        history, update = _record_calls(engine, lambda: engine._record_transition(ph, verdict, None, None))
+        assert history == [(7, 1, status)]
+        assert update[-1] == {"current_phase": "-1", "status": task_status}
 
     def test_rollback(self, engine):
         ph = engine.phase_map["0"]
-        with (
-            patch.object(engine.db, "add_task_history") as mock_hist,
-            patch.object(engine.db, "update_task") as mock_upd,
-        ):
-            engine._record_transition(ph, "rollback", None, "-1")
-        calls = [c.args for c in mock_hist.call_args_list]
-        assert calls == [(7, 2, "rollback"), (7, 1, "pending")]
-        mock_upd.assert_called_once_with(7, {"current_phase": "-1", "status": "active"})
+        history, update = _record_calls(engine, lambda: engine._record_transition(ph, "rollback", None, "-1"))
+        assert history == [(7, 2, "rollback"), (7, 1, "pending")]
+        assert update[-1] == {"current_phase": "-1", "status": "active"}
 
     def test_rollback_without_target_uses_phase(self, engine):
         ph = engine.phase_map["0"]
-        ph.rollback_target = None
-        with (
-            patch.object(engine.db, "add_task_history") as mock_hist,
-            patch.object(engine.db, "update_task") as mock_upd,
-        ):
-            engine._record_transition(ph, "rollback", None, None)
-        calls = [c.args for c in mock_hist.call_args_list]
-        assert calls == [(7, 2, "rollback"), (7, 2, "pending")]
-        mock_upd.assert_called_once_with(7, {"current_phase": "0", "status": "active"})
-
-    def test_delegate(self, engine):
-        ph = engine.phase_map["-1"]
-        with (
-            patch.object(engine.db, "add_task_history") as mock_hist,
-            patch.object(engine.db, "update_task") as mock_upd,
-        ):
-            engine._record_transition(ph, "delegate", None, None)
-        mock_hist.assert_called_once_with(7, 1, "delegated")
-        mock_upd.assert_called_once_with(7, {"current_phase": "-1", "status": "active"})
+        history, update = _record_calls(engine, lambda: engine._record_transition(ph, "rollback", None, None))
+        assert history == [(7, 2, "rollback"), (7, 2, "pending")]
+        assert update[-1] == {"current_phase": "0", "status": "active"}
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -294,47 +283,33 @@ class TestRecordTransition:
 class TestRecordParallelTransition:
     def test_pass_advances_all_and_next(self, engine):
         group = [engine.phase_map["1"], engine.phase_map["2"]]
-        with (
-            patch.object(engine.db, "add_task_history") as mock_hist,
-            patch.object(engine.db, "update_task") as mock_upd,
-        ):
-            engine._record_parallel_transition(group, "pass", "3")
-        calls = [c.args for c in mock_hist.call_args_list]
-        assert calls == [(7, 3, "done"), (7, 4, "done"), (7, 5, "pending")]
-        mock_upd.assert_called_once_with(7, {"current_phase": "3", "status": "active"})
+        history, update = _record_calls(engine, lambda: engine._record_parallel_transition(group, "pass", "3"))
+        assert history == [(7, 3, "done"), (7, 4, "done"), (7, 5, "pending")]
+        assert update[-1] == {"current_phase": "3", "status": "active"}
 
     def test_pass_no_next_marks_done(self, engine):
-        # Only one phase, no next
         group = [engine.phase_map["3"]]
-        with (
-            patch.object(engine.db, "add_task_history") as mock_hist,
-            patch.object(engine.db, "update_task") as mock_upd,
-        ):
-            engine._record_parallel_transition(group, "pass", None)
-        mock_hist.assert_called_once_with(7, 5, "done")
-        mock_upd.assert_called_once_with(7, {"current_phase": "3", "status": "done"})
+        history, update = _record_calls(engine, lambda: engine._record_parallel_transition(group, "pass", None))
+        assert history == [(7, 5, "done")]
+        assert update[-1] == {"current_phase": "3", "status": "done"}
 
-    def test_partial_does_not_touch_history(self, engine):
+    @pytest.mark.parametrize(
+        ("verdict", "history_status", "task_status"),
+        [("partial", "partial", "active"), ("blocked", "blocked", "blocked")],
+    )
+    def test_group_stays_on_first_phase(self, engine, verdict, history_status, task_status):
         group = [engine.phase_map["1"], engine.phase_map["2"]]
-        with (
-            patch.object(engine.db, "add_task_history") as mock_hist,
-            patch.object(engine.db, "update_task") as mock_upd,
-        ):
-            engine._record_parallel_transition(group, "soft_fail", "3")
-        mock_hist.assert_not_called()
-        mock_upd.assert_not_called()
+        history, update = _record_calls(engine, lambda: engine._record_parallel_transition(group, verdict, "3"))
+        assert history == [(7, 3, history_status), (7, 4, history_status)]
+        assert update[-1] == {"current_phase": "1", "status": task_status}
 
-    def test_blocked_sets_status(self, engine):
+    def test_rollback_records_group_and_target(self, engine):
         group = [engine.phase_map["1"], engine.phase_map["2"]]
-        with (
-            patch.object(engine.db, "add_task_history") as mock_hist,
-            patch.object(engine.db, "update_task") as mock_upd,
-        ):
-            engine._record_parallel_transition(group, "blocked", "3")
-        mock_hist.assert_not_called()
-        call = mock_upd.call_args[0][1]
-        assert call["status"] == "blocked"
-        assert call["current_phase"] == "1"
+        history, update = _record_calls(
+            engine, lambda: engine._record_parallel_transition(group, "rollback", None, "0")
+        )
+        assert history == [(7, 3, "rollback"), (7, 4, "rollback"), (7, 2, "pending")]
+        assert update[-1] == {"current_phase": "0", "status": "active"}
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -344,9 +319,8 @@ class TestRecordParallelTransition:
 
 class TestEvaluateEdgeCases:
     def test_orphan_phase_returns_blocked(self):
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
-            engine = WizardEngine("AAT-1", "/tmp")
+        with nullcontext():
+            engine = WizardEngine("TASK-1")
             engine.current_phase = "orphan"
             engine.phase_map = {}
             engine.all_phases = []
@@ -356,10 +330,9 @@ class TestEvaluateEdgeCases:
         assert result["verdict"] == "BLOCKED"
         assert result["blockers"] == ["phase-not-configured"]
 
-    def test_sync_evaluate_pass(self):
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
-            engine = WizardEngine("AAT-1", "/tmp")
+    def test_sync_evaluate_pass(self, wizard_llm):
+        with nullcontext():
+            engine = WizardEngine("TASK-1")
             ph = Phase(
                 id=1,
                 code="-1",
@@ -380,14 +353,14 @@ class TestEvaluateEdgeCases:
             engine.current_phase = "-1"
             engine.task = {"id": 7, "current_phase": "-1", "status": "active", "project_id": 1}
             engine.db = MagicMock()
+            wizard_llm("PASS", covered=["deploy"])
             result = engine.evaluate("deploy done")
         assert result["verdict"] == "PASS"
         assert "deploy" in result["covered"]
 
-    def test_parallel_evaluate_pass(self):
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
-            engine = WizardEngine("AAT-1", "/tmp")
+    def test_parallel_evaluate_pass(self, wizard_llm):
+        with nullcontext():
+            engine = WizardEngine("TASK-1")
             ph_a = Phase(
                 id=1,
                 code="1",
@@ -435,14 +408,14 @@ class TestEvaluateEdgeCases:
             engine.current_phase = "1"
             engine.task = {"id": 7, "current_phase": "1", "status": "active", "project_id": 1}
             engine.db = MagicMock()
+            wizard_llm("PASS", covered=["check-a", "check-b"])
             result = engine.evaluate("check-a done and check-b complete")
         assert result["verdict"] == "PASS"
         assert result["phase_name"] == "Parallel group: 1, 2"
 
-    def test_parallel_evaluate_partial_stays(self):
-        with patch("project_workflow.wizard.convo") as mock_convo:
-            mock_convo.get_last_phase.return_value = None
-            engine = WizardEngine("AAT-1", "/tmp")
+    def test_parallel_evaluate_partial_stays(self, wizard_llm):
+        with nullcontext():
+            engine = WizardEngine("TASK-1")
             ph_a = Phase(
                 id=1,
                 code="1",
@@ -490,7 +463,8 @@ class TestEvaluateEdgeCases:
             engine.current_phase = "1"
             engine.task = {"id": 7, "current_phase": "1", "status": "active", "project_id": 1}
             engine.db = MagicMock()
+            wizard_llm("PARTIAL", covered=["deploy microservice"], missing=["write unit tests"])
             result = engine.evaluate("microservice deployed")
-        assert result["verdict"] == "SOFT_FAIL"
+        assert result["verdict"] == "PARTIAL"
         assert result["next_phase"] is None  # non-pass: stay on group
         assert "write unit tests" in result["missing"]

@@ -16,14 +16,18 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SEED_PATH = REPO_ROOT / "project_workflow" / "references" / "seed.json"
 
-VALID_WORKFLOW_SKILLS = {
-    "agent-workflow-patterns",
-    "llm-wiki",
-    "repo-workflow",
-    "test-driven-development",
-    "workflow-code-intelligence",
-    "workflow-systematic-debugging",
-    "workflow-writing-plans",
+EXPECTED_PHASE_SKILLS = {
+    "0.9": ["agent-workflow-patterns", "workflow-systematic-debugging", "agent-workflow-patterns"],
+    "0.6": ["workflow-code-intelligence", "workflow-code-intelligence", "workflow-systematic-debugging"],
+    "1.5": ["workflow-code-intelligence", "workflow-code-intelligence", "workflow-systematic-debugging"],
+    "3.5": ["agent-workflow-patterns", "workflow-systematic-debugging", "workflow-writing-plans"],
+    "4.5": ["agent-workflow-patterns", "workflow-systematic-debugging", "test-driven-development"],
+    "7.5": ["repo-workflow", "workflow-systematic-debugging", "test-driven-development"],
+    "7.6": ["test-driven-development", "workflow-systematic-debugging"],
+    "7.6.R": ["workflow-code-intelligence", "workflow-systematic-debugging"],
+    "7.7": ["agent-workflow-patterns", "workflow-systematic-debugging", "agent-workflow-patterns"],
+    "8": ["repo-workflow", "repo-workflow", "agent-workflow-patterns"],
+    "9": ["agent-workflow-patterns", "workflow-code-intelligence", "workflow-writing-plans"],
 }
 
 EXPECTED_ROLE_AGENTS = {
@@ -40,6 +44,19 @@ EXPECTED_ROLE_AGENTS = {
     "9": "coder",
 }
 
+FORBIDDEN_ACTIVE_CATALOG_TERMS = {
+    "jira",
+    "gitlab",
+    "glab_token",
+    "verify-suite",
+    "hermes",
+    "workflow-jira",
+    "info/sprint",
+    "origin/develop",
+    "project-knowledge",
+    "hrflow",
+}
+
 
 def _phase_by_code(code: str) -> dict:
     items = json.loads(SEED_PATH.read_text(encoding="utf-8"))
@@ -50,7 +67,7 @@ def _phase_by_code(code: str) -> dict:
 
 
 def test_default_bootstrap_project_prefixes_are_project_specific(tmp_path):
-    uow = SAUnitOfWork(str(tmp_path / "workflow.db"))
+    uow = SAUnitOfWork(f"sqlite:///{tmp_path / 'workflow.db'}")
     uow.init()
 
     project = next((p for p in uow.get_projects() if p["code"] == "TASK"), None)
@@ -75,10 +92,76 @@ def test_seed_catalog_task_intake_and_preflight_have_real_content():
         assert "Evidence 1" not in evidence_descriptions
 
 
-def test_seed_catalog_order_matches_config_phase_order():
+def test_seed_catalog_order_is_self_consistent():
     phases = json.loads(SEED_PATH.read_text(encoding="utf-8"))
     codes = [str(phase.get("code", phase.get("id", ""))).strip() for phase in phases]
-    assert codes == config.PHASE_ORDER
+    assert len(codes) == len(set(codes)) == 27
+    assert [phase.get("phase_order") for phase in phases] == list(range(1, len(phases) + 1))
+
+
+def test_seed_catalog_has_no_legacy_provider_or_task_system_contracts():
+    active_catalog = SEED_PATH.read_text(encoding="utf-8").casefold()
+
+    found = sorted(term for term in FORBIDDEN_ACTIVE_CATALOG_TERMS if term in active_catalog)
+
+    assert found == []
+
+
+def test_catalog_migrations_cover_and_match_every_seed_phase():
+    from project_workflow.infrastructure.db.migrations.versions.d83b7c2e4f10_modernize_default_workflow_catalog import (
+        CURRENT as FIRST_CATALOG_UPDATE,
+    )
+    from project_workflow.infrastructure.db.migrations.versions.e92c4f7a1b63_sync_remaining_default_catalog import (
+        CURRENT as REMAINING_CATALOG_UPDATE,
+    )
+
+    phases = json.loads(SEED_PATH.read_text(encoding="utf-8"))
+    migrated = {**FIRST_CATALOG_UPDATE, **REMAINING_CATALOG_UPDATE}
+    assert set(migrated) == {str(phase["code"]) for phase in phases}
+
+    for phase in phases:
+        code = str(phase["code"])
+        expected = {
+            "name": phase["name"],
+            "description": phase["description"],
+            "next_recommendation": phase["next_recommendation"],
+            "instructions": [item["description"] for item in phase["instructions"]],
+            "checks": [item["description"] for item in phase["checks"]],
+            "evidence": [item["description"] for item in phase["evidence"]],
+        }
+        assert migrated[code] == expected
+
+
+def test_seed_catalog_parallel_links_form_expected_groups():
+    phases = json.loads(SEED_PATH.read_text(encoding="utf-8"))
+    by_code = {str(phase["code"]): phase for phase in phases}
+    expected_groups = [
+        {"0.6", "1"},
+        {"1.5", "2"},
+        {"4.5", "5"},
+        {"7.5", "7.6", "7.6.R"},
+    ]
+
+    for group in expected_groups:
+        assert all(by_code[code]["execution_type"] == "parallel" for code in group)
+        assert all(by_code[code].get("parallel_with") in group for code in group)
+
+
+def test_seed_catalog_rollback_topology_is_stable():
+    phases = json.loads(SEED_PATH.read_text(encoding="utf-8"))
+    rollback_targets = {
+        str(phase["code"]): phase.get("rollback_target")
+        for phase in phases
+        if phase.get("rollback_target") is not None
+    }
+
+    assert rollback_targets == {
+        "0.9": "0.0a",
+        "3.5": "3",
+        "4.5": "4",
+        "7.5": "4",
+        "7.6": "4",
+    }
 
 
 def test_seed_catalog_names_match_runtime_progress_template():
@@ -185,23 +268,30 @@ def test_seed_catalog_parallelism_uses_phase_runs_instead_of_fake_instruction_ba
 def test_seed_catalog_role_bound_phases_are_fully_filled_with_agents_skills_and_checks():
     for code, agent_name in EXPECTED_ROLE_AGENTS.items():
         phase = _phase_by_code(code)
-        assert phase.get("selected_agent") == agent_name, f"Phase {code} must pick agent {agent_name}"
+        assert phase.get("delegate", {}).get("agent") == agent_name, f"Phase {code} must pick agent {agent_name}"
         assert phase.get("instructions"), f"Phase {code} must keep instructions"
         assert phase.get("checks"), f"Phase {code} must keep checks"
         assert phase.get("evidence"), f"Phase {code} must keep evidence"
 
+        actual_skills = []
         for instruction in phase["instructions"]:
             skills = instruction.get("skills")
             assert isinstance(skills, list) and skills, (
                 f"Phase {code} instruction {instruction.get('step_num')} must declare skills"
             )
-            assert set(skills).issubset(VALID_WORKFLOW_SKILLS), (
-                f"Phase {code} instruction {instruction.get('step_num')} uses unknown skills: {skills}"
+            assert all(
+                isinstance(skill, str)
+                and skill
+                and skill == skill.strip()
+                and all(char.islower() or char.isdigit() or char == "-" for char in skill)
+                for skill in skills
             )
+            actual_skills.extend(skills)
+        assert actual_skills == EXPECTED_PHASE_SKILLS[code]
 
 
-def test_db_init_assigns_selected_agents_to_role_bound_default_phases(tmp_path):
-    uow = SAUnitOfWork(str(tmp_path / "workflow.db"))
+def test_db_init_assigns_agents_to_role_bound_default_phases(tmp_path):
+    uow = SAUnitOfWork(f"sqlite:///{tmp_path / 'workflow.db'}")
     uow.init()
     schema.ensure_phase_catalog(uow)
 

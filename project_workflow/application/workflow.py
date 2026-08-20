@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from project_workflow import config
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.repositories import UnitOfWork
 
@@ -41,21 +42,6 @@ class WorkflowService:
         self._uow.commit()
         return workflow.to_dict()
 
-    def get_or_create_smoke_workflow(self) -> dict[str, Any]:
-        from project_workflow import config
-
-        wf = self._uow.workflows.get_by_name(config.SMOKE_WORKFLOW_NAME)
-        if wf:
-            return wf.to_dict()
-        wf_dict = self.create_workflow(
-            {
-                "name": config.SMOKE_WORKFLOW_NAME,
-                "description": "Smoke test workflow",
-                "_skip_default_phase": True,
-            }
-        )
-        return wf_dict
-
     def list_workflows(self) -> list[dict[str, Any]]:
         return [w.to_dict() for w in self._uow.workflows.list()]
 
@@ -82,6 +68,6 @@ class WorkflowService:
         return None
 
     def ensure_default_exists(self) -> dict[str, Any]:
-        wf = self._uow.workflows.ensure_default_exists()
+        wf = self._uow.workflows.ensure_default_exists(config.DEFAULT_WORKFLOW_NAME)
         result = wf.to_dict()
         return result

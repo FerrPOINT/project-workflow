@@ -16,7 +16,7 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
 @pytest.fixture
 def fresh_db(tmp_path, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'workflow.db'}")
-    uow = SAUnitOfWork(str(tmp_path / "workflow.db"))
+    uow = SAUnitOfWork(f"sqlite:///{tmp_path / 'workflow.db'}")
     uow.create_all()
     ensure_phase_catalog(uow)
     return uow
