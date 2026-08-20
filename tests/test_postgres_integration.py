@@ -244,7 +244,7 @@ class TestPostgresSession:
                     ") catalog WHERE lower(value) ~ 'jira|gitlab|glab_token|verify-suite|mandatory plan.md'"
                 )
             ).scalar_one()
-        assert revision == "e92c4f7a1b63"
+        assert revision == "b7f3c9d2a641"
         assert upgraded.id == phase_id
         assert upgraded.name == "Runtime Readiness"
         active_contract = upgraded.string_agg.casefold()
@@ -260,6 +260,103 @@ class TestPostgresSession:
             runs = check_uow.supervisor_runs.list(task_id=task.id)
             assert task.id == task_id
             assert any(run.id == run_id and run.report == "preserved audit" for run in runs)
+        finally:
+            check_uow.close()
+
+    def test_skill_backfill_updates_only_empty_default_seed_instructions(self, pg_url):
+        from project_workflow.infrastructure.db import schema
+        from project_workflow.infrastructure.db.uow_bootstrap import bootstrap_default_project
+
+        engine = get_engine(pg_url)
+        run_alembic_command("upgrade", engine, "e92c4f7a1b63")
+        uow = SAUnitOfWork(engine)
+        schema.ensure_phase_catalog(uow)
+        bootstrap_default_project(uow)
+        project = uow.projects.get_by_code("TASK")
+        phase = uow.phases.get_by_code("0.9")
+        task_id = uow.tasks.create(
+            {"project_id": project.id, "task_key": "TASK-SKILL-MIGRATION", "current_phase": phase.code}
+        )
+        run_id = uow.supervisor_runs.create(
+            {"task_id": task_id, "phase_id": phase.id, "verdict": "partial", "report": "preserved"}
+        )
+        custom_workflow_id = uow.workflows.create(
+            {"name": "Custom Workflow", "description": "custom", "is_default": False}
+        )
+        custom_phase_id = uow.phases.create(
+            {
+                "workflow_id": custom_workflow_id,
+                "code": "0.9",
+                "name": "Custom phase",
+                "phase_order": 1,
+                "is_seed_managed": True,
+            }
+        )
+        custom_instruction_id = uow.instructions.create(
+            custom_phase_id, {"step_num": 1, "description": "Custom instruction", "skills": None}
+        )
+        uow.commit()
+        uow.close()
+
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE project_workflow.instructions SET skills = CASE step_num "
+                    "WHEN 1 THEN NULL WHEN 2 THEN '' WHEN 3 THEN '[]' END "
+                    "WHERE phase_id = :phase_id"
+                ),
+                {"phase_id": phase.id},
+            )
+            custom_value = '["ui-custom"]'
+            conn.execute(
+                text(
+                    "UPDATE project_workflow.instructions SET skills = :skills "
+                    "WHERE phase_id = (SELECT id FROM project_workflow.phases "
+                    "WHERE workflow_id = :workflow_id AND code = '0.6') AND step_num = 1"
+                ),
+                {"skills": custom_value, "workflow_id": project.workflow_id},
+            )
+
+        ensure_migrated(engine)
+        ensure_migrated(engine)
+
+        with engine.connect() as conn:
+            revision = conn.execute(text("SELECT version_num FROM project_workflow.alembic_version")).scalar_one()
+            migrated = conn.execute(
+                text(
+                    "SELECT step_num, skills FROM project_workflow.instructions "
+                    "WHERE phase_id = :phase_id ORDER BY step_num"
+                ),
+                {"phase_id": phase.id},
+            ).all()
+            preserved_custom = conn.execute(
+                text(
+                    "SELECT skills FROM project_workflow.instructions "
+                    "WHERE phase_id = (SELECT id FROM project_workflow.phases "
+                    "WHERE workflow_id = :workflow_id AND code = '0.6') AND step_num = 1"
+                ),
+                {"workflow_id": project.workflow_id},
+            ).scalar_one()
+            custom_workflow_skills = conn.execute(
+                text("SELECT skills FROM project_workflow.instructions WHERE id = :instruction_id"),
+                {"instruction_id": custom_instruction_id},
+            ).scalar_one()
+
+        assert revision == "b7f3c9d2a641"
+        assert [json.loads(row.skills) for row in migrated] == [
+            ["agent-workflow-patterns"],
+            ["workflow-systematic-debugging"],
+            ["agent-workflow-patterns"],
+        ]
+        assert preserved_custom == custom_value
+        assert custom_workflow_skills is None
+
+        check_uow = SAUnitOfWork(engine)
+        try:
+            task = check_uow.tasks.get_by_key("TASK-SKILL-MIGRATION")
+            runs = check_uow.supervisor_runs.list(task_id=task.id)
+            assert task.id == task_id
+            assert any(run.id == run_id and run.report == "preserved" for run in runs)
         finally:
             check_uow.close()
 
@@ -606,6 +703,10 @@ def test_full_default_workflow_through_cli_postgres_and_http(pg_url):
             if expected_phase == "0.6":
                 assert payload["next_phase"] == "1.5"
                 assert payload["next_phase_contract"]["group_phases"] == ["1.5", "2"]
+                assert any(
+                    "Используй skills: workflow-code-intelligence." in instruction
+                    for instruction in payload["next_phase_contract"]["instructions"]
+                )
                 uow = SAUnitOfWork(pg_url)
                 task = uow.tasks.get_by_key(task_key)
                 project = uow.projects.get_by_id(task.project_id)
@@ -619,12 +720,28 @@ def test_full_default_workflow_through_cli_postgres_and_http(pg_url):
             if expected_phase == "1.5":
                 assert payload["next_phase"] == "3"
 
+            if expected_phase == "3":
+                assert payload["next_phase_contract"]["group_phases"] is None
+                assert any(
+                    "Используй skills: agent-workflow-patterns." in instruction
+                    for instruction in payload["next_phase_contract"]["instructions"]
+                )
+
         terminal_result, terminal = _run_cli(env, "--json", "step", "--task", task_key)
         history_result, history_payload = _run_cli(env, "--json", "history", "--task", task_key)
         assert terminal_result.returncode == history_result.returncode == 0
         assert terminal["phase"] == "10"
         assert terminal["status"] == "done"
         assert history_payload["count"] == 22
+
+        completed_request_count = len(provider_state.chat_requests)
+        completed_result, completed = _step(env, task_key, "New report after workflow completion")
+        assert completed_result.returncode == 0
+        assert completed["verdict"] == "PASS"
+        assert completed["status"] == "done"
+        assert completed["next_phase"] is None
+        assert "уже завершён" in completed["message"]
+        assert len(provider_state.chat_requests) == completed_request_count
 
         human_env = env.copy()
         human_env.update({"PYTHONUTF8": "0", "PYTHONIOENCODING": "cp1251"})

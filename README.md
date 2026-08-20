@@ -53,7 +53,7 @@ SQLite остаётся только для изолированных тест�
 | Feature | Описание |
 |---------|----------|
 | Пофазовый workflow | Каждая задача строго следует шаблону фаз с инструкциями, чек-листами и артефактами. |
-| Рекомендации skills | Назначенные инструкции skills хранятся в PostgreSQL и передаются исполнителю прямо в контракте фазы. |
+| Рекомендации skills | Имена skills хранятся в PostgreSQL и передаются исполнителю прямо в контракте фазы; содержимое принадлежит [`relevanter/agent-skills`](https://gt.wmtgroup.ru/relevanter/agent-skills). |
 | Встроенный supervisor | Автоматическая оценка отчётов и решение о переходе на следующую фазу. |
 | Web UI | Управление шаблонами, фазами, проектами, задачами и агентами через браузер. |
 | CLI freeze | Только `step` и `history`; весь CRUD — через UI. |
@@ -102,6 +102,7 @@ Ollama Online поддерживает это поле, а значение `non
 Локальный Ollama также подключается через совместимый endpoint `http://localhost:11434/v1`.
 
 Fallback evaluator отсутствует: если провайдер недоступен или вернул некорректный JSON, команда остаётся на текущей фазе, возвращает `BLOCKED` и exit code `1`.
+Повторный отчёт после `status=done` не вызывает evaluator и не создаёт новый run/history: CLI возвращает `PASS`, `status=done` и `next_phase=null`.
 
 <a name="ui"></a>
 ## 🌐 Web UI
@@ -151,7 +152,7 @@ flowchart TD
 - UI-пакет (`project_workflow/interfaces/ui/`) — чистое FastAPI-приложение с отдельными routes, services, dependencies.
 - Конфигурация централизована в `project_workflow.config` на Pydantic Settings; `DATABASE_URL` обязателен.
 - PostgreSQL хранит каталог, задачи, историю, fingerprints и audit; packaged seed используется только для пустой БД.
-- Skills являются рекомендациями внутри инструкций фазы; отдельного runtime registry нет.
+- Skills являются рекомендациями внутри инструкций фазы; их канонические файлы хранятся в `relevanter/agent-skills`, отдельного runtime registry нет.
 
 <a name="quality"></a>
 ## 🛡️ Quality Bar
@@ -159,10 +160,10 @@ flowchart TD
 | Проверка | Команда | Статус |
 |---|---|---|
 | Lint | `ruff check .` | **green** |
-| Type check | `mypy project_workflow` | **green** |
-| Tests | `pytest -q --timeout=60` | **804 passed, 12 integration deselected** |
-| PostgreSQL integration | `pytest -q -m integration tests/test_postgres_integration.py --timeout=180` | **12 passed** |
-| Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` | **95.23%** |
+| Type check | `mypy project_workflow scripts` | **green, 81 source files** |
+| Tests | `pytest -q --timeout=60` | **806 passed, 13 integration deselected** |
+| PostgreSQL integration | `pytest -q -m integration tests/test_postgres_integration.py --timeout=180` | **13 passed** |
+| Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` | **95.17%** |
 | Systemd UI health | `curl http://localhost:8811/api/tasks` | **200** |
 
 <a name="roadmap"></a>
@@ -174,7 +175,7 @@ flowchart TD
 - [x] Docker Compose: Postgres + migrate + UI
 - [x] UI/API переведены на SQLAlchemy-сервисы
 - [x] Один runtime dataflow: CLI/UI → Wizard → OpenAI-compatible evaluator → PostgreSQL
-- [x] Полный suite: 804 теста green + 12 PostgreSQL integration tests
+- [x] Полный suite: 806 тестов green + 13 PostgreSQL integration tests
 - [x] Postgres-интеграционные тесты
 - [x] `WizardEngine` и wizard-модули собраны в пакет `project_workflow/wizard/`
 - [x] API-тесты на все UI routes
@@ -185,8 +186,7 @@ flowchart TD
 - [x] Wizard evaluate: DB-backed history/audit, idempotent replay и явный parallel rendering
 - [x] Packaged 27-phase catalog bootstrapped once into an empty PostgreSQL database
 - [x] Forward-миграция seed-managed каталога с legacy Jira/GitLab-контрактов на текущий GitHub/OpenAI-compatible runtime
-
-Подробный план: [`docs/plans/2026-06-21-detailed-roadmap.md`](docs/plans/2026-06-21-detailed-roadmap.md).
+- [x] Forward-миграция пустых skill-рекомендаций существующей PostgreSQL без перезаписи UI-значений
 
 ## Установка
 

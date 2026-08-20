@@ -19,21 +19,21 @@ After any change to the SQLAlchemy layer, application services, UI state, or wiz
    ```bash
    pytest -q --timeout=60
    ```
-   Expected: **804 passed, 12 deselected**, 0 failed, 0 errors. Integration tests
+   Expected: **806 passed, 13 deselected**, 0 failed, 0 errors. Integration tests
    are intentionally deselected here; run them separately as described below.
 
 2. **PostgreSQL integration**
    ```bash
    pytest -q -m integration tests/test_postgres_integration.py --timeout=180
    ```
-   Expected: **12 passed**, 0 failed, 0 errors. This includes the real CLI
+   Expected: **13 passed**, 0 failed, 0 errors. This includes the real CLI
    subprocess -> PostgreSQL -> OpenAI-compatible HTTP workflow path.
 
 3. **Coverage**
    ```bash
    pytest --cov=project_workflow --cov-report=term --timeout=60
    ```
-   Expected: total coverage >= 90%. Current baseline: **95.23%**.
+   Expected: total coverage >= 90%. Current baseline: **95.17%**.
 
 4. **Lint**
    ```bash
@@ -45,7 +45,7 @@ After any change to the SQLAlchemy layer, application services, UI state, or wiz
    ```bash
    mypy project_workflow scripts
    ```
-   Expected: `Success: no issues found in 80 source files`.
+   Expected: `Success: no issues found in 81 source files`.
 
 6. **UI service health**
    ```bash
@@ -62,6 +62,8 @@ After any change to the SQLAlchemy layer, application services, UI state, or wiz
 
 - Use `pytest -q --timeout=60` for the standard full suite. `--forked` is no longer required for stability; coverage reports are inaccurate under `--forked`.
 - `DATABASE_URL` is required in runtime. SQLite is used only by isolated tests.
+- `project-workflow` stores only skill names; canonical skill files live in
+  `https://gt.wmtgroup.ru/relevanter/agent-skills` and are loaded by the executor.
 - The repeatable CLI workflow acceptance process is documented in `LIVE_TEST_PLAN.md`.
 
 ## Production-readiness — what we deliberately skip

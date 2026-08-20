@@ -50,7 +50,7 @@ def format_result(result: dict) -> str:
     lines: list[str] = []
 
     if is_pass and not result.get("next_phase"):
-        lines.append("Workflow завершён: все фазы успешно пройдены.")
+        lines.append("Workflow завершён: задача уже прошла все фазы.")
 
     if verdict == "BLOCKED":
         reasons = [str(item) for item in (result.get("blockers") or []) if str(item).strip()]

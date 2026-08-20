@@ -64,6 +64,45 @@ class TestWizardEvaluate:
         assert result["verdict"] == "PARTIAL"
         assert result["missing"] == ["check"]
 
+    def test_evaluate_completed_task_does_not_call_llm(self):
+        engine = WizardEngine("TASK-1")
+        ph = self._phase()
+        engine.current_phase = "0"
+        engine.phase_map = {"0": ph}
+        engine.all_phases = [ph]
+        engine.task = {"id": 1, "task_key": "TASK-1", "current_phase": "0", "status": "done"}
+
+        with patch.object(engine, "evaluate_llm") as llm:
+            result = engine.evaluate("new report after completion")
+
+        llm.assert_not_called()
+        assert result["verdict"] == "PASS"
+        assert result["status"] == "done"
+        assert result["next_phase"] is None
+        assert result["replayed"] is False
+        assert "уже завершён" in result["message"]
+
+    def test_evaluate_completed_task_survives_missing_catalog_phase(self):
+        engine = WizardEngine("TASK-1")
+        engine.current_phase = "retired-phase"
+        engine.phase_map = {}
+        engine.all_phases = []
+        engine.task = {
+            "id": 1,
+            "task_key": "TASK-1",
+            "current_phase": "retired-phase",
+            "status": "done",
+        }
+
+        with patch.object(engine, "evaluate_llm") as llm:
+            result = engine.evaluate("new report after completion")
+
+        llm.assert_not_called()
+        assert result["verdict"] == "PASS"
+        assert result["status"] == "done"
+        assert result["phase"] == "retired-phase"
+        assert result["instructions"] == []
+
     def test_get_phase_prompt(self):
         engine = WizardEngine("TASK-1")
         ph = self._phase()

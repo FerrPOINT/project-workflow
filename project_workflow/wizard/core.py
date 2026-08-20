@@ -319,6 +319,33 @@ class WizardEngine:
             "retryable": True,
         }
 
+    def _completed_result(self, phase: Phase | None) -> dict[str, Any]:
+        contract = PhaseContractBuilder(self.all_phases).build(phase) if phase else None
+        phase_code = phase.code if phase else self.current_phase
+        return {
+            "verdict": "PASS",
+            "task_key": self.task_key,
+            "phase": phase_code,
+            "phase_name": phase.name if phase else None,
+            "status": "done",
+            "covered": [],
+            "missing": [],
+            "blockers": [],
+            "current_phase": phase_code,
+            "next_phase": None,
+            "next_phase_name": None,
+            "rollback_target": None,
+            "message": "Workflow уже завершён; новый отчёт не оценивался.",
+            "confidence": 1.0,
+            "instructions": contract.instructions if contract else [],
+            "required_checks": contract.required_checks if contract else [],
+            "required_evidence": contract.required_evidence if contract else [],
+            "group_phases": contract.group_phases if contract else None,
+            "group_details": contract.group_details if contract else [],
+            "replayed": False,
+            "retryable": False,
+        }
+
     def _resolve_transition(
         self, phase: Phase, verdict: str, group: list[Phase]
     ) -> tuple[str | None, str | None, str | None]:
@@ -365,6 +392,9 @@ class WizardEngine:
         self.current_phase = self._resolve_current_phase()
 
     def evaluate(self, report: str) -> dict:
+        if self.task and self.task.get("status") == "done":
+            return self._completed_result(self._get_current_phase_obj())
+
         phase = self._get_current_phase_obj()
         if not phase:
             return self._blocked_result()

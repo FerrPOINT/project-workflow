@@ -16,14 +16,18 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SEED_PATH = REPO_ROOT / "project_workflow" / "references" / "seed.json"
 
-VALID_WORKFLOW_SKILLS = {
-    "agent-workflow-patterns",
-    "llm-wiki",
-    "repo-workflow",
-    "test-driven-development",
-    "workflow-code-intelligence",
-    "workflow-systematic-debugging",
-    "workflow-writing-plans",
+EXPECTED_PHASE_SKILLS = {
+    "0.9": ["agent-workflow-patterns", "workflow-systematic-debugging", "agent-workflow-patterns"],
+    "0.6": ["workflow-code-intelligence", "workflow-code-intelligence", "workflow-systematic-debugging"],
+    "1.5": ["workflow-code-intelligence", "workflow-code-intelligence", "workflow-systematic-debugging"],
+    "3.5": ["agent-workflow-patterns", "workflow-systematic-debugging", "workflow-writing-plans"],
+    "4.5": ["agent-workflow-patterns", "workflow-systematic-debugging", "test-driven-development"],
+    "7.5": ["repo-workflow", "workflow-systematic-debugging", "test-driven-development"],
+    "7.6": ["test-driven-development", "workflow-systematic-debugging"],
+    "7.6.R": ["workflow-code-intelligence", "workflow-systematic-debugging"],
+    "7.7": ["agent-workflow-patterns", "workflow-systematic-debugging", "agent-workflow-patterns"],
+    "8": ["repo-workflow", "repo-workflow", "agent-workflow-patterns"],
+    "9": ["agent-workflow-patterns", "workflow-code-intelligence", "workflow-writing-plans"],
 }
 
 EXPECTED_ROLE_AGENTS = {
@@ -269,14 +273,21 @@ def test_seed_catalog_role_bound_phases_are_fully_filled_with_agents_skills_and_
         assert phase.get("checks"), f"Phase {code} must keep checks"
         assert phase.get("evidence"), f"Phase {code} must keep evidence"
 
+        actual_skills = []
         for instruction in phase["instructions"]:
             skills = instruction.get("skills")
             assert isinstance(skills, list) and skills, (
                 f"Phase {code} instruction {instruction.get('step_num')} must declare skills"
             )
-            assert set(skills).issubset(VALID_WORKFLOW_SKILLS), (
-                f"Phase {code} instruction {instruction.get('step_num')} uses unknown skills: {skills}"
+            assert all(
+                isinstance(skill, str)
+                and skill
+                and skill == skill.strip()
+                and all(char.islower() or char.isdigit() or char == "-" for char in skill)
+                for skill in skills
             )
+            actual_skills.extend(skills)
+        assert actual_skills == EXPECTED_PHASE_SKILLS[code]
 
 
 def test_db_init_assigns_agents_to_role_bound_default_phases(tmp_path):

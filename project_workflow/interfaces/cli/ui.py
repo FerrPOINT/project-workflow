@@ -59,14 +59,6 @@ def step_cmd(
         console.print(format_result(result))
         raise click.exceptions.Exit(1) from exc
 
-    if engine._get_current_phase_obj() is None:
-        result = engine._blocked_result()
-        if jmode:
-            out_json(result, exit_code=1)
-            return
-        console.print(format_result(result))
-        raise click.exceptions.Exit(1)
-
     # --report : evaluate report
     if report:
         result = engine.evaluate(report)
@@ -75,6 +67,14 @@ def step_cmd(
             return
         console.print(format_result(result))
         raise click.exceptions.Exit(1 if result["verdict"] == "BLOCKED" else 0)
+
+    if engine._get_current_phase_obj() is None:
+        result = engine._blocked_result()
+        if jmode:
+            out_json(result, exit_code=1)
+            return
+        console.print(format_result(result))
+        raise click.exceptions.Exit(1)
 
     # default: show phase prompt/instructions
     prompt = engine.get_phase_prompt()
