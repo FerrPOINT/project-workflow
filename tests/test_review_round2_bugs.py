@@ -17,7 +17,6 @@ from __future__ import annotations
 import tempfile
 
 import pytest
-import sqlalchemy as sa
 
 from project_workflow.application.instruction_service import InstructionService
 from project_workflow.infrastructure.db.session import ensure_schema, get_engine
@@ -209,9 +208,8 @@ class TestUnknownVerdictDegrades:
 class TestPhaseByCodeHistory:
     def test_history_with_code_sentinels_does_not_crash(self, uow):
         """task_history rows keyed by phase codes must resolve or skip, not raise."""
-        from project_workflow.wizard.models import Phase
-        builder = type("B", (), {})()
         from project_workflow.wizard.context import WizardContextBuilder
+        from project_workflow.wizard.models import Phase
 
         phases = [
             Phase(id=1, code="0.7", name="Seventy"),

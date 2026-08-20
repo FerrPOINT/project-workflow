@@ -164,7 +164,8 @@ class SupervisorRun:
 
     id: int | None = None
     task_id: int = 0
-    phase_id: int = 0
+    # Nullable since 62fc5d3: assessments with unresolved phase codes persist NULL
+    phase_id: int | None = 0
     verdict: str = ""
     report: str = ""
     covered: list[str] = field(default_factory=list)

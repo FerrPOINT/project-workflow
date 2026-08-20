@@ -116,7 +116,7 @@ Baseline: 949 tests passed
 | 2 | Partial updates: disjoint commits in wizard evaluate() | HIGH | FIXED (f739c53) |
 | 3 | XSS in phase_detail.html JS string interpolation | HIGH | FIXED (5054858) |
 | 4 | PK corruption: phase update() allows id/workflow_id overwrite | HIGH | FIXED (fecdad6) |
-| 5 | N+1: task/phase/project list without eager loading | HIGH | FIXED (fecdad6) |
+| 5 | N+1: task/phase/project list without eager loading | HIGH | FIXED (fecdad6 + this round: phase list() joinedload was missing, import-only) |
 | 6 | Instruction edits not persisted to seed | HIGH | FIXED (fecdad6) |
 | 7 | Empty report bypasses coverage via previously_covered | HIGH | FIXED (45e4650) |
 | 8 | False positive blockers/keywords via substring match | HIGH | FIXED (45e4650) |

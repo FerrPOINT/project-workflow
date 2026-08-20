@@ -10,10 +10,10 @@ import datetime
 from typing import Any
 
 from sqlalchemy import (
-    Integer,
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Integer,
     String,
     Text,
     UniqueConstraint,

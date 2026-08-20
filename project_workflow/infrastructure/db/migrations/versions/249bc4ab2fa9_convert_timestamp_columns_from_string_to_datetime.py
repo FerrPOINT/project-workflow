@@ -30,13 +30,27 @@ _TABLES_COLUMNS = [
 def _convert_text_to_timestamp(table: str, column: str) -> None:
     dialect = op.get_context().dialect.name
     if dialect == "postgresql":
+        # Legacy tables may not exist on fresh databases (initial migration
+        # creates only the current table set); skip them instead of failing.
+        exists = op.get_bind().execute(
+            sa.text(
+                "SELECT 1 FROM information_schema.tables "
+                "WHERE table_schema = current_schema() AND table_name = :t"
+            ),
+            {"t": table},
+        ).scalar()
+        if not exists:
+            return
         # Drop the old text default first; it cannot be cast to timestamp.
         op.execute(sa.text(f"ALTER TABLE {table} ALTER COLUMN {column} DROP DEFAULT"))
         # Normalize placeholder values to a valid timestamp string.
+        # Cast to text first: on fresh databases the initial migration already
+        # creates timestamptz columns, and comparing them to the literal
+        # 'CURRENT_TIMESTAMP' fails with InvalidDatetimeFormat.
         op.execute(
             sa.text(
                 f"UPDATE {table} SET {column} = NOW() "
-                f"WHERE {column} = 'CURRENT_TIMESTAMP' OR {column} = 'CURRENT_TIMESTAM' "
+                f"WHERE {column}::text = 'CURRENT_TIMESTAMP' OR {column}::text = 'CURRENT_TIMESTAM' "
                 f"OR {column} IS NULL"
             )
         )

@@ -8,7 +8,7 @@ from typing import Any
 
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm import Session, joinedload
 
 from project_workflow.domain import Task
 from project_workflow.domain.exceptions import NotFoundError

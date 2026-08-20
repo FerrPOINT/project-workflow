@@ -42,6 +42,10 @@ def _ensure_schema(connection: Any) -> None:
     if dialect != "postgresql":
         return
     connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA}"))
+    # Initial migration sets search_path only for its own connection; every
+    # subsequent migration must see the schema too, otherwise unqualified
+    # table names resolve to public and fail with "relation does not exist".
+    connection.execute(text(f"SET search_path TO {SCHEMA}"))
 
 
 def run_migrations_offline() -> None:

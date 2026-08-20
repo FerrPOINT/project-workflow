@@ -9,6 +9,7 @@ Create Date: 2026-07-09 00:00:00.000000
 from collections.abc import Sequence
 
 from alembic import op
+from sqlalchemy import text
 
 # revision identifiers, used by Alembic.
 revision: str = "75bc288f78c6"
@@ -20,7 +21,16 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     """Drop unused wizard_memories table."""
     op.execute("SET search_path TO project_workflow")
-    op.drop_table("wizard_memories")
+    # The table never exists on fresh databases (initial migration creates
+    # only the current table set); skip instead of failing.
+    exists = op.get_bind().execute(
+        text(
+            "SELECT 1 FROM information_schema.tables "
+            "WHERE table_schema = current_schema() AND table_name = 'wizard_memories'"
+        )
+    ).scalar()
+    if exists:
+        op.drop_table("wizard_memories")
 
 
 def downgrade() -> None:
