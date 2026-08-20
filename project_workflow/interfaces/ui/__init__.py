@@ -26,7 +26,6 @@ from .services import (
     _resolve_task_phase,
     _workflow_form_payload,
 )
-from .skills import _load_skills_catalog, _scan_hermes_skills
 from .templates import _group_instructions
 from .templates import env as _templates_env
 
@@ -44,14 +43,12 @@ __all__ = [
     "_load_phase_detail",
     "_load_phases",
     "_load_projects",
-    "_load_skills_catalog",
     "_load_tasks",
     "_load_workflows",
     "_parse_key_prefixes",
     "_parse_optional_int",
     "_phase_create_payload",
     "_resolve_task_phase",
-    "_scan_hermes_skills",
     "_workflow_form_payload",
     "_templates_env",
 ]

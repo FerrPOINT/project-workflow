@@ -77,7 +77,7 @@ class SAWorkflowRepository(WorkflowRepository):
         )
         self._session.delete(row)
 
-    def ensure_default_exists(self, name: str = "Default Workflow") -> Workflow:
+    def ensure_default_exists(self, name: str) -> Workflow:
         existing = self.get_default()
         if existing:
             return existing

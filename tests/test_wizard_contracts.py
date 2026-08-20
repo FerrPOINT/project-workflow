@@ -20,6 +20,10 @@ from project_workflow.wizard.models import (
 
 def test_text_helpers():
     assert text_from_instruction(PhaseInstruction(step=" x ")) == "x"
+    assert (
+        text_from_instruction(PhaseInstruction(step="Run checks", skills=["testing-workflow", "code-review"]))
+        == "Run checks Используй skills: testing-workflow, code-review."
+    )
     assert text_from_check(PhaseCheck(description=" c ")) == "c"
     assert text_from_evidence(PhaseEvidence(item=" e ")) == "e"
 
@@ -65,11 +69,13 @@ def test_build_missing():
 
 def test_build_parallel():
     phases = _make_phases()
+    phases[1].instructions = [PhaseInstruction(step="Review", skills=["code-review"])]
     cb = PhaseContractBuilder(phases)
     contract = cb.build_parallel(phases[1:3])
     assert contract.execution_type == "parallel"
     assert "p2" in contract.group_phases
     assert "p3" in contract.group_phases
+    assert contract.group_details[0]["instructions"] == ["Review Используй skills: code-review."]
 
 
 def test_build_checklist():

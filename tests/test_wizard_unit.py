@@ -127,20 +127,3 @@ class TestPromptAndModels:
         assert "I1" in result
         assert "C1" in result
         assert "E1" in result
-
-    def test_phase_dataclass_post_init_delegate(self):
-        from project_workflow.wizard.models import Phase, PhaseDelegate
-
-        phase = Phase(code="1", name="One", selected_agent="agent-x")
-        assert isinstance(phase.delegate, PhaseDelegate)
-        assert phase.delegate.agent == "agent-x"
-
-    def test_phase_render_instructions(self):
-        from project_workflow.wizard.models import Phase, PhaseInstruction
-
-        phase = Phase(
-            code="1",
-            instructions=[PhaseInstruction(step="run {env}")],
-        )
-        rendered = phase.render_instructions({"env": "prod"})
-        assert rendered == ["run prod"]

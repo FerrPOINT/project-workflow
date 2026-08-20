@@ -33,7 +33,7 @@ def client():
     from project_workflow.infrastructure.db.schema import ensure_phase_catalog
 
     ensure_phase_catalog(uow)
-    default_workflow = uow.workflows.ensure_default_exists()
+    default_workflow = uow.workflows.ensure_default_exists("Default Workflow")
     if not uow.projects.get_by_code("DEFAULT"):
         uow.projects.create(
             {
@@ -563,7 +563,7 @@ class TestApiInstructions:
         assert inst["description"] == "do Y"
         assert inst["execution_type"] == "sync"
 
-        resp = client.put(f"/api/instructions/{instruction_id}/skills", json={"skills": ["search"]})
+        resp = client.put(f"/api/instructions/{instruction_id}", json={"skills": ["search"]})
         assert resp.status_code == 200
         assert resp.json()["instruction"]["skills"] == ["search"]
 
@@ -618,23 +618,6 @@ class TestApiTasks:
         assert resp.status_code == 204
         assert uow.tasks.get_by_id(task["id"]) is None
         assert uow.tasks.get_history(task["id"]) == []
-
-
-class TestApiSkills:
-    def test_api_skills(self, client):
-        resp = client.get("/api/skills")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["ok"] is True
-        assert "skills" in data
-        assert isinstance(data["skills"], list)
-
-    def test_api_skills_refresh(self, client):
-        resp = client.get("/api/skills?refresh=1")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["ok"] is True
-        assert "skills" in data
 
 
 class TestApiPhaseDelete:
@@ -725,10 +708,6 @@ class TestPageRoutes:
 
     def test_agents_page(self, client):
         resp = client.get("/agents")
-        assert resp.status_code == 200
-
-    def test_skills_page(self, client):
-        resp = client.get("/skills")
         assert resp.status_code == 200
 
     def test_task_detail_page(self, client):

@@ -52,4 +52,6 @@ def get_settings() -> Settings:
 # Bootstrap-only constants.
 SEED_PATH = _pkg_dir / "references" / "seed.json"
 DEFAULT_WORKFLOW_NAME = "Default Workflow"
-DEFAULT_TASK_KEY_PREFIXES = ["TASK"]
+DEFAULT_PROJECT_CODE = "TASK"
+DEFAULT_PROJECT_NAME = "Default Project"
+DEFAULT_TASK_KEY_PREFIXES = [DEFAULT_PROJECT_CODE]

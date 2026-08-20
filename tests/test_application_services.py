@@ -187,3 +187,4 @@ class TestWorkflowService:
         uow.workflows.ensure_default_exists.return_value = FakeWorkflow(5, "Default")
         svc = WorkflowService(uow)
         assert svc.ensure_default_exists() == {"id": 5, "name": "Default"}
+        uow.workflows.ensure_default_exists.assert_called_once_with("Default Workflow")

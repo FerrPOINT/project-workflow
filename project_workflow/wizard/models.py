@@ -63,23 +63,3 @@ class Phase:
     parallel_with: str | None = None
     rollback_target: str | None = None
     execution_type: str = "sync"
-
-    selected_agent: str | None = None
-
-    def __post_init__(self) -> None:
-        if self.selected_agent and not self.delegate:
-            self.delegate = PhaseDelegate(
-                agent=self.selected_agent,
-                prompt_template=f"Phase {self.code}: {self.description}",
-                toolsets=[],
-            )
-
-    def render_instructions(self, context: dict) -> list[str]:
-        """Подставить переменные в инструкции."""
-        result = []
-        for inst in self.instructions:
-            step = inst.step
-            for key, val in context.items():
-                step = step.replace(f"{{{key}}}", str(val))
-            result.append(step)
-        return result

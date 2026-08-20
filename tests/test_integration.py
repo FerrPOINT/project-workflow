@@ -107,7 +107,7 @@ class TestEdgeCases:
         db_path = tmp_path / "test6.db"
         uow = SAUnitOfWork(f"sqlite:///{db_path}")
         uow.init()
-        wid = uow.workflows.ensure_default_exists().id
+        wid = uow.workflows.ensure_default_exists("Default Workflow").id
         uow.create_phase({"workflow_id": wid, "id": "p3", "name": "P3", "phase_order": 0})
         uow.create_phase({"workflow_id": wid, "id": "p4", "name": "P4", "phase_order": 1})
         uow.create_instruction({"phase_id": "p3", "step_num": 1, "description": "Step"})

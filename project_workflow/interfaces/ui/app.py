@@ -95,12 +95,10 @@ def create_app() -> FastAPI:
     app.get("/workflows", response_class=HTMLResponse)(pages.workflows_page)
     app.get("/task/{task_key}", response_class=HTMLResponse)(pages.task_detail_page)
     app.get("/settings", response_class=HTMLResponse)(pages.settings_page)
-    app.get("/skills", response_class=HTMLResponse)(pages.skills_page)
     app.get("/agents", response_class=HTMLResponse)(pages.agents_page)
 
     # API
     app.get("/api/settings", response_model=None)(api.api_settings_get)
-    app.get("/api/skills", response_model=None)(api.api_skills)
     app.get("/api/phases", response_model=None)(api.api_phases)
     app.get("/api/phases/{phase_id}", response_model=None)(api.api_phase_detail)
     app.post("/api/phases", response_model=None)(api.api_phase_create)
@@ -135,7 +133,6 @@ def create_app() -> FastAPI:
     app.get("/api/phases/{phase_id}/instructions", response_model=None)(api.api_instructions_list)
     app.post("/api/instructions", response_model=None)(api.api_instruction_create)
     app.put("/api/instructions/{instruction_id}", response_model=None)(api.api_instruction_update)
-    app.put("/api/instructions/{instruction_id}/skills", response_model=None)(api.api_instruction_update_skills)
     app.delete("/api/instructions/{instruction_id}", response_model=None)(api.api_instruction_delete)
     app.put("/api/phases/{phase_id}/instructions/reorder", response_model=None)(api.api_instructions_reorder)
 

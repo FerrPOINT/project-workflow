@@ -197,10 +197,10 @@ class TestApiInstructionUpdate:
         assert response.status_code == 200
 
 
-class TestApiInstructionUpdateSkills:
+class TestApiInstructionSkills:
     def test_skills_string_split(self):
         with patch("project_workflow.interfaces.ui.routes.api._app_state") as state:
             state.instruction_service.return_value.get_instruction.return_value = {"id": 1}
             state.instruction_service.return_value.get_instruction.side_effect = [{"id": 1}, {"id": 1}]
-            response = client.put("/api/instructions/1/skills", json={"skills": "a\nb"})
+            response = client.put("/api/instructions/1", json={"skills": "a\nb"})
         assert response.status_code == 200

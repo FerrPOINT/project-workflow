@@ -26,9 +26,6 @@ from project_workflow.interfaces.ui.services import (
     _load_phase_detail,
     _load_tasks,
 )
-from project_workflow.interfaces.ui.skills import (
-    _load_skills_catalog as _load_skills_catalog_direct,
-)
 from project_workflow.interfaces.ui.state import _app_state
 
 
@@ -57,10 +54,6 @@ async def api_settings_get() -> dict[str, Any] | JSONResponse:
     from project_workflow.interfaces.ui.services import _load_cli_reference
 
     return {"ok": True, "commands": _load_cli_reference()}
-
-
-async def api_skills(refresh: int = Query(default=0)) -> dict[str, Any] | JSONResponse:
-    return {"ok": True, "skills": _load_skills_catalog_direct(refresh=bool(refresh))}
 
 
 async def api_phases(workflow_id: int | None = Query(default=None)) -> dict[str, Any] | JSONResponse:
@@ -424,16 +417,6 @@ async def api_instruction_update(instruction_id: int, payload: InstructionUpdate
         updates["skills"] = _normalize_skills(payload.skills)
     if updates:
         _app_state.instruction_service().update_instruction(instruction_id, updates)
-    return {"ok": True, "instruction": _app_state.instruction_service().get_instruction(instruction_id)}
-
-
-async def api_instruction_update_skills(instruction_id: int, payload: dict[str, Any]) -> dict[str, Any] | JSONResponse:
-    existing = _app_state.instruction_service().get_instruction(instruction_id)
-    if existing is None:
-        return _error(f"Инструкция {instruction_id} не найдена", 404)
-    _app_state.instruction_service().update_instruction(
-        instruction_id, {"skills": _normalize_skills(payload.get("skills", []))}
-    )
     return {"ok": True, "instruction": _app_state.instruction_service().get_instruction(instruction_id)}
 
 

@@ -9,7 +9,12 @@ from .types import PhaseContract
 
 
 def text_from_instruction(item: Any) -> str:
-    return str(getattr(item, "step", "") or "").strip()
+    step = str(getattr(item, "step", "") or "").strip()
+    skills = [str(skill).strip() for skill in (getattr(item, "skills", None) or []) if str(skill).strip()]
+    if not skills:
+        return step
+    recommendation = f"Используй skills: {', '.join(skills)}."
+    return f"{step} {recommendation}" if step else recommendation
 
 
 def text_from_check(item: Any) -> str:

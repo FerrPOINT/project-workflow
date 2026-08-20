@@ -110,7 +110,7 @@
   {
     "phase_order": 7, "code": "0.9", "name": "CriticGate-PreFlight",
     "description": "Проверить готовность к началу работы", "execution_type": "sync",
-    "selected_agent": "critic", "is_critic": true, "rollback_target": "0.0a",
+    "delegate": {"agent": "critic"}, "is_critic": true, "rollback_target": "0.0a",
     "next_recommendation": "При PASS перейти к параллельному research и preflight",
     "instructions": [
       {"description": "Проверить входные условия, scope и подготовленные доказательства", "skills": ["agent-workflow-patterns"]},
@@ -143,7 +143,7 @@
   {
     "phase_order": 9, "code": "0.6", "name": "Researcher #1",
     "description": "Исследовать текущий dataflow и затронутые модули", "execution_type": "parallel",
-    "parallel_with": "1", "selected_agent": "researcher",
+    "parallel_with": "1", "delegate": {"agent": "researcher"},
     "next_recommendation": "Дождаться завершения Preflight",
     "instructions": [
       {"description": "Исследовать контекст задачи и затронутые модули", "skills": ["workflow-code-intelligence"]},
@@ -181,7 +181,7 @@
   {
     "phase_order": 11, "code": "1.5", "name": "Deep Research",
     "description": "Исследовать архитектуру, контракты и интеграционные точки", "execution_type": "parallel",
-    "parallel_with": "2", "selected_agent": "researcher",
+    "parallel_with": "2", "delegate": {"agent": "researcher"},
     "next_recommendation": "Дождаться Research Synthesis",
     "instructions": [
       {"description": "Исследовать архитектуру, контракты и зависимости", "skills": ["workflow-code-intelligence"]},
@@ -227,7 +227,7 @@
   {
     "phase_order": 14, "code": "3.5", "name": "CriticGate-PrePlan",
     "description": "Проверить план до реализации", "execution_type": "sync",
-    "selected_agent": "critic", "is_critic": true, "rollback_target": "3",
+    "delegate": {"agent": "critic"}, "is_critic": true, "rollback_target": "3",
     "next_recommendation": "При PASS перейти к реализации",
     "instructions": [
       {"description": "Провести критическое ревью плана и контекста", "skills": ["agent-workflow-patterns"]},
@@ -261,7 +261,7 @@
   {
     "phase_order": 16, "code": "4.5", "name": "CriticGate-PreCommit",
     "description": "Проверить diff до финальной validation", "execution_type": "parallel",
-    "parallel_with": "5", "rollback_target": "4", "selected_agent": "critic", "is_critic": true,
+    "parallel_with": "5", "rollback_target": "4", "delegate": {"agent": "critic"}, "is_critic": true,
     "next_recommendation": "Дождаться завершения Validate",
     "instructions": [
       {"description": "Проверить diff, архитектурные границы и риски регрессии", "skills": ["agent-workflow-patterns"]},
@@ -352,7 +352,7 @@
   {
     "phase_order": 21, "code": "7.5", "name": "Code Review",
     "description": "Проверить качество diff и риски регрессии", "execution_type": "parallel",
-    "parallel_with": "7.6", "rollback_target": "4", "selected_agent": "reviewer",
+    "parallel_with": "7.6", "rollback_target": "4", "delegate": {"agent": "reviewer"},
     "next_recommendation": "Дождаться QA и DVR",
     "instructions": [
       {"description": "Провести review изменённых файлов и архитектурных решений", "skills": ["repo-workflow"]},
@@ -368,7 +368,7 @@
   {
     "phase_order": 22, "code": "7.6", "name": "QA Testing",
     "description": "Проверить критерии приёмки и regression scope", "execution_type": "parallel",
-    "parallel_with": "7.5", "rollback_target": "4", "selected_agent": "reviewer",
+    "parallel_with": "7.5", "rollback_target": "4", "delegate": {"agent": "reviewer"},
     "next_recommendation": "Дождаться Code Review и DVR",
     "instructions": [
       {"description": "Проверить acceptance, regression и пользовательские сценарии", "skills": ["test-driven-development"]},
@@ -386,7 +386,7 @@
   {
     "phase_order": 23, "code": "7.6.R", "name": "DVR",
     "description": "Проверить dataflow и согласованность интеграций", "execution_type": "parallel",
-    "parallel_with": "7.6", "selected_agent": "researcher",
+    "parallel_with": "7.6", "delegate": {"agent": "researcher"},
     "next_recommendation": "Дождаться Code Review и QA",
     "instructions": [
       {"description": "Проверить фактический dataflow после изменений", "skills": ["workflow-code-intelligence"]},
@@ -401,7 +401,7 @@
   {
     "phase_order": 24, "code": "7.7", "name": "CriticGate-PostQA",
     "description": "Принять финальное quality-решение", "execution_type": "sync",
-    "selected_agent": "critic", "is_critic": true,
+    "delegate": {"agent": "critic"}, "is_critic": true,
     "next_recommendation": "При PASS перейти к delivery handoff",
     "instructions": [
       {"description": "Проверить результаты review, QA и DVR", "skills": ["agent-workflow-patterns"]},
@@ -417,7 +417,7 @@
   {
     "phase_order": 25, "code": "8", "name": "Delivery Handoff",
     "description": "Зафиксировать фактический результат и передать работу", "execution_type": "sync",
-    "selected_agent": "ops", "next_recommendation": "Перейти к ретроспективе",
+    "delegate": {"agent": "ops"}, "next_recommendation": "Перейти к ретроспективе",
     "instructions": [
       {"description": "Сверить финальный статус задачи с фактическим результатом", "skills": ["repo-workflow"]},
       {"description": "Собрать ссылки на pull request, commit и доказательства", "skills": ["repo-workflow"]},
@@ -432,7 +432,7 @@
   {
     "phase_order": 26, "code": "9", "name": "Retro",
     "description": "Собрать фактические выводы и улучшения процесса", "execution_type": "sync",
-    "selected_agent": "coder", "next_recommendation": "Перейти к фиксации improvement proposals",
+    "delegate": {"agent": "coder"}, "next_recommendation": "Перейти к фиксации improvement proposals",
     "instructions": [
       {"description": "Разобрать историю решений, failures и повторные прогоны", "skills": ["agent-workflow-patterns"]},
       {"description": "Собрать реальные метрики из тестов, runtime и audit", "skills": ["workflow-code-intelligence"]},

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from project_workflow import config
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.repositories import UnitOfWork
 
@@ -67,6 +68,6 @@ class WorkflowService:
         return None
 
     def ensure_default_exists(self) -> dict[str, Any]:
-        wf = self._uow.workflows.ensure_default_exists()
+        wf = self._uow.workflows.ensure_default_exists(config.DEFAULT_WORKFLOW_NAME)
         result = wf.to_dict()
         return result

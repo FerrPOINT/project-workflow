@@ -18,7 +18,6 @@ from project_workflow.interfaces.ui import (
     _load_workflows,
     _parse_optional_int,
     _resolve_task_phase,
-    _scan_hermes_skills,
     _workflow_form_payload,
     app,
 )
@@ -144,26 +143,6 @@ class TestResolveTaskPhase:
         token, phase = _resolve_task_phase("unknown", _db=db)
         assert token == "unknown"
         assert phase is None
-
-
-class TestScanHermesSkills:
-    def test_find_all_skills_fails(self, monkeypatch):
-        fake_mod = MagicMock()
-        fake_mod._find_all_skills.side_effect = AttributeError("boom")
-        monkeypatch.setattr(
-            "importlib.import_module", lambda name, *a, **kw: fake_mod if name == "tools.skills_tool" else MagicMock()
-        )
-        assert _scan_hermes_skills() == []
-
-    def test_filters_non_dict_items(self, monkeypatch):
-        fake_mod = MagicMock()
-        fake_mod._find_all_skills.return_value = ["string", {"name": "a"}, {"name": ""}]
-        monkeypatch.setattr(
-            "importlib.import_module", lambda name, *a, **kw: fake_mod if name == "tools.skills_tool" else MagicMock()
-        )
-        result = _scan_hermes_skills()
-        assert len(result) == 1
-        assert result[0]["name"] == "a"
 
 
 class TestLoadWorkflows:
@@ -377,10 +356,6 @@ class TestApiErrorPaths:
         response = client.get("/api/agents")
         assert response.status_code == 200
 
-    def test_api_skills(self):
-        response = client.get("/api/skills")
-        assert response.status_code == 200
-
     def test_api_project_tasks(self):
         response = client.get("/api/projects")
         assert response.status_code == 200
@@ -411,10 +386,6 @@ class TestPageEdgeCases:
 
     def test_settings_page(self):
         response = client.get("/settings")
-        assert response.status_code == 200
-
-    def test_skills_page(self):
-        response = client.get("/skills")
         assert response.status_code == 200
 
     def test_agents_page(self):

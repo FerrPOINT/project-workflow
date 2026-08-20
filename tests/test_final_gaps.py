@@ -64,21 +64,7 @@ class TestDomainFinalGaps:
         assert str(PhaseCode("1")) == "1"
 
 
-class TestUiSkillsFinalGaps:
-    def test_scan_hermes_skills_exception(self):
-        from project_workflow.interfaces.ui import skills as skills_mod
-
-        with patch("importlib.import_module", side_effect=ImportError("boom")):
-            assert skills_mod._scan_hermes_skills() == []
-
-
 class TestWizardModelContractFinalGaps:
-    def test_phase_selected_agent(self):
-        from project_workflow.wizard.models import Phase
-
-        phase = Phase(code="1", name="T", selected_agent="ag", description="D")
-        assert phase.delegate.agent == "ag"
-
     def test_parallel_contract_researcher_fallback(self):
         from project_workflow.wizard.contracts import PhaseContractBuilder
         from project_workflow.wizard.models import Phase, PhaseDelegate

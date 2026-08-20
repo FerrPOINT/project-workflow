@@ -50,7 +50,7 @@ class UIDataService:
         result = []
         for p in rows:
             delegate_agent = p.get("delegate_agent")
-            selected_agent = agents_by_id.get(p.get("agent_id")) if p.get("agent_id") else None
+            assigned_agent = agents_by_id.get(p.get("agent_id")) if p.get("agent_id") else None
             result.append(
                 {
                     "id": p["id"],
@@ -63,7 +63,7 @@ class UIDataService:
                     "description": p["description"],
                     "is_delegated": bool(delegate_agent),
                     "agent_id": p.get("agent_id"),
-                    "agent_name": selected_agent.get("name") if selected_agent else None,
+                    "agent_name": assigned_agent.get("name") if assigned_agent else None,
                     "execution_type": p.get("execution_type", "sync"),
                     "parallel_with": p.get("parallel_with"),
                 }

@@ -53,6 +53,7 @@ SQLite остаётся только для изолированных тест�
 | Feature | Описание |
 |---------|----------|
 | Пофазовый workflow | Каждая задача строго следует шаблону фаз с инструкциями, чек-листами и артефактами. |
+| Рекомендации skills | Назначенные инструкции skills хранятся в PostgreSQL и передаются исполнителю прямо в контракте фазы. |
 | Встроенный supervisor | Автоматическая оценка отчётов и решение о переходе на следующую фазу. |
 | Web UI | Управление шаблонами, фазами, проектами, задачами и агентами через браузер. |
 | CLI freeze | Только `step` и `history`; весь CRUD — через UI. |
@@ -150,6 +151,7 @@ flowchart TD
 - UI-пакет (`project_workflow/interfaces/ui/`) — чистое FastAPI-приложение с отдельными routes, services, dependencies.
 - Конфигурация централизована в `project_workflow.config` на Pydantic Settings; `DATABASE_URL` обязателен.
 - PostgreSQL хранит каталог, задачи, историю, fingerprints и audit; packaged seed используется только для пустой БД.
+- Skills являются рекомендациями внутри инструкций фазы; отдельного runtime registry нет.
 
 <a name="quality"></a>
 ## 🛡️ Quality Bar
@@ -158,9 +160,9 @@ flowchart TD
 |---|---|---|
 | Lint | `ruff check .` | **green** |
 | Type check | `mypy project_workflow` | **green** |
-| Tests | `pytest -q --timeout=60` | **827 passed, 12 integration deselected** |
+| Tests | `pytest -q --timeout=60` | **804 passed, 12 integration deselected** |
 | PostgreSQL integration | `pytest -q -m integration tests/test_postgres_integration.py --timeout=180` | **12 passed** |
-| Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` | **95.17%** |
+| Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` | **95.23%** |
 | Systemd UI health | `curl http://localhost:8811/api/tasks` | **200** |
 
 <a name="roadmap"></a>
@@ -172,7 +174,7 @@ flowchart TD
 - [x] Docker Compose: Postgres + migrate + UI
 - [x] UI/API переведены на SQLAlchemy-сервисы
 - [x] Один runtime dataflow: CLI/UI → Wizard → OpenAI-compatible evaluator → PostgreSQL
-- [x] Полный suite: 827 тестов green + 12 PostgreSQL integration tests
+- [x] Полный suite: 804 теста green + 12 PostgreSQL integration tests
 - [x] Postgres-интеграционные тесты
 - [x] `WizardEngine` и wizard-модули собраны в пакет `project_workflow/wizard/`
 - [x] API-тесты на все UI routes

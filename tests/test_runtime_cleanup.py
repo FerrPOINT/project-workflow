@@ -264,7 +264,7 @@ def test_seed_catalog_parallelism_uses_phase_runs_instead_of_fake_instruction_ba
 def test_seed_catalog_role_bound_phases_are_fully_filled_with_agents_skills_and_checks():
     for code, agent_name in EXPECTED_ROLE_AGENTS.items():
         phase = _phase_by_code(code)
-        assert phase.get("selected_agent") == agent_name, f"Phase {code} must pick agent {agent_name}"
+        assert phase.get("delegate", {}).get("agent") == agent_name, f"Phase {code} must pick agent {agent_name}"
         assert phase.get("instructions"), f"Phase {code} must keep instructions"
         assert phase.get("checks"), f"Phase {code} must keep checks"
         assert phase.get("evidence"), f"Phase {code} must keep evidence"
@@ -279,7 +279,7 @@ def test_seed_catalog_role_bound_phases_are_fully_filled_with_agents_skills_and_
             )
 
 
-def test_db_init_assigns_selected_agents_to_role_bound_default_phases(tmp_path):
+def test_db_init_assigns_agents_to_role_bound_default_phases(tmp_path):
     uow = SAUnitOfWork(f"sqlite:///{tmp_path / 'workflow.db'}")
     uow.init()
     schema.ensure_phase_catalog(uow)

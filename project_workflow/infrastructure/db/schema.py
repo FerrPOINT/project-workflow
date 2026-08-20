@@ -192,7 +192,6 @@ def _phase_item_to_wizard(item: dict[str, Any]) -> Phase:
     evidence = [PhaseEvidence(item=_text(er)) for er in item.get("evidence", []) if _text(er)]
 
     delegate: PhaseDelegate | None = None
-    selected_agent = str(item.get("selected_agent", "")).strip()
     if item.get("delegate"):
         d = item["delegate"]
         delegate = PhaseDelegate(
@@ -202,16 +201,6 @@ def _phase_item_to_wizard(item: dict[str, Any]) -> Phase:
             timeout_min=d.get("timeout_min", 10),
             max_cycles=d.get("max_cycles", 3),
         )
-    elif selected_agent:
-        delegate = PhaseDelegate(
-            agent=selected_agent,
-            prompt_template=item.get("delegate_prompt", f"Phase {item.get('code', '')}: {item.get('description', '')}"),
-            context=item.get("delegate_context", []),
-            toolsets=item.get("delegate_toolsets", []),
-            timeout_min=int(item.get("delegate_timeout_min", 10) or 10),
-            max_cycles=int(item.get("delegate_max_cycles", 3) or 3),
-        )
-
     return Phase(
         id=None,
         code=item.get("code", ""),
@@ -262,7 +251,7 @@ def ensure_phase_catalog(
             if url:
                 _CATALOG_ENSURED_URLS.add(url)
             return
-        default_workflow = uow.workflows.ensure_default_exists()
+        default_workflow = uow.workflows.ensure_default_exists(config.DEFAULT_WORKFLOW_NAME)
         workflow_id = default_workflow.id
         assert workflow_id is not None
         if uow.phases.list(workflow_id):
@@ -279,11 +268,11 @@ def ensure_phase_catalog(
                 uow.agents.create({"name": agent_name, "description": f"Seed agent for {phase.code}"})
 
         for order, phase in enumerate(seed_phases, start=1):
-            selected_agent_name = phase.delegate.agent if phase.delegate else ""
+            assigned_agent_name = phase.delegate.agent if phase.delegate else ""
             agent_id = None
-            if selected_agent_name:
+            if assigned_agent_name:
                 for agent in uow.agents.list():
-                    if agent.name == selected_agent_name:
+                    if agent.name == assigned_agent_name:
                         agent_id = agent.id
                         break
             data = {

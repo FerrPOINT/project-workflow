@@ -87,35 +87,6 @@ def _phase_href(code: str) -> str:
     return f'href="/phase/{_phase_id(code)}"'
 
 
-def _sample_hermes_skills() -> list[dict[str, str]]:
-    return [
-        {
-            "name": "test-driven-development",
-            "description": "Red-green-refactor discipline.",
-            "category": "software-development",
-        },
-        {
-            "name": "python-web-integration-tdd",
-            "description": "FastAPI integration tests first.",
-            "category": "software-development",
-        },
-        {
-            "name": "workflow-app-ui-delivery",
-            "description": "UI delivery and screenshot proof.",
-            "category": "software-development",
-        },
-    ]
-
-
-def _prime_skills_cache(monkeypatch: pytest.MonkeyPatch, skills: list[dict[str, str]]) -> None:
-    from project_workflow.interfaces import ui as ui_module
-
-    monkeypatch.setattr(ui_module, "_scan_hermes_skills", lambda: skills, raising=False)
-    response = client.get("/api/skills?refresh=1")
-    assert response.status_code == 200
-    assert response.json()["skills"] == skills
-
-
 def _normalize_skills(raw: object) -> list[str]:
     if raw in (None, "", []):
         return []
@@ -155,7 +126,7 @@ def setup_db():
     uow = ui_app_state.get_db()
     if not uow.phases.list():
         ensure_phase_catalog(uow)
-    default_workflow = uow.workflows.ensure_default_exists()
+    default_workflow = uow.workflows.ensure_default_exists(config.DEFAULT_WORKFLOW_NAME)
     default_project = uow.projects.get_by_code("DEFAULT")
     if not default_project:
         default_project_id = uow.projects.create(
@@ -353,7 +324,7 @@ class TestPhasesPage:
         hrefs = re.findall(r'href="([^"]+)"', sidebar_nav.group(1))
         assert hrefs[:5] == ["/", "/workflows", "/phases", "/tasks", "/projects"]
 
-    def test_sidebar_has_skills_link_between_agents_and_settings(self):
+    def test_sidebar_has_no_legacy_skills_catalog(self):
         response = client.get("/phases")
         assert response.status_code == 200
 
@@ -361,7 +332,8 @@ class TestPhasesPage:
         assert sidebar_nav is not None
 
         hrefs = re.findall(r'href="([^"]+)"', sidebar_nav.group(1))
-        assert hrefs[-3:] == ["/agents", "/skills", "/settings"]
+        assert hrefs[-2:] == ["/agents", "/settings"]
+        assert "/skills" not in hrefs
 
     def test_phases_page_has_workflow_nav_like_projects(self):
         response = client.get("/phases")
@@ -647,7 +619,7 @@ class TestPhasesPage:
         finally:
             _batch_update_orders(uow, original_batch)
 
-    def test_phases_page_shows_selected_agent_instead_of_hardcoded_critic(self):
+    def test_phases_page_shows_assigned_agent_instead_of_hardcoded_critic(self):
         uow = ui_app_state.get_db()
         reviewer = next(agent.to_dict() for agent in uow.agents.list() if agent.name == "reviewer")
         tracked_codes = ["0.9", "3.5", "4.5", "7.7"]
@@ -781,16 +753,14 @@ class TestPhaseDetail:
         assert "fetch('/api/phases/' + phaseId" in response.text
         assert "fetch('/api/phases/0.7'" not in response.text
 
-    def test_phase_detail_renders_selected_instruction_skills_list_and_only_remaining_add_options(self, monkeypatch):
-        skills = _sample_hermes_skills()
-        _prime_skills_cache(monkeypatch, skills)
-
+    def test_phase_detail_renders_selected_instruction_skills_and_free_text_input(self):
+        skills = ["test-driven-development", "workflow-app-ui-delivery"]
         phase_response = client.get(_phase_api_path("-1"))
         assert phase_response.status_code == 200
         phase = phase_response.json()["phase"]
         restore_payload = _phase_restore_payload(phase)
         update_payload = _phase_restore_payload(phase)
-        update_payload["instructions"][0]["skills"] = [skills[0]["name"], skills[2]["name"]]
+        update_payload["instructions"][0]["skills"] = skills
 
         try:
             update = client.put(_phase_api_path("-1"), json=update_payload)
@@ -800,37 +770,24 @@ class TestPhaseDetail:
             assert response.status_code == 200
             assert (
                 f'<span class="badge" style="background:var(--accent-soft);color:var(--accent)">'
-                f"\n            {skills[0]['name']}" in response.text
+                f"\n            {skills[0]}" in response.text
             )
             assert (
                 f'<span class="badge" style="background:var(--accent-soft);color:var(--accent)">'
-                f"\n            {skills[2]['name']}" in response.text
+                f"\n            {skills[1]}" in response.text
             )
-
-            add_select_match = re.search(
-                r'<select class="skill-candidate" data-field="skill-candidate"[^>]*>(.*?)</select>',
-                response.text,
-                re.S,
-            )
-            assert add_select_match is not None
-            add_options_html = add_select_match.group(1)
-            assert f'value="{skills[1]["name"]}"' in add_options_html
-            assert f'value="{skills[0]["name"]}"' not in add_options_html
-            assert f'value="{skills[2]["name"]}"' not in add_options_html
+            assert 'class="skill-candidate" type="text" placeholder="Добавить skill"' in response.text
         finally:
             client.put(_phase_api_path("-1"), json=restore_payload)
 
-    def test_phase_detail_javascript_uses_per_instruction_api_calls(self, monkeypatch):
-        _prime_skills_cache(monkeypatch, _sample_hermes_skills())
-
+    def test_phase_detail_javascript_uses_per_instruction_api_calls(self):
         response = client.get(_phase_detail_path("-1"))
         assert response.status_code == 200
         assert "function saveInstructionDescription(input)" in response.text
         assert "function toggleInstructionType(badge)" in response.text
-        assert "function addSkillToInstruction(selectEl)" in response.text
-        assert "function removeSkillFromInstruction(button, skillName)" in response.text
-        assert 'data-field="skill-candidate"' in response.text
-        assert "selectedOptions" not in response.text
+        assert "function addSkillToInstruction(input)" in response.text
+        assert "function removeSkillFromInstruction(button)" in response.text
+        assert 'placeholder="Добавить skill"' in response.text
 
     def test_phases_page_hides_code_and_number_visual_noise(self):
         response = client.get("/phases")
@@ -918,9 +875,8 @@ class TestPhaseDetail:
         finally:
             client.put(_phase_api_path("-1"), json=restore_payload)
 
-    def test_phase_detail_can_update_instruction_skills(self, monkeypatch):
-        skills = _sample_hermes_skills()
-        _prime_skills_cache(monkeypatch, skills)
+    def test_phase_detail_can_update_instruction_skills(self):
+        skills = ["test-driven-development", "workflow-app-ui-delivery"]
         phase_response = client.get(_phase_api_path("-1"))
         assert phase_response.status_code == 200
         phase = phase_response.json()["phase"]
@@ -928,12 +884,12 @@ class TestPhaseDetail:
         restore_payload = _phase_restore_payload(phase)
         try:
             resp = client.put(
-                f"/api/instructions/{instruction['id']}/skills", json={"skills": [skills[0]["name"], skills[2]["name"]]}
+                f"/api/instructions/{instruction['id']}", json={"skills": skills}
             )
             assert resp.status_code == 200
 
             after = client.get(_phase_api_path("-1")).json()["phase"]["instructions"][0]
-            assert set(after["skills"]) == {skills[0]["name"], skills[2]["name"]}
+            assert after["skills"] == skills
         finally:
             client.put(_phase_api_path("-1"), json=restore_payload)
 
@@ -1512,34 +1468,10 @@ class TestAgentsPage:
         assert architect["description"] == "Проектирует и уточняет контракты"
 
 
-class TestSkillsPage:
-    def test_api_skills_uses_shared_cached_hermes_catalog(self, monkeypatch):
-        from project_workflow.interfaces import ui as ui_module
-
-        sample = _sample_hermes_skills()
-        calls = {"count": 0}
-
-        def fake_scan():
-            calls["count"] += 1
-            return sample
-
-        monkeypatch.setattr(ui_module, "_scan_hermes_skills", fake_scan, raising=False)
-
-        refresh = client.get("/api/skills?refresh=1")
-        assert refresh.status_code == 200
-        assert refresh.json()["ok"] is True
-        assert refresh.json()["skills"] == sample
-
-        cached = client.get("/api/skills")
-        assert cached.status_code == 200
-        assert cached.json()["skills"] == sample
-
-        page = client.get("/skills")
-        assert page.status_code == 200
-        assert sample[0]["name"] in page.text
-        assert sample[0]["description"] in page.text
-        assert sample[0]["category"] in page.text
-        assert calls["count"] == 1
+class TestSkillsCatalogRemoved:
+    def test_legacy_skills_catalog_routes_are_removed(self):
+        assert client.get("/api/skills").status_code == 404
+        assert client.get("/skills").status_code == 404
 
 
 class TestGroupsRemoved:

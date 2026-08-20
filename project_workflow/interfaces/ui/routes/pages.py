@@ -18,9 +18,6 @@ from project_workflow.interfaces.ui.services import (
     _load_tasks,
     _load_workflows,
 )
-from project_workflow.interfaces.ui.skills import (
-    _load_skills_catalog as _load_skills_catalog_direct,
-)
 from project_workflow.interfaces.ui.state import _app_state
 from project_workflow.interfaces.ui.templates import _group_instructions, templates
 
@@ -70,14 +67,8 @@ async def phase_detail(request: Request, phase_id: str) -> HTMLResponse:
     if not phase:
         return HTMLResponse("<h1>Phase not found</h1>", status_code=404)
     agents = _app_state.agent_service().list_agents()
-    skills_catalog = _load_skills_catalog_direct()
     for instruction in phase.get("instructions", []):
-        selected_skills = PhaseService.normalize_skills(instruction.get("skills"))
-        instruction["skills"] = selected_skills
-        selected_names = set(selected_skills)
-        instruction["available_skills"] = [
-            dict(skill) for skill in skills_catalog if str(skill.get("name") or "") not in selected_names
-        ]
+        instruction["skills"] = PhaseService.normalize_skills(instruction.get("skills"))
     return templates.TemplateResponse(
         request=request,
         name="phase_detail.html",
@@ -87,7 +78,6 @@ async def phase_detail(request: Request, phase_id: str) -> HTMLResponse:
             "ui_port": get_settings().UI_PORT,
             "phase": phase,
             "agents": agents,
-            "skills_catalog": skills_catalog,
         },
     )
 
@@ -177,19 +167,6 @@ async def settings_page(request: Request) -> HTMLResponse:
     )
 
 
-async def skills_page(request: Request, refresh: int = Query(default=0)) -> HTMLResponse:
-    return templates.TemplateResponse(
-        request=request,
-        name="skills.html",
-        context={
-            "request": request,
-            "page": "skills",
-            "ui_port": get_settings().UI_PORT,
-            "skills": _load_skills_catalog_direct(refresh=bool(refresh)),
-        },
-    )
-
-
 async def agents_page(request: Request) -> HTMLResponse:
     """Список агентов."""
     agents = _app_state.agent_service().list_agents()
@@ -215,15 +192,9 @@ async def instructions_page(
     phase = _load_phase_detail(str(phase_id))
     if not phase:
         return HTMLResponse("<h1>Phase not found</h1>", status_code=404)
-    skills_catalog = _load_skills_catalog_direct()
     instructions = phase.get("instructions", [])
     for instruction in instructions:
-        selected_skills = PhaseService.normalize_skills(instruction.get("skills"))
-        instruction["skills"] = selected_skills
-        selected_names = set(selected_skills)
-        instruction["available_skills"] = [
-            dict(skill) for skill in skills_catalog if str(skill.get("name") or "") not in selected_names
-        ]
+        instruction["skills"] = PhaseService.normalize_skills(instruction.get("skills"))
     instruction_groups = _group_instructions(instructions)
     return templates.TemplateResponse(
         request=request,
@@ -235,6 +206,5 @@ async def instructions_page(
             "phase": phase,
             "instructions": instructions,
             "instruction_groups": instruction_groups,
-            "skills_catalog": skills_catalog,
         },
     )

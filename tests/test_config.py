@@ -33,6 +33,8 @@ def test_database_url_and_ui_settings_come_from_environment(monkeypatch):
 def test_bootstrap_constants_are_minimal():
     assert config.SEED_PATH.name == "seed.json"
     assert config.DEFAULT_WORKFLOW_NAME == "Default Workflow"
+    assert config.DEFAULT_PROJECT_CODE == "TASK"
+    assert config.DEFAULT_PROJECT_NAME == "Default Project"
     assert config.DEFAULT_TASK_KEY_PREFIXES == ["TASK"]
     assert not hasattr(config, "PHASE_ORDER")
     assert not hasattr(config, "WORKFLOW_DIR")

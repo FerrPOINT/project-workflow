@@ -27,7 +27,7 @@ class TestUowEdgeCases:
     def test_create_supervisor_run_with_positional_dict(self):
         uow = _fresh_uow()
         with uow:
-            default_wf = uow.workflows.ensure_default_exists()
+            default_wf = uow.workflows.ensure_default_exists("Default Workflow")
             project_id = uow.projects.create(
                 {"code": "RUN", "name": "Run", "workflow_id": default_wf.id}
             )
@@ -79,7 +79,7 @@ class TestUowEdgeCases:
 
     def test_create_phase_without_code_generates_code(self):
         uow = _fresh_uow()
-        workflow_id = uow.workflows.ensure_default_exists().id
+        workflow_id = uow.workflows.ensure_default_exists("Default Workflow").id
         phase_id = uow.create_phase(
             {
                 "workflow_id": workflow_id,
@@ -95,7 +95,7 @@ class TestUowEdgeCases:
     def test_create_instruction_with_phase_code(self):
         uow = _fresh_uow()
         with uow:
-            default_wf = uow.workflows.ensure_default_exists()
+            default_wf = uow.workflows.ensure_default_exists("Default Workflow")
             uow.phases.create(
                 {
                     "workflow_id": default_wf.id,
@@ -141,7 +141,7 @@ class TestUowEdgeCases:
     def test_delete_phase_by_code(self):
         uow = _fresh_uow()
         with uow:
-            default_wf = uow.workflows.ensure_default_exists()
+            default_wf = uow.workflows.ensure_default_exists("Default Workflow")
             uow.phases.create(
                 {
                     "workflow_id": default_wf.id,
@@ -158,7 +158,7 @@ class TestUowEdgeCases:
     def test_create_task_with_project_id_dict(self):
         uow = _fresh_uow()
         with uow:
-            default_wf = uow.workflows.ensure_default_exists()
+            default_wf = uow.workflows.ensure_default_exists("Default Workflow")
             project_id = uow.projects.create(
                 {"code": "DICT", "name": "Dict", "workflow_id": default_wf.id}
             )
