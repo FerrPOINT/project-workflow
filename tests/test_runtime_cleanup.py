@@ -103,6 +103,31 @@ def test_seed_catalog_has_no_legacy_provider_or_task_system_contracts():
     assert found == []
 
 
+def test_catalog_migrations_cover_and_match_every_seed_phase():
+    from project_workflow.infrastructure.db.migrations.versions.d83b7c2e4f10_modernize_default_workflow_catalog import (
+        CURRENT as FIRST_CATALOG_UPDATE,
+    )
+    from project_workflow.infrastructure.db.migrations.versions.e92c4f7a1b63_sync_remaining_default_catalog import (
+        CURRENT as REMAINING_CATALOG_UPDATE,
+    )
+
+    phases = json.loads(SEED_PATH.read_text(encoding="utf-8"))
+    migrated = {**FIRST_CATALOG_UPDATE, **REMAINING_CATALOG_UPDATE}
+    assert set(migrated) == {str(phase["code"]) for phase in phases}
+
+    for phase in phases:
+        code = str(phase["code"])
+        expected = {
+            "name": phase["name"],
+            "description": phase["description"],
+            "next_recommendation": phase["next_recommendation"],
+            "instructions": [item["description"] for item in phase["instructions"]],
+            "checks": [item["description"] for item in phase["checks"]],
+            "evidence": [item["description"] for item in phase["evidence"]],
+        }
+        assert migrated[code] == expected
+
+
 def test_seed_catalog_parallel_links_form_expected_groups():
     phases = json.loads(SEED_PATH.read_text(encoding="utf-8"))
     by_code = {str(phase["code"]): phase for phase in phases}

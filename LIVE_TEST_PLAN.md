@@ -33,8 +33,8 @@ python -m project_workflow.interfaces.cli --help
 Стандартный pytest намеренно исключает тесты с marker `integration`; поэтому они
 показываются как `deselected` и обязательно запускаются второй командой.
 
-Актуальный baseline: **826 passed, 12 deselected**, отдельный PostgreSQL suite —
-**12 passed**, coverage — **95.67%**. Для integration-набора используется больший
+Актуальный baseline: **827 passed, 12 deselected**, отдельный PostgreSQL suite —
+**12 passed**, coverage — **95.17%**. Для integration-набора используется больший
 timeout, потому что полный Windows-сценарий последовательно запускает 24 CLI subprocess.
 
 `test_full_default_workflow_through_cli_postgres_and_http` поднимает stdlib HTTP-сервер

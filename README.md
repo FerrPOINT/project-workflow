@@ -158,9 +158,9 @@ flowchart TD
 |---|---|---|
 | Lint | `ruff check .` | **green** |
 | Type check | `mypy project_workflow` | **green** |
-| Tests | `pytest -q --timeout=60` | **826 passed, 12 integration deselected** |
+| Tests | `pytest -q --timeout=60` | **827 passed, 12 integration deselected** |
 | PostgreSQL integration | `pytest -q -m integration tests/test_postgres_integration.py --timeout=180` | **12 passed** |
-| Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` | **95.67%** |
+| Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` | **95.17%** |
 | Systemd UI health | `curl http://localhost:8811/api/tasks` | **200** |
 
 <a name="roadmap"></a>
@@ -172,7 +172,7 @@ flowchart TD
 - [x] Docker Compose: Postgres + migrate + UI
 - [x] UI/API переведены на SQLAlchemy-сервисы
 - [x] Один runtime dataflow: CLI/UI → Wizard → OpenAI-compatible evaluator → PostgreSQL
-- [x] Полный suite: 826 тестов green + 12 PostgreSQL integration tests
+- [x] Полный suite: 827 тестов green + 12 PostgreSQL integration tests
 - [x] Postgres-интеграционные тесты
 - [x] `WizardEngine` и wizard-модули собраны в пакет `project_workflow/wizard/`
 - [x] API-тесты на все UI routes

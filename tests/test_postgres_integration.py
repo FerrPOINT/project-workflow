@@ -209,6 +209,12 @@ class TestPostgresSession:
                 ),
                 {"phase_id": phase_id},
             )
+            conn.execute(
+                text(
+                    "UPDATE project_workflow.instructions SET description = 'Write mandatory PLAN.md' "
+                    "WHERE phase_id = (SELECT id FROM project_workflow.phases WHERE code = '3')"
+                )
+            )
 
         ensure_migrated(engine)
         ensure_migrated(engine)
@@ -228,7 +234,17 @@ class TestPostgresSession:
                 ),
                 {"phase_id": phase_id},
             ).one()
-        assert revision == "d83b7c2e4f10"
+            legacy_count = conn.execute(
+                text(
+                    "SELECT count(*) FROM ("
+                    "SELECT name AS value FROM project_workflow.phases "
+                    "UNION ALL SELECT description FROM project_workflow.instructions "
+                    "UNION ALL SELECT description FROM project_workflow.checks "
+                    "UNION ALL SELECT description FROM project_workflow.evidence"
+                    ") catalog WHERE lower(value) ~ 'jira|gitlab|glab_token|verify-suite|mandatory plan.md'"
+                )
+            ).scalar_one()
+        assert revision == "e92c4f7a1b63"
         assert upgraded.id == phase_id
         assert upgraded.name == "Runtime Readiness"
         active_contract = upgraded.string_agg.casefold()
@@ -236,6 +252,7 @@ class TestPostgresSession:
             term not in active_contract
             for term in ("jira", "gitlab", "glab_token", "verify-suite", "hermes")
         )
+        assert legacy_count == 0
 
         check_uow = SAUnitOfWork(engine)
         try:
