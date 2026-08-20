@@ -108,6 +108,9 @@ Baseline: 949 tests passed
 29. **Dead Code in Contracts**
     - `wizard/contracts.py:120`: Fallback logic for "researcher" delegate is dead code.
 
+30. **Circular import when uow_bootstrap is imported first** (pre-existing on master, verified identical)
+    - `uow_bootstrap → schema → wizard/__init__ → wizard.core → uow_bootstrap`. Only reproduces with a bare `import project_workflow.infrastructure.db.uow_bootstrap` as the first project import; every real entrypoint (CLI, UI, wizard) imports `wizard` first and breaks the cycle. Not fixed in this PR to avoid entrypoint import-order regressions; fix belongs in a dedicated refactor (schema should not import wizard package `__init__`).
+
 ## Fix Status (review/full-audit)
 
 | # | Finding | Severity | Status |
