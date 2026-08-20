@@ -19,14 +19,14 @@ After any change to the SQLAlchemy layer, application services, UI state, or wiz
    ```bash
    pytest -q --timeout=60
    ```
-   Expected: **824 passed, 11 deselected**, 0 failed, 0 errors. Integration tests
+   Expected: **826 passed, 12 deselected**, 0 failed, 0 errors. Integration tests
    are intentionally deselected here; run them separately as described below.
 
 2. **PostgreSQL integration**
    ```bash
-   pytest -q -m integration tests/test_postgres_integration.py --timeout=60
+   pytest -q -m integration tests/test_postgres_integration.py --timeout=180
    ```
-   Expected: **11 passed**, 0 failed, 0 errors. This includes the real CLI
+   Expected: **12 passed**, 0 failed, 0 errors. This includes the real CLI
    subprocess -> PostgreSQL -> OpenAI-compatible HTTP workflow path.
 
 3. **Coverage**
@@ -45,7 +45,7 @@ After any change to the SQLAlchemy layer, application services, UI state, or wiz
    ```bash
    mypy project_workflow scripts
    ```
-   Expected: `Success: no issues found in 79 source files`.
+   Expected: `Success: no issues found in 80 source files`.
 
 6. **UI service health**
    ```bash

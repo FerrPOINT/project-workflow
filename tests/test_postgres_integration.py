@@ -171,6 +171,81 @@ class TestPostgresSession:
                     {"task_id": task_id, "phase_id": phase.id},
                 )
 
+    def test_catalog_upgrade_replaces_legacy_contracts_and_preserves_audit(self, pg_url):
+        from project_workflow.infrastructure.db import schema
+        from project_workflow.infrastructure.db.uow_bootstrap import bootstrap_default_project
+
+        engine = get_engine(pg_url)
+        run_alembic_command("upgrade", engine, "f61c2a7d9e04")
+        uow = SAUnitOfWork(engine)
+        schema.ensure_phase_catalog(uow)
+        bootstrap_default_project(uow)
+        project = uow.projects.get_by_code("TASK")
+        phase = uow.phases.get_by_code("0.0a")
+        assert phase is not None
+        task_id = uow.tasks.create(
+            {"project_id": project.id, "task_key": "TASK-CATALOG-MIGRATION", "current_phase": phase.code}
+        )
+        run_id = uow.supervisor_runs.create(
+            {"task_id": task_id, "phase_id": phase.id, "verdict": "blocked", "report": "preserved audit"}
+        )
+        phase_id = phase.id
+        uow.commit()
+        uow.close()
+
+        with engine.begin() as conn:
+            conn.execute(
+                text("UPDATE project_workflow.phases SET name = 'Suite Verification' WHERE id = :phase_id"),
+                {"phase_id": phase_id},
+            )
+            conn.execute(
+                text("DELETE FROM project_workflow.checks WHERE phase_id = :phase_id"),
+                {"phase_id": phase_id},
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO project_workflow.checks (phase_id, description) "
+                    "VALUES (:phase_id, 'JIRA_ACCESS_TOKEN, GLAB_TOKEN and verify-suite are required')"
+                ),
+                {"phase_id": phase_id},
+            )
+
+        ensure_migrated(engine)
+        ensure_migrated(engine)
+
+        with engine.connect() as conn:
+            revision = conn.execute(text("SELECT version_num FROM project_workflow.alembic_version")).scalar_one()
+            upgraded = conn.execute(
+                text(
+                    "SELECT p.id, p.name, string_agg(items.description, ' ') "
+                    "FROM project_workflow.phases p "
+                    "JOIN ("
+                    "SELECT phase_id, description FROM project_workflow.instructions "
+                    "UNION ALL SELECT phase_id, description FROM project_workflow.checks "
+                    "UNION ALL SELECT phase_id, description FROM project_workflow.evidence"
+                    ") items ON items.phase_id = p.id "
+                    "WHERE p.id = :phase_id GROUP BY p.id, p.name"
+                ),
+                {"phase_id": phase_id},
+            ).one()
+        assert revision == "d83b7c2e4f10"
+        assert upgraded.id == phase_id
+        assert upgraded.name == "Runtime Readiness"
+        active_contract = upgraded.string_agg.casefold()
+        assert all(
+            term not in active_contract
+            for term in ("jira", "gitlab", "glab_token", "verify-suite", "hermes")
+        )
+
+        check_uow = SAUnitOfWork(engine)
+        try:
+            task = check_uow.tasks.get_by_key("TASK-CATALOG-MIGRATION")
+            runs = check_uow.supervisor_runs.list(task_id=task.id)
+            assert task.id == task_id
+            assert any(run.id == run_id and run.report == "preserved audit" for run in runs)
+        finally:
+            check_uow.close()
+
 
 @pytest.mark.integration
 class TestPostgresUoW:

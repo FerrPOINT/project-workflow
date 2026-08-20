@@ -22,7 +22,7 @@ CLI subprocess -> PostgreSQL -> OpenAI-compatible HTTP -> WizardEngine -> Postgr
 
 ```bash
 pytest -q --timeout=60
-pytest -q -m integration tests/test_postgres_integration.py --timeout=60
+pytest -q -m integration tests/test_postgres_integration.py --timeout=180
 pytest --cov=project_workflow --cov-report=term --timeout=60
 ruff check .
 mypy project_workflow scripts
@@ -33,8 +33,9 @@ python -m project_workflow.interfaces.cli --help
 Стандартный pytest намеренно исключает тесты с marker `integration`; поэтому они
 показываются как `deselected` и обязательно запускаются второй командой.
 
-Актуальный baseline: **824 passed, 11 deselected**, отдельный PostgreSQL suite —
-**11 passed**, coverage — **95.67%**.
+Актуальный baseline: **826 passed, 12 deselected**, отдельный PostgreSQL suite —
+**12 passed**, coverage — **95.67%**. Для integration-набора используется больший
+timeout, потому что полный Windows-сценарий последовательно запускает 24 CLI subprocess.
 
 `test_full_default_workflow_through_cli_postgres_and_http` поднимает stdlib HTTP-сервер
 с настоящими `/v1/models` и `/v1/chat/completions`, запускает CLI отдельными процессами
@@ -43,7 +44,8 @@ python -m project_workflow.interfaces.cli --help
 `test_cli_verdicts_replay_and_fail_closed_through_postgres_and_http` отдельно проверяет
 `PARTIAL`, `BLOCKED`, `ROLLBACK`, `DELEGATE`, invalid JSON, HTTP error и exit codes.
 Миграционные проверки также подтверждают преобразование `soft_fail → partial`,
-`hard_fail → blocked` и новый constraint только для пяти актуальных verdict.
+`hard_fail → blocked`, новый constraint только для пяти актуальных verdict и безопасное
+обновление seed-managed каталога без изменения ID задач и audit-записей.
 
 ## Реальная проверка Ollama Online
 

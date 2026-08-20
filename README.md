@@ -158,8 +158,8 @@ flowchart TD
 |---|---|---|
 | Lint | `ruff check .` | **green** |
 | Type check | `mypy project_workflow` | **green** |
-| Tests | `pytest -q --timeout=60` | **824 passed, 11 integration deselected** |
-| PostgreSQL integration | `pytest -q -m integration tests/test_postgres_integration.py --timeout=60` | **11 passed** |
+| Tests | `pytest -q --timeout=60` | **826 passed, 12 integration deselected** |
+| PostgreSQL integration | `pytest -q -m integration tests/test_postgres_integration.py --timeout=180` | **12 passed** |
 | Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` | **95.67%** |
 | Systemd UI health | `curl http://localhost:8811/api/tasks` | **200** |
 
@@ -172,7 +172,7 @@ flowchart TD
 - [x] Docker Compose: Postgres + migrate + UI
 - [x] UI/API переведены на SQLAlchemy-сервисы
 - [x] Один runtime dataflow: CLI/UI → Wizard → OpenAI-compatible evaluator → PostgreSQL
-- [x] Полный suite: 824 теста green + 11 PostgreSQL integration tests
+- [x] Полный suite: 826 тестов green + 12 PostgreSQL integration tests
 - [x] Postgres-интеграционные тесты
 - [x] `WizardEngine` и wizard-модули собраны в пакет `project_workflow/wizard/`
 - [x] API-тесты на все UI routes
@@ -182,6 +182,7 @@ flowchart TD
 - [x] UI-доработки: execution_type на отдельной строке, русское склонение счётчиков, очистка рабочей БД от мусора
 - [x] Wizard evaluate: DB-backed history/audit, idempotent replay и явный parallel rendering
 - [x] Packaged 27-phase catalog bootstrapped once into an empty PostgreSQL database
+- [x] Forward-миграция seed-managed каталога с legacy Jira/GitLab-контрактов на текущий GitHub/OpenAI-compatible runtime
 
 Подробный план: [`docs/plans/2026-06-21-detailed-roadmap.md`](docs/plans/2026-06-21-detailed-roadmap.md).
 

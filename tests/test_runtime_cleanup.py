@@ -40,6 +40,19 @@ EXPECTED_ROLE_AGENTS = {
     "9": "coder",
 }
 
+FORBIDDEN_ACTIVE_CATALOG_TERMS = {
+    "jira",
+    "gitlab",
+    "glab_token",
+    "verify-suite",
+    "hermes",
+    "workflow-jira",
+    "info/sprint",
+    "origin/develop",
+    "project-knowledge",
+    "hrflow",
+}
+
 
 def _phase_by_code(code: str) -> dict:
     items = json.loads(SEED_PATH.read_text(encoding="utf-8"))
@@ -82,6 +95,14 @@ def test_seed_catalog_order_is_self_consistent():
     assert [phase.get("phase_order") for phase in phases] == list(range(1, len(phases) + 1))
 
 
+def test_seed_catalog_has_no_legacy_provider_or_task_system_contracts():
+    active_catalog = SEED_PATH.read_text(encoding="utf-8").casefold()
+
+    found = sorted(term for term in FORBIDDEN_ACTIVE_CATALOG_TERMS if term in active_catalog)
+
+    assert found == []
+
+
 def test_seed_catalog_parallel_links_form_expected_groups():
     phases = json.loads(SEED_PATH.read_text(encoding="utf-8"))
     by_code = {str(phase["code"]): phase for phase in phases}
@@ -95,6 +116,23 @@ def test_seed_catalog_parallel_links_form_expected_groups():
     for group in expected_groups:
         assert all(by_code[code]["execution_type"] == "parallel" for code in group)
         assert all(by_code[code].get("parallel_with") in group for code in group)
+
+
+def test_seed_catalog_rollback_topology_is_stable():
+    phases = json.loads(SEED_PATH.read_text(encoding="utf-8"))
+    rollback_targets = {
+        str(phase["code"]): phase.get("rollback_target")
+        for phase in phases
+        if phase.get("rollback_target") is not None
+    }
+
+    assert rollback_targets == {
+        "0.9": "0.0a",
+        "3.5": "3",
+        "4.5": "4",
+        "7.5": "4",
+        "7.6": "4",
+    }
 
 
 def test_seed_catalog_names_match_runtime_progress_template():
