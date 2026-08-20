@@ -523,3 +523,32 @@ class TestOpenAICompatibleClientOverrides:
     def test_custom_timeout(self):
         client = OpenAICompatibleClient(timeout=300)
         assert client.timeout == 300
+
+
+class TestEvaluatorV4PromptContract:
+    """The live provider receives explicit contradiction and chronology rules."""
+
+    def test_prompt_version_is_v4(self):
+        assert PromptBuilder.PROMPT_VERSION == "wizard-evaluator-v4"
+
+    def test_contradictory_current_facts_prohibit_pass(self):
+        prompt = PromptBuilder.SYSTEM_PROMPT
+
+        assert "Mutually exclusive CURRENT facts" in prompt
+        assert "prohibit PASS" in prompt
+        assert "return PARTIAL" in prompt
+        assert "affected required item IDs in missing" in prompt
+
+    def test_chronological_state_change_requires_timestamped_action_evidence(self):
+        prompt = PromptBuilder.SYSTEM_PROMPT
+
+        assert "first open, then merged" in prompt
+        assert "timestamps and action evidence" in prompt
+
+    def test_normal_complete_report_contract_still_allows_pass(self):
+        assert "verdict = PASS" in PromptBuilder.SYSTEM_PROMPT
+        assert "all items done, no blockers, no regressions" in PromptBuilder.SYSTEM_PROMPT
+
+    def test_output_must_be_bare_json_without_markdown_fences(self):
+        assert "one bare JSON object" in PromptBuilder.SYSTEM_PROMPT
+        assert "Never wrap it in Markdown or code fences" in PromptBuilder.SYSTEM_PROMPT

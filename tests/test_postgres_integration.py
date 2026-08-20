@@ -635,7 +635,7 @@ def _step(env: dict[str, str], task_key: str, report: str) -> tuple[subprocess.C
 
 
 @pytest.mark.integration
-def test_full_default_workflow_through_cli_postgres_and_http(pg_url):
+def test_full_wizard_runtime_through_cli_postgres_and_http(pg_url):
     expected_phases = [
         "-1",
         "0.0a",
@@ -773,7 +773,7 @@ def test_full_default_workflow_through_cli_postgres_and_http(pg_url):
     assert len(set(fingerprints)) == 22
     assert all(run.context_snapshot["model"] == "e2e-contract-model" for run in runs)
     assert all(run.context_snapshot["endpoint_mode"] == "openai-compatible" for run in runs)
-    assert all(run.context_snapshot["prompt_version"] == "wizard-evaluator-v3" for run in runs)
+    assert all(run.context_snapshot["prompt_version"] == "wizard-evaluator-v4" for run in runs)
     assert all(run.context_snapshot["raw_evaluator"]["verdict"] == "PASS" for run in runs)
     uow.close()
 

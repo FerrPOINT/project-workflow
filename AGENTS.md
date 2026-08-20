@@ -19,7 +19,7 @@ After any change to the SQLAlchemy layer, application services, UI state, or wiz
    ```bash
    pytest -q --timeout=60
    ```
-   Expected: **806 passed, 13 deselected**, 0 failed, 0 errors. Integration tests
+   Expected: **824 passed, 13 deselected**, 0 failed, 0 errors. Integration tests
    are intentionally deselected here; run them separately as described below.
 
 2. **PostgreSQL integration**
@@ -45,7 +45,7 @@ After any change to the SQLAlchemy layer, application services, UI state, or wiz
    ```bash
    mypy project_workflow scripts
    ```
-   Expected: `Success: no issues found in 81 source files`.
+   Expected: `Success: no issues found in 82 source files`.
 
 6. **UI service health**
    ```bash

@@ -1,24 +1,27 @@
-# Live-приёмка CLI / WizardEngine
+# Приёмка CLI и Wizard
 
-## Цель
+В проекте есть два разных уровня проверки. Их нельзя называть одинаково.
 
-Проверить полный runtime-путь без подмены Wizard или LLM-клиента:
+## 1. Детерминированный runtime integration test
+
+Проверяет продуктовый dataflow без реального исполнителя:
 
 ```text
-CLI subprocess -> PostgreSQL -> OpenAI-compatible HTTP -> WizardEngine -> PostgreSQL
+CLI subprocess -> PostgreSQL -> тестовый OpenAI-compatible HTTP -> Wizard -> PostgreSQL
 ```
 
-Каталог по умолчанию содержит 27 фаз и требует 22 обращения к evaluator. Параллельные группы:
+`test_full_wizard_runtime_through_cli_postgres_and_http` поднимает stdlib HTTP-сервер
+с настоящими `/v1/models` и `/v1/chat/completions`, запускает CLI отдельными
+процессами и проверяет:
 
-- `0.6 + 1`;
-- `1.5 + 2`;
-- `4.5 + 5`;
-- `7.5 + 7.6 + 7.6.R`.
+- каталог из 27 фаз и четыре группы `0.6 + 1`, `1.5 + 2`, `4.5 + 5`,
+  `7.5 + 7.6 + 7.6.R`;
+- 22 вызова evaluator и 22 `SupervisorRun` на чистом успешном пути;
+- fingerprints, audit snapshot, replay, post-done и переходы;
+- subprocess CLI, PostgreSQL и HTTP-контракт без monkeypatch Wizard/LLM-клиента.
 
-## Автоматическая приёмка
-
-Для интеграционных тестов нужна отдельная PostgreSQL, указанная через стандартные
-`PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`.
+Отчёты и ответы provider в этом тесте синтетические. Он не доказывает, что агент
+выполнял выданные задания, и не является полным бизнес-E2E.
 
 ```bash
 pytest -q --timeout=60
@@ -30,55 +33,87 @@ git diff --check
 python -m project_workflow.interfaces.cli --help
 ```
 
-Стандартный pytest намеренно исключает тесты с marker `integration`; поэтому они
+Обычный `pytest` намеренно исключает marker `integration`, поэтому PostgreSQL-тесты
 показываются как `deselected` и обязательно запускаются второй командой.
 
-Актуальный baseline: **806 passed, 13 deselected**, отдельный PostgreSQL suite —
-**13 passed**, coverage — **95.17%**. Для integration-набора используется больший
-timeout, потому что полный Windows-сценарий последовательно запускает CLI subprocess.
+## 2. Executor-driven business E2E
 
-`test_full_default_workflow_through_cli_postgres_and_http` поднимает stdlib HTTP-сервер
-с настоящими `/v1/models` и `/v1/chat/completions`, запускает CLI отдельными процессами
-и проверяет 27 завершённых фаз, 22 supervisor run, fingerprints, audit, replay,
-skill-рекомендации serial/parallel контрактов и отсутствие provider-вызова после `done`.
+Проверяет полный цикл с реальными действиями внешнего исполнителя:
 
-`test_cli_verdicts_replay_and_fail_closed_through_postgres_and_http` отдельно проверяет
-`PARTIAL`, `BLOCKED`, `ROLLBACK`, `DELEGATE`, invalid JSON, HTTP error и exit codes.
-Миграционные проверки также подтверждают канонизацию исторических verdict, constraint
-только для пяти актуальных значений и безопасное обновление seed-managed каталога без
-изменения ID задач и audit-записей. Отдельная
-forward-миграция заполняет только пустые skills default seed-managed фаз и сохраняет
-UI-значения и custom workflows.
+```text
+Wizard выдал задание
+-> исполнитель выполнил команды
+-> recorder сохранил команды и результаты
+-> исполнитель отправил отчёт со ссылками на ACTION
+-> реальный внешний OpenAI-compatible provider оценил отчёт
+-> Wizard сохранил audit и выдал следующий шаг
+```
 
-## Реальная проверка Ollama Online
+Wizard остаётся evaluator и маршрутизатором. Recorder не исполняет фазы за Wizard,
+не меняет БД напрямую и не добавляет продуктовых CLI-команд.
 
-Эта проверка выполняется только после автоматического suite и только на явно выбранной
-локальной тестовой PostgreSQL. Relevanter Dev, SSH и deploy не используются.
+### Артефакты
 
-1. Убедиться, что `DATABASE_URL` указывает на `localhost`/`127.0.0.1` и не содержит адрес
-   Relevanter Dev.
-2. Не очищать и не пересоздавать общую локальную БД. Выполнить `python scripts/init_db.py`:
-   миграции и bootstrap идемпотентны.
-3. Проверить каталог: ровно 27 фаз, `phase_order` равен `1..27`, а четыре параллельные
-   группы совпадают со списком выше. При расхождении остановиться без записи.
-4. Настроить `OPENAI_API_KEY`; значения по умолчанию — `OPENAI_BASE_URL=https://ollama.com/v1`,
-   `OPENAI_MODEL=qwen3.5:397b` и `OPENAI_REASONING_EFFORT=none`. Проверить `/v1/models`, не выводя ключ.
-5. Зафиксировать полный commit SHA `https://gt.wmtgroup.ru/relevanter/agent-skills`,
-   установить нужные `skills/<name>` исполнителю и подтвердить хотя бы на одной фазе,
-   что он загрузил рекомендованные skills из этого SHA. Wizard проверяет только имена
-   в инструкции и не обращается к GitLab.
-6. Создать новый ключ `TASK-<timestamp>` и через `project-workflow --json step` подать
-   22 полных отчёта по ID checks/evidence текущего контракта.
-7. После отчёта для `0.6 + 1` убедиться, что текущая группа — `1.5 + 2`, а эти фазы ещё
-   не завершены. После следующего отчёта задача должна перейти на фазу `3`.
-8. Финально проверить `phase=10`, `status=done`, 27 завершённых записей истории фаз,
-   22 supervisor run и fingerprint, а также model, endpoint mode, prompt version и raw
-   evaluator в audit snapshot.
-9. Повтор первого отчёта должен вернуть `replayed=true` без нового вызова provider и
-   без дополнительного перехода.
-10. Новый отличный отчёт после `done` должен вернуть `PASS`, `status=done`,
-    `next_phase=null` без provider-вызова и без новой run/history записи.
+Каждый запуск хранится только локально в ignored-каталоге:
 
-Любой неожиданный `PARTIAL/BLOCKED`, неверная граница группы или provider error означает
-провал live-приёмки. Fallback и принудительное продвижение не используются. Тестовую
-задачу оставляют в локальной БД для просмотра истории; временные логи не коммитят.
+```text
+.artifacts/live-e2e/<task>/<timestamp>/
+├── transcript.jsonl
+├── dialog.md
+├── summary.json
+└── command-logs/
+```
+
+Для каждого обращения к evaluator последовательность обязана содержать:
+
+1. `ASSIGNMENT` — точный JSON и prompt, полученные от `project-workflow --json step`;
+2. один или несколько `ACTION` — рабочая директория, команда, exit code и безопасный результат;
+3. `REPORT` — точный текст отчёта и `Evidence-Refs` текущих ACTION;
+4. `EVALUATOR` — полный JSON-ответ Wizard;
+5. `TRANSITION` — фактическая исходная и следующая фаза.
+
+Для parallel-фаз сохраняется один общий assignment и отдельные ACTION по каждому
+участнику. Отчёт без ACTION, ссылка на действие старой/чужой фазы и незавершённая
+последовательность отклоняются до отправки evaluator.
+
+### Запуск recorder
+
+Перед запуском явно настройте локальный `DATABASE_URL` и OpenAI-compatible provider.
+DSN обязан указывать на `localhost`/`127.0.0.1`, а не на Relevanter Dev.
+
+```bash
+python scripts/live_e2e_recorder.py --root <session-dir> --task TASK-123 init --metadata '{"head":"<sha>"}'
+python scripts/live_e2e_recorder.py --root <session-dir> --task TASK-123 assignment
+python scripts/live_e2e_recorder.py --root <session-dir> --task TASK-123 action \
+  --phase -1 --summary "Проверен контекст" --cwd . -- git status --short
+python scripts/live_e2e_recorder.py --root <session-dir> --task TASK-123 submit \
+  --phase -1 --report-file <report.md>
+python scripts/live_e2e_recorder.py --root <session-dir> --task TASK-123 finalize \
+  --expected-cycles <actual-cycle-count>
+```
+
+В отчёте обязательна отдельная строка, например `Evidence-Refs: A-001, A-002`.
+Recorder выполняет redaction ключей, DSN-паролей, e-mail и пользовательской части
+Windows-пути до записи командных логов.
+
+### Правила честного прогона
+
+- Нельзя использовать старые `SupervisorRun`, прежние отчёты, шаблоны PASS или
+  заранее подготовленные ответы provider.
+- Отчёт формируется только после фактических ACTION текущего assignment.
+- Рекомендованные skills загружаются исполнителем из зафиксированного SHA
+  `relevanter/agent-skills`; Wizard передаёт только их имена.
+- Любой `PARTIAL`, `BLOCKED`, provider error или неверный переход останавливает
+  продвижение. Замечание исправляется новым действием и новым отчётом; audit не
+  переписывается и принудительный переход запрещён.
+- Чистый успешный каталог содержит 22 цикла. Если evaluator вернул реальный
+  `PARTIAL/BLOCKED`, итоговый счётчик будет больше 22: эти циклы сохраняются в
+  transcript и audit, а не маскируются корректировкой ожидаемого результата.
+- Реальная смена состояния (`open` -> `merged`) допустима в отчёте только с явной
+  хронологией, временными метками и action evidence.
+- После завершения сверяются задача `phase=10/status=done`, history, все
+  `SupervisorRun`, fingerprints, prompt version, raw evaluator, replay и post-done.
+- Успешную основную задачу и её audit оставляют в локальной PostgreSQL. Временную
+  negative-probe задачу удаляют точечно после сохранения обезличенного лога.
+
+Relevanter Dev, SSH и product deploy в эту приёмку не входят.
