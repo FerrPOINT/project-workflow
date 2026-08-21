@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -114,6 +116,68 @@ def test_validate_transcript_accepts_complete_ordered_cycle():
     assert cycles[0]["actions"][0]["id"] == "A-001"
 
 
+@pytest.mark.parametrize("runner", [recorder.run_wizard, recorder.run_history])
+def test_wizard_subprocess_forces_utf8_without_mutating_parent_environment(monkeypatch, runner):
+    captured: dict = {}
+
+    def fake_run(_command, **kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(returncode=0, stdout='{"ok": true}', stderr="")
+
+    monkeypatch.setenv("LIVE_E2E_SENTINEL", "preserved")
+    monkeypatch.setenv("PYTHONIOENCODING", "cp1251")
+    monkeypatch.setattr(recorder.subprocess, "run", fake_run)
+
+    runner("TASK-1")
+
+    assert captured["env"]["LIVE_E2E_SENTINEL"] == "preserved"
+    assert captured["env"]["PYTHONIOENCODING"] == "utf-8"
+    assert os.environ["PYTHONIOENCODING"] == "cp1251"
+
+
+@pytest.mark.parametrize("field", ["phase", "current_phase", "verdict", "next_phase"])
+def test_validate_transcript_rejects_missing_evaluator_transition_field(field):
+    events = [_session(), *_cycle()]
+    events[-2]["payload"].pop(field)
+
+    with pytest.raises(recorder.TranscriptError, match="EVALUATOR"):
+        recorder.validate_transcript(events, task="TASK-1")
+
+
+@pytest.mark.parametrize("field", ["phase", "current_phase"])
+def test_validate_transcript_rejects_evaluator_for_another_phase(field):
+    events = [_session(), *_cycle()]
+    events[-2]["payload"][field] = "other"
+
+    with pytest.raises(recorder.TranscriptError, match="assigned phase"):
+        recorder.validate_transcript(events, task="TASK-1")
+
+
+def test_validate_transcript_rejects_transition_verdict_mismatch():
+    events = [_session(), *_cycle()]
+    events[-1]["verdict"] = "BLOCKED"
+
+    with pytest.raises(recorder.TranscriptError, match="verdict"):
+        recorder.validate_transcript(events, task="TASK-1")
+
+
+def test_validate_transcript_rejects_transition_target_mismatch():
+    events = [_session(), *_cycle()]
+    events[-1]["to_phase"] = "3"
+
+    with pytest.raises(recorder.TranscriptError, match="target"):
+        recorder.validate_transcript(events, task="TASK-1")
+
+
+@pytest.mark.parametrize("field", ["verdict", "to_phase"])
+def test_validate_transcript_rejects_missing_transition_field(field):
+    events = [_session(), *_cycle()]
+    events[-1].pop(field)
+
+    with pytest.raises(recorder.TranscriptError, match="TRANSITION"):
+        recorder.validate_transcript(events, task="TASK-1")
+
+
 def test_validate_transcript_rejects_legacy_scalar_action():
     events = [_session(), *_cycle()]
     events[2]["command"] = "python -m pytest"
@@ -182,6 +246,7 @@ def test_validate_open_cycle_rejects_action_for_another_phase():
 
 def test_validate_transcript_rejects_old_or_foreign_evidence_reference():
     first = _cycle("-1", action_id="A-001")
+    first[-2]["payload"]["next_phase"] = "0.6"
     first[-1]["to_phase"] = "0.6"
     second = _cycle("0.6", action_id="A-002", evidence_refs=["A-001"])
 
@@ -191,6 +256,7 @@ def test_validate_transcript_rejects_old_or_foreign_evidence_reference():
 
 def test_validate_transcript_rejects_duplicate_action_ids():
     first = _cycle("-1", action_id="A-001")
+    first[-2]["payload"]["next_phase"] = "0.6"
     first[-1]["to_phase"] = "0.6"
     second = _cycle("0.6", action_id="A-001")
 
@@ -340,6 +406,7 @@ def test_finalize_rejects_command_log_that_does_not_match_excerpt(tmp_path):
 def test_terminal_pass_summary_reports_done_status():
     events = [_session(), *_cycle()]
     events[-2]["payload"]["next_phase"] = None
+    events[-1]["to_phase"] = None
 
     cycles = recorder.validate_transcript(events, task="TASK-1", expected_cycles=1)
     summary = recorder.build_summary("TASK-1", events, cycles)

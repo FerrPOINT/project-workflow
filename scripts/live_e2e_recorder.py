@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -106,6 +107,12 @@ def _fail(message: str) -> NoReturn:
     raise SystemExit(message)
 
 
+def _wizard_subprocess_environment() -> dict[str, str]:
+    environment = os.environ.copy()
+    environment["PYTHONIOENCODING"] = "utf-8"
+    return environment
+
+
 def run_wizard(task: str, report: str | None = None) -> tuple[int, dict[str, Any], str]:
     """Call the canonical JSON CLI as a real subprocess."""
     command = [sys.executable, "-m", "project_workflow.interfaces.cli", "--json", "step", "--task", task]
@@ -116,6 +123,7 @@ def run_wizard(task: str, report: str | None = None) -> tuple[int, dict[str, Any
         capture_output=True,
         text=True,
         encoding="utf-8",
+        env=_wizard_subprocess_environment(),
         timeout=300,
         check=False,
     )
@@ -139,6 +147,7 @@ def run_history(task: str) -> tuple[int, dict[str, Any], str]:
         capture_output=True,
         text=True,
         encoding="utf-8",
+        env=_wizard_subprocess_environment(),
         timeout=60,
         check=False,
     )
@@ -308,6 +317,12 @@ def validate_transcript(
         evaluator = events[index]
         if evaluator.get("phase") != phase or not isinstance(evaluator.get("payload"), dict):
             raise TranscriptError("EVALUATOR must preserve the Wizard JSON payload")
+        evaluator_payload = evaluator["payload"]
+        evaluator_fields = {"phase", "current_phase", "verdict", "next_phase"}
+        if not evaluator_fields.issubset(evaluator_payload):
+            raise TranscriptError("EVALUATOR payload is missing transition fields")
+        if evaluator_payload["phase"] != phase or evaluator_payload["current_phase"] != phase:
+            raise TranscriptError("EVALUATOR payload must match the assigned phase")
         index += 1
 
         if index >= len(events) or events[index].get("type") != "TRANSITION":
@@ -315,6 +330,12 @@ def validate_transcript(
         transition = events[index]
         if transition.get("phase") != phase or transition.get("from_phase") != phase:
             raise TranscriptError("TRANSITION must start from the assigned phase")
+        if not {"verdict", "to_phase"}.issubset(transition):
+            raise TranscriptError("TRANSITION is missing evaluator fields")
+        if transition["verdict"] != evaluator_payload["verdict"]:
+            raise TranscriptError("TRANSITION verdict must match the EVALUATOR payload")
+        if transition["to_phase"] != evaluator_payload["next_phase"]:
+            raise TranscriptError("TRANSITION target must match the EVALUATOR payload")
         index += 1
         cycles.append(
             {
