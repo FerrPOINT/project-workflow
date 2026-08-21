@@ -9,20 +9,24 @@ def test_task_detail_renders_group_markers_and_chronological_wizard_dialog() -> 
         {
             "kind": "single",
             "status": "done",
-            "phases": [{"phase_code": "0", "phase_name": "Start", "status": "done"}],
+            "phases": [
+                {"phase_code": "0", "phase_name": "Start", "sequence_number": 1, "status": "done"}
+            ],
         },
         {
             "kind": "parallel",
             "status": "done",
             "phases": [
-                {"phase_code": "0.6", "phase_name": "Research", "status": "done"},
-                {"phase_code": "1", "phase_name": "Analysis", "status": "done"},
+                {"phase_code": "0.6", "phase_name": "Research", "sequence_number": 2, "status": "done"},
+                {"phase_code": "1", "phase_name": "Analysis", "sequence_number": 3, "status": "done"},
             ],
         },
         {
             "kind": "single",
             "status": "done",
-            "phases": [{"phase_code": "10", "phase_name": "Auto-Improve", "status": "done"}],
+            "phases": [
+                {"phase_code": "10", "phase_name": "Auto-Improve", "sequence_number": 27, "status": "done"}
+            ],
         },
     ]
     runs = [
@@ -89,6 +93,11 @@ def test_task_detail_renders_group_markers_and_chronological_wizard_dialog() -> 
 
     assert html.count('class="phase-node serial done"') == 2
     assert html.count('class="phase-node parallel done"') == 1
+    assert html.count('class="phase-sequence"') == 4
+    assert '>1</span><span class="phase-name">Start' in html
+    assert '>2</span><span class="phase-name">Research' in html
+    assert '>3</span><span class="phase-name">Analysis' in html
+    assert '>27</span><span class="phase-name">Auto-Improve' in html
     assert "phase-parallel-inner-arrow" not in html
     assert html.index("first-report") < html.index("second-report")
     assert "Диалог с Wizard" in html
@@ -98,4 +107,3 @@ def test_task_detail_renders_group_markers_and_chronological_wizard_dialog() -> 
     assert "Лог исследования" in html
     assert "Workflow завершён" in html
     assert "СЛЕДУЮЩИЙ ШАГ" not in html
-

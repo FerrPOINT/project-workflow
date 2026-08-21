@@ -78,6 +78,29 @@ class TestUIDataServiceGaps:
         )
         assert result == "2026-01-01"
 
+    def test_phase_history_uses_consecutive_numbers_after_phase_order_sort(self):
+        wdb = MagicMock()
+        phases = [
+            {"id": 30, "phase_order": 30, "code": "internal.c", "name": "Third"},
+            {"id": 10, "phase_order": 10, "code": "internal.a", "name": "First"},
+            {"id": 20, "phase_order": 20, "code": "internal.b", "name": "Second"},
+        ]
+        history = [
+            {"phase_id": 30, "status": "done"},
+            {"phase_id": 10, "status": "done"},
+            {"phase_id": 20, "status": "done"},
+        ]
+
+        blocks = _service(wdb)._build_phase_history_blocks(history, phases, None, wdb)
+        displayed_phases = [phase for block in blocks for phase in block["phases"]]
+
+        assert [phase["phase_code"] for phase in displayed_phases] == [
+            "internal.a",
+            "internal.b",
+            "internal.c",
+        ]
+        assert [phase["sequence_number"] for phase in displayed_phases] == [1, 2, 3]
+
     def test_get_task_detail_empty_history_returns_zero_completed(self):
         wdb = MagicMock()
         wdb.get_task_by_key.return_value = {

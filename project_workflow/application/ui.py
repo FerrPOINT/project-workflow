@@ -320,6 +320,8 @@ class UIDataService:
             )
 
         raw_history.sort(key=lambda item: (int(item.get("phase_order", 0)), int(item.get("phase_id", 0))))
+        for sequence_number, phase in enumerate(raw_history, start=1):
+            phase["sequence_number"] = sequence_number
         return _build_parallel_phase_blocks(raw_history)
 
     def _decorate_supervisor_runs(self, supervisor_runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
