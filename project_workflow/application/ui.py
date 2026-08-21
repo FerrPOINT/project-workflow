@@ -15,6 +15,14 @@ from ..interfaces.ui.helpers import (
 from .state import _AppState
 
 
+def _task_progress_counts(
+    *, status: str, completed: int, history_total: int, workflow_total: int
+) -> tuple[int, int]:
+    """Keep completed tasks tied to their history while unfinished tasks follow the live workflow."""
+    total = history_total if status == "done" else workflow_total
+    return completed, total
+
+
 class UIDataService:
     """Aggregates read-only data for UI pages and API responses."""
 
@@ -149,7 +157,12 @@ class UIDataService:
                 if workflow_id is not None
                 else 0
             )
-            total_phases = workflow_phase_count
+            completed, total_phases = _task_progress_counts(
+                status=str(t.get("status", "active")),
+                completed=completed,
+                history_total=len(task_history),
+                workflow_total=workflow_phase_count,
+            )
 
             current_phase_id, current = _resolve_task_phase_local(
                 t.get("current_phase", "-1"),
@@ -377,18 +390,22 @@ class UIDataService:
         task["total_phases"] = len(workflow_phases)
 
         history = wdb.get_task_history(task["id"])
-        task["completed"] = sum(1 for h in history if h.get("status") == "done")
-        task["progress_done"] = task["completed"]
-        task["progress_total"] = task["total_phases"]
         task["completed_at"] = self._compute_completion_time(task, history)
 
         task["phase_history_blocks"] = self._build_phase_history_blocks(
             history, workflow_phases, current_phase, wdb
         )
-        task["completed"] = sum(
-            1 for block in task["phase_history_blocks"] for p in block["phases"] if p.get("status") == "done"
+        displayed_history = [
+            phase for block in task["phase_history_blocks"] for phase in block["phases"]
+        ]
+        task["completed"] = sum(1 for phase in displayed_history if phase.get("status") == "done")
+        task["progress_done"], task["progress_total"] = _task_progress_counts(
+            status=str(task.get("status", "active")),
+            completed=task["completed"],
+            history_total=len(displayed_history),
+            workflow_total=task["workflow_phase_count"],
         )
-        task["total_phases"] = task.get("workflow_phase_count", 0)
+        task["total_phases"] = task["progress_total"]
 
         supervisor_runs = self._decorate_supervisor_runs(
             list(reversed(wdb.get_supervisor_runs(task_key=task_key, limit=200)))

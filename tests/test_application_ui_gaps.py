@@ -24,6 +24,45 @@ def _service(wdb):
 
 
 class TestUIDataServiceGaps:
+    @pytest.mark.parametrize(
+        ("status", "expected_total"),
+        [("done", 2), ("active", 3)],
+    )
+    def test_load_tasks_progress_uses_history_only_after_completion(self, status, expected_total):
+        wdb = MagicMock()
+        wdb.get_tasks.return_value = [
+            {
+                "id": 1,
+                "task_key": "TASK-1",
+                "title": "t",
+                "project_id": 1,
+                "status": status,
+                "current_phase": "b",
+            }
+        ]
+        phases = [
+            {"id": 1, "workflow_id": 1, "code": "a", "name": "A"},
+            {"id": 2, "workflow_id": 1, "code": "b", "name": "B"},
+            {"id": 3, "workflow_id": 1, "code": "later", "name": "Added later"},
+        ]
+        wdb.get_workflows.return_value = [{"id": 1}]
+        wdb.get_phases.return_value = phases
+        wdb.tasks.get_history_batch.return_value = {
+            1: [
+                {"phase_id": 1, "status": "done"},
+                {"phase_id": 2, "status": "done"},
+            ]
+        }
+        wdb.supervisor_runs.latest_for_tasks.return_value = []
+        wdb.get_projects.return_value = [
+            {"id": 1, "code": "TASK", "name": "Task", "workflow_id": 1}
+        ]
+
+        result = _service(wdb)._load_tasks()
+
+        assert result[0]["completed"] == 2
+        assert result[0]["total_phases"] == expected_total
+
     def test_load_tasks_latest_run_without_task_id(self):
         wdb = MagicMock()
         wdb.get_tasks.return_value = [
@@ -121,3 +160,43 @@ class TestUIDataServiceGaps:
         result = _service(wdb)._get_task_detail("TASK-1")
         assert result is not None
         assert result["completed"] == 0
+
+    @pytest.mark.parametrize(
+        ("status", "expected_total"),
+        [("done", 2), ("active", 3)],
+    )
+    def test_task_detail_progress_uses_history_only_after_completion(self, status, expected_total):
+        wdb = MagicMock()
+        phases = [
+            {"id": 1, "workflow_id": 1, "phase_order": 1, "code": "a", "name": "A"},
+            {"id": 2, "workflow_id": 1, "phase_order": 2, "code": "b", "name": "B"},
+            {
+                "id": 3,
+                "workflow_id": 1,
+                "phase_order": 3,
+                "code": "later",
+                "name": "Added later",
+            },
+        ]
+        wdb.get_task_by_key.return_value = {
+            "id": 1,
+            "task_key": "TASK-1",
+            "title": "t",
+            "project_id": 1,
+            "status": status,
+            "current_phase": "b",
+            "workflow_id": 1,
+        }
+        wdb.get_phases.return_value = phases
+        wdb.get_task_history.return_value = [
+            {"phase_id": 1, "status": "done"},
+            {"phase_id": 2, "status": "done"},
+        ]
+        wdb.get_supervisor_runs.return_value = []
+
+        result = _service(wdb)._get_task_detail("TASK-1")
+
+        assert result is not None
+        assert result["progress_done"] == 2
+        assert result["progress_total"] == expected_total
+        assert result["workflow_phase_count"] == 3
