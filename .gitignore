@@ -45,6 +45,7 @@ htmlcov/
 Thumbs.db
 
 # Project specific
+.artifacts/
 *.log
 screenshots/
 .workflow.db

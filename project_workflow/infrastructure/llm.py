@@ -112,7 +112,7 @@ class OpenAICompatibleClient:
 class PromptBuilder:
     """Build prompts from phase contracts + task context."""
 
-    PROMPT_VERSION = "wizard-evaluator-v3"
+    PROMPT_VERSION = "wizard-evaluator-v4"
 
     SYSTEM_PROMPT = (
         "You are a strict workflow supervisor. "
@@ -130,6 +130,13 @@ class PromptBuilder:
         "8. verdict = BLOCKED — real blocker → stay on phase.\n"
         "9. verdict = ROLLBACK — worker explicitly cannot/will not do this.\n"
         "10. verdict = DELEGATE — worker delegates to another agent.\n"
+        "11. Mutually exclusive CURRENT facts about the same artifact or state prohibit PASS "
+        "unless the report gives an explicit chronology backed by action evidence.\n"
+        "12. If such a contradiction is repairable, return PARTIAL, put the affected required "
+        "item IDs in missing, and keep blockers empty. A real external blocker still returns BLOCKED.\n"
+        "13. A sequence such as 'first open, then merged' is valid only when timestamps and action "
+        "evidence make the state change explicit.\n"
+        "14. Return one bare JSON object. Never wrap it in Markdown or code fences, and add no commentary.\n"
         "The Wizard never chooses the next phase.\n\n"
         "Output STRICT JSON with these keys:\n"
         "{\n"
