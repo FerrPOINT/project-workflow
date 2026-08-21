@@ -209,6 +209,11 @@ class TestApiPhaseCreate:
         assert resp.status_code == 400
         assert resp.json()["ok"] is False
 
+    def test_create_phase_rejects_non_numeric_workflow_id(self, client):
+        resp = client.post("/api/phases", json={"workflow_id": "not-a-workflow", "phase_order": 1})
+        assert resp.status_code == 400
+        assert resp.json()["ok"] is False
+
     def test_create_phase_inserts_and_shifts_orders(self, client):
         from project_workflow.interfaces.ui import _app_state
 
@@ -698,6 +703,19 @@ class TestApiPhaseUpdate:
     def test_update_phase_not_found(self, client):
         resp = client.put("/api/phases/999999", json={"name": "x"})
         assert resp.status_code == 404
+
+    def test_phase_name_is_json_encoded_in_detail_script(self, client):
+        phase_id = _phase_id(client, "0.01")
+        dangerous_name = "O'Reilly </script><script>alert(1)</script>"
+        update = client.put(f"/api/phases/{phase_id}", json={"name": dangerous_name})
+        assert update.status_code == 200
+
+        response = client.get(f"/phase/{phase_id}")
+
+        assert response.status_code == 200
+        assert "\\u0027" in response.text
+        assert "\\u003c/script\\u003e" in response.text
+        assert "meta.name || 'O'Reilly" not in response.text
 
 
 class TestPageRoutes:

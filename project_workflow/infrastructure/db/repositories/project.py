@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from project_workflow.domain import Project
 from project_workflow.domain.exceptions import NotFoundError
@@ -23,7 +23,7 @@ class SAProjectRepository(ProjectRepository):
         self._session = session
 
     def list(self) -> Sequence[Project]:
-        rows = self._session.execute(select(m.Project)).scalars().all()
+        rows = self._session.execute(select(m.Project).options(joinedload(m.Project.workflow))).scalars().all()
         return [_row_to_project(r) for r in rows]
 
     def get_by_id(self, project_id: int) -> Project | None:

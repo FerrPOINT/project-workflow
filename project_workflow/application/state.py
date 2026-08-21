@@ -7,6 +7,7 @@ circular imports.
 
 from __future__ import annotations
 
+import contextvars
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,8 @@ from . import (
     TaskService,
     WorkflowService,
 )
+
+_uow_ctx: contextvars.ContextVar[SAUnitOfWork | None] = contextvars.ContextVar("project_workflow_uow", default=None)
 
 
 class _AppState:
@@ -55,9 +58,13 @@ class _AppState:
         """PhaseService helper for UI detail/edit routes."""
         return PhaseService(self)
 
-    def get_uow(self) -> SAUnitOfWork:
+    def create_uow(self) -> SAUnitOfWork:
         engine = get_engine(self._database_url_normalized())
         return SAUnitOfWork(engine)
+
+    def get_uow(self) -> SAUnitOfWork:
+        request_uow = _uow_ctx.get()
+        return request_uow if request_uow is not None else self.create_uow()
 
     def workflow_service(self) -> WorkflowService:
         return WorkflowService(self.get_uow())
@@ -83,4 +90,4 @@ class _AppState:
 
 
 _app_state = _AppState()
-__all__ = ["_AppState", "_app_state"]
+__all__ = ["_AppState", "_app_state", "_uow_ctx"]

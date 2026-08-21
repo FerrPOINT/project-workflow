@@ -225,6 +225,16 @@ def test_finalize_generates_jsonl_dialog_and_summary(tmp_path):
     }
 
 
+def test_terminal_pass_summary_reports_done_status():
+    events = [_session(), *_cycle()]
+    events[-2]["payload"]["next_phase"] = None
+
+    cycles = recorder.validate_transcript(events, task="TASK-1", expected_cycles=1)
+    summary = recorder.build_summary("TASK-1", events, cycles)
+
+    assert summary["final_status"] == "done"
+
+
 def test_expected_cycle_count_is_enforced():
     with pytest.raises(recorder.TranscriptError, match="Expected 2 cycles, found 1"):
         recorder.validate_transcript([_session(), *_cycle()], task="TASK-1", expected_cycles=2)

@@ -8,7 +8,7 @@ from typing import Any
 
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import select, text
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from project_workflow.domain import Phase
 from project_workflow.domain.exceptions import LastPhaseError, NotFoundError
@@ -24,7 +24,7 @@ class SAPhaseRepository(PhaseRepository):
         self._session = session
 
     def list(self, workflow_id: int | None = None) -> Sequence[Phase]:
-        stmt = select(m.Phase).order_by(m.Phase.workflow_id, m.Phase.phase_order)
+        stmt = select(m.Phase).options(joinedload(m.Phase.workflow)).order_by(m.Phase.workflow_id, m.Phase.phase_order)
         if workflow_id is not None:
             stmt = stmt.where(m.Phase.workflow_id == workflow_id)
         rows = self._session.execute(stmt).scalars().all()
@@ -65,7 +65,9 @@ class SAPhaseRepository(PhaseRepository):
         if row is None:
             raise NotFoundError(f"Phase {phase_id} not found")
         for key, val in data.items():
-            if key == "is_seed_managed":
+            if key in {"id", "workflow_id"}:
+                continue
+            if key in {"is_seed_managed", "is_blocker", "is_delegated", "is_critic"}:
                 val = 1 if val else 0
             if hasattr(row, key):
                 setattr(row, key, val)

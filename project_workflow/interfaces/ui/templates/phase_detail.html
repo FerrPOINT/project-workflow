@@ -566,7 +566,7 @@ async function savePhase() {
   });
 
   const data = {
-    name: meta.name || '{{ phase.name }}',
+    name: meta.name || {{ phase.name | tojson }},
     description: meta.description || '',
     checks: [],
     evidence: [],

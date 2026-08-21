@@ -125,9 +125,34 @@ class SAInstructionRepository(InstructionRepository):
         )
         for instruction_id, new_step in orders:
             self._session.execute(
-                text("UPDATE instructions SET step_num = :step WHERE id = :id"),
-                {"step": new_step, "id": instruction_id},
+                text(
+                    "UPDATE instructions SET step_num = :step "
+                    "WHERE id = :id AND phase_id = :phase_id"
+                ),
+                {"step": new_step, "id": instruction_id, "phase_id": phase_id},
             )
+        shifted_ids = (
+            self._session.execute(
+                select(m.Instruction.id)
+                .where(
+                    m.Instruction.phase_id == phase_id,
+                    m.Instruction.step_num >= offset,
+                )
+                .order_by(m.Instruction.step_num)
+            )
+            .scalars()
+            .all()
+        )
+        next_step = max((new_step for _, new_step in orders), default=0) + 1
+        for instruction_id in shifted_ids:
+            self._session.execute(
+                text(
+                    "UPDATE instructions SET step_num = :step "
+                    "WHERE id = :id AND phase_id = :phase_id"
+                ),
+                {"step": next_step, "id": instruction_id, "phase_id": phase_id},
+            )
+            next_step += 1
         self._session.flush()
 
     def _next_step_num(self, phase_id: int) -> int:

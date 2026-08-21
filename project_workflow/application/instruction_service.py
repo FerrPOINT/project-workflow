@@ -41,8 +41,10 @@ class InstructionService:
         """Persist a new instruction order: listed ids first, remaining ids appended."""
         existing_rows = self._uow.instructions.list(phase_id)
         existing_ids = [cast(int, row["id"]) for row in existing_rows]
-        seen: set[int] = set(instruction_ids)
-        full_order = list(instruction_ids) + [iid for iid in existing_ids if iid not in seen]
+        valid_ids = set(existing_ids)
+        requested_ids = [iid for iid in dict.fromkeys(instruction_ids) if iid in valid_ids]
+        requested_set = set(requested_ids)
+        full_order = requested_ids + [iid for iid in existing_ids if iid not in requested_set]
         orders = [(iid, idx + 1) for idx, iid in enumerate(full_order)]
         self._uow.instructions.reorder(phase_id, orders)
         self._uow.commit()
