@@ -52,12 +52,13 @@ def test_run_to_dict():
 
 def test_build_parallel_phase_blocks():
     sync = {"id": 1, "code": "s1", "execution_type": "sync"}
-    par = {"id": 2, "code": "p2", "execution_type": "parallel"}
+    par = {"id": 2, "code": "p2", "execution_type": "parallel", "parallel_with": "p3"}
+    partner = {"id": 3, "code": "p3", "execution_type": "parallel"}
     single = {"id": 3, "code": "s3", "execution_type": "sync"}
-    blocks = _build_parallel_phase_blocks([sync, par, single])
-    assert len(blocks) == 2
-    assert blocks[0]["kind"] == "parallel"
-    assert blocks[1]["kind"] == "single"
+    blocks = _build_parallel_phase_blocks([sync, par, partner, single])
+    assert [block["kind"] for block in blocks] == ["single", "parallel", "single"]
+    assert [phase["code"] for phase in blocks[1]["phases"]] == ["p2", "p3"]
+    assert blocks[1]["status"] == "wait"
 
 
 def test_resolve_task_phase():
@@ -67,6 +68,20 @@ def test_resolve_task_phase():
     token, phase = _resolve_task_phase("p2", db)
     assert token == "p2"
     assert phase == {"id": 2, "code": "p2"}
+
+
+def test_resolve_task_phase_prefers_numeric_code_over_db_id():
+    db = MagicMock()
+    db.get_phases.return_value = [
+        {"id": 10, "code": "0.8", "name": "Wrong by id"},
+        {"id": 27, "code": "10", "name": "Auto-Improve"},
+    ]
+
+    token, phase = _resolve_task_phase("10", db)
+
+    assert token == "10"
+    assert phase == {"id": 27, "code": "10", "name": "Auto-Improve"}
+    db.get_phase.assert_not_called()
 
 
 def test_resolve_task_phase_fallback():

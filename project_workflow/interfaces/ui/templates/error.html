@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — project-workflow{% endblock %}
+{% block header_title %}{{ title }}{% endblock %}
+
+{% block extra_style %}
+.error-state{max-width:680px;margin:8vh auto 0;text-align:center;padding:40px 28px}
+.error-code{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-dim);margin-bottom:10px}
+.error-state h1{font-size:24px;margin-bottom:10px}
+.error-state p{color:var(--text-muted);line-height:1.65;margin-bottom:22px}
+{% endblock %}
+
+{% block content %}
+<section class="card error-state">
+  <div class="error-code">HTTP {{ status_code }}</div>
+  <h1>{{ title }}</h1>
+  <p>{{ message }}</p>
+  <a class="btn btn-secondary" href="{{ back_url }}">← {{ back_label }}</a>
+</section>
+{% endblock %}

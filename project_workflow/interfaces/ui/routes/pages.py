@@ -22,6 +22,33 @@ from project_workflow.interfaces.ui.state import _app_state
 from project_workflow.interfaces.ui.templates import _group_instructions, templates
 
 
+def _error_page(
+    request: Request,
+    *,
+    title: str,
+    message: str,
+    status_code: int,
+    back_url: str,
+    back_label: str,
+    page: str,
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request=request,
+        name="error.html",
+        status_code=status_code,
+        context={
+            "request": request,
+            "title": title,
+            "message": message,
+            "status_code": status_code,
+            "back_url": back_url,
+            "back_label": back_label,
+            "page": page,
+            "ui_port": get_settings().UI_PORT,
+        },
+    )
+
+
 async def index(request: Request) -> HTMLResponse:
     """Минимальный dashboard без заглушек."""
     dashboard = _load_dashboard()
@@ -65,7 +92,15 @@ async def phases_page(request: Request, workflow_id: int | None = Query(default=
 async def phase_detail(request: Request, phase_id: str) -> HTMLResponse:
     phase = _load_phase_detail(phase_id)
     if not phase:
-        return HTMLResponse("<h1>Phase not found</h1>", status_code=404)
+        return _error_page(
+            request,
+            title="Фаза не найдена",
+            message="Проверьте выбранный workflow или вернитесь к каталогу фаз.",
+            status_code=404,
+            back_url="/phases",
+            back_label="К фазам",
+            page="phases",
+        )
     agents = _app_state.agent_service().list_agents()
     for instruction in phase.get("instructions", []):
         instruction["skills"] = PhaseService.normalize_skills(instruction.get("skills"))
@@ -134,7 +169,15 @@ async def task_detail_page(request: Request, task_key: str) -> HTMLResponse:
     """Деталка задачи — линейная история фаз."""
     task = _get_task_detail(task_key)
     if not task:
-        return HTMLResponse("<h1>Task not found</h1>", status_code=404)
+        return _error_page(
+            request,
+            title="Задача не найдена",
+            message=f"Задачи {task_key} нет в текущем каталоге.",
+            status_code=404,
+            back_url="/tasks",
+            back_label="К списку задач",
+            page="tasks",
+        )
     return templates.TemplateResponse(
         request=request,
         name="task_detail.html",
@@ -188,10 +231,26 @@ async def instructions_page(
 ) -> HTMLResponse:
     """Dedicated instructions editor page for a phase."""
     if phase_id is None:
-        return HTMLResponse("<h1>Bad request: phase_id is required</h1>", status_code=400)
+        return _error_page(
+            request,
+            title="Фаза не выбрана",
+            message="Откройте инструкции из карточки нужной фазы.",
+            status_code=400,
+            back_url="/phases",
+            back_label="К фазам",
+            page="phases",
+        )
     phase = _load_phase_detail(str(phase_id))
     if not phase:
-        return HTMLResponse("<h1>Phase not found</h1>", status_code=404)
+        return _error_page(
+            request,
+            title="Фаза не найдена",
+            message="Инструкции для указанной фазы недоступны.",
+            status_code=404,
+            back_url="/phases",
+            back_label="К фазам",
+            page="phases",
+        )
     instructions = phase.get("instructions", [])
     for instruction in instructions:
         instruction["skills"] = PhaseService.normalize_skills(instruction.get("skills"))

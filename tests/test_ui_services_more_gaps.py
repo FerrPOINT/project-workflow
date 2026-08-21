@@ -37,12 +37,12 @@ class TestServicesMoreGaps:
         blocks = _build_parallel_phase_blocks(
             [
                 {"code": "1", "execution_type": "sync"},
-                {"code": "2", "execution_type": "parallel"},
-                {"code": "3", "execution_type": "sync"},
+                {"code": "2", "execution_type": "parallel", "parallel_with": "3"},
+                {"code": "3", "execution_type": "parallel"},
             ]
         )
-        assert blocks[0]["kind"] == "parallel"
-        assert blocks[1]["kind"] == "single"
+        assert blocks[0]["kind"] == "single"
+        assert blocks[1]["kind"] == "parallel"
 
     def test_load_dashboard_verdict_count(self, monkeypatch):
         uow = MagicMock()

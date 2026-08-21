@@ -6,7 +6,12 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from ..infrastructure.db.row_utils import row_to_dict
-from ..interfaces.ui.helpers import _resolve_task_phase, _resolve_task_phase_local, _run_to_dict
+from ..interfaces.ui.helpers import (
+    _build_parallel_phase_blocks,
+    _resolve_task_phase,
+    _resolve_task_phase_local,
+    _run_to_dict,
+)
 from .state import _AppState
 
 
@@ -168,7 +173,11 @@ class UIDataService:
             run: dict[str, Any] | None = latest_runs.get(task_id)
             if run:
                 latest_verdict = run.get("verdict")
-                latest_verdict_phase = run.get("phase_code")
+                snapshot = run.get("context_snapshot") or {}
+                response = run.get("response") or {}
+                latest_verdict_phase = (
+                    snapshot.get("phase") or response.get("current_phase") or run.get("phase_code")
+                )
 
             result.append(
                 {
@@ -278,12 +287,6 @@ class UIDataService:
         current_phase: dict[str, Any] | None,
         wdb: Any,
     ) -> list[dict[str, Any]]:
-        phase_execution_type: dict[int, str] = {}
-        for p in workflow_phases:
-            pid = p.get("id")
-            if pid is not None:
-                phase_execution_type[pid] = p.get("execution_type", "sync")
-
         phase_by_id: dict[int, dict[str, Any]] = {}
         for p in workflow_phases:
             pid = p.get("id")
@@ -304,39 +307,22 @@ class UIDataService:
                     "phase_id": pid,
                     "phase_order": phase["phase_order"],
                     "phase_name": phase["name"],
+                    "code": phase.get("code", ""),
                     "phase_code": phase.get("code", ""),
                     "phase_description": phase.get("description", ""),
                     "status": "done"
                     if history_status == "done"
                     else ("current" if current_phase and pid == current_phase["id"] else "wait"),
                     "completed_at": h.get("completed_at", ""),
-                    "execution_type": phase_execution_type.get(pid, "sync"),
+                    "execution_type": phase.get("execution_type", "sync"),
+                    "parallel_with": phase.get("parallel_with"),
                 }
             )
 
-        blocks: list[dict[str, Any]] = []
-        if raw_history:
-            runs: list[list[dict[str, Any]]] = []
-            current_run: list[dict[str, Any]] = [raw_history[0]]
-            for item in raw_history[1:]:
-                if item.get("execution_type") == "parallel":
-                    current_run.append(item)
-                else:
-                    runs.append(current_run)
-                    current_run = [item]
-            runs.append(current_run)
+        raw_history.sort(key=lambda item: (int(item.get("phase_order", 0)), int(item.get("phase_id", 0))))
+        return _build_parallel_phase_blocks(raw_history)
 
-            for run in runs:
-                if len(run) > 1:
-                    group_key = run[0]["phase_code"]
-                    for item in run:
-                        item["parallel_group"] = group_key
-                else:
-                    run[0]["parallel_group"] = None
-                blocks.append({"kind": "parallel" if len(run) > 1 else "single", "phases": run})
-        return blocks
-
-    def _decorate_supervisor_runs(self, supervisor_runs: list[dict[str, Any]], wdb: Any) -> list[dict[str, Any]]:
+    def _decorate_supervisor_runs(self, supervisor_runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
         from project_workflow.wizard.types import VERDICT_LABELS
 
         for super_run in supervisor_runs:
@@ -344,34 +330,22 @@ class UIDataService:
                 super_run.get("verdict", ""), super_run.get("verdict", "").upper()
             )
             resp = super_run.get("response") or {}
+            snapshot = super_run.get("context_snapshot") or {}
+            contract_snapshot = snapshot.get("contract_snapshot") or {}
+            super_run["phase_code"] = snapshot.get("phase") or resp.get("current_phase") or "—"
+            super_run["phase_name"] = (
+                snapshot.get("phase_name")
+                or contract_snapshot.get("phase_name")
+                or super_run["phase_code"]
+            )
             super_run["contract"] = {
-                "description": resp.get("description", ""),
-                "instructions": resp.get("instructions", []),
-                "required_checks": resp.get("required_checks", []),
-                "required_evidence": resp.get("required_evidence", []),
-                "covered": resp.get("covered", []),
-                "missing": resp.get("missing", []),
-                "blockers": resp.get("blockers", []),
+                "covered": resp.get("covered", super_run.get("covered", [])),
+                "missing": resp.get("missing", super_run.get("missing", [])),
+                "blockers": resp.get("blockers", super_run.get("blockers", [])),
                 "message": resp.get("message", ""),
-                "next_phase_name": resp.get("next_phase_name", ""),
             }
-            next_code = resp.get("next_phase")
-            if next_code:
-                next_ph = wdb.get_phase_by_code(next_code)
-                if next_ph:
-                    super_run["next_contract"] = {
-                        "phase_name": next_ph.get("name", next_code),
-                        "description": next_ph.get("description", ""),
-                        "instructions": [i.get("text", "") for i in (next_ph.get("instructions") or [])],
-                        "required_checks": [c.get("text", "") for c in (next_ph.get("checks") or [])],
-                        "required_evidence": [e.get("text", "") for e in (next_ph.get("evidence") or [])],
-                        "delegate_agent": next_ph.get("delegate_agent"),
-                        "delegate_toolsets": next_ph.get("delegate_toolsets", []),
-                    }
-                else:
-                    super_run["next_contract"] = None
-            else:
-                super_run["next_contract"] = None
+            next_contract = resp.get("next_phase_contract")
+            super_run["next_contract"] = dict(next_contract) if isinstance(next_contract, dict) else None
         return supervisor_runs
 
     def _get_task_detail(self, task_key: str) -> dict[str, Any] | None:
@@ -414,12 +388,14 @@ class UIDataService:
         )
         task["total_phases"] = task.get("workflow_phase_count", 0)
 
-        supervisor_runs = wdb.get_supervisor_runs(task_key=task_key, limit=200)
-        task["supervisor_runs"] = self._decorate_supervisor_runs(supervisor_runs, wdb)
+        supervisor_runs = self._decorate_supervisor_runs(
+            list(reversed(wdb.get_supervisor_runs(task_key=task_key, limit=200)))
+        )
+        task["supervisor_runs"] = supervisor_runs
 
         if supervisor_runs:
-            task["latest_verdict"] = supervisor_runs[0].get("verdict")
-            task["latest_verdict_label"] = supervisor_runs[0].get("verdict_label")
+            task["latest_verdict"] = supervisor_runs[-1].get("verdict")
+            task["latest_verdict_label"] = supervisor_runs[-1].get("verdict_label")
         else:
             task["latest_verdict"] = None
             task["latest_verdict_label"] = None

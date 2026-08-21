@@ -2,23 +2,24 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{% block title %}project-workflow{% endblock %}</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 :root{
-  --bg:#08090a;--panel:#0f1011;--surface:#191a1b;--surface-hover:#1f2022;--surface-active:#25262a;
-  --text:#f7f8f8;--text-secondary:#d0d6e0;--text-muted:#8a8f98;--text-dim:#62666d;
+  --bg:#111217;--panel:#17181d;--surface:#202126;--surface-hover:#27282e;--surface-active:#2d2e35;
+  --text:#f7f8f8;--text-secondary:#d0d6e0;--text-muted:#969ba5;--text-dim:#727780;
   --accent:#5e6ad2;--accent-hover:#828fff;--accent-soft:rgba(94,106,210,.15);
   --border:rgba(255,255,255,.06);--border-strong:rgba(255,255,255,.10);
   --green:#22c55e;--green-soft:rgba(34,197,94,.12);--red:#ef4444;--red-soft:rgba(239,68,68,.12);
-  --orange:#f59e0b;--orange-soft:rgba(245,158,11,.12);--blue:#3b82f6;
+  --orange:#f59e0b;--orange-soft:rgba(245,158,11,.12);--yellow:#eab308;--yellow-soft:rgba(234,179,8,.12);--blue:#3b82f6;
   --sidebar-width:240px;--header-height:52px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{font-feature-settings:"cv01","ss03"}
 body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,-apple-system,sans-serif;line-height:1.5;font-size:14px;min-height:100vh;display:flex;overflow-x:hidden}
 a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--accent-hover);outline-offset:2px}
 
 /* ── Sidebar (desktop fixed) ────────────────────────────────────────── */
 .sidebar{
@@ -59,9 +60,10 @@ a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
 .container{width:100%;padding:24px}
 
 /* ── Cards ─────────────────────────────────────────────────────────── */
-.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px}
 .card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px}
 .card-title{font-size:14px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.06em}
+.section-heading{font-size:22px;font-weight:650;color:var(--text);padding-bottom:10px;margin-bottom:18px;border-bottom:1px solid var(--border-strong);letter-spacing:-.02em}
 .card-value{font-size:28px;font-weight:600;color:var(--text);letter-spacing:-0.4px}
 .card-delta{font-size:12px;color:var(--text-muted);margin-top:4px}
 
@@ -138,10 +140,6 @@ textarea{resize:vertical;min-height:60px}
 .timeline-block{width:100%}
 .timeline-item{width:100%}
 .timeline-row{display:grid;grid-template-columns:84px minmax(0,1fr);gap:12px;align-items:stretch}
-.phase-order-controls{display:flex;flex-direction:column;align-items:center;gap:8px;padding-top:8px}
-.phase-add-btn{width:36px;height:32px;border-radius:8px;border:1px dashed var(--accent);background:rgba(88,166,255,.12);color:var(--accent);cursor:pointer;transition:all .12s;font-size:20px;font-weight:700;line-height:1}
-.phase-add-btn:hover{background:var(--accent);color:#fff;border-style:solid}
-.phase-delete-btn{width:36px;height:32px;border-radius:8px;border:1px solid var(--red);background:rgba(239,68,68,.12);color:var(--red);cursor:pointer;transition:all .12s;font-size:18px;font-weight:700;line-height:1}
 .phase-order-controls{flex-shrink:0;width:84px;display:flex;flex-direction:column;align-items:center;gap:8px;padding-top:6px}
 .phase-move-btn{width:36px;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;transition:all .12s;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center}
 .phase-move-btn:disabled{opacity:.35;cursor:not-allowed}
@@ -237,7 +235,7 @@ textarea{resize:vertical;min-height:60px}
     </nav>
     <div class="sidebar-footer">
     <span class="dot green"></span>
-    {% if ui_port is defined %}<span>UI: {{ ui_port }}</span>{% else %}<span>UI: 8811</span>{% endif %}
+    <span>Сервис работает</span>
     </div>
 </aside>
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
+from project_workflow.domain.phase_grouping import group_parallel_phases
+
 
 def _parse_optional_int(raw: Any) -> int | None:
     if raw is None or raw == "":
@@ -33,33 +35,28 @@ def _run_to_dict(run: Any) -> dict[str, Any]:
 
 
 def _build_parallel_phase_blocks(phases: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Группирует фазы по execution_type-run: parallel примыкает к текущему sync-run."""
-    if not phases:
-        return []
-
-    runs: list[list[dict[str, Any]]] = []
-    current_run: list[dict[str, Any]] = []
-    for phase in phases:
-        if not current_run:
-            current_run.append(dict(phase))
-        elif phase.get("execution_type") == "parallel":
-            current_run.append(dict(phase))
-        else:
-            runs.append(current_run)
-            current_run = [dict(phase)]
-    if current_run:
-        runs.append(current_run)
-
+    """Build UI blocks with the same ``parallel_with`` semantics as Wizard."""
+    normalized = [dict(phase) for phase in phases]
+    groups = group_parallel_phases(
+        normalized,
+        code_of=lambda phase: str(phase.get("code", "")),
+        execution_type_of=lambda phase: str(phase.get("execution_type", "sync")),
+        parallel_with_of=lambda phase: phase.get("parallel_with"),
+    )
     blocks: list[dict[str, Any]] = []
-    for idx, run in enumerate(runs):
-        group_key = str(run[0].get("code", idx))
-        if len(run) > 1:
-            for phase in run:
+    for index, group in enumerate(groups):
+        group_key = str(group[0].get("code", index))
+        if len(group) > 1:
+            for phase in group:
                 phase["parallel_group"] = group_key
-            blocks.append({"kind": "parallel", "phases": run})
+            statuses = {str(phase.get("status", "wait")) for phase in group}
+            block_status = "current" if "current" in statuses else ("done" if statuses == {"done"} else "wait")
+            blocks.append({"kind": "parallel", "status": block_status, "phases": group})
         else:
-            run[0]["parallel_group"] = None
-            blocks.append({"kind": "single", "phases": run})
+            group[0]["parallel_group"] = None
+            blocks.append(
+                {"kind": "single", "status": str(group[0].get("status", "wait")), "phases": group}
+            )
 
     return blocks
 
@@ -75,6 +72,8 @@ def _resolve_task_phase(
     for phase in workflow_phases:
         if str(phase.get("code", phase.get("id"))) == token:
             return token, phase
+
+    for phase in workflow_phases:
         if str(phase.get("id")) == token:
             return token, phase
 
@@ -99,6 +98,8 @@ def _resolve_task_phase_local(
     for phase in workflow_phases:
         if str(phase.get("code", phase.get("id"))) == token:
             return token, phase
+
+    for phase in workflow_phases:
         if str(phase.get("id")) == token:
             return token, phase
 

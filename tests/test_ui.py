@@ -403,10 +403,10 @@ class TestPhasesPage:
     def test_phases_page_has_reorder_controls_and_batch_order_api_hook(self):
         response = client.get("/phases")
         assert response.status_code == 200
-        assert "phase-order-controls" in response.text
+        assert "phase-card-actions" in response.text
         assert 'data-phase-id="' in response.text
-        assert "movePhase(this, -1)" in response.text
-        assert "movePhase(this, 1)" in response.text
+        assert "movePhase(this,-1)" in response.text
+        assert "movePhase(this,1)" in response.text
         assert "addPhaseAfter(this)" in response.text
         assert "fetch('/api/phases/order'" in response.text
         assert "fetch('/api/phases'," in response.text
@@ -416,15 +416,11 @@ class TestPhasesPage:
         assert response.status_code == 200
         assert 'class="phase-add-btn"' in response.text
         assert 'onclick="addPhaseAfter(this)"' in response.text
-        # Each phase row should now have 3 controls: up, add, down
-        controls_match = re.search(
-            r'class="phase-order-controls".*?\u003c/button\u003e.*?'
-            r'class="phase-add-btn".*?\u003c/button\u003e.*?'
-            r'class="phase-move-btn move-down-btn"',
-            response.text,
-            re.S,
-        )
-        assert controls_match is not None
+        # Reordering/deletion lives on cards; adding lives between complete blocks.
+        assert 'class="phase-card-actions"' in response.text
+        assert 'class="move-up-btn"' in response.text
+        assert 'class="move-down-btn"' in response.text
+        assert response.text.index('class="phase-card-actions"') < response.text.index('class="phase-add-btn"')
 
     def test_phases_page_add_phase_button_carries_workflow_id_from_active_nav(self):
         response = client.get("/phases")
@@ -451,9 +447,10 @@ class TestPhasesPage:
         response = client.get("/phases")
         assert response.status_code == 200
 
-        # Each row should expose the server order via data-phase-order and the JS should read it
+        # Each row exposes server order; block add buttons carry the exact insertion order.
         assert "data-phase-order=" in response.text
-        assert "parseInt(item.dataset.phaseOrder" in response.text
+        assert "data-after-order=" in response.text
+        assert "parseInt(button.dataset.afterOrder" in response.text
         assert "currentIndex + 2" not in response.text
 
     def test_phases_page_add_phase_api_flow_creates_phase_in_default_workflow(self):
@@ -652,7 +649,8 @@ class TestPhasesPage:
         phase_html = response.text.split(_phase_href("7.5"), 1)[1].split("</a>", 1)[0]
 
         assert "Code Review" in phase_html
-        assert "⚡ parallel" in phase_html
+        assert "badge-parallel" in phase_html
+        assert ">parallel<" in phase_html
 
     def test_phases_api_exposes_real_execution_type_without_fake_instruction_parallel_flag(self):
         response = client.get("/api/phases")
@@ -663,11 +661,11 @@ class TestPhasesPage:
         assert phase["execution_type"] == "sync"
         assert "has_parallel_instructions" not in phase
 
-    def test_build_parallel_phase_blocks_uses_execution_type_runs(self):
+    def test_build_parallel_phase_blocks_uses_connected_parallel_components(self):
         from project_workflow.interfaces.ui import _build_parallel_phase_blocks
 
         phases = [
-            {"code": "4.5", "execution_type": "sync", "parallel_with": None, "phase_num": 16},
+            {"code": "4.5", "execution_type": "parallel", "parallel_with": "5", "phase_num": 16},
             {"code": "5", "execution_type": "parallel", "parallel_with": None, "phase_num": 17},
             {"code": "5.5", "execution_type": "sync", "parallel_with": None, "phase_num": 18},
         ]
@@ -693,6 +691,19 @@ class TestPhasesPage:
         assert [block["kind"] for block in blocks] == ["single", "single", "single"]
         assert [[phase["code"] for phase in block["phases"]] for block in blocks] == [["4.5"], ["5"], ["5.5"]]
         assert all(block["phases"][0].get("parallel_group") is None for block in blocks)
+
+    def test_default_catalog_has_exact_parallel_components(self):
+        from project_workflow.interfaces.ui import _build_parallel_phase_blocks, _load_phases
+
+        workflow = _workflow_row("default")
+        blocks = _build_parallel_phase_blocks(_load_phases(workflow["id"]))
+        groups = [
+            [phase["code"] for phase in block["phases"]]
+            for block in blocks
+            if block["kind"] == "parallel"
+        ]
+
+        assert groups == [["0.6", "1"], ["1.5", "2"], ["4.5", "5"], ["7.5", "7.6", "7.6.R"]]
 
 
 class TestPhaseDetail:

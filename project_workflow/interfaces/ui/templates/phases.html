@@ -2,49 +2,70 @@
 
 {% block title %}Фазы workflow — project-workflow{% endblock %}
 {% block header_title %}Фазы workflow{% endblock %}
-{% block header_actions %}
-  <a href="/workflows" class="btn btn-secondary">← К workflow</a>
-{% endblock %}
+{% block header_actions %}<a href="/workflows" class="btn btn-secondary">← К workflow</a>{% endblock %}
 
 {% block extra_style %}
-.phases-layout{display:grid;grid-template-columns:320px minmax(0,1fr);gap:16px;align-items:start}
-.workflow-nav{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 190px);overflow:auto}
+.phases-layout{display:grid;grid-template-columns:280px minmax(0,1fr);gap:20px;align-items:start}
+.workflow-nav{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 100px);overflow:auto;position:sticky;top:76px}
 .workflow-nav-item{display:block;width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;color:var(--text);text-decoration:none}
-.workflow-nav-item.active{border-color:var(--accent);box-shadow:0 0 0 1px rgba(88,166,255,.25)}
+.workflow-nav-item:hover{text-decoration:none;border-color:var(--border-strong);background:var(--surface-hover)}
+.workflow-nav-item.active{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
 .workflow-name{font-size:15px;font-weight:600;color:var(--text)}
-.workflow-meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--text-dim)}
-.workflow-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:rgba(148,163,184,.12);color:var(--text-dim)}
-.timeline-panel{display:flex;flex-direction:column;gap:16px}
+.workflow-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--text-dim)}
+.workflow-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:rgba(148,163,184,.10);color:var(--text-muted)}
+.timeline-panel{display:flex;flex-direction:column;gap:18px;min-width:0}
+.workflow-summary{background:transparent;border-width:0 0 1px;border-radius:0;padding:0 0 16px}
+.workflow-summary .card-title{font-size:20px;color:var(--text);text-transform:none;letter-spacing:-.02em;margin-bottom:5px}
 .empty-note{color:var(--text-dim);font-size:13px;line-height:1.6}
-@media (max-width: 980px){.phases-layout{grid-template-columns:1fr}.workflow-nav{max-height:none}}
+.timeline{display:flex;flex-direction:column;align-items:stretch;max-width:none;gap:0}
+.timeline-block,.timeline-item{width:100%}
+.phase-card-shell{position:relative}
+.timeline-card{min-height:112px;padding:16px 148px 16px 18px;border-radius:9px}
+.timeline-card:hover{transform:none}
+.phase-card-actions{position:absolute;right:12px;top:12px;display:flex;gap:6px;z-index:2}
+.phase-card-actions button{width:30px;height:28px;border-radius:6px;border:1px solid var(--border-strong);background:var(--panel);color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px}
+.phase-card-actions button:hover:not(:disabled){color:var(--text);border-color:var(--accent);background:var(--surface-hover)}
+.phase-card-actions .phase-delete-btn:hover:not(:disabled){color:var(--red);border-color:var(--red)}
+.phase-card-actions button:disabled{opacity:.3;cursor:not-allowed}
+.execution-row{margin-top:10px;min-height:0}
+.execution-toggle{width:auto!important;padding:0 9px!important;font-size:11px!important}
+.timeline-parallel-group{display:block;border-color:var(--border-strong);background:rgba(255,255,255,.012);box-shadow:none;padding:14px}
+.timeline-parallel-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.timeline-parallel-label{border-color:var(--border-strong);background:var(--panel);color:var(--text-muted)}
+.timeline-parallel-count{font-size:12px;color:var(--text-dim)}
+.timeline-parallel-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.timeline-parallel-grid .timeline-card{min-height:132px}
+.timeline-parallel-grid .badge-parallel{background:var(--panel);color:var(--text-muted);border-color:var(--border-strong)}
+.timeline-connector{height:48px;display:flex;align-items:center;justify-content:center;position:relative}
+.timeline-connector::before{content:'';position:absolute;top:0;bottom:0;left:50%;width:1px;background:var(--border-strong)}
+.phase-add-btn{position:relative;z-index:1;width:30px;height:30px;border-radius:50%;border:1px dashed var(--accent);background:var(--panel);color:var(--accent);cursor:pointer;font-size:18px;line-height:1}
+.phase-add-btn:hover{background:var(--accent);color:#fff;border-style:solid}
+@media(max-width:1050px){.phases-layout{grid-template-columns:1fr}.workflow-nav{position:static;max-height:none}.timeline-card{padding-right:18px;padding-top:52px}.phase-card-actions{left:12px;right:auto}}
+@media(max-width:760px){.timeline-parallel-grid{grid-template-columns:1fr}.timeline-parallel-group{padding:10px}.timeline-card,.timeline-parallel-grid .timeline-card{min-height:0}}
 {% endblock %}
 
-{% macro phase_body(p) -%}
-<div class="timeline-row">
-  <div class="phase-order-controls">
-    <button type="button" class="phase-move-btn move-up-btn" onclick="movePhase(this, -1)" aria-label="Поднять фазу выше">↑</button>
-    <button type="button" class="phase-add-btn" onclick="addPhaseAfter(this)" aria-label="Добавить фазу после">+</button>
-    <button type="button" class="phase-move-btn move-down-btn" onclick="movePhase(this, 1)" aria-label="Опустить фазу ниже">↓</button>
-    <button type="button" class="phase-delete-btn" onclick="deletePhase(this)" aria-label="Удалить фазу"{% if phase_count <= 1 %} disabled style="opacity:.35;cursor:not-allowed"{% endif %}>×</button>
+{% macro phase_card(p) -%}
+<div class="timeline-item" data-phase-id="{{ p.id }}" data-phase-order="{{ p.phase_num }}" data-execution-type="{{ p.execution_type }}">
+  <div class="phase-card-shell">
+    <a href="/phase/{{ p.id }}" class="timeline-card">
+      <div class="timeline-name">{{ p.name }}</div>
+      {% set description = p.description | default('') %}
+      {% if description %}<div class="timeline-desc">{{ description[:120] }}{% if description|length > 120 %}...{% endif %}</div>{% endif %}
+      <div class="execution-row"><span class="badge {{ 'badge-parallel' if p.execution_type == 'parallel' else 'badge-sync' }}">{{ 'parallel' if p.execution_type == 'parallel' else 'sync' }}</span></div>
+      {% if p.agent_name or p.is_delegated %}
+      <div class="timeline-badges">
+        {% if p.agent_name %}<span class="badge badge-agent">{{ p.agent_name }}</span>{% endif %}
+        {% if p.is_delegated %}<span class="badge badge-delegate">delegate</span>{% endif %}
+      </div>
+      {% endif %}
+    </a>
+    <div class="phase-card-actions" aria-label="Действия фазы">
+      <button type="button" class="move-up-btn" onclick="movePhase(this,-1)" title="Поднять выше" aria-label="Поднять фазу выше">↑</button>
+      <button type="button" class="move-down-btn" onclick="movePhase(this,1)" title="Опустить ниже" aria-label="Опустить фазу ниже">↓</button>
+      <button type="button" class="execution-toggle" onclick="togglePhaseType(this)" title="Изменить режим выполнения" aria-label="Изменить режим выполнения">{{ 'P' if p.execution_type == 'parallel' else 'S' }}</button>
+      <button type="button" class="phase-delete-btn" onclick="deletePhase(this)" title="Удалить фазу" aria-label="Удалить фазу"{% if phase_count <= 1 %} disabled{% endif %}>×</button>
+    </div>
   </div>
-  <a href="/phase/{{ p.id }}" class="timeline-card">
-    <div class="timeline-name">{{ p.name }}</div>
-    {% set d = p.description | default('') %}
-    {% if d %}
-    <div class="timeline-desc">{{ d[:120] }}{% if d|length > 120 %}...{% endif %}</div>
-    {% endif %}
-    <div class="execution-row">
-      <button type="button" class="badge {{ 'badge-parallel' if p.execution_type == 'parallel' else 'badge-sync' }}" onclick="event.preventDefault(); event.stopPropagation(); togglePhaseType(this)" aria-label="Режим выполнения: {{ p.execution_type }}">
-        {% if p.execution_type == 'parallel' %}⚡ parallel{% else %}⏱ sync{% endif %}
-      </button>
-    </div>
-    {% if p.agent_name or p.is_delegated %}
-    <div class="timeline-badges">
-      {% if p.agent_name %}<span class="badge badge-agent">🤖 {{ p.agent_name }}</span>{% endif %}
-      {% if p.is_delegated %}<span class="badge badge-delegate">👤 delegate</span>{% endif %}
-    </div>
-    {% endif %}
-  </a>
 </div>
 {%- endmacro %}
 
@@ -59,260 +80,109 @@
         <span class="workflow-chip">{{ workflow.phase_count | pluralize('фаза,фазы,фаз') }}</span>
       </div>
     </a>
-    {% else %}
-    <div class="card empty-note">Workflow пока нет.</div>
-    {% endfor %}
+    {% else %}<div class="card empty-note">Workflow пока нет.</div>{% endfor %}
   </section>
 
   <section class="timeline-panel">
-    <div class="card">
+    <div class="card workflow-summary">
       <div class="card-title">{{ selected_workflow.name if selected_workflow else 'Фазы' }}</div>
-      {% if selected_workflow and selected_workflow.description %}
-      <div class="empty-note">{{ selected_workflow.description }}</div>
-      {% elif selected_workflow %}
-      <div class="empty-note">Показаны только фазы выбранного workflow.</div>
-      {% else %}
-      <div class="empty-note">Сначала создайте workflow.</div>
-      {% endif %}
+      {% if selected_workflow and selected_workflow.description %}<div class="empty-note">{{ selected_workflow.description }}</div>
+      {% elif selected_workflow %}<div class="empty-note">Порядок выполнения и связанные parallel-группы.</div>
+      {% else %}<div class="empty-note">Сначала создайте workflow.</div>{% endif %}
     </div>
 
     <div class="timeline" id="phasesTimeline">
       {% for block in phase_blocks %}
         {% if block.kind == 'parallel' %}
-          <div class="timeline-block timeline-parallel-group">
-            <div class="timeline-parallel-label">⚡ parallel</div>
-            {% for p in block.phases %}
-              <div class="timeline-item" data-phase-id="{{ p.id }}" data-phase-order="{{ p.phase_num }}" data-execution-type="{{ p.execution_type }}">
-                {{ phase_body(p) }}
-                <div class="timeline-arrow"{% if loop.last %} hidden{% endif %}>↓</div>
-              </div>
-            {% endfor %}
+        <section class="timeline-block timeline-parallel-group">
+          <div class="timeline-parallel-header">
+            <div class="timeline-parallel-label">parallel</div>
+            <div class="timeline-parallel-count">{{ block.phases | length }} одновременно</div>
           </div>
-        {% else %}
-          {% set p = block.phases[0] %}
-          <div class="timeline-block">
-            <div class="timeline-item" data-phase-id="{{ p.id }}" data-phase-order="{{ p.phase_num }}" data-execution-type="{{ p.execution_type }}">
-              {{ phase_body(p) }}
-              <div class="timeline-arrow" hidden>↓</div>
-            </div>
-          </div>
-        {% endif %}
-        <div class="timeline-arrow timeline-arrow-block"{% if loop.last %} hidden{% endif %}>↓</div>
+          <div class="timeline-parallel-grid">{% for p in block.phases %}{{ phase_card(p) }}{% endfor %}</div>
+        </section>
+        {% else %}<section class="timeline-block">{{ phase_card(block.phases[0]) }}</section>{% endif %}
+        <div class="timeline-connector">
+          <button type="button" class="phase-add-btn" data-after-order="{{ block.phases[-1].phase_num }}" onclick="addPhaseAfter(this)" title="Добавить фазу после блока" aria-label="Добавить фазу после блока">+</button>
+        </div>
       {% else %}
         <div class="card empty-note" style="width:100%">Для этого workflow фаз пока нет.</div>
+        {% if selected_workflow_id %}<div class="timeline-connector"><button type="button" class="phase-add-btn" data-after-order="0" onclick="addPhaseAfter(this)" aria-label="Добавить первую фазу">+</button></div>{% endif %}
       {% endfor %}
     </div>
   </section>
 </div>
+{% endblock %}
 
-<script>
-function getPhaseTimelineItems() {
-  return Array.from(document.querySelectorAll('#phasesTimeline .timeline-item'));
-}
+{% block extra_script %}
+function getPhaseTimelineItems(){return Array.from(document.querySelectorAll('#phasesTimeline .timeline-item'));}
 
-async function addPhaseAfter(button) {
-  const item = button.closest('.timeline-item');
-  if (!item) return;
-
-  const workflowId = new URLSearchParams(window.location.search).get('workflow_id')
-    || (document.querySelector('.workflow-nav-item.active')?.dataset.workflowId);
-  if (!workflowId) {
-    showToast('Не удалось определить workflow', 'error');
-    return;
-  }
-
-  const currentOrder = parseInt(item.dataset.phaseOrder || '0', 10);
-  if (!currentOrder || currentOrder < 1) {
-    showToast('Не удалось определить позицию фазы', 'error');
-    return;
-  }
-  const insertOrder = currentOrder + 1; // insert after current (1-based server order)
-
-  button.disabled = true;
-  try {
-    const resp = await fetch('/api/phases', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        workflow_id: parseInt(workflowId, 10),
-        phase_order: insertOrder,
-      }),
-    });
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok || !data.ok) {
-      showToast(data.error || 'Не удалось добавить фазу', 'error');
-      return;
-    }
-    // Full reload to re-render server-side grouping and fresh IDs.
+async function addPhaseAfter(button){
+  const workflowId=new URLSearchParams(window.location.search).get('workflow_id')||document.querySelector('.workflow-nav-item.active')?.dataset.workflowId;
+  const currentOrder=parseInt(button.dataset.afterOrder||'0',10);
+  if(!workflowId||currentOrder<0){showToast('Не удалось определить позицию фазы','error');return;}
+  button.disabled=true;
+  try{
+    const resp=await fetch('/api/phases',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workflow_id:parseInt(workflowId,10),phase_order:currentOrder+1})});
+    const data=await resp.json().catch(()=>({}));
+    if(!resp.ok||!data.ok){showToast(data.error||'Не удалось добавить фазу','error');return;}
     window.location.reload();
-  } finally {
-    button.disabled = false;
-  }
+  }finally{button.disabled=false;}
 }
 
-async function deletePhase(button) {
-  const item = button.closest('.timeline-item');
-  if (!item) return;
-
-  const items = getPhaseTimelineItems();
-  if (items.length <= 1) {
-    showToast('Нельзя удалить единственную фазу workflow', 'error');
-    return;
-  }
-
-  if (!confirm('Удалить фазу?')) return;
-
-  button.disabled = true;
-  try {
-    const phaseId = item.dataset.phaseId;
-    const resp = await fetch('/api/phases/' + phaseId, {method: 'DELETE'});
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok || !data.ok) {
-      showToast(data.error || 'Не удалось удалить фазу', 'error');
-      return;
-    }
+async function deletePhase(button){
+  const item=button.closest('.timeline-item');
+  const items=getPhaseTimelineItems();
+  if(!item)return;
+  if(items.length<=1){showToast('Нельзя удалить единственную фазу workflow','error');return;}
+  if(!confirm('Удалить фазу?'))return;
+  button.disabled=true;
+  try{
+    const resp=await fetch('/api/phases/'+item.dataset.phaseId,{method:'DELETE'});
+    const data=await resp.json().catch(()=>({}));
+    if(!resp.ok||!data.ok){showToast(data.error||'Не удалось удалить фазу','error');return;}
     window.location.reload();
-  } finally {
-    button.disabled = false;
-  }
+  }finally{button.disabled=false;}
 }
 
-async function togglePhaseType(button) {
-  const item = button.closest('.timeline-item');
-  if (!item) return;
-  const phaseId = item.dataset.phaseId;
-  const isSync = (item.dataset.executionType || 'sync') === 'sync';
-  const nextType = isSync ? 'parallel' : 'sync';
-  button.disabled = true;
-  try {
-    const resp = await fetch('/api/phases/' + phaseId, {
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({execution_type: nextType}),
-    });
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok || !data.ok) {
-      showToast(data.error || 'Не удалось сменить режим', 'error');
-      return;
-    }
+async function togglePhaseType(button){
+  const item=button.closest('.timeline-item');
+  if(!item)return;
+  const nextType=(item.dataset.executionType||'sync')==='sync'?'parallel':'sync';
+  button.disabled=true;
+  try{
+    const resp=await fetch('/api/phases/'+item.dataset.phaseId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({execution_type:nextType})});
+    const data=await resp.json().catch(()=>({}));
+    if(!resp.ok||!data.ok){showToast(data.error||'Не удалось сменить режим','error');return;}
     window.location.reload();
-  } finally {
-    button.disabled = false;
-  }
+  }finally{button.disabled=false;}
 }
 
-function renderPhaseTimeline(items) {
-  const timeline = document.getElementById('phasesTimeline');
-  if (!timeline) return;
-
-  const emptyNode = timeline.querySelector('.empty-note');
-  if (items.length === 0) {
-    if (emptyNode) {
-      timeline.replaceChildren(emptyNode);
-    }
-    return;
-  }
-
-  timeline.innerHTML = '';
-  let idx = 0;
-
-  while (idx < items.length) {
-    const group = [items[idx]];
-    idx++;
-
-    while (idx < items.length && (items[idx].dataset.executionType || 'sync') === 'parallel') {
-      group.push(items[idx]);
-      idx++;
-    }
-
-    const isParallelGroup = group.length > 1;
-    const block = document.createElement('div');
-    block.className = 'timeline-block' + (isParallelGroup ? ' timeline-parallel-group' : '');
-
-    if (isParallelGroup) {
-      const label = document.createElement('div');
-      label.className = 'timeline-parallel-label';
-      label.textContent = '⚡ parallel';
-      block.appendChild(label);
-    }
-
-    group.forEach((item, groupIndex) => {
-      const innerArrow = item.querySelector('.timeline-arrow');
-      if (innerArrow) {
-        innerArrow.hidden = !(isParallelGroup && groupIndex < group.length - 1);
-      }
-      block.appendChild(item);
-    });
-
-    timeline.appendChild(block);
-
-    const blockArrow = document.createElement('div');
-    blockArrow.className = 'timeline-arrow timeline-arrow-block';
-    blockArrow.textContent = '↓';
-    blockArrow.hidden = idx >= items.length;
-    timeline.appendChild(blockArrow);
-  }
+async function movePhase(button,direction){
+  const item=button.closest('.timeline-item');
+  const items=getPhaseTimelineItems();
+  const currentIndex=items.indexOf(item);
+  const targetIndex=currentIndex+direction;
+  if(!item||currentIndex<0||targetIndex<0||targetIndex>=items.length)return;
+  const reordered=[...items];
+  const moved=reordered.splice(currentIndex,1)[0];
+  reordered.splice(targetIndex,0,moved);
+  button.disabled=true;
+  try{
+    const orders=reordered.map((phase,index)=>({phase_id:phase.dataset.phaseId,phase_order:index+1}));
+    const resp=await fetch('/api/phases/order',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({orders})});
+    if(!resp.ok){showToast('Не удалось сохранить порядок фаз','error');return;}
+    window.location.reload();
+  }finally{button.disabled=false;}
 }
 
-function updateTimelineControls() {
-  const items = getPhaseTimelineItems();
-  items.forEach((item, idx) => {
-    const up = item.querySelector('.move-up-btn');
-    const down = item.querySelector('.move-down-btn');
-    if (up) up.disabled = idx === 0;
-    if (down) down.disabled = idx === items.length - 1;
+document.addEventListener('DOMContentLoaded',()=>{
+  const items=getPhaseTimelineItems();
+  items.forEach((item,index)=>{
+    const up=item.querySelector('.move-up-btn');
+    const down=item.querySelector('.move-down-btn');
+    if(up)up.disabled=index===0;
+    if(down)down.disabled=index===items.length-1;
   });
-}
-
-function applySequentialPhaseBadges() {
-  getPhaseTimelineItems().forEach((item, idx) => {
-    item.dataset.phaseOrder = String(idx + 1);
-  });
-}
-
-async function persistPhaseOrder() {
-  const orders = getPhaseTimelineItems().map((item, idx) => ({
-    phase_id: item.dataset.phaseId,
-    phase_order: idx + 1,
-  }));
-
-  const resp = await fetch('/api/phases/order', {
-    method: 'PUT',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({orders}),
-  });
-
-  if (!resp.ok) {
-    showToast('Не удалось сохранить порядок фаз', 'error');
-    return false;
-  }
-
-  showToast('Порядок фаз сохранён');
-  return true;
-}
-
-async function movePhase(button, direction) {
-  const item = button.closest('.timeline-item');
-  if (!item) return;
-
-  const items = getPhaseTimelineItems();
-  const currentIndex = items.indexOf(item);
-  const targetIndex = currentIndex + direction;
-  if (currentIndex < 0 || targetIndex < 0 || targetIndex >= items.length) return;
-
-  const reordered = [...items];
-  const [moved] = reordered.splice(currentIndex, 1);
-  reordered.splice(targetIndex, 0, moved);
-
-  renderPhaseTimeline(reordered);
-  applySequentialPhaseBadges();
-  updateTimelineControls();
-  await persistPhaseOrder();
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  renderPhaseTimeline(getPhaseTimelineItems());
-  updateTimelineControls();
 });
-</script>
 {% endblock %}

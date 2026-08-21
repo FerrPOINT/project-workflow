@@ -42,8 +42,8 @@
         <div class="cli-option-flags">{{ option.flags }}</div>
         <div class="cli-option-help">
           {{ option.help or 'Без описания' }}
-          {% if option.required %}<span class="badge">required</span>{% endif %}
-          {% if 'default' in option %}<span class="badge">default: {{ option.default }}</span>{% endif %}
+          {% if option.required %}<span class="badge">обязательно</span>{% endif %}
+          {% if 'default' in option %}<span class="badge">по умолчанию: {{ option.default }}</span>{% endif %}
         </div>
       </div>
       {% endfor %}

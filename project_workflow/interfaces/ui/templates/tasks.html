@@ -35,10 +35,15 @@
 .verdict-blocked{background:var(--red-soft);color:var(--red)}
 .verdict-rollback{background:var(--orange-soft);color:var(--orange)}
 .verdict-delegate{background:var(--accent-soft);color:var(--accent)}
+.table-card-list{display:none}
+@media(max-width:1200px){
+  .tasks-table-wrap{display:none}
+  .table-card-list{display:flex;flex-direction:column;gap:12px}
+}
 {% endblock %}
 
 {% block content %}
-<div class="card" style="padding:0;overflow-x:auto">
+<div class="card tasks-table-wrap" style="padding:0;overflow-x:auto">
   <table class="tasks-table">
     <thead>
       <tr>
@@ -58,7 +63,7 @@
       <tr data-task-key="{{ t.task_key }}">
         <td><a href="/task/{{ t.task_key }}" class="task-key">{{ t.task_key }}</a></td>
         <td>{{ t.project_code }}</td>
-        <td><span class="task-title">{{ t.title }}</span></td>
+        <td><span class="task-title">{{ t.title if t.title and t.title != t.task_key else '—' }}</span></td>
         <td>{{ t.current_phase_name or '—' }}</td>
         <td>
           <span class="progress-inline">
@@ -68,11 +73,11 @@
         </td>
         <td>
           {% if t.status == 'done' %}
-          <span class="status-badge status-done">🟢 Завершена</span>
+          <span class="status-badge status-done">Завершена</span>
           {% elif t.status == 'blocked' %}
-          <span class="status-badge status-blocked">🔴 Заблокирована</span>
+          <span class="status-badge status-blocked">Заблокирована</span>
           {% else %}
-          <span class="status-badge status-active">🔵 В работе</span>
+          <span class="status-badge status-active">В работе</span>
           {% endif %}
         </td>
         <td>
@@ -93,25 +98,27 @@
   </table>
 </div>
 
-<div class="table-card-list" style="margin-top:16px;display:none">
+<div class="table-card-list">
   {% for t in tasks %}
   <div class="task-card" data-task-key="{{ t.task_key }}">
     <div class="row">
       <a href="/task/{{ t.task_key }}" class="task-key">{{ t.task_key }}</a>
       {% if t.status == 'done' %}
-      <span class="status-badge status-done">🟢</span>
+      <span class="status-badge status-done">Завершена</span>
       {% elif t.status == 'blocked' %}
-      <span class="status-badge status-blocked">🔴</span>
+      <span class="status-badge status-blocked">Заблокирована</span>
       {% else %}
-      <span class="status-badge status-active">🔵</span>
+      <span class="status-badge status-active">В работе</span>
       {% endif %}
       {% if t.latest_verdict %}
       <span class="verdict-badge verdict-{{ t.latest_verdict }}">{{ t.latest_verdict.upper() }}</span>
       {% endif %}
     </div>
+    {% if t.title and t.title != t.task_key %}
     <div class="row" style="margin-bottom:10px">
       <span class="task-title" style="font-size:14px">{{ t.title }}</span>
     </div>
+    {% endif %}
     <div class="row">
       <div><span class="label">Проект</span><div class="value">{{ t.project_code }}</div></div>
       <div><span class="label">Фаза</span><div class="value">{{ t.current_phase_name or '—' }}</div></div>
@@ -127,18 +134,6 @@
 {% endblock %}
 
 {% block extra_script %}
-(function(){
-  function update(){
-    const isMobile = window.innerWidth <= 640;
-    const cards = document.querySelector('.table-card-list');
-    const tableWrap = document.querySelector('.tasks-table')?.closest('.card');
-    if (cards) cards.style.display = isMobile ? 'flex' : 'none';
-    if (tableWrap) tableWrap.style.display = isMobile ? 'none' : 'block';
-  }
-  update();
-  window.addEventListener('resize', update);
-})();
-
 function deleteTask(btn) {
   const row = btn.closest('tr') || btn.closest('.task-card');
   const key = row?.dataset.taskKey;

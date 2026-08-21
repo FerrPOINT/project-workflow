@@ -261,7 +261,14 @@ class TestUiServicesFinalGaps:
             "workflow_id": 1,
         }
         uow.get_phases.return_value = [
-            {"id": 1, "code": "1", "name": "P1", "phase_order": 1, "execution_type": "parallel"},
+            {
+                "id": 1,
+                "code": "1",
+                "name": "P1",
+                "phase_order": 1,
+                "execution_type": "parallel",
+                "parallel_with": "2",
+            },
             {"id": 2, "code": "2", "name": "P2", "phase_order": 2, "execution_type": "parallel"},
         ]
 

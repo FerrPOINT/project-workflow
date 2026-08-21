@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from project_workflow.domain.phase_grouping import group_parallel_phases
+
 from .models import Phase
 from .types import PhaseContract
 
@@ -186,39 +188,15 @@ class PhaseContractBuilder:
         return deduped
 
     def get_parallel_group(self, start_phase: Phase) -> list[Phase]:
-        try:
-            start_index = self.all_phases.index(start_phase)
-        except ValueError:
-            return [start_phase]
-        if start_phase.execution_type != "parallel":
-            return [start_phase]
-
-        run_start = start_index
-        while run_start > 0 and self.all_phases[run_start - 1].execution_type == "parallel":
-            run_start -= 1
-        run_end = start_index + 1
-        while run_end < len(self.all_phases) and self.all_phases[run_end].execution_type == "parallel":
-            run_end += 1
-
-        run = self.all_phases[run_start:run_end]
-        phases_by_code = {phase.code: phase for phase in run}
-        connected: dict[str, set[str]] = {phase.code: set() for phase in run}
-        for phase in run:
-            partner = phase.parallel_with
-            if partner and partner in phases_by_code and partner != phase.code:
-                connected[phase.code].add(partner)
-                connected[partner].add(phase.code)
-
-        component: set[str] = set()
-        pending = [start_phase.code]
-        while pending:
-            code = pending.pop()
-            if code in component:
-                continue
-            component.add(code)
-            pending.extend(connected.get(code, set()) - component)
-
-        return [phase for phase in run if phase.code in component]
+        for group in group_parallel_phases(
+            self.all_phases,
+            code_of=lambda phase: phase.code,
+            execution_type_of=lambda phase: phase.execution_type,
+            parallel_with_of=lambda phase: phase.parallel_with,
+        ):
+            if any(phase.code == start_phase.code for phase in group):
+                return group
+        return [start_phase]
 
     def get_next_phase(self, phase_code: str) -> tuple[str | None, str | None]:
         for index, phase in enumerate(self.all_phases):

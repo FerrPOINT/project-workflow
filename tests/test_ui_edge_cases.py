@@ -66,13 +66,13 @@ class TestBuildParallelPhaseBlocks:
         blocks = _build_parallel_phase_blocks(
             [
                 {"code": "1", "execution_type": "sync"},
-                {"code": "2", "execution_type": "parallel"},
+                {"code": "2", "execution_type": "parallel", "parallel_with": "3"},
+                {"code": "3", "execution_type": "parallel"},
             ]
         )
-        assert len(blocks) == 1
-        assert blocks[0]["kind"] == "parallel"
-        assert blocks[0]["phases"][0]["parallel_group"] == "1"
-        assert blocks[0]["phases"][1]["parallel_group"] == "1"
+        assert [block["kind"] for block in blocks] == ["single", "parallel"]
+        assert blocks[1]["phases"][0]["parallel_group"] == "2"
+        assert blocks[1]["phases"][1]["parallel_group"] == "2"
 
 
 class TestParseOptionalInt:
@@ -243,23 +243,28 @@ class TestTaskDetailEdgeCases:
             {
                 "verdict": "pass",
                 "phase_code": "1",
-                "response": {"next_phase": "2", "message": "ok"},
+                "context_snapshot": {"phase": "historical.1", "phase_name": "Historical phase"},
+                "response": {
+                    "next_phase": "2",
+                    "message": "ok",
+                    "next_phase_contract": {
+                        "phase_code": "2",
+                        "phase_name": "Next",
+                        "instructions": ["Do next"],
+                        "required_checks": ["Check next"],
+                        "required_evidence": ["Evidence next"],
+                    },
+                },
                 "created_at": "2025-01-01",
             }
         ]
-        db.get_phase_by_code.return_value = {
-            "name": "Next",
-            "description": "",
-            "instructions": [],
-            "checks": [],
-            "evidence": [],
-            "delegate_agent": None,
-            "delegate_toolsets": [],
-        }
         monkeypatch.setattr("project_workflow.interfaces.ui._app_state", MagicMock(get_db=lambda: db))
         task = _get_task_detail("AAT-1")
         assert task["supervisor_runs"][0]["next_contract"] is not None
         assert task["supervisor_runs"][0]["next_contract"]["phase_name"] == "Next"
+        assert task["supervisor_runs"][0]["phase_code"] == "historical.1"
+        assert task["supervisor_runs"][0]["phase_name"] == "Historical phase"
+        db.get_phase_by_code.assert_not_called()
 
     def test_task_detail_supervisor_runs_no_next_phase(self, monkeypatch):
         from project_workflow.interfaces.ui import _get_task_detail
@@ -399,10 +404,14 @@ class TestPageEdgeCases:
     def test_task_detail_missing(self):
         response = client.get("/task/999999")
         assert response.status_code == 404
+        assert "Задача не найдена" in response.text
+        assert "К списку задач" in response.text
 
     def test_phase_detail_missing(self):
         response = client.get("/phase/999999")
         assert response.status_code == 404
+        assert "Фаза не найдена" in response.text
+        assert "К фазам" in response.text
 
 
 # ═══════════════════════════════════════════════════════════
