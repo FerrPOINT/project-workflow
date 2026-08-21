@@ -403,6 +403,23 @@ def test_finalize_rejects_command_log_that_does_not_match_excerpt(tmp_path):
         recorder.finalize(tmp_path, "TASK-1", expected_cycles=1)
 
 
+def test_log_validation_accepts_redaction_that_expands_a_truncated_prefix(tmp_path):
+    events = [_session(), *_cycle()]
+    partial_user_path = r"C:\Users\[REDACT"
+    log_text = (
+        "x" * (recorder.MAX_EXCERPT - len(partial_user_path))
+        + partial_user_path
+        + r"ED]\repo"
+    )
+    events[2]["output_excerpt"] = recorder.redact_text(log_text[: recorder.MAX_EXCERPT])
+    _write_events(tmp_path, events)
+    log_dir = tmp_path / "command-logs"
+    log_dir.mkdir()
+    (log_dir / "A-001.log").write_text(log_text, encoding="utf-8")
+
+    recorder.finalize(tmp_path, "TASK-1", expected_cycles=1)
+
+
 def test_terminal_pass_summary_reports_done_status():
     events = [_session(), *_cycle()]
     events[-2]["payload"]["next_phase"] = None
