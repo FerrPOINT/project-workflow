@@ -195,11 +195,63 @@ def validate_open_cycle(events: list[dict[str, Any]], phase: str) -> tuple[int, 
     return assignment_index, actions
 
 
+def _validate_action_event(
+    action: dict[str, Any],
+    phase: str,
+    *,
+    artifact_root: Path | None = None,
+) -> None:
+    action_id = str(action.get("id", ""))
+    if action.get("phase") != phase or ACTION_ID_RE.fullmatch(action_id) is None:
+        raise TranscriptError("ACTION must belong to the current phase and have a stable ID")
+
+    command = action.get("command")
+    if (
+        not isinstance(command, list)
+        or not command
+        or not all(isinstance(argument, str) for argument in command)
+        or not command[0]
+    ):
+        raise TranscriptError(f"ACTION {action_id} command must be a non-empty argument list")
+
+    cwd = action.get("cwd")
+    if not isinstance(cwd, str) or not cwd or not Path(cwd).is_absolute():
+        raise TranscriptError(f"ACTION {action_id} cwd must be an absolute path")
+
+    exit_code = action.get("exit_code")
+    if not isinstance(exit_code, int) or isinstance(exit_code, bool):
+        raise TranscriptError(f"ACTION {action_id} exit_code must be an integer")
+
+    excerpt = action.get("output_excerpt")
+    if not isinstance(excerpt, str):
+        raise TranscriptError(f"ACTION {action_id} output_excerpt must be a string")
+
+    expected_log = f"command-logs/{action_id}.log"
+    command_log = action.get("command_log")
+    normalized_log = command_log.replace("\\", "/") if isinstance(command_log, str) else None
+    if normalized_log != expected_log:
+        raise TranscriptError(f"ACTION {action_id} command_log must be {expected_log}")
+
+    if artifact_root is None:
+        return
+
+    log_path = (artifact_root / Path(*expected_log.split("/"))).resolve()
+    if not log_path.is_file():
+        raise TranscriptError(f"ACTION {action_id} command log is missing: {expected_log}")
+    try:
+        logged_output = log_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise TranscriptError(f"ACTION {action_id} command log cannot be read: {expected_log}") from exc
+    if excerpt != logged_output[:MAX_EXCERPT]:
+        raise TranscriptError(f"ACTION {action_id} command log does not match output_excerpt")
+
+
 def validate_transcript(
     events: list[dict[str, Any]],
     *,
     task: str | None = None,
     expected_cycles: int | None = None,
+    artifact_root: Path | None = None,
 ) -> list[dict[str, Any]]:
     """Validate the complete SESSION -> cycle event grammar."""
     if not events or events[0].get("type") != "SESSION":
@@ -227,8 +279,7 @@ def validate_transcript(
         actions: list[dict[str, Any]] = []
         while index < len(events) and events[index].get("type") == "ACTION":
             action = events[index]
-            if action.get("phase") != phase or not ACTION_ID_RE.fullmatch(str(action.get("id", ""))):
-                raise TranscriptError("ACTION must belong to the current phase and have a stable ID")
+            _validate_action_event(action, phase, artifact_root=artifact_root)
             if action["id"] in action_ids:
                 raise TranscriptError(f"Duplicate ACTION ID: {action['id']}")
             action_ids.add(action["id"])
@@ -300,16 +351,14 @@ def render_dialog(task: str, cycles: list[dict[str, Any]]) -> str:
             ]
         )
         for action in cycle["actions"]:
-            command = action.get("command", "")
-            if isinstance(command, list):
-                command = " ".join(command)
+            command = " ".join(action["command"])
             lines.extend(
                 [
                     f"- **{action['id']}** — {action.get('summary', '')}",
                     f"  - cwd: `{action.get('cwd', '')}`",
                     f"  - command: `{command}`",
                     f"  - exit code: `{action.get('exit_code')}`",
-                    f"  - result: {action.get('output_excerpt', action.get('output', ''))}",
+                    f"  - result: {action['output_excerpt']}",
                 ]
             )
         lines.extend(
@@ -396,9 +445,14 @@ def sanitize_artifacts(root: Path) -> list[dict[str, Any]]:
 def finalize(root: Path, task: str, expected_cycles: int | None = None) -> dict[str, Any]:
     """Validate a completed transcript and produce human/machine summaries."""
     events = read_events(root)
-    validate_transcript(events, task=task, expected_cycles=expected_cycles)
+    validate_transcript(events, task=task, expected_cycles=expected_cycles, artifact_root=root)
     safe_events = sanitize_artifacts(root)
-    safe_cycles = validate_transcript(safe_events, task=task, expected_cycles=expected_cycles)
+    safe_cycles = validate_transcript(
+        safe_events,
+        task=task,
+        expected_cycles=expected_cycles,
+        artifact_root=root,
+    )
     dialog = render_dialog(task, safe_cycles)
     summary = build_summary(task, safe_events, safe_cycles)
     (root / "dialog.md").write_text(dialog, encoding="utf-8", newline="\n")

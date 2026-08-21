@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -95,11 +96,73 @@ def _write_events(root: Path, events: list[dict]) -> None:
     )
 
 
+def _write_action_logs(root: Path, events: list[dict]) -> None:
+    log_dir = root / "command-logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    for event in events:
+        if event.get("type") == "ACTION":
+            (log_dir / f"{event['id']}.log").write_text(
+                str(event["output_excerpt"]),
+                encoding="utf-8",
+            )
+
+
 def test_validate_transcript_accepts_complete_ordered_cycle():
     cycles = recorder.validate_transcript([_session(), *_cycle()], task="TASK-1", expected_cycles=1)
 
     assert len(cycles) == 1
     assert cycles[0]["actions"][0]["id"] == "A-001"
+
+
+def test_validate_transcript_rejects_legacy_scalar_action():
+    events = [_session(), *_cycle()]
+    events[2]["command"] = "python -m pytest"
+    events[2]["output"] = events[2].pop("output_excerpt")
+    events[2].pop("command_log")
+
+    with pytest.raises(recorder.TranscriptError, match="non-empty argument list"):
+        recorder.validate_transcript(events, task="TASK-1")
+
+
+@pytest.mark.parametrize("missing_field", ["output_excerpt", "command_log"])
+def test_validate_transcript_rejects_incomplete_action_schema(missing_field):
+    events = [_session(), *_cycle()]
+    events[2].pop(missing_field)
+
+    with pytest.raises(recorder.TranscriptError, match=missing_field):
+        recorder.validate_transcript(events, task="TASK-1")
+
+
+def test_validate_transcript_rejects_wrong_command_log_path():
+    events = [_session(), *_cycle()]
+    events[2]["command_log"] = "command-logs/A-999.log"
+
+    with pytest.raises(recorder.TranscriptError, match="command-logs/A-001.log"):
+        recorder.validate_transcript(events, task="TASK-1")
+
+
+def test_action_command_emits_artifact_that_passes_log_validation(tmp_path, capsys):
+    _write_events(tmp_path, [_session(), _cycle()[0]])
+    args = type(
+        "Args",
+        (),
+        {
+            "root": str(tmp_path),
+            "task": "TASK-1",
+            "phase": "0.6",
+            "summary": "Команда выполнена",
+            "cwd": str(tmp_path),
+            "timeout": 30,
+            "command": [sys.executable, "-c", "print('real output')"],
+        },
+    )()
+
+    recorder.command_action(args)
+
+    capsys.readouterr()
+    action = recorder.read_events(tmp_path)[-1]
+    recorder._validate_action_event(action, "0.6", artifact_root=tmp_path)
+    assert (tmp_path / "command-logs" / "A-001.log").read_text(encoding="utf-8") == "real output\n"
 
 
 def test_validate_transcript_rejects_report_without_actions():
@@ -158,6 +221,36 @@ def test_init_rejects_task_with_existing_wizard_history(tmp_path, monkeypatch):
     assert recorder.read_events(tmp_path) == []
 
 
+def test_submit_rejects_report_without_evidence_refs_before_provider_call(tmp_path, monkeypatch):
+    events = [_session(), *_cycle()[:2]]
+    _write_events(tmp_path, events)
+    report = tmp_path / "report.md"
+    report.write_text("Действия выполнены.\n", encoding="utf-8")
+    called = False
+
+    def fake_run_wizard(_task, _report=None):
+        nonlocal called
+        called = True
+        return 0, {}, ""
+
+    monkeypatch.setattr(recorder, "run_wizard", fake_run_wizard)
+    args = type(
+        "Args",
+        (),
+        {"root": str(tmp_path), "task": "TASK-1", "phase": "0.6", "report_file": str(report)},
+    )()
+
+    with pytest.raises(recorder.TranscriptError, match="Evidence-Refs"):
+        recorder.command_submit(args)
+
+    assert called is False
+    assert [event["type"] for event in recorder.read_events(tmp_path)] == [
+        "SESSION",
+        "ASSIGNMENT",
+        "ACTION",
+    ]
+
+
 def test_parallel_assignment_is_preserved_in_human_dialog():
     cycles = recorder.validate_transcript([_session(), *_cycle()], task="TASK-1")
 
@@ -202,7 +295,9 @@ def test_redaction_does_not_mangle_code_that_builds_authorization_header():
 
 
 def test_finalize_generates_jsonl_dialog_and_summary(tmp_path):
-    _write_events(tmp_path, [_session(), *_cycle()])
+    events = [_session(), *_cycle()]
+    _write_events(tmp_path, events)
+    _write_action_logs(tmp_path, events)
 
     summary = recorder.finalize(tmp_path, "TASK-1", expected_cycles=1)
 
@@ -223,6 +318,23 @@ def test_finalize_generates_jsonl_dialog_and_summary(tmp_path):
         "final_phase": "0.6",
         "final_status": None,
     }
+
+
+def test_finalize_rejects_missing_command_log(tmp_path):
+    _write_events(tmp_path, [_session(), *_cycle()])
+
+    with pytest.raises(recorder.TranscriptError, match="command log is missing"):
+        recorder.finalize(tmp_path, "TASK-1", expected_cycles=1)
+
+
+def test_finalize_rejects_command_log_that_does_not_match_excerpt(tmp_path):
+    events = [_session(), *_cycle()]
+    _write_events(tmp_path, events)
+    _write_action_logs(tmp_path, events)
+    (tmp_path / "command-logs" / "A-001.log").write_text("different output", encoding="utf-8")
+
+    with pytest.raises(recorder.TranscriptError, match="does not match output_excerpt"):
+        recorder.finalize(tmp_path, "TASK-1", expected_cycles=1)
 
 
 def test_terminal_pass_summary_reports_done_status():
