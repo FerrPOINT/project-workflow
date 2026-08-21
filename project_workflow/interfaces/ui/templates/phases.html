@@ -20,7 +20,8 @@
 .timeline{display:flex;flex-direction:column;align-items:stretch;max-width:none;gap:0}
 .timeline-block,.timeline-item{width:100%}
 .phase-card-shell{position:relative}
-.timeline-card{min-height:112px;padding:16px 148px 16px 18px;border-radius:9px}
+.timeline-card{min-height:112px;padding:16px 18px;border-radius:9px}
+.timeline-card .timeline-name{padding-right:130px}
 .timeline-card:hover{transform:none}
 .phase-card-actions{position:absolute;right:12px;top:12px;display:flex;gap:6px;z-index:2}
 .phase-card-actions button{width:30px;height:28px;border-radius:6px;border:1px solid var(--border-strong);background:var(--panel);color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px}
@@ -42,7 +43,7 @@
 .timeline-connector::after{top:calc(50% + 21px);bottom:0}
 .phase-add-btn{position:relative;z-index:1;width:30px;height:30px;border-radius:50%;border:1px dashed var(--accent);background:var(--panel);color:var(--accent);cursor:pointer;font-size:18px;line-height:1}
 .phase-add-btn:hover{background:var(--accent);color:#fff;border-style:solid}
-@media(max-width:1050px){.phases-layout{grid-template-columns:1fr}.workflow-nav{position:static;max-height:none}.timeline-card{padding-right:18px;padding-top:52px}.phase-card-actions{left:12px;right:auto}}
+@media(max-width:1050px){.phases-layout{grid-template-columns:1fr}.workflow-nav{position:static;max-height:none}.timeline-card{padding-top:52px}.timeline-card .timeline-name{padding-right:0}.phase-card-actions{left:12px;right:auto}}
 @media(max-width:760px){.timeline-parallel-grid{grid-template-columns:1fr}.timeline-parallel-group{padding:10px}.timeline-card,.timeline-parallel-grid .timeline-card{min-height:0}}
 {% endblock %}
 
@@ -53,13 +54,11 @@
       <div class="timeline-name">{{ p.name }}</div>
       {% set description = p.description | default('') %}
       {% if description %}<div class="timeline-desc">{{ description[:120] }}{% if description|length > 120 %}...{% endif %}</div>{% endif %}
-      <div class="execution-row"><span class="badge {{ 'badge-parallel' if p.execution_type == 'parallel' else 'badge-sync' }}">{{ 'parallel' if p.execution_type == 'parallel' else 'sync' }}</span></div>
-      {% if p.agent_name or p.is_delegated %}
-      <div class="timeline-badges">
+      <div class="execution-row">
+        <span class="badge {{ 'badge-parallel' if p.execution_type == 'parallel' else 'badge-sync' }}">{{ 'parallel' if p.execution_type == 'parallel' else 'sync' }}</span>
         {% if p.agent_name %}<span class="badge badge-agent">{{ p.agent_name }}</span>{% endif %}
         {% if p.is_delegated %}<span class="badge badge-delegate">delegate</span>{% endif %}
       </div>
-      {% endif %}
     </a>
     <div class="phase-card-actions" aria-label="Действия фазы">
       <button type="button" class="move-up-btn" onclick="movePhase(this,-1)" title="Поднять выше" aria-label="Поднять фазу выше">↑</button>

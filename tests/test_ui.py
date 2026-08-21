@@ -431,6 +431,25 @@ class TestPhasesPage:
         assert ".timeline-connector::after{top:calc(50% + 21px);bottom:0}" in response.text
         assert ".timeline-connector::before{content:'';position:absolute;top:0;bottom:0" not in response.text
 
+    def test_phase_card_reserves_action_space_only_for_its_heading(self):
+        response = client.get("/phases")
+
+        assert response.status_code == 200
+        assert ".timeline-card{min-height:112px;padding:16px 18px" in response.text
+        assert ".timeline-card .timeline-name{padding-right:130px}" in response.text
+        assert ".timeline-card{min-height:112px;padding:16px 148px" not in response.text
+        assert ".timeline-card .timeline-name{padding-right:0}" in response.text
+
+    def test_parallel_phase_places_agent_beside_execution_type(self):
+        response = client.get("/phases")
+
+        assert response.status_code == 200
+        assert re.search(
+            r'<div class="execution-row">\s*<span class="badge badge-parallel">parallel</span>\s*'
+            r'<span class="badge badge-agent">researcher</span>',
+            response.text,
+        )
+
     def test_phases_page_add_phase_button_carries_workflow_id_from_active_nav(self):
         response = client.get("/phases")
         assert response.status_code == 200
