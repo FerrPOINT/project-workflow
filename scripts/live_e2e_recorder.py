@@ -358,6 +358,9 @@ def build_summary(task: str, events: list[dict[str, Any]], cycles: list[dict[str
     """Build audit counters without querying or mutating Wizard state."""
     verdicts = Counter(str(cycle["evaluator"]["payload"].get("verdict")) for cycle in cycles)
     final_payload = cycles[-1]["evaluator"]["payload"] if cycles else {}
+    final_status = final_payload.get("status")
+    if final_status is None and final_payload.get("verdict") == "PASS" and final_payload.get("next_phase") is None:
+        final_status = "done"
     metadata = events[0].get("metadata", {})
     return {
         "task": task,
@@ -372,7 +375,7 @@ def build_summary(task: str, events: list[dict[str, Any]], cycles: list[dict[str
             cycle["transition"].get("verdict") == "PASS" for cycle in cycles
         ),
         "final_phase": final_payload.get("current_phase", final_payload.get("phase")),
-        "final_status": final_payload.get("status"),
+        "final_status": final_status,
     }
 
 

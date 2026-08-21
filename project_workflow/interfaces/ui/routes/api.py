@@ -133,10 +133,7 @@ async def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONRespons
 
     resolved_workflow_id: int | None = None
     if isinstance(workflow_id, str) and not workflow_id.isdigit():
-        workflow_row = _app_state.workflow_service().get_workflow(int(workflow_id))
-        if not workflow_row:
-            return _error(f"Workflow {workflow_id!r} не найден", 400)
-        resolved_workflow_id = int(workflow_row["id"])
+        return _error(f"Workflow {workflow_id!r} не найден", 400)
     else:
         resolved_workflow_id = int(workflow_id)
     if resolved_workflow_id is None or not _app_state.workflow_service().get_workflow(resolved_workflow_id):

@@ -19,6 +19,24 @@ from .routes import api, pages
 logger = logging.getLogger(__name__)
 
 
+class _UoWMiddleware(BaseHTTPMiddleware):
+    """Share and close one UnitOfWork for all services used by a request."""
+
+    async def dispatch(self, request: Request, call_next):
+        from ...application.state import _app_state, _uow_ctx
+
+        uow = _app_state.create_uow()
+        token = _uow_ctx.set(uow)
+        try:
+            return await call_next(request)
+        except Exception:
+            uow.rollback()
+            raise
+        finally:
+            _uow_ctx.reset(token)
+            uow.close()
+
+
 class _RequestLoggingMiddleware(BaseHTTPMiddleware):
     """Log every incoming request with method, path, status and duration."""
 
@@ -82,6 +100,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     app = FastAPI(title="project-workflow UI", version=__version__, lifespan=_lifespan)
     app.add_middleware(_RequestLoggingMiddleware)
+    app.add_middleware(_UoWMiddleware)
 
     app.get("/health")(_health)
 

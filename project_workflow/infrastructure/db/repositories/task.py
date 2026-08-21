@@ -8,7 +8,7 @@ from typing import Any
 
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import select, update
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from project_workflow.domain import Task
 from project_workflow.domain.exceptions import NotFoundError
@@ -56,7 +56,12 @@ class SATaskRepository(TaskRepository):
 
     def list(self) -> Sequence[Task]:
         with self._session.no_autoflush:
-            rows = self._session.execute(select(m.Task).order_by(m.Task.id.desc())).scalars().all()
+            stmt = (
+                select(m.Task)
+                .options(joinedload(m.Task.project).joinedload(m.Project.workflow).selectinload(m.Workflow.phases))
+                .order_by(m.Task.id.desc())
+            )
+            rows = self._session.execute(stmt).scalars().all()
         return [_row_to_task(r) for r in rows]
 
     def create(self, data: dict[str, Any]) -> int:
@@ -78,6 +83,8 @@ class SATaskRepository(TaskRepository):
         if row is None:
             raise NotFoundError(f"Task {task_id} not found")
         for key, val in data.items():
+            if key in {"id", "project_id"}:
+                continue
             if hasattr(row, key):
                 setattr(row, key, val)
 
