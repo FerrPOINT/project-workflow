@@ -10,6 +10,7 @@ import json
 import logging
 from typing import Any, cast
 
+from project_workflow.domain.phase_grouping import group_parallel_phases
 from project_workflow.domain.repositories import UnitOfWork
 
 logger = logging.getLogger(__name__)
@@ -116,7 +117,49 @@ class PhaseService:
     def update_phase(self, phase_id: int | str, data: dict[str, Any]) -> None:
         resolved = self._resolve_phase_id(phase_id)
         with self._uow:
-            self._uow.phases.update(resolved, data)
+            self._uow.phases.update(resolved, self._prepare_execution_update(resolved, data))
+
+    def _prepare_execution_update(self, phase_id: int, data: dict[str, Any]) -> dict[str, Any]:
+        """Attach a sync phase to a neighboring parallel component on toggle.
+
+        Existing ``parallel_with`` is deliberately retained while a phase is
+        temporarily sync.  The runtime ignores links on sync phases, while a
+        later sync -> parallel toggle can restore the exact previous component.
+        """
+        updates = dict(data)
+        if updates.get("execution_type") != "parallel" or "parallel_with" in updates:
+            return updates
+
+        phase = self._uow.phases.get_by_id(phase_id)
+        if phase is None or phase.execution_type == "parallel":
+            return updates
+
+        phases = list(self._uow.phases.list(workflow_id=phase.workflow_id))
+        current_index = next((index for index, item in enumerate(phases) if item.id == phase_id), None)
+        if current_index is None:
+            return updates
+
+        if phase.parallel_with:
+            groups = group_parallel_phases(
+                phases,
+                code_of=lambda item: item.code,
+                execution_type_of=lambda item: "parallel" if item.id == phase_id else item.execution_type,
+                parallel_with_of=lambda item: item.parallel_with,
+            )
+            if any(
+                phase.code in {item.code for item in group}
+                and phase.parallel_with in {item.code for item in group}
+                for group in groups
+            ):
+                return updates
+
+        previous = phases[current_index - 1] if current_index > 0 else None
+        following = phases[current_index + 1] if current_index + 1 < len(phases) else None
+        partner = previous if previous and previous.execution_type == "parallel" else None
+        if partner is None and following and following.execution_type == "parallel":
+            partner = following
+        updates["parallel_with"] = partner.code if partner else None
+        return updates
 
     def get_all_phases(self) -> list[dict[str, Any]]:
         """All phases with content (for API)."""

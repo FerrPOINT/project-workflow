@@ -695,6 +695,44 @@ class TestApiPhaseUpdate:
         assert phase["name"] == "Renamed phase"
         assert phase["execution_type"] == "parallel"
 
+    def test_sync_to_parallel_joins_previous_component(self, client):
+        from project_workflow.interfaces.ui.helpers import _build_parallel_phase_blocks
+
+        phase_id = _phase_id(client, "3")
+
+        response = client.put(f"/api/phases/{phase_id}", json={"execution_type": "parallel"})
+
+        assert response.status_code == 200
+        phases = client.get("/api/phases").json()["phases"]
+        updated = next(phase for phase in phases if phase["code"] == "3")
+        assert updated["execution_type"] == "parallel"
+        assert updated["parallel_with"] == "2"
+        groups = [
+            [phase["code"] for phase in block["phases"]]
+            for block in _build_parallel_phase_blocks(phases)
+        ]
+        assert ["1.5", "2", "3"] in groups
+
+    def test_parallel_round_trip_keeps_original_component(self, client):
+        phase_id = _phase_id(client, "1.5")
+
+        assert client.put(f"/api/phases/{phase_id}", json={"execution_type": "sync"}).status_code == 200
+        assert client.put(f"/api/phases/{phase_id}", json={"execution_type": "parallel"}).status_code == 200
+
+        phases = client.get("/api/phases").json()["phases"]
+        updated = next(phase for phase in phases if phase["code"] == "1.5")
+        assert updated["parallel_with"] == "2"
+
+    def test_explicit_null_clears_parallel_component(self, client):
+        phase_id = _phase_id(client, "1.5")
+
+        response = client.put(f"/api/phases/{phase_id}", json={"parallel_with": None})
+
+        assert response.status_code == 200
+        phases = client.get("/api/phases").json()["phases"]
+        updated = next(phase for phase in phases if phase["code"] == "1.5")
+        assert updated["parallel_with"] is None
+
     def test_update_phase_forbidden_code(self, client):
         phase_id = _phase_id(client, "0.000")
         resp = client.put(f"/api/phases/{phase_id}", json={"code": "x.y"})

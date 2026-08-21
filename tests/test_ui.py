@@ -800,6 +800,16 @@ class TestPhaseDetail:
         assert "function removeSkillFromInstruction(button)" in response.text
         assert 'placeholder="Добавить skill"' in response.text
 
+    def test_phase_detail_serializes_phase_mode_toggles(self):
+        response = client.get(_phase_detail_path("-1"))
+
+        assert response.status_code == 200
+        assert "async function togglePhaseMode(el)" in response.text
+        assert "if (el.dataset.saving === 'true') return;" in response.text
+        assert "const saved = await savePhase();" in response.text
+        assert "el.setAttribute('aria-busy', 'true');" in response.text
+        assert "return true;" in response.text
+
     def test_phases_page_hides_code_and_number_visual_noise(self):
         response = client.get("/phases")
         assert response.status_code == 200

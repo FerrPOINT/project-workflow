@@ -68,6 +68,7 @@
 /* Phase execution mode toggle */
 .execution-toggle{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:6px;border:1px solid var(--border);cursor:pointer;transition:all .12s;font-size:12px;user-select:none}
 .execution-toggle:hover{background:var(--panel);border-color:var(--accent)}
+.execution-toggle[aria-busy="true"]{opacity:.55;cursor:wait;pointer-events:none}
 .mode-sync{color:var(--green)}
 .mode-parallel{color:var(--orange)}
 /* Skill remove inside badge */
@@ -265,19 +266,32 @@ function normalizeSkillNames(raw = []) {
 }
 
 /* ---------- Phase header ---------- */
-function togglePhaseMode(el) {
-  const isSync = (el.dataset.mode || 'sync') === 'sync';
+function setPhaseMode(el, mode) {
   const b = el.querySelector('b');
-  if (isSync) {
-    el.dataset.mode = 'parallel';
+  el.dataset.mode = mode;
+  if (mode === 'parallel') {
     b.className = 'mode-parallel';
     b.textContent = '⚡ parallel';
   } else {
-    el.dataset.mode = 'sync';
     b.className = 'mode-sync';
     b.textContent = '⏱ sync';
   }
-  savePhase();
+}
+
+async function togglePhaseMode(el) {
+  if (el.dataset.saving === 'true') return;
+  const previousMode = el.dataset.mode || 'sync';
+  const nextMode = previousMode === 'sync' ? 'parallel' : 'sync';
+  setPhaseMode(el, nextMode);
+  el.dataset.saving = 'true';
+  el.setAttribute('aria-busy', 'true');
+  try {
+    const saved = await savePhase();
+    if (!saved) setPhaseMode(el, previousMode);
+  } finally {
+    delete el.dataset.saving;
+    el.removeAttribute('aria-busy');
+  }
 }
 
 /* ---------- Instructions list (like phases) ---------- */
@@ -586,23 +600,29 @@ async function savePhase() {
     if (inp) data.evidence.push({description: inp.value, validator: null});
   });
 
-  const resp = await fetch('/api/phases/' + phaseId, {
-    method: 'PUT',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(data),
-  });
-  if (!resp.ok) { showToast('Ошибка сохранения', 'error'); return; }
-  const result = await resp.json();
-  showToast('Сохранено');
-  if (result.ids) {
-    const checks = document.querySelectorAll('#checks-list li:not(.empty-state)');
-    (result.ids.checks || []).forEach((id, i) => {
-      if (checks[i]) checks[i].setAttribute('data-id', String(id));
+  try {
+    const resp = await fetch('/api/phases/' + phaseId, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data),
     });
-    const evs = document.querySelectorAll('#evidence-list li:not(.empty-state)');
-    (result.ids.evidence || []).forEach((id, i) => {
-      if (evs[i]) evs[i].setAttribute('data-id', String(id));
-    });
+    if (!resp.ok) { showToast('Ошибка сохранения', 'error'); return false; }
+    const result = await resp.json();
+    showToast('Сохранено', 'success');
+    if (result.ids) {
+      const checks = document.querySelectorAll('#checks-list li:not(.empty-state)');
+      (result.ids.checks || []).forEach((id, i) => {
+        if (checks[i]) checks[i].setAttribute('data-id', String(id));
+      });
+      const evs = document.querySelectorAll('#evidence-list li:not(.empty-state)');
+      (result.ids.evidence || []).forEach((id, i) => {
+        if (evs[i]) evs[i].setAttribute('data-id', String(id));
+      });
+    }
+    return true;
+  } catch (_error) {
+    showToast('Ошибка сохранения', 'error');
+    return false;
   }
 }
 

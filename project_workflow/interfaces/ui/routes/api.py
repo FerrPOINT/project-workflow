@@ -187,7 +187,6 @@ async def api_phase_update(phase_id: int, payload: PhaseUpdate) -> dict[str, Any
         "description",
         "delegate_agent",
         "delegate_timeout",
-        "parallel_with",
         "rollback_target",
         "next_recommendation",
         "agent_id",
@@ -196,6 +195,8 @@ async def api_phase_update(phase_id: int, payload: PhaseUpdate) -> dict[str, Any
         value = getattr(payload, key, None)
         if value is not None:
             phase_data[key] = value
+    if "parallel_with" in payload.model_fields_set:
+        phase_data["parallel_with"] = payload.parallel_with
     if phase_data:
         srv.update_phase(resolved_phase_id, phase_data)
 

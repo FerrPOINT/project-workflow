@@ -9,6 +9,7 @@ import pytest
 pytestmark = [pytest.mark.unit]
 
 from project_workflow.application.phase_service import PhaseService
+from project_workflow.domain.phase_grouping import group_parallel_phases
 from project_workflow.infrastructure.db.schema import ensure_phase_catalog
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
@@ -113,6 +114,94 @@ class TestUpdatePhase:
 
     def test_get_phase_detail_empty(self, svc):
         assert svc.get_phase_detail(9999) == {}
+
+    @staticmethod
+    def _groups(fresh_db):
+        phases = list(fresh_db.phases.list(workflow_id=1))
+        return [
+            [phase.code for phase in group]
+            for group in group_parallel_phases(
+                phases,
+                code_of=lambda phase: phase.code,
+                execution_type_of=lambda phase: phase.execution_type,
+                parallel_with_of=lambda phase: phase.parallel_with,
+            )
+        ]
+
+    def test_sync_phase_joins_previous_parallel_component(self, svc, fresh_db):
+        phase = fresh_db.phases.get_by_code("3")
+
+        svc.update_phase(phase.id, {"execution_type": "parallel"})
+
+        updated = fresh_db.phases.get_by_code("3")
+        assert updated.parallel_with == "2"
+        assert ["1.5", "2", "3"] in self._groups(fresh_db)
+
+    def test_sync_phase_before_group_joins_next_parallel_component(self, svc, fresh_db):
+        phase = fresh_db.phases.get_by_code("0.5")
+
+        svc.update_phase(phase.id, {"execution_type": "parallel"})
+
+        updated = fresh_db.phases.get_by_code("0.5")
+        assert updated.parallel_with == "0.6"
+        assert ["0.5", "0.6", "1"] in self._groups(fresh_db)
+
+    def test_parallel_sync_parallel_round_trip_keeps_original_component(self, svc, fresh_db):
+        phase = fresh_db.phases.get_by_code("1.5")
+
+        svc.update_phase(phase.id, {"execution_type": "sync"})
+        detached = fresh_db.phases.get_by_code("1.5")
+        assert detached.parallel_with == "2"
+
+        svc.update_phase(phase.id, {"execution_type": "parallel"})
+
+        restored = fresh_db.phases.get_by_code("1.5")
+        assert restored.parallel_with == "2"
+        groups = self._groups(fresh_db)
+        assert ["0.6", "1"] in groups
+        assert ["1.5", "2"] in groups
+
+    def test_sync_phase_without_parallel_neighbor_stays_single(self, svc, fresh_db):
+        phase = fresh_db.phases.get_by_code("-1")
+
+        svc.update_phase(phase.id, {"execution_type": "parallel"})
+
+        updated = fresh_db.phases.get_by_code("-1")
+        assert updated.parallel_with is None
+        assert ["-1"] in self._groups(fresh_db)
+
+    def test_explicit_null_does_not_auto_join_parallel_component(self, svc, fresh_db):
+        phase = fresh_db.phases.get_by_code("3")
+
+        svc.update_phase(phase.id, {"execution_type": "parallel", "parallel_with": None})
+
+        updated = fresh_db.phases.get_by_code("3")
+        assert updated.parallel_with is None
+        assert ["3"] in self._groups(fresh_db)
+
+    def test_invalid_saved_partner_is_replaced_by_adjacent_component(self, svc, fresh_db):
+        phase = fresh_db.phases.get_by_code("3")
+        fresh_db.phases.update(phase.id, {"parallel_with": "missing"})
+        fresh_db.commit()
+
+        svc.update_phase(phase.id, {"execution_type": "parallel"})
+
+        updated = fresh_db.phases.get_by_code("3")
+        assert updated.parallel_with == "2"
+
+    def test_parallel_components_on_both_sides_prefer_previous_deterministically(self, svc, fresh_db):
+        phase = fresh_db.phases.get_by_code("3")
+        following = fresh_db.phases.get_by_code("3.5")
+        fresh_db.phases.update(following.id, {"execution_type": "parallel"})
+        fresh_db.commit()
+
+        svc.update_phase(phase.id, {"execution_type": "parallel"})
+
+        updated = fresh_db.phases.get_by_code("3")
+        assert updated.parallel_with == "2"
+        groups = self._groups(fresh_db)
+        assert ["1.5", "2", "3"] in groups
+        assert ["3.5"] in groups
 
 
 class TestNormalizeSkills:
