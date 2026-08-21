@@ -53,4 +53,3 @@ def test_sync_phase_splits_parallel_runs() -> None:
     ]
 
     assert _groups(phases) == [["a"], ["b"], ["c"]]
-
