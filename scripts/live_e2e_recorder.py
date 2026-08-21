@@ -251,7 +251,7 @@ def _validate_action_event(
         logged_output = log_path.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
         raise TranscriptError(f"ACTION {action_id} command log cannot be read: {expected_log}") from exc
-    if excerpt != logged_output[:MAX_EXCERPT]:
+    if excerpt != redact_text(logged_output[:MAX_EXCERPT]):
         raise TranscriptError(f"ACTION {action_id} command log does not match output_excerpt")
 
 
