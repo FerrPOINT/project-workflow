@@ -161,7 +161,7 @@ flowchart TD
 |---|---|---|
 | Lint | `ruff check .` | **green** |
 | Type check | `mypy project_workflow scripts` | **green, 83 source files** |
-| Tests | `pytest -q --timeout=60` | **872 passed, 13 integration deselected** |
+| Tests | `pytest -q --timeout=60` | **873 passed, 13 integration deselected** |
 | PostgreSQL integration | `pytest -q -m integration tests/test_postgres_integration.py --timeout=180` | **13 passed** |
 | Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` | **95.31%** |
 | Systemd UI health | `curl http://localhost:8811/api/tasks` | **200** |

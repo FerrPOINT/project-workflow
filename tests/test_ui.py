@@ -1127,6 +1127,17 @@ class TestTasksPage:
         assert "?status=" not in response.text
         assert "?search=" not in response.text
 
+    def test_tasks_table_shrinks_before_enabling_horizontal_scroll(self):
+        response = client.get("/tasks")
+
+        assert response.status_code == 200
+        assert ".tasks-layout{container:tasks / inline-size;min-width:0}" in response.text
+        assert ".tasks-table{min-width:940px}" in response.text
+        assert "flex:0 0 clamp(64px,8cqw,100px)" in response.text
+        assert "@container tasks (max-width:720px)" in response.text
+        assert "@media(max-width:1200px)" not in response.text
+        assert 'style="padding:0;overflow-x:auto"' not in response.text
+
 
 class TestTaskDetail:
     """Tests for task detail page."""
