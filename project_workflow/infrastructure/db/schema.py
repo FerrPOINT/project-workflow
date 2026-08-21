@@ -102,6 +102,7 @@ def _build_phase_from_db(
         if agent:
             delegate = PhaseDelegate(
                 agent=agent.name,
+                hermes_profile=agent.hermes_profile,
                 prompt_template=f"Phase {phase_code}",
                 toolsets=[],  # domain Agent does not store toolsets in this schema
                 timeout_min=10,

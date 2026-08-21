@@ -178,6 +178,9 @@ class AgentRepository(ABC):
     def get_by_name(self, name: str) -> Agent | None: ...
 
     @abstractmethod
+    def get_by_hermes_profile(self, profile: str) -> Agent | None: ...
+
+    @abstractmethod
     def create(self, data: dict[str, Any]) -> int: ...
 
     @abstractmethod

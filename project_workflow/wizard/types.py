@@ -21,6 +21,7 @@ class PhaseContract:
     required_evidence: list[str] = field(default_factory=list)
     execution_type: str = "sync"
     delegate_agent: str | None = None
+    hermes_profile: str | None = None
     delegate_toolsets: list[str] = field(default_factory=list)
     parallel_with: str | None = None
     rollback_target: str | None = None
@@ -37,6 +38,7 @@ class PhaseContract:
             "required_evidence": self.required_evidence,
             "execution_type": self.execution_type,
             "delegate_agent": self.delegate_agent,
+            "hermes_profile": self.hermes_profile,
             "delegate_toolsets": self.delegate_toolsets,
             "parallel_with": self.parallel_with,
             "rollback_target": self.rollback_target,

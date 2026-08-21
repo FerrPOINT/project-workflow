@@ -91,12 +91,9 @@
       <span>Агент: <select id="agentSelect" class="inline-input" style="width:180px;display:inline" onchange="scheduleSave()">
         <option value="">—</option>
         {% for a in agents %}
-        <option value="{{ a.id }}" {% if phase.agent_id == a.id %}selected{% endif %}>{{ a.name }}</option>
+        <option value="{{ a.id }}" {% if phase.agent_id == a.id %}selected{% endif %}>{{ a.name }}{% if a.hermes_profile %} · {{ a.hermes_profile }}{% endif %}</option>
         {% endfor %}
       </select></span>
-      {% if phase.delegate_agent %}
-      <span>Агент: {{ phase.delegate_agent }} {% if phase.delegate_timeout %}({{ phase.delegate_timeout }} мин){% endif %}</span>
-      {% endif %}
       {% if phase.rollback_target %}
       <span>Откат: {{ phase.rollback_target }}</span>
       {% endif %}

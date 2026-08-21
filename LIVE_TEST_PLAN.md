@@ -25,7 +25,7 @@ CLI subprocess -> PostgreSQL -> тестовый OpenAI-compatible HTTP -> Wizar
 
 ```bash
 pytest -q --timeout=60
-pytest -q -m integration tests/test_postgres_integration.py --timeout=180
+pytest -q -m integration tests/test_postgres_integration.py --timeout=60
 pytest --cov=project_workflow --cov-report=term --timeout=60
 ruff check .
 mypy project_workflow scripts
@@ -35,6 +35,8 @@ python -m project_workflow.interfaces.cli --help
 
 Обычный `pytest` намеренно исключает marker `integration`, поэтому PostgreSQL-тесты
 показываются как `deselected` и обязательно запускаются второй командой.
+Два составных subprocess E2E имеют локальный marker `timeout(120)`; остальные
+integration-тесты сохраняют общий 60-секундный предел.
 
 ## 2. Executor-driven business E2E
 
@@ -113,6 +115,9 @@ Windows-пути до записи командных логов.
 - Отчёт формируется только после фактических ACTION текущего assignment.
 - Рекомендованные skills загружаются исполнителем из зафиксированного SHA
   `relevanter/agent-skills`; Wizard передаёт только их имена.
+- Если фазе назначен агент с `hermes_profile`, точное имя должно присутствовать
+  в `ASSIGNMENT`, а executor должен использовать этот профиль через
+  `hermes -p <profile>`. Wizard не подменяет профиль и не читает его содержимое.
 - Любой `PARTIAL`, `BLOCKED`, provider error или неверный переход останавливает
   продвижение. Замечание исправляется новым действием и новым отчётом; audit не
   переписывается и принудительный переход запрещён.

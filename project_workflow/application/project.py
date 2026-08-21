@@ -15,6 +15,29 @@ class ProjectService:
     def __init__(self, uow: UnitOfWork):
         self._uow = uow
 
+    @staticmethod
+    def _normalized_prefixes(raw: Any) -> list[str]:
+        values = raw.splitlines() if isinstance(raw, str) else raw or []
+        prefixes = [str(prefix).strip().upper() for prefix in values if str(prefix).strip()]
+        if not prefixes:
+            raise ValueError("At least one task key prefix is required")
+        if len(prefixes) != len(set(prefixes)):
+            raise ConflictError("Task key prefixes must be unique inside a project")
+        return prefixes
+
+    def _ensure_prefixes_available(self, prefixes: list[str], *, project_id: int | None = None) -> None:
+        requested = set(prefixes)
+        for project in self._uow.projects.list():
+            if project.id == project_id:
+                continue
+            existing_prefixes = {str(prefix).strip().upper() for prefix in project.key_prefixes}
+            overlap = requested.intersection(existing_prefixes)
+            if overlap:
+                duplicate = sorted(overlap)[0]
+                raise ConflictError(
+                    f"Task key prefix {duplicate!r} is already assigned to project {project.code!r}"
+                )
+
     def create_project(self, data: dict[str, Any]) -> dict[str, Any]:
         payload = dict(data)
         if "workflow_id" not in payload or payload["workflow_id"] is None:
@@ -24,6 +47,10 @@ class ProjectService:
             payload["name"] = payload["code"]
         if "key_prefixes" not in payload:
             payload["key_prefixes"] = [payload["code"]]
+        payload["key_prefixes"] = self._normalized_prefixes(payload["key_prefixes"])
+        self._ensure_prefixes_available(payload["key_prefixes"])
+        if self._uow.projects.get_by_code(payload["code"]):
+            raise ConflictError(f"Project code {payload['code']!r} already exists")
         pid = self._uow.projects.create(payload)
         project = self._uow.projects.get_by_id(pid)
         if not project:
@@ -39,7 +66,18 @@ class ProjectService:
         return p.to_dict() if p else None
 
     def update_project(self, project_id: int, data: dict[str, Any]) -> None:
-        self._uow.projects.update(project_id, data)
+        payload = dict(data)
+        existing = self._uow.projects.get_by_id(project_id)
+        if existing is None:
+            raise ValueError(f"Project {project_id} not found")
+        if "code" in payload and payload["code"] != existing.code:
+            same_code = self._uow.projects.get_by_code(payload["code"])
+            if same_code is not None and same_code.id != project_id:
+                raise ConflictError(f"Project code {payload['code']!r} already exists")
+        if "key_prefixes" in payload:
+            payload["key_prefixes"] = self._normalized_prefixes(payload["key_prefixes"])
+            self._ensure_prefixes_available(payload["key_prefixes"], project_id=project_id)
+        self._uow.projects.update(project_id, payload)
         self._uow.commit()
         return None
 

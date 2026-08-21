@@ -19,6 +19,7 @@ def test_format_parallel_contract_human():
     details = [
         {
             "delegate_agent": "a1",
+            "hermes_profile": "research_profile",
             "instructions": ["step 1"],
             "required_checks": ["check 1"],
             "required_evidence": ["evidence 1"],
@@ -31,9 +32,9 @@ def test_format_parallel_contract_human():
         },
     ]
     result = _format_parallel_contract_human(details)
-    assert "[a1] step 1" in result
-    assert "[a1] check 1" in result
-    assert "[a1] evidence 1" in result
+    assert "[a1 (Hermes profile: research_profile)] step 1" in result
+    assert "[a1 (Hermes profile: research_profile)] check 1" in result
+    assert "[a1 (Hermes profile: research_profile)] evidence 1" in result
     assert "[a2] step 2" in result
 
 
@@ -81,7 +82,7 @@ def test_prompt_parallel_group():
 def test_prompt_delegated():
     phase = _phase("p1")
     phase_map = {"p1": phase}
-    with patch_contract_builder(delegate_agent="a1"):
+    with patch_contract_builder(delegate_agent="a1", hermes_profile="code_profile"):
         result = build_phase_prompt(
             "T-1",
             phase_map,
@@ -91,9 +92,10 @@ def test_prompt_delegated():
             phase_id="p1",
         )
     assert "Делегировано агенту" in result
+    assert "Hermes profile: code_profile" in result
 
 
-def patch_contract_builder(delegate_agent=None):
+def patch_contract_builder(delegate_agent=None, hermes_profile=None):
     from unittest.mock import MagicMock, patch
 
     from project_workflow.wizard import prompt as prompt_mod
@@ -108,6 +110,7 @@ def patch_contract_builder(delegate_agent=None):
             "required_checks": ["c1"],
             "required_evidence": ["e1"],
             "delegate_agent": delegate_agent,
+            "hermes_profile": hermes_profile,
             "delegate_toolsets": ["t1"] if delegate_agent else None,
         }
         cb.build.return_value = contract

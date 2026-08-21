@@ -115,7 +115,7 @@
       {{ item_list('Проверки', detail.required_checks) }}
       {{ item_list('Evidence', detail.required_evidence) }}
       {% if detail.skills %}<div class="skill-list">{% for skill in detail.skills %}<span class="skill-chip">{{ skill }}</span>{% endfor %}</div>{% endif %}
-      {% if detail.delegate_agent %}<div class="assignment-description" style="margin-top:9px;margin-bottom:0">Агент: {{ detail.delegate_agent }}{% if detail.delegate_toolsets %} · {{ detail.delegate_toolsets | join(', ') }}{% endif %}</div>{% endif %}
+      {% if detail.delegate_agent %}<div class="assignment-description" style="margin-top:9px;margin-bottom:0">Агент: {{ detail.delegate_agent }}{% if detail.hermes_profile %} · Hermes profile: {{ detail.hermes_profile }}{% endif %}{% if detail.delegate_toolsets %} · {{ detail.delegate_toolsets | join(', ') }}{% endif %}</div>{% endif %}
     </section>
     {% endfor %}
   </div>
@@ -126,7 +126,7 @@
     {{ item_list('Evidence', contract.required_evidence) }}
   </div>
   {% if contract.skills %}<div class="skill-list">{% for skill in contract.skills %}<span class="skill-chip">{{ skill }}</span>{% endfor %}</div>{% endif %}
-  {% if contract.delegate_agent %}<div class="assignment-description" style="margin-top:9px;margin-bottom:0">Агент: {{ contract.delegate_agent }}{% if contract.delegate_toolsets %} · {{ contract.delegate_toolsets | join(', ') }}{% endif %}</div>{% endif %}
+  {% if contract.delegate_agent %}<div class="assignment-description" style="margin-top:9px;margin-bottom:0">Агент: {{ contract.delegate_agent }}{% if contract.hermes_profile %} · Hermes profile: {{ contract.hermes_profile }}{% endif %}{% if contract.delegate_toolsets %} · {{ contract.delegate_toolsets | join(', ') }}{% endif %}</div>{% endif %}
   {% endif %}
 {%- endmacro %}
 

@@ -33,10 +33,17 @@ class SAAgentRepository(AgentRepository):
         row = self._session.get(m.Agent, agent_id)
         return _row_to_agent(row) if row else None
 
+    def get_by_hermes_profile(self, profile: str) -> Agent | None:
+        row = self._session.execute(
+            select(m.Agent).where(m.Agent.hermes_profile == profile)
+        ).scalar_one_or_none()
+        return _row_to_agent(row) if row else None
+
     def create(self, data: dict[str, Any]) -> int:
         item = m.Agent(
             name=data["name"],
             description=data.get("description", ""),
+            hermes_profile=data.get("hermes_profile") or None,
         )
         self._session.add(item)
         self._session.flush()
@@ -50,6 +57,8 @@ class SAAgentRepository(AgentRepository):
             row.name = data["name"]
         if "description" in data:
             row.description = data["description"]
+        if "hermes_profile" in data:
+            row.hermes_profile = data["hermes_profile"] or None
 
     def delete(self, agent_id: int) -> None:
         row = self._session.get(m.Agent, agent_id)

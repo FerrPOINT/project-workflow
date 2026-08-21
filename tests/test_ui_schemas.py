@@ -34,9 +34,8 @@ def test_phase_create_phase_order_coercion():
 
 
 def test_phase_update_fields():
-    p = PhaseUpdate(name="X", delegate_timeout="30")
+    p = PhaseUpdate(name="X")
     assert p.name == "X"
-    assert p.delegate_timeout == "30"
 
 
 def test_workflow_create_update():
@@ -47,10 +46,8 @@ def test_workflow_create_update():
 
 
 def test_project_create_defaults():
-    p = ProjectCreate(code="PRJ")
-    assert p.code == "PRJ"
-    # If no prefixes supplied, default set is injected from config.
-    assert len(p.key_prefixes) > 0 or True
+    with pytest.raises(ValueError, match="At least one task key prefix"):
+        ProjectCreate(code="PRJ")
 
 
 def test_project_create_prefixes_from_str():
@@ -68,13 +65,23 @@ def test_project_create_invalid_prefix():
 def test_project_update_optional_prefixes():
     p = ProjectUpdate(code="PRJ", key_prefixes=None)
     assert p.key_prefixes is None
+    with pytest.raises(ValueError, match="At least one task key prefix"):
+        ProjectUpdate(code="PRJ", key_prefixes="")
 
 
 def test_agent_create_update():
-    a = AgentCreate(name="Coder")
+    a = AgentCreate(name="Coder", hermes_profile=" code_profile ")
     assert a.name == "Coder"
-    au = AgentUpdate(name="New")
+    assert a.hermes_profile == "code_profile"
+    au = AgentUpdate(name="New", hermes_profile="")
     assert au.name == "New"
+    assert au.hermes_profile is None
+
+
+@pytest.mark.parametrize("profile", ["UPPER", "space profile", "-leading", "profile.dot"])
+def test_agent_rejects_invalid_hermes_profile(profile):
+    with pytest.raises(ValueError, match="Hermes profile"):
+        AgentCreate(name="Coder", hermes_profile=profile)
 
 
 def test_phase_order_update():

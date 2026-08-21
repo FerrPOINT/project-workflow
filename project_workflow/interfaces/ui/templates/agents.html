@@ -11,7 +11,7 @@
 .inline-edit:hover,.inline-textarea:hover{background:var(--panel)}
 .inline-edit:focus,.inline-textarea:focus{background:var(--panel);border-color:var(--accent);outline:none}
 .inline-textarea{min-height:72px;resize:vertical}
-.form-grid{display:grid;grid-template-columns:220px 1fr auto;gap:12px;align-items:start}
+.form-grid{display:grid;grid-template-columns:200px 220px minmax(260px,1fr) auto;gap:12px;align-items:start}
 .field-label{display:block;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
 .agent-create{border-top:3px solid var(--accent)}
 @media (max-width: 820px){.form-grid{grid-template-columns:1fr}.agent-table thead{display:none}.agent-table tr{display:block;border-top:1px solid var(--border)}.agent-table td{display:block;padding:10px 0}}
@@ -25,6 +25,7 @@
       <thead>
         <tr>
           <th>Имя</th>
+          <th>Hermes profile</th>
           <th>Описание</th>
           <th></th>
         </tr>
@@ -34,6 +35,9 @@
         <tr data-id="{{ a.id }}">
           <td style="width:220px">
             <input type="text" class="inline-edit" value="{{ a.name }}" data-field="name" onblur="saveRow(this)">
+          </td>
+          <td style="width:240px">
+            <input type="text" class="inline-edit" value="{{ a.hermes_profile or '' }}" data-field="hermes_profile" onblur="saveRow(this)">
           </td>
           <td>
             <textarea class="inline-textarea" data-field="description" onblur="saveRow(this)">{{ a.description or '' }}</textarea>
@@ -51,6 +55,7 @@
     <div class="card-title" style="margin-bottom:12px">Добавить агента</div>
     <div class="form-grid">
       <label><span class="field-label">Имя</span><input type="text" id="newName"></label>
+      <label><span class="field-label">Hermes profile</span><input type="text" id="newHermesProfile"></label>
       <label><span class="field-label">Описание</span><textarea id="newDescription"></textarea></label>
       <button class="btn btn-primary" style="margin-top:23px" onclick="addAgent()">Добавить</button>
     </div>
@@ -82,8 +87,9 @@ function deleteRow(id){
 function addAgent(){
   var name=document.getElementById('newName').value.trim();
   var description=document.getElementById('newDescription').value.trim();
+  var hermesProfile=document.getElementById('newHermesProfile').value.trim();
   if(!name){showToast('Имя агента обязательно','error');return;}
-  fetch('/api/agents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,description:description})})
+  fetch('/api/agents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,description:description,hermes_profile:hermesProfile || null})})
     .then(function(r){return r.json()})
     .then(function(d){if(d.ok){showToast('Добавлено','success');location.reload()}else showToast(d.error||'Ошибка','error')});
 }

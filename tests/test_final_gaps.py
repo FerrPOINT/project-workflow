@@ -40,8 +40,8 @@ class TestSchemasFinalGaps:
         assert schemas.OptionalIntMixin._coerce_optional_int("-5") is None
 
     def test_project_create_key_prefixes_invalid_type(self):
-        p = schemas.ProjectCreate(code="PRJ", key_prefixes=123)
-        assert p.key_prefixes == list(schemas.config.DEFAULT_TASK_KEY_PREFIXES)
+        with pytest.raises(ValueError, match="At least one task key prefix"):
+            schemas.ProjectCreate(code="PRJ", key_prefixes=123)
 
     def test_project_update_key_prefixes_str(self):
         p = schemas.ProjectUpdate(code="PRJ", key_prefixes="aa\nbb")

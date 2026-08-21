@@ -57,8 +57,13 @@ def _format_parallel_contract(contract: dict[str, Any], group_details: list[dict
     for detail in group_details:
         name = detail.get("phase_name") or detail.get("phase_code") or "-"
         agent = detail.get("delegate_agent") or "не задан"
+        hermes_profile = detail.get("hermes_profile")
         toolsets = ", ".join(detail.get("delegate_toolsets") or [])
-        agent_line = f"Агент: {agent}" + (f" | toolsets: {toolsets}" if toolsets else "")
+        agent_line = f"Агент: {agent}"
+        if hermes_profile:
+            agent_line += f" | Hermes profile: {hermes_profile}"
+        if toolsets:
+            agent_line += f" | toolsets: {toolsets}"
         partner_code = detail.get("parallel_with") or "-"
         partner = next(
             (
@@ -116,6 +121,7 @@ def _format_contract(contract: dict[str, Any], human_only: bool = False) -> str:
         toolsets = ", ".join(contract.get("delegate_toolsets") or [])
         parts.append(
             f"Делегировано агенту: {contract['delegate_agent']}"
+            + (f" | Hermes profile: {contract['hermes_profile']}" if contract.get("hermes_profile") else "")
             + (f" | toolsets: {toolsets}" if toolsets else "")
             + "\n\n"
         )
@@ -132,12 +138,14 @@ def _format_parallel_contract_human(group_details: list[dict[str, Any]]) -> str:
     evidence: list[str] = []
     for detail in group_details:
         agent = detail.get("delegate_agent") or "не задан"
+        profile = detail.get("hermes_profile")
+        agent_label = f"{agent} (Hermes profile: {profile})" if profile else agent
         for item in detail.get("instructions", []) or []:
-            instructions.append(f"[{agent}] {item}")
+            instructions.append(f"[{agent_label}] {item}")
         for item in detail.get("required_checks", []) or []:
-            checks.append(f"[{agent}] {item}")
+            checks.append(f"[{agent_label}] {item}")
         for item in detail.get("required_evidence", []) or []:
-            evidence.append(f"[{agent}] {item}")
+            evidence.append(f"[{agent_label}] {item}")
 
     parts = ["Инструкции:\n" + "\n".join(f"  · {item}" for item in instructions) + "\n\n"]
     if checks:

@@ -36,6 +36,7 @@ class PhaseDelegate:
     """Конфигурация delegate_task для делегированной фазы."""
 
     agent: str = ""
+    hermes_profile: str | None = None
     prompt_template: str = ""
     context: list[str] = field(default_factory=list)
     toolsets: list[str] = field(default_factory=list)

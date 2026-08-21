@@ -229,6 +229,38 @@ def test_action_command_emits_artifact_that_passes_log_validation(tmp_path, caps
     assert (tmp_path / "command-logs" / "A-001.log").read_text(encoding="utf-8") == "real output\n"
 
 
+def test_action_subprocess_forces_utf8_without_mutating_parent_environment(tmp_path, monkeypatch, capsys):
+    _write_events(tmp_path, [_session(), _cycle()[0]])
+    captured: dict = {}
+
+    def fake_run(_command, **kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(returncode=0, stdout="Привет\n", stderr="")
+
+    monkeypatch.setenv("PYTHONIOENCODING", "cp1251")
+    monkeypatch.setattr(recorder.subprocess, "run", fake_run)
+    args = type(
+        "Args",
+        (),
+        {
+            "root": str(tmp_path),
+            "task": "TASK-1",
+            "phase": "0.6",
+            "summary": "UTF-8 output",
+            "cwd": str(tmp_path),
+            "timeout": 30,
+            "command": [sys.executable, "-c", "print('Привет')"],
+        },
+    )()
+
+    recorder.command_action(args)
+
+    capsys.readouterr()
+    assert captured["env"]["PYTHONIOENCODING"] == "utf-8"
+    assert os.environ["PYTHONIOENCODING"] == "cp1251"
+    assert recorder.read_events(tmp_path)[-1]["output_excerpt"] == "Привет\n"
+
+
 def test_validate_transcript_rejects_report_without_actions():
     events = [_session(), *_cycle()]
     del events[2]

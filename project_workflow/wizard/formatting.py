@@ -115,6 +115,7 @@ def _flatten_parallel_contract(
     for detail in group_details:
         name = detail.get("phase_name") or detail.get("phase_code") or "-"
         agent = detail.get("delegate_agent") or "не задан"
+        profile = detail.get("hermes_profile")
         toolsets = ", ".join(detail.get("delegate_toolsets") or [])
         partner_code = detail.get("parallel_with") or "-"
         partner = next(
@@ -126,7 +127,9 @@ def _flatten_parallel_contract(
             partner_code,
         )
         instructions.append(
-            f"{name} — параллельно с {partner}, агент: {agent}" + (f" | toolsets: {toolsets}" if toolsets else "")
+            f"{name} — параллельно с {partner}, агент: {agent}"
+            + (f" | Hermes profile: {profile}" if profile else "")
+            + (f" | toolsets: {toolsets}" if toolsets else "")
         )
         for item in detail.get("instructions", []) or []:
             instructions.append(f"  {item}")

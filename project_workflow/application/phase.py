@@ -28,7 +28,7 @@ class PhaseServiceApp:
                     pass
         return f"{prefix}{max_num + 1}"
 
-    def create_phase(self, data: dict[str, Any]) -> dict[str, Any]:
+    def create_phase(self, data: dict[str, Any], *, commit: bool = True) -> dict[str, Any]:
         workflow_id = int(data["workflow_id"])
         order = data.get("phase_order")
         if order is None:
@@ -56,7 +56,8 @@ class PhaseServiceApp:
         phase = self._uow.phases.get_by_id(pid)
         if not phase:
             raise RuntimeError("Phase creation failed")
-        self._uow.commit()
+        if commit:
+            self._uow.commit()
         return phase.to_dict()
 
     def list_phases(self, workflow_id: int | None = None) -> list[dict[str, Any]]:
@@ -66,12 +67,14 @@ class PhaseServiceApp:
         p = self._uow.phases.get_by_id(phase_id)
         return p.to_dict() if p else None
 
-    def update_phase(self, phase_id: int, data: dict[str, Any]) -> None:
+    def update_phase(self, phase_id: int, data: dict[str, Any], *, commit: bool = True) -> None:
         self._uow.phases.update(phase_id, data)
-        self._uow.commit()
+        if commit:
+            self._uow.commit()
         return None
 
-    def delete_phase(self, phase_id: int) -> None:
+    def delete_phase(self, phase_id: int, *, commit: bool = True) -> None:
         self._uow.phases.delete(phase_id)
-        self._uow.commit()
+        if commit:
+            self._uow.commit()
         return None

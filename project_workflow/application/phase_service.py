@@ -29,57 +29,61 @@ class PhaseService:
     # ── Bulk save helpers (atomic) ─────────────────────────────────────
 
     def _resolve_phase_id(self, phase_id: int | str) -> int:
-        with self._uow:
-            if not (isinstance(phase_id, int) or str(phase_id).lstrip("-").isdigit()):
-                phase = self._uow.phases.get_by_code(str(phase_id))
-                if not phase or phase.id is None:
-                    raise ValueError(f"Phase not found: {phase_id}")
-                return phase.id
-            candidate = int(phase_id)
-            phase = self._uow.phases.get_by_id(candidate)
+        if not (isinstance(phase_id, int) or str(phase_id).lstrip("-").isdigit()):
+            phase = self._uow.phases.get_by_code(str(phase_id))
             if not phase or phase.id is None:
                 raise ValueError(f"Phase not found: {phase_id}")
             return phase.id
+        candidate = int(phase_id)
+        phase = self._uow.phases.get_by_id(candidate)
+        if not phase or phase.id is None:
+            raise ValueError(f"Phase not found: {phase_id}")
+        return phase.id
 
-    def save_instructions(self, phase_id: int | str, items: list[dict[str, Any]]) -> list[int]:
+    def save_instructions(
+        self, phase_id: int | str, items: list[dict[str, Any]], *, commit: bool = True
+    ) -> list[int]:
         """Replace all instructions for a phase.  Returns new ids in order."""
         resolved = self._resolve_phase_id(phase_id)
-        with self._uow:
-            self._uow.instructions.delete_for_phase(resolved)
-            ids: list[int] = []
-            for idx, item in enumerate(items, 1):
-                new_id = self._uow.instructions.create(
-                    resolved,
-                    {
-                        "step_num": idx,
-                        "description": item["description"],
-                        "execution_type": item.get("execution_type", "sync"),
-                        "skills": self.serialize_skills(self.normalize_skills(item.get("skills"))),
-                    },
-                )
-                ids.append(new_id)
-            return ids
+        self._uow.instructions.delete_for_phase(resolved)
+        ids: list[int] = []
+        for idx, item in enumerate(items, 1):
+            new_id = self._uow.instructions.create(
+                resolved,
+                {
+                    "step_num": idx,
+                    "description": item["description"],
+                    "execution_type": item.get("execution_type", "sync"),
+                    "skills": self.serialize_skills(self.normalize_skills(item.get("skills"))),
+                },
+            )
+            ids.append(new_id)
+        if commit:
+            self._uow.commit()
+        return ids
 
-    def save_checks(self, phase_id: int | str, items: list[dict[str, Any]]) -> list[int]:
+    def save_checks(self, phase_id: int | str, items: list[dict[str, Any]], *, commit: bool = True) -> list[int]:
         """Replace all checks for a phase."""
         resolved = self._resolve_phase_id(phase_id)
-        with self._uow:
-            ids: list[int] = []
-            self._uow.phases.set_checks(resolved, items)
-            # Reload to return ids in order.
-            for row in self._uow.phases.get_checks(resolved):
-                ids.append(int(row["id"]))
-            return ids
+        ids: list[int] = []
+        self._uow.phases.set_checks(resolved, items)
+        # Reload to return ids in order.
+        for row in self._uow.phases.get_checks(resolved):
+            ids.append(int(row["id"]))
+        if commit:
+            self._uow.commit()
+        return ids
 
-    def save_evidence(self, phase_id: int | str, items: list[dict[str, Any]]) -> list[int]:
+    def save_evidence(self, phase_id: int | str, items: list[dict[str, Any]], *, commit: bool = True) -> list[int]:
         """Replace all evidence for a phase."""
         resolved = self._resolve_phase_id(phase_id)
-        with self._uow:
-            ids: list[int] = []
-            self._uow.phases.set_evidence(resolved, items)
-            for row in self._uow.phases.get_evidence(resolved):
-                ids.append(int(row["id"]))
-            return ids
+        ids: list[int] = []
+        self._uow.phases.set_evidence(resolved, items)
+        for row in self._uow.phases.get_evidence(resolved):
+            ids.append(int(row["id"]))
+        if commit:
+            self._uow.commit()
+        return ids
 
     # ── Read helpers ─────────────────────────────────────────────────
 
@@ -89,35 +93,35 @@ class PhaseService:
             resolved = self._resolve_phase_id(phase_id)
         except ValueError:
             return {}
-        with self._uow:
-            phase = self._uow.phases.get_by_id(resolved)
-            if not phase:
-                return {}
-            phase_dict = phase.to_dict()
-            instructions = []
-            for item in self._uow.instructions.list(resolved):
-                normalized = dict(item)
-                normalized["skills"] = self.normalize_skills(item.get("skills"))
-                instructions.append(normalized)
-            checks = [
-                {"id": r["id"], "phase_id": r["phase_id"], "description": r["description"]}
-                for r in self._uow.phases.get_checks(resolved)
-            ]
-            evidence = [
-                {"id": r["id"], "phase_id": r["phase_id"], "description": r["description"]}
-                for r in self._uow.phases.get_evidence(resolved)
-            ]
-            return {
-                **phase_dict,
-                "instructions": instructions,
-                "checks": checks,
-                "evidence": evidence,
-            }
+        phase = self._uow.phases.get_by_id(resolved)
+        if not phase:
+            return {}
+        phase_dict = phase.to_dict()
+        instructions = []
+        for item in self._uow.instructions.list(resolved):
+            normalized = dict(item)
+            normalized["skills"] = self.normalize_skills(item.get("skills"))
+            instructions.append(normalized)
+        checks = [
+            {"id": r["id"], "phase_id": r["phase_id"], "description": r["description"]}
+            for r in self._uow.phases.get_checks(resolved)
+        ]
+        evidence = [
+            {"id": r["id"], "phase_id": r["phase_id"], "description": r["description"]}
+            for r in self._uow.phases.get_evidence(resolved)
+        ]
+        return {
+            **phase_dict,
+            "instructions": instructions,
+            "checks": checks,
+            "evidence": evidence,
+        }
 
-    def update_phase(self, phase_id: int | str, data: dict[str, Any]) -> None:
+    def update_phase(self, phase_id: int | str, data: dict[str, Any], *, commit: bool = True) -> None:
         resolved = self._resolve_phase_id(phase_id)
-        with self._uow:
-            self._uow.phases.update(resolved, self._prepare_execution_update(resolved, data))
+        self._uow.phases.update(resolved, self._prepare_execution_update(resolved, data))
+        if commit:
+            self._uow.commit()
 
     def _prepare_execution_update(self, phase_id: int, data: dict[str, Any]) -> dict[str, Any]:
         """Attach a sync phase to a neighboring parallel component on toggle.
@@ -163,9 +167,8 @@ class PhaseService:
 
     def get_all_phases(self) -> list[dict[str, Any]]:
         """All phases with content (for API)."""
-        with self._uow:
-            rows = self._uow.phases.list()
-            return [self.get_phase_detail(r.id) for r in rows if r.id is not None]
+        rows = self._uow.phases.list()
+        return [self.get_phase_detail(r.id) for r in rows if r.id is not None]
 
     # ── Helpers ────────────────────────────────────────────────────────
 

@@ -107,7 +107,43 @@ class TestPostgresSession:
             from sqlalchemy import text
 
             version = conn.execute(text("SELECT version_num FROM project_workflow.alembic_version")).scalar()
-        assert version is not None
+        inspector = inspect(engine)
+        columns = {column["name"] for column in inspector.get_columns("agents", schema="project_workflow")}
+        indexes = {index["name"] for index in inspector.get_indexes("agents", schema="project_workflow")}
+        assert version == "c31a9f6d4e20"
+        assert "hermes_profile" in columns
+        assert "uq_agents_hermes_profile" in indexes
+
+    def test_hermes_profile_migration_preserves_agents_and_enforces_unique_owner(self, pg_url):
+        engine = get_engine(pg_url)
+        run_alembic_command("upgrade", engine, "b7f3c9d2a641")
+        with engine.begin() as conn:
+            agent_id = conn.execute(
+                text("INSERT INTO project_workflow.agents (name, description) VALUES ('Existing', '') RETURNING id")
+            ).scalar_one()
+
+        ensure_migrated(engine)
+        with engine.connect() as conn:
+            preserved = conn.execute(
+                text("SELECT name, hermes_profile FROM project_workflow.agents WHERE id = :id"),
+                {"id": agent_id},
+            ).one()
+        assert preserved.name == "Existing"
+        assert preserved.hermes_profile is None
+
+        with engine.begin() as conn:
+            conn.execute(
+                text("UPDATE project_workflow.agents SET hermes_profile = 'shared_profile' WHERE id = :id"),
+                {"id": agent_id},
+            )
+        with pytest.raises(IntegrityError):
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.agents (name, description, hermes_profile) "
+                        "VALUES ('Duplicate', '', 'shared_profile')"
+                    )
+                )
 
     def test_upgrade_preserves_existing_run_and_creates_unique_index(self, pg_url):
         from project_workflow.infrastructure.db import schema
@@ -244,7 +280,7 @@ class TestPostgresSession:
                     ") catalog WHERE lower(value) ~ 'jira|gitlab|glab_token|verify-suite|mandatory plan.md'"
                 )
             ).scalar_one()
-        assert revision == "b7f3c9d2a641"
+        assert revision == "c31a9f6d4e20"
         assert upgraded.id == phase_id
         assert upgraded.name == "Runtime Readiness"
         active_contract = upgraded.string_agg.casefold()
@@ -342,7 +378,7 @@ class TestPostgresSession:
                 {"instruction_id": custom_instruction_id},
             ).scalar_one()
 
-        assert revision == "b7f3c9d2a641"
+        assert revision == "c31a9f6d4e20"
         assert [json.loads(row.skills) for row in migrated] == [
             ["agent-workflow-patterns"],
             ["workflow-systematic-debugging"],
@@ -635,6 +671,7 @@ def _step(env: dict[str, str], task_key: str, report: str) -> tuple[subprocess.C
 
 
 @pytest.mark.integration
+@pytest.mark.timeout(120)
 def test_full_wizard_runtime_through_cli_postgres_and_http(pg_url):
     expected_phases = [
         "-1",
@@ -787,6 +824,7 @@ def _advance_to_phase(env: dict[str, str], task_key: str, phases: list[str]) -> 
 
 
 @pytest.mark.integration
+@pytest.mark.timeout(120)
 def test_cli_verdicts_replay_and_fail_closed_through_postgres_and_http(pg_url):
     with _openai_compatible_server() as (provider_url, provider_state):
         env = _cli_env(pg_url, provider_url)

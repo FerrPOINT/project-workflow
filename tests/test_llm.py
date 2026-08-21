@@ -110,7 +110,7 @@ class TestOpenAICompatibleClient:
         assert client.reasoning_effort == "none"
 
     def test_chat_parses_json_response(self):
-        client = OpenAICompatibleClient(api_key="test-key")
+        client = OpenAICompatibleClient(api_key="test-key", base_url="https://ollama.com/v1")
         expected = {"verdict": "PASS", "confidence": 0.95}
         with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
             mock_post.return_value = MagicMock(

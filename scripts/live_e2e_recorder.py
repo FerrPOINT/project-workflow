@@ -531,10 +531,13 @@ def command_action(args: argparse.Namespace) -> None:
     if not command:
         _fail("ACTION requires a command after --")
 
+    environment = os.environ.copy()
+    environment["PYTHONIOENCODING"] = "utf-8"
     try:
         result = subprocess.run(
             command,
             cwd=args.cwd,
+            env=environment,
             capture_output=True,
             text=True,
             encoding="utf-8",

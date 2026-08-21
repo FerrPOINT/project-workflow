@@ -32,6 +32,11 @@ class Agent(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str] = mapped_column(String, nullable=False, default="")
+    hermes_profile: Mapped[str | None] = mapped_column(String(251), nullable=True)
+
+    __table_args__ = (
+        Index("uq_agents_hermes_profile", "hermes_profile", unique=True),
+    )
 
     phases: Mapped[list[Phase]] = relationship("Phase", back_populates="agent")
 
@@ -203,7 +208,9 @@ class Task(Base):
         server_default="active",
     )
     created_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
     __table_args__ = (CheckConstraint("status IN ('active', 'done', 'blocked')", name="ck_tasks_status"),)
 
     project: Mapped[Project] = relationship("Project", back_populates="tasks")

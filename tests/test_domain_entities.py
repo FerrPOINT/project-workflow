@@ -32,7 +32,7 @@ def test_phase_to_dict():
 
 def test_agent_to_dict():
     a = Agent(id=2, name="Coder")
-    assert a.to_dict() == {"id": 2, "name": "Coder", "description": ""}
+    assert a.to_dict() == {"id": 2, "name": "Coder", "description": "", "hermes_profile": None}
 
 
 def test_workflow_to_dict():

@@ -7,8 +7,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from project_workflow import config
-
 
 class OptionalIntMixin:
     """Normalize optional integer fields coming from HTML/JSON forms."""
@@ -58,8 +56,6 @@ class PhaseCreate(BaseModel, OptionalIntMixin):
 class PhaseUpdate(BaseModel, OptionalIntMixin):
     name: str | None = Field(default=None)
     description: str | None = Field(default=None)
-    delegate_agent: str | None = Field(default=None)
-    delegate_timeout: int | str | None = Field(default=None)
     parallel_with: str | None = Field(default=None)
     rollback_target: str | None = Field(default=None)
     next_recommendation: str | None = Field(default=None)
@@ -111,8 +107,16 @@ class ProjectCreate(BaseModel, OptionalIntMixin):
     @classmethod
     def _ensure_prefixes_not_empty(cls, value: list[str]) -> list[str]:
         if not value:
-            return list(config.DEFAULT_TASK_KEY_PREFIXES)
+            raise ValueError("At least one task key prefix is required")
+        if len(value) != len(set(value)):
+            raise ValueError("Task key prefixes must be unique")
         return value
+
+    @model_validator(mode="after")
+    def _require_key_prefixes(self) -> ProjectCreate:
+        if not self.key_prefixes:
+            raise ValueError("At least one task key prefix is required")
+        return self
 
     @field_validator("key_prefixes", mode="after")
     @classmethod
@@ -153,6 +157,10 @@ class ProjectUpdate(BaseModel, OptionalIntMixin):
     def _validate_prefix_format(cls, value: list[str] | None) -> list[str] | None:
         if value is None:
             return None
+        if not value:
+            raise ValueError("At least one task key prefix is required")
+        if len(value) != len(set(value)):
+            raise ValueError("Task key prefixes must be unique")
         for prefix in value:
             if not re.fullmatch(r"[A-Z][A-Z0-9]*", prefix):
                 raise ValueError(f"Invalid prefix '{prefix}': use uppercase letters/digits only")
@@ -164,11 +172,33 @@ class ProjectUpdate(BaseModel, OptionalIntMixin):
 class AgentCreate(BaseModel):
     name: str = Field(..., min_length=1)
     description: str = Field(default="")
+    hermes_profile: str | None = Field(default=None, max_length=251)
+
+    @field_validator("hermes_profile", mode="before")
+    @classmethod
+    def _validate_hermes_profile(cls, value: Any) -> str | None:
+        profile = str(value or "").strip()
+        if not profile:
+            return None
+        if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", profile):
+            raise ValueError("Hermes profile must match [a-z0-9][a-z0-9_-]*")
+        return profile
 
 
 class AgentUpdate(BaseModel):
     name: str | None = Field(default=None)
     description: str | None = Field(default=None)
+    hermes_profile: str | None = Field(default=None, max_length=251)
+
+    @field_validator("hermes_profile", mode="before")
+    @classmethod
+    def _validate_hermes_profile(cls, value: Any) -> str | None:
+        profile = str(value or "").strip()
+        if not profile:
+            return None
+        if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", profile):
+            raise ValueError("Hermes profile must match [a-z0-9][a-z0-9_-]*")
+        return profile
 
 
 class PhaseOrderUpdate(BaseModel):

@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import Query
 from fastapi.responses import JSONResponse
 
+from project_workflow.domain.exceptions import ConflictError
 from project_workflow.interfaces.ui.schemas import (
     AgentCreate,
     AgentUpdate,
@@ -81,6 +82,7 @@ async def api_phases(workflow_id: int | None = Query(default=None)) -> dict[str,
                 "parallel_with": phase.get("parallel_with"),
                 "agent_name": agent["name"] if agent else None,
                 "agent_id": phase.get("agent_id"),
+                "hermes_profile": agent.get("hermes_profile") if agent else None,
             }
         )
     result: dict[str, Any] = {"ok": True, "phases": rows}
@@ -121,7 +123,17 @@ async def api_workflows() -> dict[str, Any] | JSONResponse:
 
 async def api_agents() -> dict[str, Any] | JSONResponse:
     rows = _app_state.agent_service().list_agents()
-    return {"ok": True, "agents": [{**agent, "description": agent.get("description", "")} for agent in rows]}
+    return {
+        "ok": True,
+        "agents": [
+            {
+                **agent,
+                "description": agent.get("description", ""),
+                "hermes_profile": agent.get("hermes_profile"),
+            }
+            for agent in rows
+        ],
+    }
 
 
 async def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONResponse:
@@ -146,11 +158,13 @@ async def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONRespons
     if new_order > (max(order_list, default=0) + 1):
         new_order = (max(order_list, default=0)) + 1
 
+    phase_service = _app_state.phase_service()
     for p in workflow_phases:
         if isinstance(p.get("phase_order"), int) and p["phase_order"] >= new_order:
-            _app_state.phase_service().update_phase(
+            phase_service.update_phase(
                 p["id"],
                 {"phase_order": p["phase_order"] + 1},
+                commit=False,
             )
     data = {
         "name": payload.name,
@@ -163,7 +177,8 @@ async def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONRespons
     }
     if payload.code:
         data["code"] = payload.code
-    phase = _app_state.phase_service().create_phase(data)
+    phase = phase_service.create_phase(data, commit=False)
+    _app_state.get_uow().commit()
     return {"ok": True, "phase_id": phase["id"], "phase_order": new_order, "phase": phase}
 
 
@@ -185,8 +200,6 @@ async def api_phase_update(phase_id: int, payload: PhaseUpdate) -> dict[str, Any
     for key in (
         "name",
         "description",
-        "delegate_agent",
-        "delegate_timeout",
         "rollback_target",
         "next_recommendation",
         "agent_id",
@@ -198,17 +211,20 @@ async def api_phase_update(phase_id: int, payload: PhaseUpdate) -> dict[str, Any
     if "parallel_with" in payload.model_fields_set:
         phase_data["parallel_with"] = payload.parallel_with
     if phase_data:
-        srv.update_phase(resolved_phase_id, phase_data)
+        srv.update_phase(resolved_phase_id, phase_data, commit=False)
 
     inst_ids: list[int] = []
     check_ids: list[int] = []
     ev_ids: list[int] = []
     if payload.instructions is not None:
-        inst_ids = srv.save_instructions(resolved_phase_id, payload.instructions)
+        inst_ids = srv.save_instructions(resolved_phase_id, payload.instructions, commit=False)
     if payload.checks is not None:
-        check_ids = srv.save_checks(resolved_phase_id, payload.checks)
+        check_ids = srv.save_checks(resolved_phase_id, payload.checks, commit=False)
     if payload.evidence is not None:
-        ev_ids = srv.save_evidence(resolved_phase_id, payload.evidence)
+        ev_ids = srv.save_evidence(resolved_phase_id, payload.evidence, commit=False)
+
+    if phase_data or payload.instructions is not None or payload.checks is not None or payload.evidence is not None:
+        _app_state.get_uow().commit()
 
     return {"ok": True, "ids": {"instructions": inst_ids, "checks": check_ids, "evidence": ev_ids}}
 
@@ -256,8 +272,10 @@ async def api_phase_batch_order(payload: PhaseOrderUpdate) -> dict[str, Any] | J
         if phase["id"] not in ordered_phase_ids:
             batch.append((phase["id"], phase.get("phase_order", 0)))
 
+    phase_service = _app_state.phase_service()
     for phase_id, new_order in batch:
-        _app_state.phase_service().update_phase(phase_id, {"phase_order": new_order})
+        phase_service.update_phase(phase_id, {"phase_order": new_order}, commit=False)
+    _app_state.get_uow().commit()
 
     return {"ok": True, "updated": len(payload.orders)}
 
@@ -305,15 +323,18 @@ async def api_workflow_delete(workflow_id: int) -> dict[str, Any] | JSONResponse
 
 async def api_project_create(payload: ProjectCreate) -> dict[str, Any] | JSONResponse:
     service = _app_state.project_service()
-    project = service.create_project(
-        {
-            "code": payload.code,
-            "name": payload.name,
-            "description": payload.description or "",
-            "key_prefixes": list(payload.key_prefixes) if payload.key_prefixes else [],
-            "workflow_id": payload.workflow_id,
-        }
-    )
+    try:
+        project = service.create_project(
+            {
+                "code": payload.code,
+                "name": payload.name,
+                "description": payload.description or "",
+                "key_prefixes": list(payload.key_prefixes),
+                "workflow_id": payload.workflow_id,
+            }
+        )
+    except ConflictError as exc:
+        return _error(str(exc), 409)
     project_id = project["id"]
     return {"ok": True, "project_id": project_id, "project": service.get_project(project_id)}
 
@@ -323,11 +344,14 @@ async def api_project_update(project_id: int, payload: ProjectUpdate) -> dict[st
     existing = service.get_project(project_id)
     if not existing:
         return _error(f"Проект {project_id} не найден", 404)
-    updates = _updates_from_payload(payload, ["name", "description", "workflow_id"])
+    updates = _updates_from_payload(payload, ["code", "name", "description", "workflow_id"])
     if payload.key_prefixes is not None:
         updates["key_prefixes"] = list(payload.key_prefixes)
     if updates:
-        service.update_project(project_id, updates)
+        try:
+            service.update_project(project_id, updates)
+        except ConflictError as exc:
+            return _error(str(exc), 409)
     return {"ok": True, "project": service.get_project(project_id)}
 
 
@@ -345,7 +369,16 @@ async def api_project_delete(project_id: int) -> dict[str, Any] | JSONResponse:
 
 async def api_agent_create(payload: AgentCreate) -> dict[str, Any] | JSONResponse:
     service = _app_state.agent_service()
-    agent_id = service.create_agent({"name": payload.name, "description": payload.description or ""})["id"]
+    try:
+        agent_id = service.create_agent(
+            {
+                "name": payload.name,
+                "description": payload.description or "",
+                "hermes_profile": payload.hermes_profile,
+            }
+        )["id"]
+    except ConflictError as exc:
+        return _error(str(exc), 409)
     return {"ok": True, "agent_id": agent_id, "agent": service.get_agent(agent_id)}
 
 
@@ -355,8 +388,13 @@ async def api_agent_update(agent_id: int, payload: AgentUpdate) -> dict[str, Any
     if not existing:
         return _error(f"Агент {agent_id} не найден", 404)
     updates = _updates_from_payload(payload, ["name", "description"])
+    if "hermes_profile" in payload.model_fields_set:
+        updates["hermes_profile"] = payload.hermes_profile
     if updates:
-        service.update_agent(agent_id, updates)
+        try:
+            service.update_agent(agent_id, updates)
+        except ConflictError as exc:
+            return _error(str(exc), 409)
     return {"ok": True, "agent": service.get_agent(agent_id)}
 
 

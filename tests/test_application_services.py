@@ -47,6 +47,8 @@ def _make_uow() -> UnitOfWork:
     uow.tasks = MagicMock()
     uow.workflows = MagicMock()
     uow.phases = MagicMock()
+    uow.projects.get_by_code.return_value = None
+    uow.projects.list.return_value = []
     return uow
 
 
@@ -140,6 +142,27 @@ class TestProjectService:
         svc = ProjectService(uow)
         with pytest.raises(ConflictError, match="linked tasks"):
             svc.delete_project(7)
+
+    def test_create_project_rejects_prefix_owned_by_another_project(self):
+        uow = _make_uow()
+        existing = MagicMock(id=2, code="OTHER", key_prefixes=["TASK"])
+        uow.projects.list.return_value = [existing]
+        svc = ProjectService(uow)
+
+        with pytest.raises(ConflictError, match="already assigned"):
+            svc.create_project({"code": "NEW", "workflow_id": 1, "key_prefixes": ["TASK"]})
+
+        uow.projects.create.assert_not_called()
+
+    def test_update_project_rejects_duplicate_code(self):
+        uow = _make_uow()
+        uow.projects.get_by_id.return_value = MagicMock(id=1, code="OLD")
+        uow.projects.get_by_code.return_value = MagicMock(id=2, code="NEW")
+
+        with pytest.raises(ConflictError, match="already exists"):
+            ProjectService(uow).update_project(1, {"code": "NEW"})
+
+        uow.projects.update.assert_not_called()
 
 
 class TestWorkflowService:

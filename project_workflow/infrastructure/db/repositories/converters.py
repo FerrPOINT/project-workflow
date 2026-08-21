@@ -101,6 +101,7 @@ def _row_to_agent(row: m.Agent) -> Agent:
         id=row.id,
         name=row.name,
         description=row.description or "",
+        hermes_profile=row.hermes_profile or None,
     )
 
 

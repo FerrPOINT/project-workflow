@@ -63,6 +63,18 @@ class TestSaveInstructions:
         with pytest.raises(ValueError, match="Phase not found"):
             svc.save_instructions(9999, [{"description": "x"}])
 
+    def test_deferred_save_does_not_commit(self, svc, fresh_db, monkeypatch):
+        phase = fresh_db.phases.get_by_code("1")
+        commits = 0
+
+        def count_commit():
+            nonlocal commits
+            commits += 1
+
+        monkeypatch.setattr(fresh_db, "commit", count_commit)
+        svc.save_instructions(phase.id, [{"description": "Deferred"}], commit=False)
+        assert commits == 0
+
 
 class TestSaveChecks:
     def test_invalid_phase_raises(self, svc):

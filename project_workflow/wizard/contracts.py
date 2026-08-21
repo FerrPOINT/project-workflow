@@ -40,6 +40,7 @@ def phase_to_dict(phase: Phase) -> dict[str, Any]:
         "parallel_with": phase.parallel_with,
         "rollback_target": phase.rollback_target,
         "delegate_agent": phase.delegate.agent if phase.delegate else None,
+        "hermes_profile": phase.delegate.hermes_profile if phase.delegate else None,
         "delegate_toolsets": list(phase.delegate.toolsets) if phase.delegate else [],
     }
 
@@ -68,6 +69,7 @@ class PhaseContractBuilder:
             required_evidence=[text_from_evidence(item) for item in phase.evidence],
             execution_type=phase.execution_type,
             delegate_agent=phase.delegate.agent if phase.delegate else None,
+            hermes_profile=phase.delegate.hermes_profile if phase.delegate else None,
             delegate_toolsets=list(phase.delegate.toolsets) if phase.delegate else [],
             parallel_with=phase.parallel_with,
             rollback_target=phase.rollback_target,
@@ -114,6 +116,7 @@ class PhaseContractBuilder:
                     "required_evidence": [t for t in ph_evidence if t],
                     "execution_type": ph.execution_type,
                     "delegate_agent": ph.delegate.agent if ph.delegate else None,
+                    "hermes_profile": ph.delegate.hermes_profile if ph.delegate else None,
                     "delegate_toolsets": list(ph.delegate.toolsets) if ph.delegate else [],
                     "parallel_with": ph.parallel_with,
                     "rollback_target": ph.rollback_target,
@@ -130,6 +133,7 @@ class PhaseContractBuilder:
             required_evidence=evidence or ["Нет явных evidence items."],
             execution_type="parallel",
             delegate_agent=representative.agent if representative else None,
+            hermes_profile=representative.hermes_profile if representative else None,
             delegate_toolsets=list(representative.toolsets) if representative else [],
             parallel_with=first.parallel_with,
             rollback_target=first.rollback_target,

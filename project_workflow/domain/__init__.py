@@ -79,12 +79,14 @@ class Agent:
     id: int | None = None
     name: str = ""
     description: str = ""
+    hermes_profile: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "name": self.name,
             "description": self.description,
+            "hermes_profile": self.hermes_profile,
         }
 
 

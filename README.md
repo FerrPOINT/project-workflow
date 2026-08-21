@@ -54,6 +54,7 @@ SQLite остаётся только для изолированных тест�
 |---------|----------|
 | Пофазовый workflow | Каждая задача строго следует шаблону фаз с инструкциями, чек-листами и артефактами. |
 | Рекомендации skills | Имена skills хранятся в PostgreSQL и передаются исполнителю прямо в контракте фазы; содержимое принадлежит [`relevanter/agent-skills`](https://gt.wmtgroup.ru/relevanter/agent-skills). |
+| Hermes profiles | Агенту можно назначить уникальное имя Hermes-профиля; Wizard передаёт его исполнителю вместе с заданием. |
 | Встроенный supervisor | Автоматическая оценка отчётов и решение о переходе на следующую фазу. |
 | Web UI | Управление шаблонами, фазами, проектами, задачами и агентами через браузер. |
 | CLI freeze | Только `step` и `history`; весь CRUD — через UI. |
@@ -130,6 +131,25 @@ sudo systemctl restart project-workflow-ui.service
 Перед первым запуском `scripts/init_db.py` применяет `alembic upgrade head` и заполняет
 каталоги только в пустой БД. Последующие запуски не перезаписывают изменения из UI.
 
+### Hermes-профили агентов
+
+На странице «Агенты» можно связать workflow-агента с уже существующим профилем
+Hermes. В базе хранится только непрозрачное имя профиля, например
+`review_profile`; ключи, skills, память и конфигурация остаются в Hermes.
+Один профиль нельзя назначить двум агентам, чтобы два исполнителя не писали в
+один `HERMES_HOME` одновременно.
+
+Внешний исполнитель получает `hermes_profile` в serial- или parallel-контракте
+и запускает Hermes канонической командой:
+
+```bash
+hermes -p review_profile
+```
+
+Wizard не проверяет наличие профиля и не загружает его содержимое: эта граница
+принадлежит executor. Пустое поле означает, что конкретный Hermes-профиль для
+агента не задан.
+
 <a name="architecture"></a>
 ## 🏗️ Architecture
 
@@ -153,6 +173,7 @@ flowchart TD
 - Конфигурация централизована в `project_workflow.config` на Pydantic Settings; `DATABASE_URL` обязателен.
 - PostgreSQL хранит каталог, задачи, историю, fingerprints и audit; packaged seed используется только для пустой БД.
 - Skills являются рекомендациями внутри инструкций фазы; их канонические файлы хранятся в `relevanter/agent-skills`, отдельного runtime registry нет.
+- Hermes profile является ссылкой на профиль внешнего исполнителя; Workflow хранит только уникальное имя и не копирует конфигурацию или секреты Hermes.
 
 <a name="quality"></a>
 ## 🛡️ Quality Bar
@@ -160,10 +181,10 @@ flowchart TD
 | Проверка | Команда | Статус |
 |---|---|---|
 | Lint | `ruff check .` | **green** |
-| Type check | `mypy project_workflow scripts` | **green, 83 source files** |
-| Tests | `pytest -q --timeout=60` | **881 passed, 13 integration deselected** |
-| PostgreSQL integration | `pytest -q -m integration tests/test_postgres_integration.py --timeout=180` | **13 passed** |
-| Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` | **95.31%** |
+| Type check | `mypy project_workflow scripts` | **green, 84 source files** |
+| Tests | `pytest -q --timeout=60` | **900 passed, 14 integration deselected** |
+| PostgreSQL integration | `pytest -q -m integration tests/test_postgres_integration.py --timeout=60` | **14 passed** |
+| Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` | **95.06%** |
 | Systemd UI health | `curl http://localhost:8811/api/tasks` | **200** |
 
 <a name="roadmap"></a>
@@ -175,7 +196,7 @@ flowchart TD
 - [x] Docker Compose: Postgres + migrate + UI
 - [x] UI/API переведены на SQLAlchemy-сервисы
 - [x] Один runtime dataflow: CLI/UI → Wizard → OpenAI-compatible evaluator → PostgreSQL
-- [x] Полный suite: 861 тест green + 13 PostgreSQL integration tests
+- [x] Полный suite: 900 тестов green + 14 PostgreSQL integration tests
 - [x] Postgres-интеграционные тесты
 - [x] `WizardEngine` и wizard-модули собраны в пакет `project_workflow/wizard/`
 - [x] API-тесты на все UI routes

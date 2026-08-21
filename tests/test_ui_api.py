@@ -149,6 +149,57 @@ class TestApiPhases:
         assert {"step", "history"}.issubset(names)
         assert "ui" not in names
 
+    def test_composite_phase_update_commits_once(self, client, monkeypatch):
+        phase_id = _phase_id(client, "0.0a")
+        original_commit = SAUnitOfWork.commit
+        commits = 0
+
+        def counted_commit(uow):
+            nonlocal commits
+            commits += 1
+            return original_commit(uow)
+
+        monkeypatch.setattr(SAUnitOfWork, "commit", counted_commit)
+        response = client.put(
+            f"/api/phases/{phase_id}",
+            json={
+                "description": "Atomic update",
+                "instructions": [{"description": "Do one thing"}],
+                "checks": [{"description": "Check one thing"}],
+                "evidence": [{"description": "One log"}],
+            },
+        )
+
+        assert response.status_code == 200
+        assert commits == 1
+
+    def test_composite_phase_update_rolls_back_on_commit_error(self, client, monkeypatch):
+        phase_id = _phase_id(client, "0.0a")
+        before = client.get(f"/api/phases/{phase_id}").json()["phase"]
+        original_commit = SAUnitOfWork.commit
+
+        def failed_commit(_uow):
+            raise RuntimeError("synthetic commit failure")
+
+        monkeypatch.setattr(SAUnitOfWork, "commit", failed_commit)
+        with pytest.raises(RuntimeError, match="synthetic commit failure"):
+            client.put(
+                f"/api/phases/{phase_id}",
+                json={
+                    "description": "Must be rolled back",
+                    "instructions": [{"description": "Must be rolled back"}],
+                    "checks": [{"description": "Must be rolled back"}],
+                    "evidence": [{"description": "Must be rolled back"}],
+                },
+            )
+
+        monkeypatch.setattr(SAUnitOfWork, "commit", original_commit)
+        after = client.get(f"/api/phases/{phase_id}").json()["phase"]
+        assert after["description"] == before["description"]
+        assert after["instructions"] == before["instructions"]
+        assert after["checks"] == before["checks"]
+        assert after["evidence"] == before["evidence"]
+
 
 class TestRemovedLegacyApi:
     def test_wizard_evaluate_removed(self, client):
@@ -510,15 +561,37 @@ class TestApiAgents:
 
     def test_create_and_update_agent(self, client):
         name = _unique("Agent")
-        resp = client.post("/api/agents", json={"name": name, "description": "desc"})
+        profile = f"profile_{uuid.uuid4().hex[:8]}"
+        resp = client.post(
+            "/api/agents",
+            json={"name": name, "description": "desc", "hermes_profile": profile},
+        )
         assert resp.status_code == 200
         data = resp.json()
         agent_id = data["agent_id"]
+        assert data["agent"]["hermes_profile"] == profile
 
-        resp = client.put(f"/api/agents/{agent_id}", json={"name": name + "2", "description": "updated"})
+        resp = client.put(
+            f"/api/agents/{agent_id}",
+            json={"name": name + "2", "description": "updated", "hermes_profile": None},
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["agent"]["description"] == "updated"
+        assert data["agent"]["hermes_profile"] is None
+
+    def test_hermes_profile_cannot_be_shared(self, client):
+        profile = f"profile_{uuid.uuid4().hex[:8]}"
+        first = client.post("/api/agents", json={"name": _unique("Agent"), "hermes_profile": profile})
+        assert first.status_code == 200
+
+        second = client.post("/api/agents", json={"name": _unique("Agent"), "hermes_profile": profile})
+        assert second.status_code == 409
+        assert "already assigned" in second.json()["error"]
+
+    def test_invalid_hermes_profile_is_rejected(self, client):
+        response = client.post("/api/agents", json={"name": _unique("Agent"), "hermes_profile": "Bad Profile"})
+        assert response.status_code == 422
 
     def test_delete_agent_assigned_to_phase_forbidden(self, client):
         from project_workflow.interfaces.ui import _app_state

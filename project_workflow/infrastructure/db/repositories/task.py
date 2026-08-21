@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import logging
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -87,6 +88,8 @@ class SATaskRepository(TaskRepository):
                 continue
             if hasattr(row, key):
                 setattr(row, key, val)
+        if data:
+            row.updated_at = datetime.datetime.now(datetime.timezone.utc)
 
     def update_if_state(
         self,
@@ -95,6 +98,8 @@ class SATaskRepository(TaskRepository):
         expected_status: str,
         data: dict[str, Any],
     ) -> bool:
+        values = dict(data)
+        values["updated_at"] = datetime.datetime.now(datetime.timezone.utc)
         result = self._session.execute(
             update(m.Task)
             .where(
@@ -102,15 +107,17 @@ class SATaskRepository(TaskRepository):
                 m.Task.current_phase == expected_phase,
                 m.Task.status == expected_status,
             )
-            .values(**data)
+            .values(**values)
         )
         return getattr(result, "rowcount", 0) == 1
 
     def add_history(self, task_id: int, phase_id: int, status: str) -> None:
+        completed_at = datetime.datetime.now(datetime.timezone.utc) if status == "done" else None
         # Check pending objects first to avoid duplicate inserts inside the same session.
         for obj in self._session.new:
             if isinstance(obj, m.TaskHistory) and obj.task_id == task_id and obj.phase_id == phase_id:
                 obj.status = status
+                obj.completed_at = completed_at
                 return
         with self._session.no_autoflush:
             existing = self._session.execute(
@@ -121,8 +128,16 @@ class SATaskRepository(TaskRepository):
             ).scalar_one_or_none()
         if existing:
             existing.status = status
+            existing.completed_at = completed_at
         else:
-            self._session.add(m.TaskHistory(task_id=task_id, phase_id=phase_id, status=status))
+            self._session.add(
+                m.TaskHistory(
+                    task_id=task_id,
+                    phase_id=phase_id,
+                    status=status,
+                    completed_at=completed_at,
+                )
+            )
 
     def get_history(self, task_id: int) -> Sequence[dict[str, Any]]:
         with self._session.no_autoflush:

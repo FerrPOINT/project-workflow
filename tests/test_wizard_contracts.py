@@ -37,11 +37,12 @@ def test_phase_to_dict():
         instructions=[PhaseInstruction(step="i")],
         checks=[PhaseCheck(description="c")],
         evidence=[PhaseEvidence(item="e")],
-        delegate=PhaseDelegate(agent="a1", toolsets=["t1"]),
+        delegate=PhaseDelegate(agent="a1", hermes_profile="code_profile", toolsets=["t1"]),
     )
     d = phase_to_dict(phase)
     assert d["code"] == "p1"
     assert d["delegate_agent"] == "a1"
+    assert d["hermes_profile"] == "code_profile"
     assert d["delegate_toolsets"] == ["t1"]
 
 
