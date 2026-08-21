@@ -422,6 +422,15 @@ class TestPhasesPage:
         assert 'class="move-down-btn"' in response.text
         assert response.text.index('class="phase-card-actions"') < response.text.index('class="phase-add-btn"')
 
+    def test_phases_add_button_breaks_the_vertical_connector_line(self):
+        response = client.get("/phases")
+
+        assert response.status_code == 200
+        assert ".timeline-connector::before,.timeline-connector::after" in response.text
+        assert ".timeline-connector::before{top:0;bottom:calc(50% + 21px)}" in response.text
+        assert ".timeline-connector::after{top:calc(50% + 21px);bottom:0}" in response.text
+        assert ".timeline-connector::before{content:'';position:absolute;top:0;bottom:0" not in response.text
+
     def test_phases_page_add_phase_button_carries_workflow_id_from_active_nav(self):
         response = client.get("/phases")
         assert response.status_code == 200

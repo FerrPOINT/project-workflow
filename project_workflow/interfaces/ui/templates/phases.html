@@ -36,8 +36,10 @@
 .timeline-parallel-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .timeline-parallel-grid .timeline-card{min-height:132px}
 .timeline-parallel-grid .badge-parallel{background:var(--panel);color:var(--text-muted);border-color:var(--border-strong)}
-.timeline-connector{height:48px;display:flex;align-items:center;justify-content:center;position:relative}
-.timeline-connector::before{content:'';position:absolute;top:0;bottom:0;left:50%;width:1px;background:var(--border-strong)}
+.timeline-connector{height:56px;display:flex;align-items:center;justify-content:center;position:relative}
+.timeline-connector::before,.timeline-connector::after{content:'';position:absolute;left:50%;width:1px;transform:translateX(-50%);background:var(--border-strong)}
+.timeline-connector::before{top:0;bottom:calc(50% + 21px)}
+.timeline-connector::after{top:calc(50% + 21px);bottom:0}
 .phase-add-btn{position:relative;z-index:1;width:30px;height:30px;border-radius:50%;border:1px dashed var(--accent);background:var(--panel);color:var(--accent);cursor:pointer;font-size:18px;line-height:1}
 .phase-add-btn:hover{background:var(--accent);color:#fff;border-style:solid}
 @media(max-width:1050px){.phases-layout{grid-template-columns:1fr}.workflow-nav{position:static;max-height:none}.timeline-card{padding-right:18px;padding-top:52px}.phase-card-actions{left:12px;right:auto}}
