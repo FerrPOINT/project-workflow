@@ -481,7 +481,7 @@ class TestPostgresSession:
                 {"instruction_id": custom_instruction_id},
             ).scalar_one()
 
-        assert revision == "a42e91d6c7f3"
+        assert revision == "4d7c2a9e6b10"
         assert [json.loads(row.skills) for row in migrated] == [
             ["project-workflow-executor", "agent-workflow-patterns"],
             ["workflow-systematic-debugging"],
