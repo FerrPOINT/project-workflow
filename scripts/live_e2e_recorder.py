@@ -15,7 +15,7 @@ import subprocess
 import sys
 from collections import Counter
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, NoReturn
 
 SENSITIVE_KEYS = {
@@ -224,7 +224,10 @@ def _validate_action_event(
         raise TranscriptError(f"ACTION {action_id} command must be a non-empty argument list")
 
     cwd = action.get("cwd")
-    if not isinstance(cwd, str) or not cwd or not Path(cwd).is_absolute():
+    is_absolute_cwd = isinstance(cwd, str) and bool(cwd) and (
+        PurePosixPath(cwd).is_absolute() or PureWindowsPath(cwd).is_absolute()
+    )
+    if not is_absolute_cwd:
         raise TranscriptError(f"ACTION {action_id} cwd must be an absolute path")
 
     exit_code = action.get("exit_code")
