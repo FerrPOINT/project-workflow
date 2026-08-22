@@ -291,7 +291,7 @@ class UnitOfWork(ABC):
     @abstractmethod
     def evidence(self) -> EvidenceRepository: ...
 
-    # UoW facade helpers used by WizardEngine, CLI and application services.
+    # UoW facade helpers used by SupervisorEngine, CLI and application services.
     @abstractmethod
     def add_task_history(self, task_id: int, phase_id: int, status: str) -> None: ...
 

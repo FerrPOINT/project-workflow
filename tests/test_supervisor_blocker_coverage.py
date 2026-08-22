@@ -4,17 +4,17 @@ from __future__ import annotations
 
 import pytest
 
-pytestmark = [pytest.mark.wizard]
+pytestmark = [pytest.mark.supervisor]
 
-from project_workflow.wizard import WizardEngine
-from project_workflow.wizard.checks import normalize_text
+from project_workflow.supervisor import SupervisorEngine
+from project_workflow.supervisor.checks import normalize_text
 
 
 class TestCoverageAccumulation:
     """Test retrieval of coverage saved by previous LLM runs."""
 
     def _make_engine(self, task_key="TASK-1"):
-        return WizardEngine(task_key)
+        return SupervisorEngine(task_key)
 
     def test_get_previously_covered_reads_runs(self, tmp_path, monkeypatch):
         engine = self._make_engine("TASK-9999")
@@ -62,9 +62,9 @@ class TestEvaluateAccumulationEndToEnd:
     """Test evaluate() accumulates coverage across multiple reports for the same phase."""
 
     def _make_engine(self, task_key="TASK-1"):
-        return WizardEngine(task_key)
+        return SupervisorEngine(task_key)
 
-    def test_evaluate_across_reports(self, tmp_path, monkeypatch, wizard_llm):
+    def test_evaluate_across_reports(self, tmp_path, monkeypatch, supervisor_llm):
         engine = self._make_engine("TASK-9996")
         tid = engine.task["id"]
 
@@ -115,7 +115,7 @@ class TestEvaluateAccumulationEndToEnd:
         engine.task = engine.db.get_task(tid)
 
         # First report: covers only check 1
-        wizard_llm("PARTIAL", covered=["tests run"], missing=["code fixed"])
+        supervisor_llm("PARTIAL", covered=["tests run"], missing=["code fixed"])
         result1 = engine.evaluate("I ran tests first")
         assert result1["verdict"] == "PARTIAL"
         assert "tests run" in result1["covered"]
@@ -125,7 +125,7 @@ class TestEvaluateAccumulationEndToEnd:
         engine.task = engine.db.get_task(tid)
 
         # Second report: covers check 2 (with accumulated coverage from first run)
-        wizard_llm("PASS", covered=["tests run", "code fixed"])
+        supervisor_llm("PASS", covered=["tests run", "code fixed"])
         result2 = engine.evaluate("I fixed failing code")
         assert result2["verdict"] == "PASS", f"Expected pass with accumulated coverage, got {result2['verdict']}"
         assert "tests run" in result2["covered"], "Previously covered item should persist"

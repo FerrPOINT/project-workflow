@@ -1,4 +1,4 @@
-"""Misc edge-case tests — cli/core, cli/ui, wizard_context, wizard_prompt."""
+"""Misc edge-case tests — cli/core, cli/ui, supervisor_context, supervisor_prompt."""
 
 from __future__ import annotations
 

@@ -22,7 +22,6 @@
   <img src="https://img.shields.io/badge/Jinja2-B41717?style=flat-square&logo=jinja&logoColor=white" alt="Jinja2" />
   <img src="https://img.shields.io/badge/Alembic-6B8E23?style=flat-square&logo=alembic&logoColor=white" alt="Alembic" />
   <img src="https://img.shields.io/badge/OpenAI%20Compatible-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI Compatible" />
-  <img src="https://img.shields.io/badge/Ollama-000000?style=flat-square&logo=ollama&logoColor=white" alt="Ollama" />
   <img src="https://img.shields.io/badge/OpenRouter-000000?style=flat-square&logo=openrouter&logoColor=white" alt="OpenRouter" />
 </p>
 
@@ -54,7 +53,7 @@ SQLite остаётся только для изолированных тест�
 |---------|----------|
 | Пофазовый workflow | Каждая задача строго следует шаблону фаз с инструкциями, чек-листами и артефактами. |
 | Рекомендации skills | Имена skills хранятся в PostgreSQL и передаются исполнителю прямо в контракте фазы; содержимое принадлежит [`relevanter/agent-skills`](https://gt.wmtgroup.ru/relevanter/agent-skills). |
-| Hermes profiles | Агенту можно назначить уникальное имя Hermes-профиля; Wizard передаёт его исполнителю вместе с заданием. |
+| Hermes profiles | Агенту можно назначить уникальное имя Hermes-профиля; Supervisor передаёт его исполнителю вместе с заданием. |
 | Встроенный supervisor | Автоматическая оценка отчётов и решение о переходе на следующую фазу. |
 | Web UI | Управление шаблонами, фазами, проектами, задачами и агентами через браузер. |
 | CLI freeze | Только `step` и `history`; весь CRUD — через UI. |
@@ -71,7 +70,7 @@ SQLite остаётся только для изолированных тест�
 | ORM & migrations | SQLAlchemy 2 + Alembic | модели, репозитории, UoW, миграции |
 | API | FastAPI + Pydantic | UI и JSON API |
 | UI | Jinja2 + minimal JS | server-side HTML, без frontend-фреймворков |
-| LLM / Supervisor | OpenAI-compatible Chat Completions | единственный evaluator отчётов; по умолчанию Ollama Online |
+| LLM / Supervisor | OpenAI-compatible Chat Completions | единственный evaluator отчётов; OpenRouter `z-ai/glm-5.2`, без fallback |
 | CLI | Click + Rich | `step` / `history` |
 | Config | Pydantic Settings | `.env`, переменные окружения |
 
@@ -86,21 +85,18 @@ project-workflow step --task TASK-123 --report "Сделал X, проверил
 project-workflow history --task TASK-123 --n 10
 ```
 
-CLI ожидает `DATABASE_URL` и доступный OpenAI-compatible evaluator. По умолчанию используется Ollama Online:
+CLI ожидает `DATABASE_URL` и доступный OpenAI-compatible evaluator. Каноническая конфигурация использует OpenRouter:
 
 ```bash
 export DATABASE_URL=postgresql+psycopg://project_workflow:project_workflow@localhost/project_workflow
-export OPENAI_BASE_URL=https://ollama.com/v1
-export OPENAI_MODEL=qwen3.5:397b
+export OPENAI_BASE_URL=https://openrouter.ai/api/v1
+export OPENAI_MODEL=z-ai/glm-5.2
 export OPENAI_TIMEOUT=120
-export OPENAI_API_KEY=<ollama-api-key>
+export OPENAI_API_KEY=<openrouter-api-key>
 export OPENAI_REASONING_EFFORT=none
 ```
 
-Для другого совместимого провайдера достаточно заменить `OPENAI_BASE_URL`, `OPENAI_MODEL` и `OPENAI_API_KEY`.
 Если endpoint не поддерживает `reasoning_effort`, задайте `OPENAI_REASONING_EFFORT=`.
-Ollama Online поддерживает это поле, а значение `none` оставляет token budget финальному JSON.
-Локальный Ollama также подключается через совместимый endpoint `http://localhost:11434/v1`.
 
 Fallback evaluator отсутствует: если провайдер недоступен или вернул некорректный JSON, команда остаётся на текущей фазе, возвращает `BLOCKED` и exit code `1`.
 Повторный отчёт после `status=done` не вызывает evaluator и не создаёт новый run/history: CLI возвращает `PASS`, `status=done` и `next_phase=null`.
@@ -143,10 +139,10 @@ Hermes. В базе хранится только непрозрачное им�
 и запускает Hermes канонической командой:
 
 ```bash
-hermes -p review_profile
+hermes --profile review_profile --oneshot "<phase prompt>"
 ```
 
-Wizard не проверяет наличие профиля и не загружает его содержимое: эта граница
+Supervisor не проверяет наличие профиля и не загружает его содержимое: эта граница
 принадлежит executor. Пустое поле означает, что конкретный Hermes-профиль для
 агента не задан.
 
@@ -155,7 +151,7 @@ Wizard не проверяет наличие профиля и не загру�
 
 ```mermaid
 flowchart TD
-    CLI[CLI project-workflow] -->|step / history| WE[WizardEngine]
+    CLI[CLI project-workflow] -->|step / history| WE[SupervisorEngine]
     UI[Web UI FastAPI+Jinja2] -->|CRUD / HTML| API[API routes]
     API -->|UoW| Repo[SQLAlchemy Repositories]
     WE --> Repo
@@ -181,10 +177,10 @@ flowchart TD
 | Проверка | Команда | Статус |
 |---|---|---|
 | Lint | `ruff check .` | **green** |
-| Type check | `mypy project_workflow scripts` | **green, 84 source files** |
-| Tests | `pytest -q --timeout=60` | **900 passed, 14 integration deselected** |
-| PostgreSQL integration | `pytest -q -m integration tests/test_postgres_integration.py --timeout=60` | **14 passed** |
-| Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` | **95.06%** |
+| Type check | `mypy project_workflow scripts` | **green, 85 source files** |
+| Tests | `pytest -q --timeout=60` | **900 passed, 15 integration deselected** |
+| PostgreSQL integration | `pytest -q -m integration tests/test_postgres_integration.py --timeout=120` | **15 passed** |
+| Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` | **95.50%** |
 | Systemd UI health | `curl http://localhost:8811/api/tasks` | **200** |
 
 <a name="roadmap"></a>
@@ -195,18 +191,20 @@ flowchart TD
 - [x] Alembic-миграции + `scripts/init_db.py` для автоматического baseline
 - [x] Docker Compose: Postgres + migrate + UI
 - [x] UI/API переведены на SQLAlchemy-сервисы
-- [x] Один runtime dataflow: CLI/UI → Wizard → OpenAI-compatible evaluator → PostgreSQL
-- [x] Полный suite: 900 тестов green + 14 PostgreSQL integration tests
+- [x] Один runtime dataflow: CLI/UI → Supervisor → OpenAI-compatible evaluator → PostgreSQL
+- [x] Полный suite: 900 тестов green + 15 PostgreSQL integration tests
 - [x] Postgres-интеграционные тесты
-- [x] `WizardEngine` и wizard-модули собраны в пакет `project_workflow/wizard/`
+- [x] `SupervisorEngine` и supervisor-модули собраны в пакет `project_workflow/supervisor/`
 - [x] API-тесты на все UI routes
 - [x] Production hardening: `/health` endpoint, graceful shutdown, PG connection retry
 - [x] Coverage > 95%
-- [x] mypy `--check-untyped-defs` для wizard/core.py
+- [x] mypy `--check-untyped-defs` для supervisor/core.py
 - [x] UI-доработки: execution_type на отдельной строке, русское склонение счётчиков, очистка рабочей БД от мусора
-- [x] Wizard evaluate: DB-backed history/audit, idempotent replay и явный parallel rendering
+- [x] Supervisor evaluate: DB-backed history/audit, idempotent replay и явный parallel rendering
 - [x] Packaged 27-phase catalog bootstrapped once into an empty PostgreSQL database
-- [x] Forward-миграция seed-managed каталога с legacy Jira/GitLab-контрактов на текущий GitHub/OpenAI-compatible runtime
+- [x] GitLab Merge Request contract: Hermes создаёт MR, Maintainer вручную merge, Hermes проверяет SHA и pipeline
+- [x] 27 seed-managed фаз связаны с шестью именованными Hermes profiles
+- [x] JSON `step` отдаёт полный `phase_contract`, включая `skills`, profile и детали parallel-участников
 - [x] Forward-миграция пустых skill-рекомендаций существующей PostgreSQL без перезаписи UI-значений
 
 ## Установка
@@ -218,6 +216,9 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev,ui]"
 ```
+
+GitHub используется только как хостинг самого `project-workflow`. Управляемый
+demo SDLC работает с Jira и self-managed GitLab.
 
 ## License
 

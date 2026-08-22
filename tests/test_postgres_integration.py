@@ -110,7 +110,7 @@ class TestPostgresSession:
         inspector = inspect(engine)
         columns = {column["name"] for column in inspector.get_columns("agents", schema="project_workflow")}
         indexes = {index["name"] for index in inspector.get_indexes("agents", schema="project_workflow")}
-        assert version == "c31a9f6d4e20"
+        assert version == "a42e91d6c7f3"
         assert "hermes_profile" in columns
         assert "uq_agents_hermes_profile" in indexes
 
@@ -144,6 +144,86 @@ class TestPostgresSession:
                         "VALUES ('Duplicate', '', 'shared_profile')"
                     )
                 )
+
+    def test_sdlc_profile_backfill_only_fills_default_seed_assignments(self, pg_url):
+        engine = get_engine(pg_url)
+        run_alembic_command("upgrade", engine, "c31a9f6d4e20")
+        uow = SAUnitOfWork(engine)
+        default_workflow_id = uow.workflows.create(
+            {"name": "Default", "description": "", "is_default": True}
+        )
+        custom_workflow_id = uow.workflows.create(
+            {"name": "Custom", "description": "", "is_default": False}
+        )
+        custom_agent_id = uow.agents.create(
+            {"name": "ui-owner", "description": "configured in UI", "hermes_profile": "ui-profile"}
+        )
+        orphan_none_id = uow.agents.create({"name": "None", "description": ""})
+        preserved_phase_id = uow.phases.create(
+            {
+                "workflow_id": default_workflow_id,
+                "code": "-1",
+                "name": "Preserved",
+                "phase_order": 1,
+                "agent_id": custom_agent_id,
+                "is_seed_managed": True,
+            }
+        )
+        filled_phase_id = uow.phases.create(
+            {
+                "workflow_id": default_workflow_id,
+                "code": "0.0a",
+                "name": "Filled",
+                "phase_order": 2,
+                "is_seed_managed": True,
+            }
+        )
+        custom_phase_id = uow.phases.create(
+            {
+                "workflow_id": custom_workflow_id,
+                "code": "0.0a",
+                "name": "Custom",
+                "phase_order": 1,
+                "is_seed_managed": True,
+            }
+        )
+        uow.commit()
+        uow.close()
+
+        ensure_migrated(engine)
+        ensure_migrated(engine)
+
+        with engine.connect() as conn:
+            assignments = dict(
+                conn.execute(
+                    text(
+                        "SELECT p.id, a.hermes_profile FROM project_workflow.phases p "
+                        "LEFT JOIN project_workflow.agents a ON a.id = p.agent_id "
+                        "WHERE p.id IN (:preserved, :filled, :custom)"
+                    ),
+                    {
+                        "preserved": preserved_phase_id,
+                        "filled": filled_phase_id,
+                        "custom": custom_phase_id,
+                    },
+                ).all()
+            )
+            profile_count = conn.execute(
+                text(
+                    "SELECT count(*) FROM project_workflow.agents "
+                    "WHERE hermes_profile LIKE 'sdlc-%'"
+                )
+            ).scalar_one()
+            orphan_count = conn.execute(
+                text("SELECT count(*) FROM project_workflow.agents WHERE id = :agent_id"),
+                {"agent_id": orphan_none_id},
+            ).scalar_one()
+
+        assert assignments[preserved_phase_id] == "ui-profile"
+        assert assignments[filled_phase_id] == "sdlc-ops"
+        assert assignments[custom_phase_id] is None
+        assert profile_count == 6
+        assert orphan_count == 0
 
     def test_upgrade_preserves_existing_run_and_creates_unique_index(self, pg_url):
         from project_workflow.infrastructure.db import schema
@@ -277,16 +357,16 @@ class TestPostgresSession:
                     "UNION ALL SELECT description FROM project_workflow.instructions "
                     "UNION ALL SELECT description FROM project_workflow.checks "
                     "UNION ALL SELECT description FROM project_workflow.evidence"
-                    ") catalog WHERE lower(value) ~ 'jira|gitlab|glab_token|verify-suite|mandatory plan.md'"
+                    ") catalog WHERE lower(value) ~ 'github|pull request|glab_token|verify-suite|mandatory plan.md'"
                 )
             ).scalar_one()
-        assert revision == "c31a9f6d4e20"
+        assert revision == "a42e91d6c7f3"
         assert upgraded.id == phase_id
         assert upgraded.name == "Runtime Readiness"
         active_contract = upgraded.string_agg.casefold()
         assert all(
             term not in active_contract
-            for term in ("jira", "gitlab", "glab_token", "verify-suite", "hermes")
+            for term in ("github", "pull request", "glab_token", "verify-suite")
         )
         assert legacy_count == 0
 
@@ -378,9 +458,9 @@ class TestPostgresSession:
                 {"instruction_id": custom_instruction_id},
             ).scalar_one()
 
-        assert revision == "c31a9f6d4e20"
+        assert revision == "a42e91d6c7f3"
         assert [json.loads(row.skills) for row in migrated] == [
-            ["agent-workflow-patterns"],
+            ["project-workflow-executor", "agent-workflow-patterns"],
             ["workflow-systematic-debugging"],
             ["agent-workflow-patterns"],
         ]
@@ -486,7 +566,7 @@ def _prepare_concurrent_task(pg_url: str, task_key: str) -> None:
 @pytest.mark.integration
 @pytest.mark.parametrize("same_report", [True, False])
 def test_concurrent_reports_create_one_transition_and_run(pg_url, same_report):
-    from project_workflow.wizard import WizardEngine
+    from project_workflow.supervisor import SupervisorEngine
 
     task_key = "TASK-CONCURRENT"
     _prepare_concurrent_task(pg_url, task_key)
@@ -494,7 +574,7 @@ def test_concurrent_reports_create_one_transition_and_run(pg_url, same_report):
 
     def evaluate(report: str):
         uow = SAUnitOfWork(pg_url)
-        engine = WizardEngine(task_key, uow=uow, create_if_missing=False)
+        engine = SupervisorEngine(task_key, uow=uow, create_if_missing=False)
         barrier.wait()
         try:
             return engine.evaluate(report)
@@ -504,7 +584,7 @@ def test_concurrent_reports_create_one_transition_and_run(pg_url, same_report):
     reports = ["same report", "same report" if same_report else "different report"]
     with (
         patch(
-            "project_workflow.wizard.evaluate.OpenAICompatibleClient.chat",
+            "project_workflow.supervisor.evaluate.OpenAICompatibleClient.chat",
             side_effect=lambda *_args, **kwargs: _pass_response(kwargs["user"]),
         ),
         ThreadPoolExecutor(max_workers=2) as pool,
@@ -662,7 +742,10 @@ def _run_cli(env: dict[str, str], *args: str) -> tuple[subprocess.CompletedProce
 
 
 def _initialize_cli_database(env: dict[str, str]) -> None:
-    result = _run_process(["scripts/init_db.py"], env)
+    # Module execution keeps the checkout root first on sys.path.  This matters
+    # when the test reuses a dependency environment whose editable install may
+    # point at another worktree.
+    result = _run_process(["-m", "scripts.init_db"], env)
     assert result.returncode == 0, result.stderr or result.stdout
 
 
@@ -672,7 +755,7 @@ def _step(env: dict[str, str], task_key: str, report: str) -> tuple[subprocess.C
 
 @pytest.mark.integration
 @pytest.mark.timeout(120)
-def test_full_wizard_runtime_through_cli_postgres_and_http(pg_url):
+def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
     expected_phases = [
         "-1",
         "0.0a",
@@ -721,6 +804,27 @@ def test_full_wizard_runtime_through_cli_postgres_and_http(pg_url):
         finally:
             bootstrap_uow.close()
 
+        assignment_result, assignment = _run_cli(env, "--json", "step", "--task", task_key)
+        assert assignment_result.returncode == 0
+        assert assignment["prompt"]
+        assert assignment["phase_contract"] == {
+            "phase_code": "-1",
+            "phase_name": "Task Intake",
+            "description": "Понять задачу, scope и ограничения до начала работы",
+            "instructions": assignment["phase_contract"]["instructions"],
+            "required_checks": assignment["phase_contract"]["required_checks"],
+            "required_evidence": assignment["phase_contract"]["required_evidence"],
+            "skills": ["project-workflow-executor", "jira-operator"],
+            "execution_type": "sync",
+            "delegate_agent": "orchestrator",
+            "hermes_profile": "sdlc-orchestrator",
+            "delegate_toolsets": [],
+            "parallel_with": None,
+            "rollback_target": None,
+            "group_phases": None,
+            "group_details": [],
+        }
+
         first_report = "E2E report 1 for phase -1"
         for index, expected_phase in enumerate(expected_phases, start=1):
             report = first_report if index == 1 else f"E2E report {index} for phase {expected_phase}"
@@ -740,8 +844,13 @@ def test_full_wizard_runtime_through_cli_postgres_and_http(pg_url):
             if expected_phase == "0.6":
                 assert payload["next_phase"] == "1.5"
                 assert payload["next_phase_contract"]["group_phases"] == ["1.5", "2"]
+                assert [
+                    detail["hermes_profile"]
+                    for detail in payload["next_phase_contract"]["group_details"]
+                ] == ["sdlc-researcher", "sdlc-orchestrator"]
+                assert "project-workflow-executor" in payload["next_phase_contract"]["skills"]
                 assert any(
-                    "Используй skills: workflow-code-intelligence." in instruction
+                    "workflow-code-intelligence" in instruction
                     for instruction in payload["next_phase_contract"]["instructions"]
                 )
                 uow = SAUnitOfWork(pg_url)
@@ -760,7 +869,7 @@ def test_full_wizard_runtime_through_cli_postgres_and_http(pg_url):
             if expected_phase == "3":
                 assert payload["next_phase_contract"]["group_phases"] is None
                 assert any(
-                    "Используй skills: agent-workflow-patterns." in instruction
+                    "agent-workflow-patterns" in instruction
                     for instruction in payload["next_phase_contract"]["instructions"]
                 )
 
@@ -768,6 +877,8 @@ def test_full_wizard_runtime_through_cli_postgres_and_http(pg_url):
         history_result, history_payload = _run_cli(env, "--json", "history", "--task", task_key)
         assert terminal_result.returncode == history_result.returncode == 0
         assert terminal["phase"] == "10"
+        assert terminal["next_phase"] is None
+        assert terminal["phase_contract"]["hermes_profile"] == "sdlc-orchestrator"
         assert terminal["status"] == "done"
         assert history_payload["count"] == 22
 
@@ -810,7 +921,7 @@ def test_full_wizard_runtime_through_cli_postgres_and_http(pg_url):
     assert len(set(fingerprints)) == 22
     assert all(run.context_snapshot["model"] == "e2e-contract-model" for run in runs)
     assert all(run.context_snapshot["endpoint_mode"] == "openai-compatible" for run in runs)
-    assert all(run.context_snapshot["prompt_version"] == "wizard-evaluator-v4" for run in runs)
+    assert all(run.context_snapshot["prompt_version"] == "supervisor-evaluator-v5" for run in runs)
     assert all(run.context_snapshot["raw_evaluator"]["verdict"] == "PASS" for run in runs)
     uow.close()
 

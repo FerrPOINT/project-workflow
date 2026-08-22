@@ -16,9 +16,9 @@ from typing import Any
 
 import click
 
-from ... import wizard
+from ... import supervisor
 from ...infrastructure.db.uow import SAUnitOfWork
-from ...wizard import format_result
+from ...supervisor import format_result
 from .core import WARN, _require_valid_key, blocked_result, cli, console, out_json
 
 # ── Guard: новые команды запрещены ──────────────────────────────────────
@@ -50,7 +50,7 @@ def step_cmd(
     try:
         uow = SAUnitOfWork()
         task_key = _require_valid_key(task, uow)
-        engine = wizard.WizardEngine(task_key, uow=uow)
+        engine = supervisor.SupervisorEngine(task_key, uow=uow)
     except (RuntimeError, ValueError) as exc:
         result = blocked_result(task, str(exc))
         if jmode:
@@ -78,6 +78,7 @@ def step_cmd(
 
     # default: show phase prompt/instructions
     prompt = engine.get_phase_prompt()
+    phase_contract = engine.get_phase_contract()
     if jmode:
         # For completed tasks return a compact contract without the heavy prompt.
         if engine.task and engine.task.get("status") == "done":
@@ -88,10 +89,20 @@ def step_cmd(
                     "phase": engine.current_phase,
                     "status": "done",
                     "instructions": engine.format_current_phase_instructions(),
+                    "phase_contract": phase_contract,
+                    "next_phase": None,
                 }
             )
             return
-        out_json({"ok": True, "task_key": task_key, "phase": engine.current_phase, "prompt": prompt})
+        out_json(
+            {
+                "ok": True,
+                "task_key": task_key,
+                "phase": engine.current_phase,
+                "prompt": prompt,
+                "phase_contract": phase_contract,
+            }
+        )
         return
     instructions = engine.format_current_phase_instructions()
     console.print(instructions)

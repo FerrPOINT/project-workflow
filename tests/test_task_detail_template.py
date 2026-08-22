@@ -3,7 +3,7 @@ from __future__ import annotations
 from project_workflow.interfaces.ui.templates import env
 
 
-def test_task_detail_renders_group_markers_and_chronological_wizard_dialog() -> None:
+def test_task_detail_renders_group_markers_and_chronological_supervisor_dialog() -> None:
     template = env.get_template("task_detail.html")
     blocks = [
         {
@@ -100,8 +100,8 @@ def test_task_detail_renders_group_markers_and_chronological_wizard_dialog() -> 
     assert '>27</span><span class="phase-name">Auto-Improve' in html
     assert "phase-parallel-inner-arrow" not in html
     assert html.index("first-report") < html.index("second-report")
-    assert "Диалог с Wizard" in html
-    assert "Задание Wizard на следующий этап" in html
+    assert "Диалог с Supervisor" in html
+    assert "Задание Supervisor на следующий этап" in html
     assert "workflow-code-intelligence" in html
     assert "Dataflow проверен" in html
     assert "Лог исследования" in html

@@ -1,4 +1,4 @@
-"""Coverage gaps for wizard/evaluate.py."""
+"""Coverage gaps for supervisor/evaluate.py."""
 
 from __future__ import annotations
 
@@ -6,10 +6,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-pytestmark = [pytest.mark.wizard]
+pytestmark = [pytest.mark.supervisor]
 
-from project_workflow.wizard.evaluate import evaluate_llm_report
-from project_workflow.wizard.models import Phase
+from project_workflow.supervisor.evaluate import evaluate_llm_report
+from project_workflow.supervisor.models import Phase
 
 
 def _phase(**overrides) -> Phase:
@@ -67,8 +67,8 @@ class TestEvaluateGaps:
         engine._resolve_transition.return_value = (None, None, None)
         return engine
 
-    @patch("project_workflow.wizard.evaluate.OpenAICompatibleClient")
-    @patch("project_workflow.wizard.evaluate.ResponseParser")
+    @patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient")
+    @patch("project_workflow.supervisor.evaluate.ResponseParser")
     def test_evaluate_blocked_default_blocker(self, mock_parser, mock_client):
         mock_parser.parse.return_value = MockLlmResponse(verdict="BLOCKED")
         mock_client.return_value.chat.return_value = "{}"
@@ -78,8 +78,8 @@ class TestEvaluateGaps:
         assert result["verdict"] == "BLOCKED"
         assert result["blockers"] == ["LLM identified blocker"]
 
-    @patch("project_workflow.wizard.evaluate.OpenAICompatibleClient")
-    @patch("project_workflow.wizard.evaluate.ResponseParser")
+    @patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient")
+    @patch("project_workflow.supervisor.evaluate.ResponseParser")
     def test_evaluate_rollback(self, mock_parser, mock_client):
         mock_parser.parse.return_value = MockLlmResponse(verdict="ROLLBACK")
         mock_client.return_value.chat.return_value = "{}"
@@ -91,8 +91,8 @@ class TestEvaluateGaps:
         assert result["verdict"] == "ROLLBACK"
         assert result["rollback_target"] == "0"
 
-    @patch("project_workflow.wizard.evaluate.OpenAICompatibleClient")
-    @patch("project_workflow.wizard.evaluate.ResponseParser")
+    @patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient")
+    @patch("project_workflow.supervisor.evaluate.ResponseParser")
     def test_evaluate_pass_next_phase_int(self, mock_parser, mock_client):
         mock_parser.parse.return_value = MockLlmResponse(verdict="PASS", next_phase="2")
         mock_client.return_value.chat.return_value = "{}"

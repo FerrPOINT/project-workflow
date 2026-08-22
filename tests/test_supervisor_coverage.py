@@ -4,16 +4,16 @@ from __future__ import annotations
 
 import pytest
 
-from project_workflow.wizard import WizardEngine
-from project_workflow.wizard.models import Phase, PhaseCheck, PhaseEvidence
-from project_workflow.wizard.types import VERDICT_LABELS
+from project_workflow.supervisor import SupervisorEngine
+from project_workflow.supervisor.models import Phase, PhaseCheck, PhaseEvidence
+from project_workflow.supervisor.types import VERDICT_LABELS
 
-pytestmark = [pytest.mark.wizard]
+pytestmark = [pytest.mark.supervisor]
 
 
 class TestBuildChecklist:
-    def _make_engine(self) -> WizardEngine:
-        return WizardEngine("TASK-1")
+    def _make_engine(self) -> SupervisorEngine:
+        return SupervisorEngine("TASK-1")
 
     def test_deduplicates_and_preserves_order(self):
         engine = self._make_engine()

@@ -1,4 +1,4 @@
-"""Shared text normalization for wizard evaluation history."""
+"""Shared text normalization for supervisor evaluation history."""
 
 from __future__ import annotations
 

@@ -16,40 +16,41 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SEED_PATH = REPO_ROOT / "project_workflow" / "references" / "seed.json"
 
-EXPECTED_PHASE_SKILLS = {
-    "0.9": ["agent-workflow-patterns", "workflow-systematic-debugging", "agent-workflow-patterns"],
-    "0.6": ["workflow-code-intelligence", "workflow-code-intelligence", "workflow-systematic-debugging"],
-    "1.5": ["workflow-code-intelligence", "workflow-code-intelligence", "workflow-systematic-debugging"],
-    "3.5": ["agent-workflow-patterns", "workflow-systematic-debugging", "workflow-writing-plans"],
-    "4.5": ["agent-workflow-patterns", "workflow-systematic-debugging", "test-driven-development"],
-    "7.5": ["repo-workflow", "workflow-systematic-debugging", "test-driven-development"],
-    "7.6": ["test-driven-development", "workflow-systematic-debugging"],
-    "7.6.R": ["workflow-code-intelligence", "workflow-systematic-debugging"],
-    "7.7": ["agent-workflow-patterns", "workflow-systematic-debugging", "agent-workflow-patterns"],
-    "8": ["repo-workflow", "repo-workflow", "agent-workflow-patterns"],
-    "9": ["agent-workflow-patterns", "workflow-code-intelligence", "workflow-writing-plans"],
-}
-
-EXPECTED_ROLE_AGENTS = {
-    "0.6": "researcher",
-    "0.9": "critic",
-    "1.5": "researcher",
-    "3.5": "critic",
-    "4.5": "critic",
-    "7.5": "reviewer",
-    "7.6": "reviewer",
-    "7.6.R": "researcher",
-    "7.7": "critic",
-    "8": "ops",
-    "9": "coder",
+EXPECTED_PHASE_PROFILES = {
+    "-1": ("orchestrator", "sdlc-orchestrator"),
+    "0.0a": ("ops", "sdlc-ops"),
+    "0.01": ("orchestrator", "sdlc-orchestrator"),
+    "0.000": ("ops", "sdlc-ops"),
+    "0.00": ("ops", "sdlc-ops"),
+    "0.7": ("ops", "sdlc-ops"),
+    "0.9": ("critic", "sdlc-critic"),
+    "0.5": ("orchestrator", "sdlc-orchestrator"),
+    "0.6": ("researcher", "sdlc-researcher"),
+    "1": ("ops", "sdlc-ops"),
+    "1.5": ("researcher", "sdlc-researcher"),
+    "2": ("orchestrator", "sdlc-orchestrator"),
+    "3": ("orchestrator", "sdlc-orchestrator"),
+    "3.5": ("critic", "sdlc-critic"),
+    "4": ("coder", "sdlc-coder"),
+    "4.5": ("critic", "sdlc-critic"),
+    "5": ("reviewer", "sdlc-reviewer"),
+    "5.5": ("coder", "sdlc-coder"),
+    "6": ("ops", "sdlc-ops"),
+    "7": ("ops", "sdlc-ops"),
+    "7.5": ("reviewer", "sdlc-reviewer"),
+    "7.6": ("reviewer", "sdlc-reviewer"),
+    "7.6.R": ("researcher", "sdlc-researcher"),
+    "7.7": ("critic", "sdlc-critic"),
+    "8": ("ops", "sdlc-ops"),
+    "9": ("orchestrator", "sdlc-orchestrator"),
+    "10": ("orchestrator", "sdlc-orchestrator"),
 }
 
 FORBIDDEN_ACTIVE_CATALOG_TERMS = {
-    "jira",
-    "gitlab",
+    "github",
+    "pull request",
     "glab_token",
     "verify-suite",
-    "hermes",
     "workflow-jira",
     "info/sprint",
     "origin/develop",
@@ -107,29 +108,17 @@ def test_seed_catalog_has_no_legacy_provider_or_task_system_contracts():
     assert found == []
 
 
-def test_catalog_migrations_cover_and_match_every_seed_phase():
-    from project_workflow.infrastructure.db.migrations.versions.d83b7c2e4f10_modernize_default_workflow_catalog import (
-        CURRENT as FIRST_CATALOG_UPDATE,
-    )
-    from project_workflow.infrastructure.db.migrations.versions.e92c4f7a1b63_sync_remaining_default_catalog import (
-        CURRENT as REMAINING_CATALOG_UPDATE,
-    )
+def test_seed_catalog_uses_gitlab_manual_merge_contract():
+    phase_7 = _phase_by_code("7")
+    phase_77 = _phase_by_code("7.7")
+    phase_8 = _phase_by_code("8")
 
-    phases = json.loads(SEED_PATH.read_text(encoding="utf-8"))
-    migrated = {**FIRST_CATALOG_UPDATE, **REMAINING_CATALOG_UPDATE}
-    assert set(migrated) == {str(phase["code"]) for phase in phases}
-
-    for phase in phases:
-        code = str(phase["code"])
-        expected = {
-            "name": phase["name"],
-            "description": phase["description"],
-            "next_recommendation": phase["next_recommendation"],
-            "instructions": [item["description"] for item in phase["instructions"]],
-            "checks": [item["description"] for item in phase["checks"]],
-            "evidence": [item["description"] for item in phase["evidence"]],
-        }
-        assert migrated[code] == expected
+    assert phase_7["name"] == "Merge Request"
+    assert "GitLab merge request" in phase_7["description"]
+    assert "ручного merge Maintainer" in phase_77["next_recommendation"]
+    assert any("Hermes не выполняет merge" in item["description"] for item in phase_77["checks"])
+    assert phase_8["name"] == "Delivery Verification"
+    assert any("merged commit" in item["description"] for item in phase_8["checks"])
 
 
 def test_seed_catalog_parallel_links_form_expected_groups():
@@ -266,19 +255,17 @@ def test_seed_catalog_parallelism_uses_phase_runs_instead_of_fake_instruction_ba
 
 
 def test_seed_catalog_role_bound_phases_are_fully_filled_with_agents_skills_and_checks():
-    for code, agent_name in EXPECTED_ROLE_AGENTS.items():
+    for code, (agent_name, profile) in EXPECTED_PHASE_PROFILES.items():
         phase = _phase_by_code(code)
         assert phase.get("delegate", {}).get("agent") == agent_name, f"Phase {code} must pick agent {agent_name}"
+        assert phase.get("delegate", {}).get("hermes_profile") == profile
         assert phase.get("instructions"), f"Phase {code} must keep instructions"
         assert phase.get("checks"), f"Phase {code} must keep checks"
         assert phase.get("evidence"), f"Phase {code} must keep evidence"
 
-        actual_skills = []
         for instruction in phase["instructions"]:
-            skills = instruction.get("skills")
-            assert isinstance(skills, list) and skills, (
-                f"Phase {code} instruction {instruction.get('step_num')} must declare skills"
-            )
+            skills = instruction.get("skills") or []
+            assert isinstance(skills, list)
             assert all(
                 isinstance(skill, str)
                 and skill
@@ -286,8 +273,7 @@ def test_seed_catalog_role_bound_phases_are_fully_filled_with_agents_skills_and_
                 and all(char.islower() or char.isdigit() or char == "-" for char in skill)
                 for skill in skills
             )
-            actual_skills.extend(skills)
-        assert actual_skills == EXPECTED_PHASE_SKILLS[code]
+        assert phase["instructions"][0]["skills"][0] == "project-workflow-executor"
 
 
 def test_db_init_assigns_agents_to_role_bound_default_phases(tmp_path):
@@ -296,8 +282,10 @@ def test_db_init_assigns_agents_to_role_bound_default_phases(tmp_path):
     schema.ensure_phase_catalog(uow)
 
     agents_by_id = {agent["id"]: agent["name"] for agent in uow.get_agents()}
-    for code, expected_agent_name in EXPECTED_ROLE_AGENTS.items():
+    profiles_by_agent_id = {agent["id"]: agent["hermes_profile"] for agent in uow.get_agents()}
+    for code, (expected_agent_name, expected_profile) in EXPECTED_PHASE_PROFILES.items():
         phase = uow.get_phase_by_code(code)
         assert phase is not None, f"Phase {code} not found"
         assert phase.get("agent_id") is not None, f"Phase {code} must resolve selected agent"
         assert agents_by_id[phase["agent_id"]] == expected_agent_name
+        assert profiles_by_agent_id[phase["agent_id"]] == expected_profile

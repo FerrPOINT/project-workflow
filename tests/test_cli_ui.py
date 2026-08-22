@@ -32,9 +32,9 @@ def _validator() -> TaskKeyValidator:
 class TestStepCommand:
     """Test `project-workflow step --task TASK-1`"""
 
-    @patch("project_workflow.wizard.WizardEngine")
+    @patch("project_workflow.supervisor.SupervisorEngine")
     def test_step_auto_init_creates_task(self, mock_engine_cls):
-        """WizardEngine auto-creates task in DB if missing."""
+        """SupervisorEngine auto-creates task in DB if missing."""
         mock_engine = mock_engine_cls.return_value
         mock_engine.current_phase = "0"
         mock_engine.format_current_phase_instructions.return_value = "do stuff"
@@ -48,7 +48,7 @@ class TestStepCommand:
         assert first_call[0] == ("TASK-1",)
         mock_engine.format_current_phase_instructions.assert_called_once()
 
-    @patch("project_workflow.wizard.WizardEngine")
+    @patch("project_workflow.supervisor.SupervisorEngine")
     def test_step_shows_phase(self, mock_engine_cls):
         mock_engine = mock_engine_cls.return_value
         mock_engine.current_phase = "0.00"
@@ -60,7 +60,7 @@ class TestStepCommand:
         assert "phase instructions" in result.output
         mock_engine.format_current_phase_instructions.assert_called_once_with()
 
-    @patch("project_workflow.wizard.WizardEngine")
+    @patch("project_workflow.supervisor.SupervisorEngine")
     def test_step_report_pass(self, mock_engine_cls):
         mock_engine = mock_engine_cls.return_value
         mock_engine.evaluate.return_value = {
@@ -93,7 +93,7 @@ class TestStepCommand:
         assert "Доказательства:" in result.output
         assert "e2" in result.output
 
-    @patch("project_workflow.wizard.WizardEngine")
+    @patch("project_workflow.supervisor.SupervisorEngine")
     def test_step_report_fail_exits_one(self, mock_engine_cls):
         mock_engine = mock_engine_cls.return_value
         mock_engine.evaluate.return_value = {
@@ -117,7 +117,7 @@ class TestStepCommand:
         assert "Чекапы:" in result.output
         assert "m1" in result.output
 
-    @patch("project_workflow.wizard.WizardEngine")
+    @patch("project_workflow.supervisor.SupervisorEngine")
     def test_step_report_json_mode(self, mock_engine_cls):
         mock_engine = mock_engine_cls.return_value
         mock_engine.evaluate.return_value = {
@@ -136,7 +136,7 @@ class TestStepCommand:
         parsed = json.loads(result.output)
         assert parsed["verdict"] == "PASS"
 
-    @patch("project_workflow.wizard.WizardEngine")
+    @patch("project_workflow.supervisor.SupervisorEngine")
     def test_step_report_json_blocked_exits_one(self, mock_engine_cls):
         mock_engine_cls.return_value.evaluate.return_value = {
             "verdict": "BLOCKED",
@@ -149,11 +149,19 @@ class TestStepCommand:
         assert result.exit_code == 1
         assert json.loads(result.output)["verdict"] == "BLOCKED"
 
-    @patch("project_workflow.wizard.WizardEngine")
+    @patch("project_workflow.supervisor.SupervisorEngine")
     def test_step_prompt_json_mode(self, mock_engine_cls):
         mock_engine = mock_engine_cls.return_value
         mock_engine.current_phase = "0.00"
         mock_engine.get_phase_prompt.return_value = "next steps"
+        mock_engine.get_phase_contract.return_value = {
+            "phase_code": "0.00",
+            "phase_name": "Git Identity",
+            "skills": ["project-workflow-executor"],
+            "hermes_profile": "sdlc-ops",
+            "group_phases": None,
+            "group_details": [],
+        }
         runner = CliRunner()
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
             result = runner.invoke(cli, ["--json", "step", "--task", "TASK-1"])
@@ -163,6 +171,8 @@ class TestStepCommand:
         assert parsed["task_key"] == "TASK-1"
         assert parsed["phase"] == "0.00"
         assert parsed["prompt"] == "next steps"
+        assert parsed["phase_contract"]["hermes_profile"] == "sdlc-ops"
+        assert parsed["phase_contract"]["skills"] == ["project-workflow-executor"]
 
     def test_step_skip_is_rejected(self):
         runner = CliRunner()

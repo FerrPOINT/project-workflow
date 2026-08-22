@@ -1,4 +1,4 @@
-"""Prompt assembly for WizardEngine phase contracts.
+"""Prompt assembly for SupervisorEngine phase contracts.
 
 The prompt is stateful: it includes task history and recent verdicts from the
 canonical database.

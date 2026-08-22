@@ -11,7 +11,7 @@ from project_workflow import config
 from project_workflow.infrastructure.db.schema import (
     _load_seed,
     _normalized_url,
-    _phase_item_to_wizard,
+    _phase_item_to_supervisor,
     ensure_phase_catalog,
     get_phase_from_db,
     load_phases_from_db,
@@ -86,8 +86,8 @@ class TestSchemaEdgeCases:
         path.write_text('{"foo": "bar"}', encoding="utf-8")
         assert _load_seed(path) == []
 
-    def test_phase_item_to_wizard_with_delegate(self):
-        phase = _phase_item_to_wizard(
+    def test_phase_item_to_supervisor_with_delegate(self):
+        phase = _phase_item_to_supervisor(
             {
                 "code": "DLG",
                 "name": "Delegate",

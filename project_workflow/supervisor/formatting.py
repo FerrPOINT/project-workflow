@@ -1,7 +1,4 @@
-"""CLI formatting helpers for wizard evaluation results.
-
-Public functions kept compatible for existing imports from wizard.core.
-"""
+"""CLI formatting helpers for Supervisor evaluation results."""
 
 from __future__ import annotations
 

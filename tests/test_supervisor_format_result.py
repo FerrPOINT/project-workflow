@@ -2,9 +2,9 @@
 
 import pytest
 
-pytestmark = [pytest.mark.wizard]
+pytestmark = [pytest.mark.supervisor]
 
-from project_workflow.wizard import format_result
+from project_workflow.supervisor import format_result
 
 
 class TestFormatResult:

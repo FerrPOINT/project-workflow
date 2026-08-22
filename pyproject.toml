@@ -75,7 +75,7 @@ timeout = 60
 markers = [
     "unit: fast domain/application tests without DB",
     "ui: UI and API tests using TestClient",
-    "wizard: wizard/supervisor logic",
+    "supervisor: supervisor/supervisor logic",
     "cli: CLI command tests",
     "integration: tests requiring a local PostgreSQL instance",
     "slow: tests that take more than 10 seconds",

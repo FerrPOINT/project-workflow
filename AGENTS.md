@@ -13,20 +13,20 @@
 
 ## Verification ritual
 
-After any change to the SQLAlchemy layer, application services, UI state, or wizard engine, run the following checks before committing:
+After any change to the SQLAlchemy layer, application services, UI state, or supervisor engine, run the following checks before committing:
 
 1. **Tests**
    ```bash
    pytest -q --timeout=60
    ```
-   Expected: **900 passed, 14 deselected**, 0 failed, 0 errors. Integration tests
+   Expected: **900 passed, 15 deselected**, 0 failed, 0 errors. Integration tests
    are intentionally deselected here; run them separately as described below.
 
 2. **PostgreSQL integration**
    ```bash
    pytest -q -m integration tests/test_postgres_integration.py --timeout=60
    ```
-   Expected: **14 passed**, 0 failed, 0 errors. This includes the real CLI
+   Expected: **15 passed**, 0 failed, 0 errors. This includes the real CLI
    subprocess -> PostgreSQL -> OpenAI-compatible HTTP workflow path. The two
    multi-subprocess E2E tests have an explicit 120-second per-test marker.
 
@@ -34,7 +34,7 @@ After any change to the SQLAlchemy layer, application services, UI state, or wiz
    ```bash
    pytest --cov=project_workflow --cov-report=term --timeout=60
    ```
-   Expected: total coverage >= 90%. Current baseline: **95.06%**.
+   Expected: total coverage >= 90%. Current baseline: **95.50%**.
 
 4. **Lint**
    ```bash
@@ -46,7 +46,7 @@ After any change to the SQLAlchemy layer, application services, UI state, or wiz
    ```bash
    mypy project_workflow scripts
    ```
-   Expected: `Success: no issues found in 84 source files`.
+   Expected: `Success: no issues found in 85 source files`.
 
 6. **UI service health**
    ```bash
@@ -67,7 +67,7 @@ After any change to the SQLAlchemy layer, application services, UI state, or wiz
   `https://gt.wmtgroup.ru/relevanter/agent-skills` and are loaded by the executor.
 - `project-workflow` stores only the unique Hermes profile name bound to an
   agent. The profile itself remains owned by Hermes and is selected by the
-  executor with `hermes -p <profile>`.
+  executor with `hermes --profile <profile> --oneshot <prompt>`.
 - The repeatable CLI workflow acceptance process is documented in `LIVE_TEST_PLAN.md`.
 
 ## Production-readiness — what we deliberately skip

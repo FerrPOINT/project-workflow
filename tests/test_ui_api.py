@@ -202,16 +202,16 @@ class TestApiPhases:
 
 
 class TestRemovedLegacyApi:
-    def test_wizard_evaluate_removed(self, client):
-        resp = client.post("/api/wizard/evaluate", json={"task_key": "AAT-999", "report": "test"})
+    def test_supervisor_evaluate_removed(self, client):
+        resp = client.post("/api/supervisor/evaluate", json={"task_key": "AAT-999", "report": "test"})
         assert resp.status_code == 404
 
-    def test_wizard_context_removed(self, client):
-        resp = client.get("/api/wizard/AAT-999/context")
+    def test_supervisor_context_removed(self, client):
+        resp = client.get("/api/supervisor/AAT-999/context")
         assert resp.status_code == 404
 
-    def test_wizard_phase_post_removed(self, client):
-        resp = client.post("/api/wizard/0", json={"report": "done"})
+    def test_supervisor_phase_post_removed(self, client):
+        resp = client.post("/api/supervisor/0", json={"report": "done"})
         assert resp.status_code == 404
 
     def test_delete_instruction_route_removed(self, client):

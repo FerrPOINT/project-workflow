@@ -1,16 +1,16 @@
-"""WizardEngine unit tests for public supervisor behavior."""
+"""SupervisorEngine unit tests for public supervisor behavior."""
 
 from unittest.mock import patch
 
 import pytest
 
-pytestmark = [pytest.mark.wizard]
+pytestmark = [pytest.mark.supervisor]
 
-from project_workflow.wizard import WizardEngine
-from project_workflow.wizard.models import Phase
+from project_workflow.supervisor import SupervisorEngine
+from project_workflow.supervisor.models import Phase
 
 
-class TestWizardEvaluate:
+class TestSupervisorEvaluate:
     def _phase(self) -> Phase:
         return Phase(
             id=1,
@@ -32,7 +32,7 @@ class TestWizardEvaluate:
         )
 
     def test_evaluate_pass(self):
-        engine = WizardEngine("TASK-1")
+        engine = SupervisorEngine("TASK-1")
         ph = self._phase()
         engine.current_phase = "0"
         engine.phase_map = {"0": ph}
@@ -47,7 +47,7 @@ class TestWizardEvaluate:
         llm.assert_called_once_with("report ok", ph)
 
     def test_evaluate_partial_when_items_missing(self):
-        engine = WizardEngine("TASK-1")
+        engine = SupervisorEngine("TASK-1")
         ph = self._phase()
         engine.current_phase = "0"
         engine.phase_map = {"0": ph}
@@ -65,7 +65,7 @@ class TestWizardEvaluate:
         assert result["missing"] == ["check"]
 
     def test_evaluate_completed_task_does_not_call_llm(self):
-        engine = WizardEngine("TASK-1")
+        engine = SupervisorEngine("TASK-1")
         ph = self._phase()
         engine.current_phase = "0"
         engine.phase_map = {"0": ph}
@@ -83,7 +83,7 @@ class TestWizardEvaluate:
         assert "уже завершён" in result["message"]
 
     def test_evaluate_completed_task_survives_missing_catalog_phase(self):
-        engine = WizardEngine("TASK-1")
+        engine = SupervisorEngine("TASK-1")
         engine.current_phase = "retired-phase"
         engine.phase_map = {}
         engine.all_phases = []
@@ -104,7 +104,7 @@ class TestWizardEvaluate:
         assert result["instructions"] == []
 
     def test_get_phase_prompt(self):
-        engine = WizardEngine("TASK-1")
+        engine = SupervisorEngine("TASK-1")
         ph = self._phase()
         engine.current_phase = "0"
         engine.phase_map = {"0": ph}

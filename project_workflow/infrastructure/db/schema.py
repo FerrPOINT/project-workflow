@@ -14,7 +14,7 @@ import yaml
 from project_workflow.domain.repositories import UnitOfWork
 
 from ... import config
-from ...wizard.models import (
+from ...supervisor.models import (
     Phase,
     PhaseCheck,
     PhaseDelegate,
@@ -23,7 +23,7 @@ from ...wizard.models import (
 )
 
 # URLs for which the phase catalog has already been bootstrapped.  This prevents
-# re-parsing the seed file on every CLI/UI/wizard request inside the same process.
+# re-parsing the seed file on every CLI/UI/supervisor request inside the same process.
 _CATALOG_ENSURED_URLS: set[str] = set()
 
 
@@ -63,7 +63,7 @@ def _build_phase_from_db(
     phase_row: Any,
     uow: UnitOfWork,
 ) -> Phase:
-    """Assemble a wizard Phase dataclass from a domain Phase + repositories."""
+    """Assemble a supervisor Phase dataclass from a domain Phase + repositories."""
     phase_id = phase_row.id
     phase_code = phase_row.code or ""
     inst_rows = uow.instructions.list(phase_id)
@@ -133,7 +133,7 @@ def load_phases_from_db(
     uow: UnitOfWork,
     workflow_id: int | str | None = None,
 ) -> list[Phase]:
-    """Load all wizard phases from a UnitOfWork instance."""
+    """Load all supervisor phases from a UnitOfWork instance."""
     if isinstance(workflow_id, str):
         workflow_id = int(workflow_id) if workflow_id.isdigit() else None
     rows = uow.phases.list(workflow_id)
@@ -171,8 +171,8 @@ def _load_seed(path: Path | str | None = None) -> list[dict[str, Any]]:
     return data
 
 
-def _phase_item_to_wizard(item: dict[str, Any]) -> Phase:
-    """Convert a raw seed dict into a wizard Phase dataclass."""
+def _phase_item_to_supervisor(item: dict[str, Any]) -> Phase:
+    """Convert a raw seed dict into a supervisor Phase dataclass."""
 
     def _text(val: Any) -> str:
         if isinstance(val, dict):
@@ -197,6 +197,7 @@ def _phase_item_to_wizard(item: dict[str, Any]) -> Phase:
         d = item["delegate"]
         delegate = PhaseDelegate(
             agent=d.get("agent", ""),
+            hermes_profile=d.get("hermes_profile") or None,
             prompt_template=d.get("prompt_template", f"Phase {item.get('code', '')}"),
             toolsets=d.get("toolsets", []),
             timeout_min=d.get("timeout_min", 10),
@@ -228,7 +229,7 @@ def load_phases_from_seed(
 ) -> list[Phase]:
     """Load phases from a YAML/JSON seed file for initial catalog bootstrap."""
     items = _load_seed(path)
-    phases = [_phase_item_to_wizard(item) for item in items]
+    phases = [_phase_item_to_supervisor(item) for item in items]
     if workflow_id is not None:
         # Seed items currently do not carry workflow_id, so this filter is a no-op.
         pass
@@ -266,7 +267,13 @@ def ensure_phase_catalog(
             delegate = phase.delegate
             agent_name = (delegate.agent or "") if delegate else ""
             if agent_name and not uow.agents.get_by_name(agent_name):
-                uow.agents.create({"name": agent_name, "description": f"Seed agent for {phase.code}"})
+                uow.agents.create(
+                    {
+                        "name": agent_name,
+                        "description": f"Seed agent for {agent_name}",
+                        "hermes_profile": delegate.hermes_profile if delegate else None,
+                    }
+                )
 
         for order, phase in enumerate(seed_phases, start=1):
             assigned_agent_name = phase.delegate.agent if phase.delegate else ""
@@ -288,6 +295,9 @@ def ensure_phase_catalog(
                 "rollback_target": phase.rollback_target,
                 "execution_type": phase.execution_type,
                 "is_seed_managed": True,
+                "is_blocker": phase.is_blocker,
+                "is_delegated": phase.is_delegated,
+                "is_critic": phase.is_critic,
                 "agent_id": agent_id,
             }
             phase_id = uow.phases.create(data)

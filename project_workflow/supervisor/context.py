@@ -1,4 +1,4 @@
-"""Wizard context builder — assembles the task dossier from PostgreSQL."""
+"""Supervisor context builder — assembles the task dossier from PostgreSQL."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from .contracts import PhaseContractBuilder, phase_to_dict
 from .models import Phase
 
 
-class WizardContextBuilder:
+class SupervisorContextBuilder:
     """Collects unified task dossier: metadata, phase history, recent verdicts, contract, artifacts."""
 
     def __init__(

@@ -1,15 +1,15 @@
-"""Tests for wizard.contracts."""
+"""Tests for supervisor.contracts."""
 
 from __future__ import annotations
 
-from project_workflow.wizard.contracts import (
+from project_workflow.supervisor.contracts import (
     PhaseContractBuilder,
     phase_to_dict,
     text_from_check,
     text_from_evidence,
     text_from_instruction,
 )
-from project_workflow.wizard.models import (
+from project_workflow.supervisor.models import (
     Phase,
     PhaseCheck,
     PhaseDelegate,
@@ -34,7 +34,7 @@ def test_phase_to_dict():
         code="p1",
         name="P",
         description="D",
-        instructions=[PhaseInstruction(step="i")],
+        instructions=[PhaseInstruction(step="i", skills=["repo-workflow", "repo-workflow"])],
         checks=[PhaseCheck(description="c")],
         evidence=[PhaseEvidence(item="e")],
         delegate=PhaseDelegate(agent="a1", hermes_profile="code_profile", toolsets=["t1"]),
@@ -44,6 +44,7 @@ def test_phase_to_dict():
     assert d["delegate_agent"] == "a1"
     assert d["hermes_profile"] == "code_profile"
     assert d["delegate_toolsets"] == ["t1"]
+    assert d["skills"] == ["repo-workflow"]
 
 
 def _make_phases():
@@ -77,6 +78,8 @@ def test_build_parallel():
     assert "p2" in contract.group_phases
     assert "p3" in contract.group_phases
     assert contract.group_details[0]["instructions"] == ["Review Используй skills: code-review."]
+    assert contract.skills == ["code-review"]
+    assert contract.group_details[0]["skills"] == ["code-review"]
 
 
 def test_build_checklist():

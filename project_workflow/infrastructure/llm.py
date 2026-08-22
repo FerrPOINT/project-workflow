@@ -1,7 +1,7 @@
-"""OpenAI-compatible LLM adapter for Wizard evaluation.
+"""OpenAI-compatible LLM adapter for Supervisor evaluation.
 
-Ollama Online is the default provider. Any OpenAI-compatible endpoint can be
-selected through environment variables without changing Wizard code.
+OpenRouter is the default provider. The adapter stays OpenAI-compatible and
+does not implement a fallback evaluator.
 
 PromptBuilder — assembles system + user prompts from phase contracts
 ResponseParser — validates and normalises LLM JSON responses
@@ -105,14 +105,14 @@ class OpenAICompatibleClient:
         """Parse one JSON object without repairing free-form model output."""
         parsed = json.loads(text)
         if not isinstance(parsed, dict):
-            raise ValueError("Wizard response must be a JSON object")
+            raise ValueError("Supervisor response must be a JSON object")
         return parsed
 
 
 class PromptBuilder:
     """Build prompts from phase contracts + task context."""
 
-    PROMPT_VERSION = "wizard-evaluator-v4"
+    PROMPT_VERSION = "supervisor-evaluator-v5"
 
     SYSTEM_PROMPT = (
         "You are a strict workflow supervisor. "
@@ -137,7 +137,7 @@ class PromptBuilder:
         "13. A sequence such as 'first open, then merged' is valid only when timestamps and action "
         "evidence make the state change explicit.\n"
         "14. Return one bare JSON object. Never wrap it in Markdown or code fences, and add no commentary.\n"
-        "The Wizard never chooses the next phase.\n\n"
+        "The Supervisor never chooses the next phase.\n\n"
         "Output STRICT JSON with these keys:\n"
         "{\n"
         '  "verdict": "PASS" | "PARTIAL" | "BLOCKED" | "ROLLBACK" | "DELEGATE",\n'

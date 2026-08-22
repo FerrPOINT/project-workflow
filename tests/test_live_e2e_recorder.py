@@ -116,8 +116,8 @@ def test_validate_transcript_accepts_complete_ordered_cycle():
     assert cycles[0]["actions"][0]["id"] == "A-001"
 
 
-@pytest.mark.parametrize("runner", [recorder.run_wizard, recorder.run_history])
-def test_wizard_subprocess_forces_utf8_without_mutating_parent_environment(monkeypatch, runner):
+@pytest.mark.parametrize("runner", [recorder.run_supervisor, recorder.run_history])
+def test_supervisor_subprocess_forces_utf8_without_mutating_parent_environment(monkeypatch, runner):
     captured: dict = {}
 
     def fake_run(_command, **kwargs):
@@ -309,7 +309,7 @@ def test_session_task_must_match_before_cycle_mutation():
         recorder._require_session_task([_session()], "TASK-2")
 
 
-def test_init_rejects_task_with_existing_wizard_history(tmp_path, monkeypatch):
+def test_init_rejects_task_with_existing_supervisor_history(tmp_path, monkeypatch):
     monkeypatch.setattr(recorder, "run_history", lambda _task: (0, {"ok": True, "count": 1}, ""))
     args = type("Args", (), {"root": str(tmp_path), "task": "TASK-1", "metadata": "{}"})()
 
@@ -326,12 +326,12 @@ def test_submit_rejects_report_without_evidence_refs_before_provider_call(tmp_pa
     report.write_text("Действия выполнены.\n", encoding="utf-8")
     called = False
 
-    def fake_run_wizard(_task, _report=None):
+    def fake_run_supervisor(_task, _report=None):
         nonlocal called
         called = True
         return 0, {}, ""
 
-    monkeypatch.setattr(recorder, "run_wizard", fake_run_wizard)
+    monkeypatch.setattr(recorder, "run_supervisor", fake_run_supervisor)
     args = type(
         "Args",
         (),
@@ -355,7 +355,7 @@ def test_parallel_assignment_is_preserved_in_human_dialog():
     dialog = recorder.render_dialog("TASK-1", cycles)
 
     assert "Параллельная группа: 0.6 + 1" in dialog
-    assert "Wizard выдал задание" in dialog
+    assert "Supervisor выдал задание" in dialog
     assert "Агент реально выполнил действия" in dialog
 
 

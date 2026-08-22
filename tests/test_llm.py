@@ -45,7 +45,7 @@ class FakeEvidence:
 class TestOpenAICompatibleClient:
     """Unit tests for the provider-neutral Chat Completions wrapper."""
 
-    def test_ollama_online_defaults(self, monkeypatch):
+    def test_openrouter_defaults(self, monkeypatch):
         from project_workflow.config import get_settings
 
         for name in (
@@ -58,8 +58,8 @@ class TestOpenAICompatibleClient:
             monkeypatch.delenv(name, raising=False)
         get_settings.cache_clear()
         client = OpenAICompatibleClient()
-        assert client.base_url == "https://ollama.com/v1"
-        assert client.model == "qwen3.5:397b"
+        assert client.base_url == "https://openrouter.ai/api/v1"
+        assert client.model == "z-ai/glm-5.2"
         assert client.timeout == 120
         assert client.api_key == ""
         assert client.reasoning_effort == "none"
@@ -305,43 +305,43 @@ class TestResponseParser:
             v.verdict = "BLOCKED"
 
 
-class TestWizardEngineEvaluateLLM:
-    """Integration tests for WizardEngine.evaluate_llm with a mocked provider."""
+class TestSupervisorEngineEvaluateLLM:
+    """Integration tests for SupervisorEngine.evaluate_llm with a mocked provider."""
 
     @pytest.fixture
     def engine(self):
-        from project_workflow.wizard import WizardEngine
+        from project_workflow.supervisor import SupervisorEngine
 
-        return WizardEngine("TASK-1001")
+        return SupervisorEngine("TASK-1001")
 
-    def test_evaluate_llm_pass(self, engine, wizard_llm):
-        wizard_llm("PASS")
+    def test_evaluate_llm_pass(self, engine, supervisor_llm):
+        supervisor_llm("PASS")
         result = engine.evaluate_llm("I checked git", engine._get_current_phase_obj())
         assert result["verdict"] == "PASS"
         assert result["phase"] == "-1"
         assert result["covered"]
         assert result["missing"] == []
 
-    def test_evaluate_llm_blocked(self, engine, wizard_llm):
-        wizard_llm("BLOCKED", blockers=["No access"])
+    def test_evaluate_llm_blocked(self, engine, supervisor_llm):
+        supervisor_llm("BLOCKED", blockers=["No access"])
         result = engine.evaluate_llm("Cannot access", engine._get_current_phase_obj())
         assert result["verdict"] == "BLOCKED"
         assert result["blockers"] == ["No access"]
 
     def test_evaluate_llm_fails_closed_on_provider_failure(self, engine):
         with patch(
-            "project_workflow.wizard.evaluate.OpenAICompatibleClient.chat",
+            "project_workflow.supervisor.evaluate.OpenAICompatibleClient.chat",
             side_effect=requests.ConnectionError("down"),
         ):
             result = engine.evaluate("")
         assert result["verdict"] == "BLOCKED"
         assert result["next_phase"] is None
 
-    def test_evaluate_llm_uses_previously_covered(self, engine, wizard_llm):
+    def test_evaluate_llm_uses_previously_covered(self, engine, supervisor_llm):
         """LLM prompt includes previously covered items."""
-        wizard_llm("PASS")
+        supervisor_llm("PASS")
         fixture_chat = OpenAICompatibleClient.chat
-        with patch("project_workflow.wizard.evaluate.OpenAICompatibleClient.chat") as mock_chat:
+        with patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient.chat") as mock_chat:
             mock_chat.side_effect = fixture_chat
             engine.evaluate_llm("Report", engine._get_current_phase_obj())
             _, kwargs = mock_chat.call_args
@@ -352,14 +352,14 @@ class TestWizardEngineEvaluateLLM:
             assert "TASK-1001" in kwargs["user"]
 
 
-class TestWizardEngineMandatoryLLM:
+class TestSupervisorEngineMandatoryLLM:
     """Report evaluation always uses the configured LLM."""
 
     @pytest.fixture
     def engine(self):
-        from project_workflow.wizard import WizardEngine
+        from project_workflow.supervisor import SupervisorEngine
 
-        return WizardEngine("TASK-1002")
+        return SupervisorEngine("TASK-1002")
 
     def test_evaluate_uses_llm(self, engine):
         with patch.object(engine, "evaluate_llm", return_value={"verdict": "BLOCKED"}) as evaluate_llm:
@@ -439,17 +439,17 @@ class TestPromptBuilderEdgeCases:
         assert "  • C" in prompt
 
 
-class TestWizardEngineLLMIntegrationDB:
+class TestSupervisorEngineLLMIntegrationDB:
     """DB state after LLM evaluate."""
 
     @pytest.fixture
     def engine(self):
-        from project_workflow.wizard import WizardEngine
+        from project_workflow.supervisor import SupervisorEngine
 
-        return WizardEngine("TASK-1003")
+        return SupervisorEngine("TASK-1003")
 
-    def test_supervisor_run_recorded_after_llm_evaluate(self, engine, wizard_llm):
-        wizard_llm("PASS")
+    def test_supervisor_run_recorded_after_llm_evaluate(self, engine, supervisor_llm):
+        supervisor_llm("PASS")
         engine.evaluate("Report")
 
         runs = engine.db.get_supervisor_runs(task_key="TASK-1003", limit=5)
@@ -461,23 +461,23 @@ class TestWizardEngineLLMIntegrationDB:
         assert run["missing"] == []
         assert run["report_fingerprint"]
 
-    def test_task_phase_advanced_after_llm_pass(self, engine, wizard_llm):
-        wizard_llm("PASS")
+    def test_task_phase_advanced_after_llm_pass(self, engine, supervisor_llm):
+        supervisor_llm("PASS")
         engine.evaluate("Report")
 
         task = engine.db.get_task(engine.task["id"])
         assert task["current_phase"] == "0.0a"
 
-    def test_task_blocked_after_llm_blocked(self, engine, wizard_llm):
-        wizard_llm("BLOCKED", blockers=["No access"])
+    def test_task_blocked_after_llm_blocked(self, engine, supervisor_llm):
+        supervisor_llm("BLOCKED", blockers=["No access"])
         engine.evaluate("Report")
 
         task = engine.db.get_task(engine.task["id"])
         assert task["current_phase"] == "-1"
         assert task["status"] == "blocked"
 
-    def test_rollback_without_config_is_retryable_and_has_no_transition(self, engine, wizard_llm):
-        wizard_llm("ROLLBACK")
+    def test_rollback_without_config_is_retryable_and_has_no_transition(self, engine, supervisor_llm):
+        supervisor_llm("ROLLBACK")
         result = engine.evaluate("Report")
 
         assert result["verdict"] == "BLOCKED"
@@ -486,7 +486,7 @@ class TestWizardEngineLLMIntegrationDB:
         assert task["status"] == "active"
         assert engine.db.get_task_history(engine.task["id"]) == []
 
-    def test_supervisor_run_failure_rolls_back_db_and_engine_state(self, engine, monkeypatch, wizard_llm):
+    def test_supervisor_run_failure_rolls_back_db_and_engine_state(self, engine, monkeypatch, supervisor_llm):
         task_id = engine.task["id"]
         original_task = dict(engine.task)
         original_phase = engine.current_phase
@@ -496,7 +496,7 @@ class TestWizardEngineLLMIntegrationDB:
             lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("supervisor write failed")),
         )
 
-        wizard_llm("PASS")
+        supervisor_llm("PASS")
         with pytest.raises(RuntimeError, match="supervisor write failed"):
             engine.evaluate("Report")
 
@@ -529,7 +529,7 @@ class TestEvaluatorV4PromptContract:
     """The live provider receives explicit contradiction and chronology rules."""
 
     def test_prompt_version_is_v4(self):
-        assert PromptBuilder.PROMPT_VERSION == "wizard-evaluator-v4"
+        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v5"
 
     def test_contradictory_current_facts_prohibit_pass(self):
         prompt = PromptBuilder.SYSTEM_PROMPT

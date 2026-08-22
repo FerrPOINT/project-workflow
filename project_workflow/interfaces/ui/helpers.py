@@ -35,7 +35,7 @@ def _run_to_dict(run: Any) -> dict[str, Any]:
 
 
 def _build_parallel_phase_blocks(phases: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Build UI blocks with the same ``parallel_with`` semantics as Wizard."""
+    """Build UI blocks with the same ``parallel_with`` semantics as Supervisor."""
     normalized = [dict(phase) for phase in phases]
     groups = group_parallel_phases(
         normalized,

@@ -93,7 +93,7 @@ def show_all_phases() -> None:
         "5": "Validate",
         "5.5": "Self-Test",
         "6": "Commit",
-        "7": "Pull Request",
+        "7": "Merge Request",
         "7.5": "Code Review",
         "7.6": "QA Testing",
         "7.6.R": "DVR",

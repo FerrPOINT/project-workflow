@@ -16,7 +16,7 @@ class ConflictError(WorkflowCliError):
 
 
 class ConcurrentTransitionError(ConflictError):
-    """Task state changed while a Wizard transition was being committed."""
+    """Task state changed while a Supervisor transition was being committed."""
 
 
 class LastPhaseError(WorkflowCliError):
