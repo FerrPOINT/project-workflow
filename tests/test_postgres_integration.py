@@ -110,7 +110,7 @@ class TestPostgresSession:
         inspector = inspect(engine)
         columns = {column["name"] for column in inspector.get_columns("agents", schema="project_workflow")}
         indexes = {index["name"] for index in inspector.get_indexes("agents", schema="project_workflow")}
-        assert version == "a42e91d6c7f3"
+        assert version == "4d7c2a9e6b10"
         assert "hermes_profile" in columns
         assert "uq_agents_hermes_profile" in indexes
 
@@ -287,6 +287,29 @@ class TestPostgresSession:
                     {"task_id": task_id, "phase_id": phase.id},
                 )
 
+    def test_superseded_v2_revision_upgrades_to_head_and_removes_v2_tables(self, pg_url):
+        engine = get_engine(pg_url)
+        run_alembic_command("upgrade", engine, "a8d3c7e9f201")
+
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO project_workflow.workflow_catalogs_v2 "
+                    "(workflow_version, catalog_revision, catalog_json) "
+                    "VALUES ('legacy', 'legacy-revision', '{}')"
+                )
+            )
+
+        ensure_migrated(engine)
+        ensure_migrated(engine)
+
+        with engine.connect() as conn:
+            version = conn.execute(text("SELECT version_num FROM project_workflow.alembic_version")).scalar_one()
+        tables = set(inspect(engine).get_table_names(schema="project_workflow"))
+
+        assert version == "4d7c2a9e6b10"
+        assert not any(table.endswith("_v2") for table in tables)
+
     def test_catalog_upgrade_replaces_legacy_contracts_and_preserves_audit(self, pg_url):
         from project_workflow.infrastructure.db import schema
         from project_workflow.infrastructure.db.uow_bootstrap import bootstrap_default_project
@@ -360,7 +383,7 @@ class TestPostgresSession:
                     ") catalog WHERE lower(value) ~ 'github|pull request|glab_token|verify-suite|mandatory plan.md'"
                 )
             ).scalar_one()
-        assert revision == "a42e91d6c7f3"
+        assert revision == "4d7c2a9e6b10"
         assert upgraded.id == phase_id
         assert upgraded.name == "Runtime Readiness"
         active_contract = upgraded.string_agg.casefold()
