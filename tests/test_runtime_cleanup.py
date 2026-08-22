@@ -15,6 +15,7 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SEED_PATH = REPO_ROOT / "project_workflow" / "references" / "seed.json"
+COMPOSE_PATH = REPO_ROOT / "docker-compose.yml"
 
 EXPECTED_PHASE_PROFILES = {
     "-1": ("orchestrator", "sdlc-orchestrator"),
@@ -75,6 +76,15 @@ def test_default_bootstrap_project_prefixes_are_project_specific(tmp_path):
     assert project is not None
     assert project["key_prefixes"] == config.DEFAULT_TASK_KEY_PREFIXES
     assert project["key_prefixes"] == ["TASK"]
+
+
+def test_compose_passes_openrouter_evaluator_configuration_to_api():
+    compose = COMPOSE_PATH.read_text(encoding="utf-8")
+
+    assert "OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}" in compose
+    assert "OPENAI_MODEL: ${OPENAI_MODEL:-z-ai/glm-5.2}" in compose
+    assert "OPENAI_API_KEY: ${OPENAI_API_KEY:-}" in compose
+    assert "OPENAI_REASONING_EFFORT: ${OPENAI_REASONING_EFFORT:-none}" in compose
 
 
 def test_seed_catalog_task_intake_and_preflight_have_real_content():
