@@ -110,7 +110,7 @@ class TestPostgresSession:
         inspector = inspect(engine)
         columns = {column["name"] for column in inspector.get_columns("agents", schema="project_workflow")}
         indexes = {index["name"] for index in inspector.get_indexes("agents", schema="project_workflow")}
-        assert version == "4d7c2a9e6b10"
+        assert version == "6f3d8a2c1b47"
         assert "hermes_profile" in columns
         assert "uq_agents_hermes_profile" in indexes
 
@@ -225,6 +225,101 @@ class TestPostgresSession:
         assert profile_count == 6
         assert orphan_count == 0
 
+    def test_legacy_default_agent_bindings_are_fixed_without_touching_custom_workflows(
+        self, pg_url
+    ):
+        from project_workflow.infrastructure.db import schema
+        from project_workflow.infrastructure.db.uow_bootstrap import bootstrap_default_project
+
+        engine = get_engine(pg_url)
+        run_alembic_command("upgrade", engine, "4d7c2a9e6b10")
+        uow = SAUnitOfWork(engine)
+        schema.ensure_phase_catalog(uow)
+        bootstrap_default_project(uow)
+        custom_workflow_id = uow.workflows.create(
+            {"name": "Custom", "description": "", "is_default": False}
+        )
+        custom_agent_id = uow.agents.create(
+            {"name": "ui-owner", "description": "configured in UI", "hermes_profile": "ui-profile"}
+        )
+        custom_phase_id = uow.phases.create(
+            {
+                "workflow_id": custom_workflow_id,
+                "code": "-1",
+                "name": "Custom intake",
+                "phase_order": 1,
+                "agent_id": custom_agent_id,
+                "is_seed_managed": True,
+            }
+        )
+        uow.commit()
+        uow.close()
+
+        with engine.begin() as conn:
+            none_id = conn.execute(
+                text(
+                    "INSERT INTO project_workflow.agents "
+                    "(name, description, hermes_profile) "
+                    "VALUES ('None', 'Seed agent for -1', NULL) RETURNING id"
+                )
+            ).scalar_one()
+            conn.execute(
+                text(
+                    "UPDATE project_workflow.phases SET agent_id = :none_id "
+                    "WHERE workflow_id = (SELECT id FROM project_workflow.workflows "
+                    "WHERE is_default = 1) AND code IN ('-1', '10')"
+                ),
+                {"none_id": none_id},
+            )
+            conn.execute(
+                text(
+                    "UPDATE project_workflow.agents SET description = 'Seed agent for 9' "
+                    "WHERE hermes_profile = 'sdlc-coder'"
+                )
+            )
+            conn.execute(
+                text(
+                    "UPDATE project_workflow.phases SET agent_id = "
+                    "(SELECT id FROM project_workflow.agents WHERE hermes_profile = 'sdlc-coder') "
+                    "WHERE workflow_id = (SELECT id FROM project_workflow.workflows "
+                    "WHERE is_default = 1) AND code = '9'"
+                )
+            )
+
+        ensure_migrated(engine)
+        ensure_migrated(engine)
+
+        with engine.connect() as conn:
+            default_assignments = dict(
+                conn.execute(
+                    text(
+                        "SELECT p.code, a.hermes_profile FROM project_workflow.phases p "
+                        "JOIN project_workflow.workflows w ON w.id = p.workflow_id "
+                        "JOIN project_workflow.agents a ON a.id = p.agent_id "
+                        "WHERE w.is_default = 1 AND p.code IN ('-1', '9', '10')"
+                    )
+                ).all()
+            )
+            custom_profile = conn.execute(
+                text(
+                    "SELECT a.hermes_profile FROM project_workflow.phases p "
+                    "JOIN project_workflow.agents a ON a.id = p.agent_id WHERE p.id = :phase_id"
+                ),
+                {"phase_id": custom_phase_id},
+            ).scalar_one()
+            legacy_none_count = conn.execute(
+                text("SELECT count(*) FROM project_workflow.agents WHERE id = :agent_id"),
+                {"agent_id": none_id},
+            ).scalar_one()
+
+        assert default_assignments == {
+            "-1": "sdlc-orchestrator",
+            "9": "sdlc-orchestrator",
+            "10": "sdlc-orchestrator",
+        }
+        assert custom_profile == "ui-profile"
+        assert legacy_none_count == 0
+
     def test_upgrade_preserves_existing_run_and_creates_unique_index(self, pg_url):
         from project_workflow.infrastructure.db import schema
         from project_workflow.infrastructure.db.uow_bootstrap import bootstrap_default_project
@@ -307,7 +402,7 @@ class TestPostgresSession:
             version = conn.execute(text("SELECT version_num FROM project_workflow.alembic_version")).scalar_one()
         tables = set(inspect(engine).get_table_names(schema="project_workflow"))
 
-        assert version == "4d7c2a9e6b10"
+        assert version == "6f3d8a2c1b47"
         assert not any(table.endswith("_v2") for table in tables)
 
     def test_catalog_upgrade_replaces_legacy_contracts_and_preserves_audit(self, pg_url):
@@ -383,7 +478,7 @@ class TestPostgresSession:
                     ") catalog WHERE lower(value) ~ 'github|pull request|glab_token|verify-suite|mandatory plan.md'"
                 )
             ).scalar_one()
-        assert revision == "4d7c2a9e6b10"
+        assert revision == "6f3d8a2c1b47"
         assert upgraded.id == phase_id
         assert upgraded.name == "Runtime Readiness"
         active_contract = upgraded.string_agg.casefold()
@@ -481,7 +576,7 @@ class TestPostgresSession:
                 {"instruction_id": custom_instruction_id},
             ).scalar_one()
 
-        assert revision == "4d7c2a9e6b10"
+        assert revision == "6f3d8a2c1b47"
         assert [json.loads(row.skills) for row in migrated] == [
             ["project-workflow-executor", "agent-workflow-patterns"],
             ["workflow-systematic-debugging"],
