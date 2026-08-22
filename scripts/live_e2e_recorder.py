@@ -1,4 +1,4 @@
-"""Record an executor-driven Wizard acceptance run.
+"""Record an executor-driven Supervisor acceptance run.
 
 The recorder is deliberately outside the product CLI. It calls the canonical
 ``project-workflow step`` module, records what an external executor actually
@@ -107,13 +107,13 @@ def _fail(message: str) -> NoReturn:
     raise SystemExit(message)
 
 
-def _wizard_subprocess_environment() -> dict[str, str]:
+def _supervisor_subprocess_environment() -> dict[str, str]:
     environment = os.environ.copy()
     environment["PYTHONIOENCODING"] = "utf-8"
     return environment
 
 
-def run_wizard(task: str, report: str | None = None) -> tuple[int, dict[str, Any], str]:
+def run_supervisor(task: str, report: str | None = None) -> tuple[int, dict[str, Any], str]:
     """Call the canonical JSON CLI as a real subprocess."""
     command = [sys.executable, "-m", "project_workflow.interfaces.cli", "--json", "step", "--task", task]
     if report is not None:
@@ -123,7 +123,7 @@ def run_wizard(task: str, report: str | None = None) -> tuple[int, dict[str, Any
         capture_output=True,
         text=True,
         encoding="utf-8",
-        env=_wizard_subprocess_environment(),
+        env=_supervisor_subprocess_environment(),
         timeout=300,
         check=False,
     )
@@ -131,23 +131,23 @@ def run_wizard(task: str, report: str | None = None) -> tuple[int, dict[str, Any
         payload = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
         raise TranscriptError(
-            f"Wizard CLI returned non-JSON output: stdout={redact_text(result.stdout)!r}; "
+            f"Supervisor CLI returned non-JSON output: stdout={redact_text(result.stdout)!r}; "
             f"stderr={redact_text(result.stderr)!r}"
         ) from exc
     if not isinstance(payload, dict):
-        raise TranscriptError("Wizard CLI JSON must be an object")
+        raise TranscriptError("Supervisor CLI JSON must be an object")
     return result.returncode, payload, result.stderr
 
 
 def run_history(task: str) -> tuple[int, dict[str, Any], str]:
-    """Read Wizard history through the canonical CLI subprocess."""
+    """Read Supervisor history through the canonical CLI subprocess."""
     command = [sys.executable, "-m", "project_workflow.interfaces.cli", "--json", "history", "--task", task]
     result = subprocess.run(
         command,
         capture_output=True,
         text=True,
         encoding="utf-8",
-        env=_wizard_subprocess_environment(),
+        env=_supervisor_subprocess_environment(),
         timeout=60,
         check=False,
     )
@@ -155,11 +155,11 @@ def run_history(task: str) -> tuple[int, dict[str, Any], str]:
         payload = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
         raise TranscriptError(
-            f"Wizard history returned non-JSON output: stdout={redact_text(result.stdout)!r}; "
+            f"Supervisor history returned non-JSON output: stdout={redact_text(result.stdout)!r}; "
             f"stderr={redact_text(result.stderr)!r}"
         ) from exc
     if not isinstance(payload, dict):
-        raise TranscriptError("Wizard history JSON must be an object")
+        raise TranscriptError("Supervisor history JSON must be an object")
     return result.returncode, payload, result.stderr
 
 
@@ -280,7 +280,7 @@ def validate_transcript(
         phase = assignment.get("phase")
         payload = assignment.get("payload")
         if not isinstance(phase, str) or not isinstance(payload, dict) or payload.get("phase") != phase:
-            raise TranscriptError("ASSIGNMENT must preserve a matching Wizard payload")
+            raise TranscriptError("ASSIGNMENT must preserve a matching Supervisor payload")
         if not isinstance(payload.get("prompt"), str):
             raise TranscriptError("ASSIGNMENT must contain the exact prompt")
         index += 1
@@ -316,7 +316,7 @@ def validate_transcript(
             raise TranscriptError(f"Phase {phase} is missing EVALUATOR")
         evaluator = events[index]
         if evaluator.get("phase") != phase or not isinstance(evaluator.get("payload"), dict):
-            raise TranscriptError("EVALUATOR must preserve the Wizard JSON payload")
+            raise TranscriptError("EVALUATOR must preserve the Supervisor JSON payload")
         evaluator_payload = evaluator["payload"]
         evaluator_fields = {"phase", "current_phase", "verdict", "next_phase"}
         if not evaluator_fields.issubset(evaluator_payload):
@@ -361,7 +361,7 @@ def render_dialog(task: str, cycles: list[dict[str, Any]]) -> str:
             [
                 f"## Цикл {number}: фаза {assignment['phase']}",
                 "",
-                "### Wizard выдал задание",
+                "### Supervisor выдал задание",
                 "",
                 "```text",
                 assignment["payload"]["prompt"],
@@ -425,7 +425,7 @@ def _current_source_sha(metadata: dict[str, Any]) -> str | None:
 
 
 def build_summary(task: str, events: list[dict[str, Any]], cycles: list[dict[str, Any]]) -> dict[str, Any]:
-    """Build audit counters without querying or mutating Wizard state."""
+    """Build audit counters without querying or mutating Supervisor state."""
     verdicts = Counter(str(cycle["evaluator"]["payload"].get("verdict")) for cycle in cycles)
     final_payload = cycles[-1]["evaluator"]["payload"] if cycles else {}
     final_status = final_payload.get("status")
@@ -510,7 +510,7 @@ def command_assignment(args: argparse.Namespace) -> None:
     _require_session_task(events, args.task)
     if events[-1].get("type") not in {"SESSION", "TRANSITION"}:
         _fail("Previous cycle is incomplete")
-    code, payload, stderr = run_wizard(args.task)
+    code, payload, stderr = run_supervisor(args.task)
     if code != 0 or not payload.get("ok"):
         _fail(f"Assignment failed: rc={code}; payload={redact(payload)}; stderr={redact_text(stderr)}")
     append_event(
@@ -593,7 +593,7 @@ def command_submit(args: argparse.Namespace) -> None:
         )
 
     append_event(root, {"type": "REPORT", "phase": args.phase, "report": report, "evidence_refs": sorted(refs)})
-    code, payload, stderr = run_wizard(args.task, report)
+    code, payload, stderr = run_supervisor(args.task, report)
     append_event(
         root,
         {"type": "EVALUATOR", "phase": args.phase, "exit_code": code, "payload": payload, "stderr": stderr},

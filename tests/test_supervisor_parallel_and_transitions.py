@@ -5,11 +5,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-pytestmark = [pytest.mark.wizard]
+pytestmark = [pytest.mark.supervisor]
 
-from project_workflow.wizard import WizardEngine
-from project_workflow.wizard.core import PromptCache
-from project_workflow.wizard.models import Phase, PhaseCheck, PhaseEvidence, PhaseInstruction
+from project_workflow.supervisor import SupervisorEngine
+from project_workflow.supervisor.core import PromptCache
+from project_workflow.supervisor.models import Phase, PhaseCheck, PhaseEvidence, PhaseInstruction
 
 # ═══════════════════════════════════════════════════════════════════════
 #  Fixtures
@@ -19,7 +19,7 @@ from project_workflow.wizard.models import Phase, PhaseCheck, PhaseEvidence, Pha
 @pytest.fixture
 def engine():
     with nullcontext():
-        eng = WizardEngine("TASK-1")
+        eng = SupervisorEngine("TASK-1")
         eng.all_phases = [
             Phase(
                 id=1,
@@ -320,7 +320,7 @@ class TestRecordParallelTransition:
 class TestEvaluateEdgeCases:
     def test_orphan_phase_returns_blocked(self):
         with nullcontext():
-            engine = WizardEngine("TASK-1")
+            engine = SupervisorEngine("TASK-1")
             engine.current_phase = "orphan"
             engine.phase_map = {}
             engine.all_phases = []
@@ -330,9 +330,9 @@ class TestEvaluateEdgeCases:
         assert result["verdict"] == "BLOCKED"
         assert result["blockers"] == ["phase-not-configured"]
 
-    def test_sync_evaluate_pass(self, wizard_llm):
+    def test_sync_evaluate_pass(self, supervisor_llm):
         with nullcontext():
-            engine = WizardEngine("TASK-1")
+            engine = SupervisorEngine("TASK-1")
             ph = Phase(
                 id=1,
                 code="-1",
@@ -353,14 +353,14 @@ class TestEvaluateEdgeCases:
             engine.current_phase = "-1"
             engine.task = {"id": 7, "current_phase": "-1", "status": "active", "project_id": 1}
             engine.db = MagicMock()
-            wizard_llm("PASS", covered=["deploy"])
+            supervisor_llm("PASS", covered=["deploy"])
             result = engine.evaluate("deploy done")
         assert result["verdict"] == "PASS"
         assert "deploy" in result["covered"]
 
-    def test_parallel_evaluate_pass(self, wizard_llm):
+    def test_parallel_evaluate_pass(self, supervisor_llm):
         with nullcontext():
-            engine = WizardEngine("TASK-1")
+            engine = SupervisorEngine("TASK-1")
             ph_a = Phase(
                 id=1,
                 code="1",
@@ -408,14 +408,14 @@ class TestEvaluateEdgeCases:
             engine.current_phase = "1"
             engine.task = {"id": 7, "current_phase": "1", "status": "active", "project_id": 1}
             engine.db = MagicMock()
-            wizard_llm("PASS", covered=["check-a", "check-b"])
+            supervisor_llm("PASS", covered=["check-a", "check-b"])
             result = engine.evaluate("check-a done and check-b complete")
         assert result["verdict"] == "PASS"
         assert result["phase_name"] == "Parallel group: 1, 2"
 
-    def test_parallel_evaluate_partial_stays(self, wizard_llm):
+    def test_parallel_evaluate_partial_stays(self, supervisor_llm):
         with nullcontext():
-            engine = WizardEngine("TASK-1")
+            engine = SupervisorEngine("TASK-1")
             ph_a = Phase(
                 id=1,
                 code="1",
@@ -463,7 +463,7 @@ class TestEvaluateEdgeCases:
             engine.current_phase = "1"
             engine.task = {"id": 7, "current_phase": "1", "status": "active", "project_id": 1}
             engine.db = MagicMock()
-            wizard_llm("PARTIAL", covered=["deploy microservice"], missing=["write unit tests"])
+            supervisor_llm("PARTIAL", covered=["deploy microservice"], missing=["write unit tests"])
             result = engine.evaluate("microservice deployed")
         assert result["verdict"] == "PARTIAL"
         assert result["next_phase"] is None  # non-pass: stay on group

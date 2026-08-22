@@ -1,8 +1,8 @@
-"""Tests for wizard.models."""
+"""Tests for supervisor.models."""
 
 from __future__ import annotations
 
-from project_workflow.wizard.models import (
+from project_workflow.supervisor.models import (
     Phase,
     PhaseCheck,
     PhaseDelegate,

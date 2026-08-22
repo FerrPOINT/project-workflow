@@ -55,7 +55,7 @@
 .parallel-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .parallel-grid .phase-card{height:100%}
 
-.wizard-activity{display:flex;flex-direction:column}
+.supervisor-activity{display:flex;flex-direction:column}
 .activity-event{display:grid;grid-template-columns:30px minmax(0,1fr);column-gap:12px;align-items:stretch;min-width:0}
 .activity-rail{position:relative;display:flex;justify-content:center;padding-top:4px}
 .activity-rail::after{content:"";position:absolute;top:16px;bottom:0;left:50%;width:1px;background:var(--border-strong)}
@@ -71,10 +71,10 @@
 .dialog-part:first-of-type{border-top:0;padding-top:0}
 .dialog-label{font-size:11px;font-weight:650;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:7px}
 .report-text{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text-secondary);font-size:13px;line-height:1.65}
-.wizard-card,.assignment-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:13px 15px;min-width:0}
-.wizard-card{border-top:3px solid var(--border-strong)}
-.wizard-card.pass{border-top-color:var(--green)}.wizard-card.partial{border-top-color:var(--yellow)}.wizard-card.blocked{border-top-color:var(--red)}.wizard-card.rollback{border-top-color:var(--orange)}.wizard-card.delegate{border-top-color:var(--blue)}
-.wizard-message{font-size:13px;line-height:1.55;color:var(--text-secondary)}
+.supervisor-card,.assignment-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:13px 15px;min-width:0}
+.supervisor-card{border-top:3px solid var(--border-strong)}
+.supervisor-card.pass{border-top-color:var(--green)}.supervisor-card.partial{border-top-color:var(--yellow)}.supervisor-card.blocked{border-top-color:var(--red)}.supervisor-card.rollback{border-top-color:var(--orange)}.supervisor-card.delegate{border-top-color:var(--blue)}
+.supervisor-message{font-size:13px;line-height:1.55;color:var(--text-secondary)}
 .result-list{margin-top:10px}.result-list h4,.contract-section h4{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin:0 0 5px}
 .result-list ul,.contract-section ul{margin:0;padding-left:18px}.result-list li,.contract-section li{font-size:12px;line-height:1.55;color:var(--text-secondary);overflow-wrap:anywhere}
 .result-list.covered li{color:var(--text-secondary)}.result-list.missing li{color:var(--yellow)}.result-list.blockers li{color:var(--red)}
@@ -192,9 +192,9 @@
   </div>
 </section>
 
-<section class="detail-section" aria-labelledby="wizard-dialog-title">
-  <h2 class="section-heading" id="wizard-dialog-title">Диалог с Wizard</h2>
-  <div class="wizard-activity">
+<section class="detail-section" aria-labelledby="supervisor-dialog-title">
+  <h2 class="section-heading" id="supervisor-dialog-title">Диалог с Supervisor</h2>
+  <div class="supervisor-activity">
     {% for run in supervisor_runs %}
     <article class="activity-event">
       <div class="activity-rail"><span class="activity-node {{ run.verdict }}" aria-hidden="true"></span></div>
@@ -210,9 +210,9 @@
         {% if run.report %}<div class="dialog-part"><div class="dialog-label">Отчёт исполнителя</div><div class="report-text">{{ run.report }}</div></div>{% endif %}
 
         <div class="dialog-part">
-          <div class="dialog-label">Ответ Wizard</div>
-          <div class="wizard-card {{ run.verdict }}">
-            <div class="wizard-message">{{ run.contract.message or run.verdict_label }}</div>
+          <div class="dialog-label">Ответ Supervisor</div>
+          <div class="supervisor-card {{ run.verdict }}">
+            <div class="supervisor-message">{{ run.contract.message or run.verdict_label }}</div>
             {% if run.contract.covered %}<div class="result-list covered"><h4>Покрыто</h4><ul>{% for item in run.contract.covered %}<li>{{ item }}</li>{% endfor %}</ul></div>{% endif %}
             {% if run.contract.missing %}<div class="result-list missing"><h4>Осталось</h4><ul>{% for item in run.contract.missing %}<li>{{ item }}</li>{% endfor %}</ul></div>{% endif %}
             {% if run.contract.blockers %}<div class="result-list blockers"><h4>Блокеры</h4><ul>{% for item in run.contract.blockers %}<li>{{ item }}</li>{% endfor %}</ul></div>{% endif %}
@@ -221,7 +221,7 @@
 
         {% if run.next_contract %}
         <div class="dialog-part">
-          <div class="dialog-label">Задание Wizard на следующий этап</div>
+          <div class="dialog-label">Задание Supervisor на следующий этап</div>
           <div class="assignment-card">
             <div class="assignment-head"><span class="phase-code">{{ run.next_contract.phase_code }}</span><span class="assignment-name">{{ run.next_contract.phase_name }}</span></div>
             {% if run.next_contract.description %}<div class="assignment-description">{{ run.next_contract.description }}</div>{% endif %}
@@ -233,7 +233,7 @@
         {% endif %}
       </div>
     </article>
-    {% else %}<div class="empty-state">Диалог с Wizard пока пуст.</div>{% endfor %}
+    {% else %}<div class="empty-state">Диалог с Supervisor пока пуст.</div>{% endfor %}
   </div>
 </section>
 {% endblock %}

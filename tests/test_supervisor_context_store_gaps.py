@@ -1,4 +1,4 @@
-"""Coverage gap tests for wizard context and store."""
+"""Coverage gap tests for supervisor context and store."""
 
 from __future__ import annotations
 
@@ -6,13 +6,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-pytestmark = [pytest.mark.wizard]
+pytestmark = [pytest.mark.supervisor]
 
-from project_workflow.wizard.context import WizardContextBuilder
-from project_workflow.wizard.models import Phase
+from project_workflow.supervisor.context import SupervisorContextBuilder
+from project_workflow.supervisor.models import Phase
 
 
-class TestWizardContextBuilder:
+class TestSupervisorContextBuilder:
     def _phase(self, code="1", name="One", id=1, parallel_with=None, rollback_target=None):
         return Phase(
             code=code,
@@ -28,17 +28,17 @@ class TestWizardContextBuilder:
         )
 
     def test_phase_by_id_none(self):
-        builder = WizardContextBuilder(all_phases=[])
+        builder = SupervisorContextBuilder(all_phases=[])
         assert builder._phase_by_id(None) is None
 
     def test_phase_by_id_no_match(self):
-        builder = WizardContextBuilder(all_phases=[self._phase(id=1)])
+        builder = SupervisorContextBuilder(all_phases=[self._phase(id=1)])
         assert builder._phase_by_id(99) is None
 
     def test_phase_status_lookup_no_phase(self):
         uow = MagicMock()
         uow.get_task_history.return_value = [{"phase_id": 99, "status": "done"}]
-        builder = WizardContextBuilder(
+        builder = SupervisorContextBuilder(
             uow=uow,
             task={"id": 1, "status": "active", "current_phase": "1"},
             all_phases=[self._phase(id=1)],
@@ -50,7 +50,7 @@ class TestWizardContextBuilder:
     def test_phase_history_skips_unknown_phase(self):
         uow = MagicMock()
         uow.get_task_history.return_value = [{"phase_id": 99, "status": "done", "completed_at": "2025-01-01"}]
-        builder = WizardContextBuilder(uow=uow, task={"id": 1}, all_phases=[self._phase(id=1)])
+        builder = SupervisorContextBuilder(uow=uow, task={"id": 1}, all_phases=[self._phase(id=1)])
         assert builder._build_phase_history() == []
 
     def test_recent_verdicts_dict_row(self):
@@ -66,7 +66,7 @@ class TestWizardContextBuilder:
                 "created_at": "2025-01-01",
             }
         ]
-        builder = WizardContextBuilder(uow=uow, task={"id": 1}, all_phases=[])
+        builder = SupervisorContextBuilder(uow=uow, task={"id": 1}, all_phases=[])
         verdicts = builder._build_recent_verdicts()
         assert len(verdicts) == 1
         assert verdicts[0]["verdict"] == "PASS"
@@ -75,7 +75,7 @@ class TestWizardContextBuilder:
         uow = MagicMock()
         uow.get_task_history.return_value = []
         uow.get_supervisor_runs.return_value = []
-        builder = WizardContextBuilder(
+        builder = SupervisorContextBuilder(
             uow=uow,
             task={"id": 1, "status": "active", "current_phase": "1"},
             project={"code": "PRJ", "name": "Project"},

@@ -9,7 +9,7 @@ from sqlalchemy import text
 from project_workflow.application.agent import AgentService
 from project_workflow.infrastructure.db.schema import load_phases_from_db
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
-from project_workflow.wizard.contracts import PhaseContractBuilder
+from project_workflow.supervisor.contracts import PhaseContractBuilder
 
 
 def _runtime_uow() -> SAUnitOfWork:

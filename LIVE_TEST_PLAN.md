@@ -1,4 +1,4 @@
-# Приёмка CLI и Wizard
+# Приёмка CLI и Supervisor
 
 В проекте есть два разных уровня проверки. Их нельзя называть одинаково.
 
@@ -7,10 +7,10 @@
 Проверяет продуктовый dataflow без реального исполнителя:
 
 ```text
-CLI subprocess -> PostgreSQL -> тестовый OpenAI-compatible HTTP -> Wizard -> PostgreSQL
+CLI subprocess -> PostgreSQL -> тестовый OpenAI-compatible HTTP -> Supervisor -> PostgreSQL
 ```
 
-`test_full_wizard_runtime_through_cli_postgres_and_http` поднимает stdlib HTTP-сервер
+`test_full_supervisor_runtime_through_cli_postgres_and_http` поднимает stdlib HTTP-сервер
 с настоящими `/v1/models` и `/v1/chat/completions`, запускает CLI отдельными
 процессами и проверяет:
 
@@ -18,7 +18,7 @@ CLI subprocess -> PostgreSQL -> тестовый OpenAI-compatible HTTP -> Wizar
   `7.5 + 7.6 + 7.6.R`;
 - 22 вызова evaluator и 22 `SupervisorRun` на чистом успешном пути;
 - fingerprints, audit snapshot, replay, post-done и переходы;
-- subprocess CLI, PostgreSQL и HTTP-контракт без monkeypatch Wizard/LLM-клиента.
+- subprocess CLI, PostgreSQL и HTTP-контракт без monkeypatch Supervisor/LLM-клиента.
 
 Отчёты и ответы provider в этом тесте синтетические. Он не доказывает, что агент
 выполнял выданные задания, и не является полным бизнес-E2E.
@@ -43,15 +43,15 @@ integration-тесты сохраняют общий 60-секундный пр�
 Проверяет полный цикл с реальными действиями внешнего исполнителя:
 
 ```text
-Wizard выдал задание
+Supervisor выдал задание
 -> исполнитель выполнил команды
 -> recorder сохранил команды и результаты
 -> исполнитель отправил отчёт со ссылками на ACTION
 -> реальный внешний OpenAI-compatible provider оценил отчёт
--> Wizard сохранил audit и выдал следующий шаг
+-> Supervisor сохранил audit и выдал следующий шаг
 ```
 
-Wizard остаётся evaluator и маршрутизатором. Recorder не исполняет фазы за Wizard,
+Supervisor остаётся evaluator и маршрутизатором. Recorder не исполняет фазы за Supervisor,
 не меняет БД напрямую и не добавляет продуктовых CLI-команд.
 
 ### Артефакты
@@ -68,10 +68,10 @@ Wizard остаётся evaluator и маршрутизатором. Recorder н
 
 Для каждого обращения к evaluator последовательность обязана содержать:
 
-1. `ASSIGNMENT` — точный JSON и prompt, полученные от `project-workflow --json step`;
+1. `ASSIGNMENT` — точные `phase_contract` и prompt, полученные от `project-workflow --json step`;
 2. один или несколько `ACTION` — рабочая директория, команда, exit code и безопасный результат;
 3. `REPORT` — точный текст отчёта и `Evidence-Refs` текущих ACTION;
-4. `EVALUATOR` — полный JSON-ответ Wizard;
+4. `EVALUATOR` — полный JSON-ответ Supervisor;
 5. `TRANSITION` — фактическая исходная и следующая фаза.
 
 Для parallel-фаз сохраняется один общий assignment и отдельные ACTION по каждому
@@ -114,10 +114,14 @@ Windows-пути до записи командных логов.
   входит в задачу recorder.
 - Отчёт формируется только после фактических ACTION текущего assignment.
 - Рекомендованные skills загружаются исполнителем из зафиксированного SHA
-  `relevanter/agent-skills`; Wizard передаёт только их имена.
-- Если фазе назначен агент с `hermes_profile`, точное имя должно присутствовать
-  в `ASSIGNMENT`, а executor должен использовать этот профиль через
-  `hermes -p <profile>`. Wizard не подменяет профиль и не читает его содержимое.
+  `relevanter/agent-skills`; Supervisor передаёт только их имена.
+- Каждая фаза содержит `delegate_agent`, `hermes_profile` и `skills`; parallel
+  assignment дополнительно содержит `group_phases` и отдельные `group_details`.
+- Executor запускает профиль штатно через
+  `hermes --profile <profile> --oneshot <prompt>`. Supervisor не подменяет профиль
+  и не читает его содержимое.
+- Фаза 7 создаёт GitLab MR. Фаза 7.7 фиксирует готовность и останавливает прогон;
+  merge выполняет Maintainer. Фаза 8 проверяет merged SHA и зелёный pipeline.
 - Любой `PARTIAL`, `BLOCKED`, provider error или неверный переход останавливает
   продвижение. Замечание исправляется новым действием и новым отчётом; audit не
   переписывается и принудительный переход запрещён.
@@ -131,4 +135,5 @@ Windows-пути до записи командных логов.
 - Успешную основную задачу и её audit оставляют в локальной PostgreSQL. Временную
   negative-probe задачу удаляют точечно после сохранения обезличенного лога.
 
-Relevanter Dev, SSH и product deploy в эту приёмку не входят.
+Канонический live-прогон выполняется на Relevanter Dev против Jira и GitLab
+`relevanter/demo`; product containers Relevanter не затрагиваются.

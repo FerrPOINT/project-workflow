@@ -1,17 +1,17 @@
-"""Tests for wizard.py to boost coverage."""
+"""Tests for supervisor.py to boost coverage."""
 
 from unittest.mock import MagicMock
 
 import pytest
 
-pytestmark = [pytest.mark.wizard]
+pytestmark = [pytest.mark.supervisor]
 
-from project_workflow.wizard import WizardEngine
+from project_workflow.supervisor import SupervisorEngine
 
 
-class TestWizard:
+class TestSupervisor:
     def test_init(self):
-        engine = WizardEngine("TASK-1")
+        engine = SupervisorEngine("TASK-1")
         assert engine.task_key == "TASK-1"
 
     def test_init_does_not_bootstrap_empty_workflow(self, tmp_path):
@@ -24,7 +24,7 @@ class TestWizard:
         uow.projects.create({"workflow_id": workflow_id, "code": "task", "name": "Task", "key_prefixes": ["TASK"]})
         uow.commit()
         with pytest.raises(ValueError, match="catalog is empty"):
-            WizardEngine("TASK-1", uow=uow)
+            SupervisorEngine("TASK-1", uow=uow)
         assert uow.phases.list(workflow_id) == []
 
     def test_get_phase_prompt(self):
@@ -35,7 +35,7 @@ class TestWizard:
         ph.is_blocker = False
         ph.is_delegated = False
         ph.instructions = []
-        engine = WizardEngine("TASK-1")
+        engine = SupervisorEngine("TASK-1")
         engine.phase_map = {"0": ph}
         engine.all_phases = [ph]
         prompt = engine.get_phase_prompt("0")
@@ -69,7 +69,7 @@ class TestWizard:
         ph_b.delegate = None
         ph_b.next_recommendation = "next"
 
-        engine = WizardEngine("TASK-1")
+        engine = SupervisorEngine("TASK-1")
         engine.phase_map = {"parallel-a": ph_a, "parallel-b": ph_b}
         engine.all_phases = [ph_a, ph_b]
         engine.current_phase = "parallel-a"
@@ -81,7 +81,7 @@ class TestWizard:
         assert "Отчёт по этой группе присылается ОДНИМ сообщением" in prompt
 
     def test_get_full_context(self):
-        engine = WizardEngine("TASK-1")
+        engine = SupervisorEngine("TASK-1")
         ctx = engine.get_full_context()
         assert "current_phase" in ctx
         assert "all_phases" in ctx
@@ -90,15 +90,15 @@ class TestWizard:
 
 class TestPromptAndModels:
     def test_build_phase_prompt_missing_phase(self):
-        from project_workflow.wizard.prompt import build_phase_prompt
+        from project_workflow.supervisor.prompt import build_phase_prompt
 
         ctx = {"workflow_name": "W", "cli_actor": {"description": "d", "entrypoint": "e"}}
         result = build_phase_prompt("TASK-1", {}, [], "1", ctx, phase_id="missing")
         assert "не найдена" in result
 
     def test_build_phase_prompt_non_current_phase(self):
-        from project_workflow.wizard.models import Phase
-        from project_workflow.wizard.prompt import build_phase_prompt
+        from project_workflow.supervisor.models import Phase
+        from project_workflow.supervisor.prompt import build_phase_prompt
 
         phase = Phase(code="2", name="Two", description="Desc", execution_type="sync")
         ctx = {"workflow_name": "W", "current_contract": None, "cli_actor": {"description": "d", "entrypoint": "e"}}
@@ -107,8 +107,8 @@ class TestPromptAndModels:
         assert "Desc" in result
 
     def test_build_phase_prompt_current_contract_dict(self):
-        from project_workflow.wizard.models import Phase
-        from project_workflow.wizard.prompt import build_phase_prompt
+        from project_workflow.supervisor.models import Phase
+        from project_workflow.supervisor.prompt import build_phase_prompt
 
         phase = Phase(code="1", name="One", description="Desc")
         contract = {

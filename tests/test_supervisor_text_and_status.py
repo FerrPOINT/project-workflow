@@ -6,14 +6,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-pytestmark = [pytest.mark.wizard]
+pytestmark = [pytest.mark.supervisor]
 
-from project_workflow.wizard.contracts import (
+from project_workflow.supervisor.contracts import (
     text_from_check,
     text_from_evidence,
     text_from_instruction,
 )
-from project_workflow.wizard.types import VERDICT_LABELS
+from project_workflow.supervisor.types import VERDICT_LABELS
 
 
 class TestTextHelpers:

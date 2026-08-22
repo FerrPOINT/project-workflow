@@ -29,8 +29,8 @@ class Settings(BaseSettings):
 
     LOG_LEVEL: str = "INFO"
 
-    OPENAI_BASE_URL: str = "https://ollama.com/v1"
-    OPENAI_MODEL: str = "qwen3.5:397b"
+    OPENAI_BASE_URL: str = "https://openrouter.ai/api/v1"
+    OPENAI_MODEL: str = "z-ai/glm-5.2"
     OPENAI_TIMEOUT: int = 120
     OPENAI_API_KEY: str = ""
     OPENAI_REASONING_EFFORT: str = "none"

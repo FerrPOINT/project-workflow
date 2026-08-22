@@ -27,6 +27,19 @@ def text_from_evidence(item: Any) -> str:
     return str(getattr(item, "item", "") or "").strip()
 
 
+def skills_from_phase(phase: Phase) -> list[str]:
+    """Return stable, de-duplicated skill names declared by phase instructions."""
+    seen: set[str] = set()
+    skills: list[str] = []
+    for instruction in phase.instructions:
+        for raw_skill in getattr(instruction, "skills", None) or []:
+            skill = str(raw_skill).strip()
+            if skill and skill not in seen:
+                seen.add(skill)
+                skills.append(skill)
+    return skills
+
+
 def phase_to_dict(phase: Phase) -> dict[str, Any]:
     return {
         "id": phase.id,
@@ -36,6 +49,7 @@ def phase_to_dict(phase: Phase) -> dict[str, Any]:
         "instructions": [text_from_instruction(item) for item in phase.instructions],
         "checks": [text_from_check(item) for item in phase.checks],
         "evidence": [text_from_evidence(item) for item in phase.evidence],
+        "skills": skills_from_phase(phase),
         "execution_type": phase.execution_type,
         "parallel_with": phase.parallel_with,
         "rollback_target": phase.rollback_target,
@@ -67,6 +81,7 @@ class PhaseContractBuilder:
             instructions=[text_from_instruction(item) for item in phase.instructions],
             required_checks=[text_from_check(item) for item in phase.checks],
             required_evidence=[text_from_evidence(item) for item in phase.evidence],
+            skills=skills_from_phase(phase),
             execution_type=phase.execution_type,
             delegate_agent=phase.delegate.agent if phase.delegate else None,
             hermes_profile=phase.delegate.hermes_profile if phase.delegate else None,
@@ -114,6 +129,7 @@ class PhaseContractBuilder:
                     "instructions": [t for t in ph_instructions if t],
                     "required_checks": [t for t in ph_checks if t],
                     "required_evidence": [t for t in ph_evidence if t],
+                    "skills": skills_from_phase(ph),
                     "execution_type": ph.execution_type,
                     "delegate_agent": ph.delegate.agent if ph.delegate else None,
                     "hermes_profile": ph.delegate.hermes_profile if ph.delegate else None,
@@ -131,6 +147,7 @@ class PhaseContractBuilder:
             instructions=instructions or ["Нет отдельных инструкций — следуй описаниям фаз и обязательным проверкам."],
             required_checks=checks or ["Нет явных checks."],
             required_evidence=evidence or ["Нет явных evidence items."],
+            skills=list(dict.fromkeys(skill for phase in group for skill in skills_from_phase(phase))),
             execution_type="parallel",
             delegate_agent=representative.agent if representative else None,
             hermes_profile=representative.hermes_profile if representative else None,

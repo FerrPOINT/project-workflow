@@ -338,7 +338,7 @@ class UIDataService:
         return _build_parallel_phase_blocks(raw_history)
 
     def _decorate_supervisor_runs(self, supervisor_runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        from project_workflow.wizard.types import VERDICT_LABELS
+        from project_workflow.supervisor.types import VERDICT_LABELS
 
         for super_run in supervisor_runs:
             super_run["verdict_label"] = VERDICT_LABELS.get(

@@ -1,4 +1,4 @@
-"""Unit tests for small coverage gaps in wizard context, store and entry points."""
+"""Unit tests for small coverage gaps in supervisor context, store and entry points."""
 
 from __future__ import annotations
 
@@ -7,26 +7,26 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from project_workflow.wizard.context import WizardContextBuilder
-from project_workflow.wizard.models import Phase
+from project_workflow.supervisor.context import SupervisorContextBuilder
+from project_workflow.supervisor.models import Phase
 
-pytestmark = [pytest.mark.wizard]
+pytestmark = [pytest.mark.supervisor]
 
 
-class TestWizardContextBuilder:
+class TestSupervisorContextBuilder:
     def test_uow_from_uow_kwarg(self):
         uow = MagicMock()
-        builder = WizardContextBuilder(uow=uow, task={"id": 1})
+        builder = SupervisorContextBuilder(uow=uow, task={"id": 1})
         assert builder.uow is uow
 
     def test_phase_by_id_none(self):
-        builder = WizardContextBuilder(all_phases=[])
+        builder = SupervisorContextBuilder(all_phases=[])
         assert builder._phase_by_id(None) is None
 
     def test_phase_status_lookup_done_task(self):
         uow = MagicMock()
         uow.get_task_history.return_value = []
-        builder = WizardContextBuilder(
+        builder = SupervisorContextBuilder(
             uow=uow,
             task={"id": 1, "status": "done", "current_phase": "0.0a"},
             all_phases=[Phase(id=1, code="0.0a", name="Setup")],

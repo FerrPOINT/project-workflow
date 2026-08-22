@@ -2,10 +2,10 @@
 
 Thin facade — orchestrates context → contract → checks → store.
 Public surface:
-- WizardEngine(task_key)
-- WizardEngine.get_full_context()
-- WizardEngine.get_phase_prompt()
-- WizardEngine.evaluate(report)
+- SupervisorEngine(task_key)
+- SupervisorEngine.get_full_context()
+- SupervisorEngine.get_phase_prompt()
+- SupervisorEngine.evaluate(report)
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from ..application.task import TaskService
 from ..application.workflow import WorkflowService
 from ..infrastructure.db import schema
 from ..infrastructure.db.uow import SAUnitOfWork
-from .context import WizardContextBuilder
+from .context import SupervisorContextBuilder
 from .contracts import PhaseContractBuilder
 from .models import Phase
 from .prompt import build_phase_prompt
@@ -51,7 +51,7 @@ class PromptCache:
                 self._gen = 0
 
 
-class WizardEngine:
+class SupervisorEngine:
     """Internal supervisor that evaluates workflow progress against DB phase contracts."""
 
     def __init__(
@@ -263,7 +263,7 @@ class WizardEngine:
             cached = self._cache.get(self.task_key, self.current_phase)
             if cached:
                 return cached
-        builder = WizardContextBuilder(
+        builder = SupervisorContextBuilder(
             uow=self._uow,
             task=self.task,
             project=self.project,
@@ -286,6 +286,19 @@ class WizardEngine:
             ctx=ctx,
             phase_id=phase_id,
         )
+
+    def get_phase_contract(self, phase_id: str | None = None) -> dict[str, Any] | None:
+        """Return the structured executor contract for a phase or parallel group."""
+        phase = self.phase_map.get(phase_id or self.current_phase)
+        if phase is None:
+            return None
+        builder = PhaseContractBuilder(self.all_phases)
+        contract = (
+            builder.build_parallel(builder.get_parallel_group(phase))
+            if phase.execution_type == "parallel"
+            else builder.build(phase)
+        )
+        return contract.to_dict()
 
     def format_current_phase_instructions(self) -> str:
         """Human-only instructions for `step --task X` without a report."""
@@ -340,6 +353,7 @@ class WizardEngine:
             "instructions": contract.instructions if contract else [],
             "required_checks": contract.required_checks if contract else [],
             "required_evidence": contract.required_evidence if contract else [],
+            "skills": contract.skills if contract else [],
             "group_phases": contract.group_phases if contract else None,
             "group_details": contract.group_details if contract else [],
             "replayed": False,

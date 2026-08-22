@@ -1,14 +1,14 @@
-"""Tests for WizardEngine edge cases and init error paths."""
+"""Tests for SupervisorEngine edge cases and init error paths."""
 
 from __future__ import annotations
 
 import pytest
 
-pytestmark = [pytest.mark.wizard]
+pytestmark = [pytest.mark.supervisor]
 
 from project_workflow.infrastructure.db import schema
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
-from project_workflow.wizard import WizardEngine
+from project_workflow.supervisor import SupervisorEngine
 
 
 @pytest.fixture
@@ -22,12 +22,12 @@ def fresh_db(tmp_path, monkeypatch):
 
 
 def _make_engine(fresh_db, task_key):
-    return WizardEngine(task_key, uow=fresh_db)
+    return SupervisorEngine(task_key, uow=fresh_db)
 
 
 def test_unknown_task_key_raises(fresh_db):
     with pytest.raises(ValueError):
-        WizardEngine("INVALID-KEY", uow=fresh_db, create_if_missing=False)
+        SupervisorEngine("INVALID-KEY", uow=fresh_db, create_if_missing=False)
 
 
 def test_existing_task_empty_current_phase(fresh_db):
@@ -36,11 +36,11 @@ def test_existing_task_empty_current_phase(fresh_db):
     assert engine.current_phase == "-1"
 
 
-class TestWizardEvaluateEdge:
-    def test_evaluate_empty_report_with_no_checks_passes(self, fresh_db, wizard_llm):
+class TestSupervisorEvaluateEdge:
+    def test_evaluate_empty_report_with_no_checks_passes(self, fresh_db, supervisor_llm):
         fresh_db.create_task({"task_key": "TASK-42", "title": "x", "current_phase": "-1"})
         engine = _make_engine(fresh_db, "TASK-42")
-        wizard_llm("PASS")
+        supervisor_llm("PASS")
         result = engine.evaluate("")
         assert result["verdict"] == "PASS"
 
@@ -51,17 +51,17 @@ class TestWizardEvaluateEdge:
         result = engine.evaluate("report")
         assert result["verdict"] == "BLOCKED"
 
-    def test_evaluate_no_history_for_first_phase(self, fresh_db, wizard_llm):
+    def test_evaluate_no_history_for_first_phase(self, fresh_db, supervisor_llm):
         fresh_db.create_task({"task_key": "TASK-42", "title": "x", "current_phase": "-1"})
         engine = _make_engine(fresh_db, "TASK-42")
-        wizard_llm("PARTIAL", missing=["evidence"])
+        supervisor_llm("PARTIAL", missing=["evidence"])
         result = engine.evaluate("report")
         assert result["verdict"] == "PARTIAL"
 
-    def test_save_records_assessment(self, fresh_db, wizard_llm):
+    def test_save_records_assessment(self, fresh_db, supervisor_llm):
         fresh_db.create_task({"task_key": "TASK-42", "title": "x", "current_phase": "-1"})
         engine = _make_engine(fresh_db, "TASK-42")
-        wizard_llm("PARTIAL")
+        supervisor_llm("PARTIAL")
         engine.evaluate("report")
         # evaluate() itself records the supervisor run; _store removed as dead code
         assert len(fresh_db.get_supervisor_runs()) >= 1

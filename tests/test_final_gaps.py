@@ -21,8 +21,8 @@ from project_workflow.interfaces.ui.services import (
     _get_task_detail,
     _load_cli_reference,
 )
-from project_workflow.wizard import core as core_mod
-from project_workflow.wizard import format_result
+from project_workflow.supervisor import core as core_mod
+from project_workflow.supervisor import format_result
 
 
 def _mock_state(uow=None):
@@ -64,10 +64,10 @@ class TestDomainFinalGaps:
         assert str(PhaseCode("1")) == "1"
 
 
-class TestWizardModelContractFinalGaps:
+class TestSupervisorModelContractFinalGaps:
     def test_parallel_contract_researcher_fallback(self):
-        from project_workflow.wizard.contracts import PhaseContractBuilder
-        from project_workflow.wizard.models import Phase, PhaseDelegate
+        from project_workflow.supervisor.contracts import PhaseContractBuilder
+        from project_workflow.supervisor.models import Phase, PhaseDelegate
 
         p1 = Phase(code="1", name="A", delegate=PhaseDelegate(agent="researcher", prompt_template="x", toolsets=[]))
         p2 = Phase(code="2", name="B")
@@ -164,21 +164,21 @@ class TestWorkflowServiceFinalGaps:
             WorkflowService(uow).create_workflow({"name": "x"})
 
 
-class TestWizardCoreFinalGaps:
+class TestSupervisorCoreFinalGaps:
     def test_resolve_current_phase_fallback_empty(self):
-        engine = core_mod.WizardEngine("TASK-1")
+        engine = core_mod.SupervisorEngine("TASK-1")
         engine.task = {"id": 1, "current_phase": ""}
         engine.all_phases = []
         assert engine._resolve_current_phase() == ""
 
     def test_record_transition_no_task(self):
-        engine = core_mod.WizardEngine("TASK-1")
+        engine = core_mod.SupervisorEngine("TASK-1")
         engine.task = None
         phase = MagicMock()
         engine._record_transition(phase, "pass", None, None)
 
     def test_evaluate_does_not_fall_back_when_llm_raises(self):
-        engine = core_mod.WizardEngine("TASK-1")
+        engine = core_mod.SupervisorEngine("TASK-1")
         engine.task = {"id": 1, "project_id": 1, "current_phase": "1"}
         uow = MagicMock()
         uow.projects.get.return_value = {"id": 1}

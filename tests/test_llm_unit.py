@@ -13,8 +13,8 @@ from project_workflow.infrastructure.llm import (
     PromptBuilder,
     ResponseParser,
 )
-from project_workflow.wizard.evaluate import evaluate_llm_report
-from project_workflow.wizard.models import Phase
+from project_workflow.supervisor.evaluate import evaluate_llm_report
+from project_workflow.supervisor.models import Phase
 
 
 def _make_engine():
@@ -51,7 +51,7 @@ class TestEvaluateLlmReportVerdicts:
             result = evaluate_llm_report("r", phase, engine)
         assert result["verdict"] == "BLOCKED"
         assert result["retryable"] is True
-        assert result["blockers"] == ["Wizard LLM unavailable: ValueError"]
+        assert result["blockers"] == ["Supervisor LLM unavailable: ValueError"]
         engine._record_evaluation.assert_not_called()
 
     def test_rollback_uses_rollback_target(self):
@@ -238,7 +238,7 @@ class TestPromptBuilder:
         assert report in prompt
 
     def test_build_user_prompt_with_lists(self):
-        from project_workflow.wizard.models import PhaseCheck, PhaseEvidence, PhaseInstruction
+        from project_workflow.supervisor.models import PhaseCheck, PhaseEvidence, PhaseInstruction
 
         phase = Phase(
             code="1",

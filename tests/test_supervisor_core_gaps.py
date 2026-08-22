@@ -1,4 +1,4 @@
-"""WizardEngine coverage gap tests for wizard/core.py helpers."""
+"""SupervisorEngine coverage gap tests for supervisor/core.py helpers."""
 
 from __future__ import annotations
 
@@ -6,13 +6,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-pytestmark = [pytest.mark.wizard]
+pytestmark = [pytest.mark.supervisor]
 
-from project_workflow.wizard import WizardEngine
-from project_workflow.wizard.models import Phase
+from project_workflow.supervisor import SupervisorEngine
+from project_workflow.supervisor.models import Phase
 
 
-class TestWizardCoreGaps:
+class TestSupervisorCoreGaps:
     @staticmethod
     def _phase(
         code: str = "1",
@@ -45,12 +45,12 @@ class TestWizardCoreGaps:
         )
 
     def test_resolve_current_phase_no_task(self):
-        engine = WizardEngine("TASK-1")
+        engine = SupervisorEngine("TASK-1")
         engine.task = None
         assert engine._resolve_current_phase() == ""
 
     def test_resolve_current_phase_preserves_unknown_value(self):
-        engine = WizardEngine("TASK-1")
+        engine = SupervisorEngine("TASK-1")
         ph = self._phase(code="1", id=1)
         engine.all_phases = [ph]
         engine.phase_map = {"1": ph}
@@ -61,7 +61,7 @@ class TestWizardCoreGaps:
         assert engine._resolve_current_phase() == "99"
 
     def test_resolve_current_phase_empty_current(self):
-        engine = WizardEngine("TASK-1")
+        engine = SupervisorEngine("TASK-1")
         ph = self._phase(code="1", id=1)
         engine.all_phases = [ph]
         engine.phase_map = {"1": ph}
@@ -72,17 +72,17 @@ class TestWizardCoreGaps:
         assert engine._resolve_current_phase() == ""
 
     def test_get_previously_covered_no_task(self):
-        engine = WizardEngine("TASK-1")
+        engine = SupervisorEngine("TASK-1")
         engine.task = None
         assert engine._get_previously_covered("1") == set()
 
     def test_get_previously_covered_no_task_id(self):
-        engine = WizardEngine("TASK-1")
+        engine = SupervisorEngine("TASK-1")
         engine.task = {"id": 0}
         assert engine._get_previously_covered("1") == set()
 
     def test_get_previously_covered_run_phase_id_none(self):
-        engine = WizardEngine("TASK-1")
+        engine = SupervisorEngine("TASK-1")
         engine.task = {"id": 1}
         uow = MagicMock()
         Run = type("R", (), {"to_dict": lambda self: {"phase_id": None, "covered": []}})()
@@ -91,7 +91,7 @@ class TestWizardCoreGaps:
         assert engine._get_previously_covered("1") == set()
 
     def test_get_previously_covered_phase_mismatch(self):
-        engine = WizardEngine("TASK-1")
+        engine = SupervisorEngine("TASK-1")
         ph = self._phase(code="1", id=1)
         engine.all_phases = [ph]
         engine.phase_map = {"1": ph}
@@ -104,13 +104,13 @@ class TestWizardCoreGaps:
         assert engine._get_previously_covered("99") == set()
 
     def test_record_transition_no_task(self):
-        engine = WizardEngine("TASK-1")
+        engine = SupervisorEngine("TASK-1")
         engine.task = None
         ph = self._phase(code="1", id=1)
         engine._record_transition(ph, "pass", None, None)
 
     def test_record_transition_delegated(self):
-        engine = WizardEngine("TASK-1")
+        engine = SupervisorEngine("TASK-1")
         engine.task = {"id": 1}
         ph = self._phase(code="1", id=1)
         engine.phase_map = {"1": ph}
@@ -120,7 +120,7 @@ class TestWizardCoreGaps:
         db.tasks.add_history.assert_called_once()
 
     def test_record_transition_partial(self):
-        engine = WizardEngine("TASK-1")
+        engine = SupervisorEngine("TASK-1")
         engine.task = {"id": 1}
         ph = self._phase(code="1", id=1)
         engine.phase_map = {"1": ph}
@@ -130,7 +130,7 @@ class TestWizardCoreGaps:
         db.tasks.add_history.assert_called_once()
 
     def test_record_parallel_transition_blocked(self):
-        engine = WizardEngine("TASK-1")
+        engine = SupervisorEngine("TASK-1")
         engine.task = {"id": 1}
         ph = self._phase(code="1", id=1)
         engine.phase_map = {"1": ph}
@@ -140,7 +140,7 @@ class TestWizardCoreGaps:
         db.tasks.update_if_state.assert_called_once()
 
     def test_record_parallel_transition_rollback(self):
-        engine = WizardEngine("TASK-1")
+        engine = SupervisorEngine("TASK-1")
         engine.task = {"id": 1}
         ph = self._phase(code="1", id=1)
         engine.phase_map = {"1": ph, "0": self._phase(id=2, code="0")}
@@ -150,7 +150,7 @@ class TestWizardCoreGaps:
         db.tasks.update_if_state.assert_called_once()
 
     def test_ensure_task_preserves_empty_current_phase(self):
-        engine = WizardEngine("TASK-1")
+        engine = SupervisorEngine("TASK-1")
         svc = MagicMock()
         svc.get_task_by_key.return_value = {"id": 1, "project_id": 1, "current_phase": ""}
         engine._task_service = svc
@@ -159,7 +159,7 @@ class TestWizardCoreGaps:
         svc.update_task.assert_not_called()
 
     def test_ensure_task_create_if_missing_false(self):
-        engine = WizardEngine("TASK-1")
+        engine = SupervisorEngine("TASK-1")
         engine.create_if_missing = False
         svc = MagicMock()
         svc.get_task_by_key.return_value = None
@@ -168,7 +168,7 @@ class TestWizardCoreGaps:
             engine._ensure_task()
 
     def test_format_result_pass_sync_after_parallel(self):
-        from project_workflow.wizard import format_result
+        from project_workflow.supervisor import format_result
 
         text = format_result(
             {
@@ -188,7 +188,7 @@ class TestWizardCoreGaps:
         assert "параллельного блока" not in text
 
     def test_format_result_pass_parallel(self):
-        from project_workflow.wizard import format_result
+        from project_workflow.supervisor import format_result
 
         text = format_result(
             {

@@ -16,7 +16,7 @@ from project_workflow.infrastructure.db.schema import (
     mark_catalog_not_ensured,
 )
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
-from project_workflow.wizard.models import Phase
+from project_workflow.supervisor.models import Phase
 
 
 @pytest.fixture
@@ -36,6 +36,8 @@ class TestEnsurePhaseCatalog:
         assert len(codes) > 0
         for code in (phase.code for phase in load_phases_from_seed()):
             assert code in codes
+        assert all(phase.delegate and phase.delegate.hermes_profile for phase in phases)
+        assert all(phase.is_delegated for phase in phases)
 
     def test_idempotent_rerun(self, fresh_db):
         ensure_phase_catalog(fresh_db)
@@ -84,7 +86,7 @@ class TestGenerateProgressJson:
 
 class TestParseOldYaml:
     def test_parse_old_yaml_item(self, fresh_db):
-        from project_workflow.infrastructure.db.schema import _phase_item_to_wizard
+        from project_workflow.infrastructure.db.schema import _phase_item_to_supervisor
 
         raw = {
             "code": "1",
@@ -94,7 +96,7 @@ class TestParseOldYaml:
             "checks": [{"description": "Check it"}],
             "evidence": [{"description": "Show it"}],
         }
-        phase = _phase_item_to_wizard(raw)
+        phase = _phase_item_to_supervisor(raw)
         assert isinstance(phase, Phase)
         assert phase.code == "1"
 

@@ -1,10 +1,10 @@
-"""Tests for wizard.prompt helpers."""
+"""Tests for supervisor.prompt helpers."""
 
 from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from project_workflow.wizard.prompt import _format_parallel_contract_human, build_phase_prompt
+from project_workflow.supervisor.prompt import _format_parallel_contract_human, build_phase_prompt
 
 
 def _phase(code, execution_type="sync", name="N"):
@@ -98,7 +98,7 @@ def test_prompt_delegated():
 def patch_contract_builder(delegate_agent=None, hermes_profile=None):
     from unittest.mock import MagicMock, patch
 
-    from project_workflow.wizard import prompt as prompt_mod
+    from project_workflow.supervisor import prompt as prompt_mod
 
     def _inner(_all_phases):
         cb = MagicMock()

@@ -57,7 +57,7 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def wizard_llm(monkeypatch):
+def supervisor_llm(monkeypatch):
     """Install an explicit LLM verdict for tests that evaluate reports."""
 
     def install(
@@ -104,7 +104,7 @@ def wizard_llm(monkeypatch):
                 "covered": covered_ids,
                 "missing": missing_ids,
                 "blockers": blockers or (["Test blocker"] if verdict == "BLOCKED" else []),
-                "message": f"Test Wizard verdict: {verdict}",
+                "message": f"Test Supervisor verdict: {verdict}",
                 "confidence": 1.0,
             }
 

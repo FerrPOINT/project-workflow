@@ -89,9 +89,9 @@ def manual_env(tmp_path, monkeypatch):
 
 
 class TestManualWorkflowEndToEnd:
-    def test_sync_phase_passes_and_advances(self, manual_env, wizard_llm):
+    def test_sync_phase_passes_and_advances(self, manual_env, supervisor_llm):
         runner = CliRunner(env={"DATABASE_URL": manual_env})
-        wizard_llm("PASS")
+        supervisor_llm("PASS")
         report = (
             "Цель задачи MANUAL-1 зафиксирована. Входные данные зафиксированы. "
             "Описание цели приложено. Список входных данных приложен."
@@ -106,9 +106,9 @@ class TestManualWorkflowEndToEnd:
         assert data["next_phase_contract"]["phase_code"] == "manual.plan"
         assert data["next_phase_contract"]["instructions"]
 
-    def test_plan_passes_then_parallel_group(self, manual_env, wizard_llm):
+    def test_plan_passes_then_parallel_group(self, manual_env, supervisor_llm):
         runner = CliRunner(env={"DATABASE_URL": manual_env})
-        wizard_llm("PASS")
+        supervisor_llm("PASS")
         runner.invoke(
             cli,
             [
@@ -131,9 +131,9 @@ class TestManualWorkflowEndToEnd:
         assert data["phase"] == "manual.plan"
         assert data["next_phase"] == "manual.parallel-a"
 
-    def test_parallel_group_partial_then_full(self, manual_env, wizard_llm):
+    def test_parallel_group_partial_then_full(self, manual_env, supervisor_llm):
         runner = CliRunner(env={"DATABASE_URL": manual_env})
-        wizard_llm("PASS")
+        supervisor_llm("PASS")
         # Advance to parallel group
         runner.invoke(
             cli,
@@ -167,7 +167,7 @@ class TestManualWorkflowEndToEnd:
         partial = (
             "Backend endpoint работает. Unit-тесты backend проходят. Код backend приложен. Тесты backend приложены."
         )
-        wizard_llm("PARTIAL", covered=["Backend"], missing=["Frontend"])
+        supervisor_llm("PARTIAL", covered=["Backend"], missing=["Frontend"])
         result = runner.invoke(cli, ["--json", "step", "--task", "MANUAL-3", "--report", partial])
         assert result.exit_code == 0, result.output
         data = json.loads(result.output)
@@ -186,7 +186,7 @@ class TestManualWorkflowEndToEnd:
             "Код backend приложен. Тесты backend приложены. "
             "Код frontend приложен. Тесты frontend приложены."
         )
-        wizard_llm("PASS")
+        supervisor_llm("PASS")
         result = runner.invoke(cli, ["--json", "step", "--task", "MANUAL-3", "--report", full])
         assert result.exit_code == 0, result.output
         data = json.loads(result.output)
@@ -195,9 +195,9 @@ class TestManualWorkflowEndToEnd:
         assert data["next_phase"] == "manual.seq-instr"
         assert data["missing"] == []
 
-    def test_mixed_instructions_phase(self, manual_env, wizard_llm):
+    def test_mixed_instructions_phase(self, manual_env, supervisor_llm):
         runner = CliRunner(env={"DATABASE_URL": manual_env})
-        wizard_llm("PASS")
+        supervisor_llm("PASS")
         # Advance through intake, plan, parallel
         for report in [
             (
@@ -216,7 +216,7 @@ class TestManualWorkflowEndToEnd:
 
         # Partial on seq-instr
         partial = "Окружение подготовлено. CI настроен."
-        wizard_llm("PARTIAL", missing=["Линтер", "Итоговый отчёт"])
+        supervisor_llm("PARTIAL", missing=["Линтер", "Итоговый отчёт"])
         result = runner.invoke(cli, ["--json", "step", "--task", "MANUAL-4", "--report", partial])
         assert result.exit_code == 0, result.output
         data = json.loads(result.output)
@@ -230,7 +230,7 @@ class TestManualWorkflowEndToEnd:
             "Конфиг окружения приложен. Конфиг CI приложен. Конфиг линтера приложен. "
             "Итоговый отчёт приложен."
         )
-        wizard_llm("PASS")
+        supervisor_llm("PASS")
         result = runner.invoke(cli, ["--json", "step", "--task", "MANUAL-4", "--report", full])
         assert result.exit_code == 0, result.output
         data = json.loads(result.output)
@@ -239,9 +239,9 @@ class TestManualWorkflowEndToEnd:
         assert data["next_phase"] == "manual.rollback-demo"
         assert data["missing"] == []
 
-    def test_rollback_phase_response(self, manual_env, wizard_llm):
+    def test_rollback_phase_response(self, manual_env, supervisor_llm):
         runner = CliRunner(env={"DATABASE_URL": manual_env})
-        wizard_llm("PASS")
+        supervisor_llm("PASS")
         for report in [
             (
                 "Цель задачи MANUAL-6 зафиксирована. Входные данные зафиксированы. "
@@ -266,14 +266,14 @@ class TestManualWorkflowEndToEnd:
             assert data["verdict"] == "PASS", data
 
         # Rollback: report contains "rollback" and phase has rollback_target
-        wizard_llm("ROLLBACK")
+        supervisor_llm("ROLLBACK")
         result = runner.invoke(cli, ["step", "--task", "MANUAL-6", "--report", "Integration failed. rollback."])
         assert result.exit_code == 0, result.output
         assert "Вернись к шагу: manual.seq-instr" in result.output
 
-    def test_delegate_phase_response(self, manual_env, wizard_llm):
+    def test_delegate_phase_response(self, manual_env, supervisor_llm):
         runner = CliRunner(env={"DATABASE_URL": manual_env})
-        wizard_llm("PASS")
+        supervisor_llm("PASS")
         for report in [
             (
                 "Цель задачи MANUAL-7 зафиксирована. Входные данные зафиксированы. "
@@ -299,14 +299,14 @@ class TestManualWorkflowEndToEnd:
             assert data["verdict"] == "PASS", data
 
         # Delegate: report contains delegate signal and phase is_delegated=True
-        wizard_llm("DELEGATE")
+        supervisor_llm("DELEGATE")
         result = runner.invoke(cli, ["step", "--task", "MANUAL-7", "--report", "delegate this review"])
         assert result.exit_code == 0, result.output
-        assert "Test Wizard verdict: DELEGATE" in result.output
+        assert "Test Supervisor verdict: DELEGATE" in result.output
 
-    def test_human_pass_shows_next_phase_contract(self, manual_env, wizard_llm):
+    def test_human_pass_shows_next_phase_contract(self, manual_env, supervisor_llm):
         runner = CliRunner(env={"DATABASE_URL": manual_env})
-        wizard_llm("PASS")
+        supervisor_llm("PASS")
 
         result = runner.invoke(cli, ["step", "--task", "MANUAL-8", "--report", "intake complete"])
 
@@ -316,9 +316,9 @@ class TestManualWorkflowEndToEnd:
         assert "Архитектура определена" in result.output
         assert "Документ архитектуры" in result.output
 
-    def test_human_partial_shows_current_phase_contract(self, manual_env, wizard_llm):
+    def test_human_partial_shows_current_phase_contract(self, manual_env, supervisor_llm):
         runner = CliRunner(env={"DATABASE_URL": manual_env})
-        wizard_llm("PARTIAL", covered=["Цель задачи зафиксирована"], missing=["Входные данные зафиксированы"])
+        supervisor_llm("PARTIAL", covered=["Цель задачи зафиксирована"], missing=["Входные данные зафиксированы"])
 
         result = runner.invoke(cli, ["step", "--task", "MANUAL-9", "--report", "partly complete"])
 
@@ -343,16 +343,16 @@ class TestManualWorkflowEndToEnd:
 
         assert result.exit_code == 1
         assert "Причина:" in result.output
-        assert "Wizard не смог проверить отчёт" in result.output
+        assert "Supervisor не смог проверить отчёт" in result.output
 
-    def test_parallel_rollback_persists_target_history_and_run(self, manual_env, wizard_llm):
+    def test_parallel_rollback_persists_target_history_and_run(self, manual_env, supervisor_llm):
         runner = CliRunner(env={"DATABASE_URL": manual_env})
-        wizard_llm("PASS")
+        supervisor_llm("PASS")
         for report in ("intake", "plan"):
             result = runner.invoke(cli, ["--json", "step", "--task", "MANUAL-11", "--report", report])
             assert result.exit_code == 0, result.output
 
-        wizard_llm("ROLLBACK")
+        supervisor_llm("ROLLBACK")
         result = runner.invoke(cli, ["--json", "step", "--task", "MANUAL-11", "--report", "rollback"])
         assert result.exit_code == 0, result.output
         data = json.loads(result.output)
@@ -375,9 +375,9 @@ class TestManualWorkflowEndToEnd:
             assert rollback_phase is not None
             assert rollback_phase.code == "manual.plan"
 
-    def test_full_workflow_to_done(self, manual_env, wizard_llm):
+    def test_full_workflow_to_done(self, manual_env, supervisor_llm):
         runner = CliRunner(env={"DATABASE_URL": manual_env})
-        wizard_llm("PASS")
+        supervisor_llm("PASS")
         reports = [
             (
                 "Цель задачи MANUAL-5 зафиксирована. Входные данные зафиксированы. "

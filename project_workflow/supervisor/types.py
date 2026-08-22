@@ -1,4 +1,4 @@
-"""Structured types for Wizard — stable contract for CLI, UI, and tests.
+"""Structured types for Supervisor — stable contract for CLI, UI, and tests.
 
 Do NOT import heavy modules here; keep it lightweight.
 """
@@ -19,6 +19,7 @@ class PhaseContract:
     instructions: list[str] = field(default_factory=list)
     required_checks: list[str] = field(default_factory=list)
     required_evidence: list[str] = field(default_factory=list)
+    skills: list[str] = field(default_factory=list)
     execution_type: str = "sync"
     delegate_agent: str | None = None
     hermes_profile: str | None = None
@@ -36,6 +37,7 @@ class PhaseContract:
             "instructions": self.instructions,
             "required_checks": self.required_checks,
             "required_evidence": self.required_evidence,
+            "skills": self.skills,
             "execution_type": self.execution_type,
             "delegate_agent": self.delegate_agent,
             "hermes_profile": self.hermes_profile,

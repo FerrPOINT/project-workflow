@@ -1,4 +1,4 @@
-"""Reliability contract for the mandatory Wizard evaluator."""
+"""Reliability contract for the mandatory Supervisor evaluator."""
 
 from __future__ import annotations
 
@@ -8,9 +8,9 @@ import pytest
 import requests
 
 from project_workflow.infrastructure.llm import OpenAICompatibleClient, ResponseParser
-from project_workflow.wizard import WizardEngine
+from project_workflow.supervisor import SupervisorEngine
 
-pytestmark = [pytest.mark.wizard]
+pytestmark = [pytest.mark.supervisor]
 
 
 def _wire(verdict: str, covered: list[str], missing: list[str], blockers: list[str] | None = None):
@@ -62,9 +62,9 @@ class TestStrictEvaluatorContract:
 
 
 @pytest.mark.parametrize("verdict", ["PASS", "PARTIAL", "BLOCKED"])
-def test_valid_report_is_replayed_once(verdict, wizard_llm):
-    engine = WizardEngine(f"TASK-90{['PASS', 'PARTIAL', 'BLOCKED'].index(verdict)}")
-    wizard_llm(verdict)
+def test_valid_report_is_replayed_once(verdict, supervisor_llm):
+    engine = SupervisorEngine(f"TASK-90{['PASS', 'PARTIAL', 'BLOCKED'].index(verdict)}")
+    supervisor_llm(verdict)
     fixture_chat = OpenAICompatibleClient.chat
     with patch.object(OpenAICompatibleClient, "chat", side_effect=fixture_chat) as chat:
         first = engine.evaluate(f"report {verdict}")
@@ -81,7 +81,7 @@ def test_valid_report_is_replayed_once(verdict, wizard_llm):
 
 
 def test_retryable_provider_error_has_no_fingerprint_or_transition():
-    engine = WizardEngine("TASK-910")
+    engine = SupervisorEngine("TASK-910")
     original_task = dict(engine.task)
     with patch.object(OpenAICompatibleClient, "chat", side_effect=requests.ConnectionError("down")) as chat:
         first = engine.evaluate("same report")
@@ -97,10 +97,10 @@ def test_retryable_provider_error_has_no_fingerprint_or_transition():
     assert engine.task == original_task
 
 
-def test_concurrent_state_change_rolls_back_run_and_history(wizard_llm, monkeypatch):
-    engine = WizardEngine("TASK-911")
+def test_concurrent_state_change_rolls_back_run_and_history(supervisor_llm, monkeypatch):
+    engine = SupervisorEngine("TASK-911")
     original_task = dict(engine.task)
-    wizard_llm("PASS")
+    supervisor_llm("PASS")
     monkeypatch.setattr(engine.db.tasks, "update_if_state", lambda *_args, **_kwargs: False)
 
     result = engine.evaluate("concurrent report")
@@ -112,15 +112,15 @@ def test_concurrent_state_change_rolls_back_run_and_history(wizard_llm, monkeypa
     assert engine.task == original_task
 
 
-def test_audit_snapshot_contains_contract_and_provider_metadata(wizard_llm):
-    engine = WizardEngine("TASK-912")
-    wizard_llm("PARTIAL")
+def test_audit_snapshot_contains_contract_and_provider_metadata(supervisor_llm):
+    engine = SupervisorEngine("TASK-912")
+    supervisor_llm("PARTIAL")
     engine.evaluate("audited report")
 
     run = engine.db.supervisor_runs.list(task_key=engine.task_key)[0]
     snapshot = run.context_snapshot
     assert snapshot["model"]
     assert snapshot["endpoint_mode"] == "openai-compatible"
-    assert snapshot["prompt_version"] == "wizard-evaluator-v4"
+    assert snapshot["prompt_version"] == "supervisor-evaluator-v5"
     assert snapshot["contract_snapshot"]["evaluation_items"]
     assert snapshot["raw_evaluator"]["verdict"] == "PARTIAL"

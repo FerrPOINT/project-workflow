@@ -21,7 +21,7 @@ def _update_task(db, task: dict, data: dict) -> None:
         data,
     )
     if not updated:
-        raise ConcurrentTransitionError("Task phase or status changed during Wizard evaluation")
+        raise ConcurrentTransitionError("Task phase or status changed during Supervisor evaluation")
 
 
 def record_transition(
