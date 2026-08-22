@@ -116,6 +116,22 @@ def test_validate_transcript_accepts_complete_ordered_cycle():
     assert cycles[0]["actions"][0]["id"] == "A-001"
 
 
+@pytest.mark.parametrize("cwd", ["C:\\repo", "/srv/relevanter/demo"])
+def test_validate_transcript_accepts_absolute_executor_paths_from_both_platforms(cwd):
+    events = [_session(), *_cycle()]
+    events[2]["cwd"] = cwd
+
+    recorder.validate_transcript(events, task="TASK-1", expected_cycles=1)
+
+
+def test_validate_transcript_rejects_relative_executor_path():
+    events = [_session(), *_cycle()]
+    events[2]["cwd"] = "repo/subdir"
+
+    with pytest.raises(recorder.TranscriptError, match="absolute path"):
+        recorder.validate_transcript(events, task="TASK-1")
+
+
 @pytest.mark.parametrize("runner", [recorder.run_supervisor, recorder.run_history])
 def test_supervisor_subprocess_forces_utf8_without_mutating_parent_environment(monkeypatch, runner):
     captured: dict = {}
