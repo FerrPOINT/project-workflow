@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from importlib import import_module
 from pathlib import Path
 
 import pytest
@@ -150,6 +151,22 @@ def test_tech_phases_reference_the_canonical_using_rtech_skill():
     assert all(
         "rtech" not in (instruction.get("skills") or [])
         for phase in phases
+        for instruction in phase["instructions"]
+    )
+
+
+def test_business_tech_migration_reconstructs_immutable_seed_on_any_line_endings():
+    migration = import_module(
+        "project_workflow.infrastructure.db.migrations.versions."
+        "9b71d2e4c6a0_add_business_tech_v1_workflow"
+    )
+
+    migrated = migration._seed()
+
+    assert len(migrated) == 19
+    assert all(
+        "using-rtech" not in (instruction.get("skills") or [])
+        for phase in migrated
         for instruction in phase["instructions"]
     )
 

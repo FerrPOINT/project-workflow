@@ -42,7 +42,7 @@ def _seed() -> list[dict[str, Any]]:
     # already released with the old ``rtech`` spelling, so this historical
     # migration must keep consuming that exact snapshot.  The following
     # migration performs the explicit forward rename.
-    historical_raw = raw.replace(b'"using-rtech"', b'"rtech"')
+    historical_raw = raw.replace(b'"using-rtech"', b'"rtech"').replace(b"\r\n", b"\n")
     if hashlib.sha256(historical_raw).hexdigest() != SEED_SHA256:
         raise RuntimeError("sdlc-business-tech-v1 seed is immutable; create a new revision")
     data = json.loads(historical_raw)
