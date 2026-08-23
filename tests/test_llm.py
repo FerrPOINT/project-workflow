@@ -139,7 +139,7 @@ class TestOpenAICompatibleClient:
             assert payload["temperature"] == 0.5
             assert payload["max_tokens"] == 4000
             assert payload["reasoning_effort"] == "none"
-            assert "response_format" not in payload
+            assert payload["response_format"] == {"type": "json_object"}
             assert len(payload["messages"]) == 2
             assert payload["messages"][0]["role"] == "system"
             assert payload["messages"][1]["role"] == "user"

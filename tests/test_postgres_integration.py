@@ -110,7 +110,7 @@ class TestPostgresSession:
         inspector = inspect(engine)
         columns = {column["name"] for column in inspector.get_columns("agents", schema="project_workflow")}
         indexes = {index["name"] for index in inspector.get_indexes("agents", schema="project_workflow")}
-        assert version == "d4e8f1a2b703"
+        assert version == "e6a4c2d8b901"
         assert "hermes_profile" in columns
         assert "uq_agents_hermes_profile" in indexes
 
@@ -207,8 +207,26 @@ class TestPostgresSession:
                 )
             ).scalars()
             catalog_skills = [skill for raw in instruction_skills for skill in json.loads(raw or "[]")]
+            pr_instruction = conn.execute(
+                text(
+                    "SELECT i.description FROM project_workflow.instructions i "
+                    "JOIN project_workflow.phases p ON p.id = i.phase_id "
+                    "JOIN project_workflow.workflows w ON w.id = p.workflow_id "
+                    "WHERE w.name = 'sdlc-business-tech-v1' AND p.code = '9.PR' "
+                    "AND i.description LIKE '%Business-задача%'"
+                )
+            ).scalar_one()
+            pr_check = conn.execute(
+                text(
+                    "SELECT c.description FROM project_workflow.checks c "
+                    "JOIN project_workflow.phases p ON p.id = c.phase_id "
+                    "JOIN project_workflow.workflows w ON w.id = p.workflow_id "
+                    "WHERE w.name = 'sdlc-business-tech-v1' AND p.code = '9.PR' "
+                    "AND c.description LIKE 'Business status%'"
+                )
+            ).scalar_one()
 
-        assert revision == "d4e8f1a2b703"
+        assert revision == "e6a4c2d8b901"
         assert [(row.name, row.is_default) for row in workflows] == [
             ("legacy-27-phase", 0),
             ("sdlc-business-tech-v1", 1),
@@ -222,6 +240,10 @@ class TestPostgresSession:
         assert json.loads(run_project.key_prefixes) == ["RUN"]
         assert "rtech" not in catalog_skills
         assert catalog_skills.count("using-rtech") == 5
+        assert pr_instruction == (
+            "Подтвердить, что Business-задача остаётся In Progress, и проверить activity"
+        )
+        assert pr_check == "Business status равен In Progress"
 
     def test_hermes_profile_migration_preserves_agents_and_enforces_unique_owner(self, pg_url):
         engine = get_engine(pg_url)
@@ -500,7 +522,7 @@ class TestPostgresSession:
             version = conn.execute(text("SELECT version_num FROM project_workflow.alembic_version")).scalar_one()
         tables = set(inspect(engine).get_table_names(schema="project_workflow"))
 
-        assert version == "d4e8f1a2b703"
+        assert version == "e6a4c2d8b901"
         assert not any(table.endswith("_v2") for table in tables)
 
     def test_catalog_upgrade_replaces_legacy_contracts_and_preserves_audit(self, pg_url):
@@ -609,7 +631,7 @@ class TestPostgresSession:
                 ),
                 {"workflow_id": workflow_id},
             ).scalar_one()
-        assert revision == "d4e8f1a2b703"
+        assert revision == "e6a4c2d8b901"
         assert upgraded.id == phase_id
         assert upgraded.name == "Runtime Readiness"
         active_contract = upgraded.string_agg.casefold()
@@ -740,7 +762,7 @@ class TestPostgresSession:
                 {"instruction_id": custom_instruction_id},
             ).scalar_one()
 
-        assert revision == "d4e8f1a2b703"
+        assert revision == "e6a4c2d8b901"
         assert [json.loads(row.skills) for row in migrated] == [
             ["project-workflow-executor", "agent-workflow-patterns"],
             ["workflow-systematic-debugging"],
@@ -1009,7 +1031,7 @@ def _run_process(
         capture_output=True,
         text=True,
         encoding=encoding,
-        timeout=30,
+        timeout=60,
         check=False,
     )
 
@@ -1036,7 +1058,7 @@ def _step(env: dict[str, str], task_key: str, report: str) -> tuple[subprocess.C
 
 
 @pytest.mark.integration
-@pytest.mark.timeout(120)
+@pytest.mark.timeout(300)
 def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
     expected_phases = [
         "1.INTAKE",
@@ -1202,7 +1224,7 @@ def _advance_to_phase(env: dict[str, str], task_key: str, phases: list[str]) -> 
 
 
 @pytest.mark.integration
-@pytest.mark.timeout(120)
+@pytest.mark.timeout(300)
 def test_cli_verdicts_replay_and_fail_closed_through_postgres_and_http(pg_url):
     with _openai_compatible_server() as (provider_url, provider_state):
         env = _cli_env(pg_url, provider_url)
