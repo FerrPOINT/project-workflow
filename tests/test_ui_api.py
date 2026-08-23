@@ -257,7 +257,7 @@ class TestApiPhaseCreate:
 
     def test_create_phase_rejects_invalid_workflow(self, client):
         resp = client.post("/api/phases", json={"workflow_id": 999999, "phase_order": 1})
-        assert resp.status_code == 400
+        assert resp.status_code == 404
         assert resp.json()["ok"] is False
 
     def test_create_phase_rejects_non_numeric_workflow_id(self, client):

@@ -43,13 +43,13 @@ class TestApiPhaseCreate:
         with patch("project_workflow.interfaces.ui.routes.api._app_state") as state:
             state.workflow_service.return_value.get_workflow.return_value = None
             response = client.post("/api/phases", json={"name": "X", "phase_order": 1, "workflow_id": "999"})
-        assert response.status_code == 400
+        assert response.status_code == 404
 
     def test_numeric_workflow_id_not_found(self):
         with patch("project_workflow.interfaces.ui.routes.api._app_state") as state:
             state.workflow_service.return_value.get_workflow.return_value = None
             response = client.post("/api/phases", json={"name": "X", "phase_order": 1, "workflow_id": 999})
-        assert response.status_code == 400
+        assert response.status_code == 404
 
     def test_code_field_is_set(self):
         with patch("project_workflow.interfaces.ui.routes.api._app_state") as state:
@@ -109,7 +109,7 @@ class TestApiPhaseBatchOrder:
     def test_invalid_phase_id(self):
         with patch("project_workflow.interfaces.ui.routes.api._coerce_phase_db_id", return_value=None):
             response = client.put("/api/phases/order", json={"orders": [{"phase_id": "bad", "phase_order": 1}]})
-        assert response.status_code == 400
+        assert response.status_code == 422
 
 
 class TestApiWorkflowDelete:

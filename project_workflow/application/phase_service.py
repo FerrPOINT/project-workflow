@@ -118,8 +118,11 @@ class PhaseService:
         }
 
     def update_phase(self, phase_id: int | str, data: dict[str, Any], *, commit: bool = True) -> None:
+        from project_workflow.application.phase import PhaseServiceApp
+
         resolved = self._resolve_phase_id(phase_id)
-        self._uow.phases.update(resolved, self._prepare_execution_update(resolved, data))
+        validated = PhaseServiceApp(self._uow).prepare_update(resolved, data)
+        self._uow.phases.update(resolved, self._prepare_execution_update(resolved, validated))
         if commit:
             self._uow.commit()
 

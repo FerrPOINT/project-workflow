@@ -61,7 +61,7 @@ class TestStrictEvaluatorContract:
         assert verdict.confidence == 0.5
 
 
-@pytest.mark.parametrize("verdict", ["PASS", "PARTIAL", "BLOCKED"])
+@pytest.mark.parametrize("verdict", ["PARTIAL", "BLOCKED"])
 def test_valid_report_is_replayed_once(verdict, supervisor_llm):
     engine = SupervisorEngine(f"RUN-90{['PASS', 'PARTIAL', 'BLOCKED'].index(verdict)}")
     supervisor_llm(verdict)
@@ -80,6 +80,24 @@ def test_valid_report_is_replayed_once(verdict, supervisor_llm):
     assert engine.db.get_task_history(engine.task["id"]) == history_after_first
 
 
+def test_same_report_is_evaluated_again_after_phase_transition(supervisor_llm):
+    engine = SupervisorEngine("TASK-900")
+    supervisor_llm("PASS")
+    fixture_chat = OpenAICompatibleClient.chat
+    with patch.object(OpenAICompatibleClient, "chat", side_effect=fixture_chat) as chat:
+        first = engine.evaluate("same completion report")
+        first_phase = first["phase"]
+        second = engine.evaluate("same completion report")
+
+    assert first["verdict"] == second["verdict"] == "PASS"
+    assert first["replayed"] is second["replayed"] is False
+    assert second["phase"] != first_phase
+    assert chat.call_count == 2
+    runs = engine.db.get_supervisor_runs(task_key=engine.task_key, limit=10)
+    assert len(runs) == 2
+    assert len({run["phase_id"] for run in runs}) == 2
+
+
 def test_retryable_provider_error_has_no_fingerprint_or_transition():
     engine = SupervisorEngine("RUN-910")
     original_task = dict(engine.task)
@@ -95,6 +113,18 @@ def test_retryable_provider_error_has_no_fingerprint_or_transition():
     assert all(run.report_fingerprint is None for run in runs)
     assert engine.db.get_task_history(engine.task["id"]) == []
     assert engine.task == original_task
+
+
+def test_recorded_evaluation_invalidates_supervisor_context_cache(supervisor_llm):
+    engine = SupervisorEngine("TASK-909")
+    before = engine.get_full_context()
+    assert engine.get_full_context() is before
+    supervisor_llm("PARTIAL")
+
+    engine.evaluate("cache invalidation report")
+
+    after = engine.get_full_context()
+    assert after is not before
 
 
 def test_concurrent_state_change_rolls_back_run_and_history(supervisor_llm, monkeypatch):

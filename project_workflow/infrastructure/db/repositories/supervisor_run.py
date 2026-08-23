@@ -54,10 +54,13 @@ class SASupervisorRunRepository(SupervisorRunRepository):
         rows = self._session.execute(stmt).scalars().all()
         return [_row_to_supervisor_run(r) for r in rows]
 
-    def get_by_fingerprint(self, task_id: int, report_fingerprint: str) -> SupervisorRun | None:
+    def get_by_fingerprint(
+        self, task_id: int, phase_id: int, report_fingerprint: str
+    ) -> SupervisorRun | None:
         row = self._session.execute(
             select(m.SupervisorRun).where(
                 m.SupervisorRun.task_id == task_id,
+                m.SupervisorRun.phase_id == phase_id,
                 m.SupervisorRun.report_fingerprint == report_fingerprint,
             )
         ).scalar_one_or_none()

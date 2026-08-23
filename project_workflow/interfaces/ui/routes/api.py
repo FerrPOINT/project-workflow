@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import Query
 from fastapi.responses import JSONResponse
 
-from project_workflow.domain.exceptions import ConflictError
+from project_workflow.domain.exceptions import ConflictError, LastPhaseError, NotFoundError
 from project_workflow.interfaces.ui.schemas import (
     AgentCreate,
     AgentUpdate,
@@ -143,43 +143,38 @@ async def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONRespons
     if payload.phase_order is None:
         return _error("phase_order обязателен", 400)
 
-    resolved_workflow_id: int | None = None
     if isinstance(workflow_id, str) and not workflow_id.isdigit():
         return _error(f"Workflow {workflow_id!r} не найден", 400)
-    else:
-        resolved_workflow_id = int(workflow_id)
-    if resolved_workflow_id is None or not _app_state.workflow_service().get_workflow(resolved_workflow_id):
-        return _error(f"Workflow {resolved_workflow_id} не найден", 400)
-    workflow_id = resolved_workflow_id
-
-    workflow_phases = _app_state.phase_service().list_phases(workflow_id)
-    order_list = sorted([p["phase_order"] for p in workflow_phases if isinstance(p.get("phase_order"), int)])
-    new_order = payload.phase_order
-    if new_order > (max(order_list, default=0) + 1):
-        new_order = (max(order_list, default=0)) + 1
-
-    phase_service = _app_state.phase_service()
-    for p in workflow_phases:
-        if isinstance(p.get("phase_order"), int) and p["phase_order"] >= new_order:
-            phase_service.update_phase(
-                p["id"],
-                {"phase_order": p["phase_order"] + 1},
-                commit=False,
-            )
+    workflow_id = int(workflow_id)
+    if _app_state.workflow_service().get_workflow(workflow_id) is None:
+        return _error(f"Workflow {workflow_id} не найден", 404)
     data = {
         "name": payload.name,
-        "description": payload.description or "",
+        "description": payload.description,
         "workflow_id": workflow_id,
-        "phase_order": new_order,
-        "execution_type": payload.execution_type or "sync",
+        "phase_order": payload.phase_order,
+        "execution_type": payload.execution_type,
         "parallel_with": payload.parallel_with,
+        "rollback_target": payload.rollback_target,
+        "next_recommendation": payload.next_recommendation,
         "agent_id": payload.agent_id,
     }
     if payload.code:
         data["code"] = payload.code
-    phase = phase_service.create_phase(data, commit=False)
-    _app_state.get_uow().commit()
-    return {"ok": True, "phase_id": phase["id"], "phase_order": new_order, "phase": phase}
+    try:
+        phase = _app_state.phase_service().create_phase(data)
+    except NotFoundError as exc:
+        return _error(str(exc), 404)
+    except ConflictError as exc:
+        return _error(str(exc), 409)
+    except ValueError as exc:
+        return _error(str(exc), 400)
+    return {
+        "ok": True,
+        "phase_id": phase["id"],
+        "phase_order": phase.get("phase_order", payload.phase_order),
+        "phase": phase,
+    }
 
 
 async def api_phase_update(phase_id: int, payload: PhaseUpdate) -> dict[str, Any] | JSONResponse:
@@ -191,27 +186,31 @@ async def api_phase_update(phase_id: int, payload: PhaseUpdate) -> dict[str, Any
     if resolved_phase_id is None:
         return _error(f"Фаза {phase_id} не найдена", 404)
 
-    if payload.phase_num is not None:
+    if "phase_num" in payload.model_fields_set:
         return _error("Редактирование phase_num запрещено", 400)
-    if payload.code is not None or payload.phase_order is not None:
+    if {"code", "phase_order"}.intersection(payload.model_fields_set):
         return _error("Редактирование identity/order фазы запрещено", 400)
 
-    phase_data: dict[str, Any] = {}
-    for key in (
+    scalar_fields = {
         "name",
         "description",
+        "parallel_with",
         "rollback_target",
         "next_recommendation",
         "agent_id",
         "execution_type",
-    ):
-        value = getattr(payload, key, None)
-        if value is not None:
-            phase_data[key] = value
-    if "parallel_with" in payload.model_fields_set:
-        phase_data["parallel_with"] = payload.parallel_with
+    }
+    selected_fields = scalar_fields.intersection(payload.model_fields_set)
+    if any(getattr(payload, field) is None for field in selected_fields.intersection({"name", "execution_type"})):
+        return _error("name и execution_type нельзя очистить", 422)
+    phase_data = {field: getattr(payload, field) for field in selected_fields}
     if phase_data:
-        srv.update_phase(resolved_phase_id, phase_data, commit=False)
+        try:
+            srv.update_phase(resolved_phase_id, phase_data, commit=False)
+        except NotFoundError as exc:
+            return _error(str(exc), 404)
+        except ConflictError as exc:
+            return _error(str(exc), 409)
 
     inst_ids: list[int] = []
     check_ids: list[int] = []
@@ -230,14 +229,14 @@ async def api_phase_update(phase_id: int, payload: PhaseUpdate) -> dict[str, Any
 
 
 async def api_phase_delete(phase_id: int) -> dict[str, Any] | JSONResponse:
-    phase = _app_state.phase_service().get_phase(phase_id)
-    if not phase:
+    if _app_state.phase_service().get_phase(phase_id) is None:
         return _error(f"Фаза {phase_id} не найдена", 404)
-    workflow_id = phase.get("workflow_id")
-    workflow_phases = _app_state.phase_service().list_phases(workflow_id)
-    if len(workflow_phases) <= 1:
-        return _error("Нельзя удалить единственную фазу workflow", 409)
-    _app_state.phase_service().delete_phase(phase_id)
+    try:
+        _app_state.phase_service().delete_phase(phase_id)
+    except NotFoundError:
+        return _error(f"Фаза {phase_id} не найдена", 404)
+    except (ConflictError, LastPhaseError) as exc:
+        return _error(str(exc), 409)
     return {"ok": True}
 
 
@@ -245,39 +244,27 @@ async def api_phase_batch_order(payload: PhaseOrderUpdate) -> dict[str, Any] | J
     if not payload.orders:
         return _error("Список order пуст", 400)
 
-    workflow_id: int | None = None
-    for item in payload.orders:
-        if item.workflow_id is not None:
-            workflow_id = item.workflow_id
-            break
-    if workflow_id is None:
-        # Try to infer from the first phase.
-        first_id = _coerce_phase_db_id(payload.orders[0].phase_id)
-        if first_id is not None:
-            phase = _app_state.phase_service().get_phase(first_id)
-            if phase:
-                workflow_id = phase.get("workflow_id")
-
     batch: list[tuple[int, int]] = []
-    ordered_phase_ids: list[int] = []
     for item in payload.orders:
         resolved_phase_id = _coerce_phase_db_id(item.phase_id)
         if resolved_phase_id is None:
             return _error(f"Некорректный phase_id: {item.phase_id!r}", 400)
+        if item.workflow_id is not None:
+            phase = _app_state.phase_service().get_phase(resolved_phase_id)
+            if phase is None:
+                return _error(f"Фаза {resolved_phase_id} не найдена", 404)
+            if phase.get("workflow_id") != item.workflow_id:
+                return _error("workflow_id не совпадает с владельцем фазы", 409)
         batch.append((resolved_phase_id, item.phase_order))
-        ordered_phase_ids.append(resolved_phase_id)
-
-    workflow_phases = _app_state.phase_service().list_phases(workflow_id)
-    for phase in workflow_phases:
-        if phase["id"] not in ordered_phase_ids:
-            batch.append((phase["id"], phase.get("phase_order", 0)))
-
-    phase_service = _app_state.phase_service()
-    for phase_id, new_order in batch:
-        phase_service.update_phase(phase_id, {"phase_order": new_order}, commit=False)
-    _app_state.get_uow().commit()
-
-    return {"ok": True, "updated": len(payload.orders)}
+    try:
+        updated = _app_state.phase_service().reorder_phases(batch)
+    except NotFoundError as exc:
+        return _error(str(exc), 404)
+    except ConflictError as exc:
+        return _error(str(exc), 409)
+    except ValueError as exc:
+        return _error(str(exc), 400)
+    return {"ok": True, "updated": updated}
 
 
 async def api_workflow_create(payload: WorkflowCreate) -> dict[str, Any] | JSONResponse:
@@ -322,6 +309,10 @@ async def api_workflow_delete(workflow_id: int) -> dict[str, Any] | JSONResponse
 
 
 async def api_project_create(payload: ProjectCreate) -> dict[str, Any] | JSONResponse:
+    if "workflow_id" in payload.model_fields_set and payload.workflow_id is None:
+        return _error("workflow_id cannot be null", 422)
+    if "description" in payload.model_fields_set and payload.description is None:
+        return _error("description cannot be null", 422)
     service = _app_state.project_service()
     try:
         project = service.create_project(
@@ -335,6 +326,8 @@ async def api_project_create(payload: ProjectCreate) -> dict[str, Any] | JSONRes
         )
     except ConflictError as exc:
         return _error(str(exc), 409)
+    except (NotFoundError, ValueError) as exc:
+        return _error(str(exc), 404)
     project_id = project["id"]
     return {"ok": True, "project_id": project_id, "project": service.get_project(project_id)}
 
@@ -344,6 +337,10 @@ async def api_project_update(project_id: int, payload: ProjectUpdate) -> dict[st
     existing = service.get_project(project_id)
     if not existing:
         return _error(f"Проект {project_id} не найден", 404)
+    if "workflow_id" in payload.model_fields_set and payload.workflow_id is None:
+        return _error("workflow_id cannot be null", 422)
+    if "description" in payload.model_fields_set and payload.description is None:
+        return _error("description cannot be null", 422)
     updates = _updates_from_payload(payload, ["code", "name", "description", "workflow_id"])
     if payload.key_prefixes is not None:
         updates["key_prefixes"] = list(payload.key_prefixes)
@@ -352,6 +349,8 @@ async def api_project_update(project_id: int, payload: ProjectUpdate) -> dict[st
             service.update_project(project_id, updates)
         except ConflictError as exc:
             return _error(str(exc), 409)
+        except (NotFoundError, ValueError) as exc:
+            return _error(str(exc), 404)
     return {"ok": True, "project": service.get_project(project_id)}
 
 

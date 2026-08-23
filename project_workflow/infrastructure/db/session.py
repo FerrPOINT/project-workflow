@@ -12,7 +12,8 @@ from typing import Any
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, event
+from alembic.script import ScriptDirectory
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
@@ -30,6 +31,7 @@ _SessionLocal = None
 
 PG_CONNECT_RETRY_ATTEMPTS: int = 3
 PG_CONNECT_RETRY_DELAY: float = 1.0
+CORE_TABLES = frozenset({"workflows", "projects", "phases", "tasks", "supervisor_runs"})
 
 
 def _is_sqlite(url: str) -> bool:
@@ -136,22 +138,15 @@ def reset_engine() -> None:
 
 
 def ensure_schema(engine: Engine | Connection | None = None) -> None:
-    """Create all tables from ORM models (fallback for tests / fresh DBs)."""
+    """Create the ORM schema for isolated SQLite tests only."""
     target = engine or get_engine()
     dialect = target.dialect.name
+    if dialect != "sqlite":
+        raise RuntimeError("ensure_schema is only available for isolated SQLite tests")
     if isinstance(target, Connection):
-        conn = target
-        if dialect == "postgresql":
-            schema = get_settings().DB_SCHEMA
-            conn.exec_driver_sql(f"CREATE SCHEMA IF NOT EXISTS {schema}")
-            conn.exec_driver_sql(f"SET search_path TO {schema}")
-        Base.metadata.create_all(conn)
+        Base.metadata.create_all(target)
     else:
         with target.begin() as conn:
-            if dialect == "postgresql":
-                schema = get_settings().DB_SCHEMA
-                conn.exec_driver_sql(f"CREATE SCHEMA IF NOT EXISTS {schema}")
-                conn.exec_driver_sql(f"SET search_path TO {schema}")
             Base.metadata.create_all(conn)
 
 
@@ -164,24 +159,61 @@ def run_alembic_command(cmd: str, engine: Engine | None = None, revision: str = 
     # so configparser interpolation does not treat them as substitution syntax.
     url = engine.url.render_as_string(hide_password=False).replace("%", "%%")
     alembic_cfg.set_main_option("sqlalchemy.url", url)
-    getattr(command, cmd)(alembic_cfg, revision)
+    with engine.connect() as connection:
+        alembic_cfg.attributes["connection"] = connection
+        getattr(command, cmd)(alembic_cfg, revision)
+        if cmd == "downgrade" and revision == "base" and connection.dialect.name == "postgresql":
+            schema = get_settings().DB_SCHEMA
+            if schema and schema != "public":
+                quoted_schema = connection.dialect.identifier_preparer.quote(schema)
+                connection.exec_driver_sql(f"DROP SCHEMA IF EXISTS {quoted_schema} CASCADE")
+                connection.commit()
     # Alembic leaves the engine pool open; close it so migrations do not hold
     # connections that can block test database teardown.
     engine.dispose()
 
 
 def ensure_migrated(engine: Engine | None = None) -> None:
-    """Apply Alembic migrations to bring schema to head."""
+    """Apply the baseline migration, rejecting databases from the legacy graph."""
     engine = engine or get_engine()
-    if not _is_sqlite(str(engine.url)):
-        schema = get_settings().DB_SCHEMA
-        with engine.begin() as conn:
-            conn.exec_driver_sql(f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    schema = None if _is_sqlite(str(engine.url)) else get_settings().DB_SCHEMA
+    revisions = database_revisions(engine)
+    existing_tables = set(inspect(engine).get_table_names(schema=schema)) - {"alembic_version"}
+    incompatible_revision = revisions and revisions != {migration_head()}
+    incomplete_head = revisions == {migration_head()} and not CORE_TABLES.issubset(existing_tables)
+    unversioned_database = not revisions and bool(existing_tables)
+    if incompatible_revision or incomplete_head or unversioned_database:
+        raise RuntimeError("legacy database must be recreated")
     run_alembic_command("upgrade", engine)
     engine.dispose()
 
 
-def stamp_head(engine: Engine | None = None) -> None:
-    """Stamp Alembic version table at head without running migrations."""
-    engine = engine or get_engine()
-    run_alembic_command("stamp", engine)
+def migration_head() -> str:
+    """Return the repository's single Alembic head revision."""
+    here = Path(__file__).resolve().parent.parent.parent.parent
+    script = ScriptDirectory.from_config(Config(str(here / "alembic.ini")))
+    head = script.get_current_head()
+    if head is None:
+        raise RuntimeError("Alembic migration head is not configured")
+    return head
+
+
+def database_revisions(engine: Engine) -> set[str]:
+    """Read applied Alembic revisions without mutating the database."""
+    schema = None if _is_sqlite(str(engine.url)) else get_settings().DB_SCHEMA
+    inspector = inspect(engine)
+    if not inspector.has_table("alembic_version", schema=schema):
+        return set()
+    qualified_table = "alembic_version"
+    if schema:
+        quoted_schema = engine.dialect.identifier_preparer.quote(schema)
+        qualified_table = f"{quoted_schema}.alembic_version"
+    with engine.connect() as conn:
+        return set(conn.execute(text(f"SELECT version_num FROM {qualified_table}")).scalars())
+
+
+def schema_is_ready(engine: Engine) -> bool:
+    """Return whether the database is at head and has every core table."""
+    schema = None if _is_sqlite(str(engine.url)) else get_settings().DB_SCHEMA
+    tables = set(inspect(engine).get_table_names(schema=schema))
+    return database_revisions(engine) == {migration_head()} and CORE_TABLES.issubset(tables)

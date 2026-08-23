@@ -37,11 +37,13 @@ SCHEMA = get_settings().DB_SCHEMA
 
 
 def _ensure_schema(connection: Any) -> None:
-    """Create target schema before running migrations on PostgreSQL."""
+    """Create and select the configured schema before PostgreSQL migrations."""
     dialect = connection.dialect.name
     if dialect != "postgresql":
         return
-    connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA}"))
+    quoted_schema = connection.dialect.identifier_preparer.quote(SCHEMA)
+    connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {quoted_schema}"))
+    connection.execute(text(f"SET search_path TO {quoted_schema}"))
 
 
 def run_migrations_offline() -> None:
@@ -63,24 +65,29 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
-    db_url = os.environ.get("DATABASE_URL") or config.get_main_option("sqlalchemy.url")
-    is_postgresql = "postgresql" in (db_url or "")
-    connectable = create_engine(
-        db_url,
-        poolclass=pool.NullPool,
-        isolation_level="AUTOCOMMIT" if is_postgresql else None,
-    )
+    def migrate(connection: Any) -> None:
+        is_postgresql = connection.dialect.name == "postgresql"
+        with connection.begin():
+            _ensure_schema(connection)
+            configure_kwargs = dict(
+                connection=connection,
+                target_metadata=target_metadata,
+                transactional_ddl=True,
+            )
+            if is_postgresql:
+                configure_kwargs["version_table_schema"] = SCHEMA
+            context.configure(**configure_kwargs)
+            context.run_migrations()
 
+    supplied_connection = config.attributes.get("connection")
+    if supplied_connection is not None:
+        migrate(supplied_connection)
+        return
+
+    db_url = os.environ.get("DATABASE_URL") or config.get_main_option("sqlalchemy.url")
+    connectable = create_engine(db_url, poolclass=pool.NullPool)
     with connectable.connect() as connection:
-        _ensure_schema(connection)
-        configure_kwargs = dict(
-            connection=connection,
-            target_metadata=target_metadata,
-            version_table_schema=SCHEMA,
-            transactional_ddl=False if is_postgresql else True,
-        )
-        context.configure(**configure_kwargs)
-        context.run_migrations()
+        migrate(connection)
 
 
 if context.is_offline_mode():

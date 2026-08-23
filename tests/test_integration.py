@@ -52,7 +52,7 @@ class TestEndToEndWorkflow:
         assert task is not None
         assert int(task["current_phase"]) == -1
         workflow_id = uow.workflows.get_default().id
-        uow.create_phase({"workflow_id": workflow_id, "id": "0", "name": "Setup", "phase_order": 0})
+        uow.create_phase({"workflow_id": workflow_id, "id": "0", "name": "Setup", "phase_order": 1})
         uow.add_task_history(task["id"], "0", "done")
         hist = uow.get_task_history(task["id"])
         assert len(hist) == 1
@@ -81,7 +81,7 @@ class TestEndToEndWorkflow:
                 "workflow_id": workflow_id,
                 "id": "p2",
                 "name": "P2",
-                "phase_order": 0,
+                "phase_order": 1,
                 "agent_id": agent_id,
                 "execution_type": "parallel",
             }
@@ -108,8 +108,8 @@ class TestEdgeCases:
         uow = SAUnitOfWork(f"sqlite:///{db_path}")
         uow.init()
         wid = uow.workflows.ensure_default_exists("Default Workflow").id
-        uow.create_phase({"workflow_id": wid, "id": "p3", "name": "P3", "phase_order": 0})
-        uow.create_phase({"workflow_id": wid, "id": "p4", "name": "P4", "phase_order": 1})
+        uow.create_phase({"workflow_id": wid, "id": "p3", "name": "P3", "phase_order": 1})
+        uow.create_phase({"workflow_id": wid, "id": "p4", "name": "P4", "phase_order": 2})
         uow.create_instruction({"phase_id": "p3", "step_num": 1, "description": "Step"})
         uow.delete_phase("p3")
         assert uow.get_phase("p3") is None

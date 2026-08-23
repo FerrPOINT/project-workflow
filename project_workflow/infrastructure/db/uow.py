@@ -20,7 +20,6 @@ from project_workflow.domain.repositories import (
     UnitOfWork,
     WorkflowRepository,
 )
-from project_workflow.infrastructure.db.models import Base
 from project_workflow.infrastructure.db.repositories import (
     SAAgentRepository,
     SACheckRepository,
@@ -291,14 +290,13 @@ class SAUnitOfWork(UnitOfWork):
         self.phases.delete(int(phase_id))
 
     def create_all(self) -> None:
-        """Create schema (dev/test helper)."""
+        """Create schema for isolated SQLite tests."""
         bind = self._session.bind
         if bind is None:
             raise RuntimeError("Session has no engine bound")
-        # For PostgreSQL make sure the target schema exists and search_path
-        # is set before creating tables.
+        if bind.dialect.name != "sqlite":
+            raise RuntimeError("SAUnitOfWork.create_all is only available for isolated SQLite tests")
         from .session import ensure_schema
 
         ensure_schema(bind)
-        Base.metadata.create_all(bind)
         return None

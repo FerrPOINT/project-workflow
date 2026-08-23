@@ -11,7 +11,9 @@ from project_workflow.interfaces.ui.app import _health, create_app
 
 
 def test_health_ok():
-    with patch("project_workflow.interfaces.ui.app.get_engine") as mock_engine:
+    with patch("project_workflow.infrastructure.db.session.get_engine") as mock_engine, patch(
+        "project_workflow.infrastructure.db.session.schema_is_ready", return_value=True
+    ):
         conn = MagicMock()
         mock_engine.return_value.connect.return_value.__enter__.return_value = conn
         response = asyncio.run(_health())
@@ -33,7 +35,9 @@ def test_request_logging_middleware():
     client = TestClient(app)
     with patch("project_workflow.interfaces.ui.app.logger") as mock_logger:
         # Health endpoint hits DB, mock engine to avoid real DB.
-        with patch("project_workflow.interfaces.ui.app.get_engine") as mock_engine:
+        with patch("project_workflow.infrastructure.db.session.get_engine") as mock_engine, patch(
+            "project_workflow.infrastructure.db.session.schema_is_ready", return_value=True
+        ):
             conn = MagicMock()
             mock_engine.return_value.connect.return_value.__enter__.return_value = conn
             response = client.get("/health")

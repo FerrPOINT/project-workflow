@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import sys
+
 from project_workflow.config import get_settings
 from project_workflow.infrastructure.db import schema
 from project_workflow.infrastructure.db.session import ensure_migrated, get_engine
@@ -13,7 +15,13 @@ __doc__ = """Upgrade the database and bootstrap packaged catalogs once."""
 def main() -> int:
     settings = get_settings()
     engine = get_engine(settings.DATABASE_URL)
-    ensure_migrated(engine)
+    try:
+        ensure_migrated(engine)
+    except RuntimeError as exc:
+        if str(exc) != "legacy database must be recreated":
+            raise
+        print(str(exc), file=sys.stderr)
+        return 2
     protocol = settings.DATABASE_URL.split(":")[0]
     print(f"Alembic upgraded to head for {protocol}")
 

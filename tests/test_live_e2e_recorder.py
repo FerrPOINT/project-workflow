@@ -365,6 +365,51 @@ def test_submit_rejects_report_without_evidence_refs_before_provider_call(tmp_pa
     ]
 
 
+def test_submit_does_not_record_cycle_for_malformed_supervisor_response(tmp_path, monkeypatch):
+    events = [_session(), *_cycle()[:2]]
+    _write_events(tmp_path, events)
+    report = tmp_path / "report.md"
+    report.write_text("Выполнено.\nEvidence-Refs: A-001\n", encoding="utf-8")
+    monkeypatch.setattr(recorder, "run_supervisor", lambda *_args: (0, {"verdict": "PASS"}, ""))
+    args = type(
+        "Args",
+        (),
+        {"root": str(tmp_path), "task": "TASK-1", "phase": "0.6", "report_file": str(report)},
+    )()
+
+    with pytest.raises(recorder.TranscriptError, match="transition contract"):
+        recorder.command_submit(args)
+
+    assert [event["type"] for event in recorder.read_events(tmp_path)] == [
+        "SESSION",
+        "ASSIGNMENT",
+        "ACTION",
+    ]
+
+
+def test_submit_does_not_record_cycle_when_supervisor_fails(tmp_path, monkeypatch):
+    events = [_session(), *_cycle()[:2]]
+    _write_events(tmp_path, events)
+    report = tmp_path / "report.md"
+    report.write_text("Выполнено.\nEvidence-Refs: A-001\n", encoding="utf-8")
+    payload = {"phase": "0.6", "current_phase": "0.6", "verdict": "BLOCKED", "next_phase": "0.6"}
+    monkeypatch.setattr(recorder, "run_supervisor", lambda *_args: (1, payload, "provider failed"))
+    args = type(
+        "Args",
+        (),
+        {"root": str(tmp_path), "task": "TASK-1", "phase": "0.6", "report_file": str(report)},
+    )()
+
+    with pytest.raises(recorder.TranscriptError, match="did not complete successfully"):
+        recorder.command_submit(args)
+
+    assert [event["type"] for event in recorder.read_events(tmp_path)] == [
+        "SESSION",
+        "ASSIGNMENT",
+        "ACTION",
+    ]
+
+
 def test_parallel_assignment_is_preserved_in_human_dialog():
     cycles = recorder.validate_transcript([_session(), *_cycle()], task="RUN-1")
 
@@ -406,6 +451,25 @@ def test_redaction_does_not_mangle_code_that_builds_authorization_header():
     command = "headers={'Authorization':'Bearer '+os.environ['OPENAI_API_KEY']}"
 
     assert recorder.redact_text(command) == command
+
+
+@pytest.mark.parametrize(
+    ("prefix", "body"),
+    [
+        ("glpat-", "1234567890abcdefghij"),
+        ("ghp_", "1234567890abcdefghijABCD"),
+        ("github_pat_", "1234567890abcdefghij_ABCDE"),
+        ("xoxb-", "1234567890-abcdefghijklmnop"),
+    ],
+)
+def test_redaction_removes_gitlab_github_and_slack_tokens(prefix, body):
+    token = prefix + body
+    assert recorder.redact_text(f"credential={token}") == "credential=[REDACTED]"
+
+
+@pytest.mark.parametrize("text", ["glpat-short", "github_path_value", "xoxb-test-fixture"])
+def test_hosted_token_redaction_preserves_non_secret_near_misses(text):
+    assert recorder.redact_text(text) == text
 
 
 def test_finalize_generates_jsonl_dialog_and_summary(tmp_path):

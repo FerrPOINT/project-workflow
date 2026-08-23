@@ -23,8 +23,8 @@ class OptionalIntMixin:
 
 
 class _PhaseOrderItem(BaseModel):
-    phase_id: int | str
-    phase_order: int
+    phase_id: int = Field(gt=0)
+    phase_order: int = Field(gt=0)
     workflow_id: int | None = Field(default=None)
 
 
@@ -41,15 +41,40 @@ class PhaseCreate(BaseModel, OptionalIntMixin):
     rollback_target: str | None = Field(default=None)
     next_recommendation: str | None = Field(default=None)
 
-    @field_validator("phase_order", "insert_after", mode="before")
+    @field_validator("phase_order", mode="before")
     @classmethod
     def _validate_phase_order(cls, value: Any) -> int | None:
-        return cls._coerce_optional_int(value)
+        if value is None or value == "":
+            return None
+        try:
+            parsed = int(str(value).strip())
+        except (TypeError, ValueError) as exc:
+            raise ValueError("phase_order must be an integer") from exc
+        if parsed <= 0:
+            raise ValueError("phase_order must be positive")
+        return parsed
+
+    @field_validator("insert_after", mode="before")
+    @classmethod
+    def _validate_insert_after(cls, value: Any) -> int | None:
+        if value is None or value == "":
+            return None
+        try:
+            parsed = int(str(value).strip())
+        except (TypeError, ValueError) as exc:
+            raise ValueError("insert_after must be an integer") from exc
+        if parsed < 0:
+            raise ValueError("insert_after must be zero or greater")
+        return parsed
 
     @model_validator(mode="after")
     def _resolve_insert_after(self) -> PhaseCreate:
-        if self.insert_after is not None and self.phase_order is None:
-            self.phase_order = self.insert_after + 1
+        if self.insert_after is None:
+            return self
+        resolved_order = self.insert_after + 1
+        if self.phase_order is not None and self.phase_order != resolved_order:
+            raise ValueError("phase_order conflicts with insert_after")
+        self.phase_order = resolved_order
         return self
 
 
@@ -92,7 +117,12 @@ class ProjectCreate(BaseModel, OptionalIntMixin):
     @field_validator("workflow_id", mode="before")
     @classmethod
     def _validate_workflow_id(cls, value: Any) -> int | None:
-        return cls._coerce_optional_int(value)
+        if value is None or value == "":
+            return None
+        parsed = cls._coerce_optional_int(value)
+        if parsed is None:
+            raise ValueError("workflow_id must be a positive integer")
+        return parsed
 
     @field_validator("key_prefixes", mode="before")
     @classmethod
@@ -139,7 +169,12 @@ class ProjectUpdate(BaseModel, OptionalIntMixin):
     @field_validator("workflow_id", mode="before")
     @classmethod
     def _validate_workflow_id(cls, value: Any) -> int | None:
-        return cls._coerce_optional_int(value)
+        if value is None or value == "":
+            return None
+        parsed = cls._coerce_optional_int(value)
+        if parsed is None:
+            raise ValueError("workflow_id must be a positive integer")
+        return parsed
 
     @field_validator("key_prefixes", mode="before")
     @classmethod

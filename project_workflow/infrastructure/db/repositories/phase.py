@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import select, text
+from sqlalchemy import or_, select, text
 from sqlalchemy.orm import Session, joinedload
 
 from project_workflow.domain import Phase
@@ -110,6 +110,66 @@ class SAPhaseRepository(PhaseRepository):
             select(m.Phase.phase_order).where(m.Phase.workflow_id == workflow_id).order_by(m.Phase.phase_order.desc())
         ).scalar()
         return (max_order or 0) + 1
+
+    def reference_kinds(self, phase_id: int) -> set[str]:
+        row = self._session.get(m.Phase, phase_id)
+        if row is None:
+            raise NotFoundError(f"Phase {phase_id} not found")
+
+        kinds: set[str] = set()
+        current_task = self._session.execute(
+            select(m.Task.id)
+            .join(m.Project, m.Task.project_id == m.Project.id)
+            .where(
+                m.Project.workflow_id == row.workflow_id,
+                or_(m.Task.current_phase == row.code, m.Task.current_phase == str(row.id)),
+            )
+            .limit(1)
+        ).scalar_one_or_none()
+        if current_task is not None:
+            kinds.add("current task")
+
+        history = self._session.execute(
+            select(m.TaskHistory.id).where(m.TaskHistory.phase_id == phase_id).limit(1)
+        ).scalar_one_or_none()
+        if history is not None:
+            kinds.add("task history")
+
+        run = self._session.execute(
+            select(m.SupervisorRun.id)
+            .where(
+                or_(
+                    m.SupervisorRun.phase_id == phase_id,
+                    m.SupervisorRun.next_phase_id == phase_id,
+                    m.SupervisorRun.rollback_phase_id == phase_id,
+                )
+            )
+            .limit(1)
+        ).scalar_one_or_none()
+        if run is not None:
+            kinds.add("supervisor run")
+
+        catalog_link = self._session.execute(
+            select(m.Phase.id)
+            .where(
+                m.Phase.workflow_id == row.workflow_id,
+                m.Phase.id != phase_id,
+                or_(m.Phase.parallel_with == row.code, m.Phase.rollback_target == row.code),
+            )
+            .limit(1)
+        ).scalar_one_or_none()
+        if catalog_link is not None:
+            kinds.add("phase link")
+        return kinds
+
+    def resequence(self, workflow_id: int) -> None:
+        rows = self._session.execute(
+            select(m.Phase)
+            .where(m.Phase.workflow_id == workflow_id)
+            .order_by(m.Phase.phase_order, m.Phase.id)
+        ).scalars()
+        for order, row in enumerate(rows, 1):
+            row.phase_order = order
 
     def get_checks(self, phase_id: int) -> Sequence[dict[str, Any]]:
         rows = self._session.execute(select(m.Check).where(m.Check.phase_id == phase_id)).scalars().all()

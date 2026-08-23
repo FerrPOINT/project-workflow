@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -314,7 +314,8 @@ class TestApiErrorPaths:
         assert response.json()["ok"] is False
 
     def test_health_endpoint_ok(self):
-        response = client.get("/health")
+        with patch("project_workflow.infrastructure.db.session.schema_is_ready", return_value=True):
+            response = client.get("/health")
         assert response.status_code == 200
         data = response.json()
         assert data["ok"] is True
@@ -331,7 +332,8 @@ class TestApiErrorPaths:
         data = response.json()
         assert data["ok"] is False
         assert data["database"] == "error"
-        assert "db down" in data["error"]
+        assert data["error_code"] == "database-unavailable"
+        assert "db down" not in response.text
 
     def test_api_workflow_create_missing_name(self):
         response = client.post("/api/workflows", json={})

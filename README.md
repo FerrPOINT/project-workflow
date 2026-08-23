@@ -124,8 +124,18 @@ sudo systemctl daemon-reload
 sudo systemctl restart project-workflow-ui.service
 ```
 
-Перед первым запуском `scripts/init_db.py` применяет `alembic upgrade head` и заполняет
-каталоги только в пустой БД. Последующие запуски не перезаписывают изменения из UI.
+Перед первым запуском `scripts/init_db.py` применяет единственную baseline migration
+`0001_initial`, загружает packaged-каталог и создаёт default project. Повторный запуск
+идемпотентен и не перезаписывает изменения из UI.
+
+Старые Alembic revision намеренно не поддерживаются. При обнаружении прежней или
+неверсионированной схемы инициализация завершается сообщением
+`legacy database must be recreated`; автоматические `drop` и `stamp` не выполняются.
+Перед запуском новой версии существующую схему или Compose volume нужно явно
+пересоздать по [reset-runbook](docs/database-reset.md). Импорт прежних данных не предусмотрен.
+
+В Compose схема и каталог создаются отдельным сервисом `migrate`; API стартует только
+после его успешного завершения.
 
 ### Hermes-профили агентов
 
@@ -177,10 +187,10 @@ flowchart TD
 | Проверка | Команда | Статус |
 |---|---|---|
 | Lint | `ruff check .` | **green** |
-| Type check | `mypy project_workflow scripts` | **green, 85 source files** |
-| Tests | `pytest -q --timeout=60` | **900 passed, 15 integration deselected** |
-| PostgreSQL integration | `pytest -q -m integration tests/test_postgres_integration.py --timeout=120` | **15 passed** |
-| Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` | **95.50%** |
+| Type check | `mypy project_workflow scripts` | **без ошибок** |
+| Tests | `pytest -q --timeout=60` | **без падений** |
+| PostgreSQL integration | `pytest -q -m integration tests/test_postgres_integration.py --timeout=120` | **без падений** |
+| Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` | **не ниже 90%** |
 | Systemd UI health | `curl http://localhost:8811/api/tasks` | **200** |
 
 <a name="roadmap"></a>
@@ -188,11 +198,11 @@ flowchart TD
 
 - [x] Конфигурация на Pydantic Settings (`DATABASE_URL` required)
 - [x] SQLAlchemy-модели, репозитории и unit-of-work
-- [x] Alembic-миграции + `scripts/init_db.py` для автоматического baseline
+- [x] Одна Alembic baseline migration + единый идемпотентный `scripts/init_db.py`
 - [x] Docker Compose: Postgres + migrate + UI
 - [x] UI/API переведены на SQLAlchemy-сервисы
 - [x] Один runtime dataflow: CLI/UI → Supervisor → OpenAI-compatible evaluator → PostgreSQL
-- [x] Полный suite: 900 тестов green + 15 PostgreSQL integration tests
+- [x] Полный pytest suite и отдельный PostgreSQL integration gate
 - [x] Postgres-интеграционные тесты
 - [x] `SupervisorEngine` и supervisor-модули собраны в пакет `project_workflow/supervisor/`
 - [x] API-тесты на все UI routes
@@ -205,7 +215,7 @@ flowchart TD
 - [x] GitLab Merge Request contract: Hermes создаёт MR, Maintainer вручную merge, Hermes проверяет SHA и pipeline
 - [x] 27 seed-managed фаз связаны с шестью именованными Hermes profiles
 - [x] JSON `step` отдаёт полный `phase_contract`, включая `skills`, profile и детали parallel-участников
-- [x] Forward-миграция пустых skill-рекомендаций существующей PostgreSQL без перезаписи UI-значений
+- [x] Packaged seed загружается только при bootstrap пустой схемы
 
 ## Установка
 

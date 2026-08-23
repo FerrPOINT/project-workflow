@@ -40,6 +40,7 @@ class SAProjectRepository(ProjectRepository):
             workflow_id=data["workflow_id"],
             code=data["code"],
             name=data["name"],
+            description=data.get("description", ""),
             key_prefixes=json.dumps([str(p) for p in prefixes], ensure_ascii=False),
         )
         self._session.add(item)
@@ -56,6 +57,8 @@ class SAProjectRepository(ProjectRepository):
             row.code = data["code"]
         if "name" in data:
             row.name = data["name"]
+        if "description" in data:
+            row.description = data["description"]
         if "key_prefixes" in data:
             prefixes = data["key_prefixes"]
             row.key_prefixes = json.dumps([str(p) for p in prefixes], ensure_ascii=False)

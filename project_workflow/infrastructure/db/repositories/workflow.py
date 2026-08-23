@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from project_workflow.domain import Workflow
@@ -39,6 +39,12 @@ class SAWorkflowRepository(WorkflowRepository):
         row = self._session.execute(select(m.Workflow).where(m.Workflow.is_default == 1)).scalar_one_or_none()
         return _row_to_workflow(row) if row else None
 
+    def lock(self, workflow_id: int) -> Workflow | None:
+        row = self._session.execute(
+            select(m.Workflow).where(m.Workflow.id == workflow_id).with_for_update()
+        ).scalar_one_or_none()
+        return _row_to_workflow(row) if row else None
+
     def create(self, data: dict[str, Any]) -> int:
         item = m.Workflow(
             name=data["name"],
@@ -64,17 +70,6 @@ class SAWorkflowRepository(WorkflowRepository):
         row = self._session.get(m.Workflow, workflow_id)
         if row is None:
             raise NotFoundError(f"Workflow {workflow_id} not found")
-        # Legacy schema may not have ON DELETE CASCADE on phase/workflow FKs, so
-        # delete child phases and their content rows explicitly.
-        for child_table in ("instructions", "checks", "evidence"):
-            self._session.execute(
-                text(f"DELETE FROM {child_table} WHERE phase_id IN (SELECT id FROM phases WHERE workflow_id = :wid)"),
-                {"wid": workflow_id},
-            )
-        self._session.execute(
-            text("DELETE FROM phases WHERE workflow_id = :wid"),
-            {"wid": workflow_id},
-        )
         self._session.delete(row)
 
     def ensure_default_exists(self, name: str) -> Workflow:

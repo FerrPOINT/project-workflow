@@ -34,8 +34,8 @@ def _blocked(exc: Exception, raw: dict[str, Any] | None = None) -> LlmVerdict:
     )
 
 
-def _replay(engine: Any, task_id: int, fingerprint: str) -> dict[str, Any] | None:
-    run = engine.db.supervisor_runs.get_by_fingerprint(task_id, fingerprint)
+def _replay(engine: Any, task_id: int, phase_id: int, fingerprint: str) -> dict[str, Any] | None:
+    run = engine.db.supervisor_runs.get_by_fingerprint(task_id, phase_id, fingerprint)
     response = getattr(run, "response", None) if run is not None else None
     if not isinstance(response, dict):
         return None
@@ -82,8 +82,11 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         )
 
     task_id = int(engine.task["id"])
+    if phase.id is None:
+        raise ValueError("Current phase is not persisted")
+    phase_id = phase.id
     fingerprint = _report_fingerprint(task_id, report)
-    replayed = _replay(engine, task_id, fingerprint)
+    replayed = _replay(engine, task_id, phase_id, fingerprint)
     if replayed is not None:
         return replayed
 
@@ -208,7 +211,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         engine.db.commit()
     except IntegrityError:
         engine.db.rollback()
-        replayed = _replay(engine, task_id, fingerprint)
+        replayed = _replay(engine, task_id, phase_id, fingerprint)
         if replayed is not None:
             return replayed
         raise

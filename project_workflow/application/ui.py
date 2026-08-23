@@ -198,6 +198,7 @@ class UIDataService:
                     "task_key": t["task_key"],
                     "title": t.get("title", ""),
                     "project_id": t.get("project_id"),
+                    "workflow_id": workflow_id,
                     "project_code": project_code,
                     "project_name": project_name,
                     "current_phase_name": current.get("name", current_phase_id),

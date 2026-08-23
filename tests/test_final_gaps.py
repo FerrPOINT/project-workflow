@@ -141,13 +141,8 @@ class TestSessionFinalGaps:
     def test_ensure_schema_postgresql_engine(self):
         engine = MagicMock()
         engine.dialect.name = "postgresql"
-        with patch("project_workflow.infrastructure.db.session.get_settings") as gs:
-            gs.return_value.DB_SCHEMA = "public"
-            with patch.object(engine, "begin") as mock_begin:
-                conn = MagicMock()
-                mock_begin.return_value.__enter__.return_value = conn
-                ensure_schema(engine)
-        conn.exec_driver_sql.assert_any_call("CREATE SCHEMA IF NOT EXISTS public")
+        with pytest.raises(RuntimeError, match="isolated SQLite tests"):
+            ensure_schema(engine)
 
 
 class TestWorkflowServiceFinalGaps:

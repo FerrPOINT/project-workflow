@@ -174,20 +174,6 @@ class TestSessionHelpers:
             mock_upgrade.assert_called_once()
         reset_engine()
 
-    def test_stamp_head_mocks_alembic(self, tmp_path):
-        from unittest.mock import patch
-
-        from project_workflow.infrastructure.db.session import stamp_head
-
-        engine = get_engine(f"sqlite:///{tmp_path}/test.db")
-        with (
-            patch("project_workflow.infrastructure.db.session.command.stamp") as mock_stamp,
-            patch("project_workflow.infrastructure.db.session.Config"),
-        ):
-            stamp_head(engine)
-            mock_stamp.assert_called_once()
-        reset_engine()
-
     def test_ensure_migrated_postgresql_branch(self, tmp_path):
         from unittest.mock import MagicMock, patch
 
@@ -197,11 +183,12 @@ class TestSessionHelpers:
         fake_engine.url = "postgresql://u:***@h/d"
         with (
             patch("project_workflow.infrastructure.db.session._is_sqlite", return_value=False),
+            patch("project_workflow.infrastructure.db.session.database_revisions", return_value=set()),
             patch("project_workflow.infrastructure.db.session.run_alembic_command") as mock_run,
             patch("project_workflow.infrastructure.db.session.get_engine", return_value=fake_engine),
         ):
             ensure_migrated(fake_engine)
-        fake_engine.begin().__enter__().exec_driver_sql.assert_called_once()
+        fake_engine.begin.assert_not_called()
         mock_run.assert_called_once_with("upgrade", fake_engine)
 
     def test_ensure_schema_postgresql_connection(self):
@@ -211,15 +198,12 @@ class TestSessionHelpers:
 
         fake_conn = MagicMock()
         fake_conn.dialect.name = "postgresql"
-        with (
-            patch(
-                "project_workflow.infrastructure.db.session.get_settings",
-                return_value=type("S", (), {"DB_SCHEMA": "test_schema"})(),
-            ),
-            patch("project_workflow.infrastructure.db.session.Base.metadata.create_all"),
+        with patch(
+            "project_workflow.infrastructure.db.session.get_settings",
+            return_value=type("S", (), {"DB_SCHEMA": "test_schema"})(),
         ):
-            ensure_schema(fake_conn)
-        fake_conn.begin().__enter__().exec_driver_sql.assert_called()
+            with pytest.raises(RuntimeError, match="isolated SQLite tests"):
+                ensure_schema(fake_conn)
 
     def test_reset_engine_clears_cache(self, tmp_path):
         db = tmp_path / "test.db"

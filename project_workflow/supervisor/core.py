@@ -419,6 +419,7 @@ class SupervisorEngine:
             return
         self.task = self._task_service.get_task(self.task["id"]) or self.task
         self.current_phase = self._resolve_current_phase()
+        self._cache.invalidate()
 
     def evaluate(self, report: str) -> dict:
         if self.task and self.task.get("status") == "done":

@@ -22,15 +22,22 @@ from project_workflow.interfaces.ui.schemas import (
 def test_phase_create_insert_after():
     p = PhaseCreate(insert_after=3)
     assert p.phase_order == 4
+    first = PhaseCreate(insert_after=0)
+    assert first.phase_order == 1
+
+
+def test_phase_create_rejects_conflicting_order_fields():
+    with pytest.raises(ValueError, match="phase_order conflicts with insert_after"):
+        PhaseCreate(phase_order=3, insert_after=0)
 
 
 def test_phase_create_phase_order_coercion():
     p = PhaseCreate(phase_order="5")
     assert p.phase_order == 5
-    p2 = PhaseCreate(phase_order="bad")
-    assert p2.phase_order is None
-    p3 = PhaseCreate(phase_order="0")
-    assert p3.phase_order is None
+    with pytest.raises(ValueError):
+        PhaseCreate(phase_order="bad")
+    with pytest.raises(ValueError):
+        PhaseCreate(phase_order="0")
 
 
 def test_phase_update_fields():
@@ -60,6 +67,14 @@ def test_project_create_invalid_prefix():
         ProjectCreate(code="PRJ", key_prefixes=["a"])
     with pytest.raises(ValueError, match="Invalid prefix"):
         ProjectCreate(code="PRJ", key_prefixes=["1A"])
+
+
+@pytest.mark.parametrize("value", ["bad", 0, -1])
+def test_project_workflow_id_rejects_invalid_explicit_values(value):
+    with pytest.raises(ValueError, match="positive integer"):
+        ProjectCreate(code="PRJ", key_prefixes=["PRJ"], workflow_id=value)
+    with pytest.raises(ValueError, match="positive integer"):
+        ProjectUpdate(workflow_id=value)
 
 
 def test_project_update_optional_prefixes():

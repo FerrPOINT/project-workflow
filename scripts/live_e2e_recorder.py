@@ -33,6 +33,10 @@ SENSITIVE_KEYS = {
 EVIDENCE_RE = re.compile(r"^Evidence-Refs:\s*([A-Z0-9_, -]+)$", re.MULTILINE)
 ACTION_ID_RE = re.compile(r"^A-\d{3,}$")
 MAX_EXCERPT = 2_000
+HOSTED_TOKEN_RE = re.compile(
+    r"\b(?:glpat-[A-Za-z0-9_-]{16,}|github_pat_[A-Za-z0-9_]{20,}|"
+    r"gh[pousr]_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{16,})\b"
+)
 
 
 class TranscriptError(ValueError):
@@ -47,6 +51,7 @@ def redact_text(value: str) -> str:
     """Remove common credentials and personal identifiers from log text."""
     value = re.sub(r"(?i)(bearer\s+)[A-Z0-9._~+/=-]+", r"\1[REDACTED]", value)
     value = re.sub(r"\bsk-[A-Za-z0-9_-]{16,}\b", "[REDACTED]", value)
+    value = HOSTED_TOKEN_RE.sub("[REDACTED]", value)
     value = re.sub(r"(?i)(://[^:/\s]+:)[^@/\s]+@", r"\1[REDACTED]@", value)
     value = re.sub(
         r"(?i)\b(api[_-]?key|password|secret|token)\s*([:=])\s*([^\s,;]+)",
@@ -96,10 +101,16 @@ def read_events(root: Path) -> list[dict[str, Any]]:
 
 def append_event(root: Path, event: dict[str, Any]) -> dict[str, Any]:
     """Append one redacted event to the machine transcript."""
+    return append_events(root, [event])[0]
+
+
+def append_events(root: Path, events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Append one fully serialized redacted event batch with a single write."""
     root.mkdir(parents=True, exist_ok=True)
-    stored = {"timestamp": _now(), **redact(event)}
+    stored = [{"timestamp": _now(), **redact(event)} for event in events]
+    payload = "".join(json.dumps(event, ensure_ascii=False) + "\n" for event in stored)
     with (root / "transcript.jsonl").open("a", encoding="utf-8", newline="\n") as stream:
-        stream.write(json.dumps(stored, ensure_ascii=False) + "\n")
+        stream.write(payload)
     return stored
 
 
@@ -595,21 +606,25 @@ def command_submit(args: argparse.Namespace) -> None:
             f"refs={sorted(refs)}, actions={sorted(current_action_ids)}"
         )
 
-    append_event(root, {"type": "REPORT", "phase": args.phase, "report": report, "evidence_refs": sorted(refs)})
     code, payload, stderr = run_supervisor(args.task, report)
-    append_event(
+    if code != 0:
+        raise TranscriptError("Supervisor did not complete successfully")
+    required_fields = {"phase", "current_phase", "verdict", "next_phase"}
+    if not required_fields.issubset(payload) or payload.get("phase") != args.phase:
+        raise TranscriptError("Supervisor response is missing a valid transition contract")
+    append_events(
         root,
-        {"type": "EVALUATOR", "phase": args.phase, "exit_code": code, "payload": payload, "stderr": stderr},
-    )
-    append_event(
-        root,
-        {
-            "type": "TRANSITION",
-            "phase": args.phase,
-            "verdict": payload.get("verdict"),
-            "from_phase": payload.get("phase"),
-            "to_phase": payload.get("next_phase"),
-        },
+        [
+            {"type": "REPORT", "phase": args.phase, "report": report, "evidence_refs": sorted(refs)},
+            {"type": "EVALUATOR", "phase": args.phase, "exit_code": code, "payload": payload, "stderr": stderr},
+            {
+                "type": "TRANSITION",
+                "phase": args.phase,
+                "verdict": payload.get("verdict"),
+                "from_phase": payload.get("phase"),
+                "to_phase": payload.get("next_phase"),
+            },
+        ],
     )
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     if code != 0 or payload.get("verdict") != "PASS":
