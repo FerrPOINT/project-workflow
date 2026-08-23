@@ -110,7 +110,7 @@ class TestPostgresSession:
         inspector = inspect(engine)
         columns = {column["name"] for column in inspector.get_columns("agents", schema="project_workflow")}
         indexes = {index["name"] for index in inspector.get_indexes("agents", schema="project_workflow")}
-        assert version == "9b71d2e4c6a0"
+        assert version == "d4e8f1a2b703"
         assert "hermes_profile" in columns
         assert "uq_agents_hermes_profile" in indexes
 
@@ -198,8 +198,17 @@ class TestPostgresSession:
                     "JOIN project_workflow.workflows w ON w.id = p.workflow_id WHERE p.code = 'RUN'"
                 )
             ).one()
+            instruction_skills = conn.execute(
+                text(
+                    "SELECT i.skills FROM project_workflow.instructions i "
+                    "JOIN project_workflow.phases p ON p.id = i.phase_id "
+                    "JOIN project_workflow.workflows w ON w.id = p.workflow_id "
+                    "WHERE w.name = 'sdlc-business-tech-v1'"
+                )
+            ).scalars()
+            catalog_skills = [skill for raw in instruction_skills for skill in json.loads(raw or "[]")]
 
-        assert revision == "9b71d2e4c6a0"
+        assert revision == "d4e8f1a2b703"
         assert [(row.name, row.is_default) for row in workflows] == [
             ("legacy-27-phase", 0),
             ("sdlc-business-tech-v1", 1),
@@ -211,6 +220,8 @@ class TestPostgresSession:
         assert run.report == "historical audit"
         assert run_project.name == "sdlc-business-tech-v1"
         assert json.loads(run_project.key_prefixes) == ["RUN"]
+        assert "rtech" not in catalog_skills
+        assert catalog_skills.count("using-rtech") == 5
 
     def test_hermes_profile_migration_preserves_agents_and_enforces_unique_owner(self, pg_url):
         engine = get_engine(pg_url)
@@ -489,7 +500,7 @@ class TestPostgresSession:
             version = conn.execute(text("SELECT version_num FROM project_workflow.alembic_version")).scalar_one()
         tables = set(inspect(engine).get_table_names(schema="project_workflow"))
 
-        assert version == "9b71d2e4c6a0"
+        assert version == "d4e8f1a2b703"
         assert not any(table.endswith("_v2") for table in tables)
 
     def test_catalog_upgrade_replaces_legacy_contracts_and_preserves_audit(self, pg_url):
@@ -598,7 +609,7 @@ class TestPostgresSession:
                 ),
                 {"workflow_id": workflow_id},
             ).scalar_one()
-        assert revision == "9b71d2e4c6a0"
+        assert revision == "d4e8f1a2b703"
         assert upgraded.id == phase_id
         assert upgraded.name == "Runtime Readiness"
         active_contract = upgraded.string_agg.casefold()
@@ -729,7 +740,7 @@ class TestPostgresSession:
                 {"instruction_id": custom_instruction_id},
             ).scalar_one()
 
-        assert revision == "9b71d2e4c6a0"
+        assert revision == "d4e8f1a2b703"
         assert [json.loads(row.skills) for row in migrated] == [
             ["project-workflow-executor", "agent-workflow-patterns"],
             ["workflow-systematic-debugging"],
