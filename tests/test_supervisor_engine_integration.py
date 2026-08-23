@@ -29,16 +29,16 @@ def supervisor_db(tmp_path, monkeypatch):
 
 class TestSupervisorEngineIntegration:
     def test_create_if_missing_true_creates_task_for_known_project(self, supervisor_db):
-        engine = SupervisorEngine("TASK-NEW", create_if_missing=True)
+        engine = SupervisorEngine("RUN-NEW", create_if_missing=True)
         assert engine.task is not None
-        assert engine.task["task_key"] == "TASK-NEW"
+        assert engine.task["task_key"] == "RUN-NEW"
 
     def test_create_if_missing_false_raises_when_task_missing(self, supervisor_db):
-        with pytest.raises(ValueError, match="Task TASK-MISSING not found"):
-            SupervisorEngine("TASK-MISSING", create_if_missing=False)
+        with pytest.raises(ValueError, match="Task RUN-MISSING not found"):
+            SupervisorEngine("RUN-MISSING", create_if_missing=False)
 
     def test_resolve_project_unknown_monkeypatched(self, supervisor_db, monkeypatch):
-        engine = SupervisorEngine("TASK-1", create_if_missing=True)
+        engine = SupervisorEngine("RUN-1", create_if_missing=True)
         monkeypatch.setattr(engine._task_service, "get_task_by_key", lambda *_a, **_kw: None)
         monkeypatch.setattr(engine, "_resolve_project", lambda: None)
         with pytest.raises(ValueError, match="Cannot resolve project"):
@@ -59,7 +59,9 @@ class TestSupervisorEngineIntegration:
     def test_evaluate_partial_on_real_phase(self, supervisor_db, supervisor_llm):
         uow = SAUnitOfWork(supervisor_db)
         project = uow.create_project({"code": "AAT", "name": "AAT", "key_prefixes": ["AAT"]})
-        uow.create_task({"task_key": "AAT-PARTIAL", "title": "Partial", "project_id": project["id"]})
+        uow.create_task(
+            {"task_key": "AAT-PARTIAL", "title": "Partial", "project_id": project["id"], "current_phase": "1.INTAKE"}
+        )
         uow.close()
 
         engine = SupervisorEngine("AAT-PARTIAL")
@@ -70,7 +72,9 @@ class TestSupervisorEngineIntegration:
     def test_evaluate_blocker_detected(self, supervisor_db, supervisor_llm):
         uow = SAUnitOfWork(supervisor_db)
         project = uow.create_project({"code": "AAT", "name": "AAT", "key_prefixes": ["AAT"]})
-        uow.create_task({"task_key": "AAT-BLOCK", "title": "Block", "project_id": project["id"]})
+        uow.create_task(
+            {"task_key": "AAT-BLOCK", "title": "Block", "project_id": project["id"], "current_phase": "1.INTAKE"}
+        )
         uow.close()
 
         engine = SupervisorEngine("AAT-BLOCK")

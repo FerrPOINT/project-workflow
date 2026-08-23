@@ -11,7 +11,6 @@ from sqlalchemy.exc import IntegrityError
 from ..domain.exceptions import ConcurrentTransitionError
 from ..infrastructure.llm import LlmVerdict, OpenAICompatibleClient, PromptBuilder, ResponseParser
 from .checks import normalize_text
-from .contracts import PhaseContractBuilder
 from .models import Phase
 from .types import VERDICT_LABELS
 
@@ -65,7 +64,7 @@ def _concurrent_result(result: dict[str, Any]) -> dict[str, Any]:
 
 def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any]:
     """Evaluate once; the workflow remains the only owner of routing."""
-    builder = PhaseContractBuilder(engine.all_phases)
+    builder = engine.contract_builder
     group = builder.get_parallel_group(phase) if phase.execution_type == "parallel" else [phase]
     current_contract = builder.build_parallel(group) if len(group) > 1 else builder.build(phase)
     evaluation_phase = phase

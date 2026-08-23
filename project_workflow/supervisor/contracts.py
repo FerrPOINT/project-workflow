@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from project_workflow import config
 from project_workflow.domain.phase_grouping import group_parallel_phases
 
 from .models import Phase
@@ -40,11 +41,20 @@ def skills_from_phase(phase: Phase) -> list[str]:
     return skills
 
 
-def phase_to_dict(phase: Phase) -> dict[str, Any]:
+def actor_from_phase(phase: Phase) -> str:
+    """Return the executor kind without turning Supervisor into an executor."""
+    if phase.delegate and phase.delegate.agent == config.CODEX_OPERATOR_AGENT:
+        return "codex_operator"
+    return "hermes"
+
+
+def phase_to_dict(phase: Phase, workflow_revision: str = "") -> dict[str, Any]:
     return {
         "id": phase.id,
         "code": phase.code,
         "name": phase.name,
+        "workflow_revision": workflow_revision,
+        "actor": actor_from_phase(phase),
         "description": phase.description,
         "instructions": [text_from_instruction(item) for item in phase.instructions],
         "checks": [text_from_check(item) for item in phase.checks],
@@ -62,8 +72,9 @@ def phase_to_dict(phase: Phase) -> dict[str, Any]:
 class PhaseContractBuilder:
     """Builds PhaseContract from DB Phase models."""
 
-    def __init__(self, all_phases: list[Phase]):
+    def __init__(self, all_phases: list[Phase], workflow_revision: str = ""):
         self.all_phases = all_phases
+        self.workflow_revision = workflow_revision
         self._phase_map: dict[str, Phase] | None = None
 
     @property
@@ -77,6 +88,8 @@ class PhaseContractBuilder:
         return PhaseContract(
             phase_code=phase.code,
             phase_name=phase.name,
+            workflow_revision=self.workflow_revision,
+            actor=actor_from_phase(phase),
             description=phase.description,
             instructions=[text_from_instruction(item) for item in phase.instructions],
             required_checks=[text_from_check(item) for item in phase.checks],
@@ -95,6 +108,7 @@ class PhaseContractBuilder:
         return PhaseContract(
             phase_code=phase_code,
             phase_name="Unknown phase",
+            workflow_revision=self.workflow_revision,
             description="",
             instructions=[],
             required_checks=[],
@@ -125,6 +139,8 @@ class PhaseContractBuilder:
                 {
                     "phase_code": ph.code,
                     "phase_name": ph.name,
+                    "workflow_revision": self.workflow_revision,
+                    "actor": actor_from_phase(ph),
                     "description": ph.description,
                     "instructions": [t for t in ph_instructions if t],
                     "required_checks": [t for t in ph_checks if t],
@@ -143,6 +159,8 @@ class PhaseContractBuilder:
         return PhaseContract(
             phase_code=first.code,
             phase_name=f"Parallel group: {', '.join(p.code for p in group)}",
+            workflow_revision=self.workflow_revision,
+            actor=actor_from_phase(first),
             description="\n".join(f"- {p.code}: {p.description or '-'}" for p in group),
             instructions=instructions or ["Нет отдельных инструкций — следуй описаниям фаз и обязательным проверкам."],
             required_checks=checks or ["Нет явных checks."],

@@ -19,7 +19,7 @@ from project_workflow.supervisor.models import Phase, PhaseCheck, PhaseEvidence,
 @pytest.fixture
 def engine():
     with nullcontext():
-        eng = SupervisorEngine("TASK-1")
+        eng = SupervisorEngine("RUN-1")
         eng.all_phases = [
             Phase(
                 id=1,
@@ -320,7 +320,7 @@ class TestRecordParallelTransition:
 class TestEvaluateEdgeCases:
     def test_orphan_phase_returns_blocked(self):
         with nullcontext():
-            engine = SupervisorEngine("TASK-1")
+            engine = SupervisorEngine("RUN-1")
             engine.current_phase = "orphan"
             engine.phase_map = {}
             engine.all_phases = []
@@ -332,7 +332,7 @@ class TestEvaluateEdgeCases:
 
     def test_sync_evaluate_pass(self, supervisor_llm):
         with nullcontext():
-            engine = SupervisorEngine("TASK-1")
+            engine = SupervisorEngine("RUN-1")
             ph = Phase(
                 id=1,
                 code="-1",
@@ -360,7 +360,7 @@ class TestEvaluateEdgeCases:
 
     def test_parallel_evaluate_pass(self, supervisor_llm):
         with nullcontext():
-            engine = SupervisorEngine("TASK-1")
+            engine = SupervisorEngine("RUN-1")
             ph_a = Phase(
                 id=1,
                 code="1",
@@ -415,7 +415,7 @@ class TestEvaluateEdgeCases:
 
     def test_parallel_evaluate_partial_stays(self, supervisor_llm):
         with nullcontext():
-            engine = SupervisorEngine("TASK-1")
+            engine = SupervisorEngine("RUN-1")
             ph_a = Phase(
                 id=1,
                 code="1",

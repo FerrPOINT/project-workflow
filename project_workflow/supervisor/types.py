@@ -15,6 +15,8 @@ class PhaseContract:
 
     phase_code: str
     phase_name: str
+    workflow_revision: str = ""
+    actor: str = "hermes"
     description: str = ""
     instructions: list[str] = field(default_factory=list)
     required_checks: list[str] = field(default_factory=list)
@@ -33,6 +35,8 @@ class PhaseContract:
         return {
             "phase_code": self.phase_code,
             "phase_name": self.phase_name,
+            "workflow_revision": self.workflow_revision,
+            "actor": self.actor,
             "description": self.description,
             "instructions": self.instructions,
             "required_checks": self.required_checks,

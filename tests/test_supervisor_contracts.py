@@ -47,6 +47,31 @@ def test_phase_to_dict():
     assert d["skills"] == ["repo-workflow"]
 
 
+def test_contract_exposes_workflow_revision_and_actor_without_fake_operator_profile():
+    hermes = Phase(
+        code="1.INTAKE",
+        name="Intake",
+        delegate=PhaseDelegate(agent="sdlc-orchestrator", hermes_profile="sdlc-orchestrator"),
+    )
+    operator = Phase(
+        code="3.DOR_GATE",
+        name="Definition of Ready",
+        delegate=PhaseDelegate(agent="codex-operator", hermes_profile=None),
+    )
+    builder = PhaseContractBuilder([hermes, operator], workflow_revision="sdlc-business-tech-v1")
+
+    hermes_contract = builder.build(hermes).to_dict()
+    operator_contract = builder.build(operator).to_dict()
+
+    assert hermes_contract["workflow_revision"] == "sdlc-business-tech-v1"
+    assert hermes_contract["actor"] == "hermes"
+    assert hermes_contract["hermes_profile"] == "sdlc-orchestrator"
+    assert operator_contract["workflow_revision"] == "sdlc-business-tech-v1"
+    assert operator_contract["actor"] == "codex_operator"
+    assert operator_contract["delegate_agent"] == "codex-operator"
+    assert operator_contract["hermes_profile"] is None
+
+
 def _make_phases():
     p1 = Phase(code="p1", name="P1", execution_type="sync", next_recommendation="go")
     p2 = Phase(code="p2", name="P2", execution_type="parallel", parallel_with="p3")

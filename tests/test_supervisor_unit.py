@@ -11,8 +11,8 @@ from project_workflow.supervisor import SupervisorEngine
 
 class TestSupervisor:
     def test_init(self):
-        engine = SupervisorEngine("TASK-1")
-        assert engine.task_key == "TASK-1"
+        engine = SupervisorEngine("RUN-1")
+        assert engine.task_key == "RUN-1"
 
     def test_init_does_not_bootstrap_empty_workflow(self, tmp_path):
         from project_workflow.infrastructure.db.uow import SAUnitOfWork
@@ -21,10 +21,10 @@ class TestSupervisor:
         uow = SAUnitOfWork(f"sqlite:///{test_db}")
         uow.create_all()
         workflow_id = uow.workflows.create({"name": "Empty", "description": ""})
-        uow.projects.create({"workflow_id": workflow_id, "code": "task", "name": "Task", "key_prefixes": ["TASK"]})
+        uow.projects.create({"workflow_id": workflow_id, "code": "run", "name": "Run", "key_prefixes": ["RUN"]})
         uow.commit()
         with pytest.raises(ValueError, match="catalog is empty"):
-            SupervisorEngine("TASK-1", uow=uow)
+            SupervisorEngine("RUN-1", uow=uow)
         assert uow.phases.list(workflow_id) == []
 
     def test_get_phase_prompt(self):
@@ -35,7 +35,7 @@ class TestSupervisor:
         ph.is_blocker = False
         ph.is_delegated = False
         ph.instructions = []
-        engine = SupervisorEngine("TASK-1")
+        engine = SupervisorEngine("RUN-1")
         engine.phase_map = {"0": ph}
         engine.all_phases = [ph]
         prompt = engine.get_phase_prompt("0")
@@ -69,7 +69,7 @@ class TestSupervisor:
         ph_b.delegate = None
         ph_b.next_recommendation = "next"
 
-        engine = SupervisorEngine("TASK-1")
+        engine = SupervisorEngine("RUN-1")
         engine.phase_map = {"parallel-a": ph_a, "parallel-b": ph_b}
         engine.all_phases = [ph_a, ph_b]
         engine.current_phase = "parallel-a"
@@ -81,7 +81,7 @@ class TestSupervisor:
         assert "Отчёт по этой группе присылается ОДНИМ сообщением" in prompt
 
     def test_get_full_context(self):
-        engine = SupervisorEngine("TASK-1")
+        engine = SupervisorEngine("RUN-1")
         ctx = engine.get_full_context()
         assert "current_phase" in ctx
         assert "all_phases" in ctx
@@ -93,7 +93,7 @@ class TestPromptAndModels:
         from project_workflow.supervisor.prompt import build_phase_prompt
 
         ctx = {"workflow_name": "W", "cli_actor": {"description": "d", "entrypoint": "e"}}
-        result = build_phase_prompt("TASK-1", {}, [], "1", ctx, phase_id="missing")
+        result = build_phase_prompt("RUN-1", {}, [], "1", ctx, phase_id="missing")
         assert "не найдена" in result
 
     def test_build_phase_prompt_non_current_phase(self):
@@ -102,7 +102,7 @@ class TestPromptAndModels:
 
         phase = Phase(code="2", name="Two", description="Desc", execution_type="sync")
         ctx = {"workflow_name": "W", "current_contract": None, "cli_actor": {"description": "d", "entrypoint": "e"}}
-        result = build_phase_prompt("TASK-1", {"2": phase}, [phase], "1", ctx, phase_id="2")
+        result = build_phase_prompt("RUN-1", {"2": phase}, [phase], "1", ctx, phase_id="2")
         assert "Two" in result
         assert "Desc" in result
 
@@ -123,7 +123,7 @@ class TestPromptAndModels:
             "delegate_agent": None,
         }
         ctx = {"workflow_name": "W", "current_contract": contract, "cli_actor": {"description": "d", "entrypoint": "e"}}
-        result = build_phase_prompt("TASK-1", {"1": phase}, [phase], "1", ctx)
+        result = build_phase_prompt("RUN-1", {"1": phase}, [phase], "1", ctx)
         assert "I1" in result
         assert "C1" in result
         assert "E1" in result

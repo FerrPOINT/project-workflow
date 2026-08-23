@@ -51,7 +51,8 @@ def get_settings() -> Settings:
 
 # Bootstrap-only constants.
 SEED_PATH = _pkg_dir / "references" / "seed.json"
-DEFAULT_WORKFLOW_NAME = "Default Workflow"
-DEFAULT_PROJECT_CODE = "TASK"
-DEFAULT_PROJECT_NAME = "Default Project"
+DEFAULT_WORKFLOW_NAME = "sdlc-business-tech-v1"
+DEFAULT_PROJECT_CODE = "RUN"
+DEFAULT_PROJECT_NAME = "Hermes + Supervisor SDLC"
 DEFAULT_TASK_KEY_PREFIXES = [DEFAULT_PROJECT_CODE]
+CODEX_OPERATOR_AGENT = "codex-operator"

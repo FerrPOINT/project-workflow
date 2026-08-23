@@ -76,7 +76,7 @@ def test_missing_database_configuration_returns_json_blocked(monkeypatch):
         MagicMock(side_effect=ValueError("DATABASE_URL is required")),
     )
 
-    result = runner.invoke(runtime_cli, ["--json", "step", "--task", "TASK-1", "--report", "report"])
+    result = runner.invoke(runtime_cli, ["--json", "step", "--task", "RUN-1", "--report", "report"])
 
     assert result.exit_code == 1
     payload = json.loads(result.output)
@@ -98,8 +98,8 @@ def test_catalog_errors_are_fail_closed_without_llm_or_audit(catalog_state):
             {"project_id": project_id, "task_key": task_key, "current_phase": "missing", "status": "active"}
         )
     else:
-        project = uow.projects.get_by_code("TASK")
-        task_key = "TASK-991"
+        project = uow.projects.get_by_code("RUN")
+        task_key = "RUN-991"
         task_id = uow.tasks.create(
             {"project_id": project.id, "task_key": task_key, "current_phase": "missing", "status": "active"}
         )

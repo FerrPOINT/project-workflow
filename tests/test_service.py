@@ -47,7 +47,7 @@ class TestNormalizeAndSerializeSkills:
 
 class TestSaveInstructions:
     def test_save_and_get_phase_detail(self, svc, fresh_db):
-        phase = fresh_db.phases.get_by_code("1")
+        phase = fresh_db.phases.get_by_code("2.REQUIREMENTS")
         ids = svc.save_instructions(
             phase.id,
             [
@@ -64,7 +64,7 @@ class TestSaveInstructions:
             svc.save_instructions(9999, [{"description": "x"}])
 
     def test_deferred_save_does_not_commit(self, svc, fresh_db, monkeypatch):
-        phase = fresh_db.phases.get_by_code("1")
+        phase = fresh_db.phases.get_by_code("2.REQUIREMENTS")
         commits = 0
 
         def count_commit():
@@ -82,14 +82,14 @@ class TestSaveChecks:
             svc.save_checks(9999, [{"description": "x"}])
 
     def test_save_checks(self, svc, fresh_db):
-        phase = fresh_db.phases.get_by_code("1")
+        phase = fresh_db.phases.get_by_code("2.REQUIREMENTS")
         ids = svc.save_checks(phase.id, [{"description": "Check A"}])
         assert len(ids) == 1
         detail = svc.get_phase_detail(phase.id)
         assert detail["checks"][0]["description"] == "Check A"
 
     def test_save_checks_replaces_previous(self, svc, fresh_db):
-        phase = fresh_db.phases.get_by_code("1")
+        phase = fresh_db.phases.get_by_code("2.REQUIREMENTS")
         svc.save_checks(phase.id, [{"description": "Old"}])
         svc.save_checks(phase.id, [{"description": "New"}])
         detail = svc.get_phase_detail(phase.id)
@@ -103,7 +103,7 @@ class TestSaveEvidence:
             svc.save_evidence(9999, [{"description": "x"}])
 
     def test_save_evidence(self, svc, fresh_db):
-        phase = fresh_db.phases.get_by_code("1")
+        phase = fresh_db.phases.get_by_code("2.REQUIREMENTS")
         ids = svc.save_evidence(phase.id, [{"description": "Screenshot"}])
         assert len(ids) == 1
         detail = svc.get_phase_detail(phase.id)
@@ -119,7 +119,7 @@ class TestGetAllPhases:
 
 class TestUpdatePhase:
     def test_update_phase_metadata(self, svc, fresh_db):
-        phase = fresh_db.phases.get_by_code("1")
+        phase = fresh_db.phases.get_by_code("2.REQUIREMENTS")
         svc.update_phase(phase.id, {"next_recommendation": "Updated"})
         detail = svc.get_phase_detail(phase.id)
         assert detail["next_recommendation"] == "Updated"
@@ -141,79 +141,79 @@ class TestUpdatePhase:
         ]
 
     def test_sync_phase_joins_previous_parallel_component(self, svc, fresh_db):
-        phase = fresh_db.phases.get_by_code("3")
+        phase = fresh_db.phases.get_by_code("7.PLAN_GATE")
 
         svc.update_phase(phase.id, {"execution_type": "parallel"})
 
-        updated = fresh_db.phases.get_by_code("3")
-        assert updated.parallel_with == "2"
-        assert ["1.5", "2", "3"] in self._groups(fresh_db)
+        updated = fresh_db.phases.get_by_code("7.PLAN_GATE")
+        assert updated.parallel_with == "6.TEST_PLAN"
+        assert ["6.SOLUTION", "6.TEST_PLAN", "7.PLAN_GATE"] in self._groups(fresh_db)
 
     def test_sync_phase_before_group_joins_next_parallel_component(self, svc, fresh_db):
-        phase = fresh_db.phases.get_by_code("0.5")
+        phase = fresh_db.phases.get_by_code("4.START")
 
         svc.update_phase(phase.id, {"execution_type": "parallel"})
 
-        updated = fresh_db.phases.get_by_code("0.5")
-        assert updated.parallel_with == "0.6"
-        assert ["0.5", "0.6", "1"] in self._groups(fresh_db)
+        updated = fresh_db.phases.get_by_code("4.START")
+        assert updated.parallel_with == "5.RESEARCH"
+        assert ["4.START", "5.RESEARCH", "5.PREFLIGHT"] in self._groups(fresh_db)
 
     def test_parallel_sync_parallel_round_trip_keeps_original_component(self, svc, fresh_db):
-        phase = fresh_db.phases.get_by_code("1.5")
+        phase = fresh_db.phases.get_by_code("6.SOLUTION")
 
         svc.update_phase(phase.id, {"execution_type": "sync"})
-        detached = fresh_db.phases.get_by_code("1.5")
-        assert detached.parallel_with == "2"
+        detached = fresh_db.phases.get_by_code("6.SOLUTION")
+        assert detached.parallel_with == "6.TEST_PLAN"
 
         svc.update_phase(phase.id, {"execution_type": "parallel"})
 
-        restored = fresh_db.phases.get_by_code("1.5")
-        assert restored.parallel_with == "2"
+        restored = fresh_db.phases.get_by_code("6.SOLUTION")
+        assert restored.parallel_with == "6.TEST_PLAN"
         groups = self._groups(fresh_db)
-        assert ["0.6", "1"] in groups
-        assert ["1.5", "2"] in groups
+        assert ["5.RESEARCH", "5.PREFLIGHT"] in groups
+        assert ["6.SOLUTION", "6.TEST_PLAN"] in groups
 
     def test_sync_phase_without_parallel_neighbor_stays_single(self, svc, fresh_db):
-        phase = fresh_db.phases.get_by_code("-1")
+        phase = fresh_db.phases.get_by_code("1.INTAKE")
 
         svc.update_phase(phase.id, {"execution_type": "parallel"})
 
-        updated = fresh_db.phases.get_by_code("-1")
+        updated = fresh_db.phases.get_by_code("1.INTAKE")
         assert updated.parallel_with is None
-        assert ["-1"] in self._groups(fresh_db)
+        assert ["1.INTAKE"] in self._groups(fresh_db)
 
     def test_explicit_null_does_not_auto_join_parallel_component(self, svc, fresh_db):
-        phase = fresh_db.phases.get_by_code("3")
+        phase = fresh_db.phases.get_by_code("7.PLAN_GATE")
 
         svc.update_phase(phase.id, {"execution_type": "parallel", "parallel_with": None})
 
-        updated = fresh_db.phases.get_by_code("3")
+        updated = fresh_db.phases.get_by_code("7.PLAN_GATE")
         assert updated.parallel_with is None
-        assert ["3"] in self._groups(fresh_db)
+        assert ["7.PLAN_GATE"] in self._groups(fresh_db)
 
     def test_invalid_saved_partner_is_replaced_by_adjacent_component(self, svc, fresh_db):
-        phase = fresh_db.phases.get_by_code("3")
+        phase = fresh_db.phases.get_by_code("7.PLAN_GATE")
         fresh_db.phases.update(phase.id, {"parallel_with": "missing"})
         fresh_db.commit()
 
         svc.update_phase(phase.id, {"execution_type": "parallel"})
 
-        updated = fresh_db.phases.get_by_code("3")
-        assert updated.parallel_with == "2"
+        updated = fresh_db.phases.get_by_code("7.PLAN_GATE")
+        assert updated.parallel_with == "6.TEST_PLAN"
 
     def test_parallel_components_on_both_sides_prefer_previous_deterministically(self, svc, fresh_db):
-        phase = fresh_db.phases.get_by_code("3")
-        following = fresh_db.phases.get_by_code("3.5")
+        phase = fresh_db.phases.get_by_code("7.PLAN_GATE")
+        following = fresh_db.phases.get_by_code("8.IMPLEMENT")
         fresh_db.phases.update(following.id, {"execution_type": "parallel"})
         fresh_db.commit()
 
         svc.update_phase(phase.id, {"execution_type": "parallel"})
 
-        updated = fresh_db.phases.get_by_code("3")
-        assert updated.parallel_with == "2"
+        updated = fresh_db.phases.get_by_code("7.PLAN_GATE")
+        assert updated.parallel_with == "6.TEST_PLAN"
         groups = self._groups(fresh_db)
-        assert ["1.5", "2", "3"] in groups
-        assert ["3.5"] in groups
+        assert ["6.SOLUTION", "6.TEST_PLAN", "7.PLAN_GATE"] in groups
+        assert ["8.IMPLEMENT"] in groups
 
 
 class TestNormalizeSkills:

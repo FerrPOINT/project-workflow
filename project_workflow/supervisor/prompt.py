@@ -168,7 +168,7 @@ def build_phase_prompt(
     if not target_phase:
         return f"Фаза {phase_id or current_phase} не найдена в workflow."
 
-    cb = PhaseContractBuilder(all_phases)
+    cb = PhaseContractBuilder(all_phases, str(ctx.get("workflow_revision") or ctx.get("workflow_name") or ""))
     is_parallel_target = target_phase.execution_type == "parallel"
     if is_parallel_target:
         group = cb.get_parallel_group(target_phase)
@@ -248,7 +248,7 @@ def format_current_phase_instructions(
     if not target_phase:
         return f"Фаза {current_phase} не найдена в workflow."
 
-    cb = PhaseContractBuilder(all_phases)
+    cb = PhaseContractBuilder(all_phases, str(ctx.get("workflow_revision") or ctx.get("workflow_name") or ""))
     is_parallel_target = target_phase.execution_type == "parallel"
     if is_parallel_target:
         group = cb.get_parallel_group(target_phase)

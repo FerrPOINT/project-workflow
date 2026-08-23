@@ -61,7 +61,7 @@ class TestEvaluateGaps:
     def _engine(self):
         engine = MagicMock()
         engine.all_phases = []
-        engine.task_key = "TASK-1"
+        engine.task_key = "RUN-1"
         engine.task = {"id": 1}
         engine.phase_map = {}
         engine._resolve_transition.return_value = (None, None, None)

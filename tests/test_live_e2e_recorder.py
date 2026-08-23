@@ -19,7 +19,7 @@ def _session() -> dict:
     return {
         "timestamp": "2026-08-20T10:00:00+00:00",
         "type": "SESSION",
-        "task": "TASK-1",
+        "task": "RUN-1",
         "metadata": {"head": "abc123", "skills_content_sha": "skills123"},
     }
 
@@ -35,7 +35,7 @@ def _cycle(
         {
             "timestamp": "2026-08-20T10:01:00+00:00",
             "type": "ASSIGNMENT",
-            "task": "TASK-1",
+            "task": "RUN-1",
             "phase": phase,
             "payload": {
                 "ok": True,
@@ -110,7 +110,7 @@ def _write_action_logs(root: Path, events: list[dict]) -> None:
 
 
 def test_validate_transcript_accepts_complete_ordered_cycle():
-    cycles = recorder.validate_transcript([_session(), *_cycle()], task="TASK-1", expected_cycles=1)
+    cycles = recorder.validate_transcript([_session(), *_cycle()], task="RUN-1", expected_cycles=1)
 
     assert len(cycles) == 1
     assert cycles[0]["actions"][0]["id"] == "A-001"
@@ -121,7 +121,7 @@ def test_validate_transcript_accepts_absolute_executor_paths_from_both_platforms
     events = [_session(), *_cycle()]
     events[2]["cwd"] = cwd
 
-    recorder.validate_transcript(events, task="TASK-1", expected_cycles=1)
+    recorder.validate_transcript(events, task="RUN-1", expected_cycles=1)
 
 
 def test_validate_transcript_rejects_relative_executor_path():
@@ -129,7 +129,7 @@ def test_validate_transcript_rejects_relative_executor_path():
     events[2]["cwd"] = "repo/subdir"
 
     with pytest.raises(recorder.TranscriptError, match="absolute path"):
-        recorder.validate_transcript(events, task="TASK-1")
+        recorder.validate_transcript(events, task="RUN-1")
 
 
 @pytest.mark.parametrize("runner", [recorder.run_supervisor, recorder.run_history])
@@ -144,7 +144,7 @@ def test_supervisor_subprocess_forces_utf8_without_mutating_parent_environment(m
     monkeypatch.setenv("PYTHONIOENCODING", "cp1251")
     monkeypatch.setattr(recorder.subprocess, "run", fake_run)
 
-    runner("TASK-1")
+    runner("RUN-1")
 
     assert captured["env"]["LIVE_E2E_SENTINEL"] == "preserved"
     assert captured["env"]["PYTHONIOENCODING"] == "utf-8"
@@ -157,7 +157,7 @@ def test_validate_transcript_rejects_missing_evaluator_transition_field(field):
     events[-2]["payload"].pop(field)
 
     with pytest.raises(recorder.TranscriptError, match="EVALUATOR"):
-        recorder.validate_transcript(events, task="TASK-1")
+        recorder.validate_transcript(events, task="RUN-1")
 
 
 @pytest.mark.parametrize("field", ["phase", "current_phase"])
@@ -166,7 +166,7 @@ def test_validate_transcript_rejects_evaluator_for_another_phase(field):
     events[-2]["payload"][field] = "other"
 
     with pytest.raises(recorder.TranscriptError, match="assigned phase"):
-        recorder.validate_transcript(events, task="TASK-1")
+        recorder.validate_transcript(events, task="RUN-1")
 
 
 def test_validate_transcript_rejects_transition_verdict_mismatch():
@@ -174,7 +174,7 @@ def test_validate_transcript_rejects_transition_verdict_mismatch():
     events[-1]["verdict"] = "BLOCKED"
 
     with pytest.raises(recorder.TranscriptError, match="verdict"):
-        recorder.validate_transcript(events, task="TASK-1")
+        recorder.validate_transcript(events, task="RUN-1")
 
 
 def test_validate_transcript_rejects_transition_target_mismatch():
@@ -182,7 +182,7 @@ def test_validate_transcript_rejects_transition_target_mismatch():
     events[-1]["to_phase"] = "3"
 
     with pytest.raises(recorder.TranscriptError, match="target"):
-        recorder.validate_transcript(events, task="TASK-1")
+        recorder.validate_transcript(events, task="RUN-1")
 
 
 @pytest.mark.parametrize("field", ["verdict", "to_phase"])
@@ -191,7 +191,7 @@ def test_validate_transcript_rejects_missing_transition_field(field):
     events[-1].pop(field)
 
     with pytest.raises(recorder.TranscriptError, match="TRANSITION"):
-        recorder.validate_transcript(events, task="TASK-1")
+        recorder.validate_transcript(events, task="RUN-1")
 
 
 def test_validate_transcript_rejects_legacy_scalar_action():
@@ -201,7 +201,7 @@ def test_validate_transcript_rejects_legacy_scalar_action():
     events[2].pop("command_log")
 
     with pytest.raises(recorder.TranscriptError, match="non-empty argument list"):
-        recorder.validate_transcript(events, task="TASK-1")
+        recorder.validate_transcript(events, task="RUN-1")
 
 
 @pytest.mark.parametrize("missing_field", ["output_excerpt", "command_log"])
@@ -210,7 +210,7 @@ def test_validate_transcript_rejects_incomplete_action_schema(missing_field):
     events[2].pop(missing_field)
 
     with pytest.raises(recorder.TranscriptError, match=missing_field):
-        recorder.validate_transcript(events, task="TASK-1")
+        recorder.validate_transcript(events, task="RUN-1")
 
 
 def test_validate_transcript_rejects_wrong_command_log_path():
@@ -218,7 +218,7 @@ def test_validate_transcript_rejects_wrong_command_log_path():
     events[2]["command_log"] = "command-logs/A-999.log"
 
     with pytest.raises(recorder.TranscriptError, match="command-logs/A-001.log"):
-        recorder.validate_transcript(events, task="TASK-1")
+        recorder.validate_transcript(events, task="RUN-1")
 
 
 def test_action_command_emits_artifact_that_passes_log_validation(tmp_path, capsys):
@@ -228,7 +228,7 @@ def test_action_command_emits_artifact_that_passes_log_validation(tmp_path, caps
         (),
         {
             "root": str(tmp_path),
-            "task": "TASK-1",
+            "task": "RUN-1",
             "phase": "0.6",
             "summary": "Команда выполнена",
             "cwd": str(tmp_path),
@@ -260,7 +260,7 @@ def test_action_subprocess_forces_utf8_without_mutating_parent_environment(tmp_p
         (),
         {
             "root": str(tmp_path),
-            "task": "TASK-1",
+            "task": "RUN-1",
             "phase": "0.6",
             "summary": "UTF-8 output",
             "cwd": str(tmp_path),
@@ -282,7 +282,7 @@ def test_validate_transcript_rejects_report_without_actions():
     del events[2]
 
     with pytest.raises(recorder.TranscriptError, match="no ACTIONS"):
-        recorder.validate_transcript(events, task="TASK-1")
+        recorder.validate_transcript(events, task="RUN-1")
 
 
 def test_validate_open_cycle_rejects_action_for_another_phase():
@@ -299,7 +299,7 @@ def test_validate_transcript_rejects_old_or_foreign_evidence_reference():
     second = _cycle("0.6", action_id="A-002", evidence_refs=["A-001"])
 
     with pytest.raises(recorder.TranscriptError, match="current phase only"):
-        recorder.validate_transcript([_session(), *first, *second], task="TASK-1")
+        recorder.validate_transcript([_session(), *first, *second], task="RUN-1")
 
 
 def test_validate_transcript_rejects_duplicate_action_ids():
@@ -309,7 +309,7 @@ def test_validate_transcript_rejects_duplicate_action_ids():
     second = _cycle("0.6", action_id="A-001")
 
     with pytest.raises(recorder.TranscriptError, match="Duplicate ACTION ID"):
-        recorder.validate_transcript([_session(), *first, *second], task="TASK-1")
+        recorder.validate_transcript([_session(), *first, *second], task="RUN-1")
 
 
 def test_validate_transcript_rejects_evidence_field_text_mismatch():
@@ -317,17 +317,17 @@ def test_validate_transcript_rejects_evidence_field_text_mismatch():
     events[3]["evidence_refs"] = ["A-999"]
 
     with pytest.raises(recorder.TranscriptError, match="exactly match"):
-        recorder.validate_transcript(events, task="TASK-1")
+        recorder.validate_transcript(events, task="RUN-1")
 
 
 def test_session_task_must_match_before_cycle_mutation():
     with pytest.raises(recorder.TranscriptError, match="another task"):
-        recorder._require_session_task([_session()], "TASK-2")
+        recorder._require_session_task([_session()], "RUN-2")
 
 
 def test_init_rejects_task_with_existing_supervisor_history(tmp_path, monkeypatch):
     monkeypatch.setattr(recorder, "run_history", lambda _task: (0, {"ok": True, "count": 1}, ""))
-    args = type("Args", (), {"root": str(tmp_path), "task": "TASK-1", "metadata": "{}"})()
+    args = type("Args", (), {"root": str(tmp_path), "task": "RUN-1", "metadata": "{}"})()
 
     with pytest.raises(SystemExit, match="fresh task"):
         recorder.command_init(args)
@@ -351,7 +351,7 @@ def test_submit_rejects_report_without_evidence_refs_before_provider_call(tmp_pa
     args = type(
         "Args",
         (),
-        {"root": str(tmp_path), "task": "TASK-1", "phase": "0.6", "report_file": str(report)},
+        {"root": str(tmp_path), "task": "RUN-1", "phase": "0.6", "report_file": str(report)},
     )()
 
     with pytest.raises(recorder.TranscriptError, match="Evidence-Refs"):
@@ -366,9 +366,9 @@ def test_submit_rejects_report_without_evidence_refs_before_provider_call(tmp_pa
 
 
 def test_parallel_assignment_is_preserved_in_human_dialog():
-    cycles = recorder.validate_transcript([_session(), *_cycle()], task="TASK-1")
+    cycles = recorder.validate_transcript([_session(), *_cycle()], task="RUN-1")
 
-    dialog = recorder.render_dialog("TASK-1", cycles)
+    dialog = recorder.render_dialog("RUN-1", cycles)
 
     assert "Параллельная группа: 0.6 + 1" in dialog
     assert "Supervisor выдал задание" in dialog
@@ -413,14 +413,14 @@ def test_finalize_generates_jsonl_dialog_and_summary(tmp_path):
     _write_events(tmp_path, events)
     _write_action_logs(tmp_path, events)
 
-    summary = recorder.finalize(tmp_path, "TASK-1", expected_cycles=1)
+    summary = recorder.finalize(tmp_path, "RUN-1", expected_cycles=1)
 
     assert (tmp_path / "transcript.jsonl").is_file()
     assert "Принято" in (tmp_path / "dialog.md").read_text(encoding="utf-8")
     stored_summary = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
     assert summary == stored_summary
     assert stored_summary == {
-        "task": "TASK-1",
+        "task": "RUN-1",
         "generated_at": stored_summary["generated_at"],
         "started_from_sha": "abc123",
         "source_sha": "abc123",
@@ -438,7 +438,7 @@ def test_finalize_rejects_missing_command_log(tmp_path):
     _write_events(tmp_path, [_session(), *_cycle()])
 
     with pytest.raises(recorder.TranscriptError, match="command log is missing"):
-        recorder.finalize(tmp_path, "TASK-1", expected_cycles=1)
+        recorder.finalize(tmp_path, "RUN-1", expected_cycles=1)
 
 
 def test_finalize_rejects_command_log_that_does_not_match_excerpt(tmp_path):
@@ -448,7 +448,7 @@ def test_finalize_rejects_command_log_that_does_not_match_excerpt(tmp_path):
     (tmp_path / "command-logs" / "A-001.log").write_text("different output", encoding="utf-8")
 
     with pytest.raises(recorder.TranscriptError, match="does not match output_excerpt"):
-        recorder.finalize(tmp_path, "TASK-1", expected_cycles=1)
+        recorder.finalize(tmp_path, "RUN-1", expected_cycles=1)
 
 
 def test_log_validation_accepts_redaction_that_expands_a_truncated_prefix(tmp_path):
@@ -465,7 +465,7 @@ def test_log_validation_accepts_redaction_that_expands_a_truncated_prefix(tmp_pa
     log_dir.mkdir()
     (log_dir / "A-001.log").write_text(log_text, encoding="utf-8")
 
-    recorder.finalize(tmp_path, "TASK-1", expected_cycles=1)
+    recorder.finalize(tmp_path, "RUN-1", expected_cycles=1)
 
 
 def test_terminal_pass_summary_reports_done_status():
@@ -473,12 +473,12 @@ def test_terminal_pass_summary_reports_done_status():
     events[-2]["payload"]["next_phase"] = None
     events[-1]["to_phase"] = None
 
-    cycles = recorder.validate_transcript(events, task="TASK-1", expected_cycles=1)
-    summary = recorder.build_summary("TASK-1", events, cycles)
+    cycles = recorder.validate_transcript(events, task="RUN-1", expected_cycles=1)
+    summary = recorder.build_summary("RUN-1", events, cycles)
 
     assert summary["final_status"] == "done"
 
 
 def test_expected_cycle_count_is_enforced():
     with pytest.raises(recorder.TranscriptError, match="Expected 2 cycles, found 1"):
-        recorder.validate_transcript([_session(), *_cycle()], task="TASK-1", expected_cycles=2)
+        recorder.validate_transcript([_session(), *_cycle()], task="RUN-1", expected_cycles=2)

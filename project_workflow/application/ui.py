@@ -387,6 +387,7 @@ class UIDataService:
 
         workflow_id, workflow_phases = self._resolve_task_workflow_id(task, wdb)
         task["workflow_phase_count"] = len(workflow_phases)
+        task["workflow_cycle_count"] = len(_build_parallel_phase_blocks(workflow_phases))
         task["total_phases"] = len(workflow_phases)
 
         history = wdb.get_task_history(task["id"])
@@ -399,6 +400,11 @@ class UIDataService:
             phase for block in task["phase_history_blocks"] for phase in block["phases"]
         ]
         task["completed"] = sum(1 for phase in displayed_history if phase.get("status") == "done")
+        task["completed_cycles"] = sum(
+            1 for block in task["phase_history_blocks"] if block.get("status") == "done"
+        )
+        if task.get("status") == "done":
+            task["completed_cycles"] = task["workflow_cycle_count"]
         task["progress_done"], task["progress_total"] = _task_progress_counts(
             status=str(task.get("status", "active")),
             completed=task["completed"],

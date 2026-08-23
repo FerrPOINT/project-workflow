@@ -60,7 +60,7 @@ class TestSchemaEdgeCases:
         monkeypatch.setattr(config, "SEED_PATH", _seed_path(tmp_path))
         ensure_phase_catalog(uow)
         phases = load_phases_from_db(uow, workflow_id="not-a-number")
-        assert any(p.code == "-1" for p in phases)
+        assert any(p.code == "1.INTAKE" for p in phases)
         uow.close()
 
     def test_get_phase_from_db_with_string_workflow_id(self, tmp_path, monkeypatch):
@@ -69,10 +69,10 @@ class TestSchemaEdgeCases:
         uow.create_all()
         monkeypatch.setattr(config, "SEED_PATH", _seed_path(tmp_path))
         ensure_phase_catalog(uow)
-        # workflow_id string 'bad' normalizes to None, so search is global and finds '1'.
-        phase = get_phase_from_db(uow, "1", workflow_id="bad")
+        # workflow_id string 'bad' normalizes to None, so search is global.
+        phase = get_phase_from_db(uow, "1.INTAKE", workflow_id="bad")
         assert phase is not None
-        assert phase.code == "1"
+        assert phase.code == "1.INTAKE"
         uow.close()
 
     def test_load_seed_yaml(self, tmp_path):

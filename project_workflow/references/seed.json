@@ -1,475 +1,166 @@
 [
   {
-    "phase_order": 1, "code": "-1", "name": "Task Intake",
-    "description": "Понять задачу, scope и ограничения до начала работы", "execution_type": "sync",
+    "phase_order": 1, "code": "1.INTAKE", "name": "Intake",
+    "description": "Создать бизнес-задачу и зафиксировать исходный сценарий без срока исполнения", "execution_type": "sync",
     "delegate": {"agent": "orchestrator", "hermes_profile": "sdlc-orchestrator"},
-    "next_recommendation": "Перейти к проверке runtime и обязательных инструментов",
     "instructions": [
-      {"description": "Сформулировать цель и ожидаемый результат задачи", "skills": ["project-workflow-executor", "jira-operator"]},
-      {"description": "Зафиксировать ограничения, зависимости и открытые вопросы"},
-      {"description": "Определить следующий обязательный шаг"}
+      {"description": "Создать задачу в Relevanter Business с полной исходной постановкой, не передавая dueDate", "skills": ["project-workflow-executor", "relevanter-business-operator"]},
+      {"description": "Сохранить стабильную ссылку и идентификатор Business-задачи в evidence"}
     ],
-    "checks": [
-      {"description": "Ключ задачи распознан и задача доступна"},
-      {"description": "Цель и ожидаемый результат сформулированы однозначно"},
-      {"description": "Ограничения и зависимости зафиксированы"}
-    ],
-    "evidence": [
-      {"description": "Ключ задачи и краткое описание цели"},
-      {"description": "Список ограничений, зависимостей и открытых вопросов"}
-    ]
+    "checks": ["Business-задача создана Hermes-аккаунтом", "Описание соответствует исходной постановке", "Срок исполнения отсутствует"],
+    "evidence": ["Business issue ref и URL", "Readback summary, description, status и отсутствующего dueDate"]
   },
   {
-    "phase_order": 2, "code": "0.0a", "name": "Runtime Readiness",
-    "description": "Проверить обязательные runtime-зависимости и канонические entrypoints", "execution_type": "sync",
+    "phase_order": 2, "code": "2.REQUIREMENTS", "name": "Требования",
+    "description": "Сформулировать проверяемые требования и границы изменения", "execution_type": "sync",
+    "delegate": {"agent": "orchestrator", "hermes_profile": "sdlc-orchestrator"}, "rollback_target": "1.INTAKE",
+    "instructions": [
+      {"description": "Зафиксировать цель, acceptance criteria, отрицательные сценарии и ограничения", "skills": ["project-workflow-executor", "workflow-writing-plans"]},
+      {"description": "Обновить Business-задачу и проверить readback"}
+    ],
+    "checks": ["Требования однозначны и тестируемы", "Есть positive, negative и boundary сценарии", "Scope не расширяет исходную постановку"],
+    "evidence": ["Актуальный текст требований", "Readback Business-задачи"]
+  },
+  {
+    "phase_order": 3, "code": "3.DOR_GATE", "name": "Definition of Ready",
+    "description": "Независимо подтвердить полноту, тестируемость и разумный размер задачи", "execution_type": "sync",
+    "delegate": {"agent": "codex-operator"}, "rollback_target": "2.REQUIREMENTS", "is_blocker": true,
+    "instructions": [{"description": "Проверить постановку, критерии, отрицательные сценарии, зависимости и размер задачи", "skills": ["code-review", "task-estimation"]}],
+    "checks": ["Постановка готова к разработке", "Критерии можно доказать", "Нет скрытой архитектурной развилки"],
+    "evidence": ["Operator review с решением и замечаниями"]
+  },
+  {
+    "phase_order": 4, "code": "4.START", "name": "Начало работы",
+    "description": "Перевести бизнес-задачу в работу и создать изолированную Tech-ветку", "execution_type": "sync",
+    "delegate": {"agent": "ops", "hermes_profile": "sdlc-ops"}, "rollback_target": "2.REQUIREMENTS",
+    "instructions": [
+      {"description": "Перевести Business-задачу из Open в In Progress", "skills": ["relevanter-business-operator"]},
+      {"description": "Создать Tech-ветку от актуального main и изолированный workspace", "skills": ["rtech", "repo-workflow"]}
+    ],
+    "checks": ["Business status равен In Progress", "Ветка основана на актуальном main", "Workspace изолирован и clean"],
+    "evidence": ["Business activity readback", "Base SHA, branch и workspace path"]
+  },
+  {
+    "phase_order": 5, "code": "5.RESEARCH", "name": "Исследование",
+    "description": "Исследовать end-to-end dataflow, владельцев данных и текущее поведение", "execution_type": "parallel", "parallel_with": "5.PREFLIGHT",
+    "delegate": {"agent": "researcher", "hermes_profile": "sdlc-researcher"}, "rollback_target": "4.START",
+    "instructions": [{"description": "Проследить UI, API, persistence, migrations и внешние контракты изменения", "skills": ["workflow-code-intelligence"]}],
+    "checks": ["Найдены владельцы изменяемых контрактов", "Текущее поведение подтверждено кодом или runtime", "Определён impact"],
+    "evidence": ["Карта dataflow с файлами и точками интеграции", "Фактический baseline поведения"]
+  },
+  {
+    "phase_order": 6, "code": "5.PREFLIGHT", "name": "Preflight",
+    "description": "Проверить repository, runtime и исходный тестовый baseline", "execution_type": "parallel", "parallel_with": "5.RESEARCH",
+    "delegate": {"agent": "ops", "hermes_profile": "sdlc-ops"}, "rollback_target": "4.START",
+    "instructions": [{"description": "Проверить инструкции репозитория, зависимости, runtime и штатные тесты", "skills": ["repo-workflow", "workflow-systematic-debugging"]}],
+    "checks": ["Применимые инструкции прочитаны", "Runtime-зависимости доступны", "Baseline tests имеют однозначный результат"],
+    "evidence": ["Точный repository SHA и status", "Команды baseline и их результаты"]
+  },
+  {
+    "phase_order": 7, "code": "6.SOLUTION", "name": "Решение",
+    "description": "Подготовить минимальное решение и impact-анализ", "execution_type": "parallel", "parallel_with": "6.TEST_PLAN",
+    "delegate": {"agent": "orchestrator", "hermes_profile": "sdlc-orchestrator"}, "rollback_target": "5.RESEARCH",
+    "instructions": [{"description": "Описать минимальные изменения по владельцам, контрактам и данным", "skills": ["workflow-writing-plans", "workflow-code-intelligence"]}],
+    "checks": ["Решение закрывает требования", "Не дублирует существующие capability", "Impact и совместимость разобраны"],
+    "evidence": ["Solution outline по компонентам", "Impact и список изменяемых контрактов"]
+  },
+  {
+    "phase_order": 8, "code": "6.TEST_PLAN", "name": "План тестирования",
+    "description": "Подготовить план тестирования, выпуска и восстановления", "execution_type": "parallel", "parallel_with": "6.SOLUTION",
+    "delegate": {"agent": "critic", "hermes_profile": "sdlc-critic"}, "rollback_target": "5.RESEARCH", "is_critic": true,
+    "instructions": [{"description": "Связать acceptance criteria с unit, integration, runtime и UI-проверками", "skills": ["test-driven-development", "workflow-writing-plans"]}],
+    "checks": ["Есть positive и negative проверки", "Покрыты миграции и partial failure либо доказана неприменимость", "Определены release и rollback evidence"],
+    "evidence": ["Traceability требований и тестов", "Release и recovery plan"]
+  },
+  {
+    "phase_order": 9, "code": "7.PLAN_GATE", "name": "Проверка плана",
+    "description": "Независимо проверить минимальность и тестируемость решения", "execution_type": "sync",
+    "delegate": {"agent": "codex-operator"}, "rollback_target": "5.RESEARCH", "is_blocker": true,
+    "instructions": [{"description": "Проверить solution и test plan на костыли, пропуски и лишнюю сложность", "skills": ["code-review", "refactor-simplify"]}],
+    "checks": ["План минимален", "Архитектурные границы соблюдены", "Приёмка воспроизводима"],
+    "evidence": ["Operator plan review и принятое решение"]
+  },
+  {
+    "phase_order": 10, "code": "8.IMPLEMENT", "name": "Реализация",
+    "description": "Выполнить изменение небольшими проверяемыми commit", "execution_type": "sync",
+    "delegate": {"agent": "coder", "hermes_profile": "sdlc-coder"}, "rollback_target": "5.RESEARCH",
+    "instructions": [{"description": "Реализовать код, тесты и документацию по принятому плану", "skills": ["test-driven-development", "repo-workflow"]}],
+    "checks": ["Изменение соответствует scope", "Тесты добавлены вместе с поведением", "Рабочее дерево не содержит посторонних файлов"],
+    "evidence": ["Commit SHA и diff summary", "Результаты focused tests"]
+  },
+  {
+    "phase_order": 11, "code": "9.PR", "name": "Pull Request",
+    "description": "Отправить ветку в Tech, создать PR и запустить build", "execution_type": "sync",
+    "delegate": {"agent": "ops", "hermes_profile": "sdlc-ops"}, "rollback_target": "8.IMPLEMENT",
+    "instructions": [
+      {"description": "Отправить ветку и создать Tech PR в main", "skills": ["rtech", "repo-workflow"]},
+      {"description": "Перевести Business-задачу в In Review и проверить activity", "skills": ["relevanter-business-operator"]}
+    ],
+    "checks": ["PR target равен main", "PR head совпадает с веткой run", "Build запущен", "Business status равен In Review"],
+    "evidence": ["Tech PR ref и URL", "Head SHA и build ref", "Business activity readback"]
+  },
+  {
+    "phase_order": 12, "code": "10.REVIEW", "name": "Code review",
+    "description": "Проверить diff, архитектуру и качество реализации", "execution_type": "parallel", "parallel_with": "10.QA",
+    "delegate": {"agent": "reviewer", "hermes_profile": "sdlc-reviewer"}, "rollback_target": "8.IMPLEMENT",
+    "instructions": [{"description": "Провести независимое review PR и проверить минимальность diff", "skills": ["repo-workflow", "workflow-code-intelligence"]}],
+    "checks": ["Нет correctness-дефектов", "Нет лишнего кода и compatibility-мусора", "Контракты и документация согласованы"],
+    "evidence": ["Review findings с файлами и строками", "Итоговый review verdict"]
+  },
+  {
+    "phase_order": 13, "code": "10.QA", "name": "QA",
+    "description": "Проверить бизнес-поведение через API и UI", "execution_type": "parallel", "parallel_with": "10.DATAFLOW",
+    "delegate": {"agent": "reviewer", "hermes_profile": "sdlc-reviewer"}, "rollback_target": "8.IMPLEMENT",
+    "instructions": [{"description": "Выполнить acceptance, regression, API и UI проверки", "skills": ["test-driven-development"]}],
+    "checks": ["Acceptance criteria доказаны", "Отрицательные сценарии проходят", "UI и API согласованы"],
+    "evidence": ["Команды и результаты QA", "API responses и UI evidence"]
+  },
+  {
+    "phase_order": 14, "code": "10.DATAFLOW", "name": "Dataflow",
+    "description": "Проверить данные, миграции, API, документацию и эксплуатацию", "execution_type": "parallel", "parallel_with": "10.REVIEW",
+    "delegate": {"agent": "researcher", "hermes_profile": "sdlc-researcher"}, "rollback_target": "8.IMPLEMENT",
+    "instructions": [{"description": "Сверить фактический dataflow и проверить persistence, migration и operational impact", "skills": ["workflow-code-intelligence", "workflow-systematic-debugging"]}],
+    "checks": ["Данные и API не расходятся", "Миграции проверены либо неприменимость доказана", "Operational и documentation impact закрыт"],
+    "evidence": ["As-built dataflow", "DB/API readback и migration evidence"]
+  },
+  {
+    "phase_order": 15, "code": "11.RUNTIME", "name": "Runtime acceptance",
+    "description": "Запустить кандидат и проверить реальное приложение", "execution_type": "sync",
+    "delegate": {"agent": "ops", "hermes_profile": "sdlc-ops"}, "rollback_target": "8.IMPLEMENT",
+    "instructions": [{"description": "Развернуть кандидат штатным Tech-механизмом и проверить API, PostgreSQL, UI, health и version", "skills": ["rtech", "workflow-systematic-debugging"]}],
+    "checks": ["Кандидат здоров", "API, PostgreSQL и UI подтверждают изменение", "Версия совпадает с candidate SHA"],
+    "evidence": ["Deployment ref и image digest", "Health/version readback", "Runtime acceptance logs"]
+  },
+  {
+    "phase_order": 16, "code": "12.RELEASE_GATE", "name": "Review и merge",
+    "description": "Независимо проверить PR и физически выполнить merge Maintainer-учёткой", "execution_type": "sync",
+    "delegate": {"agent": "codex-operator"}, "rollback_target": "8.IMPLEMENT", "is_blocker": true,
+    "instructions": [{"description": "Проверить точный PR head, diff, evidence и зелёный build, затем выполнить merge", "skills": ["code-review", "rtech"]}],
+    "checks": ["Проверен точный head SHA", "Build зелёный", "PR merged в main Maintainer-учёткой"],
+    "evidence": ["Operator review", "Merged PR readback, merge SHA и actor"]
+  },
+  {
+    "phase_order": 17, "code": "13.DELIVERY", "name": "Проверка поставки",
+    "description": "Подтвердить поставку merge SHA без автоматического workflow rollback", "execution_type": "sync",
     "delegate": {"agent": "ops", "hermes_profile": "sdlc-ops"},
-    "next_recommendation": "Перейти к фиксации критериев приёмки",
-    "instructions": [
-      {"description": "Проверить подключение к PostgreSQL и актуальность Alembic revision", "skills": ["project-workflow-executor"]},
-      {"description": "Проверить OpenAI-compatible endpoint и наличие настроенной модели без раскрытия API key"},
-      {"description": "Проверить канонические CLI entrypoints step и history на текущей revision"}
-    ],
-    "checks": [
-      {"description": "PostgreSQL доступна, DATABASE_URL настроен и Alembic находится на head"},
-      {"description": "OpenAI-compatible endpoint доступен и настроенная модель опубликована"},
-      {"description": "CLI step и history запускаются из текущей revision"}
-    ],
-    "evidence": [
-      {"description": "Безопасный snapshot DB host, database name и Alembic revision"},
-      {"description": "Provider host, model и статус models endpoint без API key"},
-      {"description": "Текущий commit и результат CLI help"}
-    ]
+    "instructions": [{"description": "Проверить main SHA, main build, deployment health и /api/version", "skills": ["rtech", "workflow-systematic-debugging"]}],
+    "checks": ["Main содержит merge SHA", "Main build зелёный", "Deployment здоров", "Версия совпадает с merge SHA"],
+    "evidence": ["Main/build/deployment refs", "Health и version readback"]
   },
   {
-    "phase_order": 3, "code": "0.01", "name": "Acceptance Setup",
-    "description": "Зафиксировать критерии приёмки и план доказательств", "execution_type": "sync",
+    "phase_order": 18, "code": "14.CLOSE", "name": "Завершение",
+    "description": "Зафиксировать as-built и завершить Business-задачу", "execution_type": "sync",
     "delegate": {"agent": "orchestrator", "hermes_profile": "sdlc-orchestrator"},
-    "next_recommendation": "Перейти к проверке workspace",
-    "instructions": [
-      {"description": "Сформулировать проверяемые критерии приёмки", "skills": ["project-workflow-executor"]},
-      {"description": "Определить positive, negative, edge и regression сценарии"},
-      {"description": "Зафиксировать источники доказательств и условия остановки"}
-    ],
-    "checks": [
-      {"description": "Критерии приёмки проверяемы и соответствуют scope"},
-      {"description": "План покрывает positive, negative, edge и regression сценарии"},
-      {"description": "Источники доказательств и условия провала определены"}
-    ],
-    "evidence": [
-      {"description": "Список критериев приёмки"},
-      {"description": "План тестов и доказательств"}
-    ]
+    "instructions": [{"description": "Обновить Business-задачу итоговыми ссылками и перевести её в Done", "skills": ["relevanter-business-operator"]}],
+    "checks": ["As-built и evidence сохранены", "Business status равен Done", "Activity содержит завершение"],
+    "evidence": ["Business issue readback", "Финальные refs и activity"]
   },
   {
-    "phase_order": 4, "code": "0.000", "name": "Workspace",
-    "description": "Проверить repository, project instructions и доступные инструменты", "execution_type": "sync",
-    "delegate": {"agent": "ops", "hermes_profile": "sdlc-ops"},
-    "next_recommendation": "Перейти к проверке git identity",
-    "instructions": [
-      {"description": "Определить точный repository и worktree задачи", "skills": ["project-workflow-executor", "gitlab-operator"]},
-      {"description": "Прочитать ближайшие project instructions и подтвердить обязательные инструменты"}
-    ],
-    "checks": [
-      {"description": "Выбран правильный repository и worktree"},
-      {"description": "Project instructions прочитаны и применимы"},
-      {"description": "Необходимые локальные инструменты доступны"}
-    ],
-    "evidence": [
-      {"description": "Абсолютный путь repository и имя branch"},
-      {"description": "Список применимых project instructions и инструментов"}
-    ]
-  },
-  {
-    "phase_order": 5, "code": "0.00", "name": "Git Identity",
-    "description": "Проверить git identity перед коммитами", "execution_type": "sync",
-    "delegate": {"agent": "ops", "hermes_profile": "sdlc-ops"},
-    "next_recommendation": "Перейти к синхронизации repository",
-    "instructions": [
-      {"description": "Проверить git config user.email", "skills": ["project-workflow-executor"]},
-      {"description": "Проверить git config user.name"}
-    ],
-    "checks": [{"description": "git config user.email и user.name заданы"}],
-    "evidence": [
-      {"description": "Настроенное git user.email"},
-      {"description": "Настроенное git user.name"}
-    ]
-  },
-  {
-    "phase_order": 6, "code": "0.7", "name": "Repo Sync",
-    "description": "Сверить рабочую ветку с актуальной base branch", "execution_type": "sync",
-    "delegate": {"agent": "ops", "hermes_profile": "sdlc-ops"},
-    "next_recommendation": "Перейти к preflight critic gate",
-    "instructions": [
-      {"description": "Получить актуальное состояние remote", "skills": ["project-workflow-executor", "gitlab-operator"]},
-      {"description": "Сравнить HEAD с фактической base branch и проверить рабочее дерево"}
-    ],
-    "checks": [
-      {"description": "Remote fetch завершён без ошибок"},
-      {"description": "Отставание или расхождение с base branch отсутствует либо явно зафиксировано"},
-      {"description": "Рабочее дерево clean либо содержит только ожидаемые изменения задачи"}
-    ],
-    "evidence": [
-      {"description": "Активная branch, base branch и ahead/behind snapshot"},
-      {"description": "git status --short --branch"}
-    ]
-  },
-  {
-    "phase_order": 7, "code": "0.9", "name": "CriticGate-PreFlight",
-    "description": "Проверить готовность к началу работы", "execution_type": "sync",
-    "delegate": {"agent": "critic", "hermes_profile": "sdlc-critic"}, "is_critic": true, "rollback_target": "0.0a",
-    "next_recommendation": "При PASS перейти к параллельному research и preflight",
-    "instructions": [
-      {"description": "Проверить входные условия, scope и подготовленные доказательства", "skills": ["project-workflow-executor", "agent-workflow-patterns"]},
-      {"description": "Оценить риски реализации и проверки", "skills": ["workflow-systematic-debugging"]},
-      {"description": "Зафиксировать решение critic gate", "skills": ["agent-workflow-patterns"]}
-    ],
-    "checks": [
-      {"description": "Все блокеры и риски задокументированы"},
-      {"description": "Критик явно подтвердил готовность или указал причину возврата"}
-    ],
-    "evidence": [{"description": "PreFlight critic report с решением и рисками"}]
-  },
-  {
-    "phase_order": 8, "code": "0.5", "name": "Work Start",
-    "description": "Зафиксировать начало работы и фактический scope", "execution_type": "sync",
-    "delegate": {"agent": "orchestrator", "hermes_profile": "sdlc-orchestrator"},
-    "next_recommendation": "Перейти к research и preflight",
-    "instructions": [
-      {"description": "Подтвердить активный статус задачи в доступном source of truth", "skills": ["project-workflow-executor", "jira-operator"]},
-      {"description": "Зафиксировать scope, owner и следующий шаг"}
-    ],
-    "checks": [
-      {"description": "Задача имеет активный статус в доступном source of truth"},
-      {"description": "Scope, owner и следующий шаг согласованы с фактической работой"}
-    ],
-    "evidence": [
-      {"description": "Task status snapshot"},
-      {"description": "Краткий work-start record со scope и следующим шагом"}
-    ]
-  },
-  {
-    "phase_order": 9, "code": "0.6", "name": "Researcher #1",
-    "description": "Исследовать текущий dataflow и затронутые модули", "execution_type": "parallel",
-    "parallel_with": "1", "delegate": {"agent": "researcher", "hermes_profile": "sdlc-researcher"},
-    "next_recommendation": "Дождаться завершения Preflight",
-    "instructions": [
-      {"description": "Исследовать контекст задачи и затронутые модули", "skills": ["project-workflow-executor", "workflow-code-intelligence"]},
-      {"description": "Проследить dataflow, зависимости и существующие точки переиспользования", "skills": ["workflow-code-intelligence"]},
-      {"description": "Зафиксировать риски и неизвестные", "skills": ["workflow-systematic-debugging"]}
-    ],
-    "checks": [
-      {"description": "Исследование перечисляет реальные модули и точки входа"},
-      {"description": "Риски, неизвестные и зависимости зафиксированы"}
-    ],
-    "evidence": [
-      {"description": "Research report с модулями, dataflow и рисками"},
-      {"description": "Список безопасных точек переиспользования"}
-    ]
-  },
-  {
-    "phase_order": 10, "code": "1", "name": "Preflight",
-    "description": "Определить repository, branch и стартовое состояние", "execution_type": "parallel",
-    "parallel_with": "0.6", "delegate": {"agent": "ops", "hermes_profile": "sdlc-ops"},
-    "next_recommendation": "Дождаться завершения Researcher #1",
-    "instructions": [
-      {"description": "Подтвердить правильный repository и project instructions", "skills": ["project-workflow-executor", "gitlab-operator"]},
-      {"description": "Проверить branch, local changes и риск затереть чужую работу"},
-      {"description": "Сверить рабочую ветку с base branch"}
-    ],
-    "checks": [
-      {"description": "Выбран правильный repository"},
-      {"description": "Состояние git проверено и неожиданные изменения учтены"},
-      {"description": "Синхронизация с base branch подтверждена либо блокер задокументирован"}
-    ],
-    "evidence": [
-      {"description": "git status --short --branch"},
-      {"description": "Branch/base synchronization snapshot"}
-    ]
-  },
-  {
-    "phase_order": 11, "code": "1.5", "name": "Deep Research",
-    "description": "Исследовать архитектуру, контракты и интеграционные точки", "execution_type": "parallel",
-    "parallel_with": "2", "delegate": {"agent": "researcher", "hermes_profile": "sdlc-researcher"},
-    "next_recommendation": "Дождаться Research Synthesis",
-    "instructions": [
-      {"description": "Исследовать архитектуру, контракты и зависимости", "skills": ["project-workflow-executor", "workflow-code-intelligence"]},
-      {"description": "Собрать реальные API, типы и точки расширения", "skills": ["workflow-code-intelligence"]},
-      {"description": "Отметить код для переиспользования, изоляции или исключения из scope", "skills": ["workflow-systematic-debugging"]}
-    ],
-    "checks": [
-      {"description": "Исследование покрывает реальные контракты, типы и интеграционные точки"},
-      {"description": "Отмечен код для переиспользования, изоляции или исключения из scope"}
-    ],
-    "evidence": [
-      {"description": "Architecture and contracts report"},
-      {"description": "Список существующих реализаций для переиспользования"}
-    ]
-  },
-  {
-    "phase_order": 12, "code": "2", "name": "Research Synthesis",
-    "description": "Свести исследования в единое решение", "execution_type": "parallel",
-    "parallel_with": "1.5", "delegate": {"agent": "orchestrator", "hermes_profile": "sdlc-orchestrator"},
-    "next_recommendation": "Перейти к планированию",
-    "instructions": [
-      {"description": "Свести найденные модули, контракты, риски и ограничения", "skills": ["project-workflow-executor"]},
-      {"description": "Отделить подтверждённые факты от открытых вопросов"},
-      {"description": "Зафиксировать выбранные решения и проверки для плана"}
-    ],
-    "checks": [{"description": "Есть единый synthesis с модулями, рисками и решениями"}],
-    "evidence": [{"description": "Сводная таблица mechanism, owner, file и dataflow"}]
-  },
-  {
-    "phase_order": 13, "code": "3", "name": "Plan",
-    "description": "Подготовить исполнимый план реализации", "execution_type": "sync",
-    "delegate": {"agent": "orchestrator", "hermes_profile": "sdlc-orchestrator"},
-    "next_recommendation": "Передать план на critic review",
-    "instructions": [
-      {"description": "Разбить работу на конкретные подзадачи", "skills": ["project-workflow-executor"]},
-      {"description": "Указать затрагиваемые owners, файлы и миграции"},
-      {"description": "Добавить проверки, критерии готовности и rollback"}
-    ],
-    "checks": [{"description": "План покрывает реализацию, миграции, проверки и rollback"}],
-    "evidence": [
-      {"description": "План с чеклистом подзадач"},
-      {"description": "Оценка объёма и рисков по подзадачам"}
-    ]
-  },
-  {
-    "phase_order": 14, "code": "3.5", "name": "CriticGate-PrePlan",
-    "description": "Проверить план до реализации", "execution_type": "sync",
-    "delegate": {"agent": "critic", "hermes_profile": "sdlc-critic"}, "is_critic": true, "rollback_target": "3",
-    "next_recommendation": "При PASS перейти к реализации",
-    "instructions": [
-      {"description": "Провести критическое ревью плана и контекста", "skills": ["project-workflow-executor", "agent-workflow-patterns"]},
-      {"description": "Проверить полноту, rollback, критерии готовности и риски", "skills": ["workflow-systematic-debugging"]},
-      {"description": "Закрыть обязательные замечания до реализации", "skills": ["workflow-writing-plans"]}
-    ],
-    "checks": [
-      {"description": "План покрывает обязательные шаги, проверки и rollback"},
-      {"description": "Возражения критика закрыты либо оформлены как action items"}
-    ],
-    "evidence": [
-      {"description": "PrePlan critic report"},
-      {"description": "Обновлённый план после critic review"}
-    ]
-  },
-  {
-    "phase_order": 15, "code": "4", "name": "Implement",
-    "description": "Реализовать согласованный план", "execution_type": "sync",
-    "delegate": {"agent": "coder", "hermes_profile": "sdlc-coder"},
-    "next_recommendation": "Перейти к pre-commit review и validation",
-    "instructions": [
-      {"description": "Реализовать изменение по согласованному плану", "skills": ["project-workflow-executor"]},
-      {"description": "Добавить или обновить тесты изменённого контракта"},
-      {"description": "Зафиксировать отклонения от плана и их причины"}
-    ],
-    "checks": [{"description": "Изменение реализовано в согласованном scope и покрыто тестами"}],
-    "evidence": [
-      {"description": "Diff реализованного изменения"},
-      {"description": "Список добавленных или обновлённых тестов"}
-    ]
-  },
-  {
-    "phase_order": 16, "code": "4.5", "name": "CriticGate-PreCommit",
-    "description": "Проверить diff до финальной validation", "execution_type": "parallel",
-    "parallel_with": "5", "rollback_target": "4", "delegate": {"agent": "critic", "hermes_profile": "sdlc-critic"}, "is_critic": true,
-    "next_recommendation": "Дождаться завершения Validate",
-    "instructions": [
-      {"description": "Проверить diff, архитектурные границы и риски регрессии", "skills": ["project-workflow-executor", "agent-workflow-patterns"]},
-      {"description": "Проверить полноту тестов и доказательств", "skills": ["workflow-systematic-debugging"]},
-      {"description": "Закрыть обязательные замечания", "skills": ["test-driven-development"]}
-    ],
-    "checks": [
-      {"description": "Diff готов к validation без известных quality blockers"},
-      {"description": "Обязательные тесты и доказательства подготовлены"}
-    ],
-    "evidence": [{"description": "PreCommit critic report с итоговым решением"}]
-  },
-  {
-    "phase_order": 17, "code": "5", "name": "Validate",
-    "description": "Запустить обязательные автоматизированные проверки", "execution_type": "parallel",
-    "parallel_with": "4.5", "delegate": {"agent": "reviewer", "hermes_profile": "sdlc-reviewer"},
-    "next_recommendation": "Дождаться завершения CriticGate-PreCommit",
-    "instructions": [
-      {"description": "Запустить lint и сохранить результат", "skills": ["project-workflow-executor"]},
-      {"description": "Запустить type и contract checks"},
-      {"description": "Запустить основной test suite и integration suite"}
-    ],
-    "checks": [
-      {"description": "Линтер завершён без ошибок"},
-      {"description": "Типы и контракты проверены"},
-      {"description": "Unit и integration tests прошли"}
-    ],
-    "evidence": [
-      {"description": "Результат lint и type checks"},
-      {"description": "Результат unit и integration test suites"}
-    ]
-  },
-  {
-    "phase_order": 18, "code": "5.5", "name": "Self-Test",
-    "description": "Проверить пользовательский и сквозной runtime-путь", "execution_type": "sync",
-    "delegate": {"agent": "coder", "hermes_profile": "sdlc-coder"},
-    "next_recommendation": "Перейти к commit и push",
-    "instructions": [
-      {"description": "Запустить применимые E2E и API сценарии", "skills": ["project-workflow-executor"]},
-      {"description": "Проверить negative, edge и replay сценарии"},
-      {"description": "Проверить UI в утверждённой browser surface, если он затронут"}
-    ],
-    "checks": [
-      {"description": "Применимые E2E и API сценарии прошли"},
-      {"description": "Negative, edge и replay сценарии проверены"}
-    ],
-    "evidence": [
-      {"description": "E2E и API результаты"},
-      {"description": "Результаты UI или обоснование неприменимости UI-проверки"}
-    ]
-  },
-  {
-    "phase_order": 19, "code": "6", "name": "Commit",
-    "description": "Зафиксировать и отправить проверенное изменение", "execution_type": "sync",
-    "delegate": {"agent": "ops", "hermes_profile": "sdlc-ops"},
-    "next_recommendation": "Перейти к merge request",
-    "instructions": [
-      {"description": "Добавить в commit только файлы текущей задачи", "skills": ["project-workflow-executor", "gitlab-operator"]},
-      {"description": "Создать осмысленный commit и проверить clean status"},
-      {"description": "Отправить branch в origin без force push"}
-    ],
-    "checks": [
-      {"description": "Commit соответствует scope задачи"},
-      {"description": "Branch отправлена в origin и рабочее дерево clean"}
-    ],
-    "evidence": [
-      {"description": "Commit SHA и commit subject"},
-      {"description": "Remote branch SHA и git status"}
-    ]
-  },
-  {
-    "phase_order": 20, "code": "7", "name": "Merge Request",
-    "description": "Создать или обновить GitLab merge request", "execution_type": "sync",
-    "delegate": {"agent": "ops", "hermes_profile": "sdlc-ops"},
-    "next_recommendation": "Перейти к review, QA и dataflow verification",
-    "instructions": [
-      {"description": "Создать или обновить merge request для текущей branch", "skills": ["project-workflow-executor", "gitlab-operator"]},
-      {"description": "Синхронизировать описание с фактическим diff и результатами проверок"},
-      {"description": "Проверить remote HEAD, mergeability и наличие checks"}
-    ],
-    "checks": [
-      {"description": "Merge request открыт на текущую branch"},
-      {"description": "Описание merge request соответствует фактическому diff и проверкам"},
-      {"description": "Remote HEAD, mergeability и GitLab pipeline проверены"}
-    ],
-    "evidence": [
-      {"description": "GitLab merge request URL"},
-      {"description": "Merge request HEAD, mergeability и pipeline snapshot"}
-    ]
-  },
-  {
-    "phase_order": 21, "code": "7.5", "name": "Code Review",
-    "description": "Проверить качество diff и риски регрессии", "execution_type": "parallel",
-    "parallel_with": "7.6", "rollback_target": "4", "delegate": {"agent": "reviewer", "hermes_profile": "sdlc-reviewer"},
-    "next_recommendation": "Дождаться QA и DVR",
-    "instructions": [
-      {"description": "Провести review изменённых файлов и архитектурных решений", "skills": ["project-workflow-executor", "gitlab-operator", "repo-workflow"]},
-      {"description": "Разделить must-fix и optional замечания", "skills": ["workflow-systematic-debugging"]},
-      {"description": "Закрыть must-fix замечания и повторить проверки", "skills": ["test-driven-development"]}
-    ],
-    "checks": [
-      {"description": "Code review завершён с явным итогом"},
-      {"description": "Must-fix замечания закрыты"}
-    ],
-    "evidence": [{"description": "Code review report и статус замечаний"}]
-  },
-  {
-    "phase_order": 22, "code": "7.6", "name": "QA Testing",
-    "description": "Проверить критерии приёмки и regression scope", "execution_type": "parallel",
-    "parallel_with": "7.5", "rollback_target": "4", "delegate": {"agent": "reviewer", "hermes_profile": "sdlc-reviewer"},
-    "next_recommendation": "Дождаться Code Review и DVR",
-    "instructions": [
-      {"description": "Проверить acceptance, regression и пользовательские сценарии", "skills": ["project-workflow-executor", "test-driven-development"]},
-      {"description": "Зафиксировать PASS или воспроизводимый FAIL", "skills": ["workflow-systematic-debugging"]}
-    ],
-    "checks": [
-      {"description": "QA зафиксировал итог по ключевым сценариям"},
-      {"description": "Найденные дефекты исправлены либо оформлены как blockers"}
-    ],
-    "evidence": [
-      {"description": "QA report с проверенными сценариями"},
-      {"description": "Доказательства результатов или шаги воспроизведения дефектов"}
-    ]
-  },
-  {
-    "phase_order": 23, "code": "7.6.R", "name": "DVR",
-    "description": "Проверить dataflow и согласованность интеграций", "execution_type": "parallel",
-    "parallel_with": "7.6", "delegate": {"agent": "researcher", "hermes_profile": "sdlc-researcher"},
-    "next_recommendation": "Дождаться Code Review и QA",
-    "instructions": [
-      {"description": "Проверить фактический dataflow после изменений", "skills": ["project-workflow-executor", "workflow-code-intelligence"]},
-      {"description": "Зафиксировать подтверждённые участки и расхождения", "skills": ["workflow-systematic-debugging"]}
-    ],
-    "checks": [
-      {"description": "Ключевой dataflow и интеграции подтверждены"},
-      {"description": "Расхождения описаны с конкретными точками в коде или runtime"}
-    ],
-    "evidence": [{"description": "Dataflow verification report"}]
-  },
-  {
-    "phase_order": 24, "code": "7.7", "name": "CriticGate-PostQA",
-    "description": "Принять финальное quality-решение", "execution_type": "sync",
+    "phase_order": 19, "code": "15.RETRO", "name": "Улучшения",
+    "description": "Зафиксировать фактические метрики и улучшения процесса", "execution_type": "sync",
     "delegate": {"agent": "critic", "hermes_profile": "sdlc-critic"}, "is_critic": true,
-    "next_recommendation": "При PASS остановиться и дождаться ручного merge Maintainer",
-    "instructions": [
-      {"description": "Проверить результаты review, QA и DVR", "skills": ["project-workflow-executor", "gitlab-operator", "agent-workflow-patterns"]},
-      {"description": "Проверить закрытие must-fix замечаний и полноту доказательств", "skills": ["workflow-systematic-debugging"]},
-      {"description": "Зафиксировать готовность MR к ручному merge Maintainer", "skills": ["agent-workflow-patterns"]}
-    ],
-    "checks": [
-      {"description": "Незакрытые quality blockers отсутствуют"},
-      {"description": "Review, QA и DVR дают достаточные доказательства"},
-      {"description": "MR готов к ручному merge и Hermes не выполняет merge самостоятельно"}
-    ],
-    "evidence": [{"description": "PostQA critic report с финальным решением"}]
-  },
-  {
-    "phase_order": 25, "code": "8", "name": "Delivery Verification",
-    "description": "Проверить выполненный Maintainer merge и завершить delivery", "execution_type": "sync",
-    "delegate": {"agent": "ops", "hermes_profile": "sdlc-ops"}, "next_recommendation": "Перейти к ретроспективе",
-    "instructions": [
-      {"description": "Проверить, что Maintainer выполнил merge MR в целевую branch", "skills": ["project-workflow-executor", "gitlab-operator", "jira-operator", "repo-workflow"]},
-      {"description": "Сверить merged commit SHA и зелёный GitLab pipeline", "skills": ["repo-workflow"]},
-      {"description": "Явно перечислить выполненные, пропущенные и заблокированные проверки", "skills": ["agent-workflow-patterns"]}
-    ],
-    "checks": [
-      {"description": "MR имеет статус merged, а target branch содержит ожидаемый SHA"},
-      {"description": "Pipeline merged commit завершён успешно"},
-      {"description": "Handoff содержит ссылки, проверки и оставшиеся риски"}
-    ],
-    "evidence": [{"description": "GitLab MR URL, merged SHA, target SHA и pipeline snapshot"}]
-  },
-  {
-    "phase_order": 26, "code": "9", "name": "Retro",
-    "description": "Собрать фактические выводы и улучшения процесса", "execution_type": "sync",
-    "delegate": {"agent": "orchestrator", "hermes_profile": "sdlc-orchestrator"}, "next_recommendation": "Перейти к фиксации improvement proposals",
-    "instructions": [
-      {"description": "Разобрать историю решений, failures и повторные прогоны", "skills": ["project-workflow-executor", "agent-workflow-patterns"]},
-      {"description": "Собрать реальные метрики из тестов, runtime и audit", "skills": ["workflow-code-intelligence"]},
-      {"description": "Сформулировать конкретные выводы и следующие улучшения", "skills": ["workflow-writing-plans"]}
-    ],
-    "checks": [
-      {"description": "Retro содержит конкретные выводы и действия"},
-      {"description": "Метрики и предложения основаны на реальных данных задачи"}
-    ],
-    "evidence": [{"description": "Retro summary с метриками, выводами и улучшениями"}]
-  },
-  {
-    "phase_order": 27, "code": "10", "name": "Auto-Improve",
-    "description": "Зафиксировать решение по improvement proposals", "execution_type": "sync",
-    "delegate": {"agent": "orchestrator", "hermes_profile": "sdlc-orchestrator"},
-    "next_recommendation": "Workflow завершён",
-    "instructions": [
-      {"description": "Преобразовать подтверждённые проблемы процесса в конкретные improvement proposals", "skills": ["project-workflow-executor"]},
-      {"description": "Если улучшения не нужны, явно зафиксировать причину"}
-    ],
-    "checks": [{"description": "Решение по improvement proposals основано на фактах ретроспективы"}],
-    "evidence": [{"description": "Список improvement proposals либо обоснование их отсутствия"}]
+    "instructions": [{"description": "Собрать факты run и сформулировать конкретные improvements без изменения принятой поставки", "skills": ["workflow-writing-plans"]}],
+    "checks": ["Метрики основаны на журнале", "Дефекты процесса отделены от дефектов продукта", "Улучшения конкретны или обоснованно отсутствуют"],
+    "evidence": ["Retro с метриками и improvement actions"]
   }
 ]

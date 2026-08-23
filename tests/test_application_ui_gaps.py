@@ -33,7 +33,7 @@ class TestUIDataServiceGaps:
         wdb.get_tasks.return_value = [
             {
                 "id": 1,
-                "task_key": "TASK-1",
+                "task_key": "RUN-1",
                 "title": "t",
                 "project_id": 1,
                 "status": status,
@@ -66,7 +66,7 @@ class TestUIDataServiceGaps:
     def test_load_tasks_latest_run_without_task_id(self):
         wdb = MagicMock()
         wdb.get_tasks.return_value = [
-            {"id": 1, "task_key": "TASK-1", "title": "t", "project_id": 1, "status": "active"}
+            {"id": 1, "task_key": "RUN-1", "title": "t", "project_id": 1, "status": "active"}
         ]
         wdb.get_workflows.return_value = []
         wdb.get_phases.return_value = []
@@ -85,7 +85,7 @@ class TestUIDataServiceGaps:
     def test_load_tasks_latest_run_extracts_verdict(self):
         wdb = MagicMock()
         wdb.get_tasks.return_value = [
-            {"id": 1, "task_key": "TASK-1", "title": "t", "project_id": 1, "status": "active"}
+            {"id": 1, "task_key": "RUN-1", "title": "t", "project_id": 1, "status": "active"}
         ]
         wdb.get_workflows.return_value = []
         wdb.get_phases.return_value = []
@@ -144,7 +144,7 @@ class TestUIDataServiceGaps:
         wdb = MagicMock()
         wdb.get_task_by_key.return_value = {
             "id": 1,
-            "task_key": "TASK-1",
+            "task_key": "RUN-1",
             "title": "t",
             "project_id": 1,
             "status": "active",
@@ -157,7 +157,7 @@ class TestUIDataServiceGaps:
         wdb.projects.get_by_id.return_value = None
         wdb.get_phase.return_value = None
 
-        result = _service(wdb)._get_task_detail("TASK-1")
+        result = _service(wdb)._get_task_detail("RUN-1")
         assert result is not None
         assert result["completed"] == 0
 
@@ -180,7 +180,7 @@ class TestUIDataServiceGaps:
         ]
         wdb.get_task_by_key.return_value = {
             "id": 1,
-            "task_key": "TASK-1",
+            "task_key": "RUN-1",
             "title": "t",
             "project_id": 1,
             "status": status,
@@ -194,7 +194,7 @@ class TestUIDataServiceGaps:
         ]
         wdb.get_supervisor_runs.return_value = []
 
-        result = _service(wdb)._get_task_detail("TASK-1")
+        result = _service(wdb)._get_task_detail("RUN-1")
 
         assert result is not None
         assert result["progress_done"] == 2

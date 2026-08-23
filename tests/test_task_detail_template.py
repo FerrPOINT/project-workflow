@@ -74,8 +74,8 @@ def test_task_detail_renders_group_markers_and_chronological_supervisor_dialog()
     html = template.render(
         page="tasks",
         task={
-            "task_key": "TASK-1",
-            "title": "TASK-1",
+            "task_key": "RUN-1",
+            "title": "RUN-1",
             "project_label": "DEFAULT",
             "created_at": "2026-08-21T09:00",
             "updated_at": "2026-08-21T11:00",
@@ -86,6 +86,8 @@ def test_task_detail_renders_group_markers_and_chronological_supervisor_dialog()
         current_phase_name="Auto-Improve",
         progress_done=27,
         progress_total=27,
+        cycles_done=3,
+        cycles_total=3,
         work_time="2 ч",
         phase_history_blocks=blocks,
         supervisor_runs=runs,

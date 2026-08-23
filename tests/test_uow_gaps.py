@@ -29,7 +29,7 @@ class TestUowEdgeCases:
         with uow:
             default_wf = uow.workflows.ensure_default_exists("Default Workflow")
             project_id = uow.projects.create(
-                {"code": "RUN", "name": "Run", "workflow_id": default_wf.id}
+                {"code": "UOW", "name": "Run", "workflow_id": default_wf.id}
             )
             phase_id = uow.phases.create(
                 {
@@ -118,18 +118,18 @@ class TestUowEdgeCases:
     def test_get_phase_by_code(self):
         uow = _fresh_uow()
         ensure_phase_catalog(uow)
-        phase = uow.get_phase_by_code("1")
+        phase = uow.get_phase_by_code("1.INTAKE")
         assert phase is not None
-        assert phase["code"] == "1"
+        assert phase["code"] == "1.INTAKE"
         assert uow.get_phase_by_code("nonexistent-code-xyz") is None
         uow.close()
 
     def test_get_phase_by_string_id(self):
         uow = _fresh_uow()
         ensure_phase_catalog(uow)
-        first = uow.get_phase("0.0a")
+        first = uow.get_phase("1.INTAKE")
         assert first is not None
-        assert first["code"] == "0.0a"
+        assert first["code"] == "1.INTAKE"
         uow.close()
 
     def test_get_phase_invalid_token(self):
@@ -183,9 +183,9 @@ class TestUowEdgeCases:
         uow.init()
         projects = list(uow.projects.list())
         workflows = list(uow.workflows.list())
-        assert [project.code for project in projects] == ["TASK"]
-        assert [workflow.name for workflow in workflows] == ["Default Workflow"]
-        assert len(uow.phases.list(workflow_id=workflows[0].id)) == 27
+        assert [project.code for project in projects] == ["RUN"]
+        assert [workflow.name for workflow in workflows] == ["sdlc-business-tech-v1"]
+        assert len(uow.phases.list(workflow_id=workflows[0].id)) == 19
         uow.close()
 
     def test_context_manager_rolls_back_on_exception(self):

@@ -28,7 +28,8 @@ class SupervisorContextBuilder:
         self.all_phases = all_phases or []
         self.current_phase = current_phase
         self.task_key = task_key
-        self._contract_builder = PhaseContractBuilder(self.all_phases)
+        workflow_revision = str(self.workflow.get("name") or "") if self.workflow else ""
+        self._contract_builder = PhaseContractBuilder(self.all_phases, workflow_revision)
         self._phase_map: dict[str, Phase] | None = None
 
     @property
@@ -123,7 +124,11 @@ class SupervisorContextBuilder:
             "current_phase": self.current_phase,
             "current_phase_name": phase.name if phase else "Unknown phase",
             "completed_phases": completed_phases,
-            "all_phases": [phase_to_dict(item) for item in self.all_phases],
+            "workflow_revision": self._contract_builder.workflow_revision,
+            "all_phases": [
+                phase_to_dict(item, self._contract_builder.workflow_revision)
+                for item in self.all_phases
+            ],
             "workflow_path": workflow_path,
             "phase_history": self._build_phase_history(),
             "recent_verdicts": self._build_recent_verdicts(),

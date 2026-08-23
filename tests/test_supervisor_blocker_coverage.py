@@ -13,11 +13,11 @@ from project_workflow.supervisor.checks import normalize_text
 class TestCoverageAccumulation:
     """Test retrieval of coverage saved by previous LLM runs."""
 
-    def _make_engine(self, task_key="TASK-1"):
+    def _make_engine(self, task_key="RUN-1"):
         return SupervisorEngine(task_key)
 
     def test_get_previously_covered_reads_runs(self, tmp_path, monkeypatch):
-        engine = self._make_engine("TASK-9999")
+        engine = self._make_engine("RUN-9999")
         tid = engine.task["id"]
         pid = engine.db.create_phase(
             {
@@ -61,11 +61,11 @@ class TestCoverageAccumulation:
 class TestEvaluateAccumulationEndToEnd:
     """Test evaluate() accumulates coverage across multiple reports for the same phase."""
 
-    def _make_engine(self, task_key="TASK-1"):
+    def _make_engine(self, task_key="RUN-1"):
         return SupervisorEngine(task_key)
 
     def test_evaluate_across_reports(self, tmp_path, monkeypatch, supervisor_llm):
-        engine = self._make_engine("TASK-9996")
+        engine = self._make_engine("RUN-9996")
         tid = engine.task["id"]
 
         class Check:

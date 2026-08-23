@@ -32,7 +32,7 @@ class TestSupervisorEvaluate:
         )
 
     def test_evaluate_pass(self):
-        engine = SupervisorEngine("TASK-1")
+        engine = SupervisorEngine("RUN-1")
         ph = self._phase()
         engine.current_phase = "0"
         engine.phase_map = {"0": ph}
@@ -47,7 +47,7 @@ class TestSupervisorEvaluate:
         llm.assert_called_once_with("report ok", ph)
 
     def test_evaluate_partial_when_items_missing(self):
-        engine = SupervisorEngine("TASK-1")
+        engine = SupervisorEngine("RUN-1")
         ph = self._phase()
         engine.current_phase = "0"
         engine.phase_map = {"0": ph}
@@ -65,12 +65,12 @@ class TestSupervisorEvaluate:
         assert result["missing"] == ["check"]
 
     def test_evaluate_completed_task_does_not_call_llm(self):
-        engine = SupervisorEngine("TASK-1")
+        engine = SupervisorEngine("RUN-1")
         ph = self._phase()
         engine.current_phase = "0"
         engine.phase_map = {"0": ph}
         engine.all_phases = [ph]
-        engine.task = {"id": 1, "task_key": "TASK-1", "current_phase": "0", "status": "done"}
+        engine.task = {"id": 1, "task_key": "RUN-1", "current_phase": "0", "status": "done"}
 
         with patch.object(engine, "evaluate_llm") as llm:
             result = engine.evaluate("new report after completion")
@@ -83,13 +83,13 @@ class TestSupervisorEvaluate:
         assert "уже завершён" in result["message"]
 
     def test_evaluate_completed_task_survives_missing_catalog_phase(self):
-        engine = SupervisorEngine("TASK-1")
+        engine = SupervisorEngine("RUN-1")
         engine.current_phase = "retired-phase"
         engine.phase_map = {}
         engine.all_phases = []
         engine.task = {
             "id": 1,
-            "task_key": "TASK-1",
+            "task_key": "RUN-1",
             "current_phase": "retired-phase",
             "status": "done",
         }
@@ -104,7 +104,7 @@ class TestSupervisorEvaluate:
         assert result["instructions"] == []
 
     def test_get_phase_prompt(self):
-        engine = SupervisorEngine("TASK-1")
+        engine = SupervisorEngine("RUN-1")
         ph = self._phase()
         engine.current_phase = "0"
         engine.phase_map = {"0": ph}

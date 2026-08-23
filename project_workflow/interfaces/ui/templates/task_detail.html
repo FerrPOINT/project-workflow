@@ -19,7 +19,7 @@
 .verdict-partial{color:var(--yellow);background:var(--yellow-soft)}
 .verdict-rollback{color:var(--orange);background:var(--orange-soft)}
 
-.summary-bar{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:28px}
+.summary-bar{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:28px}
 .summary-item{border-top:3px solid var(--border-strong);background:var(--surface);border-radius:6px;padding:14px 16px;min-width:0}
 .summary-item.done{border-top-color:var(--green)}
 .summary-label{font-size:11px;font-weight:650;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:5px}
@@ -150,9 +150,14 @@
     {% if task.status == 'done' %}<div class="summary-note">Workflow завершён</div>{% endif %}
   </div>
   <div class="summary-item {% if progress_done >= progress_total and progress_total %}done{% endif %}">
-    <div class="summary-label">Прогресс</div>
+    <div class="summary-label">Фазы workflow</div>
     <div class="summary-value">{{ progress_done }} / {{ progress_total }} <span style="font-size:12px;color:var(--text-muted)">({{ (progress_done / progress_total * 100) | round(0)|int if progress_total else 0 }}%)</span></div>
     <div class="summary-progress"><span class="{% if progress_done >= progress_total and progress_total %}done{% endif %}" style="width:{{ (progress_done / progress_total * 100) if progress_total else 0 }}%"></span></div>
+  </div>
+  <div class="summary-item {% if cycles_done >= cycles_total and cycles_total %}done{% endif %}">
+    <div class="summary-label">Циклы Supervisor</div>
+    <div class="summary-value">{{ cycles_done }} / {{ cycles_total }}</div>
+    <div class="summary-progress"><span class="{% if cycles_done >= cycles_total and cycles_total %}done{% endif %}" style="width:{{ (cycles_done / cycles_total * 100) if cycles_total else 0 }}%"></span></div>
   </div>
   <div class="summary-item">
     <div class="summary-label">Время в работе</div>
