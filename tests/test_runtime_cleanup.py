@@ -135,6 +135,25 @@ def test_due_date_and_retired_external_runtime_are_absent_from_active_contract()
     assert "merge request" not in catalog
 
 
+def test_tech_phases_reference_the_canonical_using_rtech_skill():
+    phases = _items()
+    skill_phases = {
+        phase["code"]
+        for phase in phases
+        if any(
+            "using-rtech" in (instruction.get("skills") or [])
+            for instruction in phase["instructions"]
+        )
+    }
+
+    assert skill_phases == {"4.START", "9.PR", "11.RUNTIME", "12.RELEASE_GATE", "13.DELIVERY"}
+    assert all(
+        "rtech" not in (instruction.get("skills") or [])
+        for phase in phases
+        for instruction in phase["instructions"]
+    )
+
+
 def test_post_merge_phases_have_no_workflow_rollback_target():
     by_code = {phase["code"]: phase for phase in _items()}
     assert by_code["12.RELEASE_GATE"]["rollback_target"] == "8.IMPLEMENT"

@@ -35,7 +35,7 @@
     "delegate": {"agent": "ops", "hermes_profile": "sdlc-ops"}, "rollback_target": "2.REQUIREMENTS",
     "instructions": [
       {"description": "Перевести Business-задачу из Open в In Progress", "skills": ["relevanter-business-operator"]},
-      {"description": "Создать Tech-ветку от актуального main и изолированный workspace", "skills": ["rtech", "repo-workflow"]}
+      {"description": "Создать Tech-ветку от актуального main и изолированный workspace", "skills": ["using-rtech", "repo-workflow"]}
     ],
     "checks": ["Business status равен In Progress", "Ветка основана на актуальном main", "Workspace изолирован и clean"],
     "evidence": ["Business activity readback", "Base SHA, branch и workspace path"]
@@ -93,7 +93,7 @@
     "description": "Отправить ветку в Tech, создать PR и запустить build", "execution_type": "sync",
     "delegate": {"agent": "ops", "hermes_profile": "sdlc-ops"}, "rollback_target": "8.IMPLEMENT",
     "instructions": [
-      {"description": "Отправить ветку и создать Tech PR в main", "skills": ["rtech", "repo-workflow"]},
+      {"description": "Отправить ветку и создать Tech PR в main", "skills": ["using-rtech", "repo-workflow"]},
       {"description": "Перевести Business-задачу в In Review и проверить activity", "skills": ["relevanter-business-operator"]}
     ],
     "checks": ["PR target равен main", "PR head совпадает с веткой run", "Build запущен", "Business status равен In Review"],
@@ -127,7 +127,7 @@
     "phase_order": 15, "code": "11.RUNTIME", "name": "Runtime acceptance",
     "description": "Запустить кандидат и проверить реальное приложение", "execution_type": "sync",
     "delegate": {"agent": "ops", "hermes_profile": "sdlc-ops"}, "rollback_target": "8.IMPLEMENT",
-    "instructions": [{"description": "Развернуть кандидат штатным Tech-механизмом и проверить API, PostgreSQL, UI, health и version", "skills": ["rtech", "workflow-systematic-debugging"]}],
+    "instructions": [{"description": "Развернуть кандидат штатным Tech-механизмом и проверить API, PostgreSQL, UI, health и version", "skills": ["using-rtech", "workflow-systematic-debugging"]}],
     "checks": ["Кандидат здоров", "API, PostgreSQL и UI подтверждают изменение", "Версия совпадает с candidate SHA"],
     "evidence": ["Deployment ref и image digest", "Health/version readback", "Runtime acceptance logs"]
   },
@@ -135,7 +135,7 @@
     "phase_order": 16, "code": "12.RELEASE_GATE", "name": "Review и merge",
     "description": "Независимо проверить PR и физически выполнить merge Maintainer-учёткой", "execution_type": "sync",
     "delegate": {"agent": "codex-operator"}, "rollback_target": "8.IMPLEMENT", "is_blocker": true,
-    "instructions": [{"description": "Проверить точный PR head, diff, evidence и зелёный build, затем выполнить merge", "skills": ["code-review", "rtech"]}],
+    "instructions": [{"description": "Проверить точный PR head, diff, evidence и зелёный build, затем выполнить merge", "skills": ["code-review", "using-rtech"]}],
     "checks": ["Проверен точный head SHA", "Build зелёный", "PR merged в main Maintainer-учёткой"],
     "evidence": ["Operator review", "Merged PR readback, merge SHA и actor"]
   },
@@ -143,7 +143,7 @@
     "phase_order": 17, "code": "13.DELIVERY", "name": "Проверка поставки",
     "description": "Подтвердить поставку merge SHA без автоматического workflow rollback", "execution_type": "sync",
     "delegate": {"agent": "ops", "hermes_profile": "sdlc-ops"},
-    "instructions": [{"description": "Проверить main SHA, main build, deployment health и /api/version", "skills": ["rtech", "workflow-systematic-debugging"]}],
+    "instructions": [{"description": "Проверить main SHA, main build, deployment health и /api/version", "skills": ["using-rtech", "workflow-systematic-debugging"]}],
     "checks": ["Main содержит merge SHA", "Main build зелёный", "Deployment здоров", "Версия совпадает с merge SHA"],
     "evidence": ["Main/build/deployment refs", "Health и version readback"]
   },
