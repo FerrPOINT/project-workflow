@@ -136,6 +136,12 @@ def test_due_date_and_retired_external_runtime_are_absent_from_active_contract()
     assert "merge request" not in catalog
 
 
+def test_business_status_contract_matches_default_project_catalog():
+    catalog = SEED_PATH.read_text(encoding="utf-8")
+    assert "Business status равен In Progress" in catalog
+    assert "Business status равен In Review" not in catalog
+
+
 def test_tech_phases_reference_the_canonical_using_rtech_skill():
     phases = _items()
     skill_phases = {

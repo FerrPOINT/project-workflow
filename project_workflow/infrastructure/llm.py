@@ -80,6 +80,7 @@ class OpenAICompatibleClient:
                 {"role": "user", "content": user},
             ],
             "temperature": temperature,
+            "response_format": {"type": "json_object"},
             # Reasoning-capable OpenAI-compatible models may spend part of this
             # budget before emitting the small JSON verdict.
             "max_tokens": 4000,

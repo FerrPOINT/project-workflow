@@ -94,9 +94,9 @@
     "delegate": {"agent": "ops", "hermes_profile": "sdlc-ops"}, "rollback_target": "8.IMPLEMENT",
     "instructions": [
       {"description": "Отправить ветку и создать Tech PR в main", "skills": ["using-rtech", "repo-workflow"]},
-      {"description": "Перевести Business-задачу в In Review и проверить activity", "skills": ["relevanter-business-operator"]}
+      {"description": "Подтвердить, что Business-задача остаётся In Progress, и проверить activity", "skills": ["relevanter-business-operator"]}
     ],
-    "checks": ["PR target равен main", "PR head совпадает с веткой run", "Build запущен", "Business status равен In Review"],
+    "checks": ["PR target равен main", "PR head совпадает с веткой run", "Build запущен", "Business status равен In Progress"],
     "evidence": ["Tech PR ref и URL", "Head SHA и build ref", "Business activity readback"]
   },
   {
