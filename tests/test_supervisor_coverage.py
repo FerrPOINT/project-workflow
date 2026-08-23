@@ -13,7 +13,7 @@ pytestmark = [pytest.mark.supervisor]
 
 class TestBuildChecklist:
     def _make_engine(self) -> SupervisorEngine:
-        return SupervisorEngine("TASK-1")
+        return SupervisorEngine("RUN-1")
 
     def test_deduplicates_and_preserves_order(self):
         engine = self._make_engine()

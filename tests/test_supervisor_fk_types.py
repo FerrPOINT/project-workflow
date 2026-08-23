@@ -15,7 +15,7 @@ from project_workflow.supervisor.models import Phase
 class TestRecordTransitionTypes:
     def test_record_transition_uses_int_phase_id(self):
         """add_task_history must receive int phase_id, not str code."""
-        engine = SupervisorEngine("TASK-1")
+        engine = SupervisorEngine("RUN-1")
         ph = Phase(id=42, code="1", name="T")
         engine.phase_map = {"1": ph}
         engine.all_phases = [ph]
@@ -34,7 +34,7 @@ class TestRecordTransitionTypes:
 
     def test_record_transition_next_phase_resolved_to_int(self):
         """Next phase code must be resolved to int id."""
-        engine = SupervisorEngine("TASK-1")
+        engine = SupervisorEngine("RUN-1")
         ph_current = Phase(id=42, code="1", name="T")
         ph_next = Phase(id=99, code="2", name="N")
         engine.phase_map = {"1": ph_current, "2": ph_next}
@@ -54,7 +54,7 @@ class TestRecordTransitionTypes:
 
     def test_record_transition_rollback_target_resolved_to_int(self):
         """Rollback target code must be resolved to int id."""
-        engine = SupervisorEngine("TASK-1")
+        engine = SupervisorEngine("RUN-1")
         ph = Phase(id=42, code="1", name="T", rollback_target="0")
         ph_prev = Phase(id=7, code="0", name="Prev")
         engine.phase_map = {"1": ph, "0": ph_prev}
@@ -74,7 +74,7 @@ class TestRecordTransitionTypes:
 
     def test_evaluate_llm_uses_int_phase_id(self):
         """create_supervisor_run must receive int phase_id."""
-        engine = SupervisorEngine("TASK-1")
+        engine = SupervisorEngine("RUN-1")
         ph = Phase(id=42, code="1", name="T")
         engine.phase_map = {"1": ph}
         engine.all_phases = [ph]

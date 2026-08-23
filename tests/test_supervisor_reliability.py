@@ -63,7 +63,7 @@ class TestStrictEvaluatorContract:
 
 @pytest.mark.parametrize("verdict", ["PASS", "PARTIAL", "BLOCKED"])
 def test_valid_report_is_replayed_once(verdict, supervisor_llm):
-    engine = SupervisorEngine(f"TASK-90{['PASS', 'PARTIAL', 'BLOCKED'].index(verdict)}")
+    engine = SupervisorEngine(f"RUN-90{['PASS', 'PARTIAL', 'BLOCKED'].index(verdict)}")
     supervisor_llm(verdict)
     fixture_chat = OpenAICompatibleClient.chat
     with patch.object(OpenAICompatibleClient, "chat", side_effect=fixture_chat) as chat:
@@ -81,7 +81,7 @@ def test_valid_report_is_replayed_once(verdict, supervisor_llm):
 
 
 def test_retryable_provider_error_has_no_fingerprint_or_transition():
-    engine = SupervisorEngine("TASK-910")
+    engine = SupervisorEngine("RUN-910")
     original_task = dict(engine.task)
     with patch.object(OpenAICompatibleClient, "chat", side_effect=requests.ConnectionError("down")) as chat:
         first = engine.evaluate("same report")
@@ -98,7 +98,7 @@ def test_retryable_provider_error_has_no_fingerprint_or_transition():
 
 
 def test_concurrent_state_change_rolls_back_run_and_history(supervisor_llm, monkeypatch):
-    engine = SupervisorEngine("TASK-911")
+    engine = SupervisorEngine("RUN-911")
     original_task = dict(engine.task)
     supervisor_llm("PASS")
     monkeypatch.setattr(engine.db.tasks, "update_if_state", lambda *_args, **_kwargs: False)
@@ -113,7 +113,7 @@ def test_concurrent_state_change_rolls_back_run_and_history(supervisor_llm, monk
 
 
 def test_audit_snapshot_contains_contract_and_provider_metadata(supervisor_llm):
-    engine = SupervisorEngine("TASK-912")
+    engine = SupervisorEngine("RUN-912")
     supervisor_llm("PARTIAL")
     engine.evaluate("audited report")
 

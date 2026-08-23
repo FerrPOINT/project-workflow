@@ -172,8 +172,8 @@ class TestPromptBuilder:
 
     def test_build_user_prompt_includes_task_and_phase(self):
         phase = FakePhase(code="1", name="Preflight", instructions=["Check git"])
-        prompt = PromptBuilder.build_user_prompt("TASK-1", phase, "report text")
-        assert "TASK: TASK-1" in prompt
+        prompt = PromptBuilder.build_user_prompt("RUN-1", phase, "report text")
+        assert "TASK: RUN-1" in prompt
         assert "CURRENT PHASE: 1 — Preflight" in prompt
         assert "report text" in prompt
 
@@ -312,13 +312,13 @@ class TestSupervisorEngineEvaluateLLM:
     def engine(self):
         from project_workflow.supervisor import SupervisorEngine
 
-        return SupervisorEngine("TASK-1001")
+        return SupervisorEngine("RUN-1001")
 
     def test_evaluate_llm_pass(self, engine, supervisor_llm):
         supervisor_llm("PASS")
         result = engine.evaluate_llm("I checked git", engine._get_current_phase_obj())
         assert result["verdict"] == "PASS"
-        assert result["phase"] == "-1"
+        assert result["phase"] == "1.INTAKE"
         assert result["covered"]
         assert result["missing"] == []
 
@@ -349,7 +349,7 @@ class TestSupervisorEngineEvaluateLLM:
             # unless they were passed as previously_covered param.
             # Here we just verify the prompt was built and sent.
             assert "Report" in kwargs["user"]
-            assert "TASK-1001" in kwargs["user"]
+            assert "RUN-1001" in kwargs["user"]
 
 
 class TestSupervisorEngineMandatoryLLM:
@@ -359,7 +359,7 @@ class TestSupervisorEngineMandatoryLLM:
     def engine(self):
         from project_workflow.supervisor import SupervisorEngine
 
-        return SupervisorEngine("TASK-1002")
+        return SupervisorEngine("RUN-1002")
 
     def test_evaluate_uses_llm(self, engine):
         with patch.object(engine, "evaluate_llm", return_value={"verdict": "BLOCKED"}) as evaluate_llm:
@@ -446,13 +446,13 @@ class TestSupervisorEngineLLMIntegrationDB:
     def engine(self):
         from project_workflow.supervisor import SupervisorEngine
 
-        return SupervisorEngine("TASK-1003")
+        return SupervisorEngine("RUN-1003")
 
     def test_supervisor_run_recorded_after_llm_evaluate(self, engine, supervisor_llm):
         supervisor_llm("PASS")
         engine.evaluate("Report")
 
-        runs = engine.db.get_supervisor_runs(task_key="TASK-1003", limit=5)
+        runs = engine.db.get_supervisor_runs(task_key="RUN-1003", limit=5)
         assert len(runs) == 1
         run = runs[0]
         assert run["verdict"] == "pass"
@@ -466,14 +466,14 @@ class TestSupervisorEngineLLMIntegrationDB:
         engine.evaluate("Report")
 
         task = engine.db.get_task(engine.task["id"])
-        assert task["current_phase"] == "0.0a"
+        assert task["current_phase"] == "2.REQUIREMENTS"
 
     def test_task_blocked_after_llm_blocked(self, engine, supervisor_llm):
         supervisor_llm("BLOCKED", blockers=["No access"])
         engine.evaluate("Report")
 
         task = engine.db.get_task(engine.task["id"])
-        assert task["current_phase"] == "-1"
+        assert task["current_phase"] == "1.INTAKE"
         assert task["status"] == "blocked"
 
     def test_rollback_without_config_is_retryable_and_has_no_transition(self, engine, supervisor_llm):

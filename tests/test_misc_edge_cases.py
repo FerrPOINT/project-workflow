@@ -54,7 +54,7 @@ class TestGetTaskKeyValidator:
         uow = MagicMock()
         uow.projects.list.return_value = []
         validator = _get_task_key_validator(uow=uow)
-        result = validator.validate("TASK-1")
+        result = validator.validate("RUN-1")
         assert not result.is_valid
 
 

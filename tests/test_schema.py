@@ -36,7 +36,12 @@ class TestEnsurePhaseCatalog:
         assert len(codes) > 0
         for code in (phase.code for phase in load_phases_from_seed()):
             assert code in codes
-        assert all(phase.delegate and phase.delegate.hermes_profile for phase in phases)
+        assert all(phase.delegate for phase in phases)
+        assert all(
+            phase.delegate.hermes_profile or phase.delegate.agent == "codex-operator"
+            for phase in phases
+            if phase.delegate
+        )
         assert all(phase.is_delegated for phase in phases)
 
     def test_idempotent_rerun(self, fresh_db):
@@ -133,15 +138,15 @@ class TestReadSeedItems:
 class TestGetPhase:
     def test_get_phase_returns_phase(self, fresh_db):
         ensure_phase_catalog(fresh_db)
-        phase = get_phase_from_db(fresh_db, "-1")
+        phase = get_phase_from_db(fresh_db, "1.INTAKE")
         assert phase is not None
-        assert phase.code == "-1"
+        assert phase.code == "1.INTAKE"
 
     def test_get_phase_order(self, fresh_db):
         ensure_phase_catalog(fresh_db)
-        phase = get_phase_from_db(fresh_db, "0.0a")
+        phase = get_phase_from_db(fresh_db, "2.REQUIREMENTS")
         assert phase is not None
-        assert phase.code == "0.0a"
+        assert phase.code == "2.REQUIREMENTS"
 
 
 class TestLoadPhases:
@@ -152,9 +157,9 @@ class TestLoadPhases:
 
     def test_get_phase_from_db(self, fresh_db):
         ensure_phase_catalog(fresh_db)
-        phase = get_phase_from_db(fresh_db, "-1")
+        phase = get_phase_from_db(fresh_db, "1.INTAKE")
         assert phase is not None
-        assert phase.code == "-1"
+        assert phase.code == "1.INTAKE"
 
     def test_get_phase_from_db_missing(self, fresh_db):
         ensure_phase_catalog(fresh_db)

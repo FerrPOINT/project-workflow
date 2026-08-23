@@ -21,16 +21,16 @@ def _validator() -> TaskKeyValidator:
     return TaskKeyValidator.from_projects(
         [
             {
-                "code": "TASK",
-                "name": "TASK",
-                "key_prefixes": ["TASK"],
+                "code": "RUN",
+                "name": "RUN",
+                "key_prefixes": ["RUN"],
             }
         ]
     )
 
 
 class TestStepCommand:
-    """Test `project-workflow step --task TASK-1`"""
+    """Test `project-workflow step --task RUN-1`"""
 
     @patch("project_workflow.supervisor.SupervisorEngine")
     def test_step_auto_init_creates_task(self, mock_engine_cls):
@@ -40,12 +40,12 @@ class TestStepCommand:
         mock_engine.format_current_phase_instructions.return_value = "do stuff"
         runner = CliRunner()
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
-            result = runner.invoke(cli, ["step", "--task", "TASK-1"])
+            result = runner.invoke(cli, ["step", "--task", "RUN-1"])
         assert result.exit_code == 0
         # step_cmd creates a single engine and asks for the phase instructions.
         assert mock_engine_cls.call_count == 1
         first_call = mock_engine_cls.call_args_list[0]
-        assert first_call[0] == ("TASK-1",)
+        assert first_call[0] == ("RUN-1",)
         mock_engine.format_current_phase_instructions.assert_called_once()
 
     @patch("project_workflow.supervisor.SupervisorEngine")
@@ -55,7 +55,7 @@ class TestStepCommand:
         mock_engine.format_current_phase_instructions.return_value = "phase instructions"
         runner = CliRunner()
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
-            result = runner.invoke(cli, ["step", "--task", "TASK-1"])
+            result = runner.invoke(cli, ["step", "--task", "RUN-1"])
         assert result.exit_code == 0
         assert "phase instructions" in result.output
         mock_engine.format_current_phase_instructions.assert_called_once_with()
@@ -83,7 +83,7 @@ class TestStepCommand:
         }
         runner = CliRunner()
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
-            result = runner.invoke(cli, ["step", "--task", "TASK-1", "--report", "Done"])
+            result = runner.invoke(cli, ["step", "--task", "RUN-1", "--report", "Done"])
         assert result.exit_code == 0
         mock_engine.evaluate.assert_called_once_with("Done")
         assert "Инструкции:" in result.output
@@ -112,7 +112,7 @@ class TestStepCommand:
         }
         runner = CliRunner()
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
-            result = runner.invoke(cli, ["step", "--task", "TASK-1", "--report", "Bad"])
+            result = runner.invoke(cli, ["step", "--task", "RUN-1", "--report", "Bad"])
         assert result.exit_code == 1
         assert "Чекапы:" in result.output
         assert "m1" in result.output
@@ -131,7 +131,7 @@ class TestStepCommand:
         }
         runner = CliRunner()
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
-            result = runner.invoke(cli, ["--json", "step", "--task", "TASK-1", "--report", "Done"])
+            result = runner.invoke(cli, ["--json", "step", "--task", "RUN-1", "--report", "Done"])
         assert result.exit_code == 0
         parsed = json.loads(result.output)
         assert parsed["verdict"] == "PASS"
@@ -145,7 +145,7 @@ class TestStepCommand:
         }
         runner = CliRunner()
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
-            result = runner.invoke(cli, ["--json", "step", "--task", "TASK-1", "--report", "Done"])
+            result = runner.invoke(cli, ["--json", "step", "--task", "RUN-1", "--report", "Done"])
         assert result.exit_code == 1
         assert json.loads(result.output)["verdict"] == "BLOCKED"
 
@@ -164,11 +164,11 @@ class TestStepCommand:
         }
         runner = CliRunner()
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
-            result = runner.invoke(cli, ["--json", "step", "--task", "TASK-1"])
+            result = runner.invoke(cli, ["--json", "step", "--task", "RUN-1"])
         assert result.exit_code == 0
         parsed = json.loads(result.output)
         assert parsed["ok"] is True
-        assert parsed["task_key"] == "TASK-1"
+        assert parsed["task_key"] == "RUN-1"
         assert parsed["phase"] == "0.00"
         assert parsed["prompt"] == "next steps"
         assert parsed["phase_contract"]["hermes_profile"] == "sdlc-ops"
@@ -176,19 +176,19 @@ class TestStepCommand:
 
     def test_step_skip_is_rejected(self):
         runner = CliRunner()
-        result = runner.invoke(cli, ["step", "--task", "TASK-1", "--skip"])
+        result = runner.invoke(cli, ["step", "--task", "RUN-1", "--skip"])
         assert result.exit_code != 0
         assert "No such option '--skip'" in result.output
 
     def test_step_repo_is_rejected(self):
         runner = CliRunner()
-        result = runner.invoke(cli, ["step", "--task", "TASK-1", "--repo", "/repo"])
+        result = runner.invoke(cli, ["step", "--task", "RUN-1", "--repo", "/repo"])
         assert result.exit_code != 0
         assert "No such option '--repo'" in result.output
 
 
 class TestHistoryCommand:
-    """Test `project-workflow history --task TASK-1`"""
+    """Test `project-workflow history --task RUN-1`"""
 
     @patch("project_workflow.interfaces.cli.ui.SAUnitOfWork")
     def test_history_shows_records(self, mock_uow_cls):
@@ -223,9 +223,9 @@ class TestHistoryCommand:
         uow.phases.get_by_id.side_effect = _fake_phase
         runner = CliRunner()
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
-            result = runner.invoke(cli, ["history", "--task", "TASK-1"])
+            result = runner.invoke(cli, ["history", "--task", "RUN-1"])
         assert result.exit_code == 0, result.output
-        assert "TASK-1" in result.output
+        assert "RUN-1" in result.output
         assert "Phase 0" in result.output
 
     @patch("project_workflow.interfaces.cli.ui.SAUnitOfWork")
@@ -234,7 +234,7 @@ class TestHistoryCommand:
         uow.supervisor_runs.list.return_value = []
         runner = CliRunner()
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
-            result = runner.invoke(cli, ["history", "--task", "TASK-1"])
+            result = runner.invoke(cli, ["history", "--task", "RUN-1"])
         assert result.exit_code == 0, result.output
         assert "пуста" in result.output
 
@@ -244,11 +244,11 @@ class TestHistoryCommand:
         uow.supervisor_runs.list.return_value = []
         runner = CliRunner()
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
-            result = runner.invoke(cli, ["--json", "history", "--task", "TASK-1", "--n", "10"])
+            result = runner.invoke(cli, ["--json", "history", "--task", "RUN-1", "--n", "10"])
         assert result.exit_code == 0, result.output
         parsed = json.loads(result.output)
         assert parsed["ok"] is True
-        assert parsed["task_key"] == "TASK-1"
+        assert parsed["task_key"] == "RUN-1"
         assert parsed["count"] == 0
 
 

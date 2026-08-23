@@ -30,8 +30,8 @@ class TestEndToEndWorkflow:
         assert "id" in p and "name" in p and "phase_order" in p
         assert "execution_type" in p
         workflows = uow.get_workflows()
-        assert [w["name"] for w in workflows] == ["Default Workflow"]
-        assert len(phases) == 27
+        assert [w["name"] for w in workflows] == ["sdlc-business-tech-v1"]
+        assert len(phases) == 19
         agents = uow.get_agents()
         assert len(agents) > 0
 

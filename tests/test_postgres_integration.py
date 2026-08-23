@@ -110,9 +110,107 @@ class TestPostgresSession:
         inspector = inspect(engine)
         columns = {column["name"] for column in inspector.get_columns("agents", schema="project_workflow")}
         indexes = {index["name"] for index in inspector.get_indexes("agents", schema="project_workflow")}
-        assert version == "6f3d8a2c1b47"
+        assert version == "9b71d2e4c6a0"
         assert "hermes_profile" in columns
         assert "uq_agents_hermes_profile" in indexes
+
+    def test_business_tech_workflow_becomes_default_without_rewriting_legacy_audit(self, pg_url):
+        engine = get_engine(pg_url)
+        run_alembic_command("upgrade", engine, "6f3d8a2c1b47")
+        legacy_uow = SAUnitOfWork(engine)
+        legacy_workflow_id = legacy_uow.workflows.create(
+            {"name": "legacy-27-phase", "description": "historical", "is_default": True}
+        )
+        legacy_project_id = legacy_uow.projects.create(
+            {
+                "workflow_id": legacy_workflow_id,
+                "code": "TASK",
+                "name": "Historical tasks",
+                "key_prefixes": ["TASK"],
+            }
+        )
+        legacy_phase_id = legacy_uow.phases.create(
+            {
+                "workflow_id": legacy_workflow_id,
+                "code": "10",
+                "name": "Auto-Improve",
+                "phase_order": 27,
+                "is_seed_managed": True,
+            }
+        )
+        legacy_task_id = legacy_uow.tasks.create(
+            {
+                "project_id": legacy_project_id,
+                "task_key": "TASK-HISTORICAL",
+                "current_phase": "10",
+                "status": "done",
+            }
+        )
+        legacy_run_id = legacy_uow.supervisor_runs.create(
+            {
+                "task_id": legacy_task_id,
+                "phase_id": legacy_phase_id,
+                "verdict": "pass",
+                "report": "historical audit",
+            }
+        )
+        legacy_uow.commit()
+        legacy_uow.close()
+
+        ensure_migrated(engine)
+        ensure_migrated(engine)
+
+        with engine.connect() as conn:
+            revision = conn.execute(
+                text("SELECT version_num FROM project_workflow.alembic_version")
+            ).scalar_one()
+            workflows = conn.execute(
+                text(
+                    "SELECT name, is_default FROM project_workflow.workflows "
+                    "WHERE name IN ('legacy-27-phase', 'sdlc-business-tech-v1') ORDER BY name"
+                )
+            ).all()
+            phase_count = conn.execute(
+                text(
+                    "SELECT count(*) FROM project_workflow.phases p "
+                    "JOIN project_workflow.workflows w ON w.id = p.workflow_id "
+                    "WHERE w.name = 'sdlc-business-tech-v1'"
+                )
+            ).scalar_one()
+            cycle_count = conn.execute(
+                text(
+                    "SELECT count(*) FROM project_workflow.phases p "
+                    "JOIN project_workflow.workflows w ON w.id = p.workflow_id "
+                    "WHERE w.name = 'sdlc-business-tech-v1' AND "
+                    "(p.execution_type <> 'parallel' OR p.code IN ('5.RESEARCH', '6.SOLUTION', '10.REVIEW'))"
+                )
+            ).scalar_one()
+            run = conn.execute(
+                text(
+                    "SELECT task_id, phase_id, report FROM project_workflow.supervisor_runs "
+                    "WHERE id = :run_id"
+                ),
+                {"run_id": legacy_run_id},
+            ).one()
+            run_project = conn.execute(
+                text(
+                    "SELECT w.name, p.key_prefixes FROM project_workflow.projects p "
+                    "JOIN project_workflow.workflows w ON w.id = p.workflow_id WHERE p.code = 'RUN'"
+                )
+            ).one()
+
+        assert revision == "9b71d2e4c6a0"
+        assert [(row.name, row.is_default) for row in workflows] == [
+            ("legacy-27-phase", 0),
+            ("sdlc-business-tech-v1", 1),
+        ]
+        assert phase_count == 19
+        assert cycle_count == 15
+        assert run.task_id == legacy_task_id
+        assert run.phase_id == legacy_phase_id
+        assert run.report == "historical audit"
+        assert run_project.name == "sdlc-business-tech-v1"
+        assert json.loads(run_project.key_prefixes) == ["RUN"]
 
     def test_hermes_profile_migration_preserves_agents_and_enforces_unique_owner(self, pg_url):
         engine = get_engine(pg_url)
@@ -228,20 +326,40 @@ class TestPostgresSession:
     def test_legacy_default_agent_bindings_are_fixed_without_touching_custom_workflows(
         self, pg_url
     ):
-        from project_workflow.infrastructure.db import schema
-        from project_workflow.infrastructure.db.uow_bootstrap import bootstrap_default_project
-
         engine = get_engine(pg_url)
         run_alembic_command("upgrade", engine, "4d7c2a9e6b10")
         uow = SAUnitOfWork(engine)
-        schema.ensure_phase_catalog(uow)
-        bootstrap_default_project(uow)
+        legacy_workflow_id = uow.workflows.create(
+            {"name": "Default Workflow", "description": "legacy", "is_default": True}
+        )
         custom_workflow_id = uow.workflows.create(
             {"name": "Custom", "description": "", "is_default": False}
+        )
+        orchestrator = uow.agents.get_by_hermes_profile("sdlc-orchestrator")
+        coder = uow.agents.get_by_hermes_profile("sdlc-coder")
+        assert orchestrator is not None
+        assert coder is not None
+        coder_id = coder.id
+        uow.agents.update(coder_id, {"name": "coder", "description": "Seed agent for 9"})
+        none_id = uow.agents.create(
+            {"name": "None", "description": "Seed agent for -1", "hermes_profile": None}
         )
         custom_agent_id = uow.agents.create(
             {"name": "ui-owner", "description": "configured in UI", "hermes_profile": "ui-profile"}
         )
+        for phase_order, (code, agent_id) in enumerate(
+            (("-1", none_id), ("9", coder_id), ("10", none_id)), start=1
+        ):
+            uow.phases.create(
+                {
+                    "workflow_id": legacy_workflow_id,
+                    "code": code,
+                    "name": f"Legacy {code}",
+                    "phase_order": phase_order,
+                    "agent_id": agent_id,
+                    "is_seed_managed": True,
+                }
+            )
         custom_phase_id = uow.phases.create(
             {
                 "workflow_id": custom_workflow_id,
@@ -255,49 +373,18 @@ class TestPostgresSession:
         uow.commit()
         uow.close()
 
-        with engine.begin() as conn:
-            none_id = conn.execute(
-                text(
-                    "INSERT INTO project_workflow.agents "
-                    "(name, description, hermes_profile) "
-                    "VALUES ('None', 'Seed agent for -1', NULL) RETURNING id"
-                )
-            ).scalar_one()
-            conn.execute(
-                text(
-                    "UPDATE project_workflow.phases SET agent_id = :none_id "
-                    "WHERE workflow_id = (SELECT id FROM project_workflow.workflows "
-                    "WHERE is_default = 1) AND code IN ('-1', '10')"
-                ),
-                {"none_id": none_id},
-            )
-            conn.execute(
-                text(
-                    "UPDATE project_workflow.agents SET description = 'Seed agent for 9' "
-                    "WHERE hermes_profile = 'sdlc-coder'"
-                )
-            )
-            conn.execute(
-                text(
-                    "UPDATE project_workflow.phases SET agent_id = "
-                    "(SELECT id FROM project_workflow.agents WHERE hermes_profile = 'sdlc-coder') "
-                    "WHERE workflow_id = (SELECT id FROM project_workflow.workflows "
-                    "WHERE is_default = 1) AND code = '9'"
-                )
-            )
-
         ensure_migrated(engine)
         ensure_migrated(engine)
 
         with engine.connect() as conn:
-            default_assignments = dict(
+            legacy_assignments = dict(
                 conn.execute(
                     text(
                         "SELECT p.code, a.hermes_profile FROM project_workflow.phases p "
-                        "JOIN project_workflow.workflows w ON w.id = p.workflow_id "
                         "JOIN project_workflow.agents a ON a.id = p.agent_id "
-                        "WHERE w.is_default = 1 AND p.code IN ('-1', '9', '10')"
-                    )
+                        "WHERE p.workflow_id = :workflow_id AND p.code IN ('-1', '9', '10')"
+                    ),
+                    {"workflow_id": legacy_workflow_id},
                 ).all()
             )
             custom_profile = conn.execute(
@@ -312,7 +399,7 @@ class TestPostgresSession:
                 {"agent_id": none_id},
             ).scalar_one()
 
-        assert default_assignments == {
+        assert legacy_assignments == {
             "-1": "sdlc-orchestrator",
             "9": "sdlc-orchestrator",
             "10": "sdlc-orchestrator",
@@ -329,10 +416,10 @@ class TestPostgresSession:
         uow = SAUnitOfWork(engine)
         schema.ensure_phase_catalog(uow)
         bootstrap_default_project(uow)
-        project = uow.projects.get_by_code("TASK")
+        project = uow.projects.get_by_code("RUN")
         phase = uow.phases.list(workflow_id=project.workflow_id)[0]
         task_id = uow.tasks.create(
-            {"project_id": project.id, "task_key": "TASK-MIGRATION", "current_phase": phase.code}
+            {"project_id": project.id, "task_key": "RUN-MIGRATION", "current_phase": phase.code}
         )
         run_id = uow.supervisor_runs.create(
             {"task_id": task_id, "phase_id": phase.id, "verdict": "partial", "report": "old"}
@@ -402,28 +489,52 @@ class TestPostgresSession:
             version = conn.execute(text("SELECT version_num FROM project_workflow.alembic_version")).scalar_one()
         tables = set(inspect(engine).get_table_names(schema="project_workflow"))
 
-        assert version == "6f3d8a2c1b47"
+        assert version == "9b71d2e4c6a0"
         assert not any(table.endswith("_v2") for table in tables)
 
     def test_catalog_upgrade_replaces_legacy_contracts_and_preserves_audit(self, pg_url):
-        from project_workflow.infrastructure.db import schema
-        from project_workflow.infrastructure.db.uow_bootstrap import bootstrap_default_project
-
         engine = get_engine(pg_url)
         run_alembic_command("upgrade", engine, "f61c2a7d9e04")
         uow = SAUnitOfWork(engine)
-        schema.ensure_phase_catalog(uow)
-        bootstrap_default_project(uow)
-        project = uow.projects.get_by_code("TASK")
-        phase = uow.phases.get_by_code("0.0a")
-        assert phase is not None
+        workflow_id = uow.workflows.create(
+            {"name": "Default Workflow", "description": "legacy", "is_default": True}
+        )
+        project_id = uow.projects.create(
+            {
+                "workflow_id": workflow_id,
+                "code": "TASK",
+                "name": "Historical tasks",
+                "key_prefixes": ["TASK"],
+            }
+        )
+        phase_id = uow.phases.create(
+            {
+                "workflow_id": workflow_id,
+                "code": "0.0a",
+                "name": "Legacy runtime",
+                "phase_order": 1,
+                "is_seed_managed": True,
+            }
+        )
+        plan_phase_id = uow.phases.create(
+            {
+                "workflow_id": workflow_id,
+                "code": "3",
+                "name": "Legacy plan",
+                "phase_order": 2,
+                "is_seed_managed": True,
+            }
+        )
+        uow.instructions.create(
+            plan_phase_id,
+            {"step_num": 1, "description": "Write mandatory PLAN.md", "skills": None},
+        )
         task_id = uow.tasks.create(
-            {"project_id": project.id, "task_key": "TASK-CATALOG-MIGRATION", "current_phase": phase.code}
+            {"project_id": project_id, "task_key": "TASK-CATALOG-MIGRATION", "current_phase": "0.0a"}
         )
         run_id = uow.supervisor_runs.create(
-            {"task_id": task_id, "phase_id": phase.id, "verdict": "blocked", "report": "preserved audit"}
+            {"task_id": task_id, "phase_id": phase_id, "verdict": "blocked", "report": "preserved audit"}
         )
-        phase_id = phase.id
         uow.commit()
         uow.close()
 
@@ -446,8 +557,9 @@ class TestPostgresSession:
             conn.execute(
                 text(
                     "UPDATE project_workflow.instructions SET description = 'Write mandatory PLAN.md' "
-                    "WHERE phase_id = (SELECT id FROM project_workflow.phases WHERE code = '3')"
-                )
+                    "WHERE phase_id = :plan_phase_id"
+                ),
+                {"plan_phase_id": plan_phase_id},
             )
 
         ensure_migrated(engine)
@@ -475,10 +587,18 @@ class TestPostgresSession:
                     "UNION ALL SELECT description FROM project_workflow.instructions "
                     "UNION ALL SELECT description FROM project_workflow.checks "
                     "UNION ALL SELECT description FROM project_workflow.evidence"
-                    ") catalog WHERE lower(value) ~ 'github|pull request|glab_token|verify-suite|mandatory plan.md'"
-                )
+                    ") catalog WHERE lower(value) ~ 'github|glab_token|verify-suite|mandatory plan.md' "
+                    "AND value IN (SELECT name FROM project_workflow.phases WHERE workflow_id = :workflow_id "
+                    "UNION ALL SELECT description FROM project_workflow.instructions WHERE phase_id IN "
+                    "(SELECT id FROM project_workflow.phases WHERE workflow_id = :workflow_id) "
+                    "UNION ALL SELECT description FROM project_workflow.checks WHERE phase_id IN "
+                    "(SELECT id FROM project_workflow.phases WHERE workflow_id = :workflow_id) "
+                    "UNION ALL SELECT description FROM project_workflow.evidence WHERE phase_id IN "
+                    "(SELECT id FROM project_workflow.phases WHERE workflow_id = :workflow_id))"
+                ),
+                {"workflow_id": workflow_id},
             ).scalar_one()
-        assert revision == "6f3d8a2c1b47"
+        assert revision == "9b71d2e4c6a0"
         assert upgraded.id == phase_id
         assert upgraded.name == "Runtime Readiness"
         active_contract = upgraded.string_agg.casefold()
@@ -498,18 +618,51 @@ class TestPostgresSession:
             check_uow.close()
 
     def test_skill_backfill_updates_only_empty_default_seed_instructions(self, pg_url):
-        from project_workflow.infrastructure.db import schema
-        from project_workflow.infrastructure.db.uow_bootstrap import bootstrap_default_project
-
         engine = get_engine(pg_url)
         run_alembic_command("upgrade", engine, "e92c4f7a1b63")
         uow = SAUnitOfWork(engine)
-        schema.ensure_phase_catalog(uow)
-        bootstrap_default_project(uow)
-        project = uow.projects.get_by_code("TASK")
-        phase = uow.phases.get_by_code("0.9")
+        workflow_id = uow.workflows.create(
+            {"name": "Default Workflow", "description": "legacy", "is_default": True}
+        )
+        project_id = uow.projects.create(
+            {
+                "workflow_id": workflow_id,
+                "code": "TASK",
+                "name": "Historical tasks",
+                "key_prefixes": ["TASK"],
+            }
+        )
+        phase_id = uow.phases.create(
+            {
+                "workflow_id": workflow_id,
+                "code": "0.9",
+                "name": "Legacy critic",
+                "phase_order": 1,
+                "is_seed_managed": True,
+            }
+        )
+        for step_num in range(1, 4):
+            uow.instructions.create(
+                phase_id,
+                {"step_num": step_num, "description": f"Legacy instruction {step_num}", "skills": None},
+            )
+        research_phase_id = uow.phases.create(
+            {
+                "workflow_id": workflow_id,
+                "code": "0.6",
+                "name": "Legacy research",
+                "phase_order": 2,
+                "is_seed_managed": True,
+            }
+        )
+        uow.instructions.create(
+            research_phase_id,
+            {"step_num": 1, "description": "Preserved UI instruction", "skills": '["ui-custom"]'},
+        )
+        phase = uow.phases.get_by_id(phase_id)
+        assert phase is not None
         task_id = uow.tasks.create(
-            {"project_id": project.id, "task_key": "TASK-SKILL-MIGRATION", "current_phase": phase.code}
+            {"project_id": project_id, "task_key": "TASK-SKILL-MIGRATION", "current_phase": phase.code}
         )
         run_id = uow.supervisor_runs.create(
             {"task_id": task_id, "phase_id": phase.id, "verdict": "partial", "report": "preserved"}
@@ -548,7 +701,7 @@ class TestPostgresSession:
                     "WHERE phase_id = (SELECT id FROM project_workflow.phases "
                     "WHERE workflow_id = :workflow_id AND code = '0.6') AND step_num = 1"
                 ),
-                {"skills": custom_value, "workflow_id": project.workflow_id},
+                {"skills": custom_value, "workflow_id": workflow_id},
             )
 
         ensure_migrated(engine)
@@ -569,14 +722,14 @@ class TestPostgresSession:
                     "WHERE phase_id = (SELECT id FROM project_workflow.phases "
                     "WHERE workflow_id = :workflow_id AND code = '0.6') AND step_num = 1"
                 ),
-                {"workflow_id": project.workflow_id},
+                {"workflow_id": workflow_id},
             ).scalar_one()
             custom_workflow_skills = conn.execute(
                 text("SELECT skills FROM project_workflow.instructions WHERE id = :instruction_id"),
                 {"instruction_id": custom_instruction_id},
             ).scalar_one()
 
-        assert revision == "6f3d8a2c1b47"
+        assert revision == "9b71d2e4c6a0"
         assert [json.loads(row.skills) for row in migrated] == [
             ["project-workflow-executor", "agent-workflow-patterns"],
             ["workflow-systematic-debugging"],
@@ -674,7 +827,7 @@ def _prepare_concurrent_task(pg_url: str, task_key: str) -> None:
     uow = SAUnitOfWork(engine)
     schema.ensure_phase_catalog(uow)
     bootstrap_default_project(uow)
-    project = uow.projects.get_by_code("TASK")
+    project = uow.projects.get_by_code("RUN")
     phase = uow.phases.list(workflow_id=project.workflow_id)[0]
     uow.tasks.create({"project_id": project.id, "task_key": task_key, "current_phase": phase.code})
     uow.commit()
@@ -686,7 +839,7 @@ def _prepare_concurrent_task(pg_url: str, task_key: str) -> None:
 def test_concurrent_reports_create_one_transition_and_run(pg_url, same_report):
     from project_workflow.supervisor import SupervisorEngine
 
-    task_key = "TASK-CONCURRENT"
+    task_key = "RUN-CONCURRENT"
     _prepare_concurrent_task(pg_url, task_key)
     barrier = Barrier(2)
 
@@ -875,36 +1028,28 @@ def _step(env: dict[str, str], task_key: str, report: str) -> tuple[subprocess.C
 @pytest.mark.timeout(120)
 def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
     expected_phases = [
-        "-1",
-        "0.0a",
-        "0.01",
-        "0.000",
-        "0.00",
-        "0.7",
-        "0.9",
-        "0.5",
-        "0.6",
-        "1.5",
-        "3",
-        "3.5",
-        "4",
-        "4.5",
-        "5.5",
-        "6",
-        "7",
-        "7.5",
-        "7.7",
-        "8",
-        "9",
-        "10",
+        "1.INTAKE",
+        "2.REQUIREMENTS",
+        "3.DOR_GATE",
+        "4.START",
+        "5.RESEARCH",
+        "6.SOLUTION",
+        "7.PLAN_GATE",
+        "8.IMPLEMENT",
+        "9.PR",
+        "10.REVIEW",
+        "11.RUNTIME",
+        "12.RELEASE_GATE",
+        "13.DELIVERY",
+        "14.CLOSE",
+        "15.RETRO",
     ]
     expected_groups = {
-        "0.6": ["0.6", "1"],
-        "1.5": ["1.5", "2"],
-        "4.5": ["4.5", "5"],
-        "7.5": ["7.5", "7.6", "7.6.R"],
+        "5.RESEARCH": ["5.RESEARCH", "5.PREFLIGHT"],
+        "6.SOLUTION": ["6.SOLUTION", "6.TEST_PLAN"],
+        "10.REVIEW": ["10.REVIEW", "10.QA", "10.DATAFLOW"],
     }
-    task_key = "TASK-82001"
+    task_key = "RUN-82001"
 
     with _openai_compatible_server() as (provider_url, provider_state):
         env = _cli_env(pg_url, provider_url)
@@ -917,33 +1062,26 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
             workflows = list(bootstrap_uow.workflows.list())
             projects = list(bootstrap_uow.projects.list())
             assert [workflow.name for workflow in workflows] == [config_module.DEFAULT_WORKFLOW_NAME]
-            assert [project.code for project in projects] == ["TASK"]
-            assert len(bootstrap_uow.phases.list(workflow_id=workflows[0].id)) == 27
+            assert [project.code for project in projects] == ["RUN"]
+            assert len(bootstrap_uow.phases.list(workflow_id=workflows[0].id)) == 19
         finally:
             bootstrap_uow.close()
 
         assignment_result, assignment = _run_cli(env, "--json", "step", "--task", task_key)
         assert assignment_result.returncode == 0
         assert assignment["prompt"]
-        assert assignment["phase_contract"] == {
-            "phase_code": "-1",
-            "phase_name": "Task Intake",
-            "description": "Понять задачу, scope и ограничения до начала работы",
-            "instructions": assignment["phase_contract"]["instructions"],
-            "required_checks": assignment["phase_contract"]["required_checks"],
-            "required_evidence": assignment["phase_contract"]["required_evidence"],
-            "skills": ["project-workflow-executor", "jira-operator"],
-            "execution_type": "sync",
-            "delegate_agent": "orchestrator",
-            "hermes_profile": "sdlc-orchestrator",
-            "delegate_toolsets": [],
-            "parallel_with": None,
-            "rollback_target": None,
-            "group_phases": None,
-            "group_details": [],
-        }
+        assert assignment["phase_contract"]["phase_code"] == "1.INTAKE"
+        assert assignment["phase_contract"]["phase_name"] == "Intake"
+        assert assignment["phase_contract"]["workflow_revision"] == "sdlc-business-tech-v1"
+        assert assignment["phase_contract"]["actor"] == "hermes"
+        assert assignment["phase_contract"]["skills"] == [
+            "project-workflow-executor",
+            "relevanter-business-operator",
+        ]
+        assert assignment["phase_contract"]["delegate_agent"] == "orchestrator"
+        assert assignment["phase_contract"]["hermes_profile"] == "sdlc-orchestrator"
 
-        first_report = "E2E report 1 for phase -1"
+        first_report = "E2E report 1 for phase 1.INTAKE"
         for index, expected_phase in enumerate(expected_phases, start=1):
             report = first_report if index == 1 else f"E2E report {index} for phase {expected_phase}"
             result, payload = _step(env, task_key, report)
@@ -959,14 +1097,14 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
                 assert replay["replayed"] is True
                 assert len(provider_state.chat_requests) == request_count
 
-            if expected_phase == "0.6":
-                assert payload["next_phase"] == "1.5"
-                assert payload["next_phase_contract"]["group_phases"] == ["1.5", "2"]
+            if expected_phase == "5.RESEARCH":
+                assert payload["next_phase"] == "6.SOLUTION"
+                assert payload["next_phase_contract"]["group_phases"] == ["6.SOLUTION", "6.TEST_PLAN"]
                 assert [
                     detail["hermes_profile"]
                     for detail in payload["next_phase_contract"]["group_details"]
-                ] == ["sdlc-researcher", "sdlc-orchestrator"]
-                assert "project-workflow-executor" in payload["next_phase_contract"]["skills"]
+                ] == ["sdlc-orchestrator", "sdlc-critic"]
+                assert "workflow-writing-plans" in payload["next_phase_contract"]["skills"]
                 assert any(
                     "workflow-code-intelligence" in instruction
                     for instruction in payload["next_phase_contract"]["instructions"]
@@ -976,29 +1114,29 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
                 project = uow.projects.get_by_id(task.project_id)
                 phases = {phase.id: phase.code for phase in uow.phases.list(workflow_id=project.workflow_id)}
                 statuses = {phases[row["phase_id"]]: row["status"] for row in uow.tasks.get_history(task.id)}
-                assert task.current_phase == "1.5"
-                assert statuses["1.5"] == "pending"
-                assert statuses.get("2") != "done"
+                assert task.current_phase == "6.SOLUTION"
+                assert statuses["6.SOLUTION"] == "pending"
+                assert statuses.get("6.TEST_PLAN") != "done"
                 uow.close()
 
-            if expected_phase == "1.5":
-                assert payload["next_phase"] == "3"
+            if expected_phase == "6.SOLUTION":
+                assert payload["next_phase"] == "7.PLAN_GATE"
 
-            if expected_phase == "3":
+            if expected_phase == "7.PLAN_GATE":
                 assert payload["next_phase_contract"]["group_phases"] is None
                 assert any(
-                    "agent-workflow-patterns" in instruction
+                    "test-driven-development" in instruction
                     for instruction in payload["next_phase_contract"]["instructions"]
                 )
 
         terminal_result, terminal = _run_cli(env, "--json", "step", "--task", task_key)
         history_result, history_payload = _run_cli(env, "--json", "history", "--task", task_key)
         assert terminal_result.returncode == history_result.returncode == 0
-        assert terminal["phase"] == "10"
+        assert terminal["phase"] == "15.RETRO"
         assert terminal["next_phase"] is None
-        assert terminal["phase_contract"]["hermes_profile"] == "sdlc-orchestrator"
+        assert terminal["phase_contract"]["hermes_profile"] == "sdlc-critic"
         assert terminal["status"] == "done"
-        assert history_payload["count"] == 22
+        assert history_payload["count"] == 15
 
         completed_request_count = len(provider_state.chat_requests)
         completed_result, completed = _step(env, task_key, "New report after workflow completion")
@@ -1017,11 +1155,11 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
             encoding="cp1251",
         )
         assert human_step.returncode == 0
-        assert "Auto-Improve" in human_step.stdout
+        assert "Улучшения" in human_step.stdout
         assert "UnicodeEncodeError" not in human_step.stderr
 
         assert provider_state.model_requests == 1
-        assert len(provider_state.chat_requests) == 22
+        assert len(provider_state.chat_requests) == 15
         assert provider_state.chat_phases == expected_phases
         assert all(request["model"] == "e2e-contract-model" for request in provider_state.chat_requests)
 
@@ -1029,14 +1167,14 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
     task = uow.tasks.get_by_key(task_key)
     runs = list(uow.supervisor_runs.list(task_id=task.id, limit=100))
     task_history = list(uow.tasks.get_history(task.id))
-    assert task.current_phase == "10"
+    assert task.current_phase == "15.RETRO"
     assert task.status == "done"
-    assert len(runs) == 22
-    assert len(task_history) == 27
+    assert len(runs) == 15
+    assert len(task_history) == 19
     assert all(row["status"] == "done" for row in task_history)
     fingerprints = [run.report_fingerprint for run in runs]
     assert all(fingerprints)
-    assert len(set(fingerprints)) == 22
+    assert len(set(fingerprints)) == 15
     assert all(run.context_snapshot["model"] == "e2e-contract-model" for run in runs)
     assert all(run.context_snapshot["endpoint_mode"] == "openai-compatible" for run in runs)
     assert all(run.context_snapshot["prompt_version"] == "supervisor-evaluator-v5" for run in runs)
@@ -1059,56 +1197,63 @@ def test_cli_verdicts_replay_and_fail_closed_through_postgres_and_http(pg_url):
         env = _cli_env(pg_url, provider_url)
         _initialize_cli_database(env)
 
-        partial_result, partial = _step(env, "TASK-82002", "MODE=PARTIAL incomplete report")
+        partial_result, partial = _step(env, "RUN-82002", "MODE=PARTIAL incomplete report")
         request_count = len(provider_state.chat_requests)
-        replay_result, replay = _step(env, "TASK-82002", "MODE=PARTIAL incomplete report")
+        replay_result, replay = _step(env, "RUN-82002", "MODE=PARTIAL incomplete report")
         assert partial_result.returncode == replay_result.returncode == 0
         assert partial["verdict"] == replay["verdict"] == "PARTIAL"
         assert replay["replayed"] is True
         assert len(provider_state.chat_requests) == request_count
 
-        blocked_result, blocked = _step(env, "TASK-82003", "MODE=BLOCKED blocked report")
+        blocked_result, blocked = _step(env, "RUN-82003", "MODE=BLOCKED blocked report")
         assert blocked_result.returncode == 1
         assert blocked["verdict"] == "BLOCKED"
         assert blocked["retryable"] is False
 
-        invalid_result, invalid = _step(env, "TASK-82004", "MODE=INVALID invalid response")
-        invalid_retry_result, invalid_retry = _step(env, "TASK-82004", "MODE=INVALID invalid response")
+        invalid_result, invalid = _step(env, "RUN-82004", "MODE=INVALID invalid response")
+        invalid_retry_result, invalid_retry = _step(env, "RUN-82004", "MODE=INVALID invalid response")
         assert invalid_result.returncode == invalid_retry_result.returncode == 1
         assert invalid["verdict"] == invalid_retry["verdict"] == "BLOCKED"
         assert invalid["retryable"] is invalid_retry["retryable"] is True
         assert invalid["replayed"] is invalid_retry["replayed"] is False
 
-        http_result, http_error = _step(env, "TASK-82005", "MODE=HTTP_ERROR provider error")
+        http_result, http_error = _step(env, "RUN-82005", "MODE=HTTP_ERROR provider error")
         assert http_result.returncode == 1
         assert http_error["verdict"] == "BLOCKED"
         assert http_error["retryable"] is True
 
-        phases_before_rollback = ["-1", "0.0a", "0.01", "0.000", "0.00", "0.7"]
-        _advance_to_phase(env, "TASK-82006", phases_before_rollback)
-        rollback_result, rollback = _step(env, "TASK-82006", "MODE=ROLLBACK return to suite verification")
+        phases_before_rollback = [
+            "1.INTAKE",
+            "2.REQUIREMENTS",
+            "3.DOR_GATE",
+            "4.START",
+            "5.RESEARCH",
+            "6.SOLUTION",
+        ]
+        _advance_to_phase(env, "RUN-82006", phases_before_rollback)
+        rollback_result, rollback = _step(env, "RUN-82006", "MODE=ROLLBACK return to suite verification")
         assert rollback_result.returncode == 0
         assert rollback["verdict"] == "ROLLBACK"
-        assert rollback["rollback_target"] == "0.0a"
+        assert rollback["rollback_target"] == "5.RESEARCH"
 
-        _advance_to_phase(env, "TASK-82007", phases_before_rollback)
-        delegate_result, delegate = _step(env, "TASK-82007", "MODE=DELEGATE hand off review")
+        _advance_to_phase(env, "RUN-82007", phases_before_rollback)
+        delegate_result, delegate = _step(env, "RUN-82007", "MODE=DELEGATE hand off review")
         assert delegate_result.returncode == 0
         assert delegate["verdict"] == "DELEGATE"
 
     uow = SAUnitOfWork(pg_url)
-    partial_task = uow.tasks.get_by_key("TASK-82002")
-    blocked_task = uow.tasks.get_by_key("TASK-82003")
-    invalid_task = uow.tasks.get_by_key("TASK-82004")
-    http_task = uow.tasks.get_by_key("TASK-82005")
-    rollback_task = uow.tasks.get_by_key("TASK-82006")
-    delegate_task = uow.tasks.get_by_key("TASK-82007")
-    assert (partial_task.current_phase, partial_task.status) == ("-1", "active")
-    assert (blocked_task.current_phase, blocked_task.status) == ("-1", "blocked")
-    assert (invalid_task.current_phase, invalid_task.status) == ("-1", "active")
-    assert (http_task.current_phase, http_task.status) == ("-1", "active")
-    assert (rollback_task.current_phase, rollback_task.status) == ("0.0a", "active")
-    assert (delegate_task.current_phase, delegate_task.status) == ("0.9", "active")
+    partial_task = uow.tasks.get_by_key("RUN-82002")
+    blocked_task = uow.tasks.get_by_key("RUN-82003")
+    invalid_task = uow.tasks.get_by_key("RUN-82004")
+    http_task = uow.tasks.get_by_key("RUN-82005")
+    rollback_task = uow.tasks.get_by_key("RUN-82006")
+    delegate_task = uow.tasks.get_by_key("RUN-82007")
+    assert (partial_task.current_phase, partial_task.status) == ("1.INTAKE", "active")
+    assert (blocked_task.current_phase, blocked_task.status) == ("1.INTAKE", "blocked")
+    assert (invalid_task.current_phase, invalid_task.status) == ("1.INTAKE", "active")
+    assert (http_task.current_phase, http_task.status) == ("1.INTAKE", "active")
+    assert (rollback_task.current_phase, rollback_task.status) == ("5.RESEARCH", "active")
+    assert (delegate_task.current_phase, delegate_task.status) == ("7.PLAN_GATE", "active")
     invalid_runs = list(uow.supervisor_runs.list(task_id=invalid_task.id, limit=10))
     assert len(invalid_runs) == 2
     assert all(run.report_fingerprint is None for run in invalid_runs)

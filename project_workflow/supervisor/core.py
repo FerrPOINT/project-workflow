@@ -114,6 +114,14 @@ class SupervisorEngine:
     def phase_map(self, value: dict[str, Phase]) -> None:
         self._phase_map = value
 
+    @property
+    def workflow_revision(self) -> str:
+        return str(self.workflow.get("name") or "") if self.workflow else ""
+
+    @property
+    def contract_builder(self) -> PhaseContractBuilder:
+        return PhaseContractBuilder(self.all_phases, self.workflow_revision)
+
     # ── Setup / state helpers ────────────────────────────────────────
 
     def _ensure_task(self) -> dict:
@@ -195,24 +203,19 @@ class SupervisorEngine:
         return previously
 
     def _get_next_phase(self, phase_code):
-        cb = PhaseContractBuilder(self.all_phases)
-        return cb.get_next_phase(phase_code)
+        return self.contract_builder.get_next_phase(phase_code)
 
     def _get_parallel_group(self, start_phase):
-        cb = PhaseContractBuilder(self.all_phases)
-        return cb.get_parallel_group(start_phase)
+        return self.contract_builder.get_parallel_group(start_phase)
 
     def _get_next_phase_after_group(self, group):
-        cb = PhaseContractBuilder(self.all_phases)
-        return cb._next_after_group(group)
+        return self.contract_builder._next_after_group(group)
 
     def _build_checklist(self, phase):
-        cb = PhaseContractBuilder(self.all_phases)
-        return cb.build_checklist(phase)
+        return self.contract_builder.build_checklist(phase)
 
     def _build_parallel_checklist(self, group):
-        cb = PhaseContractBuilder(self.all_phases)
-        return cb.build_parallel_checklist(group)
+        return self.contract_builder.build_parallel_checklist(group)
 
     def _record_transition(
         self,
@@ -292,7 +295,7 @@ class SupervisorEngine:
         phase = self.phase_map.get(phase_id or self.current_phase)
         if phase is None:
             return None
-        builder = PhaseContractBuilder(self.all_phases)
+        builder = self.contract_builder
         contract = (
             builder.build_parallel(builder.get_parallel_group(phase))
             if phase.execution_type == "parallel"
@@ -333,7 +336,7 @@ class SupervisorEngine:
         }
 
     def _completed_result(self, phase: Phase | None) -> dict[str, Any]:
-        contract = PhaseContractBuilder(self.all_phases).build(phase) if phase else None
+        contract = self.contract_builder.build(phase) if phase else None
         phase_code = phase.code if phase else self.current_phase
         return {
             "verdict": "PASS",

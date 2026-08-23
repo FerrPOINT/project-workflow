@@ -100,7 +100,7 @@ def patch_contract_builder(delegate_agent=None, hermes_profile=None):
 
     from project_workflow.supervisor import prompt as prompt_mod
 
-    def _inner(_all_phases):
+    def _inner(_all_phases, _workflow_revision=""):
         cb = MagicMock()
         contract = MagicMock()
         contract.to_dict.return_value = {

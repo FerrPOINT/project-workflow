@@ -19,7 +19,7 @@ from project_workflow.supervisor.models import Phase
 
 def _make_engine():
     engine = MagicMock()
-    engine.task_key = "TASK-1"
+    engine.task_key = "RUN-1"
     engine.task = {"id": 1}
     engine.all_phases = []
     engine.phase_map = {}
@@ -232,8 +232,8 @@ class TestPromptBuilder:
             evidence=[],
         )
         report = "I did it"
-        prompt = PromptBuilder.build_user_prompt("TASK-1", phase, report)
-        assert "TASK: TASK-1" in prompt
+        prompt = PromptBuilder.build_user_prompt("RUN-1", phase, report)
+        assert "TASK: RUN-1" in prompt
         assert "Phase One" in prompt
         assert report in prompt
 
@@ -247,7 +247,7 @@ class TestPromptBuilder:
             checks=[PhaseCheck(description="Check A")],
             evidence=[PhaseEvidence(item="Screenshot")],
         )
-        prompt = PromptBuilder.build_user_prompt("TASK-1", phase, "done", previously_covered=["A"])
+        prompt = PromptBuilder.build_user_prompt("RUN-1", phase, "done", previously_covered=["A"])
         assert "Run tests" in prompt
         assert "Check A" in prompt
         assert "Screenshot" in prompt

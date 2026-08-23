@@ -42,11 +42,11 @@ def client():
                 "workflow_id": default_workflow.id,
             }
         )
-    if not uow.tasks.get_by_key("TASK-1"):
+    if not uow.tasks.get_by_key("RUN-1"):
         uow.tasks.create(
             {
                 "project_id": uow.projects.get_by_code("DEFAULT").id,
-                "task_key": "TASK-1",
+                "task_key": "RUN-1",
                 "title": "Smoke task for dashboard",
                 "status": "active",
                 "current_phase": "-1",
@@ -85,7 +85,7 @@ class TestIndex:
         assert resp.status_code == 200
 
     def test_phase_detail_page(self, client):
-        resp = client.get(f"/phase/{_phase_id(client, '0.0a')}")
+        resp = client.get(f"/phase/{_phase_id(client, '1.INTAKE')}")
         assert resp.status_code == 200
 
     def test_settings_page(self, client):
@@ -122,7 +122,7 @@ class TestApiPhases:
         assert "phases" in data
 
     def test_get_phase(self, client):
-        resp = client.get(f"/api/phases/{_phase_id(client, '0.0a')}")
+        resp = client.get(f"/api/phases/{_phase_id(client, '1.INTAKE')}")
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, dict)
@@ -150,7 +150,7 @@ class TestApiPhases:
         assert "ui" not in names
 
     def test_composite_phase_update_commits_once(self, client, monkeypatch):
-        phase_id = _phase_id(client, "0.0a")
+        phase_id = _phase_id(client, "1.INTAKE")
         original_commit = SAUnitOfWork.commit
         commits = 0
 
@@ -174,7 +174,7 @@ class TestApiPhases:
         assert commits == 1
 
     def test_composite_phase_update_rolls_back_on_commit_error(self, client, monkeypatch):
-        phase_id = _phase_id(client, "0.0a")
+        phase_id = _phase_id(client, "1.INTAKE")
         before = client.get(f"/api/phases/{phase_id}").json()["phase"]
         original_commit = SAUnitOfWork.commit
 
@@ -227,7 +227,7 @@ class TestRemovedLegacyApi:
         assert resp.status_code == 404
 
     def test_single_phase_order_route_removed(self, client):
-        resp = client.put(f"/api/phases/{_phase_id(client, '1')}/order", json={"phase_order": 5})
+        resp = client.put(f"/api/phases/{_phase_id(client, '1.INTAKE')}/order", json={"phase_order": 5})
         assert resp.status_code == 404
 
     def test_parallel_route_removed(self, client):
@@ -599,7 +599,7 @@ class TestApiAgents:
         name = _unique("Agent")
         resp = client.post("/api/agents", json={"name": name})
         agent_id = resp.json()["agent_id"]
-        phase_id = _phase_id(client, "0.0a")
+        phase_id = _phase_id(client, "1.INTAKE")
         _app_state.phase_service().update_phase(phase_id, {"agent_id": agent_id})
         resp = client.delete(f"/api/agents/{agent_id}")
         assert resp.status_code == 400
@@ -609,7 +609,7 @@ class TestApiInstructions:
     def test_list_create_update_delete_instructions(self, client):
         from project_workflow.interfaces.ui import _app_state
 
-        phase_id = _phase_id(client, "0.0a")
+        phase_id = _phase_id(client, "1.INTAKE")
 
         resp = client.get(f"/api/phases/{phase_id}/instructions")
         assert resp.status_code == 200
@@ -681,13 +681,13 @@ class TestApiTasks:
         task = _app_state.task_service().create_task(
             {
                 "project_id": project.id,
-                "task_key": "TASK-DEL-1",
+                "task_key": "RUN-DEL-1",
                 "title": "To delete",
                 "status": "active",
                 "current_phase": "-1",
             }
         )
-        phase = uow.phases.get_by_code("0.0a")
+        phase = uow.phases.get_by_code("1.INTAKE")
         assert phase is not None
         _app_state.task_service().add_history(task["id"], phase.id, "done")
         assert uow.tasks.get_history(task["id"])
@@ -737,7 +737,7 @@ class TestApiInstructionsReorder:
     def test_reorder_instructions(self, client):
         from project_workflow.interfaces.ui import _app_state
 
-        phase_id = _phase_id(client, "0.0a")
+        phase_id = _phase_id(client, "1.INTAKE")
         resp1 = client.post("/api/instructions", json={"phase_id": phase_id, "description": "first"})
         resp2 = client.post("/api/instructions", json={"phase_id": phase_id, "description": "second"})
         id1 = resp1.json()["instruction"]["id"]
@@ -753,7 +753,7 @@ class TestApiPhaseUpdate:
     def test_update_phase_name_and_execution_type(self, client):
         from project_workflow.interfaces.ui import _app_state
 
-        phase_id = _phase_id(client, "0.01")
+        phase_id = _phase_id(client, "2.REQUIREMENTS")
         resp = client.put(
             f"/api/phases/{phase_id}",
             json={
@@ -771,43 +771,43 @@ class TestApiPhaseUpdate:
     def test_sync_to_parallel_joins_previous_component(self, client):
         from project_workflow.interfaces.ui.helpers import _build_parallel_phase_blocks
 
-        phase_id = _phase_id(client, "3")
+        phase_id = _phase_id(client, "7.PLAN_GATE")
 
         response = client.put(f"/api/phases/{phase_id}", json={"execution_type": "parallel"})
 
         assert response.status_code == 200
         phases = client.get("/api/phases").json()["phases"]
-        updated = next(phase for phase in phases if phase["code"] == "3")
+        updated = next(phase for phase in phases if phase["code"] == "7.PLAN_GATE")
         assert updated["execution_type"] == "parallel"
-        assert updated["parallel_with"] == "2"
+        assert updated["parallel_with"] == "6.TEST_PLAN"
         groups = [
             [phase["code"] for phase in block["phases"]]
             for block in _build_parallel_phase_blocks(phases)
         ]
-        assert ["1.5", "2", "3"] in groups
+        assert ["6.SOLUTION", "6.TEST_PLAN", "7.PLAN_GATE"] in groups
 
     def test_parallel_round_trip_keeps_original_component(self, client):
-        phase_id = _phase_id(client, "1.5")
+        phase_id = _phase_id(client, "5.RESEARCH")
 
         assert client.put(f"/api/phases/{phase_id}", json={"execution_type": "sync"}).status_code == 200
         assert client.put(f"/api/phases/{phase_id}", json={"execution_type": "parallel"}).status_code == 200
 
         phases = client.get("/api/phases").json()["phases"]
-        updated = next(phase for phase in phases if phase["code"] == "1.5")
-        assert updated["parallel_with"] == "2"
+        updated = next(phase for phase in phases if phase["code"] == "5.RESEARCH")
+        assert updated["parallel_with"] == "5.PREFLIGHT"
 
     def test_explicit_null_clears_parallel_component(self, client):
-        phase_id = _phase_id(client, "1.5")
+        phase_id = _phase_id(client, "5.RESEARCH")
 
         response = client.put(f"/api/phases/{phase_id}", json={"parallel_with": None})
 
         assert response.status_code == 200
         phases = client.get("/api/phases").json()["phases"]
-        updated = next(phase for phase in phases if phase["code"] == "1.5")
+        updated = next(phase for phase in phases if phase["code"] == "5.RESEARCH")
         assert updated["parallel_with"] is None
 
     def test_update_phase_forbidden_code(self, client):
-        phase_id = _phase_id(client, "0.000")
+        phase_id = _phase_id(client, "1.INTAKE")
         resp = client.put(f"/api/phases/{phase_id}", json={"code": "x.y"})
         assert resp.status_code == 400
 
@@ -816,7 +816,7 @@ class TestApiPhaseUpdate:
         assert resp.status_code == 404
 
     def test_phase_name_is_json_encoded_in_detail_script(self, client):
-        phase_id = _phase_id(client, "0.01")
+        phase_id = _phase_id(client, "2.REQUIREMENTS")
         dangerous_name = "O'Reilly </script><script>alert(1)</script>"
         update = client.put(f"/api/phases/{phase_id}", json={"name": dangerous_name})
         assert update.status_code == 200
@@ -840,7 +840,7 @@ class TestPageRoutes:
         assert resp.status_code == 200
 
     def test_task_detail_page(self, client):
-        resp = client.get("/task/TASK-1")
+        resp = client.get("/task/RUN-1")
         assert resp.status_code == 200
 
     def test_phase_detail_page_not_found(self, client):
