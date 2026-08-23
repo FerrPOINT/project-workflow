@@ -38,9 +38,14 @@ def _table(name: str) -> str:
 def _seed() -> list[dict[str, Any]]:
     seed_path = Path(__file__).resolve().parents[4] / "references" / "seed.json"
     raw = seed_path.read_bytes()
-    if hashlib.sha256(raw).hexdigest() != SEED_SHA256:
+    # ``using-rtech`` is the canonical public skill name.  Revision 9b71 was
+    # already released with the old ``rtech`` spelling, so this historical
+    # migration must keep consuming that exact snapshot.  The following
+    # migration performs the explicit forward rename.
+    historical_raw = raw.replace(b'"using-rtech"', b'"rtech"')
+    if hashlib.sha256(historical_raw).hexdigest() != SEED_SHA256:
         raise RuntimeError("sdlc-business-tech-v1 seed is immutable; create a new revision")
-    data = json.loads(raw)
+    data = json.loads(historical_raw)
     if not isinstance(data, list) or len(data) != 19:
         raise RuntimeError("sdlc-business-tech-v1 seed must contain exactly 19 phases")
     return data
