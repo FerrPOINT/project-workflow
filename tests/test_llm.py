@@ -25,6 +25,7 @@ class FakePhase:
         self.instructions = kwargs.get("instructions", [])
         self.checks = kwargs.get("checks", [])
         self.evidence = kwargs.get("evidence", [])
+        self.rollback_target = kwargs.get("rollback_target")
 
 
 class FakeInstruction:
@@ -525,11 +526,11 @@ class TestOpenAICompatibleClientOverrides:
         assert client.timeout == 300
 
 
-class TestEvaluatorV4PromptContract:
+class TestEvaluatorV6PromptContract:
     """The live provider receives explicit contradiction and chronology rules."""
 
-    def test_prompt_version_is_v4(self):
-        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v5"
+    def test_prompt_version_is_v6(self):
+        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v6"
 
     def test_contradictory_current_facts_prohibit_pass(self):
         prompt = PromptBuilder.SYSTEM_PROMPT
@@ -537,7 +538,16 @@ class TestEvaluatorV4PromptContract:
         assert "Mutually exclusive CURRENT facts" in prompt
         assert "prohibit PASS" in prompt
         assert "return PARTIAL" in prompt
+        assert "return ROLLBACK" in prompt
+        assert "earlier-phase artifact" in prompt
         assert "affected required item IDs in missing" in prompt
+
+    def test_build_user_prompt_exposes_rollback_target(self):
+        phase = FakePhase(rollback_target="8.IMPLEMENT")
+
+        prompt = PromptBuilder.build_user_prompt("RUN-1", phase, "reviewed")
+
+        assert "ROLLBACK TARGET: 8.IMPLEMENT" in prompt
 
     def test_chronological_state_change_requires_timestamped_action_evidence(self):
         prompt = PromptBuilder.SYSTEM_PROMPT

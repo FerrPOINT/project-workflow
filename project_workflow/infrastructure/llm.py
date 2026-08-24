@@ -113,7 +113,7 @@ class OpenAICompatibleClient:
 class PromptBuilder:
     """Build prompts from phase contracts + task context."""
 
-    PROMPT_VERSION = "supervisor-evaluator-v5"
+    PROMPT_VERSION = "supervisor-evaluator-v6"
 
     SYSTEM_PROMPT = (
         "You are a strict workflow supervisor. "
@@ -127,14 +127,20 @@ class PromptBuilder:
         "Words like 'ошибка'/'error'/'bug' alone are NOT blockers without root cause.\n"
         "5. Verify the worker did NOT break existing functionality, remove working code, or leave orphaned artifacts.\n"
         "6. verdict = PASS    — all items done, no blockers, no regressions → advance.\n"
-        "7. verdict = PARTIAL — some items done → stay on phase.\n"
+        "7. verdict = PARTIAL — some items are missing, but the CURRENT phase worker can "
+        "complete them without changing an artifact produced by an earlier phase → stay on phase.\n"
         "8. verdict = BLOCKED — real blocker → stay on phase.\n"
-        "9. verdict = ROLLBACK — worker explicitly cannot/will not do this.\n"
+        "9. verdict = ROLLBACK — missing items require changing an artifact produced by an "
+        "earlier phase, or the current worker explicitly cannot/will not do this. Use ROLLBACK "
+        "for review/QA findings that require code, test, migration, or documentation fixes in "
+        "the configured rollback phase.\n"
         "10. verdict = DELEGATE — worker delegates to another agent.\n"
         "11. Mutually exclusive CURRENT facts about the same artifact or state prohibit PASS "
         "unless the report gives an explicit chronology backed by action evidence.\n"
-        "12. If such a contradiction is repairable, return PARTIAL, put the affected required "
-        "item IDs in missing, and keep blockers empty. A real external blocker still returns BLOCKED.\n"
+        "12. If such a contradiction is repairable inside the current phase, return PARTIAL. "
+        "If repair requires changing an earlier-phase artifact and a rollback target is configured, "
+        "return ROLLBACK. Put affected required item IDs in missing and keep blockers empty. "
+        "A real external blocker still returns BLOCKED.\n"
         "13. A sequence such as 'first open, then merged' is valid only when timestamps and action "
         "evidence make the state change explicit.\n"
         "14. Return one bare JSON object. Never wrap it in Markdown or code fences, and add no commentary.\n"
@@ -161,6 +167,7 @@ class PromptBuilder:
         lines: list[str] = [
             f"TASK: {task_key}",
             f"CURRENT PHASE: {phase.code} — {phase.name}",
+            f"ROLLBACK TARGET: {getattr(phase, 'rollback_target', None) or 'not configured'}",
             "",
             "PHASE CONTRACT:",
         ]
