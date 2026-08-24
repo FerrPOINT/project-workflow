@@ -55,22 +55,29 @@ class _RequestLoggingMiddleware(BaseHTTPMiddleware):
 
 
 async def _health() -> JSONResponse:
-    """Liveness/readiness probe with DB connectivity check."""
+    """Readiness probe for connectivity, schema presence, and migration head."""
     from ...infrastructure.db import session as _session
 
-    health = {"ok": True, "version": __version__, "database": "unknown"}
+    health = {"ok": True, "version": __version__, "database": "unknown", "schema": "unknown"}
     status = 200
     start = time.perf_counter()
     try:
         engine = _session.get_engine()
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
-            health["database"] = "ok"
-    except Exception as exc:
-        logger.error("Health check failed: %s", exc)
+        health["database"] = "ok"
+        if not _session.schema_is_ready(engine):
+            raise RuntimeError("schema-not-ready")
+        health["schema"] = "ok"
+    except Exception:
+        logger.error("Health readiness check failed")
         health["ok"] = False
-        health["database"] = "error"
-        health["error"] = str(exc)
+        if health["database"] != "ok":
+            health["database"] = "error"
+            health["error_code"] = "database-unavailable"
+        else:
+            health["schema"] = "error"
+            health["error_code"] = "schema-not-ready"
         status = 503
     health["db_latency_ms"] = round((time.perf_counter() - start) * 1000, 2)
     return JSONResponse(health, status_code=status)

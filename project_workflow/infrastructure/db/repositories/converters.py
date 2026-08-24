@@ -4,13 +4,10 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
-import logging
 from typing import Any
 
 from project_workflow.domain import Agent, Phase, Project, SupervisorRun, Task, Workflow
 from project_workflow.infrastructure.db import models as m
-
-logger = logging.getLogger(__name__)
 
 
 def _iso(value: _dt.datetime | str | None) -> str | None:
@@ -27,14 +24,14 @@ def _row_to_phase(row: m.Phase) -> Phase:
         workflow_id=row.workflow_id,
         code=row.code,
         name=row.name,
-        description=row.description or "",
+        description=row.description,
         min_time_min=row.min_time_min or 0,
         is_blocker=bool(row.is_blocker),
         is_delegated=bool(row.is_delegated),
         is_critic=bool(row.is_critic),
         phase_order=row.phase_order,
         agent_id=row.agent_id,
-        next_recommendation=row.next_recommendation or "",
+        next_recommendation=row.next_recommendation,
         parallel_with=row.parallel_with,
         rollback_target=row.rollback_target,
         execution_type=row.execution_type or "sync",
@@ -53,34 +50,37 @@ def _row_to_workflow(row: m.Workflow) -> Workflow:
 
 
 def _row_to_project(row: m.Project) -> Project:
-    raw = row.key_prefixes or "[]"
+    raw = row.key_prefixes
+    if not isinstance(raw, str):
+        raise ValueError("Persisted project key_prefixes must be a JSON string array")
     try:
-        prefixes = json.loads(raw) if isinstance(raw, str) else []
+        prefixes = json.loads(raw)
     except (json.JSONDecodeError, TypeError) as exc:
-        logger.warning("Failed to parse project key_prefixes: %s", exc)
-        prefixes = []
+        raise ValueError("Persisted project key_prefixes contain invalid JSON") from exc
+    if not isinstance(prefixes, list) or not all(isinstance(prefix, str) for prefix in prefixes):
+        raise ValueError("Persisted project key_prefixes must be a JSON string array")
     return Project(
         id=row.id,
         workflow_id=row.workflow_id,
         code=row.code,
         name=row.name,
+        description=row.description,
         key_prefixes=[str(p) for p in prefixes],
         workflow_name=row.workflow.name if row.workflow else None,
     )
 
 
 def _row_to_task(row: m.Task) -> Task:
-    current_phase = row.current_phase or "-1"
+    current_phase = row.current_phase
     phase_name = None
     try:
-        if current_phase and current_phase != "-1":
+        if current_phase:
             phase = next(
-                (p for p in row.project.workflow.phases if str(p.id) == current_phase or p.code == current_phase),
+                (p for p in row.project.workflow.phases if p.code == current_phase),
                 None,
             )
             phase_name = phase.name if phase else current_phase
-    except (AttributeError, TypeError) as exc:
-        logger.warning("Failed to resolve task phase name: %s", exc)
+    except (AttributeError, TypeError):
         phase_name = current_phase
     return Task(
         id=getattr(row, "id", None),
@@ -107,24 +107,26 @@ def _row_to_agent(row: m.Agent) -> Agent:
 
 def _row_to_supervisor_run(row: m.SupervisorRun) -> SupervisorRun:
     def _parse(raw: str | None) -> list[str]:
-        if not raw:
-            return []
+        if not isinstance(raw, str):
+            raise ValueError("Persisted supervisor list field must be a JSON string array")
         try:
             parsed = json.loads(raw)
-            return parsed if isinstance(parsed, list) else []
         except (json.JSONDecodeError, TypeError) as exc:
-            logger.warning("Failed to parse supervisor list field: %s", exc)
-            return []
+            raise ValueError("Persisted supervisor list field contains invalid JSON") from exc
+        if not isinstance(parsed, list) or not all(isinstance(item, str) for item in parsed):
+            raise ValueError("Persisted supervisor list field must be a JSON string array")
+        return parsed
 
     def _parse_obj(raw: str | None) -> dict[str, Any]:
-        if not raw:
-            return {}
+        if not isinstance(raw, str):
+            raise ValueError("Persisted supervisor object field must be a JSON object")
         try:
             parsed = json.loads(raw)
-            return parsed if isinstance(parsed, dict) else {}
         except (json.JSONDecodeError, TypeError) as exc:
-            logger.warning("Failed to parse supervisor object field: %s", exc)
-            return {}
+            raise ValueError("Persisted supervisor object field contains invalid JSON") from exc
+        if not isinstance(parsed, dict):
+            raise ValueError("Persisted supervisor object field must be a JSON object")
+        return parsed
 
     return SupervisorRun(
         id=row.id,

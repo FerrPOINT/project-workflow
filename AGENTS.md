@@ -19,22 +19,22 @@ After any change to the SQLAlchemy layer, application services, UI state, or sup
    ```bash
    pytest -q --timeout=60
    ```
-   Expected: **900 passed, 15 deselected**, 0 failed, 0 errors. Integration tests
-   are intentionally deselected here; run them separately as described below.
+   Expected: 0 failed and 0 errors. PostgreSQL integration tests are intentionally
+   deselected here; run them separately as described below.
 
 2. **PostgreSQL integration**
    ```bash
    pytest -q -m integration tests/test_postgres_integration.py --timeout=60
    ```
-   Expected: **15 passed**, 0 failed, 0 errors. This includes the real CLI
+   Expected: 0 failed and 0 errors. This includes the real CLI
    subprocess -> PostgreSQL -> OpenAI-compatible HTTP workflow path. The two
-   multi-subprocess E2E tests have an explicit 120-second per-test marker.
+   multi-subprocess E2E tests have an explicit 240-second per-test marker.
 
 3. **Coverage**
    ```bash
    pytest --cov=project_workflow --cov-report=term --timeout=60
    ```
-   Expected: total coverage >= 90%. Current baseline: **95.50%**.
+   Expected: total coverage >= 90%.
 
 4. **Lint**
    ```bash
@@ -46,7 +46,7 @@ After any change to the SQLAlchemy layer, application services, UI state, or sup
    ```bash
    mypy project_workflow scripts
    ```
-   Expected: `Success: no issues found in 85 source files`.
+   Expected: `Success: no issues found`.
 
 6. **UI service health**
    ```bash

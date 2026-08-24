@@ -89,7 +89,7 @@ async def phases_page(request: Request, workflow_id: int | None = Query(default=
     )
 
 
-async def phase_detail(request: Request, phase_id: str) -> HTMLResponse:
+async def phase_detail(request: Request, phase_id: int) -> HTMLResponse:
     phase = _load_phase_detail(phase_id)
     if not phase:
         return _error_page(
@@ -102,6 +102,26 @@ async def phase_detail(request: Request, phase_id: str) -> HTMLResponse:
             page="phases",
         )
     agents = _app_state.agent_service().list_agents()
+    workflow_phases = _app_state.phase_service().list_phases(phase.get("workflow_id"))
+    current_index = next(
+        (index for index, item in enumerate(workflow_phases) if item.get("id") == phase.get("id")),
+        None,
+    )
+    parallel_candidates = []
+    if current_index is not None:
+        left = current_index - 1
+        right = current_index + 1
+        while left >= 0 and workflow_phases[left].get("execution_type") == "parallel":
+            left -= 1
+        while right < len(workflow_phases) and workflow_phases[right].get("execution_type") == "parallel":
+            right += 1
+        parallel_candidates = [
+            item
+            for index, item in enumerate(workflow_phases)
+            if left < index < right
+            and index != current_index
+            and item.get("execution_type") == "parallel"
+        ]
     for instruction in phase.get("instructions", []):
         instruction["skills"] = PhaseService.normalize_skills(instruction.get("skills"))
     return templates.TemplateResponse(
@@ -113,6 +133,8 @@ async def phase_detail(request: Request, phase_id: str) -> HTMLResponse:
             "ui_port": get_settings().UI_PORT,
             "phase": phase,
             "agents": agents,
+            "workflow_phases": workflow_phases,
+            "parallel_candidates": parallel_candidates,
         },
     )
 
@@ -242,7 +264,7 @@ async def instructions_page(
             back_label="К фазам",
             page="phases",
         )
-    phase = _load_phase_detail(str(phase_id))
+    phase = _load_phase_detail(phase_id)
     if not phase:
         return _error_page(
             request,

@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import Session
 
-from project_workflow.domain.exceptions import NotFoundError
 from project_workflow.domain.repositories import (
     AgentRepository,
     CheckRepository,
@@ -20,7 +19,6 @@ from project_workflow.domain.repositories import (
     UnitOfWork,
     WorkflowRepository,
 )
-from project_workflow.infrastructure.db.models import Base
 from project_workflow.infrastructure.db.repositories import (
     SAAgentRepository,
     SACheckRepository,
@@ -40,8 +38,8 @@ from .row_utils import row_to_dict, rows_to_dicts
 class SAUnitOfWork(UnitOfWork):
     """SQLAlchemy session-based unit of work."""
 
-    def __init__(self, db_path_or_engine: str | Engine | None = None):
-        if isinstance(db_path_or_engine, Engine):
+    def __init__(self, db_path_or_engine: str | Engine | Connection | None = None):
+        if isinstance(db_path_or_engine, (Engine, Connection)):
             self._session = Session(bind=db_path_or_engine, expire_on_commit=False)
         elif db_path_or_engine is None:
             self._session = get_session()
@@ -120,105 +118,13 @@ class SAUnitOfWork(UnitOfWork):
     def session(self) -> Session:
         return self._session
 
-    def add_task_history(self, task_id: int, phase_id: int | str, status: str) -> None:
-        self.tasks.add_history(task_id, int(phase_id), status)
-        self.commit()
-
     def create_supervisor_run(self, *args: Any, **kwargs: Any) -> int:
         if args and isinstance(args[0], dict) and not kwargs:
             kwargs = args[0]
         return self.supervisor_runs.create(kwargs)
 
-    def create_phase(self, *args: Any, **kwargs: Any) -> int:
-        from project_workflow.application.phase import PhaseServiceApp
-
-        if args and isinstance(args[0], dict) and not kwargs:
-            kwargs = args[0]
-        data = dict(kwargs)
-        if "agent_id" in data and isinstance(data["agent_id"], dict):
-            data["agent_id"] = data["agent_id"].get("id")
-        if "workflow_id" not in data or data["workflow_id"] is None:
-            raise ValueError("create_phase requires workflow_id")
-        if "code" not in data:
-            data["code"] = str(data.get("id")) if data.get("id") is not None else str(data.get("phase_order", "0"))
-        result = PhaseServiceApp(self).create_phase(data)
-        return result["id"]
-
-    def create_instruction(self, *args: Any, **kwargs: Any) -> int:
-        if args and isinstance(args[0], dict) and not kwargs:
-            kwargs = args[0]
-        data = dict(kwargs)
-        phase_id = data.pop("phase_id")
-        if isinstance(phase_id, str):
-            phase = self.phases.get_by_code(phase_id)
-            phase_id = phase.id if phase else None
-        if phase_id is None:
-            raise RuntimeError("create_instruction requires phase_id")
-        return self.instructions.create(int(phase_id), data)
-
-    def get_phase_by_code(self, code: str) -> Any | None:
-        return row_to_dict(self.phases.get_by_code(code))
-
-    def get_phase(self, token: Any) -> Any | None:
-        """Resolve a phase by id or code."""
-        numeric_id: int | None = None
-        if isinstance(token, int):
-            numeric_id = token
-        elif isinstance(token, str) and token.isdigit():
-            numeric_id = int(token)
-        if numeric_id is not None:
-            row = self.phases.get_by_id(numeric_id)
-            if row is not None:
-                return row_to_dict(row)
-        row = self.phases.get_by_code(str(token))
-        if row is None:
-            try:
-                row = self.phases.get_by_id(int(token))
-            except (TypeError, ValueError):
-                pass
-        return row_to_dict(row)
-
-    def get_task(self, task_id: int) -> Any | None:
-        return row_to_dict(self.tasks.get_by_id(task_id))
-
     def get_task_by_key(self, key: str) -> Any | None:
         return row_to_dict(self.tasks.get_by_key(key))
-
-    def update_task(self, task_id: int, data: dict[str, Any]) -> None:
-        return self.tasks.update(task_id, data)
-
-    def create_project(self, data: dict[str, Any]) -> dict[str, Any]:
-        from project_workflow.application.project import ProjectService
-
-        return ProjectService(self).create_project(data)
-
-    def create_agent(self, data: dict[str, Any]) -> int:
-        from project_workflow.application.agent import AgentService
-
-        result = AgentService(self).create_agent(data)
-        return result["id"]
-
-    def create_workflow(self, data: dict[str, Any]) -> dict[str, Any]:
-        from project_workflow.application.workflow import WorkflowService
-
-        return WorkflowService(self).create_workflow(data)
-
-    def delete_workflow(self, workflow_id: int) -> None:
-        self.workflows.delete(workflow_id)
-
-    def update_workflow(self, workflow_id: int, data: dict[str, Any]) -> None:
-        self.workflows.update(workflow_id, data)
-
-    def create_task(self, *args: Any, **kwargs: Any) -> int:
-        from project_workflow.application.task import TaskService
-
-        if args and isinstance(args[0], dict) and not kwargs:
-            kwargs = args[0]
-        data = dict(kwargs)
-        if "project_id" in data and isinstance(data["project_id"], dict):
-            data["project_id"] = data["project_id"].get("id")
-        result = TaskService(self).create_task(data)
-        return result["id"]
 
     def get_phases(self, workflow_id: int | None = None) -> list[Any]:
         if workflow_id is None:
@@ -227,10 +133,6 @@ class SAUnitOfWork(UnitOfWork):
                 return []
             workflow_id = default_wf.id
         return rows_to_dicts(self.phases.list(workflow_id=workflow_id))
-
-    def get_all_phases(self) -> list[Any]:
-        """Return phases across every workflow (used by dashboard aggregation)."""
-        return rows_to_dicts(self.phases.list())
 
     def get_projects(self) -> list[Any]:
         return rows_to_dicts(self.projects.list())
@@ -244,61 +146,8 @@ class SAUnitOfWork(UnitOfWork):
     def get_workflows(self) -> list[Any]:
         return rows_to_dicts(self.workflows.list())
 
-    def list_phases(self, workflow_id: int | None = None) -> list[Any]:
-        return self.get_phases(workflow_id)
-
-    def list_projects(self) -> list[Any]:
-        return self.get_projects()
-
-    def list_tasks(self) -> list[Any]:
-        return self.get_tasks()
-
-    def list_agents(self) -> list[Any]:
-        return self.get_agents()
-
-    def list_workflows(self) -> list[Any]:
-        return self.get_workflows()
-
     def get_task_history(self, task_id: int) -> list[dict[str, Any]]:
         return rows_to_dicts(self.tasks.get_history(task_id))
 
     def get_supervisor_runs(self, **kwargs: Any) -> list[dict[str, Any]]:
         return rows_to_dicts(self.supervisor_runs.list(**kwargs))
-
-    def init(self) -> None:
-        from . import schema
-
-        bind = self._session.bind
-        if bind is None or bind.dialect.name != "sqlite":
-            raise RuntimeError("SAUnitOfWork.init is only available for isolated SQLite tests")
-        self.create_all()
-        schema.ensure_phase_catalog(self)
-        self._bootstrap_default_project()
-
-    def _bootstrap_default_project(self) -> None:
-        from .uow_bootstrap import bootstrap_default_project
-        bootstrap_default_project(self)
-
-    def delete_phase(self, token: int | str) -> None:
-        phase_id: int | None = None
-        if isinstance(token, str):
-            phase = self.phases.get_by_code(token)
-            phase_id = phase.id if phase else None
-        else:
-            phase_id = token
-        if phase_id is None:
-            raise NotFoundError(f"Phase {token} not found")
-        self.phases.delete(int(phase_id))
-
-    def create_all(self) -> None:
-        """Create schema (dev/test helper)."""
-        bind = self._session.bind
-        if bind is None:
-            raise RuntimeError("Session has no engine bound")
-        # For PostgreSQL make sure the target schema exists and search_path
-        # is set before creating tables.
-        from .session import ensure_schema
-
-        ensure_schema(bind)
-        Base.metadata.create_all(bind)
-        return None

@@ -79,10 +79,10 @@ SQLite остаётся только для изолированных тест�
 
 ```bash
 # Выполнить текущую фазу задачи и получить вердикт supervisor
-project-workflow step --task TASK-123 --report "Сделал X, проверил Y"
+project-workflow step --task RUN-123 --report "Сделал X, проверил Y"
 
 # История фаз и supervisor-решений
-project-workflow history --task TASK-123 --n 10
+project-workflow history --task RUN-123 --n 10
 ```
 
 CLI ожидает `DATABASE_URL` и доступный OpenAI-compatible evaluator. Каноническая конфигурация использует OpenRouter:
@@ -98,7 +98,7 @@ export OPENAI_REASONING_EFFORT=none
 
 Если endpoint не поддерживает `reasoning_effort`, задайте `OPENAI_REASONING_EFFORT=`.
 
-Fallback evaluator отсутствует: если провайдер недоступен или вернул некорректный JSON, команда остаётся на текущей фазе, возвращает `BLOCKED` и exit code `1`.
+Fallback evaluator отсутствует: если провайдер недоступен или вернул некорректный JSON, задача остаётся на текущей фазе, атомарно получает `status=blocked`, blocked history и audit-run без fingerprint; команда возвращает retryable `BLOCKED` и exit code `1`. Повтор снова вызывает provider, а успешная оценка снимает техническую блокировку обычным переходом.
 Повторный отчёт после `status=done` не вызывает evaluator и не создаёт новый run/history: CLI возвращает `PASS`, `status=done` и `next_phase=null`.
 
 <a name="ui"></a>
@@ -124,8 +124,18 @@ sudo systemctl daemon-reload
 sudo systemctl restart project-workflow-ui.service
 ```
 
-Перед первым запуском `scripts/init_db.py` применяет `alembic upgrade head` и заполняет
-каталоги только в пустой БД. Последующие запуски не перезаписывают изменения из UI.
+Перед первым запуском `scripts/init_db.py` применяет единственную baseline migration
+`0001_initial`, загружает packaged-каталог и создаёт default project. Повторный запуск
+идемпотентен и не перезаписывает изменения из UI.
+
+Старые Alembic revision намеренно не поддерживаются. При обнаружении прежней или
+неверсионированной схемы инициализация завершается сообщением
+`legacy database must be recreated`; автоматические `drop` и `stamp` не выполняются.
+Перед запуском новой версии существующую схему или Compose volume нужно явно
+пересоздать по [reset-runbook](docs/database-reset.md). Импорт прежних данных не предусмотрен.
+
+В Compose схема и каталог создаются отдельным сервисом `migrate`; API стартует только
+после его успешного завершения.
 
 ### Hermes-профили агентов
 
@@ -168,6 +178,8 @@ flowchart TD
 - UI-пакет (`project_workflow/interfaces/ui/`) — чистое FastAPI-приложение с отдельными routes, services, dependencies.
 - Конфигурация централизована в `project_workflow.config` на Pydantic Settings; `DATABASE_URL` обязателен.
 - PostgreSQL хранит каталог, задачи, историю, fingerprints и audit; packaged seed используется только для пустой БД.
+- Граф фаз валидируется целиком до записи: порядок всегда `1..N`, rollback направлен назад, а явные parallel-ссылки соединяют только фазы одного непрерывного parallel-сегмента; isolated parallel допустим.
+- REST принимает числовые phase resource IDs и строгие JSON-типы; `key_prefixes` — только непустой `list[str]`, скрытого textarea/string compatibility нет.
 - Skills являются рекомендациями внутри инструкций фазы; их канонические файлы хранятся в `relevanter/agent-skills`, отдельного runtime registry нет.
 - Hermes profile является ссылкой на профиль внешнего исполнителя; Workflow хранит только уникальное имя и не копирует конфигурацию или секреты Hermes.
 
@@ -177,10 +189,10 @@ flowchart TD
 | Проверка | Команда | Статус |
 |---|---|---|
 | Lint | `ruff check .` | **green** |
-| Type check | `mypy project_workflow scripts` | **green, 85 source files** |
-| Tests | `pytest -q --timeout=60` | **900 passed, 15 integration deselected** |
-| PostgreSQL integration | `pytest -q -m integration tests/test_postgres_integration.py --timeout=120` | **15 passed** |
-| Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` | **95.50%** |
+| Type check | `mypy project_workflow scripts` | **без ошибок** |
+| Tests | `pytest -q --timeout=60` | **без падений** |
+| PostgreSQL integration | `pytest -q -m integration tests/test_postgres_integration.py --timeout=120` | **без падений** |
+| Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` | **не ниже 90%** |
 | Systemd UI health | `curl http://localhost:8811/api/tasks` | **200** |
 
 <a name="roadmap"></a>
@@ -188,24 +200,24 @@ flowchart TD
 
 - [x] Конфигурация на Pydantic Settings (`DATABASE_URL` required)
 - [x] SQLAlchemy-модели, репозитории и unit-of-work
-- [x] Alembic-миграции + `scripts/init_db.py` для автоматического baseline
+- [x] Одна Alembic baseline migration + единый идемпотентный `scripts/init_db.py`
 - [x] Docker Compose: Postgres + migrate + UI
 - [x] UI/API переведены на SQLAlchemy-сервисы
 - [x] Один runtime dataflow: CLI/UI → Supervisor → OpenAI-compatible evaluator → PostgreSQL
-- [x] Полный suite: 900 тестов green + 15 PostgreSQL integration tests
+- [x] Полный pytest suite и отдельный PostgreSQL integration gate
 - [x] Postgres-интеграционные тесты
 - [x] `SupervisorEngine` и supervisor-модули собраны в пакет `project_workflow/supervisor/`
 - [x] API-тесты на все UI routes
 - [x] Production hardening: `/health` endpoint, graceful shutdown, PG connection retry
-- [x] Coverage > 95%
+- [x] Coverage >= 90%
 - [x] mypy `--check-untyped-defs` для supervisor/core.py
 - [x] UI-доработки: execution_type на отдельной строке, русское склонение счётчиков, очистка рабочей БД от мусора
 - [x] Supervisor evaluate: DB-backed history/audit, idempotent replay и явный parallel rendering
-- [x] Packaged 27-phase catalog bootstrapped once into an empty PostgreSQL database
-- [x] GitLab Merge Request contract: Hermes создаёт MR, Maintainer вручную merge, Hermes проверяет SHA и pipeline
-- [x] 27 seed-managed фаз связаны с шестью именованными Hermes profiles
+- [x] Актуальный packaged Business Tech catalog загружается один раз в пустую PostgreSQL database
+- [x] Tech Pull Request contract: Hermes создаёт PR, Maintainer вручную merge, Hermes проверяет SHA и build
+- [x] Seed-managed фазы связаны с именованными Hermes profiles
 - [x] JSON `step` отдаёт полный `phase_contract`, включая `skills`, profile и детали parallel-участников
-- [x] Forward-миграция пустых skill-рекомендаций существующей PostgreSQL без перезаписи UI-значений
+- [x] Packaged seed загружается только при bootstrap пустой схемы
 
 ## Установка
 

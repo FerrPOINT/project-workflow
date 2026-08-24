@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,14 +11,12 @@ pytestmark = [pytest.mark.ui]
 
 from project_workflow.interfaces.ui import (
     _build_parallel_phase_blocks,
-    _coerce_phase_db_id,
     _group_instructions,
     _load_cli_reference,
     _load_tasks,
     _load_workflows,
     _parse_optional_int,
     _resolve_task_phase,
-    _workflow_form_payload,
     app,
 )
 
@@ -95,51 +93,30 @@ class TestParseOptionalInt:
         assert _parse_optional_int("-1") is None
 
 
-class TestCoercePhaseDbId:
-    def test_int_positive(self):
-        assert _coerce_phase_db_id(42) == 42
-
-    def test_int_zero(self):
-        assert _coerce_phase_db_id(0) is None
-
-    def test_none(self):
-        assert _coerce_phase_db_id(None) is None
-
-    def test_digit_string(self):
-        assert _coerce_phase_db_id("42") == 42
-
-    def test_non_digit_string(self):
-        assert _coerce_phase_db_id("abc") is None
-
-
 class TestResolveTaskPhase:
     def test_none_current_phase(self):
         db = MagicMock()
         db.get_phases.return_value = []
-        db.get_phase.return_value = None
         token, phase = _resolve_task_phase(None, _db=db)
-        assert token == "-1"
+        assert token == ""
         assert phase is None
 
     def test_by_code_match(self):
         db = MagicMock()
         db.get_phases.return_value = [{"id": 1, "code": "1", "name": "One", "phase_order": 1}]
-        db.get_phase.return_value = None
         token, phase = _resolve_task_phase("1", _db=db)
         assert token == "1"
         assert phase["code"] == "1"
 
-    def test_numeric_id(self):
+    def test_numeric_id_is_rejected_as_current_phase_code(self):
         db = MagicMock()
         db.get_phases.return_value = [{"id": 42, "code": "1", "name": "One", "phase_order": 1}]
-        db.get_phase.return_value = None
-        token, phase = _resolve_task_phase(42, _db=db)
-        assert phase["id"] == 42
+        with pytest.raises(TypeError):
+            _resolve_task_phase(42, _db=db)
 
     def test_unresolvable(self):
         db = MagicMock()
         db.get_phases.return_value = []
-        db.get_phase.return_value = None
         token, phase = _resolve_task_phase("unknown", _db=db)
         assert token == "unknown"
         assert phase is None
@@ -187,7 +164,6 @@ class TestLoadTasks:
                 {"phase_id": 1, "status": "done", "completed_at": "2025-01-20"},
             ]
         }
-        db.get_phase.return_value = {"id": 1, "name": "P", "phase_order": 1}
         db.get_supervisor_runs.return_value = []
         monkeypatch.setattr("project_workflow.interfaces.ui._app_state", MagicMock(get_db=lambda: db))
         tasks = _load_tasks()
@@ -264,7 +240,6 @@ class TestTaskDetailEdgeCases:
         assert task["supervisor_runs"][0]["next_contract"]["phase_name"] == "Next"
         assert task["supervisor_runs"][0]["phase_code"] == "historical.1"
         assert task["supervisor_runs"][0]["phase_name"] == "Historical phase"
-        db.get_phase_by_code.assert_not_called()
 
     def test_task_detail_supervisor_runs_no_next_phase(self, monkeypatch):
         from project_workflow.interfaces.ui import _get_task_detail
@@ -314,7 +289,8 @@ class TestApiErrorPaths:
         assert response.json()["ok"] is False
 
     def test_health_endpoint_ok(self):
-        response = client.get("/health")
+        with patch("project_workflow.infrastructure.db.session.schema_is_ready", return_value=True):
+            response = client.get("/health")
         assert response.status_code == 200
         data = response.json()
         assert data["ok"] is True
@@ -331,17 +307,34 @@ class TestApiErrorPaths:
         data = response.json()
         assert data["ok"] is False
         assert data["database"] == "error"
-        assert "db down" in data["error"]
+        assert data["error_code"] == "database-unavailable"
+        assert "db down" not in response.text
+
+    def test_health_endpoint_rejects_schema_drift_without_details(self):
+        with patch(
+            "project_workflow.infrastructure.db.session.schema_is_ready",
+            return_value=False,
+        ):
+            response = client.get("/health")
+
+        assert response.status_code == 503
+        data = response.json()
+        assert data["ok"] is False
+        assert data["database"] == "ok"
+        assert data["schema"] == "error"
+        assert data["error_code"] == "schema-not-ready"
+        assert "SELECT" not in response.text
+        assert "postgresql" not in response.text
 
     def test_api_workflow_create_missing_name(self):
         response = client.post("/api/workflows", json={})
-        assert response.status_code == 400
-        assert "name required" in response.json()["error"]
+        assert response.status_code == 422
+        assert "name" in response.text
 
     def test_api_workflow_create_with_code_rejected(self):
         response = client.post("/api/workflows", json={"code": "X", "name": "Test"})
-        assert response.status_code == 400
-        assert "no longer supported" in response.json()["error"]
+        assert response.status_code == 422
+        assert "code" in response.text
 
     def test_api_tasks(self):
         response = client.get("/api/tasks")
@@ -423,19 +416,3 @@ class TestLoadCliReference:
     def test_loads_commands(self):
         commands = _load_cli_reference()
         assert isinstance(commands, list)
-
-
-# ═══════════════════════════════════════════════════════════
-# Workflow form payload
-# ═══════════════════════════════════════════════════════════
-
-
-class TestWorkflowFormPayload:
-    def test_basic(self):
-        payload = _workflow_form_payload({"name": "Test", "description": "desc"})
-        assert payload["name"] == "Test"
-        assert payload["description"] == "desc"
-
-    def test_empty(self):
-        payload = _workflow_form_payload({})
-        assert payload["name"] == ""

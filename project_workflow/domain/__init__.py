@@ -20,7 +20,7 @@ class TaskKey:
 
 @dataclass(frozen=True)
 class PhaseCode:
-    """Semantic phase code, e.g. '-1', '0.0a', '1'."""
+    """Semantic phase code, e.g. '1.INTAKE' or '10.REVIEW'."""
 
     value: str
 
@@ -36,14 +36,14 @@ class Phase:
     workflow_id: int | None = None
     code: str = ""
     name: str = ""
-    description: str = ""
+    description: str | None = ""
     min_time_min: int = 0
     is_blocker: bool = False
     is_delegated: bool = False
     is_critic: bool = False
     phase_order: int = 0
     agent_id: int | None = None
-    next_recommendation: str = ""
+    next_recommendation: str | None = ""
     parallel_with: str | None = None
     rollback_target: str | None = None
     execution_type: str = "sync"
@@ -116,6 +116,7 @@ class Project:
     workflow_id: int = 0
     code: str = ""
     name: str = ""
+    description: str = ""
     key_prefixes: list[str] = field(default_factory=list)
     workflow_name: str | None = None
 
@@ -125,6 +126,7 @@ class Project:
             "workflow_id": self.workflow_id,
             "code": self.code,
             "name": self.name,
+            "description": self.description,
             "key_prefixes": self.key_prefixes,
             "workflow_name": self.workflow_name,
         }
@@ -139,7 +141,7 @@ class Task:
     task_key: str = ""
     title: str = ""
     description: str = ""
-    current_phase: str = "-1"
+    current_phase: str = ""
     current_phase_name: str = ""
     status: str = "active"
     created_at: str | None = None

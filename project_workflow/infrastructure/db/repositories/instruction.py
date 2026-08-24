@@ -16,21 +16,24 @@ from project_workflow.infrastructure.db import models as m
 
 
 def _parse_skills(raw: str | None) -> list[str]:
-    if not raw:
+    if raw is None:
         return []
     try:
         parsed = json.loads(raw)
-        return [str(s) for s in parsed] if isinstance(parsed, list) else []
-    except Exception:
-        return []
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise ValueError("Persisted instruction skills contain invalid JSON") from exc
+    if not isinstance(parsed, list) or not all(isinstance(item, str) for item in parsed):
+        raise ValueError("Persisted instruction skills must be a JSON string array")
+    return parsed
 
 
-def _dump_skills(skills: Any) -> str | None:
-    if skills in (None, [], ""):
+def _dump_skills(skills: list[str] | None) -> str | None:
+    if skills in (None, []):
         return None
-    if isinstance(skills, str):
-        return skills
-    return json.dumps([str(s) for s in skills], ensure_ascii=False)
+    if not isinstance(skills, list) or not all(isinstance(item, str) for item in skills):
+        raise TypeError("skills must be a list of strings or null")
+    return json.dumps(skills, ensure_ascii=False)
+
 
 class SAInstructionRepository(InstructionRepository):
     """SQLAlchemy implementation of InstructionRepository."""
@@ -154,6 +157,7 @@ class SAInstructionRepository(InstructionRepository):
             )
             next_step += 1
         self._session.flush()
+        self._session.expire_all()
 
     def _next_step_num(self, phase_id: int) -> int:
         max_step = self._session.execute(

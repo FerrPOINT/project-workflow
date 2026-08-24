@@ -155,7 +155,6 @@ class TestUIDataServiceGaps:
         wdb.get_phases.return_value = []
         wdb.get_supervisor_runs.return_value = []
         wdb.projects.get_by_id.return_value = None
-        wdb.get_phase.return_value = None
 
         result = _service(wdb)._get_task_detail("RUN-1")
         assert result is not None

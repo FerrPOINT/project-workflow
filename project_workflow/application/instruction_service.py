@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from project_workflow.domain.exceptions import NotFoundError
 from project_workflow.domain.repositories import UnitOfWork
 
 
@@ -20,7 +21,34 @@ class InstructionService:
         return self._uow.instructions.get_by_id(instruction_id)
 
     def create_instruction(self, phase_id: int, data: dict[str, Any]) -> dict[str, Any]:
-        iid = self._uow.instructions.create(phase_id, data)
+        phase = self._uow.phases.get_by_id(phase_id)
+        if phase is None or phase.workflow_id is None:
+            raise NotFoundError(f"Phase {phase_id} not found")
+        if self._uow.workflows.lock(phase.workflow_id) is None:
+            raise NotFoundError(f"Workflow {phase.workflow_id} not found")
+        if not any(item.id == phase_id for item in self._uow.phases.list(phase.workflow_id)):
+            raise NotFoundError(f"Phase {phase_id} not found")
+
+        existing_rows = list(self._uow.instructions.list(phase_id))
+        requested_step = data.get("step_num")
+        if requested_step is None:
+            requested_step = len(existing_rows) + 1
+        try:
+            insertion_step = int(requested_step)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("step_num must be a positive integer") from exc
+        if insertion_step < 1 or insertion_step > len(existing_rows) + 1:
+            raise ValueError(f"step_num must be in range 1..{len(existing_rows) + 1}")
+
+        create_data = {key: value for key, value in data.items() if key != "step_num"}
+        iid = self._uow.instructions.create(phase_id, create_data)
+        if insertion_step <= len(existing_rows):
+            ordered_ids = [cast(int, row["id"]) for row in existing_rows]
+            ordered_ids.insert(insertion_step - 1, iid)
+            self._uow.instructions.reorder(
+                phase_id,
+                [(instruction_id, index) for index, instruction_id in enumerate(ordered_ids, 1)],
+            )
         item = self._uow.instructions.get_by_id(iid)
         if not item:
             raise RuntimeError("Instruction creation failed")

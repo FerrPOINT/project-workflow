@@ -40,19 +40,19 @@ class TestSchemasFinalGaps:
         assert schemas.OptionalIntMixin._coerce_optional_int("-5") is None
 
     def test_project_create_key_prefixes_invalid_type(self):
-        with pytest.raises(ValueError, match="At least one task key prefix"):
+        with pytest.raises(ValueError, match="list of strings"):
             schemas.ProjectCreate(code="PRJ", key_prefixes=123)
 
-    def test_project_update_key_prefixes_str(self):
-        p = schemas.ProjectUpdate(code="PRJ", key_prefixes="aa\nbb")
-        assert p.key_prefixes == ["AA", "BB"]
+    def test_project_update_rejects_string_key_prefixes(self):
+        with pytest.raises(ValueError, match="list of strings"):
+            schemas.ProjectUpdate(code="PRJ", key_prefixes="aa\nbb")
 
     def test_project_update_key_prefixes_invalid(self):
         with pytest.raises(ValueError):
             schemas.ProjectUpdate(code="PRJ", key_prefixes=["A"])
 
     def test_phase_create_insert_after(self):
-        p = schemas.PhaseCreate(name="X", insert_after=3)
+        p = schemas.PhaseCreate(workflow_id=1, name="X", insert_after=3)
         assert p.phase_order == 4
 
 
@@ -87,6 +87,16 @@ class TestApplicationServiceFinalGaps:
     def test_phase_service_create_auto_order(self):
         uow = MagicMock()
         uow.phases.get_next_order.return_value = 7
+        uow.phases.list.return_value = [
+            MagicMock(
+                code=f"existing-{order}",
+                phase_order=order,
+                execution_type="sync",
+                parallel_with=None,
+                rollback_target=None,
+            )
+            for order in range(1, 7)
+        ]
         phase = MagicMock()
         phase.to_dict.return_value = {"id": 1}
         uow.phases.create.return_value = 1
@@ -102,15 +112,25 @@ class TestApplicationServiceFinalGaps:
 
     def test_project_service_delete(self):
         uow = MagicMock()
-        uow.tasks.list.return_value = []
+        project = MagicMock(workflow_id=1)
+        uow.projects.get_by_id.return_value = project
+        uow.projects.lock.return_value = project
+        uow.tasks.list_by_project.return_value = []
         ProjectService(uow).delete_project(1)
         uow.projects.delete.assert_called_once_with(1)
 
     def test_task_service_creation_failed(self):
         uow = MagicMock()
         project = MagicMock()
-        project.to_dict.return_value = {"id": 5}
-        uow.projects.get_by_code.return_value = project
+        project.code = "P"
+        project.key_prefixes = ["P"]
+        project.workflow_id = 1
+        uow.projects.get_by_id.return_value = project
+        uow.projects.lock.return_value = project
+        uow.workflows.lock.return_value = object()
+        uow.phases.list.return_value = [MagicMock(code="1.INTAKE")]
+        uow.phases.get_by_code.return_value = object()
+        uow.tasks.get_by_key.return_value = None
         uow.tasks.create.return_value = 1
         uow.tasks.get_by_id.return_value = None
         with pytest.raises(RuntimeError, match="Task creation failed"):
@@ -118,6 +138,9 @@ class TestApplicationServiceFinalGaps:
 
     def test_instruction_service_creation_failed(self):
         uow = MagicMock()
+        phase = MagicMock(id=1, workflow_id=7)
+        uow.phases.get_by_id.return_value = phase
+        uow.phases.list.return_value = [phase]
         uow.instructions.create.return_value = 1
         uow.instructions.get_by_id.return_value = None
         with pytest.raises(RuntimeError, match="Instruction creation failed"):
@@ -141,13 +164,8 @@ class TestSessionFinalGaps:
     def test_ensure_schema_postgresql_engine(self):
         engine = MagicMock()
         engine.dialect.name = "postgresql"
-        with patch("project_workflow.infrastructure.db.session.get_settings") as gs:
-            gs.return_value.DB_SCHEMA = "public"
-            with patch.object(engine, "begin") as mock_begin:
-                conn = MagicMock()
-                mock_begin.return_value.__enter__.return_value = conn
-                ensure_schema(engine)
-        conn.exec_driver_sql.assert_any_call("CREATE SCHEMA IF NOT EXISTS public")
+        with pytest.raises(RuntimeError, match="isolated SQLite tests"):
+            ensure_schema(engine)
 
 
 class TestWorkflowServiceFinalGaps:
@@ -272,10 +290,6 @@ class TestUiServicesFinalGaps:
             {"id": 2, "code": "2", "name": "P2", "phase_order": 2, "execution_type": "parallel"},
         ]
 
-        def _get_phase(pid):
-            return {"id": pid, "code": str(pid), "name": f"P{pid}", "phase_order": pid}
-
-        uow.get_phase.side_effect = _get_phase
         uow.get_task_history.return_value = [
             {"phase_id": 1, "status": "done", "completed_at": "", "execution_type": "parallel"},
             {"phase_id": 2, "status": "done", "completed_at": "", "execution_type": "parallel"},
@@ -298,7 +312,6 @@ class TestUiServicesFinalGaps:
         uow.get_supervisor_runs.return_value = [{"verdict": "pass", "response": {"message": "ok"}}]
         uow.get_projects.return_value = []
         uow.get_phases.return_value = []
-        uow.get_phase.return_value = None
         monkeypatch.setattr("project_workflow.interfaces.ui.services._get_app_state", lambda: _mock_state(uow))
         result = _get_task_detail("A-1")
         assert result["supervisor_runs"][0]["next_contract"] is None

@@ -18,6 +18,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -31,7 +32,7 @@ class Agent(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
-    description: Mapped[str] = mapped_column(String, nullable=False, default="")
+    description: Mapped[str] = mapped_column(String, nullable=False, default="", server_default=text("''"))
     hermes_profile: Mapped[str | None] = mapped_column(String(251), nullable=True)
 
     __table_args__ = (
@@ -46,7 +47,7 @@ class Workflow(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
-    description: Mapped[str] = mapped_column(String, nullable=False, default="")
+    description: Mapped[str] = mapped_column(String, nullable=False, default="", server_default=text("''"))
     is_default: Mapped[int] = mapped_column(
         nullable=False,
         default=0,
@@ -101,6 +102,7 @@ class Phase(Base):
     )
     __table_args__ = (
         UniqueConstraint("workflow_id", "code", name="uq_phases_workflow_code"),
+        CheckConstraint("phase_order > 0", name="ck_phases_phase_order_positive"),
         CheckConstraint(
             "execution_type IN ('sync', 'parallel')",
             name="ck_phases_execution_type",
@@ -138,6 +140,7 @@ class Instruction(Base):
     skills: Mapped[str | None] = mapped_column(Text, nullable=True)
     __table_args__ = (
         UniqueConstraint("phase_id", "step_num", name="uq_instructions_phase_step"),
+        CheckConstraint("step_num > 0", name="ck_instructions_step_num_positive"),
         CheckConstraint(
             "execution_type IN ('sync', 'parallel')",
             name="ck_instructions_execution_type",
@@ -182,6 +185,7 @@ class Project(Base):
     workflow_id: Mapped[int] = mapped_column(ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False)
     code: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default=text("''"))
     key_prefixes: Mapped[str] = mapped_column(String, nullable=False, default="[]", server_default="[]")
 
     workflow: Mapped[Workflow] = relationship("Workflow", back_populates="projects")
@@ -192,15 +196,13 @@ class Task(Base):
     __tablename__ = "tasks"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), nullable=False)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False)
     task_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     title: Mapped[str | None] = mapped_column(String, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     current_phase: Mapped[str] = mapped_column(
         Text,
         nullable=False,
-        default="-1",
-        server_default="-1",
     )
     status: Mapped[str] = mapped_column(
         String,
@@ -211,7 +213,10 @@ class Task(Base):
     updated_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
-    __table_args__ = (CheckConstraint("status IN ('active', 'done', 'blocked')", name="ck_tasks_status"),)
+    __table_args__ = (
+        CheckConstraint("status IN ('active', 'done', 'blocked')", name="ck_tasks_status"),
+        CheckConstraint("length(trim(current_phase)) > 0", name="ck_tasks_current_phase_nonblank"),
+    )
 
     project: Mapped[Project] = relationship("Project", back_populates="tasks")
 
@@ -224,7 +229,7 @@ class TaskHistory(Base):
         ForeignKey("tasks.id", ondelete="CASCADE"),
         nullable=False,
     )
-    phase_id: Mapped[int] = mapped_column(ForeignKey("phases.id"), nullable=False)
+    phase_id: Mapped[int] = mapped_column(ForeignKey("phases.id", ondelete="RESTRICT"), nullable=False)
     status: Mapped[str] = mapped_column(
         String,
         default="pending",
@@ -248,22 +253,23 @@ class SupervisorRun(Base):
         ForeignKey("tasks.id", ondelete="CASCADE"),
         nullable=False,
     )
-    phase_id: Mapped[int] = mapped_column(ForeignKey("phases.id"), nullable=False)
+    phase_id: Mapped[int] = mapped_column(ForeignKey("phases.id", ondelete="RESTRICT"), nullable=False)
     verdict: Mapped[str] = mapped_column(String, nullable=False)
-    report: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    report: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default=text("''"))
     covered: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
     missing: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
     blockers: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
-    next_phase_id: Mapped[int | None] = mapped_column(ForeignKey("phases.id"), nullable=True)
-    rollback_phase_id: Mapped[int | None] = mapped_column(ForeignKey("phases.id"), nullable=True)
+    next_phase_id: Mapped[int | None] = mapped_column(ForeignKey("phases.id", ondelete="RESTRICT"), nullable=True)
+    rollback_phase_id: Mapped[int | None] = mapped_column(ForeignKey("phases.id", ondelete="RESTRICT"), nullable=True)
     report_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
     context_snapshot: Mapped[str] = mapped_column(Text, nullable=False, default="{}", server_default="{}")
     response: Mapped[str] = mapped_column(Text, nullable=False, default="{}", server_default="{}")
     created_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
     __table_args__ = (
         Index(
-            "uq_supervisor_runs_task_report_fingerprint",
+            "uq_supervisor_runs_task_phase_report_fingerprint",
             "task_id",
+            "phase_id",
             "report_fingerprint",
             unique=True,
         ),

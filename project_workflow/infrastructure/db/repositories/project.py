@@ -6,7 +6,7 @@ import json
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session, joinedload
 
 from project_workflow.domain import Project
@@ -34,12 +34,29 @@ class SAProjectRepository(ProjectRepository):
         row = self._session.execute(select(m.Project).where(m.Project.code == code)).scalar_one_or_none()
         return _row_to_project(row) if row else None
 
+    def lock(self, project_id: int) -> Project | None:
+        row = self._session.execute(
+            select(m.Project).where(m.Project.id == project_id).with_for_update()
+        ).scalar_one_or_none()
+        return _row_to_project(row) if row else None
+
+    def lock_prefix_namespace(self) -> None:
+        if self._session.get_bind().dialect.name == "postgresql":
+            self._session.execute(
+                text(
+                    "SELECT pg_advisory_xact_lock("
+                    "hashtextextended(current_database() || chr(58) || current_schema() || :lock_suffix, 0))"
+                ),
+                {"lock_suffix": ":project-prefixes"},
+            )
+
     def create(self, data: dict[str, Any]) -> int:
         prefixes = data.get("key_prefixes", [])
         item = m.Project(
             workflow_id=data["workflow_id"],
             code=data["code"],
             name=data["name"],
+            description=data.get("description", ""),
             key_prefixes=json.dumps([str(p) for p in prefixes], ensure_ascii=False),
         )
         self._session.add(item)
@@ -56,6 +73,8 @@ class SAProjectRepository(ProjectRepository):
             row.code = data["code"]
         if "name" in data:
             row.name = data["name"]
+        if "description" in data:
+            row.description = data["description"]
         if "key_prefixes" in data:
             prefixes = data["key_prefixes"]
             row.key_prefixes = json.dumps([str(p) for p in prefixes], ensure_ascii=False)

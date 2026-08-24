@@ -19,7 +19,7 @@ class TestCoverageAccumulation:
     def test_get_previously_covered_reads_runs(self, tmp_path, monkeypatch):
         engine = self._make_engine("RUN-9999")
         tid = engine.task["id"]
-        pid = engine.db.create_phase(
+        pid = engine.db.phases.create(
             {
                 "code": "coverage.test",
                 "workflow_id": 1,
@@ -43,7 +43,7 @@ class TestCoverageAccumulation:
             }
         )
 
-        engine.task = engine.db.get_task(tid)
+        engine.task = engine.db.tasks.get_by_id(tid).to_dict()
         engine.all_phases = []
 
         class FakePhase:
@@ -76,7 +76,7 @@ class TestEvaluateAccumulationEndToEnd:
             def __init__(self, step):
                 self.step = step
 
-        pid = engine.db.create_phase(
+        pid = engine.db.phases.create(
             {
                 "code": "coverage.test",
                 "workflow_id": 1,
@@ -85,11 +85,11 @@ class TestEvaluateAccumulationEndToEnd:
                 "execution_type": "sync",
             }
         )
-        engine.db.create_instruction(
-            {"phase_id": pid, "step_num": 1, "description": "Run tests first", "execution_type": "sync"}
+        engine.db.instructions.create(
+            pid, {"step_num": 1, "description": "Run tests first", "execution_type": "sync"}
         )
-        engine.db.create_instruction(
-            {"phase_id": pid, "step_num": 2, "description": "Fix failing code", "execution_type": "sync"}
+        engine.db.instructions.create(
+            pid, {"step_num": 2, "description": "Fix failing code", "execution_type": "sync"}
         )
         engine.db.phases.set_checks(pid, [{"description": "tests run"}, {"description": "code fixed"}])
 
@@ -112,7 +112,7 @@ class TestEvaluateAccumulationEndToEnd:
         engine.all_phases = [FakePhase()]
         engine.phase_map = {"coverage.test": FakePhase()}
         engine.current_phase = "coverage.test"
-        engine.task = engine.db.get_task(tid)
+        engine.task = engine.db.tasks.get_by_id(tid).to_dict()
 
         # First report: covers only check 1
         supervisor_llm("PARTIAL", covered=["tests run"], missing=["code fixed"])
@@ -122,7 +122,7 @@ class TestEvaluateAccumulationEndToEnd:
         assert "code fixed" in result1["missing"]
 
         # Refresh engine state
-        engine.task = engine.db.get_task(tid)
+        engine.task = engine.db.tasks.get_by_id(tid).to_dict()
 
         # Second report: covers check 2 (with accumulated coverage from first run)
         supervisor_llm("PASS", covered=["tests run", "code fixed"])

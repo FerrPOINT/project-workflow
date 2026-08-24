@@ -8,8 +8,10 @@ import pytest
 
 pytestmark = [pytest.mark.supervisor]
 
+from project_workflow.infrastructure.db.session import ensure_schema
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.supervisor import SupervisorEngine
+from tests._db_helpers import phase_by_code
 
 SUPERVISOR_WORKFLOW_NAME = "Supervisor Workflow"
 SUPERVISOR_PHASES = ["sup.intake", "sup.review", "sup.done"]
@@ -22,7 +24,7 @@ def _patch_runtime(monkeypatch, tmp_path: Path) -> SAUnitOfWork:
 
     config.get_settings.cache_clear()
     uow = SAUnitOfWork(f"sqlite:///{workflow_db}")
-    uow.create_all()
+    ensure_schema(uow.session.get_bind())
     return uow
 
 
@@ -168,9 +170,9 @@ def test_supervisor_rolls_back_gate_phase_when_report_is_blocked(tmp_path: Path,
 
     project_row = next((p for p in uow.projects.list() if p.code == "SUP"), None)
     project_id = project_row.id if project_row else None
-    intake_row = uow.phases.get_by_code("sup.intake")
+    intake_row = phase_by_code(uow, "sup.intake")
     intake_id = intake_row.id if intake_row else None
-    review_row = uow.phases.get_by_code("sup.review")
+    review_row = phase_by_code(uow, "sup.review")
     review_id = review_row.id if review_row else None
     task_id = uow.tasks.create(
         {

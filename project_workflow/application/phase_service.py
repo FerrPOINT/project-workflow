@@ -1,47 +1,30 @@
-"""PhaseService — CRUD helper for UI phase detail/edit routes.
-
-Re-implemented on top of the SQLAlchemy UnitOfWork; the old sqlite3/raw-SQL
-implementation has been removed.
-"""
+"""Phase CRUD helper for UI detail and edit routes."""
 
 from __future__ import annotations
 
-import json
-import logging
-from typing import Any, cast
+from typing import Any
 
-from project_workflow.domain.phase_grouping import group_parallel_phases
 from project_workflow.domain.repositories import UnitOfWork
-
-logger = logging.getLogger(__name__)
 
 
 class PhaseService:
     """CRUD operations for phases, instructions, checks, evidence."""
 
-    def __init__(self, uow_or_state: UnitOfWork | Any):
-        """Accept either a UnitOfWork or an _AppState instance."""
-        if type(uow_or_state).__name__ == "_AppState":
-            self._uow: UnitOfWork = cast(Any, uow_or_state).get_uow()
-        else:
-            self._uow = uow_or_state
+    def __init__(self, uow: UnitOfWork):
+        self._uow = uow
 
     # ── Bulk save helpers (atomic) ─────────────────────────────────────
 
-    def _resolve_phase_id(self, phase_id: int | str) -> int:
-        if not (isinstance(phase_id, int) or str(phase_id).lstrip("-").isdigit()):
-            phase = self._uow.phases.get_by_code(str(phase_id))
-            if not phase or phase.id is None:
-                raise ValueError(f"Phase not found: {phase_id}")
-            return phase.id
-        candidate = int(phase_id)
-        phase = self._uow.phases.get_by_id(candidate)
+    def _resolve_phase_id(self, phase_id: int) -> int:
+        if not isinstance(phase_id, int) or isinstance(phase_id, bool):
+            raise ValueError(f"Phase id must be numeric: {phase_id}")
+        phase = self._uow.phases.get_by_id(phase_id)
         if not phase or phase.id is None:
             raise ValueError(f"Phase not found: {phase_id}")
         return phase.id
 
     def save_instructions(
-        self, phase_id: int | str, items: list[dict[str, Any]], *, commit: bool = True
+        self, phase_id: int, items: list[dict[str, Any]], *, commit: bool = True
     ) -> list[int]:
         """Replace all instructions for a phase.  Returns new ids in order."""
         resolved = self._resolve_phase_id(phase_id)
@@ -54,7 +37,7 @@ class PhaseService:
                     "step_num": idx,
                     "description": item["description"],
                     "execution_type": item.get("execution_type", "sync"),
-                    "skills": self.serialize_skills(self.normalize_skills(item.get("skills"))),
+                    "skills": self.normalize_skills(item.get("skills")),
                 },
             )
             ids.append(new_id)
@@ -62,7 +45,7 @@ class PhaseService:
             self._uow.commit()
         return ids
 
-    def save_checks(self, phase_id: int | str, items: list[dict[str, Any]], *, commit: bool = True) -> list[int]:
+    def save_checks(self, phase_id: int, items: list[dict[str, Any]], *, commit: bool = True) -> list[int]:
         """Replace all checks for a phase."""
         resolved = self._resolve_phase_id(phase_id)
         ids: list[int] = []
@@ -74,7 +57,7 @@ class PhaseService:
             self._uow.commit()
         return ids
 
-    def save_evidence(self, phase_id: int | str, items: list[dict[str, Any]], *, commit: bool = True) -> list[int]:
+    def save_evidence(self, phase_id: int, items: list[dict[str, Any]], *, commit: bool = True) -> list[int]:
         """Replace all evidence for a phase."""
         resolved = self._resolve_phase_id(phase_id)
         ids: list[int] = []
@@ -87,7 +70,7 @@ class PhaseService:
 
     # ── Read helpers ─────────────────────────────────────────────────
 
-    def get_phase_detail(self, phase_id: int | str) -> dict[str, Any]:
+    def get_phase_detail(self, phase_id: int) -> dict[str, Any]:
         """Return a phase with nested content."""
         try:
             resolved = self._resolve_phase_id(phase_id)
@@ -117,86 +100,18 @@ class PhaseService:
             "evidence": evidence,
         }
 
-    def update_phase(self, phase_id: int | str, data: dict[str, Any], *, commit: bool = True) -> None:
+    def update_phase(self, phase_id: int, data: dict[str, Any], *, commit: bool = True) -> None:
+        from project_workflow.application.phase import PhaseServiceApp
+
         resolved = self._resolve_phase_id(phase_id)
-        self._uow.phases.update(resolved, self._prepare_execution_update(resolved, data))
-        if commit:
-            self._uow.commit()
-
-    def _prepare_execution_update(self, phase_id: int, data: dict[str, Any]) -> dict[str, Any]:
-        """Attach a sync phase to a neighboring parallel component on toggle.
-
-        Existing ``parallel_with`` is deliberately retained while a phase is
-        temporarily sync.  The runtime ignores links on sync phases, while a
-        later sync -> parallel toggle can restore the exact previous component.
-        """
-        updates = dict(data)
-        if updates.get("execution_type") != "parallel" or "parallel_with" in updates:
-            return updates
-
-        phase = self._uow.phases.get_by_id(phase_id)
-        if phase is None or phase.execution_type == "parallel":
-            return updates
-
-        phases = list(self._uow.phases.list(workflow_id=phase.workflow_id))
-        current_index = next((index for index, item in enumerate(phases) if item.id == phase_id), None)
-        if current_index is None:
-            return updates
-
-        if phase.parallel_with:
-            groups = group_parallel_phases(
-                phases,
-                code_of=lambda item: item.code,
-                execution_type_of=lambda item: "parallel" if item.id == phase_id else item.execution_type,
-                parallel_with_of=lambda item: item.parallel_with,
-            )
-            if any(
-                phase.code in {item.code for item in group}
-                and phase.parallel_with in {item.code for item in group}
-                for group in groups
-            ):
-                return updates
-
-        previous = phases[current_index - 1] if current_index > 0 else None
-        following = phases[current_index + 1] if current_index + 1 < len(phases) else None
-        partner = previous if previous and previous.execution_type == "parallel" else None
-        if partner is None and following and following.execution_type == "parallel":
-            partner = following
-        updates["parallel_with"] = partner.code if partner else None
-        return updates
-
-    def get_all_phases(self) -> list[dict[str, Any]]:
-        """All phases with content (for API)."""
-        rows = self._uow.phases.list()
-        return [self.get_phase_detail(r.id) for r in rows if r.id is not None]
-
-    # ── Helpers ────────────────────────────────────────────────────────
+        PhaseServiceApp(self._uow).update_phase(resolved, data, commit=commit)
 
     @staticmethod
     def normalize_skills(raw: Any) -> list[str]:
-        if raw in (None, "", []):
+        if raw in (None, []):
             return []
         if isinstance(raw, list):
-            return [str(item).strip() for item in raw if str(item).strip()]
-        if isinstance(raw, str):
-            parsed = PhaseService.parse_skills(raw)
-            return [str(item).strip() for item in parsed if str(item).strip()]
-        return []
-
-    @staticmethod
-    def parse_skills(raw: str | None) -> list[str]:
-        if not raw:
-            return []
-        try:
-            parsed = json.loads(raw)
-        except (json.JSONDecodeError, TypeError) as exc:
-            logger.warning("Failed to parse skills JSON: %s", exc)
-            return []
-        return parsed if isinstance(parsed, list) else []
-
-    @staticmethod
-    def serialize_skills(skills: list[str] | None) -> str | None:
-        normalized = PhaseService.normalize_skills(skills)
-        if not normalized:
-            return None
-        return json.dumps(normalized, ensure_ascii=False)
+            if not all(isinstance(item, str) for item in raw):
+                raise TypeError("skills must contain strings only")
+            return [item.strip() for item in raw if item.strip()]
+        raise TypeError("skills must be a list of strings or null")

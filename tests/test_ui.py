@@ -15,6 +15,7 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.cli.core import cli
 from project_workflow.interfaces.ui import _app_state as ui_app_state
 from project_workflow.interfaces.ui import _load_cli_reference, app
+from tests._db_helpers import phase_by_code
 
 client = TestClient(app)
 
@@ -28,7 +29,7 @@ def _as_dict(record: object) -> dict | None:
 
 
 def _phase_row(code: str) -> dict:
-    phase = ui_app_state.get_db().phases.get_by_code(code)
+    phase = phase_by_code(ui_app_state.get_db(), code)
     assert phase is not None
     return phase.to_dict()
 
@@ -64,7 +65,7 @@ def _batch_update_orders(uow: SAUnitOfWork, rows: list[tuple[int | str, int]]) -
     """Restore phase orders from (code_or_id, order) pairs."""
     for token, order in rows:
         phase = (
-            uow.phases.get_by_id(int(token)) if str(token).lstrip("-").isdigit() else uow.phases.get_by_code(str(token))
+            uow.phases.get_by_id(int(token)) if str(token).lstrip("-").isdigit() else phase_by_code(uow, str(token))
         )
         if phase and phase.id is not None:
             uow.phases.update(phase.id, {"phase_order": order})
@@ -127,13 +128,14 @@ def setup_db():
     if not uow.phases.list():
         ensure_phase_catalog(uow)
     default_workflow = uow.workflows.ensure_default_exists(config.DEFAULT_WORKFLOW_NAME)
-    default_project = uow.projects.get_by_code("DEFAULT")
+    default_project = uow.projects.get_by_code(config.DEFAULT_PROJECT_CODE)
     if not default_project:
         default_project_id = uow.projects.create(
             {
-                "code": "DEFAULT",
+                "code": config.DEFAULT_PROJECT_CODE,
                 "name": "Default Project",
                 "workflow_id": default_workflow.id,
+                "key_prefixes": list(config.DEFAULT_TASK_KEY_PREFIXES),
             }
         )
     else:
@@ -238,7 +240,7 @@ class TestIndexPage:
         response = client.get("/")
         assert response.status_code == 200
         assert "В работе" in response.text
-        assert ">Intake<" not in response.text
+        assert "Task Intake" not in response.text
         assert "Token Verification" not in response.text
         assert "Validate" not in response.text
         assert "regex" not in response.text
@@ -360,7 +362,7 @@ class TestPhasesPage:
             uow.commit()
 
         try:
-            if not _as_dict(uow.phases.get_by_code("WF-PHASE-901")):
+            if not _as_dict(phase_by_code(uow, "WF-PHASE-901")):
                 uow.phases.create(
                     {
                         "code": "WF-PHASE-901",
@@ -375,7 +377,7 @@ class TestPhasesPage:
             response = client.get(f"/phases?workflow_id={workflow_id}")
             assert response.status_code == 200
             assert "Workflow Scoped Phase" in response.text
-            assert ">Intake<" not in response.text
+            assert "Task Intake" not in response.text
             assert f'href="/phases?workflow_id={workflow_id}"' in response.text
         finally:
             workflow = next(
@@ -466,10 +468,10 @@ class TestPhasesPage:
         response = client.get("/phases")
         assert response.status_code == 200
 
-        phase = _phase_row("8.IMPLEMENT")
+        phase = _phase_row("4.START")
 
         assert f'href="/phase/{phase["id"]}"' in response.text
-        assert 'href="/phase/0.7"' not in response.text
+        assert 'href="/phase/4.START"' not in response.text
 
     def test_phases_page_add_phase_button_uses_server_phase_order_attribute(self):
         response = client.get("/phases")
@@ -552,7 +554,7 @@ class TestPhasesPage:
             # Add a second phase, then delete it.
             uow.phases.create({"workflow_id": workflow_id, "code": "dpt-second", "name": "Second", "phase_order": 2})
             uow.commit()
-            second = _as_dict(uow.phases.get_by_code("dpt-second"))
+            second = _as_dict(phase_by_code(uow, "dpt-second"))
             assert second is not None
             resp2 = client.delete(f"/api/phases/{second['id']}")
             assert resp2.status_code == 200
@@ -570,10 +572,10 @@ class TestPhasesPage:
         response = client.get("/phases")
         assert response.status_code == 200
 
-        phase = _phase_row("8.IMPLEMENT")
+        phase = _phase_row("4.START")
 
         assert f'data-phase-id="{phase["id"]}"' in response.text
-        assert 'data-phase-id="0.7"' not in response.text
+        assert 'data-phase-id="4.START"' not in response.text
 
     def test_phases_page_rebuilds_parallel_groups_from_execution_sequence(self):
         response = client.get("/phases")
@@ -601,7 +603,7 @@ class TestPhasesPage:
 
         reordered_codes = original_codes.copy()
         moved_code = "2.REQUIREMENTS"
-        target_code = "4.START"
+        target_code = "3.DOR_GATE"
         moved_index = reordered_codes.index(moved_code)
         # Find target index by exact match to avoid substring collision with 0.000
         target_index = next(i for i, c in enumerate(reordered_codes) if c == target_code)
@@ -647,21 +649,21 @@ class TestPhasesPage:
     def test_phases_page_shows_assigned_agent_instead_of_hardcoded_critic(self):
         uow = ui_app_state.get_db()
         reviewer = next(agent.to_dict() for agent in uow.agents.list() if agent.name == "reviewer")
-        tracked_codes = ["6.TEST_PLAN", "15.RETRO", "7.PLAN_GATE"]
+        tracked_codes = ["3.DOR_GATE", "7.PLAN_GATE", "12.RELEASE_GATE", "15.RETRO"]
         original_agent_ids = {
-            code: (_as_dict(uow.phases.get_by_code(code)) or {}).get("agent_id") for code in tracked_codes
+            code: (_as_dict(phase_by_code(uow, code)) or {}).get("agent_id") for code in tracked_codes
         }
 
         try:
             for code in tracked_codes:
                 assert client.put(_phase_api_path(code), json={"agent_id": None}).status_code == 200
-            assert client.put(_phase_api_path("6.TEST_PLAN"), json={"agent_id": reviewer["id"]}).status_code == 200
+            assert client.put(_phase_api_path("3.DOR_GATE"), json={"agent_id": reviewer["id"]}).status_code == 200
 
             response = client.get("/phases")
             assert response.status_code == 200
 
-            phase_09_html = response.text.split(_phase_href("6.TEST_PLAN"), 1)[1].split("</a>", 1)[0]
-            phase_35_html = response.text.split(_phase_href("15.RETRO"), 1)[1].split("</a>", 1)[0]
+            phase_09_html = response.text.split(_phase_href("3.DOR_GATE"), 1)[1].split("</a>", 1)[0]
+            phase_35_html = response.text.split(_phase_href("7.PLAN_GATE"), 1)[1].split("</a>", 1)[0]
 
             assert "reviewer" in phase_09_html
             assert "🛡️ critic" not in response.text
@@ -753,19 +755,19 @@ class TestPhaseDetail:
         assert "move-down-btn" in response.text
 
     def test_phase_detail_keeps_sequential_cards_when_phase_instructions_are_sync(self):
-        response = client.get(_phase_detail_path("2.REQUIREMENTS"))
+        response = client.get(_phase_detail_path("4.START"))
         assert response.status_code == 200
         assert 'class="timeline-block timeline-parallel-group"' not in response.text
         assert 'class="timeline-parallel-label"' not in response.text
 
     def test_phase_detail_renders_parallel_group_for_parallel_instructions(self):
-        response = client.get(_phase_detail_path("2.REQUIREMENTS"))
+        response = client.get(_phase_detail_path("4.START"))
         assert response.status_code == 200
         assert "renderInstructionTimeline(getInstructionItems())" in response.text
         assert "function updateInstructionControls()" in response.text
 
     def test_phase_detail_hides_code_and_order_meta(self):
-        response = client.get(_phase_detail_path("3.DOR_GATE"))
+        response = client.get(_phase_detail_path("5.PREFLIGHT"))
         assert response.status_code == 200
         assert "Code:" not in response.text
         assert 'data-field="code"' not in response.text
@@ -782,19 +784,19 @@ class TestPhaseDetail:
         assert "Перейди к Phase 0.00 -- Git Identity" not in response.text
         assert "next_recommendation:" not in response.text
 
-    def test_phase_detail_404_on_legacy_code_route(self):
+    def test_phase_detail_rejects_non_numeric_identifier(self):
         response = client.get("/phase/0.7")
-        assert response.status_code == 404
+        assert response.status_code == 422
 
     def test_phase_detail_save_uses_db_id_not_legacy_code(self):
-        response = client.get(_phase_detail_path("8.IMPLEMENT"))
+        response = client.get(_phase_detail_path("4.START"))
         assert response.status_code == 200
 
-        phase = _phase_row("8.IMPLEMENT")
+        phase = _phase_row("4.START")
 
         assert f"const phaseId = {phase['id']};" in response.text
         assert "fetch('/api/phases/' + phaseId" in response.text
-        assert "fetch('/api/phases/8.IMPLEMENT'" not in response.text
+        assert "fetch('/api/phases/4.START'" not in response.text
 
     def test_phase_detail_renders_selected_instruction_skills_and_free_text_input(self):
         skills = ["test-driven-development", "workflow-app-ui-delivery"]
@@ -842,6 +844,23 @@ class TestPhaseDetail:
         assert "el.setAttribute('aria-busy', 'true');" in response.text
         assert "return true;" in response.text
 
+    def test_new_check_and_evidence_wait_for_user_input_before_saving(self):
+        response = client.get(_phase_detail_path("1.INTAKE"))
+
+        assert response.status_code == 200
+        add_check = response.text.split("function addCheck()", 1)[1].split("function addEvidence()", 1)[0]
+        add_evidence = response.text.split("function addEvidence()", 1)[1].split(
+            "/* ---------- Debounced phase meta save ---------- */", 1
+        )[0]
+        assert "savePhase();" not in add_check
+        assert "savePhase();" not in add_evidence
+        assert 'onblur="saveNewTextItem(this)"' in add_check
+        assert 'onblur="saveNewTextItem(this)"' in add_evidence
+        assert "syncTextItemList(list);" in add_check
+        assert "syncTextItemList(list);" in add_evidence
+        assert "li.querySelector('input')?.focus();" in add_check
+        assert "li.querySelector('input')?.focus();" in add_evidence
+
     def test_phases_page_hides_code_and_number_visual_noise(self):
         response = client.get("/phases")
         assert response.status_code == 200
@@ -850,9 +869,9 @@ class TestPhaseDetail:
         assert "move-up-btn" in response.text
         assert "move-down-btn" in response.text
 
-    def test_phase_detail_404_on_unknown(self):
+    def test_phase_detail_rejects_unknown_string_identifier(self):
         response = client.get("/phase/nonexistent")
-        assert response.status_code == 404
+        assert response.status_code == 422
 
     def test_phase_detail_can_update_instruction_description(self):
         phase_response = client.get(_phase_api_path("1.INTAKE"))
@@ -1003,7 +1022,7 @@ class TestPhaseUpdate:
 
     def test_api_phase_update_persists_execution_type(self):
         uow = ui_app_state.get_db()
-        original = _as_dict(uow.phases.get_by_code("7.PLAN_GATE"))
+        original = _as_dict(phase_by_code(uow, "7.PLAN_GATE"))
         assert original is not None
         assert original["execution_type"] == "sync"
         phase_api_path = _phase_api_path("7.PLAN_GATE")
@@ -1013,7 +1032,7 @@ class TestPhaseUpdate:
             resp = client.put(phase_api_path, json={"execution_type": "parallel"})
             assert resp.status_code == 200
 
-            updated = _as_dict(uow.phases.get_by_code("7.PLAN_GATE"))
+            updated = _as_dict(phase_by_code(uow, "7.PLAN_GATE"))
             assert updated is not None
             assert updated["execution_type"] == "parallel"
 
@@ -1052,54 +1071,46 @@ class TestPhaseUpdate:
         local_client = TestClient(app, raise_server_exceptions=False)
 
         resp = local_client.put(
-            _phase_api_path("3.DOR_GATE"),
+            _phase_api_path("5.PREFLIGHT"),
             json={
                 "phase_num": 1,
                 "execution_type": "parallel",
             },
         )
-        assert resp.status_code == 400
-        data = resp.json()
-        assert data["ok"] is False
-        assert "phase_num" in data["error"]
+        assert resp.status_code == 422
+        assert "phase_num" in resp.text
 
 
 class TestDragDropAPI:
     """Tests for drag-and-drop backend APIs."""
 
-    def test_api_batch_order_update(self):
+    def test_api_batch_order_rejects_invalid_graph_atomically(self):
         uow = ui_app_state.get_db()
-        original_rows = [(phase["code"], phase["phase_order"]) for phase in [p.to_dict() for p in uow.phases.list()]]
+        phases = [phase.to_dict() for phase in uow.phases.list()]
+        original_rows = [(phase["code"], phase["phase_order"]) for phase in phases]
+        reordered_rows = list(reversed(phases))
 
         try:
             resp = client.put(
                 "/api/phases/order",
                 json={
                     "orders": [
-                        {"phase_id": _phase_id("1.INTAKE"), "phase_order": 1},
-                        {"phase_id": _phase_id("2.REQUIREMENTS"), "phase_order": 2},
-                        {"phase_id": _phase_id("3.DOR_GATE"), "phase_order": 3},
+                        {"phase_id": phase["id"], "phase_order": order}
+                        for order, phase in enumerate(reordered_rows, start=1)
                     ]
                 },
             )
-            assert resp.status_code == 200
-            data = resp.json()
-            assert data["ok"] is True
-            assert data["updated"] == 3
-            reordered = [phase.to_dict() for phase in uow.phases.list()]
-            by_code = {phase["code"]: phase["phase_order"] for phase in reordered}
-            assert by_code == {**by_code, "1.INTAKE": 1, "2.REQUIREMENTS": 2, "3.DOR_GATE": 3}
+            assert resp.status_code == 409
+            assert [(phase.code, phase.phase_order) for phase in uow.phases.list()] == original_rows
         finally:
             _batch_update_orders(uow, original_rows)
 
     def test_api_batch_order_empty_error(self):
         resp = client.put("/api/phases/order", json={"orders": []})
-        assert resp.status_code == 400
-        data = resp.json()
-        assert data["ok"] is False
+        assert resp.status_code == 422
 
     def test_api_single_phase_order_route_removed(self):
-        phase_id = _phase_id("3.DOR_GATE")
+        phase_id = _phase_id("5.PREFLIGHT")
         resp = client.put(f"/api/phases/{phase_id}/order", json={"phase_order": 5})
         assert resp.status_code == 404
 
@@ -1198,7 +1209,7 @@ class TestTaskDetail:
         uow = ui_app_state.get_db()
         task_key = "RUN-300"
         task = _as_dict(uow.tasks.get_by_key(task_key))
-        default_project_id = _as_dict(uow.projects.get_by_code("DEFAULT"))["id"]
+        default_project_id = _as_dict(uow.projects.get_by_code(config.DEFAULT_PROJECT_CODE))["id"]
         if not task:
             task_id = uow.tasks.create(
                 {
@@ -1206,15 +1217,15 @@ class TestTaskDetail:
                     "task_key": task_key,
                     "title": "Проверка истории фаз",
                     "status": "active",
-                    "current_phase": "8.IMPLEMENT",
+                    "current_phase": "4.START",
                 }
             )
             uow.commit()
             task = _as_dict(uow.tasks.get_by_id(task_id))
         assert task is not None
-        uow.tasks.update(task["id"], {"current_phase": "8.IMPLEMENT"})
+        uow.tasks.update(task["id"], {"current_phase": "4.START"})
         uow.tasks.add_history(task["id"], _phase_id("1.INTAKE"), "done")
-        uow.tasks.add_history(task["id"], _phase_id("8.IMPLEMENT"), "pending")
+        uow.tasks.add_history(task["id"], _phase_id("4.START"), "pending")
         uow.commit()
 
         response = client.get(f"/task/{task_key}")
@@ -1230,9 +1241,9 @@ class TestTaskDetail:
         response = client.get("/task/UITEST-401")
         assert response.status_code == 200
         assert "Проект" in response.text
-        assert "UITEST" in response.text
+        assert "UITEST — UI Test Project" in response.text
 
-    def test_tasks_api_resolves_canonical_phase_code_to_phase_name(self):
+    def test_tasks_api_resolves_negative_phase_code_to_phase_name(self):
         response = client.get("/api/tasks")
         assert response.status_code == 200
         task = next(task for task in response.json()["tasks"] if task["task_key"] == "UITEST-401")
@@ -1250,21 +1261,21 @@ class TestTaskDetail:
                     "task_key": task_key,
                     "title": "Проверка текстового кода фазы",
                     "status": "active",
-                    "current_phase": "8.IMPLEMENT",
+                    "current_phase": "4.START",
                 }
             )
             uow.commit()
             task = _as_dict(uow.tasks.get_by_id(task_id))
         assert task is not None
-        uow.tasks.update(task["id"], {"current_phase": "8.IMPLEMENT"})
-        uow.tasks.add_history(task["id"], "1.INTAKE", "done")
-        uow.tasks.add_history(task["id"], "8.IMPLEMENT", "pending")
+        uow.tasks.update(task["id"], {"current_phase": "4.START"})
+        uow.tasks.add_history(task["id"], _phase_id("1.INTAKE"), "done")
+        uow.tasks.add_history(task["id"], _phase_id("4.START"), "pending")
         uow.commit()
 
         response = client.get(f"/task/{task_key}")
         assert response.status_code == 200
         assert "Текущая фаза" in response.text
-        assert "Реализация" in response.text
+        assert "Начало работы" in response.text
 
 
 class TestProjectsPage:
@@ -1483,8 +1494,8 @@ class TestWorkflowsPage:
                 "description": workflow["description"],
             },
         )
-        assert update.status_code == 400
-        assert update.json()["error"] == "Workflow code field is no longer supported"
+        assert update.status_code == 422
+        assert "code" in update.text
 
         workflows = client.get("/api/workflows").json()["workflows"]
         default_workflow = next(item for item in workflows if item["id"] == workflow["id"])
@@ -1553,7 +1564,7 @@ class TestGroupsRemoved:
         assert listing.status_code == 404
 
     def test_phase_detail_hides_group_selector_and_group_assignment_api(self):
-        phase_id = _phase_id("2.REQUIREMENTS")
+        phase_id = _phase_id("4.START")
         response = client.get(f"/phase/{phase_id}")
         assert response.status_code == 200
         assert 'id="groupSelect"' not in response.text

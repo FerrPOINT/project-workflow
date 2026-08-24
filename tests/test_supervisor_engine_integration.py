@@ -7,10 +7,12 @@ import pytest
 pytestmark = [pytest.mark.supervisor]
 
 from project_workflow import config
-from project_workflow.infrastructure.db.schema import ensure_phase_catalog
+from project_workflow.application.project import ProjectService
+from project_workflow.application.task import TaskService
 from project_workflow.infrastructure.db.session import reset_engine
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.supervisor import SupervisorEngine
+from tests._db_helpers import prepare_sqlite_uow
 
 
 @pytest.fixture
@@ -21,8 +23,7 @@ def supervisor_db(tmp_path, monkeypatch):
     config.get_settings.cache_clear()
     reset_engine()
     uow = SAUnitOfWork(url)
-    uow.init()
-    ensure_phase_catalog(uow)
+    prepare_sqlite_uow(uow)
     uow.close()
     return url
 
@@ -46,20 +47,20 @@ class TestSupervisorEngineIntegration:
 
     def test_new_task_with_empty_current_phase_starts_at_first_phase(self, supervisor_db):
         uow = SAUnitOfWork(supervisor_db)
-        project = uow.create_project({"code": "AAT", "name": "AAT", "key_prefixes": ["AAT"]})
-        task_id = uow.create_task(
+        project = ProjectService(uow).create_project({"code": "AAT", "name": "AAT", "key_prefixes": ["AAT"]})
+        task = TaskService(uow).create_task(
             {"task_key": "AAT-EMPTY", "title": "Empty", "current_phase": "", "project_id": project["id"]}
         )
         uow.close()
 
         engine = SupervisorEngine("AAT-EMPTY", create_if_missing=False)
-        assert engine.task["id"] == task_id
-        assert str(engine.task["current_phase"]) == "-1"
+        assert engine.task["id"] == task["id"]
+        assert engine.task["current_phase"] == "1.INTAKE"
 
     def test_evaluate_partial_on_real_phase(self, supervisor_db, supervisor_llm):
         uow = SAUnitOfWork(supervisor_db)
-        project = uow.create_project({"code": "AAT", "name": "AAT", "key_prefixes": ["AAT"]})
-        uow.create_task(
+        project = ProjectService(uow).create_project({"code": "AAT", "name": "AAT", "key_prefixes": ["AAT"]})
+        TaskService(uow).create_task(
             {"task_key": "AAT-PARTIAL", "title": "Partial", "project_id": project["id"], "current_phase": "1.INTAKE"}
         )
         uow.close()
@@ -71,8 +72,8 @@ class TestSupervisorEngineIntegration:
 
     def test_evaluate_blocker_detected(self, supervisor_db, supervisor_llm):
         uow = SAUnitOfWork(supervisor_db)
-        project = uow.create_project({"code": "AAT", "name": "AAT", "key_prefixes": ["AAT"]})
-        uow.create_task(
+        project = ProjectService(uow).create_project({"code": "AAT", "name": "AAT", "key_prefixes": ["AAT"]})
+        TaskService(uow).create_task(
             {"task_key": "AAT-BLOCK", "title": "Block", "project_id": project["id"], "current_phase": "1.INTAKE"}
         )
         uow.close()

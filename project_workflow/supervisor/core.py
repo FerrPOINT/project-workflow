@@ -16,6 +16,7 @@ from typing import Any
 from ..application.project import ProjectService
 from ..application.task import TaskService
 from ..application.workflow import WorkflowService
+from ..domain.exceptions import ConflictError
 from ..infrastructure.db import schema
 from ..infrastructure.db.uow import SAUnitOfWork
 from .context import SupervisorContextBuilder
@@ -136,17 +137,21 @@ class SupervisorEngine:
         if not project:
             raise ValueError(f"Cannot resolve project for task key: {self.task_key}")
         current_phase = self._first_phase_code_for_project(project["id"])
-        task = self._task_service.create_task(
-            {
-                "project_id": project["id"],
-                "task_key": self.task_key,
-                "title": self.task_key,
-                "current_phase": current_phase,
-                "status": "active",
-            }
-        )
-        self._uow.commit()
-        return task
+        try:
+            return self._task_service.create_task(
+                {
+                    "project_id": project["id"],
+                    "task_key": self.task_key,
+                    "title": self.task_key,
+                    "current_phase": current_phase,
+                    "status": "active",
+                }
+            )
+        except ConflictError:
+            existing = self._task_service.get_task_by_key(self.task_key)
+            if existing is not None and existing.get("project_id") == project["id"]:
+                return existing
+            raise
 
     def _resolve_project(self) -> dict[str, Any] | None:
         # Try matching via project key prefixes first.
@@ -419,6 +424,7 @@ class SupervisorEngine:
             return
         self.task = self._task_service.get_task(self.task["id"]) or self.task
         self.current_phase = self._resolve_current_phase()
+        self._cache.invalidate()
 
     def evaluate(self, report: str) -> dict:
         if self.task and self.task.get("status") == "done":

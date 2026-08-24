@@ -2,13 +2,9 @@
 
 from __future__ import annotations
 
-import json
-import logging
 import re
 from dataclasses import dataclass
 from typing import Any
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -59,13 +55,10 @@ class TaskKeyValidator:
         for project in project_prefixes:
             project_code = project.get("code")
             raw_prefixes = project.get("key_prefixes") or []
-            if isinstance(raw_prefixes, str):
-                try:
-                    parsed = json.loads(raw_prefixes)
-                    raw_prefixes = parsed if isinstance(parsed, list) else []
-                except (json.JSONDecodeError, TypeError) as exc:
-                    logger.warning("Failed to parse project prefixes: %s", exc)
-                    raw_prefixes = []
+            if not isinstance(raw_prefixes, list) or not all(
+                isinstance(prefix, str) for prefix in raw_prefixes
+            ):
+                raise ValueError("Project key_prefixes must be a list of strings")
             prefixes = [str(prefix).strip() for prefix in raw_prefixes if str(prefix).strip()]
             if prefixes:
                 self.raw_prefixes.extend(prefixes)
@@ -110,6 +103,23 @@ class TaskKeyValidator:
                     normalized=normalized,
                 )
 
+        matching_prefix = next(
+            (
+                prefix
+                for prefix in self.raw_prefixes
+                if stripped == prefix or stripped.startswith(f"{prefix}-")
+            ),
+            None,
+        )
+        if matching_prefix is not None:
+            return ValidatedTaskKey(
+                raw=key,
+                is_valid=False,
+                error_message=(
+                    f"Key '{stripped}' must match {matching_prefix}-<numeric issue number>"
+                ),
+            )
+
         allowed = ", ".join(self.raw_prefixes) or "no configured prefixes"
         error_msg = (
             f"Key '{stripped}' does not match any allowed prefix. "
@@ -132,12 +142,10 @@ def get_project_for_task_key(uow: Any, task_key: str) -> dict[str, Any] | None:
     for project in uow.projects.list():
         project_dict = project.to_dict() if hasattr(project, "to_dict") else dict(project)
         key_prefixes = project_dict.get("key_prefixes", []) or []
-        if isinstance(key_prefixes, str):
-            try:
-                key_prefixes = json.loads(key_prefixes)
-            except (json.JSONDecodeError, TypeError) as exc:
-                logger.warning("Failed to parse project key_prefixes: %s", exc)
-                key_prefixes = []
+        if not isinstance(key_prefixes, list) or not all(
+            isinstance(item, str) for item in key_prefixes
+        ):
+            raise ValueError("Project key_prefixes must be a list of strings")
         if prefix in key_prefixes:
             return project_dict
     return None

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -12,29 +12,21 @@ pytestmark = [pytest.mark.unit]
 
 
 class TestPhaseServiceHelpers:
-    def test_normalize_skills_int_and_dict(self):
-        assert PhaseService.normalize_skills([1, "", "  a  ", "b"]) == ["1", "a", "b"]
-        assert PhaseService.normalize_skills({}) == []
-        assert PhaseService.normalize_skills("not json") == []
-
-    def test_parse_skills_invalid_json(self):
-        with patch("project_workflow.application.phase_service.logger") as logger:
-            assert PhaseService.parse_skills("not-json") == []
-            logger.warning.assert_called_once()
-
-    def test_serialize_skills_empty(self):
-        assert PhaseService.serialize_skills([]) is None
-        assert PhaseService.serialize_skills(None) is None
+    def test_normalize_skills_is_list_only(self):
+        assert PhaseService.normalize_skills(["", "  a  ", "b"]) == ["a", "b"]
+        with pytest.raises(TypeError):
+            PhaseService.normalize_skills([1])
+        with pytest.raises(TypeError):
+            PhaseService.normalize_skills("not json")
 
 
 class TestPhaseServiceUow:
-    def test_resolve_phase_id_by_code(self):
+    def test_resolve_phase_id_rejects_code_identifier(self):
         uow = MagicMock()
-        phase = MagicMock()
-        phase.id = 7
-        uow.phases.get_by_code.return_value = phase
         service = PhaseService(uow)
-        assert service._resolve_phase_id("my-code") == 7
+        with pytest.raises(ValueError, match="must be numeric"):
+            service._resolve_phase_id("my-code")
+        uow.phases.get_by_code.assert_not_called()
 
     def test_resolve_phase_id_not_found(self):
         uow = MagicMock()
@@ -45,7 +37,6 @@ class TestPhaseServiceUow:
 
     def test_get_phase_detail_returns_empty_on_resolve_error(self):
         uow = MagicMock()
-        uow.phases.get_by_code.return_value = None
         service = PhaseService(uow)
         assert service.get_phase_detail("missing") == {}
 
@@ -53,7 +44,6 @@ class TestPhaseServiceUow:
         uow = MagicMock()
         phase = MagicMock()
         phase.id = 7
-        uow.phases.get_by_code.return_value = phase
         uow.phases.get_by_id.return_value = None
         service = PhaseService(uow)
         assert service.get_phase_detail(7) == {}

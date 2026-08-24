@@ -6,8 +6,8 @@
 (см. test_ui.py::test_only_two_commands_allowed).
 
 Разрешённые команды:
-- step    --task TASK-KEY [--report TEXT]
-- history --task TASK-KEY [--n N]
+- step    --task RUN-KEY [--report TEXT]
+- history --task RUN-KEY [--n N]
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from .core import WARN, _require_valid_key, blocked_result, cli, console, out_js
 
 
 @cli.command()
-@click.option("--task", required=True, help="Task key (e.g. TASK-42)")
+@click.option("--task", required=True, help="Task key (e.g. RUN-42)")
 @click.option("--report", default=None, help="Отчёт исполнителя CLI (оценить и перейти)")
 @click.pass_context
 def step_cmd(
@@ -43,8 +43,8 @@ def step_cmd(
     """Step — движение по workflow: показать текущую фазу или отчитаться и перейти.
 
     Usage:
-      project-workflow step --task TASK-KEY                -> текущие инструкции
-      project-workflow step --task TASK-KEY --report "..."  -> оценить отчёт исполнителя CLI и перейти
+      project-workflow step --task RUN-KEY                -> текущие инструкции
+      project-workflow step --task RUN-KEY --report "..."  -> оценить отчёт исполнителя CLI и перейти
     """
     jmode = ctx.obj.get("json_mode", False)
     try:
@@ -116,14 +116,14 @@ def step_cmd(
 
 @cli.command()
 @click.option("--task", required=True, help="Task key")
-@click.option("--n", type=int, default=None, help="Количество записей (по умолчанию: все)")
+@click.option("--n", type=click.IntRange(min=1), default=None, help="Количество записей (по умолчанию: все)")
 @click.pass_context
 def history_cmd(ctx: click.Context, task: str, n: int | None) -> None:
     """History — история отчётов, переходов и статусов по задаче.
 
     Usage:
-      project-workflow history --task TASK-KEY            -> все записи
-      project-workflow history --task TASK-KEY --n 50     -> последние 50 записей
+      project-workflow history --task RUN-KEY            -> все записи
+      project-workflow history --task RUN-KEY --n 50     -> последние 50 записей
     """
     jmode = ctx.obj.get("json_mode", False)
     try:
@@ -131,7 +131,7 @@ def history_cmd(ctx: click.Context, task: str, n: int | None) -> None:
             task_key = _require_valid_key(task, uow)
             task_obj = uow.tasks.get_by_key(task_key)
             task_id = task_obj.id if task_obj else None
-            runs_raw = uow.supervisor_runs.list(task_id=task_id, task_key=task_key, limit=n or 200)
+            runs_raw = uow.supervisor_runs.list(task_id=task_id, task_key=task_key, limit=n)
             runs: list[dict[str, Any]] = []
             for raw in runs_raw:
                 rd: dict[str, Any] = raw.to_dict()

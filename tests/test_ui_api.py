@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 pytestmark = [pytest.mark.ui]
 
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from tests._db_helpers import phase_by_code, prepare_sqlite_uow
 
 
 @pytest.fixture
@@ -27,12 +28,8 @@ def client():
     from project_workflow.interfaces.ui import _app_state, app
 
     _app_state.__init__(database_url=db_url)  # type: ignore[misc]
-    _app_state.reset()
     uow = _app_state.get_db()
-    uow.create_all()
-    from project_workflow.infrastructure.db.schema import ensure_phase_catalog
-
-    ensure_phase_catalog(uow)
+    prepare_sqlite_uow(uow)
     default_workflow = uow.workflows.ensure_default_exists("Default Workflow")
     if not uow.projects.get_by_code("DEFAULT"):
         uow.projects.create(
@@ -40,6 +37,7 @@ def client():
                 "code": "DEFAULT",
                 "name": "Default Project",
                 "workflow_id": default_workflow.id,
+                "key_prefixes": ["RUN"],
             }
         )
     if not uow.tasks.get_by_key("RUN-1"):
@@ -49,13 +47,12 @@ def client():
                 "task_key": "RUN-1",
                 "title": "Smoke task for dashboard",
                 "status": "active",
-                "current_phase": "-1",
+                "current_phase": "1.INTAKE",
             }
         )
     uow.commit()
     with TestClient(app) as c:
         yield c
-    _app_state.reset()
 
 
 def _phase_id(client, code: str) -> int:
@@ -68,7 +65,7 @@ def _phase_id(client, code: str) -> int:
 
 
 def _phase_by_code(uow: SAUnitOfWork, code: str) -> dict | None:
-    phase = uow.phases.get_by_code(code)
+    phase = phase_by_code(uow, code)
     return phase.to_dict() if phase else None
 
 
@@ -127,9 +124,9 @@ class TestApiPhases:
         data = resp.json()
         assert isinstance(data, dict)
 
-    def test_legacy_phase_code_route_removed_from_api(self, client):
+    def test_non_numeric_phase_identifier_is_rejected(self, client):
         resp = client.get("/api/phases/0.7")
-        assert resp.status_code == 404
+        assert resp.status_code == 422
 
     def test_update_phase_missing(self, client):
         resp = client.put("/api/phases/-9999", json={"body": {}})
@@ -200,6 +197,29 @@ class TestApiPhases:
         assert after["checks"] == before["checks"]
         assert after["evidence"] == before["evidence"]
 
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"instructions": [{"skills": []}]},
+            {"instructions": [{"description": "Step", "skills": "testing"}]},
+            {"instructions": [{"description": "Step", "execution_type": "invalid"}]},
+            {"checks": [{"description": ""}]},
+            {"checks": [{"description": "Check", "command": None}]},
+            {"evidence": [{"description": "Evidence", "validator": None}]},
+            {"checks": [{"description": "same"}, {"description": " SAME "}]},
+            {"evidence": None},
+        ],
+    )
+    def test_composite_phase_update_rejects_invalid_nested_content_without_writes(self, client, payload):
+        phase_id = _phase_id(client, "1.INTAKE")
+        before = client.get(f"/api/phases/{phase_id}").json()["phase"]
+
+        response = client.put(f"/api/phases/{phase_id}", json=payload)
+
+        assert response.status_code == 422
+        after = client.get(f"/api/phases/{phase_id}").json()["phase"]
+        assert after == before
+
 
 class TestRemovedLegacyApi:
     def test_supervisor_evaluate_removed(self, client):
@@ -242,28 +262,25 @@ def _unique(prefix: str) -> str:
 class TestApiPhaseCreate:
     def test_create_phase_requires_workflow_id(self, client):
         resp = client.post("/api/phases", json={"phase_order": 1})
-        assert resp.status_code == 400
-        assert resp.json()["ok"] is False
-        assert "workflow_id" in resp.json()["error"]
+        assert resp.status_code == 422
+        assert "workflow_id" in resp.text
 
     def test_create_phase_requires_phase_order(self, client):
         from project_workflow.interfaces.ui import _app_state
 
         workflow = _app_state.workflow_service().create_workflow({"name": _unique("wf"), "_skip_default_phase": True})
         resp = client.post("/api/phases", json={"workflow_id": workflow["id"]})
-        assert resp.status_code == 400
-        assert resp.json()["ok"] is False
-        assert "phase_order" in resp.json()["error"]
+        assert resp.status_code == 422
+        assert "phase_order or insert_after" in resp.text
 
     def test_create_phase_rejects_invalid_workflow(self, client):
         resp = client.post("/api/phases", json={"workflow_id": 999999, "phase_order": 1})
-        assert resp.status_code == 400
+        assert resp.status_code == 404
         assert resp.json()["ok"] is False
 
     def test_create_phase_rejects_non_numeric_workflow_id(self, client):
         resp = client.post("/api/phases", json={"workflow_id": "not-a-workflow", "phase_order": 1})
-        assert resp.status_code == 400
-        assert resp.json()["ok"] is False
+        assert resp.status_code == 422
 
     def test_create_phase_inserts_and_shifts_orders(self, client):
         from project_workflow.interfaces.ui import _app_state
@@ -306,7 +323,7 @@ class TestApiPhaseCreate:
             uow.workflows.delete(int(workflow_id))
             uow.commit()
 
-    def test_create_phase_appends_when_order_beyond_end(self, client):
+    def test_create_phase_rejects_order_beyond_end_without_changes(self, client):
         from project_workflow.interfaces.ui import _app_state
 
         uow = _app_state.get_db()
@@ -321,15 +338,12 @@ class TestApiPhaseCreate:
             )
 
             resp = client.post("/api/phases", json={"workflow_id": workflow_id, "phase_order": 99})
-            assert resp.status_code == 200
-            data = resp.json()
-            assert data["phase_order"] == 2
+            assert resp.status_code == 409
 
             phases = _app_state.phase_service().list_phases(workflow_id=workflow_id)
-            assert len(phases) == 2
+            assert len(phases) == 1
             orders = {p["id"]: p["phase_order"] for p in phases}
             assert orders[ph1["id"]] == 1
-            assert orders[data["phase_id"]] == 2
         finally:
             uow.workflows.delete(int(workflow_id))
             uow.commit()
@@ -435,13 +449,13 @@ class TestApiWorkflows:
 
     def test_create_workflow_requires_name(self, client):
         resp = client.post("/api/workflows", json={"description": "desc"})
-        assert resp.status_code == 400
-        assert resp.json()["ok"] is False
+        assert resp.status_code == 422
+        assert "name" in resp.text
 
     def test_create_workflow_rejects_code(self, client):
         resp = client.post("/api/workflows", json={"name": _unique("wf"), "code": "X"})
-        assert resp.status_code == 400
-        assert "code" in resp.json()["error"]
+        assert resp.status_code == 422
+        assert "code" in resp.text
 
     def test_update_workflow(self, client):
         from project_workflow.interfaces.ui import _app_state
@@ -452,6 +466,8 @@ class TestApiWorkflows:
         data = resp.json()
         assert data["ok"] is True
         assert data["workflow"]["name"] == "Updated"
+        assert client.put(f"/api/workflows/{wf['id']}", json={"name": None}).status_code == 422
+        assert client.put(f"/api/workflows/{wf['id']}", json={"description": None}).status_code == 422
 
     def test_update_workflow_not_found(self, client):
         resp = client.put("/api/workflows/999999", json={"name": "X"})
@@ -541,10 +557,10 @@ class TestApiProjects:
         _app_state.task_service().create_task(
             {
                 "project_id": project_id,
-                "task_key": _unique("TASK"),
+                "task_key": _unique("ZZZ"),
                 "title": "Task",
                 "status": "active",
-                "current_phase": "-1",
+                "current_phase": "1.INTAKE",
             }
         )
         resp = client.delete(f"/api/projects/{project_id}")
@@ -579,6 +595,7 @@ class TestApiAgents:
         data = resp.json()
         assert data["agent"]["description"] == "updated"
         assert data["agent"]["hermes_profile"] is None
+        assert client.put(f"/api/agents/{agent_id}", json={"description": None}).status_code == 422
 
     def test_hermes_profile_cannot_be_shared(self, client):
         profile = f"profile_{uuid.uuid4().hex[:8]}"
@@ -602,7 +619,7 @@ class TestApiAgents:
         phase_id = _phase_id(client, "1.INTAKE")
         _app_state.phase_service().update_phase(phase_id, {"agent_id": agent_id})
         resp = client.delete(f"/api/agents/{agent_id}")
-        assert resp.status_code == 400
+        assert resp.status_code == 409
 
 
 class TestApiInstructions:
@@ -645,6 +662,17 @@ class TestApiInstructions:
         assert resp.status_code == 200
         assert resp.json()["instruction"]["skills"] == ["search"]
 
+        resp = client.put(f"/api/instructions/{instruction_id}", json={"description": "do Z"})
+        assert resp.status_code == 200
+        assert resp.json()["instruction"]["skills"] == ["search"]
+
+        resp = client.put(f"/api/instructions/{instruction_id}", json={"skills": None})
+        assert resp.status_code == 200
+        assert resp.json()["instruction"]["skills"] == []
+
+        assert client.put(f"/api/instructions/{instruction_id}", json={"skills": "search"}).status_code == 422
+        assert client.put(f"/api/instructions/{instruction_id}", json={"description": None}).status_code == 422
+
         resp = client.delete(f"/api/instructions/{instruction_id}")
         assert resp.status_code == 200
         assert _app_state.instruction_service().get_instruction(instruction_id) is None
@@ -684,16 +712,18 @@ class TestApiTasks:
                 "task_key": "RUN-DEL-1",
                 "title": "To delete",
                 "status": "active",
-                "current_phase": "-1",
+                "current_phase": "1.INTAKE",
             }
         )
-        phase = uow.phases.get_by_code("1.INTAKE")
+        phase = phase_by_code(uow, "1.INTAKE")
         assert phase is not None
-        _app_state.task_service().add_history(task["id"], phase.id, "done")
+        uow.tasks.add_history(task["id"], phase.id, "done")
+        uow.commit()
         assert uow.tasks.get_history(task["id"])
 
         resp = client.delete(f"/api/tasks/{task['task_key']}")
         assert resp.status_code == 204
+        assert resp.content == b""
         assert uow.tasks.get_by_id(task["id"]) is None
         assert uow.tasks.get_history(task["id"]) == []
 
@@ -768,7 +798,7 @@ class TestApiPhaseUpdate:
         assert phase["name"] == "Renamed phase"
         assert phase["execution_type"] == "parallel"
 
-    def test_sync_to_parallel_joins_previous_component(self, client):
+    def test_sync_to_parallel_stays_isolated_without_explicit_partner(self, client):
         from project_workflow.interfaces.ui.helpers import _build_parallel_phase_blocks
 
         phase_id = _phase_id(client, "7.PLAN_GATE")
@@ -779,14 +809,14 @@ class TestApiPhaseUpdate:
         phases = client.get("/api/phases").json()["phases"]
         updated = next(phase for phase in phases if phase["code"] == "7.PLAN_GATE")
         assert updated["execution_type"] == "parallel"
-        assert updated["parallel_with"] == "6.TEST_PLAN"
+        assert updated["parallel_with"] is None
         groups = [
             [phase["code"] for phase in block["phases"]]
             for block in _build_parallel_phase_blocks(phases)
         ]
-        assert ["6.SOLUTION", "6.TEST_PLAN", "7.PLAN_GATE"] in groups
+        assert ["7.PLAN_GATE"] in groups
 
-    def test_parallel_round_trip_keeps_original_component(self, client):
+    def test_parallel_round_trip_does_not_restore_removed_links(self, client):
         phase_id = _phase_id(client, "5.RESEARCH")
 
         assert client.put(f"/api/phases/{phase_id}", json={"execution_type": "sync"}).status_code == 200
@@ -794,7 +824,9 @@ class TestApiPhaseUpdate:
 
         phases = client.get("/api/phases").json()["phases"]
         updated = next(phase for phase in phases if phase["code"] == "5.RESEARCH")
-        assert updated["parallel_with"] == "5.PREFLIGHT"
+        assert updated["parallel_with"] is None
+        partner = next(phase for phase in phases if phase["code"] == "5.PREFLIGHT")
+        assert partner["parallel_with"] is None
 
     def test_explicit_null_clears_parallel_component(self, client):
         phase_id = _phase_id(client, "5.RESEARCH")
@@ -806,10 +838,43 @@ class TestApiPhaseUpdate:
         updated = next(phase for phase in phases if phase["code"] == "5.RESEARCH")
         assert updated["parallel_with"] is None
 
+    def test_explicit_contiguous_parallel_partner_is_saved(self, client):
+        phase_id = _phase_id(client, "7.PLAN_GATE")
+
+        response = client.put(
+            f"/api/phases/{phase_id}",
+            json={"execution_type": "parallel", "parallel_with": "6.TEST_PLAN"},
+        )
+
+        assert response.status_code == 200
+        phases = client.get("/api/phases").json()["phases"]
+        updated = next(phase for phase in phases if phase["code"] == "7.PLAN_GATE")
+        assert updated["parallel_with"] == "6.TEST_PLAN"
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"parallel_with": "6.TEST_PLAN"},
+            {"execution_type": "parallel", "parallel_with": "8.IMPLEMENT"},
+            {"execution_type": "parallel", "parallel_with": "10.REVIEW"},
+            {"rollback_target": "8.IMPLEMENT"},
+        ],
+    )
+    def test_invalid_phase_graph_update_is_conflict_and_atomic(self, client, payload):
+        phase_id = _phase_id(client, "7.PLAN_GATE")
+        before = client.get(f"/api/phases/{phase_id}").json()["phase"]
+
+        response = client.put(f"/api/phases/{phase_id}", json=payload)
+
+        assert response.status_code == 409
+        after = client.get(f"/api/phases/{phase_id}").json()["phase"]
+        for field in ("execution_type", "parallel_with", "rollback_target"):
+            assert after[field] == before[field]
+
     def test_update_phase_forbidden_code(self, client):
         phase_id = _phase_id(client, "1.INTAKE")
         resp = client.put(f"/api/phases/{phase_id}", json={"code": "x.y"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_update_phase_not_found(self, client):
         resp = client.put("/api/phases/999999", json={"name": "x"})

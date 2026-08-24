@@ -106,6 +106,15 @@
         <b class="mode-sync">⏱ sync</b>
         {% endif %}
       </span>
+      <label id="parallelPartnerRow" {% if phase.execution_type != 'parallel' %}hidden{% endif %}>
+        Связать с:
+        <select id="parallelPartnerSelect" class="inline-input" onchange="scheduleSave()">
+          <option value="">— изолированная фаза —</option>
+          {% for candidate in parallel_candidates %}
+          <option value="{{ candidate.code }}" {% if phase.parallel_with == candidate.code %}selected{% endif %}>{{ candidate.name }} · {{ candidate.code }}</option>
+          {% endfor %}
+        </select>
+      </label>
     </div>
   </div>
 
@@ -204,7 +213,6 @@
       <li data-id="{{ c.id }}">
         <span class="status-icon wait">○</span>
         <input type="text" class="inline-input check-text" value="{{ c.description }}" data-field="description" onblur="scheduleSave()">
-        <span class="check-meta">{% if c.command %}{{ c.command }}{% endif %}</span>
         <button class="item-delete" onclick="deleteItem(this)">×</button>
       </li>
       {% else %}
@@ -225,7 +233,6 @@
       <li data-id="{{ e.id }}">
         <span class="file-icon">📄</span>
         <input type="text" class="inline-input file-name" value="{{ e.description }}" data-field="description" onblur="scheduleSave()">
-        <span class="file-status">{% if e.validator %}{{ e.validator }}{% else %}—{% endif %}</span>
         <button class="item-delete" onclick="deleteItem(this)">×</button>
       </li>
       {% else %}
@@ -272,6 +279,12 @@ function setPhaseMode(el, mode) {
   } else {
     b.className = 'mode-sync';
     b.textContent = '⏱ sync';
+  }
+  const partnerRow = document.getElementById('parallelPartnerRow');
+  if (partnerRow) partnerRow.hidden = mode !== 'parallel';
+  if (mode !== 'parallel') {
+    const partnerSelect = document.getElementById('parallelPartnerSelect');
+    if (partnerSelect) partnerSelect.value = '';
   }
 }
 
@@ -526,9 +539,33 @@ async function removeSkillFromInstruction(button) {
 }
 
 /* ---------- Checks & Evidence ---------- */
+function syncTextItemList(list) {
+  const count = list.closest('.wiki-section')?.querySelector('.count');
+  const itemCount = list.querySelectorAll('li:not(.empty-state)').length;
+  if (count) count.textContent = String(itemCount);
+  if (itemCount === 0 && !list.querySelector('.empty-state')) {
+    const empty = document.createElement('li');
+    empty.className = 'empty-state';
+    empty.textContent = list.id === 'checks-list' ? 'Нет проверок' : 'Нет evidence';
+    list.appendChild(empty);
+  }
+}
+
+function saveNewTextItem(input) {
+  const list = input.closest('ul');
+  if (!input.value.trim()) {
+    input.closest('li')?.remove();
+    if (list) syncTextItemList(list);
+    return;
+  }
+  scheduleSave();
+}
+
 function deleteItem(btn) {
   const li = btn.closest('li');
+  const list = li?.closest('ul');
   if (li) li.remove();
+  if (list) syncTextItemList(list);
   savePhase();
 }
 
@@ -539,12 +576,13 @@ function addCheck() {
   const li = document.createElement('li');
   li.innerHTML = `
     <span class="status-icon wait">○</span>
-    <input type="text" class="inline-input check-text" value="" data-field="description" onblur="scheduleSave()">
+    <input type="text" class="inline-input check-text" value="" data-field="description" onblur="saveNewTextItem(this)">
     <span class="check-meta">—</span>
     <button class="item-delete" onclick="deleteItem(this)">×</button>
   `;
   list.appendChild(li);
-  savePhase();
+  syncTextItemList(list);
+  li.querySelector('input')?.focus();
 }
 
 function addEvidence() {
@@ -554,12 +592,13 @@ function addEvidence() {
   const li = document.createElement('li');
   li.innerHTML = `
     <span class="file-icon">📄</span>
-    <input type="text" class="inline-input file-name" value="" data-field="description" onblur="scheduleSave()">
+    <input type="text" class="inline-input file-name" value="" data-field="description" onblur="saveNewTextItem(this)">
     <span class="file-status">—</span>
     <button class="item-delete" onclick="deleteItem(this)">×</button>
   `;
   list.appendChild(li);
-  savePhase();
+  syncTextItemList(list);
+  li.querySelector('input')?.focus();
 }
 
 /* ---------- Debounced phase meta save ---------- */
@@ -582,19 +621,24 @@ async function savePhase() {
     checks: [],
     evidence: [],
     execution_type: document.querySelector('.execution-toggle')?.dataset.mode || 'sync',
-    agent_id: document.getElementById('agentSelect')?.value || null,
+    parallel_with: (document.querySelector('.execution-toggle')?.dataset.mode || 'sync') === 'parallel'
+      ? (document.getElementById('parallelPartnerSelect')?.value || null)
+      : null,
+    agent_id: document.getElementById('agentSelect')?.value
+      ? Number(document.getElementById('agentSelect').value)
+      : null,
   };
 
   document.querySelectorAll('#checks-list li').forEach((li) => {
     if (li.classList.contains('empty-state')) return;
     const inp = li.querySelector('[data-field="description"]');
-    if (inp) data.checks.push({description: inp.value, command: null});
+    if (inp) data.checks.push({description: inp.value});
   });
 
   document.querySelectorAll('#evidence-list li').forEach((li) => {
     if (li.classList.contains('empty-state')) return;
     const inp = li.querySelector('[data-field="description"]');
-    if (inp) data.evidence.push({description: inp.value, validator: null});
+    if (inp) data.evidence.push({description: inp.value});
   });
 
   try {

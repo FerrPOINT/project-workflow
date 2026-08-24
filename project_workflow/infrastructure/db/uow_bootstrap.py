@@ -22,4 +22,3 @@ def bootstrap_default_project(uow: SAUnitOfWork) -> None:
                 "key_prefixes": list(config.DEFAULT_TASK_KEY_PREFIXES),
             }
         )
-        uow.commit()

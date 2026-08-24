@@ -61,7 +61,7 @@ class TestStrictEvaluatorContract:
         assert verdict.confidence == 0.5
 
 
-@pytest.mark.parametrize("verdict", ["PASS", "PARTIAL", "BLOCKED"])
+@pytest.mark.parametrize("verdict", ["PARTIAL", "BLOCKED"])
 def test_valid_report_is_replayed_once(verdict, supervisor_llm):
     engine = SupervisorEngine(f"RUN-90{['PASS', 'PARTIAL', 'BLOCKED'].index(verdict)}")
     supervisor_llm(verdict)
@@ -80,9 +80,26 @@ def test_valid_report_is_replayed_once(verdict, supervisor_llm):
     assert engine.db.get_task_history(engine.task["id"]) == history_after_first
 
 
-def test_retryable_provider_error_has_no_fingerprint_or_transition():
+def test_same_report_is_evaluated_again_after_phase_transition(supervisor_llm):
+    engine = SupervisorEngine("RUN-900")
+    supervisor_llm("PASS")
+    fixture_chat = OpenAICompatibleClient.chat
+    with patch.object(OpenAICompatibleClient, "chat", side_effect=fixture_chat) as chat:
+        first = engine.evaluate("same completion report")
+        first_phase = first["phase"]
+        second = engine.evaluate("same completion report")
+
+    assert first["verdict"] == second["verdict"] == "PASS"
+    assert first["replayed"] is second["replayed"] is False
+    assert second["phase"] != first_phase
+    assert chat.call_count == 2
+    runs = engine.db.get_supervisor_runs(task_key=engine.task_key, limit=10)
+    assert len(runs) == 2
+    assert len({run["phase_id"] for run in runs}) == 2
+
+
+def test_retryable_provider_error_has_no_fingerprint_and_blocks_current_phase():
     engine = SupervisorEngine("RUN-910")
-    original_task = dict(engine.task)
     with patch.object(OpenAICompatibleClient, "chat", side_effect=requests.ConnectionError("down")) as chat:
         first = engine.evaluate("same report")
         second = engine.evaluate("same report")
@@ -93,8 +110,106 @@ def test_retryable_provider_error_has_no_fingerprint_or_transition():
     runs = engine.db.supervisor_runs.list(task_key=engine.task_key)
     assert len(runs) == 2
     assert all(run.report_fingerprint is None for run in runs)
-    assert engine.db.get_task_history(engine.task["id"]) == []
-    assert engine.task == original_task
+    assert all(run.context_snapshot["raw_evaluator"] == {"error": "ConnectionError"} for run in runs)
+    assert [item["status"] for item in engine.db.get_task_history(engine.task["id"])] == ["blocked"]
+    assert engine.task["status"] == "blocked"
+
+
+def test_successful_retry_after_provider_error_unblocks_and_transitions(supervisor_llm):
+    engine = SupervisorEngine("RUN-913")
+    supervisor_llm("PASS")
+    successful_chat = OpenAICompatibleClient.chat
+    attempts = 0
+
+    def flaky_chat(*args, **kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise requests.Timeout("provider timeout")
+        return successful_chat(*args, **kwargs)
+
+    with patch.object(OpenAICompatibleClient, "chat", side_effect=flaky_chat):
+        failed = engine.evaluate("same report")
+        succeeded = engine.evaluate("same report")
+
+    assert failed["verdict"] == "BLOCKED"
+    assert failed["retryable"] is True
+    assert succeeded["verdict"] == "PASS"
+    assert succeeded["replayed"] is False
+    assert engine.task["status"] == "active"
+    assert engine.task["current_phase"] == "2.REQUIREMENTS"
+    runs = engine.db.supervisor_runs.list(task_key=engine.task_key)
+    assert sum(run.report_fingerprint is None for run in runs) == 1
+    assert sum(run.report_fingerprint is not None for run in runs) == 1
+
+
+def test_stale_partial_replay_restores_cached_success_after_task_becomes_blocked(supervisor_llm):
+    engine = SupervisorEngine("RUN-914")
+    supervisor_llm("PARTIAL")
+    successful_chat = OpenAICompatibleClient.chat
+
+    first = engine.evaluate("reusable partial report")
+    with patch.object(OpenAICompatibleClient, "chat", side_effect=requests.Timeout("provider timeout")):
+        failed = engine.evaluate("different technical failure")
+    with patch.object(OpenAICompatibleClient, "chat", side_effect=successful_chat) as chat:
+        retried = engine.evaluate("reusable partial report")
+
+    assert first["verdict"] == "PARTIAL"
+    assert failed["verdict"] == "BLOCKED"
+    assert engine.task["status"] == "active"
+    assert retried["verdict"] == "PARTIAL"
+    assert retried["replayed"] is True
+    assert chat.call_count == 0
+
+
+def test_stale_blocked_replay_restores_cached_block_after_partial(supervisor_llm):
+    engine = SupervisorEngine("RUN-915")
+    supervisor_llm("BLOCKED")
+    blocked = engine.evaluate("reusable blocked report")
+    supervisor_llm("PARTIAL")
+    partial = engine.evaluate("different partial report")
+
+    with patch.object(OpenAICompatibleClient, "chat", wraps=OpenAICompatibleClient.chat) as chat:
+        replayed = engine.evaluate("reusable blocked report")
+
+    assert blocked["verdict"] == "BLOCKED"
+    assert partial["verdict"] == "PARTIAL"
+    assert replayed["verdict"] == "BLOCKED"
+    assert replayed["replayed"] is True
+    assert engine.task["status"] == "blocked"
+    assert chat.call_count == 0
+
+
+def test_concurrent_change_during_stale_replay_returns_retryable_block(supervisor_llm, monkeypatch):
+    engine = SupervisorEngine("RUN-916")
+    supervisor_llm("PARTIAL")
+    engine.evaluate("cached partial report")
+    with patch.object(OpenAICompatibleClient, "chat", side_effect=requests.Timeout("provider timeout")):
+        engine.evaluate("different technical failure")
+    history_before = engine.db.get_task_history(engine.task["id"])
+    monkeypatch.setattr(engine.db.tasks, "update_if_state", lambda *_args, **_kwargs: False)
+
+    with patch.object(OpenAICompatibleClient, "chat", wraps=OpenAICompatibleClient.chat) as chat:
+        result = engine.evaluate("cached partial report")
+
+    assert result["verdict"] == "BLOCKED"
+    assert result["retryable"] is True
+    assert result["replayed"] is False
+    assert engine.task["status"] == "blocked"
+    assert engine.db.get_task_history(engine.task["id"]) == history_before
+    assert chat.call_count == 0
+
+
+def test_recorded_evaluation_invalidates_supervisor_context_cache(supervisor_llm):
+    engine = SupervisorEngine("RUN-909")
+    before = engine.get_full_context()
+    assert engine.get_full_context() is before
+    supervisor_llm("PARTIAL")
+
+    engine.evaluate("cache invalidation report")
+
+    after = engine.get_full_context()
+    assert after is not before
 
 
 def test_concurrent_state_change_rolls_back_run_and_history(supervisor_llm, monkeypatch):

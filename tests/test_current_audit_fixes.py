@@ -76,13 +76,22 @@ def test_phase_update_preserves_identity_and_coerces_boolean_flags(uow: SAUnitOf
 
 
 def test_task_update_preserves_identity_and_ownership(uow: SAUnitOfWork):
-    _, project_id = _workflow_with_project(uow, "task-a")
+    workflow_id, project_id = _workflow_with_project(uow, "task-a")
     _, other_project_id = _workflow_with_project(uow, "task-b")
+    uow.phases.create(
+        {
+            "workflow_id": workflow_id,
+            "code": "1.INTAKE",
+            "name": "Intake",
+            "phase_order": 1,
+        }
+    )
     task_id = uow.tasks.create(
         {
             "project_id": project_id,
             "task_key": "AUDIT-1",
             "title": "Original",
+            "current_phase": "1.INTAKE",
         }
     )
     uow.commit()

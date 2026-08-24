@@ -8,6 +8,7 @@ import pytest
 
 from project_workflow import config
 from project_workflow.infrastructure.llm import OpenAICompatibleClient
+from tests._db_helpers import prepare_sqlite_uow
 
 
 @pytest.fixture(autouse=True)
@@ -37,14 +38,10 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
     app_state._app_state = sqlite_app_state
     ui_state._app_state = sqlite_app_state
 
-    from project_workflow.infrastructure.db.schema import ensure_phase_catalog
     from project_workflow.infrastructure.db.uow import SAUnitOfWork
-    from project_workflow.infrastructure.db.uow_bootstrap import bootstrap_default_project
 
     uow = SAUnitOfWork(database_url)
-    uow.create_all()
-    ensure_phase_catalog(uow)
-    bootstrap_default_project(uow)
+    prepare_sqlite_uow(uow)
     uow.close()
 
     yield

@@ -32,7 +32,7 @@ class UIDataService:
     def _load_workflows(self) -> list[dict[str, Any]]:
         wdb = self._app_state.get_db()
         workflows = wdb.get_workflows()
-        phases = wdb.get_all_phases()
+        phases = [phase.to_dict() for phase in wdb.phases.list()]
         projects = wdb.get_projects()
         phase_counts: dict[int, int] = {}
         project_counts: dict[int, int] = {}
@@ -83,22 +83,10 @@ class UIDataService:
             )
         return result
 
-    def _coerce_phase_db_id(self, raw_phase_id: int | str | None) -> int | None:
-        if isinstance(raw_phase_id, int):
-            return raw_phase_id if raw_phase_id > 0 else None
-        if raw_phase_id is None:
+    def _load_phase_detail(self, phase_id: int) -> dict[str, Any] | None:
+        if phase_id <= 0:
             return None
-        token = str(raw_phase_id).strip()
-        if not token.isdigit():
-            return None
-        phase_id = int(token)
-        return phase_id if phase_id > 0 else None
-
-    def _load_phase_detail(self, phase_id: int | str) -> dict[str, Any] | None:
-        resolved_phase_id = self._coerce_phase_db_id(phase_id)
-        if resolved_phase_id is None:
-            return None
-        phase = self._app_state.get_service().get_phase_detail(resolved_phase_id)
+        phase = self._app_state.get_service().get_phase_detail(phase_id)
         if not phase:
             return None
         phase = dict(phase)
@@ -165,7 +153,7 @@ class UIDataService:
             )
 
             current_phase_id, current = _resolve_task_phase_local(
-                t.get("current_phase", "-1"),
+                t.get("current_phase", ""),
                 phases_by_workflow.get(workflow_id, []),
             )
             current = current or {}
@@ -198,6 +186,7 @@ class UIDataService:
                     "task_key": t["task_key"],
                     "title": t.get("title", ""),
                     "project_id": t.get("project_id"),
+                    "workflow_id": workflow_id,
                     "project_code": project_code,
                     "project_name": project_name,
                     "current_phase_name": current.get("name", current_phase_id),
@@ -309,8 +298,6 @@ class UIDataService:
         raw_history: list[dict[str, Any]] = []
         for h in history:
             phase = phase_by_id.get(h["phase_id"])
-            if phase is None:
-                phase = wdb.get_phase(h["phase_id"])
             if not phase:
                 continue
             history_status = h.get("status", "pending")
@@ -371,6 +358,12 @@ class UIDataService:
             return None
 
         task = dict(task)
+        project_id = task.get("project_id")
+        project = row_to_dict(wdb.projects.get_by_id(project_id)) if isinstance(project_id, int) else None
+        if project:
+            task["workflow_id"] = project.get("workflow_id")
+            task["project_code"] = project.get("code")
+            task["project_name"] = project.get("name")
         task["project_code"] = task.get("project_code") or "—"
         task["project_name"] = task.get("project_name") or task["project_code"]
         task["project_label"] = (
@@ -380,7 +373,7 @@ class UIDataService:
         )
 
         current_phase_id, current_phase = _resolve_task_phase(
-            task.get("current_phase", "-1"), wdb, workflow_id=task.get("workflow_id")
+            task.get("current_phase", ""), wdb, workflow_id=task.get("workflow_id")
         )
         task["current_phase_name"] = current_phase["name"] if current_phase else task.get("current_phase", "")
         task["current_phase_order"] = current_phase["phase_order"] if current_phase else 0

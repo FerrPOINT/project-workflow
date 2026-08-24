@@ -29,8 +29,8 @@ def test_row_to_project_bad_json_key_prefixes():
         key_prefixes="not json",
         workflow=None,
     )
-    project = _row_to_project(row)
-    assert project.key_prefixes == []
+    with pytest.raises(ValueError, match="invalid JSON"):
+        _row_to_project(row)
 
 
 def test_row_to_project_non_string_key_prefixes():
@@ -42,8 +42,8 @@ def test_row_to_project_non_string_key_prefixes():
         key_prefixes=[1, 2, 3],
         workflow=None,
     )
-    project = _row_to_project(row)
-    assert project.key_prefixes == []
+    with pytest.raises(ValueError, match="JSON string array"):
+        _row_to_project(row)
 
 
 def test_row_to_task_missing_project_workflow():
@@ -53,14 +53,14 @@ def test_row_to_task_missing_project_workflow():
         task_key="T-1",
         title="t",
         description="d",
-        current_phase="-1",
+        current_phase="1.INTAKE",
         status="active",
         created_at=None,
         updated_at=None,
         project=None,
     )
     task = _row_to_task(row)
-    assert task.current_phase_name == ""
+    assert task.current_phase_name == "1.INTAKE"
 
 
 def test_row_to_supervisor_run_bad_json_fields():
@@ -79,12 +79,8 @@ def test_row_to_supervisor_run_bad_json_fields():
         response="42",
         created_at=None,
     )
-    run = _row_to_supervisor_run(row)
-    assert run.covered == []
-    assert run.missing == []
-    assert run.blockers == []
-    assert run.context_snapshot == {}
-    assert run.response == {}
+    with pytest.raises(ValueError):
+        _row_to_supervisor_run(row)
 
 
 def test_row_to_supervisor_run_non_collection_json():
@@ -103,12 +99,8 @@ def test_row_to_supervisor_run_non_collection_json():
         response="null",
         created_at=None,
     )
-    run = _row_to_supervisor_run(row)
-    assert run.covered == []
-    assert run.missing == []
-    assert run.blockers == []
-    assert run.context_snapshot == {}
-    assert run.response == {}
+    with pytest.raises(ValueError):
+        _row_to_supervisor_run(row)
 
 
 @pytest.mark.parametrize("raw", [None, ""])
@@ -128,9 +120,5 @@ def test_row_to_supervisor_run_empty_fields(raw):
         response=raw,
         created_at=None,
     )
-    run = _row_to_supervisor_run(row)
-    assert run.covered == []
-    assert run.missing == []
-    assert run.blockers == []
-    assert run.context_snapshot == {}
-    assert run.response == {}
+    with pytest.raises(ValueError):
+        _row_to_supervisor_run(row)

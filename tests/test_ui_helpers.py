@@ -6,7 +6,6 @@ from unittest.mock import MagicMock
 
 from project_workflow.interfaces.ui.helpers import (
     _build_parallel_phase_blocks,
-    _parse_key_prefixes,
     _parse_optional_int,
     _resolve_task_phase,
     _resolve_task_phase_local,
@@ -30,13 +29,6 @@ def test_group_instructions():
     b = {"id": 2, "execution_type": "parallel"}
     c = {"id": 3, "execution_type": "sync"}
     assert _group_instructions([a, b, c]) == [[a, b], [c]]
-
-
-def test_parse_key_prefixes():
-    assert _parse_key_prefixes(["aa", " bb "]) == ["AA", "BB"]
-    assert _parse_key_prefixes("xx\nyy\n") == ["XX", "YY"]
-    assert _parse_key_prefixes(None) == []
-    assert _parse_key_prefixes(123) == []
 
 
 def test_run_to_dict():
@@ -64,7 +56,6 @@ def test_build_parallel_phase_blocks():
 def test_resolve_task_phase():
     db = MagicMock()
     db.get_phases.return_value = [{"id": 1, "code": "p1"}, {"id": 2, "code": "p2"}]
-    db.get_phase.return_value = None
     token, phase = _resolve_task_phase("p2", db)
     assert token == "p2"
     assert phase == {"id": 2, "code": "p2"}
@@ -81,16 +72,14 @@ def test_resolve_task_phase_prefers_numeric_code_over_db_id():
 
     assert token == "10"
     assert phase == {"id": 27, "code": "10", "name": "Auto-Improve"}
-    db.get_phase.assert_not_called()
 
 
-def test_resolve_task_phase_fallback():
+def test_resolve_task_phase_has_no_global_fallback():
     db = MagicMock()
     db.get_phases.return_value = []
-    db.get_phase.return_value = {"id": 7, "code": "p7"}
     token, phase = _resolve_task_phase("7", db)
     assert token == "7"
-    assert phase == {"id": 7, "code": "p7"}
+    assert phase is None
 
 
 def test_resolve_task_phase_local():

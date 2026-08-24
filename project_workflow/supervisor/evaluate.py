@@ -20,7 +20,7 @@ def _report_fingerprint(task_id: int, report: str) -> str:
     return hashlib.sha256(f"{task_id}\0{normalized}".encode()).hexdigest()
 
 
-def _blocked(exc: Exception, raw: dict[str, Any] | None = None) -> LlmVerdict:
+def _blocked(exc: Exception) -> LlmVerdict:
     return LlmVerdict(
         verdict="BLOCKED",
         covered=[],
@@ -30,17 +30,52 @@ def _blocked(exc: Exception, raw: dict[str, Any] | None = None) -> LlmVerdict:
         next_phase=None,
         next_phase_name=None,
         confidence=0.0,
-        raw=raw or {"error": type(exc).__name__},
+        raw={"error": type(exc).__name__},
     )
 
 
-def _replay(engine: Any, task_id: int, fingerprint: str) -> dict[str, Any] | None:
-    run = engine.db.supervisor_runs.get_by_fingerprint(task_id, fingerprint)
+def _replay(engine: Any, task_id: int, phase_id: int, fingerprint: str) -> dict[str, Any] | None:
+    run = engine.db.supervisor_runs.get_by_fingerprint(task_id, phase_id, fingerprint)
     response = getattr(run, "response", None) if run is not None else None
     if not isinstance(response, dict):
         return None
     result = dict(response)
     result["replayed"] = True
+    task = engine.db.tasks.get_by_id(task_id)
+    verdict = str(response.get("verdict") or "").lower()
+    evaluated_phase = str(response.get("phase") or "")
+    next_phase = str(response.get("next_phase") or "") or None
+    rollback_target = str(response.get("rollback_target") or "") or None
+    expected_phase = evaluated_phase
+    expected_status = "active"
+    if verdict == "pass":
+        expected_phase = next_phase or evaluated_phase
+        expected_status = "active" if next_phase else "done"
+    elif verdict == "rollback":
+        expected_phase = rollback_target or evaluated_phase
+    elif verdict == "blocked":
+        expected_status = "blocked"
+
+    current_phase = str(getattr(task, "current_phase", "") or "")
+    current_status = str(getattr(task, "status", "") or "")
+    if (current_phase, current_status) != (expected_phase, expected_status):
+        if current_phase != evaluated_phase or verdict not in {"pass", "partial", "blocked", "rollback", "delegate"}:
+            return None
+        engine._refresh_task_state()
+        refreshed_phase = str(engine.task.get("current_phase") or "")
+        refreshed_status = str(engine.task.get("status") or "")
+        if (refreshed_phase, refreshed_status) == (expected_phase, expected_status):
+            return result
+        if refreshed_phase != evaluated_phase:
+            return None
+        phase = engine.phase_map.get(evaluated_phase)
+        if phase is None:
+            return None
+        try:
+            engine._record_evaluation(phase, verdict, next_phase if verdict == "pass" else None, rollback_target)
+        except ConcurrentTransitionError:
+            engine.db.rollback()
+            return _concurrent_result(result)
     return result
 
 
@@ -82,8 +117,11 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         )
 
     task_id = int(engine.task["id"])
+    if phase.id is None:
+        raise ValueError("Current phase is not persisted")
+    phase_id = phase.id
     fingerprint = _report_fingerprint(task_id, report)
-    replayed = _replay(engine, task_id, fingerprint)
+    replayed = _replay(engine, task_id, phase_id, fingerprint)
     if replayed is not None:
         return replayed
 
@@ -128,7 +166,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         AttributeError,
     ) as exc:
         technical_error = True
-        llm = _blocked(exc, raw)
+        llm = _blocked(exc)
 
     covered_ids = llm.covered if not technical_error else [item_id for item_id in item_ids if item_id in previously_ids]
     missing_ids = (
@@ -173,7 +211,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
 
     next_phase_obj = engine.phase_map.get(next_phase) if next_phase else None
     rollback_phase_obj = engine.phase_map.get(rollback_target) if rollback_target else None
-    raw_evaluator = raw if raw is not None else llm.raw
+    raw_evaluator = llm.raw if technical_error else (raw if raw is not None else llm.raw)
     run_data = {
         "task_id": task_id,
         "phase_id": phase.id,
@@ -203,12 +241,11 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
 
     try:
         engine.db.create_supervisor_run(run_data)
-        if not technical_error:
-            engine._record_evaluation(phase, verdict_key, next_phase, rollback_target, commit=False)
+        engine._record_evaluation(phase, verdict_key, next_phase, rollback_target, commit=False)
         engine.db.commit()
     except IntegrityError:
         engine.db.rollback()
-        replayed = _replay(engine, task_id, fingerprint)
+        replayed = _replay(engine, task_id, phase_id, fingerprint)
         if replayed is not None:
             return replayed
         raise
