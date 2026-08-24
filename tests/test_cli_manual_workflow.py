@@ -15,6 +15,7 @@ from project_workflow import config
 from project_workflow.infrastructure.db.session import reset_engine
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.cli.ui import cli
+from tests._db_helpers import prepare_sqlite_uow
 
 
 @pytest.fixture
@@ -32,7 +33,7 @@ def manual_env(tmp_path, monkeypatch):
         seed = json.load(f)
 
     uow = SAUnitOfWork()
-    uow.init()
+    prepare_sqlite_uow(uow)
     wf_id = uow.workflows.create(
         {
             "name": "Manual Test Workflow",

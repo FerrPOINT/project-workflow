@@ -6,6 +6,7 @@ import itertools
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.interfaces.ui import app
@@ -252,6 +253,31 @@ def test_task_filter_returns_nonempty_workflow_specific_dto():
         assert tasks[0]["workflow_id"] == workflow_id
 
 
+def test_explicit_project_task_validates_prefix_and_scoped_phase_before_write():
+    workflow_id, _ = _workflow_with_phases(1)
+    prefix = _unique("STRICT").upper()
+    project = _app_state.project_service().create_project(
+        {
+            "workflow_id": workflow_id,
+            "code": _unique("strict-project"),
+            "name": "Strict project",
+            "key_prefixes": [prefix],
+        }
+    )
+    service = _app_state.task_service()
+    with pytest.raises(ConflictError, match="does not match"):
+        service.create_task({"project_id": project["id"], "task_key": "WRONG-1"})
+    with pytest.raises(ValueError, match="not found in workflow"):
+        service.create_task(
+            {
+                "project_id": project["id"],
+                "task_key": f"{prefix}-1",
+                "current_phase": "missing",
+            }
+        )
+    assert not any(task["task_key"] in {"WRONG-1", f"{prefix}-1"} for task in service.list_tasks())
+
+
 def test_nullable_phase_fields_distinguish_omitted_from_explicit_null():
     workflow_id, phases = _workflow_with_phases(2)
     first, second = phases
@@ -289,3 +315,27 @@ def test_nullable_phase_fields_distinguish_omitted_from_explicit_null():
     with pytest.raises(ConflictError):
         service.update_phase(first["id"], {"parallel_with": "missing"})
     assert service.get_phase(first["id"])["parallel_with"] is None
+
+
+def test_projects_page_exposes_description_editor():
+    response = client.get("/projects")
+    assert response.status_code == 200
+    assert 'id="projectDescription"' in response.text
+    assert "description: document.getElementById('projectDescription').value.trim()" in response.text
+
+
+def test_corrupted_persisted_instruction_skills_fail_loudly():
+    _, phases = _workflow_with_phases(1)
+    instruction = _app_state.instruction_service().create_instruction(
+        phases[0]["id"],
+        {"description": "Corrupt me", "skills": ["testing"]},
+    )
+    uow = _app_state.get_db()
+    uow.session.execute(
+        text("UPDATE instructions SET skills = '{broken' WHERE id = :id"),
+        {"id": instruction["id"]},
+    )
+    uow.commit()
+
+    with pytest.raises(ValueError, match="invalid JSON"):
+        _app_state.instruction_service().get_instruction(instruction["id"])

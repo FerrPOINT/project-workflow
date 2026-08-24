@@ -102,15 +102,17 @@ class TestApplicationServiceFinalGaps:
 
     def test_project_service_delete(self):
         uow = MagicMock()
-        uow.tasks.list.return_value = []
+        uow.projects.lock.return_value = MagicMock()
+        uow.tasks.list_by_project.return_value = []
         ProjectService(uow).delete_project(1)
         uow.projects.delete.assert_called_once_with(1)
 
     def test_task_service_creation_failed(self):
         uow = MagicMock()
         project = MagicMock()
-        project.to_dict.return_value = {"id": 5}
-        uow.projects.get_by_code.return_value = project
+        project.code = "P"
+        project.key_prefixes = ["P"]
+        uow.projects.lock.return_value = project
         uow.tasks.create.return_value = 1
         uow.tasks.get_by_id.return_value = None
         with pytest.raises(RuntimeError, match="Task creation failed"):
@@ -267,10 +269,6 @@ class TestUiServicesFinalGaps:
             {"id": 2, "code": "2", "name": "P2", "phase_order": 2, "execution_type": "parallel"},
         ]
 
-        def _get_phase(pid):
-            return {"id": pid, "code": str(pid), "name": f"P{pid}", "phase_order": pid}
-
-        uow.get_phase.side_effect = _get_phase
         uow.get_task_history.return_value = [
             {"phase_id": 1, "status": "done", "completed_at": "", "execution_type": "parallel"},
             {"phase_id": 2, "status": "done", "completed_at": "", "execution_type": "parallel"},
@@ -293,7 +291,6 @@ class TestUiServicesFinalGaps:
         uow.get_supervisor_runs.return_value = [{"verdict": "pass", "response": {"message": "ok"}}]
         uow.get_projects.return_value = []
         uow.get_phases.return_value = []
-        uow.get_phase.return_value = None
         monkeypatch.setattr("project_workflow.interfaces.ui.services._get_app_state", lambda: _mock_state(uow))
         result = _get_task_detail("A-1")
         assert result["supervisor_runs"][0]["next_contract"] is None

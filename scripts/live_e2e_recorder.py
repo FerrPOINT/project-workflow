@@ -35,7 +35,7 @@ ACTION_ID_RE = re.compile(r"^A-\d{3,}$")
 MAX_EXCERPT = 2_000
 HOSTED_TOKEN_RE = re.compile(
     r"\b(?:glpat-[A-Za-z0-9_-]{16,}|github_pat_[A-Za-z0-9_]{20,}|"
-    r"gh[pousr]_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{16,})\b"
+    r"gh[pousr]_[A-Za-z0-9]{20,}|(?:xox[a-z]-|xapp-|xwfp-)[A-Za-z0-9_-]{16,})\b"
 )
 
 

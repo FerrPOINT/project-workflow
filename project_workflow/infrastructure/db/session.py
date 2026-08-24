@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -31,7 +33,18 @@ _SessionLocal = None
 
 PG_CONNECT_RETRY_ATTEMPTS: int = 3
 PG_CONNECT_RETRY_DELAY: float = 1.0
-CORE_TABLES = frozenset({"workflows", "projects", "phases", "tasks", "supervisor_runs"})
+class DatabaseRecreateRequired(RuntimeError):
+    """The configured database cannot safely use the clean baseline."""
+
+    exit_code = 2
+
+    def __init__(self) -> None:
+        super().__init__("legacy database must be recreated")
+
+
+def expected_tables() -> frozenset[str]:
+    """Return the exact application table set owned by ORM metadata."""
+    return frozenset(Base.metadata.tables)
 
 
 def _is_sqlite(url: str) -> bool:
@@ -150,16 +163,20 @@ def ensure_schema(engine: Engine | Connection | None = None) -> None:
             Base.metadata.create_all(conn)
 
 
-def run_alembic_command(cmd: str, engine: Engine | None = None, revision: str = "head") -> None:
-    """Run an Alembic command using the configured engine."""
-    engine = engine or get_engine()
+def run_alembic_command(
+    cmd: str,
+    engine: Engine | Connection | None = None,
+    revision: str = "head",
+) -> None:
+    """Run an Alembic command in one DDL transaction."""
+    target = engine or get_engine()
+    bound_engine = target.engine if isinstance(target, Connection) else target
     here = Path(__file__).resolve().parent.parent.parent.parent
     alembic_cfg = Config(str(here / "alembic.ini"))
-    # Preserve the real password (str(URL) masks it) and escape percent signs
-    # so configparser interpolation does not treat them as substitution syntax.
-    url = engine.url.render_as_string(hide_password=False).replace("%", "%%")
+    url = bound_engine.url.render_as_string(hide_password=False).replace("%", "%%")
     alembic_cfg.set_main_option("sqlalchemy.url", url)
-    with engine.connect() as connection:
+
+    def migrate(connection: Connection) -> None:
         alembic_cfg.attributes["connection"] = connection
         getattr(command, cmd)(alembic_cfg, revision)
         if cmd == "downgrade" and revision == "base" and connection.dialect.name == "postgresql":
@@ -167,25 +184,31 @@ def run_alembic_command(cmd: str, engine: Engine | None = None, revision: str = 
             if schema and schema != "public":
                 quoted_schema = connection.dialect.identifier_preparer.quote(schema)
                 connection.exec_driver_sql(f"DROP SCHEMA IF EXISTS {quoted_schema} CASCADE")
-                connection.commit()
-    # Alembic leaves the engine pool open; close it so migrations do not hold
-    # connections that can block test database teardown.
-    engine.dispose()
+
+    if isinstance(target, Connection):
+        migrate(target)
+        return
+    with target.begin() as connection:
+        migrate(connection)
+    target.dispose()
 
 
-def ensure_migrated(engine: Engine | None = None) -> None:
+def ensure_migrated(engine: Engine | Connection | None = None) -> None:
     """Apply the baseline migration, rejecting databases from the legacy graph."""
-    engine = engine or get_engine()
-    schema = None if _is_sqlite(str(engine.url)) else get_settings().DB_SCHEMA
-    revisions = database_revisions(engine)
-    existing_tables = set(inspect(engine).get_table_names(schema=schema)) - {"alembic_version"}
+    target = engine or get_engine()
+    bound_engine = target.engine if isinstance(target, Connection) else target
+    schema = None if _is_sqlite(str(bound_engine.url)) else get_settings().DB_SCHEMA
+    revisions = database_revisions(target)
+    existing_tables = set(inspect(target).get_table_names(schema=schema)) - {"alembic_version"}
     incompatible_revision = revisions and revisions != {migration_head()}
-    incomplete_head = revisions == {migration_head()} and not CORE_TABLES.issubset(existing_tables)
+    incompatible_schema = revisions == {migration_head()} and existing_tables != expected_tables()
     unversioned_database = not revisions and bool(existing_tables)
-    if incompatible_revision or incomplete_head or unversioned_database:
-        raise RuntimeError("legacy database must be recreated")
-    run_alembic_command("upgrade", engine)
-    engine.dispose()
+    if incompatible_revision or incompatible_schema or unversioned_database:
+        raise DatabaseRecreateRequired()
+    run_alembic_command("upgrade", target)
+    migrated_tables = set(inspect(target).get_table_names(schema=schema)) - {"alembic_version"}
+    if migrated_tables != expected_tables():
+        raise DatabaseRecreateRequired()
 
 
 def migration_head() -> str:
@@ -198,9 +221,10 @@ def migration_head() -> str:
     return head
 
 
-def database_revisions(engine: Engine) -> set[str]:
+def database_revisions(engine: Engine | Connection) -> set[str]:
     """Read applied Alembic revisions without mutating the database."""
-    schema = None if _is_sqlite(str(engine.url)) else get_settings().DB_SCHEMA
+    bound_engine = engine.engine if isinstance(engine, Connection) else engine
+    schema = None if _is_sqlite(str(bound_engine.url)) else get_settings().DB_SCHEMA
     inspector = inspect(engine)
     if not inspector.has_table("alembic_version", schema=schema):
         return set()
@@ -208,12 +232,29 @@ def database_revisions(engine: Engine) -> set[str]:
     if schema:
         quoted_schema = engine.dialect.identifier_preparer.quote(schema)
         qualified_table = f"{quoted_schema}.alembic_version"
+    if isinstance(engine, Connection):
+        return set(engine.execute(text(f"SELECT version_num FROM {qualified_table}")).scalars())
     with engine.connect() as conn:
         return set(conn.execute(text(f"SELECT version_num FROM {qualified_table}")).scalars())
 
 
 def schema_is_ready(engine: Engine) -> bool:
-    """Return whether the database is at head and has every core table."""
+    """Return whether the database is at head with the exact owned schema."""
     schema = None if _is_sqlite(str(engine.url)) else get_settings().DB_SCHEMA
     tables = set(inspect(engine).get_table_names(schema=schema))
-    return database_revisions(engine) == {migration_head()} and CORE_TABLES.issubset(tables)
+    return database_revisions(engine) == {migration_head()} and tables - {"alembic_version"} == expected_tables()
+
+
+@contextmanager
+def initialization_transaction(engine: Engine) -> Iterator[Connection]:
+    """Serialize and atomically run migration plus bootstrap for one schema."""
+    with engine.begin() as connection:
+        if connection.dialect.name == "postgresql":
+            connection.execute(
+                text(
+                    "SELECT pg_advisory_xact_lock("
+                    "hashtextextended(current_database() || ':' || :schema, 0))"
+                ),
+                {"schema": get_settings().DB_SCHEMA},
+            )
+        yield connection

@@ -39,11 +39,9 @@ class TestApiPhaseCreate:
         response = client.post("/api/phases", json={"name": "X", "workflow_id": 1})
         assert response.status_code == 400
 
-    def test_invalid_string_workflow_id_not_found(self):
-        with patch("project_workflow.interfaces.ui.routes.api._app_state") as state:
-            state.workflow_service.return_value.get_workflow.return_value = None
-            response = client.post("/api/phases", json={"name": "X", "phase_order": 1, "workflow_id": "999"})
-        assert response.status_code == 404
+    def test_string_workflow_id_is_rejected(self):
+        response = client.post("/api/phases", json={"name": "X", "phase_order": 1, "workflow_id": "999"})
+        assert response.status_code == 422
 
     def test_numeric_workflow_id_not_found(self):
         with patch("project_workflow.interfaces.ui.routes.api._app_state") as state:
@@ -198,9 +196,6 @@ class TestApiInstructionUpdate:
 
 
 class TestApiInstructionSkills:
-    def test_skills_string_split(self):
-        with patch("project_workflow.interfaces.ui.routes.api._app_state") as state:
-            state.instruction_service.return_value.get_instruction.return_value = {"id": 1}
-            state.instruction_service.return_value.get_instruction.side_effect = [{"id": 1}, {"id": 1}]
-            response = client.put("/api/instructions/1", json={"skills": "a\nb"})
-        assert response.status_code == 200
+    def test_skills_string_is_rejected_by_schema(self):
+        response = client.put("/api/instructions/1", json={"skills": "a\nb"})
+        assert response.status_code == 422

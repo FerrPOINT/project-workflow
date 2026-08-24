@@ -6,11 +6,14 @@ import asyncio
 from pathlib import Path
 
 import pytest
+from alembic.autogenerate import compare_metadata
+from alembic.migration import MigrationContext
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import IntegrityError
 
 from project_workflow.infrastructure.db.models import Base
 from project_workflow.infrastructure.db.session import (
+    DatabaseRecreateRequired,
     database_revisions,
     ensure_migrated,
     migration_head,
@@ -84,6 +87,12 @@ def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
 
     assert database_revisions(engine) == {"0001_initial"}
     assert schema_is_ready(engine) is True
+    with engine.connect() as connection:
+        context = MigrationContext.configure(
+            connection,
+            opts={"compare_type": True, "compare_server_default": True},
+        )
+        assert compare_metadata(context, Base.metadata) == []
 
 
 def test_sqlite_upgrade_downgrade_reupgrade(tmp_path):
@@ -102,7 +111,7 @@ def test_sqlite_legacy_revision_is_refused_without_mutation(tmp_path):
         conn.execute(text("INSERT INTO alembic_version VALUES ('old_revision')"))
         conn.execute(text("CREATE TABLE keep_me (id INTEGER PRIMARY KEY)"))
 
-    with pytest.raises(RuntimeError, match="legacy database must be recreated"):
+    with pytest.raises(DatabaseRecreateRequired, match="legacy database must be recreated"):
         ensure_migrated(engine)
 
     assert database_revisions(engine) == {"old_revision"}
@@ -114,10 +123,25 @@ def test_sqlite_unversioned_nonempty_database_is_refused(tmp_path):
     with engine.begin() as conn:
         conn.execute(text("CREATE TABLE keep_me (id INTEGER PRIMARY KEY)"))
 
-    with pytest.raises(RuntimeError, match="legacy database must be recreated"):
+    with pytest.raises(DatabaseRecreateRequired, match="legacy database must be recreated"):
         ensure_migrated(engine)
 
     assert inspect(engine).has_table("keep_me")
+
+
+@pytest.mark.parametrize("mutation", ["missing", "extra"])
+def test_head_with_damaged_or_polluted_schema_is_refused(tmp_path, mutation):
+    engine = _sqlite_engine(tmp_path)
+    ensure_migrated(engine)
+    with engine.begin() as connection:
+        if mutation == "missing":
+            connection.execute(text("DROP TABLE instructions"))
+        else:
+            connection.execute(text("CREATE TABLE unexpected_table (id INTEGER PRIMARY KEY)"))
+
+    assert schema_is_ready(engine) is False
+    with pytest.raises(DatabaseRecreateRequired):
+        ensure_migrated(engine)
 
 
 def test_sqlite_initial_constraints(tmp_path):

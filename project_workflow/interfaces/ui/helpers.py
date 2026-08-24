@@ -70,23 +70,9 @@ def _resolve_task_phase(
 
     workflow_phases = wdb.get_phases(workflow_id=workflow_id) if workflow_id is not None else wdb.get_phases()
     for phase in workflow_phases:
-        if str(phase.get("code", phase.get("id"))) == token:
+        if str(phase.get("code")) == token:
             return token, phase
-
-    for phase in workflow_phases:
-        if str(phase.get("id")) == token:
-            return token, phase
-
-    found_phase = wdb.get_phase(token)
-    if found_phase:
-        return token, dict(found_phase)
-
-    try:
-        numeric = int(token)
-    except (TypeError, ValueError):
-        return token, None
-    numeric_phase = wdb.get_phase(numeric)
-    return token, dict(numeric_phase) if numeric_phase else None
+    return token, None
 
 
 def _resolve_task_phase_local(
@@ -96,19 +82,6 @@ def _resolve_task_phase_local(
     token = str(current_phase if current_phase is not None else "-1")
 
     for phase in workflow_phases:
-        if str(phase.get("code", phase.get("id"))) == token:
+        if str(phase.get("code")) == token:
             return token, phase
-
-    for phase in workflow_phases:
-        if str(phase.get("id")) == token:
-            return token, phase
-
-    try:
-        numeric = int(token)
-    except (TypeError, ValueError):
-        return token, None
-
-    for phase in workflow_phases:
-        if phase.get("id") == numeric:
-            return token, dict(phase)
     return token, None

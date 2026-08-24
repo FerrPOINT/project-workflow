@@ -1,19 +1,11 @@
-"""PhaseService — CRUD helper for UI phase detail/edit routes.
-
-Re-implemented on top of the SQLAlchemy UnitOfWork; the old sqlite3/raw-SQL
-implementation has been removed.
-"""
+"""Phase CRUD helper for UI detail and edit routes."""
 
 from __future__ import annotations
 
-import json
-import logging
 from typing import Any, cast
 
 from project_workflow.domain.phase_grouping import group_parallel_phases
 from project_workflow.domain.repositories import UnitOfWork
-
-logger = logging.getLogger(__name__)
 
 
 class PhaseService:
@@ -29,12 +21,10 @@ class PhaseService:
     # ── Bulk save helpers (atomic) ─────────────────────────────────────
 
     def _resolve_phase_id(self, phase_id: int | str) -> int:
-        if not (isinstance(phase_id, int) or str(phase_id).lstrip("-").isdigit()):
-            phase = self._uow.phases.get_by_code(str(phase_id))
-            if not phase or phase.id is None:
-                raise ValueError(f"Phase not found: {phase_id}")
-            return phase.id
-        candidate = int(phase_id)
+        try:
+            candidate = int(phase_id)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Phase id must be numeric: {phase_id}") from exc
         phase = self._uow.phases.get_by_id(candidate)
         if not phase or phase.id is None:
             raise ValueError(f"Phase not found: {phase_id}")
@@ -54,7 +44,7 @@ class PhaseService:
                     "step_num": idx,
                     "description": item["description"],
                     "execution_type": item.get("execution_type", "sync"),
-                    "skills": self.serialize_skills(self.normalize_skills(item.get("skills"))),
+                    "skills": self.normalize_skills(item.get("skills")),
                 },
             )
             ids.append(new_id)
@@ -177,29 +167,10 @@ class PhaseService:
 
     @staticmethod
     def normalize_skills(raw: Any) -> list[str]:
-        if raw in (None, "", []):
+        if raw in (None, []):
             return []
         if isinstance(raw, list):
-            return [str(item).strip() for item in raw if str(item).strip()]
-        if isinstance(raw, str):
-            parsed = PhaseService.parse_skills(raw)
-            return [str(item).strip() for item in parsed if str(item).strip()]
-        return []
-
-    @staticmethod
-    def parse_skills(raw: str | None) -> list[str]:
-        if not raw:
-            return []
-        try:
-            parsed = json.loads(raw)
-        except (json.JSONDecodeError, TypeError) as exc:
-            logger.warning("Failed to parse skills JSON: %s", exc)
-            return []
-        return parsed if isinstance(parsed, list) else []
-
-    @staticmethod
-    def serialize_skills(skills: list[str] | None) -> str | None:
-        normalized = PhaseService.normalize_skills(skills)
-        if not normalized:
-            return None
-        return json.dumps(normalized, ensure_ascii=False)
+            if not all(isinstance(item, str) for item in raw):
+                raise TypeError("skills must contain strings only")
+            return [item.strip() for item in raw if item.strip()]
+        raise TypeError("skills must be a list of strings or null")

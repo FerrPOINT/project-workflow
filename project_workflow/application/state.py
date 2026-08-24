@@ -46,14 +46,6 @@ class _AppState:
         """Return a fresh SQLAlchemy UnitOfWork."""
         return self.get_uow()
 
-    def reset(self) -> None:
-        from ..infrastructure.db import schema
-
-        if self._database_url:
-            schema.mark_catalog_not_ensured(self._database_url_normalized())
-        else:
-            schema.mark_catalog_not_ensured()
-
     def get_service(self) -> PhaseService:
         """PhaseService helper for UI detail/edit routes."""
         return PhaseService(self)

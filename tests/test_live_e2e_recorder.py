@@ -460,6 +460,10 @@ def test_redaction_does_not_mangle_code_that_builds_authorization_header():
         ("ghp_", "1234567890abcdefghijABCD"),
         ("github_pat_", "1234567890abcdefghij_ABCDE"),
         ("xoxb-", "1234567890-abcdefghijklmnop"),
+        ("xoxc-", "1234567890-abcdefghijklmnop"),
+        ("xoxd-", "1234567890-abcdefghijklmnop"),
+        ("xapp-", "1234567890_abcdefghijklmnop"),
+        ("xwfp-", "1234567890_abcdefghijklmnop"),
     ],
 )
 def test_redaction_removes_gitlab_github_and_slack_tokens(prefix, body):

@@ -50,8 +50,7 @@ def test_load_functions_delegate_to_ui_data_service():
 
 def test_resolve_task_phase():
     db = MagicMock()
-    db.get_phases.return_value = []
-    db.get_phase.return_value = {"id": 1, "code": "p1"}
+    db.get_phases.return_value = [{"id": 1, "code": "p1"}]
     with patch.object(services_mod, "_get_db", return_value=db):
         token, phase = services_mod._resolve_task_phase("p1")
         assert token == "p1"

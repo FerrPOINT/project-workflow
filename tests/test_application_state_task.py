@@ -17,6 +17,11 @@ from project_workflow.domain.repositories import UnitOfWork
 class FakeProject:
     id: int
     code: str
+    workflow_id: int = 1
+
+    @property
+    def key_prefixes(self) -> list[str]:
+        return [self.code]
 
     def to_dict(self) -> dict[str, Any]:
         return {"id": self.id, "code": self.code, "key_prefixes": [self.code]}
@@ -44,6 +49,7 @@ class TestTaskService:
         uow = _make_uow()
         uow.tasks.create.return_value = 7
         uow.tasks.get_by_id.return_value = FakeTask(7, "B-2", 5)
+        uow.projects.lock.return_value = FakeProject(5, "B")
         svc = TaskService(uow)
         result = svc.create_task({"task_key": "B-2", "project_id": 5})
         assert result["id"] == 7
@@ -53,6 +59,7 @@ class TestTaskService:
     def test_create_task_without_project_id(self):
         uow = _make_uow()
         uow.projects.list.return_value = [FakeProject(4, "PRJ")]
+        uow.projects.lock.return_value = FakeProject(4, "PRJ")
         uow.tasks.create.return_value = 8
         uow.tasks.get_by_id.return_value = FakeTask(8, "PRJ-1", 4)
         svc = TaskService(uow)
@@ -94,15 +101,6 @@ class TestAppState:
     def test_database_url_normalized(self):
         state = _AppState("sqlite:///tmp/../test.db")
         assert state._database_url_normalized().replace("\\", "/").endswith("/test.db")
-
-    def test_reset(self):
-        state = _AppState("sqlite:///reset.db")
-        url = state._database_url_normalized()
-        from project_workflow.infrastructure.db.schema import _CATALOG_ENSURED_URLS
-
-        _CATALOG_ENSURED_URLS.add(url)
-        state.reset()
-        assert url not in _CATALOG_ENSURED_URLS
 
     def test_service_factories(self):
         state = MagicMock(spec=_AppState)
@@ -146,6 +144,5 @@ class TestAppState:
             assert uow is not None
             uow2 = state.get_uow()
             assert uow2 is not None
-            state.reset()
             uow3 = state.get_uow()
             assert uow3 is not None

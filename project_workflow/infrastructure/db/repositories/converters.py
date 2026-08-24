@@ -76,7 +76,7 @@ def _row_to_task(row: m.Task) -> Task:
     try:
         if current_phase and current_phase != "-1":
             phase = next(
-                (p for p in row.project.workflow.phases if str(p.id) == current_phase or p.code == current_phase),
+                (p for p in row.project.workflow.phases if p.code == current_phase),
                 None,
             )
             phase_name = phase.name if phase else current_phase

@@ -18,6 +18,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -31,7 +32,7 @@ class Agent(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
-    description: Mapped[str] = mapped_column(String, nullable=False, default="")
+    description: Mapped[str] = mapped_column(String, nullable=False, default="", server_default=text("''"))
     hermes_profile: Mapped[str | None] = mapped_column(String(251), nullable=True)
 
     __table_args__ = (
@@ -46,7 +47,7 @@ class Workflow(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
-    description: Mapped[str] = mapped_column(String, nullable=False, default="")
+    description: Mapped[str] = mapped_column(String, nullable=False, default="", server_default=text("''"))
     is_default: Mapped[int] = mapped_column(
         nullable=False,
         default=0,
@@ -184,7 +185,7 @@ class Project(Base):
     workflow_id: Mapped[int] = mapped_column(ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False)
     code: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
-    description: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default=text("''"))
     key_prefixes: Mapped[str] = mapped_column(String, nullable=False, default="[]", server_default="[]")
 
     workflow: Mapped[Workflow] = relationship("Workflow", back_populates="projects")
@@ -253,7 +254,7 @@ class SupervisorRun(Base):
     )
     phase_id: Mapped[int] = mapped_column(ForeignKey("phases.id", ondelete="RESTRICT"), nullable=False)
     verdict: Mapped[str] = mapped_column(String, nullable=False)
-    report: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    report: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default=text("''"))
     covered: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
     missing: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
     blockers: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")

@@ -29,7 +29,7 @@ class _PhaseOrderItem(BaseModel):
 
 
 class PhaseCreate(BaseModel, OptionalIntMixin):
-    workflow_id: int | str | None = Field(default=None, description="Parent workflow id or code")
+    workflow_id: int | None = Field(default=None, gt=0, strict=True, description="Parent workflow id")
     phase_order: int | None = Field(default=None, description="1-based insertion position")
     insert_after: int | None = Field(default=None, description="Insert after this 0-based index")
     name: str = Field(default="Новая фаза")
@@ -250,7 +250,7 @@ class InstructionCreate(BaseModel):
 class InstructionUpdate(BaseModel):
     description: str | None = Field(default=None, min_length=1)
     execution_type: Literal["sync", "parallel"] | None = Field(default=None)
-    skills: list[str] | str | None = Field(default=None)
+    skills: list[str] | None = Field(default=None)
     step_num: int | None = Field(default=None)
 
 

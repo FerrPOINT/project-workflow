@@ -44,6 +44,7 @@ class ProjectService:
 
     def create_project(self, data: dict[str, Any]) -> dict[str, Any]:
         payload = dict(data)
+        self._uow.projects.lock_prefix_namespace()
         if "workflow_id" not in payload or payload["workflow_id"] is None:
             default_wf = self._uow.workflows.ensure_default_exists(config.DEFAULT_WORKFLOW_NAME)
             payload["workflow_id"] = default_wf.id if default_wf else None
@@ -73,14 +74,15 @@ class ProjectService:
 
     def update_project(self, project_id: int, data: dict[str, Any]) -> None:
         payload = dict(data)
-        existing = self._uow.projects.get_by_id(project_id)
+        self._uow.projects.lock_prefix_namespace()
+        existing = self._uow.projects.lock(project_id)
         if existing is None:
             raise ValueError(f"Project {project_id} not found")
         if "code" in payload and payload["code"] != existing.code:
             same_code = self._uow.projects.get_by_code(payload["code"])
             if same_code is not None and same_code.id != project_id:
                 raise ConflictError(f"Project code {payload['code']!r} already exists")
-        project_tasks = [task for task in self._uow.tasks.list() if task.project_id == project_id]
+        project_tasks = list(self._uow.tasks.list_by_project(project_id))
         if "workflow_id" in payload and int(payload["workflow_id"]) != existing.workflow_id:
             if self._uow.workflows.get_by_id(int(payload["workflow_id"])) is None:
                 raise ValueError(f"Workflow {payload['workflow_id']} not found")
@@ -103,10 +105,10 @@ class ProjectService:
         return None
 
     def delete_project(self, project_id: int) -> None:
-        tasks = self._uow.tasks.list()
-        for task in tasks:
-            if task.project_id == project_id:
-                raise ConflictError("Project has linked tasks and cannot be deleted")
+        if self._uow.projects.lock(project_id) is None:
+            raise ValueError(f"Project {project_id} not found")
+        if self._uow.tasks.list_by_project(project_id):
+            raise ConflictError("Project has linked tasks and cannot be deleted")
         self._uow.projects.delete(project_id)
         self._uow.commit()
         return None

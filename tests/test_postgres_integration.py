@@ -21,10 +21,15 @@ from urllib.request import urlopen
 
 import psycopg
 import pytest
+from alembic.autogenerate import compare_metadata
+from alembic.migration import MigrationContext
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 
 from project_workflow import config as config_module
+from project_workflow.application.project import ProjectService
+from project_workflow.application.task import TaskService
+from project_workflow.domain.exceptions import ConflictError
 from project_workflow.infrastructure.db.session import (
     ensure_migrated,
     ensure_schema,
@@ -64,10 +69,6 @@ def pg_url(monkeypatch):
     monkeypatch.setenv("DB_SCHEMA", "project_workflow")
     config_module.get_settings.cache_clear()
     reset_engine()
-    from project_workflow.infrastructure.db.schema import mark_catalog_not_ensured
-
-    mark_catalog_not_ensured()
-
     yield base_url
 
     reset_engine()
@@ -101,6 +102,13 @@ class TestPostgresInitialMigration:
                 column["name"] for column in inspector.get_columns(table_name, schema="project_workflow")
             }
             assert actual_columns == set(table.columns.keys()), table_name
+
+        with engine.connect() as conn:
+            context = MigrationContext.configure(
+                conn,
+                opts={"compare_type": True, "compare_server_default": True},
+            )
+            assert compare_metadata(context, Base.metadata) == []
 
         with engine.connect() as conn:
             version = conn.execute(
@@ -269,6 +277,26 @@ class TestPostgresInitialMigration:
         assert all(count > 0 for count in counts.values())
         assert default_projects == 1
 
+    def test_two_concurrent_init_processes_are_idempotent(self, pg_url):
+        env = os.environ.copy()
+        env.update(
+            {
+                "DATABASE_URL": pg_url,
+                "DB_SCHEMA": "project_workflow",
+                "PYTHONUTF8": "1",
+            }
+        )
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda _: _run_process(["-m", "scripts.init_db"], env), range(2)))
+        assert [result.returncode for result in results] == [0, 0], [
+            result.stderr or result.stdout for result in results
+        ]
+
+        uow = SAUnitOfWork(pg_url)
+        assert [project.code for project in uow.projects.list()].count("TASK") == 1
+        assert len([workflow for workflow in uow.workflows.list() if workflow.is_default]) == 1
+        uow.close()
+
     def test_orm_create_all_is_rejected_for_postgresql(self, pg_url):
         engine = get_engine(pg_url)
         with pytest.raises(RuntimeError, match="isolated SQLite tests"):
@@ -325,6 +353,83 @@ class TestPostgresUoW:
         with uow:
             ids = {w.id for w in uow.workflows.list()}
             assert wf_id not in ids
+
+    def test_concurrent_task_and_prefix_update_cannot_break_project_invariants(self, pg_url):
+        from scripts.init_db import main
+
+        assert main() == 0
+        setup = SAUnitOfWork(pg_url)
+        project = ProjectService(setup).create_project(
+            {"code": "RACE", "name": "Race", "key_prefixes": ["RACE"]}
+        )
+        setup.close()
+        barrier = Barrier(2)
+
+        def create_task() -> str:
+            uow = SAUnitOfWork(pg_url)
+            barrier.wait()
+            try:
+                TaskService(uow).create_task(
+                    {"project_id": project["id"], "task_key": "RACE-1", "title": "Race"}
+                )
+                return "created"
+            except ConflictError:
+                uow.rollback()
+                return "rejected"
+            finally:
+                uow.close()
+
+        def update_prefix() -> str:
+            uow = SAUnitOfWork(pg_url)
+            barrier.wait()
+            try:
+                ProjectService(uow).update_project(project["id"], {"key_prefixes": ["NEW"]})
+                return "updated"
+            except ConflictError:
+                uow.rollback()
+                return "rejected"
+            finally:
+                uow.close()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            task_result = pool.submit(create_task)
+            update_result = pool.submit(update_prefix)
+            outcomes = {task_result.result(), update_result.result()}
+        assert "rejected" in outcomes
+
+        verify = SAUnitOfWork(pg_url)
+        stored_project = verify.projects.get_by_id(project["id"])
+        stored_task = verify.tasks.get_by_key("RACE-1")
+        assert stored_project is not None
+        if stored_task is None:
+            assert stored_project.key_prefixes == ["NEW"]
+        else:
+            assert stored_project.key_prefixes == ["RACE"]
+        verify.close()
+
+    def test_concurrent_project_creates_serialize_prefix_namespace(self, pg_url):
+        from scripts.init_db import main
+
+        assert main() == 0
+        barrier = Barrier(2)
+
+        def create(code: str) -> str:
+            uow = SAUnitOfWork(pg_url)
+            barrier.wait()
+            try:
+                ProjectService(uow).create_project(
+                    {"code": code, "name": code, "key_prefixes": ["SHARED"]}
+                )
+                return "created"
+            except ConflictError:
+                uow.rollback()
+                return "rejected"
+            finally:
+                uow.close()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            outcomes = list(pool.map(create, ["PREFIX-A", "PREFIX-B"]))
+        assert sorted(outcomes) == ["created", "rejected"]
 
 
 def _pass_response(user_prompt: str) -> dict:

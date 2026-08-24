@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from project_workflow.infrastructure.db import schema
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from tests._db_helpers import prepare_sqlite_uow
 
 PHASE_CODES = [phase.code for phase in schema.load_phases_from_seed()]
 
@@ -24,9 +25,9 @@ def get_phase_checklist_raw(phase_name: str) -> list[str]:
     """Return raw checklist items for a phase from the DB catalog."""
     try:
         uow = SAUnitOfWork()
-        uow.create_all()
-        schema.ensure_phase_catalog(uow)
-        phase = schema.get_phase_from_db(uow, phase_name)
+        prepare_sqlite_uow(uow)
+        workflow = uow.workflows.get_default()
+        phase = schema.get_phase_from_db(uow, phase_name, workflow.id) if workflow and workflow.id else None
         if phase:
             items: list[str] = []
             for check in phase.checks:

@@ -19,6 +19,7 @@
 .form-stack{display:flex;flex-direction:column;gap:12px}
 .label{font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}
 textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:140px;resize:vertical}
+.project-description{min-height:96px;resize:vertical}
 .panel-actions{display:flex;gap:10px;flex-wrap:wrap}
 .prefix-item{display:flex;gap:8px;align-items:center;margin-bottom:8px}
 .prefix-item input{flex:1;font-family:'JetBrains Mono',monospace}
@@ -54,6 +55,10 @@ textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:140px;resiz
       <div>
         <div class="label">Название</div>
         <input type="text" id="projectName" value="{{ selected_project.name if selected_project else '' }}">
+      </div>
+      <div>
+        <div class="label">Описание</div>
+        <textarea id="projectDescription" class="project-description">{{ selected_project.description if selected_project else '' }}</textarea>
       </div>
       <div>
         <div class="label">Воркфлоу</div>
@@ -107,6 +112,7 @@ function currentPayload(){
   return {
     code: document.getElementById('projectCode').value.trim(),
     name: document.getElementById('projectName').value.trim(),
+    description: document.getElementById('projectDescription').value.trim(),
     workflow_id: Number(document.getElementById('projectWorkflowId').value || 0) || null,
     key_prefixes: prefixes,
   };
@@ -132,6 +138,7 @@ function syncNav(){
 function fillProjectForm(project){
   document.getElementById('projectCode').value = project ? project.code : '';
   document.getElementById('projectName').value = project ? project.name : '';
+  document.getElementById('projectDescription').value = project ? (project.description || '') : '';
   document.getElementById('projectWorkflowId').value = project && project.workflow_id ? String(project.workflow_id) : (workflowStore[0] ? String(workflowStore[0].id) : '');
   setPrefixInputs(project ? project.key_prefixes : []);
 }

@@ -34,8 +34,10 @@ class SAPhaseRepository(PhaseRepository):
         row = self._session.get(m.Phase, phase_id)
         return _row_to_phase(row) if row else None
 
-    def get_by_code(self, code: str) -> Phase | None:
-        row = self._session.execute(select(m.Phase).where(m.Phase.code == code)).scalar_one_or_none()
+    def get_by_code(self, workflow_id: int, code: str) -> Phase | None:
+        row = self._session.execute(
+            select(m.Phase).where(m.Phase.workflow_id == workflow_id, m.Phase.code == code)
+        ).scalar_one_or_none()
         return _row_to_phase(row) if row else None
 
     def create(self, data: dict[str, Any]) -> int:
@@ -122,7 +124,7 @@ class SAPhaseRepository(PhaseRepository):
             .join(m.Project, m.Task.project_id == m.Project.id)
             .where(
                 m.Project.workflow_id == row.workflow_id,
-                or_(m.Task.current_phase == row.code, m.Task.current_phase == str(row.id)),
+                m.Task.current_phase == row.code,
             )
             .limit(1)
         ).scalar_one_or_none()

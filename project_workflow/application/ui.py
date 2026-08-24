@@ -32,7 +32,7 @@ class UIDataService:
     def _load_workflows(self) -> list[dict[str, Any]]:
         wdb = self._app_state.get_db()
         workflows = wdb.get_workflows()
-        phases = wdb.get_all_phases()
+        phases = [phase.to_dict() for phase in wdb.phases.list()]
         projects = wdb.get_projects()
         phase_counts: dict[int, int] = {}
         project_counts: dict[int, int] = {}
@@ -310,8 +310,6 @@ class UIDataService:
         raw_history: list[dict[str, Any]] = []
         for h in history:
             phase = phase_by_id.get(h["phase_id"])
-            if phase is None:
-                phase = wdb.get_phase(h["phase_id"])
             if not phase:
                 continue
             history_status = h.get("status", "pending")
@@ -372,6 +370,12 @@ class UIDataService:
             return None
 
         task = dict(task)
+        project_id = task.get("project_id")
+        project = row_to_dict(wdb.projects.get_by_id(project_id)) if isinstance(project_id, int) else None
+        if project:
+            task["workflow_id"] = project.get("workflow_id")
+            task["project_code"] = project.get("code")
+            task["project_name"] = project.get("name")
         task["project_code"] = task.get("project_code") or "—"
         task["project_name"] = task.get("project_name") or task["project_code"]
         task["project_label"] = (

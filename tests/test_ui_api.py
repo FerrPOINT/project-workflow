@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 pytestmark = [pytest.mark.ui]
 
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from tests._db_helpers import phase_by_code, prepare_sqlite_uow
 
 
 @pytest.fixture
@@ -27,12 +28,8 @@ def client():
     from project_workflow.interfaces.ui import _app_state, app
 
     _app_state.__init__(database_url=db_url)  # type: ignore[misc]
-    _app_state.reset()
     uow = _app_state.get_db()
-    uow.create_all()
-    from project_workflow.infrastructure.db.schema import ensure_phase_catalog
-
-    ensure_phase_catalog(uow)
+    prepare_sqlite_uow(uow)
     default_workflow = uow.workflows.ensure_default_exists("Default Workflow")
     if not uow.projects.get_by_code("DEFAULT"):
         uow.projects.create(
@@ -40,6 +37,7 @@ def client():
                 "code": "DEFAULT",
                 "name": "Default Project",
                 "workflow_id": default_workflow.id,
+                "key_prefixes": ["TASK"],
             }
         )
     if not uow.tasks.get_by_key("RUN-1"):
@@ -55,7 +53,6 @@ def client():
     uow.commit()
     with TestClient(app) as c:
         yield c
-    _app_state.reset()
 
 
 def _phase_id(client, code: str) -> int:
@@ -68,7 +65,7 @@ def _phase_id(client, code: str) -> int:
 
 
 def _phase_by_code(uow: SAUnitOfWork, code: str) -> dict | None:
-    phase = uow.phases.get_by_code(code)
+    phase = phase_by_code(uow, code)
     return phase.to_dict() if phase else None
 
 
@@ -262,8 +259,7 @@ class TestApiPhaseCreate:
 
     def test_create_phase_rejects_non_numeric_workflow_id(self, client):
         resp = client.post("/api/phases", json={"workflow_id": "not-a-workflow", "phase_order": 1})
-        assert resp.status_code == 400
-        assert resp.json()["ok"] is False
+        assert resp.status_code == 422
 
     def test_create_phase_inserts_and_shifts_orders(self, client):
         from project_workflow.interfaces.ui import _app_state
@@ -541,7 +537,7 @@ class TestApiProjects:
         _app_state.task_service().create_task(
             {
                 "project_id": project_id,
-                "task_key": _unique("TASK"),
+                "task_key": _unique("ZZZ"),
                 "title": "Task",
                 "status": "active",
                 "current_phase": "-1",
@@ -687,7 +683,7 @@ class TestApiTasks:
                 "current_phase": "-1",
             }
         )
-        phase = uow.phases.get_by_code("1.INTAKE")
+        phase = phase_by_code(uow, "1.INTAKE")
         assert phase is not None
         _app_state.task_service().add_history(task["id"], phase.id, "done")
         assert uow.tasks.get_history(task["id"])

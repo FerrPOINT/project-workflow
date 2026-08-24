@@ -132,16 +132,27 @@ class TestInstructionsApi:
         assert set(item["skills"]) == {"a", "b"}
         client.delete(f"/api/instructions/{item['id']}")
 
-    def test_update_instruction_skills_as_string(self):
+    def test_update_instruction_skills_omitted_null_empty_and_list(self):
         phase_id = _seed_phase_id()
-        create = client.post("/api/instructions", json={"phase_id": phase_id, "description": "x"})
+        create = client.post(
+            "/api/instructions",
+            json={"phase_id": phase_id, "description": "x", "skills": ["keep"]},
+        )
         item = create.json()["instruction"]
-        update = client.put(
+        omitted = client.put(f"/api/instructions/{item['id']}", json={"description": "updated"})
+        assert omitted.json()["instruction"]["skills"] == ["keep"]
+
+        cleared = client.put(f"/api/instructions/{item['id']}", json={"skills": None})
+        assert cleared.json()["instruction"]["skills"] == []
+        replaced = client.put(f"/api/instructions/{item['id']}", json={"skills": ["one", "two"]})
+        assert replaced.json()["instruction"]["skills"] == ["one", "two"]
+        emptied = client.put(f"/api/instructions/{item['id']}", json={"skills": []})
+        assert emptied.json()["instruction"]["skills"] == []
+        rejected = client.put(
             f"/api/instructions/{item['id']}",
             json={"skills": "one\ntwo"},
         )
-        assert update.status_code == 200
-        assert set(update.json()["instruction"]["skills"]) == {"one", "two"}
+        assert rejected.status_code == 422
         client.delete(f"/api/instructions/{item['id']}")
 
 

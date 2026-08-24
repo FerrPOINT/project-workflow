@@ -44,12 +44,6 @@ def _updates_from_payload(payload: Any, fields: list[str]) -> dict[str, Any]:
     return updates
 
 
-def _normalize_skills(skills: Any) -> list[str]:
-    if isinstance(skills, str):
-        return [s.strip() for s in skills.splitlines() if s.strip()]
-    return skills
-
-
 async def api_settings_get() -> dict[str, Any] | JSONResponse:
     """Вернуть реестр CLI-команд для UI/интеграций."""
     from project_workflow.interfaces.ui.services import _load_cli_reference
@@ -143,9 +137,6 @@ async def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONRespons
     if payload.phase_order is None:
         return _error("phase_order обязателен", 400)
 
-    if isinstance(workflow_id, str) and not workflow_id.isdigit():
-        return _error(f"Workflow {workflow_id!r} не найден", 400)
-    workflow_id = int(workflow_id)
     if _app_state.workflow_service().get_workflow(workflow_id) is None:
         return _error(f"Workflow {workflow_id} не найден", 404)
     data = {
@@ -448,8 +439,8 @@ async def api_instruction_update(instruction_id: int, payload: InstructionUpdate
     if existing is None:
         return _error(f"Инструкция {instruction_id} не найдена", 404)
     updates = _updates_from_payload(payload, ["description", "execution_type", "step_num"])
-    if payload.skills is not None:
-        updates["skills"] = _normalize_skills(payload.skills)
+    if "skills" in payload.model_fields_set:
+        updates["skills"] = payload.skills
     if updates:
         _app_state.instruction_service().update_instruction(instruction_id, updates)
     return {"ok": True, "instruction": _app_state.instruction_service().get_instruction(instruction_id)}

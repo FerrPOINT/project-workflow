@@ -71,7 +71,6 @@ class TestServicesMoreGaps:
         uow.get_task_history.return_value = [{"phase_id": 1, "status": "done", "completed_at": ""}]
         uow.get_supervisor_runs.return_value = []
         uow.get_projects.return_value = []
-        uow.get_phase.return_value = None
         uow.get_phases.return_value = []
         monkeypatch.setattr("project_workflow.interfaces.ui.services._get_app_state", lambda: _mock_state(uow))
         result = _get_task_detail("A-1")
@@ -89,7 +88,6 @@ class TestServicesMoreGaps:
         uow.get_task_history.return_value = [{"phase_id": 99, "status": "done", "completed_at": ""}]
         uow.get_supervisor_runs.return_value = []
         uow.get_projects.return_value = []
-        uow.get_phase.return_value = None
         uow.get_phases.return_value = []
         monkeypatch.setattr("project_workflow.interfaces.ui.services._get_app_state", lambda: _mock_state(uow))
         result = _get_task_detail("A-1")
@@ -103,7 +101,6 @@ class TestServicesMoreGaps:
         uow.get_supervisor_runs.return_value = [{"verdict": "pass", "response": {"message": "ok"}}]
         uow.get_projects.return_value = []
         uow.get_phases.return_value = []
-        uow.get_phase.return_value = None
         monkeypatch.setattr("project_workflow.interfaces.ui.services._get_app_state", lambda: _mock_state(uow))
         result = _get_task_detail("A-1")
         assert result["supervisor_runs"][0]["next_contract"] is None
@@ -121,10 +118,9 @@ class TestServicesMoreGaps:
         assert any(item["name"] == "help" for item in result)
         assert not any(item["name"] == "ui" for item in result)
 
-    def test_resolve_task_phase_numeric(self, monkeypatch):
+    def test_resolve_task_phase_numeric_id_is_rejected(self, monkeypatch):
         uow = MagicMock()
-        uow.get_phase.return_value = {"id": 5, "code": "PH-5"}
         monkeypatch.setattr("project_workflow.interfaces.ui.services._get_app_state", lambda: _mock_state(uow))
         token, phase = _resolve_task_phase("5", workflow_id=1)
         assert token == "5"
-        assert phase["code"] == "PH-5"
+        assert phase is None

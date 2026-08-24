@@ -15,6 +15,7 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.cli.core import cli
 from project_workflow.interfaces.ui import _app_state as ui_app_state
 from project_workflow.interfaces.ui import _load_cli_reference, app
+from tests._db_helpers import phase_by_code
 
 client = TestClient(app)
 
@@ -28,7 +29,7 @@ def _as_dict(record: object) -> dict | None:
 
 
 def _phase_row(code: str) -> dict:
-    phase = ui_app_state.get_db().phases.get_by_code(code)
+    phase = phase_by_code(ui_app_state.get_db(), code)
     assert phase is not None
     return phase.to_dict()
 
@@ -64,7 +65,7 @@ def _batch_update_orders(uow: SAUnitOfWork, rows: list[tuple[int | str, int]]) -
     """Restore phase orders from (code_or_id, order) pairs."""
     for token, order in rows:
         phase = (
-            uow.phases.get_by_id(int(token)) if str(token).lstrip("-").isdigit() else uow.phases.get_by_code(str(token))
+            uow.phases.get_by_id(int(token)) if str(token).lstrip("-").isdigit() else phase_by_code(uow, str(token))
         )
         if phase and phase.id is not None:
             uow.phases.update(phase.id, {"phase_order": order})
@@ -360,7 +361,7 @@ class TestPhasesPage:
             uow.commit()
 
         try:
-            if not _as_dict(uow.phases.get_by_code("WF-PHASE-901")):
+            if not _as_dict(phase_by_code(uow, "WF-PHASE-901")):
                 uow.phases.create(
                     {
                         "code": "WF-PHASE-901",
@@ -552,7 +553,7 @@ class TestPhasesPage:
             # Add a second phase, then delete it.
             uow.phases.create({"workflow_id": workflow_id, "code": "dpt-second", "name": "Second", "phase_order": 2})
             uow.commit()
-            second = _as_dict(uow.phases.get_by_code("dpt-second"))
+            second = _as_dict(phase_by_code(uow, "dpt-second"))
             assert second is not None
             resp2 = client.delete(f"/api/phases/{second['id']}")
             assert resp2.status_code == 200
@@ -649,7 +650,7 @@ class TestPhasesPage:
         reviewer = next(agent.to_dict() for agent in uow.agents.list() if agent.name == "reviewer")
         tracked_codes = ["0.9", "3.5", "4.5", "7.7"]
         original_agent_ids = {
-            code: (_as_dict(uow.phases.get_by_code(code)) or {}).get("agent_id") for code in tracked_codes
+            code: (_as_dict(phase_by_code(uow, code)) or {}).get("agent_id") for code in tracked_codes
         }
 
         try:
@@ -999,7 +1000,7 @@ class TestPhaseUpdate:
 
     def test_api_phase_update_persists_execution_type(self):
         uow = ui_app_state.get_db()
-        original = _as_dict(uow.phases.get_by_code("3.5"))
+        original = _as_dict(phase_by_code(uow, "3.5"))
         assert original is not None
         assert original["execution_type"] == "sync"
         phase_api_path = _phase_api_path("3.5")
@@ -1009,7 +1010,7 @@ class TestPhaseUpdate:
             resp = client.put(phase_api_path, json={"execution_type": "parallel"})
             assert resp.status_code == 200
 
-            updated = _as_dict(uow.phases.get_by_code("3.5"))
+            updated = _as_dict(phase_by_code(uow, "3.5"))
             assert updated is not None
             assert updated["execution_type"] == "parallel"
 
@@ -1229,7 +1230,7 @@ class TestTaskDetail:
         response = client.get("/task/UITEST-401")
         assert response.status_code == 200
         assert "Проект" in response.text
-        assert "UITEST" in response.text
+        assert "UITEST — UI Test Project" in response.text
 
     def test_tasks_api_resolves_negative_phase_code_to_phase_name(self):
         response = client.get("/api/tasks")

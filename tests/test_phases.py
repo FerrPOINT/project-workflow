@@ -5,6 +5,7 @@ import pytest
 pytestmark = [pytest.mark.unit]
 
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from tests._db_helpers import phase_by_code, prepare_sqlite_uow
 from tests._phase_helpers import (
     get_next_phase,
     get_phase_checklist_raw,
@@ -26,8 +27,8 @@ class TestPhaseHelpers:
 
     def test_get_phase_checklist_raw(self):
         uow = SAUnitOfWork()
-        uow.init()
-        phase_code = "0.0a" if uow.get_phase("0.0a") else "0.00"
+        prepare_sqlite_uow(uow)
+        phase_code = "0.0a" if phase_by_code(uow, "0.0a") else "0.00"
         items = get_phase_checklist_raw(phase_code)
         assert isinstance(items, list)
 

@@ -116,7 +116,6 @@ class TestResolveTaskPhase:
     def test_none_current_phase(self):
         db = MagicMock()
         db.get_phases.return_value = []
-        db.get_phase.return_value = None
         token, phase = _resolve_task_phase(None, _db=db)
         assert token == "-1"
         assert phase is None
@@ -124,22 +123,19 @@ class TestResolveTaskPhase:
     def test_by_code_match(self):
         db = MagicMock()
         db.get_phases.return_value = [{"id": 1, "code": "1", "name": "One", "phase_order": 1}]
-        db.get_phase.return_value = None
         token, phase = _resolve_task_phase("1", _db=db)
         assert token == "1"
         assert phase["code"] == "1"
 
-    def test_numeric_id(self):
+    def test_numeric_id_is_not_a_current_phase_code(self):
         db = MagicMock()
         db.get_phases.return_value = [{"id": 42, "code": "1", "name": "One", "phase_order": 1}]
-        db.get_phase.return_value = None
         token, phase = _resolve_task_phase(42, _db=db)
-        assert phase["id"] == 42
+        assert phase is None
 
     def test_unresolvable(self):
         db = MagicMock()
         db.get_phases.return_value = []
-        db.get_phase.return_value = None
         token, phase = _resolve_task_phase("unknown", _db=db)
         assert token == "unknown"
         assert phase is None
@@ -187,7 +183,6 @@ class TestLoadTasks:
                 {"phase_id": 1, "status": "done", "completed_at": "2025-01-20"},
             ]
         }
-        db.get_phase.return_value = {"id": 1, "name": "P", "phase_order": 1}
         db.get_supervisor_runs.return_value = []
         monkeypatch.setattr("project_workflow.interfaces.ui._app_state", MagicMock(get_db=lambda: db))
         tasks = _load_tasks()
@@ -264,7 +259,6 @@ class TestTaskDetailEdgeCases:
         assert task["supervisor_runs"][0]["next_contract"]["phase_name"] == "Next"
         assert task["supervisor_runs"][0]["phase_code"] == "historical.1"
         assert task["supervisor_runs"][0]["phase_name"] == "Historical phase"
-        db.get_phase_by_code.assert_not_called()
 
     def test_task_detail_supervisor_runs_no_next_phase(self, monkeypatch):
         from project_workflow.interfaces.ui import _get_task_detail

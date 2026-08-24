@@ -207,7 +207,7 @@ flowchart TD
 - [x] `SupervisorEngine` и supervisor-модули собраны в пакет `project_workflow/supervisor/`
 - [x] API-тесты на все UI routes
 - [x] Production hardening: `/health` endpoint, graceful shutdown, PG connection retry
-- [x] Coverage > 95%
+- [x] Coverage >= 90%
 - [x] mypy `--check-untyped-defs` для supervisor/core.py
 - [x] UI-доработки: execution_type на отдельной строке, русское склонение счётчиков, очистка рабочей БД от мусора
 - [x] Supervisor evaluate: DB-backed history/audit, idempotent replay и явный parallel rendering

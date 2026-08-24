@@ -6,6 +6,7 @@ import pytest
 
 pytestmark = [pytest.mark.supervisor]
 
+from project_workflow.infrastructure.db.session import ensure_schema
 from project_workflow.supervisor import SupervisorEngine
 
 
@@ -19,7 +20,7 @@ class TestSupervisor:
 
         test_db = tmp_path / "workflow.db"
         uow = SAUnitOfWork(f"sqlite:///{test_db}")
-        uow.create_all()
+        ensure_schema(uow.session.get_bind())
         workflow_id = uow.workflows.create({"name": "Empty", "description": ""})
         uow.projects.create({"workflow_id": workflow_id, "code": "run", "name": "Run", "key_prefixes": ["RUN"]})
         uow.commit()

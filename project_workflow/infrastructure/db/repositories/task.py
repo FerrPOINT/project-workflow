@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime
-import logging
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -17,7 +16,7 @@ from project_workflow.domain.repositories import TaskRepository
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.repositories.converters import _iso, _row_to_task
 
-logger = logging.getLogger(__name__)
+
 class SATaskRepository(TaskRepository):
     """SQLAlchemy implementation of TaskRepository."""
 
@@ -29,15 +28,9 @@ class SATaskRepository(TaskRepository):
             row = self._session.execute(select(m.Task).where(m.Task.task_key == task_key)).scalar_one_or_none()
         if row is None:
             return None
-        try:
-            project_id = row.project_id
-            project_id = int(project_id)
-        except (ValueError, TypeError) as exc:
-            logger.warning("Failed to cast task project_id: %s", exc)
-            project_id = 0
         return Task(
             id=row.id,
-            project_id=project_id,
+            project_id=int(row.project_id),
             task_key=row.task_key,
             title=row.title or "",
             description=row.description or "",
@@ -64,6 +57,13 @@ class SATaskRepository(TaskRepository):
             )
             rows = self._session.execute(stmt).scalars().all()
         return [_row_to_task(r) for r in rows]
+
+    def list_by_project(self, project_id: int) -> Sequence[Task]:
+        with self._session.no_autoflush:
+            rows = self._session.execute(
+                select(m.Task).where(m.Task.project_id == project_id).order_by(m.Task.id)
+            ).scalars().all()
+        return [_row_to_task(row) for row in rows]
 
     def create(self, data: dict[str, Any]) -> int:
         item = m.Task(

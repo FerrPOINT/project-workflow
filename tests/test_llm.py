@@ -468,14 +468,14 @@ class TestSupervisorEngineLLMIntegrationDB:
         supervisor_llm("PASS")
         engine.evaluate("Report")
 
-        task = engine.db.get_task(engine.task["id"])
+        task = engine.db.tasks.get_by_id(engine.task["id"]).to_dict()
         assert task["current_phase"] == "2.REQUIREMENTS"
 
     def test_task_blocked_after_llm_blocked(self, engine, supervisor_llm):
         supervisor_llm("BLOCKED", blockers=["No access"])
         engine.evaluate("Report")
 
-        task = engine.db.get_task(engine.task["id"])
+        task = engine.db.tasks.get_by_id(engine.task["id"]).to_dict()
         assert task["current_phase"] == "1.INTAKE"
         assert task["status"] == "blocked"
 
@@ -485,7 +485,7 @@ class TestSupervisorEngineLLMIntegrationDB:
 
         assert result["verdict"] == "BLOCKED"
         assert result["retryable"] is True
-        task = engine.db.get_task(engine.task["id"])
+        task = engine.db.tasks.get_by_id(engine.task["id"]).to_dict()
         assert task["status"] == "active"
         assert engine.db.get_task_history(engine.task["id"]) == []
 
@@ -503,7 +503,7 @@ class TestSupervisorEngineLLMIntegrationDB:
         with pytest.raises(RuntimeError, match="supervisor write failed"):
             engine.evaluate("Report")
 
-        persisted = engine.db.get_task(task_id)
+        persisted = engine.db.tasks.get_by_id(task_id).to_dict()
         assert persisted["current_phase"] == original_task["current_phase"]
         assert persisted["status"] == original_task["status"]
         assert engine.task == original_task

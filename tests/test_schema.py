@@ -13,10 +13,17 @@ from project_workflow.infrastructure.db.schema import (
     get_phase_from_db,
     load_phases_from_db,
     load_phases_from_seed,
-    mark_catalog_not_ensured,
 )
+from project_workflow.infrastructure.db.session import ensure_schema
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.supervisor.models import Phase
+from tests._db_helpers import phase_by_code
+
+
+def _default_workflow_id(uow: SAUnitOfWork) -> int:
+    workflow = uow.workflows.get_default()
+    assert workflow is not None and workflow.id is not None
+    return workflow.id
 
 
 @pytest.fixture
@@ -24,7 +31,7 @@ def fresh_db(tmp_path, monkeypatch):
     db_path = tmp_path / "workflow.db"
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path}")
     uow = SAUnitOfWork(f"sqlite:///{db_path}")
-    uow.create_all()
+    ensure_schema(uow.session.get_bind())
     return uow
 
 
@@ -54,15 +61,14 @@ class TestEnsurePhaseCatalog:
         seed_path = tmp_path / "seed.json"
         seed_path.write_text(json.dumps([{"code": "1", "name": "Seed name"}]), encoding="utf-8")
         ensure_phase_catalog(fresh_db, seed_path=seed_path)
-        phase = fresh_db.phases.get_by_code("1")
+        phase = phase_by_code(fresh_db, "1")
         fresh_db.phases.update(phase.id, {"name": "Edited in UI"})
         fresh_db.commit()
 
         seed_path.write_text(json.dumps([{"code": "1", "name": "Changed seed"}]), encoding="utf-8")
-        mark_catalog_not_ensured(str(fresh_db.session.bind.url))
         ensure_phase_catalog(fresh_db, seed_path=seed_path)
 
-        assert fresh_db.phases.get_by_code("1").name == "Edited in UI"
+        assert phase_by_code(fresh_db, "1").name == "Edited in UI"
 
 
 class TestGenerateProgressJson:
@@ -83,14 +89,14 @@ class TestGenerateProgressJson:
             )
         )
         ensure_phase_catalog(fresh_db, seed_path=seed_path)
-        phase = get_phase_from_db(fresh_db, "-1")
+        phase = get_phase_from_db(fresh_db, "-1", _default_workflow_id(fresh_db))
         assert phase is not None
         assert phase.name == "Task Intake"
         assert len(phase.instructions) >= 1
 
 
-class TestParseOldYaml:
-    def test_parse_old_yaml_item(self, fresh_db):
+class TestParseSeedItem:
+    def test_parse_seed_item(self, fresh_db):
         from project_workflow.infrastructure.db.schema import _phase_item_to_supervisor
 
         raw = {
@@ -116,8 +122,8 @@ class TestReadSeedItems:
 
     def test_read_seed_items_from_path_missing(self, fresh_db, tmp_path):
         seed_path = tmp_path / "missing.json"
-        items = load_phases_from_seed(seed_path)
-        assert items == []
+        with pytest.raises(FileNotFoundError):
+            load_phases_from_seed(seed_path)
 
     def test_read_seed_items_with_allowed_codes(self, fresh_db, tmp_path):
         seed_path = tmp_path / "seed.json"
@@ -138,13 +144,13 @@ class TestReadSeedItems:
 class TestGetPhase:
     def test_get_phase_returns_phase(self, fresh_db):
         ensure_phase_catalog(fresh_db)
-        phase = get_phase_from_db(fresh_db, "1.INTAKE")
+        phase = get_phase_from_db(fresh_db, "1.INTAKE", _default_workflow_id(fresh_db))
         assert phase is not None
         assert phase.code == "1.INTAKE"
 
     def test_get_phase_order(self, fresh_db):
         ensure_phase_catalog(fresh_db)
-        phase = get_phase_from_db(fresh_db, "2.REQUIREMENTS")
+        phase = get_phase_from_db(fresh_db, "2.REQUIREMENTS", _default_workflow_id(fresh_db))
         assert phase is not None
         assert phase.code == "2.REQUIREMENTS"
 
@@ -157,11 +163,11 @@ class TestLoadPhases:
 
     def test_get_phase_from_db(self, fresh_db):
         ensure_phase_catalog(fresh_db)
-        phase = get_phase_from_db(fresh_db, "1.INTAKE")
+        phase = get_phase_from_db(fresh_db, "1.INTAKE", _default_workflow_id(fresh_db))
         assert phase is not None
         assert phase.code == "1.INTAKE"
 
     def test_get_phase_from_db_missing(self, fresh_db):
         ensure_phase_catalog(fresh_db)
-        phase = get_phase_from_db(fresh_db, "nonexistent")
+        phase = get_phase_from_db(fresh_db, "nonexistent", _default_workflow_id(fresh_db))
         assert phase is None

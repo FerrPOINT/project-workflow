@@ -20,17 +20,20 @@ def _parse_skills(raw: str | None) -> list[str]:
         return []
     try:
         parsed = json.loads(raw)
-        return [str(s) for s in parsed] if isinstance(parsed, list) else []
-    except Exception:
-        return []
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise ValueError("Persisted instruction skills contain invalid JSON") from exc
+    if not isinstance(parsed, list) or not all(isinstance(item, str) for item in parsed):
+        raise ValueError("Persisted instruction skills must be a JSON string array")
+    return parsed
 
 
-def _dump_skills(skills: Any) -> str | None:
-    if skills in (None, [], ""):
+def _dump_skills(skills: list[str] | None) -> str | None:
+    if skills in (None, []):
         return None
-    if isinstance(skills, str):
-        return skills
-    return json.dumps([str(s) for s in skills], ensure_ascii=False)
+    if not isinstance(skills, list) or not all(isinstance(item, str) for item in skills):
+        raise TypeError("skills must be a list of strings or null")
+    return json.dumps(skills, ensure_ascii=False)
+
 
 class SAInstructionRepository(InstructionRepository):
     """SQLAlchemy implementation of InstructionRepository."""

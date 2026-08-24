@@ -1,5 +1,6 @@
 import os
 import sys
+from contextlib import nullcontext
 from logging.config import fileConfig
 from pathlib import Path
 from typing import Any
@@ -15,20 +16,13 @@ if str(ROOT) not in sys.path:
 from project_workflow.config import get_settings  # noqa: E402
 from project_workflow.infrastructure.db.models import Base  # noqa: E402
 
-# this is the Alembic Config object, which provides
-# access to the values within the .ini file in use.
 config = context.config
 
-# Interpret the config file for Python logging.
-# This line sets up loggers basically.
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# add your model's MetaData object here
-# for 'autogenerate' support
 target_metadata = Base.metadata
 
-# Allow Docker / ops to override the DB URL via environment.
 DATABASE_URL = os.environ.get("DATABASE_URL")
 if DATABASE_URL:
     config.set_main_option("sqlalchemy.url", DATABASE_URL)
@@ -67,7 +61,8 @@ def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
     def migrate(connection: Any) -> None:
         is_postgresql = connection.dialect.name == "postgresql"
-        with connection.begin():
+        transaction = nullcontext() if connection.in_transaction() else connection.begin()
+        with transaction:
             _ensure_schema(connection)
             configure_kwargs = dict(
                 connection=connection,
@@ -85,6 +80,8 @@ def run_migrations_online() -> None:
         return
 
     db_url = os.environ.get("DATABASE_URL") or config.get_main_option("sqlalchemy.url")
+    if not db_url:
+        raise RuntimeError("DATABASE_URL is required for online migrations")
     connectable = create_engine(db_url, poolclass=pool.NullPool)
     with connectable.connect() as connection:
         migrate(connection)

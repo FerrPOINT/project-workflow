@@ -129,6 +129,8 @@ class TestProjectService:
         uow = _make_uow()
         uow.projects.list.return_value = [FakeProject(1, "A", 1)]
         uow.projects.get_by_id.return_value = FakeProject(1, "A", 1)
+        uow.projects.lock.return_value = FakeProject(1, "A", 1)
+        uow.tasks.list_by_project.return_value = []
         svc = ProjectService(uow)
         assert svc.list_projects() == [{"id": 1, "code": "A", "workflow_id": 1}]
         assert svc.get_project(1) == {"id": 1, "code": "A", "workflow_id": 1}

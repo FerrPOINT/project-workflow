@@ -9,8 +9,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from project_workflow.domain.repositories import UnitOfWork
 
 from ... import config
@@ -21,40 +19,6 @@ from ...supervisor.models import (
     PhaseEvidence,
     PhaseInstruction,
 )
-
-# URLs for which the phase catalog has already been bootstrapped.  This prevents
-# re-parsing the seed file on every CLI/UI/supervisor request inside the same process.
-_CATALOG_ENSURED_URLS: set[str] = set()
-
-
-def _normalized_url(uow: UnitOfWork) -> str:
-    """Return the database URL this UoW is bound to (best-effort)."""
-    engine = getattr(uow, "_session", None)
-    if engine is not None:
-        engine = getattr(engine, "bind", None)
-    if engine is not None:
-        url = str(engine.url)
-        if url.startswith("sqlite:///"):
-            from pathlib import Path as _Path
-
-            target = str(_Path(url[10:]).resolve())
-            url = f"sqlite:///{target}"
-        return url
-    return ""
-
-
-def mark_catalog_not_ensured(url: str | None = None) -> None:
-    """Drop a URL from the catalog guard (used by tests that mutate the DB directly)."""
-    if url:
-        if url.startswith("sqlite:///"):
-            from pathlib import Path as _Path
-
-            target = str(_Path(url[10:]).resolve())
-            url = f"sqlite:///{target}"
-        _CATALOG_ENSURED_URLS.discard(url)
-    else:
-        _CATALOG_ENSURED_URLS.clear()
-
 
 # ── DB Load ─────────────────────────────────────────────────────
 
@@ -143,15 +107,11 @@ def load_phases_from_db(
 def get_phase_from_db(
     uow: UnitOfWork,
     phase_code: str,
-    workflow_id: int | str | None = None,
+    workflow_id: int,
 ) -> Phase | None:
-    """Find a single phase by code using a UnitOfWork."""
-    if isinstance(workflow_id, str):
-        workflow_id = int(workflow_id) if workflow_id.isdigit() else None
-    for r in uow.phases.list(workflow_id):
-        if r.code == phase_code:
-            return _build_phase_from_db(r, uow)
-    return None
+    """Find a phase by its workflow-scoped code."""
+    row = uow.phases.get_by_code(workflow_id, phase_code)
+    return _build_phase_from_db(row, uow) if row else None
 
 
 # ── Bootstrap seed ───────────
@@ -160,14 +120,18 @@ def get_phase_from_db(
 def _load_seed(path: Path | str | None = None) -> list[dict[str, Any]]:
     seed_path = Path(path) if path else config.SEED_PATH
     if not seed_path.exists():
-        return []
+        raise FileNotFoundError(f"Seed catalog not found: {seed_path}")
+    if seed_path.suffix.lower() != ".json":
+        raise ValueError("Seed catalog must be JSON")
     with seed_path.open(encoding="utf-8") as f:
-        if str(seed_path).lower().endswith(".json"):
+        try:
             data = json.load(f)
-        else:
-            data = yaml.safe_load(f)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Malformed seed catalog: {seed_path}") from exc
     if not isinstance(data, list):
-        return []
+        raise ValueError("Seed catalog root must be a list")
+    if not all(isinstance(item, dict) for item in data):
+        raise ValueError("Every seed catalog item must be an object")
     return data
 
 
@@ -225,15 +189,10 @@ def _phase_item_to_supervisor(item: dict[str, Any]) -> Phase:
 
 def load_phases_from_seed(
     path: Path | str | None = None,
-    workflow_id: int | str | None = None,
 ) -> list[Phase]:
-    """Load phases from a YAML/JSON seed file for initial catalog bootstrap."""
+    """Load phases from the packaged JSON seed for initial bootstrap."""
     items = _load_seed(path)
-    phases = [_phase_item_to_supervisor(item) for item in items]
-    if workflow_id is not None:
-        # Seed items currently do not carry workflow_id, so this filter is a no-op.
-        pass
-    return phases
+    return [_phase_item_to_supervisor(item) for item in items]
 
 
 # ── Catalog bootstrap ─────────────────────────────────────────────
@@ -244,46 +203,36 @@ def ensure_phase_catalog(
     seed_path: Path | str | None = None,
 ) -> None:
     """Bootstrap the packaged phase catalog only for a new empty database."""
-    url = _normalized_url(uow)
-    if url and url in _CATALOG_ENSURED_URLS:
+    if uow.workflows.list():
         return
+    default_workflow = uow.workflows.ensure_default_exists(config.DEFAULT_WORKFLOW_NAME)
+    workflow_id = default_workflow.id
+    assert workflow_id is not None
 
-    with uow:
-        if uow.workflows.list():
-            if url:
-                _CATALOG_ENSURED_URLS.add(url)
-            return
-        default_workflow = uow.workflows.ensure_default_exists(config.DEFAULT_WORKFLOW_NAME)
-        workflow_id = default_workflow.id
-        assert workflow_id is not None
-        if uow.phases.list(workflow_id):
-            if url:
-                _CATALOG_ENSURED_URLS.add(url)
-            return
+    seed_path = Path(seed_path) if seed_path else config.SEED_PATH
+    seed_phases = load_phases_from_seed(seed_path)
+    for phase in seed_phases:
+        delegate = phase.delegate
+        agent_name = (delegate.agent or "") if delegate else ""
+        if agent_name and not uow.agents.get_by_name(agent_name):
+            uow.agents.create(
+                {
+                    "name": agent_name,
+                    "description": f"Seed agent for {agent_name}",
+                    "hermes_profile": delegate.hermes_profile if delegate else None,
+                }
+            )
 
-        seed_path = Path(seed_path) if seed_path else config.SEED_PATH
-        seed_phases = load_phases_from_seed(seed_path)
-        for phase in seed_phases:
-            delegate = phase.delegate
-            agent_name = (delegate.agent or "") if delegate else ""
-            if agent_name and not uow.agents.get_by_name(agent_name):
-                uow.agents.create(
-                    {
-                        "name": agent_name,
-                        "description": f"Seed agent for {agent_name}",
-                        "hermes_profile": delegate.hermes_profile if delegate else None,
-                    }
-                )
-
-        for order, phase in enumerate(seed_phases, start=1):
-            assigned_agent_name = phase.delegate.agent if phase.delegate else ""
-            agent_id = None
-            if assigned_agent_name:
-                for agent in uow.agents.list():
-                    if agent.name == assigned_agent_name:
-                        agent_id = agent.id
-                        break
-            data = {
+    for order, phase in enumerate(seed_phases, start=1):
+        assigned_agent_name = phase.delegate.agent if phase.delegate else ""
+        agent_id = None
+        if assigned_agent_name:
+            agent_id = next(
+                (agent.id for agent in uow.agents.list() if agent.name == assigned_agent_name),
+                None,
+            )
+        phase_id = uow.phases.create(
+            {
                 "workflow_id": workflow_id,
                 "code": phase.code,
                 "name": phase.name,
@@ -300,29 +249,22 @@ def ensure_phase_catalog(
                 "is_critic": phase.is_critic,
                 "agent_id": agent_id,
             }
-            phase_id = uow.phases.create(data)
-
-            # Sync instructions, checks, evidence from seed
-            uow.instructions.delete_for_phase(int(phase_id))
-            for idx, instr in enumerate(phase.instructions, start=1):
-                uow.instructions.create(
-                    int(phase_id),
-                    {
-                        "step_num": idx,
-                        "description": instr.step,
-                        "example": instr.example,
-                        "execution_type": instr.execution_type,
-                        "skills": instr.skills,
-                    },
-                )
-            uow.phases.set_checks(
+        )
+        for idx, instr in enumerate(phase.instructions, start=1):
+            uow.instructions.create(
                 int(phase_id),
-                [{"description": c.description} for c in phase.checks],
+                {
+                    "step_num": idx,
+                    "description": instr.step,
+                    "execution_type": instr.execution_type,
+                    "skills": instr.skills,
+                },
             )
-            uow.phases.set_evidence(
-                int(phase_id),
-                [{"description": e.item} for e in phase.evidence],
-            )
-
-    if url:
-        _CATALOG_ENSURED_URLS.add(url)
+        uow.phases.set_checks(
+            int(phase_id),
+            [{"description": check.description} for check in phase.checks],
+        )
+        uow.phases.set_evidence(
+            int(phase_id),
+            [{"description": item.item} for item in phase.evidence],
+        )
