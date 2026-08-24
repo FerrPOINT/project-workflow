@@ -29,6 +29,17 @@ class TestTaskKeyValidator:
         assert not result.is_valid
         assert "no configured prefixes" in (result.error_message or "")
 
+    @pytest.mark.parametrize("key", ["RUN", "RUN-BROWSER", "RUN-12X"])
+    def test_known_prefix_reports_numeric_suffix_contract(self, key: str):
+        result = _validator("RUN").validate(key)
+        assert not result.is_valid
+        assert "RUN-<numeric issue number>" in (result.error_message or "")
+
+    def test_unknown_prefix_reports_allowed_prefixes(self):
+        result = _validator("RUN").validate("OTHER-1")
+        assert not result.is_valid
+        assert "Prefixes: RUN" in (result.error_message or "")
+
     @pytest.mark.parametrize("raw_prefixes", ['["RUN", "DEMO"]', "RUN", ["RUN", 1]])
     def test_rejects_noncanonical_project_prefix_shapes(self, raw_prefixes):
         with pytest.raises(ValueError, match="list of strings"):

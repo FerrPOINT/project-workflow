@@ -112,7 +112,12 @@ class TestApplicationServiceFinalGaps:
         project = MagicMock()
         project.code = "P"
         project.key_prefixes = ["P"]
+        project.workflow_id = 1
         uow.projects.lock.return_value = project
+        uow.workflows.lock.return_value = object()
+        uow.phases.list.return_value = [MagicMock(code="1.INTAKE")]
+        uow.phases.get_by_code.return_value = object()
+        uow.tasks.get_by_key.return_value = None
         uow.tasks.create.return_value = 1
         uow.tasks.get_by_id.return_value = None
         with pytest.raises(RuntimeError, match="Task creation failed"):

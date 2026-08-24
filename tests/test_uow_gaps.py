@@ -6,6 +6,7 @@ import pytest
 
 from project_workflow import config
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from tests._db_helpers import phase_by_code
 
 pytestmark = [pytest.mark.ui]
 
@@ -26,25 +27,16 @@ class TestUowEdgeCases:
     def test_create_supervisor_run_with_positional_dict(self):
         uow = _fresh_uow()
         with uow:
-            default_wf = uow.workflows.ensure_default_exists("Default Workflow")
-            project_id = uow.projects.create(
-                {"code": "RUN", "name": "Run", "workflow_id": default_wf.id}
-            )
-            phase_id = uow.phases.create(
-                {
-                    "workflow_id": default_wf.id,
-                    "code": "GAP-RUN",
-                    "name": "Run Phase",
-                    "phase_order": 9000,
-                }
-            )
+            project = uow.projects.get_by_code(config.DEFAULT_PROJECT_CODE)
+            phase = phase_by_code(uow, "1.INTAKE")
+            assert project is not None and phase is not None
             task_id = uow.tasks.create(
                 {
-                    "project_id": project_id,
-                    "task_key": "RUN-1",
+                    "project_id": project.id,
+                    "task_key": "RUN-UOW-1",
                     "title": "t",
                     "status": "active",
-                    "current_phase": "-1",
+                    "current_phase": phase.code,
                 }
             )
             uow.commit()
@@ -52,7 +44,7 @@ class TestUowEdgeCases:
         run_id = uow.create_supervisor_run(
             {
                 "task_id": task_id,
-                "phase_id": phase_id,
+                "phase_id": phase.id,
                 "verdict": "pass",
                 "report": "r",
                 "covered": [],

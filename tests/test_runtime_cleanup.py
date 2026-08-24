@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from importlib import import_module
 from pathlib import Path
 
 import pytest
@@ -12,6 +11,7 @@ from project_workflow import config
 from project_workflow.domain.phase_grouping import group_parallel_phases
 from project_workflow.infrastructure.db import schema
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from tests._db_helpers import prepare_sqlite_uow
 
 pytestmark = [pytest.mark.unit]
 
@@ -70,7 +70,7 @@ def _items() -> list[dict]:
 
 def test_default_bootstrap_uses_run_prefix(tmp_path):
     uow = SAUnitOfWork(f"sqlite:///{tmp_path / 'workflow.db'}")
-    uow.init()
+    prepare_sqlite_uow(uow)
 
     assert [workflow["name"] for workflow in uow.get_workflows()] == [config.DEFAULT_WORKFLOW_NAME]
     project = next(project for project in uow.get_projects() if project["code"] == "RUN")
@@ -161,22 +161,6 @@ def test_tech_phases_reference_the_canonical_using_rtech_skill():
     )
 
 
-def test_business_tech_migration_reconstructs_immutable_seed_on_any_line_endings():
-    migration = import_module(
-        "project_workflow.infrastructure.db.migrations.versions."
-        "9b71d2e4c6a0_add_business_tech_v1_workflow"
-    )
-
-    migrated = migration._seed()
-
-    assert len(migrated) == 19
-    assert all(
-        "using-rtech" not in (instruction.get("skills") or [])
-        for phase in migrated
-        for instruction in phase["instructions"]
-    )
-
-
 def test_post_merge_phases_have_no_workflow_rollback_target():
     by_code = {phase["code"]: phase for phase in _items()}
     assert by_code["12.RELEASE_GATE"]["rollback_target"] == "8.IMPLEMENT"
@@ -186,8 +170,7 @@ def test_post_merge_phases_have_no_workflow_rollback_target():
 
 def test_sqlite_bootstrap_preserves_operator_without_fake_hermes_profile(tmp_path):
     uow = SAUnitOfWork(f"sqlite:///{tmp_path / 'workflow.db'}")
-    uow.init()
-    schema.ensure_phase_catalog(uow)
+    prepare_sqlite_uow(uow)
 
     phases = schema.load_phases_from_db(uow)
     assert len(phases) == 19

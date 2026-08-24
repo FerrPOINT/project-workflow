@@ -20,7 +20,7 @@ class TaskKey:
 
 @dataclass(frozen=True)
 class PhaseCode:
-    """Semantic phase code, e.g. '-1', '0.0a', '1'."""
+    """Semantic phase code, e.g. '1.INTAKE' or '10.REVIEW'."""
 
     value: str
 
@@ -141,7 +141,7 @@ class Task:
     task_key: str = ""
     title: str = ""
     description: str = ""
-    current_phase: str = "-1"
+    current_phase: str = ""
     current_phase_name: str = ""
     status: str = "active"
     created_at: str | None = None

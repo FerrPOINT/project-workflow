@@ -203,8 +203,6 @@ class Task(Base):
     current_phase: Mapped[str] = mapped_column(
         Text,
         nullable=False,
-        default="-1",
-        server_default="-1",
     )
     status: Mapped[str] = mapped_column(
         String,
@@ -215,7 +213,10 @@ class Task(Base):
     updated_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
-    __table_args__ = (CheckConstraint("status IN ('active', 'done', 'blocked')", name="ck_tasks_status"),)
+    __table_args__ = (
+        CheckConstraint("status IN ('active', 'done', 'blocked')", name="ck_tasks_status"),
+        CheckConstraint("length(trim(current_phase)) > 0", name="ck_tasks_current_phase_nonblank"),
+    )
 
     project: Mapped[Project] = relationship("Project", back_populates="tasks")
 

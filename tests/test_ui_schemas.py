@@ -51,10 +51,12 @@ def test_request_schemas_reject_unknown_legacy_fields():
 
 
 def test_workflow_create_update():
-    w = WorkflowCreate(name="W", code="w1")
+    w = WorkflowCreate(name="W")
     assert w.name == "W"
     wu = WorkflowUpdate(description="D")
     assert wu.description == "D"
+    with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+        WorkflowCreate.model_validate({"name": "W", "code": "legacy"})
 
 
 def test_project_create_defaults():
@@ -83,8 +85,10 @@ def test_project_workflow_id_rejects_invalid_explicit_values(value):
 
 
 def test_project_update_optional_prefixes():
-    p = ProjectUpdate(code="PRJ", key_prefixes=None)
+    p = ProjectUpdate(code="PRJ")
     assert p.key_prefixes is None
+    with pytest.raises(ValueError, match="cannot be null"):
+        ProjectUpdate(code="PRJ", key_prefixes=None)
     with pytest.raises(ValueError, match="At least one task key prefix"):
         ProjectUpdate(code="PRJ", key_prefixes="")
 
@@ -124,3 +128,57 @@ def test_instruction_create_update():
         InstructionCreate(phase_id=1, description="Step", step_num="1")
     with pytest.raises(ValueError, match="Extra inputs are not permitted"):
         InstructionUpdate.model_validate({"step_num": 1})
+
+
+def test_phase_update_nested_contract_is_strict_and_normalized():
+    update = PhaseUpdate.model_validate(
+        {
+            "instructions": [{"description": "  Run tests  ", "skills": [" testing "]}],
+            "checks": [{"description": " Check result "}],
+            "evidence": [{"description": " Evidence URL "}],
+        }
+    )
+    assert update.instructions and update.instructions[0].description == "Run tests"
+    assert update.instructions[0].skills == ["testing"]
+    assert update.checks and update.checks[0].description == "Check result"
+
+    invalid_payloads = [
+        {"instructions": [{"skills": []}]},
+        {"instructions": [{"description": "Step", "skills": "testing"}]},
+        {"checks": [{"description": "Check", "command": None}]},
+        {"evidence": [{"description": "Evidence", "validator": None}]},
+        {"checks": [{"description": "same"}, {"description": " SAME "}]},
+        {"evidence": None},
+    ]
+    for payload in invalid_payloads:
+        with pytest.raises(ValueError):
+            PhaseUpdate.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    ("schema", "field"),
+    [
+        (PhaseUpdate, "name"),
+        (PhaseUpdate, "execution_type"),
+        (WorkflowUpdate, "name"),
+        (WorkflowUpdate, "description"),
+        (ProjectUpdate, "workflow_id"),
+        (AgentUpdate, "description"),
+        (InstructionUpdate, "description"),
+        (InstructionUpdate, "execution_type"),
+    ],
+)
+def test_nonnullable_update_fields_reject_explicit_null(schema, field):
+    with pytest.raises(ValueError, match="cannot be null"):
+        schema.model_validate({field: None})
+
+
+def test_nullable_update_fields_distinguish_omitted_and_null():
+    phase = PhaseUpdate.model_validate({"description": None, "agent_id": None})
+    assert phase.model_fields_set == {"description", "agent_id"}
+    assert phase.description is None
+    assert PhaseUpdate().model_fields_set == set()
+
+    instruction = InstructionUpdate.model_validate({"skills": None})
+    assert instruction.model_fields_set == {"skills"}
+    assert instruction.skills is None

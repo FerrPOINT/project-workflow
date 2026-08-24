@@ -79,10 +79,10 @@ SQLite остаётся только для изолированных тест�
 
 ```bash
 # Выполнить текущую фазу задачи и получить вердикт supervisor
-project-workflow step --task TASK-123 --report "Сделал X, проверил Y"
+project-workflow step --task RUN-123 --report "Сделал X, проверил Y"
 
 # История фаз и supervisor-решений
-project-workflow history --task TASK-123 --n 10
+project-workflow history --task RUN-123 --n 10
 ```
 
 CLI ожидает `DATABASE_URL` и доступный OpenAI-compatible evaluator. Каноническая конфигурация использует OpenRouter:
@@ -211,9 +211,9 @@ flowchart TD
 - [x] mypy `--check-untyped-defs` для supervisor/core.py
 - [x] UI-доработки: execution_type на отдельной строке, русское склонение счётчиков, очистка рабочей БД от мусора
 - [x] Supervisor evaluate: DB-backed history/audit, idempotent replay и явный parallel rendering
-- [x] Packaged 27-phase catalog bootstrapped once into an empty PostgreSQL database
-- [x] GitLab Merge Request contract: Hermes создаёт MR, Maintainer вручную merge, Hermes проверяет SHA и pipeline
-- [x] 27 seed-managed фаз связаны с шестью именованными Hermes profiles
+- [x] Актуальный packaged Business Tech catalog загружается один раз в пустую PostgreSQL database
+- [x] Tech Pull Request contract: Hermes создаёт PR, Maintainer вручную merge, Hermes проверяет SHA и build
+- [x] Seed-managed фазы связаны с именованными Hermes profiles
 - [x] JSON `step` отдаёт полный `phase_contract`, включая `skills`, profile и детали parallel-участников
 - [x] Packaged seed загружается только при bootstrap пустой схемы
 

@@ -204,7 +204,6 @@
       <li data-id="{{ c.id }}">
         <span class="status-icon wait">○</span>
         <input type="text" class="inline-input check-text" value="{{ c.description }}" data-field="description" onblur="scheduleSave()">
-        <span class="check-meta">{% if c.command %}{{ c.command }}{% endif %}</span>
         <button class="item-delete" onclick="deleteItem(this)">×</button>
       </li>
       {% else %}
@@ -225,7 +224,6 @@
       <li data-id="{{ e.id }}">
         <span class="file-icon">📄</span>
         <input type="text" class="inline-input file-name" value="{{ e.description }}" data-field="description" onblur="scheduleSave()">
-        <span class="file-status">{% if e.validator %}{{ e.validator }}{% else %}—{% endif %}</span>
         <button class="item-delete" onclick="deleteItem(this)">×</button>
       </li>
       {% else %}
@@ -588,13 +586,13 @@ async function savePhase() {
   document.querySelectorAll('#checks-list li').forEach((li) => {
     if (li.classList.contains('empty-state')) return;
     const inp = li.querySelector('[data-field="description"]');
-    if (inp) data.checks.push({description: inp.value, command: null});
+    if (inp) data.checks.push({description: inp.value});
   });
 
   document.querySelectorAll('#evidence-list li').forEach((li) => {
     if (li.classList.contains('empty-state')) return;
     const inp = li.querySelector('[data-field="description"]');
-    if (inp) data.evidence.push({description: inp.value, validator: null});
+    if (inp) data.evidence.push({description: inp.value});
   });
 
   try {

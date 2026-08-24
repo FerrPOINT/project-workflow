@@ -35,13 +35,8 @@ def _error(message: str, status: int) -> JSONResponse:
 
 
 def _updates_from_payload(payload: Any, fields: list[str]) -> dict[str, Any]:
-    """Build an update dict from payload fields that are not None."""
-    updates: dict[str, Any] = {}
-    for key in fields:
-        value = getattr(payload, key, None)
-        if value is not None:
-            updates[key] = value
-    return updates
+    """Build updates from explicitly supplied fields, preserving nullable clears."""
+    return {key: getattr(payload, key) for key in fields if key in payload.model_fields_set}
 
 
 async def api_settings_get() -> dict[str, Any] | JSONResponse:
@@ -177,11 +172,6 @@ async def api_phase_update(phase_id: int, payload: PhaseUpdate) -> dict[str, Any
     if resolved_phase_id is None:
         return _error(f"Фаза {phase_id} не найдена", 404)
 
-    if "phase_num" in payload.model_fields_set:
-        return _error("Редактирование phase_num запрещено", 400)
-    if {"code", "phase_order"}.intersection(payload.model_fields_set):
-        return _error("Редактирование identity/order фазы запрещено", 400)
-
     scalar_fields = {
         "name",
         "description",
@@ -192,8 +182,6 @@ async def api_phase_update(phase_id: int, payload: PhaseUpdate) -> dict[str, Any
         "execution_type",
     }
     selected_fields = scalar_fields.intersection(payload.model_fields_set)
-    if any(getattr(payload, field) is None for field in selected_fields.intersection({"name", "execution_type"})):
-        return _error("name и execution_type нельзя очистить", 422)
     phase_data = {field: getattr(payload, field) for field in selected_fields}
     if phase_data:
         try:
@@ -207,11 +195,14 @@ async def api_phase_update(phase_id: int, payload: PhaseUpdate) -> dict[str, Any
     check_ids: list[int] = []
     ev_ids: list[int] = []
     if payload.instructions is not None:
-        inst_ids = srv.save_instructions(resolved_phase_id, payload.instructions, commit=False)
+        instructions = [item.model_dump() for item in payload.instructions]
+        inst_ids = srv.save_instructions(resolved_phase_id, instructions, commit=False)
     if payload.checks is not None:
-        check_ids = srv.save_checks(resolved_phase_id, payload.checks, commit=False)
+        checks = [item.model_dump() for item in payload.checks]
+        check_ids = srv.save_checks(resolved_phase_id, checks, commit=False)
     if payload.evidence is not None:
-        ev_ids = srv.save_evidence(resolved_phase_id, payload.evidence, commit=False)
+        evidence = [item.model_dump() for item in payload.evidence]
+        ev_ids = srv.save_evidence(resolved_phase_id, evidence, commit=False)
 
     if phase_data or payload.instructions is not None or payload.checks is not None or payload.evidence is not None:
         _app_state.get_uow().commit()
@@ -261,8 +252,6 @@ async def api_phase_batch_order(payload: PhaseOrderUpdate) -> dict[str, Any] | J
 async def api_workflow_create(payload: WorkflowCreate) -> dict[str, Any] | JSONResponse:
     if not payload.name or not str(payload.name).strip():
         return _error("name required", 400)
-    if payload.code:
-        return _error("Workflow code field is no longer supported", 400)
     service = _app_state.workflow_service()
     workflow = service.create_workflow({"name": payload.name, "description": payload.description or ""})
     workflow_id = workflow["id"]
@@ -274,8 +263,6 @@ async def api_workflow_update(workflow_id: int, payload: WorkflowUpdate) -> dict
     existing = service.get_workflow(workflow_id)
     if not existing:
         return _error(f"Workflow {workflow_id} не найден", 404)
-    if payload.code is not None and payload.code != existing.get("code"):
-        return _error("Workflow code field is no longer supported", 400)
     updates = _updates_from_payload(payload, ["name", "description"])
     if updates:
         service.update_workflow(workflow_id, updates)
@@ -328,10 +315,6 @@ async def api_project_update(project_id: int, payload: ProjectUpdate) -> dict[st
     existing = service.get_project(project_id)
     if not existing:
         return _error(f"Проект {project_id} не найден", 404)
-    if "workflow_id" in payload.model_fields_set and payload.workflow_id is None:
-        return _error("workflow_id cannot be null", 422)
-    if "description" in payload.model_fields_set and payload.description is None:
-        return _error("description cannot be null", 422)
     updates = _updates_from_payload(payload, ["code", "name", "description", "workflow_id"])
     if payload.key_prefixes is not None:
         updates["key_prefixes"] = list(payload.key_prefixes)

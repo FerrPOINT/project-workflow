@@ -374,7 +374,7 @@ def test_submit_does_not_record_cycle_for_malformed_supervisor_response(tmp_path
     args = type(
         "Args",
         (),
-        {"root": str(tmp_path), "task": "TASK-1", "phase": "0.6", "report_file": str(report)},
+        {"root": str(tmp_path), "task": "RUN-1", "phase": "0.6", "report_file": str(report)},
     )()
 
     with pytest.raises(recorder.TranscriptError, match="transition contract"):
@@ -397,7 +397,7 @@ def test_submit_does_not_record_cycle_when_supervisor_fails(tmp_path, monkeypatc
     args = type(
         "Args",
         (),
-        {"root": str(tmp_path), "task": "TASK-1", "phase": "0.6", "report_file": str(report)},
+        {"root": str(tmp_path), "task": "RUN-1", "phase": "0.6", "report_file": str(report)},
     )()
 
     with pytest.raises(recorder.TranscriptError, match="did not complete successfully"):

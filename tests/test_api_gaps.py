@@ -76,12 +76,12 @@ class TestApiPhaseUpdate:
     def test_forbidden_phase_num(self):
         with patch("project_workflow.interfaces.ui.routes.api._load_phase_detail", return_value={"id": 1}):
             response = client.put("/api/phases/1", json={"phase_num": 2, "name": "X"})
-        assert response.status_code == 400
+        assert response.status_code == 422
 
     def test_forbidden_code(self):
         with patch("project_workflow.interfaces.ui.routes.api._load_phase_detail", return_value={"id": 1}):
             response = client.put("/api/phases/1", json={"code": "NEW", "name": "X"})
-        assert response.status_code == 400
+        assert response.status_code == 422
 
     def test_empty_payload_ok(self):
         with patch("project_workflow.interfaces.ui.routes.api._load_phase_detail", return_value={"id": 1}):

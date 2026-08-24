@@ -8,6 +8,7 @@ import pytest
 
 pytestmark = [pytest.mark.supervisor]
 
+from project_workflow.domain.exceptions import ConflictError
 from project_workflow.supervisor import SupervisorEngine
 from project_workflow.supervisor.models import Phase
 
@@ -194,6 +195,38 @@ class TestSupervisorCoreGaps:
         svc.get_task_by_key.return_value = None
         engine._task_service = svc
         with pytest.raises(ValueError, match="not found"):
+            engine._ensure_task()
+
+    def test_ensure_task_rereads_same_project_after_concurrent_create(self):
+        engine = SupervisorEngine("RUN-1")
+        service = MagicMock()
+        service.get_task_by_key.side_effect = [
+            None,
+            {"id": 7, "project_id": 3, "task_key": "RUN-1"},
+        ]
+        service.create_task.side_effect = ConflictError("already exists")
+        engine._task_service = service
+        engine._resolve_project = MagicMock(return_value={"id": 3})
+        engine._first_phase_code_for_project = MagicMock(return_value="1.INTAKE")
+
+        task = engine._ensure_task()
+
+        assert task["id"] == 7
+        assert service.get_task_by_key.call_count == 2
+
+    def test_ensure_task_does_not_hide_cross_project_conflict(self):
+        engine = SupervisorEngine("RUN-1")
+        service = MagicMock()
+        service.get_task_by_key.side_effect = [
+            None,
+            {"id": 8, "project_id": 4, "task_key": "RUN-1"},
+        ]
+        service.create_task.side_effect = ConflictError("already exists")
+        engine._task_service = service
+        engine._resolve_project = MagicMock(return_value={"id": 3})
+        engine._first_phase_code_for_project = MagicMock(return_value="1.INTAKE")
+
+        with pytest.raises(ConflictError, match="already exists"):
             engine._ensure_task()
 
     def test_format_result_pass_sync_after_parallel(self):

@@ -238,7 +238,7 @@ class TestHistoryCommand:
             result = runner.invoke(cli, ["history", "--task", "RUN-1"])
         assert result.exit_code == 0, result.output
         assert "пуста" in result.output
-        uow.supervisor_runs.list.assert_called_once_with(task_id=None, task_key="TASK-1", limit=None)
+        uow.supervisor_runs.list.assert_called_once_with(task_id=None, task_key="RUN-1", limit=None)
 
     @patch("project_workflow.interfaces.cli.ui.SAUnitOfWork")
     def test_history_json_mode(self, mock_uow_cls):
@@ -253,7 +253,7 @@ class TestHistoryCommand:
         assert parsed["ok"] is True
         assert parsed["task_key"] == "RUN-1"
         assert parsed["count"] == 0
-        uow.supervisor_runs.list.assert_called_once_with(task_id=None, task_key="TASK-1", limit=10)
+        uow.supervisor_runs.list.assert_called_once_with(task_id=None, task_key="RUN-1", limit=10)
 
     def test_history_rejects_non_positive_limit(self):
         runner = CliRunner()

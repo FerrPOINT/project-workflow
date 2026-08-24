@@ -10,6 +10,7 @@ import pytest
 
 from project_workflow.application.state import _AppState
 from project_workflow.application.task import TaskService
+from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.repositories import UnitOfWork
 
 
@@ -37,10 +38,21 @@ class FakeTask:
         return {"id": self.id, "task_key": self.task_key, "project_id": self.project_id}
 
 
+@dataclass
+class FakePhase:
+    code: str = "1.INTAKE"
+
+
 def _make_uow() -> UnitOfWork:
     uow = MagicMock(spec=UnitOfWork)
     uow.tasks = MagicMock()
     uow.projects = MagicMock()
+    uow.workflows = MagicMock()
+    uow.phases = MagicMock()
+    uow.tasks.get_by_key.return_value = None
+    uow.workflows.lock.return_value = object()
+    uow.phases.list.return_value = [FakePhase()]
+    uow.phases.get_by_code.return_value = FakePhase()
     return uow
 
 
@@ -56,6 +68,7 @@ class TestTaskService:
         assert result["project_id"] == 5
         uow.commit.assert_called_once()
         uow.workflows.lock.assert_called_once_with(1)
+        assert uow.tasks.create.call_args.args[0]["current_phase"] == "1.INTAKE"
 
     def test_create_task_preserves_zero_phase_code(self):
         uow = _make_uow()
@@ -84,6 +97,16 @@ class TestTaskService:
         with pytest.raises(ValueError, match="No project is configured"):
             TaskService(uow).create_task({"task_key": "NEW-1"})
         uow.projects.create.assert_not_called()
+        uow.tasks.create.assert_not_called()
+
+    def test_duplicate_task_key_is_a_deterministic_conflict(self):
+        uow = _make_uow()
+        uow.projects.lock.return_value = FakeProject(5, "B")
+        uow.tasks.get_by_key.return_value = FakeTask(7, "B-2", 5)
+
+        with pytest.raises(ConflictError, match="already exists"):
+            TaskService(uow).create_task({"task_key": "B-2", "project_id": 5})
+
         uow.tasks.create.assert_not_called()
 
     def test_get_update_list_delete(self):

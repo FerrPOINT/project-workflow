@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from project_workflow.domain.repositories import UnitOfWork
 
@@ -117,7 +119,112 @@ def get_phase_from_db(
 # ── Bootstrap seed ───────────
 
 
-def _load_seed(path: Path | str | None = None) -> list[dict[str, Any]]:
+class _SeedModel(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+
+def _nonblank(value: str, field_name: str) -> str:
+    normalized = value.strip()
+    if not normalized:
+        raise ValueError(f"{field_name} must not be blank")
+    return normalized
+
+
+class _SeedInstruction(_SeedModel):
+    description: str
+    execution_type: Literal["sync", "parallel"] = "sync"
+    skills: list[str] = Field(default_factory=list)
+    example: str | None = None
+
+    @field_validator("description")
+    @classmethod
+    def _description_not_blank(cls, value: str) -> str:
+        return _nonblank(value, "instruction description")
+
+    @field_validator("skills")
+    @classmethod
+    def _normalize_skills(cls, value: list[str]) -> list[str]:
+        normalized = [_nonblank(skill, "skill") for skill in value]
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("skills must be unique")
+        return normalized
+
+
+class _SeedTextItem(_SeedModel):
+    description: str
+
+    @field_validator("description")
+    @classmethod
+    def _description_not_blank(cls, value: str) -> str:
+        return _nonblank(value, "description")
+
+
+class _SeedDelegate(_SeedModel):
+    agent: str
+    hermes_profile: str | None = None
+    prompt_template: str | None = None
+    toolsets: list[str] = Field(default_factory=list)
+    timeout_min: int = Field(default=10, gt=0)
+    max_cycles: int = Field(default=3, gt=0)
+
+    @field_validator("agent")
+    @classmethod
+    def _agent_not_blank(cls, value: str) -> str:
+        return _nonblank(value, "delegate agent")
+
+    @field_validator("hermes_profile", "prompt_template")
+    @classmethod
+    def _normalize_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+    @field_validator("toolsets")
+    @classmethod
+    def _normalize_toolsets(cls, value: list[str]) -> list[str]:
+        normalized = [_nonblank(toolset, "toolset") for toolset in value]
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("toolsets must be unique")
+        return normalized
+
+
+class _SeedPhase(_SeedModel):
+    phase_order: int = Field(gt=0)
+    code: str
+    name: str
+    description: str = ""
+    min_time_min: int = Field(default=0, ge=0)
+    execution_type: Literal["sync", "parallel"] = "sync"
+    delegate: _SeedDelegate | None = None
+    instructions: list[_SeedInstruction] = Field(default_factory=list)
+    checks: list[str | _SeedTextItem] = Field(default_factory=list)
+    evidence: list[str | _SeedTextItem] = Field(default_factory=list)
+    next_recommendation: str = ""
+    parallel_with: str | None = None
+    rollback_target: str | None = None
+    is_blocker: bool = False
+    is_critic: bool = False
+
+    @field_validator("code", "name")
+    @classmethod
+    def _identity_not_blank(cls, value: str, info: Any) -> str:
+        return _nonblank(value, info.field_name)
+
+    @field_validator("parallel_with", "rollback_target")
+    @classmethod
+    def _normalize_link(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+
+def _seed_text(value: str | _SeedTextItem) -> str:
+    return _nonblank(value if isinstance(value, str) else value.description, "description")
+
+
+def _load_seed(path: Path | str | None = None) -> list[_SeedPhase]:
     seed_path = Path(path) if path else config.SEED_PATH
     if not seed_path.exists():
         raise FileNotFoundError(f"Seed catalog not found: {seed_path}")
@@ -130,60 +237,109 @@ def _load_seed(path: Path | str | None = None) -> list[dict[str, Any]]:
             raise ValueError(f"Malformed seed catalog: {seed_path}") from exc
     if not isinstance(data, list):
         raise ValueError("Seed catalog root must be a list")
-    if not all(isinstance(item, dict) for item in data):
-        raise ValueError("Every seed catalog item must be an object")
-    return data
+    if not data:
+        raise ValueError("Seed catalog must contain at least one phase")
+    phases: list[_SeedPhase] = []
+    for index, item in enumerate(data, start=1):
+        if not isinstance(item, dict):
+            raise ValueError(f"Invalid seed phase at index {index}: item must be an object")
+        label = str(item.get("code") or f"index {index}")
+        try:
+            phase = _SeedPhase.model_validate(item)
+        except ValidationError as exc:
+            raise ValueError(f"Invalid seed phase {label!r}: {exc}") from exc
+        if phase.phase_order != index:
+            raise ValueError(
+                f"Invalid seed phase {phase.code!r}: phase_order must be {index}, got {phase.phase_order}"
+            )
+        phases.append(phase)
+
+    codes = [phase.code for phase in phases]
+    if len(codes) != len(set(codes)):
+        duplicates = sorted({code for code in codes if codes.count(code) > 1})
+        raise ValueError(f"Seed phase codes must be unique: {', '.join(duplicates)}")
+    known_codes = set(codes)
+    phases_by_code = {phase.code: phase for phase in phases}
+    for phase in phases:
+        for field_name in ("parallel_with", "rollback_target"):
+            target = getattr(phase, field_name)
+            if target is None:
+                continue
+            if target == phase.code:
+                raise ValueError(f"Invalid seed phase {phase.code!r}: {field_name} cannot reference itself")
+            if target not in known_codes:
+                raise ValueError(
+                    f"Invalid seed phase {phase.code!r}: {field_name} references unknown phase {target!r}"
+                )
+        if phase.execution_type == "parallel" and phase.parallel_with is None:
+            raise ValueError(
+                f"Invalid seed phase {phase.code!r}: parallel phase requires parallel_with"
+            )
+        if phase.execution_type == "sync" and phase.parallel_with is not None:
+            raise ValueError(
+                f"Invalid seed phase {phase.code!r}: sync phase cannot define parallel_with"
+            )
+        if phase.parallel_with is not None:
+            partner = phases_by_code[phase.parallel_with]
+            if partner.execution_type != "parallel":
+                raise ValueError(
+                    f"Invalid seed phase {phase.code!r}: parallel_with target must be parallel"
+                )
+        if phase.rollback_target is not None:
+            target = phases_by_code[phase.rollback_target]
+            if target.phase_order >= phase.phase_order:
+                raise ValueError(
+                    f"Invalid seed phase {phase.code!r}: rollback_target must reference an earlier phase"
+                )
+        for field_name in ("checks", "evidence"):
+            values = [_seed_text(item).casefold() for item in getattr(phase, field_name)]
+            if len(values) != len(set(values)):
+                raise ValueError(f"Invalid seed phase {phase.code!r}: duplicate {field_name} descriptions")
+    return phases
 
 
-def _phase_item_to_supervisor(item: dict[str, Any]) -> Phase:
-    """Convert a raw seed dict into a supervisor Phase dataclass."""
-
-    def _text(val: Any) -> str:
-        if isinstance(val, dict):
-            return str(val.get("description", val.get("item", val.get("step", "")))).strip()
-        return str(val).strip()
-
+def _phase_item_to_supervisor(item: _SeedPhase) -> Phase:
+    """Convert a validated seed model into a supervisor Phase dataclass."""
     instructions = [
         PhaseInstruction(
-            step=_text(ir),
-            example=ir.get("example") if isinstance(ir, dict) else None,
-            execution_type=ir.get("execution_type", "sync") if isinstance(ir, dict) else "sync",
-            skills=ir.get("skills", []) if isinstance(ir, dict) else [],
+            step=instruction.description,
+            example=instruction.example,
+            execution_type=instruction.execution_type,
+            skills=instruction.skills,
         )
-        for ir in item.get("instructions", [])
-        if _text(ir)
+        for instruction in item.instructions
     ]
-    checks = [PhaseCheck(description=_text(cr)) for cr in item.get("checks", []) if _text(cr)]
-    evidence = [PhaseEvidence(item=_text(er)) for er in item.get("evidence", []) if _text(er)]
+    checks = [PhaseCheck(description=_seed_text(check)) for check in item.checks]
+    evidence = [PhaseEvidence(item=_seed_text(evidence_item)) for evidence_item in item.evidence]
 
     delegate: PhaseDelegate | None = None
-    if item.get("delegate"):
-        d = item["delegate"]
+    if item.delegate:
+        delegate_data = item.delegate
         delegate = PhaseDelegate(
-            agent=d.get("agent", ""),
-            hermes_profile=d.get("hermes_profile") or None,
-            prompt_template=d.get("prompt_template", f"Phase {item.get('code', '')}"),
-            toolsets=d.get("toolsets", []),
-            timeout_min=d.get("timeout_min", 10),
-            max_cycles=d.get("max_cycles", 3),
+            agent=delegate_data.agent,
+            hermes_profile=delegate_data.hermes_profile,
+            prompt_template=delegate_data.prompt_template or f"Phase {item.code}",
+            toolsets=delegate_data.toolsets,
+            timeout_min=delegate_data.timeout_min,
+            max_cycles=delegate_data.max_cycles,
         )
     return Phase(
         id=None,
-        code=item.get("code", ""),
-        name=item.get("name", ""),
-        description=item.get("description", ""),
-        min_time_min=item.get("min_time_min", 0),
-        is_blocker=bool(item.get("is_blocker", False)),
+        code=item.code,
+        name=item.name,
+        description=item.description,
+        min_time_min=item.min_time_min,
+        is_blocker=item.is_blocker,
         is_delegated=bool(delegate),
-        is_critic=bool(item.get("is_critic", False)),
+        is_critic=item.is_critic,
         checks=checks,
         evidence=evidence,
         instructions=instructions,
         delegate=delegate,
-        next_recommendation=str(item.get("next_recommendation", "")),
-        parallel_with=str(item.get("parallel_with")) if item.get("parallel_with") else None,
-        rollback_target=str(item.get("rollback_target")) if item.get("rollback_target") else None,
-        execution_type=str(item.get("execution_type", "sync")),
+        next_recommendation=item.next_recommendation,
+        parallel_with=item.parallel_with,
+        rollback_target=item.rollback_target,
+        execution_type=item.execution_type,
     )
 
 
@@ -203,14 +359,14 @@ def ensure_phase_catalog(
     seed_path: Path | str | None = None,
 ) -> None:
     """Bootstrap the packaged phase catalog only for a new empty database."""
+    seed_path = Path(seed_path) if seed_path else config.SEED_PATH
+    seed_phases = load_phases_from_seed(seed_path)
     if uow.workflows.list():
         return
     default_workflow = uow.workflows.ensure_default_exists(config.DEFAULT_WORKFLOW_NAME)
     workflow_id = default_workflow.id
     assert workflow_id is not None
 
-    seed_path = Path(seed_path) if seed_path else config.SEED_PATH
-    seed_phases = load_phases_from_seed(seed_path)
     for phase in seed_phases:
         delegate = phase.delegate
         agent_name = (delegate.agent or "") if delegate else ""

@@ -37,15 +37,20 @@ class TaskService:
                 f"Task key {task_key!r} does not match project {locked_project.code!r} prefixes"
             )
         raw_current_phase = payload.get("current_phase")
-        current_phase = "-1" if raw_current_phase in (None, "") else str(raw_current_phase)
+        if raw_current_phase in (None, ""):
+            phases = list(self._uow.phases.list(workflow_id=locked_project.workflow_id))
+            if not phases:
+                raise ValueError(f"Workflow {locked_project.workflow_id} has no phases")
+            current_phase = phases[0].code
+        else:
+            current_phase = str(raw_current_phase)
         payload["current_phase"] = current_phase
-        if (
-            current_phase != "-1"
-            and self._uow.phases.get_by_code(locked_project.workflow_id, current_phase) is None
-        ):
+        if self._uow.phases.get_by_code(locked_project.workflow_id, current_phase) is None:
             raise ValueError(
                 f"Phase {current_phase!r} not found in workflow {locked_project.workflow_id}"
             )
+        if self._uow.tasks.get_by_key(task_key) is not None:
+            raise ConflictError(f"Task {task_key!r} already exists")
         tid = self._uow.tasks.create(payload)
         task = self._uow.tasks.get_by_id(tid)
         if not task:

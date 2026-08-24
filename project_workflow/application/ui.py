@@ -165,7 +165,7 @@ class UIDataService:
             )
 
             current_phase_id, current = _resolve_task_phase_local(
-                t.get("current_phase", "-1"),
+                t.get("current_phase", ""),
                 phases_by_workflow.get(workflow_id, []),
             )
             current = current or {}
@@ -385,7 +385,7 @@ class UIDataService:
         )
 
         current_phase_id, current_phase = _resolve_task_phase(
-            task.get("current_phase", "-1"), wdb, workflow_id=task.get("workflow_id")
+            task.get("current_phase", ""), wdb, workflow_id=task.get("workflow_id")
         )
         task["current_phase_name"] = current_phase["name"] if current_phase else task.get("current_phase", "")
         task["current_phase_order"] = current_phase["phase_order"] if current_phase else 0

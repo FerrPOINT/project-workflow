@@ -37,7 +37,7 @@ def client():
                 "code": "DEFAULT",
                 "name": "Default Project",
                 "workflow_id": default_workflow.id,
-                "key_prefixes": ["TASK"],
+                "key_prefixes": ["RUN"],
             }
         )
     if not uow.tasks.get_by_key("RUN-1"):
@@ -47,7 +47,7 @@ def client():
                 "task_key": "RUN-1",
                 "title": "Smoke task for dashboard",
                 "status": "active",
-                "current_phase": "-1",
+                "current_phase": "1.INTAKE",
             }
         )
     uow.commit()
@@ -196,6 +196,29 @@ class TestApiPhases:
         assert after["instructions"] == before["instructions"]
         assert after["checks"] == before["checks"]
         assert after["evidence"] == before["evidence"]
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"instructions": [{"skills": []}]},
+            {"instructions": [{"description": "Step", "skills": "testing"}]},
+            {"instructions": [{"description": "Step", "execution_type": "invalid"}]},
+            {"checks": [{"description": ""}]},
+            {"checks": [{"description": "Check", "command": None}]},
+            {"evidence": [{"description": "Evidence", "validator": None}]},
+            {"checks": [{"description": "same"}, {"description": " SAME "}]},
+            {"evidence": None},
+        ],
+    )
+    def test_composite_phase_update_rejects_invalid_nested_content_without_writes(self, client, payload):
+        phase_id = _phase_id(client, "1.INTAKE")
+        before = client.get(f"/api/phases/{phase_id}").json()["phase"]
+
+        response = client.put(f"/api/phases/{phase_id}", json=payload)
+
+        assert response.status_code == 422
+        after = client.get(f"/api/phases/{phase_id}").json()["phase"]
+        assert after == before
 
 
 class TestRemovedLegacyApi:
@@ -436,8 +459,8 @@ class TestApiWorkflows:
 
     def test_create_workflow_rejects_code(self, client):
         resp = client.post("/api/workflows", json={"name": _unique("wf"), "code": "X"})
-        assert resp.status_code == 400
-        assert "code" in resp.json()["error"]
+        assert resp.status_code == 422
+        assert "code" in resp.text
 
     def test_update_workflow(self, client):
         from project_workflow.interfaces.ui import _app_state
@@ -448,6 +471,8 @@ class TestApiWorkflows:
         data = resp.json()
         assert data["ok"] is True
         assert data["workflow"]["name"] == "Updated"
+        assert client.put(f"/api/workflows/{wf['id']}", json={"name": None}).status_code == 422
+        assert client.put(f"/api/workflows/{wf['id']}", json={"description": None}).status_code == 422
 
     def test_update_workflow_not_found(self, client):
         resp = client.put("/api/workflows/999999", json={"name": "X"})
@@ -540,7 +565,7 @@ class TestApiProjects:
                 "task_key": _unique("ZZZ"),
                 "title": "Task",
                 "status": "active",
-                "current_phase": "-1",
+                "current_phase": "1.INTAKE",
             }
         )
         resp = client.delete(f"/api/projects/{project_id}")
@@ -575,6 +600,7 @@ class TestApiAgents:
         data = resp.json()
         assert data["agent"]["description"] == "updated"
         assert data["agent"]["hermes_profile"] is None
+        assert client.put(f"/api/agents/{agent_id}", json={"description": None}).status_code == 422
 
     def test_hermes_profile_cannot_be_shared(self, client):
         profile = f"profile_{uuid.uuid4().hex[:8]}"
@@ -641,6 +667,17 @@ class TestApiInstructions:
         assert resp.status_code == 200
         assert resp.json()["instruction"]["skills"] == ["search"]
 
+        resp = client.put(f"/api/instructions/{instruction_id}", json={"description": "do Z"})
+        assert resp.status_code == 200
+        assert resp.json()["instruction"]["skills"] == ["search"]
+
+        resp = client.put(f"/api/instructions/{instruction_id}", json={"skills": None})
+        assert resp.status_code == 200
+        assert resp.json()["instruction"]["skills"] == []
+
+        assert client.put(f"/api/instructions/{instruction_id}", json={"skills": "search"}).status_code == 422
+        assert client.put(f"/api/instructions/{instruction_id}", json={"description": None}).status_code == 422
+
         resp = client.delete(f"/api/instructions/{instruction_id}")
         assert resp.status_code == 200
         assert _app_state.instruction_service().get_instruction(instruction_id) is None
@@ -680,7 +717,7 @@ class TestApiTasks:
                 "task_key": "RUN-DEL-1",
                 "title": "To delete",
                 "status": "active",
-                "current_phase": "-1",
+                "current_phase": "1.INTAKE",
             }
         )
         phase = phase_by_code(uow, "1.INTAKE")
@@ -806,7 +843,7 @@ class TestApiPhaseUpdate:
     def test_update_phase_forbidden_code(self, client):
         phase_id = _phase_id(client, "1.INTAKE")
         resp = client.put(f"/api/phases/{phase_id}", json={"code": "x.y"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_update_phase_not_found(self, client):
         resp = client.put("/api/phases/999999", json={"name": "x"})

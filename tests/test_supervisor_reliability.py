@@ -81,7 +81,7 @@ def test_valid_report_is_replayed_once(verdict, supervisor_llm):
 
 
 def test_same_report_is_evaluated_again_after_phase_transition(supervisor_llm):
-    engine = SupervisorEngine("TASK-900")
+    engine = SupervisorEngine("RUN-900")
     supervisor_llm("PASS")
     fixture_chat = OpenAICompatibleClient.chat
     with patch.object(OpenAICompatibleClient, "chat", side_effect=fixture_chat) as chat:
@@ -116,7 +116,7 @@ def test_retryable_provider_error_has_no_fingerprint_or_transition():
 
 
 def test_recorded_evaluation_invalidates_supervisor_context_cache(supervisor_llm):
-    engine = SupervisorEngine("TASK-909")
+    engine = SupervisorEngine("RUN-909")
     before = engine.get_full_context()
     assert engine.get_full_context() is before
     supervisor_llm("PARTIAL")

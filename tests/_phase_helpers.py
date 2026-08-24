@@ -6,7 +6,9 @@ from project_workflow.infrastructure.db import schema
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from tests._db_helpers import prepare_sqlite_uow
 
-PHASE_CODES = [phase.code for phase in schema.load_phases_from_seed()]
+SEED_PHASES = schema.load_phases_from_seed()
+PHASE_CODES = [phase.code for phase in SEED_PHASES]
+PHASE_NAMES = {phase.code: phase.name for phase in SEED_PHASES}
 
 
 def get_next_phase(current_phase: str) -> str | None:
@@ -74,37 +76,8 @@ def show_all_phases() -> None:
     table.add_column("#", style="cyan", width=6)
     table.add_column("Название", style="white")
 
-    names = {
-        "-1": "Task Intake",
-        "0.0a": "Runtime Readiness",
-        "0.01": "Acceptance Setup",
-        "0.000": "Workspace",
-        "0.00": "Git Identity",
-        "0.7": "Repo Sync",
-        "0.9": "CriticGate-PreFlight",
-        "0.5": "Work Start",
-        "0.6": "Researcher #1",
-        "1": "Preflight",
-        "1.5": "Deep Research",
-        "2": "Research Synthesis",
-        "3": "Plan",
-        "3.5": "CriticGate-PrePlan",
-        "4": "Implement",
-        "4.5": "CriticGate-PreCommit",
-        "5": "Validate",
-        "5.5": "Self-Test",
-        "6": "Commit",
-        "7": "Merge Request",
-        "7.5": "Code Review",
-        "7.6": "QA Testing",
-        "7.6.R": "DVR",
-        "7.7": "CriticGate-PostQA",
-        "8": "Delivery Handoff",
-        "9": "Retro",
-        "10": "Auto-Improve",
-    }
     for code in PHASE_CODES:
-        table.add_row(code, names.get(code, ""))
+        table.add_row(code, PHASE_NAMES[code])
     console.print(table)
     console.print("\n[dim]BLOCKER — если FAIL, workflow останавливается[/dim]")
     console.print("[dim]delegate — запускается через delegate_task[/dim]")

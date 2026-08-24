@@ -53,14 +53,14 @@ def test_row_to_task_missing_project_workflow():
         task_key="T-1",
         title="t",
         description="d",
-        current_phase="-1",
+        current_phase="1.INTAKE",
         status="active",
         created_at=None,
         updated_at=None,
         project=None,
     )
     task = _row_to_task(row)
-    assert task.current_phase_name == ""
+    assert task.current_phase_name == "1.INTAKE"
 
 
 def test_row_to_supervisor_run_bad_json_fields():

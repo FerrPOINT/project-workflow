@@ -21,6 +21,30 @@ from project_workflow.infrastructure.db.session import (
     schema_is_ready,
 )
 
+LEGACY_REVISIONS = [
+    "249bc4ab2fa9",
+    "4d7c2a9e6b10",
+    "57316bf44b1a",
+    "6f3d8a2c1b47",
+    "75bc288f78c6",
+    "7a1e9c3b4d5f",
+    "8d2e7f1a9b3c",
+    "9b71d2e4c6a0",
+    "a1b2c3d4e5f6",
+    "a42e91d6c7f3",
+    "a8d3c7e9f201",
+    "b7f3c9d2a641",
+    "becf90549ae1",
+    "c31a9f6d4e20",
+    "caeb9ba65f4a",
+    "d4e8f1a2b703",
+    "d83b7c2e4f10",
+    "e4a7b19c2d01",
+    "e6a4c2d8b901",
+    "e92c4f7a1b63",
+    "f61c2a7d9e04",
+]
+
 
 def _sqlite_engine(tmp_path: Path):
     return create_engine(f"sqlite:///{tmp_path / 'initial.db'}")
@@ -112,17 +136,21 @@ def test_sqlite_upgrade_downgrade_reupgrade(tmp_path):
     assert set(Base.metadata.tables).issubset(inspect(engine).get_table_names())
 
 
-def test_sqlite_legacy_revision_is_refused_without_mutation(tmp_path):
+@pytest.mark.parametrize("legacy_revision", LEGACY_REVISIONS)
+def test_sqlite_legacy_revision_is_refused_without_mutation(tmp_path, legacy_revision):
     engine = _sqlite_engine(tmp_path)
     with engine.begin() as conn:
         conn.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) PRIMARY KEY)"))
-        conn.execute(text("INSERT INTO alembic_version VALUES ('old_revision')"))
+        conn.execute(
+            text("INSERT INTO alembic_version VALUES (:revision)"),
+            {"revision": legacy_revision},
+        )
         conn.execute(text("CREATE TABLE keep_me (id INTEGER PRIMARY KEY)"))
 
     with pytest.raises(DatabaseRecreateRequired, match="legacy database must be recreated"):
         ensure_migrated(engine)
 
-    assert database_revisions(engine) == {"old_revision"}
+    assert database_revisions(engine) == {legacy_revision}
     assert inspect(engine).has_table("keep_me")
 
 
@@ -135,6 +163,30 @@ def test_sqlite_unversioned_nonempty_database_is_refused(tmp_path):
         ensure_migrated(engine)
 
     assert inspect(engine).has_table("keep_me")
+
+
+def test_init_db_returns_exit_code_two_for_legacy_database(tmp_path, monkeypatch, capsys):
+    from project_workflow.config import get_settings
+    from project_workflow.infrastructure.db.session import reset_engine
+    from scripts.init_db import main
+
+    database_url = f"sqlite:///{tmp_path / 'legacy-init.db'}"
+    engine = create_engine(database_url)
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) PRIMARY KEY)"))
+        connection.execute(text("INSERT INTO alembic_version VALUES ('57316bf44b1a')"))
+        connection.execute(text("CREATE TABLE keep_me (id INTEGER PRIMARY KEY)"))
+
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    get_settings.cache_clear()
+    reset_engine()
+    try:
+        assert main() == 2
+        assert "legacy database must be recreated" in capsys.readouterr().err
+        assert inspect(engine).has_table("keep_me")
+    finally:
+        get_settings.cache_clear()
+        reset_engine()
 
 
 @pytest.mark.parametrize("mutation", ["missing", "extra"])

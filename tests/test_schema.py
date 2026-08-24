@@ -9,6 +9,7 @@ import pytest
 pytestmark = [pytest.mark.unit]
 
 from project_workflow.infrastructure.db.schema import (
+    _SeedPhase,
     ensure_phase_catalog,
     get_phase_from_db,
     load_phases_from_db,
@@ -59,13 +60,19 @@ class TestEnsurePhaseCatalog:
 
     def test_existing_catalog_is_not_overwritten_after_restart(self, fresh_db, tmp_path):
         seed_path = tmp_path / "seed.json"
-        seed_path.write_text(json.dumps([{"code": "1", "name": "Seed name"}]), encoding="utf-8")
+        seed_path.write_text(
+            json.dumps([{"phase_order": 1, "code": "1", "name": "Seed name"}]),
+            encoding="utf-8",
+        )
         ensure_phase_catalog(fresh_db, seed_path=seed_path)
         phase = phase_by_code(fresh_db, "1")
         fresh_db.phases.update(phase.id, {"name": "Edited in UI"})
         fresh_db.commit()
 
-        seed_path.write_text(json.dumps([{"code": "1", "name": "Changed seed"}]), encoding="utf-8")
+        seed_path.write_text(
+            json.dumps([{"phase_order": 1, "code": "1", "name": "Changed seed"}]),
+            encoding="utf-8",
+        )
         ensure_phase_catalog(fresh_db, seed_path=seed_path)
 
         assert phase_by_code(fresh_db, "1").name == "Edited in UI"
@@ -78,8 +85,9 @@ class TestGenerateProgressJson:
             json.dumps(
                 [
                     {
-                        "code": "-1",
-                        "name": "Task Intake",
+                        "phase_order": 1,
+                        "code": "custom.intake",
+                        "name": "Custom Intake",
                         "instructions": [{"description": "Step 1"}],
                         "checks": [{"description": "Check 1"}],
                         "evidence": [{"description": "Evidence 1"}],
@@ -89,9 +97,9 @@ class TestGenerateProgressJson:
             )
         )
         ensure_phase_catalog(fresh_db, seed_path=seed_path)
-        phase = get_phase_from_db(fresh_db, "-1", _default_workflow_id(fresh_db))
+        phase = get_phase_from_db(fresh_db, "custom.intake", _default_workflow_id(fresh_db))
         assert phase is not None
-        assert phase.name == "Task Intake"
+        assert phase.name == "Custom Intake"
         assert len(phase.instructions) >= 1
 
 
@@ -100,14 +108,15 @@ class TestParseSeedItem:
         from project_workflow.infrastructure.db.schema import _phase_item_to_supervisor
 
         raw = {
+            "phase_order": 1,
             "code": "1",
             "name": "One",
             "description": "Desc",
-            "instructions": [{"step": "Do it", "execution_type": "sync"}],
+            "instructions": [{"description": "Do it", "execution_type": "sync"}],
             "checks": [{"description": "Check it"}],
             "evidence": [{"description": "Show it"}],
         }
-        phase = _phase_item_to_supervisor(raw)
+        phase = _phase_item_to_supervisor(_SeedPhase.model_validate(raw))
         assert isinstance(phase, Phase)
         assert phase.code == "1"
 
@@ -115,7 +124,9 @@ class TestParseSeedItem:
 class TestReadSeedItems:
     def test_read_seed_items(self, fresh_db, tmp_path):
         seed_path = tmp_path / "seed.json"
-        seed_path.write_text(json.dumps([{"code": "1", "name": "One"}], ensure_ascii=False))
+        seed_path.write_text(
+            json.dumps([{"phase_order": 1, "code": "1", "name": "One"}], ensure_ascii=False)
+        )
         items = load_phases_from_seed(seed_path)
         assert len(items) == 1
         assert items[0].code == "1"
@@ -130,8 +141,8 @@ class TestReadSeedItems:
         seed_path.write_text(
             json.dumps(
                 [
-                    {"code": "1", "name": "One"},
-                    {"code": "2", "name": "Two"},
+                    {"phase_order": 1, "code": "1", "name": "One"},
+                    {"phase_order": 2, "code": "2", "name": "Two"},
                 ],
                 ensure_ascii=False,
             )

@@ -65,7 +65,7 @@ def _resolve_task_phase(
     current_phase: Any, _db: Any | None = None, workflow_id: int | None = None
 ) -> tuple[str, dict[str, Any] | None]:
     assert _db is not None
-    token = str(current_phase if current_phase is not None else "-1")
+    token = str(current_phase if current_phase is not None else "")
     wdb: Any = _db
 
     workflow_phases = wdb.get_phases(workflow_id=workflow_id) if workflow_id is not None else wdb.get_phases()
@@ -79,7 +79,7 @@ def _resolve_task_phase_local(
     current_phase: Any, workflow_phases: Sequence[dict[str, Any]], workflow_id: int | None = None
 ) -> tuple[str, dict[str, Any] | None]:
     """Resolve a phase token against a preloaded list of phases (no DB hits)."""
-    token = str(current_phase if current_phase is not None else "-1")
+    token = str(current_phase if current_phase is not None else "")
 
     for phase in workflow_phases:
         if str(phase.get("code")) == token:

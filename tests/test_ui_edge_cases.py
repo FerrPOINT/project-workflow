@@ -116,7 +116,7 @@ class TestResolveTaskPhase:
         db = MagicMock()
         db.get_phases.return_value = []
         token, phase = _resolve_task_phase(None, _db=db)
-        assert token == "-1"
+        assert token == ""
         assert phase is None
 
     def test_by_code_match(self):
@@ -328,6 +328,22 @@ class TestApiErrorPaths:
         assert data["error_code"] == "database-unavailable"
         assert "db down" not in response.text
 
+    def test_health_endpoint_rejects_schema_drift_without_details(self):
+        with patch(
+            "project_workflow.infrastructure.db.session.schema_is_ready",
+            return_value=False,
+        ):
+            response = client.get("/health")
+
+        assert response.status_code == 503
+        data = response.json()
+        assert data["ok"] is False
+        assert data["database"] == "ok"
+        assert data["schema"] == "error"
+        assert data["error_code"] == "schema-not-ready"
+        assert "SELECT" not in response.text
+        assert "postgresql" not in response.text
+
     def test_api_workflow_create_missing_name(self):
         response = client.post("/api/workflows", json={})
         assert response.status_code == 400
@@ -335,8 +351,8 @@ class TestApiErrorPaths:
 
     def test_api_workflow_create_with_code_rejected(self):
         response = client.post("/api/workflows", json={"code": "X", "name": "Test"})
-        assert response.status_code == 400
-        assert "no longer supported" in response.json()["error"]
+        assert response.status_code == 422
+        assert "code" in response.text
 
     def test_api_tasks(self):
         response = client.get("/api/tasks")

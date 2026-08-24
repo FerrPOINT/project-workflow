@@ -55,7 +55,7 @@ class TestSupervisorEngineIntegration:
 
         engine = SupervisorEngine("AAT-EMPTY", create_if_missing=False)
         assert engine.task["id"] == task["id"]
-        assert str(engine.task["current_phase"]) == "-1"
+        assert engine.task["current_phase"] == "1.INTAKE"
 
     def test_evaluate_partial_on_real_phase(self, supervisor_db, supervisor_llm):
         uow = SAUnitOfWork(supervisor_db)

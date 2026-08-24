@@ -54,7 +54,7 @@ class TestEndToEndWorkflow:
         TaskService(uow).create_task({"task_key": "AAT-99", "title": "Integ Test"})
         task = uow.get_task_by_key("AAT-99")
         assert task is not None
-        assert int(task["current_phase"]) == -1
+        assert task["current_phase"] == "1.INTAKE"
         workflow_id = uow.workflows.get_default().id
         phase_id = uow.phases.create(
             {"workflow_id": workflow_id, "code": "integration.setup", "name": "Setup", "phase_order": 100}

@@ -34,7 +34,7 @@ class SATaskRepository(TaskRepository):
             task_key=row.task_key,
             title=row.title or "",
             description=row.description or "",
-            current_phase=row.current_phase or "-1",
+            current_phase=row.current_phase,
             current_phase_name="",
             status=row.status or "active",
             created_at=_iso(row.created_at),
@@ -71,7 +71,7 @@ class SATaskRepository(TaskRepository):
             task_key=data["task_key"],
             title=data.get("title"),
             description=data.get("description"),
-            current_phase=data.get("current_phase", "-1"),
+            current_phase=data["current_phase"],
             status=data.get("status", "active"),
         )
         self._session.add(item)

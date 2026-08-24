@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -12,6 +12,40 @@ class StrictRequest(BaseModel):
     """Reject stale or misspelled API fields instead of silently ignoring them."""
 
     model_config = ConfigDict(extra="forbid")
+
+
+class StrictUpdateRequest(StrictRequest):
+    """Give omitted and explicit null distinct, declared meanings."""
+
+    non_nullable_fields: ClassVar[frozenset[str]] = frozenset()
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_explicit_nulls(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        invalid = sorted(field for field in cls.non_nullable_fields if field in value and value[field] is None)
+        if invalid:
+            raise ValueError(f"Fields cannot be null: {', '.join(invalid)}")
+        return value
+
+
+def _strip_nonblank(value: str, field_name: str) -> str:
+    normalized = value.strip()
+    if not normalized:
+        raise ValueError(f"{field_name} must not be blank")
+    return normalized
+
+
+def _normalize_string_list(value: Any, field_name: str) -> list[str] | None:
+    if value is None:
+        return None
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise ValueError(f"{field_name} must be a list of strings or null")
+    normalized = [_strip_nonblank(item, field_name) for item in value]
+    if len(normalized) != len(set(normalized)):
+        raise ValueError(f"{field_name} must contain unique values")
+    return normalized
 
 
 class OptionalIntMixin:
@@ -46,6 +80,11 @@ class PhaseCreate(StrictRequest, OptionalIntMixin):
     parallel_with: str | None = Field(default=None)
     rollback_target: str | None = Field(default=None)
     next_recommendation: str | None = Field(default=None)
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str) -> str:
+        return _strip_nonblank(value, "name")
 
     @field_validator("phase_order", mode="before")
     @classmethod
@@ -84,7 +123,34 @@ class PhaseCreate(StrictRequest, OptionalIntMixin):
         return self
 
 
-class PhaseUpdate(StrictRequest, OptionalIntMixin):
+class PhaseInstructionItem(StrictRequest):
+    description: str
+    execution_type: Literal["sync", "parallel"] = "sync"
+    skills: list[str] | None = None
+
+    @field_validator("description")
+    @classmethod
+    def _description_not_blank(cls, value: str) -> str:
+        return _strip_nonblank(value, "description")
+
+    @field_validator("skills", mode="before")
+    @classmethod
+    def _validate_skills(cls, value: Any) -> list[str] | None:
+        return _normalize_string_list(value, "skills")
+
+
+class PhaseTextItem(StrictRequest):
+    description: str
+
+    @field_validator("description")
+    @classmethod
+    def _description_not_blank(cls, value: str) -> str:
+        return _strip_nonblank(value, "description")
+
+
+class PhaseUpdate(StrictUpdateRequest, OptionalIntMixin):
+    non_nullable_fields = frozenset({"name", "execution_type", "instructions", "checks", "evidence"})
+
     name: str | None = Field(default=None)
     description: str | None = Field(default=None)
     parallel_with: str | None = Field(default=None)
@@ -92,25 +158,47 @@ class PhaseUpdate(StrictRequest, OptionalIntMixin):
     next_recommendation: str | None = Field(default=None)
     agent_id: int | None = Field(default=None)
     execution_type: Literal["sync", "parallel"] | None = Field(default=None)
-    instructions: list[dict[str, Any]] | None = Field(default=None)
-    checks: list[dict[str, Any]] | None = Field(default=None)
-    evidence: list[dict[str, Any]] | None = Field(default=None)
+    instructions: list[PhaseInstructionItem] | None = Field(default=None)
+    checks: list[PhaseTextItem] | None = Field(default=None)
+    evidence: list[PhaseTextItem] | None = Field(default=None)
 
-    code: str | None = Field(default=None, exclude=True)
-    phase_num: int | None = Field(default=None, exclude=True)
-    phase_order: int | None = Field(default=None, exclude=True)
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str | None) -> str | None:
+        return _strip_nonblank(value, "name") if value is not None else None
+
+    @model_validator(mode="after")
+    def _descriptions_must_be_unique(self) -> PhaseUpdate:
+        for field_name in ("checks", "evidence"):
+            items = getattr(self, field_name)
+            if items is None:
+                continue
+            normalized = [item.description.casefold() for item in items]
+            if len(normalized) != len(set(normalized)):
+                raise ValueError(f"{field_name} descriptions must be unique")
+        return self
 
 
 class WorkflowCreate(StrictRequest):
     name: str | None = Field(default=None)
     description: str = Field(default="")
-    code: str | None = Field(default=None)
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str | None) -> str | None:
+        return _strip_nonblank(value, "name") if value is not None else None
 
 
-class WorkflowUpdate(StrictRequest):
+class WorkflowUpdate(StrictUpdateRequest):
+    non_nullable_fields = frozenset({"name", "description"})
+
     name: str | None = Field(default=None)
     description: str | None = Field(default=None)
-    code: str | None = Field(default=None)
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str | None) -> str | None:
+        return _strip_nonblank(value, "name") if value is not None else None
 
 
 class ProjectCreate(StrictRequest, OptionalIntMixin):
@@ -119,6 +207,16 @@ class ProjectCreate(StrictRequest, OptionalIntMixin):
     description: str | None = Field(default="")
     workflow_id: int | None = Field(default=None)
     key_prefixes: list[str] | str = Field(default=[])
+
+    @field_validator("code")
+    @classmethod
+    def _code_not_blank(cls, value: str) -> str:
+        return _strip_nonblank(value, "code")
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str | None) -> str | None:
+        return _strip_nonblank(value, "name") if value is not None else None
 
     @field_validator("workflow_id", mode="before")
     @classmethod
@@ -165,12 +263,19 @@ class ProjectCreate(StrictRequest, OptionalIntMixin):
         return value
 
 
-class ProjectUpdate(StrictRequest, OptionalIntMixin):
+class ProjectUpdate(StrictUpdateRequest, OptionalIntMixin):
+    non_nullable_fields = frozenset({"code", "name", "description", "workflow_id", "key_prefixes"})
+
     code: str | None = Field(default=None, min_length=1)
     name: str | None = Field(default=None)
     description: str | None = Field(default=None)
     workflow_id: int | None = Field(default=None)
     key_prefixes: list[str] | str | None = Field(default=None)
+
+    @field_validator("code", "name")
+    @classmethod
+    def _identity_not_blank(cls, value: str | None, info: Any) -> str | None:
+        return _strip_nonblank(value, info.field_name) if value is not None else None
 
     @field_validator("workflow_id", mode="before")
     @classmethod
@@ -215,6 +320,11 @@ class AgentCreate(StrictRequest):
     description: str = Field(default="")
     hermes_profile: str | None = Field(default=None, max_length=251)
 
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str) -> str:
+        return _strip_nonblank(value, "name")
+
     @field_validator("hermes_profile", mode="before")
     @classmethod
     def _validate_hermes_profile(cls, value: Any) -> str | None:
@@ -226,10 +336,17 @@ class AgentCreate(StrictRequest):
         return profile
 
 
-class AgentUpdate(StrictRequest):
+class AgentUpdate(StrictUpdateRequest):
+    non_nullable_fields = frozenset({"name", "description"})
+
     name: str | None = Field(default=None)
     description: str | None = Field(default=None)
     hermes_profile: str | None = Field(default=None, max_length=251)
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str | None) -> str | None:
+        return _strip_nonblank(value, "name") if value is not None else None
 
     @field_validator("hermes_profile", mode="before")
     @classmethod
@@ -253,11 +370,33 @@ class InstructionCreate(StrictRequest):
     skills: list[str] | None = Field(default=None)
     step_num: int | None = Field(default=None, gt=0, strict=True)
 
+    @field_validator("description")
+    @classmethod
+    def _description_not_blank(cls, value: str) -> str:
+        return _strip_nonblank(value, "description")
 
-class InstructionUpdate(StrictRequest):
+    @field_validator("skills", mode="before")
+    @classmethod
+    def _validate_skills(cls, value: Any) -> list[str] | None:
+        return _normalize_string_list(value, "skills")
+
+
+class InstructionUpdate(StrictUpdateRequest):
+    non_nullable_fields = frozenset({"description", "execution_type"})
+
     description: str | None = Field(default=None, min_length=1)
     execution_type: Literal["sync", "parallel"] | None = Field(default=None)
     skills: list[str] | None = Field(default=None)
+
+    @field_validator("description")
+    @classmethod
+    def _description_not_blank(cls, value: str | None) -> str | None:
+        return _strip_nonblank(value, "description") if value is not None else None
+
+    @field_validator("skills", mode="before")
+    @classmethod
+    def _validate_skills(cls, value: Any) -> list[str] | None:
+        return _normalize_string_list(value, "skills")
 
 
 class InstructionReorder(StrictRequest):

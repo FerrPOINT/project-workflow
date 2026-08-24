@@ -103,6 +103,23 @@ class TaskKeyValidator:
                     normalized=normalized,
                 )
 
+        matching_prefix = next(
+            (
+                prefix
+                for prefix in self.raw_prefixes
+                if stripped == prefix or stripped.startswith(f"{prefix}-")
+            ),
+            None,
+        )
+        if matching_prefix is not None:
+            return ValidatedTaskKey(
+                raw=key,
+                is_valid=False,
+                error_message=(
+                    f"Key '{stripped}' must match {matching_prefix}-<numeric issue number>"
+                ),
+            )
+
         allowed = ", ".join(self.raw_prefixes) or "no configured prefixes"
         error_msg = (
             f"Key '{stripped}' does not match any allowed prefix. "

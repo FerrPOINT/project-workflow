@@ -16,24 +16,22 @@ from tests._phase_helpers import (
 
 class TestPhaseHelpers:
     def test_get_next_phase_intake(self):
-        # "-1" -> first real phase
-        nxt = get_next_phase("-1")
-        assert isinstance(nxt, (str, type(None)))
+        assert get_next_phase("1.INTAKE") == "2.REQUIREMENTS"
 
     def test_get_next_phase_end(self):
         # last phase should return None
-        nxt = get_next_phase("10")
+        nxt = get_next_phase("15.RETRO")
         assert nxt is None
 
     def test_get_phase_checklist_raw(self):
         uow = SAUnitOfWork()
         prepare_sqlite_uow(uow)
-        phase_code = "0.0a" if phase_by_code(uow, "0.0a") else "0.00"
-        items = get_phase_checklist_raw(phase_code)
+        assert phase_by_code(uow, "1.INTAKE") is not None
+        items = get_phase_checklist_raw("1.INTAKE")
         assert isinstance(items, list)
 
     def test_show_phase_checklist(self, capsys):
-        show_phase_checklist("0.00")
+        show_phase_checklist("1.INTAKE")
         captured = capsys.readouterr()
         assert isinstance(captured.out, str)
 
