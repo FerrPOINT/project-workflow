@@ -347,7 +347,7 @@ async def api_agent_delete(agent_id: int) -> dict[str, Any] | JSONResponse:
         return _error(f"Агент {agent_id} не найден", 404)
     phases = _app_state.phase_service().list_phases(None)
     if any(phase.get("agent_id") == agent_id for phase in phases):
-        return _error("Нельзя удалить агента, назначенного на фазу", 400)
+        return _error("Нельзя удалить агента, назначенного на фазу", 409)
     service.delete_agent(agent_id)
     return {"ok": True}
 

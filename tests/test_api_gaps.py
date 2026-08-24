@@ -161,7 +161,7 @@ class TestApiAgentDelete:
             state.agent_service.return_value.get_agent.return_value = {"id": 1}
             state.phase_service.return_value.list_phases.return_value = [{"agent_id": 1}]
             response = client.delete("/api/agents/1")
-        assert response.status_code == 400
+        assert response.status_code == 409
 
 
 class TestApiInstructionCreate:

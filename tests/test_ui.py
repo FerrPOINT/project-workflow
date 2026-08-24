@@ -844,6 +844,23 @@ class TestPhaseDetail:
         assert "el.setAttribute('aria-busy', 'true');" in response.text
         assert "return true;" in response.text
 
+    def test_new_check_and_evidence_wait_for_user_input_before_saving(self):
+        response = client.get(_phase_detail_path("1.INTAKE"))
+
+        assert response.status_code == 200
+        add_check = response.text.split("function addCheck()", 1)[1].split("function addEvidence()", 1)[0]
+        add_evidence = response.text.split("function addEvidence()", 1)[1].split(
+            "/* ---------- Debounced phase meta save ---------- */", 1
+        )[0]
+        assert "savePhase();" not in add_check
+        assert "savePhase();" not in add_evidence
+        assert 'onblur="saveNewTextItem(this)"' in add_check
+        assert 'onblur="saveNewTextItem(this)"' in add_evidence
+        assert "syncTextItemList(list);" in add_check
+        assert "syncTextItemList(list);" in add_evidence
+        assert "li.querySelector('input')?.focus();" in add_check
+        assert "li.querySelector('input')?.focus();" in add_evidence
+
     def test_phases_page_hides_code_and_number_visual_noise(self):
         response = client.get("/phases")
         assert response.status_code == 200

@@ -539,9 +539,33 @@ async function removeSkillFromInstruction(button) {
 }
 
 /* ---------- Checks & Evidence ---------- */
+function syncTextItemList(list) {
+  const count = list.closest('.wiki-section')?.querySelector('.count');
+  const itemCount = list.querySelectorAll('li:not(.empty-state)').length;
+  if (count) count.textContent = String(itemCount);
+  if (itemCount === 0 && !list.querySelector('.empty-state')) {
+    const empty = document.createElement('li');
+    empty.className = 'empty-state';
+    empty.textContent = list.id === 'checks-list' ? 'Нет проверок' : 'Нет evidence';
+    list.appendChild(empty);
+  }
+}
+
+function saveNewTextItem(input) {
+  const list = input.closest('ul');
+  if (!input.value.trim()) {
+    input.closest('li')?.remove();
+    if (list) syncTextItemList(list);
+    return;
+  }
+  scheduleSave();
+}
+
 function deleteItem(btn) {
   const li = btn.closest('li');
+  const list = li?.closest('ul');
   if (li) li.remove();
+  if (list) syncTextItemList(list);
   savePhase();
 }
 
@@ -552,12 +576,13 @@ function addCheck() {
   const li = document.createElement('li');
   li.innerHTML = `
     <span class="status-icon wait">○</span>
-    <input type="text" class="inline-input check-text" value="" data-field="description" onblur="scheduleSave()">
+    <input type="text" class="inline-input check-text" value="" data-field="description" onblur="saveNewTextItem(this)">
     <span class="check-meta">—</span>
     <button class="item-delete" onclick="deleteItem(this)">×</button>
   `;
   list.appendChild(li);
-  savePhase();
+  syncTextItemList(list);
+  li.querySelector('input')?.focus();
 }
 
 function addEvidence() {
@@ -567,12 +592,13 @@ function addEvidence() {
   const li = document.createElement('li');
   li.innerHTML = `
     <span class="file-icon">📄</span>
-    <input type="text" class="inline-input file-name" value="" data-field="description" onblur="scheduleSave()">
+    <input type="text" class="inline-input file-name" value="" data-field="description" onblur="saveNewTextItem(this)">
     <span class="file-status">—</span>
     <button class="item-delete" onclick="deleteItem(this)">×</button>
   `;
   list.appendChild(li);
-  savePhase();
+  syncTextItemList(list);
+  li.querySelector('input')?.focus();
 }
 
 /* ---------- Debounced phase meta save ---------- */

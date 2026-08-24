@@ -619,7 +619,7 @@ class TestApiAgents:
         phase_id = _phase_id(client, "1.INTAKE")
         _app_state.phase_service().update_phase(phase_id, {"agent_id": agent_id})
         resp = client.delete(f"/api/agents/{agent_id}")
-        assert resp.status_code == 400
+        assert resp.status_code == 409
 
 
 class TestApiInstructions:
