@@ -113,7 +113,7 @@ class OpenAICompatibleClient:
 class PromptBuilder:
     """Build prompts from phase contracts + task context."""
 
-    PROMPT_VERSION = "supervisor-evaluator-v6"
+    PROMPT_VERSION = "supervisor-evaluator-v7"
 
     SYSTEM_PROMPT = (
         "You are a strict workflow supervisor. "
@@ -180,6 +180,14 @@ class PromptBuilder:
             lines.append("Required checks and evidence (copy only each quoted ID value into JSON):")
             for item_id, description in evaluation_items:
                 lines.append(f'  ID: "{item_id}" — {description}')
+            lines.extend(
+                [
+                    f"REQUIRED ITEM COUNT: {len(evaluation_items)}",
+                    "Before returning JSON, verify that covered and missing are disjoint, "
+                    "contain no duplicates, and together contain every required ID above exactly once.",
+                    f"The sum len(covered) + len(missing) MUST equal {len(evaluation_items)}.",
+                ]
+            )
         else:
             if phase.checks:
                 lines.append("Checks:")

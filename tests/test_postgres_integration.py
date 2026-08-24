@@ -1210,7 +1210,7 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
     assert len(set(fingerprints)) == 15
     assert all(run.context_snapshot["model"] == "e2e-contract-model" for run in runs)
     assert all(run.context_snapshot["endpoint_mode"] == "openai-compatible" for run in runs)
-    assert all(run.context_snapshot["prompt_version"] == "supervisor-evaluator-v6" for run in runs)
+    assert all(run.context_snapshot["prompt_version"] == "supervisor-evaluator-v7" for run in runs)
     assert all(run.context_snapshot["raw_evaluator"]["verdict"] == "PASS" for run in runs)
     uow.close()
 

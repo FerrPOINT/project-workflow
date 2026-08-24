@@ -210,6 +210,8 @@ class TestPromptBuilder:
 
         assert 'ID: "-1:check:1"' in prompt
         assert "[-1:check:1]" not in prompt
+        assert "REQUIRED ITEM COUNT: 1" in prompt
+        assert "len(covered) + len(missing) MUST equal 1" in prompt
 
     def test_system_prompt_is_not_empty(self):
         assert "strict workflow supervisor" in PromptBuilder.SYSTEM_PROMPT
@@ -530,7 +532,7 @@ class TestEvaluatorV6PromptContract:
     """The live provider receives explicit contradiction and chronology rules."""
 
     def test_prompt_version_is_v6(self):
-        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v6"
+        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v7"
 
     def test_contradictory_current_facts_prohibit_pass(self):
         prompt = PromptBuilder.SYSTEM_PROMPT
