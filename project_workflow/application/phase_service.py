@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from project_workflow.domain.phase_grouping import group_parallel_phases
 from project_workflow.domain.repositories import UnitOfWork
 
 
@@ -16,18 +15,16 @@ class PhaseService:
 
     # ── Bulk save helpers (atomic) ─────────────────────────────────────
 
-    def _resolve_phase_id(self, phase_id: int | str) -> int:
-        try:
-            candidate = int(phase_id)
-        except (TypeError, ValueError) as exc:
-            raise ValueError(f"Phase id must be numeric: {phase_id}") from exc
-        phase = self._uow.phases.get_by_id(candidate)
+    def _resolve_phase_id(self, phase_id: int) -> int:
+        if not isinstance(phase_id, int) or isinstance(phase_id, bool):
+            raise ValueError(f"Phase id must be numeric: {phase_id}")
+        phase = self._uow.phases.get_by_id(phase_id)
         if not phase or phase.id is None:
             raise ValueError(f"Phase not found: {phase_id}")
         return phase.id
 
     def save_instructions(
-        self, phase_id: int | str, items: list[dict[str, Any]], *, commit: bool = True
+        self, phase_id: int, items: list[dict[str, Any]], *, commit: bool = True
     ) -> list[int]:
         """Replace all instructions for a phase.  Returns new ids in order."""
         resolved = self._resolve_phase_id(phase_id)
@@ -48,7 +45,7 @@ class PhaseService:
             self._uow.commit()
         return ids
 
-    def save_checks(self, phase_id: int | str, items: list[dict[str, Any]], *, commit: bool = True) -> list[int]:
+    def save_checks(self, phase_id: int, items: list[dict[str, Any]], *, commit: bool = True) -> list[int]:
         """Replace all checks for a phase."""
         resolved = self._resolve_phase_id(phase_id)
         ids: list[int] = []
@@ -60,7 +57,7 @@ class PhaseService:
             self._uow.commit()
         return ids
 
-    def save_evidence(self, phase_id: int | str, items: list[dict[str, Any]], *, commit: bool = True) -> list[int]:
+    def save_evidence(self, phase_id: int, items: list[dict[str, Any]], *, commit: bool = True) -> list[int]:
         """Replace all evidence for a phase."""
         resolved = self._resolve_phase_id(phase_id)
         ids: list[int] = []
@@ -73,7 +70,7 @@ class PhaseService:
 
     # ── Read helpers ─────────────────────────────────────────────────
 
-    def get_phase_detail(self, phase_id: int | str) -> dict[str, Any]:
+    def get_phase_detail(self, phase_id: int) -> dict[str, Any]:
         """Return a phase with nested content."""
         try:
             resolved = self._resolve_phase_id(phase_id)
@@ -103,56 +100,11 @@ class PhaseService:
             "evidence": evidence,
         }
 
-    def update_phase(self, phase_id: int | str, data: dict[str, Any], *, commit: bool = True) -> None:
+    def update_phase(self, phase_id: int, data: dict[str, Any], *, commit: bool = True) -> None:
         from project_workflow.application.phase import PhaseServiceApp
 
         resolved = self._resolve_phase_id(phase_id)
-        validated = PhaseServiceApp(self._uow).prepare_update(resolved, data)
-        self._uow.phases.update(resolved, self._prepare_execution_update(resolved, validated))
-        if commit:
-            self._uow.commit()
-
-    def _prepare_execution_update(self, phase_id: int, data: dict[str, Any]) -> dict[str, Any]:
-        """Attach a sync phase to a neighboring parallel component on toggle.
-
-        Existing ``parallel_with`` is deliberately retained while a phase is
-        temporarily sync.  The runtime ignores links on sync phases, while a
-        later sync -> parallel toggle can restore the exact previous component.
-        """
-        updates = dict(data)
-        if updates.get("execution_type") != "parallel" or "parallel_with" in updates:
-            return updates
-
-        phase = self._uow.phases.get_by_id(phase_id)
-        if phase is None or phase.execution_type == "parallel":
-            return updates
-
-        phases = list(self._uow.phases.list(workflow_id=phase.workflow_id))
-        current_index = next((index for index, item in enumerate(phases) if item.id == phase_id), None)
-        if current_index is None:
-            return updates
-
-        if phase.parallel_with:
-            groups = group_parallel_phases(
-                phases,
-                code_of=lambda item: item.code,
-                execution_type_of=lambda item: "parallel" if item.id == phase_id else item.execution_type,
-                parallel_with_of=lambda item: item.parallel_with,
-            )
-            if any(
-                phase.code in {item.code for item in group}
-                and phase.parallel_with in {item.code for item in group}
-                for group in groups
-            ):
-                return updates
-
-        previous = phases[current_index - 1] if current_index > 0 else None
-        following = phases[current_index + 1] if current_index + 1 < len(phases) else None
-        partner = previous if previous and previous.execution_type == "parallel" else None
-        if partner is None and following and following.execution_type == "parallel":
-            partner = following
-        updates["parallel_with"] = partner.code if partner else None
-        return updates
+        PhaseServiceApp(self._uow).update_phase(resolved, data, commit=commit)
 
     @staticmethod
     def normalize_skills(raw: Any) -> list[str]:

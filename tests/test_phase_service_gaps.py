@@ -37,7 +37,6 @@ class TestPhaseServiceUow:
 
     def test_get_phase_detail_returns_empty_on_resolve_error(self):
         uow = MagicMock()
-        uow.phases.get_by_code.return_value = None
         service = PhaseService(uow)
         assert service.get_phase_detail("missing") == {}
 
@@ -45,7 +44,6 @@ class TestPhaseServiceUow:
         uow = MagicMock()
         phase = MagicMock()
         phase.id = 7
-        uow.phases.get_by_code.return_value = phase
         uow.phases.get_by_id.return_value = None
         service = PhaseService(uow)
         assert service.get_phase_detail(7) == {}

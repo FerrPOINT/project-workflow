@@ -83,22 +83,10 @@ class UIDataService:
             )
         return result
 
-    def _coerce_phase_db_id(self, raw_phase_id: int | str | None) -> int | None:
-        if isinstance(raw_phase_id, int):
-            return raw_phase_id if raw_phase_id > 0 else None
-        if raw_phase_id is None:
+    def _load_phase_detail(self, phase_id: int) -> dict[str, Any] | None:
+        if phase_id <= 0:
             return None
-        token = str(raw_phase_id).strip()
-        if not token.isdigit():
-            return None
-        phase_id = int(token)
-        return phase_id if phase_id > 0 else None
-
-    def _load_phase_detail(self, phase_id: int | str) -> dict[str, Any] | None:
-        resolved_phase_id = self._coerce_phase_db_id(phase_id)
-        if resolved_phase_id is None:
-            return None
-        phase = self._app_state.get_service().get_phase_detail(resolved_phase_id)
+        phase = self._app_state.get_service().get_phase_detail(phase_id)
         if not phase:
             return None
         phase = dict(phase)

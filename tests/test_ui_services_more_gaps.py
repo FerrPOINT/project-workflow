@@ -14,7 +14,6 @@ from project_workflow.interfaces.ui.services import (
     _get_task_detail,
     _load_cli_reference,
     _load_dashboard,
-    _parse_key_prefixes,
     _resolve_task_phase,
 )
 
@@ -27,11 +26,6 @@ def _mock_state(uow=None):
 
 
 class TestServicesMoreGaps:
-
-    def test_parse_key_prefixes(self):
-        assert _parse_key_prefixes(["a", " b "]) == ["A", "B"]
-        assert _parse_key_prefixes("a\nb") == ["A", "B"]
-        assert _parse_key_prefixes(123) == []
 
     def test_build_parallel_phase_blocks(self):
         blocks = _build_parallel_phase_blocks(

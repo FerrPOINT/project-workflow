@@ -30,6 +30,7 @@ from project_workflow import config as config_module
 from project_workflow.application.phase import PhaseServiceApp
 from project_workflow.application.project import ProjectService
 from project_workflow.application.task import TaskService
+from project_workflow.application.workflow import WorkflowService
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.infrastructure.db.session import (
     ensure_migrated,
@@ -559,6 +560,160 @@ class TestPostgresUoW:
         assert verify.phases.get_by_id(first_id) is not None
         verify.close()
 
+    @pytest.mark.parametrize("operation", ["project", "phase"])
+    def test_workflow_delete_serializes_with_dependent_creation(self, pg_url, operation):
+        ensure_migrated(get_engine(pg_url))
+        setup = SAUnitOfWork(pg_url)
+        workflow = WorkflowService(setup).create_workflow({"name": f"Delete race {operation}"})
+        workflow_id = int(workflow["id"])
+        setup.close()
+
+        creator_holds_workflow_lock = Event()
+        delete_started_lock = Event()
+        release_creator = Event()
+
+        def create_dependent() -> str:
+            uow = SAUnitOfWork(pg_url)
+            original_lock = uow.workflows.lock
+
+            def paused_lock(workflow_id_arg: int):
+                locked = original_lock(workflow_id_arg)
+                creator_holds_workflow_lock.set()
+                assert release_creator.wait(10)
+                return locked
+
+            uow.workflows.lock = paused_lock
+            try:
+                if operation == "project":
+                    ProjectService(uow).create_project(
+                        {
+                            "workflow_id": workflow_id,
+                            "code": "DELETE-RACE",
+                            "name": "Delete race",
+                            "key_prefixes": ["DELETERACE"],
+                        }
+                    )
+                else:
+                    PhaseServiceApp(uow).create_phase(
+                        {
+                            "workflow_id": workflow_id,
+                            "code": "delete.race.phase",
+                            "name": "Delete race phase",
+                            "phase_order": 2,
+                        }
+                    )
+                return "created"
+            finally:
+                uow.close()
+
+        def delete_workflow() -> str:
+            uow = SAUnitOfWork(pg_url)
+            original_lock = uow.workflows.lock
+
+            def observed_lock(workflow_id_arg: int):
+                delete_started_lock.set()
+                return original_lock(workflow_id_arg)
+
+            uow.workflows.lock = observed_lock
+            try:
+                WorkflowService(uow).delete_workflow(workflow_id)
+                return "deleted"
+            except ConflictError:
+                uow.rollback()
+                return "rejected"
+            finally:
+                uow.close()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            create_result = pool.submit(create_dependent)
+            assert creator_holds_workflow_lock.wait(10)
+            delete_result = pool.submit(delete_workflow)
+            assert delete_started_lock.wait(10)
+            release_creator.set()
+            assert create_result.result(timeout=20) == "created"
+            assert delete_result.result(timeout=20) == "rejected"
+
+        verify = SAUnitOfWork(pg_url)
+        assert verify.workflows.get_by_id(workflow_id) is not None
+        if operation == "project":
+            assert verify.projects.get_by_code("DELETE-RACE") is not None
+        else:
+            assert verify.phases.get_by_code(workflow_id, "delete.race.phase") is not None
+        verify.close()
+
+    def test_project_move_serializes_with_task_creation(self, pg_url):
+        ensure_migrated(get_engine(pg_url))
+        setup = SAUnitOfWork(pg_url)
+        source = WorkflowService(setup).create_workflow({"name": "Move race source"})
+        target = WorkflowService(setup).create_workflow({"name": "Move race target"})
+        project = ProjectService(setup).create_project(
+            {
+                "workflow_id": source["id"],
+                "code": "MOVE-RACE",
+                "name": "Move race",
+                "key_prefixes": ["MOVERACE"],
+            }
+        )
+        setup.close()
+
+        task_holds_workflow_lock = Event()
+        move_started_lock = Event()
+        release_task = Event()
+
+        def create_task() -> str:
+            uow = SAUnitOfWork(pg_url)
+            original_project_lock = uow.projects.lock
+
+            def paused_project_lock(project_id_arg: int):
+                locked = original_project_lock(project_id_arg)
+                task_holds_workflow_lock.set()
+                assert release_task.wait(10)
+                return locked
+
+            uow.projects.lock = paused_project_lock
+            try:
+                TaskService(uow).create_task(
+                    {"project_id": project["id"], "task_key": "MOVERACE-1"}
+                )
+                return "created"
+            finally:
+                uow.close()
+
+        def move_project() -> str:
+            uow = SAUnitOfWork(pg_url)
+            original_lock = uow.workflows.lock
+
+            def observed_lock(workflow_id_arg: int):
+                move_started_lock.set()
+                return original_lock(workflow_id_arg)
+
+            uow.workflows.lock = observed_lock
+            try:
+                ProjectService(uow).update_project(
+                    project["id"], {"workflow_id": target["id"]}
+                )
+                return "moved"
+            except ConflictError:
+                uow.rollback()
+                return "rejected"
+            finally:
+                uow.close()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            task_result = pool.submit(create_task)
+            assert task_holds_workflow_lock.wait(10)
+            move_result = pool.submit(move_project)
+            assert move_started_lock.wait(10)
+            release_task.set()
+            assert task_result.result(timeout=20) == "created"
+            assert move_result.result(timeout=20) == "rejected"
+
+        verify = SAUnitOfWork(pg_url)
+        stored_project = verify.projects.get_by_id(project["id"])
+        assert stored_project is not None and stored_project.workflow_id == source["id"]
+        assert verify.tasks.get_by_key("MOVERACE-1") is not None
+        verify.close()
+
 
 def _pass_response(user_prompt: str) -> dict:
     item_ids = []
@@ -1023,13 +1178,13 @@ def test_cli_verdicts_replay_and_fail_closed_through_postgres_and_http(pg_url):
     delegate_task = uow.tasks.get_by_key("RUN-82007")
     assert (partial_task.current_phase, partial_task.status) == ("1.INTAKE", "active")
     assert (blocked_task.current_phase, blocked_task.status) == ("1.INTAKE", "blocked")
-    assert (invalid_task.current_phase, invalid_task.status) == ("1.INTAKE", "active")
-    assert (http_task.current_phase, http_task.status) == ("1.INTAKE", "active")
+    assert (invalid_task.current_phase, invalid_task.status) == ("1.INTAKE", "blocked")
+    assert (http_task.current_phase, http_task.status) == ("1.INTAKE", "blocked")
     assert (rollback_task.current_phase, rollback_task.status) == ("8.IMPLEMENT", "active")
     assert (delegate_task.current_phase, delegate_task.status) == ("10.REVIEW", "active")
     invalid_runs = list(uow.supervisor_runs.list(task_id=invalid_task.id, limit=10))
     assert len(invalid_runs) == 2
     assert all(run.report_fingerprint is None for run in invalid_runs)
-    assert uow.tasks.get_history(invalid_task.id) == []
-    assert uow.tasks.get_history(http_task.id) == []
+    assert [item["status"] for item in uow.tasks.get_history(invalid_task.id)] == ["blocked"]
+    assert [item["status"] for item in uow.tasks.get_history(http_task.id)] == ["blocked"]
     uow.close()

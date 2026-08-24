@@ -11,7 +11,6 @@ pytestmark = [pytest.mark.ui]
 
 from project_workflow.interfaces.ui import (
     _build_parallel_phase_blocks,
-    _coerce_phase_db_id,
     _group_instructions,
     _load_cli_reference,
     _load_tasks,
@@ -94,23 +93,6 @@ class TestParseOptionalInt:
         assert _parse_optional_int("-1") is None
 
 
-class TestCoercePhaseDbId:
-    def test_int_positive(self):
-        assert _coerce_phase_db_id(42) == 42
-
-    def test_int_zero(self):
-        assert _coerce_phase_db_id(0) is None
-
-    def test_none(self):
-        assert _coerce_phase_db_id(None) is None
-
-    def test_digit_string(self):
-        assert _coerce_phase_db_id("42") == 42
-
-    def test_non_digit_string(self):
-        assert _coerce_phase_db_id("abc") is None
-
-
 class TestResolveTaskPhase:
     def test_none_current_phase(self):
         db = MagicMock()
@@ -126,11 +108,11 @@ class TestResolveTaskPhase:
         assert token == "1"
         assert phase["code"] == "1"
 
-    def test_numeric_id_is_not_a_current_phase_code(self):
+    def test_numeric_id_is_rejected_as_current_phase_code(self):
         db = MagicMock()
         db.get_phases.return_value = [{"id": 42, "code": "1", "name": "One", "phase_order": 1}]
-        token, phase = _resolve_task_phase(42, _db=db)
-        assert phase is None
+        with pytest.raises(TypeError):
+            _resolve_task_phase(42, _db=db)
 
     def test_unresolvable(self):
         db = MagicMock()
@@ -346,8 +328,8 @@ class TestApiErrorPaths:
 
     def test_api_workflow_create_missing_name(self):
         response = client.post("/api/workflows", json={})
-        assert response.status_code == 400
-        assert "name required" in response.json()["error"]
+        assert response.status_code == 422
+        assert "name" in response.text
 
     def test_api_workflow_create_with_code_rejected(self):
         response = client.post("/api/workflows", json={"code": "X", "name": "Test"})

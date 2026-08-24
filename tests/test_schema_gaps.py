@@ -13,7 +13,6 @@ from project_workflow.infrastructure.db.schema import (
     _phase_item_to_supervisor,
     _SeedPhase,
     ensure_phase_catalog,
-    get_phase_from_db,
     load_phases_from_db,
     load_phases_from_seed,
 )
@@ -21,6 +20,10 @@ from project_workflow.infrastructure.db.session import ensure_schema
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
 pytestmark = [pytest.mark.ui]
+
+
+def _phase_by_code(uow, code: str, workflow_id: int):
+    return next((phase for phase in load_phases_from_db(uow, workflow_id) if phase.code == code), None)
 
 
 def _seed_path(tmp_path: Path) -> Path:
@@ -55,8 +58,8 @@ def test_phase_lookup_is_scoped_to_workflow(tmp_path, monkeypatch):
     )
     uow.commit()
 
-    default_phase = get_phase_from_db(uow, "1.INTAKE", default.id)
-    other_phase = get_phase_from_db(uow, "1.INTAKE", other_id)
+    default_phase = _phase_by_code(uow, "1.INTAKE", default.id)
+    other_phase = _phase_by_code(uow, "1.INTAKE", other_id)
     assert default_phase is not None and default_phase.name != "Other phase"
     assert other_phase is not None and other_phase.name == "Other phase"
     uow.close()
@@ -133,7 +136,7 @@ def test_catalog_bootstrap_is_database_idempotent(tmp_path, monkeypatch):
         ({"phase_order": 1, "code": "P", "name": "Phase", "evidence": [""]}, "description"),
         (
             {"phase_order": 1, "code": "P", "name": "Phase", "parallel_with": "MISSING"},
-            "unknown phase",
+            "cannot define parallel_with",
         ),
         (
             {
@@ -190,24 +193,13 @@ def test_seed_rejects_noncontiguous_order_duplicate_codes_and_descriptions(tmp_p
             [
                 {
                     "phase_order": 1,
-                    "code": "P",
-                    "name": "Parallel",
-                    "execution_type": "parallel",
-                }
-            ],
-            "requires parallel_with",
-        ),
-        (
-            [
-                {
-                    "phase_order": 1,
                     "code": "A",
                     "name": "Sync",
                     "parallel_with": "B",
                 },
                 {"phase_order": 2, "code": "B", "name": "Sync"},
             ],
-            "sync phase cannot define parallel_with",
+            "sync phase .*cannot define parallel_with",
         ),
         (
             [
@@ -245,6 +237,25 @@ def test_seed_rejects_invalid_execution_graph(tmp_path, catalog, message):
     path.write_text(json.dumps(catalog), encoding="utf-8")
     with pytest.raises(ValueError, match=message):
         _load_seed(path)
+
+
+def test_seed_accepts_isolated_parallel_phase(tmp_path):
+    path = tmp_path / "isolated-parallel.json"
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    "phase_order": 1,
+                    "code": "P",
+                    "name": "Parallel",
+                    "execution_type": "parallel",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    assert _load_seed(path)[0].parallel_with is None
 
 
 def test_invalid_seed_is_detected_before_catalog_writes(tmp_path):

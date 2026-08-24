@@ -35,17 +35,15 @@ def test_load_functions_delegate_to_ui_data_service():
     mock_svc._load_projects.return_value = [{"id": 5}]
     mock_svc._load_dashboard.return_value = {"count": 1}
     mock_svc._get_task_detail.return_value = {"id": 6}
-    mock_svc._coerce_phase_db_id.return_value = 7
 
     with patch.object(services_mod, "_ui_data_service", return_value=mock_svc):
         assert services_mod._load_workflows() == [{"id": 1}]
         assert services_mod._load_phases() == [{"id": 2}]
-        assert services_mod._load_phase_detail("x") == {"id": 3}
+        assert services_mod._load_phase_detail(3) == {"id": 3}
         assert services_mod._load_tasks() == [{"id": 4}]
         assert services_mod._load_projects() == [{"id": 5}]
         assert services_mod._load_dashboard() == {"count": 1}
         assert services_mod._get_task_detail("T-1") == {"id": 6}
-        assert services_mod._coerce_phase_db_id("7") == 7
 
 
 def test_resolve_task_phase():

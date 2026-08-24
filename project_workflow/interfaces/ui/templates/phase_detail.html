@@ -106,6 +106,15 @@
         <b class="mode-sync">⏱ sync</b>
         {% endif %}
       </span>
+      <label id="parallelPartnerRow" {% if phase.execution_type != 'parallel' %}hidden{% endif %}>
+        Связать с:
+        <select id="parallelPartnerSelect" class="inline-input" onchange="scheduleSave()">
+          <option value="">— изолированная фаза —</option>
+          {% for candidate in parallel_candidates %}
+          <option value="{{ candidate.code }}" {% if phase.parallel_with == candidate.code %}selected{% endif %}>{{ candidate.name }} · {{ candidate.code }}</option>
+          {% endfor %}
+        </select>
+      </label>
     </div>
   </div>
 
@@ -270,6 +279,12 @@ function setPhaseMode(el, mode) {
   } else {
     b.className = 'mode-sync';
     b.textContent = '⏱ sync';
+  }
+  const partnerRow = document.getElementById('parallelPartnerRow');
+  if (partnerRow) partnerRow.hidden = mode !== 'parallel';
+  if (mode !== 'parallel') {
+    const partnerSelect = document.getElementById('parallelPartnerSelect');
+    if (partnerSelect) partnerSelect.value = '';
   }
 }
 
@@ -580,7 +595,12 @@ async function savePhase() {
     checks: [],
     evidence: [],
     execution_type: document.querySelector('.execution-toggle')?.dataset.mode || 'sync',
-    agent_id: document.getElementById('agentSelect')?.value || null,
+    parallel_with: (document.querySelector('.execution-toggle')?.dataset.mode || 'sync') === 'parallel'
+      ? (document.getElementById('parallelPartnerSelect')?.value || null)
+      : null,
+    agent_id: document.getElementById('agentSelect')?.value
+      ? Number(document.getElementById('agentSelect').value)
+      : null,
   };
 
   document.querySelectorAll('#checks-list li').forEach((li) => {

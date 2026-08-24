@@ -20,29 +20,45 @@ from project_workflow.interfaces.ui.schemas import (
 
 
 def test_phase_create_insert_after():
-    p = PhaseCreate(insert_after=3)
+    p = PhaseCreate(workflow_id=1, insert_after=3)
     assert p.phase_order == 4
-    first = PhaseCreate(insert_after=0)
+    first = PhaseCreate(workflow_id=1, insert_after=0)
     assert first.phase_order == 1
 
 
 def test_phase_create_rejects_conflicting_order_fields():
     with pytest.raises(ValueError, match="phase_order conflicts with insert_after"):
-        PhaseCreate(phase_order=3, insert_after=0)
+        PhaseCreate(workflow_id=1, phase_order=3, insert_after=0)
 
 
-def test_phase_create_phase_order_coercion():
-    p = PhaseCreate(phase_order="5")
-    assert p.phase_order == 5
+def test_phase_create_phase_order_is_strict():
     with pytest.raises(ValueError):
-        PhaseCreate(phase_order="bad")
+        PhaseCreate(workflow_id=1, phase_order="5")
     with pytest.raises(ValueError):
-        PhaseCreate(phase_order="0")
+        PhaseCreate(workflow_id=1, phase_order=0)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"phase_order": 1},
+        {"workflow_id": None, "phase_order": 1},
+        {"workflow_id": "1", "phase_order": 1},
+        {"workflow_id": 1, "phase_order": None},
+        {"workflow_id": 1, "insert_after": None},
+        {"workflow_id": 1, "insert_after": "0"},
+    ],
+)
+def test_phase_create_requires_strict_identifiers_and_order(payload):
+    with pytest.raises(ValueError):
+        PhaseCreate.model_validate(payload)
 
 
 def test_phase_update_fields():
     p = PhaseUpdate(name="X")
     assert p.name == "X"
+    with pytest.raises(ValueError, match="must not be blank"):
+        PhaseUpdate(parallel_with=" ")
 
 
 def test_request_schemas_reject_unknown_legacy_fields():
@@ -60,13 +76,28 @@ def test_workflow_create_update():
 
 
 def test_project_create_defaults():
-    with pytest.raises(ValueError, match="At least one task key prefix"):
+    with pytest.raises(ValueError, match="Field required"):
         ProjectCreate(code="PRJ")
 
 
-def test_project_create_prefixes_from_str():
-    p = ProjectCreate(code="PRJ", key_prefixes="aa\nbb")
-    assert p.key_prefixes == ["AA", "BB"]
+def test_project_create_rejects_prefixes_from_str():
+    with pytest.raises(ValueError, match="list of strings"):
+        ProjectCreate(code="PRJ", key_prefixes="aa\nbb")
+
+
+def test_project_prefixes_reject_non_string_items():
+    with pytest.raises(ValueError, match="list of strings"):
+        ProjectCreate(code="PRJ", key_prefixes=["PRJ", 7])
+    with pytest.raises(ValueError, match="must not be blank"):
+        ProjectCreate(code="PRJ", key_prefixes=["PRJ", " "])
+
+
+def test_phase_order_update_requires_non_empty_orders():
+    for payload in ({}, {"orders": []}):
+        with pytest.raises(ValueError):
+            PhaseOrderUpdate.model_validate(payload)
+    with pytest.raises(ValueError):
+        PhaseOrderUpdate.model_validate({"orders": [{"phase_id": "1", "phase_order": 1}]})
 
 
 def test_project_create_invalid_prefix():
@@ -78,9 +109,9 @@ def test_project_create_invalid_prefix():
 
 @pytest.mark.parametrize("value", ["bad", 0, -1])
 def test_project_workflow_id_rejects_invalid_explicit_values(value):
-    with pytest.raises(ValueError, match="positive integer"):
+    with pytest.raises(ValueError):
         ProjectCreate(code="PRJ", key_prefixes=["PRJ"], workflow_id=value)
-    with pytest.raises(ValueError, match="positive integer"):
+    with pytest.raises(ValueError):
         ProjectUpdate(workflow_id=value)
 
 
@@ -89,7 +120,7 @@ def test_project_update_optional_prefixes():
     assert p.key_prefixes is None
     with pytest.raises(ValueError, match="cannot be null"):
         ProjectUpdate(code="PRJ", key_prefixes=None)
-    with pytest.raises(ValueError, match="At least one task key prefix"):
+    with pytest.raises(ValueError, match="list of strings"):
         ProjectUpdate(code="PRJ", key_prefixes="")
 
 

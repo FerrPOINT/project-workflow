@@ -118,7 +118,11 @@ def test_phase_delete_rejects_links_current_tasks_and_history():
     first, second, third = phases
     service = _app_state.phase_service()
 
-    service.update_phase(second["id"], {"parallel_with": first["code"]})
+    service.update_phase(first["id"], {"execution_type": "parallel"})
+    service.update_phase(
+        second["id"],
+        {"execution_type": "parallel", "parallel_with": first["code"]},
+    )
     assert client.delete(f"/api/phases/{first['id']}").status_code == 409
     service.update_phase(second["id"], {"parallel_with": None})
 
@@ -283,19 +287,21 @@ def test_nullable_phase_fields_distinguish_omitted_from_explicit_null():
     first, second = phases
     agent = _app_state.agent_service().create_agent({"name": _unique("agent")})
     service = _app_state.phase_service()
+    service.update_phase(first["id"], {"execution_type": "parallel"})
     service.update_phase(
-        first["id"],
+        second["id"],
         {
             "description": "Present",
-            "parallel_with": second["code"],
-            "rollback_target": second["code"],
+            "execution_type": "parallel",
+            "parallel_with": first["code"],
+            "rollback_target": first["code"],
             "next_recommendation": "Next",
             "agent_id": agent["id"],
         },
     )
 
     response = client.put(
-        f"/api/phases/{first['id']}",
+        f"/api/phases/{second['id']}",
         json={
             "description": None,
             "parallel_with": None,
@@ -305,7 +311,7 @@ def test_nullable_phase_fields_distinguish_omitted_from_explicit_null():
         },
     )
     assert response.status_code == 200
-    updated = service.get_phase(first["id"])
+    updated = service.get_phase(second["id"])
     assert updated["description"] is None
     assert updated["parallel_with"] is None
     assert updated["rollback_target"] is None
@@ -322,6 +328,19 @@ def test_projects_page_exposes_description_editor():
     assert response.status_code == 200
     assert 'id="projectDescription"' in response.text
     assert "description: document.getElementById('projectDescription').value.trim()" in response.text
+
+
+def test_phase_detail_exposes_explicit_parallel_partner_editor():
+    phase = next(
+        phase for phase in _app_state.phase_service().list_phases() if phase["code"] == "7.PLAN_GATE"
+    )
+    response = client.get(f"/phase/{phase['id']}")
+    assert response.status_code == 200
+    assert 'id="parallelPartnerSelect"' in response.text
+    assert "— изолированная фаза —" in response.text
+    assert 'value="6.TEST_PLAN"' in response.text
+    assert 'value="10.REVIEW"' not in response.text
+    assert "partnerSelect.value = '';" in response.text
 
 
 @pytest.mark.parametrize("raw_skills", ["{broken", ""])

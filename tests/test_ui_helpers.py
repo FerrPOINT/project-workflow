@@ -6,7 +6,6 @@ from unittest.mock import MagicMock
 
 from project_workflow.interfaces.ui.helpers import (
     _build_parallel_phase_blocks,
-    _parse_key_prefixes,
     _parse_optional_int,
     _resolve_task_phase,
     _resolve_task_phase_local,
@@ -30,13 +29,6 @@ def test_group_instructions():
     b = {"id": 2, "execution_type": "parallel"}
     c = {"id": 3, "execution_type": "sync"}
     assert _group_instructions([a, b, c]) == [[a, b], [c]]
-
-
-def test_parse_key_prefixes():
-    assert _parse_key_prefixes(["aa", " bb "]) == ["AA", "BB"]
-    assert _parse_key_prefixes("xx\nyy\n") == ["XX", "YY"]
-    assert _parse_key_prefixes(None) == []
-    assert _parse_key_prefixes(123) == []
 
 
 def test_run_to_dict():

@@ -63,19 +63,19 @@ class OptionalIntMixin:
 
 
 class _PhaseOrderItem(StrictRequest):
-    phase_id: int = Field(gt=0)
-    phase_order: int = Field(gt=0)
-    workflow_id: int | None = Field(default=None)
+    phase_id: int = Field(gt=0, strict=True)
+    phase_order: int = Field(gt=0, strict=True)
+    workflow_id: int | None = Field(default=None, gt=0, strict=True)
 
 
 class PhaseCreate(StrictRequest, OptionalIntMixin):
-    workflow_id: int | None = Field(default=None, gt=0, strict=True, description="Parent workflow id")
-    phase_order: int | None = Field(default=None, description="1-based insertion position")
-    insert_after: int | None = Field(default=None, description="Insert after this 0-based index")
+    workflow_id: int = Field(gt=0, strict=True, description="Parent workflow id")
+    phase_order: int | None = Field(default=None, gt=0, strict=True, description="1-based insertion position")
+    insert_after: int | None = Field(default=None, ge=0, strict=True, description="Insert after this 0-based index")
     name: str = Field(default="Новая фаза")
     description: str = Field(default="")
     execution_type: Literal["sync", "parallel"] = Field(default="sync")
-    agent_id: int | None = Field(default=None)
+    agent_id: int | None = Field(default=None, gt=0, strict=True)
     code: str | None = Field(default=None)
     parallel_with: str | None = Field(default=None)
     rollback_target: str | None = Field(default=None)
@@ -86,34 +86,20 @@ class PhaseCreate(StrictRequest, OptionalIntMixin):
     def _name_not_blank(cls, value: str) -> str:
         return _strip_nonblank(value, "name")
 
-    @field_validator("phase_order", mode="before")
+    @field_validator("code")
     @classmethod
-    def _validate_phase_order(cls, value: Any) -> int | None:
-        if value is None or value == "":
-            return None
-        try:
-            parsed = int(str(value).strip())
-        except (TypeError, ValueError) as exc:
-            raise ValueError("phase_order must be an integer") from exc
-        if parsed <= 0:
-            raise ValueError("phase_order must be positive")
-        return parsed
+    def _code_not_blank(cls, value: str | None) -> str | None:
+        return _strip_nonblank(value, "code") if value is not None else None
 
-    @field_validator("insert_after", mode="before")
+    @field_validator("parallel_with", "rollback_target")
     @classmethod
-    def _validate_insert_after(cls, value: Any) -> int | None:
-        if value is None or value == "":
-            return None
-        try:
-            parsed = int(str(value).strip())
-        except (TypeError, ValueError) as exc:
-            raise ValueError("insert_after must be an integer") from exc
-        if parsed < 0:
-            raise ValueError("insert_after must be zero or greater")
-        return parsed
+    def _links_not_blank(cls, value: str | None, info: Any) -> str | None:
+        return _strip_nonblank(value, info.field_name) if value is not None else None
 
     @model_validator(mode="after")
     def _resolve_insert_after(self) -> PhaseCreate:
+        if self.insert_after is None and self.phase_order is None:
+            raise ValueError("phase_order or insert_after is required")
         if self.insert_after is None:
             return self
         resolved_order = self.insert_after + 1
@@ -156,7 +142,7 @@ class PhaseUpdate(StrictUpdateRequest, OptionalIntMixin):
     parallel_with: str | None = Field(default=None)
     rollback_target: str | None = Field(default=None)
     next_recommendation: str | None = Field(default=None)
-    agent_id: int | None = Field(default=None)
+    agent_id: int | None = Field(default=None, gt=0, strict=True)
     execution_type: Literal["sync", "parallel"] | None = Field(default=None)
     instructions: list[PhaseInstructionItem] | None = Field(default=None)
     checks: list[PhaseTextItem] | None = Field(default=None)
@@ -166,6 +152,11 @@ class PhaseUpdate(StrictUpdateRequest, OptionalIntMixin):
     @classmethod
     def _name_not_blank(cls, value: str | None) -> str | None:
         return _strip_nonblank(value, "name") if value is not None else None
+
+    @field_validator("parallel_with", "rollback_target")
+    @classmethod
+    def _links_not_blank(cls, value: str | None, info: Any) -> str | None:
+        return _strip_nonblank(value, info.field_name) if value is not None else None
 
     @model_validator(mode="after")
     def _descriptions_must_be_unique(self) -> PhaseUpdate:
@@ -180,13 +171,13 @@ class PhaseUpdate(StrictUpdateRequest, OptionalIntMixin):
 
 
 class WorkflowCreate(StrictRequest):
-    name: str | None = Field(default=None)
+    name: str
     description: str = Field(default="")
 
     @field_validator("name")
     @classmethod
-    def _name_not_blank(cls, value: str | None) -> str | None:
-        return _strip_nonblank(value, "name") if value is not None else None
+    def _name_not_blank(cls, value: str) -> str:
+        return _strip_nonblank(value, "name")
 
 
 class WorkflowUpdate(StrictUpdateRequest):
@@ -205,8 +196,8 @@ class ProjectCreate(StrictRequest, OptionalIntMixin):
     code: str = Field(..., min_length=1)
     name: str | None = Field(default=None)
     description: str | None = Field(default="")
-    workflow_id: int | None = Field(default=None)
-    key_prefixes: list[str] | str = Field(default=[])
+    workflow_id: int | None = Field(default=None, gt=0, strict=True)
+    key_prefixes: list[str]
 
     @field_validator("code")
     @classmethod
@@ -218,24 +209,12 @@ class ProjectCreate(StrictRequest, OptionalIntMixin):
     def _name_not_blank(cls, value: str | None) -> str | None:
         return _strip_nonblank(value, "name") if value is not None else None
 
-    @field_validator("workflow_id", mode="before")
-    @classmethod
-    def _validate_workflow_id(cls, value: Any) -> int | None:
-        if value is None or value == "":
-            return None
-        parsed = cls._coerce_optional_int(value)
-        if parsed is None:
-            raise ValueError("workflow_id must be a positive integer")
-        return parsed
-
     @field_validator("key_prefixes", mode="before")
     @classmethod
     def _validate_key_prefixes(cls, value: Any) -> list[str]:
-        if isinstance(value, list):
-            return [str(item).strip().upper() for item in value if str(item).strip()]
-        if isinstance(value, str):
-            return [line.strip().upper() for line in value.splitlines() if line.strip()]
-        return []
+        if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+            raise ValueError("key_prefixes must be a list of strings")
+        return [_strip_nonblank(item, "key_prefixes").upper() for item in value]
 
     @field_validator("key_prefixes", mode="after")
     @classmethod
@@ -269,34 +248,22 @@ class ProjectUpdate(StrictUpdateRequest, OptionalIntMixin):
     code: str | None = Field(default=None, min_length=1)
     name: str | None = Field(default=None)
     description: str | None = Field(default=None)
-    workflow_id: int | None = Field(default=None)
-    key_prefixes: list[str] | str | None = Field(default=None)
+    workflow_id: int | None = Field(default=None, gt=0, strict=True)
+    key_prefixes: list[str] | None = Field(default=None)
 
     @field_validator("code", "name")
     @classmethod
     def _identity_not_blank(cls, value: str | None, info: Any) -> str | None:
         return _strip_nonblank(value, info.field_name) if value is not None else None
 
-    @field_validator("workflow_id", mode="before")
-    @classmethod
-    def _validate_workflow_id(cls, value: Any) -> int | None:
-        if value is None or value == "":
-            return None
-        parsed = cls._coerce_optional_int(value)
-        if parsed is None:
-            raise ValueError("workflow_id must be a positive integer")
-        return parsed
-
     @field_validator("key_prefixes", mode="before")
     @classmethod
     def _validate_key_prefixes(cls, value: Any) -> list[str] | None:
         if value is None:
             return None
-        if isinstance(value, list):
-            return [str(item).strip().upper() for item in value if str(item).strip()]
-        if isinstance(value, str):
-            return [line.strip().upper() for line in value.splitlines() if line.strip()]
-        return []
+        if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+            raise ValueError("key_prefixes must be a list of strings")
+        return [_strip_nonblank(item, "key_prefixes").upper() for item in value]
 
     @field_validator("key_prefixes", mode="after")
     @classmethod
@@ -360,11 +327,11 @@ class AgentUpdate(StrictUpdateRequest):
 
 
 class PhaseOrderUpdate(StrictRequest):
-    orders: list[_PhaseOrderItem] = Field(default_factory=list)
+    orders: list[_PhaseOrderItem] = Field(min_length=1)
 
 
 class InstructionCreate(StrictRequest):
-    phase_id: int = Field(...)
+    phase_id: int = Field(gt=0, strict=True)
     description: str = Field(..., min_length=1)
     execution_type: Literal["sync", "parallel"] = Field(default="sync")
     skills: list[str] | None = Field(default=None)

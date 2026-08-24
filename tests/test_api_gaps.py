@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 pytestmark = [pytest.mark.ui]
 
+from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.interfaces.ui import app
 
 client = TestClient(app)
@@ -33,11 +34,11 @@ class TestApiTaskDetail:
 class TestApiPhaseCreate:
     def test_missing_workflow_id(self):
         response = client.post("/api/phases", json={"name": "X", "phase_order": 1})
-        assert response.status_code == 400
+        assert response.status_code == 422
 
     def test_missing_phase_order(self):
         response = client.post("/api/phases", json={"name": "X", "workflow_id": 1})
-        assert response.status_code == 400
+        assert response.status_code == 422
 
     def test_string_workflow_id_is_rejected(self):
         response = client.post("/api/phases", json={"name": "X", "phase_order": 1, "workflow_id": "999"})
@@ -45,7 +46,7 @@ class TestApiPhaseCreate:
 
     def test_numeric_workflow_id_not_found(self):
         with patch("project_workflow.interfaces.ui.routes.api._app_state") as state:
-            state.workflow_service.return_value.get_workflow.return_value = None
+            state.phase_service.return_value.create_phase.side_effect = NotFoundError("missing")
             response = client.post("/api/phases", json={"name": "X", "phase_order": 1, "workflow_id": 999})
         assert response.status_code == 404
 
@@ -65,12 +66,6 @@ class TestApiPhaseUpdate:
     def test_phase_not_found(self):
         with patch("project_workflow.interfaces.ui.routes.api._load_phase_detail", return_value=None):
             response = client.put("/api/phases/1", json={"name": "X"})
-        assert response.status_code == 404
-
-    def test_coerce_id_returns_none(self):
-        with patch("project_workflow.interfaces.ui.routes.api._load_phase_detail", return_value={"id": 1}):
-            with patch("project_workflow.interfaces.ui.routes.api._coerce_phase_db_id", return_value=None):
-                response = client.put("/api/phases/1", json={"name": "X"})
         assert response.status_code == 404
 
     def test_forbidden_phase_num(self):
@@ -102,33 +97,31 @@ class TestApiPhaseDelete:
 class TestApiPhaseBatchOrder:
     def test_empty_orders(self):
         response = client.put("/api/phases/order", json={"orders": []})
-        assert response.status_code == 400
+        assert response.status_code == 422
 
     def test_invalid_phase_id(self):
-        with patch("project_workflow.interfaces.ui.routes.api._coerce_phase_db_id", return_value=None):
-            response = client.put("/api/phases/order", json={"orders": [{"phase_id": "bad", "phase_order": 1}]})
+        response = client.put("/api/phases/order", json={"orders": [{"phase_id": "bad", "phase_order": 1}]})
         assert response.status_code == 422
 
 
 class TestApiWorkflowDelete:
     def test_workflow_not_found(self):
         with patch("project_workflow.interfaces.ui.routes.api._app_state") as state:
-            state.workflow_service.return_value.get_workflow.return_value = None
+            state.workflow_service.return_value.delete_workflow.side_effect = NotFoundError("missing")
             response = client.delete("/api/workflows/1")
         assert response.status_code == 404
 
     def test_default_workflow(self):
         with patch("project_workflow.interfaces.ui.routes.api._app_state") as state:
-            state.workflow_service.return_value.get_workflow.return_value = {"id": 1, "is_default": True}
-            state.phase_service.return_value.list_phases.return_value = []
+            state.workflow_service.return_value.delete_workflow.side_effect = ConflictError("default")
             response = client.delete("/api/workflows/1")
-        assert response.status_code == 400
+        assert response.status_code == 409
 
 
 class TestApiProjectUpdate:
     def test_project_not_found(self):
         with patch("project_workflow.interfaces.ui.routes.api._app_state") as state:
-            state.project_service.return_value.get_project.return_value = None
+            state.project_service.return_value.update_project.side_effect = NotFoundError("missing")
             response = client.put("/api/projects/1", json={"name": "X"})
         assert response.status_code == 404
 
@@ -143,8 +136,7 @@ class TestApiProjectUpdate:
 class TestApiProjectDelete:
     def test_project_delete_not_found(self):
         with patch("project_workflow.interfaces.ui.routes.api._app_state") as state:
-            state.task_service.return_value.list_tasks.return_value = []
-            state.project_service.return_value.get_project.return_value = None
+            state.project_service.return_value.delete_project.side_effect = NotFoundError("missing")
             response = client.delete("/api/projects/1")
         assert response.status_code == 404
 

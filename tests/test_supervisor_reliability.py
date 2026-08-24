@@ -98,9 +98,8 @@ def test_same_report_is_evaluated_again_after_phase_transition(supervisor_llm):
     assert len({run["phase_id"] for run in runs}) == 2
 
 
-def test_retryable_provider_error_has_no_fingerprint_or_transition():
+def test_retryable_provider_error_has_no_fingerprint_and_blocks_current_phase():
     engine = SupervisorEngine("RUN-910")
-    original_task = dict(engine.task)
     with patch.object(OpenAICompatibleClient, "chat", side_effect=requests.ConnectionError("down")) as chat:
         first = engine.evaluate("same report")
         second = engine.evaluate("same report")
@@ -111,8 +110,37 @@ def test_retryable_provider_error_has_no_fingerprint_or_transition():
     runs = engine.db.supervisor_runs.list(task_key=engine.task_key)
     assert len(runs) == 2
     assert all(run.report_fingerprint is None for run in runs)
-    assert engine.db.get_task_history(engine.task["id"]) == []
-    assert engine.task == original_task
+    assert all(run.context_snapshot["raw_evaluator"] == {"error": "ConnectionError"} for run in runs)
+    assert [item["status"] for item in engine.db.get_task_history(engine.task["id"])] == ["blocked"]
+    assert engine.task["status"] == "blocked"
+
+
+def test_successful_retry_after_provider_error_unblocks_and_transitions(supervisor_llm):
+    engine = SupervisorEngine("RUN-913")
+    supervisor_llm("PASS")
+    successful_chat = OpenAICompatibleClient.chat
+    attempts = 0
+
+    def flaky_chat(*args, **kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise requests.Timeout("provider timeout")
+        return successful_chat(*args, **kwargs)
+
+    with patch.object(OpenAICompatibleClient, "chat", side_effect=flaky_chat):
+        failed = engine.evaluate("same report")
+        succeeded = engine.evaluate("same report")
+
+    assert failed["verdict"] == "BLOCKED"
+    assert failed["retryable"] is True
+    assert succeeded["verdict"] == "PASS"
+    assert succeeded["replayed"] is False
+    assert engine.task["status"] == "active"
+    assert engine.task["current_phase"] == "2.REQUIREMENTS"
+    runs = engine.db.supervisor_runs.list(task_key=engine.task_key)
+    assert sum(run.report_fingerprint is None for run in runs) == 1
+    assert sum(run.report_fingerprint is not None for run in runs) == 1
 
 
 def test_recorded_evaluation_invalidates_supervisor_context_cache(supervisor_llm):

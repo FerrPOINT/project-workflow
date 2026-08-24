@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from project_workflow import config
-from project_workflow.domain.exceptions import ConflictError
+from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import UnitOfWork
 
 
@@ -54,15 +54,23 @@ class WorkflowService:
         return wf.to_dict() if wf else None
 
     def update_workflow(self, workflow_id: int, data: dict[str, Any]) -> None:
+        if self._uow.workflows.lock(workflow_id) is None:
+            raise NotFoundError(f"Workflow {workflow_id} not found")
         self._uow.workflows.update(workflow_id, data)
         self._uow.commit()
         return None
 
     def delete_workflow(self, workflow_id: int) -> None:
-        projects = self._uow.projects.list()
-        for project in projects:
-            if project.workflow_id == workflow_id:
-                raise ConflictError("Workflow has linked projects and cannot be deleted")
+        workflow = self._uow.workflows.lock(workflow_id)
+        if workflow is None:
+            raise NotFoundError(f"Workflow {workflow_id} not found")
+        if workflow.is_default:
+            raise ConflictError("Default workflow cannot be deleted")
+        if any(project.workflow_id == workflow_id for project in self._uow.projects.list()):
+            raise ConflictError("Workflow has linked projects and cannot be deleted")
+        starter_code = f"wf-{workflow_id}-default"
+        if any(phase.code != starter_code for phase in self._uow.phases.list(workflow_id)):
+            raise ConflictError("Workflow has non-starter phases and cannot be deleted")
         self._uow.workflows.delete(workflow_id)
         self._uow.commit()
         return None

@@ -11,7 +11,6 @@ pytestmark = [pytest.mark.unit]
 from project_workflow.infrastructure.db.schema import (
     _SeedPhase,
     ensure_phase_catalog,
-    get_phase_from_db,
     load_phases_from_db,
     load_phases_from_seed,
 )
@@ -19,6 +18,10 @@ from project_workflow.infrastructure.db.session import ensure_schema
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.supervisor.models import Phase
 from tests._db_helpers import phase_by_code
+
+
+def _supervisor_phase_by_code(uow, code: str, workflow_id: int):
+    return next((phase for phase in load_phases_from_db(uow, workflow_id) if phase.code == code), None)
 
 
 def _default_workflow_id(uow: SAUnitOfWork) -> int:
@@ -97,7 +100,7 @@ class TestGenerateProgressJson:
             )
         )
         ensure_phase_catalog(fresh_db, seed_path=seed_path)
-        phase = get_phase_from_db(fresh_db, "custom.intake", _default_workflow_id(fresh_db))
+        phase = _supervisor_phase_by_code(fresh_db, "custom.intake", _default_workflow_id(fresh_db))
         assert phase is not None
         assert phase.name == "Custom Intake"
         assert len(phase.instructions) >= 1
@@ -155,13 +158,13 @@ class TestReadSeedItems:
 class TestGetPhase:
     def test_get_phase_returns_phase(self, fresh_db):
         ensure_phase_catalog(fresh_db)
-        phase = get_phase_from_db(fresh_db, "1.INTAKE", _default_workflow_id(fresh_db))
+        phase = _supervisor_phase_by_code(fresh_db, "1.INTAKE", _default_workflow_id(fresh_db))
         assert phase is not None
         assert phase.code == "1.INTAKE"
 
     def test_get_phase_order(self, fresh_db):
         ensure_phase_catalog(fresh_db)
-        phase = get_phase_from_db(fresh_db, "2.REQUIREMENTS", _default_workflow_id(fresh_db))
+        phase = _supervisor_phase_by_code(fresh_db, "2.REQUIREMENTS", _default_workflow_id(fresh_db))
         assert phase is not None
         assert phase.code == "2.REQUIREMENTS"
 
@@ -172,13 +175,13 @@ class TestLoadPhases:
         phases = load_phases_from_db(fresh_db)
         assert len(phases) > 0
 
-    def test_get_phase_from_db(self, fresh_db):
+    def test_load_phase_by_scoped_code(self, fresh_db):
         ensure_phase_catalog(fresh_db)
-        phase = get_phase_from_db(fresh_db, "1.INTAKE", _default_workflow_id(fresh_db))
+        phase = _supervisor_phase_by_code(fresh_db, "1.INTAKE", _default_workflow_id(fresh_db))
         assert phase is not None
         assert phase.code == "1.INTAKE"
 
-    def test_get_phase_from_db_missing(self, fresh_db):
+    def test_load_phase_by_scoped_code_missing(self, fresh_db):
         ensure_phase_catalog(fresh_db)
-        phase = get_phase_from_db(fresh_db, "nonexistent", _default_workflow_id(fresh_db))
+        phase = _supervisor_phase_by_code(fresh_db, "nonexistent", _default_workflow_id(fresh_db))
         assert phase is None

@@ -31,7 +31,7 @@ def _make_engine():
 
 
 class TestEvaluateLlmReportVerdicts:
-    def test_invalid_blocked_is_retryable_without_transition(self):
+    def test_invalid_blocked_is_retryable_and_records_blocked_transition(self):
         engine = _make_engine()
         phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[])
         with patch.object(
@@ -52,7 +52,7 @@ class TestEvaluateLlmReportVerdicts:
         assert result["verdict"] == "BLOCKED"
         assert result["retryable"] is True
         assert result["blockers"] == ["Supervisor LLM unavailable: ValueError"]
-        engine._record_evaluation.assert_not_called()
+        engine._record_evaluation.assert_called_once_with(phase, "blocked", None, None, commit=False)
 
     def test_rollback_uses_rollback_target(self):
         engine = _make_engine()

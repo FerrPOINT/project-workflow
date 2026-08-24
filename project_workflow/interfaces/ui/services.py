@@ -15,7 +15,6 @@ from project_workflow.application.ui import UIDataService
 from .dependencies import _AppState
 from .helpers import (
     _build_parallel_phase_blocks,
-    _parse_key_prefixes,
     _parse_optional_int,
 )
 
@@ -52,7 +51,7 @@ def _load_phases(workflow_id: int | None = None) -> list[dict[str, Any]]:
     return _ui_data_service()._load_phases(workflow_id)
 
 
-def _load_phase_detail(phase_id: int | str) -> dict[str, Any] | None:
+def _load_phase_detail(phase_id: int) -> dict[str, Any] | None:
     """Load phase detail for UI pages/API."""
     return _ui_data_service()._load_phase_detail(phase_id)
 
@@ -77,13 +76,8 @@ def _get_task_detail(task_key: str) -> dict[str, Any] | None:
     return _ui_data_service()._get_task_detail(task_key)
 
 
-def _coerce_phase_db_id(raw_phase_id: int | str | None) -> int | None:
-    """Coerce a phase identifier to a positive integer DB id."""
-    return _ui_data_service()._coerce_phase_db_id(raw_phase_id)
-
-
 def _resolve_task_phase(
-    current_phase: str | int | None,
+    current_phase: str | None,
     _db: Any | None = None,
     workflow_id: int | None = None,
 ) -> tuple[str, dict[str, Any] | None]:
@@ -95,7 +89,7 @@ def _resolve_task_phase(
 
 
 def _resolve_task_phase_local(
-    current_phase: str | int | None,
+    current_phase: str | None,
     phases: Sequence[dict[str, Any]],
     workflow_id: int | None = None,
 ) -> tuple[str, dict[str, Any] | None]:
@@ -107,7 +101,6 @@ def _resolve_task_phase_local(
 
 __all__ = [
     "_build_parallel_phase_blocks",
-    "_parse_key_prefixes",
     "_parse_optional_int",
     "_load_cli_reference",
     "_load_workflows",
@@ -117,7 +110,6 @@ __all__ = [
     "_load_projects",
     "_load_dashboard",
     "_get_task_detail",
-    "_coerce_phase_db_id",
     "_resolve_task_phase",
     "_resolve_task_phase_local",
 ]

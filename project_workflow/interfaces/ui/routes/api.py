@@ -22,11 +22,7 @@ from project_workflow.interfaces.ui.schemas import (
     WorkflowCreate,
     WorkflowUpdate,
 )
-from project_workflow.interfaces.ui.services import (
-    _coerce_phase_db_id,
-    _load_phase_detail,
-    _load_tasks,
-)
+from project_workflow.interfaces.ui.services import _load_phase_detail, _load_tasks
 from project_workflow.interfaces.ui.state import _app_state
 
 
@@ -127,13 +123,7 @@ async def api_agents() -> dict[str, Any] | JSONResponse:
 
 async def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONResponse:
     workflow_id = payload.workflow_id
-    if workflow_id is None:
-        return _error("workflow_id обязателен", 400)
-    if payload.phase_order is None:
-        return _error("phase_order обязателен", 400)
-
-    if _app_state.workflow_service().get_workflow(workflow_id) is None:
-        return _error(f"Workflow {workflow_id} не найден", 404)
+    assert payload.phase_order is not None
     data = {
         "name": payload.name,
         "description": payload.description,
@@ -154,7 +144,7 @@ async def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONRespons
     except ConflictError as exc:
         return _error(str(exc), 409)
     except ValueError as exc:
-        return _error(str(exc), 400)
+        return _error(str(exc), 409)
     return {
         "ok": True,
         "phase_id": phase["id"],
@@ -168,9 +158,7 @@ async def api_phase_update(phase_id: int, payload: PhaseUpdate) -> dict[str, Any
     existing = _load_phase_detail(phase_id)
     if not existing:
         return _error(f"Фаза {phase_id} не найдена", 404)
-    resolved_phase_id = _coerce_phase_db_id(phase_id)
-    if resolved_phase_id is None:
-        return _error(f"Фаза {phase_id} не найдена", 404)
+    resolved_phase_id = phase_id
 
     scalar_fields = {
         "name",
@@ -223,14 +211,9 @@ async def api_phase_delete(phase_id: int) -> dict[str, Any] | JSONResponse:
 
 
 async def api_phase_batch_order(payload: PhaseOrderUpdate) -> dict[str, Any] | JSONResponse:
-    if not payload.orders:
-        return _error("Список order пуст", 400)
-
     batch: list[tuple[int, int]] = []
     for item in payload.orders:
-        resolved_phase_id = _coerce_phase_db_id(item.phase_id)
-        if resolved_phase_id is None:
-            return _error(f"Некорректный phase_id: {item.phase_id!r}", 400)
+        resolved_phase_id = item.phase_id
         if item.workflow_id is not None:
             phase = _app_state.phase_service().get_phase(resolved_phase_id)
             if phase is None:
@@ -245,13 +228,11 @@ async def api_phase_batch_order(payload: PhaseOrderUpdate) -> dict[str, Any] | J
     except ConflictError as exc:
         return _error(str(exc), 409)
     except ValueError as exc:
-        return _error(str(exc), 400)
+        return _error(str(exc), 409)
     return {"ok": True, "updated": updated}
 
 
 async def api_workflow_create(payload: WorkflowCreate) -> dict[str, Any] | JSONResponse:
-    if not payload.name or not str(payload.name).strip():
-        return _error("name required", 400)
     service = _app_state.workflow_service()
     workflow = service.create_workflow({"name": payload.name, "description": payload.description or ""})
     workflow_id = workflow["id"]
@@ -260,29 +241,22 @@ async def api_workflow_create(payload: WorkflowCreate) -> dict[str, Any] | JSONR
 
 async def api_workflow_update(workflow_id: int, payload: WorkflowUpdate) -> dict[str, Any] | JSONResponse:
     service = _app_state.workflow_service()
-    existing = service.get_workflow(workflow_id)
-    if not existing:
-        return _error(f"Workflow {workflow_id} не найден", 404)
     updates = _updates_from_payload(payload, ["name", "description"])
-    if updates:
+    try:
         service.update_workflow(workflow_id, updates)
+    except NotFoundError as exc:
+        return _error(str(exc), 404)
     return {"ok": True, "workflow": service.get_workflow(workflow_id)}
 
 
 async def api_workflow_delete(workflow_id: int) -> dict[str, Any] | JSONResponse:
     service = _app_state.workflow_service()
-    existing = service.get_workflow(workflow_id)
-    if not existing:
-        return _error(f"Workflow {workflow_id} не найден", 404)
-    phases = _app_state.phase_service().list_phases(workflow_id)
-    projects = [p for p in _app_state.project_service().list_projects() if p.get("workflow_id") == workflow_id]
-    starter_code = f"wf-{workflow_id}-default"
-    non_starter_phases = [p for p in phases if p.get("code") != starter_code]
-    if non_starter_phases or projects:
-        return _error("Нельзя удалить workflow, содержащий проекты или фазы", 409)
-    if existing.get("is_default"):
-        return _error("Нельзя удалить workflow по умолчанию", 400)
-    service.delete_workflow(workflow_id)
+    try:
+        service.delete_workflow(workflow_id)
+    except NotFoundError as exc:
+        return _error(str(exc), 404)
+    except ConflictError as exc:
+        return _error(str(exc), 409)
     return {"ok": True}
 
 
@@ -312,31 +286,26 @@ async def api_project_create(payload: ProjectCreate) -> dict[str, Any] | JSONRes
 
 async def api_project_update(project_id: int, payload: ProjectUpdate) -> dict[str, Any] | JSONResponse:
     service = _app_state.project_service()
-    existing = service.get_project(project_id)
-    if not existing:
-        return _error(f"Проект {project_id} не найден", 404)
     updates = _updates_from_payload(payload, ["code", "name", "description", "workflow_id"])
     if payload.key_prefixes is not None:
         updates["key_prefixes"] = list(payload.key_prefixes)
-    if updates:
-        try:
-            service.update_project(project_id, updates)
-        except ConflictError as exc:
-            return _error(str(exc), 409)
-        except (NotFoundError, ValueError) as exc:
-            return _error(str(exc), 404)
+    try:
+        service.update_project(project_id, updates)
+    except ConflictError as exc:
+        return _error(str(exc), 409)
+    except (NotFoundError, ValueError) as exc:
+        return _error(str(exc), 404)
     return {"ok": True, "project": service.get_project(project_id)}
 
 
 async def api_project_delete(project_id: int) -> dict[str, Any] | JSONResponse:
-    tasks = _app_state.task_service().list_tasks()
-    if any(t.get("project_id") == project_id for t in tasks):
-        return _error("Нельзя удалить проект с задачами", 409)
     service = _app_state.project_service()
-    existing = service.get_project(project_id)
-    if not existing:
-        return _error(f"Проект {project_id} не найден", 404)
-    service.delete_project(project_id)
+    try:
+        service.delete_project(project_id)
+    except NotFoundError as exc:
+        return _error(str(exc), 404)
+    except ConflictError as exc:
+        return _error(str(exc), 409)
     return {"ok": True}
 
 
@@ -383,14 +352,10 @@ async def api_agent_delete(agent_id: int) -> dict[str, Any] | JSONResponse:
     return {"ok": True}
 
 
-async def api_phase_detail(phase_id: str) -> dict[str, Any] | JSONResponse:
-    try:
-        phase_id_int = int(phase_id)
-    except ValueError:
-        return _error(f"Phase id {phase_id!r} не найдена", 404)
-    phase = _load_phase_detail(phase_id_int)
+async def api_phase_detail(phase_id: int) -> dict[str, Any] | JSONResponse:
+    phase = _load_phase_detail(phase_id)
     if not phase:
-        return _error(f"Фаза {phase_id_int} не найдена", 404)
+        return _error(f"Фаза {phase_id} не найдена", 404)
     return {"ok": True, "phase": phase}
 
 

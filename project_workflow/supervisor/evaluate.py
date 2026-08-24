@@ -20,7 +20,7 @@ def _report_fingerprint(task_id: int, report: str) -> str:
     return hashlib.sha256(f"{task_id}\0{normalized}".encode()).hexdigest()
 
 
-def _blocked(exc: Exception, raw: dict[str, Any] | None = None) -> LlmVerdict:
+def _blocked(exc: Exception) -> LlmVerdict:
     return LlmVerdict(
         verdict="BLOCKED",
         covered=[],
@@ -30,7 +30,7 @@ def _blocked(exc: Exception, raw: dict[str, Any] | None = None) -> LlmVerdict:
         next_phase=None,
         next_phase_name=None,
         confidence=0.0,
-        raw=raw or {"error": type(exc).__name__},
+        raw={"error": type(exc).__name__},
     )
 
 
@@ -131,7 +131,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         AttributeError,
     ) as exc:
         technical_error = True
-        llm = _blocked(exc, raw)
+        llm = _blocked(exc)
 
     covered_ids = llm.covered if not technical_error else [item_id for item_id in item_ids if item_id in previously_ids]
     missing_ids = (
@@ -176,7 +176,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
 
     next_phase_obj = engine.phase_map.get(next_phase) if next_phase else None
     rollback_phase_obj = engine.phase_map.get(rollback_target) if rollback_target else None
-    raw_evaluator = raw if raw is not None else llm.raw
+    raw_evaluator = llm.raw if technical_error else (raw if raw is not None else llm.raw)
     run_data = {
         "task_id": task_id,
         "phase_id": phase.id,
@@ -206,8 +206,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
 
     try:
         engine.db.create_supervisor_run(run_data)
-        if not technical_error:
-            engine._record_evaluation(phase, verdict_key, next_phase, rollback_target, commit=False)
+        engine._record_evaluation(phase, verdict_key, next_phase, rollback_target, commit=False)
         engine.db.commit()
     except IntegrityError:
         engine.db.rollback()

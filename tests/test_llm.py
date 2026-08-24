@@ -339,6 +339,14 @@ class TestSupervisorEngineEvaluateLLM:
             result = engine.evaluate("")
         assert result["verdict"] == "BLOCKED"
         assert result["next_phase"] is None
+        assert result["retryable"] is True
+        task = engine.db.tasks.get_by_id(engine.task["id"]).to_dict()
+        assert (task["current_phase"], task["status"]) == ("1.INTAKE", "blocked")
+        history = engine.db.get_task_history(engine.task["id"])
+        assert [item["status"] for item in history] == ["blocked"]
+        run = engine.db.get_supervisor_runs(task_key=engine.task_key, limit=1)[0]
+        assert run["verdict"] == "blocked"
+        assert run["report_fingerprint"] is None
 
     def test_evaluate_llm_uses_previously_covered(self, engine, supervisor_llm):
         """LLM prompt includes previously covered items."""
@@ -479,15 +487,15 @@ class TestSupervisorEngineLLMIntegrationDB:
         assert task["current_phase"] == "1.INTAKE"
         assert task["status"] == "blocked"
 
-    def test_rollback_without_config_is_retryable_and_has_no_transition(self, engine, supervisor_llm):
+    def test_rollback_without_config_is_retryable_and_blocks_current_phase(self, engine, supervisor_llm):
         supervisor_llm("ROLLBACK")
         result = engine.evaluate("Report")
 
         assert result["verdict"] == "BLOCKED"
         assert result["retryable"] is True
         task = engine.db.tasks.get_by_id(engine.task["id"]).to_dict()
-        assert task["status"] == "active"
-        assert engine.db.get_task_history(engine.task["id"]) == []
+        assert (task["current_phase"], task["status"]) == ("1.INTAKE", "blocked")
+        assert [item["status"] for item in engine.db.get_task_history(engine.task["id"])] == ["blocked"]
 
     def test_supervisor_run_failure_rolls_back_db_and_engine_state(self, engine, monkeypatch, supervisor_llm):
         task_id = engine.task["id"]

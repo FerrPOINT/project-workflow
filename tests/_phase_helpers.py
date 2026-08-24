@@ -29,7 +29,7 @@ def get_phase_checklist_raw(phase_name: str) -> list[str]:
         uow = SAUnitOfWork()
         prepare_sqlite_uow(uow)
         workflow = uow.workflows.get_default()
-        phase = schema.get_phase_from_db(uow, phase_name, workflow.id) if workflow and workflow.id else None
+        phase = uow.phases.get_by_code(workflow.id, phase_name) if workflow and workflow.id else None
         if phase:
             items: list[str] = []
             for check in phase.checks:

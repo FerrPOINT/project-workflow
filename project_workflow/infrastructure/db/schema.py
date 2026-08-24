@@ -11,6 +11,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
+from project_workflow.domain.phase_graph import validate_phase_graph
 from project_workflow.domain.repositories import UnitOfWork
 
 from ... import config
@@ -97,23 +98,11 @@ def _build_phase_from_db(
 
 def load_phases_from_db(
     uow: UnitOfWork,
-    workflow_id: int | str | None = None,
+    workflow_id: int | None = None,
 ) -> list[Phase]:
     """Load all supervisor phases from a UnitOfWork instance."""
-    if isinstance(workflow_id, str):
-        workflow_id = int(workflow_id) if workflow_id.isdigit() else None
     rows = uow.phases.list(workflow_id)
     return [_build_phase_from_db(r, uow) for r in rows]
-
-
-def get_phase_from_db(
-    uow: UnitOfWork,
-    phase_code: str,
-    workflow_id: int,
-) -> Phase | None:
-    """Find a phase by its workflow-scoped code."""
-    row = uow.phases.get_by_code(workflow_id, phase_code)
-    return _build_phase_from_db(row, uow) if row else None
 
 
 # ── Bootstrap seed ───────────
@@ -254,43 +243,11 @@ def _load_seed(path: Path | str | None = None) -> list[_SeedPhase]:
             )
         phases.append(phase)
 
-    codes = [phase.code for phase in phases]
-    if len(codes) != len(set(codes)):
-        duplicates = sorted({code for code in codes if codes.count(code) > 1})
-        raise ValueError(f"Seed phase codes must be unique: {', '.join(duplicates)}")
-    known_codes = set(codes)
-    phases_by_code = {phase.code: phase for phase in phases}
+    try:
+        validate_phase_graph(phases)
+    except ValueError as exc:
+        raise ValueError(f"Invalid seed phase graph: {exc}") from exc
     for phase in phases:
-        for field_name in ("parallel_with", "rollback_target"):
-            target = getattr(phase, field_name)
-            if target is None:
-                continue
-            if target == phase.code:
-                raise ValueError(f"Invalid seed phase {phase.code!r}: {field_name} cannot reference itself")
-            if target not in known_codes:
-                raise ValueError(
-                    f"Invalid seed phase {phase.code!r}: {field_name} references unknown phase {target!r}"
-                )
-        if phase.execution_type == "parallel" and phase.parallel_with is None:
-            raise ValueError(
-                f"Invalid seed phase {phase.code!r}: parallel phase requires parallel_with"
-            )
-        if phase.execution_type == "sync" and phase.parallel_with is not None:
-            raise ValueError(
-                f"Invalid seed phase {phase.code!r}: sync phase cannot define parallel_with"
-            )
-        if phase.parallel_with is not None:
-            partner = phases_by_code[phase.parallel_with]
-            if partner.execution_type != "parallel":
-                raise ValueError(
-                    f"Invalid seed phase {phase.code!r}: parallel_with target must be parallel"
-                )
-        if phase.rollback_target is not None:
-            target = phases_by_code[phase.rollback_target]
-            if target.phase_order >= phase.phase_order:
-                raise ValueError(
-                    f"Invalid seed phase {phase.code!r}: rollback_target must reference an earlier phase"
-                )
         for field_name in ("checks", "evidence"):
             values = [_seed_text(item).casefold() for item in getattr(phase, field_name)]
             if len(values) != len(set(values)):

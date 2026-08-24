@@ -784,9 +784,9 @@ class TestPhaseDetail:
         assert "Перейди к Phase 0.00 -- Git Identity" not in response.text
         assert "next_recommendation:" not in response.text
 
-    def test_phase_detail_404_on_legacy_code_route(self):
+    def test_phase_detail_rejects_non_numeric_identifier(self):
         response = client.get("/phase/0.7")
-        assert response.status_code == 404
+        assert response.status_code == 422
 
     def test_phase_detail_save_uses_db_id_not_legacy_code(self):
         response = client.get(_phase_detail_path("4.START"))
@@ -852,9 +852,9 @@ class TestPhaseDetail:
         assert "move-up-btn" in response.text
         assert "move-down-btn" in response.text
 
-    def test_phase_detail_404_on_unknown(self):
+    def test_phase_detail_rejects_unknown_string_identifier(self):
         response = client.get("/phase/nonexistent")
-        assert response.status_code == 404
+        assert response.status_code == 422
 
     def test_phase_detail_can_update_instruction_description(self):
         phase_response = client.get(_phase_api_path("1.INTAKE"))
@@ -1067,7 +1067,7 @@ class TestPhaseUpdate:
 class TestDragDropAPI:
     """Tests for drag-and-drop backend APIs."""
 
-    def test_api_batch_order_update(self):
+    def test_api_batch_order_rejects_invalid_graph_atomically(self):
         uow = ui_app_state.get_db()
         phases = [phase.to_dict() for phase in uow.phases.list()]
         original_rows = [(phase["code"], phase["phase_order"]) for phase in phases]
@@ -1083,23 +1083,14 @@ class TestDragDropAPI:
                     ]
                 },
             )
-            assert resp.status_code == 200
-            data = resp.json()
-            assert data["ok"] is True
-            assert data["updated"] == len(phases)
-            reordered = [phase.to_dict() for phase in uow.phases.list()]
-            by_code = {phase["code"]: phase["phase_order"] for phase in reordered}
-            assert by_code == {
-                phase["code"]: order for order, phase in enumerate(reordered_rows, start=1)
-            }
+            assert resp.status_code == 409
+            assert [(phase.code, phase.phase_order) for phase in uow.phases.list()] == original_rows
         finally:
             _batch_update_orders(uow, original_rows)
 
     def test_api_batch_order_empty_error(self):
         resp = client.put("/api/phases/order", json={"orders": []})
-        assert resp.status_code == 400
-        data = resp.json()
-        assert data["ok"] is False
+        assert resp.status_code == 422
 
     def test_api_single_phase_order_route_removed(self):
         phase_id = _phase_id("5.PREFLIGHT")

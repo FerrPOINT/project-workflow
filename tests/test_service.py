@@ -127,77 +127,29 @@ class TestUpdatePhase:
             )
         ]
 
-    def test_sync_phase_joins_previous_parallel_component(self, svc, fresh_db):
+    def test_sync_phase_becomes_explicitly_isolated_parallel(self, svc, fresh_db):
         phase = phase_by_code(fresh_db, "7.PLAN_GATE")
 
         svc.update_phase(phase.id, {"execution_type": "parallel"})
-
-        updated = phase_by_code(fresh_db, "7.PLAN_GATE")
-        assert updated.parallel_with == "6.TEST_PLAN"
-        assert ["6.SOLUTION", "6.TEST_PLAN", "7.PLAN_GATE"] in self._groups(fresh_db)
-
-    def test_sync_phase_before_group_joins_next_parallel_component(self, svc, fresh_db):
-        phase = phase_by_code(fresh_db, "4.START")
-
-        svc.update_phase(phase.id, {"execution_type": "parallel"})
-
-        updated = phase_by_code(fresh_db, "4.START")
-        assert updated.parallel_with == "5.RESEARCH"
-        assert ["4.START", "5.RESEARCH", "5.PREFLIGHT"] in self._groups(fresh_db)
-
-    def test_parallel_sync_parallel_round_trip_keeps_original_component(self, svc, fresh_db):
-        phase = phase_by_code(fresh_db, "6.SOLUTION")
-
-        svc.update_phase(phase.id, {"execution_type": "sync"})
-        detached = phase_by_code(fresh_db, "6.SOLUTION")
-        assert detached.parallel_with == "6.TEST_PLAN"
-
-        svc.update_phase(phase.id, {"execution_type": "parallel"})
-
-        restored = phase_by_code(fresh_db, "6.SOLUTION")
-        assert restored.parallel_with == "6.TEST_PLAN"
-        groups = self._groups(fresh_db)
-        assert ["5.RESEARCH", "5.PREFLIGHT"] in groups
-        assert ["6.SOLUTION", "6.TEST_PLAN"] in groups
-
-    def test_sync_phase_without_parallel_neighbor_stays_single(self, svc, fresh_db):
-        phase = phase_by_code(fresh_db, "1.INTAKE")
-
-        svc.update_phase(phase.id, {"execution_type": "parallel"})
-
-        updated = phase_by_code(fresh_db, "1.INTAKE")
-        assert updated.parallel_with is None
-        assert ["1.INTAKE"] in self._groups(fresh_db)
-
-    def test_explicit_null_does_not_auto_join_parallel_component(self, svc, fresh_db):
-        phase = phase_by_code(fresh_db, "7.PLAN_GATE")
-
-        svc.update_phase(phase.id, {"execution_type": "parallel", "parallel_with": None})
 
         updated = phase_by_code(fresh_db, "7.PLAN_GATE")
         assert updated.parallel_with is None
         assert ["7.PLAN_GATE"] in self._groups(fresh_db)
 
-    def test_invalid_saved_partner_is_replaced_by_adjacent_component(self, svc, fresh_db):
+    def test_explicit_partner_joins_contiguous_parallel_component(self, svc, fresh_db):
         phase = phase_by_code(fresh_db, "7.PLAN_GATE")
-        fresh_db.phases.update(phase.id, {"parallel_with": "missing"})
-        fresh_db.commit()
 
-        svc.update_phase(phase.id, {"execution_type": "parallel"})
+        svc.update_phase(
+            phase.id,
+            {"execution_type": "parallel", "parallel_with": "6.TEST_PLAN"},
+        )
 
-        updated = phase_by_code(fresh_db, "7.PLAN_GATE")
-        assert updated.parallel_with == "6.TEST_PLAN"
+        assert phase_by_code(fresh_db, "7.PLAN_GATE").parallel_with == "6.TEST_PLAN"
+        assert ["6.SOLUTION", "6.TEST_PLAN", "7.PLAN_GATE"] in self._groups(fresh_db)
 
-    def test_parallel_components_on_both_sides_prefer_previous_deterministically(self, svc, fresh_db):
-        phase = phase_by_code(fresh_db, "7.PLAN_GATE")
-        following = phase_by_code(fresh_db, "8.IMPLEMENT")
-        fresh_db.phases.update(following.id, {"execution_type": "parallel"})
-        fresh_db.commit()
+    def test_parallel_to_sync_clears_outgoing_and_incoming_links(self, svc, fresh_db):
+        phase = phase_by_code(fresh_db, "6.SOLUTION")
 
-        svc.update_phase(phase.id, {"execution_type": "parallel"})
-
-        updated = phase_by_code(fresh_db, "7.PLAN_GATE")
-        assert updated.parallel_with == "6.TEST_PLAN"
-        groups = self._groups(fresh_db)
-        assert ["6.SOLUTION", "6.TEST_PLAN", "7.PLAN_GATE"] in groups
-        assert ["8.IMPLEMENT"] in groups
+        svc.update_phase(phase.id, {"execution_type": "sync"})
+        assert phase_by_code(fresh_db, "6.SOLUTION").parallel_with is None
+        assert phase_by_code(fresh_db, "6.TEST_PLAN").parallel_with is None
