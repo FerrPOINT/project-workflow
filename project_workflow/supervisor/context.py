@@ -92,14 +92,19 @@ class SupervisorContextBuilder:
     def _build_recent_verdicts(self, limit: int = 5) -> list[dict[str, Any]]:
         verdicts: list[dict] = []
         for row in self.uow.get_supervisor_runs(task_id=self.task["id"], limit=limit):
+            phase = self._phase_by_id(row.get("phase_id"))
+            next_phase = self._phase_by_id(row.get("next_phase_id"))
+            rollback_phase = self._phase_by_id(row.get("rollback_phase_id"))
+            response = row.get("response") or {}
             verdicts.append(
                 {
-                    "phase_code": row.get("phase_code"),
+                    "phase_code": phase.code if phase else None,
                     "verdict": str(row.get("verdict") or "").upper(),
                     "blockers": row.get("blockers") or [],
                     "missing": row.get("missing") or [],
-                    "next_phase": row.get("next_phase_code"),
-                    "rollback_target": row.get("rollback_phase_code"),
+                    "message": response.get("message") if isinstance(response, dict) else None,
+                    "next_phase": next_phase.code if next_phase else None,
+                    "rollback_target": rollback_phase.code if rollback_phase else None,
                     "created_at": row.get("created_at"),
                 }
             )

@@ -57,19 +57,27 @@ class TestSupervisorContextBuilder:
         uow = MagicMock()
         uow.get_supervisor_runs.return_value = [
             {
-                "phase_code": "1",
+                "phase_id": 1,
                 "verdict": "pass",
                 "blockers": [],
                 "missing": [],
-                "next_phase_code": None,
-                "rollback_phase_code": None,
+                "next_phase_id": 2,
+                "rollback_phase_id": None,
+                "response": {"message": "accepted"},
                 "created_at": "2025-01-01",
             }
         ]
-        builder = SupervisorContextBuilder(uow=uow, task={"id": 1}, all_phases=[])
+        builder = SupervisorContextBuilder(
+            uow=uow,
+            task={"id": 1},
+            all_phases=[self._phase(code="1", id=1), self._phase(code="2", id=2)],
+        )
         verdicts = builder._build_recent_verdicts()
         assert len(verdicts) == 1
         assert verdicts[0]["verdict"] == "PASS"
+        assert verdicts[0]["phase_code"] == "1"
+        assert verdicts[0]["next_phase"] == "2"
+        assert verdicts[0]["message"] == "accepted"
 
     def test_build_has_no_file_conversation_messages(self):
         uow = MagicMock()

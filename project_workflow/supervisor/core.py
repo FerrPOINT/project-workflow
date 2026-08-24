@@ -301,7 +301,19 @@ class SupervisorEngine:
             if phase.execution_type == "parallel"
             else builder.build(phase)
         )
-        return contract.to_dict()
+        result = contract.to_dict()
+        recent = self.get_full_context().get("recent_verdicts") or []
+        if recent:
+            latest = recent[0]
+            verdict = str(latest.get("verdict") or "").upper()
+            destination = (
+                latest.get("rollback_target")
+                if verdict == "ROLLBACK"
+                else latest.get("phase_code")
+            )
+            if verdict in {"PARTIAL", "BLOCKED", "ROLLBACK"} and destination == phase.code:
+                result["evaluation_feedback"] = latest
+        return result
 
     def format_current_phase_instructions(self) -> str:
         """Human-only instructions for `step --task X` without a report."""
