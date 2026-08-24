@@ -222,7 +222,7 @@ class TestPromptBuilder:
 
 
 class TestResponseParser:
-    """Unit tests for LLM response normalisation."""
+    """Unit tests for the exact evaluator response contract."""
 
     def test_parse_full_valid_response(self):
         raw = {
@@ -231,8 +231,6 @@ class TestResponseParser:
             "missing": [],
             "blockers": [],
             "message": "All good",
-            "next_phase": "2",
-            "next_phase_name": "Next",
             "confidence": 0.92,
         }
         v = ResponseParser.parse(raw)
@@ -250,37 +248,47 @@ class TestResponseParser:
         with pytest.raises(ValueError):
             ResponseParser.parse(raw)
 
-    def test_parse_lowercase_verdict_normalised(self):
-        raw = {"verdict": "pass", "covered": [], "missing": [], "blockers": []}
-        v = ResponseParser.parse(raw)
-        assert v.verdict == "PASS"
+    def test_parse_lowercase_verdict_is_rejected(self):
+        raw = {
+            "verdict": "pass", "covered": [], "missing": [], "blockers": [],
+            "message": "done", "confidence": 0.5,
+        }
+        with pytest.raises(ValueError):
+            ResponseParser.parse(raw)
 
     def test_pass_with_blockers_is_rejected(self):
         with pytest.raises(ValueError):
-            ResponseParser.parse({"verdict": "PASS", "covered": [], "missing": [], "blockers": ["No access"]})
+            ResponseParser.parse(
+                {
+                    "verdict": "PASS", "covered": [], "missing": [], "blockers": ["No access"],
+                    "message": "blocked", "confidence": 0.5,
+                }
+            )
 
     def test_pass_with_missing_items_is_rejected(self):
         with pytest.raises(ValueError):
-            ResponseParser.parse({"verdict": "PASS", "covered": [], "missing": ["Run tests"], "blockers": []})
+            ResponseParser.parse(
+                {
+                    "verdict": "PASS", "covered": [], "missing": ["Run tests"], "blockers": [],
+                    "message": "missing", "confidence": 0.5,
+                }
+            )
 
-    def test_parse_optional_fields_get_defaults(self):
-        v = ResponseParser.parse({"verdict": "PARTIAL", "covered": [], "missing": ["item"], "blockers": []})
-        assert v.verdict == "PARTIAL"
-        assert v.covered == []
-        assert v.missing == ["item"]
-        assert v.blockers == []
-        assert v.message == ""
-        assert v.confidence == 0.5
+    def test_parse_missing_message_and_confidence_is_rejected(self):
+        with pytest.raises(ValueError):
+            ResponseParser.parse({"verdict": "PARTIAL", "covered": [], "missing": ["item"], "blockers": []})
 
     @pytest.mark.parametrize("value", [1.5, -0.3, None, "unknown", float("nan"), True])
-    def test_parse_invalid_confidence_uses_default(self, value):
-        raw = {"verdict": "PASS", "covered": [], "missing": [], "blockers": [], "confidence": value}
-        assert ResponseParser.parse(raw).confidence == 0.5
+    def test_parse_invalid_confidence_is_rejected(self, value):
+        raw = {"verdict": "PASS", "covered": [], "missing": [], "blockers": [], "message": "done", "confidence": value}
+        with pytest.raises(ValueError):
+            ResponseParser.parse(raw)
 
     @pytest.mark.parametrize("value", [None, 42, [], {}])
-    def test_parse_invalid_message_uses_default(self, value):
-        raw = {"verdict": "PASS", "covered": [], "missing": [], "blockers": [], "message": value}
-        assert ResponseParser.parse(raw).message == ""
+    def test_parse_invalid_message_is_rejected(self, value):
+        raw = {"verdict": "PASS", "covered": [], "missing": [], "blockers": [], "message": value, "confidence": 0.5}
+        with pytest.raises(ValueError):
+            ResponseParser.parse(raw)
 
     def test_parse_string_instead_of_list_is_rejected(self):
         raw = {
@@ -288,6 +296,8 @@ class TestResponseParser:
             "covered": "single item",
             "missing": ["a", "", "b"],
             "blockers": [],
+            "message": "done",
+            "confidence": 0.5,
         }
         with pytest.raises(ValueError):
             ResponseParser.parse(raw)
@@ -382,10 +392,10 @@ class TestSupervisorEngineMandatoryLLM:
 class TestResponseParserEdgeCases:
     """Edge-case parsing for LLM responses."""
 
-    def test_parse_confidence_none_defaults_to_half(self):
-        raw = {"verdict": "PASS", "covered": [], "missing": [], "blockers": [], "confidence": None}
-        v = ResponseParser.parse(raw)
-        assert v.confidence == 0.5
+    def test_parse_confidence_none_is_rejected(self):
+        raw = {"verdict": "PASS", "covered": [], "missing": [], "blockers": [], "message": "done", "confidence": None}
+        with pytest.raises(ValueError):
+            ResponseParser.parse(raw)
 
     def test_parse_blockers_with_whitespace_strings(self):
         raw = {
@@ -393,9 +403,11 @@ class TestResponseParserEdgeCases:
             "covered": [],
             "missing": [],
             "blockers": ["  ", "real blocker", ""],
+            "message": "blocked",
+            "confidence": 0.5,
         }
-        v = ResponseParser.parse(raw)
-        assert v.blockers == ["real blocker"]
+        with pytest.raises(ValueError):
+            ResponseParser.parse(raw)
 
     def test_parse_next_phase_null_from_llm(self):
         raw = {
@@ -403,22 +415,29 @@ class TestResponseParserEdgeCases:
             "covered": [],
             "missing": [],
             "blockers": [],
+            "message": "done",
+            "confidence": 0.5,
             "next_phase": None,
             "next_phase_name": None,
         }
-        v = ResponseParser.parse(raw)
-        assert v.next_phase is None
-        assert v.next_phase_name is None
+        with pytest.raises(ValueError):
+            ResponseParser.parse(raw)
 
-    def test_parse_preserves_raw_response(self):
-        raw = {"verdict": "PASS", "covered": [], "missing": [], "blockers": [], "extra_key": "preserved"}
-        v = ResponseParser.parse(raw)
-        assert v.raw["extra_key"] == "preserved"
+    def test_parse_rejects_extra_response_fields(self):
+        raw = {
+            "verdict": "PASS", "covered": [], "missing": [], "blockers": [],
+            "message": "done", "confidence": 0.5, "extra_key": "rejected",
+        }
+        with pytest.raises(ValueError):
+            ResponseParser.parse(raw)
 
-    def test_parse_strip_verdict_whitespace(self):
-        raw = {"verdict": "  pass  ", "covered": [], "missing": [], "blockers": []}
-        v = ResponseParser.parse(raw)
-        assert v.verdict == "PASS"
+    def test_parse_rejects_verdict_whitespace(self):
+        raw = {
+            "verdict": "  PASS  ", "covered": [], "missing": [], "blockers": [],
+            "message": "done", "confidence": 0.5,
+        }
+        with pytest.raises(ValueError):
+            ResponseParser.parse(raw)
 
 
 class TestPromptBuilderEdgeCases:

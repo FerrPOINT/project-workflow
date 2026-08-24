@@ -420,11 +420,36 @@ class SupervisorEngine:
             self._refresh_task_state()
 
     def _refresh_task_state(self) -> None:
+        self._reload_task_state()
+        self._cache.invalidate()
+
+    def _reload_task_state(self) -> None:
+        """Reload task state without changing the committed context cache."""
         if not self.task:
             return
+        self._uow.refresh()
         self.task = self._task_service.get_task(self.task["id"]) or self.task
         self.current_phase = self._resolve_current_phase()
-        self._cache.invalidate()
+
+    def _reload_evaluation_state(self) -> None:
+        """Reload task and catalog while the caller holds the workflow lock."""
+        self._uow.refresh()
+        if self.task:
+            self.task = self._task_service.get_task(self.task["id"])
+        self.project = (
+            self._project_service.get_project(self.task["project_id"])
+            if self.task and self.task.get("project_id")
+            else None
+        )
+        self.workflow_id = self.project["workflow_id"] if self.project else None
+        self.workflow = self._workflow_service.get_workflow(self.workflow_id) if self.workflow_id else None
+        self._all_phases = (
+            schema.load_phases_from_db(self._uow, workflow_id=self.workflow_id)
+            if self.workflow_id
+            else []
+        )
+        self._phase_map = None
+        self.current_phase = self._resolve_current_phase()
 
     def evaluate(self, report: str) -> dict:
         if self.task and self.task.get("status") == "done":

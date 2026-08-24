@@ -13,6 +13,7 @@ from project_workflow.infrastructure.llm import (
     PromptBuilder,
     ResponseParser,
 )
+from project_workflow.supervisor.contracts import PhaseContractBuilder
 from project_workflow.supervisor.evaluate import evaluate_llm_report
 from project_workflow.supervisor.models import Phase
 
@@ -20,20 +21,29 @@ from project_workflow.supervisor.models import Phase
 def _make_engine():
     engine = MagicMock()
     engine.task_key = "RUN-1"
-    engine.task = {"id": 1}
-    engine.all_phases = []
-    engine.phase_map = {}
+    engine.task = {"id": 1, "project_id": 1, "current_phase": "1", "status": "active"}
+    engine.workflow_id = 1
+    engine.current_phase = "1"
     engine._get_previously_covered.return_value = []
     engine._resolve_transition.return_value = (None, None, None)
     engine._resolve_current_phase.return_value = "1"
     engine.db.get_task.return_value = engine.task
+    engine.db.supervisor_runs.get_by_fingerprint.return_value = None
     return engine
+
+
+def _set_phase(engine, phase: Phase, *extra: Phase) -> None:
+    phases = [phase, *extra]
+    engine.all_phases = phases
+    engine.phase_map = {item.code: item for item in phases}
+    engine.contract_builder = PhaseContractBuilder(phases)
 
 
 class TestEvaluateLlmReportVerdicts:
     def test_invalid_blocked_is_retryable_and_records_blocked_transition(self):
         engine = _make_engine()
         phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[])
+        _set_phase(engine, phase)
         with patch.object(
             OpenAICompatibleClient,
             "chat",
@@ -43,8 +53,6 @@ class TestEvaluateLlmReportVerdicts:
                 "missing": ["x"],
                 "blockers": [],
                 "message": "blocked",
-                "next_phase": None,
-                "next_phase_name": None,
                 "confidence": 0.7,
             },
         ):
@@ -58,6 +66,7 @@ class TestEvaluateLlmReportVerdicts:
         engine = _make_engine()
         engine._resolve_transition.return_value = (None, None, "0")
         phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[], rollback_target="0")
+        _set_phase(engine, phase)
         with patch.object(
             OpenAICompatibleClient,
             "chat",
@@ -67,8 +76,6 @@ class TestEvaluateLlmReportVerdicts:
                 "missing": [],
                 "blockers": [],
                 "message": "rb",
-                "next_phase": None,
-                "next_phase_name": None,
                 "confidence": 0.6,
             },
         ):
@@ -80,6 +87,7 @@ class TestEvaluateLlmReportVerdicts:
     def test_delegate_records_transition(self):
         engine = _make_engine()
         phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[], is_delegated=True)
+        _set_phase(engine, phase)
         with patch.object(
             OpenAICompatibleClient,
             "chat",
@@ -89,8 +97,6 @@ class TestEvaluateLlmReportVerdicts:
                 "missing": [],
                 "blockers": [],
                 "message": "delegate",
-                "next_phase": None,
-                "next_phase_name": None,
                 "confidence": 0.5,
             },
         ):
@@ -102,9 +108,8 @@ class TestEvaluateLlmReportVerdicts:
         engine = _make_engine()
         engine._resolve_transition.return_value = ("2", "Two", None)
         next_phase = Phase(code="2", name="Two", instructions=[], checks=[], evidence=[])
-        engine.all_phases = [Phase(code="1", name="One", instructions=[], checks=[], evidence=[]), next_phase]
-        engine.phase_map = {"2": next_phase}
         phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[])
+        _set_phase(engine, phase, next_phase)
         with patch.object(
             OpenAICompatibleClient,
             "chat",
@@ -114,8 +119,6 @@ class TestEvaluateLlmReportVerdicts:
                 "missing": [],
                 "blockers": [],
                 "message": "ok",
-                "next_phase": None,
-                "next_phase_name": None,
                 "confidence": 0.9,
             },
         ):
@@ -128,11 +131,15 @@ class TestEvaluateLlmReportVerdicts:
         engine = _make_engine()
         engine.db.create_supervisor_run.side_effect = RuntimeError("write failed")
         phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[])
+        _set_phase(engine, phase)
         with (
             patch.object(
                 OpenAICompatibleClient,
                 "chat",
-                return_value={"verdict": "PASS", "covered": [], "missing": [], "blockers": []},
+                return_value={
+                    "verdict": "PASS", "covered": [], "missing": [], "blockers": [],
+                    "message": "ok", "confidence": 0.9,
+                },
             ),
             pytest.raises(RuntimeError, match="write failed"),
         ):
@@ -140,7 +147,9 @@ class TestEvaluateLlmReportVerdicts:
 
         engine._record_evaluation.assert_not_called()
         engine.db.rollback.assert_called_once_with()
-        engine.db.commit.assert_not_called()
+        # The read snapshot transaction is closed before the provider call;
+        # the failed write transaction is rolled back separately.
+        engine.db.commit.assert_called_once_with()
 
 
 class TestOpenAICompatibleClientIsAvailable:
@@ -257,13 +266,11 @@ class TestPromptBuilder:
 class TestResponseParser:
     def test_parse_full(self):
         raw = {
-            "verdict": "pass",
+            "verdict": "PASS",
             "covered": ["A"],
             "missing": [],
             "blockers": [],
             "message": "ok",
-            "next_phase": "2",
-            "next_phase_name": "Two",
             "confidence": 0.9,
         }
         v = ResponseParser.parse(raw)
@@ -280,12 +287,11 @@ class TestResponseParser:
         with pytest.raises(ValueError):
             ResponseParser.parse({"verdict": "BLOCKED", "covered": "single"})
 
-    def test_parse_invalid_optional_fields_use_defaults(self):
-        verdict = ResponseParser.parse(
-            {"verdict": "pass", "covered": [], "missing": [], "blockers": [], "confidence": 1.5, "message": None}
-        )
-        assert verdict.confidence == 0.5
-        assert verdict.message == ""
+    def test_parse_invalid_required_fields_is_rejected(self):
+        with pytest.raises(ValueError):
+            ResponseParser.parse(
+                {"verdict": "PASS", "covered": [], "missing": [], "blockers": [], "confidence": 1.5, "message": None}
+            )
 
     def test_parse_missing_control_fields_is_rejected(self):
         with pytest.raises(ValueError):

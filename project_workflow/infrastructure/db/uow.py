@@ -78,6 +78,10 @@ class SAUnitOfWork(UnitOfWork):
     def rollback(self) -> None:
         self._session.rollback()
 
+    def refresh(self) -> None:
+        """Expire cached ORM rows so subsequent repository reads hit the database."""
+        self._session.expire_all()
+
     @property
     def workflows(self) -> WorkflowRepository:
         return self._workflows

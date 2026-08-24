@@ -7,6 +7,7 @@ import pytest
 pytestmark = [pytest.mark.unit]
 
 from project_workflow.application.phase_service import PhaseService
+from project_workflow.domain.exceptions import NotFoundError
 from project_workflow.domain.phase_grouping import group_parallel_phases
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from tests._db_helpers import phase_by_code, prepare_sqlite_uow
@@ -54,7 +55,7 @@ class TestSaveInstructions:
         assert detail["instructions"][0]["skills"] == ["testing"]
 
     def test_invalid_phase_raises(self, svc):
-        with pytest.raises(ValueError, match="Phase not found"):
+        with pytest.raises(NotFoundError, match="Phase 9999 not found"):
             svc.save_instructions(9999, [{"description": "x"}])
 
     def test_deferred_save_does_not_commit(self, svc, fresh_db, monkeypatch):
@@ -72,7 +73,7 @@ class TestSaveInstructions:
 
 class TestSaveChecks:
     def test_invalid_phase_raises(self, svc):
-        with pytest.raises(ValueError, match="Phase not found"):
+        with pytest.raises(NotFoundError, match="Phase 9999 not found"):
             svc.save_checks(9999, [{"description": "x"}])
 
     def test_save_checks(self, svc, fresh_db):
@@ -93,7 +94,7 @@ class TestSaveChecks:
 
 class TestSaveEvidence:
     def test_invalid_phase_raises(self, svc):
-        with pytest.raises(ValueError, match="Phase not found"):
+        with pytest.raises(NotFoundError, match="Phase 9999 not found"):
             svc.save_evidence(9999, [{"description": "x"}])
 
     def test_save_evidence(self, svc, fresh_db):

@@ -27,7 +27,10 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 
 from project_workflow import config as config_module
+from project_workflow.application.agent import AgentService
+from project_workflow.application.instruction_service import InstructionService
 from project_workflow.application.phase import PhaseServiceApp
+from project_workflow.application.phase_service import PhaseService
 from project_workflow.application.project import ProjectService
 from project_workflow.application.task import TaskService
 from project_workflow.application.workflow import WorkflowService
@@ -714,6 +717,235 @@ class TestPostgresUoW:
         assert verify.tasks.get_by_key("MOVERACE-1") is not None
         verify.close()
 
+    def test_agent_assignment_serializes_with_delete(self, pg_url):
+        ensure_migrated(get_engine(pg_url))
+        setup = SAUnitOfWork(pg_url)
+        workflow = WorkflowService(setup).create_workflow({"name": "Agent assignment race"})
+        phase = setup.phases.list(int(workflow["id"]))[0]
+        agent = AgentService(setup).create_agent({"name": "Race agent"})
+        setup.close()
+
+        assignment_holds_agent = Event()
+        delete_started = Event()
+        release_assignment = Event()
+
+        def assign() -> str:
+            uow = SAUnitOfWork(pg_url)
+            original_lock = uow.agents.lock
+
+            def paused_lock(agent_id: int):
+                locked = original_lock(agent_id)
+                assignment_holds_agent.set()
+                assert release_assignment.wait(10)
+                return locked
+
+            uow.agents.lock = paused_lock
+            try:
+                PhaseServiceApp(uow).update_phase(int(phase.id), {"agent_id": int(agent["id"])})
+                return "assigned"
+            finally:
+                uow.close()
+
+        def delete() -> str:
+            uow = SAUnitOfWork(pg_url)
+            original_lock = uow.agents.lock
+
+            def observed_lock(agent_id: int):
+                delete_started.set()
+                return original_lock(agent_id)
+
+            uow.agents.lock = observed_lock
+            try:
+                AgentService(uow).delete_agent(int(agent["id"]))
+                return "deleted"
+            except ConflictError:
+                return "rejected"
+            finally:
+                uow.close()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            assignment_result = pool.submit(assign)
+            assert assignment_holds_agent.wait(10)
+            delete_result = pool.submit(delete)
+            assert delete_started.wait(10)
+            release_assignment.set()
+            assert assignment_result.result(timeout=20) == "assigned"
+            assert delete_result.result(timeout=20) == "rejected"
+
+        verify = SAUnitOfWork(pg_url)
+        assert verify.agents.get_by_id(int(agent["id"])) is not None
+        assert verify.phases.get_by_id(int(phase.id)).agent_id == agent["id"]
+        verify.close()
+
+    @pytest.mark.parametrize("operation", ["create", "update"])
+    def test_concurrent_hermes_profile_claim_is_domain_conflict(self, pg_url, operation):
+        ensure_migrated(get_engine(pg_url))
+        agent_ids: list[int] = []
+        if operation == "update":
+            setup = SAUnitOfWork(pg_url)
+            agent_ids = [
+                int(AgentService(setup).create_agent({"name": f"Profile owner {index}"})["id"])
+                for index in range(2)
+            ]
+            setup.close()
+        barrier = Barrier(2)
+
+        def claim(index: int) -> str:
+            uow = SAUnitOfWork(pg_url)
+            repository_method = uow.agents.create if operation == "create" else uow.agents.update
+
+            def synchronized_write(*args, **kwargs):
+                barrier.wait(timeout=10)
+                return repository_method(*args, **kwargs)
+
+            if operation == "create":
+                uow.agents.create = synchronized_write
+            else:
+                uow.agents.update = synchronized_write
+            try:
+                if operation == "create":
+                    AgentService(uow).create_agent(
+                        {"name": f"Concurrent profile {index}", "hermes_profile": "shared-race-profile"}
+                    )
+                else:
+                    AgentService(uow).update_agent(
+                        agent_ids[index], {"hermes_profile": "shared-race-profile"}
+                    )
+                return "saved"
+            except ConflictError:
+                return "conflict"
+            finally:
+                uow.close()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(claim, range(2)))
+
+        assert sorted(results) == ["conflict", "saved"]
+        verify = SAUnitOfWork(pg_url)
+        assert len([agent for agent in verify.agents.list() if agent.hermes_profile == "shared-race-profile"]) == 1
+        verify.close()
+
+    def test_catalog_mutation_during_supervisor_provider_call_fails_closed(self, pg_url):
+        from project_workflow.infrastructure.llm import OpenAICompatibleClient
+        from project_workflow.supervisor import SupervisorEngine
+        from scripts.init_db import main
+
+        assert main() == 0
+        provider_started = Event()
+        release_provider = Event()
+
+        def provider(*_args, **kwargs):
+            provider_started.set()
+            assert release_provider.wait(10)
+            return _pass_response(str(kwargs["user"]))
+
+        def evaluate() -> dict:
+            uow = SAUnitOfWork(pg_url)
+            try:
+                with patch.object(OpenAICompatibleClient, "chat", side_effect=provider):
+                    return SupervisorEngine("RUN-PG-CATALOG-RACE", uow=uow).evaluate("done")
+            finally:
+                uow.close()
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            result_future = pool.submit(evaluate)
+            assert provider_started.wait(10)
+            mutation = SAUnitOfWork(pg_url)
+            workflow = mutation.workflows.get_default()
+            assert workflow is not None and workflow.id is not None
+            phase = mutation.phases.get_by_code(int(workflow.id), "1.INTAKE")
+            assert phase is not None and phase.id is not None
+            checks = [dict(row) for row in mutation.phases.get_checks(int(phase.id))]
+            checks.append({"description": "Concurrent PostgreSQL catalog check"})
+            PhaseService(mutation).save_checks(int(phase.id), checks)
+            mutation.close()
+            release_provider.set()
+            result = result_future.result(timeout=20)
+
+        assert result["verdict"] == "BLOCKED"
+        assert result["retryable"] is True
+        verify = SAUnitOfWork(pg_url)
+        task = verify.tasks.get_by_key("RUN-PG-CATALOG-RACE")
+        assert task is not None and task.status == "blocked" and task.current_phase == "1.INTAKE"
+        run = verify.supervisor_runs.list(task_key="RUN-PG-CATALOG-RACE", limit=1)[0]
+        assert run.verdict == "blocked"
+        assert run.report_fingerprint is None
+        verify.close()
+
+    @pytest.mark.parametrize("operation", ["update", "delete", "reorder"])
+    def test_instruction_mutation_serializes_with_phase_update(self, pg_url, operation):
+        ensure_migrated(get_engine(pg_url))
+        setup = SAUnitOfWork(pg_url)
+        workflow = WorkflowService(setup).create_workflow({"name": f"Instruction race {operation}"})
+        phase = setup.phases.list(int(workflow["id"]))[0]
+        first = InstructionService(setup).create_instruction(int(phase.id), {"description": "first"})
+        second = InstructionService(setup).create_instruction(int(phase.id), {"description": "second"})
+        setup.close()
+
+        instruction_holds_workflow = Event()
+        phase_update_started = Event()
+        release_instruction = Event()
+
+        def mutate_instruction() -> str:
+            uow = SAUnitOfWork(pg_url)
+            repository_method = getattr(uow.instructions, operation)
+
+            def paused_write(*args, **kwargs):
+                instruction_holds_workflow.set()
+                assert release_instruction.wait(10)
+                return repository_method(*args, **kwargs)
+
+            setattr(uow.instructions, operation, paused_write)
+            try:
+                service = InstructionService(uow)
+                if operation == "update":
+                    service.update_instruction(int(first["id"]), {"description": "updated"})
+                elif operation == "delete":
+                    service.delete_instruction(int(first["id"]))
+                else:
+                    service.reorder_instructions(
+                        int(phase.id), [int(second["id"]), int(first["id"])]
+                    )
+                return "instruction-saved"
+            finally:
+                uow.close()
+
+        def mutate_phase() -> str:
+            uow = SAUnitOfWork(pg_url)
+            original_lock = uow.workflows.lock
+
+            def observed_lock(workflow_id: int):
+                phase_update_started.set()
+                return original_lock(workflow_id)
+
+            uow.workflows.lock = observed_lock
+            try:
+                PhaseServiceApp(uow).update_phase(int(phase.id), {"name": f"Phase after {operation}"})
+                return "phase-saved"
+            finally:
+                uow.close()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            instruction_result = pool.submit(mutate_instruction)
+            assert instruction_holds_workflow.wait(10)
+            phase_result = pool.submit(mutate_phase)
+            assert phase_update_started.wait(10)
+            release_instruction.set()
+            assert instruction_result.result(timeout=20) == "instruction-saved"
+            assert phase_result.result(timeout=20) == "phase-saved"
+
+        verify = SAUnitOfWork(pg_url)
+        assert verify.phases.get_by_id(int(phase.id)).name == f"Phase after {operation}"
+        rows = list(verify.instructions.list(int(phase.id)))
+        if operation == "update":
+            assert rows[0]["description"] == "updated"
+        elif operation == "delete":
+            assert [row["step_num"] for row in rows] == [1]
+            assert rows[0]["id"] == second["id"]
+        else:
+            assert [row["id"] for row in rows] == [second["id"], first["id"]]
+        verify.close()
+
 
 def _pass_response(user_prompt: str) -> dict:
     item_ids = []
@@ -788,6 +1020,53 @@ def test_concurrent_reports_create_one_transition_and_run(pg_url, same_report):
         assert sum(result["replayed"] is True for result in results) == 1
     else:
         assert sum(result["verdict"] == "BLOCKED" and result["retryable"] is True for result in results) == 1
+
+
+@pytest.mark.integration
+def test_concurrent_distinct_partial_reports_do_not_apply_stale_snapshot(pg_url):
+    from project_workflow.supervisor import SupervisorEngine
+
+    task_key = "RUN-CONCURRENT-PARTIAL"
+    _prepare_concurrent_task(pg_url, task_key)
+    start = Barrier(2)
+    providers = Barrier(2)
+
+    def partial_response(user_prompt: str) -> dict:
+        response = _pass_response(user_prompt)
+        response["verdict"] = "PARTIAL"
+        response["missing"] = response.pop("covered")
+        response["covered"] = []
+        response["message"] = "partial"
+        return response
+
+    def provider(*_args, **kwargs):
+        providers.wait(timeout=10)
+        return partial_response(str(kwargs["user"]))
+
+    def evaluate(report: str) -> dict:
+        uow = SAUnitOfWork(pg_url)
+        try:
+            engine = SupervisorEngine(task_key, uow=uow, create_if_missing=False)
+            start.wait(timeout=10)
+            return engine.evaluate(report)
+        finally:
+            uow.close()
+
+    with (
+        patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient.chat", side_effect=provider),
+        ThreadPoolExecutor(max_workers=2) as pool,
+    ):
+        results = list(pool.map(evaluate, ["first partial", "second partial"]))
+
+    assert sorted(result["verdict"] for result in results) == ["BLOCKED", "PARTIAL"]
+    blocked = next(result for result in results if result["verdict"] == "BLOCKED")
+    assert blocked["retryable"] is True
+    verify = SAUnitOfWork(pg_url)
+    task = verify.tasks.get_by_key(task_key)
+    assert task is not None
+    assert len(verify.supervisor_runs.list(task_id=task.id)) == 1
+    assert len(verify.tasks.get_history(task.id)) == 1
+    verify.close()
 
 
 class _ProviderState:

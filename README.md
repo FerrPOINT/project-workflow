@@ -99,6 +99,7 @@ export OPENAI_REASONING_EFFORT=none
 Если endpoint не поддерживает `reasoning_effort`, задайте `OPENAI_REASONING_EFFORT=`.
 
 Fallback evaluator отсутствует: если провайдер недоступен или вернул некорректный JSON, задача остаётся на текущей фазе, атомарно получает `status=blocked`, blocked history и audit-run без fingerprint; команда возвращает retryable `BLOCKED` и exit code `1`. Повтор снова вызывает provider, а успешная оценка снимает техническую блокировку обычным переходом.
+Ответ evaluator принимается только по точному JSON-контракту: uppercase verdict, обязательные `message` и finite `confidence` в диапазоне `0..1`, непустые строковые элементы массивов и отсутствие неизвестных полей. Replay действует только для той же задачи, фазы, нормализованного отчёта и неизменившегося contract fingerprint. DB-транзакция не удерживается во время provider-вызова; изменение каталога до применения verdict даёт retryable `BLOCKED` без fingerprint.
 Повторный отчёт после `status=done` не вызывает evaluator и не создаёт новый run/history: CLI возвращает `PASS`, `status=done` и `next_phase=null`.
 
 <a name="ui"></a>
@@ -179,9 +180,9 @@ flowchart TD
 - Конфигурация централизована в `project_workflow.config` на Pydantic Settings; `DATABASE_URL` обязателен.
 - PostgreSQL хранит каталог, задачи, историю, fingerprints и audit; packaged seed используется только для пустой БД.
 - Граф фаз валидируется целиком до записи: порядок всегда `1..N`, rollback направлен назад, а явные parallel-ссылки соединяют только фазы одного непрерывного parallel-сегмента; isolated parallel допустим.
-- REST принимает числовые phase resource IDs и строгие JSON-типы; `key_prefixes` — только непустой `list[str]`, скрытого textarea/string compatibility нет.
+- REST принимает числовые phase resource IDs и строгие JSON-типы; `key_prefixes` — только непустой `list[str]`, а reorder инструкций — полный уникальный набор ID одной фазы. Скрытого textarea/string compatibility нет.
 - Skills являются рекомендациями внутри инструкций фазы; их канонические файлы хранятся в `relevanter/agent-skills`, отдельного runtime registry нет.
-- Hermes profile является ссылкой на профиль внешнего исполнителя; Workflow хранит только уникальное имя и не копирует конфигурацию или секреты Hermes.
+- Hermes profile является уникальной строковой ссылкой на профиль внешнего исполнителя; очистка выполняется только явным `null`. Workflow не копирует конфигурацию или секреты Hermes.
 
 <a name="quality"></a>
 ## 🛡️ Quality Bar

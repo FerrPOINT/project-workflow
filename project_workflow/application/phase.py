@@ -36,7 +36,7 @@ class PhaseServiceApp:
             raise NotFoundError(f"Workflow {workflow_id} not found")
 
     def _validate_agent(self, agent_id: Any) -> None:
-        if agent_id is not None and self._uow.agents.get_by_id(int(agent_id)) is None:
+        if agent_id is not None and self._uow.agents.lock(int(agent_id)) is None:
             raise NotFoundError(f"Agent {agent_id} not found")
 
     @staticmethod
@@ -67,6 +67,7 @@ class PhaseServiceApp:
 
     def create_phase(self, data: dict[str, Any], *, commit: bool = True) -> dict[str, Any]:
         workflow_id = int(data["workflow_id"])
+        self._validate_agent(data.get("agent_id"))
         self._lock_workflow(workflow_id)
         existing = list(self._uow.phases.list(workflow_id))
         order = data.get("phase_order")
@@ -87,7 +88,6 @@ class PhaseServiceApp:
             code = raw_code.strip()
         if any(phase.code == code for phase in existing):
             raise ConflictError(f"Phase code {code!r} already exists in the workflow")
-        self._validate_agent(data.get("agent_id"))
         validated = dict(data)
         self._normalize_links(validated)
         prospective = [
@@ -142,13 +142,14 @@ class PhaseServiceApp:
         if phase.workflow_id is None:
             raise ConflictError("Phase has no owning workflow")
         workflow_id = phase.workflow_id
-        self._lock_workflow(workflow_id)
         updates = dict(data)
         if "agent_id" in updates:
             self._validate_agent(updates["agent_id"])
+        self._lock_workflow(workflow_id)
         self._normalize_links(updates)
         phases = list(self._uow.phases.list(workflow_id))
-        if not any(item.id == phase_id for item in phases):
+        phase = next((item for item in phases if item.id == phase_id), None)
+        if phase is None:
             raise NotFoundError(f"Phase {phase_id} not found")
         detached_ids: list[int] = []
         if updates.get("execution_type") == "sync":

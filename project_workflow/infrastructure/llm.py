@@ -11,12 +11,11 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 from dataclasses import dataclass
 from typing import Any, Literal
 
 import requests
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from project_workflow import config
 
@@ -223,16 +222,30 @@ class PromptBuilder:
 
 
 class _LlmResponse(BaseModel):
-    """Wire contract: strict on decisions, tolerant on optional explanation."""
+    """Exact evaluator wire contract."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     verdict: Literal["PASS", "PARTIAL", "BLOCKED", "ROLLBACK", "DELEGATE"]
     covered: list[str]
     missing: list[str]
     blockers: list[str]
-    message: str = ""
-    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    message: str = Field(min_length=1)
+    confidence: float = Field(ge=0.0, le=1.0, allow_inf_nan=False)
+
+    @field_validator("covered", "missing", "blockers")
+    @classmethod
+    def _strict_string_items(cls, values: list[str]) -> list[str]:
+        if any(not item or item != item.strip() for item in values):
+            raise ValueError("list items must be non-blank strings without surrounding whitespace")
+        return values
+
+    @field_validator("message")
+    @classmethod
+    def _strict_message(cls, value: str) -> str:
+        if value != value.strip():
+            raise ValueError("message must not contain surrounding whitespace")
+        return value
 
 
 class ResponseParser:
@@ -246,28 +259,7 @@ class ResponseParser:
         required_item_ids: list[str] | None = None,
         previously_covered_ids: set[str] | None = None,
     ) -> LlmVerdict:
-        payload = dict(raw)
-        verdict_value = payload.get("verdict")
-        if isinstance(verdict_value, str):
-            payload["verdict"] = verdict_value.upper().strip()
-        if not isinstance(payload.get("message", ""), str):
-            payload["message"] = ""
-        else:
-            payload["message"] = payload.get("message", "").strip()
-
-        confidence = payload.get("confidence", 0.5)
-        try:
-            confidence = float(confidence) if not isinstance(confidence, bool) else 0.5
-        except (TypeError, ValueError):
-            confidence = 0.5
-        if not math.isfinite(confidence) or not 0.0 <= confidence <= 1.0:
-            confidence = 0.5
-        payload["confidence"] = confidence
-        for field_name in ("covered", "missing", "blockers"):
-            values = payload.get(field_name)
-            if isinstance(values, list) and all(isinstance(item, str) for item in values):
-                payload[field_name] = [item.strip() for item in values if item.strip()]
-        response = _LlmResponse.model_validate(payload)
+        response = _LlmResponse.model_validate(raw)
 
         covered = response.covered
         missing = response.missing

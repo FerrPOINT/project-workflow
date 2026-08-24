@@ -66,7 +66,10 @@
 {% block extra_script %}
 function payloadFromRow(row){
   var data={};
-  row.querySelectorAll('[data-field]').forEach(function(field){data[field.dataset.field]=field.value.trim()});
+  row.querySelectorAll('[data-field]').forEach(function(field){
+    var value=field.value.trim();
+    data[field.dataset.field]=field.dataset.field==='hermes_profile' ? (value || null) : value;
+  });
   return data;
 }
 function saveRow(el){

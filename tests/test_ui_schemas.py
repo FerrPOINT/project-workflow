@@ -128,9 +128,14 @@ def test_agent_create_update():
     a = AgentCreate(name="Coder", hermes_profile=" code_profile ")
     assert a.name == "Coder"
     assert a.hermes_profile == "code_profile"
-    au = AgentUpdate(name="New", hermes_profile="")
+    au = AgentUpdate(name="New", hermes_profile=None)
     assert au.name == "New"
     assert au.hermes_profile is None
+    with pytest.raises(ValueError, match="use null to clear"):
+        AgentUpdate(name="New", hermes_profile="")
+    for invalid in (1, {}, []):
+        with pytest.raises(ValueError):
+            AgentUpdate.model_validate({"hermes_profile": invalid})
 
 
 @pytest.mark.parametrize("profile", ["UPPER", "space profile", "-leading", "profile.dot"])

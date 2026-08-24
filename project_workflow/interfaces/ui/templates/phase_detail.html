@@ -361,17 +361,22 @@ function updateInstructionControls() {
 
 async function persistInstructionOrder() {
   const ids = getInstructionItems().map((item) => parseInt(item.dataset.instructionId, 10));
-  const resp = await fetch(`/api/phases/${phaseId}/instructions/reorder`, {
-    method: 'PUT',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({instruction_ids: ids}),
-  });
-  if (!resp.ok) {
+  try {
+    const resp = await fetch(`/api/phases/${phaseId}/instructions/reorder`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({instruction_ids: ids}),
+    });
+    if (!resp.ok) {
+      showToast('Не удалось сохранить порядок инструкций', 'error');
+      return false;
+    }
+    showToast('Порядок инструкций сохранён');
+    return true;
+  } catch (_error) {
     showToast('Не удалось сохранить порядок инструкций', 'error');
     return false;
   }
-  showToast('Порядок инструкций сохранён');
-  return true;
 }
 
 async function moveInstruction(button, direction) {
@@ -386,7 +391,10 @@ async function moveInstruction(button, direction) {
   reordered.splice(targetIndex, 0, moved);
   renderInstructionTimeline(reordered);
   updateInstructionControls();
-  await persistInstructionOrder();
+  if (!await persistInstructionOrder()) {
+    renderInstructionTimeline(items);
+    updateInstructionControls();
+  }
 }
 
 async function addInstructionAfter(button) {

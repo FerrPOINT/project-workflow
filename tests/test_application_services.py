@@ -145,20 +145,42 @@ class TestInstructionService:
 
     def test_update_and_delete_instruction(self):
         uow = _make_uow()
+        phase = MagicMock(id=10, workflow_id=7)
+        uow.phases.get_by_id.return_value = phase
+        uow.phases.list.return_value = [phase]
+        uow.instructions.get_by_id.return_value = {"id": 2, "phase_id": 10}
+        uow.instructions.list.return_value = [{"id": 2}, {"id": 3}]
         svc = InstructionService(uow)
         assert svc.update_instruction(2, {"description": "Z"}) is None
         assert svc.delete_instruction(2) is None
         uow.instructions.update.assert_called_once_with(2, {"description": "Z"})
         uow.instructions.delete.assert_called_once_with(2)
+        uow.instructions.reorder.assert_called_once_with(10, [(3, 1)])
         assert uow.commit.call_count == 2
 
     def test_reorder_instructions(self):
         uow = _make_uow()
+        phase = MagicMock(id=10, workflow_id=7)
+        uow.phases.get_by_id.return_value = phase
+        uow.phases.list.return_value = [phase]
         uow.instructions.list.return_value = [{"id": 3}, {"id": 1}, {"id": 2}]
         svc = InstructionService(uow)
-        svc.reorder_instructions(10, [2, 3])
+        svc.reorder_instructions(10, [2, 3, 1])
         uow.instructions.reorder.assert_called_once_with(10, [(2, 1), (3, 2), (1, 3)])
         uow.commit.assert_called_once()
+
+    def test_reorder_instructions_rejects_partial_set(self):
+        uow = _make_uow()
+        phase = MagicMock(id=10, workflow_id=7)
+        uow.phases.get_by_id.return_value = phase
+        uow.phases.list.return_value = [phase]
+        uow.instructions.list.return_value = [{"id": 3}, {"id": 1}, {"id": 2}]
+
+        with pytest.raises(ConflictError, match="complete set"):
+            InstructionService(uow).reorder_instructions(10, [2, 3])
+
+        uow.instructions.reorder.assert_not_called()
+        uow.commit.assert_not_called()
 
 
 class TestProjectService:

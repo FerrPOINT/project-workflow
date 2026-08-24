@@ -22,6 +22,19 @@ def _seed_phase_id() -> int:
 
 
 class TestInstructionsApi:
+    def test_reorder_templates_move_rows_and_restore_dom_on_failure(self):
+        phase_id = _seed_phase_id()
+        dedicated = client.get(f"/instructions?phase_id={phase_id}").text
+        detail = client.get(f"/phase/{phase_id}").text
+
+        assert "layout.replaceChildren(...reordered)" in dedicated
+        assert "layout.replaceChildren(...rows)" in dedicated
+        assert "appendChild(r.closest('.instruction-block')" not in dedicated
+        assert "const isParallelGroup = group.length > 1;" in dedicated
+        assert "type === 'parallel' ? ' parallel-group'" not in dedicated
+        assert "if (!await persistInstructionOrder())" in detail
+        assert "renderInstructionTimeline(items)" in detail
+
     def test_instructions_list_returns_phase_and_instructions(self):
         phase_id = _seed_phase_id()
         response = client.get(f"/api/phases/{phase_id}/instructions")
@@ -104,10 +117,15 @@ class TestInstructionsApi:
         ]
         ids = [item["id"] for item in items]
         reversed_ids = list(reversed(ids))
+        current_ids = [
+            item["id"]
+            for item in client.get(f"/api/phases/{phase_id}/instructions").json()["instructions"]
+        ]
+        full_order = [item_id for item_id in current_ids if item_id not in ids] + reversed_ids
 
         response = client.put(
             f"/api/phases/{phase_id}/instructions/reorder",
-            json={"instruction_ids": reversed_ids},
+            json={"instruction_ids": full_order},
         )
         assert response.status_code == 200
 
@@ -119,8 +137,58 @@ class TestInstructionsApi:
             client.delete(f"/api/instructions/{item['id']}")
 
     def test_reorder_404_for_missing_phase(self):
-        response = client.put("/api/phases/9999999/instructions/reorder", json={"instruction_ids": []})
+        response = client.put("/api/phases/9999999/instructions/reorder", json={"instruction_ids": [9999999]})
         assert response.status_code == 404
+
+    @pytest.mark.parametrize("instruction_ids", [[], [1, 1], ["1"], [True]])
+    def test_reorder_rejects_malformed_ids(self, instruction_ids):
+        phase_id = _seed_phase_id()
+        response = client.put(
+            f"/api/phases/{phase_id}/instructions/reorder",
+            json={"instruction_ids": instruction_ids},
+        )
+        assert response.status_code == 422
+
+    def test_reorder_rejects_incomplete_missing_and_cross_phase_ids(self):
+        phase_id = _seed_phase_id()
+        other_phase_id = client.get("/api/phases").json()["phases"][1]["id"]
+        own_ids = [
+            item["id"]
+            for item in client.get(f"/api/phases/{phase_id}/instructions").json()["instructions"]
+        ]
+        foreign = client.post(
+            "/api/instructions",
+            json={"phase_id": other_phase_id, "description": "foreign instruction"},
+        ).json()["instruction"]
+
+        incomplete = own_ids[:-1] if len(own_ids) > 1 else [9999998]
+        assert client.put(
+            f"/api/phases/{phase_id}/instructions/reorder",
+            json={"instruction_ids": incomplete},
+        ).status_code == 409
+        assert client.put(
+            f"/api/phases/{phase_id}/instructions/reorder",
+            json={"instruction_ids": own_ids[:-1] + [9999999]},
+        ).status_code == 409
+        assert client.put(
+            f"/api/phases/{phase_id}/instructions/reorder",
+            json={"instruction_ids": own_ids[:-1] + [foreign["id"]]},
+        ).status_code == 409
+        client.delete(f"/api/instructions/{foreign['id']}")
+
+    def test_delete_instruction_keeps_contiguous_step_numbers(self):
+        phase_id = _seed_phase_id()
+        created = [
+            client.post(
+                "/api/instructions",
+                json={"phase_id": phase_id, "description": f"delete-order-{index}"},
+            ).json()["instruction"]["id"]
+            for index in range(3)
+        ]
+        for instruction_id in (created[0], created[1], created[2]):
+            assert client.delete(f"/api/instructions/{instruction_id}").status_code == 200
+            rows = client.get(f"/api/phases/{phase_id}/instructions").json()["instructions"]
+            assert [row["step_num"] for row in rows] == list(range(1, len(rows) + 1))
 
     def test_create_instruction_persists_skills(self):
         phase_id = _seed_phase_id()

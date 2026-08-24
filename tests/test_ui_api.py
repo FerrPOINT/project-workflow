@@ -568,6 +568,10 @@ class TestApiProjects:
 
 
 class TestApiAgents:
+    def test_agents_page_clears_hermes_profile_with_null(self, client):
+        html = client.get("/agents").text
+        assert "field.dataset.field==='hermes_profile' ? (value || null) : value" in html
+
     def test_list_agents(self, client):
         resp = client.get("/api/agents")
         assert resp.status_code == 200
@@ -609,6 +613,11 @@ class TestApiAgents:
     def test_invalid_hermes_profile_is_rejected(self, client):
         response = client.post("/api/agents", json={"name": _unique("Agent"), "hermes_profile": "Bad Profile"})
         assert response.status_code == 422
+        for invalid in ("", 1, {}, []):
+            response = client.post(
+                "/api/agents", json={"name": _unique("Agent"), "hermes_profile": invalid}
+            )
+            assert response.status_code == 422
 
     def test_delete_agent_assigned_to_phase_forbidden(self, client):
         from project_workflow.interfaces.ui import _app_state
@@ -772,11 +781,13 @@ class TestApiInstructionsReorder:
         resp2 = client.post("/api/instructions", json={"phase_id": phase_id, "description": "second"})
         id1 = resp1.json()["instruction"]["id"]
         id2 = resp2.json()["instruction"]["id"]
-        resp = client.put(f"/api/phases/{phase_id}/instructions/reorder", json={"instruction_ids": [id2, id1]})
+        current = _app_state.instruction_service().list_instructions(phase_id)
+        full_order = [item["id"] for item in current if item["id"] not in {id1, id2}] + [id2, id1]
+        resp = client.put(f"/api/phases/{phase_id}/instructions/reorder", json={"instruction_ids": full_order})
         assert resp.status_code == 200
         assert resp.json()["ok"] is True
         ordered = _app_state.instruction_service().list_instructions(phase_id)
-        assert [i["id"] for i in ordered[:2]] == [id2, id1]
+        assert [i["id"] for i in ordered[-2:]] == [id2, id1]
 
 
 class TestApiPhaseUpdate:

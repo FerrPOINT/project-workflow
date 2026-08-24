@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, ClassVar, Literal
+from typing import Annotated, Any, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -48,27 +48,13 @@ def _normalize_string_list(value: Any, field_name: str) -> list[str] | None:
     return normalized
 
 
-class OptionalIntMixin:
-    """Normalize optional integer fields coming from HTML/JSON forms."""
-
-    @staticmethod
-    def _coerce_optional_int(value: Any) -> int | None:
-        if value is None or value == "":
-            return None
-        try:
-            parsed = int(str(value).strip())
-        except (TypeError, ValueError):
-            return None
-        return parsed if parsed > 0 else None
-
-
 class _PhaseOrderItem(StrictRequest):
     phase_id: int = Field(gt=0, strict=True)
     phase_order: int = Field(gt=0, strict=True)
     workflow_id: int | None = Field(default=None, gt=0, strict=True)
 
 
-class PhaseCreate(StrictRequest, OptionalIntMixin):
+class PhaseCreate(StrictRequest):
     workflow_id: int = Field(gt=0, strict=True, description="Parent workflow id")
     phase_order: int | None = Field(default=None, gt=0, strict=True, description="1-based insertion position")
     insert_after: int | None = Field(default=None, ge=0, strict=True, description="Insert after this 0-based index")
@@ -134,7 +120,7 @@ class PhaseTextItem(StrictRequest):
         return _strip_nonblank(value, "description")
 
 
-class PhaseUpdate(StrictUpdateRequest, OptionalIntMixin):
+class PhaseUpdate(StrictUpdateRequest):
     non_nullable_fields = frozenset({"name", "execution_type", "instructions", "checks", "evidence"})
 
     name: str | None = Field(default=None)
@@ -192,7 +178,7 @@ class WorkflowUpdate(StrictUpdateRequest):
         return _strip_nonblank(value, "name") if value is not None else None
 
 
-class ProjectCreate(StrictRequest, OptionalIntMixin):
+class ProjectCreate(StrictRequest):
     code: str = Field(..., min_length=1)
     name: str | None = Field(default=None)
     description: str | None = Field(default="")
@@ -242,7 +228,7 @@ class ProjectCreate(StrictRequest, OptionalIntMixin):
         return value
 
 
-class ProjectUpdate(StrictUpdateRequest, OptionalIntMixin):
+class ProjectUpdate(StrictUpdateRequest):
     non_nullable_fields = frozenset({"code", "name", "description", "workflow_id", "key_prefixes"})
 
     code: str | None = Field(default=None, min_length=1)
@@ -285,19 +271,21 @@ class ProjectUpdate(StrictUpdateRequest, OptionalIntMixin):
 class AgentCreate(StrictRequest):
     name: str = Field(..., min_length=1)
     description: str = Field(default="")
-    hermes_profile: str | None = Field(default=None, max_length=251)
+    hermes_profile: str | None = Field(default=None, max_length=251, strict=True)
 
     @field_validator("name")
     @classmethod
     def _name_not_blank(cls, value: str) -> str:
         return _strip_nonblank(value, "name")
 
-    @field_validator("hermes_profile", mode="before")
+    @field_validator("hermes_profile")
     @classmethod
-    def _validate_hermes_profile(cls, value: Any) -> str | None:
-        profile = str(value or "").strip()
-        if not profile:
+    def _validate_hermes_profile(cls, value: str | None) -> str | None:
+        if value is None:
             return None
+        profile = value.strip()
+        if not profile:
+            raise ValueError("Hermes profile must not be blank; use null to clear it")
         if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", profile):
             raise ValueError("Hermes profile must match [a-z0-9][a-z0-9_-]*")
         return profile
@@ -308,19 +296,21 @@ class AgentUpdate(StrictUpdateRequest):
 
     name: str | None = Field(default=None)
     description: str | None = Field(default=None)
-    hermes_profile: str | None = Field(default=None, max_length=251)
+    hermes_profile: str | None = Field(default=None, max_length=251, strict=True)
 
     @field_validator("name")
     @classmethod
     def _name_not_blank(cls, value: str | None) -> str | None:
         return _strip_nonblank(value, "name") if value is not None else None
 
-    @field_validator("hermes_profile", mode="before")
+    @field_validator("hermes_profile")
     @classmethod
-    def _validate_hermes_profile(cls, value: Any) -> str | None:
-        profile = str(value or "").strip()
-        if not profile:
+    def _validate_hermes_profile(cls, value: str | None) -> str | None:
+        if value is None:
             return None
+        profile = value.strip()
+        if not profile:
+            raise ValueError("Hermes profile must not be blank; use null to clear it")
         if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", profile):
             raise ValueError("Hermes profile must match [a-z0-9][a-z0-9_-]*")
         return profile
@@ -367,4 +357,11 @@ class InstructionUpdate(StrictUpdateRequest):
 
 
 class InstructionReorder(StrictRequest):
-    instruction_ids: list[int] = Field(...)
+    instruction_ids: list[Annotated[int, Field(gt=0, strict=True)]] = Field(min_length=1)
+
+    @field_validator("instruction_ids")
+    @classmethod
+    def _instruction_ids_unique(cls, value: list[int]) -> list[int]:
+        if len(value) != len(set(value)):
+            raise ValueError("instruction_ids must contain unique values")
+        return value

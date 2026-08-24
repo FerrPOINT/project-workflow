@@ -72,6 +72,9 @@ class PhaseRepository(ABC):
     def reference_kinds(self, phase_id: int) -> set[str]: ...
 
     @abstractmethod
+    def has_agent_reference(self, agent_id: int) -> bool: ...
+
+    @abstractmethod
     def resequence(self, workflow_id: int) -> None: ...
 
     @abstractmethod
@@ -197,6 +200,9 @@ class AgentRepository(ABC):
 
     @abstractmethod
     def get_by_hermes_profile(self, profile: str) -> Agent | None: ...
+
+    @abstractmethod
+    def lock(self, agent_id: int) -> Agent | None: ...
 
     @abstractmethod
     def create(self, data: dict[str, Any]) -> int: ...

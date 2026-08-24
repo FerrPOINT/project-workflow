@@ -26,6 +26,7 @@ def _make_uow(agents=None) -> UnitOfWork:
     uow = MagicMock(spec=UnitOfWork)
     uow.agents = agents or MagicMock()
     uow.agents.get_by_hermes_profile.return_value = None
+    uow.phases.has_agent_reference.return_value = False
     return uow
 
 
@@ -121,3 +122,14 @@ def test_delete_agent():
     assert svc.delete_agent(5) is None
     uow.agents.delete.assert_called_once_with(5)
     uow.commit.assert_called_once()
+
+
+def test_delete_assigned_agent_is_conflict_and_rolls_back():
+    uow = _make_uow()
+    uow.phases.has_agent_reference.return_value = True
+
+    with pytest.raises(ConflictError, match="assigned to a phase"):
+        AgentService(uow).delete_agent(5)
+
+    uow.agents.delete.assert_not_called()
+    uow.rollback.assert_called_once_with()

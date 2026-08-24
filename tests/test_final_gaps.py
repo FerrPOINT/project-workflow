@@ -32,12 +32,10 @@ def _mock_state(uow=None):
 
 
 class TestSchemasFinalGaps:
-    def test_coerce_int_invalid(self):
-        assert schemas.OptionalIntMixin._coerce_optional_int("abc") is None
-
-    def test_coerce_int_zero_or_negative(self):
-        assert schemas.OptionalIntMixin._coerce_optional_int("0") is None
-        assert schemas.OptionalIntMixin._coerce_optional_int("-5") is None
+    @pytest.mark.parametrize("value", ["abc", "0", "-5", 0, -5, True])
+    def test_phase_create_rejects_invalid_optional_integer(self, value):
+        with pytest.raises(ValueError):
+            schemas.PhaseCreate(workflow_id=1, phase_order=1, agent_id=value)
 
     def test_project_create_key_prefixes_invalid_type(self):
         with pytest.raises(ValueError, match="list of strings"):

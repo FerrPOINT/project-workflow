@@ -41,6 +41,8 @@ def _build_phase_from_db(
             example=ir.get("example"),
             execution_type=ir.get("execution_type", "sync"),
             skills=ir.get("skills") or [],
+            id=ir.get("id"),
+            step_num=ir.get("step_num"),
         )
         for ir in inst_rows
     ]

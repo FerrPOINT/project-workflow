@@ -104,21 +104,27 @@ function updateTimeline() {
   const layout = document.getElementById('instructionsLayout');
   const rows = getRows();
   layout.innerHTML = '';
-  let currentBlock = null;
+  const groups = [];
   rows.forEach((row, idx) => {
     const type = row.querySelector('.type-badge')?.textContent || 'sync';
     if (idx === 0 || type !== 'parallel') {
-      currentBlock = document.createElement('div');
-      currentBlock.className = 'instruction-block' + (type === 'parallel' ? ' parallel-group' : '');
-      if (type === 'parallel') {
-        const label = document.createElement('div');
-        label.className = 'parallel-label';
-        label.textContent = '⚡ parallel';
-        currentBlock.appendChild(label);
-      }
-      layout.appendChild(currentBlock);
+      groups.push([row]);
+    } else {
+      groups[groups.length - 1].push(row);
     }
-    currentBlock.appendChild(row);
+  });
+  groups.forEach(group => {
+    const isParallelGroup = group.length > 1;
+    const block = document.createElement('div');
+    block.className = 'instruction-block' + (isParallelGroup ? ' parallel-group' : '');
+    if (isParallelGroup) {
+      const label = document.createElement('div');
+      label.className = 'parallel-label';
+      label.textContent = '⚡ parallel';
+      block.appendChild(label);
+    }
+    group.forEach(row => block.appendChild(row));
+    layout.appendChild(block);
   });
   renumberRows();
   updateMoveButtons();
@@ -136,15 +142,24 @@ function updateMoveButtons() {
 
 async function persistOrder() {
   const ids = getRows().map(r => parseInt(r.dataset.instructionId, 10));
-  const resp = await fetch('/api/phases/' + PHASE_ID + '/instructions/reorder', {
-    method: 'PUT',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({instruction_ids: ids}),
-  });
-  if (!resp.ok) showToast('Не удалось сохранить порядок', 'error');
+  try {
+    const resp = await fetch('/api/phases/' + PHASE_ID + '/instructions/reorder', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({instruction_ids: ids}),
+    });
+    if (!resp.ok) {
+      showToast('Не удалось сохранить порядок', 'error');
+      return false;
+    }
+    return true;
+  } catch (_error) {
+    showToast('Не удалось сохранить порядок', 'error');
+    return false;
+  }
 }
 
-function moveInstruction(button, dir) {
+async function moveInstruction(button, dir) {
   const row = button.closest('.instruction-row');
   const rows = getRows();
   const idx = rows.indexOf(row);
@@ -154,10 +169,12 @@ function moveInstruction(button, dir) {
   const [moved] = reordered.splice(idx, 1);
   reordered.splice(target, 0, moved);
   const layout = document.getElementById('instructionsLayout');
-  layout.innerHTML = '';
-  reordered.forEach(r => layout.appendChild(r.closest('.instruction-block') || r));
+  layout.replaceChildren(...reordered);
   updateTimeline();
-  persistOrder();
+  if (!await persistOrder()) {
+    layout.replaceChildren(...rows);
+    updateTimeline();
+  }
 }
 
 async function updateInstruction(textarea) {

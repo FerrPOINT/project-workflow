@@ -27,7 +27,7 @@ class SAPhaseRepository(PhaseRepository):
         stmt = select(m.Phase).options(joinedload(m.Phase.workflow)).order_by(m.Phase.workflow_id, m.Phase.phase_order)
         if workflow_id is not None:
             stmt = stmt.where(m.Phase.workflow_id == workflow_id)
-        rows = self._session.execute(stmt).scalars().all()
+        rows = self._session.execute(stmt.execution_options(populate_existing=True)).scalars().all()
         return [_row_to_phase(r) for r in rows]
 
     def get_by_id(self, phase_id: int) -> Phase | None:
@@ -163,6 +163,12 @@ class SAPhaseRepository(PhaseRepository):
         if catalog_link is not None:
             kinds.add("phase link")
         return kinds
+
+    def has_agent_reference(self, agent_id: int) -> bool:
+        phase_id = self._session.execute(
+            select(m.Phase.id).where(m.Phase.agent_id == agent_id).limit(1)
+        ).scalar_one_or_none()
+        return phase_id is not None
 
     def resequence(self, workflow_id: int) -> None:
         rows = self._session.execute(

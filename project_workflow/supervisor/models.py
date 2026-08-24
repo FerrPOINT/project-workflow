@@ -29,6 +29,8 @@ class PhaseInstruction:
     example: str | None = None
     execution_type: str = "sync"
     skills: list[str] = field(default_factory=list)
+    id: int | None = None
+    step_num: int | None = None
 
 
 @dataclass

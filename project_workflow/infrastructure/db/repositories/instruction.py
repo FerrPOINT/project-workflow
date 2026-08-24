@@ -10,7 +10,7 @@ from typing import Any
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from project_workflow.domain.exceptions import NotFoundError
+from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import InstructionRepository
 from project_workflow.infrastructure.db import models as m
 
@@ -119,8 +119,22 @@ class SAInstructionRepository(InstructionRepository):
         phase out of the target number range, then assign the final numbers.
         This avoids UNIQUE constraint collisions on (phase_id, step_num).
         """
-        if not orders:
-            return
+        existing_ids = list(
+            self._session.execute(
+                select(m.Instruction.id)
+                .where(m.Instruction.phase_id == phase_id)
+                .order_by(m.Instruction.step_num)
+            ).scalars()
+        )
+        requested_ids = [instruction_id for instruction_id, _ in orders]
+        positions = [position for _, position in orders]
+        if (
+            not orders
+            or len(requested_ids) != len(set(requested_ids))
+            or set(requested_ids) != set(existing_ids)
+            or sorted(positions) != list(range(1, len(existing_ids) + 1))
+        ):
+            raise ConflictError("Instruction reorder must contain the complete phase order")
         offset = len(orders) + 1000
         self._session.execute(
             text("UPDATE instructions SET step_num = step_num + :offset WHERE phase_id = :phase_id"),
@@ -134,28 +148,6 @@ class SAInstructionRepository(InstructionRepository):
                 ),
                 {"step": new_step, "id": instruction_id, "phase_id": phase_id},
             )
-        shifted_ids = (
-            self._session.execute(
-                select(m.Instruction.id)
-                .where(
-                    m.Instruction.phase_id == phase_id,
-                    m.Instruction.step_num >= offset,
-                )
-                .order_by(m.Instruction.step_num)
-            )
-            .scalars()
-            .all()
-        )
-        next_step = max((new_step for _, new_step in orders), default=0) + 1
-        for instruction_id in shifted_ids:
-            self._session.execute(
-                text(
-                    "UPDATE instructions SET step_num = :step "
-                    "WHERE id = :id AND phase_id = :phase_id"
-                ),
-                {"step": next_step, "id": instruction_id, "phase_id": phase_id},
-            )
-            next_step += 1
         self._session.flush()
         self._session.expire_all()
 
