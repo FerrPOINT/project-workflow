@@ -76,6 +76,35 @@ class TestSupervisorCoreGaps:
         engine.task = None
         assert engine._get_previously_covered("1") == set()
 
+    def test_phase_contract_includes_feedback_after_rollback(self):
+        engine = SupervisorEngine("RUN-1")
+        implementation = self._phase(code="8.IMPLEMENT", id=8)
+        engine.all_phases = [implementation]
+        engine.phase_map = {implementation.code: implementation}
+        engine.current_phase = implementation.code
+        engine.get_full_context = MagicMock(
+            return_value={
+                "recent_verdicts": [
+                    {
+                        "phase_code": "10.REVIEW",
+                        "verdict": "ROLLBACK",
+                        "message": "Fix the JavaScript syntax error",
+                        "missing": ["Нет correctness-дефектов"],
+                        "blockers": [],
+                        "rollback_target": "8.IMPLEMENT",
+                    }
+                ]
+            }
+        )
+
+        contract = engine.get_phase_contract()
+
+        assert contract is not None
+        assert contract["evaluation_feedback"]["verdict"] == "ROLLBACK"
+        assert contract["evaluation_feedback"]["message"] == (
+            "Fix the JavaScript syntax error"
+        )
+
     def test_get_previously_covered_no_task_id(self):
         engine = SupervisorEngine("RUN-1")
         engine.task = {"id": 0}
