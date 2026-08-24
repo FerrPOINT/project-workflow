@@ -121,6 +121,6 @@ def test_audit_snapshot_contains_contract_and_provider_metadata(supervisor_llm):
     snapshot = run.context_snapshot
     assert snapshot["model"]
     assert snapshot["endpoint_mode"] == "openai-compatible"
-    assert snapshot["prompt_version"] == "supervisor-evaluator-v6"
+    assert snapshot["prompt_version"] == "supervisor-evaluator-v7"
     assert snapshot["contract_snapshot"]["evaluation_items"]
     assert snapshot["raw_evaluator"]["verdict"] == "PARTIAL"
