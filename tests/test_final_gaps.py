@@ -120,6 +120,9 @@ class TestApplicationServiceFinalGaps:
 
     def test_instruction_service_creation_failed(self):
         uow = MagicMock()
+        phase = MagicMock(id=1, workflow_id=7)
+        uow.phases.get_by_id.return_value = phase
+        uow.phases.list.return_value = [phase]
         uow.instructions.create.return_value = 1
         uow.instructions.get_by_id.return_value = None
         with pytest.raises(RuntimeError, match="Instruction creation failed"):

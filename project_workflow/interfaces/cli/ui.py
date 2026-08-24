@@ -116,7 +116,7 @@ def step_cmd(
 
 @cli.command()
 @click.option("--task", required=True, help="Task key")
-@click.option("--n", type=int, default=None, help="Количество записей (по умолчанию: все)")
+@click.option("--n", type=click.IntRange(min=1), default=None, help="Количество записей (по умолчанию: все)")
 @click.pass_context
 def history_cmd(ctx: click.Context, task: str, n: int | None) -> None:
     """History — история отчётов, переходов и статусов по задаче.
@@ -131,7 +131,7 @@ def history_cmd(ctx: click.Context, task: str, n: int | None) -> None:
             task_key = _require_valid_key(task, uow)
             task_obj = uow.tasks.get_by_key(task_key)
             task_id = task_obj.id if task_obj else None
-            runs_raw = uow.supervisor_runs.list(task_id=task_id, task_key=task_key, limit=n or 200)
+            runs_raw = uow.supervisor_runs.list(task_id=task_id, task_key=task_key, limit=n)
             runs: list[dict[str, Any]] = []
             for raw in runs_raw:
                 rd: dict[str, Any] = raw.to_dict()

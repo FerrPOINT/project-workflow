@@ -25,9 +25,11 @@ class SASupervisorRunRepository(SupervisorRunRepository):
         self,
         task_id: int | None = None,
         task_key: str | None = None,
-        limit: int = 200,
+        limit: int | None = 200,
     ) -> Sequence[SupervisorRun]:
-        stmt = select(m.SupervisorRun).order_by(m.SupervisorRun.id.desc()).limit(limit)
+        stmt = select(m.SupervisorRun).order_by(m.SupervisorRun.id.desc())
+        if limit is not None:
+            stmt = stmt.limit(limit)
         if task_id is not None:
             stmt = stmt.where(m.SupervisorRun.task_id == task_id)
         if task_key is not None:

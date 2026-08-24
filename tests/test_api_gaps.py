@@ -188,11 +188,16 @@ class TestApiInstructionUpdate:
         assert response.status_code == 404
 
     def test_update_step_num(self):
-        with patch("project_workflow.interfaces.ui.routes.api._app_state") as state:
-            state.instruction_service.return_value.get_instruction.return_value = {"id": 1}
-            state.instruction_service.return_value.get_instruction.side_effect = [{"id": 1}, {"id": 1}]
-            response = client.put("/api/instructions/1", json={"step_num": 5})
-        assert response.status_code == 200
+        response = client.put("/api/instructions/1", json={"step_num": 5})
+        assert response.status_code == 422
+
+    @pytest.mark.parametrize("step_num", [0, -1, "1"])
+    def test_create_rejects_invalid_step_num(self, step_num):
+        response = client.post(
+            "/api/instructions",
+            json={"phase_id": 1, "description": "d", "step_num": step_num},
+        )
+        assert response.status_code == 422
 
 
 class TestApiInstructionSkills:

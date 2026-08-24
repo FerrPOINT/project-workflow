@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import Query
+from fastapi import Query, Response
 from fastapi.responses import JSONResponse
 
 from project_workflow.domain.exceptions import ConflictError, LastPhaseError, NotFoundError
@@ -92,7 +92,7 @@ async def api_tasks(workflow_id: int | None = Query(default=None)) -> dict[str, 
     return {"ok": True, "tasks": tasks}
 
 
-async def api_task_delete(task_key: str) -> JSONResponse:
+async def api_task_delete(task_key: str) -> Response:
     task = _app_state.task_service().get_task_by_key(task_key)
     if task is None:
         return _error(f"Задача {task_key!r} не найдена", 404)
@@ -100,7 +100,7 @@ async def api_task_delete(task_key: str) -> JSONResponse:
     if not isinstance(task_id, int):
         return _error("Некорректный идентификатор задачи", 400)
     _app_state.task_service().delete_task(task_id)
-    return JSONResponse({}, status_code=204)
+    return Response(status_code=204)
 
 
 async def api_projects() -> dict[str, Any] | JSONResponse:
@@ -423,14 +423,20 @@ async def api_instruction_create(payload: InstructionCreate) -> dict[str, Any] |
     phase = _app_state.phase_service().get_phase(payload.phase_id)
     if phase is None:
         return _error(f"Фаза {payload.phase_id} не найдена", 404)
-    item = _app_state.instruction_service().create_instruction(
-        payload.phase_id,
-        {
-            "description": payload.description,
-            "execution_type": payload.execution_type,
-            "skills": payload.skills,
-        },
-    )
+    try:
+        item = _app_state.instruction_service().create_instruction(
+            payload.phase_id,
+            {
+                "description": payload.description,
+                "execution_type": payload.execution_type,
+                "skills": payload.skills,
+                "step_num": payload.step_num,
+            },
+        )
+    except NotFoundError as exc:
+        return _error(str(exc), 404)
+    except ValueError as exc:
+        return _error(str(exc), 422)
     return {"ok": True, "instruction": item}
 
 
@@ -438,7 +444,7 @@ async def api_instruction_update(instruction_id: int, payload: InstructionUpdate
     existing = _app_state.instruction_service().get_instruction(instruction_id)
     if existing is None:
         return _error(f"Инструкция {instruction_id} не найдена", 404)
-    updates = _updates_from_payload(payload, ["description", "execution_type", "step_num"])
+    updates = _updates_from_payload(payload, ["description", "execution_type"])
     if "skills" in payload.model_fields_set:
         updates["skills"] = payload.skills
     if updates:

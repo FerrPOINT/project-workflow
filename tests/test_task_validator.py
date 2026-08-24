@@ -29,14 +29,10 @@ class TestTaskKeyValidator:
         assert not result.is_valid
         assert "no configured prefixes" in (result.error_message or "")
 
-    def test_reads_json_prefixes_from_database_rows(self):
-        validator = TaskKeyValidator.from_projects([{"code": "project", "key_prefixes": '["RUN", "DEMO"]'}])
-        assert validator.validate("RUN-1").is_valid
-        assert validator.validate("DEMO-2").is_valid
-
-    def test_invalid_json_prefixes_fail_closed(self):
-        validator = TaskKeyValidator.from_projects([{"code": "project", "key_prefixes": "TASK"}])
-        assert not validator.validate("RUN-1").is_valid
+    @pytest.mark.parametrize("raw_prefixes", ['["RUN", "DEMO"]', "RUN", ["RUN", 1]])
+    def test_rejects_noncanonical_project_prefix_shapes(self, raw_prefixes):
+        with pytest.raises(ValueError, match="list of strings"):
+            TaskKeyValidator.from_projects([{"code": "project", "key_prefixes": raw_prefixes}])
 
     def test_validated_key_string_uses_normalized_value(self):
         value = ValidatedTaskKey(raw="raw", is_valid=True, normalized="RUN-1")

@@ -95,6 +95,14 @@ def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
         assert compare_metadata(context, Base.metadata) == []
 
 
+def test_in_memory_sqlite_migration_keeps_the_schema_alive():
+    engine = create_engine("sqlite://")
+
+    ensure_migrated(engine)
+
+    assert schema_is_ready(engine) is True
+
+
 def test_sqlite_upgrade_downgrade_reupgrade(tmp_path):
     engine = _sqlite_engine(tmp_path)
     ensure_migrated(engine)
@@ -138,6 +146,24 @@ def test_head_with_damaged_or_polluted_schema_is_refused(tmp_path, mutation):
             connection.execute(text("DROP TABLE instructions"))
         else:
             connection.execute(text("CREATE TABLE unexpected_table (id INTEGER PRIMARY KEY)"))
+
+    assert schema_is_ready(engine) is False
+    with pytest.raises(DatabaseRecreateRequired):
+        ensure_migrated(engine)
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "ALTER TABLE projects ADD COLUMN unexpected_column TEXT",
+        "ALTER TABLE projects DROP COLUMN description",
+    ],
+)
+def test_head_with_column_drift_is_refused(tmp_path, statement):
+    engine = _sqlite_engine(tmp_path)
+    ensure_migrated(engine)
+    with engine.begin() as connection:
+        connection.execute(text(statement))
 
     assert schema_is_ready(engine) is False
     with pytest.raises(DatabaseRecreateRequired):

@@ -185,6 +185,7 @@ class TestSessionHelpers:
             patch("project_workflow.infrastructure.db.session._is_sqlite", return_value=False),
             patch("project_workflow.infrastructure.db.session.database_revisions", return_value=set()),
             patch("project_workflow.infrastructure.db.session.expected_tables", return_value=frozenset()),
+            patch("project_workflow.infrastructure.db.session._metadata_is_current", return_value=True),
             patch("project_workflow.infrastructure.db.session.run_alembic_command") as mock_run,
             patch("project_workflow.infrastructure.db.session.get_engine", return_value=fake_engine),
         ):

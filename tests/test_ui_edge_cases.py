@@ -18,7 +18,6 @@ from project_workflow.interfaces.ui import (
     _load_workflows,
     _parse_optional_int,
     _resolve_task_phase,
-    _workflow_form_payload,
     app,
 )
 
@@ -419,19 +418,3 @@ class TestLoadCliReference:
     def test_loads_commands(self):
         commands = _load_cli_reference()
         assert isinstance(commands, list)
-
-
-# ═══════════════════════════════════════════════════════════
-# Workflow form payload
-# ═══════════════════════════════════════════════════════════
-
-
-class TestWorkflowFormPayload:
-    def test_basic(self):
-        payload = _workflow_form_payload({"name": "Test", "description": "desc"})
-        assert payload["name"] == "Test"
-        assert payload["description"] == "desc"
-
-    def test_empty(self):
-        payload = _workflow_form_payload({})
-        assert payload["name"] == ""

@@ -16,7 +16,7 @@ from project_workflow.infrastructure.db import models as m
 
 
 def _parse_skills(raw: str | None) -> list[str]:
-    if not raw:
+    if raw is None:
         return []
     try:
         parsed = json.loads(raw)
@@ -157,6 +157,7 @@ class SAInstructionRepository(InstructionRepository):
             )
             next_step += 1
         self._session.flush()
+        self._session.expire_all()
 
     def _next_step_num(self, phase_id: int) -> int:
         max_step = self._session.execute(

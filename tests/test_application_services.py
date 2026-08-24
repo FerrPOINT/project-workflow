@@ -11,7 +11,7 @@ import pytest
 from project_workflow.application.instruction_service import InstructionService
 from project_workflow.application.project import ProjectService
 from project_workflow.application.workflow import WorkflowService
-from project_workflow.domain.exceptions import ConflictError
+from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import UnitOfWork
 
 
@@ -67,6 +67,9 @@ class TestInstructionService:
 
     def test_create_instruction_success(self):
         uow = _make_uow()
+        phase = MagicMock(id=3, workflow_id=7)
+        uow.phases.get_by_id.return_value = phase
+        uow.phases.list.return_value = [phase]
         uow.instructions.create.return_value = 5
         uow.instructions.get_by_id.return_value = {"id": 5, "description": "Y"}
         svc = InstructionService(uow)
@@ -74,13 +77,70 @@ class TestInstructionService:
         uow.instructions.create.assert_called_once_with(3, {"description": "Y"})
         uow.commit.assert_called_once()
 
+    def test_create_instruction_inserts_at_requested_step(self):
+        uow = _make_uow()
+        phase = MagicMock(id=3, workflow_id=7)
+        uow.phases.get_by_id.return_value = phase
+        uow.phases.list.return_value = [phase]
+        uow.instructions.list.return_value = [{"id": 10}, {"id": 20}]
+        uow.instructions.create.return_value = 30
+        uow.instructions.get_by_id.return_value = {"id": 30, "description": "Y"}
+
+        result = InstructionService(uow).create_instruction(
+            3, {"description": "Y", "step_num": 2}
+        )
+
+        assert result == {"id": 30, "description": "Y"}
+        uow.instructions.create.assert_called_once_with(3, {"description": "Y"})
+        uow.instructions.reorder.assert_called_once_with(3, [(10, 1), (30, 2), (20, 3)])
+        uow.commit.assert_called_once()
+
     def test_create_instruction_failure(self):
         uow = _make_uow()
+        phase = MagicMock(id=1, workflow_id=7)
+        uow.phases.get_by_id.return_value = phase
+        uow.phases.list.return_value = [phase]
         uow.instructions.create.return_value = 1
         uow.instructions.get_by_id.return_value = None
         svc = InstructionService(uow)
         with pytest.raises(RuntimeError, match="Instruction creation failed"):
             svc.create_instruction(1, {})
+
+    @pytest.mark.parametrize(
+        ("phase", "locked_workflow", "listed_phases", "message"),
+        [
+            (None, MagicMock(), [], "Phase 3 not found"),
+            (MagicMock(id=3, workflow_id=7), None, [], "Workflow 7 not found"),
+            (MagicMock(id=3, workflow_id=7), MagicMock(), [], "Phase 3 not found"),
+        ],
+    )
+    def test_create_instruction_rechecks_locked_owners(
+        self, phase, locked_workflow, listed_phases, message
+    ):
+        uow = _make_uow()
+        uow.phases.get_by_id.return_value = phase
+        uow.workflows.lock.return_value = locked_workflow
+        uow.phases.list.return_value = listed_phases
+
+        with pytest.raises(NotFoundError, match=message):
+            InstructionService(uow).create_instruction(3, {"description": "Y"})
+
+        uow.instructions.create.assert_not_called()
+        uow.commit.assert_not_called()
+
+    def test_create_instruction_rejects_non_numeric_internal_step(self):
+        uow = _make_uow()
+        phase = MagicMock(id=3, workflow_id=7)
+        uow.phases.get_by_id.return_value = phase
+        uow.phases.list.return_value = [phase]
+
+        with pytest.raises(ValueError, match="step_num must be a positive integer"):
+            InstructionService(uow).create_instruction(
+                3, {"description": "Y", "step_num": "second"}
+            )
+
+        uow.instructions.create.assert_not_called()
+        uow.commit.assert_not_called()
 
     def test_update_and_delete_instruction(self):
         uow = _make_uow()

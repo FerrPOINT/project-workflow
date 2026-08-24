@@ -155,6 +155,43 @@ class TestInstructionsApi:
         assert rejected.status_code == 422
         client.delete(f"/api/instructions/{item['id']}")
 
+    def test_create_instruction_inserts_at_requested_step(self):
+        phase_id = _seed_phase_id()
+        appended = client.post(
+            "/api/instructions",
+            json={"phase_id": phase_id, "description": "append marker"},
+        ).json()["instruction"]
+
+        response = client.post(
+            "/api/instructions",
+            json={
+                "phase_id": phase_id,
+                "description": "insert marker",
+                "step_num": appended["step_num"],
+            },
+        )
+
+        assert response.status_code == 200
+        inserted = response.json()["instruction"]
+        listed = client.get(f"/api/phases/{phase_id}/instructions").json()["instructions"]
+        positions = {item["description"]: item["step_num"] for item in listed}
+        assert positions["insert marker"] == appended["step_num"]
+        assert positions["append marker"] == appended["step_num"] + 1
+
+        client.delete(f"/api/instructions/{inserted['id']}")
+        client.delete(f"/api/instructions/{appended['id']}")
+
+    def test_create_instruction_rejects_step_past_end(self):
+        phase_id = _seed_phase_id()
+        count = len(client.get(f"/api/phases/{phase_id}/instructions").json()["instructions"])
+
+        response = client.post(
+            "/api/instructions",
+            json={"phase_id": phase_id, "description": "out of range", "step_num": count + 2},
+        )
+
+        assert response.status_code == 422
+
 
 class TestInstructionsPage:
     def test_instructions_page_requires_phase_id(self):

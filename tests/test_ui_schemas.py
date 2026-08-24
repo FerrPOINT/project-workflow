@@ -45,6 +45,11 @@ def test_phase_update_fields():
     assert p.name == "X"
 
 
+def test_request_schemas_reject_unknown_legacy_fields():
+    with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+        PhaseUpdate.model_validate({"group_id": "legacy"})
+
+
 def test_workflow_create_update():
     w = WorkflowCreate(name="W", code="w1")
     assert w.name == "W"
@@ -106,9 +111,16 @@ def test_phase_order_update():
 
 
 def test_instruction_create_update():
-    i = InstructionCreate(phase_id=1, description="Step")
+    i = InstructionCreate(phase_id=1, description="Step", step_num=1)
     assert i.phase_id == 1
+    assert i.step_num == 1
     iu = InstructionUpdate(description="Updated")
     assert iu.description == "Updated"
     iu2 = InstructionUpdate(skills=["s1", "s2"])
     assert iu2.skills == ["s1", "s2"]
+    with pytest.raises(ValueError):
+        InstructionCreate(phase_id=1, description="Step", step_num=0)
+    with pytest.raises(ValueError):
+        InstructionCreate(phase_id=1, description="Step", step_num="1")
+    with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+        InstructionUpdate.model_validate({"step_num": 1})

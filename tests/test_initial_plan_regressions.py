@@ -324,7 +324,8 @@ def test_projects_page_exposes_description_editor():
     assert "description: document.getElementById('projectDescription').value.trim()" in response.text
 
 
-def test_corrupted_persisted_instruction_skills_fail_loudly():
+@pytest.mark.parametrize("raw_skills", ["{broken", ""])
+def test_corrupted_persisted_instruction_skills_fail_loudly(raw_skills):
     _, phases = _workflow_with_phases(1)
     instruction = _app_state.instruction_service().create_instruction(
         phases[0]["id"],
@@ -332,8 +333,8 @@ def test_corrupted_persisted_instruction_skills_fail_loudly():
     )
     uow = _app_state.get_db()
     uow.session.execute(
-        text("UPDATE instructions SET skills = '{broken' WHERE id = :id"),
-        {"id": instruction["id"]},
+        text("UPDATE instructions SET skills = :skills WHERE id = :id"),
+        {"id": instruction["id"], "skills": raw_skills},
     )
     uow.commit()
 

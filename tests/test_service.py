@@ -110,13 +110,6 @@ class TestSaveEvidence:
         assert detail["evidence"][0]["description"] == "Screenshot"
 
 
-class TestGetAllPhases:
-    def test_get_all_phases(self, svc, fresh_db):
-        phases = svc.get_all_phases()
-        assert len(phases) == len(fresh_db.phases.list())
-        assert all("instructions" in p for p in phases)
-
-
 class TestUpdatePhase:
     def test_update_phase_metadata(self, svc, fresh_db):
         phase = fresh_db.phases.get_by_code("2.REQUIREMENTS")

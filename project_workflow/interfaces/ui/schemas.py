@@ -5,7 +5,13 @@ from __future__ import annotations
 import re
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+class StrictRequest(BaseModel):
+    """Reject stale or misspelled API fields instead of silently ignoring them."""
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class OptionalIntMixin:
@@ -22,13 +28,13 @@ class OptionalIntMixin:
         return parsed if parsed > 0 else None
 
 
-class _PhaseOrderItem(BaseModel):
+class _PhaseOrderItem(StrictRequest):
     phase_id: int = Field(gt=0)
     phase_order: int = Field(gt=0)
     workflow_id: int | None = Field(default=None)
 
 
-class PhaseCreate(BaseModel, OptionalIntMixin):
+class PhaseCreate(StrictRequest, OptionalIntMixin):
     workflow_id: int | None = Field(default=None, gt=0, strict=True, description="Parent workflow id")
     phase_order: int | None = Field(default=None, description="1-based insertion position")
     insert_after: int | None = Field(default=None, description="Insert after this 0-based index")
@@ -78,7 +84,7 @@ class PhaseCreate(BaseModel, OptionalIntMixin):
         return self
 
 
-class PhaseUpdate(BaseModel, OptionalIntMixin):
+class PhaseUpdate(StrictRequest, OptionalIntMixin):
     name: str | None = Field(default=None)
     description: str | None = Field(default=None)
     parallel_with: str | None = Field(default=None)
@@ -95,19 +101,19 @@ class PhaseUpdate(BaseModel, OptionalIntMixin):
     phase_order: int | None = Field(default=None, exclude=True)
 
 
-class WorkflowCreate(BaseModel):
+class WorkflowCreate(StrictRequest):
     name: str | None = Field(default=None)
     description: str = Field(default="")
     code: str | None = Field(default=None)
 
 
-class WorkflowUpdate(BaseModel):
+class WorkflowUpdate(StrictRequest):
     name: str | None = Field(default=None)
     description: str | None = Field(default=None)
     code: str | None = Field(default=None)
 
 
-class ProjectCreate(BaseModel, OptionalIntMixin):
+class ProjectCreate(StrictRequest, OptionalIntMixin):
     code: str = Field(..., min_length=1)
     name: str | None = Field(default=None)
     description: str | None = Field(default="")
@@ -159,7 +165,7 @@ class ProjectCreate(BaseModel, OptionalIntMixin):
         return value
 
 
-class ProjectUpdate(BaseModel, OptionalIntMixin):
+class ProjectUpdate(StrictRequest, OptionalIntMixin):
     code: str | None = Field(default=None, min_length=1)
     name: str | None = Field(default=None)
     description: str | None = Field(default=None)
@@ -204,7 +210,7 @@ class ProjectUpdate(BaseModel, OptionalIntMixin):
         return value
 
 
-class AgentCreate(BaseModel):
+class AgentCreate(StrictRequest):
     name: str = Field(..., min_length=1)
     description: str = Field(default="")
     hermes_profile: str | None = Field(default=None, max_length=251)
@@ -220,7 +226,7 @@ class AgentCreate(BaseModel):
         return profile
 
 
-class AgentUpdate(BaseModel):
+class AgentUpdate(StrictRequest):
     name: str | None = Field(default=None)
     description: str | None = Field(default=None)
     hermes_profile: str | None = Field(default=None, max_length=251)
@@ -236,23 +242,23 @@ class AgentUpdate(BaseModel):
         return profile
 
 
-class PhaseOrderUpdate(BaseModel):
-    orders: list[_PhaseOrderItem] = Field(default=[])
+class PhaseOrderUpdate(StrictRequest):
+    orders: list[_PhaseOrderItem] = Field(default_factory=list)
 
 
-class InstructionCreate(BaseModel):
+class InstructionCreate(StrictRequest):
     phase_id: int = Field(...)
     description: str = Field(..., min_length=1)
     execution_type: Literal["sync", "parallel"] = Field(default="sync")
     skills: list[str] | None = Field(default=None)
+    step_num: int | None = Field(default=None, gt=0, strict=True)
 
 
-class InstructionUpdate(BaseModel):
+class InstructionUpdate(StrictRequest):
     description: str | None = Field(default=None, min_length=1)
     execution_type: Literal["sync", "parallel"] | None = Field(default=None)
     skills: list[str] | None = Field(default=None)
-    step_num: int | None = Field(default=None)
 
 
-class InstructionReorder(BaseModel):
+class InstructionReorder(StrictRequest):
     instruction_ids: list[int] = Field(...)

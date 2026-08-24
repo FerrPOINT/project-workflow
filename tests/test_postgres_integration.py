@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from threading import Barrier, Thread
+from threading import Barrier, Event, Thread
 from unittest.mock import patch
 from urllib.request import urlopen
 
@@ -27,6 +27,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 
 from project_workflow import config as config_module
+from project_workflow.application.phase import PhaseServiceApp
 from project_workflow.application.project import ProjectService
 from project_workflow.application.task import TaskService
 from project_workflow.domain.exceptions import ConflictError
@@ -161,6 +162,18 @@ class TestPostgresInitialMigration:
 
         assert database_revisions(engine) == {"old_revision"}
         assert inspect(engine).has_table("keep_me", schema="project_workflow")
+
+    def test_head_with_column_drift_is_not_ready(self, pg_url):
+        from project_workflow.infrastructure.db.session import DatabaseRecreateRequired, schema_is_ready
+
+        engine = get_engine(pg_url)
+        ensure_migrated(engine)
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE project_workflow.projects ADD COLUMN unexpected_column TEXT"))
+
+        assert schema_is_ready(engine) is False
+        with pytest.raises(DatabaseRecreateRequired):
+            ensure_migrated(engine)
 
     def test_initial_constraints_and_phase_scoped_fingerprint(self, pg_url):
         engine = get_engine(pg_url)
@@ -430,6 +443,85 @@ class TestPostgresUoW:
         with ThreadPoolExecutor(max_workers=2) as pool:
             outcomes = list(pool.map(create, ["PREFIX-A", "PREFIX-B"]))
         assert sorted(outcomes) == ["created", "rejected"]
+
+    def test_task_creation_serializes_with_phase_deletion(self, pg_url):
+        ensure_migrated(get_engine(pg_url))
+        setup = SAUnitOfWork(pg_url)
+        workflow_id = setup.workflows.create({"name": "Phase race", "description": ""})
+        first_id = setup.phases.create(
+            {"workflow_id": workflow_id, "code": "race.first", "name": "First", "phase_order": 1}
+        )
+        setup.phases.create(
+            {"workflow_id": workflow_id, "code": "race.second", "name": "Second", "phase_order": 2}
+        )
+        setup.commit()
+        project = ProjectService(setup).create_project(
+            {
+                "workflow_id": workflow_id,
+                "code": "PHASE-RACE",
+                "name": "Phase race",
+                "key_prefixes": ["PHASERACE"],
+            }
+        )
+        setup.close()
+
+        task_holds_workflow_lock = Event()
+        delete_started_lock = Event()
+        release_task = Event()
+
+        def create_task() -> str:
+            uow = SAUnitOfWork(pg_url)
+            original_lookup = uow.phases.get_by_code
+
+            def paused_lookup(workflow_id_arg: int, code: str):
+                task_holds_workflow_lock.set()
+                assert release_task.wait(10)
+                return original_lookup(workflow_id_arg, code)
+
+            uow.phases.get_by_code = paused_lookup
+            try:
+                TaskService(uow).create_task(
+                    {
+                        "project_id": project["id"],
+                        "task_key": "PHASERACE-1",
+                        "current_phase": "race.first",
+                    }
+                )
+                return "created"
+            finally:
+                uow.close()
+
+        def delete_phase() -> str:
+            uow = SAUnitOfWork(pg_url)
+            original_lock = uow.workflows.lock
+
+            def observed_lock(workflow_id_arg: int):
+                delete_started_lock.set()
+                return original_lock(workflow_id_arg)
+
+            uow.workflows.lock = observed_lock
+            try:
+                PhaseServiceApp(uow).delete_phase(first_id)
+                return "deleted"
+            except ConflictError:
+                uow.rollback()
+                return "rejected"
+            finally:
+                uow.close()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            task_result = pool.submit(create_task)
+            assert task_holds_workflow_lock.wait(10)
+            delete_result = pool.submit(delete_phase)
+            assert delete_started_lock.wait(10)
+            release_task.set()
+            assert task_result.result(timeout=20) == "created"
+            assert delete_result.result(timeout=20) == "rejected"
+
+        verify = SAUnitOfWork(pg_url)
+        assert verify.tasks.get_by_key("PHASERACE-1") is not None
+        assert verify.phases.get_by_id(first_id) is not None
+        verify.close()
 
 
 def _pass_response(user_prompt: str) -> dict:

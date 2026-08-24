@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 
 from project_workflow.domain.phase_grouping import group_parallel_phases
 from project_workflow.domain.repositories import UnitOfWork
@@ -11,12 +11,8 @@ from project_workflow.domain.repositories import UnitOfWork
 class PhaseService:
     """CRUD operations for phases, instructions, checks, evidence."""
 
-    def __init__(self, uow_or_state: UnitOfWork | Any):
-        """Accept either a UnitOfWork or an _AppState instance."""
-        if type(uow_or_state).__name__ == "_AppState":
-            self._uow: UnitOfWork = cast(Any, uow_or_state).get_uow()
-        else:
-            self._uow = uow_or_state
+    def __init__(self, uow: UnitOfWork):
+        self._uow = uow
 
     # ── Bulk save helpers (atomic) ─────────────────────────────────────
 
@@ -157,13 +153,6 @@ class PhaseService:
             partner = following
         updates["parallel_with"] = partner.code if partner else None
         return updates
-
-    def get_all_phases(self) -> list[dict[str, Any]]:
-        """All phases with content (for API)."""
-        rows = self._uow.phases.list()
-        return [self.get_phase_detail(r.id) for r in rows if r.id is not None]
-
-    # ── Helpers ────────────────────────────────────────────────────────
 
     @staticmethod
     def normalize_skills(raw: Any) -> list[str]:

@@ -13,7 +13,9 @@ from pathlib import Path
 from typing import Any
 
 from alembic import command
+from alembic.autogenerate import compare_metadata
 from alembic.config import Config
+from alembic.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.engine import Connection, Engine
@@ -190,7 +192,22 @@ def run_alembic_command(
         return
     with target.begin() as connection:
         migrate(connection)
-    target.dispose()
+
+
+def _metadata_is_current(target: Engine | Connection) -> bool:
+    """Compare the live schema with the complete ORM metadata contract."""
+
+    def compare(connection: Connection) -> bool:
+        context = MigrationContext.configure(
+            connection,
+            opts={"compare_type": True, "compare_server_default": True},
+        )
+        return compare_metadata(context, Base.metadata) == []
+
+    if isinstance(target, Connection):
+        return compare(target)
+    with target.connect() as connection:
+        return compare(connection)
 
 
 def ensure_migrated(engine: Engine | Connection | None = None) -> None:
@@ -201,13 +218,16 @@ def ensure_migrated(engine: Engine | Connection | None = None) -> None:
     revisions = database_revisions(target)
     existing_tables = set(inspect(target).get_table_names(schema=schema)) - {"alembic_version"}
     incompatible_revision = revisions and revisions != {migration_head()}
-    incompatible_schema = revisions == {migration_head()} and existing_tables != expected_tables()
+    exact_tables = existing_tables == expected_tables()
+    incompatible_schema = revisions == {migration_head()} and (
+        not exact_tables or not _metadata_is_current(target)
+    )
     unversioned_database = not revisions and bool(existing_tables)
     if incompatible_revision or incompatible_schema or unversioned_database:
         raise DatabaseRecreateRequired()
     run_alembic_command("upgrade", target)
     migrated_tables = set(inspect(target).get_table_names(schema=schema)) - {"alembic_version"}
-    if migrated_tables != expected_tables():
+    if migrated_tables != expected_tables() or not _metadata_is_current(target):
         raise DatabaseRecreateRequired()
 
 
@@ -242,7 +262,11 @@ def schema_is_ready(engine: Engine) -> bool:
     """Return whether the database is at head with the exact owned schema."""
     schema = None if _is_sqlite(str(engine.url)) else get_settings().DB_SCHEMA
     tables = set(inspect(engine).get_table_names(schema=schema))
-    return database_revisions(engine) == {migration_head()} and tables - {"alembic_version"} == expected_tables()
+    return (
+        database_revisions(engine) == {migration_head()}
+        and tables - {"alembic_version"} == expected_tables()
+        and _metadata_is_current(engine)
+    )
 
 
 @contextmanager

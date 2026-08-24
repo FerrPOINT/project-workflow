@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import contextvars
 from pathlib import Path
-from typing import Any
 
 from ..application.phase_service import PhaseService
 from ..config import get_settings
@@ -48,7 +47,7 @@ class _AppState:
 
     def get_service(self) -> PhaseService:
         """PhaseService helper for UI detail/edit routes."""
-        return PhaseService(self)
+        return PhaseService(self.get_uow())
 
     def create_uow(self) -> SAUnitOfWork:
         engine = get_engine(self._database_url_normalized())
@@ -75,11 +74,6 @@ class _AppState:
 
     def instruction_service(self) -> InstructionService:
         return InstructionService(self.get_uow())
-
-    @property
-    def db(self) -> Any | None:
-        return None
-
 
 _app_state = _AppState()
 __all__ = ["_AppState", "_app_state", "_uow_ctx"]

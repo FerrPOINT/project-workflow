@@ -690,6 +690,7 @@ class TestApiTasks:
 
         resp = client.delete(f"/api/tasks/{task['task_key']}")
         assert resp.status_code == 204
+        assert resp.content == b""
         assert uow.tasks.get_by_id(task["id"]) is None
         assert uow.tasks.get_history(task["id"]) == []
 

@@ -232,16 +232,19 @@ class TestHistoryCommand:
     def test_history_empty(self, mock_uow_cls):
         uow = mock_uow_cls.return_value.__enter__.return_value
         uow.supervisor_runs.list.return_value = []
+        uow.tasks.get_by_key.return_value = None
         runner = CliRunner()
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
             result = runner.invoke(cli, ["history", "--task", "RUN-1"])
         assert result.exit_code == 0, result.output
         assert "пуста" in result.output
+        uow.supervisor_runs.list.assert_called_once_with(task_id=None, task_key="TASK-1", limit=None)
 
     @patch("project_workflow.interfaces.cli.ui.SAUnitOfWork")
     def test_history_json_mode(self, mock_uow_cls):
         uow = mock_uow_cls.return_value.__enter__.return_value
         uow.supervisor_runs.list.return_value = []
+        uow.tasks.get_by_key.return_value = None
         runner = CliRunner()
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
             result = runner.invoke(cli, ["--json", "history", "--task", "RUN-1", "--n", "10"])
@@ -250,6 +253,13 @@ class TestHistoryCommand:
         assert parsed["ok"] is True
         assert parsed["task_key"] == "RUN-1"
         assert parsed["count"] == 0
+        uow.supervisor_runs.list.assert_called_once_with(task_id=None, task_key="TASK-1", limit=10)
+
+    def test_history_rejects_non_positive_limit(self):
+        runner = CliRunner()
+        result = runner.invoke(cli, ["history", "--task", "TASK-1", "--n", "0"])
+        assert result.exit_code == 2
+        assert "0 is not in the range x>=1" in result.output
 
 
 class TestCliGuard:

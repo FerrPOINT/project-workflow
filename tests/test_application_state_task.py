@@ -55,6 +55,18 @@ class TestTaskService:
         assert result["id"] == 7
         assert result["project_id"] == 5
         uow.commit.assert_called_once()
+        uow.workflows.lock.assert_called_once_with(1)
+
+    def test_create_task_preserves_zero_phase_code(self):
+        uow = _make_uow()
+        uow.projects.lock.return_value = FakeProject(5, "B")
+        uow.tasks.create.return_value = 7
+        uow.tasks.get_by_id.return_value = FakeTask(7, "B-2", 5)
+
+        TaskService(uow).create_task({"task_key": "B-2", "project_id": 5, "current_phase": 0})
+
+        assert uow.tasks.create.call_args.args[0]["current_phase"] == "0"
+        uow.phases.get_by_code.assert_called_once_with(1, "0")
 
     def test_create_task_without_project_id(self):
         uow = _make_uow()
@@ -125,10 +137,6 @@ class TestAppState:
         assert state.get_service() is not None
         assert state.get_db() is not None
         assert state.get_uow.call_count >= 7
-
-    def test_db_property(self):
-        state = _AppState()
-        assert state.db is None
 
     def test_get_uow_sqlite(self):
         import tempfile
