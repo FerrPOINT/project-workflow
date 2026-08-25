@@ -24,11 +24,8 @@ class InstructionService:
         phase = self._uow.phases.get_by_id(phase_id)
         if phase is None or phase.workflow_id is None:
             raise NotFoundError(f"Фаза {phase_id} не найдена")
-        workflow = self._uow.workflows.lock(phase.workflow_id)
-        if workflow is None:
+        if self._uow.workflows.lock(phase.workflow_id) is None:
             raise NotFoundError(f"Воркфлоу {phase.workflow_id} не найден")
-        if getattr(workflow, "is_locked", False) is True:
-            raise ConflictError("Locked workflow revision cannot be changed")
         if not any(item.id == phase_id for item in self._uow.phases.list(phase.workflow_id)):
             raise NotFoundError(f"Фаза {phase_id} не найдена")
 
@@ -50,10 +47,9 @@ class InstructionService:
         requested_step = data.get("step_num")
         if requested_step is None:
             requested_step = len(existing_rows) + 1
-        try:
-            insertion_step = int(requested_step)
-        except (TypeError, ValueError) as exc:
-            raise ValueError("step_num должен быть положительным целым числом") from exc
+        if not isinstance(requested_step, int) or isinstance(requested_step, bool):
+            raise ValueError("step_num должен быть положительным целым числом")
+        insertion_step = requested_step
         if insertion_step < 1 or insertion_step > len(existing_rows) + 1:
             raise ValueError(f"step_num должен быть в диапазоне 1..{len(existing_rows) + 1}")
 
@@ -114,6 +110,13 @@ class InstructionService:
         existing_ids = [cast(int, row["id"]) for row in existing_rows]
         if not instruction_ids:
             raise ValueError("instruction_ids не может быть пустым")
+        if any(
+            not isinstance(instruction_id, int)
+            or isinstance(instruction_id, bool)
+            or instruction_id <= 0
+            for instruction_id in instruction_ids
+        ):
+            raise ValueError("instruction_ids должен содержать только положительные целые числа")
         if len(instruction_ids) != len(set(instruction_ids)):
             raise ValueError("instruction_ids должен содержать уникальные значения")
         if len(instruction_ids) != len(existing_ids) or set(instruction_ids) != set(existing_ids):

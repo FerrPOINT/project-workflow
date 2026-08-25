@@ -16,7 +16,7 @@ def test_database_url_is_required(monkeypatch):
 
 def test_blank_database_url_is_rejected(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "   ")
-    with pytest.raises(ValidationError, match="DATABASE_URL is required"):
+    with pytest.raises(ValidationError, match="DATABASE_URL обязательна"):
         config.Settings(_env_file=None)
 
 

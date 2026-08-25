@@ -27,6 +27,7 @@ def _make_uow(agents=None) -> UnitOfWork:
     uow.agents = agents or MagicMock()
     uow.agents.get_by_hermes_profile.return_value = None
     uow.phases.has_agent_reference.return_value = False
+    uow.phases.workflow_ids_for_agent.return_value = []
     return uow
 
 
@@ -74,8 +75,10 @@ def test_get_agent_not_found():
 
 def test_update_agent():
     uow = _make_uow()
+    uow.phases.workflow_ids_for_agent.return_value = [7, 3]
     svc = AgentService(uow)
     assert svc.update_agent(3, {"name": "X"}) is None
+    assert [call.args[0] for call in uow.workflows.lock.call_args_list] == [3, 7]
     uow.agents.update.assert_called_once_with(3, {"name": "X"})
     uow.commit.assert_called_once()
 

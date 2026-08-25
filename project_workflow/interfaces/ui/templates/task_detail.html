@@ -159,10 +159,6 @@
     <div class="summary-value">{{ cycles_done }} / {{ cycles_total }}</div>
     <div class="summary-progress"><span class="{% if cycles_done >= cycles_total and cycles_total %}done{% endif %}" style="width:{{ (cycles_done / cycles_total * 100) if cycles_total else 0 }}%"></span></div>
   </div>
-  <div class="summary-item">
-    <div class="summary-label">Время в работе</div>
-    <div class="summary-value">{{ work_time or '—' }}</div>
-  </div>
 </div>
 
 <section class="detail-section" aria-labelledby="phase-history-title">

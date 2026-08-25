@@ -6,8 +6,8 @@
 (см. test_ui.py::test_only_two_commands_allowed).
 
 Разрешённые команды:
-- step    --task RUN-KEY [--report TEXT]
-- history --task RUN-KEY [--n N]
+- step    --task RUN-42 [--report TEXT]
+- history --task RUN-42 [--n N]
 """
 
 from __future__ import annotations
@@ -40,11 +40,11 @@ def step_cmd(
     task: str,
     report: str | None,
 ) -> None:
-    """Step — движение по workflow: показать текущую фазу или отчитаться и перейти.
+    """Движение по workflow: показать текущую фазу или отчитаться и перейти.
 
-    Usage:
-      project-workflow step --task RUN-KEY                -> текущие инструкции
-      project-workflow step --task RUN-KEY --report "..."  -> оценить отчёт исполнителя CLI и перейти
+    Примеры:
+      project-workflow step --task RUN-42                -> текущие инструкции
+      project-workflow step --task RUN-42 --report "..."  -> оценить отчёт исполнителя CLI и перейти
     """
     jmode = ctx.obj.get("json_mode", False)
     try:
@@ -119,11 +119,11 @@ def step_cmd(
 @click.option("--n", type=click.IntRange(min=1), default=None, help="Количество записей (по умолчанию: все)")
 @click.pass_context
 def history_cmd(ctx: click.Context, task: str, n: int | None) -> None:
-    """History — история отчётов, переходов и статусов по задаче.
+    """История отчётов, переходов и статусов по задаче.
 
-    Usage:
-      project-workflow history --task RUN-KEY            -> все записи
-      project-workflow history --task RUN-KEY --n 50     -> последние 50 записей
+    Примеры:
+      project-workflow history --task RUN-42            -> все записи
+      project-workflow history --task RUN-42 --n 50     -> последние 50 записей
     """
     jmode = ctx.obj.get("json_mode", False)
     try:

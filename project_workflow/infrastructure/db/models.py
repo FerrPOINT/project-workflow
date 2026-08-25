@@ -53,22 +53,12 @@ class Workflow(Base):
         default=0,
         server_default="0",
     )
-    is_locked: Mapped[int] = mapped_column(nullable=False, default=0, server_default="0")
-    catalog_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    __table_args__ = (
-        CheckConstraint("is_default IN (0, 1)", name="ck_workflows_is_default"),
-        CheckConstraint("is_locked IN (0, 1)", name="ck_workflows_is_locked"),
-        CheckConstraint(
-            "catalog_sha256 IS NULL OR length(catalog_sha256) = 64",
-            name="ck_workflows_catalog_sha256",
-        ),
-    )
+    __table_args__ = (CheckConstraint("is_default IN (0, 1)", name="ck_workflows_is_default"),)
 
     phases: Mapped[list[Phase]] = relationship(
         "Phase", back_populates="workflow", cascade="all, delete-orphan", passive_deletes=True
     )
     projects: Mapped[list[Project]] = relationship("Project", back_populates="workflow", cascade="all, delete-orphan")
-    tasks: Mapped[list[Task]] = relationship("Task", back_populates="workflow")
 
 
 class Phase(Base):
@@ -207,7 +197,6 @@ class Task(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False)
-    workflow_id: Mapped[int] = mapped_column(ForeignKey("workflows.id", ondelete="RESTRICT"), nullable=False)
     task_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     title: Mapped[str | None] = mapped_column(String, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -230,7 +219,6 @@ class Task(Base):
     )
 
     project: Mapped[Project] = relationship("Project", back_populates="tasks")
-    workflow: Mapped[Workflow] = relationship("Workflow", back_populates="tasks")
 
 
 class TaskHistory(Base):

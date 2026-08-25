@@ -129,7 +129,8 @@ class TestInstructionService:
         uow.instructions.create.assert_not_called()
         uow.commit.assert_not_called()
 
-    def test_create_instruction_rejects_non_numeric_internal_step(self):
+    @pytest.mark.parametrize("step_num", ["2", True, 1.5, "second"])
+    def test_create_instruction_rejects_non_numeric_internal_step(self, step_num):
         uow = _make_uow()
         phase = MagicMock(id=3, workflow_id=7)
         uow.phases.get_by_id.return_value = phase
@@ -137,7 +138,7 @@ class TestInstructionService:
 
         with pytest.raises(ValueError, match="step_num должен быть положительным целым числом"):
             InstructionService(uow).create_instruction(
-                3, {"description": "Y", "step_num": "second"}
+                3, {"description": "Y", "step_num": step_num}
             )
 
         uow.instructions.create.assert_not_called()
@@ -178,6 +179,20 @@ class TestInstructionService:
 
         with pytest.raises(ConflictError, match="полный набор"):
             InstructionService(uow).reorder_instructions(10, [2, 3])
+
+        uow.instructions.reorder.assert_not_called()
+        uow.commit.assert_not_called()
+
+    @pytest.mark.parametrize("instruction_ids", [[True, 2, 3], ["1", 2, 3], [0, 2, 3]])
+    def test_reorder_instructions_rejects_non_strict_ids(self, instruction_ids):
+        uow = _make_uow()
+        phase = MagicMock(id=10, workflow_id=7)
+        uow.phases.get_by_id.return_value = phase
+        uow.phases.list.return_value = [phase]
+        uow.instructions.list.return_value = [{"id": 3}, {"id": 1}, {"id": 2}]
+
+        with pytest.raises(ValueError, match="положительные целые числа"):
+            InstructionService(uow).reorder_instructions(10, instruction_ids)
 
         uow.instructions.reorder.assert_not_called()
         uow.commit.assert_not_called()

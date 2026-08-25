@@ -371,7 +371,7 @@ async function persistInstructionOrder() {
       showToast('Не удалось сохранить порядок инструкций', 'error');
       return false;
     }
-    showToast('Порядок инструкций сохранён');
+    showToast('Порядок инструкций сохранён', 'success');
     return true;
   } catch (_error) {
     showToast('Не удалось сохранить порядок инструкций', 'error');
@@ -397,6 +397,17 @@ async function moveInstruction(button, direction) {
   }
 }
 
+async function requestPhaseDetail(url, options) {
+  try {
+    const resp = await fetch(url, options);
+    const data = await resp.json().catch(() => ({}));
+    return {resp, data};
+  } catch (_error) {
+    showRequestError();
+    return null;
+  }
+}
+
 async function addInstructionAfter(button) {
   const item = button.closest('.timeline-item');
   if (!item) return;
@@ -404,12 +415,13 @@ async function addInstructionAfter(button) {
   const stepNum = currentStep > 0 ? currentStep + 1 : 1;
   button.disabled = true;
   try {
-    const resp = await fetch('/api/instructions', {
+    const result = await requestPhaseDetail('/api/instructions', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({phase_id: phaseId, description: 'Новая инструкция', step_num: stepNum}),
     });
-    const data = await resp.json().catch(() => ({}));
+    if (!result) return;
+    const {resp, data} = result;
     if (!resp.ok || !data.ok) {
       showToast(data.error || 'Не удалось добавить инструкцию', 'error');
       return;
@@ -427,12 +439,13 @@ async function addInstructionLast() {
   const btn = timeline?.nextElementSibling;
   if (btn) btn.disabled = true;
   try {
-    const resp = await fetch('/api/instructions', {
+    const result = await requestPhaseDetail('/api/instructions', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({phase_id: phaseId, description: 'Новая инструкция', step_num: stepNum}),
     });
-    const data = await resp.json().catch(() => ({}));
+    if (!result) return;
+    const {resp, data} = result;
     if (!resp.ok || !data.ok) {
       showToast(data.error || 'Не удалось добавить инструкцию', 'error');
       return;
@@ -455,8 +468,9 @@ async function deleteInstruction(button) {
   button.disabled = true;
   try {
     const id = item.dataset.instructionId;
-    const resp = await fetch('/api/instructions/' + id, {method: 'DELETE'});
-    const data = await resp.json().catch(() => ({}));
+    const result = await requestPhaseDetail('/api/instructions/' + id, {method: 'DELETE'});
+    if (!result) return;
+    const {resp, data} = result;
     if (!resp.ok || !data.ok) {
       showToast(data.error || 'Не удалось удалить инструкцию', 'error');
       return;
@@ -474,11 +488,13 @@ async function toggleInstructionType(badge) {
   const nextType = isSync ? 'parallel' : 'sync';
   badge.disabled = true;
   try {
-    const resp = await fetch('/api/instructions/' + id, {
+    const result = await requestPhaseDetail('/api/instructions/' + id, {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({execution_type: nextType}),
     });
+    if (!result) return;
+    const {resp} = result;
     if (!resp.ok) {
       showToast('Не удалось сменить режим', 'error');
       return;
@@ -492,11 +508,13 @@ async function toggleInstructionType(badge) {
 async function saveInstructionDescription(input) {
   const card = input.closest('.timeline-card');
   const id = card.dataset.instructionId;
-  const resp = await fetch('/api/instructions/' + id, {
+  const result = await requestPhaseDetail('/api/instructions/' + id, {
     method: 'PUT',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({description: input.value}),
   });
+  if (!result) return;
+  const {resp} = result;
   if (!resp.ok) showToast('Не удалось сохранить описание', 'error');
 }
 
@@ -511,11 +529,13 @@ async function addSkillToInstruction(input) {
   const skills = normalizeSkillNames([...existing, skill]);
   input.disabled = true;
   try {
-    const resp = await fetch('/api/instructions/' + id, {
+    const result = await requestPhaseDetail('/api/instructions/' + id, {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({skills: skills}),
     });
+    if (!result) return;
+    const {resp} = result;
     if (!resp.ok) {
       showToast('Не удалось добавить навык', 'error');
       return;
@@ -534,11 +554,13 @@ async function removeSkillFromInstruction(button) {
     .filter((b) => !b.classList.contains('badge-sync') && !b.classList.contains('badge-parallel'))
     .map((b) => b.textContent.replace('×', '').trim());
   const skills = normalizeSkillNames(existing.filter((s) => s !== skillName));
-  const resp = await fetch('/api/instructions/' + id, {
+  const result = await requestPhaseDetail('/api/instructions/' + id, {
     method: 'PUT',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({skills: skills}),
   });
+  if (!result) return;
+  const {resp} = result;
   if (!resp.ok) {
     showToast('Не удалось убрать навык', 'error');
     return;
@@ -559,22 +581,28 @@ function syncTextItemList(list) {
   }
 }
 
-function saveNewTextItem(input) {
-  const list = input.closest('ul');
+async function saveNewTextItem(input) {
   if (!input.value.trim()) {
-    input.closest('li')?.remove();
-    if (list) syncTextItemList(list);
+    await deleteItem(input);
     return;
   }
   scheduleSave();
 }
 
-function deleteItem(btn) {
+async function deleteItem(btn) {
   const li = btn.closest('li');
   const list = li?.closest('ul');
-  if (li) li.remove();
-  if (list) syncTextItemList(list);
-  savePhase();
+  if (!li || !list) return;
+  const nextSibling = li.nextSibling;
+  li.remove();
+  syncTextItemList(list);
+  if (!await savePhase()) {
+    const empty = list.querySelector('.empty-state');
+    if (empty) empty.remove();
+    if (nextSibling && nextSibling.parentNode === list) list.insertBefore(li, nextSibling);
+    else list.appendChild(li);
+    syncTextItemList(list);
+  }
 }
 
 function addCheck() {
@@ -611,12 +639,19 @@ function addEvidence() {
 
 /* ---------- Debounced phase meta save ---------- */
 let _saveTimer = null;
+let _phaseSaveQueue = Promise.resolve(true);
 function scheduleSave() {
   if (_saveTimer) clearTimeout(_saveTimer);
   _saveTimer = setTimeout(savePhase, 400);
 }
 
-async function savePhase() {
+function savePhase() {
+  const queued = _phaseSaveQueue.then(() => persistPhase());
+  _phaseSaveQueue = queued.catch(() => false);
+  return queued;
+}
+
+async function persistPhase() {
   const header = document.querySelector('.wiki-header');
   const meta = {};
   header.querySelectorAll('[data-field]').forEach((inp) => {

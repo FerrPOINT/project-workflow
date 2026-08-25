@@ -79,13 +79,15 @@ function saveRow(el){
   if(!data.name){showToast('Имя агента обязательно','error');return;}
   fetch('/api/agents/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
     .then(function(r){return r.json()})
-    .then(function(d){if(d.ok)showToast('Сохранено','success');else showToast(d.error||'Ошибка','error')});
+    .then(function(d){if(d.ok)showToast('Сохранено','success');else showToast(d.error||'Ошибка','error')})
+    .catch(showRequestError);
 }
 function deleteRow(id){
   if(!confirm('Удалить агента?'))return;
   fetch('/api/agents/'+id,{method:'DELETE'})
     .then(function(r){return r.json()})
-    .then(function(d){if(d.ok){showToast('Удалено','success');location.reload()}else showToast(d.error||'Ошибка','error')});
+    .then(function(d){if(d.ok){showToast('Удалено','success');location.reload()}else showToast(d.error||'Ошибка','error')})
+    .catch(showRequestError);
 }
 function addAgent(){
   var name=document.getElementById('newName').value.trim();
@@ -94,6 +96,7 @@ function addAgent(){
   if(!name){showToast('Имя агента обязательно','error');return;}
   fetch('/api/agents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,description:description,hermes_profile:hermesProfile || null})})
     .then(function(r){return r.json()})
-    .then(function(d){if(d.ok){showToast('Добавлено','success');location.reload()}else showToast(d.error||'Ошибка','error')});
+    .then(function(d){if(d.ok){showToast('Добавлено','success');location.reload()}else showToast(d.error||'Ошибка','error')})
+    .catch(showRequestError);
 }
 {% endblock %}

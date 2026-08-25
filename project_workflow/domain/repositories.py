@@ -75,6 +75,9 @@ class PhaseRepository(ABC):
     def has_agent_reference(self, agent_id: int) -> bool: ...
 
     @abstractmethod
+    def workflow_ids_for_agent(self, agent_id: int) -> Sequence[int]: ...
+
+    @abstractmethod
     def resequence(self, workflow_id: int) -> None: ...
 
     @abstractmethod
@@ -159,6 +162,9 @@ class TaskRepository(ABC):
     def get_by_key(self, task_key: str) -> Task | None: ...
 
     @abstractmethod
+    def lock(self, task_id: int) -> Task | None: ...
+
+    @abstractmethod
     def create(self, data: dict[str, Any]) -> int: ...
 
     @abstractmethod
@@ -222,6 +228,7 @@ class SupervisorRunRepository(ABC):
         self,
         task_id: int | None = None,
         task_key: str | None = None,
+        phase_id: int | None = None,
         limit: int | None = 200,
     ) -> Sequence[SupervisorRun]: ...
 

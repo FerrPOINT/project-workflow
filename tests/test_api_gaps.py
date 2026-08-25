@@ -31,6 +31,21 @@ class TestApiTaskDetail:
         assert response.status_code == 404
 
 
+class TestApiTaskDelete:
+    @pytest.mark.parametrize(
+        ("error", "status"),
+        [(NotFoundError("задача исчезла"), 404), (ConflictError("состояние изменилось"), 409)],
+    )
+    def test_concurrent_service_errors_are_mapped(self, error, status):
+        with patch("project_workflow.interfaces.ui.routes.api._app_state") as state:
+            state.task_service.return_value.get_task_by_key.return_value = {"id": 7}
+            state.task_service.return_value.delete_task.side_effect = error
+            response = client.delete("/api/tasks/RUN-7")
+
+        assert response.status_code == status
+        assert response.json() == {"ok": False, "error": str(error)}
+
+
 class TestApiPhaseCreate:
     def test_missing_workflow_id(self):
         response = client.post("/api/phases", json={"name": "X", "phase_order": 1})
@@ -102,6 +117,18 @@ class TestApiPhaseBatchOrder:
 
     def test_invalid_phase_id(self):
         response = client.put("/api/phases/order", json={"orders": [{"phase_id": "bad", "phase_order": 1}]})
+        assert response.status_code == 422
+
+    @pytest.mark.parametrize(
+        "order",
+        [
+            {"phase_id": True, "phase_order": 1},
+            {"phase_id": 1, "phase_order": True},
+            {"phase_id": 1, "phase_order": 1, "workflow_id": True},
+        ],
+    )
+    def test_boolean_ids_and_orders_are_rejected(self, order):
+        response = client.put("/api/phases/order", json={"orders": [order]})
         assert response.status_code == 422
 
 
@@ -183,7 +210,7 @@ class TestApiInstructionUpdate:
         response = client.put("/api/instructions/1", json={"step_num": 5})
         assert response.status_code == 422
 
-    @pytest.mark.parametrize("step_num", [0, -1, "1"])
+    @pytest.mark.parametrize("step_num", [0, -1, "1", True])
     def test_create_rejects_invalid_step_num(self, step_num):
         response = client.post(
             "/api/instructions",
@@ -195,4 +222,14 @@ class TestApiInstructionUpdate:
 class TestApiInstructionSkills:
     def test_skills_string_is_rejected_by_schema(self):
         response = client.put("/api/instructions/1", json={"skills": "a\nb"})
+        assert response.status_code == 422
+
+
+class TestApiInstructionReorderValidation:
+    @pytest.mark.parametrize("instruction_ids", [[], [True], ["1"], [1.0], [0], [1, 1]])
+    def test_rejects_malformed_instruction_ids(self, instruction_ids):
+        response = client.put(
+            "/api/phases/1/instructions/reorder",
+            json={"instruction_ids": instruction_ids},
+        )
         assert response.status_code == 422

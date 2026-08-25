@@ -6,7 +6,7 @@ from typing import Any
 
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import UnitOfWork
-from project_workflow.domain.validation import get_project_for_task_key
+from project_workflow.domain.validation import TaskKeyValidator, get_project_for_task_key
 
 
 class TaskService:
@@ -33,19 +33,15 @@ class TaskService:
             raise NotFoundError(f"Проект {project_id} не найден")
         if locked_project.workflow_id != project.workflow_id:
             raise ConflictError("Воркфлоу проекта изменился во время создания задачи")
-        payload["workflow_id"] = locked_project.workflow_id
         raw_task_key = payload.get("task_key")
         if not isinstance(raw_task_key, str) or not raw_task_key.strip():
             raise ValueError("task_key должен быть непустой строкой")
         task_key = raw_task_key.strip()
+        validated_key = TaskKeyValidator.from_projects([locked_project.to_dict()]).validate(task_key)
+        if not validated_key.is_valid:
+            raise ConflictError(validated_key.error_message or f"Недопустимый ключ задачи {task_key!r}")
+        task_key = validated_key.normalized or task_key
         payload["task_key"] = task_key
-        if not any(
-            task_key == prefix or task_key.startswith(f"{prefix}-")
-            for prefix in locked_project.key_prefixes
-        ):
-            raise ConflictError(
-                f"Ключ задачи {task_key!r} не соответствует префиксам проекта {locked_project.code!r}"
-            )
         raw_current_phase = payload.get("current_phase")
         if raw_current_phase in (None, ""):
             phases = list(self._uow.phases.list(workflow_id=locked_project.workflow_id))
@@ -84,6 +80,24 @@ class TaskService:
         return [t.to_dict() for t in self._uow.tasks.list()]
 
     def delete_task(self, task_id: int) -> None:
+        task = self._uow.tasks.get_by_id(task_id)
+        if task is None:
+            raise NotFoundError(f"Задача {task_id} не найдена")
+        project = self._uow.projects.get_by_id(task.project_id)
+        if project is None:
+            raise NotFoundError(f"Проект {task.project_id} не найден")
+        if self._uow.workflows.lock(project.workflow_id) is None:
+            raise NotFoundError(f"Воркфлоу {project.workflow_id} не найден")
+        locked_project = self._uow.projects.lock(task.project_id)
+        if locked_project is None:
+            raise NotFoundError(f"Проект {task.project_id} не найден")
+        if locked_project.workflow_id != project.workflow_id:
+            raise ConflictError("Воркфлоу проекта изменился во время удаления задачи")
+        locked_task = self._uow.tasks.lock(task_id)
+        if locked_task is None:
+            raise NotFoundError(f"Задача {task_id} не найдена")
+        if locked_task.project_id != locked_project.id:
+            raise ConflictError("Проект задачи изменился во время удаления")
         self._uow.tasks.delete(task_id)
         self._uow.commit()
         return None

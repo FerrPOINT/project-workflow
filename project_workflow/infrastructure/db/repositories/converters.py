@@ -46,21 +46,19 @@ def _row_to_workflow(row: m.Workflow) -> Workflow:
         name=row.name,
         description=row.description or "",
         is_default=bool(row.is_default),
-        is_locked=bool(row.is_locked),
-        catalog_sha256=row.catalog_sha256,
     )
 
 
 def _row_to_project(row: m.Project) -> Project:
     raw = row.key_prefixes
     if not isinstance(raw, str):
-        raise ValueError("Persisted project key_prefixes must be a JSON string array")
+        raise ValueError("Сохранённое key_prefixes проекта должно быть JSON-массивом строк")
     try:
         prefixes = json.loads(raw)
     except (json.JSONDecodeError, TypeError) as exc:
-        raise ValueError("Persisted project key_prefixes contain invalid JSON") from exc
+        raise ValueError("Сохранённое key_prefixes проекта содержит некорректный JSON") from exc
     if not isinstance(prefixes, list) or not all(isinstance(prefix, str) for prefix in prefixes):
-        raise ValueError("Persisted project key_prefixes must be a JSON string array")
+        raise ValueError("Сохранённое key_prefixes проекта должно быть JSON-массивом строк")
     return Project(
         id=row.id,
         workflow_id=row.workflow_id,
@@ -78,7 +76,7 @@ def _row_to_task(row: m.Task) -> Task:
     try:
         if current_phase:
             phase = next(
-                (p for p in row.workflow.phases if p.code == current_phase),
+                (p for p in row.project.workflow.phases if p.code == current_phase),
                 None,
             )
             phase_name = phase.name if phase else current_phase
@@ -87,7 +85,6 @@ def _row_to_task(row: m.Task) -> Task:
     return Task(
         id=getattr(row, "id", None),
         project_id=row.project_id,
-        workflow_id=row.workflow_id,
         task_key=row.task_key,
         title=row.title or "",
         description=row.description or "",
@@ -111,24 +108,24 @@ def _row_to_agent(row: m.Agent) -> Agent:
 def _row_to_supervisor_run(row: m.SupervisorRun) -> SupervisorRun:
     def _parse(raw: str | None) -> list[str]:
         if not isinstance(raw, str):
-            raise ValueError("Persisted supervisor list field must be a JSON string array")
+            raise ValueError("Сохранённое поле-список Supervisor должно быть JSON-массивом строк")
         try:
             parsed = json.loads(raw)
         except (json.JSONDecodeError, TypeError) as exc:
-            raise ValueError("Persisted supervisor list field contains invalid JSON") from exc
+            raise ValueError("Сохранённое поле-список Supervisor содержит некорректный JSON") from exc
         if not isinstance(parsed, list) or not all(isinstance(item, str) for item in parsed):
-            raise ValueError("Persisted supervisor list field must be a JSON string array")
+            raise ValueError("Сохранённое поле-список Supervisor должно быть JSON-массивом строк")
         return parsed
 
     def _parse_obj(raw: str | None) -> dict[str, Any]:
         if not isinstance(raw, str):
-            raise ValueError("Persisted supervisor object field must be a JSON object")
+            raise ValueError("Сохранённое поле-объект Supervisor должно быть JSON-объектом")
         try:
             parsed = json.loads(raw)
         except (json.JSONDecodeError, TypeError) as exc:
-            raise ValueError("Persisted supervisor object field contains invalid JSON") from exc
+            raise ValueError("Сохранённое поле-объект Supervisor содержит некорректный JSON") from exc
         if not isinstance(parsed, dict):
-            raise ValueError("Persisted supervisor object field must be a JSON object")
+            raise ValueError("Сохранённое поле-объект Supervisor должно быть JSON-объектом")
         return parsed
 
     return SupervisorRun(

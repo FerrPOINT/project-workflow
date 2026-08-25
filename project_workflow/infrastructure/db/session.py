@@ -6,6 +6,7 @@ The DSN is read from config.Settings.DATABASE_URL.
 from __future__ import annotations
 
 import logging
+import sqlite3
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -41,7 +42,7 @@ class DatabaseRecreateRequired(RuntimeError):
     exit_code = 2
 
     def __init__(self) -> None:
-        super().__init__("legacy database must be recreated")
+        super().__init__("Устаревшую базу данных необходимо пересоздать")
 
 
 def expected_tables() -> frozenset[str]:
@@ -131,7 +132,7 @@ def get_session(url: str | None = None) -> Session:
 @event.listens_for(Engine, "connect")
 def _set_sqlite_pragma(dbapi_conn: Any, connection_record: Any) -> None:
     """Apply performance and correctness pragmas to SQLite connections."""
-    if getattr(connection_record, "dialect", None) is None or connection_record.dialect.name != "sqlite":
+    if not isinstance(dbapi_conn, sqlite3.Connection):
         return
     try:
         cursor = dbapi_conn.cursor()
@@ -211,14 +212,13 @@ def _metadata_is_current(target: Engine | Connection) -> bool:
 
 
 def ensure_migrated(engine: Engine | Connection | None = None) -> None:
-    """Apply known forward migrations, rejecting databases from another graph."""
+    """Apply the baseline migration, rejecting databases from the legacy graph."""
     target = engine or get_engine()
     bound_engine = target.engine if isinstance(target, Connection) else target
     schema = None if _is_sqlite(str(bound_engine.url)) else get_settings().DB_SCHEMA
     revisions = database_revisions(target)
     existing_tables = set(inspect(target).get_table_names(schema=schema)) - {"alembic_version"}
-    known_revisions = migration_revisions()
-    incompatible_revision = bool(revisions) and not revisions.issubset(known_revisions)
+    incompatible_revision = revisions and revisions != {migration_head()}
     exact_tables = existing_tables == expected_tables()
     incompatible_schema = revisions == {migration_head()} and (
         not exact_tables or not _metadata_is_current(target)
@@ -240,13 +240,6 @@ def migration_head() -> str:
     if head is None:
         raise RuntimeError("Не настроена головная ревизия миграций Alembic")
     return head
-
-
-def migration_revisions() -> frozenset[str]:
-    """Return every revision in the current forward-only migration graph."""
-    here = Path(__file__).resolve().parent.parent.parent.parent
-    script = ScriptDirectory.from_config(Config(str(here / "alembic.ini")))
-    return frozenset(revision.revision for revision in script.walk_revisions())
 
 
 def database_revisions(engine: Engine | Connection) -> set[str]:

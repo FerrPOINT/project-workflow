@@ -75,10 +75,7 @@ class SupervisorEngine:
             if self.task and self.task.get("project_id")
             else None
         )
-        task_workflow_id = self.task.get("workflow_id") if self.task else None
-        self.workflow_id = task_workflow_id or (
-            self.project["workflow_id"] if self.project else None
-        )
+        self.workflow_id = self.project["workflow_id"] if self.project else None
         self.workflow = self._workflow_service.get_workflow(self.workflow_id) if self.workflow_id else None
         self._all_phases: list[Phase] | None = None
         self._phase_map: dict[str, Phase] | None = None
@@ -189,14 +186,18 @@ class SupervisorEngine:
         task_id = int(self.task.get("id", 0))
         if not task_id:
             return previously
-        runs = [r.to_dict() for r in self._uow.supervisor_runs.list(task_id=task_id, limit=200)]
+        phase = self.phase_map.get(str(phase_code))
+        if phase is None or phase.id is None:
+            return previously
+        runs = [
+            r.to_dict()
+            for r in self._uow.supervisor_runs.list(
+                task_id=task_id,
+                phase_id=int(phase.id),
+                limit=None,
+            )
+        ]
         for run in runs:
-            run_phase_id = run.get("phase_id")
-            if run_phase_id is None:
-                continue
-            phase = self._uow.phases.get_by_id(int(run_phase_id))
-            if phase is None or str(phase.code) != str(phase_code):
-                continue
             covered = run.get("covered", [])
             for item in covered:
                 if isinstance(item, str):
@@ -444,10 +445,7 @@ class SupervisorEngine:
             if self.task and self.task.get("project_id")
             else None
         )
-        task_workflow_id = self.task.get("workflow_id") if self.task else None
-        self.workflow_id = task_workflow_id or (
-            self.project["workflow_id"] if self.project else None
-        )
+        self.workflow_id = self.project["workflow_id"] if self.project else None
         self.workflow = self._workflow_service.get_workflow(self.workflow_id) if self.workflow_id else None
         self._all_phases = (
             schema.load_phases_from_db(self._uow, workflow_id=self.workflow_id)

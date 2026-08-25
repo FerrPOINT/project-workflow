@@ -177,15 +177,27 @@ async function moveInstruction(button, dir) {
   }
 }
 
+async function requestInstruction(url, options) {
+  try {
+    const resp = await fetch(url, options);
+    const data = await resp.json().catch(() => ({}));
+    return {resp, data};
+  } catch (_error) {
+    showRequestError();
+    return null;
+  }
+}
+
 async function updateInstruction(textarea) {
   const row = textarea.closest('.instruction-row');
   const id = parseInt(row.dataset.instructionId, 10);
-  const resp = await fetch('/api/instructions/' + id, {
+  const result = await requestInstruction('/api/instructions/' + id, {
     method: 'PUT',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({description: textarea.value.trim()}),
   });
-  const data = await resp.json().catch(() => ({}));
+  if (!result) return;
+  const {resp, data} = result;
   if (!resp.ok || !data.ok) showToast(data.error || 'Ошибка сохранения', 'error');
 }
 
@@ -193,12 +205,13 @@ async function toggleType(badge) {
   const row = badge.closest('.instruction-row');
   const id = parseInt(row.dataset.instructionId, 10);
   const nextType = (badge.dataset.executionType || 'sync') === 'sync' ? 'parallel' : 'sync';
-  const resp = await fetch('/api/instructions/' + id, {
+  const result = await requestInstruction('/api/instructions/' + id, {
     method: 'PUT',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({execution_type: nextType}),
   });
-  const data = await resp.json().catch(() => ({}));
+  if (!result) return;
+  const {resp, data} = result;
   if (!resp.ok || !data.ok) {
     showToast(data.error || 'Ошибка сохранения', 'error');
     return;
@@ -213,8 +226,9 @@ async function deleteInstruction(button) {
   const row = button.closest('.instruction-row');
   const id = parseInt(row.dataset.instructionId, 10);
   if (!confirm('Удалить инструкцию?')) return;
-  const resp = await fetch('/api/instructions/' + id, {method: 'DELETE'});
-  const data = await resp.json().catch(() => ({}));
+  const result = await requestInstruction('/api/instructions/' + id, {method: 'DELETE'});
+  if (!result) return;
+  const {resp, data} = result;
   if (!resp.ok || !data.ok) {
     showToast(data.error || 'Ошибка удаления', 'error');
     return;
@@ -227,12 +241,13 @@ async function addInstruction() {
   const input = document.getElementById('newInstructionText');
   const description = input.value.trim();
   if (!description) return;
-  const resp = await fetch('/api/instructions', {
+  const result = await requestInstruction('/api/instructions', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({phase_id: PHASE_ID, description: description}),
   });
-  const data = await resp.json().catch(() => ({}));
+  if (!result) return;
+  const {resp, data} = result;
   if (!resp.ok || !data.ok) {
     showToast(data.error || 'Ошибка добавления', 'error');
     return;
@@ -244,12 +259,13 @@ async function updateSkills(input) {
   const row = input.closest('.instruction-row');
   const id = parseInt(row.dataset.instructionId, 10);
   const selected = input.value.split(',').map(value => value.trim()).filter(Boolean);
-  const resp = await fetch('/api/instructions/' + id, {
+  const result = await requestInstruction('/api/instructions/' + id, {
     method: 'PUT',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({skills: selected}),
   });
-  const data = await resp.json().catch(() => ({}));
+  if (!result) return;
+  const {resp, data} = result;
   if (!resp.ok || !data.ok) {
     showToast(data.error || 'Ошибка сохранения', 'error');
     return;

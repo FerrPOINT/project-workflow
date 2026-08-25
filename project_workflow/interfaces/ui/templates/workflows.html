@@ -174,14 +174,16 @@ function reloadWorkflows(nextId){
       fillWorkflowForm(workflowById(selectedWorkflowId));
       setWorkflowFormMode('edit');
       syncWorkflowNav();
-    });
+    })
+    .catch(showRequestError);
 }
 function saveWorkflow(){
   if(selectedWorkflowId == null){ showToast('Воркфлоу не выбран','error'); return; }
   var payload = currentWorkflowPayload();
   fetch('/api/workflows/' + selectedWorkflowId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json()})
-    .then(function(d){ if(d.ok){ showToast('Воркфлоу сохранён','success'); reloadWorkflows(selectedWorkflowId); } else { showToast(d.error || 'Ошибка','error'); } });
+    .then(function(d){ if(d.ok){ showToast('Воркфлоу сохранён','success'); reloadWorkflows(selectedWorkflowId); } else { showToast(d.error || 'Ошибка','error'); } })
+    .catch(showRequestError);
 }
 function createWorkflow(){
   var payload = currentWorkflowPayload();
@@ -195,14 +197,16 @@ function createWorkflow(){
       } else {
         showToast(d.error || 'Ошибка','error');
       }
-    });
+    })
+    .catch(showRequestError);
 }
 function deleteWorkflow(){
   if(selectedWorkflowId == null){ showToast('Воркфлоу не выбран','error'); return; }
   if(!confirm('Удалить воркфлоу?')) return;
   fetch('/api/workflows/' + selectedWorkflowId,{method:'DELETE'})
     .then(function(r){return r.json()})
-    .then(function(d){ if(d.ok){ showToast('Воркфлоу удалён','success'); reloadWorkflows(null); } else { showToast(d.error || 'Ошибка','error'); } });
+    .then(function(d){ if(d.ok){ showToast('Воркфлоу удалён','success'); reloadWorkflows(null); } else { showToast(d.error || 'Ошибка','error'); } })
+    .catch(showRequestError);
 }
 function submitWorkflow(){
   if(workflowFormMode === 'create'){

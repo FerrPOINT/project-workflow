@@ -52,6 +52,24 @@ class TestServicesMoreGaps:
             mock_projects.return_value = []
             result = _load_dashboard()
         assert result["stats"]["verdicts"]["PASS"] == 1
+        assert result["stats"]["verdict_labels"]["PASS"] == "Принято"
+
+    def test_load_dashboard_keeps_blocked_tasks_visible(self, monkeypatch):
+        uow = MagicMock()
+        from project_workflow.application.ui import UIDataService
+
+        monkeypatch.setattr("project_workflow.interfaces.ui.services._get_app_state", lambda: _mock_state(uow))
+        with (
+            patch.object(UIDataService, "_load_tasks") as mock_tasks,
+            patch.object(UIDataService, "_load_projects") as mock_projects,
+        ):
+            blocked = {"status": "blocked", "status_label": "Заблокирована", "latest_verdict": "blocked"}
+            mock_tasks.return_value = [blocked]
+            mock_projects.return_value = []
+            result = _load_dashboard()
+
+        assert result["open_tasks"] == [blocked]
+        assert result["stats"]["active"] == 0
 
     def test_get_task_detail_completed_at_fallback(self, monkeypatch):
         uow = MagicMock()
@@ -98,6 +116,7 @@ class TestServicesMoreGaps:
         monkeypatch.setattr("project_workflow.interfaces.ui.services._get_app_state", lambda: _mock_state(uow))
         result = _get_task_detail("A-1")
         assert result["supervisor_runs"][0]["next_contract"] is None
+        assert result["supervisor_runs"][0]["verdict_label"] == "Принято"
 
     def test_load_cli_reference(self):
         with patch(

@@ -222,7 +222,7 @@ class TestIndexPage:
         assert response.status_code == 200
         assert response.headers["content-type"] == "text/html; charset=utf-8"
         assert "Дашборд" in response.text
-        assert "Активные задачи" in response.text
+        assert "Незавершённые задачи" in response.text
         assert "Проекты" in response.text
 
     def test_index_has_nav(self):
@@ -546,10 +546,10 @@ class TestPhasesPage:
             assert len(phases) == 1
             default_phase_id = phases[0]["id"]
 
-            # Cannot delete the only phase.
+            # Единственную фазу удалить нельзя.
             resp = client.delete(f"/api/phases/{default_phase_id}")
             assert resp.status_code == 409
-            assert "only phase" in resp.json()["error"].lower() or "единственную" in resp.json()["error"].lower()
+            assert resp.json()["error"] == "Нельзя удалить единственную фазу воркфлоу"
 
             # Add a second phase, then delete it.
             uow.phases.create({"workflow_id": workflow_id, "code": "dpt-second", "name": "Second", "phase_order": 2})
@@ -576,6 +576,7 @@ class TestPhasesPage:
 
         assert f'data-phase-id="{phase["id"]}"' in response.text
         assert 'data-phase-id="4.START"' not in response.text
+        assert "phase_id:Number(phase.dataset.phaseId)" in response.text
 
     def test_phases_page_rebuilds_parallel_groups_from_execution_sequence(self):
         response = client.get("/phases")
@@ -844,6 +845,15 @@ class TestPhaseDetail:
         assert "el.setAttribute('aria-busy', 'true');" in response.text
         assert "return true;" in response.text
 
+    def test_phase_detail_serializes_all_phase_aggregate_saves(self):
+        response = client.get(_phase_detail_path("1.INTAKE"))
+
+        assert response.status_code == 200
+        assert "let _phaseSaveQueue = Promise.resolve(true);" in response.text
+        assert "const queued = _phaseSaveQueue.then(() => persistPhase());" in response.text
+        assert "_phaseSaveQueue = queued.catch(() => false);" in response.text
+        assert "async function persistPhase()" in response.text
+
     def test_new_check_and_evidence_wait_for_user_input_before_saving(self):
         response = client.get(_phase_detail_path("1.INTAKE"))
 
@@ -919,6 +929,12 @@ class TestPhaseDetail:
             assert [i["id"] for i in after] == list(reversed(ids))
         finally:
             client.put(_phase_api_path("1.INTAKE"), json=restore_payload)
+
+    def test_phase_detail_reorder_success_uses_success_toast(self):
+        response = client.get(_phase_detail_path("1.INTAKE"))
+
+        assert "showToast('Порядок инструкций сохранён', 'success');" in response.text
+        assert "showToast('Порядок инструкций сохранён');" not in response.text
 
     def test_phase_detail_can_add_and_delete_instruction(self):
         phase_response = client.get(_phase_api_path("1.INTAKE"))
@@ -1518,6 +1534,12 @@ class TestAgentsPage:
         assert 'type="number"' not in response.text
         assert "placeholder=" not in response.text
 
+    def test_agents_crud_reports_network_errors(self):
+        response = client.get("/agents")
+
+        assert response.status_code == 200
+        assert response.text.count(".catch(showRequestError)") >= 3
+
     def test_agents_api_create_and_update_description(self):
         create = client.post(
             "/api/agents",
@@ -1669,3 +1691,42 @@ class TestSettingsPage:
         flag_option = next(option for option in discovered["options"] if option["flags"] == "--flag")
         assert flag_option["help"] == "Probe flag"
         assert "default" not in flag_option
+
+
+class TestUiNetworkFailures:
+    @pytest.mark.parametrize(
+        ("path", "minimum_handlers"),
+        [("/projects", 4), ("/workflows", 4), ("/agents", 3)],
+    )
+    def test_promise_based_crud_reports_network_errors(self, path, minimum_handlers):
+        response = client.get(path)
+
+        assert response.status_code == 200
+        assert response.text.count(".catch(showRequestError)") >= minimum_handlers
+        assert "Не удалось связаться с сервером" in response.text
+
+    def test_task_delete_reports_network_error_without_reloading(self):
+        response = client.get("/tasks")
+
+        assert response.status_code == 200
+        catch_body = response.text.split(".catch(function()", 1)[1].split("});", 1)[0]
+        assert "showRequestError();" in catch_body
+        assert "window.location.reload();" not in catch_body
+
+    def test_async_editors_handle_rejection_and_restore_optimistic_deletion(self):
+        phase = _phase_row("1.INTAKE")
+        phase_id = int(phase["id"])
+        phases_page = client.get("/phases")
+        instructions_page = client.get(f"/instructions?phase_id={phase_id}")
+        detail_page = client.get(f"/phase/{phase_id}")
+
+        assert phases_page.status_code == 200
+        assert phases_page.text.count("catch(_error){showRequestError();") >= 4
+        assert instructions_page.status_code == 200
+        assert "async function requestInstruction(url, options)" in instructions_page.text
+        assert "showRequestError();" in instructions_page.text
+        assert detail_page.status_code == 200
+        assert "async function requestPhaseDetail(url, options)" in detail_page.text
+        assert "if (!await savePhase())" in detail_page.text
+        assert "list.insertBefore(li, nextSibling)" in detail_page.text
+        assert "await deleteItem(input);" in detail_page.text
