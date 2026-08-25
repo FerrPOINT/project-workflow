@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from project_workflow.domain.exceptions import NotFoundError
+from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import UnitOfWork
 
 
@@ -31,8 +31,11 @@ class PhaseService:
         initial = self._uow.phases.get_by_id(phase_id)
         if initial is None or initial.workflow_id is None:
             raise NotFoundError(f"Фаза {phase_id} не найдена")
-        if self._uow.workflows.lock(initial.workflow_id) is None:
+        workflow = self._uow.workflows.lock(initial.workflow_id)
+        if workflow is None:
             raise NotFoundError(f"Воркфлоу {initial.workflow_id} не найден")
+        if getattr(workflow, "is_locked", False) is True:
+            raise ConflictError("Locked workflow revision cannot be changed")
         fresh = next(
             (phase for phase in self._uow.phases.list(initial.workflow_id) if phase.id == phase_id),
             None,
