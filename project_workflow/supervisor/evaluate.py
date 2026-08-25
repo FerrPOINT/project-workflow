@@ -23,12 +23,14 @@ def _contract_fingerprint(
     group: list[Phase],
     contract: Any,
     evaluation_items: list[tuple[str, str]],
+    previously_covered_ids: set[str],
     transition_routes: dict[str, tuple[str | None, str | None, str | None]],
 ) -> str:
     contract_data = contract.to_dict()
     state = {
         "contract": contract_data,
         "evaluation_items": [{"id": item_id, "text": text} for item_id, text in evaluation_items],
+        "previously_covered_ids": sorted(previously_covered_ids),
         "delegation_allowed": bool(phase.is_delegated or phase.delegate),
         "group": [member.code for member in group],
         "transition_routes": transition_routes,
@@ -108,8 +110,18 @@ def _contract_changed() -> LlmVerdict:
     )
 
 
-def _replay(engine: Any, task_id: int, phase_id: int, fingerprint: str) -> dict[str, Any] | None:
+def _replay(
+    engine: Any,
+    task_id: int,
+    phase_id: int,
+    fingerprint: str,
+    *,
+    after_run_id: int | None = None,
+) -> dict[str, Any] | None:
     run = engine.db.supervisor_runs.get_by_fingerprint(task_id, phase_id, fingerprint)
+    run_id = getattr(run, "id", None) if run is not None else None
+    if after_run_id is not None and (run_id is None or int(run_id) <= after_run_id):
+        return None
     response = getattr(run, "response", None) if run is not None else None
     if not isinstance(response, dict):
         return None
@@ -225,6 +237,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     previously_ids = {
         item_id for item_id, text in evaluation_items if item_id in previously or normalize_text(text) in previously
     }
+    initial_previously_ids = set(previously_ids)
     transition_routes = {
         verdict: engine._resolve_transition(phase, verdict, group)
         for verdict in ("pass", "rollback", "delegate")
@@ -235,6 +248,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         group=group,
         contract=current_contract,
         evaluation_items=evaluation_items,
+        previously_covered_ids=previously_ids,
         transition_routes=transition_routes,
     )
     fingerprint = _report_fingerprint(task_id, report, initial_contract_fingerprint)
@@ -328,13 +342,29 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         group=group,
         contract=current_contract,
         evaluation_items=evaluation_items,
+        previously_covered_ids=previously_ids,
         transition_routes=transition_routes,
     )
-    if current_contract_fingerprint == initial_contract_fingerprint:
+    current_snapshot_fingerprint = _contract_fingerprint(
+        builder=builder,
+        phase=phase,
+        group=group,
+        contract=current_contract,
+        evaluation_items=evaluation_items,
+        previously_covered_ids=initial_previously_ids,
+        transition_routes=transition_routes,
+    )
+    if current_snapshot_fingerprint == initial_contract_fingerprint:
         # Another identical evaluation may have committed while this provider
         # call was in flight.  Replay it only after proving the catalog still
         # matches the provider snapshot.
-        replayed = _replay(engine, task_id, phase_id, fingerprint)
+        replayed = _replay(
+            engine,
+            task_id,
+            phase_id,
+            fingerprint,
+            after_run_id=initial_run_id or 0,
+        )
         if replayed is not None:
             engine.db.commit()
             engine._refresh_task_state()

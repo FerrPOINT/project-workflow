@@ -57,6 +57,32 @@ class TestCoverageAccumulation:
         assert normalize_text("Item A") in prev
         assert normalize_text("Item B") in prev
 
+    def test_get_previously_covered_has_no_arbitrary_run_limit(self):
+        engine = self._make_engine("RUN-9998")
+        task_id = engine.task["id"]
+        phase = engine._get_current_phase_obj()
+        assert phase is not None and phase.id is not None
+
+        for index in range(201):
+            engine.db.create_supervisor_run(
+                {
+                    "task_id": task_id,
+                    "phase_id": phase.id,
+                    "verdict": "partial",
+                    "report": f"report-{index}",
+                    "covered": ["Самое раннее покрытие"] if index == 0 else [],
+                    "missing": [],
+                    "blockers": [],
+                    "context_snapshot": {},
+                    "response": {},
+                }
+            )
+        engine.db.commit()
+
+        previously = engine._get_previously_covered(phase.code)
+
+        assert normalize_text("Самое раннее покрытие") in previously
+
 
 class TestEvaluateAccumulationEndToEnd:
     """Test evaluate() accumulates coverage across multiple reports for the same phase."""

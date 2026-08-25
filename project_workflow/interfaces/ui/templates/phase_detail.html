@@ -639,12 +639,19 @@ function addEvidence() {
 
 /* ---------- Debounced phase meta save ---------- */
 let _saveTimer = null;
+let _phaseSaveQueue = Promise.resolve(true);
 function scheduleSave() {
   if (_saveTimer) clearTimeout(_saveTimer);
   _saveTimer = setTimeout(savePhase, 400);
 }
 
-async function savePhase() {
+function savePhase() {
+  const queued = _phaseSaveQueue.then(() => persistPhase());
+  _phaseSaveQueue = queued.catch(() => false);
+  return queued;
+}
+
+async function persistPhase() {
   const header = document.querySelector('.wiki-header');
   const meta = {};
   header.querySelectorAll('[data-field]').forEach((inp) => {

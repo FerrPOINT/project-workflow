@@ -189,11 +189,15 @@ class SAPhaseRepository(PhaseRepository):
             row.phase_order = order
 
     def get_checks(self, phase_id: int) -> Sequence[dict[str, Any]]:
-        rows = self._session.execute(select(m.Check).where(m.Check.phase_id == phase_id)).scalars().all()
+        rows = self._session.execute(
+            select(m.Check).where(m.Check.phase_id == phase_id).order_by(m.Check.id)
+        ).scalars().all()
         return [{"id": r.id, "phase_id": r.phase_id, "description": r.description} for r in rows]
 
     def get_evidence(self, phase_id: int) -> Sequence[dict[str, Any]]:
-        rows = self._session.execute(select(m.Evidence).where(m.Evidence.phase_id == phase_id)).scalars().all()
+        rows = self._session.execute(
+            select(m.Evidence).where(m.Evidence.phase_id == phase_id).order_by(m.Evidence.id)
+        ).scalars().all()
         return [{"id": r.id, "phase_id": r.phase_id, "description": r.description} for r in rows]
 
     def set_checks(self, phase_id: int, items: builtins.list[dict[str, Any]]) -> None:
