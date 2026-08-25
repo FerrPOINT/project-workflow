@@ -148,7 +148,11 @@ class SATaskRepository(TaskRepository):
 
     def get_history(self, task_id: int) -> Sequence[dict[str, Any]]:
         with self._session.no_autoflush:
-            rows = self._session.execute(select(m.TaskHistory).where(m.TaskHistory.task_id == task_id)).scalars().all()
+            rows = self._session.execute(
+                select(m.TaskHistory)
+                .where(m.TaskHistory.task_id == task_id)
+                .order_by(m.TaskHistory.id)
+            ).scalars().all()
         return [
             {
                 "id": r.id,
@@ -165,7 +169,13 @@ class SATaskRepository(TaskRepository):
             return {}
         with self._session.no_autoflush:
             rows = (
-                self._session.execute(select(m.TaskHistory).where(m.TaskHistory.task_id.in_(task_ids))).scalars().all()
+                self._session.execute(
+                    select(m.TaskHistory)
+                    .where(m.TaskHistory.task_id.in_(task_ids))
+                    .order_by(m.TaskHistory.task_id, m.TaskHistory.id)
+                )
+                .scalars()
+                .all()
             )
         result: dict[int, list[dict[str, Any]]] = {tid: [] for tid in task_ids}
         for r in rows:

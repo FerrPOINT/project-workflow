@@ -23,7 +23,9 @@ class SAProjectRepository(ProjectRepository):
         self._session = session
 
     def list(self) -> Sequence[Project]:
-        rows = self._session.execute(select(m.Project).options(joinedload(m.Project.workflow))).scalars().all()
+        rows = self._session.execute(
+            select(m.Project).options(joinedload(m.Project.workflow)).order_by(m.Project.id)
+        ).scalars().all()
         return [_row_to_project(r) for r in rows]
 
     def get_by_id(self, project_id: int) -> Project | None:

@@ -380,6 +380,72 @@ class TestPostgresUoW:
             assert tasks.get("TST-1") == task_id
             uow.commit()
 
+    def test_repository_list_reads_have_deterministic_id_order(self, pg_url):
+        from scripts.init_db import main
+
+        assert main() == 0
+        uow = SAUnitOfWork(pg_url)
+        workflow = uow.workflows.get_default()
+        assert workflow is not None and workflow.id is not None
+        phase = uow.phases.get_by_code(int(workflow.id), "1.INTAKE")
+        assert phase is not None and phase.id is not None
+        project = uow.projects.list()[0]
+        uow.projects.create(
+            {
+                "workflow_id": int(workflow.id),
+                "code": "ORDERING",
+                "name": "Ordering project",
+                "description": "",
+                "key_prefixes": ["ORD"],
+            }
+        )
+        task_id = uow.tasks.create(
+            {
+                "project_id": int(project.id),
+                "task_key": "RUN-ORDER",
+                "title": "Ordering test",
+                "current_phase": phase.code,
+            }
+        )
+        history_phases = list(uow.phases.list(int(workflow.id)))[:3]
+        for history_phase in history_phases:
+            assert history_phase.id is not None
+            uow.tasks.add_history(task_id, int(history_phase.id), "pending")
+
+        uow.session.execute(text("CREATE INDEX checks_desc_test_idx ON checks (id DESC)"))
+        uow.session.execute(text("CREATE INDEX evidence_desc_test_idx ON evidence (id DESC)"))
+        uow.session.execute(text("CREATE INDEX task_history_desc_test_idx ON task_history (id DESC)"))
+        uow.session.execute(text("CREATE INDEX agents_desc_test_idx ON agents (id DESC)"))
+        uow.session.execute(text("CREATE INDEX projects_desc_test_idx ON projects (id DESC)"))
+        uow.commit()
+        uow.session.execute(text("CLUSTER checks USING checks_desc_test_idx"))
+        uow.session.execute(text("CLUSTER evidence USING evidence_desc_test_idx"))
+        uow.session.execute(text("CLUSTER task_history USING task_history_desc_test_idx"))
+        uow.session.execute(text("CLUSTER agents USING agents_desc_test_idx"))
+        uow.session.execute(text("CLUSTER projects USING projects_desc_test_idx"))
+        uow.commit()
+        uow.session.execute(text("SET LOCAL enable_indexscan = off"))
+        uow.session.execute(text("SET LOCAL enable_bitmapscan = off"))
+
+        phase_checks = list(uow.phases.get_checks(int(phase.id)))
+        phase_evidence = list(uow.phases.get_evidence(int(phase.id)))
+        checks = list(uow.checks.list(int(phase.id)))
+        evidence = list(uow.evidence.list(int(phase.id)))
+        history = list(uow.tasks.get_history(task_id))
+        batch_history = list(uow.tasks.get_history_batch([task_id])[task_id])
+        agents = list(uow.agents.list())
+        projects = list(uow.projects.list())
+
+        assert [row["id"] for row in phase_checks] == sorted(row["id"] for row in phase_checks)
+        assert [row["id"] for row in phase_evidence] == sorted(row["id"] for row in phase_evidence)
+        assert [row["id"] for row in checks] == sorted(row["id"] for row in checks)
+        assert [row["id"] for row in evidence] == sorted(row["id"] for row in evidence)
+        assert [row["id"] for row in history] == sorted(row["id"] for row in history)
+        assert [row["id"] for row in batch_history] == sorted(row["id"] for row in batch_history)
+        assert [agent.id for agent in agents] == sorted(agent.id for agent in agents)
+        assert [item.id for item in projects] == sorted(item.id for item in projects)
+        uow.close()
+
     def test_ensure_phase_catalog_does_not_overwrite_existing_workflow(self, pg_url):
         from project_workflow.infrastructure.db import schema as schema_module
 
@@ -1525,11 +1591,15 @@ def test_cli_verdicts_replay_and_fail_closed_through_postgres_and_http(pg_url):
 
         partial_result, partial = _step(env, "RUN-82002", "MODE=PARTIAL incomplete report")
         request_count = len(provider_state.chat_requests)
+        progress_result, progress = _step(env, "RUN-82002", "MODE=PARTIAL incomplete report")
+        stable_request_count = len(provider_state.chat_requests)
         replay_result, replay = _step(env, "RUN-82002", "MODE=PARTIAL incomplete report")
-        assert partial_result.returncode == replay_result.returncode == 0
-        assert partial["verdict"] == replay["verdict"] == "PARTIAL"
+        assert partial_result.returncode == progress_result.returncode == replay_result.returncode == 0
+        assert partial["verdict"] == progress["verdict"] == replay["verdict"] == "PARTIAL"
+        assert progress["replayed"] is False
+        assert stable_request_count == request_count + 1
         assert replay["replayed"] is True
-        assert len(provider_state.chat_requests) == request_count
+        assert len(provider_state.chat_requests) == stable_request_count
 
         blocked_result, blocked = _step(env, "RUN-82003", "MODE=BLOCKED blocked report")
         assert blocked_result.returncode == 1

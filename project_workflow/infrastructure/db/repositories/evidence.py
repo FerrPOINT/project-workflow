@@ -19,7 +19,9 @@ class SAEvidenceRepository(EvidenceRepository):
         self._session = session
 
     def list(self, phase_id: int) -> Sequence[dict[str, Any]]:
-        rows = self._session.execute(select(m.Evidence).where(m.Evidence.phase_id == phase_id)).scalars().all()
+        rows = self._session.execute(
+            select(m.Evidence).where(m.Evidence.phase_id == phase_id).order_by(m.Evidence.id)
+        ).scalars().all()
         return [
             {
                 "id": r.id,
