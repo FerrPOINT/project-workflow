@@ -143,8 +143,8 @@ async def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONRespons
         return _error(str(exc), 404)
     except ConflictError as exc:
         return _error(str(exc), 409)
-    except ValueError as exc:
-        return _error(str(exc), 409)
+    except (TypeError, ValueError) as exc:
+        return _error(str(exc), 422)
     return {
         "ok": True,
         "phase_id": phase["id"],
@@ -155,11 +155,6 @@ async def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONRespons
 
 async def api_phase_update(phase_id: int, payload: PhaseUpdate) -> dict[str, Any] | JSONResponse:
     srv = _app_state.get_service()
-    existing = _load_phase_detail(phase_id)
-    if not existing:
-        return _error(f"Фаза {phase_id} не найдена", 404)
-    resolved_phase_id = phase_id
-
     scalar_fields = {
         "name",
         "description",
@@ -170,37 +165,24 @@ async def api_phase_update(phase_id: int, payload: PhaseUpdate) -> dict[str, Any
         "execution_type",
     }
     selected_fields = scalar_fields.intersection(payload.model_fields_set)
-    phase_data = {field: getattr(payload, field) for field in selected_fields}
-    if phase_data:
-        try:
-            srv.update_phase(resolved_phase_id, phase_data, commit=False)
-        except NotFoundError as exc:
-            return _error(str(exc), 404)
-        except ConflictError as exc:
-            return _error(str(exc), 409)
-
-    inst_ids: list[int] = []
-    check_ids: list[int] = []
-    ev_ids: list[int] = []
-    if payload.instructions is not None:
-        instructions = [item.model_dump() for item in payload.instructions]
-        inst_ids = srv.save_instructions(resolved_phase_id, instructions, commit=False)
-    if payload.checks is not None:
-        checks = [item.model_dump() for item in payload.checks]
-        check_ids = srv.save_checks(resolved_phase_id, checks, commit=False)
-    if payload.evidence is not None:
-        evidence = [item.model_dump() for item in payload.evidence]
-        ev_ids = srv.save_evidence(resolved_phase_id, evidence, commit=False)
-
-    if phase_data or payload.instructions is not None or payload.checks is not None or payload.evidence is not None:
-        _app_state.get_uow().commit()
-
-    return {"ok": True, "ids": {"instructions": inst_ids, "checks": check_ids, "evidence": ev_ids}}
+    aggregate = {field: getattr(payload, field) for field in selected_fields}
+    for field in ("instructions", "checks", "evidence"):
+        if field in payload.model_fields_set:
+            items = getattr(payload, field)
+            assert items is not None
+            aggregate[field] = [item.model_dump() for item in items]
+    try:
+        ids = srv.update_phase_detail(phase_id, aggregate)
+    except NotFoundError as exc:
+        return _error(str(exc), 404)
+    except ConflictError as exc:
+        return _error(str(exc), 409)
+    except (TypeError, ValueError) as exc:
+        return _error(str(exc), 422)
+    return {"ok": True, "ids": ids}
 
 
 async def api_phase_delete(phase_id: int) -> dict[str, Any] | JSONResponse:
-    if _app_state.phase_service().get_phase(phase_id) is None:
-        return _error(f"Фаза {phase_id} не найдена", 404)
     try:
         _app_state.phase_service().delete_phase(phase_id)
     except NotFoundError:
@@ -228,7 +210,7 @@ async def api_phase_batch_order(payload: PhaseOrderUpdate) -> dict[str, Any] | J
     except ConflictError as exc:
         return _error(str(exc), 409)
     except ValueError as exc:
-        return _error(str(exc), 409)
+        return _error(str(exc), 422)
     return {"ok": True, "updated": updated}
 
 
@@ -262,9 +244,9 @@ async def api_workflow_delete(workflow_id: int) -> dict[str, Any] | JSONResponse
 
 async def api_project_create(payload: ProjectCreate) -> dict[str, Any] | JSONResponse:
     if "workflow_id" in payload.model_fields_set and payload.workflow_id is None:
-        return _error("workflow_id cannot be null", 422)
+        return _error("workflow_id не может быть null", 422)
     if "description" in payload.model_fields_set and payload.description is None:
-        return _error("description cannot be null", 422)
+        return _error("description не может быть null", 422)
     service = _app_state.project_service()
     try:
         project = service.create_project(
@@ -278,8 +260,10 @@ async def api_project_create(payload: ProjectCreate) -> dict[str, Any] | JSONRes
         )
     except ConflictError as exc:
         return _error(str(exc), 409)
-    except (NotFoundError, ValueError) as exc:
+    except NotFoundError as exc:
         return _error(str(exc), 404)
+    except ValueError as exc:
+        return _error(str(exc), 422)
     project_id = project["id"]
     return {"ok": True, "project_id": project_id, "project": service.get_project(project_id)}
 
@@ -293,8 +277,10 @@ async def api_project_update(project_id: int, payload: ProjectUpdate) -> dict[st
         service.update_project(project_id, updates)
     except ConflictError as exc:
         return _error(str(exc), 409)
-    except (NotFoundError, ValueError) as exc:
+    except NotFoundError as exc:
         return _error(str(exc), 404)
+    except ValueError as exc:
+        return _error(str(exc), 422)
     return {"ok": True, "project": service.get_project(project_id)}
 
 
@@ -306,6 +292,8 @@ async def api_project_delete(project_id: int) -> dict[str, Any] | JSONResponse:
         return _error(str(exc), 404)
     except ConflictError as exc:
         return _error(str(exc), 409)
+    except ValueError as exc:
+        return _error(str(exc), 422)
     return {"ok": True}
 
 
@@ -321,34 +309,35 @@ async def api_agent_create(payload: AgentCreate) -> dict[str, Any] | JSONRespons
         )["id"]
     except ConflictError as exc:
         return _error(str(exc), 409)
+    except ValueError as exc:
+        return _error(str(exc), 422)
     return {"ok": True, "agent_id": agent_id, "agent": service.get_agent(agent_id)}
 
 
 async def api_agent_update(agent_id: int, payload: AgentUpdate) -> dict[str, Any] | JSONResponse:
     service = _app_state.agent_service()
-    existing = service.get_agent(agent_id)
-    if not existing:
-        return _error(f"Агент {agent_id} не найден", 404)
     updates = _updates_from_payload(payload, ["name", "description"])
     if "hermes_profile" in payload.model_fields_set:
         updates["hermes_profile"] = payload.hermes_profile
-    if updates:
-        try:
-            service.update_agent(agent_id, updates)
-        except ConflictError as exc:
-            return _error(str(exc), 409)
+    try:
+        service.update_agent(agent_id, updates)
+    except NotFoundError as exc:
+        return _error(str(exc), 404)
+    except ConflictError as exc:
+        return _error(str(exc), 409)
+    except ValueError as exc:
+        return _error(str(exc), 422)
     return {"ok": True, "agent": service.get_agent(agent_id)}
 
 
 async def api_agent_delete(agent_id: int) -> dict[str, Any] | JSONResponse:
     service = _app_state.agent_service()
-    existing = service.get_agent(agent_id)
-    if not existing:
-        return _error(f"Агент {agent_id} не найден", 404)
-    phases = _app_state.phase_service().list_phases(None)
-    if any(phase.get("agent_id") == agent_id for phase in phases):
-        return _error("Нельзя удалить агента, назначенного на фазу", 409)
-    service.delete_agent(agent_id)
+    try:
+        service.delete_agent(agent_id)
+    except NotFoundError as exc:
+        return _error(str(exc), 404)
+    except ConflictError as exc:
+        return _error(str(exc), 409)
     return {"ok": True}
 
 
@@ -368,9 +357,6 @@ async def api_instructions_list(phase_id: int) -> dict[str, Any] | JSONResponse:
 
 
 async def api_instruction_create(payload: InstructionCreate) -> dict[str, Any] | JSONResponse:
-    phase = _app_state.phase_service().get_phase(payload.phase_id)
-    if phase is None:
-        return _error(f"Фаза {payload.phase_id} не найдена", 404)
     try:
         item = _app_state.instruction_service().create_instruction(
             payload.phase_id,
@@ -389,30 +375,39 @@ async def api_instruction_create(payload: InstructionCreate) -> dict[str, Any] |
 
 
 async def api_instruction_update(instruction_id: int, payload: InstructionUpdate) -> dict[str, Any] | JSONResponse:
-    existing = _app_state.instruction_service().get_instruction(instruction_id)
-    if existing is None:
-        return _error(f"Инструкция {instruction_id} не найдена", 404)
     updates = _updates_from_payload(payload, ["description", "execution_type"])
     if "skills" in payload.model_fields_set:
         updates["skills"] = payload.skills
-    if updates:
+    try:
         _app_state.instruction_service().update_instruction(instruction_id, updates)
+    except NotFoundError as exc:
+        return _error(str(exc), 404)
+    except ConflictError as exc:
+        return _error(str(exc), 409)
+    except (TypeError, ValueError) as exc:
+        return _error(str(exc), 422)
     return {"ok": True, "instruction": _app_state.instruction_service().get_instruction(instruction_id)}
 
 
 async def api_instruction_delete(instruction_id: int) -> dict[str, Any] | JSONResponse:
-    existing = _app_state.instruction_service().get_instruction(instruction_id)
-    if existing is None:
-        return _error(f"Инструкция {instruction_id} не найдена", 404)
-    _app_state.instruction_service().delete_instruction(instruction_id)
+    try:
+        _app_state.instruction_service().delete_instruction(instruction_id)
+    except NotFoundError as exc:
+        return _error(str(exc), 404)
+    except ConflictError as exc:
+        return _error(str(exc), 409)
     return {"ok": True}
 
 
 async def api_instructions_reorder(phase_id: int, payload: InstructionReorder) -> dict[str, Any] | JSONResponse:
-    phase = _app_state.phase_service().get_phase(phase_id)
-    if phase is None:
-        return _error(f"Фаза {phase_id} не найдена", 404)
-    _app_state.instruction_service().reorder_instructions(phase_id, payload.instruction_ids)
+    try:
+        _app_state.instruction_service().reorder_instructions(phase_id, payload.instruction_ids)
+    except NotFoundError as exc:
+        return _error(str(exc), 404)
+    except ConflictError as exc:
+        return _error(str(exc), 409)
+    except (TypeError, ValueError) as exc:
+        return _error(str(exc), 422)
     return {"ok": True}
 
 

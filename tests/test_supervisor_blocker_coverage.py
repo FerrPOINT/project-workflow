@@ -67,21 +67,14 @@ class TestEvaluateAccumulationEndToEnd:
     def test_evaluate_across_reports(self, tmp_path, monkeypatch, supervisor_llm):
         engine = self._make_engine("RUN-9996")
         tid = engine.task["id"]
-
-        class Check:
-            def __init__(self, description):
-                self.description = description
-
-        class Instr:
-            def __init__(self, step):
-                self.step = step
-
+        assert engine.workflow_id is not None
+        phase_order = len(engine.db.phases.list(engine.workflow_id)) + 1
         pid = engine.db.phases.create(
             {
                 "code": "coverage.test",
-                "workflow_id": 1,
+                "workflow_id": engine.workflow_id,
                 "name": "Test",
-                "phase_order": 1,
+                "phase_order": phase_order,
                 "execution_type": "sync",
             }
         )
@@ -92,27 +85,9 @@ class TestEvaluateAccumulationEndToEnd:
             pid, {"step_num": 2, "description": "Fix failing code", "execution_type": "sync"}
         )
         engine.db.phases.set_checks(pid, [{"description": "tests run"}, {"description": "code fixed"}])
-
-        # Mock phase map
-        class FakePhase:
-            id = pid
-            code = "coverage.test"
-            name = "Test"
-            description = ""
-            execution_type = "sync"
-            parallel_with = None
-            rollback_target = None
-            next_recommendation = None
-            instructions = [Instr("Run tests first"), Instr("Fix failing code")]
-            checks = [Check("tests run"), Check("code fixed")]
-            evidence = []
-            delegate = None
-            is_delegated = False
-
-        engine.all_phases = [FakePhase()]
-        engine.phase_map = {"coverage.test": FakePhase()}
-        engine.current_phase = "coverage.test"
-        engine.task = engine.db.tasks.get_by_id(tid).to_dict()
+        engine.db.tasks.update(tid, {"current_phase": "coverage.test", "status": "active"})
+        engine.db.commit()
+        engine._reload_evaluation_state()
 
         # First report: covers only check 1
         supervisor_llm("PARTIAL", covered=["tests run"], missing=["code fixed"])

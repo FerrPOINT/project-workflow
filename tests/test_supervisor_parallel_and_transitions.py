@@ -353,6 +353,7 @@ class TestEvaluateEdgeCases:
             engine.current_phase = "-1"
             engine.task = {"id": 7, "current_phase": "-1", "status": "active", "project_id": 1}
             engine.db = MagicMock()
+            engine._reload_evaluation_state = MagicMock()
             supervisor_llm("PASS", covered=["deploy"])
             result = engine.evaluate("deploy done")
         assert result["verdict"] == "PASS"
@@ -408,6 +409,7 @@ class TestEvaluateEdgeCases:
             engine.current_phase = "1"
             engine.task = {"id": 7, "current_phase": "1", "status": "active", "project_id": 1}
             engine.db = MagicMock()
+            engine._reload_evaluation_state = MagicMock()
             supervisor_llm("PASS", covered=["check-a", "check-b"])
             result = engine.evaluate("check-a done and check-b complete")
         assert result["verdict"] == "PASS"
@@ -463,6 +465,7 @@ class TestEvaluateEdgeCases:
             engine.current_phase = "1"
             engine.task = {"id": 7, "current_phase": "1", "status": "active", "project_id": 1}
             engine.db = MagicMock()
+            engine._reload_evaluation_state = MagicMock()
             supervisor_llm("PARTIAL", covered=["deploy microservice"], missing=["write unit tests"])
             result = engine.evaluate("microservice deployed")
         assert result["verdict"] == "PARTIAL"

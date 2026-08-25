@@ -32,9 +32,9 @@ def test_format_parallel_contract_human():
         },
     ]
     result = _format_parallel_contract_human(details)
-    assert "[a1 (Hermes profile: research_profile)] step 1" in result
-    assert "[a1 (Hermes profile: research_profile)] check 1" in result
-    assert "[a1 (Hermes profile: research_profile)] evidence 1" in result
+    assert "[a1 (профиль Hermes: research_profile)] step 1" in result
+    assert "[a1 (профиль Hermes: research_profile)] check 1" in result
+    assert "[a1 (профиль Hermes: research_profile)] evidence 1" in result
     assert "[a2] step 2" in result
 
 
@@ -61,7 +61,7 @@ def test_prompt_for_missing_phase():
         {"workflow_name": "W"},
         phase_id="p99",
     )
-    assert "p99 не найдена в workflow" in result
+    assert "p99 не найдена в воркфлоу" in result
 
 
 def test_prompt_parallel_group():
@@ -92,7 +92,7 @@ def test_prompt_delegated():
             phase_id="p1",
         )
     assert "Делегировано агенту" in result
-    assert "Hermes profile: code_profile" in result
+    assert "профиль Hermes: code_profile" in result
 
 
 def patch_contract_builder(delegate_agent=None, hermes_profile=None):

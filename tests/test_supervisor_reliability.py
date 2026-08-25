@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 import requests
 
+from project_workflow.application.phase_service import PhaseService
 from project_workflow.infrastructure.llm import OpenAICompatibleClient, ResponseParser
 from project_workflow.supervisor import SupervisorEngine
 
@@ -19,13 +20,13 @@ def _wire(verdict: str, covered: list[str], missing: list[str], blockers: list[s
         "covered": covered,
         "missing": missing,
         "blockers": blockers or [],
-        "message": None,
-        "confidence": None,
+        "message": "Результат проверки",
+        "confidence": 0.5,
     }
 
 
 class TestStrictEvaluatorContract:
-    @pytest.mark.parametrize("field", ["verdict", "covered", "missing", "blockers"])
+    @pytest.mark.parametrize("field", ["verdict", "covered", "missing", "blockers", "message", "confidence"])
     def test_control_fields_are_required(self, field):
         raw = _wire("PASS", ["phase:check:1"], [], [])
         raw.pop(field)
@@ -54,10 +55,10 @@ class TestStrictEvaluatorContract:
         assert verdict.covered == ["phase:check:1", "phase:evidence:2"]
         assert verdict.missing == []
 
-    def test_empty_checklist_pass_and_soft_fields(self):
+    def test_empty_checklist_pass_with_required_fields(self):
         verdict = ResponseParser.parse(_wire("PASS", [], []), required_item_ids=[])
         assert verdict.verdict == "PASS"
-        assert verdict.message == ""
+        assert verdict.message == "Результат проверки"
         assert verdict.confidence == 0.5
 
 
@@ -96,6 +97,102 @@ def test_same_report_is_evaluated_again_after_phase_transition(supervisor_llm):
     runs = engine.db.get_supervisor_runs(task_key=engine.task_key, limit=10)
     assert len(runs) == 2
     assert len({run["phase_id"] for run in runs}) == 2
+
+
+def test_same_report_uses_provider_again_after_instruction_contract_change(supervisor_llm):
+    engine = SupervisorEngine("RUN-915")
+    supervisor_llm("PARTIAL")
+    fixture_chat = OpenAICompatibleClient.chat
+    report = "Контракт пока выполнен частично"
+
+    with patch.object(OpenAICompatibleClient, "chat", side_effect=fixture_chat) as chat:
+        first = engine.evaluate(report)
+        phase = engine._get_current_phase_obj()
+        assert phase is not None and phase.id is not None
+        updated = [
+            {
+                "description": instruction.step,
+                "execution_type": instruction.execution_type,
+                "skills": instruction.skills,
+            }
+            for instruction in phase.instructions
+        ]
+        updated.append({"description": "Новая обязательная инструкция", "execution_type": "sync", "skills": []})
+        PhaseService(engine.db).save_instructions(phase.id, updated)
+        second = engine.evaluate(report)
+
+    assert first["replayed"] is False
+    assert second["replayed"] is False
+    assert chat.call_count == 2
+
+
+def test_catalog_change_during_provider_call_fails_closed_then_retries(supervisor_llm):
+    engine = SupervisorEngine("RUN-916")
+    supervisor_llm("PASS")
+    fixture_chat = OpenAICompatibleClient.chat
+    mutated = False
+
+    def mutate_then_answer(*args, **kwargs):
+        nonlocal mutated
+        if not mutated:
+            mutated = True
+            phase = engine._get_current_phase_obj()
+            assert phase is not None and phase.id is not None
+            checks = [{"description": item.description} for item in phase.checks]
+            checks.append({"description": "Проверка, добавленная конкурентно"})
+            PhaseService(engine.db).save_checks(phase.id, checks)
+        return fixture_chat(*args, **kwargs)
+
+    with patch.object(OpenAICompatibleClient, "chat", side_effect=mutate_then_answer) as chat:
+        blocked = engine.evaluate("Всё выполнено")
+        blocked_task = engine.db.tasks.get_by_id(engine.task["id"]).to_dict()
+        blocked_run = engine.db.get_supervisor_runs(task_key=engine.task_key, limit=1)[0]
+        blocked_history = engine.db.get_task_history(engine.task["id"])
+        retry = engine.evaluate("Всё выполнено")
+
+    assert blocked["verdict"] == "BLOCKED"
+    assert blocked["retryable"] is True
+    assert blocked["current_phase"] == blocked["phase"]
+    assert blocked_task["status"] == "blocked"
+    assert blocked_task["current_phase"] == blocked["phase"]
+    assert blocked_run["verdict"] == "blocked"
+    assert blocked_run["report_fingerprint"] is None
+    assert blocked_history[-1]["status"] == "blocked"
+    assert retry["verdict"] == "PASS"
+    assert retry["replayed"] is False
+    assert chat.call_count == 2
+
+
+@pytest.mark.parametrize(
+    ("task_number", "invalid_response"),
+    [
+        (921, {"verdict": "pass", "covered": [], "missing": [], "blockers": [], "message": "ok", "confidence": 0.5}),
+        (
+            922,
+            {
+                "verdict": "PASS", "covered": [], "missing": [], "blockers": [],
+                "message": "ok", "confidence": 0.5, "extra": True,
+            },
+        ),
+        (923, {"verdict": "PASS", "covered": [], "missing": [], "blockers": [], "confidence": 0.5}),
+        (924, {"verdict": "PASS", "covered": [], "missing": [], "blockers": [], "message": 1, "confidence": 0.5}),
+        (925, {"verdict": "PASS", "covered": [], "missing": [], "blockers": [], "message": "ok", "confidence": "high"}),
+    ],
+)
+def test_invalid_evaluator_contract_uses_fail_closed_audit(task_number, invalid_response):
+    engine = SupervisorEngine(f"RUN-{task_number}")
+    phase_before = engine.current_phase
+
+    with patch.object(OpenAICompatibleClient, "chat", return_value=invalid_response):
+        result = engine.evaluate("Отчёт")
+
+    task = engine.db.tasks.get_by_id(engine.task["id"]).to_dict()
+    run = engine.db.get_supervisor_runs(task_key=engine.task_key, limit=1)[0]
+    assert result["verdict"] == "BLOCKED"
+    assert result["retryable"] is True
+    assert task["status"] == "blocked"
+    assert task["current_phase"] == phase_before
+    assert run["report_fingerprint"] is None
 
 
 def test_retryable_provider_error_has_no_fingerprint_and_blocks_current_phase():

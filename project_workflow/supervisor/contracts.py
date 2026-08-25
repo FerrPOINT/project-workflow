@@ -16,7 +16,7 @@ def text_from_instruction(item: Any) -> str:
     skills = [str(skill).strip() for skill in (getattr(item, "skills", None) or []) if str(skill).strip()]
     if not skills:
         return step
-    recommendation = f"Используй skills: {', '.join(skills)}."
+    recommendation = f"Используй навыки: {', '.join(skills)}."
     return f"{step} {recommendation}" if step else recommendation
 
 
@@ -107,7 +107,7 @@ class PhaseContractBuilder:
         """Placeholder when phase is not in catalog."""
         return PhaseContract(
             phase_code=phase_code,
-            phase_name="Unknown phase",
+            phase_name="Неизвестная фаза",
             workflow_revision=self.workflow_revision,
             description="",
             instructions=[],
@@ -163,8 +163,8 @@ class PhaseContractBuilder:
             actor=actor_from_phase(first),
             description="\n".join(f"- {p.code}: {p.description or '-'}" for p in group),
             instructions=instructions or ["Нет отдельных инструкций — следуй описаниям фаз и обязательным проверкам."],
-            required_checks=checks or ["Нет явных checks."],
-            required_evidence=evidence or ["Нет явных evidence items."],
+            required_checks=checks or ["Нет явных проверок."],
+            required_evidence=evidence or ["Нет явных подтверждений."],
             skills=list(dict.fromkeys(skill for phase in group for skill in skills_from_phase(phase))),
             execution_type="parallel",
             delegate_agent=representative.agent if representative else None,

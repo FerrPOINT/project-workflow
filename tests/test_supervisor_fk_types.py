@@ -82,8 +82,13 @@ class TestRecordTransitionTypes:
 
         engine.task = {"id": 7, "current_phase": engine.current_phase, "status": "active", "project_id": 1}
         engine.db = MagicMock()
+        engine.workflow_id = 1
+        engine.db.supervisor_runs.list.return_value = []
+        engine.db.supervisor_runs.get_by_fingerprint.return_value = None
         with (
             patch.object(engine, "_get_previously_covered", return_value=set()),
+            patch.object(engine, "_reload_evaluation_state"),
+            patch.object(engine, "_reload_task_state"),
             patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient") as mock_client,
             patch.object(engine.db, "create_supervisor_run") as mock_run,
             patch.object(engine.db, "get_task", return_value=engine.task),
@@ -95,8 +100,6 @@ class TestRecordTransitionTypes:
                 "missing": [],
                 "blockers": [],
                 "message": "ok",
-                "next_phase": None,
-                "next_phase_name": None,
                 "confidence": 1.0,
             }
             engine.evaluate_llm("report ok", ph)

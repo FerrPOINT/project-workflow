@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
@@ -33,7 +34,8 @@ def test_create_app_routes():
 def test_request_logging_middleware():
     app = create_app()
     client = TestClient(app)
-    with patch("project_workflow.interfaces.ui.app.logger") as mock_logger:
+    app_module = importlib.import_module("project_workflow.interfaces.ui.app")
+    with patch.object(app_module, "logger") as mock_logger:
         # Health endpoint hits DB, mock engine to avoid real DB.
         with patch("project_workflow.infrastructure.db.session.get_engine") as mock_engine, patch(
             "project_workflow.infrastructure.db.session.schema_is_ready", return_value=True

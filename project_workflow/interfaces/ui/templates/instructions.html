@@ -43,7 +43,7 @@
   {% for group in instruction_groups %}
     {% set is_parallel_group = group | length > 1 %}
     <div class="instruction-block {% if is_parallel_group %}parallel-group{% endif %}" data-block-index="{{ loop.index0 }}">
-      {% if is_parallel_group %}<div class="parallel-label">⚡ parallel</div>{% endif %}
+      {% if is_parallel_group %}<div class="parallel-label">⚡ параллельно</div>{% endif %}
       {% for instruction in group %}
       <div class="instruction-row" data-instruction-id="{{ instruction.id }}" data-step-num="{{ instruction.step_num }}">
         <div class="order-controls">
@@ -56,13 +56,13 @@
             <textarea class="instruction-text" onchange="updateInstruction(this)">{{ instruction.description }}</textarea>
           </div>
           <div class="execution-row">
-            <span class="type-badge {{ instruction.execution_type }}" onclick="toggleType(this)" role="button" tabindex="0">{{ instruction.execution_type }}</span>
+            <span class="type-badge {{ instruction.execution_type }}" data-execution-type="{{ instruction.execution_type }}" onclick="toggleType(this)" role="button" tabindex="0">{{ 'параллельно' if instruction.execution_type == 'parallel' else 'последовательно' }}</span>
           </div>
           <div class="skills-cell">
             {% for skill in instruction.skills %}
             <span class="skill-chip">{{ skill }}</span>
             {% endfor %}
-            <input class="skills-input" type="text" value="{{ instruction.skills | join(', ') }}" placeholder="Skills через запятую" onchange="updateSkills(this)">
+            <input class="skills-input" type="text" value="{{ instruction.skills | join(', ') }}" placeholder="Навыки через запятую" onchange="updateSkills(this)">
           </div>
         </div>
         <div class="row-actions">
@@ -104,21 +104,27 @@ function updateTimeline() {
   const layout = document.getElementById('instructionsLayout');
   const rows = getRows();
   layout.innerHTML = '';
-  let currentBlock = null;
+  const groups = [];
   rows.forEach((row, idx) => {
-    const type = row.querySelector('.type-badge')?.textContent || 'sync';
+    const type = row.querySelector('.type-badge')?.dataset.executionType || 'sync';
     if (idx === 0 || type !== 'parallel') {
-      currentBlock = document.createElement('div');
-      currentBlock.className = 'instruction-block' + (type === 'parallel' ? ' parallel-group' : '');
-      if (type === 'parallel') {
-        const label = document.createElement('div');
-        label.className = 'parallel-label';
-        label.textContent = '⚡ parallel';
-        currentBlock.appendChild(label);
-      }
-      layout.appendChild(currentBlock);
+      groups.push([row]);
+    } else {
+      groups[groups.length - 1].push(row);
     }
-    currentBlock.appendChild(row);
+  });
+  groups.forEach(group => {
+    const isParallelGroup = group.length > 1;
+    const block = document.createElement('div');
+    block.className = 'instruction-block' + (isParallelGroup ? ' parallel-group' : '');
+    if (isParallelGroup) {
+      const label = document.createElement('div');
+      label.className = 'parallel-label';
+      label.textContent = '⚡ параллельно';
+      block.appendChild(label);
+    }
+    group.forEach(row => block.appendChild(row));
+    layout.appendChild(block);
   });
   renumberRows();
   updateMoveButtons();
@@ -136,15 +142,24 @@ function updateMoveButtons() {
 
 async function persistOrder() {
   const ids = getRows().map(r => parseInt(r.dataset.instructionId, 10));
-  const resp = await fetch('/api/phases/' + PHASE_ID + '/instructions/reorder', {
-    method: 'PUT',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({instruction_ids: ids}),
-  });
-  if (!resp.ok) showToast('Не удалось сохранить порядок', 'error');
+  try {
+    const resp = await fetch('/api/phases/' + PHASE_ID + '/instructions/reorder', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({instruction_ids: ids}),
+    });
+    if (!resp.ok) {
+      showToast('Не удалось сохранить порядок', 'error');
+      return false;
+    }
+    return true;
+  } catch (_error) {
+    showToast('Не удалось сохранить порядок', 'error');
+    return false;
+  }
 }
 
-function moveInstruction(button, dir) {
+async function moveInstruction(button, dir) {
   const row = button.closest('.instruction-row');
   const rows = getRows();
   const idx = rows.indexOf(row);
@@ -154,10 +169,12 @@ function moveInstruction(button, dir) {
   const [moved] = reordered.splice(idx, 1);
   reordered.splice(target, 0, moved);
   const layout = document.getElementById('instructionsLayout');
-  layout.innerHTML = '';
-  reordered.forEach(r => layout.appendChild(r.closest('.instruction-block') || r));
+  layout.replaceChildren(...reordered);
   updateTimeline();
-  persistOrder();
+  if (!await persistOrder()) {
+    layout.replaceChildren(...rows);
+    updateTimeline();
+  }
 }
 
 async function updateInstruction(textarea) {
@@ -175,7 +192,7 @@ async function updateInstruction(textarea) {
 async function toggleType(badge) {
   const row = badge.closest('.instruction-row');
   const id = parseInt(row.dataset.instructionId, 10);
-  const nextType = badge.textContent === 'sync' ? 'parallel' : 'sync';
+  const nextType = (badge.dataset.executionType || 'sync') === 'sync' ? 'parallel' : 'sync';
   const resp = await fetch('/api/instructions/' + id, {
     method: 'PUT',
     headers: {'Content-Type': 'application/json'},
@@ -186,7 +203,8 @@ async function toggleType(badge) {
     showToast(data.error || 'Ошибка сохранения', 'error');
     return;
   }
-  badge.textContent = nextType;
+  badge.dataset.executionType = nextType;
+  badge.textContent = nextType === 'parallel' ? 'параллельно' : 'последовательно';
   badge.className = 'type-badge ' + nextType;
   updateTimeline();
 }

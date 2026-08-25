@@ -32,7 +32,7 @@ from .core import WARN, _require_valid_key, blocked_result, cli, console, out_js
 
 
 @cli.command()
-@click.option("--task", required=True, help="Task key (e.g. RUN-42)")
+@click.option("--task", required=True, help="Ключ задачи (например, RUN-42)")
 @click.option("--report", default=None, help="Отчёт исполнителя CLI (оценить и перейти)")
 @click.pass_context
 def step_cmd(
@@ -115,7 +115,7 @@ def step_cmd(
 
 
 @cli.command()
-@click.option("--task", required=True, help="Task key")
+@click.option("--task", required=True, help="Ключ задачи")
 @click.option("--n", type=click.IntRange(min=1), default=None, help="Количество записей (по умолчанию: все)")
 @click.pass_context
 def history_cmd(ctx: click.Context, task: str, n: int | None) -> None:
@@ -176,12 +176,12 @@ def history_cmd(ctx: click.Context, task: str, n: int | None) -> None:
         console.print(f"{WARN} История для {task_key} пуста.")
         return
 
-    console.print(f"[bold]History: {task_key}[/bold] (последние {len(runs)} записей)\n")
+    console.print(f"[bold]История: {task_key}[/bold] (последние {len(runs)} записей)\n")
     for r in runs:
         verdict = r.get("verdict")
-        verdict_label = "PASS" if verdict == "pass" else "ROLLBACK" if verdict == "rollback" else "CHECK"
+        verdict_label = "ПРОЙДЕНО" if verdict == "pass" else "ОТКАТ" if verdict == "rollback" else "ПРОВЕРКА"
         phase = r.get("phase_code", "-")
         next_phase = r.get("next_phase_code", "-")
         rollback = r.get("rollback_phase_code", "-")
         created_at = r.get("created_at", "-")
-        console.print(f"{verdict_label} [{created_at}] Phase {phase} -> {next_phase} (rollback: {rollback})")
+        console.print(f"{verdict_label} [{created_at}] Фаза {phase} -> {next_phase} (откат: {rollback})")

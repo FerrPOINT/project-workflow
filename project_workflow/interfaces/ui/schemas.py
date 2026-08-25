@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, ClassVar, Literal
+from typing import Annotated, Any, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -26,14 +26,14 @@ class StrictUpdateRequest(StrictRequest):
             return value
         invalid = sorted(field for field in cls.non_nullable_fields if field in value and value[field] is None)
         if invalid:
-            raise ValueError(f"Fields cannot be null: {', '.join(invalid)}")
+            raise ValueError(f"Поля не могут быть null: {', '.join(invalid)}")
         return value
 
 
 def _strip_nonblank(value: str, field_name: str) -> str:
     normalized = value.strip()
     if not normalized:
-        raise ValueError(f"{field_name} must not be blank")
+        raise ValueError(f"Поле {field_name} не может быть пустым")
     return normalized
 
 
@@ -41,25 +41,11 @@ def _normalize_string_list(value: Any, field_name: str) -> list[str] | None:
     if value is None:
         return None
     if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
-        raise ValueError(f"{field_name} must be a list of strings or null")
+        raise ValueError(f"Поле {field_name} должно быть массивом строк или null")
     normalized = [_strip_nonblank(item, field_name) for item in value]
     if len(normalized) != len(set(normalized)):
-        raise ValueError(f"{field_name} must contain unique values")
+        raise ValueError(f"Поле {field_name} должно содержать уникальные значения")
     return normalized
-
-
-class OptionalIntMixin:
-    """Normalize optional integer fields coming from HTML/JSON forms."""
-
-    @staticmethod
-    def _coerce_optional_int(value: Any) -> int | None:
-        if value is None or value == "":
-            return None
-        try:
-            parsed = int(str(value).strip())
-        except (TypeError, ValueError):
-            return None
-        return parsed if parsed > 0 else None
 
 
 class _PhaseOrderItem(StrictRequest):
@@ -68,7 +54,7 @@ class _PhaseOrderItem(StrictRequest):
     workflow_id: int | None = Field(default=None, gt=0, strict=True)
 
 
-class PhaseCreate(StrictRequest, OptionalIntMixin):
+class PhaseCreate(StrictRequest):
     workflow_id: int = Field(gt=0, strict=True, description="Parent workflow id")
     phase_order: int | None = Field(default=None, gt=0, strict=True, description="1-based insertion position")
     insert_after: int | None = Field(default=None, ge=0, strict=True, description="Insert after this 0-based index")
@@ -99,12 +85,12 @@ class PhaseCreate(StrictRequest, OptionalIntMixin):
     @model_validator(mode="after")
     def _resolve_insert_after(self) -> PhaseCreate:
         if self.insert_after is None and self.phase_order is None:
-            raise ValueError("phase_order or insert_after is required")
+            raise ValueError("Необходимо указать phase_order или insert_after")
         if self.insert_after is None:
             return self
         resolved_order = self.insert_after + 1
         if self.phase_order is not None and self.phase_order != resolved_order:
-            raise ValueError("phase_order conflicts with insert_after")
+            raise ValueError("phase_order противоречит insert_after")
         self.phase_order = resolved_order
         return self
 
@@ -134,7 +120,7 @@ class PhaseTextItem(StrictRequest):
         return _strip_nonblank(value, "description")
 
 
-class PhaseUpdate(StrictUpdateRequest, OptionalIntMixin):
+class PhaseUpdate(StrictUpdateRequest):
     non_nullable_fields = frozenset({"name", "execution_type", "instructions", "checks", "evidence"})
 
     name: str | None = Field(default=None)
@@ -166,7 +152,7 @@ class PhaseUpdate(StrictUpdateRequest, OptionalIntMixin):
                 continue
             normalized = [item.description.casefold() for item in items]
             if len(normalized) != len(set(normalized)):
-                raise ValueError(f"{field_name} descriptions must be unique")
+                raise ValueError(f"Описания в поле {field_name} должны быть уникальными")
         return self
 
 
@@ -192,7 +178,7 @@ class WorkflowUpdate(StrictUpdateRequest):
         return _strip_nonblank(value, "name") if value is not None else None
 
 
-class ProjectCreate(StrictRequest, OptionalIntMixin):
+class ProjectCreate(StrictRequest):
     code: str = Field(..., min_length=1)
     name: str | None = Field(default=None)
     description: str | None = Field(default="")
@@ -213,22 +199,22 @@ class ProjectCreate(StrictRequest, OptionalIntMixin):
     @classmethod
     def _validate_key_prefixes(cls, value: Any) -> list[str]:
         if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
-            raise ValueError("key_prefixes must be a list of strings")
+            raise ValueError("key_prefixes должен быть массивом строк")
         return [_strip_nonblank(item, "key_prefixes").upper() for item in value]
 
     @field_validator("key_prefixes", mode="after")
     @classmethod
     def _ensure_prefixes_not_empty(cls, value: list[str]) -> list[str]:
         if not value:
-            raise ValueError("At least one task key prefix is required")
+            raise ValueError("Нужен хотя бы один префикс ключа задачи")
         if len(value) != len(set(value)):
-            raise ValueError("Task key prefixes must be unique")
+            raise ValueError("Префиксы ключей задач должны быть уникальными")
         return value
 
     @model_validator(mode="after")
     def _require_key_prefixes(self) -> ProjectCreate:
         if not self.key_prefixes:
-            raise ValueError("At least one task key prefix is required")
+            raise ValueError("Нужен хотя бы один префикс ключа задачи")
         return self
 
     @field_validator("key_prefixes", mode="after")
@@ -236,13 +222,15 @@ class ProjectCreate(StrictRequest, OptionalIntMixin):
     def _validate_prefix_format(cls, value: list[str]) -> list[str]:
         for prefix in value:
             if not re.fullmatch(r"[A-Z][A-Z0-9]*", prefix):
-                raise ValueError(f"Invalid prefix '{prefix}': use uppercase letters/digits only")
+                raise ValueError(
+                    f"Недопустимый префикс '{prefix}': используйте только заглавные латинские буквы и цифры"
+                )
             if len(prefix) < 2:
-                raise ValueError(f"Prefix '{prefix}' too short (min 2 chars)")
+                raise ValueError(f"Префикс '{prefix}' слишком короткий: нужно не менее 2 символов")
         return value
 
 
-class ProjectUpdate(StrictUpdateRequest, OptionalIntMixin):
+class ProjectUpdate(StrictUpdateRequest):
     non_nullable_fields = frozenset({"code", "name", "description", "workflow_id", "key_prefixes"})
 
     code: str | None = Field(default=None, min_length=1)
@@ -262,7 +250,7 @@ class ProjectUpdate(StrictUpdateRequest, OptionalIntMixin):
         if value is None:
             return None
         if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
-            raise ValueError("key_prefixes must be a list of strings")
+            raise ValueError("key_prefixes должен быть массивом строк")
         return [_strip_nonblank(item, "key_prefixes").upper() for item in value]
 
     @field_validator("key_prefixes", mode="after")
@@ -271,35 +259,39 @@ class ProjectUpdate(StrictUpdateRequest, OptionalIntMixin):
         if value is None:
             return None
         if not value:
-            raise ValueError("At least one task key prefix is required")
+            raise ValueError("Нужен хотя бы один префикс ключа задачи")
         if len(value) != len(set(value)):
-            raise ValueError("Task key prefixes must be unique")
+            raise ValueError("Префиксы ключей задач должны быть уникальными")
         for prefix in value:
             if not re.fullmatch(r"[A-Z][A-Z0-9]*", prefix):
-                raise ValueError(f"Invalid prefix '{prefix}': use uppercase letters/digits only")
+                raise ValueError(
+                    f"Недопустимый префикс '{prefix}': используйте только заглавные латинские буквы и цифры"
+                )
             if len(prefix) < 2:
-                raise ValueError(f"Prefix '{prefix}' too short (min 2 chars)")
+                raise ValueError(f"Префикс '{prefix}' слишком короткий: нужно не менее 2 символов")
         return value
 
 
 class AgentCreate(StrictRequest):
     name: str = Field(..., min_length=1)
     description: str = Field(default="")
-    hermes_profile: str | None = Field(default=None, max_length=251)
+    hermes_profile: str | None = Field(default=None, max_length=251, strict=True)
 
     @field_validator("name")
     @classmethod
     def _name_not_blank(cls, value: str) -> str:
         return _strip_nonblank(value, "name")
 
-    @field_validator("hermes_profile", mode="before")
+    @field_validator("hermes_profile")
     @classmethod
-    def _validate_hermes_profile(cls, value: Any) -> str | None:
-        profile = str(value or "").strip()
-        if not profile:
+    def _validate_hermes_profile(cls, value: str | None) -> str | None:
+        if value is None:
             return None
+        profile = value.strip()
+        if not profile:
+            raise ValueError("Профиль Hermes не может быть пустым; для очистки используйте null")
         if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", profile):
-            raise ValueError("Hermes profile must match [a-z0-9][a-z0-9_-]*")
+            raise ValueError("Профиль Hermes должен соответствовать [a-z0-9][a-z0-9_-]*")
         return profile
 
 
@@ -308,21 +300,23 @@ class AgentUpdate(StrictUpdateRequest):
 
     name: str | None = Field(default=None)
     description: str | None = Field(default=None)
-    hermes_profile: str | None = Field(default=None, max_length=251)
+    hermes_profile: str | None = Field(default=None, max_length=251, strict=True)
 
     @field_validator("name")
     @classmethod
     def _name_not_blank(cls, value: str | None) -> str | None:
         return _strip_nonblank(value, "name") if value is not None else None
 
-    @field_validator("hermes_profile", mode="before")
+    @field_validator("hermes_profile")
     @classmethod
-    def _validate_hermes_profile(cls, value: Any) -> str | None:
-        profile = str(value or "").strip()
-        if not profile:
+    def _validate_hermes_profile(cls, value: str | None) -> str | None:
+        if value is None:
             return None
+        profile = value.strip()
+        if not profile:
+            raise ValueError("Профиль Hermes не может быть пустым; для очистки используйте null")
         if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", profile):
-            raise ValueError("Hermes profile must match [a-z0-9][a-z0-9_-]*")
+            raise ValueError("Профиль Hermes должен соответствовать [a-z0-9][a-z0-9_-]*")
         return profile
 
 
@@ -367,4 +361,11 @@ class InstructionUpdate(StrictUpdateRequest):
 
 
 class InstructionReorder(StrictRequest):
-    instruction_ids: list[int] = Field(...)
+    instruction_ids: list[Annotated[int, Field(gt=0, strict=True)]] = Field(min_length=1)
+
+    @field_validator("instruction_ids")
+    @classmethod
+    def _instruction_ids_unique(cls, value: list[int]) -> list[int]:
+        if len(value) != len(set(value)):
+            raise ValueError("instruction_ids должен содержать уникальные значения")
+        return value

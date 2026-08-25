@@ -27,7 +27,7 @@ def test_phase_create_insert_after():
 
 
 def test_phase_create_rejects_conflicting_order_fields():
-    with pytest.raises(ValueError, match="phase_order conflicts with insert_after"):
+    with pytest.raises(ValueError, match="phase_order противоречит insert_after"):
         PhaseCreate(workflow_id=1, phase_order=3, insert_after=0)
 
 
@@ -57,7 +57,7 @@ def test_phase_create_requires_strict_identifiers_and_order(payload):
 def test_phase_update_fields():
     p = PhaseUpdate(name="X")
     assert p.name == "X"
-    with pytest.raises(ValueError, match="must not be blank"):
+    with pytest.raises(ValueError, match="не может быть пустым"):
         PhaseUpdate(parallel_with=" ")
 
 
@@ -81,14 +81,14 @@ def test_project_create_defaults():
 
 
 def test_project_create_rejects_prefixes_from_str():
-    with pytest.raises(ValueError, match="list of strings"):
+    with pytest.raises(ValueError, match="массивом строк"):
         ProjectCreate(code="PRJ", key_prefixes="aa\nbb")
 
 
 def test_project_prefixes_reject_non_string_items():
-    with pytest.raises(ValueError, match="list of strings"):
+    with pytest.raises(ValueError, match="массивом строк"):
         ProjectCreate(code="PRJ", key_prefixes=["PRJ", 7])
-    with pytest.raises(ValueError, match="must not be blank"):
+    with pytest.raises(ValueError, match="не может быть пустым"):
         ProjectCreate(code="PRJ", key_prefixes=["PRJ", " "])
 
 
@@ -101,9 +101,9 @@ def test_phase_order_update_requires_non_empty_orders():
 
 
 def test_project_create_invalid_prefix():
-    with pytest.raises(ValueError, match="too short"):
+    with pytest.raises(ValueError, match="слишком короткий"):
         ProjectCreate(code="PRJ", key_prefixes=["a"])
-    with pytest.raises(ValueError, match="Invalid prefix"):
+    with pytest.raises(ValueError, match="Недопустимый префикс"):
         ProjectCreate(code="PRJ", key_prefixes=["1A"])
 
 
@@ -118,9 +118,9 @@ def test_project_workflow_id_rejects_invalid_explicit_values(value):
 def test_project_update_optional_prefixes():
     p = ProjectUpdate(code="PRJ")
     assert p.key_prefixes is None
-    with pytest.raises(ValueError, match="cannot be null"):
+    with pytest.raises(ValueError, match="не могут быть null"):
         ProjectUpdate(code="PRJ", key_prefixes=None)
-    with pytest.raises(ValueError, match="list of strings"):
+    with pytest.raises(ValueError, match="массивом строк"):
         ProjectUpdate(code="PRJ", key_prefixes="")
 
 
@@ -128,14 +128,19 @@ def test_agent_create_update():
     a = AgentCreate(name="Coder", hermes_profile=" code_profile ")
     assert a.name == "Coder"
     assert a.hermes_profile == "code_profile"
-    au = AgentUpdate(name="New", hermes_profile="")
+    au = AgentUpdate(name="New", hermes_profile=None)
     assert au.name == "New"
     assert au.hermes_profile is None
+    with pytest.raises(ValueError, match="для очистки используйте null"):
+        AgentUpdate(name="New", hermes_profile="")
+    for invalid in (1, {}, []):
+        with pytest.raises(ValueError):
+            AgentUpdate.model_validate({"hermes_profile": invalid})
 
 
 @pytest.mark.parametrize("profile", ["UPPER", "space profile", "-leading", "profile.dot"])
 def test_agent_rejects_invalid_hermes_profile(profile):
-    with pytest.raises(ValueError, match="Hermes profile"):
+    with pytest.raises(ValueError, match="Профиль Hermes"):
         AgentCreate(name="Coder", hermes_profile=profile)
 
 
@@ -200,7 +205,7 @@ def test_phase_update_nested_contract_is_strict_and_normalized():
     ],
 )
 def test_nonnullable_update_fields_reject_explicit_null(schema, field):
-    with pytest.raises(ValueError, match="cannot be null"):
+    with pytest.raises(ValueError, match="не могут быть null"):
         schema.model_validate({field: None})
 
 

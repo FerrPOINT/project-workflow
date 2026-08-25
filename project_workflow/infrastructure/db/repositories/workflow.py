@@ -58,7 +58,7 @@ class SAWorkflowRepository(WorkflowRepository):
     def update(self, workflow_id: int, data: dict[str, Any]) -> None:
         row = self._session.get(m.Workflow, workflow_id)
         if row is None:
-            raise NotFoundError(f"Workflow {workflow_id} not found")
+            raise NotFoundError(f"Воркфлоу {workflow_id} не найден")
         if "name" in data:
             row.name = data["name"]
         if "description" in data:
@@ -69,7 +69,7 @@ class SAWorkflowRepository(WorkflowRepository):
     def delete(self, workflow_id: int) -> None:
         row = self._session.get(m.Workflow, workflow_id)
         if row is None:
-            raise NotFoundError(f"Workflow {workflow_id} not found")
+            raise NotFoundError(f"Воркфлоу {workflow_id} не найден")
         self._session.delete(row)
 
     def ensure_default_exists(self, name: str) -> Workflow:
@@ -79,7 +79,7 @@ class SAWorkflowRepository(WorkflowRepository):
         new_id = self.create({"name": name, "is_default": True})
         created = self.get_by_id(new_id)
         if created is None:
-            raise RuntimeError(f"Failed to create default workflow {name}")
+            raise RuntimeError(f"Не удалось создать воркфлоу по умолчанию {name}")
         return created
 
 

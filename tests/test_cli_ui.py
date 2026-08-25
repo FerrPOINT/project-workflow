@@ -226,7 +226,7 @@ class TestHistoryCommand:
             result = runner.invoke(cli, ["history", "--task", "RUN-1"])
         assert result.exit_code == 0, result.output
         assert "RUN-1" in result.output
-        assert "Phase 0" in result.output
+        assert "Фаза 0" in result.output
 
     @patch("project_workflow.interfaces.cli.ui.SAUnitOfWork")
     def test_history_empty(self, mock_uow_cls):

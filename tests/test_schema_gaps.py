@@ -68,11 +68,11 @@ def test_phase_lookup_is_scoped_to_workflow(tmp_path, monkeypatch):
 @pytest.mark.parametrize(
     ("name", "contents", "message"),
     [
-        ("seed.yaml", "- code: old", "must be JSON"),
-        ("malformed.json", "{", "Malformed seed catalog"),
-        ("object.json", '{"code": "bad"}', "root must be a list"),
-        ("items.json", '["bad"]', "item must be an object"),
-        ("empty.json", "[]", "at least one phase"),
+        ("seed.yaml", "- code: old", "должен быть в формате JSON"),
+        ("malformed.json", "{", "Некорректный начальный каталог"),
+        ("object.json", '{"code": "bad"}', "Корневое значение.*должно быть массивом"),
+        ("items.json", '["bad"]', "нужен объект"),
+        ("empty.json", "[]", "хотя бы одну фазу"),
     ],
 )
 def test_invalid_seed_is_rejected(tmp_path, name, contents, message):
@@ -83,7 +83,7 @@ def test_invalid_seed_is_rejected(tmp_path, name, contents, message):
 
 
 def test_missing_seed_is_rejected(tmp_path):
-    with pytest.raises(FileNotFoundError, match="Seed catalog not found"):
+    with pytest.raises(FileNotFoundError, match="Файл начального каталога не найден"):
         _load_seed(tmp_path / "missing.json")
 
 
@@ -136,7 +136,7 @@ def test_catalog_bootstrap_is_database_idempotent(tmp_path, monkeypatch):
         ({"phase_order": 1, "code": "P", "name": "Phase", "evidence": [""]}, "description"),
         (
             {"phase_order": 1, "code": "P", "name": "Phase", "parallel_with": "MISSING"},
-            "cannot define parallel_with",
+            "не может задавать parallel_with",
         ),
         (
             {
@@ -159,13 +159,13 @@ def test_seed_rejects_invalid_nested_shapes_before_bootstrap(tmp_path, phase, me
 
 def test_seed_rejects_noncontiguous_order_duplicate_codes_and_descriptions(tmp_path):
     invalid_catalogs = [
-        ([{"phase_order": 2, "code": "P", "name": "Phase"}], "phase_order must be 1"),
+        ([{"phase_order": 2, "code": "P", "name": "Phase"}], "phase_order должен быть 1"),
         (
             [
                 {"phase_order": 1, "code": "P", "name": "One"},
                 {"phase_order": 2, "code": "P", "name": "Two"},
             ],
-            "codes must be unique",
+            "должны быть уникальными",
         ),
         (
             [
@@ -176,7 +176,7 @@ def test_seed_rejects_noncontiguous_order_duplicate_codes_and_descriptions(tmp_p
                     "checks": ["same", {"description": " SAME "}],
                 }
             ],
-            "duplicate checks",
+            "повторяющиеся описания в поле checks",
         ),
     ]
     for index, (catalog, message) in enumerate(invalid_catalogs):
@@ -199,7 +199,7 @@ def test_seed_rejects_noncontiguous_order_duplicate_codes_and_descriptions(tmp_p
                 },
                 {"phase_order": 2, "code": "B", "name": "Sync"},
             ],
-            "sync phase .*cannot define parallel_with",
+            "Последовательная фаза .* не может задавать parallel_with",
         ),
         (
             [
@@ -212,7 +212,7 @@ def test_seed_rejects_noncontiguous_order_duplicate_codes_and_descriptions(tmp_p
                 },
                 {"phase_order": 2, "code": "B", "name": "Sync"},
             ],
-            "parallel_with target must be parallel",
+            "Целевая фаза parallel_with .* должна быть параллельной",
         ),
         (
             [
@@ -225,7 +225,7 @@ def test_seed_rejects_noncontiguous_order_duplicate_codes_and_descriptions(tmp_p
                     "rollback_target": "B",
                 },
             ],
-            "rollback_target must reference an earlier phase",
+            "rollback_target фазы .* должен ссылаться на более раннюю фазу",
         ),
     ],
 )
@@ -264,7 +264,7 @@ def test_invalid_seed_is_detected_before_catalog_writes(tmp_path):
     path = tmp_path / "invalid.json"
     path.write_text("[]", encoding="utf-8")
 
-    with pytest.raises(ValueError, match="at least one phase"):
+    with pytest.raises(ValueError, match="хотя бы одну фазу"):
         ensure_phase_catalog(uow, path)
 
     assert uow.workflows.list() == []

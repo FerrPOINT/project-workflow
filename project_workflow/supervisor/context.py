@@ -127,7 +127,7 @@ class SupervisorContextBuilder:
             "workflow_id": self.workflow.get("id") if self.workflow else None,
             "task_status": self.task.get("status"),
             "current_phase": self.current_phase,
-            "current_phase_name": phase.name if phase else "Unknown phase",
+            "current_phase_name": phase.name if phase else "Неизвестная фаза",
             "completed_phases": completed_phases,
             "workflow_revision": self._contract_builder.workflow_revision,
             "all_phases": [
@@ -159,9 +159,9 @@ class SupervisorContextBuilder:
     @staticmethod
     def _report_template() -> dict[str, str]:
         return {
-            "summary": "What was achieved in this phase.",
-            "completed": "Bullet list of completed contract items.",
-            "evidence": "Concrete evidence produced in this phase.",
-            "blockers": "Explicit blockers or 'none'.",
-            "next_step": "Single next recommended action.",
+            "summary": "Что достигнуто на этой фазе.",
+            "completed": "Список выполненных пунктов контракта.",
+            "evidence": "Конкретные подтверждения, полученные на этой фазе.",
+            "blockers": "Явные блокеры или 'нет'.",
+            "next_step": "Одно рекомендуемое следующее действие.",
         }

@@ -34,30 +34,30 @@ def test_isolated_parallel_and_one_way_contiguous_link_are_valid():
 @pytest.mark.parametrize(
     ("phases", "message"),
     [
-        ([_node("A", 2)], "contiguous range"),
-        ([_node("A", 1), _node("A", 2)], "codes must be unique"),
-        ([_node(" ", 1)], "must not be blank"),
-        ([_node(" A ", 1)], "must be trimmed"),
-        ([_node("A", 1, execution_type="other")], "invalid execution_type"),
-        ([_node("A", 1, rollback_target="MISSING")], "unknown phase"),
-        ([_node("A", 1), _node("B", 2, rollback_target="B")], "earlier phase"),
-        ([_node("A", 1, parallel_with="B"), _node("B", 2)], "sync phase"),
+        ([_node("A", 2)], "непрерывный диапазон"),
+        ([_node("A", 1), _node("A", 2)], "должны быть уникальными"),
+        ([_node(" ", 1)], "не может быть пустым"),
+        ([_node(" A ", 1)], "пробелы по краям"),
+        ([_node("A", 1, execution_type="other")], "недопустимый execution_type"),
+        ([_node("A", 1, rollback_target="MISSING")], "неизвестную фазу"),
+        ([_node("A", 1), _node("B", 2, rollback_target="B")], "более раннюю фазу"),
+        ([_node("A", 1, parallel_with="B"), _node("B", 2)], "Последовательная фаза"),
         (
             [
                 _node("A", 1, execution_type="parallel", parallel_with="A"),
             ],
-            "cannot reference itself",
+            "не может ссылаться на неё саму",
         ),
         (
             [_node("A", 1, execution_type="parallel", parallel_with="MISSING")],
-            "unknown phase",
+            "неизвестную фазу",
         ),
         (
             [
                 _node("A", 1, execution_type="parallel", parallel_with="B"),
                 _node("B", 2),
             ],
-            "target must be parallel",
+            "должна быть параллельной",
         ),
         (
             [
@@ -65,7 +65,7 @@ def test_isolated_parallel_and_one_way_contiguous_link_are_valid():
                 _node("B", 2),
                 _node("C", 3, execution_type="parallel"),
             ],
-            "continuous parallel segment",
+            "непрерывном параллельном сегменте",
         ),
     ],
 )

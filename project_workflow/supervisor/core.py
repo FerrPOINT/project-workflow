@@ -68,7 +68,7 @@ class SupervisorEngine:
 
         self.task = self._ensure_task() if create_if_missing else self._task_service.get_task_by_key(task_key)
         if self.task is None:
-            raise ValueError(f"Task {task_key} not found")
+            raise ValueError(f"Задача {task_key} не найдена")
         self._uow.commit()
         self.project = (
             self._project_service.get_project(self.task["project_id"])
@@ -131,11 +131,11 @@ class SupervisorEngine:
             return existing
 
         if not self.create_if_missing:
-            raise ValueError(f"Task {self.task_key} not found and create_if_missing=False")
+            raise ValueError(f"Задача {self.task_key} не найдена, а create_if_missing=False")
 
         project = self._resolve_project()
         if not project:
-            raise ValueError(f"Cannot resolve project for task key: {self.task_key}")
+            raise ValueError(f"Не удалось определить проект для ключа задачи: {self.task_key}")
         current_phase = self._first_phase_code_for_project(project["id"])
         try:
             return self._task_service.create_task(
@@ -166,7 +166,7 @@ class SupervisorEngine:
         workflow_id = project["workflow_id"] if project else None
         phases = schema.load_phases_from_db(self._uow, workflow_id=workflow_id)
         if not phases:
-            raise ValueError("Workflow phase catalog is empty")
+            raise ValueError("Каталог фаз воркфлоу пуст")
         return phases[0].code
 
     def _resolve_current_phase(self) -> str:
@@ -334,9 +334,9 @@ class SupervisorEngine:
 
     def _blocked_result(self) -> dict[str, Any]:
         message = (
-            "Workflow phase catalog is empty."
+            "Каталог фаз воркфлоу пуст."
             if not self.all_phases
-            else "Current phase is not configured in the workflow catalog."
+            else "Текущая фаза отсутствует в каталоге воркфлоу."
         )
         return {
             "verdict": "BLOCKED",
@@ -368,7 +368,7 @@ class SupervisorEngine:
             "next_phase": None,
             "next_phase_name": None,
             "rollback_target": None,
-            "message": "Workflow уже завершён; новый отчёт не оценивался.",
+            "message": "Воркфлоу уже завершён; новый отчёт не оценивался.",
             "confidence": 1.0,
             "instructions": contract.instructions if contract else [],
             "required_checks": contract.required_checks if contract else [],
@@ -420,11 +420,36 @@ class SupervisorEngine:
             self._refresh_task_state()
 
     def _refresh_task_state(self) -> None:
+        self._reload_task_state()
+        self._cache.invalidate()
+
+    def _reload_task_state(self) -> None:
+        """Reload task state without changing the committed context cache."""
         if not self.task:
             return
+        self._uow.refresh()
         self.task = self._task_service.get_task(self.task["id"]) or self.task
         self.current_phase = self._resolve_current_phase()
-        self._cache.invalidate()
+
+    def _reload_evaluation_state(self) -> None:
+        """Reload task and catalog while the caller holds the workflow lock."""
+        self._uow.refresh()
+        if self.task:
+            self.task = self._task_service.get_task(self.task["id"])
+        self.project = (
+            self._project_service.get_project(self.task["project_id"])
+            if self.task and self.task.get("project_id")
+            else None
+        )
+        self.workflow_id = self.project["workflow_id"] if self.project else None
+        self.workflow = self._workflow_service.get_workflow(self.workflow_id) if self.workflow_id else None
+        self._all_phases = (
+            schema.load_phases_from_db(self._uow, workflow_id=self.workflow_id)
+            if self.workflow_id
+            else []
+        )
+        self._phase_map = None
+        self.current_phase = self._resolve_current_phase()
 
     def evaluate(self, report: str) -> dict:
         if self.task and self.task.get("status") == "done":

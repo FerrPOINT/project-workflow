@@ -194,7 +194,7 @@ class TestSupervisorCoreGaps:
         svc = MagicMock()
         svc.get_task_by_key.return_value = None
         engine._task_service = svc
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(ValueError, match="не найдена"):
             engine._ensure_task()
 
     def test_ensure_task_rereads_same_project_after_concurrent_create(self):

@@ -24,7 +24,7 @@ class TestSupervisor:
         workflow_id = uow.workflows.create({"name": "Empty", "description": ""})
         uow.projects.create({"workflow_id": workflow_id, "code": "run", "name": "Run", "key_prefixes": ["RUN"]})
         uow.commit()
-        with pytest.raises(ValueError, match="catalog is empty"):
+        with pytest.raises(ValueError, match="Каталог фаз воркфлоу пуст"):
             SupervisorEngine("RUN-1", uow=uow)
         assert uow.phases.list(workflow_id) == []
 

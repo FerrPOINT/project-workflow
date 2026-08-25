@@ -58,7 +58,7 @@ def _resolve_task_phase(
 ) -> tuple[str, dict[str, Any] | None]:
     assert _db is not None
     if current_phase is not None and not isinstance(current_phase, str):
-        raise TypeError("current_phase must be a phase code string")
+        raise TypeError("current_phase должен быть строковым кодом фазы")
     token = current_phase or ""
     wdb: Any = _db
 
@@ -76,7 +76,7 @@ def _resolve_task_phase_local(
 ) -> tuple[str, dict[str, Any] | None]:
     """Resolve a phase token against a preloaded list of phases (no DB hits)."""
     if current_phase is not None and not isinstance(current_phase, str):
-        raise TypeError("current_phase must be a phase code string")
+        raise TypeError("current_phase должен быть строковым кодом фазы")
     token = current_phase or ""
 
     for phase in workflow_phases:

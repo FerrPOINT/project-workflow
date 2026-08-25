@@ -447,7 +447,7 @@ class TestPhasesPage:
 
         assert response.status_code == 200
         assert re.search(
-            r'<div class="execution-row">\s*<span class="badge badge-parallel">parallel</span>\s*'
+            r'<div class="execution-row">\s*<span class="badge badge-parallel">параллельно</span>\s*'
             r'<span class="badge badge-agent">researcher</span>',
             response.text,
         )
@@ -678,9 +678,9 @@ class TestPhasesPage:
 
         phase_html = response.text.split(_phase_href("10.REVIEW"), 1)[1].split("</a>", 1)[0]
 
-        assert "Code review" in phase_html
+        assert "Проверка кода" in phase_html
         assert "badge-parallel" in phase_html
-        assert ">parallel<" in phase_html
+        assert ">параллельно<" in phase_html
 
     def test_phases_api_exposes_real_execution_type_without_fake_instruction_parallel_flag(self):
         response = client.get("/api/phases")
@@ -821,7 +821,7 @@ class TestPhaseDetail:
                 f'<span class="badge" style="background:var(--accent-soft);color:var(--accent)">'
                 f"\n            {skills[1]}" in response.text
             )
-            assert 'class="skill-candidate" type="text" placeholder="Добавить skill"' in response.text
+            assert 'class="skill-candidate" type="text" placeholder="Добавить навык"' in response.text
         finally:
             client.put(_phase_api_path("1.INTAKE"), json=restore_payload)
 
@@ -832,7 +832,7 @@ class TestPhaseDetail:
         assert "function toggleInstructionType(badge)" in response.text
         assert "function addSkillToInstruction(input)" in response.text
         assert "function removeSkillFromInstruction(button)" in response.text
-        assert 'placeholder="Добавить skill"' in response.text
+        assert 'placeholder="Добавить навык"' in response.text
 
     def test_phase_detail_serializes_phase_mode_toggles(self):
         response = client.get(_phase_detail_path("1.INTAKE"))
@@ -1198,7 +1198,7 @@ class TestTaskDetail:
         uow.commit()
         response = client.get("/task/RUN-247")
         assert response.status_code == 200
-        assert "Intake" in response.text
+        assert "Приём задачи" in response.text
         progress_match = re.search(r"(\d+)\s*/\s*(\d+)", response.text)
         assert progress_match is not None
         current, total = map(int, progress_match.groups())
@@ -1230,7 +1230,7 @@ class TestTaskDetail:
 
         response = client.get(f"/task/{task_key}")
         assert response.status_code == 200
-        assert "Intake" in response.text
+        assert "Приём задачи" in response.text
 
     def test_task_detail_has_phase_history(self):
         response = client.get("/task/RUN-247")
@@ -1247,7 +1247,7 @@ class TestTaskDetail:
         response = client.get("/api/tasks")
         assert response.status_code == 200
         task = next(task for task in response.json()["tasks"] if task["task_key"] == "UITEST-401")
-        assert task["current_phase_name"] == "Intake"
+        assert task["current_phase_name"] == "Приём задачи"
 
     def test_task_detail_marks_text_phase_code_as_current(self):
         uow = ui_app_state.get_db()

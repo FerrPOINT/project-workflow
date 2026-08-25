@@ -105,7 +105,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="project-workflow UI", version=__version__, lifespan=_lifespan)
+    app = FastAPI(title="Интерфейс project-workflow", version=__version__, lifespan=_lifespan)
     app.add_middleware(_RequestLoggingMiddleware)
     app.add_middleware(_UoWMiddleware)
 
@@ -146,7 +146,7 @@ def create_app() -> FastAPI:
 
     # Explicit 404 stubs for endpoints intentionally not implemented by this UI.
     async def _not_found() -> JSONResponse:
-        return JSONResponse({"ok": False, "error": "Not found"}, status_code=404)
+        return JSONResponse({"ok": False, "error": "Ресурс не найден"}, status_code=404)
 
     # Phase order update must be registered before /{phase_id} to avoid shadowing.
     app.put("/api/phases/order", response_model=None)(api.api_update_order)

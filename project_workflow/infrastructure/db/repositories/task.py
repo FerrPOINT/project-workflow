@@ -82,7 +82,7 @@ class SATaskRepository(TaskRepository):
         with self._session.no_autoflush:
             row = self._session.get(m.Task, task_id)
         if row is None:
-            raise NotFoundError(f"Task {task_id} not found")
+            raise NotFoundError(f"Задача {task_id} не найдена")
         for key, val in data.items():
             if key in {"id", "project_id"}:
                 continue
@@ -176,7 +176,7 @@ class SATaskRepository(TaskRepository):
         with self._session.no_autoflush:
             row = self._session.get(m.Task, task_id)
         if row is None:
-            raise ValueError(f"Task {task_id} not found")
+            raise ValueError(f"Задача {task_id} не найдена")
         self._session.execute(sa_delete(m.TaskHistory).where(m.TaskHistory.task_id == task_id))
         self._session.delete(row)
         self._session.flush()

@@ -100,7 +100,7 @@ class TestFormatResult:
         result["next_phase"] = None
         result["next_phase_name"] = None
         result.pop("next_phase_contract", None)
-        assert "Workflow завершён" in format_result(result)
+        assert "Воркфлоу завершён" in format_result(result)
 
     def test_pass_no_message_hint(self):
         """Message field from JSON must NOT leak into formatted output."""

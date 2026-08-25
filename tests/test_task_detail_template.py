@@ -46,7 +46,7 @@ def test_task_detail_renders_group_markers_and_chronological_supervisor_dialog()
                     {
                         "phase_code": "0.6",
                         "phase_name": "Research",
-                        "instructions": ["Исследуй. Используй skills: workflow-code-intelligence."],
+                        "instructions": ["Исследуй. Используй навыки: workflow-code-intelligence."],
                         "required_checks": ["Dataflow проверен"],
                         "required_evidence": ["Лог исследования"],
                     },
@@ -107,5 +107,5 @@ def test_task_detail_renders_group_markers_and_chronological_supervisor_dialog()
     assert "workflow-code-intelligence" in html
     assert "Dataflow проверен" in html
     assert "Лог исследования" in html
-    assert "Workflow завершён" in html
+    assert "Воркфлоу завершён" in html
     assert "СЛЕДУЮЩИЙ ШАГ" not in html

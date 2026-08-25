@@ -38,7 +38,7 @@ class WorkflowService:
             self._uow.phases.create(default_phase)
         workflow = self._uow.workflows.get_by_id(wid)
         if not workflow:
-            raise RuntimeError("Workflow creation failed")
+            raise RuntimeError("Не удалось создать воркфлоу")
         self._uow.commit()
         return workflow.to_dict()
 
@@ -55,7 +55,7 @@ class WorkflowService:
 
     def update_workflow(self, workflow_id: int, data: dict[str, Any]) -> None:
         if self._uow.workflows.lock(workflow_id) is None:
-            raise NotFoundError(f"Workflow {workflow_id} not found")
+            raise NotFoundError(f"Воркфлоу {workflow_id} не найден")
         self._uow.workflows.update(workflow_id, data)
         self._uow.commit()
         return None
@@ -63,14 +63,14 @@ class WorkflowService:
     def delete_workflow(self, workflow_id: int) -> None:
         workflow = self._uow.workflows.lock(workflow_id)
         if workflow is None:
-            raise NotFoundError(f"Workflow {workflow_id} not found")
+            raise NotFoundError(f"Воркфлоу {workflow_id} не найден")
         if workflow.is_default:
-            raise ConflictError("Default workflow cannot be deleted")
+            raise ConflictError("Воркфлоу по умолчанию нельзя удалить")
         if any(project.workflow_id == workflow_id for project in self._uow.projects.list()):
-            raise ConflictError("Workflow has linked projects and cannot be deleted")
+            raise ConflictError("Воркфлоу связан с проектами, поэтому удалить его нельзя")
         starter_code = f"wf-{workflow_id}-default"
         if any(phase.code != starter_code for phase in self._uow.phases.list(workflow_id)):
-            raise ConflictError("Workflow has non-starter phases and cannot be deleted")
+            raise ConflictError("Воркфлоу содержит дополнительные фазы, поэтому удалить его нельзя")
         self._uow.workflows.delete(workflow_id)
         self._uow.commit()
         return None

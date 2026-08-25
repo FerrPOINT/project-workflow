@@ -12,6 +12,7 @@ from sqlalchemy import event
 
 from project_workflow.application import state as app_state
 from project_workflow.application.instruction_service import InstructionService
+from project_workflow.domain.exceptions import ConflictError
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui.app import create_app
 
@@ -135,31 +136,33 @@ def _phase_with_instructions(
     return phase_id, instruction_ids
 
 
-def test_instruction_service_deduplicates_and_ignores_foreign_ids(uow: SAUnitOfWork):
+def test_instruction_service_rejects_duplicates_and_foreign_ids(uow: SAUnitOfWork):
     workflow_id, _ = _workflow_with_project(uow, "instructions")
     first_phase_id, first_ids = _phase_with_instructions(uow, workflow_id, "first", ["one", "two", "three"])
     second_phase_id, second_ids = _phase_with_instructions(uow, workflow_id, "second", ["foreign"])
 
-    InstructionService(uow).reorder_instructions(
-        first_phase_id,
-        [first_ids[1], second_ids[0], first_ids[0], first_ids[0]],
-    )
+    with pytest.raises(ValueError, match="уникальные"):
+        InstructionService(uow).reorder_instructions(
+            first_phase_id,
+            [first_ids[1], second_ids[0], first_ids[0], first_ids[0]],
+        )
 
     reordered = list(uow.instructions.list(first_phase_id))
-    assert [row["id"] for row in reordered] == [first_ids[1], first_ids[0], first_ids[2]]
+    assert [row["id"] for row in reordered] == first_ids
     assert [row["step_num"] for row in reordered] == [1, 2, 3]
     assert list(uow.instructions.list(second_phase_id))[0]["step_num"] == 1
 
 
-def test_instruction_repository_partial_reorder_renumbers_unlisted_rows(uow: SAUnitOfWork):
+def test_instruction_repository_rejects_partial_reorder_without_changes(uow: SAUnitOfWork):
     workflow_id, _ = _workflow_with_project(uow, "partial-order")
     phase_id, instruction_ids = _phase_with_instructions(uow, workflow_id, "partial", ["one", "two", "three"])
 
-    uow.instructions.reorder(phase_id, [(instruction_ids[1], 1), (instruction_ids[0], 2)])
-    uow.commit()
+    with pytest.raises(ConflictError, match="полный порядок инструкций фазы"):
+        uow.instructions.reorder(phase_id, [(instruction_ids[1], 1), (instruction_ids[0], 2)])
+    uow.rollback()
 
     rows = list(uow.instructions.list(phase_id))
-    assert [row["id"] for row in rows] == [instruction_ids[1], instruction_ids[0], instruction_ids[2]]
+    assert [row["id"] for row in rows] == instruction_ids
     assert [row["step_num"] for row in rows] == [1, 2, 3]
 
 

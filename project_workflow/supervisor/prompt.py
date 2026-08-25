@@ -37,9 +37,9 @@ def _format_verdicts(ctx: dict[str, Any], limit: int = 3) -> str:
         missing = item.get("missing") or []
         parts = [f"- {name}: {verdict}"]
         if missing:
-            parts.append(f"  missing: {', '.join(str(m) for m in missing[:3])}")
+            parts.append(f"  не выполнено: {', '.join(str(m) for m in missing[:3])}")
         if blockers:
-            parts.append(f"  blockers: {', '.join(str(b) for b in blockers[:3])}")
+            parts.append(f"  блокеры: {', '.join(str(b) for b in blockers[:3])}")
         lines.extend(parts)
     return "\n".join(lines)
 
@@ -49,9 +49,9 @@ def _format_parallel_contract(contract: dict[str, Any], group_details: list[dict
     group_names = [d.get("phase_name") or d.get("phase_code") or "-" for d in group_details]
     parts = [
         f"- Описание: {contract.get('description') or '-'}\n",
-        "- Тип выполнения: parallel\n",
+        "- Тип выполнения: параллельно\n",
         f"- Фазы в группе: {', '.join(group_names)}\n",
-        f"- Rollback target: {contract.get('rollback_target') or '-'}\n\n",
+        f"- Цель отката: {contract.get('rollback_target') or '-'}\n\n",
         "Параллельные фазы (выполняются одновременно, отчёт — одним сообщением):\n",
     ]
     for detail in group_details:
@@ -61,9 +61,9 @@ def _format_parallel_contract(contract: dict[str, Any], group_details: list[dict
         toolsets = ", ".join(detail.get("delegate_toolsets") or [])
         agent_line = f"Агент: {agent}"
         if hermes_profile:
-            agent_line += f" | Hermes profile: {hermes_profile}"
+            agent_line += f" | профиль Hermes: {hermes_profile}"
         if toolsets:
-            agent_line += f" | toolsets: {toolsets}"
+            agent_line += f" | наборы инструментов: {toolsets}"
         partner_code = detail.get("parallel_with") or "-"
         partner = next(
             (
@@ -98,16 +98,17 @@ def _format_contract(contract: dict[str, Any], human_only: bool = False) -> str:
     instructions = contract.get("instructions") or [
         "Нет отдельных инструкций — следуй описанию фазы и обязательным проверкам."
     ]
-    checks = contract.get("required_checks") or ["Нет явных checks."]
-    evidence = contract.get("required_evidence") or ["Нет явных evidence items."]
+    checks = contract.get("required_checks") or ["Нет явных проверок."]
+    evidence = contract.get("required_evidence") or ["Нет явных подтверждений."]
     parts: list[str] = []
     if not human_only:
+        execution_type = "параллельно" if contract.get("execution_type") == "parallel" else "последовательно"
         parts.extend(
             [
                 f"- Описание: {contract.get('description') or '-'}\n",
-                f"- Тип выполнения: {contract.get('execution_type') or 'sync'}\n",
+                f"- Тип выполнения: {execution_type}\n",
                 f"- Параллельно с: {contract.get('parallel_with') or '-'}\n",
-                f"- Rollback target: {contract.get('rollback_target') or '-'}\n",
+                f"- Цель отката: {contract.get('rollback_target') or '-'}\n",
             ]
         )
     parts.extend(
@@ -121,8 +122,8 @@ def _format_contract(contract: dict[str, Any], human_only: bool = False) -> str:
         toolsets = ", ".join(contract.get("delegate_toolsets") or [])
         parts.append(
             f"Делегировано агенту: {contract['delegate_agent']}"
-            + (f" | Hermes profile: {contract['hermes_profile']}" if contract.get("hermes_profile") else "")
-            + (f" | toolsets: {toolsets}" if toolsets else "")
+            + (f" | профиль Hermes: {contract['hermes_profile']}" if contract.get("hermes_profile") else "")
+            + (f" | наборы инструментов: {toolsets}" if toolsets else "")
             + "\n\n"
         )
     return "".join(parts)
@@ -139,7 +140,7 @@ def _format_parallel_contract_human(group_details: list[dict[str, Any]]) -> str:
     for detail in group_details:
         agent = detail.get("delegate_agent") or "не задан"
         profile = detail.get("hermes_profile")
-        agent_label = f"{agent} (Hermes profile: {profile})" if profile else agent
+        agent_label = f"{agent} (профиль Hermes: {profile})" if profile else agent
         for item in detail.get("instructions", []) or []:
             instructions.append(f"[{agent_label}] {item}")
         for item in detail.get("required_checks", []) or []:
@@ -166,7 +167,7 @@ def build_phase_prompt(
     """Build a stateful human-readable prompt for a given phase (or current)."""
     target_phase = phase_map.get(phase_id or current_phase)
     if not target_phase:
-        return f"Фаза {phase_id or current_phase} не найдена в workflow."
+        return f"Фаза {phase_id or current_phase} не найдена в воркфлоу."
 
     cb = PhaseContractBuilder(all_phases, str(ctx.get("workflow_revision") or ctx.get("workflow_name") or ""))
     is_parallel_target = target_phase.execution_type == "parallel"
@@ -191,7 +192,7 @@ def build_phase_prompt(
         parallel_banner = ""
 
     cli_actor = ctx.get("cli_actor") or {
-        "description": "CLI user",
+        "description": "Пользователь CLI",
         "entrypoint": "project-workflow step --task RUN-KEY [--report TEXT]",
     }
     report_template = ctx.get("report_template") or {
@@ -212,10 +213,10 @@ def build_phase_prompt(
 
     return (
         f"Задача: {task_key}\n"
-        f"Workflow: {ctx.get('workflow_name') or '-'}\n"
+        f"Воркфлоу: {ctx.get('workflow_name') or '-'}\n"
         f"Текущий шаг: {target_phase.code} — {target_phase.name}\n"
         f"Исполнитель CLI: {cli_actor['description']}\n"
-        f"CLI entrypoint: {cli_actor['entrypoint']}\n\n"
+        f"Команда CLI: {cli_actor['entrypoint']}\n\n"
         f"{parallel_banner}"
         f"Контракт текущей фазы:\n"
         f"{_format_contract(contract)}"
@@ -246,7 +247,7 @@ def format_current_phase_instructions(
     """
     target_phase = phase_map.get(current_phase)
     if not target_phase:
-        return f"Фаза {current_phase} не найдена в workflow."
+        return f"Фаза {current_phase} не найдена в воркфлоу."
 
     cb = PhaseContractBuilder(all_phases, str(ctx.get("workflow_revision") or ctx.get("workflow_name") or ""))
     is_parallel_target = target_phase.execution_type == "parallel"

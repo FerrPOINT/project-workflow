@@ -81,7 +81,7 @@ def run_migrations_online() -> None:
 
     db_url = os.environ.get("DATABASE_URL") or config.get_main_option("sqlalchemy.url")
     if not db_url:
-        raise RuntimeError("DATABASE_URL is required for online migrations")
+        raise RuntimeError("Для online-миграций необходимо указать DATABASE_URL")
     connectable = create_engine(db_url, poolclass=pool.NullPool)
     with connectable.connect() as connection:
         migrate(connection)

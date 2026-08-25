@@ -29,7 +29,7 @@ class TaskKeyValidationError(ValueError):
     def __init__(self, key: str, reason: str):
         self.key = key
         self.reason = reason
-        super().__init__(f"Invalid task key '{key}': {reason}")
+        super().__init__(f"Недопустимый ключ задачи '{key}': {reason}")
 
 
 def _prefixes_to_regex(prefixes: list[str]) -> str:
@@ -58,7 +58,7 @@ class TaskKeyValidator:
             if not isinstance(raw_prefixes, list) or not all(
                 isinstance(prefix, str) for prefix in raw_prefixes
             ):
-                raise ValueError("Project key_prefixes must be a list of strings")
+                raise ValueError("key_prefixes проекта должен быть массивом строк")
             prefixes = [str(prefix).strip() for prefix in raw_prefixes if str(prefix).strip()]
             if prefixes:
                 self.raw_prefixes.extend(prefixes)
@@ -71,21 +71,21 @@ class TaskKeyValidator:
             return ValidatedTaskKey(
                 raw=str(key),
                 is_valid=False,
-                error_message="Key is empty or not a string",
+                error_message="Ключ пуст или не является строкой",
             )
 
         stripped = key.strip()
         example_prefix = self.raw_prefixes[0] if self.raw_prefixes else "PREFIX"
         if stripped.upper() != stripped:
             error_msg = (
-                f"Key '{key}' содержит строчные буквы. Ключ задаётся В ВЕРХНЕМ РЕГИСТРЕ "
+                f"Ключ '{key}' содержит строчные буквы. Ключ задаётся В ВЕРХНЕМ РЕГИСТРЕ "
                 f"(например: {example_prefix}-123)"
             )
             return ValidatedTaskKey(raw=key, is_valid=False, error_message=error_msg)
 
         for pat, reason in self.REJECT_PATTERNS:
             if re.search(pat, stripped):
-                error_msg = f"Key '{key}' не прошёл проверку: {reason}"
+                error_msg = f"Ключ '{key}' не прошёл проверку: {reason}"
                 return ValidatedTaskKey(raw=key, is_valid=False, error_message=error_msg)
 
         for project_code, pattern in self.pattern_sources:
@@ -116,14 +116,14 @@ class TaskKeyValidator:
                 raw=key,
                 is_valid=False,
                 error_message=(
-                    f"Key '{stripped}' must match {matching_prefix}-<numeric issue number>"
+                    f"Ключ '{stripped}' должен соответствовать шаблону {matching_prefix}-<номер задачи>"
                 ),
             )
 
-        allowed = ", ".join(self.raw_prefixes) or "no configured prefixes"
+        allowed = ", ".join(self.raw_prefixes) or "нет настроенных префиксов"
         error_msg = (
-            f"Key '{stripped}' does not match any allowed prefix. "
-            f"Prefixes: {allowed}"
+            f"Ключ '{stripped}' не соответствует ни одному разрешённому префиксу. "
+            f"Префиксы: {allowed}"
         )
         return ValidatedTaskKey(raw=key, is_valid=False, error_message=error_msg)
 
@@ -145,7 +145,7 @@ def get_project_for_task_key(uow: Any, task_key: str) -> dict[str, Any] | None:
         if not isinstance(key_prefixes, list) or not all(
             isinstance(item, str) for item in key_prefixes
         ):
-            raise ValueError("Project key_prefixes must be a list of strings")
+            raise ValueError("key_prefixes проекта должен быть массивом строк")
         if prefix in key_prefixes:
             return project_dict
     return None

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from project_workflow.domain.exceptions import ConflictError
+from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import UnitOfWork
 
 
@@ -17,11 +17,18 @@ class AgentService:
 
     @staticmethod
     def _normalize_profile(profile: Any) -> str | None:
-        value = str(profile or "").strip()
-        if not value:
+        if profile is None:
             return None
+        if not isinstance(profile, str):
+            raise ValueError("Профиль Hermes должен быть строкой или null")
+        value = profile.strip()
+        if not value:
+            raise ValueError("Профиль Hermes не может быть пустым")
         if len(value) > 251 or not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", value):
-            raise ValueError("Hermes profile must match [a-z0-9][a-z0-9_-]* and be at most 251 characters")
+            raise ValueError(
+                "Профиль Hermes должен соответствовать [a-z0-9][a-z0-9_-]* "
+                "и содержать не более 251 символа"
+            )
         return value
 
     def _validate_profile_owner(self, profile: str | None, *, agent_id: int | None = None) -> None:
@@ -29,19 +36,23 @@ class AgentService:
             return
         owner = self._uow.agents.get_by_hermes_profile(profile)
         if owner is not None and owner.id != agent_id:
-            raise ConflictError(f"Hermes profile {profile!r} is already assigned to agent {owner.name!r}")
+            raise ConflictError(f"Профиль Hermes {profile!r} уже назначен агенту {owner.name!r}")
 
     def create_agent(self, data: dict[str, Any]) -> dict[str, Any]:
         payload = dict(data)
         if "hermes_profile" in payload:
             payload["hermes_profile"] = self._normalize_profile(payload["hermes_profile"])
         self._validate_profile_owner(payload.get("hermes_profile"))
-        aid = self._uow.agents.create(payload)
-        agent = self._uow.agents.get_by_id(aid)
-        if not agent:
-            raise RuntimeError("Agent creation failed")
-        self._uow.commit()
-        return agent.to_dict()
+        try:
+            aid = self._uow.agents.create(payload)
+            agent = self._uow.agents.get_by_id(aid)
+            if not agent:
+                raise RuntimeError("Не удалось создать агента")
+            self._uow.commit()
+            return agent.to_dict()
+        except Exception:
+            self._uow.rollback()
+            raise
 
     def list_agents(self) -> list[dict[str, Any]]:
         return [a.to_dict() for a in self._uow.agents.list()]
@@ -54,12 +65,27 @@ class AgentService:
         payload = dict(data)
         if "hermes_profile" in payload:
             payload["hermes_profile"] = self._normalize_profile(payload["hermes_profile"])
-        self._validate_profile_owner(payload.get("hermes_profile"), agent_id=agent_id)
-        self._uow.agents.update(agent_id, payload)
-        self._uow.commit()
+        if self._uow.agents.lock(agent_id) is None:
+            raise NotFoundError(f"Агент {agent_id} не найден")
+        try:
+            self._validate_profile_owner(payload.get("hermes_profile"), agent_id=agent_id)
+            self._uow.agents.update(agent_id, payload)
+            self._uow.commit()
+        except Exception:
+            self._uow.rollback()
+            raise
         return None
 
     def delete_agent(self, agent_id: int) -> None:
-        self._uow.agents.delete(agent_id)
-        self._uow.commit()
+        if self._uow.agents.lock(agent_id) is None:
+            raise NotFoundError(f"Агент {agent_id} не найден")
+        if self._uow.phases.has_agent_reference(agent_id):
+            self._uow.rollback()
+            raise ConflictError("Агент назначен фазе, поэтому удалить его нельзя")
+        try:
+            self._uow.agents.delete(agent_id)
+            self._uow.commit()
+        except Exception:
+            self._uow.rollback()
+            raise
         return None

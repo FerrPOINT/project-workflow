@@ -41,6 +41,8 @@ def _build_phase_from_db(
             example=ir.get("example"),
             execution_type=ir.get("execution_type", "sync"),
             skills=ir.get("skills") or [],
+            id=ir.get("id"),
+            step_num=ir.get("step_num"),
         )
         for ir in inst_rows
     ]
@@ -70,7 +72,7 @@ def _build_phase_from_db(
             delegate = PhaseDelegate(
                 agent=agent.name,
                 hermes_profile=agent.hermes_profile,
-                prompt_template=f"Phase {phase_code}",
+                prompt_template=f"Фаза {phase_code}",
                 toolsets=[],  # domain Agent does not store toolsets in this schema
                 timeout_min=10,
                 max_cycles=3,
@@ -115,7 +117,7 @@ class _SeedModel(BaseModel):
 def _nonblank(value: str, field_name: str) -> str:
     normalized = value.strip()
     if not normalized:
-        raise ValueError(f"{field_name} must not be blank")
+        raise ValueError(f"Поле {field_name} не может быть пустым")
     return normalized
 
 
@@ -135,7 +137,7 @@ class _SeedInstruction(_SeedModel):
     def _normalize_skills(cls, value: list[str]) -> list[str]:
         normalized = [_nonblank(skill, "skill") for skill in value]
         if len(normalized) != len(set(normalized)):
-            raise ValueError("skills must be unique")
+            raise ValueError("skills должен содержать уникальные значения")
         return normalized
 
 
@@ -174,7 +176,7 @@ class _SeedDelegate(_SeedModel):
     def _normalize_toolsets(cls, value: list[str]) -> list[str]:
         normalized = [_nonblank(toolset, "toolset") for toolset in value]
         if len(normalized) != len(set(normalized)):
-            raise ValueError("toolsets must be unique")
+            raise ValueError("toolsets должен содержать уникальные значения")
         return normalized
 
 
@@ -216,42 +218,46 @@ def _seed_text(value: str | _SeedTextItem) -> str:
 def _load_seed(path: Path | str | None = None) -> list[_SeedPhase]:
     seed_path = Path(path) if path else config.SEED_PATH
     if not seed_path.exists():
-        raise FileNotFoundError(f"Seed catalog not found: {seed_path}")
+        raise FileNotFoundError(f"Файл начального каталога не найден: {seed_path}")
     if seed_path.suffix.lower() != ".json":
-        raise ValueError("Seed catalog must be JSON")
+        raise ValueError("Начальный каталог должен быть в формате JSON")
     with seed_path.open(encoding="utf-8") as f:
         try:
             data = json.load(f)
         except json.JSONDecodeError as exc:
-            raise ValueError(f"Malformed seed catalog: {seed_path}") from exc
+            raise ValueError(f"Некорректный начальный каталог: {seed_path}") from exc
     if not isinstance(data, list):
-        raise ValueError("Seed catalog root must be a list")
+        raise ValueError("Корневое значение начального каталога должно быть массивом")
     if not data:
-        raise ValueError("Seed catalog must contain at least one phase")
+        raise ValueError("Начальный каталог должен содержать хотя бы одну фазу")
     phases: list[_SeedPhase] = []
     for index, item in enumerate(data, start=1):
         if not isinstance(item, dict):
-            raise ValueError(f"Invalid seed phase at index {index}: item must be an object")
+            raise ValueError(f"Некорректная фаза начального каталога с индексом {index}: нужен объект")
         label = str(item.get("code") or f"index {index}")
         try:
             phase = _SeedPhase.model_validate(item)
         except ValidationError as exc:
-            raise ValueError(f"Invalid seed phase {label!r}: {exc}") from exc
+            raise ValueError(f"Некорректная фаза начального каталога {label!r}: {exc}") from exc
         if phase.phase_order != index:
             raise ValueError(
-                f"Invalid seed phase {phase.code!r}: phase_order must be {index}, got {phase.phase_order}"
+                f"Некорректная фаза начального каталога {phase.code!r}: "
+                f"phase_order должен быть {index}, получено {phase.phase_order}"
             )
         phases.append(phase)
 
     try:
         validate_phase_graph(phases)
     except ValueError as exc:
-        raise ValueError(f"Invalid seed phase graph: {exc}") from exc
+        raise ValueError(f"Некорректный граф фаз начального каталога: {exc}") from exc
     for phase in phases:
         for field_name in ("checks", "evidence"):
             values = [_seed_text(item).casefold() for item in getattr(phase, field_name)]
             if len(values) != len(set(values)):
-                raise ValueError(f"Invalid seed phase {phase.code!r}: duplicate {field_name} descriptions")
+                raise ValueError(
+                    f"Некорректная фаза начального каталога {phase.code!r}: "
+                    f"повторяющиеся описания в поле {field_name}"
+                )
     return phases
 
 
@@ -275,7 +281,7 @@ def _phase_item_to_supervisor(item: _SeedPhase) -> Phase:
         delegate = PhaseDelegate(
             agent=delegate_data.agent,
             hermes_profile=delegate_data.hermes_profile,
-            prompt_template=delegate_data.prompt_template or f"Phase {item.code}",
+            prompt_template=delegate_data.prompt_template or f"Фаза {item.code}",
             toolsets=delegate_data.toolsets,
             timeout_min=delegate_data.timeout_min,
             max_cycles=delegate_data.max_cycles,

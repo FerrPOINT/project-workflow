@@ -77,7 +77,7 @@ class TestTaskService:
         uow.tasks.create.return_value = 7
         uow.tasks.get_by_id.return_value = FakeTask(7, "B-2", 5)
 
-        with pytest.raises(ValueError, match="phase code string"):
+        with pytest.raises(ValueError, match="строковым кодом фазы"):
             TaskService(uow).create_task(
                 {"task_key": "B-2", "project_id": 5, "current_phase": 0}
             )
@@ -97,7 +97,7 @@ class TestTaskService:
     def test_create_task_unknown_prefix_fails_without_writes(self):
         uow = _make_uow()
         uow.projects.list.return_value = []
-        with pytest.raises(ValueError, match="No project is configured"):
+        with pytest.raises(ValueError, match="не настроен проект"):
             TaskService(uow).create_task({"task_key": "NEW-1"})
         uow.projects.create.assert_not_called()
         uow.tasks.create.assert_not_called()
@@ -107,7 +107,7 @@ class TestTaskService:
         uow.projects.lock.return_value = FakeProject(5, "B")
         uow.tasks.get_by_key.return_value = FakeTask(7, "B-2", 5)
 
-        with pytest.raises(ConflictError, match="already exists"):
+        with pytest.raises(ConflictError, match="уже существует"):
             TaskService(uow).create_task({"task_key": "B-2", "project_id": 5})
 
         uow.tasks.create.assert_not_called()
