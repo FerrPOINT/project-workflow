@@ -68,6 +68,8 @@ class AgentService:
         if self._uow.agents.lock(agent_id) is None:
             raise NotFoundError(f"Агент {agent_id} не найден")
         try:
+            for workflow_id in sorted(set(self._uow.phases.workflow_ids_for_agent(agent_id))):
+                self._uow.workflows.lock(workflow_id)
             self._validate_profile_owner(payload.get("hermes_profile"), agent_id=agent_id)
             self._uow.agents.update(agent_id, payload)
             self._uow.commit()

@@ -357,5 +357,5 @@ def test_corrupted_persisted_instruction_skills_fail_loudly(raw_skills):
     )
     uow.commit()
 
-    with pytest.raises(ValueError, match="invalid JSON"):
+    with pytest.raises(ValueError, match="некорректный JSON"):
         _app_state.instruction_service().get_instruction(instruction["id"])

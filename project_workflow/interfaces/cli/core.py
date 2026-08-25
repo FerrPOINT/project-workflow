@@ -8,7 +8,9 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
+from collections.abc import Sequence
 from typing import Any
 
 import click
@@ -21,6 +23,119 @@ from ...domain.validation import TaskKeyValidationError
 console = Console()
 
 WARN = "[yellow]WARN[/yellow]"
+
+
+def _format_options(command: click.Command, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+    records = [record for param in command.get_params(ctx) if (record := param.get_help_record(ctx))]
+    if records:
+        with formatter.section("Параметры"):
+            formatter.write_dl(records)
+
+
+def _parameter_hint(exc: click.BadParameter) -> str:
+    hint = exc.param_hint
+    if hint is None and exc.param is not None:
+        hint = exc.param.get_error_hint(exc.ctx)
+    if isinstance(hint, Sequence) and not isinstance(hint, str):
+        return " / ".join(hint)
+    return str(hint or "")
+
+
+def _usage_error_message(exc: click.UsageError) -> str:
+    if isinstance(exc, click.NoSuchOption):
+        return f"Нет такого параметра: {exc.option_name}."
+    if isinstance(exc, click.MissingParameter):
+        hint = _parameter_hint(exc)
+        return f"Не указан обязательный параметр {hint}." if hint else "Не указан обязательный параметр."
+    if isinstance(exc, click.BadParameter):
+        hint = _parameter_hint(exc)
+        return f"Некорректное значение параметра {hint}." if hint else "Некорректное значение параметра."
+    missing_command = re.fullmatch(r"No such command '([^']+)'\.", exc.message)
+    if missing_command:
+        return f"Нет такой команды: {missing_command.group(1)!r}."
+    return "Некорректный вызов команды."
+
+
+class RussianUsageError(click.UsageError):
+    """Usage error that never exposes Click's English diagnostics."""
+
+    def show(self, file: Any | None = None) -> None:
+        if file is None:
+            file = click.get_text_stream("stderr")
+        if self.ctx is not None:
+            click.echo(self.ctx.get_usage(), file=file)
+            click.echo(f"Для справки: '{self.ctx.command_path} --help'.", file=file)
+        click.echo(f"Ошибка: {self.message}", file=file)
+
+
+def _russian_usage_error(exc: click.UsageError, ctx: click.Context) -> RussianUsageError:
+    if isinstance(exc, RussianUsageError):
+        return exc
+    return RussianUsageError(_usage_error_message(exc), exc.ctx or ctx)
+
+
+class RussianCommand(click.Command):
+    """Click command with Russian help headings and built-in option text."""
+
+    def format_usage(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+        formatter.write_usage(ctx.command_path, " ".join(self.collect_usage_pieces(ctx)), prefix="Использование: ")
+
+    def format_options(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+        _format_options(self, ctx, formatter)
+
+    def get_help_option(self, ctx: click.Context) -> click.Option | None:
+        option = super().get_help_option(ctx)
+        if option is not None:
+            option.help = "Показать справку и выйти."
+        return option
+
+    def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
+        try:
+            return super().parse_args(ctx, args)
+        except click.UsageError as exc:
+            raise _russian_usage_error(exc, ctx) from exc
+
+
+class RussianGroup(click.Group):
+    """Click group whose complete help surface is Russian."""
+
+    command_class = RussianCommand
+
+    def format_usage(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+        formatter.write_usage(ctx.command_path, " ".join(self.collect_usage_pieces(ctx)), prefix="Использование: ")
+
+    def format_options(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+        _format_options(self, ctx, formatter)
+        self.format_commands(ctx, formatter)
+
+    def format_commands(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+        commands: list[tuple[str, str]] = []
+        for name in self.list_commands(ctx):
+            command = self.get_command(ctx, name)
+            if command is None or command.hidden:
+                continue
+            commands.append((name, command.get_short_help_str()))
+        if commands:
+            with formatter.section("Команды"):
+                formatter.write_dl(commands)
+
+    def get_help_option(self, ctx: click.Context) -> click.Option | None:
+        option = super().get_help_option(ctx)
+        if option is not None:
+            option.help = "Показать справку и выйти."
+        return option
+
+    def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
+        try:
+            return super().parse_args(ctx, args)
+        except click.UsageError as exc:
+            raise _russian_usage_error(exc, ctx) from exc
+
+    def invoke(self, ctx: click.Context) -> Any:
+        try:
+            return super().invoke(ctx)
+        except click.UsageError as exc:
+            raise _russian_usage_error(exc, exc.ctx or ctx) from exc
 
 
 def out_json(data: dict[str, Any], exit_code: int | None = None) -> None:
@@ -45,7 +160,7 @@ def _require_valid_key(task_key: str, uow=None) -> str:
     else:
         validated = _get_task_key_validator(uow=uow).validate(task_key)
     if not validated.is_valid:
-        raise TaskKeyValidationError(task_key, validated.error_message or "unknown project prefix")
+        raise TaskKeyValidationError(task_key, validated.error_message or "неизвестный префикс проекта")
     return validated.normalized or task_key
 
 
@@ -66,8 +181,13 @@ def blocked_result(task_key: str, message: str, phase: str = "") -> dict[str, An
     }
 
 
-@click.group()
-@click.version_option(version=__version__, prog_name="project-workflow")
+@click.group(cls=RussianGroup)
+@click.version_option(
+    version=__version__,
+    prog_name="project-workflow",
+    message="project-workflow, версия %(version)s",
+    help="Показать версию и выйти.",
+)
 @click.option(
     "--json", "json_mode", is_flag=True, help="Машиночитаемый JSON вывод (для CLI-автоматизации и внешних исполнителей)"
 )

@@ -34,6 +34,29 @@ def test_cli_group_sets_json_mode():
     assert "json=True" in result.output
 
 
+@pytest.mark.parametrize("args", [["--help"], ["step", "--help"], ["history", "--help"]])
+def test_cli_help_is_fully_russian(args):
+    result = CliRunner().invoke(runtime_cli, args)
+
+    assert result.exit_code == 0
+    assert "Использование:" in result.output
+    assert "Параметры:" in result.output
+    assert "Показать справку и выйти." in result.output
+    assert "Usage:" not in result.output
+    assert "Options:" not in result.output
+    assert "Show this message and exit." not in result.output
+    if args == ["--help"]:
+        assert "Команды:" in result.output
+        assert "Показать версию и выйти." in result.output
+
+
+def test_cli_version_message_is_russian():
+    result = CliRunner().invoke(runtime_cli, ["--version"])
+
+    assert result.exit_code == 0
+    assert result.output == "project-workflow, версия 1.0.0\n"
+
+
 def test_out_json_success(capsys):
     with pytest.raises(SystemExit) as exc:
         out_json({"ok": True})
@@ -73,7 +96,7 @@ def test_missing_database_configuration_returns_json_blocked(monkeypatch):
     runner = CliRunner()
     monkeypatch.setattr(
         "project_workflow.interfaces.cli.ui.SAUnitOfWork",
-        MagicMock(side_effect=ValueError("DATABASE_URL is required")),
+        MagicMock(side_effect=ValueError("Переменная DATABASE_URL обязательна")),
     )
 
     result = runner.invoke(runtime_cli, ["--json", "step", "--task", "RUN-1", "--report", "report"])

@@ -128,7 +128,7 @@ def test_validate_transcript_rejects_relative_executor_path():
     events = [_session(), *_cycle()]
     events[2]["cwd"] = "repo/subdir"
 
-    with pytest.raises(recorder.TranscriptError, match="absolute path"):
+    with pytest.raises(recorder.TranscriptError, match="абсолютным путём"):
         recorder.validate_transcript(events, task="RUN-1")
 
 
@@ -165,7 +165,7 @@ def test_validate_transcript_rejects_evaluator_for_another_phase(field):
     events = [_session(), *_cycle()]
     events[-2]["payload"][field] = "other"
 
-    with pytest.raises(recorder.TranscriptError, match="assigned phase"):
+    with pytest.raises(recorder.TranscriptError, match="назначенной фазой"):
         recorder.validate_transcript(events, task="RUN-1")
 
 
@@ -173,7 +173,7 @@ def test_validate_transcript_rejects_transition_verdict_mismatch():
     events = [_session(), *_cycle()]
     events[-1]["verdict"] = "BLOCKED"
 
-    with pytest.raises(recorder.TranscriptError, match="verdict"):
+    with pytest.raises(recorder.TranscriptError, match="Verdict"):
         recorder.validate_transcript(events, task="RUN-1")
 
 
@@ -181,7 +181,7 @@ def test_validate_transcript_rejects_transition_target_mismatch():
     events = [_session(), *_cycle()]
     events[-1]["to_phase"] = "3"
 
-    with pytest.raises(recorder.TranscriptError, match="target"):
+    with pytest.raises(recorder.TranscriptError, match="Цель"):
         recorder.validate_transcript(events, task="RUN-1")
 
 
@@ -200,7 +200,7 @@ def test_validate_transcript_rejects_legacy_scalar_action():
     events[2]["output"] = events[2].pop("output_excerpt")
     events[2].pop("command_log")
 
-    with pytest.raises(recorder.TranscriptError, match="non-empty argument list"):
+    with pytest.raises(recorder.TranscriptError, match="непустым массивом аргументов"):
         recorder.validate_transcript(events, task="RUN-1")
 
 
@@ -281,14 +281,14 @@ def test_validate_transcript_rejects_report_without_actions():
     events = [_session(), *_cycle()]
     del events[2]
 
-    with pytest.raises(recorder.TranscriptError, match="no ACTIONS"):
+    with pytest.raises(recorder.TranscriptError, match="не содержит ACTION"):
         recorder.validate_transcript(events, task="RUN-1")
 
 
 def test_validate_open_cycle_rejects_action_for_another_phase():
     events = [_session(), _cycle()[0]]
 
-    with pytest.raises(recorder.TranscriptError, match="Phase does not match"):
+    with pytest.raises(recorder.TranscriptError, match="Фаза не совпадает"):
         recorder.validate_open_cycle(events, "1")
 
 
@@ -298,7 +298,7 @@ def test_validate_transcript_rejects_old_or_foreign_evidence_reference():
     first[-1]["to_phase"] = "0.6"
     second = _cycle("0.6", action_id="A-002", evidence_refs=["A-001"])
 
-    with pytest.raises(recorder.TranscriptError, match="current phase only"):
+    with pytest.raises(recorder.TranscriptError, match="ACTION текущей фазы"):
         recorder.validate_transcript([_session(), *first, *second], task="RUN-1")
 
 
@@ -308,7 +308,7 @@ def test_validate_transcript_rejects_duplicate_action_ids():
     first[-1]["to_phase"] = "0.6"
     second = _cycle("0.6", action_id="A-001")
 
-    with pytest.raises(recorder.TranscriptError, match="Duplicate ACTION ID"):
+    with pytest.raises(recorder.TranscriptError, match="Дублирующийся ID ACTION"):
         recorder.validate_transcript([_session(), *first, *second], task="RUN-1")
 
 
@@ -316,12 +316,12 @@ def test_validate_transcript_rejects_evidence_field_text_mismatch():
     events = [_session(), *_cycle()]
     events[3]["evidence_refs"] = ["A-999"]
 
-    with pytest.raises(recorder.TranscriptError, match="exactly match"):
+    with pytest.raises(recorder.TranscriptError, match="точно совпадать"):
         recorder.validate_transcript(events, task="RUN-1")
 
 
 def test_session_task_must_match_before_cycle_mutation():
-    with pytest.raises(recorder.TranscriptError, match="another task"):
+    with pytest.raises(recorder.TranscriptError, match="другой задаче"):
         recorder._require_session_task([_session()], "RUN-2")
 
 
@@ -329,7 +329,7 @@ def test_init_rejects_task_with_existing_supervisor_history(tmp_path, monkeypatc
     monkeypatch.setattr(recorder, "run_history", lambda _task: (0, {"ok": True, "count": 1}, ""))
     args = type("Args", (), {"root": str(tmp_path), "task": "RUN-1", "metadata": "{}"})()
 
-    with pytest.raises(SystemExit, match="fresh task"):
+    with pytest.raises(SystemExit, match="новая задача"):
         recorder.command_init(args)
 
     assert recorder.read_events(tmp_path) == []
@@ -377,7 +377,7 @@ def test_submit_does_not_record_cycle_for_malformed_supervisor_response(tmp_path
         {"root": str(tmp_path), "task": "RUN-1", "phase": "0.6", "report_file": str(report)},
     )()
 
-    with pytest.raises(recorder.TranscriptError, match="transition contract"):
+    with pytest.raises(recorder.TranscriptError, match="контракт перехода"):
         recorder.command_submit(args)
 
     assert [event["type"] for event in recorder.read_events(tmp_path)] == [
@@ -400,7 +400,7 @@ def test_submit_does_not_record_cycle_when_supervisor_fails(tmp_path, monkeypatc
         {"root": str(tmp_path), "task": "RUN-1", "phase": "0.6", "report_file": str(report)},
     )()
 
-    with pytest.raises(recorder.TranscriptError, match="did not complete successfully"):
+    with pytest.raises(recorder.TranscriptError, match="не завершил проверку успешно"):
         recorder.command_submit(args)
 
     assert [event["type"] for event in recorder.read_events(tmp_path)] == [
@@ -476,6 +476,31 @@ def test_hosted_token_redaction_preserves_non_secret_near_misses(text):
     assert recorder.redact_text(text) == text
 
 
+@pytest.mark.parametrize(
+    "parameter",
+    ["access_token", "refresh-token", "oauth_token", "private-token", "client_secret", "webhook-token"],
+)
+def test_redaction_removes_sensitive_query_and_assignment_parameters(parameter):
+    text = f"https://example.test/callback?{parameter}=value-that-must-not-leak"
+
+    safe = recorder.redact_text(text)
+
+    assert "value-that-must-not-leak" not in safe
+    assert "[REDACTED]" in safe
+
+
+@pytest.mark.parametrize("key", ["client_secret", "refresh_token", "private_token", "slack_token"])
+def test_redaction_removes_nested_sensitive_keys(key):
+    assert recorder.redact({"nested": {key: "value-that-must-not-leak"}}) == {
+        "nested": {key: "[REDACTED]"}
+    }
+
+
+@pytest.mark.parametrize("text", ["token_count=42", "client_secret_name=demo", "refresh_tokenizer=value"])
+def test_parameter_redaction_preserves_safe_near_misses(text):
+    assert recorder.redact_text(text) == text
+
+
 def test_finalize_generates_jsonl_dialog_and_summary(tmp_path):
     events = [_session(), *_cycle()]
     _write_events(tmp_path, events)
@@ -505,7 +530,7 @@ def test_finalize_generates_jsonl_dialog_and_summary(tmp_path):
 def test_finalize_rejects_missing_command_log(tmp_path):
     _write_events(tmp_path, [_session(), *_cycle()])
 
-    with pytest.raises(recorder.TranscriptError, match="command log is missing"):
+    with pytest.raises(recorder.TranscriptError, match="Лог команды .* отсутствует"):
         recorder.finalize(tmp_path, "RUN-1", expected_cycles=1)
 
 
@@ -515,7 +540,7 @@ def test_finalize_rejects_command_log_that_does_not_match_excerpt(tmp_path):
     _write_action_logs(tmp_path, events)
     (tmp_path / "command-logs" / "A-001.log").write_text("different output", encoding="utf-8")
 
-    with pytest.raises(recorder.TranscriptError, match="does not match output_excerpt"):
+    with pytest.raises(recorder.TranscriptError, match="не совпадает с output_excerpt"):
         recorder.finalize(tmp_path, "RUN-1", expected_cycles=1)
 
 
@@ -548,5 +573,5 @@ def test_terminal_pass_summary_reports_done_status():
 
 
 def test_expected_cycle_count_is_enforced():
-    with pytest.raises(recorder.TranscriptError, match="Expected 2 cycles, found 1"):
+    with pytest.raises(recorder.TranscriptError, match="Ожидалось циклов: 2; найдено: 1"):
         recorder.validate_transcript([_session(), *_cycle()], task="RUN-1", expected_cycles=2)

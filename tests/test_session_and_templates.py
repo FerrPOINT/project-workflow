@@ -107,11 +107,10 @@ class TestSessionHelpers:
         db = tmp_path / "test.db"
         sess = get_session(f"sqlite:///{db}")
         assert isinstance(sess, Session)
-        # SQLite pragmas were applied by event listener.
         from sqlalchemy import text
 
-        pragma = sess.execute(text("PRAGMA journal_mode")).scalar()
-        assert pragma is not None
+        assert sess.execute(text("PRAGMA foreign_keys")).scalar() == 1
+        assert sess.execute(text("PRAGMA journal_mode")).scalar() == "wal"
         sess.close()
         reset_engine()
 
@@ -268,3 +267,13 @@ class TestTemplateHelpers:
     def test_templates_env_exposes_filters(self):
         assert "group_instructions" in templates_module.env.filters
         assert "pluralize" in templates_module.env.filters
+
+    def test_verdict_templates_use_russian_ui_labels(self):
+        template_dir = templates_module.BASE_DIR / "templates"
+        dashboard = (template_dir / "dashboard.html").read_text(encoding="utf-8")
+        tasks = (template_dir / "tasks.html").read_text(encoding="utf-8")
+
+        assert "stats.verdict_labels[verdict]" in dashboard
+        assert "verdict.upper()" not in dashboard
+        assert tasks.count("t.latest_verdict_label") == 2
+        assert "t.latest_verdict.upper()" not in tasks

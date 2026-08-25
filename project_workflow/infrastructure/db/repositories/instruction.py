@@ -21,9 +21,9 @@ def _parse_skills(raw: str | None) -> list[str]:
     try:
         parsed = json.loads(raw)
     except (json.JSONDecodeError, TypeError) as exc:
-        raise ValueError("Persisted instruction skills contain invalid JSON") from exc
+        raise ValueError("Сохранённые skills инструкции содержат некорректный JSON") from exc
     if not isinstance(parsed, list) or not all(isinstance(item, str) for item in parsed):
-        raise ValueError("Persisted instruction skills must be a JSON string array")
+        raise ValueError("Сохранённые skills инструкции должны быть JSON-массивом строк")
     return parsed
 
 
@@ -31,7 +31,7 @@ def _dump_skills(skills: list[str] | None) -> str | None:
     if skills in (None, []):
         return None
     if not isinstance(skills, list) or not all(isinstance(item, str) for item in skills):
-        raise TypeError("skills must be a list of strings or null")
+        raise TypeError("skills должен быть массивом строк или null")
     return json.dumps(skills, ensure_ascii=False)
 
 

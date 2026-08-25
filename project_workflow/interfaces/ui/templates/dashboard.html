@@ -31,17 +31,17 @@
   <section class="metric-card"><div class="metric-label">Завершённые</div><div class="metric-value">{{ stats.done }}</div></section>
   {% if stats.verdicts %}
   {% for verdict, count in stats.verdicts.items() %}
-  <section class="metric-card metric-verdict-{{ verdict }}"><div class="metric-label">Вердикт: {{ verdict.upper() }}</div><div class="metric-value">{{ count }}</div></section>
+  <section class="metric-card metric-verdict-{{ verdict }}"><div class="metric-label">Вердикт: {{ stats.verdict_labels[verdict] }}</div><div class="metric-value">{{ count }}</div></section>
   {% endfor %}
   {% endif %}
 </div>
 
 <div class="dashboard-panels">
-  {% if active_tasks %}
+  {% if open_tasks %}
   <section class="card">
-    <div class="card-title" style="margin-bottom:14px">Активные задачи</div>
+    <div class="card-title" style="margin-bottom:14px">Незавершённые задачи</div>
     <div class="list-stack">
-      {% for task in active_tasks %}
+      {% for task in open_tasks %}
       <a href="/task/{{ task.task_key }}" class="list-item">
         <div class="list-title"><span class="code">{{ task.task_key }}</span>{% if task.title %} — {{ task.title }}{% endif %}</div>
         <div class="list-meta">

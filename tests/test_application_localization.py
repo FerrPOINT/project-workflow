@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from project_workflow.domain.validation import TaskKeyValidator
+from project_workflow.supervisor.evaluate import _blocked
 from project_workflow.supervisor.formatting import format_result
 
 ROOT = Path(__file__).parents[1]
@@ -88,3 +89,10 @@ def test_cli_result_and_task_key_errors_are_in_russian() -> None:
     assert error is not None
     assert "не соответствует" in error
     assert "Префиксы:" in error
+
+
+def test_provider_failure_blocker_is_user_facing_russian() -> None:
+    blocker = _blocked(ConnectionError("provider down")).blockers[0]
+
+    assert blocker.startswith("Проверяющий LLM недоступен:")
+    assert "unavailable" not in blocker.lower()
