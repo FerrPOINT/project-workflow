@@ -9,7 +9,6 @@ from __future__ import annotations
 import hashlib
 import importlib
 import json
-import os
 from pathlib import Path
 from typing import Any
 
@@ -352,11 +351,6 @@ def migrate_legacy(
     """Check or bridge only the deployed e6a4c2d8b901 database."""
     if check_only == apply_mode:
         raise click.UsageError("choose exactly one of --check or --apply")
-    # The explicit administrative DSN is authoritative.  Settings is also used
-    # for DB_SCHEMA while constructing the PostgreSQL engine, so keep its
-    # process-local view in sync instead of requiring a duplicate env variable.
-    os.environ["DATABASE_URL"] = database_url
-    config.get_settings.cache_clear()
     engine = get_engine(database_url)
     if check_only:
         result = {"ok": True, "mode": "check", **check_legacy(engine)}
