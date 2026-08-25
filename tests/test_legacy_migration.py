@@ -65,9 +65,25 @@ def _legacy_engine(tmp_path: Path):
             batch.drop_constraint("ck_workflows_is_locked", type_="check")
             batch.drop_column("catalog_sha256")
             batch.drop_column("is_locked")
+        with operations.batch_alter_table("projects") as batch:
+            batch.drop_column("description")
+        with operations.batch_alter_table("phases") as batch:
+            batch.drop_constraint("ck_phases_phase_order_positive", type_="check")
+        with operations.batch_alter_table("instructions") as batch:
+            batch.drop_constraint("ck_instructions_step_num_positive", type_="check")
         with operations.batch_alter_table("tasks") as batch:
             batch.drop_constraint("ck_tasks_current_phase_nonblank", type_="check")
             batch.alter_column("current_phase", existing_type=sa.Text(), server_default="-1")
+        operations.drop_index(
+            "uq_supervisor_runs_task_phase_report_fingerprint",
+            table_name="supervisor_runs",
+        )
+        operations.create_index(
+            "uq_supervisor_runs_task_report_fingerprint",
+            "supervisor_runs",
+            ["task_id", "report_fingerprint"],
+            unique=True,
+        )
         connection.execute(text("UPDATE alembic_version SET version_num = 'e6a4c2d8b901'"))
     engine.dispose()
     return create_engine(f"sqlite:///{database}"), database
