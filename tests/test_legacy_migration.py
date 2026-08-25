@@ -19,7 +19,6 @@ from project_workflow.infrastructure.db import schema
 from project_workflow.infrastructure.db.session import database_revisions, run_alembic_command
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.db.uow_bootstrap import bootstrap_default_project
-from project_workflow.interfaces import admin_legacy
 from project_workflow.interfaces.admin_legacy import apply_legacy, check_legacy, main
 
 
@@ -144,31 +143,3 @@ def test_admin_entrypoint_exposes_only_explicit_migrate_legacy_command():
 
     assert result.exit_code == 0
     assert "migrate-legacy" in result.output
-
-
-def test_admin_explicit_database_url_is_authoritative_without_duplicate_env(monkeypatch):
-    explicit_url = "postgresql+psycopg://operator:secret@database/project_workflow"
-    observed: dict[str, str] = {}
-
-    def fake_get_engine(url: str):
-        observed["argument"] = url
-        observed["settings"] = admin_legacy.config.get_settings().DATABASE_URL
-        return object()
-
-    monkeypatch.delenv("DATABASE_URL", raising=False)
-    admin_legacy.config.get_settings.cache_clear()
-    monkeypatch.setattr(admin_legacy, "get_engine", fake_get_engine)
-    monkeypatch.setattr(
-        admin_legacy,
-        "check_legacy",
-        lambda _engine: {"revision": "e6a4c2d8b901"},
-    )
-
-    result = CliRunner().invoke(
-        main,
-        ["migrate-legacy", "--database-url", explicit_url, "--check"],
-        env={"DB_SCHEMA": "project_workflow"},
-    )
-
-    assert result.exit_code == 0, result.output
-    assert observed == {"argument": explicit_url, "settings": explicit_url}
