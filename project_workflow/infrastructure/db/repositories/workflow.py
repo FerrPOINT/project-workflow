@@ -50,6 +50,10 @@ class SAWorkflowRepository(WorkflowRepository):
             name=data["name"],
             description=data.get("description", ""),
             is_default=1 if data.get("is_default") else 0,
+            # Catalog locking is an administrative migration concern.  Public
+            # create/update paths cannot manufacture a locked revision.
+            is_locked=0,
+            catalog_sha256=None,
         )
         self._session.add(item)
         self._session.flush()

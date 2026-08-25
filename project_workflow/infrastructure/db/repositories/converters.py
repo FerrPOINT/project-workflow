@@ -46,6 +46,8 @@ def _row_to_workflow(row: m.Workflow) -> Workflow:
         name=row.name,
         description=row.description or "",
         is_default=bool(row.is_default),
+        is_locked=bool(row.is_locked),
+        catalog_sha256=row.catalog_sha256,
     )
 
 

@@ -102,6 +102,146 @@ def _seed(v2: bool = False) -> list[dict[str, Any]]:
     return data
 
 
+def _canonical_seed(seed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return the database-owned catalog fields in one stable representation."""
+    result: list[dict[str, Any]] = []
+    for phase_order, item in enumerate(seed, start=1):
+        delegate = item.get("delegate") or {}
+        result.append(
+            {
+                "code": str(item["code"]),
+                "name": str(item["name"]),
+                "description": str(item.get("description") or ""),
+                "min_time_min": int(item.get("min_time_min") or 0),
+                "phase_order": phase_order,
+                "next_recommendation": str(item.get("next_recommendation") or ""),
+                "parallel_with": item.get("parallel_with"),
+                "rollback_target": item.get("rollback_target"),
+                "execution_type": str(item.get("execution_type") or "sync"),
+                "is_blocker": bool(item.get("is_blocker")),
+                "is_delegated": bool(delegate),
+                "is_critic": bool(item.get("is_critic")),
+                "delegate": (
+                    {
+                        "agent": str(delegate.get("agent") or ""),
+                        "hermes_profile": str(delegate.get("hermes_profile") or "") or None,
+                    }
+                    if delegate
+                    else None
+                ),
+                "instructions": [
+                    {
+                        "step_num": step_num,
+                        "description": str(
+                            (raw if isinstance(raw, dict) else {"description": str(raw)}).get("description") or ""
+                        ),
+                        "execution_type": str((raw if isinstance(raw, dict) else {}).get("execution_type") or "sync"),
+                        "skills": list((raw if isinstance(raw, dict) else {}).get("skills") or []),
+                    }
+                    for step_num, raw in enumerate(item.get("instructions") or [], start=1)
+                ],
+                "checks": [
+                    str(raw.get("description") if isinstance(raw, dict) else raw) for raw in item.get("checks") or []
+                ],
+                "evidence": [
+                    str(raw.get("description") if isinstance(raw, dict) else raw) for raw in item.get("evidence") or []
+                ],
+            }
+        )
+    return result
+
+
+def _catalog_sha256(catalog: list[dict[str, Any]]) -> str:
+    payload = json.dumps(catalog, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _read_catalog(conn: Any, workflow_id: int) -> list[dict[str, Any]]:
+    rows = (
+        conn.execute(
+            sa.text(
+                "SELECT p.id, p.code, p.name AS phase_name, p.description, p.min_time_min, p.phase_order, "
+                "p.next_recommendation, p.parallel_with, p.rollback_target, p.execution_type, "
+                "p.is_blocker, p.is_delegated, p.is_critic, a.name AS agent_name, a.hermes_profile "
+                "FROM phases p LEFT JOIN agents a ON a.id = p.agent_id "
+                "WHERE p.workflow_id = :workflow_id ORDER BY p.phase_order, p.id"
+            ),
+            {"workflow_id": workflow_id},
+        )
+        .mappings()
+        .all()
+    )
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        phase_id = int(row["id"])
+        instructions = (
+            conn.execute(
+                sa.text(
+                    "SELECT step_num, description, execution_type, skills FROM instructions "
+                    "WHERE phase_id = :phase_id ORDER BY step_num, id"
+                ),
+                {"phase_id": phase_id},
+            )
+            .mappings()
+            .all()
+        )
+        checks = (
+            conn.execute(
+                sa.text("SELECT description FROM checks WHERE phase_id = :phase_id ORDER BY id"),
+                {"phase_id": phase_id},
+            )
+            .scalars()
+            .all()
+        )
+        evidence = (
+            conn.execute(
+                sa.text("SELECT description FROM evidence WHERE phase_id = :phase_id ORDER BY id"),
+                {"phase_id": phase_id},
+            )
+            .scalars()
+            .all()
+        )
+        parsed_instructions: list[dict[str, Any]] = []
+        for instruction in instructions:
+            raw_skills = instruction["skills"]
+            skills = json.loads(raw_skills) if raw_skills else []
+            if not isinstance(skills, list) or not all(isinstance(value, str) for value in skills):
+                raise RuntimeError("Persisted workflow instruction skills are not a string array")
+            parsed_instructions.append(
+                {
+                    "step_num": int(instruction["step_num"]),
+                    "description": str(instruction["description"]),
+                    "execution_type": str(instruction["execution_type"] or "sync"),
+                    "skills": skills,
+                }
+            )
+        result.append(
+            {
+                "code": str(row["code"]),
+                "name": str(row["phase_name"]),
+                "description": str(row["description"] or ""),
+                "min_time_min": int(row["min_time_min"] or 0),
+                "phase_order": int(row["phase_order"]),
+                "next_recommendation": str(row["next_recommendation"] or ""),
+                "parallel_with": row["parallel_with"],
+                "rollback_target": row["rollback_target"],
+                "execution_type": str(row["execution_type"] or "sync"),
+                "is_blocker": bool(row["is_blocker"]),
+                "is_delegated": bool(row["is_delegated"]),
+                "is_critic": bool(row["is_critic"]),
+                "delegate": (
+                    {"agent": str(row["agent_name"]), "hermes_profile": row["hermes_profile"]}
+                    if row["agent_name"] is not None
+                    else None
+                ),
+                "instructions": parsed_instructions,
+                "checks": [str(value) for value in checks],
+                "evidence": [str(value) for value in evidence],
+            }
+        )
+    return result
+
+
 def _ensure_agent(conn: Any, workflow_name: str, item: dict[str, Any]) -> int | None:
     delegate = item.get("delegate") or {}
     name = str(delegate.get("agent") or "").strip()
@@ -115,10 +255,7 @@ def _ensure_agent(conn: Any, workflow_name: str, item: dict[str, Any]) -> int | 
         ).scalar()
     else:
         agent_id = conn.execute(
-            sa.text(
-                "SELECT id FROM agents WHERE name = :name AND hermes_profile IS NULL "
-                "ORDER BY id LIMIT 1"
-            ),
+            sa.text("SELECT id FROM agents WHERE name = :name AND hermes_profile IS NULL ORDER BY id LIMIT 1"),
             {"name": name},
         ).scalar()
     if agent_id is not None:
@@ -170,48 +307,23 @@ def _insert_contract(conn: Any, phase_id: int, item: dict[str, Any]) -> None:
 
 
 def _ensure_workflow(conn: Any, name: str, seed: list[dict[str, Any]]) -> int:
-    workflow_ids = conn.execute(
-        sa.text("SELECT id FROM workflows WHERE name = :name ORDER BY id"),
-        {"name": name},
-    ).scalars().all()
+    workflow_ids = (
+        conn.execute(
+            sa.text("SELECT id FROM workflows WHERE name = :name ORDER BY id"),
+            {"name": name},
+        )
+        .scalars()
+        .all()
+    )
     if len(workflow_ids) > 1:
         raise RuntimeError(f"Workflow name must be unique before migration: {name}")
     if workflow_ids:
         workflow_id = int(workflow_ids[0])
-        actual_contract = conn.execute(
-            sa.text(
-                "SELECT code, name, description, min_time_min, phase_order, next_recommendation, "
-                "parallel_with, rollback_target, execution_type, is_blocker, is_delegated, is_critic "
-                "FROM phases WHERE workflow_id = :workflow_id "
-                "ORDER BY phase_order, id"
-            ),
-            {"workflow_id": workflow_id},
-        ).tuples().all()
-        expected_contract = [
-            (
-                str(item["code"]),
-                str(item["name"]),
-                str(item.get("description") or ""),
-                int(item.get("min_time_min") or 0),
-                phase_order,
-                str(item.get("next_recommendation") or ""),
-                item.get("parallel_with"),
-                item.get("rollback_target"),
-                str(item.get("execution_type") or "sync"),
-                bool(item.get("is_blocker")),
-                bool(item.get("delegate")),
-                bool(item.get("is_critic")),
-            )
-            for phase_order, item in enumerate(seed, start=1)
-        ]
-        if [tuple(row) for row in actual_contract] != expected_contract:
+        if _read_catalog(conn, workflow_id) != _canonical_seed(seed):
             raise RuntimeError(f"Existing workflow contract does not match immutable seed: {name}")
         return workflow_id
     workflow_id = conn.execute(
-        sa.text(
-            "INSERT INTO workflows (name, description, is_default) "
-            "VALUES (:name, :description, 0) RETURNING id"
-        ),
+        sa.text("INSERT INTO workflows (name, description, is_default) VALUES (:name, :description, 0) RETURNING id"),
         {
             "name": name,
             "description": "Hermes + Supervisor + Relevanter Business + Relevanter Tech",
@@ -251,8 +363,22 @@ def _ensure_workflow(conn: Any, name: str, seed: list[dict[str, Any]]) -> int:
 
 def upgrade() -> None:
     conn = op.get_bind()
-    v1_id = _ensure_workflow(conn, V1_WORKFLOW, _seed())
-    v2_id = _ensure_workflow(conn, V2_WORKFLOW, _seed(v2=True))
+    v1_seed = _seed()
+    v2_seed = _seed(v2=True)
+    v1_id = _ensure_workflow(conn, V1_WORKFLOW, v1_seed)
+    v2_id = _ensure_workflow(conn, V2_WORKFLOW, v2_seed)
+    if _read_catalog(conn, v1_id) != _canonical_seed(v1_seed):
+        raise RuntimeError(f"Created workflow contract does not match immutable seed: {V1_WORKFLOW}")
+    if _read_catalog(conn, v2_id) != _canonical_seed(v2_seed):
+        raise RuntimeError(f"Created workflow contract does not match immutable seed: {V2_WORKFLOW}")
+    conn.execute(
+        sa.text("UPDATE workflows SET is_locked = 1, catalog_sha256 = :catalog_sha256 WHERE id = :workflow_id"),
+        {"workflow_id": v1_id, "catalog_sha256": _catalog_sha256(_canonical_seed(v1_seed))},
+    )
+    conn.execute(
+        sa.text("UPDATE workflows SET is_locked = 1, catalog_sha256 = :catalog_sha256 WHERE id = :workflow_id"),
+        {"workflow_id": v2_id, "catalog_sha256": _catalog_sha256(_canonical_seed(v2_seed))},
+    )
 
     op.add_column("tasks", sa.Column("workflow_id", sa.Integer(), nullable=True))
     conn.execute(
@@ -274,9 +400,7 @@ def upgrade() -> None:
             ondelete="RESTRICT",
         )
 
-    default_ids = conn.execute(
-        sa.text("SELECT id FROM workflows WHERE is_default = 1 ORDER BY id")
-    ).scalars().all()
+    default_ids = conn.execute(sa.text("SELECT id FROM workflows WHERE is_default = 1 ORDER BY id")).scalars().all()
     if not default_ids:
         conn.execute(
             sa.text("UPDATE workflows SET is_default = 1 WHERE id = :workflow_id"),
@@ -284,10 +408,14 @@ def upgrade() -> None:
         )
     elif list(default_ids) != [v1_id]:
         raise RuntimeError("sdlc-business-tech-v1 must remain the only default workflow")
-    project_ids = conn.execute(
-        sa.text("SELECT id FROM projects WHERE code = :code ORDER BY id"),
-        {"code": PROJECT_CODE},
-    ).scalars().all()
+    project_ids = (
+        conn.execute(
+            sa.text("SELECT id FROM projects WHERE code = :code ORDER BY id"),
+            {"code": PROJECT_CODE},
+        )
+        .scalars()
+        .all()
+    )
     if len(project_ids) > 1:
         raise RuntimeError(f"Project code must be unique before migration: {PROJECT_CODE}")
     if not project_ids:

@@ -147,7 +147,7 @@ def test_v2_preserves_existing_task_workflow_and_only_changes_intake(tmp_path):
         return {
             "workflow": list(
                 connection.execute(
-                    text("SELECT * FROM workflows WHERE id = :workflow_id"),
+                    text("SELECT id, name, description, is_default FROM workflows WHERE id = :workflow_id"),
                     {"workflow_id": workflow_id},
                 ).tuples()
             ),
@@ -205,6 +205,17 @@ def test_v2_preserves_existing_task_workflow_and_only_changes_intake(tmp_path):
             text("SELECT workflow_id FROM projects WHERE code = 'RUN'")
         ).scalar_one() == v2_id
         assert v1_snapshot(connection, v1_id) == immutable_v1_before
+        locked_revisions = connection.execute(
+            text(
+                "SELECT name, is_locked, catalog_sha256 FROM workflows "
+                "WHERE name IN ('sdlc-business-tech-v1', 'sdlc-business-tech-v2') ORDER BY name"
+            )
+        ).all()
+        assert [row[0] for row in locked_revisions] == [
+            "sdlc-business-tech-v1",
+            "sdlc-business-tech-v2",
+        ]
+        assert all(row[1] == 1 and len(row[2]) == 64 for row in locked_revisions)
 
         phase_rows = connection.execute(
             text(
