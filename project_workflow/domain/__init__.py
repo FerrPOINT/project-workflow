@@ -98,6 +98,8 @@ class Workflow:
     name: str = ""
     description: str = ""
     is_default: bool = False
+    is_locked: bool = False
+    catalog_sha256: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -105,6 +107,8 @@ class Workflow:
             "name": self.name,
             "description": self.description,
             "is_default": self.is_default,
+            "is_locked": self.is_locked,
+            "catalog_sha256": self.catalog_sha256,
         }
 
 
@@ -138,6 +142,7 @@ class Task:
 
     id: int | None = None
     project_id: int = 0
+    workflow_id: int = 0
     task_key: str = ""
     title: str = ""
     description: str = ""
@@ -151,6 +156,7 @@ class Task:
         return {
             "id": self.id,
             "project_id": self.project_id,
+            "workflow_id": self.workflow_id,
             "task_key": self.task_key,
             "title": self.title,
             "description": self.description,
