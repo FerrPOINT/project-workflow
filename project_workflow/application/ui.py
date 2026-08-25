@@ -138,12 +138,7 @@ class UIDataService:
             project = projects_by_id.get(t.get("project_id"), {})
             project_code = project.get("code") or ""
             project_name = project.get("name") or ""
-            # New tasks are pinned to an immutable workflow revision.  Only
-            # legacy rows without a pinned id inherit the project's current
-            # workflow.
-            workflow_id_raw = t.get("workflow_id")
-            if workflow_id_raw is None:
-                workflow_id_raw = project.get("workflow_id")
+            workflow_id_raw = project.get("workflow_id")
             workflow_id: int | None = int(workflow_id_raw) if isinstance(workflow_id_raw, int) else None
             workflow_phase_count = (
                 phase_counts_by_workflow.get(workflow_id, 0)
@@ -366,8 +361,7 @@ class UIDataService:
         project_id = task.get("project_id")
         project = row_to_dict(wdb.projects.get_by_id(project_id)) if isinstance(project_id, int) else None
         if project:
-            if task.get("workflow_id") is None:
-                task["workflow_id"] = project.get("workflow_id")
+            task["workflow_id"] = project.get("workflow_id")
             task["project_code"] = project.get("code")
             task["project_name"] = project.get("name")
         task["project_code"] = task.get("project_code") or "—"

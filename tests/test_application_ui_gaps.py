@@ -82,38 +82,6 @@ class TestUIDataServiceGaps:
         assert result[0]["latest_verdict"] is None
         assert result[0]["latest_verdict_phase"] is None
 
-    def test_load_tasks_prefers_pinned_workflow_over_project_revision(self):
-        wdb = MagicMock()
-        wdb.get_tasks.return_value = [
-            {
-                "id": 1,
-                "task_key": "RUN-OLD",
-                "title": "old",
-                "project_id": 1,
-                "workflow_id": 1,
-                "status": "active",
-                "current_phase": "v1",
-            }
-        ]
-        wdb.get_workflows.return_value = [{"id": 1}, {"id": 2}]
-        phases = {
-            1: [{"id": 11, "workflow_id": 1, "code": "v1", "name": "V1"}],
-            2: [
-                {"id": 21, "workflow_id": 2, "code": "v2a", "name": "V2 A"},
-                {"id": 22, "workflow_id": 2, "code": "v2b", "name": "V2 B"},
-            ],
-        }
-        wdb.get_phases.side_effect = lambda workflow_id=None: phases.get(workflow_id, [])
-        wdb.tasks.get_history_batch.return_value = {1: []}
-        wdb.supervisor_runs.latest_for_tasks.return_value = []
-        wdb.get_projects.return_value = [{"id": 1, "code": "RUN", "name": "Runs", "workflow_id": 2}]
-
-        result = _service(wdb)._load_tasks()
-
-        assert result[0]["workflow_id"] == 1
-        assert result[0]["total_phases"] == 1
-        assert result[0]["current_phase_name"] == "V1"
-
     def test_load_tasks_latest_run_extracts_verdict(self):
         wdb = MagicMock()
         wdb.get_tasks.return_value = [

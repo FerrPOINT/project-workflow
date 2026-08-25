@@ -33,7 +33,6 @@ class TaskService:
             raise NotFoundError(f"Проект {project_id} не найден")
         if locked_project.workflow_id != project.workflow_id:
             raise ConflictError("Воркфлоу проекта изменился во время создания задачи")
-        payload["workflow_id"] = locked_project.workflow_id
         raw_task_key = payload.get("task_key")
         if not isinstance(raw_task_key, str) or not raw_task_key.strip():
             raise ValueError("task_key должен быть непустой строкой")

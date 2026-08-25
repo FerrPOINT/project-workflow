@@ -54,11 +54,8 @@ class WorkflowService:
         return wf.to_dict() if wf else None
 
     def update_workflow(self, workflow_id: int, data: dict[str, Any]) -> None:
-        workflow = self._uow.workflows.lock(workflow_id)
-        if workflow is None:
+        if self._uow.workflows.lock(workflow_id) is None:
             raise NotFoundError(f"Воркфлоу {workflow_id} не найден")
-        if getattr(workflow, "is_locked", False) is True:
-            raise ConflictError("Locked workflow revision cannot be changed")
         self._uow.workflows.update(workflow_id, data)
         self._uow.commit()
         return None
@@ -67,8 +64,6 @@ class WorkflowService:
         workflow = self._uow.workflows.lock(workflow_id)
         if workflow is None:
             raise NotFoundError(f"Воркфлоу {workflow_id} не найден")
-        if getattr(workflow, "is_locked", False) is True:
-            raise ConflictError("Locked workflow revision cannot be deleted")
         if workflow.is_default:
             raise ConflictError("Воркфлоу по умолчанию нельзя удалить")
         if any(project.workflow_id == workflow_id for project in self._uow.projects.list()):

@@ -24,11 +24,8 @@ class InstructionService:
         phase = self._uow.phases.get_by_id(phase_id)
         if phase is None or phase.workflow_id is None:
             raise NotFoundError(f"Фаза {phase_id} не найдена")
-        workflow = self._uow.workflows.lock(phase.workflow_id)
-        if workflow is None:
+        if self._uow.workflows.lock(phase.workflow_id) is None:
             raise NotFoundError(f"Воркфлоу {phase.workflow_id} не найден")
-        if getattr(workflow, "is_locked", False) is True:
-            raise ConflictError("Locked workflow revision cannot be changed")
         if not any(item.id == phase_id for item in self._uow.phases.list(phase.workflow_id)):
             raise NotFoundError(f"Фаза {phase_id} не найдена")
 
