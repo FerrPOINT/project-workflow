@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 from pathlib import Path
 
 import pytest
@@ -239,6 +240,14 @@ def test_v2_preserves_existing_task_workflow_and_only_changes_intake(tmp_path):
         assert [row["is_critic"] for row in by_workflow[v2_id]] == [
             row["is_critic"] for row in by_workflow[v1_id]
         ]
+        migration = importlib.import_module(
+            "project_workflow.infrastructure.db.migrations.versions.0002_sdlc_business_tech_v2"
+        )
+        v1_catalog = migration._read_catalog(connection, v1_id)
+        v2_catalog = migration._read_catalog(connection, v2_id)
+        assert v2_catalog[1:] == v1_catalog[1:]
+        assert v2_catalog[0] != v1_catalog[0]
+        assert v2_catalog[0]["code"] == v1_catalog[0]["code"] == "1.INTAKE"
         intake = connection.execute(
             text("SELECT description FROM phases WHERE workflow_id = :v2 AND code = '1.INTAKE'"),
             {"v2": v2_id},
