@@ -123,6 +123,10 @@ class TestApplicationServiceFinalGaps:
         project.code = "P"
         project.key_prefixes = ["P"]
         project.workflow_id = 1
+        project.to_dict.return_value = {
+            "code": "P",
+            "key_prefixes": ["P"],
+        }
         uow.projects.get_by_id.return_value = project
         uow.projects.lock.return_value = project
         uow.workflows.lock.return_value = object()

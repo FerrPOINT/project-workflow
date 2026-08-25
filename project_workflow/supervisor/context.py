@@ -153,7 +153,7 @@ class SupervisorContextBuilder:
                 "и отправляет report по текущей фазе. Supervisor не предполагает конкретную модель, "
                 "OpenAI-compatible провайдера."
             ),
-            "entrypoint": "project-workflow step --task RUN-KEY [--report TEXT]",
+            "entrypoint": "project-workflow step --task RUN-42 [--report TEXT]",
         }
 
     @staticmethod

@@ -34,7 +34,7 @@ def test_task_detail_renders_group_markers_and_chronological_supervisor_dialog()
             "phase_code": "0",
             "phase_name": "Start",
             "verdict": "pass",
-            "verdict_label": "PASS",
+            "verdict_label": "Принято",
             "created_at": "2026-08-21T10:00",
             "report": "first-report",
             "contract": {"message": "Принято", "covered": ["check"], "missing": [], "blockers": []},
@@ -64,7 +64,7 @@ def test_task_detail_renders_group_markers_and_chronological_supervisor_dialog()
             "phase_code": "10",
             "phase_name": "Auto-Improve",
             "verdict": "pass",
-            "verdict_label": "PASS",
+            "verdict_label": "Принято",
             "created_at": "2026-08-21T11:00",
             "report": "second-report",
             "contract": {"message": "Готово", "covered": [], "missing": [], "blockers": []},
@@ -81,14 +81,13 @@ def test_task_detail_renders_group_markers_and_chronological_supervisor_dialog()
             "updated_at": "2026-08-21T11:00",
             "status": "done",
             "latest_verdict": "pass",
-            "latest_verdict_label": "PASS",
+            "latest_verdict_label": "Принято",
         },
         current_phase_name="Auto-Improve",
         progress_done=27,
         progress_total=27,
         cycles_done=3,
         cycles_total=3,
-        work_time="2 ч",
         phase_history_blocks=blocks,
         supervisor_runs=runs,
     )
@@ -108,4 +107,5 @@ def test_task_detail_renders_group_markers_and_chronological_supervisor_dialog()
     assert "Dataflow проверен" in html
     assert "Лог исследования" in html
     assert "Воркфлоу завершён" in html
+    assert "Время в работе" not in html
     assert "СЛЕДУЮЩИЙ ШАГ" not in html

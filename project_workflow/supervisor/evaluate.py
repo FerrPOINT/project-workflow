@@ -85,7 +85,7 @@ def _blocked(exc: Exception) -> LlmVerdict:
         verdict="BLOCKED",
         covered=[],
         missing=[],
-        blockers=[f"Supervisor LLM unavailable: {type(exc).__name__}"],
+        blockers=[f"Проверяющий LLM недоступен: {type(exc).__name__}"],
         message="Supervisor не смог проверить отчёт; переход заблокирован.",
         next_phase=None,
         next_phase_name=None,

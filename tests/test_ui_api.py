@@ -75,7 +75,26 @@ class TestIndex:
         assert resp.status_code == 200
         assert "html" in resp.headers.get("content-type", "")
         assert "Дашборд" in resp.text
-        assert "Активные задачи" in resp.text
+        assert "Незавершённые задачи" in resp.text
+
+    def test_blocked_task_remains_visible_on_dashboard(self, client):
+        from project_workflow.interfaces.ui import _app_state
+
+        uow = _app_state.get_db()
+        task = uow.tasks.get_by_key("RUN-1")
+        assert task is not None and task.id is not None
+        uow.tasks.update(task.id, {"status": "blocked"})
+        uow.commit()
+        try:
+            response = client.get("/")
+
+            assert response.status_code == 200
+            assert "Незавершённые задачи" in response.text
+            assert "RUN-1" in response.text
+            assert "Заблокирована" in response.text
+        finally:
+            uow.tasks.update(task.id, {"status": "active"})
+            uow.commit()
 
     def test_phases_list_page(self, client):
         resp = client.get("/phases")
@@ -557,7 +576,7 @@ class TestApiProjects:
         _app_state.task_service().create_task(
             {
                 "project_id": project_id,
-                "task_key": _unique("ZZZ"),
+                "task_key": "ZZZ-576",
                 "title": "Task",
                 "status": "active",
                 "current_phase": "1.INTAKE",
@@ -718,7 +737,7 @@ class TestApiTasks:
         task = _app_state.task_service().create_task(
             {
                 "project_id": project.id,
-                "task_key": "RUN-DEL-1",
+                "task_key": "RUN-905",
                 "title": "To delete",
                 "status": "active",
                 "current_phase": "1.INTAKE",

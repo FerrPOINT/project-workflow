@@ -205,7 +205,8 @@ function reloadProjects(nextId){
       fillProjectForm(byId(selectedProjectId));
       setProjectFormMode('edit');
       syncNav();
-    });
+    })
+    .catch(showRequestError);
 }
 function renderProjectNav(){
   var nav = document.getElementById('projectNav');
@@ -250,14 +251,16 @@ function saveProject(){
   if(!payload.code){ showToast('Код проекта обязателен','error'); return; }
   fetch('/api/projects/' + selectedProjectId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json()})
-    .then(function(d){ if(d.ok){ showToast('Проект сохранён','success'); reloadProjects(selectedProjectId); } else { showToast(d.error || 'Ошибка','error'); } });
+    .then(function(d){ if(d.ok){ showToast('Проект сохранён','success'); reloadProjects(selectedProjectId); } else { showToast(d.error || 'Ошибка','error'); } })
+    .catch(showRequestError);
 }
 function deleteProject(){
   if(selectedProjectId == null){ showToast('Нет выбранного проекта','error'); return; }
   if(!confirm('Удалить проект?')) return;
   fetch('/api/projects/' + selectedProjectId,{method:'DELETE'})
     .then(function(r){return r.json()})
-    .then(function(d){ if(d.ok){ showToast('Проект удалён','success'); reloadProjects(null); } else { showToast(d.error || 'Ошибка','error'); } });
+    .then(function(d){ if(d.ok){ showToast('Проект удалён','success'); reloadProjects(null); } else { showToast(d.error || 'Ошибка','error'); } })
+    .catch(showRequestError);
 }
 function createProject(){
   var payload = currentPayload();
@@ -271,7 +274,8 @@ function createProject(){
       } else {
         showToast(d.error || 'Ошибка','error');
       }
-    });
+    })
+    .catch(showRequestError);
 }
 function submitProject(){
   if(projectFormMode === 'create'){

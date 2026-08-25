@@ -6,6 +6,7 @@ The DSN is read from config.Settings.DATABASE_URL.
 from __future__ import annotations
 
 import logging
+import sqlite3
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -41,7 +42,7 @@ class DatabaseRecreateRequired(RuntimeError):
     exit_code = 2
 
     def __init__(self) -> None:
-        super().__init__("legacy database must be recreated")
+        super().__init__("Устаревшую базу данных необходимо пересоздать")
 
 
 def expected_tables() -> frozenset[str]:
@@ -131,7 +132,7 @@ def get_session(url: str | None = None) -> Session:
 @event.listens_for(Engine, "connect")
 def _set_sqlite_pragma(dbapi_conn: Any, connection_record: Any) -> None:
     """Apply performance and correctness pragmas to SQLite connections."""
-    if getattr(connection_record, "dialect", None) is None or connection_record.dialect.name != "sqlite":
+    if not isinstance(dbapi_conn, sqlite3.Connection):
         return
     try:
         cursor = dbapi_conn.cursor()

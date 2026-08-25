@@ -89,7 +89,7 @@ class SAPhaseRepository(PhaseRepository):
             .all()
         )
         if not remaining:
-            raise LastPhaseError("Cannot delete the only phase of a workflow")
+            raise LastPhaseError("Нельзя удалить единственную фазу воркфлоу")
         # Cascade delete content rows explicitly (mirror ON DELETE CASCADE).
         for child_class in (m.Instruction, m.Check, m.Evidence):
             self._session.execute(
@@ -169,6 +169,15 @@ class SAPhaseRepository(PhaseRepository):
             select(m.Phase.id).where(m.Phase.agent_id == agent_id).limit(1)
         ).scalar_one_or_none()
         return phase_id is not None
+
+    def workflow_ids_for_agent(self, agent_id: int) -> Sequence[int]:
+        rows = self._session.execute(
+            select(m.Phase.workflow_id)
+            .where(m.Phase.agent_id == agent_id)
+            .distinct()
+            .order_by(m.Phase.workflow_id)
+        ).scalars()
+        return [int(workflow_id) for workflow_id in rows]
 
     def resequence(self, workflow_id: int) -> None:
         rows = self._session.execute(

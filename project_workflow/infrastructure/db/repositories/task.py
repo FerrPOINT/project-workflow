@@ -48,6 +48,13 @@ class SATaskRepository(TaskRepository):
             return None
         return _row_to_task(row)
 
+    def lock(self, task_id: int) -> Task | None:
+        with self._session.no_autoflush:
+            row = self._session.execute(
+                select(m.Task).where(m.Task.id == task_id).with_for_update()
+            ).scalar_one_or_none()
+        return _row_to_task(row) if row else None
+
     def list(self) -> Sequence[Task]:
         with self._session.no_autoflush:
             stmt = (

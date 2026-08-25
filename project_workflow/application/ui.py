@@ -14,6 +14,19 @@ from ..interfaces.ui.helpers import (
 )
 from .state import _AppState
 
+_UI_VERDICT_LABELS = {
+    "pass": "Принято",
+    "partial": "Частично принято",
+    "blocked": "Заблокировано",
+    "rollback": "Откат",
+    "delegate": "Делегировано",
+}
+
+
+def _ui_verdict_label(verdict: Any) -> str:
+    value = str(verdict or "")
+    return _UI_VERDICT_LABELS.get(value.lower(), value.upper())
+
 
 def _task_progress_counts(
     *, status: str, completed: int, history_total: int, workflow_total: int
@@ -193,10 +206,17 @@ class UIDataService:
                     "completed": completed,
                     "total_phases": total_phases,
                     "status": t.get("status", "active"),
-                    "status_label": "В работе" if t.get("status") != "done" else "Завершена",
+                    "status_label": (
+                        "Завершена"
+                        if t.get("status") == "done"
+                        else "Заблокирована"
+                        if t.get("status") == "blocked"
+                        else "В работе"
+                    ),
                     "created_at": t.get("created_at", ""),
                     "completed_at": completed_at,
                     "latest_verdict": latest_verdict,
+                    "latest_verdict_label": _ui_verdict_label(latest_verdict),
                     "latest_verdict_phase": latest_verdict_phase,
                 }
             )
@@ -230,6 +250,7 @@ class UIDataService:
         tasks = self._load_tasks()
         projects = self._load_projects()
 
+        open_tasks = [task for task in tasks if task.get("status") != "done"]
         active_tasks = [task for task in tasks if task.get("status") == "active"]
         done_tasks = [task for task in tasks if task.get("status") == "done"]
 
@@ -246,8 +267,11 @@ class UIDataService:
                 "active": len(active_tasks),
                 "done": len(done_tasks),
                 "verdicts": verdict_counts,
+                "verdict_labels": {
+                    verdict: _ui_verdict_label(verdict) for verdict in verdict_counts
+                },
             },
-            "active_tasks": active_tasks[:8],
+            "open_tasks": open_tasks[:8],
             "projects": sorted(projects, key=lambda item: (-item.get("task_count", 0), item.get("name", "")))[:8],
         }
 
@@ -325,12 +349,8 @@ class UIDataService:
         return _build_parallel_phase_blocks(raw_history)
 
     def _decorate_supervisor_runs(self, supervisor_runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        from project_workflow.supervisor.types import VERDICT_LABELS
-
         for super_run in supervisor_runs:
-            super_run["verdict_label"] = VERDICT_LABELS.get(
-                super_run.get("verdict", ""), super_run.get("verdict", "").upper()
-            )
+            super_run["verdict_label"] = _ui_verdict_label(super_run.get("verdict"))
             resp = super_run.get("response") or {}
             snapshot = super_run.get("context_snapshot") or {}
             contract_snapshot = snapshot.get("contract_snapshot") or {}

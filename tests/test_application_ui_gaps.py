@@ -102,6 +102,7 @@ class TestUIDataServiceGaps:
 
         result = _service(wdb)._load_tasks()
         assert result[0]["latest_verdict"] == "pass"
+        assert result[0]["latest_verdict_label"] == "Принято"
         assert result[0]["latest_verdict_phase"] == "1"
 
     def test_resolve_task_workflow_id_from_project_dict(self):
