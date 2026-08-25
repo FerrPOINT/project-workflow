@@ -233,6 +233,8 @@ async def api_workflow_update(workflow_id: int, payload: WorkflowUpdate) -> dict
         service.update_workflow(workflow_id, updates)
     except NotFoundError as exc:
         return _error(str(exc), 404)
+    except ConflictError as exc:
+        return _error(str(exc), 409)
     return {"ok": True, "workflow": service.get_workflow(workflow_id)}
 
 
