@@ -227,7 +227,55 @@ class TestPostgresInitialMigration:
                 text(
                     "ALTER TABLE project_workflow.tasks "
                     "DROP CONSTRAINT ck_tasks_current_phase_nonblank, "
+                    "DROP CONSTRAINT tasks_project_id_fkey, "
+                    "ADD CONSTRAINT tasks_project_id_fkey FOREIGN KEY (project_id) "
+                    "REFERENCES project_workflow.projects(id), "
                     "ALTER COLUMN current_phase SET DEFAULT '-1'"
+                )
+            )
+            connection.execute(text("ALTER TABLE project_workflow.projects DROP COLUMN description"))
+            connection.execute(
+                text(
+                    "ALTER TABLE project_workflow.phases "
+                    "DROP CONSTRAINT ck_phases_phase_order_positive"
+                )
+            )
+            connection.execute(
+                text(
+                    "ALTER TABLE project_workflow.instructions "
+                    "DROP CONSTRAINT ck_instructions_step_num_positive"
+                )
+            )
+            connection.execute(
+                text(
+                    "ALTER TABLE project_workflow.task_history "
+                    "DROP CONSTRAINT task_history_phase_id_fkey, "
+                    "ADD CONSTRAINT task_history_phase_id_fkey FOREIGN KEY (phase_id) "
+                    "REFERENCES project_workflow.phases(id)"
+                )
+            )
+            for constraint, column in (
+                ("supervisor_runs_phase_id_fkey", "phase_id"),
+                ("supervisor_runs_next_phase_id_fkey", "next_phase_id"),
+                ("supervisor_runs_rollback_phase_id_fkey", "rollback_phase_id"),
+            ):
+                connection.execute(
+                    text(
+                        "ALTER TABLE project_workflow.supervisor_runs "
+                        f"DROP CONSTRAINT {constraint}, "
+                        f"ADD CONSTRAINT {constraint} FOREIGN KEY ({column}) "
+                        "REFERENCES project_workflow.phases(id)"
+                    )
+                )
+            connection.execute(
+                text(
+                    "DROP INDEX project_workflow.uq_supervisor_runs_task_phase_report_fingerprint"
+                )
+            )
+            connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX uq_supervisor_runs_task_report_fingerprint "
+                    "ON project_workflow.supervisor_runs (task_id, report_fingerprint)"
                 )
             )
             connection.execute(

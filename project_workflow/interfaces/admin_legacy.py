@@ -59,7 +59,7 @@ LEGACY_COLUMNS: dict[str, frozenset[str]] = {
     "instructions": frozenset({"id", "phase_id", "step_num", "description", "execution_type", "skills"}),
     "checks": frozenset({"id", "phase_id", "description"}),
     "evidence": frozenset({"id", "phase_id", "description"}),
-    "projects": frozenset({"id", "workflow_id", "code", "name", "description", "key_prefixes"}),
+    "projects": frozenset({"id", "workflow_id", "code", "name", "key_prefixes"}),
     "tasks": frozenset(
         {
             "id",
@@ -104,10 +104,9 @@ LEGACY_CHECKS: dict[str, frozenset[str]] = {
             "ck_phases_is_critic",
             "ck_phases_is_delegated",
             "ck_phases_is_seed_managed",
-            "ck_phases_phase_order_positive",
         }
     ),
-    "instructions": frozenset({"ck_instructions_execution_type", "ck_instructions_step_num_positive"}),
+    "instructions": frozenset({"ck_instructions_execution_type"}),
     "checks": frozenset(),
     "evidence": frozenset(),
     "projects": frozenset(),
@@ -126,7 +125,40 @@ LEGACY_UNIQUES: dict[str, frozenset[tuple[str, ...]]] = {
     "projects": frozenset({("code",)}),
     "tasks": frozenset({("task_key",)}),
     "task_history": frozenset({("task_id", "phase_id")}),
-    "supervisor_runs": frozenset({("task_id", "phase_id", "report_fingerprint")}),
+    "supervisor_runs": frozenset({("task_id", "report_fingerprint")}),
+}
+
+LEGACY_FOREIGN_KEYS: dict[
+    str,
+    frozenset[tuple[tuple[str, ...], str, tuple[str, ...], str | None]],
+] = {
+    "agents": frozenset(),
+    "workflows": frozenset(),
+    "phases": frozenset(
+        {
+            (("workflow_id",), "workflows", ("id",), "CASCADE"),
+            (("agent_id",), "agents", ("id",), "SET NULL"),
+        }
+    ),
+    "instructions": frozenset({(("phase_id",), "phases", ("id",), "CASCADE")}),
+    "checks": frozenset({(("phase_id",), "phases", ("id",), "CASCADE")}),
+    "evidence": frozenset({(("phase_id",), "phases", ("id",), "CASCADE")}),
+    "projects": frozenset({(("workflow_id",), "workflows", ("id",), "CASCADE")}),
+    "tasks": frozenset({(("project_id",), "projects", ("id",), None)}),
+    "task_history": frozenset(
+        {
+            (("task_id",), "tasks", ("id",), "CASCADE"),
+            (("phase_id",), "phases", ("id",), None),
+        }
+    ),
+    "supervisor_runs": frozenset(
+        {
+            (("task_id",), "tasks", ("id",), "CASCADE"),
+            (("phase_id",), "phases", ("id",), None),
+            (("next_phase_id",), "phases", ("id",), None),
+            (("rollback_phase_id",), "phases", ("id",), None),
+        }
+    ),
 }
 
 
@@ -220,6 +252,21 @@ def _snapshot(connection: Connection) -> dict[str, Any]:
         actual_uniques[table] = frozenset(value for value in values if value)
     if actual_uniques != LEGACY_UNIQUES:
         raise click.ClickException("legacy unique constraints differ from the supported schema")
+    if connection.dialect.name == "postgresql":
+        actual_foreign_keys = {
+            table: frozenset(
+                (
+                    tuple(str(value) for value in item.get("constrained_columns") or ()),
+                    str(item.get("referred_table") or ""),
+                    tuple(str(value) for value in item.get("referred_columns") or ()),
+                    str((item.get("options") or {}).get("ondelete") or "").upper() or None,
+                )
+                for item in inspector.get_foreign_keys(table, schema=schema)
+            )
+            for table in tables
+        }
+        if actual_foreign_keys != LEGACY_FOREIGN_KEYS:
+            raise click.ClickException("legacy foreign keys differ from the supported schema")
     blank_phases = int(
         connection.execute(
             text(f"SELECT COUNT(*) FROM {_qualified(connection, 'tasks')} WHERE length(trim(current_phase)) = 0")
@@ -269,9 +316,63 @@ def _bridge_to_initial(connection: Connection) -> None:
             "ck_workflows_catalog_sha256",
             "catalog_sha256 IS NULL OR length(catalog_sha256) = 64",
         )
+    with operations.batch_alter_table("projects", schema=schema) as batch:
+        batch.add_column(sa.Column("description", sa.Text(), server_default="", nullable=False))
+    with operations.batch_alter_table("phases", schema=schema) as batch:
+        batch.create_check_constraint("ck_phases_phase_order_positive", "phase_order > 0")
+    with operations.batch_alter_table("instructions", schema=schema) as batch:
+        batch.create_check_constraint("ck_instructions_step_num_positive", "step_num > 0")
     with operations.batch_alter_table("tasks", schema=schema) as batch:
         batch.alter_column("current_phase", existing_type=sa.Text(), server_default=None)
         batch.create_check_constraint("ck_tasks_current_phase_nonblank", "length(trim(current_phase)) > 0")
+        if connection.dialect.name == "postgresql":
+            batch.drop_constraint("tasks_project_id_fkey", type_="foreignkey")
+            batch.create_foreign_key(
+                "tasks_project_id_fkey",
+                "projects",
+                ["project_id"],
+                ["id"],
+                referent_schema=schema,
+                ondelete="RESTRICT",
+            )
+    if connection.dialect.name == "postgresql":
+        with operations.batch_alter_table("task_history", schema=schema) as batch:
+            batch.drop_constraint("task_history_phase_id_fkey", type_="foreignkey")
+            batch.create_foreign_key(
+                "task_history_phase_id_fkey",
+                "phases",
+                ["phase_id"],
+                ["id"],
+                referent_schema=schema,
+                ondelete="RESTRICT",
+            )
+        with operations.batch_alter_table("supervisor_runs", schema=schema) as batch:
+            for constraint, column in (
+                ("supervisor_runs_phase_id_fkey", "phase_id"),
+                ("supervisor_runs_next_phase_id_fkey", "next_phase_id"),
+                ("supervisor_runs_rollback_phase_id_fkey", "rollback_phase_id"),
+            ):
+                batch.drop_constraint(constraint, type_="foreignkey")
+                batch.create_foreign_key(
+                    constraint,
+                    "phases",
+                    [column],
+                    ["id"],
+                    referent_schema=schema,
+                    ondelete="RESTRICT",
+                )
+    operations.drop_index(
+        "uq_supervisor_runs_task_report_fingerprint",
+        table_name="supervisor_runs",
+        schema=schema,
+    )
+    operations.create_index(
+        "uq_supervisor_runs_task_phase_report_fingerprint",
+        "supervisor_runs",
+        ["task_id", "phase_id", "report_fingerprint"],
+        unique=True,
+        schema=schema,
+    )
     version_table = _qualified(connection, "alembic_version")
     updated = connection.execute(
         text(f"UPDATE {version_table} SET version_num = :new WHERE version_num = :old"),
