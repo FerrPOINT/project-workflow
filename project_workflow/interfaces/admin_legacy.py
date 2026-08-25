@@ -420,6 +420,17 @@ def apply_legacy(engine: Engine, manifest: Path, manifest_sha256: str) -> dict[s
         ).scalar_one()
         if project_workflow != V2_WORKFLOW:
             raise click.ClickException("RUN project was not switched to v2")
+        migration = _migration_module()
+        migrated_v1_catalog = migration._read_catalog(connection, v1_id)
+        migrated_v1_sha256 = migration._catalog_sha256(migrated_v1_catalog)
+        if migrated_v1_sha256 != before["v1_catalog_sha256"]:
+            raise click.ClickException("legacy v1 catalog changed during migration")
+        stored_v1_sha256 = connection.execute(
+            text(f"SELECT catalog_sha256 FROM {workflow_table} WHERE id = :v1"),
+            {"v1": v1_id},
+        ).scalar_one()
+        if stored_v1_sha256 != migrated_v1_sha256:
+            raise click.ClickException("legacy v1 stored checksum differs from its catalog")
         after_counts = {
             table: int(connection.execute(text(f"SELECT COUNT(*) FROM {_qualified(connection, table)}")).scalar_one())
             for table in sorted(LEGACY_COLUMNS)

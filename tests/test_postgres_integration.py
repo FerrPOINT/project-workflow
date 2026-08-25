@@ -288,6 +288,9 @@ class TestPostgresInitialMigration:
         checked = check_legacy(engine)
         assert checked["counts"]["tasks"] == 1
         assert checked["counts"]["task_history"] == 1
+        assert checked["v1_catalog_sha256"] == (
+            "c12e564f8896754387260c38f9706ae1776212c6a8a5504a3280021db80d039c"
+        )
 
         dump = tmp_path / "workflow.dump"
         dump.write_bytes(b"verified test dump")
@@ -326,7 +329,7 @@ class TestPostgresInitialMigration:
             ).one()
             locked = connection.execute(
                 text(
-                    "SELECT name, is_locked, length(catalog_sha256) "
+                    "SELECT name, is_locked, catalog_sha256 "
                     "FROM project_workflow.workflows "
                     "WHERE name IN ('sdlc-business-tech-v1', 'sdlc-business-tech-v2') "
                     "ORDER BY name"
@@ -336,10 +339,9 @@ class TestPostgresInitialMigration:
             "sdlc-business-tech-v1",
             "sdlc-business-tech-v2",
         )
-        assert locked == [
-            ("sdlc-business-tech-v1", 1, 64),
-            ("sdlc-business-tech-v2", 1, 64),
-        ]
+        assert locked[0] == ("sdlc-business-tech-v1", 1, checked["v1_catalog_sha256"])
+        assert locked[1][:2] == ("sdlc-business-tech-v2", 1)
+        assert len(locked[1][2]) == 64
 
     def test_head_with_column_drift_is_not_ready(self, pg_url):
         from project_workflow.infrastructure.db.session import DatabaseRecreateRequired, schema_is_ready
