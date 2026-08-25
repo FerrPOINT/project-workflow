@@ -23,7 +23,7 @@ class SAAgentRepository(AgentRepository):
         self._session = session
 
     def list(self) -> Sequence[Agent]:
-        rows = self._session.execute(select(m.Agent)).scalars().all()
+        rows = self._session.execute(select(m.Agent).order_by(m.Agent.id)).scalars().all()
         return [_row_to_agent(r) for r in rows]
 
     def get_by_name(self, name: str) -> Agent | None:

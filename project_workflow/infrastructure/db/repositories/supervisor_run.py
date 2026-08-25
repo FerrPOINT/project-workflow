@@ -25,6 +25,7 @@ class SASupervisorRunRepository(SupervisorRunRepository):
         self,
         task_id: int | None = None,
         task_key: str | None = None,
+        phase_id: int | None = None,
         limit: int | None = 200,
     ) -> Sequence[SupervisorRun]:
         stmt = select(m.SupervisorRun).order_by(m.SupervisorRun.id.desc())
@@ -34,6 +35,8 @@ class SASupervisorRunRepository(SupervisorRunRepository):
             stmt = stmt.where(m.SupervisorRun.task_id == task_id)
         if task_key is not None:
             stmt = stmt.join(m.Task, m.SupervisorRun.task_id == m.Task.id).where(m.Task.task_key == task_key)
+        if phase_id is not None:
+            stmt = stmt.where(m.SupervisorRun.phase_id == phase_id)
         rows = self._session.execute(stmt).scalars().all()
         return [_row_to_supervisor_run(r) for r in rows]
 

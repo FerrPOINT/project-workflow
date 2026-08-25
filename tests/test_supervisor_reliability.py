@@ -126,6 +126,37 @@ def test_same_report_uses_provider_again_after_instruction_contract_change(super
     assert chat.call_count == 2
 
 
+def test_same_report_uses_provider_again_after_accumulated_coverage_changes():
+    engine = SupervisorEngine("RUN-917")
+    calls = 0
+
+    def partial_progress(*_args, **kwargs):
+        nonlocal calls
+        item_ids = [
+            line.strip()[5:].split('" — ', 1)[0]
+            for line in str(kwargs.get("user", "")).splitlines()
+            if line.strip().startswith('ID: "') and '" — ' in line.strip()
+        ]
+        assert len(item_ids) >= 3
+        covered = [item_ids[calls]] if calls < 2 else []
+        calls += 1
+        return _wire(
+            "PARTIAL",
+            covered,
+            [item_id for item_id in item_ids if item_id not in covered],
+        )
+
+    with patch.object(OpenAICompatibleClient, "chat", side_effect=partial_progress) as chat:
+        first = engine.evaluate("повторяемый отчёт")
+        second = engine.evaluate("другой отчёт")
+        retried = engine.evaluate("повторяемый отчёт")
+
+    assert first["verdict"] == second["verdict"] == retried["verdict"] == "PARTIAL"
+    assert retried["replayed"] is False
+    assert chat.call_count == 3
+    assert len(retried["covered"]) >= 2
+
+
 def test_catalog_change_during_provider_call_fails_closed_then_retries(supervisor_llm):
     engine = SupervisorEngine("RUN-916")
     supervisor_llm("PASS")

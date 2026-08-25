@@ -845,6 +845,15 @@ class TestPhaseDetail:
         assert "el.setAttribute('aria-busy', 'true');" in response.text
         assert "return true;" in response.text
 
+    def test_phase_detail_serializes_all_phase_aggregate_saves(self):
+        response = client.get(_phase_detail_path("1.INTAKE"))
+
+        assert response.status_code == 200
+        assert "let _phaseSaveQueue = Promise.resolve(true);" in response.text
+        assert "const queued = _phaseSaveQueue.then(() => persistPhase());" in response.text
+        assert "_phaseSaveQueue = queued.catch(() => false);" in response.text
+        assert "async function persistPhase()" in response.text
+
     def test_new_check_and_evidence_wait_for_user_input_before_saving(self):
         response = client.get(_phase_detail_path("1.INTAKE"))
 

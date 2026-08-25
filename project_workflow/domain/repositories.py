@@ -228,6 +228,7 @@ class SupervisorRunRepository(ABC):
         self,
         task_id: int | None = None,
         task_key: str | None = None,
+        phase_id: int | None = None,
         limit: int | None = 200,
     ) -> Sequence[SupervisorRun]: ...
 

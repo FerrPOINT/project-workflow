@@ -19,7 +19,9 @@ class SACheckRepository(CheckRepository):
         self._session = session
 
     def list(self, phase_id: int) -> Sequence[dict[str, Any]]:
-        rows = self._session.execute(select(m.Check).where(m.Check.phase_id == phase_id)).scalars().all()
+        rows = self._session.execute(
+            select(m.Check).where(m.Check.phase_id == phase_id).order_by(m.Check.id)
+        ).scalars().all()
         return [
             {
                 "id": r.id,

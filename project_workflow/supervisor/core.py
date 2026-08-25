@@ -186,14 +186,18 @@ class SupervisorEngine:
         task_id = int(self.task.get("id", 0))
         if not task_id:
             return previously
-        runs = [r.to_dict() for r in self._uow.supervisor_runs.list(task_id=task_id, limit=200)]
+        phase = self.phase_map.get(str(phase_code))
+        if phase is None or phase.id is None:
+            return previously
+        runs = [
+            r.to_dict()
+            for r in self._uow.supervisor_runs.list(
+                task_id=task_id,
+                phase_id=int(phase.id),
+                limit=None,
+            )
+        ]
         for run in runs:
-            run_phase_id = run.get("phase_id")
-            if run_phase_id is None:
-                continue
-            phase = self._uow.phases.get_by_id(int(run_phase_id))
-            if phase is None or str(phase.code) != str(phase_code):
-                continue
             covered = run.get("covered", [])
             for item in covered:
                 if isinstance(item, str):
