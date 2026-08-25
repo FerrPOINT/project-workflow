@@ -75,10 +75,7 @@ class SupervisorEngine:
             if self.task and self.task.get("project_id")
             else None
         )
-        task_workflow_id = self.task.get("workflow_id") if self.task else None
-        self.workflow_id = task_workflow_id or (
-            self.project["workflow_id"] if self.project else None
-        )
+        self.workflow_id = self.project["workflow_id"] if self.project else None
         self.workflow = self._workflow_service.get_workflow(self.workflow_id) if self.workflow_id else None
         self._all_phases: list[Phase] | None = None
         self._phase_map: dict[str, Phase] | None = None
@@ -444,10 +441,7 @@ class SupervisorEngine:
             if self.task and self.task.get("project_id")
             else None
         )
-        task_workflow_id = self.task.get("workflow_id") if self.task else None
-        self.workflow_id = task_workflow_id or (
-            self.project["workflow_id"] if self.project else None
-        )
+        self.workflow_id = self.project["workflow_id"] if self.project else None
         self.workflow = self._workflow_service.get_workflow(self.workflow_id) if self.workflow_id else None
         self._all_phases = (
             schema.load_phases_from_db(self._uow, workflow_id=self.workflow_id)

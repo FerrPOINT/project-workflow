@@ -7,7 +7,6 @@ Run them explicitly with:
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import subprocess
@@ -120,7 +119,7 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0002_sdlc_v2"
+        assert version == migration_head() == "0001_initial"
         assert schema_is_ready(engine) is True
 
     def test_downgrade_and_reupgrade(self, pg_url):
@@ -171,128 +170,6 @@ class TestPostgresInitialMigration:
         assert database_revisions(engine) == {"e6a4c2d8b901"}
         assert inspect(engine).has_table("keep_me", schema="project_workflow")
 
-    def test_explicit_legacy_bridge_preserves_history_and_locks_catalogs(self, pg_url, tmp_path):
-        from project_workflow.infrastructure.db import schema
-        from project_workflow.infrastructure.db.session import database_revisions
-        from project_workflow.infrastructure.db.uow_bootstrap import bootstrap_default_project
-        from project_workflow.interfaces.admin_legacy import apply_legacy, check_legacy
-
-        engine = get_engine(pg_url)
-        run_alembic_command("upgrade", engine, "0001_initial")
-        with engine.begin() as connection:
-            uow = SAUnitOfWork(connection)
-            schema.ensure_phase_catalog(uow)
-            bootstrap_default_project(uow)
-            uow.commit()
-            project_id = int(
-                connection.execute(
-                    text("SELECT id FROM project_workflow.projects WHERE code = 'RUN'")
-                ).scalar_one()
-            )
-            phase_id = int(
-                connection.execute(
-                    text(
-                        "SELECT p.id FROM project_workflow.phases p "
-                        "JOIN project_workflow.workflows w ON w.id = p.workflow_id "
-                        "WHERE w.name = 'sdlc-business-tech-v1' AND p.code = '1.INTAKE'"
-                    )
-                ).scalar_one()
-            )
-            task_id = int(
-                connection.execute(
-                    text(
-                        "INSERT INTO project_workflow.tasks "
-                        "(project_id, task_key, title, current_phase, status) "
-                        "VALUES (:project, 'RUN-PG-LEGACY', 'Legacy', '1.INTAKE', 'active') RETURNING id"
-                    ),
-                    {"project": project_id},
-                ).scalar_one()
-            )
-            connection.execute(
-                text(
-                    "INSERT INTO project_workflow.task_history (task_id, phase_id, status) "
-                    "VALUES (:task, :phase, 'pending')"
-                ),
-                {"task": task_id, "phase": phase_id},
-            )
-            connection.execute(
-                text(
-                    "ALTER TABLE project_workflow.workflows "
-                    "DROP CONSTRAINT ck_workflows_catalog_sha256, "
-                    "DROP CONSTRAINT ck_workflows_is_locked, "
-                    "DROP COLUMN catalog_sha256, DROP COLUMN is_locked"
-                )
-            )
-            connection.execute(
-                text(
-                    "ALTER TABLE project_workflow.tasks "
-                    "DROP CONSTRAINT ck_tasks_current_phase_nonblank, "
-                    "ALTER COLUMN current_phase SET DEFAULT '-1'"
-                )
-            )
-            connection.execute(
-                text(
-                    "UPDATE project_workflow.alembic_version "
-                    "SET version_num = 'e6a4c2d8b901'"
-                )
-            )
-
-        checked = check_legacy(engine)
-        assert checked["counts"]["tasks"] == 1
-        assert checked["counts"]["task_history"] == 1
-
-        dump = tmp_path / "workflow.dump"
-        dump.write_bytes(b"verified test dump")
-        dump_sha = hashlib.sha256(dump.read_bytes()).hexdigest()
-        manifest = tmp_path / "backup-manifest.json"
-        manifest.write_text(
-            json.dumps(
-                {
-                    "format_version": 1,
-                    "source_revision": "e6a4c2d8b901",
-                    "database": {
-                        "name": engine.url.database,
-                        "schema": "project_workflow",
-                    },
-                    "dump": {"path": dump.name, "sha256": dump_sha},
-                },
-                sort_keys=True,
-            ),
-            encoding="utf-8",
-        )
-        manifest_sha = hashlib.sha256(manifest.read_bytes()).hexdigest()
-
-        result = apply_legacy(engine, manifest, manifest_sha)
-
-        assert result["status"] == "applied"
-        assert database_revisions(engine) == {"0002_sdlc_v2"}
-        with engine.connect() as connection:
-            task_workflow, project_workflow = connection.execute(
-                text(
-                    "SELECT tw.name, pw.name FROM project_workflow.tasks t "
-                    "JOIN project_workflow.workflows tw ON tw.id = t.workflow_id "
-                    "JOIN project_workflow.projects p ON p.id = t.project_id "
-                    "JOIN project_workflow.workflows pw ON pw.id = p.workflow_id "
-                    "WHERE t.task_key = 'RUN-PG-LEGACY'"
-                )
-            ).one()
-            locked = connection.execute(
-                text(
-                    "SELECT name, is_locked, length(catalog_sha256) "
-                    "FROM project_workflow.workflows "
-                    "WHERE name IN ('sdlc-business-tech-v1', 'sdlc-business-tech-v2') "
-                    "ORDER BY name"
-                )
-            ).all()
-        assert (task_workflow, project_workflow) == (
-            "sdlc-business-tech-v1",
-            "sdlc-business-tech-v2",
-        )
-        assert locked == [
-            ("sdlc-business-tech-v1", 1, 64),
-            ("sdlc-business-tech-v2", 1, 64),
-        ]
-
     def test_head_with_column_drift_is_not_ready(self, pg_url):
         from project_workflow.infrastructure.db.session import DatabaseRecreateRequired, schema_is_ready
 
@@ -342,10 +219,10 @@ class TestPostgresInitialMigration:
             task_id = conn.execute(
                 text(
                     "INSERT INTO project_workflow.tasks "
-                    "(project_id, workflow_id, task_key, current_phase, status) "
-                    "VALUES (:project_id, :workflow_id, 'P-1', '1', 'active') RETURNING id"
+                    "(project_id, task_key, current_phase, status) "
+                    "VALUES (:project_id, 'P-1', '1', 'active') RETURNING id"
                 ),
-                {"project_id": project_id, "workflow_id": workflow_id},
+                {"project_id": project_id},
             ).scalar_one()
             for phase_id in phase_ids:
                 conn.execute(
@@ -509,16 +386,14 @@ class TestPostgresUoW:
         ensure_migrated(get_engine(pg_url))
         uow = SAUnitOfWork(pg_url)
         with uow:
-            default_wf_id = uow.workflows.create(
-                {"name": "Unmanaged", "description": "unmanaged", "is_default": False}
-            )
+            default_wf_id = uow.workflows.create({"name": "Default", "description": "default", "is_default": True})
             uow.projects.create({"workflow_id": default_wf_id, "code": "DEFAULT", "name": "Default Project"})
             uow.commit()
 
         schema_module.ensure_phase_catalog(uow)
         with uow:
-            unmanaged = next(workflow for workflow in uow.workflows.list() if workflow.name == "Unmanaged")
-            phases = uow.phases.list(workflow_id=unmanaged.id)
+            default_wf = uow.workflows.get_default()
+            phases = uow.phases.list(workflow_id=default_wf.id)
             assert phases == []
 
     def test_uow_commit_and_rollback(self, pg_url):
@@ -956,24 +831,6 @@ class TestPostgresUoW:
         from scripts.init_db import main
 
         assert main() == 0
-        setup = SAUnitOfWork(pg_url)
-        workflow = WorkflowService(setup).create_workflow({"name": "Mutable catalog race"})
-        project = ProjectService(setup).create_project(
-            {
-                "code": "CATRACE",
-                "name": "Catalog race",
-                "key_prefixes": ["CATRACE"],
-                "workflow_id": workflow["id"],
-            }
-        )
-        TaskService(setup).create_task(
-            {
-                "project_id": project["id"],
-                "task_key": "CATRACE-1",
-                "title": "Catalog race",
-            }
-        )
-        setup.close()
         provider_started = Event()
         release_provider = Event()
 
@@ -986,7 +843,7 @@ class TestPostgresUoW:
             uow = SAUnitOfWork(pg_url)
             try:
                 with patch.object(OpenAICompatibleClient, "chat", side_effect=provider):
-                    return SupervisorEngine("CATRACE-1", uow=uow).evaluate("done")
+                    return SupervisorEngine("RUN-PG-CATALOG-RACE", uow=uow).evaluate("done")
             finally:
                 uow.close()
 
@@ -994,9 +851,9 @@ class TestPostgresUoW:
             result_future = pool.submit(evaluate)
             assert provider_started.wait(10)
             mutation = SAUnitOfWork(pg_url)
-            task = mutation.tasks.get_by_key("CATRACE-1")
-            assert task is not None
-            phase = mutation.phases.get_by_code(task.workflow_id, task.current_phase)
+            workflow = mutation.workflows.get_default()
+            assert workflow is not None and workflow.id is not None
+            phase = mutation.phases.get_by_code(int(workflow.id), "1.INTAKE")
             assert phase is not None and phase.id is not None
             checks = [dict(row) for row in mutation.phases.get_checks(int(phase.id))]
             checks.append({"description": "Concurrent PostgreSQL catalog check"})
@@ -1008,9 +865,9 @@ class TestPostgresUoW:
         assert result["verdict"] == "BLOCKED"
         assert result["retryable"] is True
         verify = SAUnitOfWork(pg_url)
-        task = verify.tasks.get_by_key("CATRACE-1")
-        assert task is not None and task.status == "blocked" and task.current_phase.startswith("wf-")
-        run = verify.supervisor_runs.list(task_key="CATRACE-1", limit=1)[0]
+        task = verify.tasks.get_by_key("RUN-PG-CATALOG-RACE")
+        assert task is not None and task.status == "blocked" and task.current_phase == "1.INTAKE"
+        run = verify.supervisor_runs.list(task_key="RUN-PG-CATALOG-RACE", limit=1)[0]
         assert run.verdict == "blocked"
         assert run.report_fingerprint is None
         verify.close()
@@ -1396,12 +1253,9 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
         try:
             workflows = list(bootstrap_uow.workflows.list())
             projects = list(bootstrap_uow.projects.list())
-            assert [workflow.name for workflow in workflows] == [
-                config_module.DEFAULT_WORKFLOW_NAME,
-                "sdlc-business-tech-v2",
-            ]
+            assert [workflow.name for workflow in workflows] == [config_module.DEFAULT_WORKFLOW_NAME]
             assert [project.code for project in projects] == ["RUN"]
-            assert all(len(bootstrap_uow.phases.list(workflow_id=workflow.id)) == 19 for workflow in workflows)
+            assert len(bootstrap_uow.phases.list(workflow_id=workflows[0].id)) == 19
         finally:
             bootstrap_uow.close()
 
@@ -1411,7 +1265,7 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
         assignment_contract = assignment["phase_contract"]
         assert assignment_contract["phase_code"] == "1.INTAKE"
         assert assignment_contract["phase_name"] == "Приём задачи"
-        assert assignment_contract["workflow_revision"] == "sdlc-business-tech-v2"
+        assert assignment_contract["workflow_revision"] == "sdlc-business-tech-v1"
         assert assignment_contract["actor"] == "hermes"
         assert assignment_contract["skills"] == [
             "project-workflow-executor",
@@ -1448,7 +1302,8 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
                 )
                 uow = SAUnitOfWork(pg_url)
                 task = uow.tasks.get_by_key(task_key)
-                phases = {phase.id: phase.code for phase in uow.phases.list(workflow_id=task.workflow_id)}
+                project = uow.projects.get_by_id(task.project_id)
+                phases = {phase.id: phase.code for phase in uow.phases.list(workflow_id=project.workflow_id)}
                 statuses = {phases[row["phase_id"]]: row["status"] for row in uow.tasks.get_history(task.id)}
                 assert task.current_phase == "6.SOLUTION"
                 assert statuses["6.SOLUTION"] == "pending"

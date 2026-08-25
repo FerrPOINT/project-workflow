@@ -1,4 +1,4 @@
-"""Contract tests for the clean baseline and forward-only workflow revisions."""
+"""Contract tests for the single clean Alembic baseline."""
 
 from __future__ import annotations
 
@@ -56,11 +56,8 @@ def _constraint_names(items: list[dict]) -> set[str]:
 
 def test_repository_has_exactly_one_base_and_head():
     versions = Path(__file__).parents[1] / "project_workflow" / "infrastructure" / "db" / "migrations" / "versions"
-    assert sorted(path.name for path in versions.glob("*.py")) == [
-        "0001_initial_schema.py",
-        "0002_sdlc_business_tech_v2.py",
-    ]
-    assert migration_head() == "0002_sdlc_v2"
+    assert [path.name for path in versions.glob("*.py")] == ["0001_initial_schema.py"]
+    assert migration_head() == "0001_initial"
 
 
 def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
@@ -112,7 +109,7 @@ def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
         }
         assert actual_fks == expected_fks, table_name
 
-    assert database_revisions(engine) == {"0002_sdlc_v2"}
+    assert database_revisions(engine) == {"0001_initial"}
     assert schema_is_ready(engine) is True
     with engine.connect() as connection:
         context = MigrationContext.configure(
@@ -130,123 +127,6 @@ def test_in_memory_sqlite_migration_keeps_the_schema_alive():
     assert schema_is_ready(engine) is True
 
 
-def test_v2_preserves_existing_task_workflow_and_only_changes_intake(tmp_path):
-    from project_workflow.infrastructure.db import schema
-    from project_workflow.infrastructure.db.uow import SAUnitOfWork
-    from project_workflow.infrastructure.db.uow_bootstrap import bootstrap_default_project
-
-    engine = _sqlite_engine(tmp_path)
-    run_alembic_command("upgrade", engine, "0001_initial")
-
-    def v1_snapshot(connection, workflow_id):
-        phase_ids = connection.execute(
-            text("SELECT id FROM phases WHERE workflow_id = :workflow_id ORDER BY id"),
-            {"workflow_id": workflow_id},
-        ).scalars().all()
-        phase_filter = ",".join(str(int(phase_id)) for phase_id in phase_ids) or "NULL"
-        return {
-            "workflow": list(
-                connection.execute(
-                    text("SELECT id, name, description, is_default FROM workflows WHERE id = :workflow_id"),
-                    {"workflow_id": workflow_id},
-                ).tuples()
-            ),
-            "phases": list(
-                connection.execute(
-                    text("SELECT * FROM phases WHERE workflow_id = :workflow_id ORDER BY id"),
-                    {"workflow_id": workflow_id},
-                ).tuples()
-            ),
-            "instructions": list(
-                connection.execute(
-                    text(f"SELECT * FROM instructions WHERE phase_id IN ({phase_filter}) ORDER BY id")
-                ).tuples()
-            ),
-            "checks": list(
-                connection.execute(
-                    text(f"SELECT * FROM checks WHERE phase_id IN ({phase_filter}) ORDER BY id")
-                ).tuples()
-            ),
-            "evidence": list(
-                connection.execute(
-                    text(f"SELECT * FROM evidence WHERE phase_id IN ({phase_filter}) ORDER BY id")
-                ).tuples()
-            ),
-        }
-
-    with engine.begin() as connection:
-        uow = SAUnitOfWork(connection)
-        schema.ensure_phase_catalog(uow)
-        bootstrap_default_project(uow)
-        uow.commit()
-        v1_id = connection.execute(
-            text("SELECT id FROM workflows WHERE name = 'sdlc-business-tech-v1'")
-        ).scalar_one()
-        immutable_v1_before = v1_snapshot(connection, v1_id)
-        project_id = connection.execute(text("SELECT id FROM projects WHERE code = 'RUN'")).scalar_one()
-        connection.execute(
-            text(
-                "INSERT INTO tasks (project_id, task_key, title, current_phase, status) "
-                "VALUES (:project_id, 'RUN-OLD', 'Old run', '1.INTAKE', 'active')"
-            ),
-            {"project_id": project_id},
-        )
-
-    ensure_migrated(engine)
-
-    with engine.connect() as connection:
-        v2_id = connection.execute(
-            text("SELECT id FROM workflows WHERE name = 'sdlc-business-tech-v2'")
-        ).scalar_one()
-        assert connection.execute(
-            text("SELECT workflow_id FROM tasks WHERE task_key = 'RUN-OLD'")
-        ).scalar_one() == v1_id
-        assert connection.execute(
-            text("SELECT workflow_id FROM projects WHERE code = 'RUN'")
-        ).scalar_one() == v2_id
-        assert v1_snapshot(connection, v1_id) == immutable_v1_before
-        locked_revisions = connection.execute(
-            text(
-                "SELECT name, is_locked, catalog_sha256 FROM workflows "
-                "WHERE name IN ('sdlc-business-tech-v1', 'sdlc-business-tech-v2') ORDER BY name"
-            )
-        ).all()
-        assert [row[0] for row in locked_revisions] == [
-            "sdlc-business-tech-v1",
-            "sdlc-business-tech-v2",
-        ]
-        assert all(row[1] == 1 and len(row[2]) == 64 for row in locked_revisions)
-
-        phase_rows = connection.execute(
-            text(
-                "SELECT workflow_id, code, phase_order, parallel_with, is_blocker, is_critic "
-                "FROM phases WHERE workflow_id IN (:v1, :v2) ORDER BY workflow_id, phase_order"
-            ),
-            {"v1": v1_id, "v2": v2_id},
-        ).mappings().all()
-        by_workflow = {
-            workflow_id: [row for row in phase_rows if row["workflow_id"] == workflow_id]
-            for workflow_id in (v1_id, v2_id)
-        }
-        assert len(by_workflow[v1_id]) == len(by_workflow[v2_id]) == 19
-        assert [row["code"] for row in by_workflow[v2_id]] == [row["code"] for row in by_workflow[v1_id]]
-        assert [row["parallel_with"] for row in by_workflow[v2_id]] == [
-            row["parallel_with"] for row in by_workflow[v1_id]
-        ]
-        assert [row["is_blocker"] for row in by_workflow[v2_id]] == [
-            row["is_blocker"] for row in by_workflow[v1_id]
-        ]
-        assert [row["is_critic"] for row in by_workflow[v2_id]] == [
-            row["is_critic"] for row in by_workflow[v1_id]
-        ]
-        intake = connection.execute(
-            text("SELECT description FROM phases WHERE workflow_id = :v2 AND code = '1.INTAKE'"),
-            {"v2": v2_id},
-        ).scalar_one()
-        assert "TaskContext" in intake
-        assert "Business-задач" in intake
-
-
 def test_sqlite_upgrade_downgrade_reupgrade(tmp_path):
     engine = _sqlite_engine(tmp_path)
     ensure_migrated(engine)
@@ -254,28 +134,6 @@ def test_sqlite_upgrade_downgrade_reupgrade(tmp_path):
     assert set(inspect(engine).get_table_names()).isdisjoint(Base.metadata.tables)
     ensure_migrated(engine)
     assert set(Base.metadata.tables).issubset(inspect(engine).get_table_names())
-
-
-def test_v2_downgrade_refuses_a_pinned_run_without_history(tmp_path):
-    engine = _sqlite_engine(tmp_path)
-    ensure_migrated(engine)
-    with engine.begin() as connection:
-        project_id, workflow_id = connection.execute(
-            text("SELECT id, workflow_id FROM projects WHERE code = 'RUN'")
-        ).one()
-        connection.execute(
-            text(
-                "INSERT INTO tasks "
-                "(project_id, workflow_id, task_key, current_phase, status) "
-                "VALUES (:project_id, :workflow_id, 'RUN-V2', '1.INTAKE', 'active')"
-            ),
-            {"project_id": project_id, "workflow_id": workflow_id},
-        )
-
-    with pytest.raises(RuntimeError, match="pinned runs"):
-        run_alembic_command("downgrade", engine, "0001_initial")
-
-    assert database_revisions(engine) == {"0002_sdlc_v2"}
 
 
 @pytest.mark.parametrize("legacy_revision", LEGACY_REVISIONS)

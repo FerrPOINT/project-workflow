@@ -32,11 +32,8 @@ class PhaseServiceApp:
         return f"{prefix}{max_num + 1}"
 
     def _lock_workflow(self, workflow_id: int) -> None:
-        workflow = self._uow.workflows.lock(workflow_id)
-        if workflow is None:
+        if self._uow.workflows.lock(workflow_id) is None:
             raise NotFoundError(f"Воркфлоу {workflow_id} не найден")
-        if getattr(workflow, "is_locked", False) is True:
-            raise ConflictError("Locked workflow revision cannot be changed")
 
     def _validate_agent(self, agent_id: Any) -> None:
         if agent_id is not None and self._uow.agents.lock(int(agent_id)) is None:

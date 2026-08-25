@@ -34,14 +34,7 @@ def upgrade() -> None:
         sa.Column("name", sa.String(), nullable=False),
         sa.Column("description", sa.String(), server_default="", nullable=False),
         sa.Column("is_default", sa.Integer(), server_default="0", nullable=False),
-        sa.Column("is_locked", sa.Integer(), server_default="0", nullable=False),
-        sa.Column("catalog_sha256", sa.String(length=64), nullable=True),
         sa.CheckConstraint("is_default IN (0, 1)", name="ck_workflows_is_default"),
-        sa.CheckConstraint("is_locked IN (0, 1)", name="ck_workflows_is_locked"),
-        sa.CheckConstraint(
-            "catalog_sha256 IS NULL OR length(catalog_sha256) = 64",
-            name="ck_workflows_catalog_sha256",
-        ),
         sa.PrimaryKeyConstraint("id"),
     )
 
