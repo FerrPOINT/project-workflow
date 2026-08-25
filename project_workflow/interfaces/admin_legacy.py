@@ -94,6 +94,11 @@ LEGACY_COLUMNS: dict[str, frozenset[str]] = {
     ),
 }
 
+LEGACY_DESCRIPTION_DEFAULTS: dict[str, None] = {
+    "agents": None,
+    "workflows": None,
+}
+
 LEGACY_CHECKS: dict[str, frozenset[str]] = {
     "agents": frozenset(),
     "workflows": frozenset({"ck_workflows_is_default"}),
@@ -230,6 +235,16 @@ def _snapshot(connection: Connection) -> dict[str, Any]:
     }
     if tables != set(LEGACY_COLUMNS) or actual_columns != LEGACY_COLUMNS:
         raise click.ClickException("legacy schema differs from the only supported e6a4c2d8b901 shape")
+    actual_description_defaults = {
+        table: next(
+            column.get("default")
+            for column in inspector.get_columns(table, schema=schema)
+            if column["name"] == "description"
+        )
+        for table in LEGACY_DESCRIPTION_DEFAULTS
+    }
+    if actual_description_defaults != LEGACY_DESCRIPTION_DEFAULTS:
+        raise click.ClickException("legacy description defaults differ from the supported schema")
     actual_checks = {
         table: frozenset(
             str(item["name"]) for item in inspector.get_check_constraints(table, schema=schema) if item.get("name")
@@ -308,7 +323,10 @@ def _bridge_to_initial(connection: Connection) -> None:
     context = MigrationContext.configure(connection)
     operations = Operations(context)
     schema = _schema(connection)
+    with operations.batch_alter_table("agents", schema=schema) as batch:
+        batch.alter_column("description", existing_type=sa.String(), server_default="")
     with operations.batch_alter_table("workflows", schema=schema) as batch:
+        batch.alter_column("description", existing_type=sa.String(), server_default="")
         batch.add_column(sa.Column("is_locked", sa.Integer(), server_default="0", nullable=False))
         batch.add_column(sa.Column("catalog_sha256", sa.String(length=64), nullable=True))
         batch.create_check_constraint("ck_workflows_is_locked", "is_locked IN (0, 1)")
