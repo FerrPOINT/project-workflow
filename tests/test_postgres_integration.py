@@ -225,6 +225,12 @@ class TestPostgresInitialMigration:
             )
             connection.execute(
                 text(
+                    "ALTER TABLE project_workflow.agents ALTER COLUMN description DROP DEFAULT; "
+                    "ALTER TABLE project_workflow.workflows ALTER COLUMN description DROP DEFAULT"
+                )
+            )
+            connection.execute(
+                text(
                     "ALTER TABLE project_workflow.tasks "
                     "DROP CONSTRAINT ck_tasks_current_phase_nonblank, "
                     "DROP CONSTRAINT tasks_project_id_fkey, "

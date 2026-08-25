@@ -66,7 +66,10 @@ def _legacy_engine(tmp_path: Path):
         connection.exec_driver_sql("PRAGMA foreign_keys = OFF")
         assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 0
         operations = Operations(MigrationContext.configure(connection))
+        with operations.batch_alter_table("agents") as batch:
+            batch.alter_column("description", existing_type=sa.String(), server_default=None)
         with operations.batch_alter_table("workflows") as batch:
+            batch.alter_column("description", existing_type=sa.String(), server_default=None)
             batch.drop_constraint("ck_workflows_catalog_sha256", type_="check")
             batch.drop_constraint("ck_workflows_is_locked", type_="check")
             batch.drop_column("catalog_sha256")
