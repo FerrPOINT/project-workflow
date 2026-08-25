@@ -119,7 +119,7 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0001_initial"
+        assert version == migration_head() == "0002_sdlc_v2"
         assert schema_is_ready(engine) is True
 
     def test_downgrade_and_reupgrade(self, pg_url):
@@ -219,10 +219,10 @@ class TestPostgresInitialMigration:
             task_id = conn.execute(
                 text(
                     "INSERT INTO project_workflow.tasks "
-                    "(project_id, task_key, current_phase, status) "
-                    "VALUES (:project_id, 'P-1', '1', 'active') RETURNING id"
+                    "(project_id, workflow_id, task_key, current_phase, status) "
+                    "VALUES (:project_id, :workflow_id, 'P-1', '1', 'active') RETURNING id"
                 ),
-                {"project_id": project_id},
+                {"project_id": project_id, "workflow_id": workflow_id},
             ).scalar_one()
             for phase_id in phase_ids:
                 conn.execute(
@@ -386,14 +386,16 @@ class TestPostgresUoW:
         ensure_migrated(get_engine(pg_url))
         uow = SAUnitOfWork(pg_url)
         with uow:
-            default_wf_id = uow.workflows.create({"name": "Default", "description": "default", "is_default": True})
+            default_wf_id = uow.workflows.create(
+                {"name": "Unmanaged", "description": "unmanaged", "is_default": False}
+            )
             uow.projects.create({"workflow_id": default_wf_id, "code": "DEFAULT", "name": "Default Project"})
             uow.commit()
 
         schema_module.ensure_phase_catalog(uow)
         with uow:
-            default_wf = uow.workflows.get_default()
-            phases = uow.phases.list(workflow_id=default_wf.id)
+            unmanaged = next(workflow for workflow in uow.workflows.list() if workflow.name == "Unmanaged")
+            phases = uow.phases.list(workflow_id=unmanaged.id)
             assert phases == []
 
     def test_uow_commit_and_rollback(self, pg_url):
@@ -851,9 +853,9 @@ class TestPostgresUoW:
             result_future = pool.submit(evaluate)
             assert provider_started.wait(10)
             mutation = SAUnitOfWork(pg_url)
-            workflow = mutation.workflows.get_default()
-            assert workflow is not None and workflow.id is not None
-            phase = mutation.phases.get_by_code(int(workflow.id), "1.INTAKE")
+            task = mutation.tasks.get_by_key("RUN-PG-CATALOG-RACE")
+            assert task is not None
+            phase = mutation.phases.get_by_code(task.workflow_id, "1.INTAKE")
             assert phase is not None and phase.id is not None
             checks = [dict(row) for row in mutation.phases.get_checks(int(phase.id))]
             checks.append({"description": "Concurrent PostgreSQL catalog check"})
@@ -1253,9 +1255,12 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
         try:
             workflows = list(bootstrap_uow.workflows.list())
             projects = list(bootstrap_uow.projects.list())
-            assert [workflow.name for workflow in workflows] == [config_module.DEFAULT_WORKFLOW_NAME]
+            assert [workflow.name for workflow in workflows] == [
+                config_module.DEFAULT_WORKFLOW_NAME,
+                "sdlc-business-tech-v2",
+            ]
             assert [project.code for project in projects] == ["RUN"]
-            assert len(bootstrap_uow.phases.list(workflow_id=workflows[0].id)) == 19
+            assert all(len(bootstrap_uow.phases.list(workflow_id=workflow.id)) == 19 for workflow in workflows)
         finally:
             bootstrap_uow.close()
 
@@ -1265,7 +1270,7 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
         assignment_contract = assignment["phase_contract"]
         assert assignment_contract["phase_code"] == "1.INTAKE"
         assert assignment_contract["phase_name"] == "Приём задачи"
-        assert assignment_contract["workflow_revision"] == "sdlc-business-tech-v1"
+        assert assignment_contract["workflow_revision"] == "sdlc-business-tech-v2"
         assert assignment_contract["actor"] == "hermes"
         assert assignment_contract["skills"] == [
             "project-workflow-executor",
@@ -1302,8 +1307,7 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
                 )
                 uow = SAUnitOfWork(pg_url)
                 task = uow.tasks.get_by_key(task_key)
-                project = uow.projects.get_by_id(task.project_id)
-                phases = {phase.id: phase.code for phase in uow.phases.list(workflow_id=project.workflow_id)}
+                phases = {phase.id: phase.code for phase in uow.phases.list(workflow_id=task.workflow_id)}
                 statuses = {phases[row["phase_id"]]: row["status"] for row in uow.tasks.get_history(task.id)}
                 assert task.current_phase == "6.SOLUTION"
                 assert statuses["6.SOLUTION"] == "pending"

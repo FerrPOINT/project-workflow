@@ -25,25 +25,22 @@ class SATaskRepository(TaskRepository):
 
     def get_by_key(self, task_key: str) -> Task | None:
         with self._session.no_autoflush:
-            row = self._session.execute(select(m.Task).where(m.Task.task_key == task_key)).scalar_one_or_none()
+            row = self._session.execute(
+                select(m.Task)
+                .options(joinedload(m.Task.workflow).selectinload(m.Workflow.phases))
+                .where(m.Task.task_key == task_key)
+            ).scalar_one_or_none()
         if row is None:
             return None
-        return Task(
-            id=row.id,
-            project_id=int(row.project_id),
-            task_key=row.task_key,
-            title=row.title or "",
-            description=row.description or "",
-            current_phase=row.current_phase,
-            current_phase_name="",
-            status=row.status or "active",
-            created_at=_iso(row.created_at),
-            updated_at=_iso(row.updated_at),
-        )
+        return _row_to_task(row)
 
     def get_by_id(self, task_id: int) -> Task | None:
         with self._session.no_autoflush:
-            row = self._session.get(m.Task, task_id)
+            row = self._session.execute(
+                select(m.Task)
+                .options(joinedload(m.Task.workflow).selectinload(m.Workflow.phases))
+                .where(m.Task.id == task_id)
+            ).scalar_one_or_none()
         if row is None:
             return None
         return _row_to_task(row)
@@ -52,7 +49,7 @@ class SATaskRepository(TaskRepository):
         with self._session.no_autoflush:
             stmt = (
                 select(m.Task)
-                .options(joinedload(m.Task.project).joinedload(m.Project.workflow).selectinload(m.Workflow.phases))
+                .options(joinedload(m.Task.workflow).selectinload(m.Workflow.phases))
                 .order_by(m.Task.id.desc())
             )
             rows = self._session.execute(stmt).scalars().all()
@@ -61,13 +58,24 @@ class SATaskRepository(TaskRepository):
     def list_by_project(self, project_id: int) -> Sequence[Task]:
         with self._session.no_autoflush:
             rows = self._session.execute(
-                select(m.Task).where(m.Task.project_id == project_id).order_by(m.Task.id)
+                select(m.Task)
+                .options(joinedload(m.Task.workflow).selectinload(m.Workflow.phases))
+                .where(m.Task.project_id == project_id)
+                .order_by(m.Task.id)
             ).scalars().all()
         return [_row_to_task(row) for row in rows]
 
     def create(self, data: dict[str, Any]) -> int:
+        workflow_id = data.get("workflow_id")
+        if workflow_id is None:
+            with self._session.no_autoflush:
+                project = self._session.get(m.Project, data["project_id"])
+            if project is None:
+                raise NotFoundError(f"Проект {data['project_id']} не найден")
+            workflow_id = project.workflow_id
         item = m.Task(
             project_id=data["project_id"],
+            workflow_id=workflow_id,
             task_key=data["task_key"],
             title=data.get("title"),
             description=data.get("description"),
@@ -84,7 +92,7 @@ class SATaskRepository(TaskRepository):
         if row is None:
             raise NotFoundError(f"Задача {task_id} не найдена")
         for key, val in data.items():
-            if key in {"id", "project_id"}:
+            if key in {"id", "project_id", "workflow_id"}:
                 continue
             if hasattr(row, key):
                 setattr(row, key, val)
@@ -98,7 +106,7 @@ class SATaskRepository(TaskRepository):
         expected_status: str,
         data: dict[str, Any],
     ) -> bool:
-        values = dict(data)
+        values = {key: value for key, value in data.items() if key not in {"id", "project_id", "workflow_id"}}
         values["updated_at"] = datetime.datetime.now(datetime.timezone.utc)
         result = self._session.execute(
             update(m.Task)

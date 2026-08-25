@@ -76,7 +76,7 @@ def _row_to_task(row: m.Task) -> Task:
     try:
         if current_phase:
             phase = next(
-                (p for p in row.project.workflow.phases if p.code == current_phase),
+                (p for p in row.workflow.phases if p.code == current_phase),
                 None,
             )
             phase_name = phase.name if phase else current_phase
@@ -85,6 +85,7 @@ def _row_to_task(row: m.Task) -> Task:
     return Task(
         id=getattr(row, "id", None),
         project_id=row.project_id,
+        workflow_id=row.workflow_id,
         task_key=row.task_key,
         title=row.title or "",
         description=row.description or "",

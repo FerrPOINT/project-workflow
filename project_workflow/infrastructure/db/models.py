@@ -59,6 +59,7 @@ class Workflow(Base):
         "Phase", back_populates="workflow", cascade="all, delete-orphan", passive_deletes=True
     )
     projects: Mapped[list[Project]] = relationship("Project", back_populates="workflow", cascade="all, delete-orphan")
+    tasks: Mapped[list[Task]] = relationship("Task", back_populates="workflow")
 
 
 class Phase(Base):
@@ -197,6 +198,7 @@ class Task(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False)
+    workflow_id: Mapped[int] = mapped_column(ForeignKey("workflows.id", ondelete="RESTRICT"), nullable=False)
     task_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     title: Mapped[str | None] = mapped_column(String, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -219,6 +221,7 @@ class Task(Base):
     )
 
     project: Mapped[Project] = relationship("Project", back_populates="tasks")
+    workflow: Mapped[Workflow] = relationship("Workflow", back_populates="tasks")
 
 
 class TaskHistory(Base):
