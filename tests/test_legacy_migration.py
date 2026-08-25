@@ -113,7 +113,7 @@ def test_check_and_apply_supported_legacy_database(tmp_path):
     checked = check_legacy(engine)
     assert checked["revision"] == "e6a4c2d8b901"
     assert checked["counts"]["tasks"] == 1
-    assert len(checked["v1_catalog_sha256"]) == 64
+    assert checked["v1_catalog_sha256"] == "c12e564f8896754387260c38f9706ae1776212c6a8a5504a3280021db80d039c"
 
     manifest, manifest_sha = _backup_manifest(tmp_path, database)
     result = apply_legacy(engine, manifest, manifest_sha)
@@ -136,6 +136,9 @@ def test_check_and_apply_supported_legacy_database(tmp_path):
             ).scalar_one()
             == "sdlc-business-tech-v2"
         )
+        assert connection.execute(
+            text("SELECT catalog_sha256 FROM workflows WHERE name = 'sdlc-business-tech-v1'")
+        ).scalar_one() == checked["v1_catalog_sha256"]
 
 
 def test_check_rejects_unknown_revision_without_writes(tmp_path):

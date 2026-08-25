@@ -24,7 +24,7 @@ depends_on: str | Sequence[str] | None = None
 V1_WORKFLOW = "sdlc-business-tech-v1"
 V2_WORKFLOW = "sdlc-business-tech-v2"
 PROJECT_CODE = "RUN"
-V1_SEED_SHA256 = "55880a7d62839f2b530cec062406a933e12af0b8cb7b5c25111ac444536c29f6"
+V1_SEED_SHA256 = "abdb166bc9734630769cbb1eae165c0ac066e783cda8179d909a5c5a1beecec6"
 
 V2_INTAKE: dict[str, Any] = {
     "phase_order": 1,
@@ -92,7 +92,8 @@ V2_INTAKE: dict[str, Any] = {
 def _seed(v2: bool = False) -> list[dict[str, Any]]:
     seed_path = Path(__file__).resolve().parents[4] / "references" / "seed.json"
     raw = seed_path.read_bytes()
-    if hashlib.sha256(raw).hexdigest() != V1_SEED_SHA256:
+    normalized_raw = raw.replace(b"\r\n", b"\n")
+    if hashlib.sha256(normalized_raw).hexdigest() != V1_SEED_SHA256:
         raise RuntimeError("sdlc-business-tech-v1 seed is immutable; create a new revision")
     data = json.loads(raw)
     if not isinstance(data, list) or len(data) != 19:
