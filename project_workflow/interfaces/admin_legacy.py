@@ -394,6 +394,13 @@ def _lock_legacy_schema(connection: Connection) -> None:
 def apply_legacy(engine: Engine, manifest: Path, manifest_sha256: str) -> dict[str, Any]:
     before = check_legacy(engine)
     with engine.begin() as connection:
+        if connection.dialect.name == "sqlite":
+            # SQLite batch ALTER rebuilds referenced tables.  Disable checks
+            # only for this explicit transaction, then prove referential
+            # integrity before it can commit. PostgreSQL never takes this path.
+            connection.exec_driver_sql("PRAGMA foreign_keys = OFF")
+            if connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() != 0:
+                raise click.ClickException("could not open the SQLite migration FK window")
         _verify_backup_manifest(manifest, manifest_sha256, connection)
         _lock_legacy_schema(connection)
         # Revalidate inside the write transaction before the first DDL statement.
@@ -438,6 +445,10 @@ def apply_legacy(engine: Engine, manifest: Path, manifest_sha256: str) -> dict[s
         for table in ("tasks", "task_history", "supervisor_runs"):
             if after_counts[table] != before["counts"][table]:
                 raise click.ClickException(f"historical row count changed for {table}")
+        if connection.dialect.name == "sqlite":
+            foreign_key_violation = connection.exec_driver_sql("PRAGMA foreign_key_check").first()
+            if foreign_key_violation is not None:
+                raise click.ClickException("SQLite foreign key integrity failed after migration")
     if not schema_is_ready(engine):
         raise click.ClickException("database is not at the exact current schema after migration")
     return {"before": before, "revision": "0002_sdlc_v2", "status": "applied"}

@@ -1195,11 +1195,27 @@ class TestPostgresUoW:
 
         assert main() == 0
         setup = SAUnitOfWork(pg_url)
-        workflow = setup.workflows.get_default()
-        assert workflow is not None and workflow.id is not None
-        phase = setup.phases.get_by_code(int(workflow.id), "1.INTAKE")
-        assert phase is not None and phase.agent_id is not None
-        agent_id = int(phase.agent_id)
+        workflow = WorkflowService(setup).create_workflow({"name": "Mutable agent race"})
+        agent = AgentService(setup).create_agent({"name": "Mutable race agent"})
+        phase = setup.phases.list(int(workflow["id"]))[0]
+        assert phase.id is not None
+        PhaseServiceApp(setup).update_phase(int(phase.id), {"agent_id": int(agent["id"])})
+        project = ProjectService(setup).create_project(
+            {
+                "workflow_id": int(workflow["id"]),
+                "code": "AGENTRACE",
+                "name": "Mutable agent race",
+                "key_prefixes": ["AGENTRACE"],
+            }
+        )
+        TaskService(setup).create_task(
+            {
+                "project_id": int(project["id"]),
+                "task_key": "AGENTRACE-1",
+                "title": "Mutable agent race",
+            }
+        )
+        agent_id = int(agent["id"])
         setup.close()
 
         evaluation_holds_workflow = Event()
@@ -1223,7 +1239,7 @@ class TestPostgresUoW:
                     "chat",
                     side_effect=lambda *_args, **kwargs: _pass_response(str(kwargs["user"])),
                 ):
-                    return SupervisorEngine("RUN-90004", uow=uow).evaluate("done")
+                    return SupervisorEngine("AGENTRACE-1", uow=uow).evaluate("done")
             finally:
                 uow.close()
 

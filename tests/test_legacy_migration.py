@@ -59,6 +59,12 @@ def _legacy_engine(tmp_path: Path):
             {"task": task_id, "phase": phase_id},
         )
 
+    # The production bridge is PostgreSQL-only.  This fixture explicitly
+    # disables FK checks only while Alembic reshapes the SQLite test schema;
+    # every engine returned to a test gets the normal FK-on connect hook.
+    with engine.connect() as connection:
+        connection.exec_driver_sql("PRAGMA foreign_keys = OFF")
+        assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 0
         operations = Operations(MigrationContext.configure(connection))
         with operations.batch_alter_table("workflows") as batch:
             batch.drop_constraint("ck_workflows_catalog_sha256", type_="check")
@@ -85,6 +91,9 @@ def _legacy_engine(tmp_path: Path):
             unique=True,
         )
         connection.execute(text("UPDATE alembic_version SET version_num = 'e6a4c2d8b901'"))
+        connection.commit()
+        connection.exec_driver_sql("PRAGMA foreign_keys = ON")
+        assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
     engine.dispose()
     return create_engine(f"sqlite:///{database}"), database
 
