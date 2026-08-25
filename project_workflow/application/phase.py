@@ -33,11 +33,11 @@ class PhaseServiceApp:
 
     def _lock_workflow(self, workflow_id: int) -> None:
         if self._uow.workflows.lock(workflow_id) is None:
-            raise NotFoundError(f"Workflow {workflow_id} not found")
+            raise NotFoundError(f"Воркфлоу {workflow_id} не найден")
 
     def _validate_agent(self, agent_id: Any) -> None:
         if agent_id is not None and self._uow.agents.lock(int(agent_id)) is None:
-            raise NotFoundError(f"Agent {agent_id} not found")
+            raise NotFoundError(f"Агент {agent_id} не найден")
 
     @staticmethod
     def _node(phase: Phase, **updates: Any) -> PhaseGraphNode:
@@ -62,7 +62,7 @@ class PhaseServiceApp:
             if field not in data or data[field] is None:
                 continue
             if not isinstance(data[field], str) or not data[field].strip():
-                raise ValueError(f"{field} must be a non-blank phase code or null")
+                raise ValueError(f"{field} должен быть непустым кодом фазы или null")
             data[field] = data[field].strip()
 
     def create_phase(self, data: dict[str, Any], *, commit: bool = True) -> dict[str, Any]:
@@ -76,18 +76,18 @@ class PhaseServiceApp:
         else:
             order = int(order)
             if order <= 0:
-                raise ValueError("phase_order must be positive")
+                raise ValueError("phase_order должен быть положительным")
             if order > len(existing) + 1:
-                raise ConflictError(f"phase_order must be between 1 and {len(existing) + 1}")
+                raise ConflictError(f"phase_order должен быть в диапазоне 1..{len(existing) + 1}")
         raw_code = data.get("code")
         if raw_code is None:
             code = self._generate_code(workflow_id, order)
         elif not isinstance(raw_code, str) or not raw_code.strip():
-            raise ValueError("code must be a non-blank string")
+            raise ValueError("code должен быть непустой строкой")
         else:
             code = raw_code.strip()
         if any(phase.code == code for phase in existing):
-            raise ConflictError(f"Phase code {code!r} already exists in the workflow")
+            raise ConflictError(f"Код фазы {code!r} уже существует в этом воркфлоу")
         validated = dict(data)
         self._normalize_links(validated)
         prospective = [
@@ -123,7 +123,7 @@ class PhaseServiceApp:
         pid = self._uow.phases.create(phase_data)
         phase = self._uow.phases.get_by_id(pid)
         if not phase:
-            raise RuntimeError("Phase creation failed")
+            raise RuntimeError("Не удалось создать фазу")
         if commit:
             self._uow.commit()
         return phase.to_dict()
@@ -138,9 +138,9 @@ class PhaseServiceApp:
     def prepare_update(self, phase_id: int, data: dict[str, Any]) -> tuple[dict[str, Any], list[int]]:
         phase = self._uow.phases.get_by_id(phase_id)
         if phase is None:
-            raise NotFoundError(f"Phase {phase_id} not found")
+            raise NotFoundError(f"Фаза {phase_id} не найдена")
         if phase.workflow_id is None:
-            raise ConflictError("Phase has no owning workflow")
+            raise ConflictError("Для фазы не найден владеющий воркфлоу")
         workflow_id = phase.workflow_id
         updates = dict(data)
         if "agent_id" in updates:
@@ -150,7 +150,7 @@ class PhaseServiceApp:
         phases = list(self._uow.phases.list(workflow_id))
         phase = next((item for item in phases if item.id == phase_id), None)
         if phase is None:
-            raise NotFoundError(f"Phase {phase_id} not found")
+            raise NotFoundError(f"Фаза {phase_id} не найдена")
         detached_ids: list[int] = []
         if updates.get("execution_type") == "sync":
             updates["parallel_with"] = None
@@ -182,14 +182,14 @@ class PhaseServiceApp:
     def delete_phase(self, phase_id: int, *, commit: bool = True) -> None:
         phase = self._uow.phases.get_by_id(phase_id)
         if phase is None:
-            raise NotFoundError(f"Phase {phase_id} not found")
+            raise NotFoundError(f"Фаза {phase_id} не найдена")
         if phase.workflow_id is None:
-            raise ConflictError("Phase has no owning workflow")
+            raise ConflictError("Для фазы не найден владеющий воркфлоу")
         workflow_id = phase.workflow_id
         self._lock_workflow(workflow_id)
         references = self._uow.phases.reference_kinds(phase_id)
         if references:
-            raise ConflictError(f"Phase is referenced by {', '.join(sorted(references))}")
+            raise ConflictError(f"На фазу ссылаются: {', '.join(sorted(references))}")
         self._uow.phases.delete(phase_id)
         self._uow.phases.resequence(workflow_id)
         if commit:
@@ -198,33 +198,33 @@ class PhaseServiceApp:
 
     def reorder_phases(self, orders: list[tuple[int, int]], *, commit: bool = True) -> int:
         if not orders:
-            raise ValueError("Phase order list is empty")
+            raise ValueError("Список порядка фаз пуст")
         phase_ids = [phase_id for phase_id, _ in orders]
         if len(phase_ids) != len(set(phase_ids)):
-            raise ConflictError("Phase order contains duplicate phase ids")
+            raise ConflictError("Список порядка фаз содержит повторяющиеся идентификаторы")
 
         phases = [self._uow.phases.get_by_id(phase_id) for phase_id in phase_ids]
         if any(phase is None for phase in phases):
-            raise NotFoundError("Phase order contains an unknown phase")
+            raise NotFoundError("Список порядка фаз содержит неизвестную фазу")
         if any(phase is not None and phase.workflow_id is None for phase in phases):
-            raise ConflictError("A reordered phase has no owning workflow")
+            raise ConflictError("Для перемещаемой фазы не найден владеющий воркфлоу")
         workflow_ids = {
             phase.workflow_id
             for phase in phases
             if phase is not None and phase.workflow_id is not None
         }
         if len(workflow_ids) != 1:
-            raise ConflictError("All reordered phases must belong to one workflow")
+            raise ConflictError("Все перемещаемые фазы должны принадлежать одному воркфлоу")
         workflow_id = workflow_ids.pop()
         self._lock_workflow(workflow_id)
 
         locked_phases = list(self._uow.phases.list(workflow_id))
         current_ids = {phase.id for phase in locked_phases}
         if set(phase_ids) != current_ids:
-            raise ConflictError("Phase order must include every phase in the workflow exactly once")
+            raise ConflictError("Порядок должен содержать каждую фазу воркфлоу ровно один раз")
         positions = [position for _, position in orders]
         if sorted(positions) != list(range(1, len(orders) + 1)):
-            raise ConflictError("Phase order positions must be the contiguous range 1..N")
+            raise ConflictError("Позиции фаз должны образовывать непрерывный диапазон 1..N")
 
         position_by_id = dict(orders)
         prospective = [

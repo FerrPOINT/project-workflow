@@ -32,9 +32,9 @@ def main() -> int:
         print(str(exc), file=sys.stderr)
         return exc.exit_code
     protocol = settings.DATABASE_URL.split(":")[0]
-    print(f"Alembic upgraded to head for {protocol}")
+    print(f"Alembic обновлён до head для {protocol}")
 
-    print("Initial catalogs ensured")
+    print("Начальные каталоги загружены")
     return 0
 
 

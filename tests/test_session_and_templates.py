@@ -157,7 +157,7 @@ class TestSessionHelpers:
 
         fake_settings = type("S", (), {"DATABASE_URL": ""})()
         with patch("project_workflow.infrastructure.db.session.get_settings", return_value=fake_settings):
-            with pytest.raises(RuntimeError, match="DATABASE_URL is not configured"):
+            with pytest.raises(RuntimeError, match="DATABASE_URL не настроен"):
                 get_database_url()
 
     def test_run_alembic_command_mocks_alembic(self, tmp_path):
@@ -204,7 +204,7 @@ class TestSessionHelpers:
             "project_workflow.infrastructure.db.session.get_settings",
             return_value=type("S", (), {"DB_SCHEMA": "test_schema"})(),
         ):
-            with pytest.raises(RuntimeError, match="isolated SQLite tests"):
+            with pytest.raises(RuntimeError, match="изолированных тестах SQLite"):
                 ensure_schema(fake_conn)
 
     def test_reset_engine_clears_cache(self, tmp_path):

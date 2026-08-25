@@ -244,9 +244,9 @@ async def api_workflow_delete(workflow_id: int) -> dict[str, Any] | JSONResponse
 
 async def api_project_create(payload: ProjectCreate) -> dict[str, Any] | JSONResponse:
     if "workflow_id" in payload.model_fields_set and payload.workflow_id is None:
-        return _error("workflow_id cannot be null", 422)
+        return _error("workflow_id не может быть null", 422)
     if "description" in payload.model_fields_set and payload.description is None:
-        return _error("description cannot be null", 422)
+        return _error("description не может быть null", 422)
     service = _app_state.project_service()
     try:
         project = service.create_project(

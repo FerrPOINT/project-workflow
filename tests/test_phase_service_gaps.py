@@ -24,7 +24,7 @@ class TestPhaseServiceUow:
     def test_resolve_phase_id_rejects_code_identifier(self):
         uow = MagicMock()
         service = PhaseService(uow)
-        with pytest.raises(ValueError, match="must be numeric"):
+        with pytest.raises(ValueError, match="должен быть числом"):
             service._resolve_phase_id("my-code")
         uow.phases.get_by_code.assert_not_called()
 

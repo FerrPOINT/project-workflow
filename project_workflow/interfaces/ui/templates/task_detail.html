@@ -113,9 +113,9 @@
       <div class="participant-title"><span class="phase-code">{{ detail.phase_code }}</span> {{ detail.phase_name }}</div>
       {{ item_list('Инструкции', detail.instructions) }}
       {{ item_list('Проверки', detail.required_checks) }}
-      {{ item_list('Evidence', detail.required_evidence) }}
+      {{ item_list('Подтверждения', detail.required_evidence) }}
       {% if detail.skills %}<div class="skill-list">{% for skill in detail.skills %}<span class="skill-chip">{{ skill }}</span>{% endfor %}</div>{% endif %}
-      {% if detail.delegate_agent %}<div class="assignment-description" style="margin-top:9px;margin-bottom:0">Агент: {{ detail.delegate_agent }}{% if detail.hermes_profile %} · Hermes profile: {{ detail.hermes_profile }}{% endif %}{% if detail.delegate_toolsets %} · {{ detail.delegate_toolsets | join(', ') }}{% endif %}</div>{% endif %}
+      {% if detail.delegate_agent %}<div class="assignment-description" style="margin-top:9px;margin-bottom:0">Агент: {{ detail.delegate_agent }}{% if detail.hermes_profile %} · профиль Hermes: {{ detail.hermes_profile }}{% endif %}{% if detail.delegate_toolsets %} · {{ detail.delegate_toolsets | join(', ') }}{% endif %}</div>{% endif %}
     </section>
     {% endfor %}
   </div>
@@ -123,10 +123,10 @@
   <div class="contract-grid">
     {{ item_list('Инструкции', contract.instructions) }}
     {{ item_list('Проверки', contract.required_checks) }}
-    {{ item_list('Evidence', contract.required_evidence) }}
+    {{ item_list('Подтверждения', contract.required_evidence) }}
   </div>
   {% if contract.skills %}<div class="skill-list">{% for skill in contract.skills %}<span class="skill-chip">{{ skill }}</span>{% endfor %}</div>{% endif %}
-  {% if contract.delegate_agent %}<div class="assignment-description" style="margin-top:9px;margin-bottom:0">Агент: {{ contract.delegate_agent }}{% if contract.hermes_profile %} · Hermes profile: {{ contract.hermes_profile }}{% endif %}{% if contract.delegate_toolsets %} · {{ contract.delegate_toolsets | join(', ') }}{% endif %}</div>{% endif %}
+  {% if contract.delegate_agent %}<div class="assignment-description" style="margin-top:9px;margin-bottom:0">Агент: {{ contract.delegate_agent }}{% if contract.hermes_profile %} · профиль Hermes: {{ contract.hermes_profile }}{% endif %}{% if contract.delegate_toolsets %} · {{ contract.delegate_toolsets | join(', ') }}{% endif %}</div>{% endif %}
   {% endif %}
 {%- endmacro %}
 
@@ -147,10 +147,10 @@
   <div class="summary-item {% if task.status == 'done' %}done{% endif %}">
     <div class="summary-label">{{ 'Завершённая фаза' if task.status == 'done' else 'Текущая фаза' }}</div>
     <div class="summary-value">{{ current_phase_name or '—' }}</div>
-    {% if task.status == 'done' %}<div class="summary-note">Workflow завершён</div>{% endif %}
+    {% if task.status == 'done' %}<div class="summary-note">Воркфлоу завершён</div>{% endif %}
   </div>
   <div class="summary-item {% if progress_done >= progress_total and progress_total %}done{% endif %}">
-    <div class="summary-label">Фазы workflow</div>
+    <div class="summary-label">Фазы воркфлоу</div>
     <div class="summary-value">{{ progress_done }} / {{ progress_total }} <span style="font-size:12px;color:var(--text-muted)">({{ (progress_done / progress_total * 100) | round(0)|int if progress_total else 0 }}%)</span></div>
     <div class="summary-progress"><span class="{% if progress_done >= progress_total and progress_total %}done{% endif %}" style="width:{{ (progress_done / progress_total * 100) if progress_total else 0 }}%"></span></div>
   </div>
@@ -234,7 +234,7 @@
           </div>
         </div>
         {% elif task.status == 'done' and loop.last and run.verdict == 'pass' %}
-        <div class="dialog-part"><div class="terminal-card">Workflow завершён</div></div>
+        <div class="dialog-part"><div class="terminal-card">Воркфлоу завершён</div></div>
         {% endif %}
       </div>
     </article>

@@ -56,7 +56,7 @@ def _is_sqlite(url: str) -> bool:
 def get_database_url() -> str:
     url = get_settings().DATABASE_URL
     if not url:
-        raise RuntimeError("DATABASE_URL is not configured. Set it to a PostgreSQL or SQLite DSN.")
+        raise RuntimeError("DATABASE_URL не настроен. Укажите DSN PostgreSQL или SQLite.")
     return url
 
 
@@ -114,7 +114,7 @@ def _create_postgres_engine(target: str) -> Engine:
                 time.sleep(PG_CONNECT_RETRY_DELAY)
     if last_exc is not None:
         raise last_exc
-    raise RuntimeError("Failed to create PostgreSQL engine")
+    raise RuntimeError("Не удалось создать подключение к PostgreSQL")
 
 
 def get_sessionmaker(url: str | None = None) -> sessionmaker[Any]:
@@ -157,7 +157,7 @@ def ensure_schema(engine: Engine | Connection | None = None) -> None:
     target = engine or get_engine()
     dialect = target.dialect.name
     if dialect != "sqlite":
-        raise RuntimeError("ensure_schema is only available for isolated SQLite tests")
+        raise RuntimeError("ensure_schema доступен только в изолированных тестах SQLite")
     if isinstance(target, Connection):
         Base.metadata.create_all(target)
     else:
@@ -237,7 +237,7 @@ def migration_head() -> str:
     script = ScriptDirectory.from_config(Config(str(here / "alembic.ini")))
     head = script.get_current_head()
     if head is None:
-        raise RuntimeError("Alembic migration head is not configured")
+        raise RuntimeError("Не настроена головная ревизия миграций Alembic")
     return head
 
 

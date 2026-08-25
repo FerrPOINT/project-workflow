@@ -66,7 +66,7 @@ class SAProjectRepository(ProjectRepository):
     def update(self, project_id: int, data: dict[str, Any]) -> None:
         row = self._session.get(m.Project, project_id)
         if row is None:
-            raise NotFoundError(f"Project {project_id} not found")
+            raise NotFoundError(f"Проект {project_id} не найден")
         if "workflow_id" in data:
             row.workflow_id = data["workflow_id"]
         if "code" in data:
@@ -82,7 +82,7 @@ class SAProjectRepository(ProjectRepository):
     def delete(self, project_id: int) -> None:
         row = self._session.get(m.Project, project_id)
         if row is None:
-            raise NotFoundError(f"Project {project_id} not found")
+            raise NotFoundError(f"Проект {project_id} не найден")
         self._session.delete(row)
 
 

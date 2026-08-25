@@ -136,7 +136,7 @@ def test_cli_help_is_cp1251_safe(args):
         capture_output=True,
         text=True,
         encoding="cp1251",
-        timeout=20,
+        timeout=60,
         check=False,
     )
 

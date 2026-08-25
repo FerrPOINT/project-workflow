@@ -269,9 +269,9 @@ def test_explicit_project_task_validates_prefix_and_scoped_phase_before_write():
         }
     )
     service = _app_state.task_service()
-    with pytest.raises(ConflictError, match="does not match"):
+    with pytest.raises(ConflictError, match="не соответствует"):
         service.create_task({"project_id": project["id"], "task_key": "WRONG-1"})
-    with pytest.raises(ValueError, match="not found in workflow"):
+    with pytest.raises(ValueError, match="не найдена в воркфлоу"):
         service.create_task(
             {
                 "project_id": project["id"],

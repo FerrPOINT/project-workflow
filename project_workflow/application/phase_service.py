@@ -18,27 +18,27 @@ class PhaseService:
 
     def _resolve_phase_id(self, phase_id: int) -> int:
         if not isinstance(phase_id, int) or isinstance(phase_id, bool):
-            raise ValueError(f"Phase id must be numeric: {phase_id}")
+            raise ValueError(f"Идентификатор фазы должен быть числом: {phase_id}")
         phase = self._uow.phases.get_by_id(phase_id)
         if not phase or phase.id is None:
-            raise ValueError(f"Phase not found: {phase_id}")
+            raise ValueError(f"Фаза не найдена: {phase_id}")
         return phase.id
 
     def _lock_phase(self, phase_id: int) -> int:
         """Lock the owning workflow and return a freshly read phase id."""
         if not isinstance(phase_id, int) or isinstance(phase_id, bool):
-            raise ValueError(f"Phase id must be numeric: {phase_id}")
+            raise ValueError(f"Идентификатор фазы должен быть числом: {phase_id}")
         initial = self._uow.phases.get_by_id(phase_id)
         if initial is None or initial.workflow_id is None:
-            raise NotFoundError(f"Phase {phase_id} not found")
+            raise NotFoundError(f"Фаза {phase_id} не найдена")
         if self._uow.workflows.lock(initial.workflow_id) is None:
-            raise NotFoundError(f"Workflow {initial.workflow_id} not found")
+            raise NotFoundError(f"Воркфлоу {initial.workflow_id} не найден")
         fresh = next(
             (phase for phase in self._uow.phases.list(initial.workflow_id) if phase.id == phase_id),
             None,
         )
         if fresh is None or fresh.id is None:
-            raise NotFoundError(f"Phase {phase_id} not found")
+            raise NotFoundError(f"Фаза {phase_id} не найдена")
         return fresh.id
 
     def _replace_instructions(self, phase_id: int, items: list[dict[str, Any]]) -> list[int]:
@@ -161,6 +161,6 @@ class PhaseService:
             return []
         if isinstance(raw, list):
             if not all(isinstance(item, str) for item in raw):
-                raise TypeError("skills must contain strings only")
+                raise TypeError("skills должен содержать только строки")
             return [item.strip() for item in raw if item.strip()]
-        raise TypeError("skills must be a list of strings or null")
+        raise TypeError("skills должен быть массивом строк или null")

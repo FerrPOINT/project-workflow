@@ -271,7 +271,7 @@ class TestApiPhaseCreate:
         workflow = _app_state.workflow_service().create_workflow({"name": _unique("wf"), "_skip_default_phase": True})
         resp = client.post("/api/phases", json={"workflow_id": workflow["id"]})
         assert resp.status_code == 422
-        assert "phase_order or insert_after" in resp.text
+        assert "phase_order или insert_after" in resp.text
 
     def test_create_phase_rejects_invalid_workflow(self, client):
         resp = client.post("/api/phases", json={"workflow_id": 999999, "phase_order": 1})
@@ -608,7 +608,7 @@ class TestApiAgents:
 
         second = client.post("/api/agents", json={"name": _unique("Agent"), "hermes_profile": profile})
         assert second.status_code == 409
-        assert "already assigned" in second.json()["error"]
+        assert "уже назначен" in second.json()["error"]
 
     def test_invalid_hermes_profile_is_rejected(self, client):
         response = client.post("/api/agents", json={"name": _unique("Agent"), "hermes_profile": "Bad Profile"})

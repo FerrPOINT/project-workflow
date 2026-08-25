@@ -22,7 +22,7 @@ def test_text_helpers():
     assert text_from_instruction(PhaseInstruction(step=" x ")) == "x"
     assert (
         text_from_instruction(PhaseInstruction(step="Run checks", skills=["testing-workflow", "code-review"]))
-        == "Run checks Используй skills: testing-workflow, code-review."
+        == "Run checks Используй навыки: testing-workflow, code-review."
     )
     assert text_from_check(PhaseCheck(description=" c ")) == "c"
     assert text_from_evidence(PhaseEvidence(item=" e ")) == "e"
@@ -91,7 +91,7 @@ def test_build_single():
 def test_build_missing():
     cb = PhaseContractBuilder([])
     contract = cb.build_missing("x")
-    assert contract.phase_name == "Unknown phase"
+    assert contract.phase_name == "Неизвестная фаза"
 
 
 def test_build_parallel():
@@ -102,7 +102,7 @@ def test_build_parallel():
     assert contract.execution_type == "parallel"
     assert "p2" in contract.group_phases
     assert "p3" in contract.group_phases
-    assert contract.group_details[0]["instructions"] == ["Review Используй skills: code-review."]
+    assert contract.group_details[0]["instructions"] == ["Review Используй навыки: code-review."]
     assert contract.skills == ["code-review"]
     assert contract.group_details[0]["skills"] == ["code-review"]
 

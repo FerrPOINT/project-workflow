@@ -35,14 +35,14 @@ class TestSupervisorEngineIntegration:
         assert engine.task["task_key"] == "RUN-NEW"
 
     def test_create_if_missing_false_raises_when_task_missing(self, supervisor_db):
-        with pytest.raises(ValueError, match="Task RUN-MISSING not found"):
+        with pytest.raises(ValueError, match="Задача RUN-MISSING не найдена"):
             SupervisorEngine("RUN-MISSING", create_if_missing=False)
 
     def test_resolve_project_unknown_monkeypatched(self, supervisor_db, monkeypatch):
         engine = SupervisorEngine("RUN-1", create_if_missing=True)
         monkeypatch.setattr(engine._task_service, "get_task_by_key", lambda *_a, **_kw: None)
         monkeypatch.setattr(engine, "_resolve_project", lambda: None)
-        with pytest.raises(ValueError, match="Cannot resolve project"):
+        with pytest.raises(ValueError, match="Не удалось определить проект"):
             engine._ensure_task()
 
     def test_new_task_with_empty_current_phase_starts_at_first_phase(self, supervisor_db):

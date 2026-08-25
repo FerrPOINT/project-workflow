@@ -184,7 +184,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     evaluated_phase_code = phase.code
     workflow_id = engine.workflow_id
     if workflow_id is None or engine.db.workflows.lock(workflow_id) is None:
-        raise ConcurrentTransitionError("Workflow changed during Supervisor evaluation")
+        raise ConcurrentTransitionError("Воркфлоу изменился во время оценки Supervisor")
     engine._reload_evaluation_state()
     if engine.current_phase != evaluated_phase_code:
         engine.db.rollback()
@@ -214,7 +214,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     task_id = int(engine.task["id"])
     initial_run_id = _latest_run_id(engine, task_id)
     if phase.id is None:
-        raise ValueError("Current phase is not persisted")
+        raise ValueError("Текущая фаза не сохранена в базе данных")
     phase_id = phase.id
     evaluation_items = (
         builder.build_parallel_evaluation_items(group) if len(group) > 1 else builder.build_evaluation_items(phase)
@@ -266,9 +266,9 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
             previously_covered_ids=previously_ids,
         )
         if llm.verdict == "ROLLBACK" and not phase.rollback_target:
-            raise ValueError("rollback target is not configured for the current phase")
+            raise ValueError("Для текущей фазы не настроена цель отката")
         if llm.verdict == "DELEGATE" and not (phase.is_delegated or phase.delegate):
-            raise ValueError("delegation is not configured for the current phase")
+            raise ValueError("Для текущей фазы не настроено делегирование")
     except (
         requests.RequestException,
         OSError,

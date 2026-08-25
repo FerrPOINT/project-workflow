@@ -352,7 +352,7 @@ class TestPostgresInitialMigration:
 
     def test_orm_create_all_is_rejected_for_postgresql(self, pg_url):
         engine = get_engine(pg_url)
-        with pytest.raises(RuntimeError, match="isolated SQLite tests"):
+        with pytest.raises(RuntimeError, match="изолированных тестах SQLite"):
             ensure_schema(engine)
 @pytest.mark.integration
 class TestPostgresUoW:
@@ -1264,7 +1264,7 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
         assert assignment["prompt"]
         assignment_contract = assignment["phase_contract"]
         assert assignment_contract["phase_code"] == "1.INTAKE"
-        assert assignment_contract["phase_name"] == "Intake"
+        assert assignment_contract["phase_name"] == "Приём задачи"
         assert assignment_contract["workflow_revision"] == "sdlc-business-tech-v1"
         assert assignment_contract["actor"] == "hermes"
         assert assignment_contract["skills"] == [

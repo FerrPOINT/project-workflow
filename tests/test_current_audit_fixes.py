@@ -141,7 +141,7 @@ def test_instruction_service_rejects_duplicates_and_foreign_ids(uow: SAUnitOfWor
     first_phase_id, first_ids = _phase_with_instructions(uow, workflow_id, "first", ["one", "two", "three"])
     second_phase_id, second_ids = _phase_with_instructions(uow, workflow_id, "second", ["foreign"])
 
-    with pytest.raises(ValueError, match="unique"):
+    with pytest.raises(ValueError, match="уникальные"):
         InstructionService(uow).reorder_instructions(
             first_phase_id,
             [first_ids[1], second_ids[0], first_ids[0], first_ids[0]],
@@ -157,7 +157,7 @@ def test_instruction_repository_rejects_partial_reorder_without_changes(uow: SAU
     workflow_id, _ = _workflow_with_project(uow, "partial-order")
     phase_id, instruction_ids = _phase_with_instructions(uow, workflow_id, "partial", ["one", "two", "three"])
 
-    with pytest.raises(ConflictError, match="complete phase order"):
+    with pytest.raises(ConflictError, match="полный порядок инструкций фазы"):
         uow.instructions.reorder(phase_id, [(instruction_ids[1], 1), (instruction_ids[0], 2)])
     uow.rollback()
 

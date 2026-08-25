@@ -3,7 +3,7 @@
 {% block title %}Воркфлоу — project-workflow{% endblock %}
 {% block header_title %}Воркфлоу{% endblock %}
 {% block header_actions %}
-  <button type="button" class="btn btn-primary" id="newWorkflowButton" onclick="startCreateWorkflow()">+ Новый workflow</button>
+  <button type="button" class="btn btn-primary" id="newWorkflowButton" onclick="startCreateWorkflow()">+ Новый воркфлоу</button>
   <a href="/phases" class="btn btn-secondary">← К фазам</a>
 {% endblock %}
 
@@ -35,13 +35,13 @@ textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:160px;resiz
       </div>
     </button>
     {% else %}
-    <div class="card empty-note">Workflow пока нет.</div>
+    <div class="card empty-note">Воркфлоу пока нет.</div>
     {% endfor %}
   </section>
 
   <section class="workflow-panel">
     <form id="workflowForm" class="card form-stack" onsubmit="event.preventDefault(); submitWorkflow();">
-      <div class="card-title" id="workflowFormMode">Редактирование workflow</div>
+      <div class="card-title" id="workflowFormMode">Редактирование воркфлоу</div>
       <div>
         <div class="label">Название</div>
         <input type="text" id="workflowName" value="{{ selected_workflow.name if selected_workflow else '' }}">
@@ -85,8 +85,8 @@ function fillWorkflowForm(workflow){
 function setWorkflowFormMode(mode){
   workflowFormMode = mode;
   var createMode = mode === 'create';
-  document.getElementById('workflowFormMode').textContent = createMode ? 'Новый workflow' : 'Редактирование workflow';
-  document.getElementById('workflowSubmitButton').textContent = createMode ? 'Создать workflow' : 'Сохранить';
+  document.getElementById('workflowFormMode').textContent = createMode ? 'Новый воркфлоу' : 'Редактирование воркфлоу';
+  document.getElementById('workflowSubmitButton').textContent = createMode ? 'Создать воркфлоу' : 'Сохранить';
   document.getElementById('deleteWorkflowButton').style.display = createMode ? 'none' : '';
   document.getElementById('cancelCreateWorkflowButton').style.display = createMode && workflowStore.length ? '' : 'none';
 }
@@ -150,7 +150,7 @@ function reloadWorkflows(nextId){
   fetch('/api/workflows')
     .then(function(r){return r.json()})
     .then(function(d){
-      if(!d.ok){showToast(d.error || 'Ошибка загрузки workflow','error');return;}
+      if(!d.ok){showToast(d.error || 'Ошибка загрузки воркфлоу','error');return;}
       workflowStore.length = 0;
       d.workflows.forEach(function(workflow){ workflowStore.push(workflow); });
       if(workflowStore.length === 0){
@@ -162,7 +162,7 @@ function reloadWorkflows(nextId){
         nav.replaceChildren();
         var empty = document.createElement('div');
         empty.className = 'card empty-note';
-        empty.textContent = 'Workflow пока нет.';
+        empty.textContent = 'Воркфлоу пока нет.';
         nav.appendChild(empty);
         syncWorkflowNav();
         return;
@@ -177,11 +177,11 @@ function reloadWorkflows(nextId){
     });
 }
 function saveWorkflow(){
-  if(selectedWorkflowId == null){ showToast('Нет выбранного workflow','error'); return; }
+  if(selectedWorkflowId == null){ showToast('Воркфлоу не выбран','error'); return; }
   var payload = currentWorkflowPayload();
   fetch('/api/workflows/' + selectedWorkflowId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json()})
-    .then(function(d){ if(d.ok){ showToast('Workflow сохранён','success'); reloadWorkflows(selectedWorkflowId); } else { showToast(d.error || 'Ошибка','error'); } });
+    .then(function(d){ if(d.ok){ showToast('Воркфлоу сохранён','success'); reloadWorkflows(selectedWorkflowId); } else { showToast(d.error || 'Ошибка','error'); } });
 }
 function createWorkflow(){
   var payload = currentWorkflowPayload();
@@ -189,7 +189,7 @@ function createWorkflow(){
     .then(function(r){return r.json()})
     .then(function(d){
       if(d.ok){
-        showToast('Workflow создан','success');
+        showToast('Воркфлоу создан','success');
         reloadWorkflows(d.workflow_id);
         window.location.href = '/phases?workflow_id=' + d.workflow_id;
       } else {
@@ -198,11 +198,11 @@ function createWorkflow(){
     });
 }
 function deleteWorkflow(){
-  if(selectedWorkflowId == null){ showToast('Нет выбранного workflow','error'); return; }
-  if(!confirm('Удалить workflow?')) return;
+  if(selectedWorkflowId == null){ showToast('Воркфлоу не выбран','error'); return; }
+  if(!confirm('Удалить воркфлоу?')) return;
   fetch('/api/workflows/' + selectedWorkflowId,{method:'DELETE'})
     .then(function(r){return r.json()})
-    .then(function(d){ if(d.ok){ showToast('Workflow удалён','success'); reloadWorkflows(null); } else { showToast(d.error || 'Ошибка','error'); } });
+    .then(function(d){ if(d.ok){ showToast('Воркфлоу удалён','success'); reloadWorkflows(null); } else { showToast(d.error || 'Ошибка','error'); } });
 }
 function submitWorkflow(){
   if(workflowFormMode === 'create'){

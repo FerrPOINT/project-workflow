@@ -38,11 +38,11 @@ class TestSchemasFinalGaps:
             schemas.PhaseCreate(workflow_id=1, phase_order=1, agent_id=value)
 
     def test_project_create_key_prefixes_invalid_type(self):
-        with pytest.raises(ValueError, match="list of strings"):
+        with pytest.raises(ValueError, match="массивом строк"):
             schemas.ProjectCreate(code="PRJ", key_prefixes=123)
 
     def test_project_update_rejects_string_key_prefixes(self):
-        with pytest.raises(ValueError, match="list of strings"):
+        with pytest.raises(ValueError, match="массивом строк"):
             schemas.ProjectUpdate(code="PRJ", key_prefixes="aa\nbb")
 
     def test_project_update_key_prefixes_invalid(self):
@@ -79,7 +79,7 @@ class TestApplicationServiceFinalGaps:
         uow = MagicMock()
         uow.agents.create.return_value = 1
         uow.agents.get_by_id.return_value = None
-        with pytest.raises(RuntimeError, match="Agent creation failed"):
+        with pytest.raises(RuntimeError, match="Не удалось создать агента"):
             AgentService(uow).create_agent({"name": "x"})
 
     def test_phase_service_create_auto_order(self):
@@ -131,7 +131,7 @@ class TestApplicationServiceFinalGaps:
         uow.tasks.get_by_key.return_value = None
         uow.tasks.create.return_value = 1
         uow.tasks.get_by_id.return_value = None
-        with pytest.raises(RuntimeError, match="Task creation failed"):
+        with pytest.raises(RuntimeError, match="Не удалось создать задачу"):
             TaskService(uow).create_task({"task_key": "P-1", "project_id": 5})
 
     def test_instruction_service_creation_failed(self):
@@ -141,7 +141,7 @@ class TestApplicationServiceFinalGaps:
         uow.phases.list.return_value = [phase]
         uow.instructions.create.return_value = 1
         uow.instructions.get_by_id.return_value = None
-        with pytest.raises(RuntimeError, match="Instruction creation failed"):
+        with pytest.raises(RuntimeError, match="Не удалось создать инструкцию"):
             InstructionService(uow).create_instruction(1, {"text": "x"})
 
 
@@ -162,7 +162,7 @@ class TestSessionFinalGaps:
     def test_ensure_schema_postgresql_engine(self):
         engine = MagicMock()
         engine.dialect.name = "postgresql"
-        with pytest.raises(RuntimeError, match="isolated SQLite tests"):
+        with pytest.raises(RuntimeError, match="изолированных тестах SQLite"):
             ensure_schema(engine)
 
 
@@ -176,7 +176,7 @@ class TestWorkflowServiceFinalGaps:
         uow = MagicMock()
         uow.workflows.create.return_value = 1
         uow.workflows.get_by_id.return_value = None
-        with pytest.raises(RuntimeError, match="creation failed"):
+        with pytest.raises(RuntimeError, match="Не удалось создать воркфлоу"):
             WorkflowService(uow).create_workflow({"name": "x"})
 
 

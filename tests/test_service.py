@@ -55,7 +55,7 @@ class TestSaveInstructions:
         assert detail["instructions"][0]["skills"] == ["testing"]
 
     def test_invalid_phase_raises(self, svc):
-        with pytest.raises(NotFoundError, match="Phase 9999 not found"):
+        with pytest.raises(NotFoundError, match="Фаза 9999 не найдена"):
             svc.save_instructions(9999, [{"description": "x"}])
 
     def test_deferred_save_does_not_commit(self, svc, fresh_db, monkeypatch):
@@ -73,7 +73,7 @@ class TestSaveInstructions:
 
 class TestSaveChecks:
     def test_invalid_phase_raises(self, svc):
-        with pytest.raises(NotFoundError, match="Phase 9999 not found"):
+        with pytest.raises(NotFoundError, match="Фаза 9999 не найдена"):
             svc.save_checks(9999, [{"description": "x"}])
 
     def test_save_checks(self, svc, fresh_db):
@@ -94,7 +94,7 @@ class TestSaveChecks:
 
 class TestSaveEvidence:
     def test_invalid_phase_raises(self, svc):
-        with pytest.raises(NotFoundError, match="Phase 9999 not found"):
+        with pytest.raises(NotFoundError, match="Фаза 9999 не найдена"):
             svc.save_evidence(9999, [{"description": "x"}])
 
     def test_save_evidence(self, svc, fresh_db):

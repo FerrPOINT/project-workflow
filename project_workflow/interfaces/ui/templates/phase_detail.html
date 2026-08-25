@@ -101,9 +101,9 @@
     <div class="execution-row" style="margin-top:12px">
       <span class="execution-toggle" data-mode="{{ phase.execution_type or 'sync' }}" onclick="togglePhaseMode(this)">
         {% if phase.execution_type == 'parallel' %}
-        <b class="mode-parallel">⚡ parallel</b>
+        <b class="mode-parallel">⚡ параллельно</b>
         {% else %}
-        <b class="mode-sync">⏱ sync</b>
+        <b class="mode-sync">⏱ последовательно</b>
         {% endif %}
       </span>
       <label id="parallelPartnerRow" {% if phase.execution_type != 'parallel' %}hidden{% endif %}>
@@ -155,8 +155,8 @@
       <div class="timeline-card" data-instruction-id="{{ i.id }}" data-step-num="{{ i.step_num }}" data-type="{{ i.execution_type }}">
         <input type="text" class="timeline-name-input" value="{{ i.description }}" data-field="description" onblur="saveInstructionDescription(this)">
         <div class="execution-row">
-          <button type="button" class="badge {{ 'badge-parallel' if i.execution_type == 'parallel' else 'badge-sync' }}" onclick="toggleInstructionType(this)" aria-label="Режим выполнения: {{ i.execution_type }}">
-            {% if i.execution_type == 'parallel' %}⚡ parallel{% else %}⏱ sync{% endif %}
+          <button type="button" class="badge {{ 'badge-parallel' if i.execution_type == 'parallel' else 'badge-sync' }}" onclick="toggleInstructionType(this)" aria-label="Режим выполнения: {{ 'параллельно' if i.execution_type == 'parallel' else 'последовательно' }}">
+            {% if i.execution_type == 'parallel' %}⚡ параллельно{% else %}⏱ последовательно{% endif %}
           </button>
         </div>
         <div class="timeline-badges">
@@ -166,7 +166,7 @@
             <button type="button" class="skill-remove-btn" data-skill="{{ s }}" onclick="removeSkillFromInstruction(this)" aria-label="Убрать {{ s }}">×</button>
           </span>
           {% endfor %}
-          <input class="skill-candidate" type="text" placeholder="Добавить skill" onchange="addSkillToInstruction(this)">
+          <input class="skill-candidate" type="text" placeholder="Добавить навык" onchange="addSkillToInstruction(this)">
         </div>
       </div>
     </div>
@@ -177,7 +177,7 @@
       {% for run in runs %}
         {% if run|length > 1 %}
           <div class="timeline-block timeline-parallel-group">
-            <div class="timeline-parallel-label">⚡ parallel</div>
+            <div class="timeline-parallel-label">⚡ параллельно</div>
             {% for i in run %}
               <div class="timeline-item" data-instruction-id="{{ i.id }}" data-step-num="{{ i.step_num }}" data-type="{{ i.execution_type }}">
                 {{ instruction_body(i, phase.instructions|length) }}
@@ -225,7 +225,7 @@
   <!-- Evidence -->
   <div class="wiki-section">
     <div class="wiki-section-title">
-      📎 Evidence
+      📎 Подтверждения
       <span class="count">{{ phase.evidence|length }}</span>
     </div>
     <ul class="evidence-list" id="evidence-list">
@@ -236,10 +236,10 @@
         <button class="item-delete" onclick="deleteItem(this)">×</button>
       </li>
       {% else %}
-      <li class="empty-state">Нет evidence</li>
+      <li class="empty-state">Нет подтверждений</li>
       {% endfor %}
     </ul>
-    <button class="wiki-add-btn" onclick="addEvidence()">+ Добавить evidence</button>
+    <button class="wiki-add-btn" onclick="addEvidence()">+ Добавить подтверждение</button>
   </div>
 
 </div>
@@ -275,10 +275,10 @@ function setPhaseMode(el, mode) {
   el.dataset.mode = mode;
   if (mode === 'parallel') {
     b.className = 'mode-parallel';
-    b.textContent = '⚡ parallel';
+    b.textContent = '⚡ параллельно';
   } else {
     b.className = 'mode-sync';
-    b.textContent = '⏱ sync';
+    b.textContent = '⏱ последовательно';
   }
   const partnerRow = document.getElementById('parallelPartnerRow');
   if (partnerRow) partnerRow.hidden = mode !== 'parallel';
@@ -332,7 +332,7 @@ function renderInstructionTimeline(items) {
     if (isParallelGroup) {
       const label = document.createElement('div');
       label.className = 'timeline-parallel-label';
-      label.textContent = '⚡ parallel';
+      label.textContent = '⚡ параллельно';
       block.appendChild(label);
     }
     group.forEach((item, groupIndex) => {
@@ -517,7 +517,7 @@ async function addSkillToInstruction(input) {
       body: JSON.stringify({skills: skills}),
     });
     if (!resp.ok) {
-      showToast('Не удалось добавить skill', 'error');
+      showToast('Не удалось добавить навык', 'error');
       return;
     }
     window.location.reload();
@@ -540,7 +540,7 @@ async function removeSkillFromInstruction(button) {
     body: JSON.stringify({skills: skills}),
   });
   if (!resp.ok) {
-    showToast('Не удалось убрать skill', 'error');
+    showToast('Не удалось убрать навык', 'error');
     return;
   }
   window.location.reload();
@@ -554,7 +554,7 @@ function syncTextItemList(list) {
   if (itemCount === 0 && !list.querySelector('.empty-state')) {
     const empty = document.createElement('li');
     empty.className = 'empty-state';
-    empty.textContent = list.id === 'checks-list' ? 'Нет проверок' : 'Нет evidence';
+    empty.textContent = list.id === 'checks-list' ? 'Нет проверок' : 'Нет подтверждений';
     list.appendChild(empty);
   }
 }

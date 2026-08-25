@@ -47,7 +47,7 @@ def test_create_agent_failure():
     uow.agents.create.return_value = 1
     uow.agents.get_by_id.return_value = None
     svc = AgentService(uow)
-    with pytest.raises(RuntimeError, match="Agent creation failed"):
+    with pytest.raises(RuntimeError, match="Не удалось создать агента"):
         svc.create_agent({"name": "Ghost"})
 
 
@@ -93,7 +93,7 @@ def test_create_agent_normalizes_hermes_profile():
 def test_create_agent_rejects_invalid_hermes_profile():
     uow = _make_uow()
 
-    with pytest.raises(ValueError, match="Hermes profile"):
+    with pytest.raises(ValueError, match="Профиль Hermes"):
         AgentService(uow).create_agent({"name": "Coder", "hermes_profile": "Bad Profile"})
 
 
@@ -101,7 +101,7 @@ def test_hermes_profile_must_have_one_agent_owner():
     uow = _make_uow()
     uow.agents.get_by_hermes_profile.return_value = FakeAgent(7, "Existing")
 
-    with pytest.raises(ConflictError, match="already assigned"):
+    with pytest.raises(ConflictError, match="уже назначен"):
         AgentService(uow).create_agent({"name": "Other", "hermes_profile": "shared"})
 
     uow.agents.create.assert_not_called()
@@ -128,7 +128,7 @@ def test_delete_assigned_agent_is_conflict_and_rolls_back():
     uow = _make_uow()
     uow.phases.has_agent_reference.return_value = True
 
-    with pytest.raises(ConflictError, match="assigned to a phase"):
+    with pytest.raises(ConflictError, match="назначен фазе"):
         AgentService(uow).delete_agent(5)
 
     uow.agents.delete.assert_not_called()

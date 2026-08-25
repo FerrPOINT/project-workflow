@@ -90,7 +90,7 @@ class SAInstructionRepository(InstructionRepository):
     def update(self, instruction_id: int, data: dict[str, Any]) -> None:
         row = self._session.get(m.Instruction, instruction_id)
         if row is None:
-            raise NotFoundError(f"Instruction {instruction_id} not found")
+            raise NotFoundError(f"Инструкция {instruction_id} не найдена")
         if "description" in data:
             row.description = data["description"]
         if "execution_type" in data:
@@ -103,7 +103,7 @@ class SAInstructionRepository(InstructionRepository):
     def delete(self, instruction_id: int) -> None:
         row = self._session.get(m.Instruction, instruction_id)
         if row is None:
-            raise NotFoundError(f"Instruction {instruction_id} not found")
+            raise NotFoundError(f"Инструкция {instruction_id} не найдена")
         self._session.delete(row)
 
     def delete_for_phase(self, phase_id: int) -> None:
@@ -134,7 +134,7 @@ class SAInstructionRepository(InstructionRepository):
             or set(requested_ids) != set(existing_ids)
             or sorted(positions) != list(range(1, len(existing_ids) + 1))
         ):
-            raise ConflictError("Instruction reorder must contain the complete phase order")
+            raise ConflictError("Перестановка должна содержать полный порядок инструкций фазы")
         offset = len(orders) + 1000
         self._session.execute(
             text("UPDATE instructions SET step_num = step_num + :offset WHERE phase_id = :phase_id"),

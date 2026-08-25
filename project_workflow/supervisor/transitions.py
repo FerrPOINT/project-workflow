@@ -10,7 +10,7 @@ _VERDICTS = {"pass", "partial", "blocked", "rollback", "delegate"}
 
 def _validate_verdict(verdict: str) -> None:
     if verdict not in _VERDICTS:
-        raise ValueError(f"Unsupported verdict: {verdict}")
+        raise ValueError(f"Неподдерживаемый вердикт: {verdict}")
 
 
 def _update_task(db, task: dict, data: dict) -> None:
@@ -21,7 +21,7 @@ def _update_task(db, task: dict, data: dict) -> None:
         data,
     )
     if not updated:
-        raise ConcurrentTransitionError("Task phase or status changed during Supervisor evaluation")
+        raise ConcurrentTransitionError("Фаза или статус задачи изменились во время оценки Supervisor")
 
 
 def record_transition(

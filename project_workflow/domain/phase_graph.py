@@ -49,51 +49,52 @@ def validate_phase_graph(phases: Sequence[PhaseGraphItem]) -> None:
     expected_orders = list(range(1, len(ordered) + 1))
     actual_orders = [phase.phase_order for phase in ordered]
     if actual_orders != expected_orders:
-        raise ValueError("phase_order values must be the contiguous range 1..N")
+        raise ValueError("Значения phase_order должны образовывать непрерывный диапазон 1..N")
 
     codes = [phase.code.strip() for phase in ordered]
     if any(not code for code in codes):
-        raise ValueError("phase code must not be blank")
+        raise ValueError("Код фазы не может быть пустым")
     if any(phase.code != phase.code.strip() for phase in ordered):
-        raise ValueError("phase codes must be trimmed")
+        raise ValueError("Коды фаз не должны содержать пробелы по краям")
     if len(codes) != len(set(codes)):
-        raise ValueError("phase codes must be unique inside a workflow")
+        raise ValueError("Коды фаз внутри воркфлоу должны быть уникальными")
 
     by_code = {phase.code: phase for phase in ordered}
     index_by_code = {phase.code: index for index, phase in enumerate(ordered)}
     for phase in ordered:
         if phase.execution_type not in {"sync", "parallel"}:
-            raise ValueError(f"phase {phase.code!r} has an invalid execution_type")
+            raise ValueError(f"У фазы {phase.code!r} недопустимый execution_type")
 
         rollback_target = phase.rollback_target
         if rollback_target is not None:
             target = by_code.get(rollback_target)
             if target is None:
                 raise ValueError(
-                    f"phase {phase.code!r} rollback_target references an unknown phase"
+                    f"rollback_target фазы {phase.code!r} ссылается на неизвестную фазу"
                 )
             if target.phase_order >= phase.phase_order:
                 raise ValueError(
-                    f"phase {phase.code!r} rollback_target must reference an earlier phase"
+                    f"rollback_target фазы {phase.code!r} должен ссылаться на более раннюю фазу"
                 )
 
         partner_code = phase.parallel_with
         if phase.execution_type == "sync":
             if partner_code is not None:
-                raise ValueError(f"sync phase {phase.code!r} cannot define parallel_with")
+                raise ValueError(f"Последовательная фаза {phase.code!r} не может задавать parallel_with")
             continue
         if partner_code is None:
             continue
         if partner_code == phase.code:
-            raise ValueError(f"phase {phase.code!r} parallel_with cannot reference itself")
+            raise ValueError(f"parallel_with фазы {phase.code!r} не может ссылаться на неё саму")
         partner = by_code.get(partner_code)
         if partner is None:
-            raise ValueError(f"phase {phase.code!r} parallel_with references an unknown phase")
+            raise ValueError(f"parallel_with фазы {phase.code!r} ссылается на неизвестную фазу")
         if partner.execution_type != "parallel":
-            raise ValueError(f"phase {phase.code!r} parallel_with target must be parallel")
+            raise ValueError(f"Целевая фаза parallel_with для {phase.code!r} должна быть параллельной")
 
         left, right = sorted((index_by_code[phase.code], index_by_code[partner_code]))
         if any(item.execution_type != "parallel" for item in ordered[left : right + 1]):
             raise ValueError(
-                f"phase {phase.code!r} parallel_with target must be in the same continuous parallel segment"
+                f"Целевая фаза parallel_with для {phase.code!r} должна находиться "
+                "в том же непрерывном параллельном сегменте"
             )

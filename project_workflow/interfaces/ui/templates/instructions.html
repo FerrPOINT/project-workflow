@@ -43,7 +43,7 @@
   {% for group in instruction_groups %}
     {% set is_parallel_group = group | length > 1 %}
     <div class="instruction-block {% if is_parallel_group %}parallel-group{% endif %}" data-block-index="{{ loop.index0 }}">
-      {% if is_parallel_group %}<div class="parallel-label">⚡ parallel</div>{% endif %}
+      {% if is_parallel_group %}<div class="parallel-label">⚡ параллельно</div>{% endif %}
       {% for instruction in group %}
       <div class="instruction-row" data-instruction-id="{{ instruction.id }}" data-step-num="{{ instruction.step_num }}">
         <div class="order-controls">
@@ -56,13 +56,13 @@
             <textarea class="instruction-text" onchange="updateInstruction(this)">{{ instruction.description }}</textarea>
           </div>
           <div class="execution-row">
-            <span class="type-badge {{ instruction.execution_type }}" onclick="toggleType(this)" role="button" tabindex="0">{{ instruction.execution_type }}</span>
+            <span class="type-badge {{ instruction.execution_type }}" data-execution-type="{{ instruction.execution_type }}" onclick="toggleType(this)" role="button" tabindex="0">{{ 'параллельно' if instruction.execution_type == 'parallel' else 'последовательно' }}</span>
           </div>
           <div class="skills-cell">
             {% for skill in instruction.skills %}
             <span class="skill-chip">{{ skill }}</span>
             {% endfor %}
-            <input class="skills-input" type="text" value="{{ instruction.skills | join(', ') }}" placeholder="Skills через запятую" onchange="updateSkills(this)">
+            <input class="skills-input" type="text" value="{{ instruction.skills | join(', ') }}" placeholder="Навыки через запятую" onchange="updateSkills(this)">
           </div>
         </div>
         <div class="row-actions">
@@ -106,7 +106,7 @@ function updateTimeline() {
   layout.innerHTML = '';
   const groups = [];
   rows.forEach((row, idx) => {
-    const type = row.querySelector('.type-badge')?.textContent || 'sync';
+    const type = row.querySelector('.type-badge')?.dataset.executionType || 'sync';
     if (idx === 0 || type !== 'parallel') {
       groups.push([row]);
     } else {
@@ -120,7 +120,7 @@ function updateTimeline() {
     if (isParallelGroup) {
       const label = document.createElement('div');
       label.className = 'parallel-label';
-      label.textContent = '⚡ parallel';
+      label.textContent = '⚡ параллельно';
       block.appendChild(label);
     }
     group.forEach(row => block.appendChild(row));
@@ -192,7 +192,7 @@ async function updateInstruction(textarea) {
 async function toggleType(badge) {
   const row = badge.closest('.instruction-row');
   const id = parseInt(row.dataset.instructionId, 10);
-  const nextType = badge.textContent === 'sync' ? 'parallel' : 'sync';
+  const nextType = (badge.dataset.executionType || 'sync') === 'sync' ? 'parallel' : 'sync';
   const resp = await fetch('/api/instructions/' + id, {
     method: 'PUT',
     headers: {'Content-Type': 'application/json'},
@@ -203,7 +203,8 @@ async function toggleType(badge) {
     showToast(data.error || 'Ошибка сохранения', 'error');
     return;
   }
-  badge.textContent = nextType;
+  badge.dataset.executionType = nextType;
+  badge.textContent = nextType === 'parallel' ? 'параллельно' : 'последовательно';
   badge.className = 'type-badge ' + nextType;
   updateTimeline();
 }

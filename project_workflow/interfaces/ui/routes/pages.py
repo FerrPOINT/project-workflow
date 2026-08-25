@@ -95,7 +95,7 @@ async def phase_detail(request: Request, phase_id: int) -> HTMLResponse:
         return _error_page(
             request,
             title="Фаза не найдена",
-            message="Проверьте выбранный workflow или вернитесь к каталогу фаз.",
+            message="Проверьте выбранный воркфлоу или вернитесь к каталогу фаз.",
             status_code=404,
             back_url="/phases",
             back_label="К фазам",

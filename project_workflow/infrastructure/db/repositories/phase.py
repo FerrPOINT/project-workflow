@@ -65,7 +65,7 @@ class SAPhaseRepository(PhaseRepository):
     def update(self, phase_id: int, data: dict[str, Any]) -> None:
         row = self._session.get(m.Phase, phase_id)
         if row is None:
-            raise NotFoundError(f"Phase {phase_id} not found")
+            raise NotFoundError(f"Фаза {phase_id} не найдена")
         for key, val in data.items():
             if key in {"id", "workflow_id"}:
                 continue
@@ -77,7 +77,7 @@ class SAPhaseRepository(PhaseRepository):
     def delete(self, phase_id: int) -> None:
         row = self._session.get(m.Phase, phase_id)
         if row is None:
-            raise NotFoundError(f"Phase {phase_id} not found")
+            raise NotFoundError(f"Фаза {phase_id} не найдена")
         remaining = (
             self._session.execute(
                 select(m.Phase).where(
@@ -116,7 +116,7 @@ class SAPhaseRepository(PhaseRepository):
     def reference_kinds(self, phase_id: int) -> set[str]:
         row = self._session.get(m.Phase, phase_id)
         if row is None:
-            raise NotFoundError(f"Phase {phase_id} not found")
+            raise NotFoundError(f"Фаза {phase_id} не найдена")
 
         kinds: set[str] = set()
         current_task = self._session.execute(

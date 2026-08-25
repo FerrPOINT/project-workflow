@@ -104,15 +104,15 @@ class TestInstructionService:
         uow.instructions.create.return_value = 1
         uow.instructions.get_by_id.return_value = None
         svc = InstructionService(uow)
-        with pytest.raises(RuntimeError, match="Instruction creation failed"):
+        with pytest.raises(RuntimeError, match="Не удалось создать инструкцию"):
             svc.create_instruction(1, {})
 
     @pytest.mark.parametrize(
         ("phase", "locked_workflow", "listed_phases", "message"),
         [
-            (None, MagicMock(), [], "Phase 3 not found"),
-            (MagicMock(id=3, workflow_id=7), None, [], "Workflow 7 not found"),
-            (MagicMock(id=3, workflow_id=7), MagicMock(), [], "Phase 3 not found"),
+            (None, MagicMock(), [], "Фаза 3 не найдена"),
+            (MagicMock(id=3, workflow_id=7), None, [], "Воркфлоу 7 не найден"),
+            (MagicMock(id=3, workflow_id=7), MagicMock(), [], "Фаза 3 не найдена"),
         ],
     )
     def test_create_instruction_rechecks_locked_owners(
@@ -135,7 +135,7 @@ class TestInstructionService:
         uow.phases.get_by_id.return_value = phase
         uow.phases.list.return_value = [phase]
 
-        with pytest.raises(ValueError, match="step_num must be a positive integer"):
+        with pytest.raises(ValueError, match="step_num должен быть положительным целым числом"):
             InstructionService(uow).create_instruction(
                 3, {"description": "Y", "step_num": "second"}
             )
@@ -176,7 +176,7 @@ class TestInstructionService:
         uow.phases.list.return_value = [phase]
         uow.instructions.list.return_value = [{"id": 3}, {"id": 1}, {"id": 2}]
 
-        with pytest.raises(ConflictError, match="complete set"):
+        with pytest.raises(ConflictError, match="полный набор"):
             InstructionService(uow).reorder_instructions(10, [2, 3])
 
         uow.instructions.reorder.assert_not_called()
@@ -230,7 +230,7 @@ class TestProjectService:
         uow.projects.lock.return_value = project
         uow.tasks.list_by_project.return_value = [FakeTask(1, 7)]
         svc = ProjectService(uow)
-        with pytest.raises(ConflictError, match="linked tasks"):
+        with pytest.raises(ConflictError, match="связан с задачами"):
             svc.delete_project(7)
 
     def test_create_project_rejects_prefix_owned_by_another_project(self):
@@ -239,7 +239,7 @@ class TestProjectService:
         uow.projects.list.return_value = [existing]
         svc = ProjectService(uow)
 
-        with pytest.raises(ConflictError, match="already assigned"):
+        with pytest.raises(ConflictError, match="уже назначен"):
             svc.create_project({"code": "NEW", "workflow_id": 1, "key_prefixes": ["TASK"]})
 
         uow.projects.create.assert_not_called()
@@ -251,7 +251,7 @@ class TestProjectService:
         uow.projects.lock.return_value = project
         uow.projects.get_by_code.return_value = MagicMock(id=2, code="NEW")
 
-        with pytest.raises(ConflictError, match="already exists"):
+        with pytest.raises(ConflictError, match="уже существует"):
             ProjectService(uow).update_project(1, {"code": "NEW"})
 
         uow.projects.update.assert_not_called()
@@ -297,7 +297,7 @@ class TestWorkflowService:
         uow.projects.list.return_value = [FakeProject(1, "P", 3)]
         uow.workflows.lock.return_value = FakeWorkflow(3, "W")
         svc = WorkflowService(uow)
-        with pytest.raises(ConflictError, match="linked projects"):
+        with pytest.raises(ConflictError, match="связан с проектами"):
             svc.delete_workflow(3)
 
     def test_ensure_default_exists(self):

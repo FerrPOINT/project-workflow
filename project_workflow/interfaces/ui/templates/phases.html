@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 
-{% block title %}Фазы workflow — project-workflow{% endblock %}
-{% block header_title %}Фазы workflow{% endblock %}
-{% block header_actions %}<a href="/workflows" class="btn btn-secondary">← К workflow</a>{% endblock %}
+{% block title %}Фазы воркфлоу — project-workflow{% endblock %}
+{% block header_title %}Фазы воркфлоу{% endblock %}
+{% block header_actions %}<a href="/workflows" class="btn btn-secondary">← К воркфлоу</a>{% endblock %}
 
 {% block extra_style %}
 .phases-layout{display:grid;grid-template-columns:280px minmax(0,1fr);gap:20px;align-items:start}
@@ -55,9 +55,9 @@
       {% set description = p.description | default('') %}
       {% if description %}<div class="timeline-desc">{{ description[:120] }}{% if description|length > 120 %}...{% endif %}</div>{% endif %}
       <div class="execution-row">
-        <span class="badge {{ 'badge-parallel' if p.execution_type == 'parallel' else 'badge-sync' }}">{{ 'parallel' if p.execution_type == 'parallel' else 'sync' }}</span>
+        <span class="badge {{ 'badge-parallel' if p.execution_type == 'parallel' else 'badge-sync' }}">{{ 'параллельно' if p.execution_type == 'parallel' else 'последовательно' }}</span>
         {% if p.agent_name %}<span class="badge badge-agent">{{ p.agent_name }}</span>{% endif %}
-        {% if p.is_delegated %}<span class="badge badge-delegate">delegate</span>{% endif %}
+        {% if p.is_delegated %}<span class="badge badge-delegate">делегирование</span>{% endif %}
       </div>
     </a>
     <div class="phase-card-actions" aria-label="Действия фазы">
@@ -81,15 +81,15 @@
         <span class="workflow-chip">{{ workflow.phase_count | pluralize('фаза,фазы,фаз') }}</span>
       </div>
     </a>
-    {% else %}<div class="card empty-note">Workflow пока нет.</div>{% endfor %}
+    {% else %}<div class="card empty-note">Воркфлоу пока нет.</div>{% endfor %}
   </section>
 
   <section class="timeline-panel">
     <div class="card workflow-summary">
       <div class="card-title">{{ selected_workflow.name if selected_workflow else 'Фазы' }}</div>
       {% if selected_workflow and selected_workflow.description %}<div class="empty-note">{{ selected_workflow.description }}</div>
-      {% elif selected_workflow %}<div class="empty-note">Порядок выполнения и связанные parallel-группы.</div>
-      {% else %}<div class="empty-note">Сначала создайте workflow.</div>{% endif %}
+      {% elif selected_workflow %}<div class="empty-note">Порядок выполнения и связанные параллельные группы.</div>
+      {% else %}<div class="empty-note">Сначала создайте воркфлоу.</div>{% endif %}
     </div>
 
     <div class="timeline" id="phasesTimeline">
@@ -97,7 +97,7 @@
         {% if block.kind == 'parallel' %}
         <section class="timeline-block timeline-parallel-group">
           <div class="timeline-parallel-header">
-            <div class="timeline-parallel-label">parallel</div>
+            <div class="timeline-parallel-label">параллельно</div>
             <div class="timeline-parallel-count">{{ block.phases | length }} одновременно</div>
           </div>
           <div class="timeline-parallel-grid">{% for p in block.phases %}{{ phase_card(p) }}{% endfor %}</div>
@@ -107,7 +107,7 @@
           <button type="button" class="phase-add-btn" data-after-order="{{ block.phases[-1].phase_num }}" onclick="addPhaseAfter(this)" title="Добавить фазу после блока" aria-label="Добавить фазу после блока">+</button>
         </div>
       {% else %}
-        <div class="card empty-note" style="width:100%">Для этого workflow фаз пока нет.</div>
+        <div class="card empty-note" style="width:100%">Для этого воркфлоу фаз пока нет.</div>
         {% if selected_workflow_id %}<div class="timeline-connector"><button type="button" class="phase-add-btn" data-after-order="0" onclick="addPhaseAfter(this)" aria-label="Добавить первую фазу">+</button></div>{% endif %}
       {% endfor %}
     </div>
@@ -135,7 +135,7 @@ async function deletePhase(button){
   const item=button.closest('.timeline-item');
   const items=getPhaseTimelineItems();
   if(!item)return;
-  if(items.length<=1){showToast('Нельзя удалить единственную фазу workflow','error');return;}
+  if(items.length<=1){showToast('Нельзя удалить единственную фазу воркфлоу','error');return;}
   if(!confirm('Удалить фазу?'))return;
   button.disabled=true;
   try{

@@ -51,7 +51,7 @@ class SAAgentRepository(AgentRepository):
             self._session.flush()
         except IntegrityError as exc:
             label = repr(profile) if profile else "the requested value"
-            raise ConflictError(f"Hermes profile {label} is already assigned to another agent") from exc
+            raise ConflictError(f"Профиль Hermes {label} уже назначен другому агенту") from exc
 
     def create(self, data: dict[str, Any]) -> int:
         item = m.Agent(
@@ -66,7 +66,7 @@ class SAAgentRepository(AgentRepository):
     def update(self, agent_id: int, data: dict[str, Any]) -> None:
         row = self._session.get(m.Agent, agent_id)
         if row is None:
-            raise NotFoundError(f"Agent {agent_id} not found")
+            raise NotFoundError(f"Агент {agent_id} не найден")
         if "name" in data:
             row.name = data["name"]
         if "description" in data:
@@ -78,7 +78,7 @@ class SAAgentRepository(AgentRepository):
     def delete(self, agent_id: int) -> None:
         row = self._session.get(m.Agent, agent_id)
         if row is None:
-            raise NotFoundError(f"Agent {agent_id} not found")
+            raise NotFoundError(f"Агент {agent_id} не найден")
         self._session.delete(row)
 
 

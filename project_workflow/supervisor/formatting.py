@@ -47,7 +47,7 @@ def format_result(result: dict) -> str:
     lines: list[str] = []
 
     if is_pass and not result.get("next_phase"):
-        lines.append("Workflow завершён: задача уже прошла все фазы.")
+        lines.append("Воркфлоу завершён: задача уже прошла все фазы.")
 
     if verdict == "BLOCKED":
         reasons = [str(item) for item in (result.get("blockers") or []) if str(item).strip()]
@@ -125,8 +125,8 @@ def _flatten_parallel_contract(
         )
         instructions.append(
             f"{name} — параллельно с {partner}, агент: {agent}"
-            + (f" | Hermes profile: {profile}" if profile else "")
-            + (f" | toolsets: {toolsets}" if toolsets else "")
+            + (f" | профиль Hermes: {profile}" if profile else "")
+            + (f" | наборы инструментов: {toolsets}" if toolsets else "")
         )
         for item in detail.get("instructions", []) or []:
             instructions.append(f"  {item}")
