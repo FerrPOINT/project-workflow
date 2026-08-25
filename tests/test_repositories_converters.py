@@ -29,7 +29,7 @@ def test_row_to_project_bad_json_key_prefixes():
         key_prefixes="not json",
         workflow=None,
     )
-    with pytest.raises(ValueError, match="invalid JSON"):
+    with pytest.raises(ValueError, match="некорректный JSON"):
         _row_to_project(row)
 
 
@@ -42,7 +42,7 @@ def test_row_to_project_non_string_key_prefixes():
         key_prefixes=[1, 2, 3],
         workflow=None,
     )
-    with pytest.raises(ValueError, match="JSON string array"):
+    with pytest.raises(ValueError, match="JSON-массивом строк"):
         _row_to_project(row)
 
 

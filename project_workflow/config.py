@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     def _require_database_url(cls, value: object) -> str:
         url = str(value or "").strip()
         if not url:
-            raise ValueError("DATABASE_URL is required")
+            raise ValueError("Переменная DATABASE_URL обязательна")
         return url
 
 

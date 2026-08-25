@@ -90,7 +90,12 @@ async def api_task_delete(task_key: str) -> Response:
     task_id = task.get("id")
     if not isinstance(task_id, int):
         return _error("Некорректный идентификатор задачи", 400)
-    _app_state.task_service().delete_task(task_id)
+    try:
+        _app_state.task_service().delete_task(task_id)
+    except NotFoundError as exc:
+        return _error(str(exc), 404)
+    except ConflictError as exc:
+        return _error(str(exc), 409)
     return Response(status_code=204)
 
 

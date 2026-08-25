@@ -178,13 +178,15 @@ class TestStepCommand:
         runner = CliRunner()
         result = runner.invoke(cli, ["step", "--task", "RUN-1", "--skip"])
         assert result.exit_code != 0
-        assert "No such option '--skip'" in result.output
+        assert "Нет такого параметра: --skip." in result.output
+        assert "No such option" not in result.output
 
     def test_step_repo_is_rejected(self):
         runner = CliRunner()
         result = runner.invoke(cli, ["step", "--task", "RUN-1", "--repo", "/repo"])
         assert result.exit_code != 0
-        assert "No such option '--repo'" in result.output
+        assert "Нет такого параметра: --repo." in result.output
+        assert "No such option" not in result.output
 
 
 class TestHistoryCommand:
@@ -259,7 +261,8 @@ class TestHistoryCommand:
         runner = CliRunner()
         result = runner.invoke(cli, ["history", "--task", "TASK-1", "--n", "0"])
         assert result.exit_code == 2
-        assert "0 is not in the range x>=1" in result.output
+        assert "Некорректное значение параметра '--n'." in result.output
+        assert "not in the range" not in result.output
 
 
 class TestCliGuard:
@@ -287,4 +290,5 @@ class TestCliGuard:
         runner = CliRunner()
         result = runner.invoke(cli, ["ui", "--help"])
         assert result.exit_code != 0
-        assert "No such command 'ui'" in result.output
+        assert "Нет такой команды: 'ui'." in result.output
+        assert "No such command" not in result.output

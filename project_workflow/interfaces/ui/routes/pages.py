@@ -213,7 +213,6 @@ async def task_detail_page(request: Request, task_key: str) -> HTMLResponse:
             "progress_total": task.get("progress_total", 0),
             "cycles_done": task.get("completed_cycles", 0),
             "cycles_total": task.get("workflow_cycle_count", 0),
-            "work_time": task.get("work_time"),
             "phase_history_blocks": task.get("phase_history_blocks", []),
             "supervisor_runs": task.get("supervisor_runs", []),
         },

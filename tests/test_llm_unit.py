@@ -59,7 +59,7 @@ class TestEvaluateLlmReportVerdicts:
             result = evaluate_llm_report("r", phase, engine)
         assert result["verdict"] == "BLOCKED"
         assert result["retryable"] is True
-        assert result["blockers"] == ["Supervisor LLM unavailable: ValueError"]
+        assert result["blockers"] == ["Проверяющий LLM недоступен: ValueError"]
         engine._record_evaluation.assert_called_once_with(phase, "blocked", None, None, commit=False)
 
     def test_rollback_uses_rollback_target(self):

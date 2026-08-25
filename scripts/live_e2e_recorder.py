@@ -22,13 +22,21 @@ SENSITIVE_KEYS = {
     "access_token",
     "api_key",
     "authorization",
+    "client_secret",
     "database_url",
     "dsn",
+    "github_token",
+    "gitlab_token",
     "openai_api_key",
+    "oauth_token",
     "password",
     "pgpassword",
+    "private_token",
+    "refresh_token",
     "secret",
+    "slack_token",
     "token",
+    "webhook_token",
 }
 EVIDENCE_RE = re.compile(r"^Evidence-Refs:\s*([A-Z0-9_, -]+)$", re.MULTILINE)
 ACTION_ID_RE = re.compile(r"^A-\d{3,}$")
@@ -54,7 +62,9 @@ def redact_text(value: str) -> str:
     value = HOSTED_TOKEN_RE.sub("[REDACTED]", value)
     value = re.sub(r"(?i)(://[^:/\s]+:)[^@/\s]+@", r"\1[REDACTED]@", value)
     value = re.sub(
-        r"(?i)\b(api[_-]?key|password|secret|token)\s*([:=])\s*([^\s,;]+)",
+        r"(?i)\b(api[_-]?key|password|secret|token|access[_-]?token|refresh[_-]?token|"
+        r"oauth[_-]?token|private[_-]?token|client[_-]?secret|webhook[_-]?token)"
+        r"\s*([:=])\s*([^\s,;]+)",
         r"\1\2[REDACTED]",
         value,
     )
@@ -92,9 +102,9 @@ def read_events(root: Path) -> list[dict[str, Any]]:
         try:
             event = json.loads(line)
         except json.JSONDecodeError as exc:
-            raise TranscriptError(f"Invalid JSONL at line {line_number}") from exc
+            raise TranscriptError(f"Некорректный JSONL в строке {line_number}") from exc
         if not isinstance(event, dict):
-            raise TranscriptError(f"Event at line {line_number} must be an object")
+            raise TranscriptError(f"Событие в строке {line_number} должно быть объектом")
         events.append(event)
     return events
 
@@ -142,11 +152,11 @@ def run_supervisor(task: str, report: str | None = None) -> tuple[int, dict[str,
         payload = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
         raise TranscriptError(
-            f"Supervisor CLI returned non-JSON output: stdout={redact_text(result.stdout)!r}; "
+            f"Supervisor CLI вернул не-JSON: stdout={redact_text(result.stdout)!r}; "
             f"stderr={redact_text(result.stderr)!r}"
         ) from exc
     if not isinstance(payload, dict):
-        raise TranscriptError("Supervisor CLI JSON must be an object")
+        raise TranscriptError("JSON от Supervisor CLI должен быть объектом")
     return result.returncode, payload, result.stderr
 
 
@@ -166,11 +176,11 @@ def run_history(task: str) -> tuple[int, dict[str, Any], str]:
         payload = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
         raise TranscriptError(
-            f"Supervisor history returned non-JSON output: stdout={redact_text(result.stdout)!r}; "
+            f"История Supervisor вернула не-JSON: stdout={redact_text(result.stdout)!r}; "
             f"stderr={redact_text(result.stderr)!r}"
         ) from exc
     if not isinstance(payload, dict):
-        raise TranscriptError("Supervisor history JSON must be an object")
+        raise TranscriptError("JSON истории Supervisor должен быть объектом")
     return result.returncode, payload, result.stderr
 
 
@@ -178,7 +188,7 @@ def _last_assignment_index(events: list[dict[str, Any]]) -> int:
     for index in range(len(events) - 1, -1, -1):
         if events[index].get("type") == "ASSIGNMENT":
             return index
-    raise TranscriptError("No current ASSIGNMENT")
+    raise TranscriptError("Нет текущего ASSIGNMENT")
 
 
 def _next_action_id(events: list[dict[str, Any]]) -> str:
@@ -187,18 +197,18 @@ def _next_action_id(events: list[dict[str, Any]]) -> str:
 
 def _require_session_task(events: list[dict[str, Any]], task: str) -> None:
     if not events or events[0].get("type") != "SESSION":
-        raise TranscriptError("Session is not initialized")
+        raise TranscriptError("Сессия не инициализирована")
     if events[0].get("task") != task:
-        raise TranscriptError("SESSION belongs to another task")
+        raise TranscriptError("SESSION относится к другой задаче")
 
 
 def _report_refs(report: str) -> set[str]:
     match = EVIDENCE_RE.search(report)
     if match is None:
-        raise TranscriptError("Report must contain Evidence-Refs")
+        raise TranscriptError("Отчёт должен содержать Evidence-Refs")
     refs = {item.strip() for item in match.group(1).split(",") if item.strip()}
     if not refs or any(ACTION_ID_RE.fullmatch(ref) is None for ref in refs):
-        raise TranscriptError("Evidence-Refs must contain current ACTION IDs")
+        raise TranscriptError("Evidence-Refs должен содержать ID текущих ACTION")
     return refs
 
 
@@ -207,10 +217,10 @@ def validate_open_cycle(events: list[dict[str, Any]], phase: str) -> tuple[int, 
     assignment_index = _last_assignment_index(events)
     assignment = events[assignment_index]
     if assignment.get("phase") != phase:
-        raise TranscriptError("Phase does not match the current assignment")
+        raise TranscriptError("Фаза не совпадает с текущим ASSIGNMENT")
     tail = events[assignment_index + 1 :]
     if any(event.get("type") in {"REPORT", "EVALUATOR", "TRANSITION"} for event in tail):
-        raise TranscriptError("Current assignment cycle is already submitted")
+        raise TranscriptError("Текущий цикл ASSIGNMENT уже отправлен")
     actions = [event for event in tail if event.get("type") == "ACTION"]
     return assignment_index, actions
 
@@ -223,7 +233,7 @@ def _validate_action_event(
 ) -> None:
     action_id = str(action.get("id", ""))
     if action.get("phase") != phase or ACTION_ID_RE.fullmatch(action_id) is None:
-        raise TranscriptError("ACTION must belong to the current phase and have a stable ID")
+        raise TranscriptError("ACTION должен относиться к текущей фазе и иметь стабильный ID")
 
     command = action.get("command")
     if (
@@ -232,41 +242,41 @@ def _validate_action_event(
         or not all(isinstance(argument, str) for argument in command)
         or not command[0]
     ):
-        raise TranscriptError(f"ACTION {action_id} command must be a non-empty argument list")
+        raise TranscriptError(f"Команда ACTION {action_id} должна быть непустым массивом аргументов")
 
     cwd = action.get("cwd")
     is_absolute_cwd = isinstance(cwd, str) and bool(cwd) and (
         PurePosixPath(cwd).is_absolute() or PureWindowsPath(cwd).is_absolute()
     )
     if not is_absolute_cwd:
-        raise TranscriptError(f"ACTION {action_id} cwd must be an absolute path")
+        raise TranscriptError(f"cwd ACTION {action_id} должен быть абсолютным путём")
 
     exit_code = action.get("exit_code")
     if not isinstance(exit_code, int) or isinstance(exit_code, bool):
-        raise TranscriptError(f"ACTION {action_id} exit_code must be an integer")
+        raise TranscriptError(f"exit_code ACTION {action_id} должен быть целым числом")
 
     excerpt = action.get("output_excerpt")
     if not isinstance(excerpt, str):
-        raise TranscriptError(f"ACTION {action_id} output_excerpt must be a string")
+        raise TranscriptError(f"output_excerpt ACTION {action_id} должен быть строкой")
 
     expected_log = f"command-logs/{action_id}.log"
     command_log = action.get("command_log")
     normalized_log = command_log.replace("\\", "/") if isinstance(command_log, str) else None
     if normalized_log != expected_log:
-        raise TranscriptError(f"ACTION {action_id} command_log must be {expected_log}")
+        raise TranscriptError(f"command_log ACTION {action_id} должен быть {expected_log}")
 
     if artifact_root is None:
         return
 
     log_path = (artifact_root / Path(*expected_log.split("/"))).resolve()
     if not log_path.is_file():
-        raise TranscriptError(f"ACTION {action_id} command log is missing: {expected_log}")
+        raise TranscriptError(f"Лог команды ACTION {action_id} отсутствует: {expected_log}")
     try:
         logged_output = log_path.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
-        raise TranscriptError(f"ACTION {action_id} command log cannot be read: {expected_log}") from exc
+        raise TranscriptError(f"Лог команды ACTION {action_id} не удалось прочитать: {expected_log}") from exc
     if excerpt != redact_text(logged_output[:MAX_EXCERPT]):
-        raise TranscriptError(f"ACTION {action_id} command log does not match output_excerpt")
+        raise TranscriptError(f"Лог команды ACTION {action_id} не совпадает с output_excerpt")
 
 
 def validate_transcript(
@@ -278,9 +288,9 @@ def validate_transcript(
 ) -> list[dict[str, Any]]:
     """Validate the complete SESSION -> cycle event grammar."""
     if not events or events[0].get("type") != "SESSION":
-        raise TranscriptError("Transcript must start with SESSION")
+        raise TranscriptError("Транскрипт должен начинаться с SESSION")
     if task is not None and events[0].get("task") != task:
-        raise TranscriptError("SESSION belongs to another task")
+        raise TranscriptError("SESSION относится к другой задаче")
 
     cycles: list[dict[str, Any]] = []
     action_ids: set[str] = set()
@@ -288,15 +298,15 @@ def validate_transcript(
     while index < len(events):
         assignment = events[index]
         if assignment.get("type") != "ASSIGNMENT":
-            raise TranscriptError(f"Expected ASSIGNMENT at event {index + 1}")
+            raise TranscriptError(f"В событии {index + 1} ожидался ASSIGNMENT")
         if task is not None and assignment.get("task") != task:
-            raise TranscriptError("ASSIGNMENT belongs to another task")
+            raise TranscriptError("ASSIGNMENT относится к другой задаче")
         phase = assignment.get("phase")
         payload = assignment.get("payload")
         if not isinstance(phase, str) or not isinstance(payload, dict) or payload.get("phase") != phase:
-            raise TranscriptError("ASSIGNMENT must preserve a matching Supervisor payload")
+            raise TranscriptError("ASSIGNMENT должен сохранять совпадающий payload Supervisor")
         if not isinstance(payload.get("prompt"), str):
-            raise TranscriptError("ASSIGNMENT must contain the exact prompt")
+            raise TranscriptError("ASSIGNMENT должен содержать точный prompt")
         index += 1
 
         actions: list[dict[str, Any]] = []
@@ -304,52 +314,52 @@ def validate_transcript(
             action = events[index]
             _validate_action_event(action, phase, artifact_root=artifact_root)
             if action["id"] in action_ids:
-                raise TranscriptError(f"Duplicate ACTION ID: {action['id']}")
+                raise TranscriptError(f"Дублирующийся ID ACTION: {action['id']}")
             action_ids.add(action["id"])
             actions.append(action)
             index += 1
         if not actions:
-            raise TranscriptError(f"Phase {phase} has no ACTIONS")
+            raise TranscriptError(f"Фаза {phase} не содержит ACTION")
 
         if index >= len(events) or events[index].get("type") != "REPORT":
-            raise TranscriptError(f"Phase {phase} is missing REPORT")
+            raise TranscriptError(f"В фазе {phase} отсутствует REPORT")
         report = events[index]
         if report.get("phase") != phase or not isinstance(report.get("report"), str):
-            raise TranscriptError("REPORT must belong to the current phase")
+            raise TranscriptError("REPORT должен относиться к текущей фазе")
         text_refs = _report_refs(report["report"])
         stored_refs = report.get("evidence_refs")
         if not isinstance(stored_refs, list) or set(stored_refs) != text_refs:
-            raise TranscriptError("REPORT evidence_refs must exactly match Evidence-Refs in report text")
+            raise TranscriptError("evidence_refs в REPORT должны точно совпадать с Evidence-Refs в тексте отчёта")
         refs = text_refs
         current_action_ids = {action["id"] for action in actions}
         if not refs or not refs.issubset(current_action_ids):
-            raise TranscriptError("REPORT evidence must reference ACTIONS from the current phase only")
+            raise TranscriptError("Evidence в REPORT должны ссылаться только на ACTION текущей фазы")
         index += 1
 
         if index >= len(events) or events[index].get("type") != "EVALUATOR":
-            raise TranscriptError(f"Phase {phase} is missing EVALUATOR")
+            raise TranscriptError(f"В фазе {phase} отсутствует EVALUATOR")
         evaluator = events[index]
         if evaluator.get("phase") != phase or not isinstance(evaluator.get("payload"), dict):
-            raise TranscriptError("EVALUATOR must preserve the Supervisor JSON payload")
+            raise TranscriptError("EVALUATOR должен сохранять JSON payload Supervisor")
         evaluator_payload = evaluator["payload"]
         evaluator_fields = {"phase", "current_phase", "verdict", "next_phase"}
         if not evaluator_fields.issubset(evaluator_payload):
-            raise TranscriptError("EVALUATOR payload is missing transition fields")
+            raise TranscriptError("В payload EVALUATOR отсутствуют поля перехода")
         if evaluator_payload["phase"] != phase or evaluator_payload["current_phase"] != phase:
-            raise TranscriptError("EVALUATOR payload must match the assigned phase")
+            raise TranscriptError("Payload EVALUATOR должен совпадать с назначенной фазой")
         index += 1
 
         if index >= len(events) or events[index].get("type") != "TRANSITION":
-            raise TranscriptError(f"Phase {phase} is missing TRANSITION")
+            raise TranscriptError(f"В фазе {phase} отсутствует TRANSITION")
         transition = events[index]
         if transition.get("phase") != phase or transition.get("from_phase") != phase:
-            raise TranscriptError("TRANSITION must start from the assigned phase")
+            raise TranscriptError("TRANSITION должен начинаться с назначенной фазы")
         if not {"verdict", "to_phase"}.issubset(transition):
-            raise TranscriptError("TRANSITION is missing evaluator fields")
+            raise TranscriptError("В TRANSITION отсутствуют поля evaluator")
         if transition["verdict"] != evaluator_payload["verdict"]:
-            raise TranscriptError("TRANSITION verdict must match the EVALUATOR payload")
+            raise TranscriptError("Verdict TRANSITION должен совпадать с payload EVALUATOR")
         if transition["to_phase"] != evaluator_payload["next_phase"]:
-            raise TranscriptError("TRANSITION target must match the EVALUATOR payload")
+            raise TranscriptError("Цель TRANSITION должна совпадать с payload EVALUATOR")
         index += 1
         cycles.append(
             {
@@ -362,7 +372,7 @@ def validate_transcript(
         )
 
     if expected_cycles is not None and len(cycles) != expected_cycles:
-        raise TranscriptError(f"Expected {expected_cycles} cycles, found {len(cycles)}")
+        raise TranscriptError(f"Ожидалось циклов: {expected_cycles}; найдено: {len(cycles)}")
     return cycles
 
 
@@ -502,18 +512,21 @@ def finalize(root: Path, task: str, expected_cycles: int | None = None) -> dict[
 def command_init(args: argparse.Namespace) -> None:
     root = Path(args.root)
     if read_events(root):
-        _fail("Transcript already exists")
+        _fail("Транскрипт уже существует")
     try:
         metadata = json.loads(args.metadata)
     except json.JSONDecodeError as exc:
-        raise SystemExit("--metadata must be a JSON object") from exc
+        raise SystemExit("--metadata должен быть JSON-объектом") from exc
     if not isinstance(metadata, dict):
-        _fail("--metadata must be a JSON object")
+        _fail("--metadata должен быть JSON-объектом")
     code, history, stderr = run_history(args.task)
     if code != 0 or not history.get("ok"):
-        _fail(f"History check failed: rc={code}; payload={redact(history)}; stderr={redact_text(stderr)}")
+        _fail(
+            f"Проверка истории завершилась ошибкой: rc={code}; "
+            f"payload={redact(history)}; stderr={redact_text(stderr)}"
+        )
     if history.get("count") != 0:
-        _fail("Live acceptance requires a fresh task without previous SupervisorRun records")
+        _fail("Для live-приёмки нужна новая задача без предыдущих записей SupervisorRun")
     event = append_event(root, {"type": "SESSION", "task": args.task, "metadata": metadata})
     print(json.dumps(event, ensure_ascii=False))
 
@@ -523,10 +536,10 @@ def command_assignment(args: argparse.Namespace) -> None:
     events = read_events(root)
     _require_session_task(events, args.task)
     if events[-1].get("type") not in {"SESSION", "TRANSITION"}:
-        _fail("Previous cycle is incomplete")
+        _fail("Предыдущий цикл не завершён")
     code, payload, stderr = run_supervisor(args.task)
     if code != 0 or not payload.get("ok"):
-        _fail(f"Assignment failed: rc={code}; payload={redact(payload)}; stderr={redact_text(stderr)}")
+        _fail(f"ASSIGNMENT завершился ошибкой: rc={code}; payload={redact(payload)}; stderr={redact_text(stderr)}")
     append_event(
         root,
         {"type": "ASSIGNMENT", "task": args.task, "phase": payload.get("phase"), "payload": payload},
@@ -543,7 +556,7 @@ def command_action(args: argparse.Namespace) -> None:
     if command and command[0] == "--":
         command = command[1:]
     if not command:
-        _fail("ACTION requires a command after --")
+        _fail("Для ACTION нужна команда после --")
 
     environment = os.environ.copy()
     environment["PYTHONIOENCODING"] = "utf-8"
@@ -596,22 +609,22 @@ def command_submit(args: argparse.Namespace) -> None:
     _require_session_task(events, args.task)
     _, actions = validate_open_cycle(events, args.phase)
     if not actions:
-        _fail("At least one ACTION is required before REPORT")
+        _fail("Перед REPORT нужен хотя бы один ACTION")
     report = Path(args.report_file).read_text(encoding="utf-8")
     refs = _report_refs(report)
     current_action_ids = {str(action["id"]) for action in actions}
     if not refs.issubset(current_action_ids):
         _fail(
-            "Evidence refs must belong to current phase actions: "
+            "Evidence-Refs должны относиться к ACTION текущей фазы: "
             f"refs={sorted(refs)}, actions={sorted(current_action_ids)}"
         )
 
     code, payload, stderr = run_supervisor(args.task, report)
     if code != 0:
-        raise TranscriptError("Supervisor did not complete successfully")
+        raise TranscriptError("Supervisor не завершил проверку успешно")
     required_fields = {"phase", "current_phase", "verdict", "next_phase"}
     if not required_fields.issubset(payload) or payload.get("phase") != args.phase:
-        raise TranscriptError("Supervisor response is missing a valid transition contract")
+        raise TranscriptError("В ответе Supervisor отсутствует корректный контракт перехода")
     append_events(
         root,
         [

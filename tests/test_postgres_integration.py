@@ -164,7 +164,7 @@ class TestPostgresInitialMigration:
             )
             conn.execute(text("CREATE TABLE project_workflow.keep_me (id INTEGER PRIMARY KEY)"))
 
-        with pytest.raises(DatabaseRecreateRequired, match="legacy database must be recreated"):
+        with pytest.raises(DatabaseRecreateRequired, match="Устаревшую базу данных необходимо пересоздать"):
             ensure_migrated(engine)
 
         assert database_revisions(engine) == {"e6a4c2d8b901"}
@@ -335,7 +335,7 @@ class TestPostgresInitialMigration:
         def create() -> int:
             uow = SAUnitOfWork(pg_url)
             try:
-                return int(SupervisorEngine("RUN-RACE", uow=uow).task["id"])
+                return int(SupervisorEngine("RUN-90001", uow=uow).task["id"])
             finally:
                 uow.close()
 
@@ -347,7 +347,7 @@ class TestPostgresInitialMigration:
 
         assert task_ids[0] == task_ids[1]
         verify = SAUnitOfWork(pg_url)
-        assert len([task for task in verify.tasks.list() if task.task_key == "RUN-RACE"]) == 1
+        assert len([task for task in verify.tasks.list() if task.task_key == "RUN-90001"]) == 1
         verify.close()
 
     def test_orm_create_all_is_rejected_for_postgresql(self, pg_url):
@@ -843,7 +843,7 @@ class TestPostgresUoW:
             uow = SAUnitOfWork(pg_url)
             try:
                 with patch.object(OpenAICompatibleClient, "chat", side_effect=provider):
-                    return SupervisorEngine("RUN-PG-CATALOG-RACE", uow=uow).evaluate("done")
+                    return SupervisorEngine("RUN-90002", uow=uow).evaluate("done")
             finally:
                 uow.close()
 
@@ -865,11 +865,135 @@ class TestPostgresUoW:
         assert result["verdict"] == "BLOCKED"
         assert result["retryable"] is True
         verify = SAUnitOfWork(pg_url)
-        task = verify.tasks.get_by_key("RUN-PG-CATALOG-RACE")
+        task = verify.tasks.get_by_key("RUN-90002")
         assert task is not None and task.status == "blocked" and task.current_phase == "1.INTAKE"
-        run = verify.supervisor_runs.list(task_key="RUN-PG-CATALOG-RACE", limit=1)[0]
+        run = verify.supervisor_runs.list(task_key="RUN-90002", limit=1)[0]
         assert run.verdict == "blocked"
         assert run.report_fingerprint is None
+        verify.close()
+
+    def test_task_delete_waits_for_supervisor_commit(self, pg_url):
+        from project_workflow.infrastructure.llm import OpenAICompatibleClient
+        from project_workflow.supervisor import SupervisorEngine
+        from scripts.init_db import main
+
+        assert main() == 0
+        evaluation_holds_workflow = Event()
+        allow_evaluation_commit = Event()
+        delete_started = Event()
+        delete_finished = Event()
+
+        def evaluate() -> dict:
+            uow = SAUnitOfWork(pg_url)
+            original_create_run = uow.create_supervisor_run
+
+            def paused_create_run(*args, **kwargs):
+                evaluation_holds_workflow.set()
+                assert allow_evaluation_commit.wait(10)
+                return original_create_run(*args, **kwargs)
+
+            uow.create_supervisor_run = paused_create_run
+            try:
+                with patch.object(
+                    OpenAICompatibleClient,
+                    "chat",
+                    side_effect=lambda *_args, **kwargs: _pass_response(str(kwargs["user"])),
+                ):
+                    return SupervisorEngine("RUN-90003", uow=uow).evaluate("done")
+            finally:
+                uow.close()
+
+        def delete() -> str:
+            uow = SAUnitOfWork(pg_url)
+            try:
+                task = uow.tasks.get_by_key("RUN-90003")
+                assert task is not None and task.id is not None
+                delete_started.set()
+                TaskService(uow).delete_task(int(task.id))
+                return "deleted"
+            finally:
+                delete_finished.set()
+                uow.close()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            evaluation_result = pool.submit(evaluate)
+            assert evaluation_holds_workflow.wait(10)
+            deletion_result = pool.submit(delete)
+            assert delete_started.wait(10)
+            deletion_was_serialized = not delete_finished.wait(0.5)
+            allow_evaluation_commit.set()
+            evaluated = evaluation_result.result(timeout=20)
+            deleted = deletion_result.result(timeout=20)
+
+        assert deletion_was_serialized
+        assert evaluated["verdict"] == "PASS"
+        assert deleted == "deleted"
+
+    def test_assigned_agent_update_waits_for_supervisor_commit(self, pg_url):
+        from project_workflow.infrastructure.llm import OpenAICompatibleClient
+        from project_workflow.supervisor import SupervisorEngine
+        from scripts.init_db import main
+
+        assert main() == 0
+        setup = SAUnitOfWork(pg_url)
+        workflow = setup.workflows.get_default()
+        assert workflow is not None and workflow.id is not None
+        phase = setup.phases.get_by_code(int(workflow.id), "1.INTAKE")
+        assert phase is not None and phase.agent_id is not None
+        agent_id = int(phase.agent_id)
+        setup.close()
+
+        evaluation_holds_workflow = Event()
+        allow_evaluation_commit = Event()
+        update_started = Event()
+        update_finished = Event()
+
+        def evaluate() -> dict:
+            uow = SAUnitOfWork(pg_url)
+            original_create_run = uow.create_supervisor_run
+
+            def paused_create_run(*args, **kwargs):
+                evaluation_holds_workflow.set()
+                assert allow_evaluation_commit.wait(10)
+                return original_create_run(*args, **kwargs)
+
+            uow.create_supervisor_run = paused_create_run
+            try:
+                with patch.object(
+                    OpenAICompatibleClient,
+                    "chat",
+                    side_effect=lambda *_args, **kwargs: _pass_response(str(kwargs["user"])),
+                ):
+                    return SupervisorEngine("RUN-90004", uow=uow).evaluate("done")
+            finally:
+                uow.close()
+
+        def update_agent() -> str:
+            uow = SAUnitOfWork(pg_url)
+            try:
+                update_started.set()
+                AgentService(uow).update_agent(agent_id, {"name": "Обновлённый агент"})
+                return "updated"
+            finally:
+                update_finished.set()
+                uow.close()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            evaluation_result = pool.submit(evaluate)
+            assert evaluation_holds_workflow.wait(10)
+            update_result = pool.submit(update_agent)
+            assert update_started.wait(10)
+            update_was_serialized = not update_finished.wait(0.5)
+            allow_evaluation_commit.set()
+            evaluated = evaluation_result.result(timeout=20)
+            updated = update_result.result(timeout=20)
+
+        assert update_was_serialized
+        assert evaluated["verdict"] == "PASS"
+        assert updated == "updated"
+        verify = SAUnitOfWork(pg_url)
+        agent = verify.agents.get_by_id(agent_id)
+        assert agent is not None and agent.name == "Обновлённый агент"
         verify.close()
 
     @pytest.mark.parametrize("operation", ["update", "delete", "reorder"])
@@ -984,7 +1108,7 @@ def _prepare_concurrent_task(pg_url: str, task_key: str) -> None:
 def test_concurrent_reports_create_one_transition_and_run(pg_url, same_report):
     from project_workflow.supervisor import SupervisorEngine
 
-    task_key = "RUN-CONCURRENT"
+    task_key = "RUN-90005"
     _prepare_concurrent_task(pg_url, task_key)
     barrier = Barrier(2)
 
@@ -1026,7 +1150,7 @@ def test_concurrent_reports_create_one_transition_and_run(pg_url, same_report):
 def test_concurrent_distinct_partial_reports_do_not_apply_stale_snapshot(pg_url):
     from project_workflow.supervisor import SupervisorEngine
 
-    task_key = "RUN-CONCURRENT-PARTIAL"
+    task_key = "RUN-90006"
     _prepare_concurrent_task(pg_url, task_key)
     start = Barrier(2)
     providers = Barrier(2)

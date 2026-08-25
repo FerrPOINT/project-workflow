@@ -86,7 +86,7 @@
         </td>
         <td>
           {% if t.latest_verdict %}
-          <span class="verdict-badge verdict-{{ t.latest_verdict }}">{{ t.latest_verdict.upper() }}</span>
+          <span class="verdict-badge verdict-{{ t.latest_verdict }}">{{ t.latest_verdict_label }}</span>
           {% if t.latest_verdict_phase %}<span style="font-size:11px;color:var(--text-dim)">{{ t.latest_verdict_phase }}</span>{% endif %}
           {% else %}—{% endif %}
         </td>
@@ -115,7 +115,7 @@
       <span class="status-badge status-active">В работе</span>
       {% endif %}
       {% if t.latest_verdict %}
-      <span class="verdict-badge verdict-{{ t.latest_verdict }}">{{ t.latest_verdict.upper() }}</span>
+      <span class="verdict-badge verdict-{{ t.latest_verdict }}">{{ t.latest_verdict_label }}</span>
       {% endif %}
     </div>
     {% if t.title and t.title != t.task_key %}
@@ -153,7 +153,7 @@ function deleteTask(btn) {
       window.location.reload();
     })
     .catch(function() {
-      window.location.reload();
+      showRequestError();
     });
 }
 {% endblock %}
