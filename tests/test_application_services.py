@@ -287,11 +287,9 @@ class TestWorkflowService:
         uow = _make_uow()
         uow.workflows.list.return_value = [FakeWorkflow(1, "W")]
         uow.workflows.get_by_id.return_value = FakeWorkflow(1, "W")
-        uow.workflows.get_by_name.return_value = FakeWorkflow(1, "W")
         svc = WorkflowService(uow)
         assert svc.list_workflows() == [{"id": 1, "name": "W"}]
         assert svc.get_workflow(1) == {"id": 1, "name": "W"}
-        assert svc.get_workflow_by_name("W") == {"id": 1, "name": "W"}
         assert svc.update_workflow(1, {"name": "Z"}) is None
         uow.projects.list.return_value = []
         uow.workflows.lock.return_value = FakeWorkflow(1, "W")

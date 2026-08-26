@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 
@@ -50,22 +49,33 @@ def test_primary_ui_labels_do_not_expose_internal_english_enums() -> None:
     assert "Подтверждения" in sources
 
 
-def test_packaged_v1_is_the_exact_historical_catalog() -> None:
-    seed_path = ROOT / "project_workflow" / "references" / "seed.json"
-    raw = seed_path.read_bytes()
-    catalog = json.loads(raw)
+def test_packaged_phase_names_are_localized_without_changing_codes() -> None:
+    catalog = json.loads((ROOT / "project_workflow" / "references" / "seed.json").read_text(encoding="utf-8"))
     by_code = {item["code"]: item["name"] for item in catalog}
 
-    normalized_raw = raw.replace(b"\r\n", b"\n")
-    assert hashlib.sha256(normalized_raw).hexdigest() == (
-        "abdb166bc9734630769cbb1eae165c0ac066e783cda8179d909a5c5a1beecec6"
+    assert by_code["1.INTAKE"] == "Приём задачи"
+    assert by_code["3.DOR_GATE"] == "Готовность к работе"
+    assert by_code["9.PR"] == "Запрос на слияние"
+    assert by_code["10.REVIEW"] == "Проверка кода"
+    assert by_code["11.RUNTIME"] == "Приёмка приложения"
+
+    user_text = "\n".join(
+        str(value)
+        for phase in catalog
+        for key, value in phase.items()
+        if key in {"name", "description", "instructions", "checks", "evidence"}
     )
-    assert len(catalog) == 19
-    assert by_code["1.INTAKE"] == "Intake"
-    assert by_code["3.DOR_GATE"] == "Definition of Ready"
-    assert by_code["9.PR"] == "Pull Request"
-    assert by_code["10.REVIEW"] == "Code review"
-    assert by_code["11.RUNTIME"] == "Runtime acceptance"
+    for forbidden in (
+        "Используй skills",
+        "acceptance criteria",
+        "Operator review",
+        "Readback",
+        "evidence сохранены",
+        "Runtime acceptance",
+        "Unknown phase",
+        "выполнить merge",
+    ):
+        assert forbidden not in user_text
 
 
 def test_cli_result_and_task_key_errors_are_in_russian() -> None:

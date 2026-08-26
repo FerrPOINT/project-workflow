@@ -98,8 +98,6 @@ class Workflow:
     name: str = ""
     description: str = ""
     is_default: bool = False
-    is_locked: bool = False
-    catalog_sha256: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -107,8 +105,6 @@ class Workflow:
             "name": self.name,
             "description": self.description,
             "is_default": self.is_default,
-            "is_locked": self.is_locked,
-            "catalog_sha256": self.catalog_sha256,
         }
 
 

@@ -46,8 +46,6 @@ def _row_to_workflow(row: m.Workflow) -> Workflow:
         name=row.name,
         description=row.description or "",
         is_default=bool(row.is_default),
-        is_locked=bool(row.is_locked),
-        catalog_sha256=row.catalog_sha256,
     )
 
 
@@ -67,7 +65,7 @@ def _row_to_project(row: m.Project) -> Project:
         code=row.code,
         name=row.name,
         description=row.description,
-        key_prefixes=[str(p) for p in prefixes],
+        key_prefixes=list(prefixes),
         workflow_name=row.workflow.name if row.workflow else None,
     )
 

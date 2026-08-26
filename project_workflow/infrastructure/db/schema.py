@@ -38,7 +38,6 @@ def _build_phase_from_db(
     instructions = [
         PhaseInstruction(
             step=ir["description"],
-            example=ir.get("example"),
             execution_type=ir.get("execution_type", "sync"),
             skills=ir.get("skills") or [],
             id=ir.get("id"),
@@ -125,12 +124,11 @@ class _SeedInstruction(_SeedModel):
     description: str
     execution_type: Literal["sync", "parallel"] = "sync"
     skills: list[str] = Field(default_factory=list)
-    example: str | None = None
 
     @field_validator("description")
     @classmethod
     def _description_not_blank(cls, value: str) -> str:
-        return _nonblank(value, "instruction description")
+        return _nonblank(value, "description инструкции")
 
     @field_validator("skills")
     @classmethod
@@ -153,32 +151,19 @@ class _SeedTextItem(_SeedModel):
 class _SeedDelegate(_SeedModel):
     agent: str
     hermes_profile: str | None = None
-    prompt_template: str | None = None
-    toolsets: list[str] = Field(default_factory=list)
-    timeout_min: int = Field(default=10, gt=0)
-    max_cycles: int = Field(default=3, gt=0)
 
     @field_validator("agent")
     @classmethod
     def _agent_not_blank(cls, value: str) -> str:
-        return _nonblank(value, "delegate agent")
+        return _nonblank(value, "agent делегата")
 
-    @field_validator("hermes_profile", "prompt_template")
+    @field_validator("hermes_profile")
     @classmethod
     def _normalize_optional_text(cls, value: str | None) -> str | None:
         if value is None:
             return None
         normalized = value.strip()
         return normalized or None
-
-    @field_validator("toolsets")
-    @classmethod
-    def _normalize_toolsets(cls, value: list[str]) -> list[str]:
-        normalized = [_nonblank(toolset, "toolset") for toolset in value]
-        if len(normalized) != len(set(normalized)):
-            raise ValueError("toolsets должен содержать уникальные значения")
-        return normalized
-
 
 class _SeedPhase(_SeedModel):
     phase_order: int = Field(gt=0)
@@ -266,7 +251,6 @@ def _phase_item_to_supervisor(item: _SeedPhase) -> Phase:
     instructions = [
         PhaseInstruction(
             step=instruction.description,
-            example=instruction.example,
             execution_type=instruction.execution_type,
             skills=instruction.skills,
         )
@@ -281,10 +265,10 @@ def _phase_item_to_supervisor(item: _SeedPhase) -> Phase:
         delegate = PhaseDelegate(
             agent=delegate_data.agent,
             hermes_profile=delegate_data.hermes_profile,
-            prompt_template=delegate_data.prompt_template or f"Фаза {item.code}",
-            toolsets=delegate_data.toolsets,
-            timeout_min=delegate_data.timeout_min,
-            max_cycles=delegate_data.max_cycles,
+            prompt_template=f"Фаза {item.code}",
+            toolsets=[],
+            timeout_min=10,
+            max_cycles=3,
         )
     return Phase(
         id=None,
@@ -337,7 +321,7 @@ def ensure_phase_catalog(
             uow.agents.create(
                 {
                     "name": agent_name,
-                    "description": f"Seed agent for {agent_name}",
+                    "description": f"Агент начального каталога: {agent_name}",
                     "hermes_profile": delegate.hermes_profile if delegate else None,
                 }
             )
