@@ -11,14 +11,6 @@ pytestmark = [pytest.mark.unit]
 from project_workflow.interfaces.ui import services as services_mod
 
 
-def test_get_db():
-    db = MagicMock()
-    state = MagicMock()
-    state.get_db.return_value = db
-    with patch.object(services_mod, "_get_app_state", return_value=state):
-        assert services_mod._get_db() is db
-
-
 def test_ui_data_service():
     state = MagicMock()
     with patch.object(services_mod, "_get_app_state", return_value=state):
@@ -44,28 +36,3 @@ def test_load_functions_delegate_to_ui_data_service():
         assert services_mod._load_projects() == [{"id": 5}]
         assert services_mod._load_dashboard() == {"count": 1}
         assert services_mod._get_task_detail("T-1") == {"id": 6}
-
-
-def test_resolve_task_phase():
-    db = MagicMock()
-    db.get_phases.return_value = [{"id": 1, "code": "p1"}]
-    with patch.object(services_mod, "_get_db", return_value=db):
-        token, phase = services_mod._resolve_task_phase("p1")
-        assert token == "p1"
-        assert phase == {"id": 1, "code": "p1"}
-
-
-def test_resolve_task_phase_local():
-    phases = [
-        {"id": 1, "code": "p1"},
-        {"id": 2, "code": "p2"},
-    ]
-    token, phase = services_mod._resolve_task_phase_local("p2", phases)
-    assert token == "p2"
-    assert phase == {"id": 2, "code": "p2"}
-
-
-def test_resolve_task_phase_local_not_found():
-    token, phase = services_mod._resolve_task_phase_local("missing", [])
-    assert token == "missing"
-    assert phase is None

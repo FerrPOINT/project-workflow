@@ -11,6 +11,7 @@ from sqlalchemy import text
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.interfaces.ui import app
 from project_workflow.interfaces.ui.state import _app_state
+from tests._phase_helpers import create_empty_workflow
 
 pytestmark = [pytest.mark.ui]
 
@@ -23,9 +24,7 @@ def _unique(prefix: str) -> str:
 
 
 def _workflow_with_phases(count: int = 2) -> tuple[int, list[dict]]:
-    workflow = _app_state.workflow_service().create_workflow(
-        {"name": _unique("workflow"), "_skip_default_phase": True}
-    )
+    workflow = create_empty_workflow(_app_state.get_db(), _unique("workflow"))
     phases = [
         _app_state.phase_service().create_phase(
             {

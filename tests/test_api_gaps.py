@@ -24,11 +24,12 @@ def _fake_app_state(**kwargs):
 
 
 class TestApiTaskDetail:
-    def test_task_detail_not_found(self):
+    def test_task_detail_method_is_not_registered(self):
         with patch("project_workflow.interfaces.ui.routes.api._app_state") as state:
             state.get_db.return_value.get_task_by_key.return_value = None
             response = client.get("/api/tasks/MISSING-99")
-        assert response.status_code == 404
+        assert response.status_code == 405
+        assert response.json() == {"ok": False, "error": "Метод не поддерживается"}
 
 
 class TestApiTaskDelete:
@@ -58,6 +59,22 @@ class TestApiPhaseCreate:
     def test_string_workflow_id_is_rejected(self):
         response = client.post("/api/phases", json={"name": "X", "phase_order": 1, "workflow_id": "999"})
         assert response.status_code == 422
+        assert response.json()["details"] == [
+            {"field": "workflow_id", "message": "Ожидается целое число"}
+        ]
+
+    def test_validation_errors_are_safe_and_localized(self):
+        response = client.post("/api/workflows", json={"unexpected": "value"})
+
+        assert response.status_code == 422
+        assert response.json() == {
+            "ok": False,
+            "error": "Некорректные данные запроса",
+            "details": [
+                {"field": "name", "message": "Обязательное поле не указано"},
+                {"field": "unexpected", "message": "Неизвестное поле"},
+            ],
+        }
 
     def test_numeric_workflow_id_not_found(self):
         with patch("project_workflow.interfaces.ui.routes.api._app_state") as state:

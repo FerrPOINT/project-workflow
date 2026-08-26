@@ -1122,7 +1122,7 @@ class TestPostgresUoW:
             assert phase is not None and phase.id is not None
             checks = [dict(row) for row in mutation.phases.get_checks(int(phase.id))]
             checks.append({"description": "Concurrent PostgreSQL catalog check"})
-            PhaseService(mutation).save_checks(int(phase.id), checks)
+            PhaseService(mutation).update_phase_detail(int(phase.id), {"checks": checks})
             mutation.close()
             release_provider.set()
             result = result_future.result(timeout=20)

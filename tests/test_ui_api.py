@@ -14,6 +14,7 @@ pytestmark = [pytest.mark.ui]
 
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from tests._db_helpers import phase_by_code, prepare_sqlite_uow
+from tests._phase_helpers import create_empty_workflow
 
 
 @pytest.fixture
@@ -145,7 +146,8 @@ class TestApiPhases:
 
     def test_non_numeric_phase_identifier_is_rejected(self, client):
         resp = client.get("/api/phases/0.7")
-        assert resp.status_code == 422
+        assert resp.status_code == 404
+        assert resp.json() == {"ok": False, "error": "Ресурс не найден"}
 
     def test_update_phase_missing(self, client):
         resp = client.put("/api/phases/-9999", json={"body": {}})
@@ -287,7 +289,7 @@ class TestApiPhaseCreate:
     def test_create_phase_requires_phase_order(self, client):
         from project_workflow.interfaces.ui import _app_state
 
-        workflow = _app_state.workflow_service().create_workflow({"name": _unique("wf"), "_skip_default_phase": True})
+        workflow = create_empty_workflow(_app_state.get_db(), _unique("wf"))
         resp = client.post("/api/phases", json={"workflow_id": workflow["id"]})
         assert resp.status_code == 422
         assert "phase_order или insert_after" in resp.text
@@ -305,9 +307,7 @@ class TestApiPhaseCreate:
         from project_workflow.interfaces.ui import _app_state
 
         uow = _app_state.get_db()
-        workflow = _app_state.workflow_service().create_workflow(
-            {"name": _unique("cpt-wf"), "_skip_default_phase": True}
-        )
+        workflow = create_empty_workflow(uow, _unique("cpt-wf"))
         workflow_id = workflow["id"]
         c1, c2, c3 = _unique("cpt"), _unique("cpt"), _unique("cpt")
         try:
@@ -346,9 +346,7 @@ class TestApiPhaseCreate:
         from project_workflow.interfaces.ui import _app_state
 
         uow = _app_state.get_db()
-        workflow = _app_state.workflow_service().create_workflow(
-            {"name": _unique("cpa-wf"), "_skip_default_phase": True}
-        )
+        workflow = create_empty_workflow(uow, _unique("cpa-wf"))
         workflow_id = workflow["id"]
         c1 = _unique("cpa")
         try:
@@ -371,9 +369,7 @@ class TestApiPhaseCreate:
         from project_workflow.interfaces.ui import _app_state
 
         uow = _app_state.get_db()
-        workflow = _app_state.workflow_service().create_workflow(
-            {"name": _unique("cpfull-wf"), "_skip_default_phase": True}
-        )
+        workflow = create_empty_workflow(uow, _unique("cpfull-wf"))
         workflow_id = workflow["id"]
         try:
             resp = client.post(
@@ -403,9 +399,7 @@ class TestApiPhaseCreate:
         from project_workflow.interfaces.ui import _app_state
 
         uow = _app_state.get_db()
-        workflow = _app_state.workflow_service().create_workflow(
-            {"name": _unique("cpof-wf"), "_skip_default_phase": True}
-        )
+        workflow = create_empty_workflow(uow, _unique("cpof-wf"))
         workflow_id = workflow["id"]
         codes = [_unique("cpof") for _ in range(4)]
         try:
@@ -479,7 +473,7 @@ class TestApiWorkflows:
     def test_update_workflow(self, client):
         from project_workflow.interfaces.ui import _app_state
 
-        wf = _app_state.workflow_service().create_workflow({"name": _unique("upd-wf"), "_skip_default_phase": True})
+        wf = create_empty_workflow(_app_state.get_db(), _unique("upd-wf"))
         resp = client.put(f"/api/workflows/{wf['id']}", json={"name": "Updated", "description": "new"})
         assert resp.status_code == 200
         data = resp.json()
@@ -502,7 +496,7 @@ class TestApiWorkflows:
     def test_delete_workflow_with_phases_forbidden(self, client):
         from project_workflow.interfaces.ui import _app_state
 
-        wf = _app_state.workflow_service().create_workflow({"name": _unique("del-wf"), "_skip_default_phase": True})
+        wf = create_empty_workflow(_app_state.get_db(), _unique("del-wf"))
         _app_state.phase_service().create_phase(
             {"workflow_id": wf["id"], "code": _unique("delph"), "name": "Phase", "phase_order": 1}
         )
@@ -724,9 +718,10 @@ class TestApiTasks:
         assert data["ok"] is True
         assert all(t.get("workflow_id") == default_wf["id"] for t in data["tasks"])
 
-    def test_api_task_detail_404_for_unknown_key(self, client):
+    def test_api_task_detail_method_is_not_registered(self, client):
         resp = client.get("/api/tasks/NONEXISTENT-99999")
-        assert resp.status_code == 404
+        assert resp.status_code == 405
+        assert resp.json() == {"ok": False, "error": "Метод не поддерживается"}
 
     def test_delete_task_cascade(self, client):
         from project_workflow.interfaces.ui import _app_state
@@ -761,9 +756,7 @@ class TestApiPhaseDelete:
         from project_workflow.interfaces.ui import _app_state
 
         uow = _app_state.get_db()
-        workflow = _app_state.workflow_service().create_workflow(
-            {"name": _unique("del-phase-wf"), "_skip_default_phase": True}
-        )
+        workflow = create_empty_workflow(uow, _unique("del-phase-wf"))
         workflow_id = workflow["id"]
         try:
             ph1 = _app_state.phase_service().create_phase(
