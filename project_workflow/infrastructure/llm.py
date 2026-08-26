@@ -10,16 +10,19 @@ ResponseParser — validates and normalises LLM JSON responses
 from __future__ import annotations
 
 import json
-import logging
 from dataclasses import dataclass
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 import requests
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from project_workflow import config
 
-logger = logging.getLogger(__name__)
+
+class LlmConfigurationError(ValueError):
+    """Ожидаемая безопасная ошибка конфигурации evaluator."""
+
 
 @dataclass(frozen=True)
 class LlmVerdict:
@@ -49,23 +52,16 @@ class OpenAICompatibleClient:
         self.base_url = (base_url or settings.OPENAI_BASE_URL).rstrip("/")
         self.model = model or settings.OPENAI_MODEL
         self.timeout = timeout or settings.OPENAI_TIMEOUT
-        self.api_key = api_key if api_key is not None else settings.OPENAI_API_KEY
+        self.api_key = (api_key if api_key is not None else settings.OPENAI_API_KEY).strip()
         self.reasoning_effort = (
             settings.OPENAI_REASONING_EFFORT if reasoning_effort is None else reasoning_effort
         ).strip()
 
-    def is_available(self) -> bool:
-        """Quick health-check."""
-        try:
-            headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
-            r = requests.get(f"{self.base_url}/models", headers=headers, timeout=5)
-            return r.status_code == 200
-        except (requests.RequestException, OSError) as exc:
-            logger.warning("LLM health-check failed: %s", exc)
-            return False
-
     def chat(self, system: str, user: str, temperature: float = 0.1) -> dict[str, Any]:
         """Send chat request, return parsed JSON content."""
+        if urlsplit(self.base_url).hostname == "openrouter.ai" and not self.api_key:
+            raise LlmConfigurationError("Для OpenRouter требуется OPENAI_API_KEY")
+
         headers = {
             "Content-Type": "application/json",
         }

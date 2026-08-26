@@ -10,7 +10,13 @@ import requests
 from sqlalchemy.exc import IntegrityError
 
 from ..domain.exceptions import ConcurrentTransitionError
-from ..infrastructure.llm import LlmVerdict, OpenAICompatibleClient, PromptBuilder, ResponseParser
+from ..infrastructure.llm import (
+    LlmConfigurationError,
+    LlmVerdict,
+    OpenAICompatibleClient,
+    PromptBuilder,
+    ResponseParser,
+)
 from .checks import normalize_text
 from .models import Phase
 from .types import VERDICT_LABELS
@@ -83,11 +89,25 @@ def _report_fingerprint(task_id: int, report: str, contract_fingerprint: str) ->
 
 
 def _blocked(exc: Exception) -> LlmVerdict:
+    if isinstance(exc, LlmConfigurationError):
+        blocker = "Проверяющий LLM не настроен: для OpenRouter требуется OPENAI_API_KEY."
+    elif isinstance(exc, (requests.Timeout, TimeoutError)):
+        blocker = "Проверяющий LLM не ответил за отведённое время."
+    elif isinstance(exc, requests.HTTPError):
+        blocker = "Проверяющий LLM отклонил запрос."
+    elif isinstance(exc, requests.ConnectionError):
+        blocker = "Не удалось установить соединение с проверяющим LLM."
+    elif isinstance(exc, requests.RequestException):
+        blocker = "Ошибка обмена данными с проверяющим LLM."
+    elif isinstance(exc, (ConnectionError, OSError)):
+        blocker = "Не удалось установить соединение с проверяющим LLM."
+    else:
+        blocker = "Проверяющий LLM вернул некорректный ответ."
     return LlmVerdict(
         verdict="BLOCKED",
         covered=[],
         missing=[],
-        blockers=[f"Проверяющий LLM недоступен: {type(exc).__name__}"],
+        blockers=[blocker],
         message="Supervisor не смог проверить отчёт; переход заблокирован.",
         next_phase=None,
         next_phase_name=None,
@@ -269,10 +289,11 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     # Do not keep a database transaction or workflow row lock open across the provider call.
     engine.db.commit()
 
-    client = OpenAICompatibleClient()
+    client: OpenAICompatibleClient | None = None
     raw: dict[str, Any] | None = None
     technical_error = False
     try:
+        client = OpenAICompatibleClient()
         raw = client.chat(system=PromptBuilder.SYSTEM_PROMPT, user=user, temperature=0.1)
         llm = ResponseParser.parse(
             raw,
@@ -439,7 +460,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         "context_snapshot": {
             "phase": phase.code,
             "phase_name": evaluation_phase.name,
-            "model": client.model,
+            "model": client.model if client is not None else None,
             "endpoint_mode": "openai-compatible",
             "prompt_version": PromptBuilder.PROMPT_VERSION,
             "contract_fingerprint": current_contract_fingerprint,

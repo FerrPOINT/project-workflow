@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 import requests
 
+from project_workflow import config
 from project_workflow.application.phase_service import PhaseService
 from project_workflow.infrastructure.llm import OpenAICompatibleClient, ResponseParser
 from project_workflow.supervisor import SupervisorEngine
@@ -241,6 +242,26 @@ def test_retryable_provider_error_has_no_fingerprint_and_blocks_current_phase():
     assert all(run.context_snapshot["raw_evaluator"] == {"error": "ConnectionError"} for run in runs)
     assert [item["status"] for item in engine.db.get_task_history(engine.task["id"])] == ["blocked"]
     assert engine.task["status"] == "blocked"
+
+
+def test_missing_openrouter_key_blocks_locally_without_network(monkeypatch):
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "   ")
+    config.get_settings.cache_clear()
+    engine = SupervisorEngine("RUN-911")
+
+    with patch("project_workflow.infrastructure.llm.requests.post") as post:
+        result = engine.evaluate("same report")
+
+    assert result["verdict"] == "BLOCKED"
+    assert result["retryable"] is True
+    assert result["blockers"] == [
+        "Проверяющий LLM не настроен: для OpenRouter требуется OPENAI_API_KEY."
+    ]
+    post.assert_not_called()
+    run = engine.db.supervisor_runs.list(task_key=engine.task_key)[0]
+    assert run.report_fingerprint is None
+    assert run.context_snapshot["raw_evaluator"] == {"error": "LlmConfigurationError"}
 
 
 def test_successful_retry_after_provider_error_unblocks_and_transitions(supervisor_llm):
