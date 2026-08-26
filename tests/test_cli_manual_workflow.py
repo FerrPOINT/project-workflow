@@ -50,6 +50,14 @@ def manual_env(tmp_path, monkeypatch):
     )
     uow.commit()
 
+    delegate_agent_id = uow.agents.create(
+        {
+            "name": "Старший ревьюер",
+            "description": "Тестовый делегат",
+            "hermes_profile": "senior-reviewer",
+        }
+    )
+    phase_ids: dict[str, int] = {}
     for p in seed:
         phase_id = uow.phases.create(
             {
@@ -59,16 +67,22 @@ def manual_env(tmp_path, monkeypatch):
                 "name": p["name"],
                 "description": p["description"],
                 "execution_type": p["execution_type"],
-                "parallel_with": p.get("parallel_with"),
-                "rollback_target": p.get("rollback_target"),
-                "is_delegated": p.get("is_delegated", False),
-                "is_blocker": p.get("is_blocker", False),
-                "is_critic": p.get("is_critic", False),
-                "is_seed_managed": p.get("is_seed_managed", False),
+                "agent_id": delegate_agent_id if p.get("delegate") else None,
             }
         )
+        phase_ids[p["code"]] = phase_id
+
+    for p in seed:
+        phase_id = phase_ids[p["code"]]
+        uow.phases.update(
+            phase_id,
+            {
+                "parallel_with_phase_id": phase_ids.get(p.get("parallel_with_phase_code")),
+                "rollback_target_phase_id": phase_ids.get(p.get("rollback_target_phase_code")),
+            },
+        )
         for inst in p.get("instructions", []):
-            uow.instructions.create(
+            uow.phase_instructions.create(
                 phase_id,
                 {
                     "description": inst["description"],
@@ -76,9 +90,9 @@ def manual_env(tmp_path, monkeypatch):
                 },
             )
         for chk in p.get("checks", []):
-            uow.checks.create(phase_id, {"description": chk["description"]})
+            uow.phase_checks.create(phase_id, {"description": chk["description"]})
         for ev in p.get("evidence", []):
-            uow.evidence.create(phase_id, {"description": ev["description"]})
+            uow.phase_evidence_requirements.create(phase_id, {"description": ev["description"]})
     uow.commit()
     uow.close()
 
@@ -100,8 +114,8 @@ class TestManualWorkflowEndToEnd:
         assert result.exit_code == 0, result.output
         data = json.loads(result.output)
         assert data["verdict"] == "PASS"
-        assert data["phase"] == "manual.intake"
-        assert data["next_phase"] == "manual.plan"
+        assert data["phase_code"] == "manual.intake"
+        assert data["next_phase_code"] == "manual.plan"
         assert data["missing"] == []
         assert data["next_phase_contract"]["phase_code"] == "manual.plan"
         assert data["next_phase_contract"]["instructions"]
@@ -128,8 +142,8 @@ class TestManualWorkflowEndToEnd:
         assert result.exit_code == 0, result.output
         data = json.loads(result.output)
         assert data["verdict"] == "PASS"
-        assert data["phase"] == "manual.plan"
-        assert data["next_phase"] == "manual.parallel-a"
+        assert data["phase_code"] == "manual.plan"
+        assert data["next_phase_code"] == "manual.parallel-a"
 
     def test_parallel_group_partial_then_full(self, manual_env, supervisor_llm):
         runner = CliRunner(env={"DATABASE_URL": manual_env})
@@ -172,9 +186,9 @@ class TestManualWorkflowEndToEnd:
         assert result.exit_code == 0, result.output
         data = json.loads(result.output)
         assert data["verdict"] == "PARTIAL"
-        assert "manual.parallel-a" in data["phase"]
+        assert "manual.parallel-a" in data["phase_code"]
         assert "Параллельная группа" in data["phase_name"]
-        assert data["next_phase"] is None
+        assert data["next_phase_code"] is None
         assert any("Frontend" in m for m in data["missing"])
         assert data["instructions"]
         assert data["required_checks"]
@@ -192,7 +206,7 @@ class TestManualWorkflowEndToEnd:
         data = json.loads(result.output)
         assert data["verdict"] == "PASS"
         assert "Параллельная группа" in data["phase_name"]
-        assert data["next_phase"] == "manual.seq-instr"
+        assert data["next_phase_code"] == "manual.seq-instr"
         assert data["missing"] == []
 
     def test_mixed_instructions_phase(self, manual_env, supervisor_llm):
@@ -221,8 +235,8 @@ class TestManualWorkflowEndToEnd:
         assert result.exit_code == 0, result.output
         data = json.loads(result.output)
         assert data["verdict"] == "PARTIAL"
-        assert data["phase"] == "manual.seq-instr"
-        assert data["next_phase"] is None
+        assert data["phase_code"] == "manual.seq-instr"
+        assert data["next_phase_code"] is None
         assert len(data["missing"]) > 0
 
         full = (
@@ -235,8 +249,8 @@ class TestManualWorkflowEndToEnd:
         assert result.exit_code == 0, result.output
         data = json.loads(result.output)
         assert data["verdict"] == "PASS"
-        assert data["phase"] == "manual.seq-instr"
-        assert data["next_phase"] == "manual.rollback-demo"
+        assert data["phase_code"] == "manual.seq-instr"
+        assert data["next_phase_code"] == "manual.rollback-demo"
         assert data["missing"] == []
 
     def test_rollback_phase_response(self, manual_env, supervisor_llm):
@@ -265,7 +279,7 @@ class TestManualWorkflowEndToEnd:
             data = json.loads(result.output)
             assert data["verdict"] == "PASS", data
 
-        # Rollback: report contains "rollback" and phase has rollback_target
+        # Rollback: the evaluator returns ROLLBACK and the phase has a configured target ID.
         supervisor_llm("ROLLBACK")
         result = runner.invoke(cli, ["step", "--task", "MANUAL-6", "--report", "Integration failed. rollback."])
         assert result.exit_code == 0, result.output
@@ -298,7 +312,7 @@ class TestManualWorkflowEndToEnd:
             data = json.loads(result.output)
             assert data["verdict"] == "PASS", data
 
-        # Delegate: report contains delegate signal and phase is_delegated=True
+        # Delegate is valid because the phase has an assigned agent.
         supervisor_llm("DELEGATE")
         result = runner.invoke(cli, ["step", "--task", "MANUAL-7", "--report", "delegate this review"])
         assert result.exit_code == 0, result.output
@@ -356,21 +370,28 @@ class TestManualWorkflowEndToEnd:
         result = runner.invoke(cli, ["--json", "step", "--task", "MANUAL-11", "--report", "rollback"])
         assert result.exit_code == 0, result.output
         data = json.loads(result.output)
-        assert data["rollback_target"] == "manual.plan"
-        assert data["next_phase"] == "manual.plan"
+        assert data["rollback_phase_code"] == "manual.plan"
+        assert data["next_phase_code"] == "manual.plan"
 
         with SAUnitOfWork() as uow:
             task = uow.tasks.get_by_key("MANUAL-11")
             assert task is not None
-            assert task.current_phase == "manual.plan"
-            statuses = {
-                uow.phases.get_by_id(row["phase_id"]).code: row["status"]
-                for row in uow.tasks.get_history(task.id)
+            assert task.current_phase_code == "manual.plan"
+            run = uow.step_history.list(task_id=task.id, limit=1)[0]
+            rollback_events = [
+                event
+                for event in uow.tasks.list_phase_events(task.id)
+                if event.step_history_id == run.id
+            ]
+            event_types = {
+                uow.phases.get_by_id(event.phase_id).code: event.event_type
+                for event in rollback_events
             }
-            assert statuses["manual.parallel-a"] == "rollback"
-            assert statuses["manual.parallel-b"] == "rollback"
-            assert statuses["manual.plan"] == "pending"
-            run = uow.supervisor_runs.list(task_id=task.id, limit=1)[0]
+            assert event_types == {
+                "manual.parallel-a": "rolled_back",
+                "manual.parallel-b": "rolled_back",
+                "manual.plan": "entered",
+            }
             rollback_phase = uow.phases.get_by_id(run.rollback_phase_id)
             assert rollback_phase is not None
             assert rollback_phase.code == "manual.plan"
@@ -407,7 +428,7 @@ class TestManualWorkflowEndToEnd:
         result = runner.invoke(cli, ["--json", "step", "--task", "MANUAL-5"])
         assert result.exit_code == 0, result.output
         data = json.loads(result.output)
-        assert data["phase"] == "manual.done"
+        assert data["phase_code"] == "manual.done"
         assert data["status"] == "done"
 
         assert "prompt" not in data

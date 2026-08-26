@@ -104,8 +104,9 @@ def test_seed_catalog_has_exact_assignment_groups():
     groups = group_parallel_phases(
         _items(),
         code_of=lambda phase: phase["code"],
+        id_of=lambda phase: phase["code"],
         execution_type_of=lambda phase: phase.get("execution_type", "sync"),
-        parallel_with_of=lambda phase: phase.get("parallel_with"),
+        parallel_with_phase_id_of=lambda phase: phase.get("parallel_with_phase_code"),
     )
     codes = [[phase["code"] for phase in group] for group in groups]
     assert len(codes) == 15
@@ -171,9 +172,9 @@ def test_tech_phases_reference_the_canonical_using_rtech_skill():
 
 def test_post_merge_phases_have_no_workflow_rollback_target():
     by_code = {phase["code"]: phase for phase in _items()}
-    assert by_code["12.RELEASE_GATE"]["rollback_target"] == "8.IMPLEMENT"
+    assert by_code["12.RELEASE_GATE"]["rollback_target_phase_code"] == "8.IMPLEMENT"
     for code in ("13.DELIVERY", "14.CLOSE", "15.RETRO"):
-        assert by_code[code].get("rollback_target") is None
+        assert by_code[code].get("rollback_target_phase_code") is None
 
 
 def test_sqlite_bootstrap_preserves_operator_without_fake_hermes_profile(tmp_path):

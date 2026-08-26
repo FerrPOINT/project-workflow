@@ -108,6 +108,14 @@ async def phase_detail(request: Request, phase_id: int) -> HTMLResponse:
         None,
     )
     parallel_candidates = []
+    rollback_target_phase = next(
+        (
+            item
+            for item in workflow_phases
+            if item.get("id") == phase.get("rollback_target_phase_id")
+        ),
+        None,
+    )
     if current_index is not None:
         left = current_index - 1
         right = current_index + 1
@@ -135,6 +143,7 @@ async def phase_detail(request: Request, phase_id: int) -> HTMLResponse:
             "agents": agents,
             "workflow_phases": workflow_phases,
             "parallel_candidates": parallel_candidates,
+            "rollback_target_phase": rollback_target_phase,
         },
     )
 
@@ -214,7 +223,7 @@ async def task_detail_page(request: Request, task_key: str) -> HTMLResponse:
             "cycles_done": task.get("completed_cycles", 0),
             "cycles_total": task.get("workflow_cycle_count", 0),
             "phase_history_blocks": task.get("phase_history_blocks", []),
-            "supervisor_runs": task.get("supervisor_runs", []),
+            "step_history": task.get("step_history", []),
         },
     )
 

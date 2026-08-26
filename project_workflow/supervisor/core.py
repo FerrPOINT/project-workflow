@@ -33,16 +33,16 @@ class PromptCache:
         self._lock = threading.Lock()
         self._gen = 0
 
-    def key(self, task_key: str, current_phase: str, gen: int) -> str:
-        return f"{task_key}:{current_phase}:{gen}"
+    def key(self, task_key: str, current_phase_code: str, gen: int) -> str:
+        return f"{task_key}:{current_phase_code}:{gen}"
 
-    def get(self, task_key: str, current_phase: str) -> dict | None:
+    def get(self, task_key: str, current_phase_code: str) -> dict | None:
         with self._lock:
-            return self._cache.get(self.key(task_key, current_phase, self._gen))
+            return self._cache.get(self.key(task_key, current_phase_code, self._gen))
 
-    def set(self, task_key: str, current_phase: str, value: dict) -> None:
+    def set(self, task_key: str, current_phase_code: str, value: dict) -> None:
         with self._lock:
-            self._cache[self.key(task_key, current_phase, self._gen)] = value
+            self._cache[self.key(task_key, current_phase_code, self._gen)] = value
 
     def invalidate(self) -> None:
         with self._lock:
@@ -79,7 +79,7 @@ class SupervisorEngine:
         self.workflow = self._workflow_service.get_workflow(self.workflow_id) if self.workflow_id else None
         self._all_phases: list[Phase] | None = None
         self._phase_map: dict[str, Phase] | None = None
-        self.current_phase = self._resolve_current_phase()
+        self.current_phase_code = self._resolve_current_phase_code()
         self._cache = PromptCache()
 
     @property
@@ -136,14 +136,14 @@ class SupervisorEngine:
         project = self._resolve_project()
         if not project:
             raise ValueError(f"Не удалось определить проект для ключа задачи: {self.task_key}")
-        current_phase = self._first_phase_code_for_project(project["id"])
+        current_phase_id = self._first_phase_id_for_project(project["id"])
         try:
             return self._task_service.create_task(
                 {
                     "project_id": project["id"],
                     "task_key": self.task_key,
                     "title": self.task_key,
-                    "current_phase": current_phase,
+                    "current_phase_id": current_phase_id,
                     "status": "active",
                 }
             )
@@ -161,19 +161,24 @@ class SupervisorEngine:
                     return project
         return None
 
-    def _first_phase_code_for_project(self, project_id: int) -> str:
+    def _first_phase_id_for_project(self, project_id: int) -> int:
         project = self._project_service.get_project(project_id)
         workflow_id = project["workflow_id"] if project else None
         phases = schema.load_phases_from_db(self._uow, workflow_id=workflow_id)
         if not phases:
             raise ValueError("Каталог фаз воркфлоу пуст")
-        return phases[0].code
+        phase_id = phases[0].id
+        if not isinstance(phase_id, int) or isinstance(phase_id, bool) or phase_id <= 0:
+            raise ValueError("Начальная фаза воркфлоу не сохранена")
+        return phase_id
 
-    def _resolve_current_phase(self) -> str:
+    def _resolve_current_phase_code(self) -> str:
         if not self.task:
             return ""
-        current = str(self.task.get("current_phase") or "").strip()
-        return current
+        current = self.task.get("current_phase_code")
+        if not isinstance(current, str) or not current.strip():
+            raise ValueError("У задачи отсутствует корректный current_phase_code")
+        return current.strip()
 
     @staticmethod
     def _require_task_workflow_id(task: dict[str, Any]) -> int:
@@ -183,7 +188,7 @@ class SupervisorEngine:
         return workflow_id
 
     def _get_current_phase_obj(self) -> Phase | None:
-        return self.phase_map.get(self.current_phase)
+        return self.phase_map.get(self.current_phase_code)
 
     def _get_previously_covered(self, phase_code: str) -> set[str]:
         """Return items already covered in previous supervisor runs for this phase."""
@@ -198,20 +203,20 @@ class SupervisorEngine:
             return previously
         runs = [
             r.to_dict()
-            for r in self._uow.supervisor_runs.list(
+            for r in self._uow.step_history.list(
                 task_id=task_id,
                 phase_id=int(phase.id),
                 limit=None,
             )
         ]
         for run in runs:
-            covered = run.get("covered", [])
+            covered = run.get("covered_item_ids", [])
             for item in covered:
                 if isinstance(item, str):
                     from .checks import normalize_text
 
                     previously.add(normalize_text(item))
-            snapshot = run.get("context_snapshot", {})
+            snapshot = run.get("evaluation_snapshot", {})
             if isinstance(snapshot, dict):
                 for item_id in snapshot.get("covered_item_ids", []):
                     if isinstance(item_id, str):
@@ -237,8 +242,9 @@ class SupervisorEngine:
         self,
         phase: Phase,
         verdict: str,
-        next_phase: str | None,
-        rollback_target: str | None,
+        next_phase_code: str | None,
+        rollback_phase_code: str | None,
+        step_history_id: int,
         *,
         commit: bool = True,
     ) -> None:
@@ -248,9 +254,10 @@ class SupervisorEngine:
             task=self.task,
             phase=phase,
             verdict=verdict,
-            next_phase=next_phase,
-            rollback_target=rollback_target,
+            next_phase_code=next_phase_code,
+            rollback_phase_code=rollback_phase_code,
             phase_map=self.phase_map,
+            step_history_id=step_history_id,
             commit=commit,
         )
 
@@ -258,9 +265,10 @@ class SupervisorEngine:
         self,
         group: list[Phase],
         verdict: str,
-        next_phase: str | None,
-        rollback_target: str | None = None,
+        next_phase_code: str | None,
+        rollback_phase_code: str | None = None,
         *,
+        step_history_id: int,
         commit: bool = True,
     ) -> None:
         from .transitions import record_parallel_transition
@@ -270,8 +278,9 @@ class SupervisorEngine:
             group=group,
             phase_map=self.phase_map,
             verdict=verdict,
-            next_phase=next_phase,
-            rollback_target=rollback_target,
+            next_phase_code=next_phase_code,
+            rollback_phase_code=rollback_phase_code,
+            step_history_id=step_history_id,
             commit=commit,
         )
 
@@ -279,7 +288,7 @@ class SupervisorEngine:
 
     def get_full_context(self, use_cache: bool = True) -> dict:
         if use_cache:
-            cached = self._cache.get(self.task_key, self.current_phase)
+            cached = self._cache.get(self.task_key, self.current_phase_code)
             if cached:
                 return cached
         builder = SupervisorContextBuilder(
@@ -288,27 +297,27 @@ class SupervisorEngine:
             project=self.project,
             workflow=self.workflow,
             all_phases=self.all_phases,
-            current_phase=self.current_phase,
+            current_phase_code=self.current_phase_code,
             task_key=self.task_key,
         )
         ctx = builder.build()
-        self._cache.set(self.task_key, self.current_phase, ctx)
+        self._cache.set(self.task_key, self.current_phase_code, ctx)
         return ctx
 
-    def get_phase_prompt(self, phase_id: str | None = None) -> str:
+    def get_phase_prompt(self, phase_code: str | None = None) -> str:
         ctx = self.get_full_context()
         return build_phase_prompt(
             task_key=self.task_key,
             phase_map=self.phase_map,
             all_phases=self.all_phases,
-            current_phase=self.current_phase,
+            current_phase_code=self.current_phase_code,
             ctx=ctx,
-            phase_id=phase_id,
+            phase_code=phase_code,
         )
 
-    def get_phase_contract(self, phase_id: str | None = None) -> dict[str, Any] | None:
+    def get_phase_contract(self, phase_code: str | None = None) -> dict[str, Any] | None:
         """Return the structured executor contract for a phase or parallel group."""
-        phase = self.phase_map.get(phase_id or self.current_phase)
+        phase = self.phase_map.get(phase_code or self.current_phase_code)
         if phase is None:
             return None
         builder = self.contract_builder
@@ -323,7 +332,7 @@ class SupervisorEngine:
             latest = recent[0]
             verdict = str(latest.get("verdict") or "").upper()
             destination = (
-                latest.get("rollback_target")
+                latest.get("rollback_phase_code")
                 if verdict == "ROLLBACK"
                 else latest.get("phase_code")
             )
@@ -339,7 +348,7 @@ class SupervisorEngine:
             task_key=self.task_key,
             phase_map=self.phase_map,
             all_phases=self.all_phases,
-            current_phase=self.current_phase,
+            current_phase_code=self.current_phase_code,
             ctx=self.get_full_context(),
         )
 
@@ -352,33 +361,33 @@ class SupervisorEngine:
         return {
             "verdict": "BLOCKED",
             "task_key": self.task_key,
-            "phase": self.current_phase,
+            "phase_code": self.current_phase_code,
             "message": message,
             "covered": [],
             "missing": [],
             "blockers": ["phase-not-configured"],
-            "current_phase": self.current_phase,
-            "next_phase": None,
+            "current_phase_code": self.current_phase_code,
+            "next_phase_code": None,
             "replayed": False,
             "retryable": True,
         }
 
     def _completed_result(self, phase: Phase | None) -> dict[str, Any]:
         contract = self.contract_builder.build(phase) if phase else None
-        phase_code = phase.code if phase else self.current_phase
+        phase_code = phase.code if phase else self.current_phase_code
         return {
             "verdict": "PASS",
             "task_key": self.task_key,
-            "phase": phase_code,
+            "phase_code": phase_code,
             "phase_name": phase.name if phase else None,
             "status": "done",
             "covered": [],
             "missing": [],
             "blockers": [],
-            "current_phase": phase_code,
-            "next_phase": None,
+            "current_phase_code": phase_code,
+            "next_phase_code": None,
             "next_phase_name": None,
-            "rollback_target": None,
+            "rollback_phase_code": None,
             "message": "Воркфлоу уже завершён; новый отчёт не оценивался.",
             "confidence": 1.0,
             "instructions": contract.instructions if contract else [],
@@ -394,38 +403,57 @@ class SupervisorEngine:
     def _resolve_transition(
         self, phase: Phase, verdict: str, group: list[Phase]
     ) -> tuple[str | None, str | None, str | None]:
-        """Return (next_phase_code, next_phase_name, rollback_target_code)."""
+        """Return (next_phase_code, next_phase_name, rollback_phase_code)."""
         is_parallel = len(group) > 1
         if is_parallel:
-            next_phase, next_phase_name = self._get_next_phase_after_group(group)
-            rollback_target = group[0].rollback_target if verdict == "rollback" else None
+            next_phase_code, next_phase_name = self._get_next_phase_after_group(group)
+            rollback_phase_code = (
+                group[0].rollback_target_phase_code if verdict == "rollback" else None
+            )
             if verdict != "pass":
-                next_phase = None
+                next_phase_code = None
                 next_phase_name = None
         else:
-            next_phase, next_phase_name = self._get_next_phase(phase.code)
-            rollback_target = phase.rollback_target if verdict == "rollback" else None
+            next_phase_code, next_phase_name = self._get_next_phase(phase.code)
+            rollback_phase_code = (
+                phase.rollback_target_phase_code if verdict == "rollback" else None
+            )
 
-        if verdict == "pass" and next_phase:
-            next_phase_obj = self.phase_map.get(next_phase)
+        if verdict == "pass" and next_phase_code:
+            next_phase_obj = self.phase_map.get(next_phase_code)
             next_phase_name = next_phase_obj.name if next_phase_obj else next_phase_name
-        return next_phase, next_phase_name, rollback_target
+        return next_phase_code, next_phase_name, rollback_phase_code
 
     def _record_evaluation(
         self,
         phase: Phase,
         verdict: str,
-        next_phase: str | None,
-        rollback_target: str | None,
+        next_phase_code: str | None,
+        rollback_phase_code: str | None,
+        step_history_id: int,
         *,
         commit: bool = True,
     ) -> None:
         is_parallel = phase.execution_type == "parallel"
         if is_parallel:
             group = self._get_parallel_group(phase)
-            self._record_parallel_transition(group, verdict, next_phase, rollback_target, commit=False)
+            self._record_parallel_transition(
+                group,
+                verdict,
+                next_phase_code,
+                rollback_phase_code,
+                step_history_id=step_history_id,
+                commit=False,
+            )
         else:
-            self._record_transition(phase, verdict, next_phase, rollback_target, commit=False)
+            self._record_transition(
+                phase,
+                verdict,
+                next_phase_code,
+                rollback_phase_code,
+                step_history_id,
+                commit=False,
+            )
         if commit:
             self._uow.commit()
             self._refresh_task_state()
@@ -437,16 +465,16 @@ class SupervisorEngine:
     def _reload_task_state(self) -> None:
         """Reload task state without changing the committed context cache."""
         if not self.task:
-            self.current_phase = ""
+            self.current_phase_code = ""
             return
         task_id = self.task.get("id")
         if not isinstance(task_id, int) or isinstance(task_id, bool) or task_id <= 0:
             self.task = None
-            self.current_phase = ""
+            self.current_phase_code = ""
             return
         self._uow.refresh()
         self.task = self._task_service.get_task(task_id)
-        self.current_phase = self._resolve_current_phase()
+        self.current_phase_code = self._resolve_current_phase_code()
 
     def _reload_evaluation_state(self) -> None:
         """Reload task and catalog while the caller holds the workflow lock."""
@@ -466,15 +494,14 @@ class SupervisorEngine:
             else []
         )
         self._phase_map = None
-        self.current_phase = self._resolve_current_phase()
+        self.current_phase_code = self._resolve_current_phase_code()
 
     def evaluate(self, report: str) -> dict:
-        if self.task and self.task.get("status") == "done":
-            return self._completed_result(self._get_current_phase_obj())
-
         phase = self._get_current_phase_obj()
         if not phase:
             return self._blocked_result()
+        if self.task and self.task.get("status") == "done":
+            return self._completed_result(phase)
 
         return self.evaluate_llm(report, phase)
 

@@ -31,37 +31,37 @@ def test_unknown_task_key_raises(fresh_db):
 
 
 def test_existing_task_empty_current_phase(fresh_db):
-    TaskService(fresh_db).create_task({"task_key": "RUN-42", "title": "x", "current_phase": "1.INTAKE"})
+    TaskService(fresh_db).create_task({"task_key": "RUN-42", "title": "x"})
     engine = _make_engine(fresh_db, "RUN-42")
-    assert engine.current_phase == "1.INTAKE"
+    assert engine.current_phase_code == "1.INTAKE"
 
 
 class TestSupervisorEvaluateEdge:
     def test_evaluate_empty_report_with_no_checks_passes(self, fresh_db, supervisor_llm):
-        TaskService(fresh_db).create_task({"task_key": "RUN-42", "title": "x", "current_phase": "1.INTAKE"})
+        TaskService(fresh_db).create_task({"task_key": "RUN-42", "title": "x"})
         engine = _make_engine(fresh_db, "RUN-42")
         supervisor_llm("PASS")
         result = engine.evaluate("")
         assert result["verdict"] == "PASS"
 
     def test_evaluate_nonexistent_phase_returns_blocked(self, fresh_db):
-        TaskService(fresh_db).create_task({"task_key": "RUN-42", "title": "x", "current_phase": "1.INTAKE"})
+        TaskService(fresh_db).create_task({"task_key": "RUN-42", "title": "x"})
         engine = _make_engine(fresh_db, "RUN-42")
-        engine.current_phase = "nonexistent"
+        engine.current_phase_code = "nonexistent"
         result = engine.evaluate("report")
         assert result["verdict"] == "BLOCKED"
 
     def test_evaluate_no_history_for_first_phase(self, fresh_db, supervisor_llm):
-        TaskService(fresh_db).create_task({"task_key": "RUN-42", "title": "x", "current_phase": "1.INTAKE"})
+        TaskService(fresh_db).create_task({"task_key": "RUN-42", "title": "x"})
         engine = _make_engine(fresh_db, "RUN-42")
         supervisor_llm("PARTIAL", missing=["evidence"])
         result = engine.evaluate("report")
         assert result["verdict"] == "PARTIAL"
 
     def test_save_records_assessment(self, fresh_db, supervisor_llm):
-        TaskService(fresh_db).create_task({"task_key": "RUN-42", "title": "x", "current_phase": "1.INTAKE"})
+        TaskService(fresh_db).create_task({"task_key": "RUN-42", "title": "x"})
         engine = _make_engine(fresh_db, "RUN-42")
         supervisor_llm("PARTIAL")
         engine.evaluate("report")
         # evaluate() itself records the supervisor run; _store removed as dead code
-        assert len(fresh_db.get_supervisor_runs()) >= 1
+        assert len(fresh_db.list_step_history(task_id=engine.task["id"])) >= 1

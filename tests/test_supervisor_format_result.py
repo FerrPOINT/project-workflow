@@ -14,13 +14,13 @@ class TestFormatResult:
         return {
             "verdict": "PASS",
             "phase_name": "Smoke Plan",
-            "phase": "smoke.plan",
+            "phase_code": "smoke.plan",
             "covered": ["c1", "c2"],
             "missing": [],
             "blockers": [],
-            "next_phase": "smoke.next",
+            "next_phase_code": "smoke.next",
             "next_phase_name": "Next Phase",
-            "rollback_target": None,
+            "rollback_phase_code": None,
             "message": "Go next",
             "instructions": ["Инструкция 1", "Инструкция 2"],
             "required_checks": ["c1", "c2"],
@@ -36,13 +36,13 @@ class TestFormatResult:
         return {
             "verdict": "PARTIAL",
             "phase_name": "Smoke Plan",
-            "phase": "smoke.plan",
+            "phase_code": "smoke.plan",
             "covered": ["c1"],
             "missing": ["m1"],
             "blockers": [],
-            "next_phase": None,
+            "next_phase_code": None,
             "next_phase_name": None,
-            "rollback_target": None,
+            "rollback_phase_code": None,
             "message": "Need more",
             "instructions": ["Инструкция 1"],
             "required_checks": ["c1", "m1"],
@@ -53,13 +53,13 @@ class TestFormatResult:
         return {
             "verdict": "BLOCKED",
             "phase_name": "Smoke Plan",
-            "phase": "smoke.plan",
+            "phase_code": "smoke.plan",
             "covered": [],
             "missing": ["m1"],
             "blockers": ["b1"],
-            "next_phase": None,
+            "next_phase_code": None,
             "next_phase_name": None,
-            "rollback_target": None,
+            "rollback_phase_code": None,
             "message": "Blocked msg",
             "instructions": ["Инструкция 1"],
             "required_checks": ["m1"],
@@ -97,7 +97,7 @@ class TestFormatResult:
 
     def test_terminal_pass_reports_workflow_completion(self):
         result = self._pass()
-        result["next_phase"] = None
+        result["next_phase_code"] = None
         result["next_phase_name"] = None
         result.pop("next_phase_contract", None)
         assert "Воркфлоу завершён" in format_result(result)
@@ -155,13 +155,13 @@ class TestFormatResult:
         return {
             "verdict": "PASS",
             "phase_name": "Smoke Plan",
-            "phase": "smoke.plan",
+            "phase_code": "smoke.plan",
             "covered": ["c1"],
             "missing": [],
             "blockers": [],
-            "next_phase": "smoke.parallel-a",
+            "next_phase_code": "smoke.parallel-a",
             "next_phase_name": "Smoke Parallel A",
-            "rollback_target": None,
+            "rollback_phase_code": None,
             "message": "Phase accepted.",
             "instructions": [],
             "required_checks": [],
@@ -179,8 +179,7 @@ class TestFormatResult:
                         "required_checks": ["backend check prepared"],
                         "required_evidence": ["backend check"],
                         "delegate_agent": "researcher",
-                        "delegate_toolsets": [],
-                        "parallel_with": "smoke.parallel-b",
+                        "parallel_with_phase_code": "smoke.parallel-b",
                     },
                     {
                         "phase_code": "smoke.parallel-b",
@@ -189,8 +188,7 @@ class TestFormatResult:
                         "required_checks": ["ui check prepared"],
                         "required_evidence": ["ui check"],
                         "delegate_agent": "coder",
-                        "delegate_toolsets": [],
-                        "parallel_with": "smoke.parallel-a",
+                        "parallel_with_phase_code": "smoke.parallel-a",
                     },
                 ],
             },

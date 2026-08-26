@@ -19,27 +19,29 @@ class TestCoverageAccumulation:
     def test_get_previously_covered_reads_runs(self, tmp_path, monkeypatch):
         engine = self._make_engine("RUN-9999")
         tid = engine.task["id"]
+        assert engine.workflow_id is not None
+        phase_order = len(engine.db.phases.list(engine.workflow_id)) + 1
         pid = engine.db.phases.create(
             {
                 "code": "coverage.test",
-                "workflow_id": 1,
+                "workflow_id": engine.workflow_id,
                 "name": "Test",
-                "phase_order": 1,
+                "phase_order": phase_order,
                 "execution_type": "sync",
             }
         )
 
-        engine.db.create_supervisor_run(
+        engine.db.record_step(
             {
                 "task_id": tid,
                 "phase_id": pid,
                 "verdict": "partial",
-                "report": "report1",
-                "covered": ["Item A", "Item B"],
-                "missing": ["Item C"],
-                "blockers": [],
-                "context_snapshot": {},
-                "response": {},
+                "worker_report": "report1",
+                "covered_item_ids": ["Item A", "Item B"],
+                "missing_item_ids": ["Item C"],
+                "blocker_messages": [],
+                "evaluation_snapshot": {},
+                "supervisor_response": {},
             }
         )
 
@@ -64,17 +66,17 @@ class TestCoverageAccumulation:
         assert phase is not None and phase.id is not None
 
         for index in range(201):
-            engine.db.create_supervisor_run(
+            engine.db.record_step(
                 {
                     "task_id": task_id,
                     "phase_id": phase.id,
                     "verdict": "partial",
-                    "report": f"report-{index}",
-                    "covered": ["Самое раннее покрытие"] if index == 0 else [],
-                    "missing": [],
-                    "blockers": [],
-                    "context_snapshot": {},
-                    "response": {},
+                    "worker_report": f"report-{index}",
+                    "covered_item_ids": ["Самое раннее покрытие"] if index == 0 else [],
+                    "missing_item_ids": [],
+                    "blocker_messages": [],
+                    "evaluation_snapshot": {},
+                    "supervisor_response": {},
                 }
             )
         engine.db.commit()
@@ -104,14 +106,14 @@ class TestEvaluateAccumulationEndToEnd:
                 "execution_type": "sync",
             }
         )
-        engine.db.instructions.create(
+        engine.db.phase_instructions.create(
             pid, {"step_num": 1, "description": "Run tests first", "execution_type": "sync"}
         )
-        engine.db.instructions.create(
+        engine.db.phase_instructions.create(
             pid, {"step_num": 2, "description": "Fix failing code", "execution_type": "sync"}
         )
         engine.db.phases.set_checks(pid, [{"description": "tests run"}, {"description": "code fixed"}])
-        engine.db.tasks.update(tid, {"current_phase": "coverage.test", "status": "active"})
+        engine.db.tasks.update(tid, {"current_phase_id": pid, "status": "active"})
         engine.db.commit()
         engine._reload_evaluation_state()
 

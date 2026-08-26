@@ -42,12 +42,19 @@ class PhaseServiceApp:
 
     @staticmethod
     def _node(phase: Phase, **updates: Any) -> PhaseGraphNode:
+        if phase.id is None:
+            raise ValueError("Фаза без идентификатора не может участвовать в графе")
         return PhaseGraphNode(
             code=str(updates.get("code", phase.code)),
+            graph_id=phase.id,
             phase_order=int(updates.get("phase_order", phase.phase_order)),
             execution_type=str(updates.get("execution_type", phase.execution_type)),
-            parallel_with=updates.get("parallel_with", phase.parallel_with),
-            rollback_target=updates.get("rollback_target", phase.rollback_target),
+            parallel_with_phase_id=updates.get(
+                "parallel_with_phase_id", phase.parallel_with_phase_id
+            ),
+            rollback_target_phase_id=updates.get(
+                "rollback_target_phase_id", phase.rollback_target_phase_id
+            ),
         )
 
     @staticmethod
@@ -59,12 +66,11 @@ class PhaseServiceApp:
 
     @staticmethod
     def _normalize_links(data: dict[str, Any]) -> None:
-        for field in ("parallel_with", "rollback_target"):
+        for field in ("parallel_with_phase_id", "rollback_target_phase_id"):
             if field not in data or data[field] is None:
                 continue
-            if not isinstance(data[field], str) or not data[field].strip():
-                raise ValueError(f"{field} должен быть непустым кодом фазы или null")
-            data[field] = data[field].strip()
+            if not isinstance(data[field], int) or isinstance(data[field], bool) or data[field] <= 0:
+                raise ValueError(f"{field} должен быть положительным целым числом или null")
 
     def create_phase(self, data: dict[str, Any], *, commit: bool = True) -> dict[str, Any]:
         workflow_id = int(data["workflow_id"])
@@ -98,10 +104,11 @@ class PhaseServiceApp:
         prospective.append(
             PhaseGraphNode(
                 code=code,
+                graph_id=f"new:{code}",
                 phase_order=order,
                 execution_type=validated.get("execution_type", "sync"),
-                parallel_with=validated.get("parallel_with"),
-                rollback_target=validated.get("rollback_target"),
+                parallel_with_phase_id=validated.get("parallel_with_phase_id"),
+                rollback_target_phase_id=validated.get("rollback_target_phase_id"),
             )
         )
         self._validate_graph(prospective)
@@ -115,11 +122,8 @@ class PhaseServiceApp:
             "execution_type": validated.get("execution_type", "sync"),
             "phase_order": order,
             "agent_id": validated.get("agent_id"),
-            "next_recommendation": validated.get("next_recommendation"),
-            "parallel_with": validated.get("parallel_with"),
-            "rollback_target": validated.get("rollback_target"),
-            "is_seed_managed": validated.get("is_seed_managed", False),
-            "min_time_min": validated.get("min_time_min", 0),
+            "parallel_with_phase_id": validated.get("parallel_with_phase_id"),
+            "rollback_target_phase_id": validated.get("rollback_target_phase_id"),
         }
         pid = self._uow.phases.create(phase_data)
         phase = self._uow.phases.get_by_id(pid)
@@ -154,17 +158,19 @@ class PhaseServiceApp:
             raise NotFoundError(f"Фаза {phase_id} не найдена")
         detached_ids: list[int] = []
         if updates.get("execution_type") == "sync":
-            updates["parallel_with"] = None
+            updates["parallel_with_phase_id"] = None
             detached_ids = [
                 int(item.id)
                 for item in phases
-                if item.id is not None and item.id != phase_id and item.parallel_with == phase.code
+                if item.id is not None
+                and item.id != phase_id
+                and item.parallel_with_phase_id == phase_id
             ]
         prospective = [
             self._node(
                 item,
                 **(updates if item.id == phase_id else {}),
-                **({"parallel_with": None} if item.id in detached_ids else {}),
+                **({"parallel_with_phase_id": None} if item.id in detached_ids else {}),
             )
             for item in phases
         ]
@@ -174,7 +180,7 @@ class PhaseServiceApp:
     def update_phase(self, phase_id: int, data: dict[str, Any], *, commit: bool = True) -> None:
         updates, detached_ids = self.prepare_update(phase_id, data)
         for detached_id in detached_ids:
-            self._uow.phases.update(detached_id, {"parallel_with": None})
+            self._uow.phases.update(detached_id, {"parallel_with_phase_id": None})
         self._uow.phases.update(phase_id, updates)
         if commit:
             self._uow.commit()
@@ -235,8 +241,7 @@ class PhaseServiceApp:
         ]
         self._validate_graph(prospective)
 
-        for phase_id, position in orders:
-            self._uow.phases.update(phase_id, {"phase_order": position})
+        self._uow.phases.reorder(workflow_id, orders)
         if commit:
             self._uow.commit()
         return len(orders)

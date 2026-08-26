@@ -45,23 +45,23 @@ class TestSupervisorEngineIntegration:
         with pytest.raises(ValueError, match="Не удалось определить проект"):
             engine._ensure_task()
 
-    def test_new_task_with_empty_current_phase_starts_at_first_phase(self, supervisor_db):
+    def test_new_task_without_current_phase_id_starts_at_first_phase(self, supervisor_db):
         uow = SAUnitOfWork(supervisor_db)
         project = ProjectService(uow).create_project({"code": "AAT", "name": "AAT", "key_prefixes": ["AAT"]})
         task = TaskService(uow).create_task(
-            {"task_key": "AAT-902", "title": "Empty", "current_phase": "", "project_id": project["id"]}
+            {"task_key": "AAT-902", "title": "Default phase", "project_id": project["id"]}
         )
         uow.close()
 
         engine = SupervisorEngine("AAT-902", create_if_missing=False)
         assert engine.task["id"] == task["id"]
-        assert engine.task["current_phase"] == "1.INTAKE"
+        assert engine.task["current_phase_code"] == "1.INTAKE"
 
     def test_evaluate_partial_on_real_phase(self, supervisor_db, supervisor_llm):
         uow = SAUnitOfWork(supervisor_db)
         project = ProjectService(uow).create_project({"code": "AAT", "name": "AAT", "key_prefixes": ["AAT"]})
         TaskService(uow).create_task(
-            {"task_key": "AAT-903", "title": "Partial", "project_id": project["id"], "current_phase": "1.INTAKE"}
+            {"task_key": "AAT-903", "title": "Partial", "project_id": project["id"]}
         )
         uow.close()
 
@@ -74,7 +74,7 @@ class TestSupervisorEngineIntegration:
         uow = SAUnitOfWork(supervisor_db)
         project = ProjectService(uow).create_project({"code": "AAT", "name": "AAT", "key_prefixes": ["AAT"]})
         TaskService(uow).create_task(
-            {"task_key": "AAT-904", "title": "Block", "project_id": project["id"], "current_phase": "1.INTAKE"}
+            {"task_key": "AAT-904", "title": "Block", "project_id": project["id"]}
         )
         uow.close()
 

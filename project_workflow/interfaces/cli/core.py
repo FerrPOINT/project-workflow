@@ -164,18 +164,18 @@ def _require_valid_key(task_key: str, uow=None) -> str:
     return validated.normalized or task_key
 
 
-def blocked_result(task_key: str, message: str, phase: str = "") -> dict[str, Any]:
+def blocked_result(task_key: str, message: str, phase_code: str = "") -> dict[str, Any]:
     """Return the single fail-closed CLI error shape."""
     return {
         "verdict": "BLOCKED",
         "task_key": task_key,
-        "phase": phase,
+        "phase_code": phase_code,
         "message": message,
         "covered": [],
         "missing": [],
         "blockers": ["configuration-error"],
-        "current_phase": phase,
-        "next_phase": None,
+        "current_phase_code": phase_code,
+        "next_phase_code": None,
         "replayed": False,
         "retryable": True,
     }

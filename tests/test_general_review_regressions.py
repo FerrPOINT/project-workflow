@@ -18,7 +18,7 @@ def _runtime_uow() -> SAUnitOfWork:
     return state._app_state.create_uow()
 
 
-def test_done_history_has_completion_time_and_pending_clears_it():
+def test_phase_events_are_append_only_and_timestamped():
     uow = _runtime_uow()
     try:
         project = uow.projects.list()[0]
@@ -29,21 +29,22 @@ def test_done_history_has_completion_time_and_pending_clears_it():
                 "workflow_id": project.workflow_id,
                 "task_key": "REVIEW-HISTORY-1",
                 "title": "History timestamp regression",
-                "current_phase": phase.code,
+                "current_phase_id": phase.id,
                 "status": "active",
             }
         )
 
-        uow.tasks.add_history(task_id, phase.id, "done")
+        uow.tasks.record_phase_event(task_id, phase.id, "completed")
         uow.commit()
-        completed = uow.tasks.get_history(task_id)[0]
-        assert completed["completed_at"] is not None
-        assert datetime.datetime.fromisoformat(str(completed["completed_at"]))
+        completed = uow.list_phase_events(task_id)[-1]
+        assert completed["occurred_at"] is not None
+        assert datetime.datetime.fromisoformat(str(completed["occurred_at"]))
 
-        uow.tasks.add_history(task_id, phase.id, "pending")
+        uow.tasks.record_phase_event(task_id, phase.id, "entered")
         uow.commit()
-        pending = uow.tasks.get_history(task_id)[0]
-        assert pending["completed_at"] is None
+        events = uow.list_phase_events(task_id)
+        assert [event["event_type"] for event in events] == ["entered", "completed", "entered"]
+        assert len({event["id"] for event in events}) == 3
     finally:
         uow.close()
 
@@ -81,7 +82,7 @@ def test_conditional_task_transition_refreshes_updated_at():
                 "workflow_id": project.workflow_id,
                 "task_key": "REVIEW-UPDATED-AT-1",
                 "title": "Before",
-                "current_phase": phase.code,
+                "current_phase_id": phase.id,
                 "status": "active",
             }
         )
@@ -94,7 +95,7 @@ def test_conditional_task_transition_refreshes_updated_at():
 
         updated = uow.tasks.update_if_state(
             task_id,
-            expected_phase=phase.code,
+            expected_phase_id=phase.id,
             expected_status="active",
             data={"title": "After"},
         )

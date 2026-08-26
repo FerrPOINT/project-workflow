@@ -9,25 +9,25 @@ from sqlalchemy.orm import Session
 
 from project_workflow.domain.repositories import (
     AgentRepository,
-    CheckRepository,
-    EvidenceRepository,
-    InstructionRepository,
+    PhaseCheckRepository,
+    PhaseEvidenceRequirementRepository,
+    PhaseInstructionRepository,
     PhaseRepository,
     ProjectRepository,
-    SupervisorRunRepository,
     TaskRepository,
+    TaskStepHistoryRepository,
     UnitOfWork,
     WorkflowRepository,
 )
 from project_workflow.infrastructure.db.repositories import (
     SAAgentRepository,
-    SACheckRepository,
-    SAEvidenceRepository,
-    SAInstructionRepository,
+    SAPhaseCheckRepository,
+    SAPhaseEvidenceRequirementRepository,
+    SAPhaseInstructionRepository,
     SAPhaseRepository,
     SAProjectRepository,
-    SASupervisorRunRepository,
     SATaskRepository,
+    SATaskStepHistoryRepository,
     SAWorkflowRepository,
 )
 from project_workflow.infrastructure.db.session import get_session
@@ -50,13 +50,13 @@ class SAUnitOfWork(UnitOfWork):
     def _init_repositories(self) -> None:
         self._workflows: SAWorkflowRepository = SAWorkflowRepository(self._session)
         self._phases: SAPhaseRepository = SAPhaseRepository(self._session)
-        self._instructions: SAInstructionRepository = SAInstructionRepository(self._session)
-        self._checks: SACheckRepository = SACheckRepository(self._session)
-        self._evidence: SAEvidenceRepository = SAEvidenceRepository(self._session)
+        self._phase_instructions = SAPhaseInstructionRepository(self._session)
+        self._phase_checks = SAPhaseCheckRepository(self._session)
+        self._phase_evidence_requirements = SAPhaseEvidenceRequirementRepository(self._session)
         self._projects: SAProjectRepository = SAProjectRepository(self._session)
         self._tasks: SATaskRepository = SATaskRepository(self._session)
         self._agents: SAAgentRepository = SAAgentRepository(self._session)
-        self._supervisor_runs: SASupervisorRunRepository = SASupervisorRunRepository(self._session)
+        self._step_history = SATaskStepHistoryRepository(self._session)
 
     def __enter__(self) -> SAUnitOfWork:
         return self
@@ -103,29 +103,29 @@ class SAUnitOfWork(UnitOfWork):
         return self._agents
 
     @property
-    def supervisor_runs(self) -> SupervisorRunRepository:
-        return self._supervisor_runs
+    def step_history(self) -> TaskStepHistoryRepository:
+        return self._step_history
 
     @property
-    def instructions(self) -> InstructionRepository:
-        return self._instructions
+    def phase_instructions(self) -> PhaseInstructionRepository:
+        return self._phase_instructions
 
     @property
-    def checks(self) -> CheckRepository:
-        return self._checks
+    def phase_checks(self) -> PhaseCheckRepository:
+        return self._phase_checks
 
     @property
-    def evidence(self) -> EvidenceRepository:
-        return self._evidence
+    def phase_evidence_requirements(self) -> PhaseEvidenceRequirementRepository:
+        return self._phase_evidence_requirements
 
     @property
     def session(self) -> Session:
         return self._session
 
-    def create_supervisor_run(self, *args: Any, **kwargs: Any) -> int:
+    def record_step(self, *args: Any, **kwargs: Any) -> int:
         if args and isinstance(args[0], dict) and not kwargs:
             kwargs = args[0]
-        return self.supervisor_runs.create(kwargs)
+        return self.step_history.create(kwargs)
 
     def get_task_by_key(self, key: str) -> Any | None:
         return row_to_dict(self.tasks.get_by_key(key))
@@ -150,8 +150,14 @@ class SAUnitOfWork(UnitOfWork):
     def get_workflows(self) -> list[Any]:
         return rows_to_dicts(self.workflows.list())
 
-    def get_task_history(self, task_id: int) -> list[dict[str, Any]]:
-        return rows_to_dicts(self.tasks.get_history(task_id))
+    def list_phase_events(self, task_id: int) -> list[dict[str, Any]]:
+        return rows_to_dicts(self.tasks.list_phase_events(task_id))
 
-    def get_supervisor_runs(self, **kwargs: Any) -> list[dict[str, Any]]:
-        return rows_to_dicts(self.supervisor_runs.list(**kwargs))
+    def list_phase_events_batch(self, task_ids: list[int]) -> dict[int, list[dict[str, Any]]]:
+        return {
+            task_id: rows_to_dicts(events)
+            for task_id, events in self.tasks.list_phase_events_batch(task_ids).items()
+        }
+
+    def list_step_history(self, **kwargs: Any) -> list[dict[str, Any]]:
+        return rows_to_dicts(self.step_history.list(**kwargs))

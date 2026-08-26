@@ -24,5 +24,5 @@ def test_phase_check_evidence_defaults():
 
 def test_phase_delegate_defaults():
     d = PhaseDelegate()
-    assert d.timeout_min == 10
-    assert d.max_cycles == 3
+    assert d.agent == ""
+    assert d.hermes_profile is None

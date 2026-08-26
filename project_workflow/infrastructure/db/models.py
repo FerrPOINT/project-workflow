@@ -13,6 +13,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     String,
     Text,
@@ -70,61 +71,53 @@ class Phase(Base):
     code: Mapped[str] = mapped_column(String, nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    min_time_min: Mapped[int] = mapped_column(default=0, server_default="0")
     phase_order: Mapped[int] = mapped_column(nullable=False)
-    agent_id: Mapped[int | None] = mapped_column(ForeignKey("agents.id", ondelete="SET NULL"), nullable=True)
-    next_recommendation: Mapped[str | None] = mapped_column(Text, nullable=True)
-    parallel_with: Mapped[str | None] = mapped_column(String, nullable=True)
-    rollback_target: Mapped[str | None] = mapped_column(String, nullable=True)
+    agent_id: Mapped[int | None] = mapped_column(ForeignKey("agents.id", ondelete="RESTRICT"), nullable=True)
+    parallel_with_phase_id: Mapped[int | None] = mapped_column(nullable=True)
+    rollback_target_phase_id: Mapped[int | None] = mapped_column(nullable=True)
     execution_type: Mapped[str] = mapped_column(
         String,
         default="sync",
         server_default="sync",
     )
-    is_seed_managed: Mapped[int] = mapped_column(
-        nullable=False,
-        default=0,
-        server_default="0",
-    )
-    is_blocker: Mapped[int] = mapped_column(
-        nullable=False,
-        default=0,
-        server_default="0",
-    )
-    is_delegated: Mapped[int] = mapped_column(
-        nullable=False,
-        default=0,
-        server_default="0",
-    )
-    is_critic: Mapped[int] = mapped_column(
-        nullable=False,
-        default=0,
-        server_default="0",
-    )
     __table_args__ = (
+        UniqueConstraint("id", "workflow_id", name="uq_phases_id_workflow"),
         UniqueConstraint("workflow_id", "code", name="uq_phases_workflow_code"),
+        UniqueConstraint("workflow_id", "phase_order", name="uq_phases_workflow_order"),
+        ForeignKeyConstraint(
+            ["parallel_with_phase_id", "workflow_id"],
+            ["phases.id", "phases.workflow_id"],
+            name="fk_phases_parallel_with_workflow",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["rollback_target_phase_id", "workflow_id"],
+            ["phases.id", "phases.workflow_id"],
+            name="fk_phases_rollback_target_workflow",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint("phase_order > 0", name="ck_phases_phase_order_positive"),
         CheckConstraint(
             "execution_type IN ('sync', 'parallel')",
             name="ck_phases_execution_type",
         ),
-        CheckConstraint("is_seed_managed IN (0, 1)", name="ck_phases_is_seed_managed"),
-        CheckConstraint("is_blocker IN (0, 1)", name="ck_phases_is_blocker"),
-        CheckConstraint("is_delegated IN (0, 1)", name="ck_phases_is_delegated"),
-        CheckConstraint("is_critic IN (0, 1)", name="ck_phases_is_critic"),
     )
 
     workflow: Mapped[Workflow] = relationship("Workflow", back_populates="phases")
     agent: Mapped[Agent | None] = relationship("Agent", back_populates="phases")
-    instructions: Mapped[list[Instruction]] = relationship(
-        "Instruction", back_populates="phase", cascade="all, delete-orphan"
+    instructions: Mapped[list[PhaseInstruction]] = relationship(
+        "PhaseInstruction", back_populates="phase", cascade="all, delete-orphan"
     )
-    checks: Mapped[list[Check]] = relationship("Check", back_populates="phase", cascade="all, delete-orphan")
-    evidence: Mapped[list[Evidence]] = relationship("Evidence", back_populates="phase", cascade="all, delete-orphan")
+    checks: Mapped[list[PhaseCheck]] = relationship(
+        "PhaseCheck", back_populates="phase", cascade="all, delete-orphan"
+    )
+    evidence: Mapped[list[PhaseEvidenceRequirement]] = relationship(
+        "PhaseEvidenceRequirement", back_populates="phase", cascade="all, delete-orphan"
+    )
 
 
-class Instruction(Base):
-    __tablename__ = "instructions"
+class PhaseInstruction(Base):
+    __tablename__ = "phase_instructions"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     phase_id: Mapped[int] = mapped_column(
@@ -140,19 +133,19 @@ class Instruction(Base):
     )
     skills: Mapped[str | None] = mapped_column(Text, nullable=True)
     __table_args__ = (
-        UniqueConstraint("phase_id", "step_num", name="uq_instructions_phase_step"),
-        CheckConstraint("step_num > 0", name="ck_instructions_step_num_positive"),
+        UniqueConstraint("phase_id", "step_num", name="uq_phase_instructions_phase_step"),
+        CheckConstraint("step_num > 0", name="ck_phase_instructions_step_num_positive"),
         CheckConstraint(
             "execution_type IN ('sync', 'parallel')",
-            name="ck_instructions_execution_type",
+            name="ck_phase_instructions_execution_type",
         ),
     )
 
     phase: Mapped[Phase] = relationship("Phase", back_populates="instructions")
 
 
-class Check(Base):
-    __tablename__ = "checks"
+class PhaseCheck(Base):
+    __tablename__ = "phase_checks"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     phase_id: Mapped[int] = mapped_column(
@@ -160,13 +153,13 @@ class Check(Base):
         nullable=False,
     )
     description: Mapped[str] = mapped_column(String, nullable=False)
-    __table_args__ = (UniqueConstraint("phase_id", "description", name="uq_checks_phase_description"),)
+    __table_args__ = (UniqueConstraint("phase_id", "description", name="uq_phase_checks_description"),)
 
     phase: Mapped[Phase] = relationship("Phase", back_populates="checks")
 
 
-class Evidence(Base):
-    __tablename__ = "evidence"
+class PhaseEvidenceRequirement(Base):
+    __tablename__ = "phase_evidence_requirements"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     phase_id: Mapped[int] = mapped_column(
@@ -174,7 +167,9 @@ class Evidence(Base):
         nullable=False,
     )
     description: Mapped[str] = mapped_column(String, nullable=False)
-    __table_args__ = (UniqueConstraint("phase_id", "description", name="uq_evidence_phase_description"),)
+    __table_args__ = (
+        UniqueConstraint("phase_id", "description", name="uq_phase_evidence_requirements_description"),
+    )
 
     phase: Mapped[Phase] = relationship("Phase", back_populates="evidence")
 
@@ -202,10 +197,7 @@ class Task(Base):
     task_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     title: Mapped[str | None] = mapped_column(String, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    current_phase: Mapped[str] = mapped_column(
-        Text,
-        nullable=False,
-    )
+    current_phase_id: Mapped[int] = mapped_column(nullable=False)
     status: Mapped[str] = mapped_column(
         String,
         default="active",
@@ -216,40 +208,21 @@ class Task(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["current_phase_id", "workflow_id"],
+            ["phases.id", "phases.workflow_id"],
+            name="fk_tasks_current_phase_workflow",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint("status IN ('active', 'done', 'blocked')", name="ck_tasks_status"),
-        CheckConstraint("length(trim(current_phase)) > 0", name="ck_tasks_current_phase_nonblank"),
     )
 
     project: Mapped[Project] = relationship("Project", back_populates="tasks")
     workflow: Mapped[Workflow] = relationship("Workflow", back_populates="tasks")
 
 
-class TaskHistory(Base):
-    __tablename__ = "task_history"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    task_id: Mapped[int] = mapped_column(
-        ForeignKey("tasks.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    phase_id: Mapped[int] = mapped_column(ForeignKey("phases.id", ondelete="RESTRICT"), nullable=False)
-    status: Mapped[str] = mapped_column(
-        String,
-        default="pending",
-        server_default="pending",
-    )
-    completed_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    __table_args__ = (
-        UniqueConstraint("task_id", "phase_id", name="uq_task_history_task_phase"),
-        CheckConstraint(
-            "status IN ('pending', 'done', 'partial', 'blocked', 'rollback', 'delegated')",
-            name="ck_task_history_status",
-        ),
-    )
-
-
-class SupervisorRun(Base):
-    __tablename__ = "supervisor_runs"
+class TaskStepHistoryEntry(Base):
+    __tablename__ = "task_step_history"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     task_id: Mapped[int] = mapped_column(
@@ -258,27 +231,53 @@ class SupervisorRun(Base):
     )
     phase_id: Mapped[int] = mapped_column(ForeignKey("phases.id", ondelete="RESTRICT"), nullable=False)
     verdict: Mapped[str] = mapped_column(String, nullable=False)
-    report: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default=text("''"))
-    covered: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
-    missing: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
-    blockers: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
+    worker_report: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default=text("''"))
+    covered_item_ids: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
+    missing_item_ids: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
+    blocker_messages: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
     next_phase_id: Mapped[int | None] = mapped_column(ForeignKey("phases.id", ondelete="RESTRICT"), nullable=True)
     rollback_phase_id: Mapped[int | None] = mapped_column(ForeignKey("phases.id", ondelete="RESTRICT"), nullable=True)
-    report_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    context_snapshot: Mapped[str] = mapped_column(Text, nullable=False, default="{}", server_default="{}")
-    response: Mapped[str] = mapped_column(Text, nullable=False, default="{}", server_default="{}")
-    created_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    replay_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    evaluation_snapshot: Mapped[str] = mapped_column(Text, nullable=False, default="{}", server_default="{}")
+    supervisor_response: Mapped[str] = mapped_column(Text, nullable=False, default="{}", server_default="{}")
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
     __table_args__ = (
         Index(
-            "uq_supervisor_runs_task_phase_report_fingerprint",
+            "uq_task_step_history_replay",
             "task_id",
             "phase_id",
-            "report_fingerprint",
+            "replay_fingerprint",
             unique=True,
         ),
         CheckConstraint(
             "verdict IN ('pass', 'partial', 'blocked', 'rollback', 'delegate')",
-            name="ck_supervisor_runs_verdict",
+            name="ck_task_step_history_verdict",
+        ),
+    )
+
+
+class TaskPhaseEvent(Base):
+    __tablename__ = "task_phase_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    task_id: Mapped[int] = mapped_column(
+        ForeignKey("tasks.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    phase_id: Mapped[int] = mapped_column(ForeignKey("phases.id", ondelete="RESTRICT"), nullable=False)
+    step_history_id: Mapped[int | None] = mapped_column(
+        ForeignKey("task_step_history.id", ondelete="RESTRICT"), nullable=True
+    )
+    event_type: Mapped[str] = mapped_column(String, nullable=False)
+    occurred_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    __table_args__ = (
+        CheckConstraint(
+            "event_type IN ('entered', 'completed', 'blocked', 'resumed', 'rolled_back')",
+            name="ck_task_phase_events_event_type",
         ),
     )
 

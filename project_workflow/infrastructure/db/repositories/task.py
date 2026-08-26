@@ -10,11 +10,11 @@ from sqlalchemy import delete as sa_delete
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session, joinedload
 
-from project_workflow.domain import Task
+from project_workflow.domain import Task, TaskPhaseEvent
 from project_workflow.domain.exceptions import NotFoundError
 from project_workflow.domain.repositories import TaskRepository
 from project_workflow.infrastructure.db import models as m
-from project_workflow.infrastructure.db.repositories.converters import _iso, _row_to_task
+from project_workflow.infrastructure.db.repositories.converters import _row_to_phase_event, _row_to_task
 
 
 class SATaskRepository(TaskRepository):
@@ -82,11 +82,12 @@ class SATaskRepository(TaskRepository):
             task_key=data["task_key"],
             title=data.get("title"),
             description=data.get("description"),
-            current_phase=data["current_phase"],
+            current_phase_id=data["current_phase_id"],
             status=data.get("status", "active"),
         )
         self._session.add(item)
         self._session.flush()
+        self.record_phase_event(int(item.id), item.current_phase_id, "entered")
         return int(item.id)
 
     def update(self, task_id: int, data: dict[str, Any]) -> None:
@@ -105,7 +106,7 @@ class SATaskRepository(TaskRepository):
     def update_if_state(
         self,
         task_id: int,
-        expected_phase: str,
+        expected_phase_id: int,
         expected_status: str,
         data: dict[str, Any],
     ) -> bool:
@@ -115,82 +116,72 @@ class SATaskRepository(TaskRepository):
             update(m.Task)
             .where(
                 m.Task.id == task_id,
-                m.Task.current_phase == expected_phase,
+                m.Task.current_phase_id == expected_phase_id,
                 m.Task.status == expected_status,
             )
             .values(**values)
         )
         return getattr(result, "rowcount", 0) == 1
 
-    def add_history(self, task_id: int, phase_id: int, status: str) -> None:
-        completed_at = datetime.datetime.now(datetime.timezone.utc) if status == "done" else None
-        # Check pending objects first to avoid duplicate inserts inside the same session.
-        for obj in self._session.new:
-            if isinstance(obj, m.TaskHistory) and obj.task_id == task_id and obj.phase_id == phase_id:
-                obj.status = status
-                obj.completed_at = completed_at
-                return
-        with self._session.no_autoflush:
-            existing = self._session.execute(
-                select(m.TaskHistory).where(
-                    m.TaskHistory.task_id == task_id,
-                    m.TaskHistory.phase_id == phase_id,
+    def record_phase_event(
+        self,
+        task_id: int,
+        phase_id: int,
+        event_type: str,
+        step_history_id: int | None = None,
+    ) -> None:
+        task_workflow_id = self._session.execute(
+            select(m.Task.workflow_id).where(m.Task.id == task_id)
+        ).scalar_one_or_none()
+        phase_workflow_id = self._session.execute(
+            select(m.Phase.workflow_id).where(m.Phase.id == phase_id)
+        ).scalar_one_or_none()
+        if task_workflow_id is None:
+            raise NotFoundError(f"Задача {task_id} не найдена")
+        if phase_workflow_id != task_workflow_id:
+            raise ValueError("Событие фазы должно принадлежать воркфлоу задачи")
+        if step_history_id is not None:
+            owner_task_id = self._session.execute(
+                select(m.TaskStepHistoryEntry.task_id).where(
+                    m.TaskStepHistoryEntry.id == step_history_id
                 )
             ).scalar_one_or_none()
-        if existing:
-            existing.status = status
-            existing.completed_at = completed_at
-        else:
-            self._session.add(
-                m.TaskHistory(
-                    task_id=task_id,
-                    phase_id=phase_id,
-                    status=status,
-                    completed_at=completed_at,
-                )
+            if owner_task_id != task_id:
+                raise ValueError("Событие фазы и запись step должны принадлежать одной задаче")
+        self._session.add(
+            m.TaskPhaseEvent(
+                task_id=task_id,
+                phase_id=phase_id,
+                step_history_id=step_history_id,
+                event_type=event_type,
             )
+        )
 
-    def get_history(self, task_id: int) -> Sequence[dict[str, Any]]:
+    def list_phase_events(self, task_id: int) -> Sequence[TaskPhaseEvent]:
         with self._session.no_autoflush:
             rows = self._session.execute(
-                select(m.TaskHistory)
-                .where(m.TaskHistory.task_id == task_id)
-                .order_by(m.TaskHistory.id)
+                select(m.TaskPhaseEvent)
+                .where(m.TaskPhaseEvent.task_id == task_id)
+                .order_by(m.TaskPhaseEvent.id)
             ).scalars().all()
-        return [
-            {
-                "id": r.id,
-                "task_id": r.task_id,
-                "phase_id": r.phase_id,
-                "status": r.status,
-                "completed_at": _iso(r.completed_at),
-            }
-            for r in rows
-        ]
+        return [_row_to_phase_event(row) for row in rows]
 
-    def get_history_batch(self, task_ids: Sequence[int]) -> Mapping[int, Sequence[dict[str, Any]]]:
+    def list_phase_events_batch(self, task_ids: Sequence[int]) -> Mapping[int, Sequence[TaskPhaseEvent]]:
         if not task_ids:
             return {}
         with self._session.no_autoflush:
             rows = (
                 self._session.execute(
-                    select(m.TaskHistory)
-                    .where(m.TaskHistory.task_id.in_(task_ids))
-                    .order_by(m.TaskHistory.task_id, m.TaskHistory.id)
+                    select(m.TaskPhaseEvent)
+                    .where(m.TaskPhaseEvent.task_id.in_(task_ids))
+                    .order_by(m.TaskPhaseEvent.task_id, m.TaskPhaseEvent.id)
                 )
                 .scalars()
                 .all()
             )
-        result: dict[int, list[dict[str, Any]]] = {tid: [] for tid in task_ids}
+        result: dict[int, list[TaskPhaseEvent]] = {tid: [] for tid in task_ids}
         for r in rows:
-            entry = {
-                "id": r.id,
-                "task_id": r.task_id,
-                "phase_id": r.phase_id,
-                "status": r.status,
-                "completed_at": _iso(r.completed_at),
-            }
-            result.setdefault(r.task_id, []).append(entry)
+            result.setdefault(r.task_id, []).append(_row_to_phase_event(r))
         return result
 
     def delete(self, task_id: int) -> None:
@@ -198,7 +189,8 @@ class SATaskRepository(TaskRepository):
             row = self._session.get(m.Task, task_id)
         if row is None:
             raise ValueError(f"Задача {task_id} не найдена")
-        self._session.execute(sa_delete(m.TaskHistory).where(m.TaskHistory.task_id == task_id))
+        self._session.execute(sa_delete(m.TaskPhaseEvent).where(m.TaskPhaseEvent.task_id == task_id))
+        self._session.execute(sa_delete(m.TaskStepHistoryEntry).where(m.TaskStepHistoryEntry.task_id == task_id))
         self._session.delete(row)
         self._session.flush()
 

@@ -7,7 +7,15 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
-from project_workflow.domain import Agent, Phase, Project, SupervisorRun, Task, Workflow
+from project_workflow.domain import (
+    Agent,
+    Phase,
+    Project,
+    Task,
+    TaskPhaseEvent,
+    TaskStepHistoryEntry,
+    Workflow,
+)
 
 
 class WorkflowRepository(ABC):
@@ -78,6 +86,9 @@ class PhaseRepository(ABC):
     def resequence(self, workflow_id: int) -> None: ...
 
     @abstractmethod
+    def reorder(self, workflow_id: int, orders: Sequence[tuple[int, int]]) -> None: ...
+
+    @abstractmethod
     def get_checks(self, phase_id: int) -> Sequence[dict[str, Any]]: ...
 
     @abstractmethod
@@ -90,7 +101,7 @@ class PhaseRepository(ABC):
     def set_evidence(self, phase_id: int, items: builtins.list[dict[str, Any]]) -> None: ...
 
 
-class InstructionRepository(ABC):
+class PhaseInstructionRepository(ABC):
     """Persistence contract for phase instructions."""
 
     @abstractmethod
@@ -171,19 +182,25 @@ class TaskRepository(ABC):
     def update_if_state(
         self,
         task_id: int,
-        expected_phase: str,
+        expected_phase_id: int,
         expected_status: str,
         data: dict[str, Any],
     ) -> bool: ...
 
     @abstractmethod
-    def add_history(self, task_id: int, phase_id: int, status: str) -> None: ...
+    def record_phase_event(
+        self,
+        task_id: int,
+        phase_id: int,
+        event_type: str,
+        step_history_id: int | None = None,
+    ) -> None: ...
 
     @abstractmethod
-    def get_history(self, task_id: int) -> Sequence[dict[str, Any]]: ...
+    def list_phase_events(self, task_id: int) -> Sequence[TaskPhaseEvent]: ...
 
     @abstractmethod
-    def get_history_batch(self, task_ids: Sequence[int]) -> Mapping[int, Sequence[dict[str, Any]]]: ...
+    def list_phase_events_batch(self, task_ids: Sequence[int]) -> Mapping[int, Sequence[TaskPhaseEvent]]: ...
 
     @abstractmethod
     def delete(self, task_id: int) -> None: ...
@@ -217,8 +234,8 @@ class AgentRepository(ABC):
     def delete(self, agent_id: int) -> None: ...
 
 
-class SupervisorRunRepository(ABC):
-    """Persistence contract for supervisor runs."""
+class TaskStepHistoryRepository(ABC):
+    """Persistence contract for evaluated CLI ``step`` records."""
 
     @abstractmethod
     def list(
@@ -227,21 +244,21 @@ class SupervisorRunRepository(ABC):
         task_key: str | None = None,
         phase_id: int | None = None,
         limit: int | None = 200,
-    ) -> Sequence[SupervisorRun]: ...
+    ) -> Sequence[TaskStepHistoryEntry]: ...
 
     @abstractmethod
-    def latest_for_tasks(self, task_ids: Sequence[int]) -> Sequence[SupervisorRun]: ...
+    def latest_for_tasks(self, task_ids: Sequence[int]) -> Sequence[TaskStepHistoryEntry]: ...
 
     @abstractmethod
     def get_by_fingerprint(
-        self, task_id: int, phase_id: int, report_fingerprint: str
-    ) -> SupervisorRun | None: ...
+        self, task_id: int, phase_id: int, replay_fingerprint: str
+    ) -> TaskStepHistoryEntry | None: ...
 
     @abstractmethod
     def create(self, data: dict[str, Any]) -> int: ...
 
 
-class CheckRepository(ABC):
+class PhaseCheckRepository(ABC):
     """Persistence contract for phase checks."""
 
     @abstractmethod
@@ -254,7 +271,7 @@ class CheckRepository(ABC):
     def delete_for_phase(self, phase_id: int) -> None: ...
 
 
-class EvidenceRepository(ABC):
+class PhaseEvidenceRequirementRepository(ABC):
     """Persistence contract for phase evidence."""
 
     @abstractmethod
@@ -304,22 +321,22 @@ class UnitOfWork(ABC):
 
     @property
     @abstractmethod
-    def supervisor_runs(self) -> SupervisorRunRepository: ...
+    def step_history(self) -> TaskStepHistoryRepository: ...
 
     @property
     @abstractmethod
-    def instructions(self) -> InstructionRepository: ...
+    def phase_instructions(self) -> PhaseInstructionRepository: ...
 
     @property
     @abstractmethod
-    def checks(self) -> CheckRepository: ...
+    def phase_checks(self) -> PhaseCheckRepository: ...
 
     @property
     @abstractmethod
-    def evidence(self) -> EvidenceRepository: ...
+    def phase_evidence_requirements(self) -> PhaseEvidenceRequirementRepository: ...
 
     @abstractmethod
-    def create_supervisor_run(self, **kwargs: Any) -> int: ...
+    def record_step(self, **kwargs: Any) -> int: ...
 
     @abstractmethod
     def get_task_by_key(self, key: str) -> Task | None: ...

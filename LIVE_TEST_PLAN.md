@@ -107,7 +107,7 @@ Windows-пути до записи командных логов.
 
 ### Правила честного прогона
 
-- Нельзя использовать старые `SupervisorRun`, прежние отчёты, шаблоны PASS или
+- Нельзя использовать старые записи `task_step_history`, прежние отчёты, шаблоны PASS или
   заранее подготовленные ответы provider.
 - Нельзя вручную дописывать `ACTION` в transcript или подменять соответствующий
   файл в `command-logs`. `finalize` выявляет упрощённые и несогласованные правки;
@@ -132,8 +132,9 @@ Windows-пути до записи командных логов.
   результата.
 - Реальная смена состояния (`open` -> `merged`) допустима в отчёте только с явной
   хронологией, временными метками и action evidence.
-- После завершения сверяются задача `status=done`, её фактическая конечная фаза, history, все
-  `SupervisorRun`, fingerprints, prompt version, raw evaluator, replay и post-done.
+- После завершения сверяются задача `status=done`, её фактическая конечная фаза,
+  `task_phase_events`, все записи `task_step_history`, fingerprints, prompt version,
+  raw evaluator, replay и post-done.
 - Успешную основную задачу и её audit оставляют в локальной PostgreSQL. Временную
   negative-probe задачу удаляют точечно после сохранения обезличенного лога.
 

@@ -5,11 +5,13 @@ from __future__ import annotations
 from .models import Base
 from .repositories import (
     SAAgentRepository,
-    SAInstructionRepository,
+    SAPhaseCheckRepository,
+    SAPhaseEvidenceRequirementRepository,
+    SAPhaseInstructionRepository,
     SAPhaseRepository,
     SAProjectRepository,
-    SASupervisorRunRepository,
     SATaskRepository,
+    SATaskStepHistoryRepository,
     SAWorkflowRepository,
 )
 from .session import get_engine, get_session
@@ -18,10 +20,12 @@ from .uow import SAUnitOfWork, UnitOfWork
 __all__ = [
     "Base",
     "SAAgentRepository",
-    "SAInstructionRepository",
+    "SAPhaseCheckRepository",
+    "SAPhaseEvidenceRequirementRepository",
+    "SAPhaseInstructionRepository",
     "SAPhaseRepository",
     "SAProjectRepository",
-    "SASupervisorRunRepository",
+    "SATaskStepHistoryRepository",
     "SATaskRepository",
     "SAWorkflowRepository",
     "get_engine",

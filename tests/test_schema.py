@@ -53,7 +53,6 @@ class TestEnsurePhaseCatalog:
             for phase in phases
             if phase.delegate
         )
-        assert all(phase.is_delegated for phase in phases)
 
     def test_idempotent_rerun(self, fresh_db):
         ensure_phase_catalog(fresh_db)

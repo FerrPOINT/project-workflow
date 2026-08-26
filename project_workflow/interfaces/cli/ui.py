@@ -93,11 +93,11 @@ def step_cmd(
                 {
                     "ok": True,
                     "task_key": task_key,
-                    "phase": engine.current_phase,
+                    "phase_code": engine.current_phase_code,
                     "status": "done",
                     "instructions": engine.format_current_phase_instructions(),
                     "phase_contract": phase_contract,
-                    "next_phase": None,
+                    "next_phase_code": None,
                 }
             )
             return
@@ -105,7 +105,7 @@ def step_cmd(
             {
                 "ok": True,
                 "task_key": task_key,
-                "phase": engine.current_phase,
+                "phase_code": engine.current_phase_code,
                 "prompt": prompt,
                 "phase_contract": phase_contract,
             }
@@ -138,18 +138,20 @@ def history_cmd(ctx: click.Context, task: str, n: int | None) -> None:
             task_key = _require_valid_key(task, uow)
             task_obj = uow.tasks.get_by_key(task_key)
             task_id = task_obj.id if task_obj else None
-            runs_raw = uow.supervisor_runs.list(task_id=task_id, task_key=task_key, limit=n)
+            runs_raw = uow.step_history.list(task_id=task_id, task_key=task_key, limit=n)
             runs: list[dict[str, Any]] = []
             for raw in runs_raw:
                 rd: dict[str, Any] = raw.to_dict()
                 next_phase_id = rd.get("next_phase_id")
                 rollback_phase_id = rd.get("rollback_phase_id")
-                phase = uow.phases.get_by_id(int(rd.get("phase_id") or 0))
+                evaluated_phase = uow.phases.get_by_id(int(rd.get("phase_id") or 0))
                 next_phase = uow.phases.get_by_id(int(next_phase_id)) if next_phase_id is not None else None
                 rollback_phase = uow.phases.get_by_id(int(rollback_phase_id)) if rollback_phase_id is not None else None
-                rd["phase_code"] = phase.code if phase else "-"
-                rd["next_phase_code"] = next_phase.code if next_phase else "-"
-                rd["rollback_phase_code"] = rollback_phase.code if rollback_phase else "-"
+                if evaluated_phase is None:
+                    raise ValueError("История step ссылается на неизвестную фазу")
+                rd["phase_code"] = evaluated_phase.code
+                rd["next_phase_code"] = next_phase.code if next_phase else None
+                rd["rollback_phase_code"] = rollback_phase.code if rollback_phase else None
                 runs.append(rd)
     except (RuntimeError, ValueError) as exc:
         result = blocked_result(task, str(exc))
@@ -169,8 +171,10 @@ def history_cmd(ctx: click.Context, task: str, n: int | None) -> None:
                     {
                         "phase_code": r.get("phase_code"),
                         "verdict": r.get("verdict"),
-                        "next_phase": r.get("next_phase_code"),
-                        "rollback_phase": r.get("rollback_phase_code"),
+                        "worker_report": r.get("worker_report"),
+                        "supervisor_message": (r.get("supervisor_response") or {}).get("message"),
+                        "next_phase_code": r.get("next_phase_code"),
+                        "rollback_phase_code": r.get("rollback_phase_code"),
                         "created_at": r.get("created_at"),
                     }
                     for r in runs
@@ -187,8 +191,14 @@ def history_cmd(ctx: click.Context, task: str, n: int | None) -> None:
     for r in runs:
         verdict = r.get("verdict")
         verdict_label = "ПРОЙДЕНО" if verdict == "pass" else "ОТКАТ" if verdict == "rollback" else "ПРОВЕРКА"
-        phase = r.get("phase_code", "-")
-        next_phase = r.get("next_phase_code", "-")
-        rollback = r.get("rollback_phase_code", "-")
+        phase_code = r.get("phase_code", "-")
+        next_phase_code = r.get("next_phase_code") or "—"
+        rollback_phase_code = r.get("rollback_phase_code") or "—"
         created_at = r.get("created_at", "-")
-        console.print(f"{verdict_label} [{created_at}] Фаза {phase} -> {next_phase} (откат: {rollback})")
+        console.print(
+            f"{verdict_label} [{created_at}] Фаза {phase_code} -> {next_phase_code} "
+            f"(откат: {rollback_phase_code})"
+        )
+        console.print(f"  Отчёт исполнителя: {r.get('worker_report') or '—'}")
+        response = r.get("supervisor_response") or {}
+        console.print(f"  Ответ Supervisor: {response.get('message') or '—'}")

@@ -26,7 +26,7 @@ def _service(wdb):
 class TestUIDataServiceGaps:
     @pytest.mark.parametrize(
         ("status", "expected_total"),
-        [("done", 2), ("active", 3)],
+        [("done", 3), ("active", 3)],
     )
     def test_load_tasks_progress_uses_history_only_after_completion(self, status, expected_total):
         wdb = MagicMock()
@@ -38,7 +38,9 @@ class TestUIDataServiceGaps:
                 "project_id": 1,
                 "workflow_id": 1,
                 "status": status,
-                "current_phase": "b",
+                "current_phase_id": 2,
+                "current_phase_code": "b",
+                "current_phase_name": "B",
             }
         ]
         phases = [
@@ -48,13 +50,13 @@ class TestUIDataServiceGaps:
         ]
         wdb.get_workflows.return_value = [{"id": 1}]
         wdb.get_phases.return_value = phases
-        wdb.tasks.get_history_batch.return_value = {
+        wdb.list_phase_events_batch.return_value = {
             1: [
-                {"phase_id": 1, "status": "done"},
-                {"phase_id": 2, "status": "done"},
+                {"phase_id": 1, "event_type": "completed", "occurred_at": "2026-01-01"},
+                {"phase_id": 2, "event_type": "completed", "occurred_at": "2026-01-02"},
             ]
         }
-        wdb.supervisor_runs.latest_for_tasks.return_value = []
+        wdb.step_history.latest_for_tasks.return_value = []
         wdb.get_projects.return_value = [
             {"id": 1, "code": "TASK", "name": "Task", "workflow_id": 1}
         ]
@@ -67,16 +69,26 @@ class TestUIDataServiceGaps:
     def test_load_tasks_latest_run_without_task_id(self):
         wdb = MagicMock()
         wdb.get_tasks.return_value = [
-            {"id": 1, "task_key": "RUN-1", "title": "t", "project_id": 1, "status": "active"}
+            {
+                "id": 1,
+                "task_key": "RUN-1",
+                "title": "t",
+                "project_id": 1,
+                "workflow_id": 1,
+                "status": "active",
+                "current_phase_id": 1,
+                "current_phase_code": "a",
+                "current_phase_name": "A",
+            }
         ]
-        wdb.get_workflows.return_value = []
-        wdb.get_phases.return_value = []
-        wdb.tasks.get_history_batch.return_value = {1: []}
+        wdb.get_workflows.return_value = [{"id": 1}]
+        wdb.get_phases.return_value = [{"id": 1, "code": "a", "name": "A"}]
+        wdb.list_phase_events_batch.return_value = {1: []}
 
         class Run:
             pass
 
-        wdb.supervisor_runs.latest_for_tasks.return_value = [Run()]
+        wdb.step_history.latest_for_tasks.return_value = [Run()]
         wdb.get_projects.return_value = []
 
         result = _service(wdb)._load_tasks()
@@ -93,7 +105,9 @@ class TestUIDataServiceGaps:
                 "project_id": 1,
                 "workflow_id": 1,
                 "status": "active",
-                "current_phase": "v1",
+                "current_phase_id": 11,
+                "current_phase_code": "v1",
+                "current_phase_name": "V1",
             }
         ]
         wdb.get_workflows.return_value = [{"id": 1}, {"id": 2}]
@@ -105,8 +119,8 @@ class TestUIDataServiceGaps:
             ],
         }
         wdb.get_phases.side_effect = lambda workflow_id=None: phases.get(workflow_id, [])
-        wdb.tasks.get_history_batch.return_value = {1: []}
-        wdb.supervisor_runs.latest_for_tasks.return_value = []
+        wdb.list_phase_events_batch.return_value = {1: []}
+        wdb.step_history.latest_for_tasks.return_value = []
         wdb.get_projects.return_value = [{"id": 1, "code": "RUN", "name": "Runs", "workflow_id": 2}]
 
         result = _service(wdb)._load_tasks()
@@ -118,19 +132,33 @@ class TestUIDataServiceGaps:
     def test_load_tasks_latest_run_extracts_verdict(self):
         wdb = MagicMock()
         wdb.get_tasks.return_value = [
-            {"id": 1, "task_key": "RUN-1", "title": "t", "project_id": 1, "status": "active"}
+            {
+                "id": 1,
+                "task_key": "RUN-1",
+                "title": "t",
+                "project_id": 1,
+                "workflow_id": 1,
+                "status": "active",
+                "current_phase_id": 1,
+                "current_phase_code": "1",
+                "current_phase_name": "One",
+            }
         ]
-        wdb.get_workflows.return_value = []
-        wdb.get_phases.return_value = []
-        wdb.tasks.get_history_batch.return_value = {1: []}
+        wdb.get_workflows.return_value = [{"id": 1}]
+        wdb.get_phases.return_value = [{"id": 1, "code": "1", "name": "One"}]
+        wdb.list_phase_events_batch.return_value = {1: []}
 
         class Run:
             task_id = 1
 
             def to_dict(self):
-                return {"verdict": "pass", "phase_code": "1"}
+                return {
+                    "verdict": "pass",
+                    "evaluation_snapshot": {"phase_code": "1"},
+                    "supervisor_response": {},
+                }
 
-        wdb.supervisor_runs.latest_for_tasks.return_value = [Run()]
+        wdb.step_history.latest_for_tasks.return_value = [Run()]
         wdb.get_projects.return_value = []
 
         result = _service(wdb)._load_tasks()
@@ -148,10 +176,10 @@ class TestUIDataServiceGaps:
         wdb.get_phases.assert_not_called()
 
     def test_compute_completion_time_empty_done_entries(self):
-        result = _service(None)._compute_completion_time(
-            {"status": "done", "updated_at": "2026-01-01"}, []
-        )
-        assert result == "2026-01-01"
+        with pytest.raises(ValueError, match="нет события completed"):
+            _service(None)._compute_completion_time(
+                {"status": "done", "task_key": "RUN-1", "updated_at": "2026-01-01"}, []
+            )
 
     def test_phase_history_uses_consecutive_numbers_after_phase_order_sort(self):
         wdb = MagicMock()
@@ -161,12 +189,12 @@ class TestUIDataServiceGaps:
             {"id": 20, "phase_order": 20, "code": "internal.b", "name": "Second"},
         ]
         history = [
-            {"phase_id": 30, "status": "done"},
-            {"phase_id": 10, "status": "done"},
-            {"phase_id": 20, "status": "done"},
+            {"phase_id": 30, "event_type": "completed", "occurred_at": "2026-01-03"},
+            {"phase_id": 10, "event_type": "completed", "occurred_at": "2026-01-01"},
+            {"phase_id": 20, "event_type": "completed", "occurred_at": "2026-01-02"},
         ]
 
-        blocks = _service(wdb)._build_phase_history_blocks(history, phases, None, wdb)
+        blocks = _service(wdb)._build_phase_history_blocks(history, phases, phases[0], "done")
         displayed_phases = [phase for block in blocks for phase in block["phases"]]
 
         assert [phase["phase_code"] for phase in displayed_phases] == [
@@ -176,7 +204,7 @@ class TestUIDataServiceGaps:
         ]
         assert [phase["sequence_number"] for phase in displayed_phases] == [1, 2, 3]
 
-    def test_get_task_detail_empty_history_returns_zero_completed(self):
+    def test_get_task_detail_empty_history_fails_closed(self):
         wdb = MagicMock()
         wdb.get_task_by_key.return_value = {
             "id": 1,
@@ -184,23 +212,26 @@ class TestUIDataServiceGaps:
             "title": "t",
             "project_id": 1,
             "status": "active",
-            "current_phase": "-1",
+            "current_phase_id": 1,
+            "current_phase_code": "-1",
+            "current_phase_name": "Start",
             "workflow_id": 1,
         }
-        wdb.get_task_history.return_value = []
-        wdb.get_phases.return_value = []
-        wdb.get_supervisor_runs.return_value = []
+        wdb.list_phase_events.return_value = []
+        wdb.get_phases.return_value = [
+            {"id": 1, "workflow_id": 1, "phase_order": 1, "code": "-1", "name": "Start"}
+        ]
+        wdb.list_step_history.return_value = []
         wdb.projects.get_by_id.return_value = None
 
-        result = _service(wdb)._get_task_detail("RUN-1")
-        assert result is not None
-        assert result["completed"] == 0
+        with pytest.raises(ValueError, match="обязательный журнал событий"):
+            _service(wdb)._get_task_detail("RUN-1")
 
     @pytest.mark.parametrize(
-        ("status", "expected_total"),
+        ("status", "current_phase_id"),
         [("done", 2), ("active", 3)],
     )
-    def test_task_detail_progress_uses_history_only_after_completion(self, status, expected_total):
+    def test_task_detail_progress_uses_events_and_current_snapshot(self, status, current_phase_id):
         wdb = MagicMock()
         phases = [
             {"id": 1, "workflow_id": 1, "phase_order": 1, "code": "a", "name": "A"},
@@ -219,19 +250,24 @@ class TestUIDataServiceGaps:
             "title": "t",
             "project_id": 1,
             "status": status,
-            "current_phase": "b",
+            "current_phase_id": current_phase_id,
             "workflow_id": 1,
         }
         wdb.get_phases.return_value = phases
-        wdb.get_task_history.return_value = [
-            {"phase_id": 1, "status": "done"},
-            {"phase_id": 2, "status": "done"},
+        wdb.list_phase_events.return_value = [
+            {"phase_id": 1, "event_type": "completed", "occurred_at": "2026-01-01"},
+            {"phase_id": 2, "event_type": "completed", "occurred_at": "2026-01-02"},
+            *(
+                [{"phase_id": 3, "event_type": "entered", "occurred_at": "2026-01-03"}]
+                if status == "active"
+                else []
+            ),
         ]
-        wdb.get_supervisor_runs.return_value = []
+        wdb.list_step_history.return_value = []
 
         result = _service(wdb)._get_task_detail("RUN-1")
 
         assert result is not None
         assert result["progress_done"] == 2
-        assert result["progress_total"] == expected_total
+        assert result["progress_total"] == 3
         assert result["workflow_phase_count"] == 3

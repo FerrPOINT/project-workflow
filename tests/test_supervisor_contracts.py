@@ -39,13 +39,13 @@ def test_phase_to_dict():
         instructions=[PhaseInstruction(step="i", skills=["repo-workflow", "repo-workflow"])],
         checks=[PhaseCheck(description="c")],
         evidence=[PhaseEvidence(item="e")],
-        delegate=PhaseDelegate(agent="a1", hermes_profile="code_profile", toolsets=["t1"]),
+        delegate=PhaseDelegate(agent="a1", hermes_profile="code_profile"),
     )
     d = phase_to_dict(phase)
     assert d["code"] == "p1"
     assert d["delegate_agent"] == "a1"
     assert d["hermes_profile"] == "code_profile"
-    assert d["delegate_toolsets"] == ["t1"]
+    assert "delegate_toolsets" not in d
     assert d["skills"] == ["repo-workflow"]
 
 
@@ -75,10 +75,10 @@ def test_contract_exposes_workflow_revision_and_actor_without_fake_operator_prof
 
 
 def _make_phases():
-    p1 = Phase(code="p1", name="P1", execution_type="sync", next_recommendation="go")
-    p2 = Phase(code="p2", name="P2", execution_type="parallel", parallel_with="p3")
-    p3 = Phase(code="p3", name="P3", execution_type="parallel", parallel_with="p2")
-    p4 = Phase(code="p4", name="P4", execution_type="sync")
+    p1 = Phase(id=1, code="p1", name="P1", execution_type="sync")
+    p2 = Phase(id=2, code="p2", name="P2", execution_type="parallel", parallel_with_phase_code="p3")
+    p3 = Phase(id=3, code="p3", name="P3", execution_type="parallel", parallel_with_phase_code="p2")
+    p4 = Phase(id=4, code="p4", name="P4", execution_type="sync")
     return [p1, p2, p3, p4]
 
 
@@ -131,10 +131,10 @@ def test_get_parallel_group():
 
 def test_get_parallel_group_keeps_adjacent_pairs_separate_from_any_member():
     phases = [
-        Phase(code="a", execution_type="parallel", parallel_with="b"),
-        Phase(code="b", execution_type="parallel", parallel_with="a"),
-        Phase(code="c", execution_type="parallel", parallel_with="d"),
-        Phase(code="d", execution_type="parallel", parallel_with="c"),
+        Phase(id=1, code="a", execution_type="parallel", parallel_with_phase_code="b"),
+        Phase(id=2, code="b", execution_type="parallel", parallel_with_phase_code="a"),
+        Phase(id=3, code="c", execution_type="parallel", parallel_with_phase_code="d"),
+        Phase(id=4, code="d", execution_type="parallel", parallel_with_phase_code="c"),
     ]
     builder = PhaseContractBuilder(phases)
 
@@ -146,9 +146,9 @@ def test_get_parallel_group_keeps_adjacent_pairs_separate_from_any_member():
 
 def test_get_parallel_group_follows_transitive_and_one_way_links():
     phases = [
-        Phase(code="a", execution_type="parallel", parallel_with="b"),
-        Phase(code="b", execution_type="parallel"),
-        Phase(code="c", execution_type="parallel", parallel_with="b"),
+        Phase(id=1, code="a", execution_type="parallel", parallel_with_phase_code="b"),
+        Phase(id=2, code="b", execution_type="parallel"),
+        Phase(id=3, code="c", execution_type="parallel", parallel_with_phase_code="b"),
     ]
     builder = PhaseContractBuilder(phases)
 
@@ -157,10 +157,10 @@ def test_get_parallel_group_follows_transitive_and_one_way_links():
 
 
 def test_get_parallel_group_ignores_unknown_cross_run_and_self_links():
-    isolated = Phase(code="a", execution_type="parallel", parallel_with="missing")
-    self_linked = Phase(code="b", execution_type="parallel", parallel_with="b")
-    sync = Phase(code="gate", execution_type="sync")
-    cross_run = Phase(code="c", execution_type="parallel", parallel_with="a")
+    isolated = Phase(id=1, code="a", execution_type="parallel", parallel_with_phase_code="missing")
+    self_linked = Phase(id=2, code="b", execution_type="parallel", parallel_with_phase_code="b")
+    sync = Phase(id=3, code="gate", execution_type="sync")
+    cross_run = Phase(id=4, code="c", execution_type="parallel", parallel_with_phase_code="a")
     builder = PhaseContractBuilder([isolated, self_linked, sync, cross_run])
 
     assert builder.get_parallel_group(isolated) == [isolated]
@@ -186,10 +186,10 @@ def test_get_next_phase():
 
 def test_next_phase_follows_parallel_components_instead_of_physical_last_member():
     phases = [
-        Phase(code="a", name="A", execution_type="parallel", parallel_with="c"),
-        Phase(code="b", name="B", execution_type="parallel"),
-        Phase(code="c", name="C", execution_type="parallel"),
-        Phase(code="done", name="Done"),
+        Phase(id=1, code="a", name="A", execution_type="parallel", parallel_with_phase_code="c"),
+        Phase(id=2, code="b", name="B", execution_type="parallel"),
+        Phase(id=3, code="c", name="C", execution_type="parallel"),
+        Phase(id=4, code="done", name="Done"),
     ]
     builder = PhaseContractBuilder(phases)
     linked_group = builder.get_parallel_group(phases[0])

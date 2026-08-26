@@ -43,7 +43,7 @@ class FakeTask:
 
 def _make_uow() -> UnitOfWork:
     uow = MagicMock(spec=UnitOfWork)
-    uow.instructions = MagicMock()
+    uow.phase_instructions = MagicMock()
     uow.projects = MagicMock()
     uow.tasks = MagicMock()
     uow.workflows = MagicMock()
@@ -56,13 +56,13 @@ def _make_uow() -> UnitOfWork:
 class TestInstructionService:
     def test_list_instructions(self):
         uow = _make_uow()
-        uow.instructions.list.return_value = [{"id": 1, "description": "D"}]
+        uow.phase_instructions.list.return_value = [{"id": 1, "description": "D"}]
         svc = InstructionService(uow)
         assert svc.list_instructions(7) == [{"id": 1, "description": "D"}]
 
     def test_get_instruction(self):
         uow = _make_uow()
-        uow.instructions.get_by_id.return_value = {"id": 2, "description": "X"}
+        uow.phase_instructions.get_by_id.return_value = {"id": 2, "description": "X"}
         svc = InstructionService(uow)
         assert svc.get_instruction(2) == {"id": 2, "description": "X"}
 
@@ -71,11 +71,11 @@ class TestInstructionService:
         phase = MagicMock(id=3, workflow_id=7)
         uow.phases.get_by_id.return_value = phase
         uow.phases.list.return_value = [phase]
-        uow.instructions.create.return_value = 5
-        uow.instructions.get_by_id.return_value = {"id": 5, "description": "Y"}
+        uow.phase_instructions.create.return_value = 5
+        uow.phase_instructions.get_by_id.return_value = {"id": 5, "description": "Y"}
         svc = InstructionService(uow)
         assert svc.create_instruction(3, {"description": "Y"}) == {"id": 5, "description": "Y"}
-        uow.instructions.create.assert_called_once_with(3, {"description": "Y"})
+        uow.phase_instructions.create.assert_called_once_with(3, {"description": "Y"})
         uow.commit.assert_called_once()
 
     def test_create_instruction_inserts_at_requested_step(self):
@@ -83,17 +83,17 @@ class TestInstructionService:
         phase = MagicMock(id=3, workflow_id=7)
         uow.phases.get_by_id.return_value = phase
         uow.phases.list.return_value = [phase]
-        uow.instructions.list.return_value = [{"id": 10}, {"id": 20}]
-        uow.instructions.create.return_value = 30
-        uow.instructions.get_by_id.return_value = {"id": 30, "description": "Y"}
+        uow.phase_instructions.list.return_value = [{"id": 10}, {"id": 20}]
+        uow.phase_instructions.create.return_value = 30
+        uow.phase_instructions.get_by_id.return_value = {"id": 30, "description": "Y"}
 
         result = InstructionService(uow).create_instruction(
             3, {"description": "Y", "step_num": 2}
         )
 
         assert result == {"id": 30, "description": "Y"}
-        uow.instructions.create.assert_called_once_with(3, {"description": "Y"})
-        uow.instructions.reorder.assert_called_once_with(3, [(10, 1), (30, 2), (20, 3)])
+        uow.phase_instructions.create.assert_called_once_with(3, {"description": "Y"})
+        uow.phase_instructions.reorder.assert_called_once_with(3, [(10, 1), (30, 2), (20, 3)])
         uow.commit.assert_called_once()
 
     def test_create_instruction_failure(self):
@@ -101,8 +101,8 @@ class TestInstructionService:
         phase = MagicMock(id=1, workflow_id=7)
         uow.phases.get_by_id.return_value = phase
         uow.phases.list.return_value = [phase]
-        uow.instructions.create.return_value = 1
-        uow.instructions.get_by_id.return_value = None
+        uow.phase_instructions.create.return_value = 1
+        uow.phase_instructions.get_by_id.return_value = None
         svc = InstructionService(uow)
         with pytest.raises(RuntimeError, match="Не удалось создать инструкцию"):
             svc.create_instruction(1, {})
@@ -126,7 +126,7 @@ class TestInstructionService:
         with pytest.raises(NotFoundError, match=message):
             InstructionService(uow).create_instruction(3, {"description": "Y"})
 
-        uow.instructions.create.assert_not_called()
+        uow.phase_instructions.create.assert_not_called()
         uow.commit.assert_not_called()
 
     @pytest.mark.parametrize("step_num", ["2", True, 1.5, "second"])
@@ -141,7 +141,7 @@ class TestInstructionService:
                 3, {"description": "Y", "step_num": step_num}
             )
 
-        uow.instructions.create.assert_not_called()
+        uow.phase_instructions.create.assert_not_called()
         uow.commit.assert_not_called()
 
     def test_update_and_delete_instruction(self):
@@ -149,14 +149,14 @@ class TestInstructionService:
         phase = MagicMock(id=10, workflow_id=7)
         uow.phases.get_by_id.return_value = phase
         uow.phases.list.return_value = [phase]
-        uow.instructions.get_by_id.return_value = {"id": 2, "phase_id": 10}
-        uow.instructions.list.return_value = [{"id": 2}, {"id": 3}]
+        uow.phase_instructions.get_by_id.return_value = {"id": 2, "phase_id": 10}
+        uow.phase_instructions.list.return_value = [{"id": 2}, {"id": 3}]
         svc = InstructionService(uow)
         assert svc.update_instruction(2, {"description": "Z"}) is None
         assert svc.delete_instruction(2) is None
-        uow.instructions.update.assert_called_once_with(2, {"description": "Z"})
-        uow.instructions.delete.assert_called_once_with(2)
-        uow.instructions.reorder.assert_called_once_with(10, [(3, 1)])
+        uow.phase_instructions.update.assert_called_once_with(2, {"description": "Z"})
+        uow.phase_instructions.delete.assert_called_once_with(2)
+        uow.phase_instructions.reorder.assert_called_once_with(10, [(3, 1)])
         assert uow.commit.call_count == 2
 
     def test_reorder_instructions(self):
@@ -164,10 +164,10 @@ class TestInstructionService:
         phase = MagicMock(id=10, workflow_id=7)
         uow.phases.get_by_id.return_value = phase
         uow.phases.list.return_value = [phase]
-        uow.instructions.list.return_value = [{"id": 3}, {"id": 1}, {"id": 2}]
+        uow.phase_instructions.list.return_value = [{"id": 3}, {"id": 1}, {"id": 2}]
         svc = InstructionService(uow)
         svc.reorder_instructions(10, [2, 3, 1])
-        uow.instructions.reorder.assert_called_once_with(10, [(2, 1), (3, 2), (1, 3)])
+        uow.phase_instructions.reorder.assert_called_once_with(10, [(2, 1), (3, 2), (1, 3)])
         uow.commit.assert_called_once()
 
     def test_reorder_instructions_rejects_partial_set(self):
@@ -175,12 +175,12 @@ class TestInstructionService:
         phase = MagicMock(id=10, workflow_id=7)
         uow.phases.get_by_id.return_value = phase
         uow.phases.list.return_value = [phase]
-        uow.instructions.list.return_value = [{"id": 3}, {"id": 1}, {"id": 2}]
+        uow.phase_instructions.list.return_value = [{"id": 3}, {"id": 1}, {"id": 2}]
 
         with pytest.raises(ConflictError, match="полный набор"):
             InstructionService(uow).reorder_instructions(10, [2, 3])
 
-        uow.instructions.reorder.assert_not_called()
+        uow.phase_instructions.reorder.assert_not_called()
         uow.commit.assert_not_called()
 
     @pytest.mark.parametrize("instruction_ids", [[True, 2, 3], ["1", 2, 3], [0, 2, 3]])
@@ -189,12 +189,12 @@ class TestInstructionService:
         phase = MagicMock(id=10, workflow_id=7)
         uow.phases.get_by_id.return_value = phase
         uow.phases.list.return_value = [phase]
-        uow.instructions.list.return_value = [{"id": 3}, {"id": 1}, {"id": 2}]
+        uow.phase_instructions.list.return_value = [{"id": 3}, {"id": 1}, {"id": 2}]
 
         with pytest.raises(ValueError, match="положительные целые числа"):
             InstructionService(uow).reorder_instructions(10, instruction_ids)
 
-        uow.instructions.reorder.assert_not_called()
+        uow.phase_instructions.reorder.assert_not_called()
         uow.commit.assert_not_called()
 
 

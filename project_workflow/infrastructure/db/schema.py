@@ -11,7 +11,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
-from project_workflow.domain.phase_graph import validate_phase_graph
+from project_workflow.domain.phase_graph import PhaseGraphNode, validate_phase_graph
 from project_workflow.domain.repositories import UnitOfWork
 
 from ... import config
@@ -29,11 +29,12 @@ from ...supervisor.models import (
 def _build_phase_from_db(
     phase_row: Any,
     uow: UnitOfWork,
+    phase_code_by_id: dict[int, str],
 ) -> Phase:
     """Assemble a supervisor Phase dataclass from a domain Phase + repositories."""
     phase_id = phase_row.id
     phase_code = phase_row.code or ""
-    inst_rows = uow.instructions.list(phase_id)
+    inst_rows = uow.phase_instructions.list(phase_id)
 
     instructions = [
         PhaseInstruction(
@@ -71,10 +72,6 @@ def _build_phase_from_db(
             delegate = PhaseDelegate(
                 agent=agent.name,
                 hermes_profile=agent.hermes_profile,
-                prompt_template=f"Фаза {phase_code}",
-                toolsets=[],  # domain Agent does not store toolsets in this schema
-                timeout_min=10,
-                max_cycles=3,
             )
 
     return Phase(
@@ -82,17 +79,12 @@ def _build_phase_from_db(
         code=phase_code,
         name=phase_row.name,
         description=phase_row.description or "",
-        min_time_min=phase_row.min_time_min or 0,
-        is_blocker=phase_row.is_blocker,
-        is_delegated=phase_row.is_delegated,
-        is_critic=phase_row.is_critic,
         checks=checks,
         evidence=evidence,
         instructions=instructions,
         delegate=delegate,
-        next_recommendation=phase_row.next_recommendation or "",
-        parallel_with=phase_row.parallel_with,
-        rollback_target=phase_row.rollback_target,
+        parallel_with_phase_code=phase_code_by_id.get(phase_row.parallel_with_phase_id),
+        rollback_target_phase_code=phase_code_by_id.get(phase_row.rollback_target_phase_id),
         execution_type=phase_row.execution_type or "sync",
     )
 
@@ -102,8 +94,9 @@ def load_phases_from_db(
     workflow_id: int | None = None,
 ) -> list[Phase]:
     """Load all supervisor phases from a UnitOfWork instance."""
-    rows = uow.phases.list(workflow_id)
-    return [_build_phase_from_db(r, uow) for r in rows]
+    rows = list(uow.phases.list(workflow_id))
+    phase_code_by_id = {int(row.id): row.code for row in rows if row.id is not None}
+    return [_build_phase_from_db(row, uow, phase_code_by_id) for row in rows]
 
 
 # ── Bootstrap seed ───────────
@@ -170,24 +163,20 @@ class _SeedPhase(_SeedModel):
     code: str
     name: str
     description: str = ""
-    min_time_min: int = Field(default=0, ge=0)
     execution_type: Literal["sync", "parallel"] = "sync"
     delegate: _SeedDelegate | None = None
     instructions: list[_SeedInstruction] = Field(default_factory=list)
     checks: list[str | _SeedTextItem] = Field(default_factory=list)
     evidence: list[str | _SeedTextItem] = Field(default_factory=list)
-    next_recommendation: str = ""
-    parallel_with: str | None = None
-    rollback_target: str | None = None
-    is_blocker: bool = False
-    is_critic: bool = False
+    parallel_with_phase_code: str | None = None
+    rollback_target_phase_code: str | None = None
 
     @field_validator("code", "name")
     @classmethod
     def _identity_not_blank(cls, value: str, info: Any) -> str:
         return _nonblank(value, info.field_name)
 
-    @field_validator("parallel_with", "rollback_target")
+    @field_validator("parallel_with_phase_code", "rollback_target_phase_code")
     @classmethod
     def _normalize_link(cls, value: str | None) -> str | None:
         if value is None:
@@ -232,7 +221,19 @@ def _load_seed(path: Path | str | None = None) -> list[_SeedPhase]:
         phases.append(phase)
 
     try:
-        validate_phase_graph(phases)
+        validate_phase_graph(
+            [
+                PhaseGraphNode(
+                    code=phase.code,
+                    graph_id=phase.code,
+                    phase_order=phase.phase_order,
+                    execution_type=phase.execution_type,
+                    parallel_with_phase_id=phase.parallel_with_phase_code,
+                    rollback_target_phase_id=phase.rollback_target_phase_code,
+                )
+                for phase in phases
+            ]
+        )
     except ValueError as exc:
         raise ValueError(f"Некорректный граф фаз начального каталога: {exc}") from exc
     for phase in phases:
@@ -265,27 +266,18 @@ def _phase_item_to_supervisor(item: _SeedPhase) -> Phase:
         delegate = PhaseDelegate(
             agent=delegate_data.agent,
             hermes_profile=delegate_data.hermes_profile,
-            prompt_template=f"Фаза {item.code}",
-            toolsets=[],
-            timeout_min=10,
-            max_cycles=3,
         )
     return Phase(
         id=None,
         code=item.code,
         name=item.name,
         description=item.description,
-        min_time_min=item.min_time_min,
-        is_blocker=item.is_blocker,
-        is_delegated=bool(delegate),
-        is_critic=item.is_critic,
         checks=checks,
         evidence=evidence,
         instructions=instructions,
         delegate=delegate,
-        next_recommendation=item.next_recommendation,
-        parallel_with=item.parallel_with,
-        rollback_target=item.rollback_target,
+        parallel_with_phase_code=item.parallel_with_phase_code,
+        rollback_target_phase_code=item.rollback_target_phase_code,
         execution_type=item.execution_type,
     )
 
@@ -307,7 +299,8 @@ def ensure_phase_catalog(
 ) -> None:
     """Bootstrap the packaged phase catalog only for a new empty database."""
     seed_path = Path(seed_path) if seed_path else config.SEED_PATH
-    seed_phases = load_phases_from_seed(seed_path)
+    seed_items = _load_seed(seed_path)
+    seed_phases = [_phase_item_to_supervisor(item) for item in seed_items]
     if uow.workflows.list():
         return
     default_workflow = uow.workflows.ensure_default_exists(config.DEFAULT_WORKFLOW_NAME)
@@ -326,6 +319,7 @@ def ensure_phase_catalog(
                 }
             )
 
+    phase_id_by_code: dict[str, int] = {}
     for order, phase in enumerate(seed_phases, start=1):
         assigned_agent_name = phase.delegate.agent if phase.delegate else ""
         agent_id = None
@@ -340,21 +334,34 @@ def ensure_phase_catalog(
                 "code": phase.code,
                 "name": phase.name,
                 "description": phase.description,
-                "min_time_min": phase.min_time_min,
                 "phase_order": order,
-                "next_recommendation": phase.next_recommendation,
-                "parallel_with": phase.parallel_with,
-                "rollback_target": phase.rollback_target,
                 "execution_type": phase.execution_type,
-                "is_seed_managed": True,
-                "is_blocker": phase.is_blocker,
-                "is_delegated": phase.is_delegated,
-                "is_critic": phase.is_critic,
                 "agent_id": agent_id,
             }
         )
+        phase_id_by_code[phase.code] = int(phase_id)
+
+    for phase in seed_phases:
+        phase_id = phase_id_by_code[phase.code]
+        parallel_phase_id = (
+            phase_id_by_code[phase.parallel_with_phase_code]
+            if phase.parallel_with_phase_code is not None
+            else None
+        )
+        rollback_phase_id = (
+            phase_id_by_code[phase.rollback_target_phase_code]
+            if phase.rollback_target_phase_code is not None
+            else None
+        )
+        uow.phases.update(
+            phase_id,
+            {
+                "parallel_with_phase_id": parallel_phase_id,
+                "rollback_target_phase_id": rollback_phase_id,
+            },
+        )
         for idx, instr in enumerate(phase.instructions, start=1):
-            uow.instructions.create(
+            uow.phase_instructions.create(
                 int(phase_id),
                 {
                     "step_num": idx,

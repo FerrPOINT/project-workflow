@@ -115,7 +115,7 @@
       {{ item_list('Проверки', detail.required_checks) }}
       {{ item_list('Подтверждения', detail.required_evidence) }}
       {% if detail.skills %}<div class="skill-list">{% for skill in detail.skills %}<span class="skill-chip">{{ skill }}</span>{% endfor %}</div>{% endif %}
-      {% if detail.delegate_agent %}<div class="assignment-description" style="margin-top:9px;margin-bottom:0">Агент: {{ detail.delegate_agent }}{% if detail.hermes_profile %} · профиль Hermes: {{ detail.hermes_profile }}{% endif %}{% if detail.delegate_toolsets %} · {{ detail.delegate_toolsets | join(', ') }}{% endif %}</div>{% endif %}
+      {% if detail.delegate_agent %}<div class="assignment-description" style="margin-top:9px;margin-bottom:0">Агент: {{ detail.delegate_agent }}{% if detail.hermes_profile %} · профиль Hermes: {{ detail.hermes_profile }}{% endif %}</div>{% endif %}
     </section>
     {% endfor %}
   </div>
@@ -126,7 +126,7 @@
     {{ item_list('Подтверждения', contract.required_evidence) }}
   </div>
   {% if contract.skills %}<div class="skill-list">{% for skill in contract.skills %}<span class="skill-chip">{{ skill }}</span>{% endfor %}</div>{% endif %}
-  {% if contract.delegate_agent %}<div class="assignment-description" style="margin-top:9px;margin-bottom:0">Агент: {{ contract.delegate_agent }}{% if contract.hermes_profile %} · профиль Hermes: {{ contract.hermes_profile }}{% endif %}{% if contract.delegate_toolsets %} · {{ contract.delegate_toolsets | join(', ') }}{% endif %}</div>{% endif %}
+  {% if contract.delegate_agent %}<div class="assignment-description" style="margin-top:9px;margin-bottom:0">Агент: {{ contract.delegate_agent }}{% if contract.hermes_profile %} · профиль Hermes: {{ contract.hermes_profile }}{% endif %}</div>{% endif %}
   {% endif %}
 {%- endmacro %}
 
@@ -194,9 +194,9 @@
 </section>
 
 <section class="detail-section" aria-labelledby="supervisor-dialog-title">
-  <h2 class="section-heading" id="supervisor-dialog-title">Диалог с Supervisor</h2>
+  <h2 class="section-heading" id="supervisor-dialog-title">История проверок Supervisor</h2>
   <div class="supervisor-activity">
-    {% for run in supervisor_runs %}
+    {% for run in step_history %}
     <article class="activity-event">
       <div class="activity-rail"><span class="activity-node {{ run.verdict }}" aria-hidden="true"></span></div>
       <div class="activity-content">
@@ -208,7 +208,7 @@
           <time class="activity-time">{{ run.created_at[:16] if run.created_at else '—' }}</time>
         </header>
 
-        {% if run.report %}<div class="dialog-part"><div class="dialog-label">Отчёт исполнителя</div><div class="report-text">{{ run.report }}</div></div>{% endif %}
+        {% if run.worker_report %}<div class="dialog-part"><div class="dialog-label">Отчёт исполнителя</div><div class="report-text">{{ run.worker_report }}</div></div>{% endif %}
 
         <div class="dialog-part">
           <div class="dialog-label">Ответ Supervisor</div>
@@ -234,7 +234,7 @@
         {% endif %}
       </div>
     </article>
-    {% else %}<div class="empty-state">Диалог с Supervisor пока пуст.</div>{% endfor %}
+    {% else %}<div class="empty-state">Проверок Supervisor пока нет.</div>{% endfor %}
   </div>
 </section>
 {% endblock %}

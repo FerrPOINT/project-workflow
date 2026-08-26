@@ -162,7 +162,7 @@ class PromptBuilder:
         lines: list[str] = [
             f"TASK: {task_key}",
             f"CURRENT PHASE: {phase.code} — {phase.name}",
-            f"ROLLBACK TARGET: {getattr(phase, 'rollback_target', None) or 'not configured'}",
+            f"ROLLBACK TARGET: {getattr(phase, 'rollback_target_phase_code', None) or 'not configured'}",
             "",
             "PHASE CONTRACT:",
         ]

@@ -8,6 +8,7 @@ pytestmark = [pytest.mark.supervisor]
 
 from project_workflow.infrastructure.db.session import ensure_schema
 from project_workflow.supervisor import SupervisorEngine
+from project_workflow.supervisor.models import Phase
 
 
 class TestSupervisor:
@@ -29,51 +30,51 @@ class TestSupervisor:
         assert uow.phases.list(workflow_id) == []
 
     def test_get_phase_prompt(self):
-        ph = MagicMock()
-        ph.code = "0"
-        ph.name = "Test"
-        ph.description = "D"
-        ph.is_blocker = False
-        ph.is_delegated = False
-        ph.instructions = []
+        ph = Phase(id=100, code="0", name="Test", description="D")
         engine = SupervisorEngine("RUN-1")
         engine.phase_map = {"0": ph}
         engine.all_phases = [ph]
+        engine.current_phase_code = "0"
+        engine.get_full_context = MagicMock(
+            return_value={
+                "workflow_name": "W",
+                "current_contract": {},
+                "cli_actor": {"description": "d", "entrypoint": "e"},
+            }
+        )
         prompt = engine.get_phase_prompt("0")
         assert "Test" in prompt
 
     def test_get_phase_prompt_parallel(self):
         """Parallel phases produce a single merged prompt with per-phase agents and partner."""
-        ph_a = MagicMock()
-        ph_a.code = "parallel-a"
-        ph_a.name = "Parallel A"
-        ph_a.description = "Desc A"
-        ph_a.execution_type = "parallel"
-        ph_a.parallel_with = "parallel-b"
-        ph_a.rollback_target = None
-        ph_a.instructions = []
-        ph_a.checks = []
-        ph_a.evidence = []
-        ph_a.delegate = None
-        ph_a.next_recommendation = "next"
-
-        ph_b = MagicMock()
-        ph_b.code = "parallel-b"
-        ph_b.name = "Parallel B"
-        ph_b.description = "Desc B"
-        ph_b.execution_type = "parallel"
-        ph_b.parallel_with = "parallel-a"
-        ph_b.rollback_target = None
-        ph_b.instructions = []
-        ph_b.checks = []
-        ph_b.evidence = []
-        ph_b.delegate = None
-        ph_b.next_recommendation = "next"
+        ph_a = Phase(
+            id=100,
+            code="parallel-a",
+            name="Parallel A",
+            description="Desc A",
+            execution_type="parallel",
+            parallel_with_phase_code="parallel-b",
+        )
+        ph_b = Phase(
+            id=101,
+            code="parallel-b",
+            name="Parallel B",
+            description="Desc B",
+            execution_type="parallel",
+            parallel_with_phase_code="parallel-a",
+        )
 
         engine = SupervisorEngine("RUN-1")
         engine.phase_map = {"parallel-a": ph_a, "parallel-b": ph_b}
         engine.all_phases = [ph_a, ph_b]
-        engine.current_phase = "parallel-a"
+        engine.current_phase_code = "parallel-a"
+        engine.get_full_context = MagicMock(
+            return_value={
+                "workflow_name": "W",
+                "current_contract": {},
+                "cli_actor": {"description": "d", "entrypoint": "e"},
+            }
+        )
         prompt = engine.get_phase_prompt("parallel-a")
         assert "ПАРАЛЛЕЛЬНАЯ ГРУППА ФАЗ" in prompt
         assert "Parallel A, Parallel B" in prompt
@@ -84,7 +85,7 @@ class TestSupervisor:
     def test_get_full_context(self):
         engine = SupervisorEngine("RUN-1")
         ctx = engine.get_full_context()
-        assert "current_phase" in ctx
+        assert "current_phase_code" in ctx
         assert "all_phases" in ctx
         assert "messages" not in ctx
 
@@ -94,7 +95,7 @@ class TestPromptAndModels:
         from project_workflow.supervisor.prompt import build_phase_prompt
 
         ctx = {"workflow_name": "W", "cli_actor": {"description": "d", "entrypoint": "e"}}
-        result = build_phase_prompt("RUN-1", {}, [], "1", ctx, phase_id="missing")
+        result = build_phase_prompt("RUN-1", {}, [], "1", ctx, phase_code="missing")
         assert "не найдена" in result
 
     def test_build_phase_prompt_non_current_phase(self):
@@ -103,7 +104,7 @@ class TestPromptAndModels:
 
         phase = Phase(code="2", name="Two", description="Desc", execution_type="sync")
         ctx = {"workflow_name": "W", "current_contract": None, "cli_actor": {"description": "d", "entrypoint": "e"}}
-        result = build_phase_prompt("RUN-1", {"2": phase}, [phase], "1", ctx, phase_id="2")
+        result = build_phase_prompt("RUN-1", {"2": phase}, [phase], "1", ctx, phase_code="2")
         assert "Two" in result
         assert "Desc" in result
 
@@ -115,9 +116,8 @@ class TestPromptAndModels:
         contract = {
             "description": "CDesc",
             "execution_type": "sync",
-            "parallel_with": None,
-            "rollback_target": None,
-            "next_recommendation": None,
+            "parallel_with_phase_code": None,
+            "rollback_target_phase_code": None,
             "instructions": ["I1"],
             "required_checks": ["C1"],
             "required_evidence": ["E1"],

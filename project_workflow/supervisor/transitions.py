@@ -1,4 +1,4 @@
-"""Atomic transition recording for the five evaluator verdicts."""
+"""Atomic task snapshot and append-only phase-event transitions."""
 
 from __future__ import annotations
 
@@ -13,41 +13,48 @@ def _validate_verdict(verdict: str) -> None:
         raise ValueError(f"Неподдерживаемый вердикт: {verdict}")
 
 
-def _task_state(task: dict | None) -> tuple[int, str, str]:
+def _task_state(task: dict | None) -> tuple[int, int, str]:
     if not task:
         raise ConcurrentTransitionError("Задача была удалена во время оценки Supervisor")
     task_id = task.get("id")
-    current_phase = task.get("current_phase")
+    current_phase_id = task.get("current_phase_id")
     status = task.get("status")
     if (
         not isinstance(task_id, int)
         or isinstance(task_id, bool)
         or task_id <= 0
-        or not isinstance(current_phase, str)
-        or not current_phase
+        or not isinstance(current_phase_id, int)
+        or isinstance(current_phase_id, bool)
+        or current_phase_id <= 0
         or not isinstance(status, str)
         or not status
     ):
         raise ConcurrentTransitionError("Состояние задачи изменилось во время оценки Supervisor")
-    return task_id, current_phase, status
+    return task_id, current_phase_id, status
 
 
-def _phase_id(phase: Phase, *, role: str) -> int:
-    if not isinstance(phase.id, int) or isinstance(phase.id, bool) or phase.id <= 0:
+def _phase_id(phase: Phase | None, *, role: str) -> int:
+    phase_id = phase.id if phase is not None else None
+    if not isinstance(phase_id, int) or isinstance(phase_id, bool) or phase_id <= 0:
         raise ConcurrentTransitionError(f"{role} отсутствует в актуальном каталоге")
-    return phase.id
+    return phase_id
 
 
-def _update_task(db, task_state: tuple[int, str, str], data: dict) -> None:
-    task_id, current_phase, status = task_state
-    updated = db.tasks.update_if_state(
-        task_id,
-        current_phase,
-        status,
-        data,
-    )
-    if not updated:
+def _update_task(db, task_state: tuple[int, int, str], data: dict) -> None:
+    task_id, current_phase_id, status = task_state
+    if not db.tasks.update_if_state(task_id, current_phase_id, status, data):
         raise ConcurrentTransitionError("Фаза или статус задачи изменились во время оценки Supervisor")
+
+
+def _record_resume_events(
+    db, task_state: tuple[int, int, str], phase_ids: list[int], step_history_id: int
+) -> None:
+    if task_state[2] != "blocked":
+        return
+    for phase_id in phase_ids:
+        db.tasks.record_phase_event(
+            task_state[0], phase_id, "resumed", step_history_id=step_history_id
+        )
 
 
 def record_transition(
@@ -56,51 +63,52 @@ def record_transition(
     task,
     phase: Phase,
     verdict: str,
-    next_phase: str | None,
-    rollback_target: str | None,
+    next_phase_code: str | None,
+    rollback_phase_code: str | None,
     phase_map: dict[str, Phase],
+    step_history_id: int,
     commit: bool = True,
 ) -> None:
-    """Record a single-phase transition in the DB."""
+    """Persist one evaluated phase, its event(s), and the task snapshot."""
     _validate_verdict(verdict)
     task_state = _task_state(task)
     task_id = task_state[0]
     phase_id = _phase_id(phase, role="Текущая фаза")
-    add_history = db.tasks.add_history
-    next_phase_obj = phase_map.get(next_phase) if next_phase else None
-    next_phase_id = _phase_id(next_phase_obj, role="Следующая фаза") if next_phase_obj else None
-    if next_phase is not None and next_phase_id is None:
+    next_phase = phase_map.get(next_phase_code) if next_phase_code else None
+    if next_phase_code is not None and next_phase is None:
         raise ConcurrentTransitionError("Следующая фаза отсутствует в актуальном каталоге")
+    next_phase_id = _phase_id(next_phase, role="Следующая фаза") if next_phase else None
+
+    if verdict != "blocked":
+        _record_resume_events(db, task_state, [phase_id], step_history_id)
 
     if verdict == "pass":
         _update_task(
             db,
             task_state,
             {
-                "current_phase": next_phase if next_phase_id else phase.code,
+                "current_phase_id": next_phase_id or phase_id,
                 "status": "active" if next_phase_id else "done",
             },
         )
-        add_history(task_id, phase_id, "done")
-        if next_phase_id:
-            add_history(task_id, next_phase_id, "pending")
+        db.tasks.record_phase_event(task_id, phase_id, "completed", step_history_id)
+        if next_phase_id is not None:
+            db.tasks.record_phase_event(task_id, next_phase_id, "entered", step_history_id)
     elif verdict == "blocked":
-        _update_task(db, task_state, {"current_phase": phase.code, "status": "blocked"})
-        add_history(task_id, phase_id, "blocked")
+        _update_task(db, task_state, {"current_phase_id": phase_id, "status": "blocked"})
+        db.tasks.record_phase_event(task_id, phase_id, "blocked", step_history_id)
     elif verdict == "rollback":
-        target_phase = phase_map.get(rollback_target) if rollback_target else None
-        if target_phase is None:
-            raise ConcurrentTransitionError("Цель отката отсутствует в актуальном каталоге")
-        target_phase_id = _phase_id(target_phase, role="Цель отката")
-        _update_task(db, task_state, {"current_phase": target_phase.code, "status": "active"})
-        add_history(task_id, phase_id, "rollback")
-        add_history(task_id, target_phase_id, "pending")
-    elif verdict == "delegate":
-        _update_task(db, task_state, {"current_phase": phase.code, "status": "active"})
-        add_history(task_id, phase_id, "delegated")
+        rollback_phase = phase_map.get(rollback_phase_code) if rollback_phase_code else None
+        rollback_phase_id = _phase_id(rollback_phase, role="Цель отката")
+        _update_task(
+            db,
+            task_state,
+            {"current_phase_id": rollback_phase_id, "status": "active"},
+        )
+        db.tasks.record_phase_event(task_id, phase_id, "rolled_back", step_history_id)
+        db.tasks.record_phase_event(task_id, rollback_phase_id, "entered", step_history_id)
     else:
-        _update_task(db, task_state, {"current_phase": phase.code, "status": "active"})
-        add_history(task_id, phase_id, "partial")
+        _update_task(db, task_state, {"current_phase_id": phase_id, "status": "active"})
 
     if commit:
         db.commit()
@@ -113,51 +121,65 @@ def record_parallel_transition(
     group: list[Phase],
     phase_map: dict[str, Phase],
     verdict: str,
-    next_phase: str | None,
-    rollback_target: str | None = None,
+    next_phase_code: str | None,
+    rollback_phase_code: str | None = None,
+    step_history_id: int,
     commit: bool = True,
 ) -> None:
-    """Record a parallel-group transition in the DB."""
+    """Persist one evaluated parallel group and its append-only events."""
     _validate_verdict(verdict)
-    task_state = _task_state(task)
-    task_id = task_state[0]
     if not group:
         raise ConcurrentTransitionError("Параллельная группа отсутствует в актуальном каталоге")
+    task_state = _task_state(task)
+    task_id = task_state[0]
     group_phase_ids = [_phase_id(phase, role="Фаза параллельной группы") for phase in group]
-    add_history = db.tasks.add_history
+    representative_phase_id = group_phase_ids[0]
+
+    if verdict != "blocked":
+        _record_resume_events(db, task_state, group_phase_ids, step_history_id)
 
     if verdict == "pass":
-        next_phase_obj = phase_map.get(next_phase) if next_phase else None
-        next_phase_id = _phase_id(next_phase_obj, role="Следующая фаза") if next_phase_obj else None
-        if next_phase is not None and next_phase_id is None:
+        next_phase = phase_map.get(next_phase_code) if next_phase_code else None
+        if next_phase_code is not None and next_phase is None:
             raise ConcurrentTransitionError("Следующая фаза отсутствует в актуальном каталоге")
-        target_code = next_phase_obj.code if next_phase_obj else group[-1].code
-        _update_task(db, task_state, {"current_phase": target_code, "status": "active" if next_phase else "done"})
+        next_phase_id = _phase_id(next_phase, role="Следующая фаза") if next_phase else None
+        _update_task(
+            db,
+            task_state,
+            {
+                "current_phase_id": next_phase_id or representative_phase_id,
+                "status": "active" if next_phase_id else "done",
+            },
+        )
         for phase_id in group_phase_ids:
-            add_history(task_id, phase_id, "done")
-        if next_phase_obj is not None:
-            add_history(task_id, next_phase_id, "pending")
+            db.tasks.record_phase_event(task_id, phase_id, "completed", step_history_id)
+        if next_phase_id is not None:
+            db.tasks.record_phase_event(task_id, next_phase_id, "entered", step_history_id)
     elif verdict == "blocked":
-        _update_task(db, task_state, {"current_phase": group[0].code, "status": "blocked"})
+        _update_task(
+            db,
+            task_state,
+            {"current_phase_id": representative_phase_id, "status": "blocked"},
+        )
         for phase_id in group_phase_ids:
-            add_history(task_id, phase_id, "blocked")
+            db.tasks.record_phase_event(task_id, phase_id, "blocked", step_history_id)
     elif verdict == "rollback":
-        target_phase = phase_map.get(rollback_target) if rollback_target else None
-        if target_phase is None:
-            raise ConcurrentTransitionError("Цель отката отсутствует в актуальном каталоге")
-        target_phase_id = _phase_id(target_phase, role="Цель отката")
-        _update_task(db, task_state, {"current_phase": target_phase.code, "status": "active"})
+        rollback_phase = phase_map.get(rollback_phase_code) if rollback_phase_code else None
+        rollback_phase_id = _phase_id(rollback_phase, role="Цель отката")
+        _update_task(
+            db,
+            task_state,
+            {"current_phase_id": rollback_phase_id, "status": "active"},
+        )
         for phase_id in group_phase_ids:
-            add_history(task_id, phase_id, "rollback")
-        add_history(task_id, target_phase_id, "pending")
-    elif verdict == "delegate":
-        _update_task(db, task_state, {"current_phase": group[0].code, "status": "active"})
-        for phase_id in group_phase_ids:
-            add_history(task_id, phase_id, "delegated")
+            db.tasks.record_phase_event(task_id, phase_id, "rolled_back", step_history_id)
+        db.tasks.record_phase_event(task_id, rollback_phase_id, "entered", step_history_id)
     else:
-        _update_task(db, task_state, {"current_phase": group[0].code, "status": "active"})
-        for phase_id in group_phase_ids:
-            add_history(task_id, phase_id, "partial")
+        _update_task(
+            db,
+            task_state,
+            {"current_phase_id": representative_phase_id, "status": "active"},
+        )
 
     if commit:
         db.commit()

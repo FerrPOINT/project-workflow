@@ -46,17 +46,11 @@ class SAPhaseRepository(PhaseRepository):
             code=data["code"],
             name=data["name"],
             description=data.get("description"),
-            min_time_min=data.get("min_time_min", 0),
             phase_order=data["phase_order"],
             agent_id=data.get("agent_id"),
-            next_recommendation=data.get("next_recommendation"),
-            parallel_with=data.get("parallel_with"),
-            rollback_target=data.get("rollback_target"),
+            parallel_with_phase_id=data.get("parallel_with_phase_id"),
+            rollback_target_phase_id=data.get("rollback_target_phase_id"),
             execution_type=data.get("execution_type", "sync"),
-            is_seed_managed=1 if data.get("is_seed_managed") else 0,
-            is_blocker=1 if data.get("is_blocker") else 0,
-            is_delegated=1 if data.get("is_delegated") else 0,
-            is_critic=1 if data.get("is_critic") else 0,
         )
         self._session.add(item)
         self._session.flush()
@@ -69,8 +63,6 @@ class SAPhaseRepository(PhaseRepository):
         for key, val in data.items():
             if key in {"id", "workflow_id"}:
                 continue
-            if key in {"is_seed_managed", "is_blocker", "is_delegated", "is_critic"}:
-                val = 1 if val else 0
             if hasattr(row, key):
                 setattr(row, key, val)
 
@@ -91,7 +83,7 @@ class SAPhaseRepository(PhaseRepository):
         if not remaining:
             raise LastPhaseError("Нельзя удалить единственную фазу воркфлоу")
         # Cascade delete content rows explicitly (mirror ON DELETE CASCADE).
-        for child_class in (m.Instruction, m.Check, m.Evidence):
+        for child_class in (m.PhaseInstruction, m.PhaseCheck, m.PhaseEvidenceRequirement):
             self._session.execute(
                 text(f"DELETE FROM {child_class.__tablename__} WHERE phase_id = :pid"),
                 {"pid": phase_id},
@@ -99,12 +91,25 @@ class SAPhaseRepository(PhaseRepository):
         self._session.delete(row)
 
     def shift_orders(self, workflow_id: int, start_order: int, delta: int = 1) -> None:
+        offset = self.get_next_order(workflow_id) + 1000
         self._session.execute(
             text(
-                "UPDATE phases SET phase_order = phase_order + :delta "
+                "UPDATE phases SET phase_order = phase_order + :offset "
                 "WHERE workflow_id = :wid AND phase_order >= :start"
             ),
-            {"delta": delta, "wid": workflow_id, "start": start_order},
+            {"offset": offset, "wid": workflow_id, "start": start_order},
+        )
+        self._session.execute(
+            text(
+                "UPDATE phases SET phase_order = phase_order - :offset + :delta "
+                "WHERE workflow_id = :wid AND phase_order >= :shifted_start"
+            ),
+            {
+                "offset": offset,
+                "delta": delta,
+                "wid": workflow_id,
+                "shifted_start": start_order + offset,
+            },
         )
 
     def get_next_order(self, workflow_id: int) -> int:
@@ -124,7 +129,7 @@ class SAPhaseRepository(PhaseRepository):
             .join(m.Project, m.Task.project_id == m.Project.id)
             .where(
                 m.Project.workflow_id == row.workflow_id,
-                m.Task.current_phase == row.code,
+                m.Task.current_phase_id == phase_id,
             )
             .limit(1)
         ).scalar_one_or_none()
@@ -132,18 +137,18 @@ class SAPhaseRepository(PhaseRepository):
             kinds.add("current task")
 
         history = self._session.execute(
-            select(m.TaskHistory.id).where(m.TaskHistory.phase_id == phase_id).limit(1)
+            select(m.TaskPhaseEvent.id).where(m.TaskPhaseEvent.phase_id == phase_id).limit(1)
         ).scalar_one_or_none()
         if history is not None:
             kinds.add("task history")
 
         run = self._session.execute(
-            select(m.SupervisorRun.id)
+            select(m.TaskStepHistoryEntry.id)
             .where(
                 or_(
-                    m.SupervisorRun.phase_id == phase_id,
-                    m.SupervisorRun.next_phase_id == phase_id,
-                    m.SupervisorRun.rollback_phase_id == phase_id,
+                    m.TaskStepHistoryEntry.phase_id == phase_id,
+                    m.TaskStepHistoryEntry.next_phase_id == phase_id,
+                    m.TaskStepHistoryEntry.rollback_phase_id == phase_id,
                 )
             )
             .limit(1)
@@ -156,7 +161,10 @@ class SAPhaseRepository(PhaseRepository):
             .where(
                 m.Phase.workflow_id == row.workflow_id,
                 m.Phase.id != phase_id,
-                or_(m.Phase.parallel_with == row.code, m.Phase.rollback_target == row.code),
+                or_(
+                    m.Phase.parallel_with_phase_id == phase_id,
+                    m.Phase.rollback_target_phase_id == phase_id,
+                ),
             )
             .limit(1)
         ).scalar_one_or_none()
@@ -180,34 +188,80 @@ class SAPhaseRepository(PhaseRepository):
         return [int(workflow_id) for workflow_id in rows]
 
     def resequence(self, workflow_id: int) -> None:
-        rows = self._session.execute(
-            select(m.Phase)
-            .where(m.Phase.workflow_id == workflow_id)
-            .order_by(m.Phase.phase_order, m.Phase.id)
-        ).scalars()
-        for order, row in enumerate(rows, 1):
-            row.phase_order = order
+        rows = list(
+            self._session.execute(
+                select(m.Phase.id)
+                .where(m.Phase.workflow_id == workflow_id)
+                .order_by(m.Phase.phase_order, m.Phase.id)
+            ).scalars()
+        )
+        if not rows:
+            return
+        offset = len(rows) + 1000
+        self._session.execute(
+            text("UPDATE phases SET phase_order = phase_order + :offset WHERE workflow_id = :wid"),
+            {"offset": offset, "wid": workflow_id},
+        )
+        for order, phase_id in enumerate(rows, 1):
+            self._session.execute(
+                text("UPDATE phases SET phase_order = :order WHERE id = :phase_id"),
+                {"order": order, "phase_id": phase_id},
+            )
+        self._session.flush()
+        self._session.expire_all()
+
+    def reorder(self, workflow_id: int, orders: Sequence[tuple[int, int]]) -> None:
+        if not orders:
+            return
+        offset = self.get_next_order(workflow_id) + len(orders) + 1000
+        self._session.execute(
+            text(
+                "UPDATE phases SET phase_order = phase_order + :offset "
+                "WHERE workflow_id = :wid"
+            ),
+            {"offset": offset, "wid": workflow_id},
+        )
+        for phase_id, phase_order in orders:
+            self._session.execute(
+                text(
+                    "UPDATE phases SET phase_order = :phase_order "
+                    "WHERE id = :phase_id AND workflow_id = :workflow_id"
+                ),
+                {
+                    "phase_order": phase_order,
+                    "phase_id": phase_id,
+                    "workflow_id": workflow_id,
+                },
+            )
+        self._session.flush()
+        self._session.expire_all()
 
     def get_checks(self, phase_id: int) -> Sequence[dict[str, Any]]:
         rows = self._session.execute(
-            select(m.Check).where(m.Check.phase_id == phase_id).order_by(m.Check.id)
+            select(m.PhaseCheck).where(m.PhaseCheck.phase_id == phase_id).order_by(m.PhaseCheck.id)
         ).scalars().all()
         return [{"id": r.id, "phase_id": r.phase_id, "description": r.description} for r in rows]
 
     def get_evidence(self, phase_id: int) -> Sequence[dict[str, Any]]:
         rows = self._session.execute(
-            select(m.Evidence).where(m.Evidence.phase_id == phase_id).order_by(m.Evidence.id)
+            select(m.PhaseEvidenceRequirement)
+            .where(m.PhaseEvidenceRequirement.phase_id == phase_id)
+            .order_by(m.PhaseEvidenceRequirement.id)
         ).scalars().all()
         return [{"id": r.id, "phase_id": r.phase_id, "description": r.description} for r in rows]
 
     def set_checks(self, phase_id: int, items: builtins.list[dict[str, Any]]) -> None:
-        self._session.execute(sa_delete(m.Check).where(m.Check.phase_id == phase_id))
+        self._session.execute(sa_delete(m.PhaseCheck).where(m.PhaseCheck.phase_id == phase_id))
         for item in items:
-            self._session.add(m.Check(phase_id=phase_id, description=item.get("description", "")))
+            self._session.add(m.PhaseCheck(phase_id=phase_id, description=item.get("description", "")))
 
     def set_evidence(self, phase_id: int, items: builtins.list[dict[str, Any]]) -> None:
-        self._session.execute(sa_delete(m.Evidence).where(m.Evidence.phase_id == phase_id))
+        self._session.execute(
+            sa_delete(m.PhaseEvidenceRequirement).where(m.PhaseEvidenceRequirement.phase_id == phase_id)
+        )
         for item in items:
-            self._session.add(m.Evidence(phase_id=phase_id, description=item.get("description", "")))
+            self._session.add(
+                m.PhaseEvidenceRequirement(phase_id=phase_id, description=item.get("description", ""))
+            )
 
 

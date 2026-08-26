@@ -36,7 +36,7 @@ def test_task_detail_renders_group_markers_and_chronological_supervisor_dialog()
             "verdict": "pass",
             "verdict_label": "Принято",
             "created_at": "2026-08-21T10:00",
-            "report": "first-report",
+            "worker_report": "first-report",
             "contract": {"message": "Принято", "covered": ["check"], "missing": [], "blockers": []},
             "next_contract": {
                 "phase_code": "0.6",
@@ -66,7 +66,7 @@ def test_task_detail_renders_group_markers_and_chronological_supervisor_dialog()
             "verdict": "pass",
             "verdict_label": "Принято",
             "created_at": "2026-08-21T11:00",
-            "report": "second-report",
+            "worker_report": "second-report",
             "contract": {"message": "Готово", "covered": [], "missing": [], "blockers": []},
             "next_contract": None,
         },
@@ -89,7 +89,7 @@ def test_task_detail_renders_group_markers_and_chronological_supervisor_dialog()
         cycles_done=3,
         cycles_total=3,
         phase_history_blocks=blocks,
-        supervisor_runs=runs,
+        step_history=runs,
     )
 
     assert html.count('class="phase-node serial done"') == 2
@@ -101,7 +101,7 @@ def test_task_detail_renders_group_markers_and_chronological_supervisor_dialog()
     assert '>27</span><span class="phase-name">Auto-Improve' in html
     assert "phase-parallel-inner-arrow" not in html
     assert html.index("first-report") < html.index("second-report")
-    assert "Диалог с Supervisor" in html
+    assert "История проверок Supervisor" in html
     assert "Задание Supervisor на следующий этап" in html
     assert "workflow-code-intelligence" in html
     assert "Dataflow проверен" in html

@@ -54,16 +54,11 @@ class TestEndToEndWorkflow:
         TaskService(uow).create_task({"task_key": "AAT-99", "title": "Integ Test"})
         task = uow.get_task_by_key("AAT-99")
         assert task is not None
-        assert task["current_phase"] == "1.INTAKE"
-        workflow_id = uow.workflows.get_default().id
-        phase_id = uow.phases.create(
-            {"workflow_id": workflow_id, "code": "integration.setup", "name": "Setup", "phase_order": 100}
-        )
-        uow.tasks.add_history(task["id"], phase_id, "done")
+        assert task["current_phase_code"] == "1.INTAKE"
+        uow.tasks.record_phase_event(task["id"], task["current_phase_id"], "completed")
         uow.commit()
-        hist = uow.get_task_history(task["id"])
-        assert len(hist) == 1
-        assert hist[0]["status"] == "done"
+        hist = uow.list_phase_events(task["id"])
+        assert [event["event_type"] for event in hist] == ["entered", "completed"]
 
     def test_agents_crud(self, tmp_path: Path):
         """Полный CRUD агентов."""
@@ -123,16 +118,15 @@ class TestEdgeCases:
         p4_id = uow.phases.create(
             {"workflow_id": wid, "code": "p4", "name": "P4", "phase_order": 101}
         )
-        uow.instructions.create(p3_id, {"step_num": 1, "description": "Step"})
+        uow.phase_instructions.create(p3_id, {"step_num": 1, "description": "Step"})
         uow.phases.delete(p3_id)
         uow.commit()
         assert phase_by_code(uow, "p3", wid) is None
         p4 = uow.phases.get_by_id(p4_id)
         assert p4 is not None
-        inst = list(uow.instructions.list(p4_id))
+        inst = list(uow.phase_instructions.list(p4_id))
         assert len(inst) == 0
-    def test_task_history_no_skipped_status(self, tmp_path: Path):
-        """В task_history статус skipped не должен использоваться, но DB его принимает."""
+    def test_task_phase_events_are_append_only(self, tmp_path: Path):
         db_path = tmp_path / "test8.db"
         uow = SAUnitOfWork(f"sqlite:///{db_path}")
         prepare_sqlite_uow(uow)
@@ -150,9 +144,9 @@ class TestEdgeCases:
         TaskService(uow).create_task({"task_key": "AAT-99", "title": "Skip Test"})
         task = uow.get_task_by_key("AAT-99")
         assert task is not None
-        uow.tasks.add_history(task["id"], phase_id, "pending")
-        # Re-adding with done status should update via ON CONFLICT
-        uow.tasks.add_history(task["id"], phase_id, "done")
+        uow.tasks.record_phase_event(task["id"], phase_id, "entered")
+        uow.tasks.record_phase_event(task["id"], phase_id, "completed")
         uow.commit()
-        hist = uow.get_task_history(task["id"])
-        assert hist[0]["status"] == "done"
+        hist = uow.list_phase_events(task["id"])
+        assert [event["event_type"] for event in hist[-2:]] == ["entered", "completed"]
+        assert hist[-2]["id"] != hist[-1]["id"]

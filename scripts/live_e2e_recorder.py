@@ -303,7 +303,11 @@ def validate_transcript(
             raise TranscriptError("ASSIGNMENT относится к другой задаче")
         phase = assignment.get("phase")
         payload = assignment.get("payload")
-        if not isinstance(phase, str) or not isinstance(payload, dict) or payload.get("phase") != phase:
+        if (
+            not isinstance(phase, str)
+            or not isinstance(payload, dict)
+            or payload.get("phase_code") != phase
+        ):
             raise TranscriptError("ASSIGNMENT должен сохранять совпадающий payload Supervisor")
         if not isinstance(payload.get("prompt"), str):
             raise TranscriptError("ASSIGNMENT должен содержать точный prompt")
@@ -342,10 +346,13 @@ def validate_transcript(
         if evaluator.get("phase") != phase or not isinstance(evaluator.get("payload"), dict):
             raise TranscriptError("EVALUATOR должен сохранять JSON payload Supervisor")
         evaluator_payload = evaluator["payload"]
-        evaluator_fields = {"phase", "current_phase", "verdict", "next_phase"}
+        evaluator_fields = {"phase_code", "current_phase_code", "verdict", "next_phase_code"}
         if not evaluator_fields.issubset(evaluator_payload):
             raise TranscriptError("В payload EVALUATOR отсутствуют поля перехода")
-        if evaluator_payload["phase"] != phase or evaluator_payload["current_phase"] != phase:
+        if (
+            evaluator_payload["phase_code"] != phase
+            or evaluator_payload["current_phase_code"] != phase
+        ):
             raise TranscriptError("Payload EVALUATOR должен совпадать с назначенной фазой")
         index += 1
 
@@ -358,7 +365,7 @@ def validate_transcript(
             raise TranscriptError("В TRANSITION отсутствуют поля evaluator")
         if transition["verdict"] != evaluator_payload["verdict"]:
             raise TranscriptError("Verdict TRANSITION должен совпадать с payload EVALUATOR")
-        if transition["to_phase"] != evaluator_payload["next_phase"]:
+        if transition["to_phase"] != evaluator_payload["next_phase_code"]:
             raise TranscriptError("Цель TRANSITION должна совпадать с payload EVALUATOR")
         index += 1
         cycles.append(
@@ -453,7 +460,11 @@ def build_summary(task: str, events: list[dict[str, Any]], cycles: list[dict[str
     verdicts = Counter(str(cycle["evaluator"]["payload"].get("verdict")) for cycle in cycles)
     final_payload = cycles[-1]["evaluator"]["payload"] if cycles else {}
     final_status = final_payload.get("status")
-    if final_status is None and final_payload.get("verdict") == "PASS" and final_payload.get("next_phase") is None:
+    if (
+        final_status is None
+        and final_payload.get("verdict") == "PASS"
+        and final_payload.get("next_phase_code") is None
+    ):
         final_status = "done"
     metadata = events[0].get("metadata", {})
     return {
@@ -468,7 +479,7 @@ def build_summary(task: str, events: list[dict[str, Any]], cycles: list[dict[str
         "successful_transitions": sum(
             cycle["transition"].get("verdict") == "PASS" for cycle in cycles
         ),
-        "final_phase": final_payload.get("current_phase", final_payload.get("phase")),
+        "final_phase": final_payload.get("current_phase_code", final_payload.get("phase_code")),
         "final_status": final_status,
     }
 
@@ -526,7 +537,7 @@ def command_init(args: argparse.Namespace) -> None:
             f"payload={redact(history)}; stderr={redact_text(stderr)}"
         )
     if history.get("count") != 0:
-        _fail("Для live-приёмки нужна новая задача без предыдущих записей SupervisorRun")
+        _fail("Для live-приёмки нужна новая задача без предыдущих записей task_step_history")
     event = append_event(root, {"type": "SESSION", "task": args.task, "metadata": metadata})
     print(json.dumps(event, ensure_ascii=False))
 
@@ -542,7 +553,12 @@ def command_assignment(args: argparse.Namespace) -> None:
         _fail(f"ASSIGNMENT завершился ошибкой: rc={code}; payload={redact(payload)}; stderr={redact_text(stderr)}")
     append_event(
         root,
-        {"type": "ASSIGNMENT", "task": args.task, "phase": payload.get("phase"), "payload": payload},
+        {
+            "type": "ASSIGNMENT",
+            "task": args.task,
+            "phase": payload.get("phase_code"),
+            "payload": payload,
+        },
     )
     print(json.dumps(payload, ensure_ascii=False, indent=2))
 
@@ -622,8 +638,8 @@ def command_submit(args: argparse.Namespace) -> None:
     code, payload, stderr = run_supervisor(args.task, report)
     if code != 0:
         raise TranscriptError("Supervisor не завершил проверку успешно")
-    required_fields = {"phase", "current_phase", "verdict", "next_phase"}
-    if not required_fields.issubset(payload) or payload.get("phase") != args.phase:
+    required_fields = {"phase_code", "current_phase_code", "verdict", "next_phase_code"}
+    if not required_fields.issubset(payload) or payload.get("phase_code") != args.phase:
         raise TranscriptError("В ответе Supervisor отсутствует корректный контракт перехода")
     append_events(
         root,
@@ -634,8 +650,8 @@ def command_submit(args: argparse.Namespace) -> None:
                 "type": "TRANSITION",
                 "phase": args.phase,
                 "verdict": payload.get("verdict"),
-                "from_phase": payload.get("phase"),
-                "to_phase": payload.get("next_phase"),
+                "from_phase": payload.get("phase_code"),
+                "to_phase": payload.get("next_phase_code"),
             },
         ],
     )

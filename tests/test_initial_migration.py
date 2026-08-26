@@ -241,7 +241,7 @@ def test_head_with_damaged_or_polluted_schema_is_refused(tmp_path, mutation):
     ensure_migrated(engine)
     with engine.begin() as connection:
         if mutation == "missing":
-            connection.execute(text("DROP TABLE instructions"))
+            connection.execute(text("DROP TABLE phase_instructions"))
         else:
             connection.execute(text("CREATE TABLE unexpected_table (id INTEGER PRIMARY KEY)"))
             connection.execute(text("INSERT INTO unexpected_table VALUES (42)"))
@@ -300,7 +300,7 @@ def test_sqlite_initial_constraints(tmp_path):
     with pytest.raises(IntegrityError):
         with engine.begin() as conn:
             conn.execute(
-                text("INSERT INTO instructions (phase_id, step_num, description) VALUES (:id, 0, 'Bad')"),
+                text("INSERT INTO phase_instructions (phase_id, step_num, description) VALUES (:id, 0, 'Bad')"),
                 {"id": phase_id},
             )
 

@@ -81,7 +81,7 @@ SQLite остаётся только для изолированных тест�
 # Выполнить текущую фазу задачи и получить вердикт supervisor
 project-workflow step --task RUN-123 --report "Сделал X, проверил Y"
 
-# История фаз и supervisor-решений
+# История отчётов step и ответов Supervisor
 project-workflow history --task RUN-123 --n 10
 ```
 
@@ -98,10 +98,12 @@ export OPENAI_REASONING_EFFORT=none
 
 Если endpoint не поддерживает `reasoning_effort`, задайте `OPENAI_REASONING_EFFORT=`.
 
-Fallback evaluator отсутствует: если провайдер недоступен или вернул некорректный JSON, задача остаётся на текущей фазе, атомарно получает `status=blocked`, blocked history и audit-run без fingerprint; команда возвращает retryable `BLOCKED` и exit code `1`. Повтор снова вызывает provider, а успешная оценка снимает техническую блокировку обычным переходом.
+Fallback evaluator отсутствует: если провайдер недоступен или вернул некорректный JSON, задача остаётся на текущей фазе, атомарно получает `status=blocked`, событие `blocked` и запись `task_step_history` без fingerprint; команда возвращает retryable `BLOCKED` и exit code `1`. Повтор снова вызывает provider, а успешная оценка снимает техническую блокировку обычным переходом.
 Для стандартного OpenRouter непустой `OPENAI_API_KEY` обязателен: без него Supervisor блокирует переход локально и не выполняет заведомо неуспешный внешний запрос. Пользовательский OpenAI-compatible endpoint может работать без ключа, если это допускает сам endpoint.
 Ответ evaluator принимается только по точному JSON-контракту: uppercase verdict, обязательные `message` и finite `confidence` в диапазоне `0..1`, непустые строковые элементы массивов и отсутствие неизвестных полей. Replay действует только для той же задачи, фазы, нормализованного отчёта и неизменившегося contract fingerprint. DB-транзакция не удерживается во время provider-вызова; изменение каталога до применения verdict даёт retryable `BLOCKED` без fingerprint.
-Повторный отчёт после `status=done` не вызывает evaluator и не создаёт новый run/history: CLI возвращает `PASS`, `status=done` и `next_phase=null`.
+Повторный отчёт после `status=done` не вызывает evaluator и не создаёт новые записи: CLI возвращает `PASS`, `status=done` и `next_phase_code=null`.
+
+Команда `step` возвращает текущий snapshot задачи и, после оценки, одной транзакцией сохраняет пару «отчёт исполнителя → ответ Supervisor» в `task_step_history`, связанные события перехода в `task_phase_events` и новое текущее состояние в `tasks`. Команда `history` читает только `task_step_history` и показывает отчёт, verdict, сообщение Supervisor, оценённую/следующую/rollback-фазу и время; timeline UI строится отдельно по `task_phase_events`.
 
 <a name="ui"></a>
 ## 🌐 Web UI
@@ -165,13 +167,32 @@ flowchart TD
     Seed[packaged seed, empty DB only] --> DB
 ```
 
+### Схема состояния и истории
+
+```mermaid
+erDiagram
+    WORKFLOWS ||--o{ PHASES : содержит
+    WORKFLOWS ||--o{ TASKS : определяет
+    PHASES ||--o{ PHASE_INSTRUCTIONS : содержит
+    PHASES ||--o{ PHASE_CHECKS : содержит
+    PHASES ||--o{ PHASE_EVIDENCE_REQUIREMENTS : требует
+    PHASES ||--o{ TASKS : "текущая фаза"
+    TASKS ||--o{ TASK_PHASE_EVENTS : журнал
+    TASKS ||--o{ TASK_STEP_HISTORY : проверки
+    TASK_STEP_HISTORY ||--o{ TASK_PHASE_EVENTS : вызывает
+```
+
+`tasks` — единственный текущий snapshot задачи. `task_phase_events` — append-only журнал событий `entered`, `completed`, `blocked`, `resumed` и `rolled_back`. `task_step_history` — история вызовов `step`: отчёт исполнителя, verdict, покрытые и пропущенные пункты, ответ Supervisor, снимок контракта и вычисленные переходы. Отдельная chat-таблица не нужна: одна step-запись хранит законченную пару запроса и ответа.
+
+Каталог физически хранится в `workflows`, `phases`, `phase_instructions`, `phase_checks` и `phase_evidence_requirements`. Ссылки текущей, parallel- и rollback-фаз являются числовыми FK; коды используются только как явные `*_phase_code` в CLI, seed и Supervisor-контракте.
+
 ### Принципы
 
 - Единый data layer: все операции через SQLAlchemy-модели и репозитории.
 - Единственный evaluator — обязательный OpenAI-compatible LLM.
 - UI-пакет (`project_workflow/interfaces/ui/`) — чистое FastAPI-приложение с отдельными routes, services, dependencies.
 - Конфигурация централизована в `project_workflow.config` на Pydantic Settings; `DATABASE_URL` обязателен.
-- PostgreSQL хранит один редактируемый каталог, задачи, историю, fingerprints и audit; packaged JSON seed из 19 фаз используется только при bootstrap пустой БД.
+- PostgreSQL хранит один редактируемый каталог, snapshot задач, append-only события фаз и историю `step`; packaged JSON seed из 19 фаз используется только при bootstrap пустой БД.
 - Граф фаз валидируется целиком до записи: порядок всегда `1..N`, rollback направлен назад, а явные parallel-ссылки соединяют только фазы одного непрерывного parallel-сегмента; isolated parallel допустим.
 - REST принимает числовые phase resource IDs и строгие JSON-типы; `key_prefixes` — только непустой `list[str]`, а reorder инструкций — полный уникальный набор ID одной фазы. Строковые обходные формы не поддерживаются.
 - Skills являются рекомендациями внутри инструкций фазы; их канонические файлы хранятся в `relevanter/agent-skills`, отдельного runtime registry нет.
@@ -206,10 +227,10 @@ flowchart TD
 - [x] Coverage >= 90%
 - [x] mypy `--check-untyped-defs` для supervisor/core.py
 - [x] UI-доработки: execution_type на отдельной строке, русское склонение счётчиков, очистка рабочей БД от мусора
-- [x] Supervisor evaluate: DB-backed history/audit, idempotent replay и явный parallel rendering
+- [x] Supervisor evaluate: раздельные `task_phase_events`/`task_step_history`, idempotent replay и явный parallel rendering
 - [x] Актуальный packaged Business Tech catalog `sdlc-business-tech-v1` из 19 фаз загружается один раз в пустую PostgreSQL database
 - [x] Tech Pull Request contract: Hermes создаёт PR, Maintainer вручную merge, Hermes проверяет SHA и build
-- [x] Seed-managed фазы связаны с именованными Hermes profiles
+- [x] Фазы packaged-каталога связаны с именованными Hermes profiles
 - [x] JSON `step` отдаёт полный `phase_contract`, включая `skills`, profile и детали parallel-участников
 - [x] Packaged seed загружается только при bootstrap пустой схемы
 

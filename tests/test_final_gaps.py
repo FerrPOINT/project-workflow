@@ -67,7 +67,7 @@ class TestSupervisorModelContractFinalGaps:
         from project_workflow.supervisor.contracts import PhaseContractBuilder
         from project_workflow.supervisor.models import Phase, PhaseDelegate
 
-        p1 = Phase(code="1", name="A", delegate=PhaseDelegate(agent="researcher", prompt_template="x", toolsets=[]))
+        p1 = Phase(code="1", name="A", delegate=PhaseDelegate(agent="researcher"))
         p2 = Phase(code="2", name="B")
         group = [p1, p2]
         contract = PhaseContractBuilder([]).build_parallel(group)
@@ -87,11 +87,12 @@ class TestApplicationServiceFinalGaps:
         uow.phases.get_next_order.return_value = 7
         uow.phases.list.return_value = [
             MagicMock(
+                id=order,
                 code=f"existing-{order}",
                 phase_order=order,
                 execution_type="sync",
-                parallel_with=None,
-                rollback_target=None,
+                parallel_with_phase_id=None,
+                rollback_target_phase_id=None,
             )
             for order in range(1, 7)
         ]
@@ -130,7 +131,7 @@ class TestApplicationServiceFinalGaps:
         uow.projects.get_by_id.return_value = project
         uow.projects.lock.return_value = project
         uow.workflows.lock.return_value = object()
-        uow.phases.list.return_value = [MagicMock(code="1.INTAKE")]
+        uow.phases.list.return_value = [MagicMock(id=1, code="1.INTAKE")]
         uow.phases.get_by_code.return_value = object()
         uow.tasks.get_by_key.return_value = None
         uow.tasks.create.return_value = 1
@@ -143,8 +144,8 @@ class TestApplicationServiceFinalGaps:
         phase = MagicMock(id=1, workflow_id=7)
         uow.phases.get_by_id.return_value = phase
         uow.phases.list.return_value = [phase]
-        uow.instructions.create.return_value = 1
-        uow.instructions.get_by_id.return_value = None
+        uow.phase_instructions.create.return_value = 1
+        uow.phase_instructions.get_by_id.return_value = None
         with pytest.raises(RuntimeError, match="Не удалось создать инструкцию"):
             InstructionService(uow).create_instruction(1, {"text": "x"})
 
@@ -180,15 +181,21 @@ class TestWorkflowServiceFinalGaps:
 
 
 class TestSupervisorCoreFinalGaps:
-    def test_resolve_current_phase_is_empty_for_blank_code(self):
+    def test_resolve_current_phase_rejects_blank_code(self):
         engine = core_mod.SupervisorEngine("RUN-1")
-        engine.task = {"id": 1, "current_phase": ""}
+        engine.task = {"id": 1, "current_phase_id": 1, "current_phase_code": ""}
         engine.all_phases = []
-        assert engine._resolve_current_phase() == ""
+        with pytest.raises(ValueError, match="current_phase_code"):
+            engine._resolve_current_phase_code()
 
     def test_evaluate_does_not_fall_back_when_llm_raises(self):
         engine = core_mod.SupervisorEngine("RUN-1")
-        engine.task = {"id": 1, "project_id": 1, "current_phase": "1"}
+        engine.task = {
+            "id": 1,
+            "project_id": 1,
+            "current_phase_id": 1,
+            "current_phase_code": "1",
+        }
         uow = MagicMock()
         uow.projects.get.return_value = {"id": 1}
         uow.tasks.get.return_value = engine.task
@@ -202,7 +209,7 @@ class TestSupervisorCoreFinalGaps:
         phase.checks = []
         phase.evidence = []
         engine.all_phases = [phase]
-        engine.current_phase = "1"
+        engine.current_phase_code = "1"
         with patch.object(engine, "evaluate_llm", side_effect=Exception("boom")) as mock_llm:
             with pytest.raises(Exception, match="boom"):
                 engine.evaluate(report="ok")
@@ -265,8 +272,8 @@ class TestUiServicesFinalGaps:
         uow.get_task_by_key.return_value = {
             "id": 1,
             "task_key": "A-1",
-            "status": "active",
-            "current_phase": "1",
+            "status": "done",
+            "current_phase_id": 2,
             "workflow_id": 1,
         }
         uow.get_phases.return_value = [
@@ -276,19 +283,28 @@ class TestUiServicesFinalGaps:
                 "name": "P1",
                 "phase_order": 1,
                 "execution_type": "parallel",
-                "parallel_with": "2",
+                "parallel_with_phase_id": 2,
             },
-            {"id": 2, "code": "2", "name": "P2", "phase_order": 2, "execution_type": "parallel"},
+            {
+                "id": 2,
+                "code": "2",
+                "name": "P2",
+                "phase_order": 2,
+                "execution_type": "parallel",
+                "parallel_with_phase_id": 1,
+            },
         ]
 
-        uow.get_task_history.return_value = [
-            {"phase_id": 1, "status": "done", "completed_at": "", "execution_type": "parallel"},
-            {"phase_id": 2, "status": "done", "completed_at": "", "execution_type": "parallel"},
+        uow.list_phase_events.return_value = [
+            {"phase_id": 1, "event_type": "completed", "occurred_at": "2026-01-01"},
+            {"phase_id": 2, "event_type": "completed", "occurred_at": "2026-01-01"},
         ]
-        uow.get_supervisor_runs.return_value = [{"verdict": "pass", "response": {}}]
+        uow.list_step_history.return_value = []
         monkeypatch.setattr("project_workflow.interfaces.ui.services._get_app_state", lambda: _mock_state(uow))
         result = _get_task_detail("A-1")
-        assert result["phase_history_blocks"][0]["phases"][0]["parallel_group"] == "1"
+        assert [
+            phase["phase_code"] for phase in result["phase_history_blocks"][0]["phases"]
+        ] == ["1", "2"]
 
     def test_get_task_detail_next_contract_none(self, monkeypatch):
         uow = MagicMock()
@@ -296,13 +312,24 @@ class TestUiServicesFinalGaps:
             "id": 1,
             "task_key": "A-1",
             "status": "active",
-            "current_phase": "1",
+            "current_phase_id": 1,
             "workflow_id": 1,
         }
-        uow.get_task_history.return_value = [{"phase_id": 1, "status": "done", "completed_at": ""}]
-        uow.get_supervisor_runs.return_value = [{"verdict": "pass", "response": {"message": "ok"}}]
+        uow.list_phase_events.return_value = [
+            {"phase_id": 1, "event_type": "entered", "occurred_at": "2026-01-01"}
+        ]
+        uow.list_step_history.return_value = [
+            {
+                "verdict": "pass",
+                "evaluation_snapshot": {"phase_code": "1", "phase_name": "P1"},
+                "supervisor_response": {"message": "ok"},
+                "blocker_messages": [],
+            }
+        ]
         uow.get_projects.return_value = []
-        uow.get_phases.return_value = []
+        uow.get_phases.return_value = [
+            {"id": 1, "code": "1", "name": "P1", "phase_order": 1}
+        ]
         monkeypatch.setattr("project_workflow.interfaces.ui.services._get_app_state", lambda: _mock_state(uow))
         result = _get_task_detail("A-1")
-        assert result["supervisor_runs"][0]["next_contract"] is None
+        assert result["step_history"][0]["next_contract"] is None

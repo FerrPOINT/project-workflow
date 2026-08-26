@@ -16,20 +16,25 @@ from project_workflow.infrastructure.llm import (
 )
 from project_workflow.supervisor.contracts import PhaseContractBuilder
 from project_workflow.supervisor.evaluate import evaluate_llm_report
-from project_workflow.supervisor.models import Phase
+from project_workflow.supervisor.models import Phase, PhaseDelegate
 
 
 def _make_engine():
     engine = MagicMock()
     engine.task_key = "RUN-1"
-    engine.task = {"id": 1, "project_id": 1, "current_phase": "1", "status": "active"}
+    engine.task = {
+        "id": 1,
+        "project_id": 1,
+        "current_phase_id": 1,
+        "current_phase_code": "1",
+        "status": "active",
+    }
     engine.workflow_id = 1
-    engine.current_phase = "1"
+    engine.current_phase_code = "1"
     engine._get_previously_covered.return_value = []
     engine._resolve_transition.return_value = (None, None, None)
-    engine._resolve_current_phase.return_value = "1"
-    engine.db.get_task.return_value = engine.task
-    engine.db.supervisor_runs.get_by_fingerprint.return_value = None
+    engine.db.record_step.return_value = 42
+    engine.db.step_history.get_by_fingerprint.return_value = None
     return engine
 
 
@@ -56,10 +61,10 @@ class TestEvaluateLlmReportVerdicts:
         assert result["blockers"] == [
             "Проверяющий LLM не настроен: для OpenRouter требуется OPENAI_API_KEY."
         ]
-        run_data = engine.db.create_supervisor_run.call_args.args[0]
-        assert run_data["report_fingerprint"] is None
-        assert run_data["context_snapshot"]["model"] is None
-        assert run_data["context_snapshot"]["raw_evaluator"] == {
+        run_data = engine.db.record_step.call_args.args[0]
+        assert run_data["replay_fingerprint"] is None
+        assert run_data["evaluation_snapshot"]["model"] is None
+        assert run_data["evaluation_snapshot"]["raw_evaluator"] == {
             "error": "LlmConfigurationError"
         }
 
@@ -83,12 +88,14 @@ class TestEvaluateLlmReportVerdicts:
         assert result["verdict"] == "BLOCKED"
         assert result["retryable"] is True
         assert result["blockers"] == ["Проверяющий LLM вернул некорректный ответ."]
-        engine._record_evaluation.assert_called_once_with(phase, "blocked", None, None, commit=False)
+        engine._record_evaluation.assert_called_once_with(
+            phase, "blocked", None, None, 42, commit=False
+        )
 
     def test_rollback_uses_rollback_target(self):
         engine = _make_engine()
         engine._resolve_transition.return_value = (None, None, "0")
-        phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[], rollback_target="0")
+        phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[], rollback_target_phase_code="0")
         _set_phase(engine, phase)
         with patch.object(
             OpenAICompatibleClient,
@@ -104,12 +111,19 @@ class TestEvaluateLlmReportVerdicts:
         ):
             result = evaluate_llm_report("r", phase, engine)
         assert result["verdict"] == "ROLLBACK"
-        assert result["rollback_target"] == "0"
-        assert result["next_phase"] == "0"
+        assert result["rollback_phase_code"] == "0"
+        assert result["next_phase_code"] == "0"
 
     def test_delegate_records_transition(self):
         engine = _make_engine()
-        phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[], is_delegated=True)
+        phase = Phase(
+            code="1",
+            name="One",
+            instructions=[],
+            checks=[],
+            evidence=[],
+            delegate=PhaseDelegate(agent="reviewer"),
+        )
         _set_phase(engine, phase)
         with patch.object(
             OpenAICompatibleClient,
@@ -125,7 +139,9 @@ class TestEvaluateLlmReportVerdicts:
         ):
             result = evaluate_llm_report("r", phase, engine)
         assert result["verdict"] == "DELEGATE"
-        engine._record_evaluation.assert_called_once_with(phase, "delegate", None, None, commit=False)
+        engine._record_evaluation.assert_called_once_with(
+            phase, "delegate", None, None, 42, commit=False
+        )
 
     def test_pass_fills_next_phase_from_builder(self):
         engine = _make_engine()
@@ -147,12 +163,12 @@ class TestEvaluateLlmReportVerdicts:
         ):
             result = evaluate_llm_report("r", phase, engine)
         assert result["verdict"] == "PASS"
-        assert result["next_phase"] == "2"
+        assert result["next_phase_code"] == "2"
         assert result["next_phase_name"] == "Two"
 
     def test_persistence_failure_rolls_back_transaction(self):
         engine = _make_engine()
-        engine.db.create_supervisor_run.side_effect = RuntimeError("write failed")
+        engine.db.record_step.side_effect = RuntimeError("write failed")
         phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[])
         _set_phase(engine, phase)
         with (

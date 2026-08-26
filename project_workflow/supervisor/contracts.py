@@ -61,11 +61,10 @@ def phase_to_dict(phase: Phase, workflow_revision: str = "") -> dict[str, Any]:
         "evidence": [text_from_evidence(item) for item in phase.evidence],
         "skills": skills_from_phase(phase),
         "execution_type": phase.execution_type,
-        "parallel_with": phase.parallel_with,
-        "rollback_target": phase.rollback_target,
+        "parallel_with_phase_code": phase.parallel_with_phase_code,
+        "rollback_target_phase_code": phase.rollback_target_phase_code,
         "delegate_agent": phase.delegate.agent if phase.delegate else None,
         "hermes_profile": phase.delegate.hermes_profile if phase.delegate else None,
-        "delegate_toolsets": list(phase.delegate.toolsets) if phase.delegate else [],
     }
 
 
@@ -88,8 +87,9 @@ class PhaseContractBuilder:
         return group_parallel_phases(
             self.all_phases,
             code_of=lambda phase: phase.code,
+            id_of=lambda phase: phase.code,
             execution_type_of=lambda phase: phase.execution_type,
-            parallel_with_of=lambda phase: phase.parallel_with,
+            parallel_with_phase_id_of=lambda phase: phase.parallel_with_phase_code,
         )
 
     def build(self, phase: Phase) -> PhaseContract:
@@ -107,9 +107,8 @@ class PhaseContractBuilder:
             execution_type=phase.execution_type,
             delegate_agent=phase.delegate.agent if phase.delegate else None,
             hermes_profile=phase.delegate.hermes_profile if phase.delegate else None,
-            delegate_toolsets=list(phase.delegate.toolsets) if phase.delegate else [],
-            parallel_with=phase.parallel_with,
-            rollback_target=phase.rollback_target,
+            parallel_with_phase_code=phase.parallel_with_phase_code,
+            rollback_target_phase_code=phase.rollback_target_phase_code,
         )
 
     def build_missing(self, phase_code: str) -> PhaseContract:
@@ -158,9 +157,8 @@ class PhaseContractBuilder:
                     "execution_type": ph.execution_type,
                     "delegate_agent": ph.delegate.agent if ph.delegate else None,
                     "hermes_profile": ph.delegate.hermes_profile if ph.delegate else None,
-                    "delegate_toolsets": list(ph.delegate.toolsets) if ph.delegate else [],
-                    "parallel_with": ph.parallel_with,
-                    "rollback_target": ph.rollback_target,
+                    "parallel_with_phase_code": ph.parallel_with_phase_code,
+                    "rollback_target_phase_code": ph.rollback_target_phase_code,
                 }
             )
         first = group[0]
@@ -178,9 +176,8 @@ class PhaseContractBuilder:
             execution_type="parallel",
             delegate_agent=representative.agent if representative else None,
             hermes_profile=representative.hermes_profile if representative else None,
-            delegate_toolsets=list(representative.toolsets) if representative else [],
-            parallel_with=first.parallel_with,
-            rollback_target=first.rollback_target,
+            parallel_with_phase_code=first.parallel_with_phase_code,
+            rollback_target_phase_code=first.rollback_target_phase_code,
             group_phases=[p.code for p in group],
             group_details=group_details,
         )

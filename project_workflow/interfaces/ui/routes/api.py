@@ -64,7 +64,8 @@ async def api_phases(workflow_id: int | None = Query(default=None)) -> dict[str,
                 "phase_num": phase.get("phase_num", phase.get("phase_order", 0)),
                 "phase_order": phase.get("phase_order", 0),
                 "execution_type": phase.get("execution_type", "sync"),
-                "parallel_with": phase.get("parallel_with"),
+                "parallel_with_phase_id": phase.get("parallel_with_phase_id"),
+                "rollback_target_phase_id": phase.get("rollback_target_phase_id"),
                 "agent_name": agent["name"] if agent else None,
                 "agent_id": phase.get("agent_id"),
                 "hermes_profile": agent.get("hermes_profile") if agent else None,
@@ -135,9 +136,8 @@ async def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONRespons
         "workflow_id": workflow_id,
         "phase_order": payload.phase_order,
         "execution_type": payload.execution_type,
-        "parallel_with": payload.parallel_with,
-        "rollback_target": payload.rollback_target,
-        "next_recommendation": payload.next_recommendation,
+        "parallel_with_phase_id": payload.parallel_with_phase_id,
+        "rollback_target_phase_id": payload.rollback_target_phase_id,
         "agent_id": payload.agent_id,
     }
     if payload.code:
@@ -163,9 +163,8 @@ async def api_phase_update(phase_id: int, payload: PhaseUpdate) -> dict[str, Any
     scalar_fields = {
         "name",
         "description",
-        "parallel_with",
-        "rollback_target",
-        "next_recommendation",
+        "parallel_with_phase_id",
+        "rollback_target_phase_id",
         "agent_id",
         "execution_type",
     }

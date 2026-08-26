@@ -37,17 +37,11 @@ class Phase:
     code: str = ""
     name: str = ""
     description: str | None = ""
-    min_time_min: int = 0
-    is_blocker: bool = False
-    is_delegated: bool = False
-    is_critic: bool = False
     phase_order: int = 0
     agent_id: int | None = None
-    next_recommendation: str | None = ""
-    parallel_with: str | None = None
-    rollback_target: str | None = None
+    parallel_with_phase_id: int | None = None
+    rollback_target_phase_id: int | None = None
     execution_type: str = "sync"
-    is_seed_managed: bool = False
     workflow_name: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -57,17 +51,11 @@ class Phase:
             "code": self.code,
             "name": self.name,
             "description": self.description,
-            "min_time_min": self.min_time_min,
-            "is_blocker": self.is_blocker,
-            "is_delegated": self.is_delegated,
-            "is_critic": self.is_critic,
             "phase_order": self.phase_order,
             "agent_id": self.agent_id,
-            "next_recommendation": self.next_recommendation,
-            "parallel_with": self.parallel_with,
-            "rollback_target": self.rollback_target,
+            "parallel_with_phase_id": self.parallel_with_phase_id,
+            "rollback_target_phase_id": self.rollback_target_phase_id,
             "execution_type": self.execution_type,
-            "is_seed_managed": self.is_seed_managed,
             "workflow_name": self.workflow_name,
         }
 
@@ -142,7 +130,8 @@ class Task:
     task_key: str = ""
     title: str = ""
     description: str = ""
-    current_phase: str = ""
+    current_phase_id: int = 0
+    current_phase_code: str = ""
     current_phase_name: str = ""
     status: str = "active"
     created_at: str | None = None
@@ -156,7 +145,8 @@ class Task:
             "task_key": self.task_key,
             "title": self.title,
             "description": self.description,
-            "current_phase": self.current_phase,
+            "current_phase_id": self.current_phase_id,
+            "current_phase_code": self.current_phase_code,
             "current_phase_name": self.current_phase_name,
             "status": self.status,
             "created_at": self.created_at,
@@ -165,22 +155,22 @@ class Task:
 
 
 @dataclass
-class SupervisorRun:
-    """Domain supervisor run."""
+class TaskStepHistoryEntry:
+    """One persisted evaluation produced by the CLI ``step`` flow."""
 
     id: int | None = None
     task_id: int = 0
     phase_id: int = 0
     verdict: str = ""
-    report: str = ""
-    covered: list[str] = field(default_factory=list)
-    missing: list[str] = field(default_factory=list)
-    blockers: list[str] = field(default_factory=list)
+    worker_report: str = ""
+    covered_item_ids: list[str] = field(default_factory=list)
+    missing_item_ids: list[str] = field(default_factory=list)
+    blocker_messages: list[str] = field(default_factory=list)
     next_phase_id: int | None = None
     rollback_phase_id: int | None = None
-    report_fingerprint: str | None = None
-    context_snapshot: dict[str, Any] = field(default_factory=dict)
-    response: dict[str, Any] = field(default_factory=dict)
+    replay_fingerprint: str | None = None
+    evaluation_snapshot: dict[str, Any] = field(default_factory=dict)
+    supervisor_response: dict[str, Any] = field(default_factory=dict)
     created_at: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -189,14 +179,36 @@ class SupervisorRun:
             "task_id": self.task_id,
             "phase_id": self.phase_id,
             "verdict": self.verdict,
-            "report": self.report,
-            "covered": self.covered,
-            "missing": self.missing,
-            "blockers": self.blockers,
+            "worker_report": self.worker_report,
+            "covered_item_ids": self.covered_item_ids,
+            "missing_item_ids": self.missing_item_ids,
+            "blocker_messages": self.blocker_messages,
             "next_phase_id": self.next_phase_id,
             "rollback_phase_id": self.rollback_phase_id,
-            "report_fingerprint": self.report_fingerprint,
-            "context_snapshot": self.context_snapshot,
-            "response": self.response,
+            "replay_fingerprint": self.replay_fingerprint,
+            "evaluation_snapshot": self.evaluation_snapshot,
+            "supervisor_response": self.supervisor_response,
             "created_at": self.created_at,
+        }
+
+
+@dataclass
+class TaskPhaseEvent:
+    """One append-only task phase/status event."""
+
+    id: int | None = None
+    task_id: int = 0
+    phase_id: int = 0
+    step_history_id: int | None = None
+    event_type: str = ""
+    occurred_at: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "task_id": self.task_id,
+            "phase_id": self.phase_id,
+            "step_history_id": self.step_history_id,
+            "event_type": self.event_type,
+            "occurred_at": self.occurred_at,
         }

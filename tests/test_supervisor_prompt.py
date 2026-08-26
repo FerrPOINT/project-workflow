@@ -72,7 +72,7 @@ def test_prompt_for_missing_phase():
         [],
         "p1",
         {"workflow_name": "W"},
-        phase_id="p99",
+        phase_code="p99",
     )
     assert "p99 не найдена в воркфлоу" in result
 
@@ -87,7 +87,7 @@ def test_prompt_parallel_group():
             [],
             "p1",
             {"workflow_name": "W"},
-            phase_id="p1",
+            phase_code="p1",
         )
     assert "ПАРАЛЛЕЛЬНАЯ ГРУППА" in result
 
@@ -102,7 +102,7 @@ def test_prompt_delegated():
             [],
             "p1",
             {"workflow_name": "W"},
-            phase_id="p1",
+            phase_code="p1",
         )
     assert "Делегировано агенту" in result
     assert "профиль Hermes: code_profile" in result
@@ -124,7 +124,6 @@ def patch_contract_builder(delegate_agent=None, hermes_profile=None):
             "required_evidence": ["e1"],
             "delegate_agent": delegate_agent,
             "hermes_profile": hermes_profile,
-            "delegate_toolsets": ["t1"] if delegate_agent else None,
         }
         cb.build.return_value = contract
         group_contract = MagicMock()

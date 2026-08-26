@@ -9,7 +9,7 @@ import pytest
 
 from project_workflow.infrastructure.db.repositories.converters import (
     _row_to_project,
-    _row_to_supervisor_run,
+    _row_to_step_history,
     _row_to_task,
 )
 from project_workflow.infrastructure.db.repositories.project import SAProjectRepository
@@ -56,7 +56,7 @@ def test_row_to_task_missing_workflow_fails_closed():
         task_key="T-1",
         title="t",
         description="d",
-        current_phase="1.INTAKE",
+        current_phase_id=4,
         status="active",
         created_at=None,
         updated_at=None,
@@ -66,7 +66,7 @@ def test_row_to_task_missing_workflow_fails_closed():
         _row_to_task(row)
 
 
-def test_row_to_task_unknown_phase_preserves_code_for_fail_closed_diagnostic():
+def test_row_to_task_unknown_phase_fails_closed():
     row = _row(
         id=1,
         project_id=2,
@@ -74,14 +74,16 @@ def test_row_to_task_unknown_phase_preserves_code_for_fail_closed_diagnostic():
         task_key="T-1",
         title="t",
         description="d",
-        current_phase="missing",
+        current_phase_id=99,
         status="active",
         created_at=None,
         updated_at=None,
-        workflow=SimpleNamespace(phases=[SimpleNamespace(code="1.INTAKE", name="Входящий запрос")]),
+        workflow=SimpleNamespace(
+            phases=[SimpleNamespace(id=4, code="1.INTAKE", name="Входящий запрос")]
+        ),
     )
-    task = _row_to_task(row)
-    assert task.current_phase_name == "missing"
+    with pytest.raises(ValueError, match="не найдена текущая фаза"):
+        _row_to_task(row)
 
 
 @pytest.mark.parametrize("prefixes", [None, [], "RUN", ["RUN", 1]])
@@ -98,62 +100,65 @@ def test_project_repository_rejects_non_string_prefix_collections(prefixes):
         )
 
 
-def test_row_to_supervisor_run_bad_json_fields():
+def test_row_to_step_history_bad_json_fields():
     row = _row(
         id=1,
         task_id=2,
         phase_id=3,
         verdict="pass",
-        report="r",
-        covered="not list",
-        missing="{}",
-        blockers="[",
+        worker_report="r",
+        covered_item_ids="not list",
+        missing_item_ids="{}",
+        blocker_messages="[",
         next_phase_id=None,
         rollback_phase_id=None,
-        context_snapshot="not object",
-        response="42",
+        evaluation_snapshot="not object",
+        supervisor_response="42",
+        replay_fingerprint=None,
         created_at=None,
     )
     with pytest.raises(ValueError):
-        _row_to_supervisor_run(row)
+        _row_to_step_history(row)
 
 
-def test_row_to_supervisor_run_non_collection_json():
+def test_row_to_step_history_non_collection_json():
     row = _row(
         id=1,
         task_id=2,
         phase_id=3,
         verdict="pass",
-        report="r",
-        covered='"string"',
-        missing="42",
-        blockers="{}",
+        worker_report="r",
+        covered_item_ids='"string"',
+        missing_item_ids="42",
+        blocker_messages="{}",
         next_phase_id=None,
         rollback_phase_id=None,
-        context_snapshot="[]",
-        response="null",
+        evaluation_snapshot="[]",
+        supervisor_response="null",
+        replay_fingerprint=None,
         created_at=None,
     )
     with pytest.raises(ValueError):
-        _row_to_supervisor_run(row)
+        _row_to_step_history(row)
 
 
 @pytest.mark.parametrize("raw", [None, ""])
-def test_row_to_supervisor_run_empty_fields(raw):
+def test_row_to_step_history_empty_fields(raw):
     row = _row(
         id=1,
         task_id=2,
         phase_id=3,
         verdict="pass",
-        report="r",
-        covered=raw,
-        missing=raw,
-        blockers=raw,
+        worker_report="r",
+        covered_item_ids=raw,
+        missing_item_ids=raw,
+        blocker_messages=raw,
         next_phase_id=None,
         rollback_phase_id=None,
-        context_snapshot=raw,
-        response=raw,
+        evaluation_snapshot=raw,
+        supervisor_response=raw,
+        replay_fingerprint=None,
         created_at=None,
     )
     with pytest.raises(ValueError):
-        _row_to_supervisor_run(row)
+        _row_to_step_history(row)
