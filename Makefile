@@ -1,4 +1,4 @@
-# WARTZ project-workflow — Makefile
+# project-workflow — Makefile
 
 .PHONY: test coverage lint clean install-dev
 

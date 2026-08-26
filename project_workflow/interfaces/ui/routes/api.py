@@ -89,7 +89,7 @@ async def api_task_delete(task_key: str) -> Response:
         return _error(f"Задача {task_key!r} не найдена", 404)
     task_id = task.get("id")
     if not isinstance(task_id, int):
-        return _error("Некорректный идентификатор задачи", 400)
+        return _error("Некорректный идентификатор задачи", 422)
     try:
         _app_state.task_service().delete_task(task_id)
     except NotFoundError as exc:
@@ -376,6 +376,8 @@ async def api_instruction_create(payload: InstructionCreate) -> dict[str, Any] |
         )
     except NotFoundError as exc:
         return _error(str(exc), 404)
+    except ConflictError as exc:
+        return _error(str(exc), 409)
     except ValueError as exc:
         return _error(str(exc), 422)
     return {"ok": True, "instruction": item}

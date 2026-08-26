@@ -13,7 +13,7 @@ services:
       timeout: 5s
       retries: 5
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
 
   migrate:
     build: .
@@ -28,7 +28,7 @@ services:
   api:
     build: .
     ports:
-      - "8812:8811"
+      - "127.0.0.1:8812:8811"
     environment:
       DATABASE_URL: postgresql+psycopg://project_workflow:project_workflow@db:5432/project_workflow
       DB_SCHEMA: project_workflow

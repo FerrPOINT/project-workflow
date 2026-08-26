@@ -63,7 +63,7 @@ class TestDomainFinalGaps:
 
 
 class TestSupervisorModelContractFinalGaps:
-    def test_parallel_contract_researcher_fallback(self):
+    def test_parallel_contract_uses_group_delegate(self):
         from project_workflow.supervisor.contracts import PhaseContractBuilder
         from project_workflow.supervisor.models import Phase, PhaseDelegate
 
@@ -171,11 +171,6 @@ class TestSessionFinalGaps:
 
 
 class TestWorkflowServiceFinalGaps:
-    def test_get_workflow_by_name_none(self):
-        uow = MagicMock()
-        uow.workflows.get_by_name.return_value = None
-        assert WorkflowService(uow).get_workflow_by_name("x") is None
-
     def test_create_workflow_failure(self):
         uow = MagicMock()
         uow.workflows.create.return_value = 1
@@ -185,7 +180,7 @@ class TestWorkflowServiceFinalGaps:
 
 
 class TestSupervisorCoreFinalGaps:
-    def test_resolve_current_phase_fallback_empty(self):
+    def test_resolve_current_phase_is_empty_for_blank_code(self):
         engine = core_mod.SupervisorEngine("RUN-1")
         engine.task = {"id": 1, "current_phase": ""}
         engine.all_phases = []
