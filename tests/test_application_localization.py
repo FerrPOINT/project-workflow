@@ -6,7 +6,11 @@ import hashlib
 import json
 from pathlib import Path
 
+import pytest
+import requests
+
 from project_workflow.domain.validation import TaskKeyValidator
+from project_workflow.infrastructure.llm import LlmConfigurationError
 from project_workflow.supervisor.evaluate import _blocked
 from project_workflow.supervisor.formatting import format_result
 
@@ -81,8 +85,19 @@ def test_cli_result_and_task_key_errors_are_in_russian() -> None:
     assert "Префиксы:" in error
 
 
-def test_provider_failure_blocker_is_user_facing_russian() -> None:
-    blocker = _blocked(ConnectionError("provider down")).blockers[0]
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (LlmConfigurationError("secret"), "не настроен"),
+        (requests.Timeout("secret"), "не ответил"),
+        (requests.ConnectionError("secret"), "соединение"),
+        (requests.HTTPError("secret"), "отклонил"),
+        (requests.RequestException("secret"), "обмена данными"),
+        (ValueError("secret"), "некорректный ответ"),
+    ],
+)
+def test_provider_failure_blocker_is_user_facing_russian(error: Exception, expected: str) -> None:
+    blocker = _blocked(error).blockers[0]
 
-    assert blocker.startswith("Проверяющий LLM недоступен:")
-    assert "unavailable" not in blocker.lower()
+    assert expected in blocker
+    assert "secret" not in blocker
