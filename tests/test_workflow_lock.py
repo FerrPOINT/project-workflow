@@ -87,10 +87,13 @@ def test_locked_revision_rejects_every_catalog_writer(tmp_path):
             lambda: InstructionService(uow).update_instruction(int(instruction_ids[0]), {"description": "changed"}),
             lambda: InstructionService(uow).delete_instruction(int(instruction_ids[0])),
             lambda: InstructionService(uow).reorder_instructions(phase_id, [int(value) for value in instruction_ids]),
-            lambda: PhaseService(uow).save_instructions(phase_id, [{"description": "new"}]),
-            lambda: PhaseService(uow).save_checks(phase_id, [{"description": "new"}]),
-            lambda: PhaseService(uow).save_evidence(phase_id, [{"description": "new"}]),
+            lambda: PhaseService(uow).update_phase_detail(
+                phase_id, {"instructions": [{"description": "new"}]}
+            ),
             lambda: PhaseService(uow).update_phase_detail(phase_id, {"checks": [{"description": "new"}]}),
+            lambda: PhaseService(uow).update_phase_detail(
+                phase_id, {"evidence": [{"description": "new"}]}
+            ),
             lambda: AgentService(uow).update_agent(agent_id, {"name": "changed"}),
         ]
         for operation in operations:
