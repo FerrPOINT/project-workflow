@@ -1610,7 +1610,8 @@ class TestLegacyApiRemoved:
 
     def test_task_detail_json_api_removed(self):
         response = client.get("/api/tasks/UITEST-402")
-        assert response.status_code == 404
+        assert response.status_code == 405
+        assert response.json() == {"ok": False, "error": "Метод не поддерживается"}
 
 
 class TestSettingsPage:

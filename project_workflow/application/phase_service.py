@@ -67,32 +67,6 @@ class PhaseService:
         self._uow.phases.set_evidence(phase_id, items)
         return [int(row["id"]) for row in self._uow.phases.get_evidence(phase_id)]
 
-    def save_instructions(
-        self, phase_id: int, items: list[dict[str, Any]], *, commit: bool = True
-    ) -> list[int]:
-        """Replace all instructions for a phase.  Returns new ids in order."""
-        resolved = self._lock_phase(phase_id)
-        ids = self._replace_instructions(resolved, items)
-        if commit:
-            self._uow.commit()
-        return ids
-
-    def save_checks(self, phase_id: int, items: list[dict[str, Any]], *, commit: bool = True) -> list[int]:
-        """Replace all checks for a phase."""
-        resolved = self._lock_phase(phase_id)
-        ids = self._replace_checks(resolved, items)
-        if commit:
-            self._uow.commit()
-        return ids
-
-    def save_evidence(self, phase_id: int, items: list[dict[str, Any]], *, commit: bool = True) -> list[int]:
-        """Replace all evidence for a phase."""
-        resolved = self._lock_phase(phase_id)
-        ids = self._replace_evidence(resolved, items)
-        if commit:
-            self._uow.commit()
-        return ids
-
     # ── Read helpers ─────────────────────────────────────────────────
 
     def get_phase_detail(self, phase_id: int) -> dict[str, Any]:
@@ -124,12 +98,6 @@ class PhaseService:
             "checks": checks,
             "evidence": evidence,
         }
-
-    def update_phase(self, phase_id: int, data: dict[str, Any], *, commit: bool = True) -> None:
-        from project_workflow.application.phase import PhaseServiceApp
-
-        resolved = self._resolve_phase_id(phase_id)
-        PhaseServiceApp(self._uow).update_phase(resolved, data, commit=commit)
 
     def update_phase_detail(self, phase_id: int, data: dict[str, Any]) -> dict[str, list[int]]:
         """Update the complete phase aggregate in one locked transaction."""

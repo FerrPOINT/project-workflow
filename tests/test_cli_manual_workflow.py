@@ -38,7 +38,6 @@ def manual_env(tmp_path, monkeypatch):
         {
             "name": "Manual Test Workflow",
             "description": "CLI manual test workflow",
-            "_skip_default_phase": True,
         }
     )
     uow.projects.create(

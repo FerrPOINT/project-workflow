@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from project_workflow import config
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import UnitOfWork
 
@@ -20,22 +19,21 @@ class WorkflowService:
     def create_workflow(self, data: dict[str, Any]) -> dict[str, Any]:
         payload = dict(data)
         wid = self._uow.workflows.create(payload)
-        if not payload.get("_skip_default_phase"):
-            default_phase = {
-                "workflow_id": wid,
-                "code": f"wf-{wid}-default",
-                "name": self.DEFAULT_PHASE_NAME,
-                "description": "",
-                "min_time_min": 0,
-                "phase_order": 1,
-                "agent_id": None,
-                "next_recommendation": None,
-                "parallel_with": None,
-                "rollback_target": None,
-                "execution_type": "sync",
-                "is_seed_managed": False,
-            }
-            self._uow.phases.create(default_phase)
+        default_phase = {
+            "workflow_id": wid,
+            "code": f"wf-{wid}-default",
+            "name": self.DEFAULT_PHASE_NAME,
+            "description": "",
+            "min_time_min": 0,
+            "phase_order": 1,
+            "agent_id": None,
+            "next_recommendation": None,
+            "parallel_with": None,
+            "rollback_target": None,
+            "execution_type": "sync",
+            "is_seed_managed": False,
+        }
+        self._uow.phases.create(default_phase)
         workflow = self._uow.workflows.get_by_id(wid)
         if not workflow:
             raise RuntimeError("Не удалось создать воркфлоу")
@@ -71,8 +69,3 @@ class WorkflowService:
         self._uow.workflows.delete(workflow_id)
         self._uow.commit()
         return None
-
-    def ensure_default_exists(self) -> dict[str, Any]:
-        wf = self._uow.workflows.ensure_default_exists(config.DEFAULT_WORKFLOW_NAME)
-        result = wf.to_dict()
-        return result

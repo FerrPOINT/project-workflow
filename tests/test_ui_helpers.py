@@ -6,21 +6,11 @@ from unittest.mock import MagicMock
 
 from project_workflow.interfaces.ui.helpers import (
     _build_parallel_phase_blocks,
-    _parse_optional_int,
     _resolve_task_phase,
     _resolve_task_phase_local,
     _run_to_dict,
 )
 from project_workflow.interfaces.ui.templates import _group_instructions
-
-
-def test_parse_optional_int():
-    assert _parse_optional_int("5") == 5
-    assert _parse_optional_int("0") is None
-    assert _parse_optional_int("abc") is None
-    assert _parse_optional_int(None) is None
-    assert _parse_optional_int("") is None
-    assert _parse_optional_int(-3) is None
 
 
 def test_group_instructions():

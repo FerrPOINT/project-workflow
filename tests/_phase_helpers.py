@@ -11,6 +11,17 @@ PHASE_CODES = [phase.code for phase in SEED_PHASES]
 PHASE_NAMES = {phase.code: phase.name for phase in SEED_PHASES}
 
 
+def create_empty_workflow(
+    uow: SAUnitOfWork, name: str, description: str = ""
+) -> dict[str, object]:
+    """Create an empty workflow directly for tests that build a custom catalog."""
+    workflow_id = uow.workflows.create({"name": name, "description": description})
+    workflow = uow.workflows.get_by_id(workflow_id)
+    assert workflow is not None
+    uow.commit()
+    return workflow.to_dict()
+
+
 def get_next_phase(current_phase: str) -> str | None:
     """Return the next phase code in configured order."""
     try:

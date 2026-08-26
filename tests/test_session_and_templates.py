@@ -56,12 +56,36 @@ class TestSessionHelpers:
         reset_engine()
 
     def test_get_engine_creates_new_instance_after_url_change(self, tmp_path):
+        from unittest.mock import patch
+
         reset_engine()
         db1 = tmp_path / "a.db"
         db2 = tmp_path / "b.db"
         e1 = get_engine(f"sqlite:///{db1}")
-        e2 = get_engine(f"sqlite:///{db2}")
+        with patch.object(e1, "dispose", wraps=e1.dispose) as dispose:
+            e2 = get_engine(f"sqlite:///{db2}")
         assert e1 is not e2
+        dispose.assert_called_once_with()
+        reset_engine()
+
+    def test_get_engine_reuses_postgresql_engine_with_password(self, monkeypatch):
+        from unittest.mock import MagicMock
+
+        from sqlalchemy.engine import make_url
+
+        from project_workflow.infrastructure.db import session as session_module
+
+        reset_engine()
+        fake_engine = MagicMock()
+        fake_engine.url = make_url("postgresql://user:secret@localhost/workflow")
+        create = MagicMock(return_value=fake_engine)
+        monkeypatch.setattr(session_module, "_create_postgres_engine", create)
+
+        first = get_engine("postgresql://user:secret@localhost/workflow")
+        second = get_engine("postgresql://user:secret@localhost/workflow")
+
+        assert first is second is fake_engine
+        create.assert_called_once_with("postgresql://user:secret@localhost/workflow")
         reset_engine()
 
     def test_get_engine_postgresql_retry_then_success(self, monkeypatch):
@@ -110,6 +134,28 @@ class TestSessionHelpers:
             with pytest.raises(OperationalError, match="db down"):
                 _create_postgres_engine("postgresql://u:***@h/d")
         assert len(calls) == 3
+
+    def test_get_engine_postgresql_disposes_failed_connections(self, monkeypatch):
+        from unittest.mock import MagicMock, patch
+
+        from sqlalchemy.exc import OperationalError
+
+        from project_workflow.infrastructure.db import session as session_module
+        from project_workflow.infrastructure.db.session import _create_postgres_engine
+
+        engines = [MagicMock() for _ in range(3)]
+        for engine in engines:
+            engine.connect.side_effect = OperationalError("connect", {}, RuntimeError("db down"))
+
+        with (
+            patch.object(session_module, "create_engine", side_effect=engines),
+            patch.object(session_module.time, "sleep"),
+            pytest.raises(OperationalError, match="db down"),
+        ):
+            _create_postgres_engine("postgresql://u:***@h/d")
+
+        for engine in engines:
+            engine.dispose.assert_called_once_with()
 
     def test_get_session_returns_active_session(self, tmp_path):
         reset_engine()
@@ -216,11 +262,15 @@ class TestSessionHelpers:
                 ensure_schema(fake_conn)
 
     def test_reset_engine_clears_cache(self, tmp_path):
+        from unittest.mock import patch
+
         db = tmp_path / "test.db"
         e1 = get_engine(f"sqlite:///{db}")
-        reset_engine()
+        with patch.object(e1, "dispose", wraps=e1.dispose) as dispose:
+            reset_engine()
         e2 = get_engine(f"sqlite:///{db}")
         assert e1 is not e2
+        dispose.assert_called_once_with()
         reset_engine()
 
 

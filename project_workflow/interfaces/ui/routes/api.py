@@ -418,7 +418,3 @@ async def api_instructions_reorder(phase_id: int, payload: InstructionReorder) -
     except (TypeError, ValueError) as exc:
         return _error(str(exc), 422)
     return {"ok": True}
-
-
-# Alias used by app wiring for the /api/phases/order endpoint.
-api_update_order = api_phase_batch_order

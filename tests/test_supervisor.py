@@ -33,7 +33,6 @@ def _bootstrap_supervisor_workflow(uow: SAUnitOfWork) -> None:
         {
             "name": SUPERVISOR_WORKFLOW_NAME,
             "description": "Workflow used to validate DB-backed supervisor behavior.",
-            "_skip_default_phase": True,
         }
     )
     uow.projects.create(

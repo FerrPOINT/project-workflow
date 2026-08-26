@@ -19,8 +19,6 @@ from .services import (
     _load_projects,
     _load_tasks,
     _load_workflows,
-    _parse_optional_int,
-    _resolve_task_phase,
 )
 from .templates import _group_instructions
 from .templates import env as _templates_env
@@ -40,8 +38,6 @@ __all__ = [
     "_load_projects",
     "_load_tasks",
     "_load_workflows",
-    "_parse_optional_int",
-    "_resolve_task_phase",
     "_templates_env",
 ]
 

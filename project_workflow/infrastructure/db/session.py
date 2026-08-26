@@ -11,6 +11,7 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 from alembic import command
@@ -30,8 +31,8 @@ from .models import Base
 
 logger = logging.getLogger(__name__)
 
-_engine = None
-_SessionLocal = None
+_engine: Engine | None = None
+_engine_lock = Lock()
 
 
 PG_CONNECT_RETRY_ATTEMPTS: int = 3
@@ -72,21 +73,26 @@ def get_engine(url: str | None = None) -> Engine:
     global _engine
     target = _normalize_url(url)
     parsed_target = make_url(target)
-    normalized_target = parsed_target.render_as_string(hide_password=False)
-    if _engine is None or str(_engine.url) != normalized_target:
+    with _engine_lock:
+        if _engine is not None and _engine.url == parsed_target:
+            return _engine
         if parsed_target.get_backend_name() == "sqlite":
             db_path = parsed_target.database
             if db_path and db_path != ":memory:":
                 Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-            _engine = create_engine(
+            new_engine = create_engine(
                 parsed_target,
                 connect_args={"check_same_thread": False, "timeout": 10},
                 echo=False,
                 poolclass=NullPool,
             )
         else:
-            _engine = _create_postgres_engine(target)
-    return _engine
+            new_engine = _create_postgres_engine(target)
+        previous_engine = _engine
+        _engine = new_engine
+        if previous_engine is not None:
+            previous_engine.dispose()
+        return new_engine
 
 
 def _create_postgres_engine(target: str) -> Engine:
@@ -97,6 +103,7 @@ def _create_postgres_engine(target: str) -> Engine:
         connect_args["options"] = f"-csearch_path={schema}"
     last_exc: Exception | None = None
     for attempt in range(PG_CONNECT_RETRY_ATTEMPTS):
+        engine: Engine | None = None
         try:
             engine = create_engine(
                 target,
@@ -111,6 +118,8 @@ def _create_postgres_engine(target: str) -> Engine:
                 conn.exec_driver_sql("SELECT 1")
             return engine
         except (SQLAlchemyError, OSError) as exc:
+            if engine is not None:
+                engine.dispose()
             last_exc = exc
             logger.warning("Postgres engine creation failed (attempt %s): %s", attempt + 1, exc)
             if attempt + 1 < PG_CONNECT_RETRY_ATTEMPTS:
@@ -150,9 +159,12 @@ def _set_sqlite_pragma(dbapi_conn: Any, connection_record: Any) -> None:
 
 def reset_engine() -> None:
     """Reset cached engine; useful in tests after monkeypatching DB path."""
-    global _engine, _SessionLocal
-    _engine = None
-    _SessionLocal = None
+    global _engine
+    with _engine_lock:
+        previous_engine = _engine
+        _engine = None
+        if previous_engine is not None:
+            previous_engine.dispose()
 
 
 def ensure_schema(engine: Engine | Connection | None = None) -> None:
