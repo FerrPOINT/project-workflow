@@ -46,7 +46,7 @@ class TaskKeyValidator:
     REJECT_PATTERNS = [
         (r"^-", "Ключ не может начинаться с дефиса"),
         (r"[ _+]", "Пробелы и подчёркивания запрещены -- используй дефис"),
-        (r"^\\d+$", "Только номер без префикса недопустим"),
+        (r"^\d+$", "Только номер без префикса недопустим"),
     ]
 
     def __init__(self, project_prefixes: list[dict[str, Any]]):
@@ -54,16 +54,18 @@ class TaskKeyValidator:
         self.raw_prefixes: list[str] = []
         for project in project_prefixes:
             project_code = project.get("code")
+            if not isinstance(project_code, str) or not project_code.strip():
+                raise ValueError("code проекта должен быть непустой строкой")
             raw_prefixes = project.get("key_prefixes") or []
             if not isinstance(raw_prefixes, list) or not all(
                 isinstance(prefix, str) for prefix in raw_prefixes
             ):
                 raise ValueError("key_prefixes проекта должен быть массивом строк")
-            prefixes = [str(prefix).strip() for prefix in raw_prefixes if str(prefix).strip()]
+            prefixes = [prefix.strip() for prefix in raw_prefixes if prefix.strip()]
             if prefixes:
                 self.raw_prefixes.extend(prefixes)
                 pattern = re.compile(_prefixes_to_regex(prefixes))
-                self.pattern_sources.append((str(project_code) if project_code else None, pattern))
+                self.pattern_sources.append((project_code.strip(), pattern))
 
     def validate(self, key: str) -> ValidatedTaskKey:
         """Validate a task key without inventing a default project."""

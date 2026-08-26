@@ -63,7 +63,7 @@ docker compose up --build -d
 ```bash
 docker compose ps
 docker compose logs --no-log-prefix migrate
-curl --fail --silent http://localhost:8812/health
+curl --fail --silent http://127.0.0.1:8812/health
 ```
 
 Успешный результат:
@@ -73,6 +73,10 @@ curl --fail --silent http://localhost:8812/health
 - `/health` возвращает HTTP `200`, `database=ok` и `schema=ok`;
 - в `alembic_version` находится `0001_initial`;
 - packaged-каталог, агенты и default project созданы без дубликатов.
+
+PostgreSQL и API в стандартном Compose опубликованы только на `127.0.0.1`.
+Для удалённой проверки используйте защищённый proxy или VPN, не меняя host
+bindings на общедоступный интерфейс.
 
 Локальные проверки, hosted CI и реальный provider-run фиксируются как разные
 классы evidence. Успешный reset сам по себе не подтверждает работу внешнего LLM.

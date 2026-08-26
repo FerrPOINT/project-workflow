@@ -209,6 +209,20 @@ class TestGetParallelGroup:
         assert [phase.code for phase in second] == ["3", "4"]
         assert engine._get_next_phase_after_group(second) == ("5", "Done")
 
+    def test_interleaved_parallel_component_does_not_skip_isolated_phase(self, engine):
+        linked_a = Phase(id=10, code="a", name="A", execution_type="parallel", parallel_with="c")
+        isolated_b = Phase(id=11, code="b", name="B", execution_type="parallel")
+        linked_c = Phase(id=12, code="c", name="C", execution_type="parallel")
+        done = Phase(id=13, code="done", name="Done", execution_type="sync")
+        engine.all_phases = [linked_a, isolated_b, linked_c, done]
+        engine.phase_map = {phase.code: phase for phase in engine.all_phases}
+
+        linked_group = engine._get_parallel_group(linked_a)
+        isolated_group = engine._get_parallel_group(isolated_b)
+
+        assert engine._resolve_transition(linked_a, "pass", linked_group) == ("b", "B", None)
+        assert engine._resolve_transition(isolated_b, "pass", isolated_group) == ("done", "Done", None)
+
 
 # ═══════════════════════════════════════════════════════════════════════
 #  _get_next_phase_after_group
@@ -437,7 +451,7 @@ class TestEvaluateEdgeCases:
             supervisor_llm("PASS", covered=["check-a", "check-b"])
             result = engine.evaluate("check-a done and check-b complete")
         assert result["verdict"] == "PASS"
-        assert result["phase_name"] == "Parallel group: 1, 2"
+        assert result["phase_name"] == "Параллельная группа: 1, 2"
 
     def test_parallel_evaluate_partial_stays(self, supervisor_llm):
         with nullcontext():

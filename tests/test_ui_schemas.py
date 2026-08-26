@@ -61,9 +61,9 @@ def test_phase_update_fields():
         PhaseUpdate(parallel_with=" ")
 
 
-def test_request_schemas_reject_unknown_legacy_fields():
+def test_request_schemas_reject_unknown_fields():
     with pytest.raises(ValueError, match="Extra inputs are not permitted"):
-        PhaseUpdate.model_validate({"group_id": "legacy"})
+        PhaseUpdate.model_validate({"unexpected": "value"})
 
 
 def test_workflow_create_update():
@@ -72,7 +72,7 @@ def test_workflow_create_update():
     wu = WorkflowUpdate(description="D")
     assert wu.description == "D"
     with pytest.raises(ValueError, match="Extra inputs are not permitted"):
-        WorkflowCreate.model_validate({"name": "W", "code": "legacy"})
+        WorkflowCreate.model_validate({"name": "W", "unexpected": "value"})
 
 
 def test_project_create_defaults():

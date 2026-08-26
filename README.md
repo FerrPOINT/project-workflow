@@ -42,14 +42,14 @@
 
 CLI остаётся минимальным: ровно две команды — `step` и `history`.
 
-В production используется **PostgreSQL**.
+В рабочем runtime используется **PostgreSQL**.
 
 SQLite остаётся только для изолированных тестов с явно заданным DSN/engine.
 
 <a name="features"></a>
-## ✨ Features
+## ✨ Возможности
 
-| Feature | Описание |
+| Возможность | Описание |
 |---------|----------|
 | Пофазовый workflow | Каждая задача строго следует шаблону фаз с инструкциями, чек-листами и артефактами. |
 | Рекомендации skills | Имена skills хранятся в PostgreSQL и передаются исполнителю прямо в контракте фазы; содержимое принадлежит [`relevanter/agent-skills`](https://gt.wmtgroup.ru/relevanter/agent-skills). |
@@ -57,16 +57,16 @@ SQLite остаётся только для изолированных тест�
 | Встроенный supervisor | Автоматическая оценка отчётов и решение о переходе на следующую фазу. |
 | Web UI | Управление шаблонами, фазами, проектами, задачами и агентами через браузер. |
 | CLI freeze | Только `step` и `history`; весь CRUD — через UI. |
-| PostgreSQL | Единый production-стек: systemd UI и CLI используют тот же Postgres через `DATABASE_URL`. |
+| PostgreSQL | Единый runtime: UI и CLI используют тот же Postgres через `DATABASE_URL`. |
 | Автоматические миграции | `docker compose up` сам создаёт схему, таблицы и baseline. |
 
 <a name="stack"></a>
-## 🔧 Core Stack
+## 🔧 Стек
 
-| Zone | Tech | Роль |
+| Зона | Технология | Роль |
 |------|------|------|
 | Runtime | Python 3.11 | основной язык |
-| Data | PostgreSQL | production БД |
+| Данные | PostgreSQL | runtime БД |
 | ORM & migrations | SQLAlchemy 2 + Alembic | модели, репозитории, UoW, миграции |
 | API | FastAPI + Pydantic | UI и JSON API |
 | UI | Jinja2 + minimal JS | server-side HTML, без frontend-фреймворков |
@@ -106,24 +106,12 @@ Fallback evaluator отсутствует: если провайдер недо�
 <a name="ui"></a>
 ## 🌐 Web UI
 
-Web UI работает в двух режимах:
-
-- **systemd-сервис** `project-workflow-ui.service` — production UI на `http://localhost:8811` (Postgres Docker).
-- **Docker Compose** — UI на `http://localhost:8812` (тот же Postgres).
-
-Запуск через Docker Compose:
+Поддерживаемый локальный запуск Web UI выполняется через Docker Compose:
 
 ```bash
 cp .env.example .env
 docker compose up --build -d
-# UI доступен на http://localhost:8812
-```
-
-Переключение systemd UI на Postgres:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl restart project-workflow-ui.service
+# UI доступен на http://127.0.0.1:8812
 ```
 
 Перед первым запуском `scripts/init_db.py` применяет единственную baseline migration
@@ -132,12 +120,16 @@ sudo systemctl restart project-workflow-ui.service
 
 Старые Alembic revision намеренно не поддерживаются. При обнаружении прежней или
 неверсионированной схемы инициализация завершается сообщением
-«Устаревшую базу данных необходимо пересоздать»; автоматические `drop` и `stamp` не выполняются.
+«Несовместимую базу данных необходимо пересоздать»; автоматические `drop` и `stamp` не выполняются.
 Перед запуском новой версии существующую схему или Compose volume нужно явно
 пересоздать по [reset-runbook](docs/database-reset.md). Импорт прежних данных не предусмотрен.
 
 В Compose схема и каталог создаются отдельным сервисом `migrate`; API стартует только
 после его успешного завершения.
+
+Compose публикует PostgreSQL и API только на `127.0.0.1`. Удалённый доступ
+разрешён только через отдельно настроенный защищённый proxy или VPN; прямую
+публикацию портов во внешнюю сеть этот репозиторий не поддерживает.
 
 ### Hermes-профили агентов
 
@@ -179,14 +171,14 @@ flowchart TD
 - Единственный evaluator — обязательный OpenAI-compatible LLM.
 - UI-пакет (`project_workflow/interfaces/ui/`) — чистое FastAPI-приложение с отдельными routes, services, dependencies.
 - Конфигурация централизована в `project_workflow.config` на Pydantic Settings; `DATABASE_URL` обязателен.
-- PostgreSQL хранит каталог, задачи, историю, fingerprints и audit; packaged seed используется только для пустой БД.
+- PostgreSQL хранит один редактируемый каталог, задачи, историю, fingerprints и audit; packaged JSON seed из 19 фаз используется только при bootstrap пустой БД.
 - Граф фаз валидируется целиком до записи: порядок всегда `1..N`, rollback направлен назад, а явные parallel-ссылки соединяют только фазы одного непрерывного parallel-сегмента; isolated parallel допустим.
-- REST принимает числовые phase resource IDs и строгие JSON-типы; `key_prefixes` — только непустой `list[str]`, а reorder инструкций — полный уникальный набор ID одной фазы. Скрытого textarea/string compatibility нет.
+- REST принимает числовые phase resource IDs и строгие JSON-типы; `key_prefixes` — только непустой `list[str]`, а reorder инструкций — полный уникальный набор ID одной фазы. Строковые обходные формы не поддерживаются.
 - Skills являются рекомендациями внутри инструкций фазы; их канонические файлы хранятся в `relevanter/agent-skills`, отдельного runtime registry нет.
 - Hermes profile является уникальной строковой ссылкой на профиль внешнего исполнителя; очистка выполняется только явным `null`. Workflow не копирует конфигурацию или секреты Hermes.
 
 <a name="quality"></a>
-## 🛡️ Quality Bar
+## 🛡️ Проверки качества
 
 | Проверка | Команда | Статус |
 |---|---|---|
@@ -195,10 +187,10 @@ flowchart TD
 | Tests | `pytest -q --timeout=60` | **без падений** |
 | PostgreSQL integration | `pytest -q -m integration tests/test_postgres_integration.py --timeout=120` | **без падений** |
 | Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` | **не ниже 90%** |
-| Systemd UI health | `curl http://localhost:8811/api/tasks` | **200** |
+| Compose readiness | `curl --fail http://127.0.0.1:8812/health` | **200** |
 
 <a name="roadmap"></a>
-## 🗺️ Roadmap
+## 🗺️ Готовность
 
 - [x] Конфигурация на Pydantic Settings (`DATABASE_URL` required)
 - [x] SQLAlchemy-модели, репозитории и unit-of-work
@@ -210,12 +202,12 @@ flowchart TD
 - [x] Postgres-интеграционные тесты
 - [x] `SupervisorEngine` и supervisor-модули собраны в пакет `project_workflow/supervisor/`
 - [x] API-тесты на все UI routes
-- [x] Production hardening: `/health` endpoint, graceful shutdown, PG connection retry
+- [x] Runtime hardening: `/health`, корректное завершение и retry подключения к PostgreSQL
 - [x] Coverage >= 90%
 - [x] mypy `--check-untyped-defs` для supervisor/core.py
 - [x] UI-доработки: execution_type на отдельной строке, русское склонение счётчиков, очистка рабочей БД от мусора
 - [x] Supervisor evaluate: DB-backed history/audit, idempotent replay и явный parallel rendering
-- [x] Актуальный packaged Business Tech catalog загружается один раз в пустую PostgreSQL database
+- [x] Актуальный packaged Business Tech catalog `sdlc-business-tech-v1` из 19 фаз загружается один раз в пустую PostgreSQL database
 - [x] Tech Pull Request contract: Hermes создаёт PR, Maintainer вручную merge, Hermes проверяет SHA и build
 - [x] Seed-managed фазы связаны с именованными Hermes profiles
 - [x] JSON `step` отдаёт полный `phase_contract`, включая `skills`, profile и детали parallel-участников
@@ -231,10 +223,12 @@ source .venv/bin/activate
 pip install -e ".[dev,ui]"
 ```
 
-GitHub используется только как хостинг самого `project-workflow`. Управляемый
-demo SDLC работает с Jira и self-managed GitLab.
+`project-workflow` — самостоятельная внутренняя delivery-утилита, а не product
+runtime Relevanter. Актуальный packaged-каталог описывает работу через
+Relevanter Business и Relevanter Tech; внешние интеграции остаются во владении
+соответствующих исполнителей.
 
-## License
+## Лицензия
 
 MIT
 

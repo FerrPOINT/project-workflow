@@ -20,9 +20,6 @@ class WorkflowRepository(ABC):
     def get_by_id(self, workflow_id: int) -> Workflow | None: ...
 
     @abstractmethod
-    def get_by_name(self, name: str) -> Workflow | None: ...
-
-    @abstractmethod
     def get_default(self) -> Workflow | None: ...
 
     @abstractmethod

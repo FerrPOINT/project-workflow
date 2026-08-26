@@ -145,6 +145,7 @@ def setup_db():
         uow.tasks.create(
             {
                 "project_id": default_project_id,
+                "workflow_id": default_workflow.id,
                 "task_key": "RUN-247",
                 "title": "Добавить E2E тесты для workflow",
                 "status": "active",
@@ -188,6 +189,7 @@ def setup_db():
         uow.tasks.create(
             {
                 "project_id": project_id,
+                "workflow_id": default_workflow.id,
                 "task_key": "UITEST-401",
                 "title": "Проверка project-aware UI",
                 "status": "active",
@@ -288,22 +290,6 @@ class TestPhasesPage:
         assert "phases" in data
         assert len(data["phases"]) > 0
 
-    def test_phases_page_hides_legacy_blocker_badge_and_removed_setup_phases(self):
-        response = client.get("/phases")
-        assert response.status_code == 200
-        assert "🔴 blocker" not in response.text
-        assert ".gitignore Check" not in response.text
-        assert "Token Verification" not in response.text
-        assert "Jira Init" not in response.text
-
-    def test_phases_api_excludes_removed_setup_phases(self):
-        response = client.get("/api/phases")
-        assert response.status_code == 200
-        codes = {phase["code"] for phase in response.json()["phases"]}
-        assert "0.01a" not in codes
-        assert "0.01b" not in codes
-        assert "0" not in codes
-
     def test_sidebar_has_projects_link(self):
         response = client.get("/phases")
         assert response.status_code == 200
@@ -325,17 +311,6 @@ class TestPhasesPage:
 
         hrefs = re.findall(r'href="([^"]+)"', sidebar_nav.group(1))
         assert hrefs[:5] == ["/", "/workflows", "/phases", "/tasks", "/projects"]
-
-    def test_sidebar_has_no_legacy_skills_catalog(self):
-        response = client.get("/phases")
-        assert response.status_code == 200
-
-        sidebar_nav = re.search(r'<nav class="sidebar-nav">(.*?)</nav>', response.text, re.S)
-        assert sidebar_nav is not None
-
-        hrefs = re.findall(r'href="([^"]+)"', sidebar_nav.group(1))
-        assert hrefs[-2:] == ["/agents", "/settings"]
-        assert "/skills" not in hrefs
 
     def test_phases_page_has_workflow_nav_like_projects(self):
         response = client.get("/phases")
@@ -464,7 +439,7 @@ class TestPhasesPage:
         assert nav_match is not None
         assert int(nav_match.group(1)) == workflow["id"]
 
-    def test_phases_page_links_phase_detail_by_db_id_not_legacy_code(self):
+    def test_phases_page_links_phase_detail_by_numeric_resource_id(self):
         response = client.get("/phases")
         assert response.status_code == 200
 
@@ -568,7 +543,7 @@ class TestPhasesPage:
             uow.workflows.delete(workflow_id)
             uow.commit()
 
-    def test_phases_page_reorder_payload_uses_db_id_not_legacy_code(self):
+    def test_phases_page_reorder_payload_uses_numeric_resource_id(self):
         response = client.get("/phases")
         assert response.status_code == 200
 
@@ -679,7 +654,7 @@ class TestPhasesPage:
 
         phase_html = response.text.split(_phase_href("10.REVIEW"), 1)[1].split("</a>", 1)[0]
 
-        assert "Code review" in phase_html
+        assert "Проверка кода" in phase_html
         assert "badge-parallel" in phase_html
         assert ">параллельно<" in phase_html
 
@@ -789,7 +764,7 @@ class TestPhaseDetail:
         response = client.get("/phase/0.7")
         assert response.status_code == 422
 
-    def test_phase_detail_save_uses_db_id_not_legacy_code(self):
+    def test_phase_detail_save_uses_numeric_resource_id(self):
         response = client.get(_phase_detail_path("4.START"))
         assert response.status_code == 200
 
@@ -1214,7 +1189,7 @@ class TestTaskDetail:
         uow.commit()
         response = client.get("/task/RUN-247")
         assert response.status_code == 200
-        assert "Intake" in response.text
+        assert "Приём задачи" in response.text
         progress_match = re.search(r"(\d+)\s*/\s*(\d+)", response.text)
         assert progress_match is not None
         current, total = map(int, progress_match.groups())
@@ -1230,6 +1205,7 @@ class TestTaskDetail:
             task_id = uow.tasks.create(
                 {
                     "project_id": default_project_id,
+                    "workflow_id": _workflow_row(is_default=True)["id"],
                     "task_key": task_key,
                     "title": "Проверка истории фаз",
                     "status": "active",
@@ -1246,7 +1222,7 @@ class TestTaskDetail:
 
         response = client.get(f"/task/{task_key}")
         assert response.status_code == 200
-        assert "Intake" in response.text
+        assert "Приём задачи" in response.text
 
     def test_task_detail_has_phase_history(self):
         response = client.get("/task/RUN-247")
@@ -1263,7 +1239,7 @@ class TestTaskDetail:
         response = client.get("/api/tasks")
         assert response.status_code == 200
         task = next(task for task in response.json()["tasks"] if task["task_key"] == "UITEST-401")
-        assert task["current_phase_name"] == "Intake"
+        assert task["current_phase_name"] == "Приём задачи"
 
     def test_task_detail_marks_text_phase_code_as_current(self):
         uow = ui_app_state.get_db()
@@ -1274,6 +1250,7 @@ class TestTaskDetail:
             task_id = uow.tasks.create(
                 {
                     "project_id": project_id,
+                    "workflow_id": _workflow_row(is_default=True)["id"],
                     "task_key": task_key,
                     "title": "Проверка текстового кода фазы",
                     "status": "active",
@@ -1563,51 +1540,6 @@ class TestAgentsPage:
         agents = client.get("/api/agents").json()["agents"]
         architect = next(agent for agent in agents if agent["id"] == payload["agent_id"])
         assert architect["description"] == "Проектирует и уточняет контракты"
-
-
-class TestSkillsCatalogRemoved:
-    def test_legacy_skills_catalog_routes_are_removed(self):
-        assert client.get("/api/skills").status_code == 404
-        assert client.get("/skills").status_code == 404
-
-
-class TestGroupsRemoved:
-    def test_sidebar_has_no_groups_link(self):
-        response = client.get("/phases")
-        assert response.status_code == 200
-        assert 'href="/groups"' not in response.text
-        assert ">Группы<" not in response.text
-
-    def test_groups_page_and_api_are_removed(self):
-        page = client.get("/groups")
-        assert page.status_code == 404
-
-        listing = client.get("/api/groups")
-        assert listing.status_code == 404
-
-    def test_phase_detail_hides_group_selector_and_group_assignment_api(self):
-        phase_id = _phase_id("4.START")
-        response = client.get(f"/phase/{phase_id}")
-        assert response.status_code == 200
-        assert 'id="groupSelect"' not in response.text
-        assert "Группа:" not in response.text
-
-        assign = client.put(f"/api/phases/{phase_id}/group", json={"group_id": "legacy"})
-        assert assign.status_code == 404
-
-
-class TestLegacyApiRemoved:
-    def test_parallel_api_removed(self):
-        response = client.put(
-            "/api/phases/parallel",
-            json={"groups": [["-1", "0.0a"]], "clear": ["1"]},
-        )
-        assert response.status_code == 404
-
-    def test_task_detail_json_api_removed(self):
-        response = client.get("/api/tasks/UITEST-402")
-        assert response.status_code == 405
-        assert response.json() == {"ok": False, "error": "Метод не поддерживается"}
 
 
 class TestSettingsPage:

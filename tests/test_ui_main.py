@@ -13,7 +13,7 @@ def test_main_defaults():
         with patch("sys.argv", ["ui"]):
             ui_main.main()
     args = mock_uvicorn.run.call_args.kwargs
-    assert args["host"] == "0.0.0.0"
+    assert args["host"] == "127.0.0.1"
     assert args["port"] == 8811
     assert args["log_level"] == "info"
 

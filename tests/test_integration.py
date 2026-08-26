@@ -77,7 +77,7 @@ class TestEndToEndWorkflow:
         assert created[0]["id"] is not None
 
     def test_phase_with_agent(self, tmp_path: Path):
-        """Фаза с agent_id без legacy group_id."""
+        """Фаза сохраняет назначенного агента."""
         db_path = tmp_path / "test5.db"
         uow = SAUnitOfWork(f"sqlite:///{db_path}")
         prepare_sqlite_uow(uow)

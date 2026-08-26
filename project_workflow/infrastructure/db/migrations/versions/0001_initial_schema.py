@@ -17,7 +17,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    """Create the current schema without historical compatibility objects."""
+    """Create the current application schema."""
     op.create_table(
         "agents",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
@@ -34,14 +34,7 @@ def upgrade() -> None:
         sa.Column("name", sa.String(), nullable=False),
         sa.Column("description", sa.String(), server_default="", nullable=False),
         sa.Column("is_default", sa.Integer(), server_default="0", nullable=False),
-        sa.Column("is_locked", sa.Integer(), server_default="0", nullable=False),
-        sa.Column("catalog_sha256", sa.String(length=64), nullable=True),
         sa.CheckConstraint("is_default IN (0, 1)", name="ck_workflows_is_default"),
-        sa.CheckConstraint("is_locked IN (0, 1)", name="ck_workflows_is_locked"),
-        sa.CheckConstraint(
-            "catalog_sha256 IS NULL OR length(catalog_sha256) = 64",
-            name="ck_workflows_catalog_sha256",
-        ),
         sa.PrimaryKeyConstraint("id"),
     )
 
@@ -127,6 +120,7 @@ def upgrade() -> None:
         "tasks",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("project_id", sa.Integer(), nullable=False),
+        sa.Column("workflow_id", sa.Integer(), nullable=False),
         sa.Column("task_key", sa.String(), nullable=False),
         sa.Column("title", sa.String(), nullable=True),
         sa.Column("description", sa.Text(), nullable=True),
@@ -137,6 +131,7 @@ def upgrade() -> None:
         sa.CheckConstraint("length(trim(current_phase)) > 0", name="ck_tasks_current_phase_nonblank"),
         sa.CheckConstraint("status IN ('active', 'done', 'blocked')", name="ck_tasks_status"),
         sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["workflow_id"], ["workflows.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("task_key"),
     )

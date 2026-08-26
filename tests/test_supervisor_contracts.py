@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from project_workflow.infrastructure.llm import PromptBuilder
 from project_workflow.supervisor.contracts import (
     PhaseContractBuilder,
     phase_to_dict,
@@ -9,6 +10,7 @@ from project_workflow.supervisor.contracts import (
     text_from_evidence,
     text_from_instruction,
 )
+from project_workflow.supervisor.evaluate import _contract_fingerprint
 from project_workflow.supervisor.models import (
     Phase,
     PhaseCheck,
@@ -180,6 +182,44 @@ def test_get_next_phase():
     assert cb.get_next_phase("p1") == ("p2", "P2")
     assert cb.get_next_phase("p4") == (None, None)
     assert cb.get_next_phase("px") == (None, None)
+
+
+def test_next_phase_follows_parallel_components_instead_of_physical_last_member():
+    phases = [
+        Phase(code="a", name="A", execution_type="parallel", parallel_with="c"),
+        Phase(code="b", name="B", execution_type="parallel"),
+        Phase(code="c", name="C", execution_type="parallel"),
+        Phase(code="done", name="Done"),
+    ]
+    builder = PhaseContractBuilder(phases)
+    linked_group = builder.get_parallel_group(phases[0])
+
+    assert [phase.code for phase in linked_group] == ["a", "c"]
+    assert builder._next_after_group(linked_group) == ("b", "B")
+    assert builder.get_next_phase("b") == ("done", "Done")
+    assert builder.get_next_phase("c") == ("b", "B")
+
+
+def test_contract_fingerprint_changes_with_evaluator_prompt_version(monkeypatch):
+    phase = Phase(id=1, code="phase", name="Phase")
+    builder = PhaseContractBuilder([phase])
+    contract = builder.build(phase)
+
+    def fingerprint() -> str:
+        return _contract_fingerprint(
+            builder=builder,
+            phase=phase,
+            group=[phase],
+            contract=contract,
+            evaluation_items=[],
+            previously_covered_ids=set(),
+            transition_routes={},
+        )
+
+    before = fingerprint()
+    monkeypatch.setattr(PromptBuilder, "PROMPT_VERSION", "supervisor-evaluator-next")
+
+    assert fingerprint() != before
 
 
 def test_build_next_contract():

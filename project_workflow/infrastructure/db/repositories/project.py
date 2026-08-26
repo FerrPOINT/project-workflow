@@ -16,6 +16,12 @@ from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.repositories.converters import _row_to_project
 
 
+def _serialize_key_prefixes(raw: Any) -> str:
+    if not isinstance(raw, list) or not raw or any(not isinstance(prefix, str) for prefix in raw):
+        raise TypeError("key_prefixes должен быть непустым массивом строк")
+    return json.dumps(raw, ensure_ascii=False)
+
+
 class SAProjectRepository(ProjectRepository):
     """SQLAlchemy implementation of ProjectRepository."""
 
@@ -53,13 +59,12 @@ class SAProjectRepository(ProjectRepository):
             )
 
     def create(self, data: dict[str, Any]) -> int:
-        prefixes = data.get("key_prefixes", [])
         item = m.Project(
             workflow_id=data["workflow_id"],
             code=data["code"],
             name=data["name"],
             description=data.get("description", ""),
-            key_prefixes=json.dumps([str(p) for p in prefixes], ensure_ascii=False),
+            key_prefixes=_serialize_key_prefixes(data.get("key_prefixes")),
         )
         self._session.add(item)
         self._session.flush()
@@ -78,8 +83,7 @@ class SAProjectRepository(ProjectRepository):
         if "description" in data:
             row.description = data["description"]
         if "key_prefixes" in data:
-            prefixes = data["key_prefixes"]
-            row.key_prefixes = json.dumps([str(p) for p in prefixes], ensure_ascii=False)
+            row.key_prefixes = _serialize_key_prefixes(data["key_prefixes"])
 
     def delete(self, project_id: int) -> None:
         row = self._session.get(m.Project, project_id)

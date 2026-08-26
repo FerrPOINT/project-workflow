@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -11,6 +12,7 @@ from project_workflow.infrastructure.db.repositories.converters import (
     _row_to_supervisor_run,
     _row_to_task,
 )
+from project_workflow.infrastructure.db.repositories.project import SAProjectRepository
 
 
 def _row(**kwargs):
@@ -46,10 +48,11 @@ def test_row_to_project_non_string_key_prefixes():
         _row_to_project(row)
 
 
-def test_row_to_task_missing_project_workflow():
+def test_row_to_task_missing_workflow_fails_closed():
     row = _row(
         id=1,
         project_id=2,
+        workflow_id=3,
         task_key="T-1",
         title="t",
         description="d",
@@ -57,10 +60,42 @@ def test_row_to_task_missing_project_workflow():
         status="active",
         created_at=None,
         updated_at=None,
-        project=None,
+        workflow=None,
+    )
+    with pytest.raises(ValueError, match="не найден связанный воркфлоу"):
+        _row_to_task(row)
+
+
+def test_row_to_task_unknown_phase_preserves_code_for_fail_closed_diagnostic():
+    row = _row(
+        id=1,
+        project_id=2,
+        workflow_id=3,
+        task_key="T-1",
+        title="t",
+        description="d",
+        current_phase="missing",
+        status="active",
+        created_at=None,
+        updated_at=None,
+        workflow=SimpleNamespace(phases=[SimpleNamespace(code="1.INTAKE", name="Входящий запрос")]),
     )
     task = _row_to_task(row)
-    assert task.current_phase_name == "1.INTAKE"
+    assert task.current_phase_name == "missing"
+
+
+@pytest.mark.parametrize("prefixes", [None, [], "RUN", ["RUN", 1]])
+def test_project_repository_rejects_non_string_prefix_collections(prefixes):
+    repository = SAProjectRepository(MagicMock())
+    with pytest.raises(TypeError, match="непустым массивом строк"):
+        repository.create(
+            {
+                "workflow_id": 1,
+                "code": "RUN",
+                "name": "RUN",
+                "key_prefixes": prefixes,
+            }
+        )
 
 
 def test_row_to_supervisor_run_bad_json_fields():

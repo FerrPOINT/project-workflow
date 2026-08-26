@@ -1,6 +1,6 @@
 # AGENTS.md
 
-## Repo rules
+## Правила репозитория
 
 1. После завершения задачи нельзя оставлять готовую работу в незакоммиченном состоянии.
    - Сначала прогнать релевантные проверки.
@@ -11,77 +11,82 @@
 
 3. Merge и deploy запрещены без явной команды пользователя.
 
-## Verification ritual
+## Обязательные проверки
 
-After any change to the SQLAlchemy layer, application services, UI state, or supervisor engine, run the following checks before committing:
+После любого изменения SQLAlchemy-слоя, application services, состояния UI или
+Supervisor Engine перед commit выполнить следующие проверки:
 
 1. **Tests**
    ```bash
    pytest -q --timeout=60
    ```
-   Expected: 0 failed and 0 errors. PostgreSQL integration tests are intentionally
-   deselected here; run them separately as described below.
+   Ожидается 0 падений и 0 ошибок. PostgreSQL integration tests здесь намеренно
+   исключены и запускаются отдельно.
 
 2. **PostgreSQL integration**
    ```bash
    pytest -q -m integration tests/test_postgres_integration.py --timeout=60
    ```
-   Expected: 0 failed and 0 errors. This includes the real CLI
-   subprocess -> PostgreSQL -> OpenAI-compatible HTTP workflow path. The two
-   multi-subprocess E2E tests have an explicit 240-second per-test marker.
+   Ожидается 0 падений и 0 ошибок. Набор включает реальный путь CLI subprocess →
+   PostgreSQL → тестовый OpenAI-compatible HTTP endpoint. Два multi-process E2E
+   теста имеют собственный timeout 240 секунд.
 
 3. **Coverage**
    ```bash
    pytest --cov=project_workflow --cov-report=term --timeout=60
    ```
-   Expected: total coverage >= 90%.
+   Ожидается общее покрытие не ниже 90%.
 
 4. **Lint**
    ```bash
    ruff check .
    ```
-   Expected: `All checks passed!`
+   Ожидается `All checks passed!`.
 
 5. **Type check**
    ```bash
    mypy project_workflow scripts
    ```
-   Expected: `Success: no issues found`.
+   Ожидается `Success: no issues found`.
 
-6. **UI service health**
+6. **Readiness локального Compose**
    ```bash
-   systemctl restart project-workflow-ui.service
-   curl -s -o /dev/null -w "%{http_code}" http://localhost:8811/api/tasks
+   docker compose up --build -d
+   curl --fail http://127.0.0.1:8812/health
    ```
-   Expected: `200`.
+   Ожидается HTTP `200` и `database=ok`, `schema=ok`.
 
-7. **Browser check** for UI changes
-   - Open `http://localhost:8811/` and `http://localhost:8811/phases`.
-   - Capture a screenshot.
+7. **Браузерная проверка** для изменений UI
+   - Открыть `http://127.0.0.1:8812/` и `http://127.0.0.1:8812/phases`.
+   - Сохранить скриншот.
 
-## Notes
+## Примечания
 
-- Use `pytest -q --timeout=60` for the standard full suite. `--forked` is no longer required for stability; coverage reports are inaccurate under `--forked`.
-- `DATABASE_URL` is required in runtime. SQLite is used only by isolated tests.
-- `project-workflow` stores only skill names; canonical skill files live in
-  `https://gt.wmtgroup.ru/relevanter/agent-skills` and are loaded by the executor.
-- `project-workflow` stores only the unique Hermes profile name bound to an
-  agent. The profile itself remains owned by Hermes and is selected by the
-  executor with `hermes --profile <profile> --oneshot <prompt>`.
-- The repeatable CLI workflow acceptance process is documented in `LIVE_TEST_PLAN.md`.
+- Для стандартного полного набора использовать `pytest -q --timeout=60`.
+  `--forked` не требуется; при нём отчёт coverage некорректен.
+- `DATABASE_URL` обязателен в runtime. SQLite используется только в изолированных тестах.
+- `project-workflow` хранит только имена skills. Канонические файлы находятся в
+  `https://gt.wmtgroup.ru/relevanter/agent-skills` и загружаются исполнителем.
+- `project-workflow` хранит только уникальное имя Hermes-профиля, назначенного
+  агенту. Профилем владеет Hermes; исполнитель выбирает его командой
+  `hermes --profile <profile> --oneshot <prompt>`.
+- Воспроизводимый CLI acceptance описан в `LIVE_TEST_PLAN.md`.
 
-## Production-readiness — what we deliberately skip
+## Осознанно исключённые возможности
 
-This project is an internal lightweight agent utility, not a customer-facing production service. The following items were evaluated and explicitly rejected for this repo:
+Это внутренняя лёгкая агентская утилита, а не клиентский production-сервис.
+Следующие возможности оценены и исключены из текущего scope:
 
-| Item | Decision | Rationale |
+| Возможность | Решение | Причина |
 |---|---|---|
-| CI/CD pipeline (GitLab/GitHub) | **Skip** | Repo is maintained manually; verification ritual above is sufficient. |
-| Security middleware (CORS, CSP, HTTPS redirect, rate limits) | **Skip** | UI runs on a private host / VPN; no external exposure. |
-| Hardcoded local credentials in `docker-compose.yml` | **Accept for dev only** | Compose stack is for local development; production uses env-provided `DATABASE_URL`. |
-| Observability / metrics / structured JSON logs | **Skip** | Request logging middleware and `/health` endpoint provide enough visibility for an internal tool. |
-| Input validation / sanitization hardening audit | **Skip** | API uses Pydantic schemas and SQLAlchemy ORM; raw SQL is limited to migration/admin scripts. |
-| Graceful connection draining beyond lifespan dispose | **Skip** | Internal tool tolerance for brief connection drops is acceptable. |
-| Bandit/safety/pre-commit hooks | **Skip** | `ruff` + `mypy` + `pytest` coverage gate is the agreed quality bar. |
+| CI/CD pipeline (GitLab/GitHub) | **Не добавлять** | Репозиторий обслуживается вручную; обязательных локальных проверок достаточно. |
+| Security middleware (CORS, CSP, HTTPS redirect, rate limits) | **Не добавлять** | UI доступен только на loopback либо в защищённом private/VPN-контуре. |
+| Локальные credentials в `docker-compose.yml` | **Допустимо только локально** | Compose публикуется только на loopback; внешний runtime обязан передавать собственный `DATABASE_URL`. |
+| Observability / metrics / structured JSON logs | **Не добавлять** | Request logging и `/health` достаточны для внутренней утилиты. |
+| Дополнительный слой sanitization | **Не добавлять** | API использует строгие Pydantic-схемы, SQLAlchemy ORM и параметризованный SQL. |
+| Connection draining сверх lifespan dispose | **Не добавлять** | Для внутренней утилиты допустим краткий разрыв соединения при перезапуске. |
+| Bandit/safety/pre-commit hooks | **Не добавлять** | Принятый quality bar: `ruff`, `mypy`, `pytest` и coverage. |
 
-If any of these assumptions change (e.g. external exposure, multi-user access, customer data), revisit this section before expanding scope.
+Если изменятся исходные условия, например появятся внешний доступ,
+многопользовательский режим или клиентские данные, этот раздел нужно пересмотреть
+до расширения scope.

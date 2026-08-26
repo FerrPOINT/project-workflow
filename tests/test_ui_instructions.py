@@ -275,8 +275,3 @@ class TestInstructionsPage:
     def test_instructions_page_404_for_missing_phase(self):
         response = client.get("/instructions?phase_id=9999999")
         assert response.status_code == 404
-
-    def test_instructions_page_removed_legacy_path(self):
-        phase_id = _seed_phase_id()
-        response = client.get(f"/phase/{phase_id}/instructions")
-        assert response.status_code == 404

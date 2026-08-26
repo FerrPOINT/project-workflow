@@ -31,10 +31,6 @@ class SAWorkflowRepository(WorkflowRepository):
             return None
         return _row_to_workflow(row)
 
-    def get_by_name(self, name: str) -> Workflow | None:
-        row = self._session.execute(select(m.Workflow).where(m.Workflow.name == name)).scalar_one_or_none()
-        return _row_to_workflow(row) if row else None
-
     def get_default(self) -> Workflow | None:
         row = self._session.execute(select(m.Workflow).where(m.Workflow.is_default == 1)).scalar_one_or_none()
         return _row_to_workflow(row) if row else None
@@ -50,10 +46,6 @@ class SAWorkflowRepository(WorkflowRepository):
             name=data["name"],
             description=data.get("description", ""),
             is_default=1 if data.get("is_default") else 0,
-            # Catalog locking is an administrative migration concern.  Public
-            # create/update paths cannot manufacture a locked revision.
-            is_locked=0,
-            catalog_sha256=None,
         )
         self._session.add(item)
         self._session.flush()

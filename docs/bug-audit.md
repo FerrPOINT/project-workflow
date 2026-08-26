@@ -1,7 +1,7 @@
 # Реестр post-merge аудита багов
 
 Реестр фиксирует только дефекты существующего `project-workflow`. Новые
-продуктовые возможности, compatibility-слои и дополнительные runtime-компоненты
+продуктовые возможности, слои совместимости и дополнительные runtime-компоненты
 в этот аудит не входят.
 
 ## Подтверждённые дефекты
@@ -38,12 +38,20 @@
 | BUG-028 | Runtime / конфигурация | `_AppState` повторно разбирал `DATABASE_URL` до канонического DB factory, поэтому некорректный DSN в UI/API/CLI path обходил безопасный `DatabaseUnavailable` и выбрасывал сырой `sqlalchemy.ArgumentError`. | Парсинг и нормализация SQLite path принадлежат `get_engine()`; regression проверяет безопасную ошибку без secret-marker и абсолютный canonical SQLite path. | Исправлено |
 | BUG-029 | Readiness | Request middleware создавал UoW раньше `/health`, поэтому при недоступной БД readiness handler не выполнялся и сервер отвечал общим `500` вместо безопасного `503`. Существующий тест подменял только внутренний вызов handler и не моделировал отказ middleware. | Middleware не создаёт request UoW для `/health`; regression одновременно запрещает создание UoW и проверяет безопасный `503 database-unavailable`. | Исправлено |
 | BUG-030 | Web UI / ошибки | Обработка удаления задачи показывала ошибку только при сетевом сбое, а любой HTTP `404/409` молча перезагружал страницу. Регрессионный тест BUG-008 проверял только тело `.catch()` и не замечал reload в ветке обработанного ответа. | Ответ со статусом, отличным от `204`, разбирается безопасно и показывает русскую ошибку API без reload; регрессионный тест запрещает reload во всей функции и проверяет ветку HTTP-ошибки. | Исправлено |
+| BUG-031 | Supervisor / parallel routing | При чередовании связанных и изолированных parallel-фаз переход вычислялся по физически последней фазе группы и мог пропустить следующую каноническую execution-группу. | Регрессии проверяют переходы для связанной группы и изолированной parallel-фазы через единое доменное разбиение. | Исправлено |
+| BUG-032 | CLI / strict input | Явный `--report ""` или отчёт из пробелов интерпретировался как отсутствие параметра и показывал инструкции вместо контролируемого отказа. | CLI regressions требуют `BLOCKED`, exit code `1` и отсутствие создания DB engine для пустого отчёта. | Исправлено |
+| BUG-033 | Domain / diagnostics | Regex для ключа, состоящего только из цифр, содержал лишнее экранирование и не выдавал предназначенную диагностическую причину. | Regression проверяет точное русское сообщение для ключа `123`. | Исправлено |
+| BUG-034 | Supervisor / replay | Версия evaluator prompt не входила в contract fingerprint, поэтому успешный run мог replay-иться после изменения правил проверки без повторного вызова provider. | Unit и end-to-end regressions меняют `PROMPT_VERSION` и требуют новый fingerprint и повторную оценку. | Исправлено |
+| BUG-035 | Runtime / безопасность | Локальный UI по умолчанию слушал `0.0.0.0`, хотя приложение не содержит встроенной аутентификации. | Конфигурационный regression требует `127.0.0.1`; Compose сохраняет `0.0.0.0` только внутри контейнера и публикует порт на loopback. | Исправлено |
+| BUG-036 | Supervisor / prompt | Assignment prompt содержал пример `RUN-42` вместо ключа текущей задачи и мог направить исполнителя к чужому идентификатору. | Context и prompt regressions проверяют текущий `task_key` и отсутствие захардкоженного примера. | Исправлено |
+| BUG-037 | Persistence / strict contract | Project repository превращал произвольные `key_prefixes` в строки, а task converter скрывал отсутствующую workflow-связь. Внутренний caller мог обойти строгий REST-контракт или получить правдоподобный DTO из повреждённых данных. | Repository и converter regressions требуют непустой `list[str]` и fail-closed при отсутствии workflow; неизвестный phase code сохраняется только для штатного missing-phase diagnostic. | Исправлено |
+| BUG-038 | Cleanup / документация | В репозитории оставались Alembic revision template, тесты давно удалённых routes и setup-фаз, а README/live plan описывали отсутствующий systemd service и прежние Jira/GitLab contracts. | Caller scan подтверждает отсутствие template consumers; документация описывает фактический Compose и Relevanter Business/Tech, stale route tests удалены. | Исправлено |
 
 ## Следующие проверки
 
 - [x] Readiness/bootstrap повторно проверены на лишних и отсутствующих таблицах,
   неверной revision и ошибке seed до первой записи; SQLite-набор и PostgreSQL
   initial migration проходят полностью.
-- [x] Caller/legacy sweep подтверждает, что новые `TaskRepository.lock()` и
-  `PhaseRepository.workflow_ids_for_agent()` имеют ровно по одному production-consumer,
-  а production `create_all` ограничен явным SQLite test helper `ensure_schema()`.
+- [x] Caller-sweep подтверждает production-consumers для `TaskRepository.lock()` и
+  `PhaseRepository.workflow_ids_for_agent()`; удалённые test-only методы не имеют
+  runtime-вызовов, а `create_all` ограничен явным SQLite test helper `ensure_schema()`.

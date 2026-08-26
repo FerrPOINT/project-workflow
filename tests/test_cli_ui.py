@@ -149,6 +149,17 @@ class TestStepCommand:
         assert result.exit_code == 1
         assert json.loads(result.output)["verdict"] == "BLOCKED"
 
+    @pytest.mark.parametrize("report", ["", "   "])
+    @patch("project_workflow.supervisor.SupervisorEngine")
+    def test_step_rejects_explicit_blank_report_without_creating_task(self, mock_engine_cls, report):
+        runner = CliRunner()
+
+        result = runner.invoke(cli, ["--json", "step", "--task", "RUN-404", "--report", report])
+
+        assert result.exit_code == 1
+        assert json.loads(result.output)["message"] == "Отчёт не может быть пустым"
+        mock_engine_cls.assert_not_called()
+
     @patch("project_workflow.supervisor.SupervisorEngine")
     def test_step_prompt_json_mode(self, mock_engine_cls):
         mock_engine = mock_engine_cls.return_value

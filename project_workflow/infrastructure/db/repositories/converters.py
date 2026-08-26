@@ -46,8 +46,6 @@ def _row_to_workflow(row: m.Workflow) -> Workflow:
         name=row.name,
         description=row.description or "",
         is_default=bool(row.is_default),
-        is_locked=bool(row.is_locked),
-        catalog_sha256=row.catalog_sha256,
     )
 
 
@@ -67,23 +65,17 @@ def _row_to_project(row: m.Project) -> Project:
         code=row.code,
         name=row.name,
         description=row.description,
-        key_prefixes=[str(p) for p in prefixes],
+        key_prefixes=list(prefixes),
         workflow_name=row.workflow.name if row.workflow else None,
     )
 
 
 def _row_to_task(row: m.Task) -> Task:
     current_phase = row.current_phase
-    phase_name = None
-    try:
-        if current_phase:
-            phase = next(
-                (p for p in row.workflow.phases if p.code == current_phase),
-                None,
-            )
-            phase_name = phase.name if phase else current_phase
-    except (AttributeError, TypeError):
-        phase_name = current_phase
+    workflow = row.workflow
+    if workflow is None:
+        raise ValueError(f"Для задачи {row.task_key!r} не найден связанный воркфлоу")
+    phase = next((item for item in workflow.phases if item.code == current_phase), None)
     return Task(
         id=getattr(row, "id", None),
         project_id=row.project_id,
@@ -92,7 +84,7 @@ def _row_to_task(row: m.Task) -> Task:
         title=row.title or "",
         description=row.description or "",
         current_phase=current_phase,
-        current_phase_name=phase_name or "",
+        current_phase_name=phase.name if phase is not None else current_phase,
         status=row.status or "active",
         created_at=_iso(row.created_at),
         updated_at=_iso(row.updated_at),
