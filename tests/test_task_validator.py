@@ -51,6 +51,11 @@ class TestTaskKeyValidator:
         with pytest.raises(ValueError, match="массивом строк"):
             TaskKeyValidator.from_projects([{"code": "project", "key_prefixes": raw_prefixes}])
 
+    @pytest.mark.parametrize("project_code", [None, "", "   ", 7])
+    def test_rejects_noncanonical_project_codes(self, project_code):
+        with pytest.raises(ValueError, match="code проекта должен быть непустой строкой"):
+            TaskKeyValidator.from_projects([{"code": project_code, "key_prefixes": ["RUN"]}])
+
     def test_validated_key_string_uses_normalized_value(self):
         value = ValidatedTaskKey(raw="raw", is_valid=True, normalized="RUN-1")
         assert str(value) == "RUN-1"

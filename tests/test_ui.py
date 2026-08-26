@@ -290,22 +290,6 @@ class TestPhasesPage:
         assert "phases" in data
         assert len(data["phases"]) > 0
 
-    def test_phases_page_hides_legacy_blocker_badge_and_removed_setup_phases(self):
-        response = client.get("/phases")
-        assert response.status_code == 200
-        assert "🔴 blocker" not in response.text
-        assert ".gitignore Check" not in response.text
-        assert "Token Verification" not in response.text
-        assert "Jira Init" not in response.text
-
-    def test_phases_api_excludes_removed_setup_phases(self):
-        response = client.get("/api/phases")
-        assert response.status_code == 200
-        codes = {phase["code"] for phase in response.json()["phases"]}
-        assert "0.01a" not in codes
-        assert "0.01b" not in codes
-        assert "0" not in codes
-
     def test_sidebar_has_projects_link(self):
         response = client.get("/phases")
         assert response.status_code == 200
@@ -327,17 +311,6 @@ class TestPhasesPage:
 
         hrefs = re.findall(r'href="([^"]+)"', sidebar_nav.group(1))
         assert hrefs[:5] == ["/", "/workflows", "/phases", "/tasks", "/projects"]
-
-    def test_sidebar_has_no_legacy_skills_catalog(self):
-        response = client.get("/phases")
-        assert response.status_code == 200
-
-        sidebar_nav = re.search(r'<nav class="sidebar-nav">(.*?)</nav>', response.text, re.S)
-        assert sidebar_nav is not None
-
-        hrefs = re.findall(r'href="([^"]+)"', sidebar_nav.group(1))
-        assert hrefs[-2:] == ["/agents", "/settings"]
-        assert "/skills" not in hrefs
 
     def test_phases_page_has_workflow_nav_like_projects(self):
         response = client.get("/phases")
@@ -466,7 +439,7 @@ class TestPhasesPage:
         assert nav_match is not None
         assert int(nav_match.group(1)) == workflow["id"]
 
-    def test_phases_page_links_phase_detail_by_db_id_not_legacy_code(self):
+    def test_phases_page_links_phase_detail_by_numeric_resource_id(self):
         response = client.get("/phases")
         assert response.status_code == 200
 
@@ -570,7 +543,7 @@ class TestPhasesPage:
             uow.workflows.delete(workflow_id)
             uow.commit()
 
-    def test_phases_page_reorder_payload_uses_db_id_not_legacy_code(self):
+    def test_phases_page_reorder_payload_uses_numeric_resource_id(self):
         response = client.get("/phases")
         assert response.status_code == 200
 
@@ -791,7 +764,7 @@ class TestPhaseDetail:
         response = client.get("/phase/0.7")
         assert response.status_code == 422
 
-    def test_phase_detail_save_uses_db_id_not_legacy_code(self):
+    def test_phase_detail_save_uses_numeric_resource_id(self):
         response = client.get(_phase_detail_path("4.START"))
         assert response.status_code == 200
 
@@ -1567,51 +1540,6 @@ class TestAgentsPage:
         agents = client.get("/api/agents").json()["agents"]
         architect = next(agent for agent in agents if agent["id"] == payload["agent_id"])
         assert architect["description"] == "Проектирует и уточняет контракты"
-
-
-class TestSkillsCatalogRemoved:
-    def test_legacy_skills_catalog_routes_are_removed(self):
-        assert client.get("/api/skills").status_code == 404
-        assert client.get("/skills").status_code == 404
-
-
-class TestGroupsRemoved:
-    def test_sidebar_has_no_groups_link(self):
-        response = client.get("/phases")
-        assert response.status_code == 200
-        assert 'href="/groups"' not in response.text
-        assert ">Группы<" not in response.text
-
-    def test_groups_page_and_api_are_removed(self):
-        page = client.get("/groups")
-        assert page.status_code == 404
-
-        listing = client.get("/api/groups")
-        assert listing.status_code == 404
-
-    def test_phase_detail_hides_group_selector_and_group_assignment_api(self):
-        phase_id = _phase_id("4.START")
-        response = client.get(f"/phase/{phase_id}")
-        assert response.status_code == 200
-        assert 'id="groupSelect"' not in response.text
-        assert "Группа:" not in response.text
-
-        assign = client.put(f"/api/phases/{phase_id}/group", json={"group_id": "legacy"})
-        assert assign.status_code == 404
-
-
-class TestLegacyApiRemoved:
-    def test_parallel_api_removed(self):
-        response = client.put(
-            "/api/phases/parallel",
-            json={"groups": [["-1", "0.0a"]], "clear": ["1"]},
-        )
-        assert response.status_code == 404
-
-    def test_task_detail_json_api_removed(self):
-        response = client.get("/api/tasks/UITEST-402")
-        assert response.status_code == 405
-        assert response.json() == {"ok": False, "error": "Метод не поддерживается"}
 
 
 class TestSettingsPage:

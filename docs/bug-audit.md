@@ -44,6 +44,8 @@
 | BUG-034 | Supervisor / replay | Версия evaluator prompt не входила в contract fingerprint, поэтому успешный run мог replay-иться после изменения правил проверки без повторного вызова provider. | Unit и end-to-end regressions меняют `PROMPT_VERSION` и требуют новый fingerprint и повторную оценку. | Исправлено |
 | BUG-035 | Runtime / безопасность | Локальный UI по умолчанию слушал `0.0.0.0`, хотя приложение не содержит встроенной аутентификации. | Конфигурационный regression требует `127.0.0.1`; Compose сохраняет `0.0.0.0` только внутри контейнера и публикует порт на loopback. | Исправлено |
 | BUG-036 | Supervisor / prompt | Assignment prompt содержал пример `RUN-42` вместо ключа текущей задачи и мог направить исполнителя к чужому идентификатору. | Context и prompt regressions проверяют текущий `task_key` и отсутствие захардкоженного примера. | Исправлено |
+| BUG-037 | Persistence / strict contract | Project repository превращал произвольные `key_prefixes` в строки, а task converter скрывал отсутствующую workflow-связь. Внутренний caller мог обойти строгий REST-контракт или получить правдоподобный DTO из повреждённых данных. | Repository и converter regressions требуют непустой `list[str]` и fail-closed при отсутствии workflow; неизвестный phase code сохраняется только для штатного missing-phase diagnostic. | Исправлено |
+| BUG-038 | Cleanup / документация | В репозитории оставались Alembic revision template, тесты давно удалённых routes и setup-фаз, а README/live plan описывали отсутствующий systemd service и прежние Jira/GitLab contracts. | Caller scan подтверждает отсутствие template consumers; документация описывает фактический Compose и Relevanter Business/Tech, stale route tests удалены. | Исправлено |
 
 ## Следующие проверки
 

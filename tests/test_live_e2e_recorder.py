@@ -194,7 +194,7 @@ def test_validate_transcript_rejects_missing_transition_field(field):
         recorder.validate_transcript(events, task="RUN-1")
 
 
-def test_validate_transcript_rejects_legacy_scalar_action():
+def test_validate_transcript_rejects_scalar_action():
     events = [_session(), *_cycle()]
     events[2]["command"] = "python -m pytest"
     events[2]["output"] = events[2].pop("output_excerpt")

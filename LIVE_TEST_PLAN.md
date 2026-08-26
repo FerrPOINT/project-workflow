@@ -137,5 +137,6 @@ Windows-пути до записи командных логов.
 - Успешную основную задачу и её audit оставляют в локальной PostgreSQL. Временную
   negative-probe задачу удаляют точечно после сохранения обезличенного лога.
 
-Канонический live-прогон выполняется на Relevanter Dev против Jira и GitLab
-`relevanter/demo`; product containers Relevanter не затрагиваются.
+Канонический live-прогон выполняется в изолированном окружении `project-workflow`
+с настроенным provider и тестовыми ресурсами Relevanter Business/Tech. Product
+containers Relevanter этим прогоном не изменяются.

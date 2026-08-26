@@ -364,7 +364,9 @@ class TestPostgresUoW:
             workflows = {w.name: w.id for w in uow.workflows.list()}
             assert workflows.get("Test Workflow") == wf_id
 
-            proj_id = uow.projects.create({"workflow_id": wf_id, "code": "TST", "name": "Default"})
+            proj_id = uow.projects.create(
+                {"workflow_id": wf_id, "code": "TST", "name": "Default", "key_prefixes": ["TST"]}
+            )
             projects = {p.code: p.id for p in uow.projects.list()}
             assert projects.get("TST") == proj_id
 
@@ -455,7 +457,14 @@ class TestPostgresUoW:
         uow = SAUnitOfWork(pg_url)
         with uow:
             default_wf_id = uow.workflows.create({"name": "Default", "description": "default", "is_default": True})
-            uow.projects.create({"workflow_id": default_wf_id, "code": "DEFAULT", "name": "Default Project"})
+            uow.projects.create(
+                {
+                    "workflow_id": default_wf_id,
+                    "code": "DEFAULT",
+                    "name": "Default Project",
+                    "key_prefixes": ["DEFAULT"],
+                }
+            )
             uow.commit()
 
         schema_module.ensure_phase_catalog(uow)

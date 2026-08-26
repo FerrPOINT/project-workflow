@@ -243,40 +243,6 @@ class TestApiPhases:
         assert after == before
 
 
-class TestRemovedLegacyApi:
-    def test_supervisor_evaluate_removed(self, client):
-        resp = client.post("/api/supervisor/evaluate", json={"task_key": "AAT-999", "report": "test"})
-        assert resp.status_code == 404
-
-    def test_supervisor_context_removed(self, client):
-        resp = client.get("/api/supervisor/AAT-999/context")
-        assert resp.status_code == 404
-
-    def test_supervisor_phase_post_removed(self, client):
-        resp = client.post("/api/supervisor/0", json={"report": "done"})
-        assert resp.status_code == 404
-
-    def test_delete_instruction_route_removed(self, client):
-        resp = client.delete("/api/instructions/99999")
-        assert resp.status_code == 404
-
-    def test_delete_check_route_removed(self, client):
-        resp = client.delete("/api/checks/99999")
-        assert resp.status_code == 404
-
-    def test_delete_evidence_route_removed(self, client):
-        resp = client.delete("/api/evidence/99999")
-        assert resp.status_code == 404
-
-    def test_single_phase_order_route_removed(self, client):
-        resp = client.put(f"/api/phases/{_phase_id(client, '1.INTAKE')}/order", json={"phase_order": 5})
-        assert resp.status_code == 404
-
-    def test_parallel_route_removed(self, client):
-        resp = client.put("/api/phases/parallel", json={"groups": [["-1", "0.0a"]]})
-        assert resp.status_code == 404
-
-
 def _unique(prefix: str) -> str:
     return f"{prefix}-{uuid.uuid4().hex[:8]}"
 

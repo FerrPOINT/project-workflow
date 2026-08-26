@@ -33,7 +33,7 @@ class ProjectService:
         for project in self._uow.projects.list():
             if project.id == project_id:
                 continue
-            existing_prefixes = {str(prefix).strip().upper() for prefix in project.key_prefixes}
+            existing_prefixes = {prefix.strip().upper() for prefix in project.key_prefixes}
             overlap = requested.intersection(existing_prefixes)
             if overlap:
                 duplicate = sorted(overlap)[0]

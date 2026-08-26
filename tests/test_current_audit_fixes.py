@@ -1,4 +1,4 @@
-"""Regression tests for current findings rescued from superseded PR #2."""
+"""Regression tests for data integrity and bounded-query findings."""
 
 from __future__ import annotations
 
@@ -33,6 +33,7 @@ def _workflow_with_project(unit: SAUnitOfWork, suffix: str) -> tuple[int, int]:
             "workflow_id": workflow_id,
             "code": f"PROJECT-{suffix}",
             "name": f"Project {suffix}",
+            "key_prefixes": [f"P{suffix.replace('-', '').upper()}"],
         }
     )
     return workflow_id, project_id
