@@ -191,12 +191,6 @@ class TestSupervisorCoreFinalGaps:
         engine.all_phases = []
         assert engine._resolve_current_phase() == ""
 
-    def test_record_transition_no_task(self):
-        engine = core_mod.SupervisorEngine("RUN-1")
-        engine.task = None
-        phase = MagicMock()
-        engine._record_transition(phase, "pass", None, None)
-
     def test_evaluate_does_not_fall_back_when_llm_raises(self):
         engine = core_mod.SupervisorEngine("RUN-1")
         engine.task = {"id": 1, "project_id": 1, "current_phase": "1"}

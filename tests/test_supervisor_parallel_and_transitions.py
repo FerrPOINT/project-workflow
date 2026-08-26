@@ -7,6 +7,7 @@ import pytest
 
 pytestmark = [pytest.mark.supervisor]
 
+from project_workflow.domain.exceptions import ConcurrentTransitionError
 from project_workflow.supervisor import SupervisorEngine
 from project_workflow.supervisor.core import PromptCache
 from project_workflow.supervisor.models import Phase, PhaseCheck, PhaseEvidence, PhaseInstruction
@@ -268,11 +269,15 @@ class TestRecordTransition:
         assert history == [(7, 2, "rollback"), (7, 1, "pending")]
         assert update[-1] == {"current_phase": "-1", "status": "active"}
 
-    def test_rollback_without_target_uses_phase(self, engine):
+    def test_rollback_without_target_is_rejected(self, engine):
         ph = engine.phase_map["0"]
-        history, update = _record_calls(engine, lambda: engine._record_transition(ph, "rollback", None, None))
-        assert history == [(7, 2, "rollback"), (7, 2, "pending")]
-        assert update[-1] == {"current_phase": "0", "status": "active"}
+        with pytest.raises(ConcurrentTransitionError, match="Цель отката"):
+            _record_calls(engine, lambda: engine._record_transition(ph, "rollback", None, None))
+
+    def test_unknown_next_phase_is_not_treated_as_workflow_completion(self, engine):
+        ph = engine.phase_map["0"]
+        with pytest.raises(ConcurrentTransitionError, match="Следующая фаза"):
+            _record_calls(engine, lambda: engine._record_transition(ph, "pass", "missing", None))
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -310,6 +315,25 @@ class TestRecordParallelTransition:
         )
         assert history == [(7, 3, "rollback"), (7, 4, "rollback"), (7, 2, "pending")]
         assert update[-1] == {"current_phase": "0", "status": "active"}
+
+    @pytest.mark.parametrize(
+        ("verdict", "next_phase", "rollback_target", "message"),
+        [
+            ("pass", "missing", None, "Следующая фаза"),
+            ("rollback", None, None, "Цель отката"),
+        ],
+    )
+    def test_invalid_parallel_target_is_rejected(self, engine, verdict, next_phase, rollback_target, message):
+        group = [engine.phase_map["1"], engine.phase_map["2"]]
+        with pytest.raises(ConcurrentTransitionError, match=message):
+            _record_calls(
+                engine,
+                lambda: engine._record_parallel_transition(group, verdict, next_phase, rollback_target),
+            )
+
+    def test_empty_parallel_group_is_rejected(self, engine):
+        with pytest.raises(ConcurrentTransitionError, match="Параллельная группа"):
+            _record_calls(engine, lambda: engine._record_parallel_transition([], "pass", None))
 
 
 # ═══════════════════════════════════════════════════════════════════════
