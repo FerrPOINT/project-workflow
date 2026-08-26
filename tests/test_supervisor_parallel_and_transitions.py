@@ -451,7 +451,7 @@ class TestEvaluateEdgeCases:
             supervisor_llm("PASS", covered=["check-a", "check-b"])
             result = engine.evaluate("check-a done and check-b complete")
         assert result["verdict"] == "PASS"
-        assert result["phase_name"] == "Parallel group: 1, 2"
+        assert result["phase_name"] == "Параллельная группа: 1, 2"
 
     def test_parallel_evaluate_partial_stays(self, supervisor_llm):
         with nullcontext():

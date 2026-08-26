@@ -167,7 +167,7 @@ class PhaseContractBuilder:
         representative = first.delegate or next((phase.delegate for phase in group if phase.delegate), None)
         return PhaseContract(
             phase_code=first.code,
-            phase_name=f"Parallel group: {', '.join(p.code for p in group)}",
+            phase_name=f"Параллельная группа: {', '.join(p.code for p in group)}",
             workflow_revision=self.workflow_revision,
             actor=actor_from_phase(first),
             description="\n".join(f"- {p.code}: {p.description or '-'}" for p in group),

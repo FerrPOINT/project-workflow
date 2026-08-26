@@ -173,7 +173,7 @@ class TestManualWorkflowEndToEnd:
         data = json.loads(result.output)
         assert data["verdict"] == "PARTIAL"
         assert "manual.parallel-a" in data["phase"]
-        assert "Parallel group" in data["phase_name"]
+        assert "Параллельная группа" in data["phase_name"]
         assert data["next_phase"] is None
         assert any("Frontend" in m for m in data["missing"])
         assert data["instructions"]
@@ -191,7 +191,7 @@ class TestManualWorkflowEndToEnd:
         assert result.exit_code == 0, result.output
         data = json.loads(result.output)
         assert data["verdict"] == "PASS"
-        assert "Parallel group" in data["phase_name"]
+        assert "Параллельная группа" in data["phase_name"]
         assert data["next_phase"] == "manual.seq-instr"
         assert data["missing"] == []
 

@@ -34,6 +34,7 @@ def _contract_fingerprint(
 ) -> str:
     contract_data = contract.to_dict()
     state = {
+        "prompt_version": PromptBuilder.PROMPT_VERSION,
         "contract": contract_data,
         "evaluation_items": [{"id": item_id, "text": text} for item_id, text in evaluation_items],
         "previously_covered_ids": sorted(previously_covered_ids),

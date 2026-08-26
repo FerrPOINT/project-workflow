@@ -9,7 +9,7 @@ import requests
 
 from project_workflow import config
 from project_workflow.application.phase_service import PhaseService
-from project_workflow.infrastructure.llm import OpenAICompatibleClient, ResponseParser
+from project_workflow.infrastructure.llm import OpenAICompatibleClient, PromptBuilder, ResponseParser
 from project_workflow.supervisor import SupervisorEngine
 
 pytestmark = [pytest.mark.supervisor]
@@ -80,6 +80,23 @@ def test_valid_report_is_replayed_once(verdict, supervisor_llm):
     assert chat.call_count == 1
     assert len(engine.db.get_supervisor_runs(task_key=engine.task_key, limit=10)) == 1
     assert engine.db.get_task_history(engine.task["id"]) == history_after_first
+
+
+def test_same_report_uses_provider_again_after_prompt_version_change(supervisor_llm, monkeypatch):
+    engine = SupervisorEngine("RUN-918")
+    supervisor_llm("PARTIAL")
+    fixture_chat = OpenAICompatibleClient.chat
+
+    with patch.object(OpenAICompatibleClient, "chat", side_effect=fixture_chat) as chat:
+        first = engine.evaluate("same report after evaluator update")
+        monkeypatch.setattr(PromptBuilder, "PROMPT_VERSION", "supervisor-evaluator-next")
+        second = engine.evaluate("same report after evaluator update")
+
+    assert first["replayed"] is second["replayed"] is False
+    assert chat.call_count == 2
+    runs = engine.db.supervisor_runs.list(task_key=engine.task_key)
+    assert len(runs) == 2
+    assert len({run.report_fingerprint for run in runs}) == 2
 
 
 def test_replay_does_not_return_stale_result_for_deleted_task(supervisor_llm):
