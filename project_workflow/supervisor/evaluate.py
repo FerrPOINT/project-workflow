@@ -276,6 +276,8 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     if replayed is not None:
         engine.db.commit()
         engine._reload_task_state()
+        if not engine.task:
+            return _concurrent_result(replayed)
         return replayed
 
     user = PromptBuilder.build_user_prompt(
@@ -389,6 +391,8 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         if replayed is not None:
             engine.db.commit()
             engine._refresh_task_state()
+            if not engine.task:
+                return _concurrent_result(replayed)
             return replayed
     if _latest_run_id(engine, task_id) != initial_run_id:
         engine.db.rollback()
@@ -493,4 +497,6 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         raise
 
     engine._refresh_task_state()
+    if not engine.task:
+        return _concurrent_result(result)
     return result

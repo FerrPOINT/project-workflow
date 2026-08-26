@@ -1,7 +1,5 @@
 """Tests that supervisor.py passes int phase_id to DB FK columns."""
 
-"""Tests that supervisor.py passes int phase_id to DB FK columns."""
-
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -24,7 +22,7 @@ class TestRecordTransitionTypes:
         engine.task = {"id": 7, "current_phase": engine.current_phase, "status": "active", "project_id": 1}
         engine.db = MagicMock()
         with patch.object(engine.db.tasks, "add_history") as mock_history:
-            engine._record_transition(ph, "pass", "2", None)
+            engine._record_transition(ph, "pass", None, None)
 
         # First call: mark current phase done
         call1 = mock_history.call_args_list[0]
