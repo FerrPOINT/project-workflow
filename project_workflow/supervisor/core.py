@@ -437,9 +437,15 @@ class SupervisorEngine:
     def _reload_task_state(self) -> None:
         """Reload task state without changing the committed context cache."""
         if not self.task:
+            self.current_phase = ""
+            return
+        task_id = self.task.get("id")
+        if not isinstance(task_id, int) or isinstance(task_id, bool) or task_id <= 0:
+            self.task = None
+            self.current_phase = ""
             return
         self._uow.refresh()
-        self.task = self._task_service.get_task(self.task["id"]) or self.task
+        self.task = self._task_service.get_task(task_id)
         self.current_phase = self._resolve_current_phase()
 
     def _reload_evaluation_state(self) -> None:

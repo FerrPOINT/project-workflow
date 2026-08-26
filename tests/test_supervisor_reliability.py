@@ -82,6 +82,28 @@ def test_valid_report_is_replayed_once(verdict, supervisor_llm):
     assert engine.db.get_task_history(engine.task["id"]) == history_after_first
 
 
+def test_replay_does_not_return_stale_result_for_deleted_task(supervisor_llm):
+    engine = SupervisorEngine("RUN-902")
+    supervisor_llm("PARTIAL")
+    engine.evaluate("report before deletion")
+
+    def remove_task_from_state() -> None:
+        engine.task = None
+        engine.current_phase = ""
+
+    with (
+        patch.object(engine, "_reload_task_state", side_effect=remove_task_from_state),
+        patch.object(OpenAICompatibleClient, "chat", wraps=OpenAICompatibleClient.chat) as chat,
+    ):
+        result = engine.evaluate("report before deletion")
+
+    assert result["verdict"] == "BLOCKED"
+    assert result["retryable"] is True
+    assert result["replayed"] is False
+    assert engine.task is None
+    assert chat.call_count == 0
+
+
 def test_same_report_is_evaluated_again_after_phase_transition(supervisor_llm):
     engine = SupervisorEngine("RUN-900")
     supervisor_llm("PASS")

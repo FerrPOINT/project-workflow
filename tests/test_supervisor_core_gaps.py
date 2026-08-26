@@ -8,7 +8,7 @@ import pytest
 
 pytestmark = [pytest.mark.supervisor]
 
-from project_workflow.domain.exceptions import ConflictError
+from project_workflow.domain.exceptions import ConcurrentTransitionError, ConflictError
 from project_workflow.supervisor import SupervisorEngine
 from project_workflow.supervisor.models import Phase
 
@@ -137,11 +137,25 @@ class TestSupervisorCoreGaps:
         engine = SupervisorEngine("RUN-1")
         engine.task = None
         ph = self._phase(code="1", id=1)
-        engine._record_transition(ph, "pass", None, None)
+        with pytest.raises(ConcurrentTransitionError, match="Задача была удалена"):
+            engine._record_transition(ph, "pass", None, None)
+
+    def test_record_transition_requires_complete_task_state(self):
+        engine = SupervisorEngine("RUN-1")
+        engine.task = {"id": 1}
+        ph = self._phase(code="1", id=1)
+        engine.phase_map = {"1": ph}
+        engine.db = MagicMock()
+
+        with pytest.raises(ConcurrentTransitionError, match="Состояние задачи"):
+            engine._record_transition(ph, "pass", None, None)
+
+        engine.db.tasks.update_if_state.assert_not_called()
+        engine.db.tasks.add_history.assert_not_called()
 
     def test_record_transition_delegated(self):
         engine = SupervisorEngine("RUN-1")
-        engine.task = {"id": 1}
+        engine.task = {"id": 1, "current_phase": "1", "status": "active"}
         ph = self._phase(code="1", id=1)
         engine.phase_map = {"1": ph}
         db = MagicMock()
@@ -151,7 +165,7 @@ class TestSupervisorCoreGaps:
 
     def test_record_transition_partial(self):
         engine = SupervisorEngine("RUN-1")
-        engine.task = {"id": 1}
+        engine.task = {"id": 1, "current_phase": "1", "status": "active"}
         ph = self._phase(code="1", id=1)
         engine.phase_map = {"1": ph}
         db = MagicMock()
@@ -161,7 +175,7 @@ class TestSupervisorCoreGaps:
 
     def test_record_parallel_transition_blocked(self):
         engine = SupervisorEngine("RUN-1")
-        engine.task = {"id": 1}
+        engine.task = {"id": 1, "current_phase": "1", "status": "active"}
         ph = self._phase(code="1", id=1)
         engine.phase_map = {"1": ph}
         db = MagicMock()
@@ -171,13 +185,25 @@ class TestSupervisorCoreGaps:
 
     def test_record_parallel_transition_rollback(self):
         engine = SupervisorEngine("RUN-1")
-        engine.task = {"id": 1}
+        engine.task = {"id": 1, "current_phase": "1", "status": "active"}
         ph = self._phase(code="1", id=1)
         engine.phase_map = {"1": ph, "0": self._phase(id=2, code="0")}
         db = MagicMock()
         engine.db = db
         engine._record_parallel_transition([ph], "rollback", None, "0")
         db.tasks.update_if_state.assert_called_once()
+
+    def test_reload_task_state_does_not_keep_deleted_task(self):
+        engine = SupervisorEngine("RUN-1")
+        engine.task = {"id": 1, "current_phase": "1", "status": "active"}
+        engine.current_phase = "1"
+        engine.db = MagicMock()
+        engine._task_service.get_task = MagicMock(return_value=None)
+
+        engine._reload_task_state()
+
+        assert engine.task is None
+        assert engine.current_phase == ""
 
     def test_ensure_task_preserves_empty_current_phase(self):
         engine = SupervisorEngine("RUN-1")
