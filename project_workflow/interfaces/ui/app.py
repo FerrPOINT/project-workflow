@@ -52,6 +52,8 @@ class _UoWMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         from ...application.state import _app_state, _uow_ctx
 
+        if request.url.path == "/health":
+            return await call_next(request)
         uow = _app_state.create_uow()
         token = _uow_ctx.set(uow)
         try:

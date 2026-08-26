@@ -281,7 +281,11 @@ class TestApiErrorPaths:
             raise RuntimeError("db down")
 
         monkeypatch.setattr("project_workflow.infrastructure.db.session.get_engine", _bad_engine)
-        response = client.get("/health")
+        with patch(
+            "project_workflow.application.state._AppState.create_uow",
+            side_effect=AssertionError("health must not create a request UoW"),
+        ):
+            response = client.get("/health")
         assert response.status_code == 503
         data = response.json()
         assert data["ok"] is False

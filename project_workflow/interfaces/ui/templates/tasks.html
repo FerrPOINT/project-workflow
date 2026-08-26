@@ -145,12 +145,13 @@ function deleteTask(btn) {
   if (!key) return;
   if (!confirm('Удалить задачу ' + key + '?')) return;
   fetch('/api/tasks/' + encodeURIComponent(key), { method: 'DELETE' })
-    .then(function(resp) {
+    .then(async function(resp) {
       if (resp.status === 204) {
         row.remove();
         return;
       }
-      window.location.reload();
+      const data = await resp.json().catch(function() { return {}; });
+      showToast(data.error || 'Не удалось удалить задачу', 'error');
     })
     .catch(function() {
       showRequestError();

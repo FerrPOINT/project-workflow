@@ -1706,13 +1706,15 @@ class TestUiNetworkFailures:
         assert response.text.count(".catch(showRequestError)") >= minimum_handlers
         assert "Не удалось связаться с сервером" in response.text
 
-    def test_task_delete_reports_network_error_without_reloading(self):
+    def test_task_delete_reports_http_and_network_errors_without_reloading(self):
         response = client.get("/tasks")
 
         assert response.status_code == 200
-        catch_body = response.text.split(".catch(function()", 1)[1].split("});", 1)[0]
+        catch_body = response.text.rsplit(".catch(function()", 1)[1].split("});", 1)[0]
         assert "showRequestError();" in catch_body
-        assert "window.location.reload();" not in catch_body
+        assert "window.location.reload();" not in response.text
+        assert "const data = await resp.json().catch" in response.text
+        assert "showToast(data.error || 'Не удалось удалить задачу', 'error');" in response.text
 
     def test_async_editors_handle_rejection_and_restore_optimistic_deletion(self):
         phase = _phase_row("1.INTAKE")

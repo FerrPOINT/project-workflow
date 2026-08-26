@@ -141,18 +141,30 @@ class TestTaskService:
 
 
 class TestAppState:
-    def test_init_default_url(self, monkeypatch):
+    def test_init_default_url(self, monkeypatch, tmp_path):
+        from project_workflow.infrastructure.db.session import get_engine, reset_engine
+
+        monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("DATABASE_URL", "sqlite:///env.db")
         from project_workflow.config import get_settings
 
         get_settings.cache_clear()
+        reset_engine()
         state = _AppState()
         assert state._database_url is None
-        assert state._database_url_normalized().endswith("env.db")
+        uow = state.create_uow()
+        assert get_engine().url.database == str((tmp_path / "env.db").resolve())
+        uow.close()
+        reset_engine()
 
-    def test_database_url_normalized(self):
-        state = _AppState("sqlite:///tmp/../test.db")
-        assert state._database_url_normalized().replace("\\", "/").endswith("/test.db")
+    def test_invalid_database_url_uses_safe_database_error(self):
+        from project_workflow.infrastructure.db.session import DatabaseUnavailable
+
+        marker = "app-state-secret-marker"
+        with pytest.raises(DatabaseUnavailable, match="проверьте DATABASE_URL") as error:
+            _AppState(f"not a url {marker}").create_uow()
+
+        assert marker not in str(error.value)
 
     def test_service_factories(self):
         state = MagicMock(spec=_AppState)

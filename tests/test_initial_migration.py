@@ -299,7 +299,7 @@ def test_sqlite_legacy_revision_is_refused_without_mutation(tmp_path, legacy_rev
         )
         conn.execute(text("CREATE TABLE keep_me (id INTEGER PRIMARY KEY)"))
 
-    with pytest.raises(DatabaseRecreateRequired, match="Устаревшую базу данных необходимо пересоздать"):
+    with pytest.raises(DatabaseRecreateRequired, match="Несовместимую базу данных необходимо пересоздать"):
         ensure_migrated(engine)
 
     assert database_revisions(engine) == {legacy_revision}
@@ -311,7 +311,7 @@ def test_sqlite_unversioned_nonempty_database_is_refused(tmp_path):
     with engine.begin() as conn:
         conn.execute(text("CREATE TABLE keep_me (id INTEGER PRIMARY KEY)"))
 
-    with pytest.raises(DatabaseRecreateRequired, match="Устаревшую базу данных необходимо пересоздать"):
+    with pytest.raises(DatabaseRecreateRequired, match="Несовместимую базу данных необходимо пересоздать"):
         ensure_migrated(engine)
 
     assert inspect(engine).has_table("keep_me")
@@ -334,7 +334,7 @@ def test_init_db_returns_exit_code_two_for_legacy_database(tmp_path, monkeypatch
     reset_engine()
     try:
         assert main() == 2
-        assert "Устаревшую базу данных необходимо пересоздать" in capsys.readouterr().err
+        assert "Несовместимую базу данных необходимо пересоздать" in capsys.readouterr().err
         assert inspect(engine).has_table("keep_me")
     finally:
         get_settings.cache_clear()

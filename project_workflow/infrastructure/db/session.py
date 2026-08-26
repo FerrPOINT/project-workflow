@@ -54,7 +54,7 @@ class DatabaseRecreateRequired(RuntimeError):
     exit_code = 2
 
     def __init__(self) -> None:
-        super().__init__("Устаревшую базу данных необходимо пересоздать")
+        super().__init__("Несовместимую базу данных необходимо пересоздать")
 
 
 def expected_tables() -> frozenset[str]:
@@ -63,7 +63,7 @@ def expected_tables() -> frozenset[str]:
 
 
 def _is_sqlite(url: str) -> bool:
-    return url.startswith("sqlite://")
+    return make_url(url).get_backend_name() == "sqlite"
 
 
 def get_database_url() -> str:
@@ -89,6 +89,11 @@ def get_engine(url: str | None = None) -> Engine:
         raise DatabaseUnavailable() from None
     if parsed_target.get_backend_name() not in {"postgresql", "sqlite"}:
         raise DatabaseUnavailable() from None
+    if (
+        parsed_target.get_backend_name() == "sqlite"
+        and parsed_target.database not in (None, "", ":memory:")
+    ):
+        parsed_target = parsed_target.set(database=str(Path(parsed_target.database).resolve()))
     with _engine_lock:
         if _engine is not None and _engine.url == parsed_target:
             return _engine

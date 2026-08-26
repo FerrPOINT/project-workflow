@@ -8,10 +8,8 @@ circular imports.
 from __future__ import annotations
 
 import contextvars
-from pathlib import Path
 
 from ..application.phase_service import PhaseService
-from ..config import get_settings
 from ..infrastructure.db.session import get_engine
 from ..infrastructure.db.uow import SAUnitOfWork
 from . import (
@@ -34,13 +32,6 @@ class _AppState:
     def __init__(self, database_url: str | None = None) -> None:
         self._database_url = database_url
 
-    def _database_url_normalized(self) -> str:
-        target = self._database_url or get_settings().DATABASE_URL
-        if target.startswith("sqlite:///"):
-            target = str(Path(target[10:]).resolve())
-            target = f"sqlite:///{target}"
-        return target
-
     def get_db(self) -> SAUnitOfWork:
         """Return a fresh SQLAlchemy UnitOfWork."""
         return self.get_uow()
@@ -50,7 +41,7 @@ class _AppState:
         return PhaseService(self.get_uow())
 
     def create_uow(self) -> SAUnitOfWork:
-        engine = get_engine(self._database_url_normalized())
+        engine = get_engine(self._database_url)
         return SAUnitOfWork(engine)
 
     def get_uow(self) -> SAUnitOfWork:
@@ -74,6 +65,7 @@ class _AppState:
 
     def instruction_service(self) -> InstructionService:
         return InstructionService(self.get_uow())
+
 
 _app_state = _AppState()
 __all__ = ["_AppState", "_app_state", "_uow_ctx"]
