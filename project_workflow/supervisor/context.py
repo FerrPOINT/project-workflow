@@ -144,8 +144,7 @@ class SupervisorContextBuilder:
             "completed_count": len(completed_phases),
         }
 
-    @staticmethod
-    def _cli_actor() -> dict[str, Any]:
+    def _cli_actor(self) -> dict[str, Any]:
         return {
             "kind": "cli-user",
             "description": (
@@ -153,7 +152,7 @@ class SupervisorContextBuilder:
                 "и отправляет report по текущей фазе. Supervisor не предполагает конкретную модель, "
                 "OpenAI-compatible провайдера."
             ),
-            "entrypoint": "project-workflow step --task RUN-42 [--report TEXT]",
+            "entrypoint": f"project-workflow step --task {self.task_key} [--report TEXT]",
         }
 
     @staticmethod

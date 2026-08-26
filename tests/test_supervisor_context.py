@@ -28,9 +28,16 @@ class TestSupervisorFullContext:
             assert key in ctx, f"Missing key: {key}"
 
     def test_task_key_passed_through(self):
-        engine = supervisor.SupervisorEngine("RUN-42")
+        engine = supervisor.SupervisorEngine("RUN-987654")
         ctx = engine.get_full_context()
-        assert ctx["task_key"] == "RUN-42"
+        assert ctx["task_key"] == "RUN-987654"
+        assert ctx["cli_actor"]["entrypoint"] == (
+            "project-workflow step --task RUN-987654 [--report TEXT]"
+        )
+
+        prompt = engine.get_phase_prompt()
+        assert "project-workflow step --task RUN-987654 [--report TEXT]" in prompt
+        assert "RUN-42" not in prompt
 
     def test_all_phases_present(self):
         engine = supervisor.SupervisorEngine("RUN-1")

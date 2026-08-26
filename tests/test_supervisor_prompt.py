@@ -52,6 +52,19 @@ def test_prompt_for_current_phase():
     assert "p1 — N" in result
 
 
+def test_prompt_fallback_cli_actor_uses_current_task_key():
+    phase = _phase("p1")
+    result = build_phase_prompt(
+        "RUN-987654",
+        {"p1": phase},
+        [],
+        "p1",
+        {"workflow_name": "W"},
+    )
+    assert "project-workflow step --task RUN-987654 [--report TEXT]" in result
+    assert "RUN-42" not in result
+
+
 def test_prompt_for_missing_phase():
     result = build_phase_prompt(
         "T-1",
