@@ -47,6 +47,13 @@ def step_cmd(
       project-workflow step --task RUN-42 --report "..."  -> оценить отчёт исполнителя CLI и перейти
     """
     jmode = ctx.obj.get("json_mode", False)
+    if report is not None and not report.strip():
+        result = blocked_result(task, "Отчёт не может быть пустым")
+        if jmode:
+            out_json(result, exit_code=1)
+            return
+        console.print(format_result(result))
+        raise click.exceptions.Exit(1)
     try:
         uow = SAUnitOfWork()
         task_key = _require_valid_key(task, uow)
@@ -60,7 +67,7 @@ def step_cmd(
         raise click.exceptions.Exit(1) from exc
 
     # --report : evaluate report
-    if report:
+    if report is not None:
         result = engine.evaluate(report)
         if jmode:
             out_json(result, exit_code=1 if result["verdict"] == "BLOCKED" else 0)

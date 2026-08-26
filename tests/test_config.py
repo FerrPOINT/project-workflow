@@ -30,6 +30,13 @@ def test_database_url_and_ui_settings_come_from_environment(monkeypatch):
     assert settings.UI_PORT == 9999
 
 
+def test_local_ui_defaults_to_loopback(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")
+    monkeypatch.delenv("UI_HOST", raising=False)
+
+    assert config.Settings(_env_file=None).UI_HOST == "127.0.0.1"
+
+
 def test_bootstrap_constants_are_minimal():
     assert config.SEED_PATH.name == "seed.json"
     assert config.DEFAULT_WORKFLOW_NAME == "sdlc-business-tech-v1"

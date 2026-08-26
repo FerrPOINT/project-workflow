@@ -182,6 +182,22 @@ def test_get_next_phase():
     assert cb.get_next_phase("px") == (None, None)
 
 
+def test_next_phase_follows_parallel_components_instead_of_physical_last_member():
+    phases = [
+        Phase(code="a", name="A", execution_type="parallel", parallel_with="c"),
+        Phase(code="b", name="B", execution_type="parallel"),
+        Phase(code="c", name="C", execution_type="parallel"),
+        Phase(code="done", name="Done"),
+    ]
+    builder = PhaseContractBuilder(phases)
+    linked_group = builder.get_parallel_group(phases[0])
+
+    assert [phase.code for phase in linked_group] == ["a", "c"]
+    assert builder._next_after_group(linked_group) == ("b", "B")
+    assert builder.get_next_phase("b") == ("done", "Done")
+    assert builder.get_next_phase("c") == ("b", "B")
+
+
 def test_build_next_contract():
     phases = _make_phases()
     cb = PhaseContractBuilder(phases)
