@@ -193,7 +193,7 @@ def build_phase_prompt(
 
     cli_actor = ctx.get("cli_actor") or {
         "description": "Пользователь CLI",
-        "entrypoint": "project-workflow step --task RUN-42 [--report TEXT]",
+        "entrypoint": f"project-workflow step --task {task_key} [--report TEXT]",
     }
     report_template = ctx.get("report_template") or {
         "summary": "Краткое описание результата работы над фазой.",
