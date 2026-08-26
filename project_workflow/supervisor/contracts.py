@@ -83,6 +83,15 @@ class PhaseContractBuilder:
             self._phase_map = {phase.code: phase for phase in self.all_phases}
         return self._phase_map
 
+    def _phase_groups(self) -> list[list[Phase]]:
+        """Return the canonical execution sequence, including isolated parallel phases."""
+        return group_parallel_phases(
+            self.all_phases,
+            code_of=lambda phase: phase.code,
+            execution_type_of=lambda phase: phase.execution_type,
+            parallel_with_of=lambda phase: phase.parallel_with,
+        )
+
     def build(self, phase: Phase) -> PhaseContract:
         """Single-phase contract."""
         return PhaseContract(
@@ -227,37 +236,26 @@ class PhaseContractBuilder:
         return deduped
 
     def get_parallel_group(self, start_phase: Phase) -> list[Phase]:
-        for group in group_parallel_phases(
-            self.all_phases,
-            code_of=lambda phase: phase.code,
-            execution_type_of=lambda phase: phase.execution_type,
-            parallel_with_of=lambda phase: phase.parallel_with,
-        ):
+        for group in self._phase_groups():
             if any(phase.code == start_phase.code for phase in group):
                 return group
         return [start_phase]
 
     def get_next_phase(self, phase_code: str) -> tuple[str | None, str | None]:
-        for index, phase in enumerate(self.all_phases):
-            if phase.code != phase_code:
+        groups = self._phase_groups()
+        for index, group in enumerate(groups):
+            if not any(phase.code == phase_code for phase in group):
                 continue
-            if index + 1 >= len(self.all_phases):
+            if index + 1 >= len(groups):
                 return None, None
-            nxt = self.all_phases[index + 1]
+            nxt = groups[index + 1][0]
             return nxt.code, nxt.name
         return None, None
 
     def _next_after_group(self, group: list[Phase]) -> tuple[str | None, str | None]:
         if not group:
             return None, None
-        try:
-            last_index = self.all_phases.index(group[-1])
-        except ValueError:
-            return None, None
-        if last_index + 1 >= len(self.all_phases):
-            return None, None
-        nxt = self.all_phases[last_index + 1]
-        return nxt.code, nxt.name
+        return self.get_next_phase(group[0].code)
 
     def build_next_contract(self, phase_code: str | None) -> PhaseContract | None:
         """Contract for the phase that follows the current one."""

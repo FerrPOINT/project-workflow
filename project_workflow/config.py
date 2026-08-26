@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     DB_SCHEMA: str = "project_workflow"
 
-    UI_HOST: str = "0.0.0.0"
+    UI_HOST: str = "127.0.0.1"
     UI_PORT: int = 8811
 
     LOG_LEVEL: str = "INFO"

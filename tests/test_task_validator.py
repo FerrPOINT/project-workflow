@@ -40,6 +40,12 @@ class TestTaskKeyValidator:
         assert not result.is_valid
         assert "Префиксы: RUN" in (result.error_message or "")
 
+    def test_digits_only_reports_missing_prefix(self):
+        result = _validator("RUN").validate("123")
+
+        assert not result.is_valid
+        assert "Только номер без префикса недопустим" in (result.error_message or "")
+
     @pytest.mark.parametrize("raw_prefixes", ['["RUN", "DEMO"]', "RUN", ["RUN", 1]])
     def test_rejects_noncanonical_project_prefix_shapes(self, raw_prefixes):
         with pytest.raises(ValueError, match="массивом строк"):
