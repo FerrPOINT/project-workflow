@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import sys
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from project_workflow.config import get_settings
 from project_workflow.infrastructure.db import schema
 from project_workflow.infrastructure.db.session import (
     DatabaseRecreateRequired,
+    DatabaseUnavailable,
     ensure_migrated,
     get_engine,
     initialization_transaction,
@@ -18,9 +21,9 @@ __doc__ = """Upgrade the database and bootstrap packaged catalogs once."""
 
 
 def main() -> int:
-    settings = get_settings()
-    engine = get_engine(settings.DATABASE_URL)
     try:
+        settings = get_settings()
+        engine = get_engine(settings.DATABASE_URL)
         with initialization_transaction(engine) as connection:
             ensure_migrated(connection)
             uow = SAUnitOfWork(connection)
@@ -31,6 +34,12 @@ def main() -> int:
     except DatabaseRecreateRequired as exc:
         print(str(exc), file=sys.stderr)
         return exc.exit_code
+    except DatabaseUnavailable as exc:
+        print(str(exc), file=sys.stderr)
+        return exc.exit_code
+    except (SQLAlchemyError, OSError):
+        print("Не удалось инициализировать базу данных", file=sys.stderr)
+        return 1
     protocol = settings.DATABASE_URL.split(":")[0]
     print(f"Alembic обновлён до head для {protocol}")
 

@@ -46,3 +46,27 @@ def test_request_logging_middleware():
             assert response.status_code == 200
             # Logging middleware should have logged the request.
             assert mock_logger.info.called
+
+
+def test_lifespan_hides_database_and_shutdown_exception_details():
+    app = create_app()
+    app_module = importlib.import_module("project_workflow.interfaces.ui.app")
+
+    async def exercise_lifespan() -> None:
+        with (
+            patch.object(app_module, "get_engine", side_effect=RuntimeError("startup-secret-marker")),
+            patch.object(app_module, "reset_engine", side_effect=RuntimeError("shutdown-secret-marker")),
+            patch.object(app_module, "logger") as logger,
+        ):
+            async with app.router.lifespan_context(app):
+                pass
+
+        rendered_calls = str(logger.warning.call_args_list)
+        assert "startup-secret-marker" not in rendered_calls
+        assert "shutdown-secret-marker" not in rendered_calls
+        logger.warning.assert_any_call("База данных недоступна при запуске приложения")
+        logger.warning.assert_any_call("Не удалось освободить пул базы данных при остановке приложения")
+
+    asyncio.run(exercise_lifespan())
+
+    assert not hasattr(app.state, "startup_error")

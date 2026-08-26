@@ -37,6 +37,17 @@ _engine_lock = Lock()
 
 PG_CONNECT_RETRY_ATTEMPTS: int = 3
 PG_CONNECT_RETRY_DELAY: float = 1.0
+
+
+class DatabaseUnavailable(RuntimeError):
+    """База данных недоступна или её DSN настроен неверно."""
+
+    exit_code = 1
+
+    def __init__(self) -> None:
+        super().__init__("Не удалось подключиться к базе данных; проверьте DATABASE_URL")
+
+
 class DatabaseRecreateRequired(RuntimeError):
     """The configured database cannot safely use the clean baseline."""
 
@@ -72,7 +83,12 @@ def get_engine(url: str | None = None) -> Engine:
     """Return a cached or newly created SQLAlchemy engine."""
     global _engine
     target = _normalize_url(url)
-    parsed_target = make_url(target)
+    try:
+        parsed_target = make_url(target)
+    except (SQLAlchemyError, TypeError, ValueError):
+        raise DatabaseUnavailable() from None
+    if parsed_target.get_backend_name() not in {"postgresql", "sqlite"}:
+        raise DatabaseUnavailable() from None
     with _engine_lock:
         if _engine is not None and _engine.url == parsed_target:
             return _engine
@@ -101,7 +117,6 @@ def _create_postgres_engine(target: str) -> Engine:
     schema = get_settings().DB_SCHEMA
     if schema:
         connect_args["options"] = f"-csearch_path={schema}"
-    last_exc: Exception | None = None
     for attempt in range(PG_CONNECT_RETRY_ATTEMPTS):
         engine: Engine | None = None
         try:
@@ -117,16 +132,17 @@ def _create_postgres_engine(target: str) -> Engine:
             with engine.connect() as conn:
                 conn.exec_driver_sql("SELECT 1")
             return engine
-        except (SQLAlchemyError, OSError) as exc:
+        except (SQLAlchemyError, OSError):
             if engine is not None:
                 engine.dispose()
-            last_exc = exc
-            logger.warning("Postgres engine creation failed (attempt %s): %s", attempt + 1, exc)
+            logger.warning(
+                "Не удалось подключиться к PostgreSQL: попытка %s из %s",
+                attempt + 1,
+                PG_CONNECT_RETRY_ATTEMPTS,
+            )
             if attempt + 1 < PG_CONNECT_RETRY_ATTEMPTS:
                 time.sleep(PG_CONNECT_RETRY_DELAY)
-    if last_exc is not None:
-        raise last_exc
-    raise RuntimeError("Не удалось создать подключение к PostgreSQL")
+    raise DatabaseUnavailable() from None
 
 
 def get_sessionmaker(url: str | None = None) -> sessionmaker[Any]:
