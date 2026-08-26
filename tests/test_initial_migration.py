@@ -10,11 +10,12 @@ import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from sqlalchemy import create_engine, inspect, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from project_workflow.infrastructure.db.models import Base
 from project_workflow.infrastructure.db.session import (
     DatabaseRecreateRequired,
+    DatabaseUnavailable,
     database_revisions,
     ensure_migrated,
     migration_head,
@@ -338,6 +339,32 @@ def test_init_db_returns_exit_code_two_for_legacy_database(tmp_path, monkeypatch
     finally:
         get_settings.cache_clear()
         reset_engine()
+
+
+@pytest.mark.parametrize(
+    ("error", "message"),
+    [
+        (DatabaseUnavailable(), "Не удалось подключиться к базе данных"),
+        (
+            OperationalError("sql-secret-marker", {}, RuntimeError("dsn-secret-marker")),
+            "Не удалось инициализировать базу данных",
+        ),
+    ],
+)
+def test_init_db_hides_database_exception_details(monkeypatch, capsys, error, message):
+    from scripts import init_db
+
+    monkeypatch.setattr(
+        init_db,
+        "get_engine",
+        lambda _url: (_ for _ in ()).throw(error),
+    )
+
+    assert init_db.main() == 1
+    stderr = capsys.readouterr().err
+    assert message in stderr
+    assert "sql-secret-marker" not in stderr
+    assert "dsn-secret-marker" not in stderr
 
 
 @pytest.mark.parametrize("mutation", ["missing", "extra"])
