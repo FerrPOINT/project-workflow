@@ -1,6 +1,6 @@
 # project-workflow — Makefile
 
-.PHONY: test coverage lint clean install-dev
+.PHONY: test test-verbose coverage coverage-html lint lint-fix clean install-dev
 
 # --- testing ---------------------------------------------------------------
 
@@ -19,11 +19,11 @@ coverage-html:
 # --- lint ------------------------------------------------------------------
 
 lint:
-	ruff check project_workflow/ tests/
-	mypy project_workflow/
+	ruff check .
+	mypy project_workflow scripts
 
 lint-fix:
-	ruff check --fix project_workflow/ tests/
+	ruff check --fix .
 
 # --- dev setup -------------------------------------------------------------
 
