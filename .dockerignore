@@ -14,7 +14,6 @@ docs
 screenshots
 **/__pycache__
 **/*.py[cod]
-project_workflow/v2
 *.db
 *.dump
 .env

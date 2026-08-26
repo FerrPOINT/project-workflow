@@ -86,6 +86,14 @@ def test_compose_passes_openrouter_evaluator_configuration_to_api():
     assert "OPENAI_REASONING_EFFORT: ${OPENAI_REASONING_EFFORT:-none}" in compose
 
 
+def test_compose_publishes_database_and_api_on_loopback_only():
+    compose = COMPOSE_PATH.read_text(encoding="utf-8")
+    assert '"127.0.0.1:5432:5432"' in compose
+    assert '"127.0.0.1:8812:8811"' in compose
+    assert '"5432:5432"' not in compose
+    assert '"8812:8811"' not in compose
+
+
 def test_seed_catalog_has_exact_codes_and_order():
     phases = _items()
     assert [phase["code"] for phase in phases] == EXPECTED_CODES
@@ -138,8 +146,8 @@ def test_due_date_and_retired_external_runtime_are_absent_from_active_contract()
 
 def test_business_status_contract_matches_default_project_catalog():
     catalog = SEED_PATH.read_text(encoding="utf-8")
-    assert "Business status равен In Progress" in catalog
-    assert "Business status равен In Review" not in catalog
+    assert "Статус Business-задачи равен In Progress" in catalog
+    assert "Статус Business-задачи равен In Review" not in catalog
 
 
 def test_tech_phases_reference_the_canonical_using_rtech_skill():

@@ -118,13 +118,25 @@ def test_catalog_errors_are_fail_closed_without_llm_or_audit(catalog_state):
         )
         task_key = "EMPTY-1"
         task_id = uow.tasks.create(
-            {"project_id": project_id, "task_key": task_key, "current_phase": "missing", "status": "active"}
+            {
+                "project_id": project_id,
+                "workflow_id": workflow_id,
+                "task_key": task_key,
+                "current_phase": "missing",
+                "status": "active",
+            }
         )
     else:
         project = uow.projects.get_by_code("RUN")
         task_key = "RUN-991"
         task_id = uow.tasks.create(
-            {"project_id": project.id, "task_key": task_key, "current_phase": "missing", "status": "active"}
+            {
+                "project_id": project.id,
+                "workflow_id": project.workflow_id,
+                "task_key": task_key,
+                "current_phase": "missing",
+                "status": "active",
+            }
         )
     uow.commit()
 

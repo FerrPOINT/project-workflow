@@ -151,12 +151,7 @@ class UIDataService:
             project = projects_by_id.get(t.get("project_id"), {})
             project_code = project.get("code") or ""
             project_name = project.get("name") or ""
-            # New tasks are pinned to an immutable workflow revision.  Only
-            # legacy rows without a pinned id inherit the project's current
-            # workflow.
             workflow_id_raw = t.get("workflow_id")
-            if workflow_id_raw is None:
-                workflow_id_raw = project.get("workflow_id")
             workflow_id: int | None = int(workflow_id_raw) if isinstance(workflow_id_raw, int) else None
             workflow_phase_count = (
                 phase_counts_by_workflow.get(workflow_id, 0)
@@ -284,19 +279,9 @@ class UIDataService:
         self, task: dict[str, Any], wdb: Any
     ) -> tuple[int | None, list[dict[str, Any]]]:
         workflow_id = task.get("workflow_id")
-        if workflow_id is None:
-            project = task.get("project")
-            if isinstance(project, dict):
-                workflow_id = project.get("workflow_id")
-            elif task.get("project_id") is not None:
-                proj_row = wdb.projects.get_by_id(int(task["project_id"]))
-                if proj_row is not None:
-                    workflow_id = getattr(proj_row, "workflow_id", None) or row_to_dict(proj_row).get("workflow_id")
-        if workflow_id is not None:
-            phases = wdb.get_phases(workflow_id=workflow_id)
-        else:
-            phases = wdb.get_phases()
-        return workflow_id, phases
+        if not isinstance(workflow_id, int) or isinstance(workflow_id, bool) or workflow_id <= 0:
+            return None, []
+        return workflow_id, wdb.get_phases(workflow_id=workflow_id)
 
     def _compute_completion_time(self, task: dict[str, Any], history: list[dict[str, Any]]) -> str:
         if task.get("status") != "done":
@@ -386,8 +371,6 @@ class UIDataService:
         project_id = task.get("project_id")
         project = row_to_dict(wdb.projects.get_by_id(project_id)) if isinstance(project_id, int) else None
         if project:
-            if task.get("workflow_id") is None:
-                task["workflow_id"] = project.get("workflow_id")
             task["project_code"] = project.get("code")
             task["project_name"] = project.get("name")
         task["project_code"] = task.get("project_code") or "—"

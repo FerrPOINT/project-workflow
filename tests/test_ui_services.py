@@ -50,7 +50,7 @@ def test_resolve_task_phase():
     db = MagicMock()
     db.get_phases.return_value = [{"id": 1, "code": "p1"}]
     with patch.object(services_mod, "_get_db", return_value=db):
-        token, phase = services_mod._resolve_task_phase("p1")
+        token, phase = services_mod._resolve_task_phase("p1", workflow_id=1)
         assert token == "p1"
         assert phase == {"id": 1, "code": "p1"}
 
