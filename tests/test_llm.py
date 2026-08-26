@@ -146,7 +146,7 @@ class TestOpenAICompatibleClient:
             assert payload["messages"][1]["role"] == "user"
 
     def test_chat_omits_reasoning_effort_when_disabled(self):
-        client = OpenAICompatibleClient(reasoning_effort="")
+        client = OpenAICompatibleClient(reasoning_effort="", api_key="test-key")
         with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
             mock_post.return_value = MagicMock(
                 json=lambda: {"choices": [{"message": {"content": "{}"}}]},
@@ -157,7 +157,7 @@ class TestOpenAICompatibleClient:
         assert "reasoning_effort" not in mock_post.call_args.kwargs["json"]
 
     def test_chat_empty_content_raises(self):
-        client = OpenAICompatibleClient()
+        client = OpenAICompatibleClient(api_key="test-key")
         with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
             mock_post.return_value = MagicMock(
                 status_code=200,
