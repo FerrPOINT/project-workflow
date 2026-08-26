@@ -283,14 +283,6 @@ class TestWorkflowService:
         uow.phases.create.assert_called_once()
         uow.commit.assert_called_once()
 
-    def test_create_workflow_skip_default_phase(self):
-        uow = _make_uow()
-        uow.workflows.create.return_value = 4
-        uow.workflows.get_by_id.return_value = FakeWorkflow(4, "Flow")
-        svc = WorkflowService(uow)
-        svc.create_workflow({"name": "Flow", "_skip_default_phase": True})
-        uow.phases.create.assert_not_called()
-
     def test_list_get_update_delete(self):
         uow = _make_uow()
         uow.workflows.list.return_value = [FakeWorkflow(1, "W")]
@@ -312,10 +304,3 @@ class TestWorkflowService:
         svc = WorkflowService(uow)
         with pytest.raises(ConflictError, match="связан с проектами"):
             svc.delete_workflow(3)
-
-    def test_ensure_default_exists(self):
-        uow = _make_uow()
-        uow.workflows.ensure_default_exists.return_value = FakeWorkflow(5, "Default")
-        svc = WorkflowService(uow)
-        assert svc.ensure_default_exists() == {"id": 5, "name": "Default"}
-        uow.workflows.ensure_default_exists.assert_called_once_with("sdlc-business-tech-v1")

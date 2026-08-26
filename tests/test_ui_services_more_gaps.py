@@ -9,12 +9,12 @@ import pytest
 
 pytestmark = [pytest.mark.ui]
 
+from project_workflow.interfaces.ui.helpers import _resolve_task_phase
 from project_workflow.interfaces.ui.services import (
     _build_parallel_phase_blocks,
     _get_task_detail,
     _load_cli_reference,
     _load_dashboard,
-    _resolve_task_phase,
 )
 
 
@@ -131,9 +131,8 @@ class TestServicesMoreGaps:
         assert any(item["name"] == "help" for item in result)
         assert not any(item["name"] == "ui" for item in result)
 
-    def test_resolve_task_phase_numeric_id_is_rejected(self, monkeypatch):
+    def test_resolve_task_phase_numeric_id_is_rejected(self):
         uow = MagicMock()
-        monkeypatch.setattr("project_workflow.interfaces.ui.services._get_app_state", lambda: _mock_state(uow))
-        token, phase = _resolve_task_phase("5", workflow_id=1)
+        token, phase = _resolve_task_phase("5", _db=uow, workflow_id=1)
         assert token == "5"
         assert phase is None

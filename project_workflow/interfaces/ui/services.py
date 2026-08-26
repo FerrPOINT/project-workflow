@@ -6,7 +6,6 @@ interface layer free of DB/infrastructure details.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from typing import Any, cast
 
 import project_workflow.interfaces.ui as _ui_module
@@ -15,18 +14,12 @@ from project_workflow.application.ui import UIDataService
 from .dependencies import _AppState
 from .helpers import (
     _build_parallel_phase_blocks,
-    _parse_optional_int,
 )
 
 
 def _get_app_state() -> _AppState:
     """Return the current UI application state (supports test monkeypatching)."""
     return cast(_AppState, _ui_module._app_state)
-
-
-def _get_db() -> Any:
-    """Return the current DB/UoW for UI page loaders."""
-    return _get_app_state().get_db()
 
 
 def _ui_data_service() -> UIDataService:
@@ -76,32 +69,8 @@ def _get_task_detail(task_key: str) -> dict[str, Any] | None:
     return _ui_data_service()._get_task_detail(task_key)
 
 
-def _resolve_task_phase(
-    current_phase: str | None,
-    _db: Any | None = None,
-    workflow_id: int | None = None,
-) -> tuple[str, dict[str, Any] | None]:
-    """Resolve a phase token to (phase_id, phase_dict)."""
-    from .helpers import _resolve_task_phase as _impl
-
-    db = _db if _db is not None else _get_db()
-    return _impl(current_phase, _db=db, workflow_id=workflow_id)
-
-
-def _resolve_task_phase_local(
-    current_phase: str | None,
-    phases: Sequence[dict[str, Any]],
-    workflow_id: int | None = None,
-) -> tuple[str, dict[str, Any] | None]:
-    """Resolve a phase token using a preloaded phase list."""
-    from .helpers import _resolve_task_phase_local as _impl
-
-    return _impl(current_phase, phases, workflow_id=workflow_id)
-
-
 __all__ = [
     "_build_parallel_phase_blocks",
-    "_parse_optional_int",
     "_load_cli_reference",
     "_load_workflows",
     "_load_phases",
@@ -110,6 +79,4 @@ __all__ = [
     "_load_projects",
     "_load_dashboard",
     "_get_task_detail",
-    "_resolve_task_phase",
-    "_resolve_task_phase_local",
 ]

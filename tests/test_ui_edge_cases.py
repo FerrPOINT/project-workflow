@@ -15,10 +15,9 @@ from project_workflow.interfaces.ui import (
     _load_cli_reference,
     _load_tasks,
     _load_workflows,
-    _parse_optional_int,
-    _resolve_task_phase,
     app,
 )
+from project_workflow.interfaces.ui.helpers import _resolve_task_phase
 
 client = TestClient(app)
 
@@ -71,26 +70,6 @@ class TestBuildParallelPhaseBlocks:
         assert [block["kind"] for block in blocks] == ["single", "parallel"]
         assert blocks[1]["phases"][0]["parallel_group"] == "2"
         assert blocks[1]["phases"][1]["parallel_group"] == "2"
-
-
-class TestParseOptionalInt:
-    def test_none(self):
-        assert _parse_optional_int(None) is None
-
-    def test_empty_string(self):
-        assert _parse_optional_int("") is None
-
-    def test_valid_positive(self):
-        assert _parse_optional_int("42") == 42
-
-    def test_invalid_string(self):
-        assert _parse_optional_int("abc") is None
-
-    def test_zero(self):
-        assert _parse_optional_int("0") is None
-
-    def test_negative(self):
-        assert _parse_optional_int("-1") is None
 
 
 class TestResolveTaskPhase:

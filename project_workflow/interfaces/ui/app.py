@@ -8,15 +8,42 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy import text
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from ... import __version__
-from ...infrastructure.db.session import get_engine
+from ...infrastructure.db.session import get_engine, reset_engine
 from .routes import api, pages
 
 logger = logging.getLogger(__name__)
+
+_VALIDATION_MESSAGES = {
+    "missing": "Обязательное поле не указано",
+    "extra_forbidden": "Неизвестное поле",
+    "int_type": "Ожидается целое число",
+    "string_type": "Ожидается строка",
+    "list_type": "Ожидается массив",
+    "literal_error": "Недопустимое значение",
+    "greater_than": "Значение меньше допустимого",
+    "greater_than_equal": "Значение меньше допустимого",
+    "too_short": "Недостаточно элементов",
+}
+
+
+def _validation_details(exc: RequestValidationError) -> list[dict[str, str]]:
+    details: list[dict[str, str]] = []
+    for issue in exc.errors():
+        location = ".".join(str(part) for part in issue["loc"] if part not in {"body", "query", "path"})
+        message = str(issue.get("msg", ""))
+        if message.startswith("Value error, "):
+            message = message.removeprefix("Value error, ")
+        else:
+            message = _VALIDATION_MESSAGES.get(str(issue.get("type")), "Недопустимое значение")
+        details.append({"field": location or "request", "message": message})
+    return details
 
 
 class _UoWMiddleware(BaseHTTPMiddleware):
@@ -96,10 +123,9 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     else:
         app.state.startup_error = None
     yield
-    # Shutdown: dispose engine pool to release DB connections cleanly.
+    # Shutdown: dispose and clear the cached engine pool.
     try:
-        engine = get_engine()
-        engine.dispose()
+        reset_engine()
     except Exception as exc:
         logger.warning("Engine dispose failed during shutdown: %s", exc)
 
@@ -108,6 +134,25 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Интерфейс project-workflow", version=__version__, lifespan=_lifespan)
     app.add_middleware(_RequestLoggingMiddleware)
     app.add_middleware(_UoWMiddleware)
+
+    @app.exception_handler(RequestValidationError)
+    async def _validation_error(_request: Request, exc: RequestValidationError) -> JSONResponse:
+        return JSONResponse(
+            {
+                "ok": False,
+                "error": "Некорректные данные запроса",
+                "details": _validation_details(exc),
+            },
+            status_code=422,
+        )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def _http_error(_request: Request, exc: StarletteHTTPException) -> JSONResponse:
+        if exc.status_code == 404:
+            return JSONResponse({"ok": False, "error": "Ресурс не найден"}, status_code=404)
+        if exc.status_code == 405:
+            return JSONResponse({"ok": False, "error": "Метод не поддерживается"}, status_code=405)
+        return JSONResponse({"ok": False, "error": str(exc.detail)}, status_code=exc.status_code)
 
     app.get("/health")(_health)
 
@@ -126,9 +171,9 @@ def create_app() -> FastAPI:
     # API
     app.get("/api/settings", response_model=None)(api.api_settings_get)
     app.get("/api/phases", response_model=None)(api.api_phases)
-    app.get("/api/phases/{phase_id}", response_model=None)(api.api_phase_detail)
+    app.get("/api/phases/{phase_id:int}", response_model=None)(api.api_phase_detail)
     app.post("/api/phases", response_model=None)(api.api_phase_create)
-    app.delete("/api/phases/{phase_id}", response_model=None)(api.api_phase_delete)
+    app.delete("/api/phases/{phase_id:int}", response_model=None)(api.api_phase_delete)
     app.get("/api/tasks", response_model=None)(api.api_tasks)
     app.delete("/api/tasks/{task_key}", response_model=None)(api.api_task_delete)
     app.get("/api/workflows", response_model=None)(api.api_workflows)
@@ -144,23 +189,16 @@ def create_app() -> FastAPI:
     app.put("/api/agents/{agent_id}", response_model=None)(api.api_agent_update)
     app.delete("/api/agents/{agent_id}", response_model=None)(api.api_agent_delete)
 
-    # Explicit 404 stubs for endpoints intentionally not implemented by this UI.
-    async def _not_found() -> JSONResponse:
-        return JSONResponse({"ok": False, "error": "Ресурс не найден"}, status_code=404)
-
     # Phase order update must be registered before /{phase_id} to avoid shadowing.
-    app.put("/api/phases/order", response_model=None)(api.api_update_order)
-    app.put("/api/phases/parallel", response_model=None)(_not_found)
-    app.put("/api/phases/{phase_id}", response_model=None)(api.api_phase_update)
-    app.put("/api/phases/{phase_id}/group", response_model=None)(_not_found)
-    app.get("/api/tasks/{task_key}", response_model=None)(_not_found)
+    app.put("/api/phases/order", response_model=None)(api.api_phase_batch_order)
+    app.put("/api/phases/{phase_id:int}", response_model=None)(api.api_phase_update)
 
     # Instructions management
-    app.get("/api/phases/{phase_id}/instructions", response_model=None)(api.api_instructions_list)
+    app.get("/api/phases/{phase_id:int}/instructions", response_model=None)(api.api_instructions_list)
     app.post("/api/instructions", response_model=None)(api.api_instruction_create)
     app.put("/api/instructions/{instruction_id}", response_model=None)(api.api_instruction_update)
     app.delete("/api/instructions/{instruction_id}", response_model=None)(api.api_instruction_delete)
-    app.put("/api/phases/{phase_id}/instructions/reorder", response_model=None)(api.api_instructions_reorder)
+    app.put("/api/phases/{phase_id:int}/instructions/reorder", response_model=None)(api.api_instructions_reorder)
 
     return app
 

@@ -8,16 +8,6 @@ from typing import Any
 from project_workflow.domain.phase_grouping import group_parallel_phases
 
 
-def _parse_optional_int(raw: Any) -> int | None:
-    if raw is None or raw == "":
-        return None
-    try:
-        value = int(str(raw).strip())
-    except (TypeError, ValueError):
-        return None
-    return value if value > 0 else None
-
-
 def _run_to_dict(run: Any) -> dict[str, Any]:
     if isinstance(run, dict):
         return run

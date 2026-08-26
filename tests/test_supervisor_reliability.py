@@ -118,7 +118,7 @@ def test_same_report_uses_provider_again_after_instruction_contract_change(super
             for instruction in phase.instructions
         ]
         updated.append({"description": "Новая обязательная инструкция", "execution_type": "sync", "skills": []})
-        PhaseService(engine.db).save_instructions(phase.id, updated)
+        PhaseService(engine.db).update_phase_detail(phase.id, {"instructions": updated})
         second = engine.evaluate(report)
 
     assert first["replayed"] is False
@@ -171,7 +171,7 @@ def test_catalog_change_during_provider_call_fails_closed_then_retries(superviso
             assert phase is not None and phase.id is not None
             checks = [{"description": item.description} for item in phase.checks]
             checks.append({"description": "Проверка, добавленная конкурентно"})
-            PhaseService(engine.db).save_checks(phase.id, checks)
+            PhaseService(engine.db).update_phase_detail(phase.id, {"checks": checks})
         return fixture_chat(*args, **kwargs)
 
     with patch.object(OpenAICompatibleClient, "chat", side_effect=mutate_then_answer) as chat:
