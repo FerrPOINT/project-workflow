@@ -26,7 +26,6 @@ def test_done_history_has_completion_time_and_pending_clears_it():
         task_id = uow.tasks.create(
             {
                 "project_id": project.id,
-                "workflow_id": project.workflow_id,
                 "task_key": "REVIEW-HISTORY-1",
                 "title": "History timestamp regression",
                 "current_phase": phase.code,
@@ -78,7 +77,6 @@ def test_conditional_task_transition_refreshes_updated_at():
         task_id = uow.tasks.create(
             {
                 "project_id": project.id,
-                "workflow_id": project.workflow_id,
                 "task_key": "REVIEW-UPDATED-AT-1",
                 "title": "Before",
                 "current_phase": phase.code,

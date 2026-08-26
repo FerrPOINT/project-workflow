@@ -145,7 +145,6 @@ def setup_db():
         uow.tasks.create(
             {
                 "project_id": default_project_id,
-                "workflow_id": default_workflow.id,
                 "task_key": "RUN-247",
                 "title": "Добавить E2E тесты для workflow",
                 "status": "active",
@@ -189,7 +188,6 @@ def setup_db():
         uow.tasks.create(
             {
                 "project_id": project_id,
-                "workflow_id": default_workflow.id,
                 "task_key": "UITEST-401",
                 "title": "Проверка project-aware UI",
                 "status": "active",
@@ -681,7 +679,7 @@ class TestPhasesPage:
 
         phase_html = response.text.split(_phase_href("10.REVIEW"), 1)[1].split("</a>", 1)[0]
 
-        assert "Проверка кода" in phase_html
+        assert "Code review" in phase_html
         assert "badge-parallel" in phase_html
         assert ">параллельно<" in phase_html
 
@@ -1216,7 +1214,7 @@ class TestTaskDetail:
         uow.commit()
         response = client.get("/task/RUN-247")
         assert response.status_code == 200
-        assert "Приём задачи" in response.text
+        assert "Intake" in response.text
         progress_match = re.search(r"(\d+)\s*/\s*(\d+)", response.text)
         assert progress_match is not None
         current, total = map(int, progress_match.groups())
@@ -1232,7 +1230,6 @@ class TestTaskDetail:
             task_id = uow.tasks.create(
                 {
                     "project_id": default_project_id,
-                    "workflow_id": _workflow_row(is_default=True)["id"],
                     "task_key": task_key,
                     "title": "Проверка истории фаз",
                     "status": "active",
@@ -1249,7 +1246,7 @@ class TestTaskDetail:
 
         response = client.get(f"/task/{task_key}")
         assert response.status_code == 200
-        assert "Приём задачи" in response.text
+        assert "Intake" in response.text
 
     def test_task_detail_has_phase_history(self):
         response = client.get("/task/RUN-247")
@@ -1266,7 +1263,7 @@ class TestTaskDetail:
         response = client.get("/api/tasks")
         assert response.status_code == 200
         task = next(task for task in response.json()["tasks"] if task["task_key"] == "UITEST-401")
-        assert task["current_phase_name"] == "Приём задачи"
+        assert task["current_phase_name"] == "Intake"
 
     def test_task_detail_marks_text_phase_code_as_current(self):
         uow = ui_app_state.get_db()
@@ -1277,7 +1274,6 @@ class TestTaskDetail:
             task_id = uow.tasks.create(
                 {
                     "project_id": project_id,
-                    "workflow_id": _workflow_row(is_default=True)["id"],
                     "task_key": task_key,
                     "title": "Проверка текстового кода фазы",
                     "status": "active",

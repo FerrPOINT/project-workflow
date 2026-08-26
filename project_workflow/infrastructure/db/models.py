@@ -53,7 +53,16 @@ class Workflow(Base):
         default=0,
         server_default="0",
     )
-    __table_args__ = (CheckConstraint("is_default IN (0, 1)", name="ck_workflows_is_default"),)
+    is_locked: Mapped[int] = mapped_column(nullable=False, default=0, server_default="0")
+    catalog_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    __table_args__ = (
+        CheckConstraint("is_default IN (0, 1)", name="ck_workflows_is_default"),
+        CheckConstraint("is_locked IN (0, 1)", name="ck_workflows_is_locked"),
+        CheckConstraint(
+            "catalog_sha256 IS NULL OR length(catalog_sha256) = 64",
+            name="ck_workflows_catalog_sha256",
+        ),
+    )
 
     phases: Mapped[list[Phase]] = relationship(
         "Phase", back_populates="workflow", cascade="all, delete-orphan", passive_deletes=True

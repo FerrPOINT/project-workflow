@@ -90,7 +90,6 @@ def test_task_update_preserves_identity_and_ownership(uow: SAUnitOfWork):
     task_id = uow.tasks.create(
         {
             "project_id": project_id,
-            "workflow_id": workflow_id,
             "task_key": "AUDIT-1",
             "title": "Original",
             "current_phase": "1.INTAKE",
@@ -197,7 +196,6 @@ def test_repository_lists_use_bounded_queries_for_related_data(uow: SAUnitOfWork
         uow.tasks.create(
             {
                 "project_id": project_id,
-                "workflow_id": workflow_id,
                 "task_key": f"QUERY-{index}",
                 "current_phase": str(phase_id),
             }

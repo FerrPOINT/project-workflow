@@ -33,7 +33,6 @@ class TestUowEdgeCases:
             task_id = uow.tasks.create(
                 {
                     "project_id": project.id,
-                    "workflow_id": project.workflow_id,
                     "task_key": "RUN-UOW-1",
                     "title": "t",
                     "status": "active",
@@ -55,24 +54,6 @@ class TestUowEdgeCases:
             }
         )
         assert isinstance(run_id, int)
-        uow.close()
-
-    def test_task_repository_requires_explicit_workflow_id(self):
-        uow = _fresh_uow()
-        project = uow.projects.get_by_code(config.DEFAULT_PROJECT_CODE)
-        phase = phase_by_code(uow, "1.INTAKE")
-        assert project is not None and phase is not None
-
-        with pytest.raises(ValueError, match="workflow_id задачи"):
-            uow.tasks.create(
-                {
-                    "project_id": project.id,
-                    "task_key": "RUN-UOW-MISSING-WORKFLOW",
-                    "current_phase": phase.code,
-                }
-            )
-
-        uow.rollback()
         uow.close()
 
     def test_context_manager_rolls_back_on_exception(self):

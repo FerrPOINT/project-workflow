@@ -75,7 +75,10 @@ class SupervisorEngine:
             if self.task and self.task.get("project_id")
             else None
         )
-        self.workflow_id: int | None = self._require_task_workflow_id(self.task)
+        task_workflow_id = self.task.get("workflow_id") if self.task else None
+        self.workflow_id = task_workflow_id or (
+            self.project["workflow_id"] if self.project else None
+        )
         self.workflow = self._workflow_service.get_workflow(self.workflow_id) if self.workflow_id else None
         self._all_phases: list[Phase] | None = None
         self._phase_map: dict[str, Phase] | None = None
@@ -174,13 +177,6 @@ class SupervisorEngine:
             return ""
         current = str(self.task.get("current_phase") or "").strip()
         return current
-
-    @staticmethod
-    def _require_task_workflow_id(task: dict[str, Any]) -> int:
-        workflow_id = task.get("workflow_id")
-        if not isinstance(workflow_id, int) or isinstance(workflow_id, bool) or workflow_id <= 0:
-            raise ValueError("У задачи отсутствует корректный workflow_id")
-        return workflow_id
 
     def _get_current_phase_obj(self) -> Phase | None:
         return self.phase_map.get(self.current_phase)
@@ -458,7 +454,10 @@ class SupervisorEngine:
             if self.task and self.task.get("project_id")
             else None
         )
-        self.workflow_id = self._require_task_workflow_id(self.task) if self.task else None
+        task_workflow_id = self.task.get("workflow_id") if self.task else None
+        self.workflow_id = task_workflow_id or (
+            self.project["workflow_id"] if self.project else None
+        )
         self.workflow = self._workflow_service.get_workflow(self.workflow_id) if self.workflow_id else None
         self._all_phases = (
             schema.load_phases_from_db(self._uow, workflow_id=self.workflow_id)

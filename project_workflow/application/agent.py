@@ -38,11 +38,11 @@ class AgentService:
         if owner is not None and owner.id != agent_id:
             raise ConflictError(f"Профиль Hermes {profile!r} уже назначен агенту {owner.name!r}")
 
-    def _lock_assigned_workflows(self, agent_id: int) -> None:
-        """Serialize agent changes with evaluations that read its phase assignments."""
+    def _ensure_agent_catalog_is_mutable(self, agent_id: int) -> None:
         for workflow_id in sorted(set(self._uow.phases.workflow_ids_for_agent(agent_id))):
-            if self._uow.workflows.lock(workflow_id) is None:
-                raise NotFoundError(f"Воркфлоу {workflow_id} не найден")
+            workflow = self._uow.workflows.lock(workflow_id)
+            if workflow is not None and getattr(workflow, "is_locked", False) is True:
+                raise ConflictError("Locked workflow revision agent cannot be changed")
 
     def create_agent(self, data: dict[str, Any]) -> dict[str, Any]:
         payload = dict(data)
@@ -74,7 +74,7 @@ class AgentService:
         if self._uow.agents.lock(agent_id) is None:
             raise NotFoundError(f"Агент {agent_id} не найден")
         try:
-            self._lock_assigned_workflows(agent_id)
+            self._ensure_agent_catalog_is_mutable(agent_id)
             self._validate_profile_owner(payload.get("hermes_profile"), agent_id=agent_id)
             self._uow.agents.update(agent_id, payload)
             self._uow.commit()
@@ -86,7 +86,6 @@ class AgentService:
     def delete_agent(self, agent_id: int) -> None:
         if self._uow.agents.lock(agent_id) is None:
             raise NotFoundError(f"Агент {agent_id} не найден")
-        self._lock_assigned_workflows(agent_id)
         if self._uow.phases.has_agent_reference(agent_id):
             self._uow.rollback()
             raise ConflictError("Агент назначен фазе, поэтому удалить его нельзя")

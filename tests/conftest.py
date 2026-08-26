@@ -29,17 +29,14 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
 
     from project_workflow.application import state as app_state
     from project_workflow.infrastructure.db.session import reset_engine
-    from project_workflow.interfaces import ui as ui_package
     from project_workflow.interfaces.ui import state as ui_state
 
     reset_engine()
     original_app_state = app_state._app_state
     original_ui_app_state = ui_state._app_state
-    original_ui_package_app_state = ui_package._app_state
     sqlite_app_state = app_state._AppState(database_url=database_url)
     app_state._app_state = sqlite_app_state
     ui_state._app_state = sqlite_app_state
-    ui_package._app_state = sqlite_app_state
 
     from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
@@ -52,7 +49,6 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
     # Restore original shared state so later tests are not confused.
     app_state._app_state = original_app_state
     ui_state._app_state = original_ui_app_state
-    ui_package._app_state = original_ui_package_app_state
     reset_engine()
     config.get_settings.cache_clear()
 

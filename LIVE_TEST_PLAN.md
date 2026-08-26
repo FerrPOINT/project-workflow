@@ -14,10 +14,9 @@ CLI subprocess -> PostgreSQL -> тестовый OpenAI-compatible HTTP -> Super
 с настоящими `/v1/models` и `/v1/chat/completions`, запускает CLI отдельными
 процессами и проверяет:
 
-- packaged-каталог `sdlc-business-tech-v1` из 19 фаз, включая serial- и
-  parallel-группы;
-- полный успешный путь без точной привязки документа к изменяемому числу
-  evaluator-вызовов;
+- каталог из 27 фаз и четыре группы `0.6 + 1`, `1.5 + 2`, `4.5 + 5`,
+  `7.5 + 7.6 + 7.6.R`;
+- 22 вызова evaluator и 22 `SupervisorRun` на чистом успешном пути;
 - fingerprints, audit snapshot, replay, post-done и переходы;
 - subprocess CLI, PostgreSQL и HTTP-контракт без monkeypatch Supervisor/LLM-клиента.
 
@@ -121,18 +120,17 @@ Windows-пути до записи командных логов.
 - Executor запускает профиль штатно через
   `hermes --profile <profile> --oneshot <prompt>`. Supervisor не подменяет профиль
   и не читает его содержимое.
-- Фаза `9.PR` создаёт Pull Request. Фаза `12.RELEASE_GATE` останавливает прогон
-  перед merge; merge выполняет Maintainer. Фаза `13.DELIVERY` проверяет merged
-  SHA и результат сборки.
+- Фаза 7 создаёт GitLab MR. Фаза 7.7 фиксирует готовность и останавливает прогон;
+  merge выполняет Maintainer. Фаза 8 проверяет merged SHA и зелёный pipeline.
 - Любой `PARTIAL`, `BLOCKED`, provider error или неверный переход останавливает
   продвижение. Замечание исправляется новым действием и новым отчётом; audit не
   переписывается и принудительный переход запрещён.
-- Если evaluator вернул реальный `PARTIAL/BLOCKED`, дополнительные циклы
-  сохраняются в transcript и audit, а не маскируются корректировкой ожидаемого
-  результата.
+- Чистый успешный каталог содержит 22 цикла. Если evaluator вернул реальный
+  `PARTIAL/BLOCKED`, итоговый счётчик будет больше 22: эти циклы сохраняются в
+  transcript и audit, а не маскируются корректировкой ожидаемого результата.
 - Реальная смена состояния (`open` -> `merged`) допустима в отчёте только с явной
   хронологией, временными метками и action evidence.
-- После завершения сверяются задача `status=done`, её фактическая конечная фаза, history, все
+- После завершения сверяются задача `phase=10/status=done`, history, все
   `SupervisorRun`, fingerprints, prompt version, raw evaluator, replay и post-done.
 - Успешную основную задачу и её audit оставляют в локальной PostgreSQL. Временную
   negative-probe задачу удаляют точечно после сохранения обезличенного лога.
