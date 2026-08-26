@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 pytestmark = [pytest.mark.unit]
 
 from project_workflow.infrastructure.db.session import (
+    DatabaseUnavailable,
     _is_sqlite,
     _normalize_url,
     ensure_schema,
@@ -126,14 +127,21 @@ class TestSessionHelpers:
 
         def _fake_create_engine(*a, **kw):
             calls.append((a, kw))
-            raise OperationalError("boom", {}, RuntimeError("db down"))
+            raise OperationalError("secret-marker", {}, RuntimeError("db down"))
 
-        with patch.object(session_module, "create_engine", _fake_create_engine):
+        with (
+            patch.object(session_module, "create_engine", _fake_create_engine),
+            patch.object(session_module, "logger") as logger,
+        ):
             from project_workflow.infrastructure.db.session import _create_postgres_engine
 
-            with pytest.raises(OperationalError, match="db down"):
+            with pytest.raises(DatabaseUnavailable, match="проверьте DATABASE_URL"):
                 _create_postgres_engine("postgresql://u:***@h/d")
         assert len(calls) == 3
+        assert logger.warning.call_count == 3
+        rendered_calls = str(logger.warning.call_args_list)
+        assert "secret-marker" not in rendered_calls
+        assert "db down" not in rendered_calls
 
     def test_get_engine_postgresql_disposes_failed_connections(self, monkeypatch):
         from unittest.mock import MagicMock, patch
@@ -150,12 +158,30 @@ class TestSessionHelpers:
         with (
             patch.object(session_module, "create_engine", side_effect=engines),
             patch.object(session_module.time, "sleep"),
-            pytest.raises(OperationalError, match="db down"),
+            pytest.raises(DatabaseUnavailable, match="проверьте DATABASE_URL"),
         ):
             _create_postgres_engine("postgresql://u:***@h/d")
 
         for engine in engines:
             engine.dispose.assert_called_once_with()
+
+    def test_invalid_database_url_is_reported_without_echoing_it(self):
+        marker = "secret-marker"
+        with pytest.raises(DatabaseUnavailable, match="проверьте DATABASE_URL") as error:
+            get_engine(f"not a url {marker}")
+
+        assert marker not in str(error.value)
+
+    def test_unsupported_database_backend_is_rejected_without_engine_creation(self):
+        from unittest.mock import patch
+
+        with (
+            patch("project_workflow.infrastructure.db.session.create_engine") as create,
+            pytest.raises(DatabaseUnavailable, match="проверьте DATABASE_URL"),
+        ):
+            get_engine("mysql://user:secret@localhost/database")
+
+        create.assert_not_called()
 
     def test_get_session_returns_active_session(self, tmp_path):
         reset_engine()

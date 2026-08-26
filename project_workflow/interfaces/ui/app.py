@@ -117,17 +117,14 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         engine = get_engine()
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
-    except Exception as exc:
-        logger.warning("Startup DB check failed: %s", exc)
-        app.state.startup_error = str(exc)
-    else:
-        app.state.startup_error = None
+    except Exception:
+        logger.warning("База данных недоступна при запуске приложения")
     yield
     # Shutdown: dispose and clear the cached engine pool.
     try:
         reset_engine()
-    except Exception as exc:
-        logger.warning("Engine dispose failed during shutdown: %s", exc)
+    except Exception:
+        logger.warning("Не удалось освободить пул базы данных при остановке приложения")
 
 
 def create_app() -> FastAPI:
