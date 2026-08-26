@@ -74,8 +74,12 @@ class SATaskRepository(TaskRepository):
 
     def create(self, data: dict[str, Any]) -> int:
         workflow_id = data.get("workflow_id")
-        if not isinstance(workflow_id, int) or isinstance(workflow_id, bool) or workflow_id <= 0:
-            raise ValueError("workflow_id задачи должен быть положительным целым числом")
+        if workflow_id is None:
+            with self._session.no_autoflush:
+                project = self._session.get(m.Project, data["project_id"])
+            if project is None:
+                raise NotFoundError(f"Проект {data['project_id']} не найден")
+            workflow_id = project.workflow_id
         item = m.Task(
             project_id=data["project_id"],
             workflow_id=workflow_id,

@@ -19,7 +19,7 @@ from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, event, inspect, text
-from sqlalchemy.engine import Connection, Engine, make_url
+from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import NullPool
@@ -42,7 +42,7 @@ class DatabaseRecreateRequired(RuntimeError):
     exit_code = 2
 
     def __init__(self) -> None:
-        super().__init__("Несовместимую базу данных необходимо пересоздать")
+        super().__init__("Устаревшую базу данных необходимо пересоздать")
 
 
 def expected_tables() -> frozenset[str]:
@@ -51,7 +51,7 @@ def expected_tables() -> frozenset[str]:
 
 
 def _is_sqlite(url: str) -> bool:
-    return make_url(url).get_backend_name() == "sqlite"
+    return url.startswith("sqlite://")
 
 
 def get_database_url() -> str:
@@ -71,15 +71,13 @@ def get_engine(url: str | None = None) -> Engine:
     """Return a cached or newly created SQLAlchemy engine."""
     global _engine
     target = _normalize_url(url)
-    parsed_target = make_url(target)
-    normalized_target = parsed_target.render_as_string(hide_password=False)
+    normalized_target = str(target)
     if _engine is None or str(_engine.url) != normalized_target:
-        if parsed_target.get_backend_name() == "sqlite":
-            db_path = parsed_target.database
-            if db_path and db_path != ":memory:":
-                Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+        if _is_sqlite(target):
+            db_path = target.replace("sqlite:///", "")
+            Path(db_path).parent.mkdir(parents=True, exist_ok=True)
             _engine = create_engine(
-                parsed_target,
+                target,
                 connect_args={"check_same_thread": False, "timeout": 10},
                 echo=False,
                 poolclass=NullPool,
@@ -214,13 +212,14 @@ def _metadata_is_current(target: Engine | Connection) -> bool:
 
 
 def ensure_migrated(engine: Engine | Connection | None = None) -> None:
-    """Apply the baseline only to an empty or exact ``0001_initial`` database."""
+    """Apply known forward migrations, rejecting databases from another graph."""
     target = engine or get_engine()
     bound_engine = target.engine if isinstance(target, Connection) else target
     schema = None if _is_sqlite(str(bound_engine.url)) else get_settings().DB_SCHEMA
     revisions = database_revisions(target)
     existing_tables = set(inspect(target).get_table_names(schema=schema)) - {"alembic_version"}
-    incompatible_revision = bool(revisions) and revisions != {migration_head()}
+    known_revisions = migration_revisions()
+    incompatible_revision = bool(revisions) and not revisions.issubset(known_revisions)
     exact_tables = existing_tables == expected_tables()
     incompatible_schema = revisions == {migration_head()} and (
         not exact_tables or not _metadata_is_current(target)
@@ -242,6 +241,13 @@ def migration_head() -> str:
     if head is None:
         raise RuntimeError("Не настроена головная ревизия миграций Alembic")
     return head
+
+
+def migration_revisions() -> frozenset[str]:
+    """Return every revision in the current forward-only migration graph."""
+    here = Path(__file__).resolve().parent.parent.parent.parent
+    script = ScriptDirectory.from_config(Config(str(here / "alembic.ini")))
+    return frozenset(revision.revision for revision in script.walk_revisions())
 
 
 def database_revisions(engine: Engine | Connection) -> set[str]:

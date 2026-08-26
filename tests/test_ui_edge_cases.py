@@ -97,14 +97,14 @@ class TestResolveTaskPhase:
     def test_none_current_phase(self):
         db = MagicMock()
         db.get_phases.return_value = []
-        token, phase = _resolve_task_phase(None, _db=db, workflow_id=1)
+        token, phase = _resolve_task_phase(None, _db=db)
         assert token == ""
         assert phase is None
 
     def test_by_code_match(self):
         db = MagicMock()
         db.get_phases.return_value = [{"id": 1, "code": "1", "name": "One", "phase_order": 1}]
-        token, phase = _resolve_task_phase("1", _db=db, workflow_id=1)
+        token, phase = _resolve_task_phase("1", _db=db)
         assert token == "1"
         assert phase["code"] == "1"
 
@@ -112,12 +112,12 @@ class TestResolveTaskPhase:
         db = MagicMock()
         db.get_phases.return_value = [{"id": 42, "code": "1", "name": "One", "phase_order": 1}]
         with pytest.raises(TypeError):
-            _resolve_task_phase(42, _db=db, workflow_id=1)
+            _resolve_task_phase(42, _db=db)
 
     def test_unresolvable(self):
         db = MagicMock()
         db.get_phases.return_value = []
-        token, phase = _resolve_task_phase("unknown", _db=db, workflow_id=1)
+        token, phase = _resolve_task_phase("unknown", _db=db)
         assert token == "unknown"
         assert phase is None
 

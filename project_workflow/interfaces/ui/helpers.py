@@ -62,9 +62,7 @@ def _resolve_task_phase(
     token = current_phase or ""
     wdb: Any = _db
 
-    if not isinstance(workflow_id, int) or isinstance(workflow_id, bool) or workflow_id <= 0:
-        return token, None
-    workflow_phases = wdb.get_phases(workflow_id=workflow_id)
+    workflow_phases = wdb.get_phases(workflow_id=workflow_id) if workflow_id is not None else wdb.get_phases()
     for phase in workflow_phases:
         if str(phase.get("code")) == token:
             return token, phase

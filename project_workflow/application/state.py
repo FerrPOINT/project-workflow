@@ -10,8 +10,6 @@ from __future__ import annotations
 import contextvars
 from pathlib import Path
 
-from sqlalchemy.engine import make_url
-
 from ..application.phase_service import PhaseService
 from ..config import get_settings
 from ..infrastructure.db.session import get_engine
@@ -38,12 +36,10 @@ class _AppState:
 
     def _database_url_normalized(self) -> str:
         target = self._database_url or get_settings().DATABASE_URL
-        parsed = make_url(target)
-        if parsed.get_backend_name() != "sqlite" or parsed.database in (None, "", ":memory:"):
-            return parsed.render_as_string(hide_password=False)
-        return parsed.set(database=str(Path(parsed.database).resolve())).render_as_string(
-            hide_password=False
-        )
+        if target.startswith("sqlite:///"):
+            target = str(Path(target[10:]).resolve())
+            target = f"sqlite:///{target}"
+        return target
 
     def get_db(self) -> SAUnitOfWork:
         """Return a fresh SQLAlchemy UnitOfWork."""

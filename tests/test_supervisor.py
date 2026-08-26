@@ -179,7 +179,6 @@ def test_supervisor_rolls_back_gate_phase_when_report_is_blocked(tmp_path: Path,
             "task_key": "SUP-3",
             "title": "Rollback case",
             "project_id": project_id,
-            "workflow_id": project_row.workflow_id,
             "current_phase": "sup.review",
         }
     )

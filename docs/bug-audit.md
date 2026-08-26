@@ -1,7 +1,7 @@
 # Реестр post-merge аудита багов
 
 Реестр фиксирует только дефекты существующего `project-workflow`. Новые
-продуктовые возможности, слои совместимости и дополнительные runtime-компоненты
+продуктовые возможности, compatibility-слои и дополнительные runtime-компоненты
 в этот аудит не входят.
 
 ## Подтверждённые дефекты
@@ -35,6 +35,6 @@
 - [x] Readiness/bootstrap повторно проверены на лишних и отсутствующих таблицах,
   неверной revision и ошибке seed до первой записи; SQLite-набор и PostgreSQL
   initial migration проходят полностью.
-- [x] Caller-sweep подтверждает production-consumers для `TaskRepository.lock()` и
-  `PhaseRepository.workflow_ids_for_agent()`; удалённые test-only методы не имеют
-  runtime-вызовов, а `create_all` ограничен явным SQLite test helper `ensure_schema()`.
+- [x] Caller/legacy sweep подтверждает, что новые `TaskRepository.lock()` и
+  `PhaseRepository.workflow_ids_for_agent()` имеют ровно по одному production-consumer,
+  а production `create_all` ограничен явным SQLite test helper `ensure_schema()`.

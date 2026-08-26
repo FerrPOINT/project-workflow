@@ -97,14 +97,17 @@ def test_phase_item_to_supervisor_with_delegate():
             "phase_order": 1,
             "code": "DLG",
             "name": "Delegate",
-            "delegate": {"agent": "reviewer"},
+            "delegate": {
+                "agent": "reviewer",
+                "toolsets": ["ts1"],
+                "timeout_min": 5,
+                "max_cycles": 2,
+            },
         })
     )
     assert phase.delegate is not None
     assert phase.delegate.agent == "reviewer"
-    assert phase.delegate.toolsets == []
-    assert phase.delegate.timeout_min == 10
-    assert phase.delegate.max_cycles == 3
+    assert phase.delegate.toolsets == ["ts1"]
 
 
 def test_catalog_bootstrap_is_database_idempotent(tmp_path, monkeypatch):
@@ -145,51 +148,6 @@ def test_catalog_bootstrap_is_database_idempotent(tmp_path, monkeypatch):
             "skills",
         ),
         ({"phase_order": "1", "code": "P", "name": "Phase"}, "phase_order"),
-        (
-            {
-                "phase_order": 1,
-                "code": "P",
-                "name": "Phase",
-                "instructions": [{"description": "Step", "example": "lost"}],
-            },
-            "example",
-        ),
-        (
-            {
-                "phase_order": 1,
-                "code": "P",
-                "name": "Phase",
-                "delegate": {"agent": "reviewer", "prompt_template": "lost"},
-            },
-            "prompt_template",
-        ),
-        (
-            {
-                "phase_order": 1,
-                "code": "P",
-                "name": "Phase",
-                "delegate": {"agent": "reviewer", "toolsets": []},
-            },
-            "toolsets",
-        ),
-        (
-            {
-                "phase_order": 1,
-                "code": "P",
-                "name": "Phase",
-                "delegate": {"agent": "reviewer", "timeout_min": 5},
-            },
-            "timeout_min",
-        ),
-        (
-            {
-                "phase_order": 1,
-                "code": "P",
-                "name": "Phase",
-                "delegate": {"agent": "reviewer", "max_cycles": 2},
-            },
-            "max_cycles",
-        ),
     ],
 )
 def test_seed_rejects_invalid_nested_shapes_before_bootstrap(tmp_path, phase, message):

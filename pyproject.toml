@@ -33,6 +33,10 @@ ui  = ["fastapi>=0.100", "uvicorn>=0.23", "jinja2>=3.1,<4"]
 
 [project.scripts]
 project-workflow = "project_workflow.interfaces.cli:main"
+project-workflow-admin = "project_workflow.interfaces.admin_legacy:main"
+
+[tool.alembic]
+# placeholder; alembic.ini carries real config
 
 [tool.ruff]
 line-length = 120

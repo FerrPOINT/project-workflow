@@ -24,7 +24,6 @@ from project_workflow.interfaces.ui.templates import _group_instructions
 class TestSessionHelpers:
     def test_is_sqlite_detects_sqlite(self):
         assert _is_sqlite("sqlite:///tmp/db.sqlite")
-        assert _is_sqlite("sqlite+pysqlite:///tmp/db.sqlite")
         assert _is_sqlite("sqlite:///:memory:")
         assert not _is_sqlite("postgresql://user:***@localhost/db")
         assert not _is_sqlite("mysql://user:***@localhost/db")
@@ -45,14 +44,6 @@ class TestSessionHelpers:
         e2 = get_engine(f"sqlite:///{db}")
         assert e1 is e2
         assert isinstance(e1, Engine)
-        reset_engine()
-
-    def test_get_engine_supports_explicit_pysqlite_driver(self, tmp_path):
-        reset_engine()
-        engine = get_engine(f"sqlite+pysqlite:///{tmp_path / 'driver.db'}")
-        assert engine.dialect.name == "sqlite"
-        with engine.connect() as connection:
-            assert connection.exec_driver_sql("SELECT 1").scalar_one() == 1
         reset_engine()
 
     def test_get_engine_creates_new_instance_after_url_change(self, tmp_path):

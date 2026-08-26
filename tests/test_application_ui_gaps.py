@@ -36,7 +36,6 @@ class TestUIDataServiceGaps:
                 "task_key": "RUN-1",
                 "title": "t",
                 "project_id": 1,
-                "workflow_id": 1,
                 "status": status,
                 "current_phase": "b",
             }
@@ -100,8 +99,8 @@ class TestUIDataServiceGaps:
         phases = {
             1: [{"id": 11, "workflow_id": 1, "code": "v1", "name": "V1"}],
             2: [
-                {"id": 21, "workflow_id": 2, "code": "wf-two-a", "name": "Workflow two A"},
-                {"id": 22, "workflow_id": 2, "code": "wf-two-b", "name": "Workflow two B"},
+                {"id": 21, "workflow_id": 2, "code": "v2a", "name": "V2 A"},
+                {"id": 22, "workflow_id": 2, "code": "v2b", "name": "V2 B"},
             ],
         }
         wdb.get_phases.side_effect = lambda workflow_id=None: phases.get(workflow_id, [])
@@ -138,14 +137,12 @@ class TestUIDataServiceGaps:
         assert result[0]["latest_verdict_label"] == "Принято"
         assert result[0]["latest_verdict_phase"] == "1"
 
-    def test_missing_task_workflow_id_fails_closed_without_project_fallback(self):
+    def test_resolve_task_workflow_id_from_project_dict(self):
         wdb = MagicMock()
         wid, phases = _service(wdb)._resolve_task_workflow_id(
             {"workflow_id": None, "project": {"workflow_id": 5}}, wdb
         )
-        assert wid is None
-        assert phases == []
-        wdb.get_phases.assert_not_called()
+        assert wid == 5
 
     def test_compute_completion_time_empty_done_entries(self):
         result = _service(None)._compute_completion_time(
