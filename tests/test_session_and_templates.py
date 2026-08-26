@@ -56,6 +56,13 @@ class TestSessionHelpers:
             assert connection.exec_driver_sql("SELECT 1").scalar_one() == 1
         reset_engine()
 
+    def test_get_engine_canonicalizes_relative_sqlite_path(self, monkeypatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        reset_engine()
+        engine = get_engine("sqlite:///nested/../relative.db")
+        assert engine.url.database == str((tmp_path / "relative.db").resolve())
+        reset_engine()
+
     def test_get_engine_creates_new_instance_after_url_change(self, tmp_path):
         from unittest.mock import patch
 
