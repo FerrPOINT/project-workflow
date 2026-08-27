@@ -64,6 +64,7 @@ omit = [
     "*/tests/*",
     "*/templates/*",
     "*/references/*",
+    "*/infrastructure/db/migrations/*",
 ]
 
 [tool.pytest.ini_options]

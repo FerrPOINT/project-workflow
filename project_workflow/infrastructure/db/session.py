@@ -247,13 +247,18 @@ def _metadata_is_current(target: Engine | Connection) -> bool:
 
 
 def ensure_migrated(engine: Engine | Connection | None = None) -> None:
-    """Apply the baseline only to an empty or exact ``0001_initial`` database."""
+    """Upgrade an empty database or a database on this repository's revision chain."""
     target = engine or get_engine()
     bound_engine = target.engine if isinstance(target, Connection) else target
+    if bound_engine.dialect.name == "sqlite":
+        _ensure_sqlite_test_schema(target)
+        return
     schema = None if _is_sqlite(str(bound_engine.url)) else get_settings().DB_SCHEMA
     revisions = database_revisions(target)
     existing_tables = set(inspect(target).get_table_names(schema=schema)) - {"alembic_version"}
-    incompatible_revision = bool(revisions) and revisions != {migration_head()}
+    script = _migration_script()
+    known_revisions = {item.revision for item in script.walk_revisions()}
+    incompatible_revision = len(revisions) > 1 or bool(revisions - known_revisions)
     exact_tables = existing_tables == expected_tables()
     incompatible_schema = revisions == {migration_head()} and (
         not exact_tables or not _metadata_is_current(target)
@@ -267,14 +272,47 @@ def ensure_migrated(engine: Engine | Connection | None = None) -> None:
         raise DatabaseRecreateRequired()
 
 
+def _ensure_sqlite_test_schema(target: Engine | Connection) -> None:
+    """Use ORM DDL only for an empty, explicitly supplied SQLite test database."""
+    revisions = database_revisions(target)
+    existing_tables = set(inspect(target).get_table_names()) - {"alembic_version"}
+    if revisions == {migration_head()}:
+        if existing_tables == expected_tables() and _metadata_is_current(target):
+            return
+        raise DatabaseRecreateRequired()
+    if revisions or existing_tables:
+        raise DatabaseRecreateRequired()
+
+    def create_and_stamp(connection: Connection) -> None:
+        Base.metadata.create_all(connection)
+        run_alembic_command("stamp", connection)
+
+    if isinstance(target, Connection):
+        create_and_stamp(target)
+    else:
+        with target.begin() as connection:
+            create_and_stamp(connection)
+    migrated_tables = set(inspect(target).get_table_names()) - {"alembic_version"}
+    if (
+        database_revisions(target) != {migration_head()}
+        or migrated_tables != expected_tables()
+        or not _metadata_is_current(target)
+    ):
+        raise DatabaseRecreateRequired()
+
+
 def migration_head() -> str:
     """Return the repository's single Alembic head revision."""
-    here = Path(__file__).resolve().parent.parent.parent.parent
-    script = ScriptDirectory.from_config(Config(str(here / "alembic.ini")))
+    script = _migration_script()
     head = script.get_current_head()
     if head is None:
         raise RuntimeError("Не настроена головная ревизия миграций Alembic")
     return head
+
+
+def _migration_script() -> ScriptDirectory:
+    here = Path(__file__).resolve().parent.parent.parent.parent
+    return ScriptDirectory.from_config(Config(str(here / "alembic.ini")))
 
 
 def database_revisions(engine: Engine | Connection) -> set[str]:

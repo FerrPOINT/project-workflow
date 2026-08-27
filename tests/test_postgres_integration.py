@@ -36,6 +36,7 @@ from project_workflow.application.task import TaskService
 from project_workflow.application.workflow import WorkflowService
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.infrastructure.db.session import (
+    database_revisions,
     ensure_migrated,
     ensure_schema,
     get_engine,
@@ -119,24 +120,170 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0001_initial"
+        assert version == migration_head() == "0003_normalized"
         assert schema_is_ready(engine) is True
 
-    def test_downgrade_and_reupgrade(self, pg_url):
+    def test_upgrade_from_deployed_v2_preserves_tasks_catalog_and_audit(self, pg_url):
+        from project_workflow.infrastructure.db.models import Base
+        from project_workflow.infrastructure.db.session import migration_head, schema_is_ready
+
+        engine = get_engine(pg_url)
+        run_alembic_command("upgrade", engine, "0002_sdlc_v2")
+        with engine.begin() as conn:
+            v1_id = conn.execute(
+                text("SELECT id FROM workflows WHERE name = 'sdlc-business-tech-v1'")
+            ).scalar_one()
+            v2_id = conn.execute(
+                text("SELECT id FROM workflows WHERE name = 'sdlc-business-tech-v2'")
+            ).scalar_one()
+            project_id = conn.execute(
+                text("SELECT id FROM projects WHERE code = 'RUN'")
+            ).scalar_one()
+            project_workflow_id = conn.execute(
+                text("SELECT workflow_id FROM projects WHERE id = :id"), {"id": project_id}
+            ).scalar_one()
+            assert project_workflow_id == v2_id
+
+            v1_intake = conn.execute(
+                text("SELECT id FROM phases WHERE workflow_id = :workflow AND code = '1.INTAKE'"),
+                {"workflow": v1_id},
+            ).scalar_one()
+            v1_requirements = conn.execute(
+                text("SELECT id FROM phases WHERE workflow_id = :workflow AND code = '2.REQUIREMENTS'"),
+                {"workflow": v1_id},
+            ).scalar_one()
+            v2_intake = conn.execute(
+                text("SELECT id FROM phases WHERE workflow_id = :workflow AND code = '1.INTAKE'"),
+                {"workflow": v2_id},
+            ).scalar_one()
+            v1_task = conn.execute(
+                text(
+                    "INSERT INTO tasks "
+                    "(project_id, workflow_id, task_key, current_phase, status) "
+                    "VALUES (:project, :workflow, 'RUN-MIGRATION-V1', '2.REQUIREMENTS', 'active') "
+                    "RETURNING id"
+                ),
+                {"project": project_id, "workflow": v1_id},
+            ).scalar_one()
+            v2_task = conn.execute(
+                text(
+                    "INSERT INTO tasks "
+                    "(project_id, workflow_id, task_key, current_phase, status) "
+                    "VALUES (:project, :workflow, 'RUN-MIGRATION-V2', '1.INTAKE', 'active') "
+                    "RETURNING id"
+                ),
+                {"project": project_id, "workflow": v2_id},
+            ).scalar_one()
+            conn.execute(
+                text(
+                    "INSERT INTO task_history (task_id, phase_id, status, completed_at) VALUES "
+                    "(:task, :intake, 'done', NOW()), (:task, :requirements, 'pending', NULL)"
+                ),
+                {"task": v1_task, "intake": v1_intake, "requirements": v1_requirements},
+            )
+            first_run = conn.execute(
+                text(
+                    "INSERT INTO supervisor_runs "
+                    "(task_id, phase_id, verdict, report, covered, missing, blockers, "
+                    "next_phase_id, report_fingerprint, context_snapshot, response) "
+                    "VALUES (:task, :phase, 'pass', 'report-v1', '[\"check\"]', '[]', '[]', "
+                    ":next_phase, :fingerprint, '{\"model\":\"test\"}', '{\"verdict\":\"PASS\"}') "
+                    "RETURNING id"
+                ),
+                {
+                    "task": v1_task,
+                    "phase": v1_intake,
+                    "next_phase": v1_requirements,
+                    "fingerprint": "a" * 64,
+                },
+            ).scalar_one()
+            conn.execute(
+                text(
+                    "INSERT INTO supervisor_runs "
+                    "(task_id, phase_id, verdict, report, covered, missing, blockers, "
+                    "report_fingerprint, context_snapshot, response) "
+                    "VALUES (:task, :phase, 'blocked', 'report-v2', '[]', '[\"evidence\"]', "
+                    "'[\"blocked\"]', :fingerprint, '{}', '{\"verdict\":\"BLOCKED\"}')"
+                ),
+                {"task": v2_task, "phase": v2_intake, "fingerprint": "b" * 64},
+            )
+            before = {
+                "projects": conn.execute(text("SELECT COUNT(*) FROM projects")).scalar_one(),
+                "tasks": conn.execute(text("SELECT COUNT(*) FROM tasks")).scalar_one(),
+                "instructions": conn.execute(text("SELECT COUNT(*) FROM instructions")).scalar_one(),
+                "checks": conn.execute(text("SELECT COUNT(*) FROM checks")).scalar_one(),
+                "evidence": conn.execute(text("SELECT COUNT(*) FROM evidence")).scalar_one(),
+                "history": conn.execute(text("SELECT COUNT(*) FROM task_history")).scalar_one(),
+                "runs": conn.execute(text("SELECT COUNT(*) FROM supervisor_runs")).scalar_one(),
+            }
+
+        run_alembic_command("upgrade", engine, "head")
+        with engine.connect() as conn:
+            assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == migration_head()
+            assert conn.execute(text("SELECT COUNT(*) FROM projects")).scalar_one() == before["projects"]
+            assert conn.execute(text("SELECT COUNT(*) FROM tasks")).scalar_one() == before["tasks"]
+            assert conn.execute(text("SELECT COUNT(*) FROM phase_instructions")).scalar_one() == before["instructions"]
+            assert conn.execute(text("SELECT COUNT(*) FROM phase_checks")).scalar_one() == before["checks"]
+            assert (
+                conn.execute(text("SELECT COUNT(*) FROM phase_evidence_requirements")).scalar_one()
+                == before["evidence"]
+            )
+            assert conn.execute(text("SELECT COUNT(*) FROM task_step_history")).scalar_one() == before["runs"]
+            assert conn.execute(text("SELECT COUNT(*) FROM task_phase_events")).scalar_one() == before["history"] + 1
+            migrated = conn.execute(
+                text(
+                    "SELECT t.project_id, t.workflow_id, t.current_phase_id, p.code "
+                    "FROM tasks t JOIN phases p ON p.id = t.current_phase_id "
+                    "WHERE t.id = :task"
+                ),
+                {"task": v1_task},
+            ).one()
+            assert tuple(migrated) == (project_id, v1_id, v1_requirements, "2.REQUIREMENTS")
+            step = conn.execute(
+                text(
+                    "SELECT worker_report, replay_fingerprint, evaluation_snapshot, supervisor_response "
+                    "FROM task_step_history WHERE id = :id"
+                ),
+                {"id": first_run},
+            ).one()
+            assert tuple(step) == (
+                "report-v1",
+                "a" * 64,
+                '{"model":"test"}',
+                '{"verdict":"PASS"}',
+            )
+            event_types = conn.execute(
+                text(
+                    "SELECT event_type FROM task_phase_events WHERE task_id = :task ORDER BY id"
+                ),
+                {"task": v1_task},
+            ).scalars().all()
+            assert event_types == ["completed", "entered"]
+            assert conn.execute(
+                text(
+                    "SELECT step_history_id FROM task_phase_events "
+                    "WHERE task_id = :task AND phase_id = :phase"
+                ),
+                {"task": v1_task, "phase": v1_intake},
+            ).scalar_one() == first_run
+            context = MigrationContext.configure(
+                conn,
+                opts={"compare_type": True, "compare_server_default": True},
+            )
+            assert compare_metadata(context, Base.metadata) == []
+
+        ensure_migrated(engine)
+        assert schema_is_ready(engine) is True
+
+    def test_lossless_downgrade_is_refused_without_mutation(self, pg_url):
         from project_workflow.infrastructure.db.models import Base
 
         engine = get_engine(pg_url)
         ensure_migrated(engine)
-        run_alembic_command("downgrade", engine, "base")
+        with pytest.raises(RuntimeError, match="Lossless downgrade"):
+            run_alembic_command("downgrade", engine, "base")
 
-        tables_after_downgrade = set(
-            inspect(engine).get_table_names(schema="project_workflow")
-        )
-        assert tables_after_downgrade.isdisjoint(Base.metadata.tables)
-        assert "project_workflow" not in inspect(engine).get_schema_names()
-
-        ensure_migrated(engine)
-        assert "project_workflow" in inspect(engine).get_schema_names()
+        assert database_revisions(engine) == {"0003_normalized"}
         assert set(Base.metadata.tables).issubset(
             inspect(engine).get_table_names(schema="project_workflow")
         )
@@ -322,18 +469,32 @@ class TestPostgresInitialMigration:
                 project_ids.append(project_id)
                 phase_ids.append(phase_id)
 
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO project_workflow.tasks "
+                    "(project_id, workflow_id, task_key, current_phase_id, status) "
+                    "VALUES (:project_id, :workflow_id, 'PA-PINNED', :phase_id, 'active')"
+                ),
+                {
+                    "project_id": project_ids[0],
+                    "workflow_id": workflow_ids[1],
+                    "phase_id": phase_ids[1],
+                },
+            )
+
         with pytest.raises(IntegrityError):
             with engine.begin() as conn:
                 conn.execute(
                     text(
                         "INSERT INTO project_workflow.tasks "
                         "(project_id, workflow_id, task_key, current_phase_id, status) "
-                        "VALUES (:project_id, :workflow_id, 'PA-BAD', :phase_id, 'active')"
+                        "VALUES (:project_id, :workflow_id, 'PA-BAD-PHASE', :phase_id, 'active')"
                     ),
                     {
                         "project_id": project_ids[0],
                         "workflow_id": workflow_ids[1],
-                        "phase_id": phase_ids[1],
+                        "phase_id": phase_ids[0],
                     },
                 )
 
@@ -622,6 +783,9 @@ class TestPostgresUoW:
         ensure_migrated(get_engine(pg_url))
         uow = SAUnitOfWork(pg_url)
         with uow:
+            for workflow in uow.workflows.list():
+                if workflow.is_default and workflow.id is not None:
+                    uow.workflows.update(int(workflow.id), {"is_default": False})
             default_wf_id = uow.workflows.create({"name": "Default", "description": "default", "is_default": True})
             uow.projects.create(
                 {
@@ -1110,9 +1274,8 @@ class TestPostgresUoW:
             result_future = pool.submit(evaluate)
             assert provider_started.wait(10)
             mutation = SAUnitOfWork(pg_url)
-            workflow = mutation.workflows.get_default()
-            assert workflow is not None and workflow.id is not None
-            phase = mutation.phases.get_by_code(int(workflow.id), "1.INTAKE")
+            project = next(item for item in mutation.projects.list() if item.code == "RUN")
+            phase = mutation.phases.get_by_code(int(project.workflow_id), "1.INTAKE")
             assert phase is not None and phase.id is not None
             checks = [dict(row) for row in mutation.phases.get_checks(int(phase.id))]
             checks.append({"description": "Concurrent PostgreSQL catalog check"})
@@ -1586,9 +1749,14 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
         try:
             workflows = list(bootstrap_uow.workflows.list())
             projects = list(bootstrap_uow.projects.list())
-            assert [workflow.name for workflow in workflows] == [config_module.DEFAULT_WORKFLOW_NAME]
+            assert [workflow.name for workflow in workflows] == [
+                config_module.DEFAULT_WORKFLOW_NAME,
+                "sdlc-business-tech-v2",
+            ]
             assert [project.code for project in projects] == ["RUN"]
+            assert projects[0].workflow_id == workflows[1].id
             assert len(bootstrap_uow.phases.list(workflow_id=workflows[0].id)) == 19
+            assert len(bootstrap_uow.phases.list(workflow_id=workflows[1].id)) == 19
         finally:
             bootstrap_uow.close()
 
@@ -1598,7 +1766,7 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
         assignment_contract = assignment["phase_contract"]
         assert assignment_contract["phase_code"] == "1.INTAKE"
         assert assignment_contract["phase_name"] == "Приём задачи"
-        assert assignment_contract["workflow_revision"] == "sdlc-business-tech-v1"
+        assert assignment_contract["workflow_revision"] == "sdlc-business-tech-v2"
         assert assignment_contract["actor"] == "hermes"
         assert assignment_contract["skills"] == [
             "project-workflow-executor",
