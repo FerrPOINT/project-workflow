@@ -112,7 +112,7 @@ Fallback evaluator отсутствует: если провайдер недо�
 
 ```bash
 cp .env.example .env
-docker compose up --build -d
+docker compose up --build -d --wait
 # UI доступен на http://127.0.0.1:8812
 ```
 

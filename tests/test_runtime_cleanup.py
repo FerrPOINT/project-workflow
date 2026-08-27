@@ -94,6 +94,14 @@ def test_compose_publishes_database_and_api_on_loopback_only():
     assert '"8812:8811"' not in compose
 
 
+def test_compose_waits_for_api_readiness():
+    compose = COMPOSE_PATH.read_text(encoding="utf-8")
+    api_block = compose.split("\n  api:\n", maxsplit=1)[1]
+    assert "healthcheck:" in api_block
+    assert "http://127.0.0.1:8811/health" in api_block
+    assert "data.get('ok') is True" in api_block
+
+
 def test_seed_catalog_has_exact_codes_and_order():
     phases = _items()
     assert [phase["code"] for phase in phases] == EXPECTED_CODES

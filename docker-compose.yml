@@ -40,6 +40,12 @@ services:
       OPENAI_TIMEOUT: ${OPENAI_TIMEOUT:-120}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_REASONING_EFFORT: ${OPENAI_REASONING_EFFORT:-none}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json, urllib.request; data = json.load(urllib.request.urlopen('http://127.0.0.1:8811/health', timeout=3)); assert data.get('ok') is True"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
     depends_on:
       migrate:
         condition: service_completed_successfully
