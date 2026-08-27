@@ -1,4 +1,4 @@
-"""Contract tests for the PostgreSQL migration chain and isolated SQLite schema."""
+"""Contract tests for the single clean Alembic baseline."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from project_workflow.infrastructure.db.session import (
     database_revisions,
     ensure_migrated,
     migration_head,
+    run_alembic_command,
     schema_is_ready,
 )
 
@@ -55,14 +56,10 @@ def _constraint_names(items: list[dict]) -> set[str]:
     return {str(item["name"]) for item in items if item.get("name")}
 
 
-def test_repository_has_one_linear_migration_chain():
+def test_repository_has_exactly_one_base_and_head():
     versions = Path(__file__).parents[1] / "project_workflow" / "infrastructure" / "db" / "migrations" / "versions"
-    assert sorted(path.name for path in versions.glob("*.py")) == [
-        "0001_initial_schema.py",
-        "0002_sdlc_business_tech_v2.py",
-        "0003_normalize_persisted_schema.py",
-    ]
-    assert migration_head() == "0003_normalized"
+    assert [path.name for path in versions.glob("*.py")] == ["0001_initial_schema.py"]
+    assert migration_head() == "0001_initial"
 
 
 def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
@@ -114,7 +111,7 @@ def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
         }
         assert actual_fks == expected_fks, table_name
 
-    assert database_revisions(engine) == {"0003_normalized"}
+    assert database_revisions(engine) == {"0001_initial"}
     assert schema_is_ready(engine) is True
     with engine.connect() as connection:
         context = MigrationContext.configure(
@@ -130,6 +127,15 @@ def test_in_memory_sqlite_migration_keeps_the_schema_alive():
     ensure_migrated(engine)
 
     assert schema_is_ready(engine) is True
+
+
+def test_sqlite_upgrade_downgrade_reupgrade(tmp_path):
+    engine = _sqlite_engine(tmp_path)
+    ensure_migrated(engine)
+    run_alembic_command("downgrade", engine, "base")
+    assert set(inspect(engine).get_table_names()).isdisjoint(Base.metadata.tables)
+    ensure_migrated(engine)
+    assert set(Base.metadata.tables).issubset(inspect(engine).get_table_names())
 
 
 @pytest.mark.parametrize("legacy_revision", LEGACY_REVISIONS)
@@ -266,7 +272,7 @@ def test_head_with_damaged_or_polluted_schema_is_refused(tmp_path, mutation):
     assert schema_is_ready(engine) is False
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0003_normalized"}
+    assert database_revisions(engine) == {"0001_initial"}
     if mutation == "extra":
         with engine.connect() as connection:
             assert connection.execute(text("SELECT id FROM unexpected_table")).scalar_one() == 42

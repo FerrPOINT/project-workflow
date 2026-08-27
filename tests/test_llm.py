@@ -46,7 +46,7 @@ class FakeEvidence:
 class TestOpenAICompatibleClient:
     """Unit tests for the provider-neutral Chat Completions wrapper."""
 
-    def test_openrouter_defaults(self, monkeypatch):
+    def test_app_test_defaults(self, monkeypatch):
         from project_workflow.config import get_settings
 
         for name in (
@@ -59,8 +59,8 @@ class TestOpenAICompatibleClient:
             monkeypatch.delenv(name, raising=False)
         get_settings.cache_clear()
         client = OpenAICompatibleClient()
-        assert client.base_url == "https://openrouter.ai/api/v1"
-        assert client.model == "z-ai/glm-5.2"
+        assert client.base_url == "http://192.168.10.1:4000/v1"
+        assert client.model == "app-test"
         assert client.timeout == 120
         assert client.api_key == ""
         assert client.reasoning_effort == "none"

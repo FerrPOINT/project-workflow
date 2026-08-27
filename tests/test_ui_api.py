@@ -185,9 +185,9 @@ class TestApiPhases:
             f"/api/phases/{phase_id}",
             json={
                 "description": "Atomic update",
-                "instructions": [{"description": "Do one thing"}],
-                "checks": [{"description": "Check one thing"}],
-                "evidence": [{"description": "One log"}],
+                "instructions": [{"id": None, "description": "Do one thing"}],
+                "checks": [{"id": None, "description": "Check one thing"}],
+                "evidence": [{"id": None, "description": "One log"}],
             },
         )
 
@@ -208,9 +208,9 @@ class TestApiPhases:
                 f"/api/phases/{phase_id}",
                 json={
                     "description": "Must be rolled back",
-                    "instructions": [{"description": "Must be rolled back"}],
-                    "checks": [{"description": "Must be rolled back"}],
-                    "evidence": [{"description": "Must be rolled back"}],
+                    "instructions": [{"id": None, "description": "Must be rolled back"}],
+                    "checks": [{"id": None, "description": "Must be rolled back"}],
+                    "evidence": [{"id": None, "description": "Must be rolled back"}],
                 },
             )
 
@@ -222,15 +222,49 @@ class TestApiPhases:
         assert after["evidence"] == before["evidence"]
 
     @pytest.mark.parametrize(
+        "item",
+        [
+            {"description": "Без ID"},
+            {"id": True, "description": "Boolean"},
+            {"id": "1", "description": "Строка"},
+        ],
+    )
+    def test_composite_phase_update_rejects_invalid_nested_ids(self, client, item):
+        phase_id = _phase_id(client, "1.INTAKE")
+
+        response = client.put(f"/api/phases/{phase_id}", json={"checks": [item]})
+
+        assert response.status_code == 422
+
+    def test_composite_phase_update_rejects_foreign_nested_id_atomically(self, client):
+        phase_id = _phase_id(client, "1.INTAKE")
+        foreign_phase_id = _phase_id(client, "2.REQUIREMENTS")
+        before = client.get(f"/api/phases/{phase_id}").json()["phase"]
+        foreign = client.get(f"/api/phases/{foreign_phase_id}").json()["phase"]
+
+        response = client.put(
+            f"/api/phases/{phase_id}",
+            json={
+                "description": "Не должно сохраниться",
+                "checks": [
+                    {"id": foreign["checks"][0]["id"], "description": "Чужая проверка"}
+                ],
+            },
+        )
+
+        assert response.status_code == 409
+        assert client.get(f"/api/phases/{phase_id}").json()["phase"] == before
+
+    @pytest.mark.parametrize(
         "payload",
         [
-            {"instructions": [{"skills": []}]},
-            {"instructions": [{"description": "Step", "skills": "testing"}]},
-            {"instructions": [{"description": "Step", "execution_type": "invalid"}]},
-            {"checks": [{"description": ""}]},
-            {"checks": [{"description": "Check", "command": None}]},
-            {"evidence": [{"description": "Evidence", "validator": None}]},
-            {"checks": [{"description": "same"}, {"description": " SAME "}]},
+            {"instructions": [{"id": None, "skills": []}]},
+            {"instructions": [{"id": None, "description": "Step", "skills": "testing"}]},
+            {"instructions": [{"id": None, "description": "Step", "execution_type": "invalid"}]},
+            {"checks": [{"id": None, "description": ""}]},
+            {"checks": [{"id": None, "description": "Check", "command": None}]},
+            {"evidence": [{"id": None, "description": "Evidence", "validator": None}]},
+            {"checks": [{"id": None, "description": "same"}, {"id": None, "description": " SAME "}]},
             {"evidence": None},
         ],
     )

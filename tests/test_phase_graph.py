@@ -83,3 +83,54 @@ def test_invalid_graphs_are_rejected(phases, message):
 
 def test_backward_rollback_is_valid():
     validate_phase_graph([_node("A", 1), _node("B", 2, rollback_target="A")])
+
+
+def test_linked_parallel_group_accepts_common_or_absent_rollback_target():
+    validate_phase_graph(
+        [
+            _node("A", 1),
+            _node("B", 2, execution_type="parallel", parallel_with="C", rollback_target="A"),
+            _node("C", 3, execution_type="parallel", rollback_target="A"),
+        ]
+    )
+    validate_phase_graph(
+        [
+            _node("A", 1, execution_type="parallel", parallel_with="B"),
+            _node("B", 2, execution_type="parallel"),
+        ]
+    )
+
+
+@pytest.mark.parametrize(
+    "targets",
+    [("A", None), ("A", "B")],
+)
+def test_linked_parallel_group_rejects_mixed_or_different_rollback_targets(targets):
+    with pytest.raises(ValueError, match="общую цель отката"):
+        validate_phase_graph(
+            [
+                _node("A", 1),
+                _node("B", 2),
+                _node(
+                    "C",
+                    3,
+                    execution_type="parallel",
+                    parallel_with="D",
+                    rollback_target=targets[0],
+                ),
+                _node("D", 4, execution_type="parallel", rollback_target=targets[1]),
+            ]
+        )
+
+
+def test_disconnected_parallel_components_may_use_different_rollback_targets():
+    validate_phase_graph(
+        [
+            _node("A", 1),
+            _node("B", 2),
+            _node("C", 3, execution_type="parallel", parallel_with="D", rollback_target="A"),
+            _node("D", 4, execution_type="parallel", rollback_target="A"),
+            _node("E", 5, execution_type="parallel", parallel_with="F", rollback_target="B"),
+            _node("F", 6, execution_type="parallel", rollback_target="B"),
+        ]
+    )

@@ -261,6 +261,15 @@ class TestSessionHelpers:
             mock_upgrade.assert_called_once()
         reset_engine()
 
+    def test_programmatic_alembic_config_is_independent_of_working_directory(
+        self, tmp_path, monkeypatch
+    ):
+        from project_workflow.infrastructure.db.session import migration_head
+
+        monkeypatch.chdir(tmp_path)
+
+        assert migration_head() == "0001_initial"
+
     def test_ensure_migrated_postgresql_branch(self, tmp_path):
         from unittest.mock import MagicMock, patch
 

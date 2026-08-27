@@ -113,6 +113,7 @@
     "description": "Параллельная работа B.",
     "execution_type": "parallel",
     "parallel_with_phase_code": "manual.parallel-a",
+    "rollback_target_phase_code": "manual.plan",
     "instructions": [
       {
         "step_num": 1,

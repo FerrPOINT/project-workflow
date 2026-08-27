@@ -114,12 +114,6 @@ class SAPhaseInstructionRepository(PhaseInstructionRepository):
             raise NotFoundError(f"Инструкция {instruction_id} не найдена")
         self._session.delete(row)
 
-    def delete_for_phase(self, phase_id: int) -> None:
-        self._session.execute(
-            text("DELETE FROM phase_instructions WHERE phase_id = :pid"),
-            {"pid": phase_id},
-        )
-
     def reorder(self, phase_id: int, orders: builtins.list[tuple[int, int]]) -> None:
         """Reassign step_num values based on (instruction_id, new_step_num) pairs.
 

@@ -5,9 +5,10 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from project_workflow.domain.exceptions import NotFoundError
 from project_workflow.domain.repositories import PhaseCheckRepository
 from project_workflow.infrastructure.db import models as m
 
@@ -51,10 +52,18 @@ class SAPhaseCheckRepository(PhaseCheckRepository):
         self._session.flush()
         return int(item.id)
 
-    def delete_for_phase(self, phase_id: int) -> None:
-        self._session.execute(
-            text("DELETE FROM phase_checks WHERE phase_id = :pid"),
-            {"pid": phase_id},
-        )
+    def update(self, check_id: int, data: dict[str, Any]) -> None:
+        row = self._session.get(m.PhaseCheck, check_id)
+        if row is None:
+            raise NotFoundError(f"Проверка {check_id} не найдена")
+        row.description = data["description"]
+        self._session.flush()
+
+    def delete(self, check_id: int) -> None:
+        row = self._session.get(m.PhaseCheck, check_id)
+        if row is None:
+            raise NotFoundError(f"Проверка {check_id} не найдена")
+        self._session.delete(row)
+        self._session.flush()
 
 

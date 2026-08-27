@@ -22,7 +22,7 @@
   <img src="https://img.shields.io/badge/Jinja2-B41717?style=flat-square&logo=jinja&logoColor=white" alt="Jinja2" />
   <img src="https://img.shields.io/badge/Alembic-6B8E23?style=flat-square&logo=alembic&logoColor=white" alt="Alembic" />
   <img src="https://img.shields.io/badge/OpenAI%20Compatible-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI Compatible" />
-  <img src="https://img.shields.io/badge/OpenRouter-000000?style=flat-square&logo=openrouter&logoColor=white" alt="OpenRouter" />
+  <img src="https://img.shields.io/badge/LiteLLM-app--test-5B5BD6?style=flat-square" alt="LiteLLM app-test" />
 </p>
 
 <p align="center">
@@ -70,7 +70,7 @@ SQLite остаётся только для изолированных тест�
 | ORM & migrations | SQLAlchemy 2 + Alembic | модели, репозитории, UoW, миграции |
 | API | FastAPI + Pydantic | UI и JSON API |
 | UI | Jinja2 + minimal JS | server-side HTML, без frontend-фреймворков |
-| LLM / Supervisor | OpenAI-compatible Chat Completions | единственный evaluator отчётов; OpenRouter `z-ai/glm-5.2`, без fallback |
+| LLM / Supervisor | OpenAI-compatible Chat Completions | единственный evaluator отчётов; Octo LiteLLM `app-test`, без fallback |
 | CLI | Click + Rich | `step` / `history` |
 | Config | Pydantic Settings | `.env`, переменные окружения |
 
@@ -85,21 +85,21 @@ project-workflow step --task RUN-123 --report "Сделал X, проверил 
 project-workflow history --task RUN-123 --n 10
 ```
 
-CLI ожидает `DATABASE_URL` и доступный OpenAI-compatible evaluator. Каноническая конфигурация использует OpenRouter:
+CLI ожидает `DATABASE_URL` и доступный OpenAI-compatible evaluator. Каноническая конфигурация использует Octo LiteLLM с модельным маршрутом `app-test`:
 
 ```bash
 export DATABASE_URL=postgresql+psycopg://project_workflow:project_workflow@localhost/project_workflow
-export OPENAI_BASE_URL=https://openrouter.ai/api/v1
-export OPENAI_MODEL=z-ai/glm-5.2
+export OPENAI_BASE_URL=http://192.168.10.1:4000/v1
+export OPENAI_MODEL=app-test
 export OPENAI_TIMEOUT=120
-export OPENAI_API_KEY=<openrouter-api-key>
+export OPENAI_API_KEY=<litellm-master-key>
 export OPENAI_REASONING_EFFORT=none
 ```
 
 Если endpoint не поддерживает `reasoning_effort`, задайте `OPENAI_REASONING_EFFORT=`.
 
 Fallback evaluator отсутствует: если провайдер недоступен или вернул некорректный JSON, задача остаётся на текущей фазе, атомарно получает `status=blocked`, событие `blocked` и запись `task_step_history` без fingerprint; команда возвращает retryable `BLOCKED` и exit code `1`. Повтор снова вызывает provider, а успешная оценка снимает техническую блокировку обычным переходом.
-Для стандартного OpenRouter непустой `OPENAI_API_KEY` обязателен: без него Supervisor блокирует переход локально и не выполняет заведомо неуспешный внешний запрос. Пользовательский OpenAI-compatible endpoint может работать без ключа, если это допускает сам endpoint.
+Для Octo LiteLLM непустой `OPENAI_API_KEY` передаётся только через окружение. Пользовательский OpenAI-compatible endpoint может работать без ключа, если это допускает сам endpoint; для `openrouter.ai` клиент требует ключ и блокирует заведомо неуспешный запрос локально.
 Ответ evaluator принимается только по точному JSON-контракту: uppercase verdict, обязательные `message` и finite `confidence` в диапазоне `0..1`, непустые строковые элементы массивов и отсутствие неизвестных полей. Replay действует только для той же задачи, фазы, нормализованного отчёта и неизменившегося contract fingerprint. DB-транзакция не удерживается во время provider-вызова; изменение каталога до применения verdict даёт retryable `BLOCKED` без fingerprint.
 Повторный отчёт после `status=done` не вызывает evaluator и не создаёт новые записи: CLI возвращает `PASS`, `status=done` и `next_phase_code=null`.
 
@@ -116,15 +116,15 @@ docker compose up --build -d --wait
 # UI доступен на http://127.0.0.1:8812
 ```
 
-Перед первым запуском `scripts/init_db.py` применяет линейную цепочку Alembic до
-`0003_normalized`, загружает packaged-каталог и создаёт default project. Повторный
-запуск идемпотентен и не перезаписывает изменения из UI. Развёрнутая PostgreSQL
-на `0002_sdlc_v2` обновляется с сохранением задач, каталога, phase history и
-evaluator audit; неизвестная revision или schema drift по-прежнему блокируются.
+Перед первым запуском `scripts/init_db.py` применяет единственную baseline migration
+`0001_initial`, загружает packaged-каталог и создаёт default project. Повторный запуск
+идемпотентен и не перезаписывает изменения из UI.
 
-Перед обновлением общего окружения нужно сделать PostgreSQL backup и проверить
-миграцию на его копии по [migration-runbook](docs/database-reset.md). Автоматические
-`drop`, reset volume и `stamp` для PostgreSQL не выполняются.
+Старые Alembic revision намеренно не поддерживаются. При обнаружении прежней или
+неверсионированной схемы инициализация завершается сообщением
+«Несовместимую базу данных необходимо пересоздать»; автоматические `drop` и `stamp` не выполняются.
+Перед запуском новой версии существующую схему или Compose volume нужно явно
+пересоздать по [reset-runbook](docs/database-reset.md). Импорт прежних данных не предусмотрен.
 
 В Compose схема и каталог создаются отдельным сервисом `migrate`; API стартует только
 после его успешного завершения.
@@ -197,8 +197,9 @@ erDiagram
 - UI-пакет (`project_workflow/interfaces/ui/`) — чистое FastAPI-приложение с отдельными routes, services, dependencies.
 - Конфигурация централизована в `project_workflow.config` на Pydantic Settings; `DATABASE_URL` обязателен.
 - PostgreSQL хранит один редактируемый каталог, snapshot задач, append-only события фаз и историю `step`; packaged JSON seed из 19 фаз используется только при bootstrap пустой БД.
-- Граф фаз валидируется целиком до записи: порядок всегда `1..N`, rollback направлен назад, а явные parallel-ссылки соединяют только фазы одного непрерывного parallel-сегмента; isolated parallel допустим.
+- Граф фаз валидируется целиком до записи: порядок всегда `1..N`, rollback направлен назад, а явные parallel-ссылки соединяют только фазы одного непрерывного parallel-сегмента. Isolated parallel допустим; все фазы связанной parallel-группы используют одну общую цель rollback либо не задают её.
 - REST принимает числовые phase resource IDs и строгие JSON-типы; `key_prefixes` — только непустой `list[str]`, а reorder инструкций — полный уникальный набор ID одной фазы. Строковые обходные формы не поддерживаются.
+- При полном обновлении фазы каждый вложенный элемент `instructions`, `checks` и `evidence` обязан передать `id`: положительный integer обновляет существующую запись, `null` создаёт новую, отсутствие элемента удаляет его. Неизвестный или принадлежащий другой фазе ID отклоняет всю транзакцию; сохранение без изменений сохраняет ID и replay fingerprint.
 - Skills являются рекомендациями внутри инструкций фазы; их канонические файлы хранятся в `relevanter/agent-skills`, отдельного runtime registry нет.
 - Hermes profile является уникальной строковой ссылкой на профиль внешнего исполнителя; очистка выполняется только явным `null`. Workflow не копирует конфигурацию или секреты Hermes.
 
@@ -245,8 +246,13 @@ git clone https://github.com/FerrPOINT/project-workflow.git
 cd project-workflow
 python -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev,ui]"
+python -m pip install --constraint constraints.txt -e ".[dev,ui]"
 ```
+
+`constraints.txt` фиксирует единый проверяемый набор версий для Python 3.10 и
+3.11. Docker-сборка использует тот же файл, устанавливает приложение в
+`/opt/venv` и не переносит глобальный `site-packages` или инструменты сборки в
+финальный runtime-слой.
 
 `project-workflow` — самостоятельная внутренняя delivery-утилита, а не product
 runtime Relevanter. Актуальный packaged-каталог описывает работу через

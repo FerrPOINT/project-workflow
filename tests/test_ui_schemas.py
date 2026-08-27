@@ -169,9 +169,9 @@ def test_instruction_create_update():
 def test_phase_update_nested_contract_is_strict_and_normalized():
     update = PhaseUpdate.model_validate(
         {
-            "instructions": [{"description": "  Run tests  ", "skills": [" testing "]}],
-            "checks": [{"description": " Check result "}],
-            "evidence": [{"description": " Evidence URL "}],
+            "instructions": [{"id": None, "description": "  Run tests  ", "skills": [" testing "]}],
+            "checks": [{"id": None, "description": " Check result "}],
+            "evidence": [{"id": None, "description": " Evidence URL "}],
         }
     )
     assert update.instructions and update.instructions[0].description == "Run tests"
@@ -179,16 +179,36 @@ def test_phase_update_nested_contract_is_strict_and_normalized():
     assert update.checks and update.checks[0].description == "Check result"
 
     invalid_payloads = [
-        {"instructions": [{"skills": []}]},
-        {"instructions": [{"description": "Step", "skills": "testing"}]},
-        {"checks": [{"description": "Check", "command": None}]},
-        {"evidence": [{"description": "Evidence", "validator": None}]},
-        {"checks": [{"description": "same"}, {"description": " SAME "}]},
+        {"instructions": [{"id": None, "skills": []}]},
+        {"instructions": [{"id": None, "description": "Step", "skills": "testing"}]},
+        {"checks": [{"id": None, "description": "Check", "command": None}]},
+        {"evidence": [{"id": None, "description": "Evidence", "validator": None}]},
+        {"checks": [{"id": None, "description": "same"}, {"id": None, "description": " SAME "}]},
         {"evidence": None},
     ]
     for payload in invalid_payloads:
         with pytest.raises(ValueError):
             PhaseUpdate.model_validate(payload)
+
+
+@pytest.mark.parametrize("item_id", [True, "1", 0, -1])
+def test_phase_update_rejects_noncanonical_nested_ids(item_id):
+    with pytest.raises(ValueError):
+        PhaseUpdate.model_validate({"checks": [{"id": item_id, "description": "Проверка"}]})
+
+
+def test_phase_update_requires_nested_id_and_rejects_duplicates():
+    with pytest.raises(ValueError):
+        PhaseUpdate.model_validate({"checks": [{"description": "Проверка"}]})
+    with pytest.raises(ValueError, match="Идентификаторы.*должны быть уникальными"):
+        PhaseUpdate.model_validate(
+            {
+                "evidence": [
+                    {"id": 7, "description": "Первое"},
+                    {"id": 7, "description": "Второе"},
+                ]
+            }
+        )
 
 
 @pytest.mark.parametrize(

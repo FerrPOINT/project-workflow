@@ -106,15 +106,17 @@ def _phase_restore_payload(phase: dict) -> dict:
         "execution_type": phase.get("execution_type", "sync"),
         "instructions": [
             {
+                "id": item["id"],
                 "description": item["description"],
                 "execution_type": item.get("execution_type", "sync"),
                 "skills": _normalize_skills(item.get("skills")),
             }
             for item in phase.get("instructions", [])
         ],
-        "checks": [{"description": item["description"]} for item in phase.get("checks", [])],
+        "checks": [{"id": item["id"], "description": item["description"]} for item in phase.get("checks", [])],
         "evidence": [
-            {"description": item.get("description", item.get("item", ""))} for item in phase.get("evidence", [])
+            {"id": item["id"], "description": item.get("description", item.get("item", ""))}
+            for item in phase.get("evidence", [])
         ],
     }
 
@@ -824,7 +826,17 @@ class TestPhaseDetail:
         assert "if (el.dataset.saving === 'true') return;" in response.text
         assert "const saved = await savePhase();" in response.text
         assert "el.setAttribute('aria-busy', 'true');" in response.text
+        assert "const previousPartner = partnerSelect?.value || '';" in response.text
+        assert "partnerSelect.value = previousPartner;" in response.text
         assert "return true;" in response.text
+
+    def test_phase_detail_sends_strict_nested_ids_and_stores_returned_ids(self):
+        response = client.get(_phase_detail_path("1.INTAKE"))
+
+        assert response.status_code == 200
+        assert "id: li.dataset.id ? Number(li.dataset.id) : null" in response.text
+        assert "checks[i].setAttribute('data-id', String(id));" in response.text
+        assert "evs[i].setAttribute('data-id', String(id));" in response.text
 
     def test_phase_detail_serializes_all_phase_aggregate_saves(self):
         response = client.get(_phase_detail_path("1.INTAKE"))
@@ -969,11 +981,11 @@ class TestPhaseUpdate:
             _phase_api_path("1.INTAKE"),
             json={
                 "instructions": [
-                    {"description": "Test 1", "execution_type": "sync"},
-                    {"description": "Test 2", "execution_type": "parallel"},
+                    {"id": None, "description": "Test 1", "execution_type": "sync"},
+                    {"id": None, "description": "Test 2", "execution_type": "parallel"},
                 ],
-                "checks": [{"description": "Check 1"}],
-                "evidence": [{"description": "Evidence 1"}],
+                "checks": [{"id": None, "description": "Check 1"}],
+                "evidence": [{"id": None, "description": "Evidence 1"}],
             },
         )
         assert resp.status_code == 200
@@ -985,7 +997,8 @@ class TestPhaseUpdate:
 
     def test_api_phase_update_returns_ids(self):
         resp = client.put(
-            _phase_api_path("1.INTAKE"), json={"instructions": [{"description": "X", "execution_type": "sync"}]}
+            _phase_api_path("1.INTAKE"),
+            json={"instructions": [{"id": None, "description": "X", "execution_type": "sync"}]},
         )
         data = resp.json()
         # IDs must be positive integers
