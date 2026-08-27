@@ -6,7 +6,6 @@ import datetime
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from sqlalchemy import delete as sa_delete
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session, joinedload
 
@@ -151,6 +150,7 @@ class SATaskRepository(TaskRepository):
         self._session.add(
             m.TaskPhaseEvent(
                 task_id=task_id,
+                workflow_id=task_workflow_id,
                 phase_id=phase_id,
                 step_history_id=step_history_id,
                 event_type=event_type,
@@ -183,15 +183,4 @@ class SATaskRepository(TaskRepository):
         for r in rows:
             result.setdefault(r.task_id, []).append(_row_to_phase_event(r))
         return result
-
-    def delete(self, task_id: int) -> None:
-        with self._session.no_autoflush:
-            row = self._session.get(m.Task, task_id)
-        if row is None:
-            raise ValueError(f"Задача {task_id} не найдена")
-        self._session.execute(sa_delete(m.TaskPhaseEvent).where(m.TaskPhaseEvent.task_id == task_id))
-        self._session.execute(sa_delete(m.TaskStepHistoryEntry).where(m.TaskStepHistoryEntry.task_id == task_id))
-        self._session.delete(row)
-        self._session.flush()
-
 

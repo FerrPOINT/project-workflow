@@ -61,7 +61,7 @@ class TestEvaluateLlmReportVerdicts:
         assert result["blockers"] == [
             "Проверяющий LLM не настроен: для OpenRouter требуется OPENAI_API_KEY."
         ]
-        run_data = engine.db.record_step.call_args.args[0]
+        run_data = engine.db.record_step.call_args.kwargs
         assert run_data["replay_fingerprint"] is None
         assert run_data["evaluation_snapshot"]["model"] is None
         assert run_data["evaluation_snapshot"]["raw_evaluator"] == {

@@ -127,8 +127,6 @@ class TestRecordTransitionTypes:
             }
             engine.evaluate_llm("report ok", ph)
 
-        call = mock_run.call_args
-        args, kwargs = call
-        payload = args[0]
+        payload = mock_run.call_args.kwargs
         assert isinstance(payload["phase_id"], int), f"phase_id must be int, got {type(payload['phase_id'])}"
         assert payload["phase_id"] == 42

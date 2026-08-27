@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
+from sqlalchemy import event
 
 pytestmark = [pytest.mark.unit]
 
@@ -173,6 +174,25 @@ class TestLoadPhases:
         ensure_phase_catalog(fresh_db)
         phases = load_phases_from_db(fresh_db)
         assert len(phases) > 0
+
+    def test_catalog_load_uses_a_bounded_number_of_queries(self, fresh_db):
+        ensure_phase_catalog(fresh_db)
+        fresh_db.commit()
+        statements: list[str] = []
+        engine = fresh_db.session.get_bind()
+
+        def capture_statement(_conn, _cursor, statement, _parameters, _context, _executemany):
+            if statement.lstrip().upper().startswith("SELECT"):
+                statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", capture_statement)
+        try:
+            phases = load_phases_from_db(fresh_db)
+        finally:
+            event.remove(engine, "before_cursor_execute", capture_statement)
+
+        assert len(phases) == 19
+        assert len(statements) <= 5
 
     def test_load_phase_by_scoped_code(self, fresh_db):
         ensure_phase_catalog(fresh_db)

@@ -108,6 +108,9 @@ class PhaseInstructionRepository(ABC):
     def list(self, phase_id: int) -> Sequence[dict[str, Any]]: ...
 
     @abstractmethod
+    def list_for_phases(self, phase_ids: Sequence[int]) -> Mapping[int, Sequence[dict[str, Any]]]: ...
+
+    @abstractmethod
     def get_by_id(self, instruction_id: int) -> dict[str, Any] | None: ...
 
     @abstractmethod
@@ -202,15 +205,14 @@ class TaskRepository(ABC):
     @abstractmethod
     def list_phase_events_batch(self, task_ids: Sequence[int]) -> Mapping[int, Sequence[TaskPhaseEvent]]: ...
 
-    @abstractmethod
-    def delete(self, task_id: int) -> None: ...
-
-
 class AgentRepository(ABC):
     """Persistence contract for agents."""
 
     @abstractmethod
     def list(self) -> Sequence[Agent]: ...
+
+    @abstractmethod
+    def list_by_ids(self, agent_ids: Sequence[int]) -> Sequence[Agent]: ...
 
     @abstractmethod
     def get_by_id(self, agent_id: int) -> Agent | None: ...
@@ -265,6 +267,9 @@ class PhaseCheckRepository(ABC):
     def list(self, phase_id: int) -> Sequence[dict[str, Any]]: ...
 
     @abstractmethod
+    def list_for_phases(self, phase_ids: Sequence[int]) -> Mapping[int, Sequence[dict[str, Any]]]: ...
+
+    @abstractmethod
     def create(self, phase_id: int, data: dict[str, Any]) -> int: ...
 
     @abstractmethod
@@ -276,6 +281,9 @@ class PhaseEvidenceRequirementRepository(ABC):
 
     @abstractmethod
     def list(self, phase_id: int) -> Sequence[dict[str, Any]]: ...
+
+    @abstractmethod
+    def list_for_phases(self, phase_ids: Sequence[int]) -> Mapping[int, Sequence[dict[str, Any]]]: ...
 
     @abstractmethod
     def create(self, phase_id: int, data: dict[str, Any]) -> int: ...

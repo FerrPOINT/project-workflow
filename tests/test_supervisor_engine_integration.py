@@ -47,7 +47,10 @@ class TestSupervisorEngineIntegration:
 
     def test_new_task_without_current_phase_id_starts_at_first_phase(self, supervisor_db):
         uow = SAUnitOfWork(supervisor_db)
-        project = ProjectService(uow).create_project({"code": "AAT", "name": "AAT", "key_prefixes": ["AAT"]})
+        workflow_id = uow.workflows.get_default().id
+        project = ProjectService(uow).create_project(
+            {"code": "AAT", "name": "AAT", "key_prefixes": ["AAT"], "workflow_id": workflow_id}
+        )
         task = TaskService(uow).create_task(
             {"task_key": "AAT-902", "title": "Default phase", "project_id": project["id"]}
         )
@@ -59,7 +62,10 @@ class TestSupervisorEngineIntegration:
 
     def test_evaluate_partial_on_real_phase(self, supervisor_db, supervisor_llm):
         uow = SAUnitOfWork(supervisor_db)
-        project = ProjectService(uow).create_project({"code": "AAT", "name": "AAT", "key_prefixes": ["AAT"]})
+        workflow_id = uow.workflows.get_default().id
+        project = ProjectService(uow).create_project(
+            {"code": "AAT", "name": "AAT", "key_prefixes": ["AAT"], "workflow_id": workflow_id}
+        )
         TaskService(uow).create_task(
             {"task_key": "AAT-903", "title": "Partial", "project_id": project["id"]}
         )
@@ -72,7 +78,10 @@ class TestSupervisorEngineIntegration:
 
     def test_evaluate_blocker_detected(self, supervisor_db, supervisor_llm):
         uow = SAUnitOfWork(supervisor_db)
-        project = ProjectService(uow).create_project({"code": "AAT", "name": "AAT", "key_prefixes": ["AAT"]})
+        workflow_id = uow.workflows.get_default().id
+        project = ProjectService(uow).create_project(
+            {"code": "AAT", "name": "AAT", "key_prefixes": ["AAT"], "workflow_id": workflow_id}
+        )
         TaskService(uow).create_task(
             {"task_key": "AAT-904", "title": "Block", "project_id": project["id"]}
         )

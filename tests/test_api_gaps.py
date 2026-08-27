@@ -28,23 +28,8 @@ class TestApiTaskDetail:
         with patch("project_workflow.interfaces.ui.routes.api._app_state") as state:
             state.get_db.return_value.get_task_by_key.return_value = None
             response = client.get("/api/tasks/MISSING-99")
-        assert response.status_code == 405
-        assert response.json() == {"ok": False, "error": "Метод не поддерживается"}
-
-
-class TestApiTaskDelete:
-    @pytest.mark.parametrize(
-        ("error", "status"),
-        [(NotFoundError("задача исчезла"), 404), (ConflictError("состояние изменилось"), 409)],
-    )
-    def test_concurrent_service_errors_are_mapped(self, error, status):
-        with patch("project_workflow.interfaces.ui.routes.api._app_state") as state:
-            state.task_service.return_value.get_task_by_key.return_value = {"id": 7}
-            state.task_service.return_value.delete_task.side_effect = error
-            response = client.delete("/api/tasks/RUN-7")
-
-        assert response.status_code == status
-        assert response.json() == {"ok": False, "error": str(error)}
+        assert response.status_code == 404
+        assert response.json() == {"ok": False, "error": "Ресурс не найден"}
 
 
 class TestApiPhaseCreate:

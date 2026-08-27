@@ -32,17 +32,15 @@ class TestCoverageAccumulation:
         )
 
         engine.db.record_step(
-            {
-                "task_id": tid,
-                "phase_id": pid,
-                "verdict": "partial",
-                "worker_report": "report1",
-                "covered_item_ids": ["Item A", "Item B"],
-                "missing_item_ids": ["Item C"],
-                "blocker_messages": [],
-                "evaluation_snapshot": {},
-                "supervisor_response": {},
-            }
+            task_id=tid,
+            phase_id=pid,
+            verdict="partial",
+            worker_report="report1",
+            covered_item_ids=["Item A", "Item B"],
+            missing_item_ids=["Item C"],
+            blocker_messages=[],
+            evaluation_snapshot={},
+            supervisor_response={},
         )
 
         engine.task = engine.db.tasks.get_by_id(tid).to_dict()
@@ -67,17 +65,15 @@ class TestCoverageAccumulation:
 
         for index in range(201):
             engine.db.record_step(
-                {
-                    "task_id": task_id,
-                    "phase_id": phase.id,
-                    "verdict": "partial",
-                    "worker_report": f"report-{index}",
-                    "covered_item_ids": ["Самое раннее покрытие"] if index == 0 else [],
-                    "missing_item_ids": [],
-                    "blocker_messages": [],
-                    "evaluation_snapshot": {},
-                    "supervisor_response": {},
-                }
+                task_id=task_id,
+                phase_id=phase.id,
+                verdict="partial",
+                worker_report=f"report-{index}",
+                covered_item_ids=["Самое раннее покрытие"] if index == 0 else [],
+                missing_item_ids=[],
+                blocker_messages=[],
+                evaluation_snapshot={},
+                supervisor_response={},
             )
         engine.db.commit()
 

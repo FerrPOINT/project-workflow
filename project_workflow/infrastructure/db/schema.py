@@ -28,13 +28,16 @@ from ...supervisor.models import (
 
 def _build_phase_from_db(
     phase_row: Any,
-    uow: UnitOfWork,
     phase_code_by_id: dict[int, str],
+    instructions_by_phase: dict[int, list[dict[str, Any]]],
+    checks_by_phase: dict[int, list[dict[str, Any]]],
+    evidence_by_phase: dict[int, list[dict[str, Any]]],
+    agents_by_id: dict[int, Any],
 ) -> Phase:
-    """Assemble a supervisor Phase dataclass from a domain Phase + repositories."""
+    """Assemble a Supervisor phase from one batched catalog snapshot."""
     phase_id = phase_row.id
     phase_code = phase_row.code or ""
-    inst_rows = uow.phase_instructions.list(phase_id)
+    inst_rows = instructions_by_phase.get(phase_id, [])
 
     instructions = [
         PhaseInstruction(
@@ -47,7 +50,7 @@ def _build_phase_from_db(
         for ir in inst_rows
     ]
 
-    check_rows = uow.phases.get_checks(phase_id)
+    check_rows = checks_by_phase.get(phase_id, [])
     checks = [
         PhaseCheck(
             description=cr["description"],
@@ -56,7 +59,7 @@ def _build_phase_from_db(
         for cr in check_rows
     ]
 
-    ev_rows = uow.phases.get_evidence(phase_id)
+    ev_rows = evidence_by_phase.get(phase_id, [])
     evidence = [
         PhaseEvidence(
             item=er["description"],
@@ -67,7 +70,7 @@ def _build_phase_from_db(
 
     delegate = None
     if phase_row.agent_id:
-        agent = uow.agents.get_by_id(phase_row.agent_id)
+        agent = agents_by_id.get(phase_row.agent_id)
         if agent:
             delegate = PhaseDelegate(
                 agent=agent.name,
@@ -95,8 +98,45 @@ def load_phases_from_db(
 ) -> list[Phase]:
     """Load all supervisor phases from a UnitOfWork instance."""
     rows = list(uow.phases.list(workflow_id))
+    if not rows:
+        return []
+    phase_ids = [int(row.id) for row in rows if row.id is not None]
     phase_code_by_id = {int(row.id): row.code for row in rows if row.id is not None}
-    return [_build_phase_from_db(row, uow, phase_code_by_id) for row in rows]
+    instructions_by_phase = {
+        phase_id: list(items)
+        for phase_id, items in uow.phase_instructions.list_for_phases(phase_ids).items()
+    }
+    checks_by_phase = {
+        phase_id: list(items)
+        for phase_id, items in uow.phase_checks.list_for_phases(phase_ids).items()
+    }
+    evidence_by_phase = {
+        phase_id: list(items)
+        for phase_id, items in uow.phase_evidence_requirements.list_for_phases(phase_ids).items()
+    }
+    agent_ids = sorted(
+        {
+            int(row.agent_id)
+            for row in rows
+            if row.agent_id is not None
+        }
+    )
+    agents_by_id = {
+        int(agent.id): agent
+        for agent in uow.agents.list_by_ids(agent_ids)
+        if agent.id is not None
+    }
+    return [
+        _build_phase_from_db(
+            row,
+            phase_code_by_id,
+            instructions_by_phase,
+            checks_by_phase,
+            evidence_by_phase,
+            agents_by_id,
+        )
+        for row in rows
+    ]
 
 
 # ── Bootstrap seed ───────────

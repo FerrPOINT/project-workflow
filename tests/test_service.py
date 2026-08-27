@@ -100,7 +100,6 @@ class TestUpdatePhase:
             [phase.code for phase in group]
             for group in group_parallel_phases(
                 phases,
-                code_of=lambda phase: phase.code,
                 id_of=lambda phase: int(phase.id),
                 execution_type_of=lambda phase: phase.execution_type,
                 parallel_with_phase_id_of=lambda phase: phase.parallel_with_phase_id,

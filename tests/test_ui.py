@@ -1313,12 +1313,14 @@ class TestProjectsPage:
         assert "source of truth для проектных префиксов" not in response.text
 
     def test_projects_api_create_update_and_delete(self):
+        workflow = _workflow_row("default")
         create = client.post(
             "/api/projects",
             json={
                 "code": "APICRUD",
                 "name": "API CRUD Project",
                 "key_prefixes": ["APICRUD"],
+                "workflow_id": workflow["id"],
             },
         )
         assert create.status_code == 200
@@ -1644,15 +1646,17 @@ class TestUiNetworkFailures:
         assert response.text.count(".catch(showRequestError)") >= minimum_handlers
         assert "Не удалось связаться с сервером" in response.text
 
-    def test_task_delete_reports_http_and_network_errors_without_reloading(self):
+    def test_task_deletion_is_absent_from_ui_and_routes(self):
         response = client.get("/tasks")
 
         assert response.status_code == 200
-        catch_body = response.text.rsplit(".catch(function()", 1)[1].split("});", 1)[0]
-        assert "showRequestError();" in catch_body
-        assert "window.location.reload();" not in response.text
-        assert "const data = await resp.json().catch" in response.text
-        assert "showToast(data.error || 'Не удалось удалить задачу', 'error');" in response.text
+        assert "deleteTask" not in response.text
+        assert "Удалить задачу" not in response.text
+        assert client.delete("/api/tasks/RUN-1").status_code == 404
+        assert not any(
+            route.path == "/api/tasks/{task_key}" and "DELETE" in (route.methods or set())
+            for route in app.routes
+        )
 
     def test_async_editors_handle_rejection_and_restore_optimistic_deletion(self):
         phase = _phase_row("1.INTAKE")

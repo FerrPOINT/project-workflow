@@ -8,7 +8,6 @@ def _groups(phases: list[dict[str, int | str | None]]) -> list[list[str]]:
         [str(phase["code"]) for phase in group]
         for group in group_parallel_phases(
             phases,
-            code_of=lambda phase: str(phase["code"]),
             execution_type_of=lambda phase: str(phase["execution_type"]),
             id_of=lambda phase: int(phase["id"]),
             parallel_with_phase_id_of=lambda phase: phase.get("parallel_with_phase_id"),

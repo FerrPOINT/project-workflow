@@ -61,7 +61,7 @@ class RussianUsageError(click.UsageError):
 
     def show(self, file: Any | None = None) -> None:
         if file is None:
-            file = click.get_text_stream("stderr")
+            file = sys.stderr
         if self.ctx is not None:
             click.echo(self.ctx.get_usage(), file=file)
             click.echo(f"Для справки: '{self.ctx.command_path} --help'.", file=file)

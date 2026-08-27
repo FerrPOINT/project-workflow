@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from sqlalchemy import select, text
@@ -31,6 +31,21 @@ class SAPhaseEvidenceRequirementRepository(PhaseEvidenceRequirementRepository):
             }
             for r in rows
         ]
+
+    def list_for_phases(self, phase_ids: Sequence[int]) -> Mapping[int, Sequence[dict[str, Any]]]:
+        result: dict[int, list[dict[str, Any]]] = {phase_id: [] for phase_id in phase_ids}
+        if not phase_ids:
+            return result
+        rows = self._session.execute(
+            select(m.PhaseEvidenceRequirement)
+            .where(m.PhaseEvidenceRequirement.phase_id.in_(phase_ids))
+            .order_by(m.PhaseEvidenceRequirement.phase_id, m.PhaseEvidenceRequirement.id)
+        ).scalars().all()
+        for row in rows:
+            result.setdefault(int(row.phase_id), []).append(
+                {"id": row.id, "phase_id": row.phase_id, "description": row.description}
+            )
+        return result
 
     def create(self, phase_id: int, data: dict[str, Any]) -> int:
         item = m.PhaseEvidenceRequirement(phase_id=phase_id, description=data["description"])

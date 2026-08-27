@@ -103,7 +103,6 @@ def test_seed_catalog_has_exact_codes_and_order():
 def test_seed_catalog_has_exact_assignment_groups():
     groups = group_parallel_phases(
         _items(),
-        code_of=lambda phase: phase["code"],
         id_of=lambda phase: phase["code"],
         execution_type_of=lambda phase: phase.get("execution_type", "sync"),
         parallel_with_phase_id_of=lambda phase: phase.get("parallel_with_phase_code"),

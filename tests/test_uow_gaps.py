@@ -24,7 +24,7 @@ class TestUowEdgeCases:
         assert uow._session is not None
         uow.close()
 
-    def test_record_step_with_positional_dict(self):
+    def test_record_step_uses_keyword_only_contract(self):
         uow = _fresh_uow()
         with uow:
             project = uow.projects.get_by_code(config.DEFAULT_PROJECT_CODE)
@@ -43,17 +43,15 @@ class TestUowEdgeCases:
             uow.commit()
 
         run_id = uow.record_step(
-            {
-                "task_id": task_id,
-                "phase_id": phase.id,
-                "verdict": "pass",
-                "worker_report": "r",
-                "covered_item_ids": [],
-                "missing_item_ids": [],
-                "blocker_messages": [],
-                "evaluation_snapshot": {},
-                "supervisor_response": {},
-            }
+            task_id=task_id,
+            phase_id=phase.id,
+            verdict="pass",
+            worker_report="r",
+            covered_item_ids=[],
+            missing_item_ids=[],
+            blocker_messages=[],
+            evaluation_snapshot={},
+            supervisor_response={},
         )
         assert isinstance(run_id, int)
         uow.close()

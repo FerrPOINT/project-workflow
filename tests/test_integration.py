@@ -44,11 +44,13 @@ class TestEndToEndWorkflow:
         db_path = tmp_path / "test2.db"
         uow = SAUnitOfWork(f"sqlite:///{db_path}")
         prepare_sqlite_uow(uow)
+        workflow_id = uow.workflows.get_default().id
         ProjectService(uow).create_project(
             {
                 "code": "AAT",
                 "name": "AAT",
                 "key_prefixes": ["AAT"],
+                "workflow_id": workflow_id,
             }
         )
         TaskService(uow).create_task({"task_key": "AAT-99", "title": "Integ Test"})
@@ -139,6 +141,7 @@ class TestEdgeCases:
                 "code": "AATSK",
                 "name": "AATSK",
                 "key_prefixes": ["AAT"],
+                "workflow_id": workflow_id,
             }
         )
         TaskService(uow).create_task({"task_key": "AAT-99", "title": "Skip Test"})

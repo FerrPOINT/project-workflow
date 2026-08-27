@@ -90,12 +90,6 @@ def test_build_single():
     assert contract.execution_type == "sync"
 
 
-def test_build_missing():
-    cb = PhaseContractBuilder([])
-    contract = cb.build_missing("x")
-    assert contract.phase_name == "Неизвестная фаза"
-
-
 def test_build_parallel():
     phases = _make_phases()
     phases[1].instructions = [PhaseInstruction(step="Review", skills=["code-review"])]

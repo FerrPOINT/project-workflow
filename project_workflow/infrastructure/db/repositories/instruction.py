@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import builtins
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from sqlalchemy import select, text
@@ -50,22 +50,29 @@ class SAPhaseInstructionRepository(PhaseInstructionRepository):
             .scalars()
             .all()
         )
-        return [
-            {
-                "id": r.id,
-                "phase_id": r.phase_id,
-                "step_num": r.step_num,
-                "description": r.description,
-                "execution_type": r.execution_type or "sync",
-                "skills": _parse_skills(r.skills),
-            }
-            for r in rows
-        ]
+        return [self._to_dict(row) for row in rows]
+
+    def list_for_phases(self, phase_ids: Sequence[int]) -> Mapping[int, Sequence[dict[str, Any]]]:
+        result: dict[int, list[dict[str, Any]]] = {phase_id: [] for phase_id in phase_ids}
+        if not phase_ids:
+            return result
+        rows = self._session.execute(
+            select(m.PhaseInstruction)
+            .where(m.PhaseInstruction.phase_id.in_(phase_ids))
+            .order_by(m.PhaseInstruction.phase_id, m.PhaseInstruction.step_num)
+        ).scalars().all()
+        for row in rows:
+            result.setdefault(int(row.phase_id), []).append(self._to_dict(row))
+        return result
 
     def get_by_id(self, instruction_id: int) -> dict[str, Any] | None:
         row = self._session.get(m.PhaseInstruction, instruction_id)
         if row is None:
             return None
+        return self._to_dict(row)
+
+    @staticmethod
+    def _to_dict(row: m.PhaseInstruction) -> dict[str, Any]:
         return {
             "id": row.id,
             "phase_id": row.phase_id,

@@ -172,7 +172,9 @@ flowchart TD
 ```mermaid
 erDiagram
     WORKFLOWS ||--o{ PHASES : содержит
+    WORKFLOWS ||--o{ PROJECTS : использует
     WORKFLOWS ||--o{ TASKS : определяет
+    PROJECTS ||--o{ TASKS : содержит
     PHASES ||--o{ PHASE_INSTRUCTIONS : содержит
     PHASES ||--o{ PHASE_CHECKS : содержит
     PHASES ||--o{ PHASE_EVIDENCE_REQUIREMENTS : требует
@@ -183,6 +185,8 @@ erDiagram
 ```
 
 `tasks` — единственный текущий snapshot задачи. `task_phase_events` — append-only журнал событий `entered`, `completed`, `blocked`, `resumed` и `rolled_back`. `task_step_history` — история вызовов `step`: отчёт исполнителя, verdict, покрытые и пропущенные пункты, ответ Supervisor, снимок контракта и вычисленные переходы. Отдельная chat-таблица не нужна: одна step-запись хранит законченную пару запроса и ответа.
+
+Создание проекта требует явного положительного `workflow_id`; runtime не создаёт и не выбирает default workflow. Удаление задач через REST, UI, application service или repository не поддерживается: snapshot и связанный audit сохраняются, а FK используют `RESTRICT`. Внутренний `workflow_id` в audit-таблицах служит только для составных FK ownership и не дублируется в публичных DTO.
 
 Каталог физически хранится в `workflows`, `phases`, `phase_instructions`, `phase_checks` и `phase_evidence_requirements`. Ссылки текущей, parallel- и rollback-фаз являются числовыми FK; коды используются только как явные `*_phase_code` в CLI, seed и Supervisor-контракте.
 

@@ -232,10 +232,10 @@ class TestPostgresInitialMigration:
                 conn.execute(
                     text(
                         "INSERT INTO project_workflow.task_step_history "
-                        "(task_id, phase_id, verdict, replay_fingerprint) "
-                        "VALUES (:task_id, :phase_id, 'partial', 'same')"
+                        "(task_id, workflow_id, phase_id, verdict, replay_fingerprint) "
+                        "VALUES (:task_id, :workflow_id, :phase_id, 'partial', 'same')"
                     ),
-                    {"task_id": task_id, "phase_id": phase_id},
+                    {"task_id": task_id, "workflow_id": workflow_id, "phase_id": phase_id},
                 )
 
         with engine.connect() as conn:
@@ -269,16 +269,169 @@ class TestPostgresInitialMigration:
                 conn.execute(
                     text(
                         "INSERT INTO project_workflow.task_step_history "
-                        "(task_id, phase_id, verdict, replay_fingerprint) "
-                        "VALUES (:task_id, :phase_id, 'partial', 'same')"
+                        "(task_id, workflow_id, phase_id, verdict, replay_fingerprint) "
+                        "VALUES (:task_id, :workflow_id, :phase_id, 'partial', 'same')"
                     ),
-                    {"task_id": task_id, "phase_id": phase_ids[0]},
+                    {"task_id": task_id, "workflow_id": workflow_id, "phase_id": phase_ids[0]},
                 )
         with pytest.raises(IntegrityError):
             with engine.begin() as conn:
                 conn.execute(
                     text("DELETE FROM project_workflow.phases WHERE id = :phase_id"),
                     {"phase_id": phase_ids[0]},
+                )
+
+    def test_database_enforces_task_and_audit_ownership(self, pg_url):
+        engine = get_engine(pg_url)
+        ensure_migrated(engine)
+
+        with engine.begin() as conn:
+            workflow_ids: list[int] = []
+            project_ids: list[int] = []
+            phase_ids: list[int] = []
+            for suffix in ("A", "B"):
+                workflow_id = conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.workflows (name, description, is_default) "
+                        "VALUES (:name, '', 0) RETURNING id"
+                    ),
+                    {"name": f"Workflow {suffix}"},
+                ).scalar_one()
+                project_id = conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.projects "
+                        "(workflow_id, code, name, description, key_prefixes) "
+                        "VALUES (:workflow_id, :code, :name, '', :prefixes) RETURNING id"
+                    ),
+                    {
+                        "workflow_id": workflow_id,
+                        "code": f"P{suffix}",
+                        "name": f"Project {suffix}",
+                        "prefixes": f'["P{suffix}"]',
+                    },
+                ).scalar_one()
+                phase_id = conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.phases "
+                        "(workflow_id, code, name, phase_order) "
+                        "VALUES (:workflow_id, :code, :name, 1) RETURNING id"
+                    ),
+                    {"workflow_id": workflow_id, "code": suffix, "name": f"Phase {suffix}"},
+                ).scalar_one()
+                workflow_ids.append(workflow_id)
+                project_ids.append(project_id)
+                phase_ids.append(phase_id)
+
+        with pytest.raises(IntegrityError):
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.tasks "
+                        "(project_id, workflow_id, task_key, current_phase_id, status) "
+                        "VALUES (:project_id, :workflow_id, 'PA-BAD', :phase_id, 'active')"
+                    ),
+                    {
+                        "project_id": project_ids[0],
+                        "workflow_id": workflow_ids[1],
+                        "phase_id": phase_ids[1],
+                    },
+                )
+
+        with engine.begin() as conn:
+            task_ids = [
+                conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.tasks "
+                        "(project_id, workflow_id, task_key, current_phase_id, status) "
+                        "VALUES (:project_id, :workflow_id, :task_key, :phase_id, 'active') RETURNING id"
+                    ),
+                    {
+                        "project_id": project_ids[index],
+                        "workflow_id": workflow_ids[index],
+                        "task_key": f"P{suffix}-1",
+                        "phase_id": phase_ids[index],
+                    },
+                ).scalar_one()
+                for index, suffix in enumerate(("A", "B"))
+            ]
+
+        with pytest.raises(IntegrityError):
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.task_step_history "
+                        "(task_id, workflow_id, phase_id, verdict) "
+                        "VALUES (:task_id, :workflow_id, :phase_id, 'partial')"
+                    ),
+                    {
+                        "task_id": task_ids[0],
+                        "workflow_id": workflow_ids[0],
+                        "phase_id": phase_ids[1],
+                    },
+                )
+
+        with pytest.raises(IntegrityError):
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.task_phase_events "
+                        "(task_id, workflow_id, phase_id, event_type) "
+                        "VALUES (:task_id, :workflow_id, :phase_id, 'entered')"
+                    ),
+                    {
+                        "task_id": task_ids[0],
+                        "workflow_id": workflow_ids[0],
+                        "phase_id": phase_ids[1],
+                    },
+                )
+
+        with engine.begin() as conn:
+            step_history_id = conn.execute(
+                text(
+                    "INSERT INTO project_workflow.task_step_history "
+                    "(task_id, workflow_id, phase_id, verdict) "
+                    "VALUES (:task_id, :workflow_id, :phase_id, 'partial') RETURNING id"
+                ),
+                {
+                    "task_id": task_ids[0],
+                    "workflow_id": workflow_ids[0],
+                    "phase_id": phase_ids[0],
+                },
+            ).scalar_one()
+            conn.execute(
+                text(
+                    "INSERT INTO project_workflow.task_phase_events "
+                    "(task_id, workflow_id, phase_id, event_type) "
+                    "VALUES (:task_id, :workflow_id, :phase_id, 'entered')"
+                ),
+                {
+                    "task_id": task_ids[0],
+                    "workflow_id": workflow_ids[0],
+                    "phase_id": phase_ids[0],
+                },
+            )
+
+        with pytest.raises(IntegrityError):
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.task_phase_events "
+                        "(task_id, workflow_id, phase_id, step_history_id, event_type) "
+                        "VALUES (:task_id, :workflow_id, :phase_id, :step_history_id, 'entered')"
+                    ),
+                    {
+                        "task_id": task_ids[1],
+                        "workflow_id": workflow_ids[1],
+                        "phase_id": phase_ids[1],
+                        "step_history_id": step_history_id,
+                    },
+                )
+
+        with pytest.raises(IntegrityError):
+            with engine.begin() as conn:
+                conn.execute(
+                    text("DELETE FROM project_workflow.tasks WHERE id = :task_id"),
+                    {"task_id": task_ids[0]},
                 )
 
     def test_bootstrap_is_idempotent(self, pg_url):
@@ -502,8 +655,14 @@ class TestPostgresUoW:
 
         assert main() == 0
         setup = SAUnitOfWork(pg_url)
+        workflow_id = setup.workflows.get_default().id
         project = ProjectService(setup).create_project(
-            {"code": "RACE", "name": "Race", "key_prefixes": ["RACE"]}
+            {
+                "code": "RACE",
+                "name": "Race",
+                "key_prefixes": ["RACE"],
+                "workflow_id": workflow_id,
+            }
         )
         setup.close()
         barrier = Barrier(2)
@@ -554,6 +713,9 @@ class TestPostgresUoW:
         from scripts.init_db import main
 
         assert main() == 0
+        setup = SAUnitOfWork(pg_url)
+        workflow_id = setup.workflows.get_default().id
+        setup.close()
         barrier = Barrier(2)
 
         def create(code: str) -> str:
@@ -561,7 +723,12 @@ class TestPostgresUoW:
             barrier.wait()
             try:
                 ProjectService(uow).create_project(
-                    {"code": code, "name": code, "key_prefixes": ["SHARED"]}
+                    {
+                        "code": code,
+                        "name": code,
+                        "key_prefixes": ["SHARED"],
+                        "workflow_id": workflow_id,
+                    }
                 )
                 return "created"
             except ConflictError:
@@ -961,63 +1128,6 @@ class TestPostgresUoW:
         assert run.verdict == "blocked"
         assert run.replay_fingerprint is None
         verify.close()
-
-    def test_task_delete_waits_for_supervisor_commit(self, pg_url):
-        from project_workflow.infrastructure.llm import OpenAICompatibleClient
-        from project_workflow.supervisor import SupervisorEngine
-        from scripts.init_db import main
-
-        assert main() == 0
-        evaluation_holds_workflow = Event()
-        allow_evaluation_commit = Event()
-        delete_started = Event()
-        delete_finished = Event()
-
-        def evaluate() -> dict:
-            uow = SAUnitOfWork(pg_url)
-            original_create_run = uow.record_step
-
-            def paused_create_run(*args, **kwargs):
-                evaluation_holds_workflow.set()
-                assert allow_evaluation_commit.wait(10)
-                return original_create_run(*args, **kwargs)
-
-            uow.record_step = paused_create_run
-            try:
-                with patch.object(
-                    OpenAICompatibleClient,
-                    "chat",
-                    side_effect=lambda *_args, **kwargs: _pass_response(str(kwargs["user"])),
-                ):
-                    return SupervisorEngine("RUN-90003", uow=uow).evaluate("done")
-            finally:
-                uow.close()
-
-        def delete() -> str:
-            uow = SAUnitOfWork(pg_url)
-            try:
-                task = uow.tasks.get_by_key("RUN-90003")
-                assert task is not None and task.id is not None
-                delete_started.set()
-                TaskService(uow).delete_task(int(task.id))
-                return "deleted"
-            finally:
-                delete_finished.set()
-                uow.close()
-
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            evaluation_result = pool.submit(evaluate)
-            assert evaluation_holds_workflow.wait(10)
-            deletion_result = pool.submit(delete)
-            assert delete_started.wait(10)
-            deletion_was_serialized = not delete_finished.wait(0.5)
-            allow_evaluation_commit.set()
-            evaluated = evaluation_result.result(timeout=20)
-            deleted = deletion_result.result(timeout=20)
-
-        assert deletion_was_serialized
-        assert evaluated["verdict"] == "PASS"
-        assert deleted == "deleted"
 
     def test_assigned_agent_update_waits_for_supervisor_commit(self, pg_url):
         from project_workflow.infrastructure.llm import OpenAICompatibleClient

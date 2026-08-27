@@ -104,6 +104,7 @@ class SATaskStepHistoryRepository(TaskStepHistoryRepository):
             raise ValueError("Запись step может ссылаться только на фазы воркфлоу задачи")
         item = m.TaskStepHistoryEntry(
             task_id=data["task_id"],
+            workflow_id=task_workflow_id,
             phase_id=data["phase_id"],
             verdict=data["verdict"],
             worker_report=data["worker_report"],

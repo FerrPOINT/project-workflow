@@ -122,9 +122,7 @@ class SAUnitOfWork(UnitOfWork):
     def session(self) -> Session:
         return self._session
 
-    def record_step(self, *args: Any, **kwargs: Any) -> int:
-        if args and isinstance(args[0], dict) and not kwargs:
-            kwargs = args[0]
+    def record_step(self, **kwargs: Any) -> int:
         return self.step_history.create(kwargs)
 
     def get_task_by_key(self, key: str) -> Any | None:

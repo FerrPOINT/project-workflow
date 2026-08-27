@@ -480,6 +480,22 @@ class TestApiProjects:
         assert data["ok"] is True
         assert "projects" in data
 
+    @pytest.mark.parametrize("workflow_id", [None, "1", True])
+    def test_create_project_requires_strict_workflow_id(self, client, workflow_id):
+        payload = {
+            "code": _unique("STRICT-WF"),
+            "name": "Strict workflow",
+            "key_prefixes": ["SWF"],
+        }
+        if workflow_id is not None:
+            payload["workflow_id"] = workflow_id
+
+        response = client.post("/api/projects", json=payload)
+
+        assert response.status_code == 422
+        assert response.json()["ok"] is False
+        assert any(detail["field"] == "workflow_id" for detail in response.json()["details"])
+
     def test_create_and_update_project(self, client):
         from project_workflow.interfaces.ui import _app_state
 
@@ -689,35 +705,18 @@ class TestApiTasks:
 
     def test_api_task_detail_method_is_not_registered(self, client):
         resp = client.get("/api/tasks/NONEXISTENT-99999")
-        assert resp.status_code == 405
-        assert resp.json() == {"ok": False, "error": "Метод не поддерживается"}
+        assert resp.status_code == 404
+        assert resp.json() == {"ok": False, "error": "Ресурс не найден"}
 
-    def test_delete_task_cascade(self, client):
-        from project_workflow.interfaces.ui import _app_state
+    def test_task_delete_api_and_ui_control_are_absent(self, client):
+        delete_response = client.delete("/api/tasks/RUN-905")
+        assert delete_response.status_code == 404
+        assert delete_response.json() == {"ok": False, "error": "Ресурс не найден"}
 
-        uow = _app_state.get_db()
-        project = uow.projects.get_by_code("DEFAULT")
-        assert project is not None
-        task = _app_state.task_service().create_task(
-            {
-                "project_id": project.id,
-                "task_key": "RUN-905",
-                "title": "To delete",
-                "status": "active",
-                "current_phase_id": _phase_id(client, "1.INTAKE"),
-            }
-        )
-        phase = phase_by_code(uow, "1.INTAKE")
-        assert phase is not None
-        uow.tasks.record_phase_event(task["id"], phase.id, "completed")
-        uow.commit()
-        assert uow.tasks.list_phase_events(task["id"])
-
-        resp = client.delete(f"/api/tasks/{task['task_key']}")
-        assert resp.status_code == 204
-        assert resp.content == b""
-        assert uow.tasks.get_by_id(task["id"]) is None
-        assert uow.tasks.list_phase_events(task["id"]) == []
+        page = client.get("/tasks")
+        assert page.status_code == 200
+        assert "deleteTask" not in page.text
+        assert "Удалить задачу" not in page.text
 
 
 class TestApiPhaseDelete:

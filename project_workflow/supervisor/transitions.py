@@ -15,7 +15,7 @@ def _validate_verdict(verdict: str) -> None:
 
 def _task_state(task: dict | None) -> tuple[int, int, str]:
     if not task:
-        raise ConcurrentTransitionError("Задача была удалена во время оценки Supervisor")
+        raise ConcurrentTransitionError("Задача отсутствует во время оценки Supervisor")
     task_id = task.get("id")
     current_phase_id = task.get("current_phase_id")
     status = task.get("status")

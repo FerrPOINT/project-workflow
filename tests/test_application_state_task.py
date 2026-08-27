@@ -123,22 +123,15 @@ class TestTaskService:
 
         uow.tasks.create.assert_not_called()
 
-    def test_get_list_delete(self):
+    def test_get_and_list(self):
         uow = _make_uow()
         uow.tasks.get_by_id.return_value = FakeTask(1, "A-1", 1)
-        uow.tasks.lock.return_value = FakeTask(1, "A-1", 1)
         uow.tasks.get_by_key.return_value = FakeTask(1, "A-1", 1)
         uow.tasks.list.return_value = [FakeTask(1, "A-1", 1)]
-        uow.projects.get_by_id.return_value = FakeProject(1, "A", 1)
-        uow.projects.lock.return_value = FakeProject(1, "A", 1)
         svc = TaskService(uow)
         assert svc.get_task(1) == {"id": 1, "task_key": "A-1", "project_id": 1}
         assert svc.get_task_by_key("A-1") == {"id": 1, "task_key": "A-1", "project_id": 1}
         assert svc.list_tasks() == [{"id": 1, "task_key": "A-1", "project_id": 1}]
-        assert svc.delete_task(1) is None
-        uow.workflows.lock.assert_called_with(1)
-        uow.projects.lock.assert_called_with(1)
-        uow.tasks.lock.assert_called_once_with(1)
 
 
 class TestAppState:

@@ -123,7 +123,7 @@ class TestSupervisorCoreGaps:
         engine = SupervisorEngine("RUN-1")
         engine.task = None
         ph = self._phase(code="1", id=1)
-        with pytest.raises(ConcurrentTransitionError, match="Задача была удалена"):
+        with pytest.raises(ConcurrentTransitionError, match="Задача отсутствует"):
             engine._record_transition(ph, "pass", None, None, 55)
 
     def test_record_transition_requires_complete_task_state(self):

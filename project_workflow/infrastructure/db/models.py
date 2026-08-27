@@ -184,15 +184,23 @@ class Project(Base):
     description: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default=text("''"))
     key_prefixes: Mapped[str] = mapped_column(String, nullable=False, default="[]", server_default="[]")
 
+    __table_args__ = (
+        UniqueConstraint("id", "workflow_id", name="uq_projects_id_workflow"),
+    )
+
     workflow: Mapped[Workflow] = relationship("Workflow", back_populates="projects")
-    tasks: Mapped[list[Task]] = relationship("Task", back_populates="project", cascade="all, delete-orphan")
+    tasks: Mapped[list[Task]] = relationship(
+        "Task",
+        back_populates="project",
+        foreign_keys="Task.project_id",
+    )
 
 
 class Task(Base):
     __tablename__ = "tasks"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False)
+    project_id: Mapped[int] = mapped_column(nullable=False)
     workflow_id: Mapped[int] = mapped_column(ForeignKey("workflows.id", ondelete="RESTRICT"), nullable=False)
     task_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     title: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -209,15 +217,29 @@ class Task(Base):
     )
     __table_args__ = (
         ForeignKeyConstraint(
+            ["project_id", "workflow_id"],
+            ["projects.id", "projects.workflow_id"],
+            name="fk_tasks_project_workflow",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
             ["current_phase_id", "workflow_id"],
             ["phases.id", "phases.workflow_id"],
             name="fk_tasks_current_phase_workflow",
             ondelete="RESTRICT",
         ),
+        UniqueConstraint("id", "workflow_id", name="uq_tasks_id_workflow"),
         CheckConstraint("status IN ('active', 'done', 'blocked')", name="ck_tasks_status"),
+        Index("ix_tasks_project_id", "project_id"),
+        Index("ix_tasks_workflow_id", "workflow_id"),
+        Index("ix_tasks_current_phase_id", "current_phase_id"),
     )
 
-    project: Mapped[Project] = relationship("Project", back_populates="tasks")
+    project: Mapped[Project] = relationship(
+        "Project",
+        back_populates="tasks",
+        foreign_keys=[project_id],
+    )
     workflow: Mapped[Workflow] = relationship("Workflow", back_populates="tasks")
 
 
@@ -225,18 +247,16 @@ class TaskStepHistoryEntry(Base):
     __tablename__ = "task_step_history"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    task_id: Mapped[int] = mapped_column(
-        ForeignKey("tasks.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    phase_id: Mapped[int] = mapped_column(ForeignKey("phases.id", ondelete="RESTRICT"), nullable=False)
+    task_id: Mapped[int] = mapped_column(nullable=False)
+    workflow_id: Mapped[int] = mapped_column(nullable=False)
+    phase_id: Mapped[int] = mapped_column(nullable=False)
     verdict: Mapped[str] = mapped_column(String, nullable=False)
     worker_report: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default=text("''"))
     covered_item_ids: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
     missing_item_ids: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
     blocker_messages: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
-    next_phase_id: Mapped[int | None] = mapped_column(ForeignKey("phases.id", ondelete="RESTRICT"), nullable=True)
-    rollback_phase_id: Mapped[int | None] = mapped_column(ForeignKey("phases.id", ondelete="RESTRICT"), nullable=True)
+    next_phase_id: Mapped[int | None] = mapped_column(nullable=True)
+    rollback_phase_id: Mapped[int | None] = mapped_column(nullable=True)
     replay_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
     evaluation_snapshot: Mapped[str] = mapped_column(Text, nullable=False, default="{}", server_default="{}")
     supervisor_response: Mapped[str] = mapped_column(Text, nullable=False, default="{}", server_default="{}")
@@ -244,6 +264,31 @@ class TaskStepHistoryEntry(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["task_id", "workflow_id"],
+            ["tasks.id", "tasks.workflow_id"],
+            name="fk_task_step_history_task_workflow",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["phase_id", "workflow_id"],
+            ["phases.id", "phases.workflow_id"],
+            name="fk_task_step_history_phase_workflow",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["next_phase_id", "workflow_id"],
+            ["phases.id", "phases.workflow_id"],
+            name="fk_task_step_history_next_phase_workflow",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["rollback_phase_id", "workflow_id"],
+            ["phases.id", "phases.workflow_id"],
+            name="fk_task_step_history_rollback_phase_workflow",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "task_id", name="uq_task_step_history_id_task"),
         Index(
             "uq_task_step_history_replay",
             "task_id",
@@ -251,6 +296,9 @@ class TaskStepHistoryEntry(Base):
             "replay_fingerprint",
             unique=True,
         ),
+        Index("ix_task_step_history_phase_id", "phase_id"),
+        Index("ix_task_step_history_next_phase_id", "next_phase_id"),
+        Index("ix_task_step_history_rollback_phase_id", "rollback_phase_id"),
         CheckConstraint(
             "verdict IN ('pass', 'partial', 'blocked', 'rollback', 'delegate')",
             name="ck_task_step_history_verdict",
@@ -262,19 +310,36 @@ class TaskPhaseEvent(Base):
     __tablename__ = "task_phase_events"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    task_id: Mapped[int] = mapped_column(
-        ForeignKey("tasks.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    phase_id: Mapped[int] = mapped_column(ForeignKey("phases.id", ondelete="RESTRICT"), nullable=False)
-    step_history_id: Mapped[int | None] = mapped_column(
-        ForeignKey("task_step_history.id", ondelete="RESTRICT"), nullable=True
-    )
+    task_id: Mapped[int] = mapped_column(nullable=False)
+    workflow_id: Mapped[int] = mapped_column(nullable=False)
+    phase_id: Mapped[int] = mapped_column(nullable=False)
+    step_history_id: Mapped[int | None] = mapped_column(nullable=True)
     event_type: Mapped[str] = mapped_column(String, nullable=False)
     occurred_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["task_id", "workflow_id"],
+            ["tasks.id", "tasks.workflow_id"],
+            name="fk_task_phase_events_task_workflow",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["phase_id", "workflow_id"],
+            ["phases.id", "phases.workflow_id"],
+            name="fk_task_phase_events_phase_workflow",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["step_history_id", "task_id"],
+            ["task_step_history.id", "task_step_history.task_id"],
+            name="fk_task_phase_events_step_task",
+            ondelete="RESTRICT",
+        ),
+        Index("ix_task_phase_events_task_id_id", "task_id", "id"),
+        Index("ix_task_phase_events_phase_id", "phase_id"),
+        Index("ix_task_phase_events_step_history_id", "step_history_id"),
         CheckConstraint(
             "event_type IN ('entered', 'completed', 'blocked', 'resumed', 'rolled_back')",
             name="ck_task_phase_events_event_type",

@@ -485,7 +485,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     }
 
     try:
-        step_history_id = engine.db.record_step(run_data)
+        step_history_id = engine.db.record_step(**run_data)
         engine._record_evaluation(
             phase,
             verdict_key,

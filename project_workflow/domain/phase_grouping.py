@@ -11,7 +11,6 @@ PhaseT = TypeVar("PhaseT")
 def group_parallel_phases(
     phases: Sequence[PhaseT],
     *,
-    code_of: Callable[[PhaseT], str],
     execution_type_of: Callable[[PhaseT], str],
     id_of: Callable[[PhaseT], int | str],
     parallel_with_phase_id_of: Callable[[PhaseT], int | str | None],

@@ -82,28 +82,4 @@ class TaskService:
     def list_tasks(self) -> list[dict[str, Any]]:
         return [t.to_dict() for t in self._uow.tasks.list()]
 
-    def delete_task(self, task_id: int) -> None:
-        task = self._uow.tasks.get_by_id(task_id)
-        if task is None:
-            raise NotFoundError(f"Задача {task_id} не найдена")
-        project = self._uow.projects.get_by_id(task.project_id)
-        if project is None:
-            raise NotFoundError(f"Проект {task.project_id} не найден")
-        if self._uow.workflows.lock(project.workflow_id) is None:
-            raise NotFoundError(f"Воркфлоу {project.workflow_id} не найден")
-        locked_project = self._uow.projects.lock(task.project_id)
-        if locked_project is None:
-            raise NotFoundError(f"Проект {task.project_id} не найден")
-        if locked_project.workflow_id != project.workflow_id:
-            raise ConflictError("Воркфлоу проекта изменился во время удаления задачи")
-        locked_task = self._uow.tasks.lock(task_id)
-        if locked_task is None:
-            raise NotFoundError(f"Задача {task_id} не найдена")
-        if locked_task.project_id != locked_project.id:
-            raise ConflictError("Проект задачи изменился во время удаления")
-        self._uow.tasks.delete(task_id)
-        self._uow.commit()
-        return None
-
-
 __all__ = ["TaskService"]

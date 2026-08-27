@@ -26,6 +26,14 @@ class SAAgentRepository(AgentRepository):
         rows = self._session.execute(select(m.Agent).order_by(m.Agent.id)).scalars().all()
         return [_row_to_agent(r) for r in rows]
 
+    def list_by_ids(self, agent_ids: Sequence[int]) -> Sequence[Agent]:
+        if not agent_ids:
+            return []
+        rows = self._session.execute(
+            select(m.Agent).where(m.Agent.id.in_(agent_ids)).order_by(m.Agent.id)
+        ).scalars().all()
+        return [_row_to_agent(row) for row in rows]
+
     def get_by_name(self, name: str) -> Agent | None:
         row = self._session.execute(select(m.Agent).where(m.Agent.name == name)).scalar_one_or_none()
         return _row_to_agent(row) if row else None

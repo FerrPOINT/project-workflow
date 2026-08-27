@@ -86,7 +86,6 @@ class PhaseContractBuilder:
         """Return the canonical execution sequence, including isolated parallel phases."""
         return group_parallel_phases(
             self.all_phases,
-            code_of=lambda phase: phase.code,
             id_of=lambda phase: phase.code,
             execution_type_of=lambda phase: phase.execution_type,
             parallel_with_phase_id_of=lambda phase: phase.parallel_with_phase_code,
@@ -109,19 +108,6 @@ class PhaseContractBuilder:
             hermes_profile=phase.delegate.hermes_profile if phase.delegate else None,
             parallel_with_phase_code=phase.parallel_with_phase_code,
             rollback_target_phase_code=phase.rollback_target_phase_code,
-        )
-
-    def build_missing(self, phase_code: str) -> PhaseContract:
-        """Placeholder when phase is not in catalog."""
-        return PhaseContract(
-            phase_code=phase_code,
-            phase_name="Неизвестная фаза",
-            workflow_revision=self.workflow_revision,
-            description="",
-            instructions=[],
-            required_checks=[],
-            required_evidence=[],
-            execution_type="sync",
         )
 
     def build_parallel(self, group: list[Phase]) -> PhaseContract:

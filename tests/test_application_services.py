@@ -199,18 +199,14 @@ class TestInstructionService:
 
 
 class TestProjectService:
-    def test_create_project_defaults(self):
+    def test_create_project_requires_explicit_workflow(self):
         uow = _make_uow()
-        uow.workflows.ensure_default_exists.return_value = FakeWorkflow(5)
-        uow.projects.create.return_value = 8
-        uow.projects.get_by_id.return_value = FakeProject(8, "PRJ", 5)
         svc = ProjectService(uow)
-        result = svc.create_project({"code": "PRJ", "key_prefixes": ["PRJ"]})
-        assert result["id"] == 8
-        assert result["code"] == "PRJ"
-        assert result["workflow_id"] == 5
-        uow.projects.create.assert_called_once()
-        uow.commit.assert_called_once()
+        with pytest.raises(ValueError, match="workflow_id проекта"):
+            svc.create_project({"code": "PRJ", "key_prefixes": ["PRJ"]})
+        uow.workflows.ensure_default_exists.assert_not_called()
+        uow.projects.create.assert_not_called()
+        uow.commit.assert_not_called()
 
     def test_create_project_with_workflow_id(self):
         uow = _make_uow()

@@ -170,7 +170,7 @@ class ProjectCreate(StrictRequest):
     code: str = Field(..., min_length=1)
     name: str | None = Field(default=None)
     description: str | None = Field(default="")
-    workflow_id: int | None = Field(default=None, gt=0, strict=True)
+    workflow_id: int = Field(gt=0, strict=True)
     key_prefixes: list[str]
 
     @field_validator("code")
