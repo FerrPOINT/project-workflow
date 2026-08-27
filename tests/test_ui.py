@@ -1655,6 +1655,9 @@ class TestUiNetworkFailures:
         delete_response = client.delete("/api/tasks/RUN-1")
         assert delete_response.status_code == 405
         assert delete_response.json() == {"ok": False, "error": "Метод не поддерживается"}
+        unknown_nested = client.delete("/api/tasks/RUN-1/unknown")
+        assert unknown_nested.status_code == 404
+        assert unknown_nested.json() == {"ok": False, "error": "Ресурс не найден"}
         assert not any(
             route.path == "/api/tasks/{task_key}" and "DELETE" in (route.methods or set())
             for route in app.routes
