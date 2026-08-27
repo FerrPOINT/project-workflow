@@ -18,6 +18,7 @@ pytestmark = [pytest.mark.unit]
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SEED_PATH = REPO_ROOT / "project_workflow" / "references" / "seed.json"
 COMPOSE_PATH = REPO_ROOT / "docker-compose.yml"
+AGENTS_PATH = REPO_ROOT / "AGENTS.md"
 
 EXPECTED_CODES = [
     "1.INTAKE",
@@ -100,6 +101,11 @@ def test_compose_waits_for_api_readiness():
     assert "healthcheck:" in api_block
     assert "http://127.0.0.1:8811/health" in api_block
     assert "data.get('ok') is True" in api_block
+
+
+def test_repository_runbook_waits_for_compose_readiness():
+    agents = AGENTS_PATH.read_text(encoding="utf-8")
+    assert "docker compose up --build -d --wait" in agents
 
 
 def test_seed_catalog_has_exact_codes_and_order():
