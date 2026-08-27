@@ -146,7 +146,9 @@ def create_app() -> FastAPI:
         )
 
     @app.exception_handler(StarletteHTTPException)
-    async def _http_error(_request: Request, exc: StarletteHTTPException) -> JSONResponse:
+    async def _http_error(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+        if exc.status_code == 404 and request.method == "DELETE" and request.url.path.startswith("/api/tasks/"):
+            return JSONResponse({"ok": False, "error": "Метод не поддерживается"}, status_code=405)
         if exc.status_code == 404:
             return JSONResponse({"ok": False, "error": "Ресурс не найден"}, status_code=404)
         if exc.status_code == 405:

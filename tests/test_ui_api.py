@@ -612,9 +612,7 @@ class TestApiAgents:
         response = client.post("/api/agents", json={"name": _unique("Agent"), "hermes_profile": "Bad Profile"})
         assert response.status_code == 422
         for invalid in ("", 1, {}, []):
-            response = client.post(
-                "/api/agents", json={"name": _unique("Agent"), "hermes_profile": invalid}
-            )
+            response = client.post("/api/agents", json={"name": _unique("Agent"), "hermes_profile": invalid})
             assert response.status_code == 422
 
     def test_delete_agent_assigned_to_phase_forbidden(self, client):
@@ -710,8 +708,12 @@ class TestApiTasks:
 
     def test_task_delete_api_and_ui_control_are_absent(self, client):
         delete_response = client.delete("/api/tasks/RUN-905")
-        assert delete_response.status_code == 404
-        assert delete_response.json() == {"ok": False, "error": "Ресурс не найден"}
+        assert delete_response.status_code == 405
+        assert delete_response.json() == {"ok": False, "error": "Метод не поддерживается"}
+
+        unknown_delete = client.delete("/api/unknown/RUN-905")
+        assert unknown_delete.status_code == 404
+        assert unknown_delete.json() == {"ok": False, "error": "Ресурс не найден"}
 
         page = client.get("/tasks")
         assert page.status_code == 200
@@ -801,10 +803,7 @@ class TestApiPhaseUpdate:
         updated = next(phase for phase in phases if phase["code"] == "7.PLAN_GATE")
         assert updated["execution_type"] == "parallel"
         assert updated["parallel_with_phase_id"] is None
-        groups = [
-            [phase["code"] for phase in block["phases"]]
-            for block in _build_parallel_phase_blocks(phases)
-        ]
+        groups = [[phase["code"] for phase in block["phases"]] for block in _build_parallel_phase_blocks(phases)]
         assert ["7.PLAN_GATE"] in groups
 
     def test_parallel_round_trip_does_not_restore_removed_links(self, client):
@@ -822,9 +821,7 @@ class TestApiPhaseUpdate:
     def test_explicit_null_clears_parallel_component(self, client):
         phase_id = _phase_id(client, "5.RESEARCH")
 
-        response = client.put(
-            f"/api/phases/{phase_id}", json={"parallel_with_phase_id": None}
-        )
+        response = client.put(f"/api/phases/{phase_id}", json={"parallel_with_phase_id": None})
 
         assert response.status_code == 200
         phases = client.get("/api/phases").json()["phases"]

@@ -70,7 +70,7 @@ async def phases_page(request: Request, workflow_id: int | None = Query(default=
     if selected_workflow is None and workflows:
         selected_workflow = workflows[0]
     selected_workflow_id = selected_workflow["id"] if selected_workflow else None
-    phases = _load_phases(selected_workflow_id)
+    phases = _load_phases(int(selected_workflow_id)) if selected_workflow_id is not None else []
     phase_blocks = _build_parallel_phase_blocks(phases)
     return templates.TemplateResponse(
         request=request,

@@ -1652,7 +1652,9 @@ class TestUiNetworkFailures:
         assert response.status_code == 200
         assert "deleteTask" not in response.text
         assert "Удалить задачу" not in response.text
-        assert client.delete("/api/tasks/RUN-1").status_code == 404
+        delete_response = client.delete("/api/tasks/RUN-1")
+        assert delete_response.status_code == 405
+        assert delete_response.json() == {"ok": False, "error": "Метод не поддерживается"}
         assert not any(
             route.path == "/api/tasks/{task_key}" and "DELETE" in (route.methods or set())
             for route in app.routes

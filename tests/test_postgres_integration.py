@@ -46,7 +46,7 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-PG_HOST = os.environ.get("PGHOST", "localhost")
+PG_HOST = os.environ.get("PGHOST", "127.0.0.1")
 PG_PORT = int(os.environ.get("PGPORT", "5432"))
 PG_USER = os.environ.get("PGUSER", "project_workflow")
 PG_PASSWORD = os.environ.get("PGPASSWORD", "project_workflow")
@@ -616,7 +616,7 @@ class TestPostgresUoW:
         assert [item.id for item in projects] == sorted(item.id for item in projects)
         uow.close()
 
-    def test_ensure_phase_catalog_does_not_overwrite_existing_workflow(self, pg_url):
+    def test_ensure_phase_catalog_populates_an_empty_default_workflow(self, pg_url):
         from project_workflow.infrastructure.db import schema as schema_module
 
         ensure_migrated(get_engine(pg_url))
@@ -637,7 +637,9 @@ class TestPostgresUoW:
         with uow:
             default_wf = uow.workflows.get_default()
             phases = uow.phases.list(workflow_id=default_wf.id)
-            assert phases == []
+            assert [phase.code for phase in phases] == [
+                phase.code for phase in schema_module.load_phases_from_seed()
+            ]
 
     def test_uow_commit_and_rollback(self, pg_url):
         ensure_migrated(get_engine(pg_url))

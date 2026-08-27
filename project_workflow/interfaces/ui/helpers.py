@@ -7,14 +7,6 @@ from typing import Any
 from project_workflow.domain.phase_grouping import group_parallel_phases
 
 
-def _run_to_dict(run: Any) -> dict[str, Any]:
-    if isinstance(run, dict):
-        return run
-    if hasattr(run, "to_dict"):
-        return run.to_dict()
-    return dict(run)
-
-
 def _build_parallel_phase_blocks(phases: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Build UI blocks with the same phase-link semantics as Supervisor."""
     normalized = [dict(phase) for phase in phases]

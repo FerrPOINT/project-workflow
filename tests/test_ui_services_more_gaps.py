@@ -26,7 +26,6 @@ def _mock_state(uow=None):
 
 
 class TestServicesMoreGaps:
-
     def test_build_parallel_phase_blocks(self):
         blocks = _build_parallel_phase_blocks(
             [
@@ -78,12 +77,16 @@ class TestServicesMoreGaps:
             "task_key": "A-1",
             "status": "done",
             "updated_at": "2025-02-01",
+            "project_id": 10,
             "workflow_id": 1,
             "current_phase_id": 1,
         }
-        uow.list_phase_events.return_value = [
-            {"phase_id": 1, "event_type": "entered", "occurred_at": "2025-01-01"}
-        ]
+        uow.projects.get_by_id.return_value.to_dict.return_value = {
+            "id": 10,
+            "code": "A",
+            "name": "Project A",
+        }
+        uow.list_phase_events.return_value = [{"phase_id": 1, "event_type": "entered", "occurred_at": "2025-01-01"}]
         uow.list_step_history.return_value = []
         uow.get_phases.return_value = [
             {"id": 1, "code": "1", "name": "One", "phase_order": 1, "execution_type": "sync"}
@@ -98,8 +101,14 @@ class TestServicesMoreGaps:
             "id": 1,
             "task_key": "A-1",
             "status": "active",
+            "project_id": 10,
             "current_phase_id": 1,
             "workflow_id": 1,
+        }
+        uow.projects.get_by_id.return_value.to_dict.return_value = {
+            "id": 10,
+            "code": "A",
+            "name": "Project A",
         }
         uow.list_phase_events.return_value = [
             {"phase_id": 1, "event_type": "entered", "occurred_at": "2025-01-01"},
@@ -115,11 +124,21 @@ class TestServicesMoreGaps:
 
     def test_get_task_detail_next_contract_none(self, monkeypatch):
         uow = MagicMock()
-        task = {"id": 1, "task_key": "A-1", "status": "active", "current_phase_id": 1, "workflow_id": 1}
+        task = {
+            "id": 1,
+            "task_key": "A-1",
+            "status": "active",
+            "project_id": 10,
+            "current_phase_id": 1,
+            "workflow_id": 1,
+        }
         uow.get_task_by_key.return_value = task
-        uow.list_phase_events.return_value = [
-            {"phase_id": 1, "event_type": "entered", "occurred_at": "2025-01-01"}
-        ]
+        uow.projects.get_by_id.return_value.to_dict.return_value = {
+            "id": 10,
+            "code": "A",
+            "name": "Project A",
+        }
+        uow.list_phase_events.return_value = [{"phase_id": 1, "event_type": "entered", "occurred_at": "2025-01-01"}]
         uow.list_step_history.return_value = [
             {
                 "verdict": "pass",

@@ -5,11 +5,9 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from ..infrastructure.db.row_utils import row_to_dict
 from ..interfaces.ui.helpers import (
     _build_parallel_phase_blocks,
     _resolve_task_phase_id,
-    _run_to_dict,
 )
 from .state import _AppState
 
@@ -64,7 +62,7 @@ class UIDataService:
             )
         return result
 
-    def _load_phases(self, workflow_id: int | None = None) -> list[dict[str, Any]]:
+    def _load_phases(self, workflow_id: int) -> list[dict[str, Any]]:
         wdb = self._app_state.get_db()
         rows = wdb.get_phases(workflow_id=workflow_id)
         agents_by_id = {agent["id"]: agent for agent in wdb.get_agents()}
@@ -126,9 +124,9 @@ class UIDataService:
             history_batch = wdb.list_phase_events_batch(task_ids)
             latest_runs_raw = wdb.step_history.latest_for_tasks(task_ids)
             for latest_run in latest_runs_raw:
-                tid = getattr(latest_run, "task_id", None)
-                if tid is not None and tid not in latest_runs:
-                    latest_runs[tid] = _run_to_dict(latest_run)
+                tid = latest_run.task_id
+                if tid not in latest_runs:
+                    latest_runs[tid] = latest_run.to_dict()
 
         # Batch project lookup.
         projects_by_id: dict[int, dict[str, Any]] = {}
@@ -145,9 +143,14 @@ class UIDataService:
             completed = sum(
                 1 for event in latest_event_by_phase.values() if event.get("event_type") == "completed"
             )
-            project = projects_by_id.get(t.get("project_id"), {})
-            project_code = project.get("code") or ""
-            project_name = project.get("name") or ""
+            project_id = t.get("project_id")
+            if not isinstance(project_id, int) or isinstance(project_id, bool) or project_id <= 0:
+                raise ValueError(f"У задачи {t['task_key']} отсутствует корректный project_id")
+            task_project = projects_by_id.get(project_id)
+            if task_project is None:
+                raise ValueError(f"Для задачи {t['task_key']} не найден проект {project_id}")
+            project_code = str(task_project["code"])
+            project_name = str(task_project["name"])
             workflow_id_raw = t.get("workflow_id")
             workflow_id: int | None = int(workflow_id_raw) if isinstance(workflow_id_raw, int) else None
             workflow_phase_count = (
@@ -380,12 +383,14 @@ class UIDataService:
 
         task = dict(task)
         project_id = task.get("project_id")
-        project = row_to_dict(wdb.projects.get_by_id(project_id)) if isinstance(project_id, int) else None
-        if project:
-            task["project_code"] = project.get("code")
-            task["project_name"] = project.get("name")
-        task["project_code"] = task.get("project_code") or "—"
-        task["project_name"] = task.get("project_name") or task["project_code"]
+        if not isinstance(project_id, int) or isinstance(project_id, bool) or project_id <= 0:
+            raise ValueError(f"У задачи {task_key} отсутствует корректный project_id")
+        project_row = wdb.projects.get_by_id(project_id)
+        if project_row is None:
+            raise ValueError(f"Для задачи {task_key} не найден проект {project_id}")
+        project = project_row.to_dict()
+        task["project_code"] = project["code"]
+        task["project_name"] = project["name"]
         task["project_label"] = (
             task["project_name"]
             if task["project_name"] == task["project_code"]

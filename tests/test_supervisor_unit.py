@@ -40,6 +40,13 @@ class TestSupervisor:
                 "workflow_name": "W",
                 "current_contract": {},
                 "cli_actor": {"description": "d", "entrypoint": "e"},
+                "report_template": {
+                    "summary": "s",
+                    "completed": "c",
+                    "evidence": "e",
+                    "blockers": "b",
+                    "next_step": "n",
+                },
             }
         )
         prompt = engine.get_phase_prompt("0")
@@ -73,6 +80,13 @@ class TestSupervisor:
                 "workflow_name": "W",
                 "current_contract": {},
                 "cli_actor": {"description": "d", "entrypoint": "e"},
+                "report_template": {
+                    "summary": "s",
+                    "completed": "c",
+                    "evidence": "e",
+                    "blockers": "b",
+                    "next_step": "n",
+                },
             }
         )
         prompt = engine.get_phase_prompt("parallel-a")
@@ -103,7 +117,12 @@ class TestPromptAndModels:
         from project_workflow.supervisor.prompt import build_phase_prompt
 
         phase = Phase(code="2", name="Two", description="Desc", execution_type="sync")
-        ctx = {"workflow_name": "W", "current_contract": None, "cli_actor": {"description": "d", "entrypoint": "e"}}
+        ctx = {
+            "workflow_name": "W",
+            "current_contract": None,
+            "cli_actor": {"description": "d", "entrypoint": "e"},
+            "report_template": {"summary": "s", "completed": "c", "evidence": "e", "blockers": "b", "next_step": "n"},
+        }
         result = build_phase_prompt("RUN-1", {"2": phase}, [phase], "1", ctx, phase_code="2")
         assert "Two" in result
         assert "Desc" in result
@@ -123,7 +142,12 @@ class TestPromptAndModels:
             "required_evidence": ["E1"],
             "delegate_agent": None,
         }
-        ctx = {"workflow_name": "W", "current_contract": contract, "cli_actor": {"description": "d", "entrypoint": "e"}}
+        ctx = {
+            "workflow_name": "W",
+            "current_contract": contract,
+            "cli_actor": {"description": "d", "entrypoint": "e"},
+            "report_template": {"summary": "s", "completed": "c", "evidence": "e", "blockers": "b", "next_step": "n"},
+        }
         result = build_phase_prompt("RUN-1", {"1": phase}, [phase], "1", ctx)
         assert "I1" in result
         assert "C1" in result

@@ -32,8 +32,6 @@ from project_workflow.infrastructure.db.repositories import (
 )
 from project_workflow.infrastructure.db.session import get_session
 
-from .row_utils import row_to_dict, rows_to_dicts
-
 
 class SAUnitOfWork(UnitOfWork):
     """SQLAlchemy session-based unit of work."""
@@ -125,37 +123,35 @@ class SAUnitOfWork(UnitOfWork):
     def record_step(self, **kwargs: Any) -> int:
         return self.step_history.create(kwargs)
 
-    def get_task_by_key(self, key: str) -> Any | None:
-        return row_to_dict(self.tasks.get_by_key(key))
+    def get_task_by_key(self, key: str) -> dict[str, Any] | None:
+        task = self.tasks.get_by_key(key)
+        return task.to_dict() if task is not None else None
 
-    def get_phases(self, workflow_id: int | None = None) -> list[Any]:
-        if workflow_id is None:
-            default_wf = self.workflows.get_default()
-            if default_wf is None:
-                return []
-            workflow_id = default_wf.id
-        return rows_to_dicts(self.phases.list(workflow_id=workflow_id))
+    def get_phases(self, workflow_id: int) -> list[dict[str, Any]]:
+        if not isinstance(workflow_id, int) or isinstance(workflow_id, bool) or workflow_id <= 0:
+            raise ValueError("workflow_id должен быть положительным целым числом")
+        return [phase.to_dict() for phase in self.phases.list(workflow_id=workflow_id)]
 
-    def get_projects(self) -> list[Any]:
-        return rows_to_dicts(self.projects.list())
+    def get_projects(self) -> list[dict[str, Any]]:
+        return [project.to_dict() for project in self.projects.list()]
 
-    def get_tasks(self) -> list[Any]:
-        return rows_to_dicts(self.tasks.list())
+    def get_tasks(self) -> list[dict[str, Any]]:
+        return [task.to_dict() for task in self.tasks.list()]
 
-    def get_agents(self) -> list[Any]:
-        return rows_to_dicts(self.agents.list())
+    def get_agents(self) -> list[dict[str, Any]]:
+        return [agent.to_dict() for agent in self.agents.list()]
 
-    def get_workflows(self) -> list[Any]:
-        return rows_to_dicts(self.workflows.list())
+    def get_workflows(self) -> list[dict[str, Any]]:
+        return [workflow.to_dict() for workflow in self.workflows.list()]
 
     def list_phase_events(self, task_id: int) -> list[dict[str, Any]]:
-        return rows_to_dicts(self.tasks.list_phase_events(task_id))
+        return [event.to_dict() for event in self.tasks.list_phase_events(task_id)]
 
     def list_phase_events_batch(self, task_ids: list[int]) -> dict[int, list[dict[str, Any]]]:
         return {
-            task_id: rows_to_dicts(events)
+            task_id: [event.to_dict() for event in events]
             for task_id, events in self.tasks.list_phase_events_batch(task_ids).items()
         }
 
     def list_step_history(self, **kwargs: Any) -> list[dict[str, Any]]:
-        return rows_to_dicts(self.step_history.list(**kwargs))
+        return [entry.to_dict() for entry in self.step_history.list(**kwargs)]

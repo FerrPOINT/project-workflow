@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from project_workflow.supervisor.prompt import _format_parallel_contract_human, build_phase_prompt
 
 
@@ -13,6 +15,20 @@ def _phase(code, execution_type="sync", name="N"):
     p.name = name
     p.execution_type = execution_type
     return p
+
+
+def _ctx() -> dict:
+    return {
+        "workflow_name": "W",
+        "cli_actor": {"description": "D", "entrypoint": "E"},
+        "report_template": {
+            "summary": "S",
+            "completed": "C",
+            "evidence": "E",
+            "blockers": "B",
+            "next_step": "N",
+        },
+    }
 
 
 def test_format_parallel_contract_human():
@@ -46,23 +62,16 @@ def test_prompt_for_current_phase():
         phase_map,
         [],
         "p1",
-        {"workflow_name": "W", "cli_actor": {"description": "D", "entrypoint": "E"}},
+        _ctx(),
     )
     assert "T-1" in result
     assert "p1 — N" in result
 
 
-def test_prompt_fallback_cli_actor_uses_current_task_key():
+def test_prompt_rejects_incomplete_context():
     phase = _phase("p1")
-    result = build_phase_prompt(
-        "RUN-987654",
-        {"p1": phase},
-        [],
-        "p1",
-        {"workflow_name": "W"},
-    )
-    assert "project-workflow step --task RUN-987654 [--report TEXT]" in result
-    assert "RUN-42" not in result
+    with pytest.raises(ValueError, match="CLI-исполнителя"):
+        build_phase_prompt("RUN-987654", {"p1": phase}, [], "p1", {"workflow_name": "W"})
 
 
 def test_prompt_for_missing_phase():
@@ -86,7 +95,7 @@ def test_prompt_parallel_group():
             phase_map,
             [],
             "p1",
-            {"workflow_name": "W"},
+            _ctx(),
             phase_code="p1",
         )
     assert "ПАРАЛЛЕЛЬНАЯ ГРУППА" in result
@@ -101,7 +110,7 @@ def test_prompt_delegated():
             phase_map,
             [],
             "p1",
-            {"workflow_name": "W"},
+            _ctx(),
             phase_code="p1",
         )
     assert "Делегировано агенту" in result

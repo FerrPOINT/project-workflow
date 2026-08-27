@@ -66,35 +66,6 @@ class TestUIDataServiceGaps:
         assert result[0]["completed"] == 2
         assert result[0]["total_phases"] == expected_total
 
-    def test_load_tasks_latest_run_without_task_id(self):
-        wdb = MagicMock()
-        wdb.get_tasks.return_value = [
-            {
-                "id": 1,
-                "task_key": "RUN-1",
-                "title": "t",
-                "project_id": 1,
-                "workflow_id": 1,
-                "status": "active",
-                "current_phase_id": 1,
-                "current_phase_code": "a",
-                "current_phase_name": "A",
-            }
-        ]
-        wdb.get_workflows.return_value = [{"id": 1}]
-        wdb.get_phases.return_value = [{"id": 1, "code": "a", "name": "A"}]
-        wdb.list_phase_events_batch.return_value = {1: []}
-
-        class Run:
-            pass
-
-        wdb.step_history.latest_for_tasks.return_value = [Run()]
-        wdb.get_projects.return_value = []
-
-        result = _service(wdb)._load_tasks()
-        assert result[0]["latest_verdict"] is None
-        assert result[0]["latest_verdict_phase"] is None
-
     def test_load_tasks_prefers_pinned_workflow_over_project_revision(self):
         wdb = MagicMock()
         wdb.get_tasks.return_value = [
@@ -159,12 +130,35 @@ class TestUIDataServiceGaps:
                 }
 
         wdb.step_history.latest_for_tasks.return_value = [Run()]
-        wdb.get_projects.return_value = []
+        wdb.get_projects.return_value = [{"id": 1, "code": "RUN", "name": "Runs"}]
 
         result = _service(wdb)._load_tasks()
         assert result[0]["latest_verdict"] == "pass"
         assert result[0]["latest_verdict_label"] == "Принято"
         assert result[0]["latest_verdict_phase"] == "1"
+
+    def test_load_tasks_fails_closed_when_project_is_missing(self):
+        wdb = MagicMock()
+        wdb.get_tasks.return_value = [
+            {
+                "id": 1,
+                "task_key": "RUN-1",
+                "project_id": 7,
+                "workflow_id": 1,
+                "status": "active",
+                "current_phase_id": 1,
+                "current_phase_code": "1",
+                "current_phase_name": "One",
+            }
+        ]
+        wdb.get_workflows.return_value = [{"id": 1}]
+        wdb.get_phases.return_value = [{"id": 1, "code": "1", "name": "One"}]
+        wdb.list_phase_events_batch.return_value = {1: []}
+        wdb.step_history.latest_for_tasks.return_value = []
+        wdb.get_projects.return_value = []
+
+        with pytest.raises(ValueError, match="не найден проект 7"):
+            _service(wdb)._load_tasks()
 
     def test_missing_task_workflow_id_fails_closed_without_project_fallback(self):
         wdb = MagicMock()
@@ -222,7 +216,9 @@ class TestUIDataServiceGaps:
             {"id": 1, "workflow_id": 1, "phase_order": 1, "code": "-1", "name": "Start"}
         ]
         wdb.list_step_history.return_value = []
-        wdb.projects.get_by_id.return_value = None
+        project = MagicMock()
+        project.to_dict.return_value = {"id": 1, "code": "RUN", "name": "Runs"}
+        wdb.projects.get_by_id.return_value = project
 
         with pytest.raises(ValueError, match="обязательный журнал событий"):
             _service(wdb)._get_task_detail("RUN-1")

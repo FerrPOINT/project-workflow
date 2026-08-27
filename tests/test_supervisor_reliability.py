@@ -47,14 +47,12 @@ class TestStrictEvaluatorContract:
         with pytest.raises(ValueError):
             ResponseParser.parse(raw, required_item_ids=["phase:check:1"])
 
-    def test_previous_coverage_completes_pass(self):
-        verdict = ResponseParser.parse(
-            _wire("PASS", ["phase:evidence:2"], ["phase:check:1"]),
-            required_item_ids=["phase:check:1", "phase:evidence:2"],
-            previously_covered_ids={"phase:check:1"},
-        )
-        assert verdict.covered == ["phase:check:1", "phase:evidence:2"]
-        assert verdict.missing == []
+    def test_pass_does_not_repair_previously_covered_ids_from_missing(self):
+        with pytest.raises(ValueError, match="PASS requires full coverage"):
+            ResponseParser.parse(
+                _wire("PASS", ["phase:evidence:2"], ["phase:check:1"]),
+                required_item_ids=["phase:check:1", "phase:evidence:2"],
+            )
 
     def test_empty_checklist_pass_with_required_fields(self):
         verdict = ResponseParser.parse(_wire("PASS", [], []), required_item_ids=[])
@@ -178,7 +176,7 @@ def test_same_report_uses_provider_again_after_accumulated_coverage_changes():
             if line.strip().startswith('ID: "') and '" — ' in line.strip()
         ]
         assert len(item_ids) >= 3
-        covered = [item_ids[calls]] if calls < 2 else []
+        covered = item_ids[: min(calls + 1, 2)]
         calls += 1
         return _wire(
             "PARTIAL",

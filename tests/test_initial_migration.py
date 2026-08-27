@@ -235,6 +235,29 @@ def test_init_db_hides_database_exception_details(monkeypatch, capsys, error, me
     assert "dsn-secret-marker" not in stderr
 
 
+def test_init_db_reports_invalid_seed_without_traceback(tmp_path, monkeypatch, capsys):
+    from project_workflow import config
+    from project_workflow.infrastructure.db.session import reset_engine
+    from scripts import init_db
+
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'invalid-seed.db'}")
+    monkeypatch.setattr(
+        init_db.schema,
+        "ensure_phase_catalog",
+        lambda _uow: (_ for _ in ()).throw(ValueError("Некорректный начальный каталог: phase.code")),
+    )
+    config.get_settings.cache_clear()
+    reset_engine()
+    try:
+        assert init_db.main() == 1
+        stderr = capsys.readouterr().err
+        assert "Некорректный начальный каталог: phase.code" in stderr
+        assert "Traceback" not in stderr
+    finally:
+        config.get_settings.cache_clear()
+        reset_engine()
+
+
 @pytest.mark.parametrize("mutation", ["missing", "extra"])
 def test_head_with_damaged_or_polluted_schema_is_refused(tmp_path, mutation):
     engine = _sqlite_engine(tmp_path)

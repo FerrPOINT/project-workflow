@@ -30,7 +30,8 @@ def test_load_functions_delegate_to_ui_data_service():
 
     with patch.object(services_mod, "_ui_data_service", return_value=mock_svc):
         assert services_mod._load_workflows() == [{"id": 1}]
-        assert services_mod._load_phases() == [{"id": 2}]
+        assert services_mod._load_phases(7) == [{"id": 2}]
+        mock_svc._load_phases.assert_called_once_with(7)
         assert services_mod._load_phase_detail(3) == {"id": 3}
         assert services_mod._load_tasks() == [{"id": 4}]
         assert services_mod._load_projects() == [{"id": 5}]

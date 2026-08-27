@@ -13,7 +13,11 @@ def bootstrap_default_project(uow: SAUnitOfWork) -> None:
 
     code = config.DEFAULT_PROJECT_CODE
     if uow.projects.get_by_code(code) is None:
-        default_wf = uow.workflows.ensure_default_exists(config.DEFAULT_WORKFLOW_NAME)
+        default_wf = uow.workflows.get_default()
+        if default_wf is None or default_wf.id is None:
+            raise ValueError("Начальный воркфлоу не загружен")
+        if not uow.phases.list(default_wf.id):
+            raise ValueError("Начальный воркфлоу не содержит фаз")
         uow.projects.create(
             {
                 "workflow_id": default_wf.id,

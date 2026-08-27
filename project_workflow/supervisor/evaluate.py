@@ -297,7 +297,6 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         llm = ResponseParser.parse(
             raw,
             required_item_ids=item_ids,
-            previously_covered_ids=previously_ids,
         )
         if llm.verdict == "ROLLBACK" and not phase.rollback_target_phase_code:
             raise ValueError("Для текущей фазы не настроена цель отката")

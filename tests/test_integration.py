@@ -92,7 +92,7 @@ class TestEndToEndWorkflow:
                 "execution_type": "parallel",
             }
         )
-        rows = uow.get_phases()
+        rows = uow.get_phases(workflow_id)
         phase = next(row for row in rows if row["code"] == "p2")
         assert "group_id" not in phase
         assert phase["agent_id"] == agent_id

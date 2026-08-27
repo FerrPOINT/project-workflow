@@ -310,3 +310,51 @@ def test_invalid_seed_is_detected_before_catalog_writes(tmp_path):
     assert uow.phases.list() == []
     assert uow.agents.list() == []
     uow.close()
+
+
+@pytest.mark.parametrize(
+    "catalog",
+    [
+        [
+            {
+                "phase_order": 1,
+                "code": "one",
+                "name": "One",
+                "delegate": {"agent": "reviewer", "hermes_profile": "profile-one"},
+            },
+            {
+                "phase_order": 2,
+                "code": "two",
+                "name": "Two",
+                "delegate": {"agent": "reviewer", "hermes_profile": "profile-two"},
+            },
+        ],
+        [
+            {
+                "phase_order": 1,
+                "code": "one",
+                "name": "One",
+                "delegate": {"agent": "reviewer", "hermes_profile": "shared-profile"},
+            },
+            {
+                "phase_order": 2,
+                "code": "two",
+                "name": "Two",
+                "delegate": {"agent": "coder", "hermes_profile": "shared-profile"},
+            },
+        ],
+    ],
+)
+def test_seed_rejects_ambiguous_agent_profile_ownership_before_writes(tmp_path, catalog):
+    path = tmp_path / "ambiguous-agents.json"
+    path.write_text(json.dumps(catalog), encoding="utf-8")
+    uow = SAUnitOfWork(f"sqlite:///{tmp_path / 'ambiguous-agents.db'}")
+    ensure_schema(uow.session.get_bind())
+
+    with pytest.raises(ValueError, match="профил"):
+        ensure_phase_catalog(uow, path)
+
+    assert uow.workflows.list() == []
+    assert uow.phases.list() == []
+    assert uow.agents.list() == []
+    uow.close()

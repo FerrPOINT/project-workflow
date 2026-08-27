@@ -253,7 +253,6 @@ class ResponseParser:
         raw: dict[str, Any],
         *,
         required_item_ids: list[str] | None = None,
-        previously_covered_ids: set[str] | None = None,
     ) -> LlmVerdict:
         response = _LlmResponse.model_validate(raw)
 
@@ -271,10 +270,6 @@ class ResponseParser:
                 unknown = sorted(classified - required)
                 omitted = sorted(required - classified)
                 raise ValueError(f"invalid item IDs: unknown={unknown}, omitted={omitted}")
-            effective_covered = set(covered) | (previously_covered_ids or set())
-            covered = [item_id for item_id in required_item_ids if item_id in effective_covered]
-            missing = [item_id for item_id in required_item_ids if item_id not in effective_covered]
-
             if response.verdict == "PASS" and (missing or response.blockers):
                 raise ValueError("PASS requires full coverage and empty missing/blockers")
             if response.verdict == "PARTIAL" and (not missing or response.blockers):

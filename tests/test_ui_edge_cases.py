@@ -115,9 +115,7 @@ class TestLoadTasks:
                 "current_phase_id": 1,
                 "current_phase_code": "-1",
                 "current_phase_name": "Start",
-                "project_id": None,
-                "project_code": None,
-                "project_name": None,
+                "project_id": 10,
                 "workflow_id": 1,
                 "updated_at": "2025-02-01",
             }
@@ -131,7 +129,7 @@ class TestLoadTasks:
             ]
         }
         db.step_history.latest_for_tasks.return_value = []
-        db.get_projects.return_value = []
+        db.get_projects.return_value = [{"id": 10, "code": "AAT", "name": "AAT"}]
         monkeypatch.setattr("project_workflow.interfaces.ui._app_state", MagicMock(get_db=lambda: db))
         tasks = _load_tasks()
         assert tasks[0]["completed_at"] == "2025-01-20"
@@ -146,9 +144,7 @@ class TestLoadTasks:
                 "current_phase_id": 1,
                 "current_phase_code": "-1",
                 "current_phase_name": "Start",
-                "project_id": None,
-                "project_code": None,
-                "project_name": None,
+                "project_id": 10,
                 "workflow_id": 1,
                 "updated_at": "2025-02-01",
             }
@@ -159,7 +155,7 @@ class TestLoadTasks:
             1: [{"phase_id": 1, "event_type": "entered", "occurred_at": "2025-01-15"}]
         }
         db.step_history.latest_for_tasks.return_value = []
-        db.get_projects.return_value = []
+        db.get_projects.return_value = [{"id": 10, "code": "AAT", "name": "AAT"}]
         monkeypatch.setattr("project_workflow.interfaces.ui._app_state", MagicMock(get_db=lambda: db))
         with pytest.raises(ValueError, match="нет события completed"):
             _load_tasks()
@@ -182,11 +178,14 @@ class TestTaskDetailEdgeCases:
             "current_phase_id": 1,
             "title": "T",
             "workflow_id": 1,
-            "project_id": None,
+            "project_id": 10,
         }
-        db.list_phase_events.return_value = [
-            {"phase_id": 1, "event_type": "entered", "occurred_at": "2025-01-01"}
-        ]
+        db.projects.get_by_id.return_value.to_dict.return_value = {
+            "id": 10,
+            "code": "AAT",
+            "name": "AAT",
+        }
+        db.list_phase_events.return_value = [{"phase_id": 1, "event_type": "entered", "occurred_at": "2025-01-01"}]
         db.get_phases.return_value = [
             {"id": 1, "code": "1", "name": "Current", "phase_order": 1, "execution_type": "sync"}
         ]
@@ -227,11 +226,14 @@ class TestTaskDetailEdgeCases:
             "current_phase_id": 1,
             "title": "T",
             "workflow_id": 1,
-            "project_id": None,
+            "project_id": 10,
         }
-        db.list_phase_events.return_value = [
-            {"phase_id": 1, "event_type": "entered", "occurred_at": "2025-01-01"}
-        ]
+        db.projects.get_by_id.return_value.to_dict.return_value = {
+            "id": 10,
+            "code": "AAT",
+            "name": "AAT",
+        }
+        db.list_phase_events.return_value = [{"phase_id": 1, "event_type": "entered", "occurred_at": "2025-01-01"}]
         db.get_phases.return_value = [
             {"id": 1, "code": "1", "name": "Current", "phase_order": 1, "execution_type": "sync"}
         ]

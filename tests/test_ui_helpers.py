@@ -7,7 +7,6 @@ import pytest
 from project_workflow.interfaces.ui.helpers import (
     _build_parallel_phase_blocks,
     _resolve_task_phase_id,
-    _run_to_dict,
 )
 from project_workflow.interfaces.ui.templates import _group_instructions
 
@@ -18,16 +17,6 @@ def test_group_instructions():
     c = {"id": 3, "execution_type": "sync"}
     assert _group_instructions([]) == []
     assert _group_instructions([a, b, c]) == [[a, b], [c]]
-
-
-def test_run_to_dict():
-    class Item:
-        def to_dict(self):
-            return {"id": 2}
-
-    assert _run_to_dict({"id": 1}) == {"id": 1}
-    assert _run_to_dict(Item()) == {"id": 2}
-    assert _run_to_dict([(1, "a")]) == {1: "a"}
 
 
 def test_build_parallel_phase_blocks_uses_numeric_links():

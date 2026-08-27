@@ -103,29 +103,14 @@ def load_phases_from_db(
     phase_ids = [int(row.id) for row in rows if row.id is not None]
     phase_code_by_id = {int(row.id): row.code for row in rows if row.id is not None}
     instructions_by_phase = {
-        phase_id: list(items)
-        for phase_id, items in uow.phase_instructions.list_for_phases(phase_ids).items()
+        phase_id: list(items) for phase_id, items in uow.phase_instructions.list_for_phases(phase_ids).items()
     }
-    checks_by_phase = {
-        phase_id: list(items)
-        for phase_id, items in uow.phase_checks.list_for_phases(phase_ids).items()
-    }
+    checks_by_phase = {phase_id: list(items) for phase_id, items in uow.phase_checks.list_for_phases(phase_ids).items()}
     evidence_by_phase = {
-        phase_id: list(items)
-        for phase_id, items in uow.phase_evidence_requirements.list_for_phases(phase_ids).items()
+        phase_id: list(items) for phase_id, items in uow.phase_evidence_requirements.list_for_phases(phase_ids).items()
     }
-    agent_ids = sorted(
-        {
-            int(row.agent_id)
-            for row in rows
-            if row.agent_id is not None
-        }
-    )
-    agents_by_id = {
-        int(agent.id): agent
-        for agent in uow.agents.list_by_ids(agent_ids)
-        if agent.id is not None
-    }
+    agent_ids = sorted({int(row.agent_id) for row in rows if row.agent_id is not None})
+    agents_by_id = {int(agent.id): agent for agent in uow.agents.list_by_ids(agent_ids) if agent.id is not None}
     return [
         _build_phase_from_db(
             row,
@@ -197,6 +182,7 @@ class _SeedDelegate(_SeedModel):
             return None
         normalized = value.strip()
         return normalized or None
+
 
 class _SeedPhase(_SeedModel):
     phase_order: int = Field(gt=0)
@@ -281,9 +267,28 @@ def _load_seed(path: Path | str | None = None) -> list[_SeedPhase]:
             values = [_seed_text(item).casefold() for item in getattr(phase, field_name)]
             if len(values) != len(set(values)):
                 raise ValueError(
-                    f"Некорректная фаза начального каталога {phase.code!r}: "
-                    f"повторяющиеся описания в поле {field_name}"
+                    f"Некорректная фаза начального каталога {phase.code!r}: повторяющиеся описания в поле {field_name}"
                 )
+    profiles_by_agent: dict[str, str | None] = {}
+    agents_by_profile: dict[str, str] = {}
+    for phase in phases:
+        delegate = phase.delegate
+        if delegate is None:
+            continue
+        previous_profile = profiles_by_agent.setdefault(delegate.agent, delegate.hermes_profile)
+        if previous_profile != delegate.hermes_profile:
+            raise ValueError(
+                f"Некорректная фаза начального каталога {phase.code!r}: "
+                f"для агента {delegate.agent!r} заданы разные профили Hermes"
+            )
+        if delegate.hermes_profile is None:
+            continue
+        previous_agent = agents_by_profile.setdefault(delegate.hermes_profile, delegate.agent)
+        if previous_agent != delegate.agent:
+            raise ValueError(
+                f"Некорректная фаза начального каталога {phase.code!r}: "
+                f"профиль Hermes {delegate.hermes_profile!r} назначен разным агентам"
+            )
     return phases
 
 
@@ -337,20 +342,36 @@ def ensure_phase_catalog(
     uow: UnitOfWork,
     seed_path: Path | str | None = None,
 ) -> None:
-    """Bootstrap the packaged phase catalog only for a new empty database."""
+    """Bootstrap the packaged catalog when the default workflow has no phases."""
     seed_path = Path(seed_path) if seed_path else config.SEED_PATH
     seed_items = _load_seed(seed_path)
     seed_phases = [_phase_item_to_supervisor(item) for item in seed_items]
-    if uow.workflows.list():
+    default_workflow = uow.workflows.get_default()
+    if default_workflow is not None and uow.phases.list(default_workflow.id):
         return
-    default_workflow = uow.workflows.ensure_default_exists(config.DEFAULT_WORKFLOW_NAME)
+    existing_agents = {agent.name: agent for agent in uow.agents.list()}
+    desired_agents = {
+        phase.delegate.agent: phase.delegate.hermes_profile
+        for phase in seed_phases
+        if phase.delegate is not None and phase.delegate.agent
+    }
+    for agent_name, hermes_profile in desired_agents.items():
+        existing_agent = existing_agents.get(agent_name)
+        if existing_agent is not None and existing_agent.hermes_profile != hermes_profile:
+            raise ValueError(f"Агент {agent_name!r} уже существует с другим профилем Hermes")
+        if hermes_profile is not None:
+            profile_owner = uow.agents.get_by_hermes_profile(hermes_profile)
+            if profile_owner is not None and profile_owner.name != agent_name:
+                raise ValueError(f"Профиль Hermes {hermes_profile!r} уже назначен агенту {profile_owner.name!r}")
+
+    default_workflow = default_workflow or uow.workflows.ensure_default_exists(config.DEFAULT_WORKFLOW_NAME)
     workflow_id = default_workflow.id
     assert workflow_id is not None
 
     for phase in seed_phases:
         delegate = phase.delegate
         agent_name = (delegate.agent or "") if delegate else ""
-        if agent_name and not uow.agents.get_by_name(agent_name):
+        if agent_name and agent_name not in existing_agents:
             uow.agents.create(
                 {
                     "name": agent_name,
@@ -358,6 +379,10 @@ def ensure_phase_catalog(
                     "hermes_profile": delegate.hermes_profile if delegate else None,
                 }
             )
+            created_agent = uow.agents.get_by_name(agent_name)
+            if created_agent is None:
+                raise RuntimeError(f"Не удалось создать агента начального каталога {agent_name!r}")
+            existing_agents[agent_name] = created_agent
 
     phase_id_by_code: dict[str, int] = {}
     for order, phase in enumerate(seed_phases, start=1):
@@ -384,14 +409,10 @@ def ensure_phase_catalog(
     for phase in seed_phases:
         phase_id = phase_id_by_code[phase.code]
         parallel_phase_id = (
-            phase_id_by_code[phase.parallel_with_phase_code]
-            if phase.parallel_with_phase_code is not None
-            else None
+            phase_id_by_code[phase.parallel_with_phase_code] if phase.parallel_with_phase_code is not None else None
         )
         rollback_phase_id = (
-            phase_id_by_code[phase.rollback_target_phase_code]
-            if phase.rollback_target_phase_code is not None
-            else None
+            phase_id_by_code[phase.rollback_target_phase_code] if phase.rollback_target_phase_code is not None else None
         )
         uow.phases.update(
             phase_id,

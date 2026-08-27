@@ -133,7 +133,14 @@ class TestSupervisorEvaluate:
                     "parallel_with_phase_code": None,
                     "rollback_target_phase_code": None,
                 },
-                "report_template": {"summary": "..."},
+                "cli_actor": {"description": "d", "entrypoint": "e"},
+                "report_template": {
+                    "summary": "s",
+                    "completed": "c",
+                    "evidence": "e",
+                    "blockers": "b",
+                    "next_step": "n",
+                },
             },
         ):
             prompt = engine.get_phase_prompt()

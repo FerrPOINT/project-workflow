@@ -186,25 +186,17 @@ def build_phase_prompt(
             contract = cb.build(target_phase).to_dict()
         parallel_banner = ""
 
-    cli_actor = ctx.get("cli_actor") or {
-        "description": "Пользователь CLI",
-        "entrypoint": f"project-workflow step --task {task_key} [--report TEXT]",
-    }
-    report_template = ctx.get("report_template") or {
-        "summary": "Краткое описание результата работы над фазой.",
-        "completed": "Перечисли выполненные пункты контракта фазы.",
-        "evidence": "Приложи конкретные артефакты: ссылки, файлы, скриншоты, коммиты.",
-        "blockers": "Укажи явные блокеры или 'нет'.",
-        "next_step": "Опиши одно конкретное следующее действие.",
-    }
-    # Guard against partial report_template dicts from tests.
-    report_template = {
-        "summary": report_template.get("summary", "Краткое описание результата работы над фазой."),
-        "completed": report_template.get("completed", "Перечисли выполненные пункты контракта фазы."),
-        "evidence": report_template.get("evidence", "Приложи конкретные артефакты: ссылки, файлы, скриншоты, коммиты."),
-        "blockers": report_template.get("blockers", "Укажи явные блокеры или 'нет'."),
-        "next_step": report_template.get("next_step", "Опиши одно конкретное следующее действие."),
-    }
+    cli_actor = ctx.get("cli_actor")
+    report_template = ctx.get("report_template")
+    if not isinstance(cli_actor, dict) or not all(
+        isinstance(cli_actor.get(key), str) and cli_actor[key].strip() for key in ("description", "entrypoint")
+    ):
+        raise ValueError("Контекст Supervisor не содержит полного описания CLI-исполнителя")
+    if not isinstance(report_template, dict) or not all(
+        isinstance(report_template.get(key), str) and report_template[key].strip()
+        for key in ("summary", "completed", "evidence", "blockers", "next_step")
+    ):
+        raise ValueError("Контекст Supervisor не содержит полного шаблона отчёта")
 
     return (
         f"Задача: {task_key}\n"

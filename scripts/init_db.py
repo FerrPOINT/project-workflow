@@ -37,6 +37,9 @@ def main() -> int:
     except DatabaseUnavailable as exc:
         print(str(exc), file=sys.stderr)
         return exc.exit_code
+    except (FileNotFoundError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
     except (SQLAlchemyError, OSError):
         print("Не удалось инициализировать базу данных", file=sys.stderr)
         return 1
