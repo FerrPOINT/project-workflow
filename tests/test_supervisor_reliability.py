@@ -366,7 +366,7 @@ def test_missing_openrouter_key_blocks_locally_without_network(monkeypatch):
     config.get_settings.cache_clear()
     engine = SupervisorEngine("RUN-911")
 
-    with patch("project_workflow.infrastructure.llm.requests.post") as post:
+    with patch("project_workflow.infrastructure.llm.requests.Session.post") as post:
         result = engine.evaluate("same report")
 
     assert result["verdict"] == "BLOCKED"

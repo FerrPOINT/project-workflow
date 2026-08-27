@@ -1,6 +1,9 @@
 """Tests for OpenAI-compatible evaluation and response parsing."""
 
 import json
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Thread
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -14,6 +17,47 @@ from project_workflow.infrastructure.llm import (
     PromptBuilder,
     ResponseParser,
 )
+
+
+@contextmanager
+def _provider_with_responses(*statuses: int):
+    pending = list(statuses)
+    state = {"requests": 0, "models": []}
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, _format, *_args):
+            return
+
+        def do_POST(self):
+            state["requests"] += 1
+            request = json.loads(
+                self.rfile.read(int(self.headers.get("Content-Length", "0"))).decode()
+            )
+            state["models"].append(request["model"])
+            status = pending.pop(0) if pending else 200
+            payload = (
+                {"error": "temporarily unavailable"}
+                if status != 200
+                else {"choices": [{"message": {"content": "{}"}}]}
+            )
+            body = json.dumps(payload).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            if status != 200:
+                self.send_header("Retry-After", "0")
+            self.end_headers()
+            self.wfile.write(body)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}/v1", state
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
 
 
 class FakePhase:
@@ -113,7 +157,7 @@ class TestOpenAICompatibleClient:
     def test_chat_parses_json_response(self):
         client = OpenAICompatibleClient(api_key="test-key", base_url="https://ollama.com/v1")
         expected = {"verdict": "PASS", "confidence": 0.95}
-        with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
+        with patch("project_workflow.infrastructure.llm.requests.Session.post") as mock_post:
             mock_post.return_value = MagicMock(
                 status_code=200,
                 json=lambda: {"choices": [{"message": {"content": json.dumps(expected)}}]},
@@ -127,7 +171,7 @@ class TestOpenAICompatibleClient:
 
     def test_chat_payload_structure(self):
         client = OpenAICompatibleClient(model="test-model", base_url="http://host:1234/v1")
-        with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
+        with patch("project_workflow.infrastructure.llm.requests.Session.post") as mock_post:
             mock_post.return_value = MagicMock(
                 status_code=200,
                 json=lambda: {"choices": [{"message": {"content": "{}"}}]},
@@ -147,7 +191,7 @@ class TestOpenAICompatibleClient:
 
     def test_chat_omits_reasoning_effort_when_disabled(self):
         client = OpenAICompatibleClient(reasoning_effort="", api_key="test-key")
-        with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
+        with patch("project_workflow.infrastructure.llm.requests.Session.post") as mock_post:
             mock_post.return_value = MagicMock(
                 json=lambda: {"choices": [{"message": {"content": "{}"}}]},
                 raise_for_status=lambda: None,
@@ -158,7 +202,7 @@ class TestOpenAICompatibleClient:
 
     def test_chat_empty_content_raises(self):
         client = OpenAICompatibleClient(api_key="test-key")
-        with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
+        with patch("project_workflow.infrastructure.llm.requests.Session.post") as mock_post:
             mock_post.return_value = MagicMock(
                 status_code=200,
                 json=lambda: {"choices": [{"message": {"content": ""}}]},
@@ -166,6 +210,30 @@ class TestOpenAICompatibleClient:
             )
             with pytest.raises(ValueError, match="Empty content"):
                 client.chat("sys", "usr")
+
+    @pytest.mark.parametrize("status", [429, 503])
+    def test_chat_retries_temporary_provider_errors(self, status):
+        with _provider_with_responses(status) as (base_url, state):
+            assert OpenAICompatibleClient(base_url=base_url).chat("sys", "usr") == {}
+
+        assert state["requests"] == 2
+        assert state["models"] == ["app-test", "app-test"]
+
+    def test_chat_does_not_retry_authentication_error(self):
+        with _provider_with_responses(401) as (base_url, state), pytest.raises(requests.HTTPError):
+            OpenAICompatibleClient(base_url=base_url).chat("sys", "usr")
+
+        assert state["requests"] == 1
+
+    def test_chat_stops_after_two_retries(self):
+        with _provider_with_responses(503, 503, 503) as (
+            base_url,
+            state,
+        ), pytest.raises(requests.HTTPError):
+            OpenAICompatibleClient(base_url=base_url).chat("sys", "usr")
+
+        assert state["requests"] == 3
+        assert state["models"] == ["app-test"] * 3
 
 
 class TestPromptBuilder:

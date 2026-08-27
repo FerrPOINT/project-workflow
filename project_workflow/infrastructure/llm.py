@@ -16,6 +16,8 @@ from urllib.parse import urlsplit
 
 import requests
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from project_workflow import config
 
@@ -39,6 +41,10 @@ class LlmVerdict:
 
 class OpenAICompatibleClient:
     """Small Chat Completions client for any OpenAI-compatible provider."""
+
+    _RETRYABLE_STATUSES = (408, 429, 500, 502, 503, 504)
+    _MAX_RETRIES = 2
+    _MAX_RETRY_AFTER_SECONDS = 30
 
     def __init__(
         self,
@@ -83,12 +89,27 @@ class OpenAICompatibleClient:
         if self.reasoning_effort:
             payload["reasoning_effort"] = self.reasoning_effort
 
-        resp = requests.post(
-            f"{self.base_url}/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=self.timeout,
+        retry = Retry(
+            total=self._MAX_RETRIES,
+            connect=self._MAX_RETRIES,
+            read=self._MAX_RETRIES,
+            status=self._MAX_RETRIES,
+            other=0,
+            allowed_methods=frozenset({"POST"}),
+            status_forcelist=self._RETRYABLE_STATUSES,
+            backoff_factor=0.5,
+            respect_retry_after_header=True,
+            retry_after_max=self._MAX_RETRY_AFTER_SECONDS,
+            raise_on_status=False,
         )
+        with requests.Session() as session:
+            session.mount(self.base_url, HTTPAdapter(max_retries=retry))
+            resp = session.post(
+                f"{self.base_url}/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=self.timeout,
+            )
         resp.raise_for_status()
         data = resp.json()
         content = data.get("choices", [{}])[0].get("message", {}).get("content", "")

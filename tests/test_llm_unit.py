@@ -194,7 +194,7 @@ class TestEvaluateLlmReportVerdicts:
 class TestOpenAICompatibleClientChatErrors:
     def test_openrouter_without_key_is_rejected_before_network(self):
         client = OpenAICompatibleClient(base_url="https://openrouter.ai/api/v1", api_key="   ")
-        with patch("requests.post") as post, pytest.raises(
+        with patch("requests.Session.post") as post, pytest.raises(
             LlmConfigurationError,
             match="OPENAI_API_KEY",
         ):
@@ -207,13 +207,13 @@ class TestOpenAICompatibleClientChatErrors:
         response = MagicMock()
         response.raise_for_status.return_value = None
         response.json.return_value = {"choices": [{"message": {"content": "{}"}}]}
-        with patch("requests.post", return_value=response) as post:
+        with patch("requests.Session.post", return_value=response) as post:
             assert client.chat("sys", "user") == {}
 
         assert "Authorization" not in post.call_args.kwargs["headers"]
 
     def test_timeout(self):
-        with patch("requests.post", side_effect=TimeoutError("slow")):
+        with patch("requests.Session.post", side_effect=TimeoutError("slow")):
             client = OpenAICompatibleClient(api_key="test-key")
             with pytest.raises(TimeoutError):
                 client.chat("sys", "user")
@@ -221,7 +221,7 @@ class TestOpenAICompatibleClientChatErrors:
     def test_http_error(self):
         resp = MagicMock()
         resp.raise_for_status.side_effect = Exception("bad")
-        with patch("requests.post", return_value=resp):
+        with patch("requests.Session.post", return_value=resp):
             client = OpenAICompatibleClient(api_key="test-key")
             with pytest.raises(Exception, match="bad"):
                 client.chat("sys", "user")
@@ -230,7 +230,7 @@ class TestOpenAICompatibleClientChatErrors:
         resp = MagicMock()
         resp.raise_for_status.return_value = None
         resp.json.return_value = {"choices": [{"message": {"content": ""}}]}
-        with patch("requests.post", return_value=resp):
+        with patch("requests.Session.post", return_value=resp):
             client = OpenAICompatibleClient(api_key="test-key")
             with pytest.raises(ValueError, match="Empty content"):
                 client.chat("sys", "user")
@@ -239,7 +239,7 @@ class TestOpenAICompatibleClientChatErrors:
         resp = MagicMock()
         resp.raise_for_status.return_value = None
         resp.json.return_value = {"choices": [{"message": {"content": "  "}}]}
-        with patch("requests.post", return_value=resp):
+        with patch("requests.Session.post", return_value=resp):
             client = OpenAICompatibleClient(base_url="https://provider.example/v1")
             with pytest.raises(ValueError, match="Empty content"):
                 client.chat("sys", "user")
