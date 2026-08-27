@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from project_workflow.domain.exceptions import NotFoundError
@@ -67,11 +67,5 @@ class SAPhaseEvidenceRequirementRepository(PhaseEvidenceRequirementRepository):
             raise NotFoundError(f"Требование подтверждения {evidence_id} не найдено")
         self._session.delete(row)
         self._session.flush()
-
-    def delete_for_phase(self, phase_id: int) -> None:
-        self._session.execute(
-            text("DELETE FROM phase_evidence_requirements WHERE phase_id = :pid"),
-            {"pid": phase_id},
-        )
 
 

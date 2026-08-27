@@ -85,7 +85,7 @@ project-workflow step --task RUN-123 --report "Сделал X, проверил 
 project-workflow history --task RUN-123 --n 10
 ```
 
-CLI ожидает `DATABASE_URL` и доступный OpenAI-compatible evaluator. Каноническая конфигурация использует OpenRouter:
+CLI ожидает `DATABASE_URL` и доступный OpenAI-compatible evaluator. Каноническая конфигурация использует Octo LiteLLM с модельным маршрутом `app-test`:
 
 ```bash
 export DATABASE_URL=postgresql+psycopg://project_workflow:project_workflow@localhost/project_workflow
@@ -99,7 +99,7 @@ export OPENAI_REASONING_EFFORT=none
 Если endpoint не поддерживает `reasoning_effort`, задайте `OPENAI_REASONING_EFFORT=`.
 
 Fallback evaluator отсутствует: если провайдер недоступен или вернул некорректный JSON, задача остаётся на текущей фазе, атомарно получает `status=blocked`, событие `blocked` и запись `task_step_history` без fingerprint; команда возвращает retryable `BLOCKED` и exit code `1`. Повтор снова вызывает provider, а успешная оценка снимает техническую блокировку обычным переходом.
-Для стандартного OpenRouter непустой `OPENAI_API_KEY` обязателен: без него Supervisor блокирует переход локально и не выполняет заведомо неуспешный внешний запрос. Пользовательский OpenAI-compatible endpoint может работать без ключа, если это допускает сам endpoint.
+Для Octo LiteLLM непустой `OPENAI_API_KEY` передаётся только через окружение. Пользовательский OpenAI-compatible endpoint может работать без ключа, если это допускает сам endpoint; для `openrouter.ai` клиент требует ключ и блокирует заведомо неуспешный запрос локально.
 Ответ evaluator принимается только по точному JSON-контракту: uppercase verdict, обязательные `message` и finite `confidence` в диапазоне `0..1`, непустые строковые элементы массивов и отсутствие неизвестных полей. Replay действует только для той же задачи, фазы, нормализованного отчёта и неизменившегося contract fingerprint. DB-транзакция не удерживается во время provider-вызова; изменение каталога до применения verdict даёт retryable `BLOCKED` без fingerprint.
 Повторный отчёт после `status=done` не вызывает evaluator и не создаёт новые записи: CLI возвращает `PASS`, `status=done` и `next_phase_code=null`.
 

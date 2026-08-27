@@ -123,9 +123,6 @@ class PhaseInstructionRepository(ABC):
     def delete(self, instruction_id: int) -> None: ...
 
     @abstractmethod
-    def delete_for_phase(self, phase_id: int) -> None: ...
-
-    @abstractmethod
     def reorder(self, phase_id: int, orders: builtins.list[tuple[int, int]]) -> None: ...
 
 
@@ -278,9 +275,6 @@ class PhaseCheckRepository(ABC):
     @abstractmethod
     def delete(self, check_id: int) -> None: ...
 
-    @abstractmethod
-    def delete_for_phase(self, phase_id: int) -> None: ...
-
 
 class PhaseEvidenceRequirementRepository(ABC):
     """Persistence contract for phase evidence."""
@@ -299,9 +293,6 @@ class PhaseEvidenceRequirementRepository(ABC):
 
     @abstractmethod
     def delete(self, evidence_id: int) -> None: ...
-
-    @abstractmethod
-    def delete_for_phase(self, phase_id: int) -> None: ...
 
 
 class UnitOfWork(ABC):
