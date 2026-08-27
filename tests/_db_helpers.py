@@ -1,5 +1,9 @@
 """Explicit SQLite schema and catalog setup for isolated tests."""
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path
+
 from project_workflow.infrastructure.db.schema import ensure_phase_catalog
 from project_workflow.infrastructure.db.session import ensure_schema
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
@@ -12,6 +16,16 @@ def prepare_sqlite_uow(uow: SAUnitOfWork) -> None:
     ensure_phase_catalog(uow)
     bootstrap_default_project(uow)
     uow.commit()
+
+
+@contextmanager
+def prepared_sqlite_uow(tmp_path: Path, filename: str = "workflow.db") -> Iterator[SAUnitOfWork]:
+    uow = SAUnitOfWork(f"sqlite:///{tmp_path / filename}")
+    try:
+        prepare_sqlite_uow(uow)
+        yield uow
+    finally:
+        uow.close()
 
 
 def phase_by_code(

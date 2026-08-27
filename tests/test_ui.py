@@ -29,9 +29,13 @@ def _as_dict(record: object) -> dict | None:
 
 
 def _phase_row(code: str) -> dict:
-    phase = phase_by_code(ui_app_state.get_db(), code)
-    assert phase is not None
-    return phase.to_dict()
+    uow = ui_app_state.get_db()
+    try:
+        phase = phase_by_code(uow, code)
+        assert phase is not None
+        return phase.to_dict()
+    finally:
+        uow.close()
 
 
 def _workflow_row(
@@ -41,7 +45,11 @@ def _workflow_row(
     name: str | None = None,
     is_default: bool | None = None,
 ) -> dict:
-    workflows = [w.to_dict() for w in ui_app_state.get_db().workflows.list()]
+    uow = ui_app_state.get_db()
+    try:
+        workflows = [w.to_dict() for w in uow.workflows.list()]
+    finally:
+        uow.close()
     for workflow in workflows:
         if lookup is not None:
             lookup_token = str(lookup)
@@ -122,11 +130,12 @@ def _phase_restore_payload(phase: dict) -> dict:
 
 
 @pytest.fixture(autouse=True)
-def setup_db():
+def setup_db(isolate_ui_runtime_state, request):
     """Populate DB with seed.json + sample task before UI tests."""
     from project_workflow.infrastructure.db.schema import ensure_phase_catalog
 
     uow = ui_app_state.get_db()
+    request.addfinalizer(uow.close)
     if not uow.phases.list():
         ensure_phase_catalog(uow)
     default_workflow = uow.workflows.ensure_default_exists(config.DEFAULT_WORKFLOW_NAME)
@@ -174,9 +183,12 @@ def setup_db():
         uow.commit()
     sample_task = uow.tasks.get_by_key("RUN-247")
     assert sample_task is not None
-    with sqlite3.connect(str(uow._session.bind.url).replace("sqlite:///", "")) as conn:
+    conn = sqlite3.connect(str(uow._session.bind.url).replace("sqlite:///", ""))
+    try:
         conn.execute("DELETE FROM task_phase_events WHERE task_id = ?", (sample_task.id,))
         conn.commit()
+    finally:
+        conn.close()
     uow.tasks.record_phase_event(sample_task.id, implementation_phase.id, "entered")
     uow.commit()
     project = uow.projects.get_by_code("UITEST")

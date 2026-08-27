@@ -1,29 +1,44 @@
 # project-workflow — Makefile
 
-.PHONY: test test-verbose coverage coverage-html lint lint-fix clean install-dev
+UV ?= uv run --isolated --with-requirements constraints.txt --all-extras
+PYTEST ?= $(UV) pytest
+
+.PHONY: test test-verbose test-integration coverage coverage-html lint lint-fix quality warnings compose-ready clean install-dev
 
 # --- testing ---------------------------------------------------------------
 
 test:
-	pytest -q --tb=short
+	$(PYTEST) -q --timeout=60
 
 test-verbose:
-	pytest -v --tb=short
+	$(PYTEST) -v --timeout=60
+
+test-integration:
+	$(PYTEST) -q -m integration tests/test_postgres_integration.py --timeout=120
 
 coverage:
-	pytest --cov=project_workflow --cov-report=term-missing -q --tb=short
+	$(PYTEST) --cov=project_workflow --cov-report=term --timeout=60
 
 coverage-html:
-	pytest --cov=project_workflow --cov-report=html -q --tb=short
+	$(PYTEST) --cov=project_workflow --cov-report=html --timeout=60
+
+warnings:
+	$(PYTEST) -q --timeout=60 -W error::ResourceWarning -W error::pytest.PytestUnraisableExceptionWarning
 
 # --- lint ------------------------------------------------------------------
 
 lint:
-	ruff check .
-	mypy project_workflow scripts
+	$(UV) ruff check .
+	$(UV) mypy project_workflow scripts
 
 lint-fix:
-	ruff check --fix .
+	$(UV) ruff check --fix .
+
+quality: test test-integration coverage lint
+
+compose-ready:
+	docker compose up --build -d --wait
+	curl --fail http://127.0.0.1:8812/health
 
 # --- dev setup -------------------------------------------------------------
 

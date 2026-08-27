@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from project_workflow import config
+from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.llm import OpenAICompatibleClient
 from tests._db_helpers import prepare_sqlite_uow
 
@@ -14,6 +16,15 @@ from tests._db_helpers import prepare_sqlite_uow
 @pytest.fixture(autouse=True)
 def isolate_ui_runtime_state(tmp_path, monkeypatch):
     """Keep tests away from the user's real runtime DB/settings and mutable seed file."""
+    created_uows: list[SAUnitOfWork] = []
+    original_uow_init = SAUnitOfWork.__init__
+
+    def tracked_uow_init(self: SAUnitOfWork, *args: Any, **kwargs: Any) -> None:
+        original_uow_init(self, *args, **kwargs)
+        created_uows.append(self)
+
+    monkeypatch.setattr(SAUnitOfWork, "__init__", tracked_uow_init)
+
     runtime_dir = tmp_path / ".project-workflow"
     runtime_dir.mkdir(parents=True, exist_ok=True)
     test_db = runtime_dir / "workflow.db"
@@ -41,8 +52,6 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
     ui_state._app_state = sqlite_app_state
     ui_package._app_state = sqlite_app_state
 
-    from project_workflow.infrastructure.db.uow import SAUnitOfWork
-
     uow = SAUnitOfWork(database_url)
     prepare_sqlite_uow(uow)
     uow.close()
@@ -53,6 +62,8 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
     app_state._app_state = original_app_state
     ui_state._app_state = original_ui_app_state
     ui_package._app_state = original_ui_package_app_state
+    for tracked_uow in reversed(created_uows):
+        tracked_uow.close()
     reset_engine()
     config.get_settings.cache_clear()
 

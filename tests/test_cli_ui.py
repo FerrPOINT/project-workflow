@@ -149,6 +149,37 @@ class TestStepCommand:
         assert result.exit_code == 1
         assert json.loads(result.output)["verdict"] == "BLOCKED"
 
+    @patch("project_workflow.interfaces.cli.ui.SAUnitOfWork")
+    @patch("project_workflow.supervisor.SupervisorEngine")
+    def test_step_json_prompt_closes_unit_of_work(self, mock_engine_cls, mock_uow_cls):
+        mock_engine = mock_engine_cls.return_value
+        mock_engine.current_phase_code = "1.INTAKE"
+        mock_engine.task = {"status": "active"}
+        mock_engine._get_current_phase_obj.return_value = object()
+        mock_engine.get_phase_prompt.return_value = "prompt"
+        mock_engine.get_phase_contract.return_value = {"phase_code": "1.INTAKE"}
+        runner = CliRunner()
+
+        with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
+            result = runner.invoke(cli, ["--json", "step", "--task", "RUN-1"])
+
+        assert result.exit_code == 0
+        assert json.loads(result.output)["prompt"] == "prompt"
+        mock_uow_cls.return_value.close.assert_called_once_with()
+
+    @patch("project_workflow.interfaces.cli.ui.SAUnitOfWork")
+    @patch("project_workflow.supervisor.SupervisorEngine")
+    def test_step_closes_unit_of_work_when_engine_init_fails(self, mock_engine_cls, mock_uow_cls):
+        mock_engine_cls.side_effect = ValueError("Сломанный snapshot задачи")
+        runner = CliRunner()
+
+        with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
+            result = runner.invoke(cli, ["step", "--task", "RUN-1"])
+
+        assert result.exit_code == 1
+        assert "Сломанный snapshot задачи" in result.output
+        mock_uow_cls.return_value.close.assert_called_once_with()
+
     @pytest.mark.parametrize("report", ["", "   "])
     @patch("project_workflow.supervisor.SupervisorEngine")
     def test_step_rejects_explicit_blank_report_without_creating_task(self, mock_engine_cls, report):
@@ -184,6 +215,55 @@ class TestStepCommand:
         assert parsed["prompt"] == "next steps"
         assert parsed["phase_contract"]["hermes_profile"] == "sdlc-ops"
         assert parsed["phase_contract"]["skills"] == ["project-workflow-executor"]
+
+    @patch("project_workflow.supervisor.SupervisorEngine")
+    def test_step_done_json_mode_returns_compact_snapshot(self, mock_engine_cls):
+        mock_engine = mock_engine_cls.return_value
+        mock_engine.current_phase_code = "19.DELIVERY"
+        mock_engine.task = {"status": "done"}
+        mock_engine._get_current_phase_obj.return_value = object()
+        mock_engine.get_phase_prompt.return_value = "heavy prompt must stay out of done JSON"
+        mock_engine.get_phase_contract.return_value = {"phase_code": "19.DELIVERY"}
+        mock_engine.format_current_phase_instructions.return_value = "Финальный snapshot"
+        runner = CliRunner()
+
+        with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
+            result = runner.invoke(cli, ["--json", "step", "--task", "RUN-1"])
+
+        assert result.exit_code == 0
+        parsed = json.loads(result.output)
+        assert parsed["status"] == "done"
+        assert parsed["next_phase_code"] is None
+        assert parsed["instructions"] == "Финальный snapshot"
+        assert "prompt" not in parsed
+
+    @pytest.mark.parametrize(
+        ("verdict", "expected"),
+        [
+            ("PARTIAL", "Нужно доделать проверку"),
+            ("DELEGATE", "Передай выполнение агенту Review"),
+        ],
+    )
+    @patch("project_workflow.supervisor.SupervisorEngine")
+    def test_step_report_non_pass_non_blocked_rendering(self, mock_engine_cls, verdict, expected):
+        mock_engine_cls.return_value.evaluate.return_value = {
+            "verdict": verdict,
+            "phase_name": "Review",
+            "covered": [],
+            "missing": ["Нужно доделать проверку"],
+            "blockers": [],
+            "message": "Передай выполнение агенту Review",
+            "instructions": ["Проверь отчёт"],
+            "required_checks": ["Нужно доделать проверку"],
+            "required_evidence": [],
+        }
+        runner = CliRunner()
+
+        with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
+            result = runner.invoke(cli, ["step", "--task", "RUN-1", "--report", "Готово частично"])
+
+        assert result.exit_code == 0
+        assert expected in result.output
 
     def test_step_skip_is_rejected(self):
         runner = CliRunner()
@@ -270,6 +350,31 @@ class TestHistoryCommand:
         assert parsed["task_key"] == "RUN-1"
         assert parsed["count"] == 0
         uow.step_history.list.assert_called_once_with(task_id=None, task_key="RUN-1", limit=10)
+
+    @patch("project_workflow.interfaces.cli.ui.SAUnitOfWork")
+    def test_history_non_json_fails_closed_when_phase_is_missing(self, mock_uow_cls):
+        from project_workflow.domain import TaskStepHistoryEntry
+
+        run = TaskStepHistoryEntry(
+            id=1,
+            task_id=1,
+            phase_id=999,
+            verdict="pass",
+            worker_report="done",
+            supervisor_response={"message": "ok"},
+            created_at="2024-01-01",
+        )
+        uow = mock_uow_cls.return_value.__enter__.return_value
+        uow.tasks.get_by_key.return_value = type("Task", (), {"id": 1})()
+        uow.step_history.list.return_value = [run]
+        uow.phases.get_by_id.return_value = None
+        runner = CliRunner()
+
+        with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
+            result = runner.invoke(cli, ["history", "--task", "RUN-1"])
+
+        assert result.exit_code == 1
+        assert "История step ссылается на неизвестную фазу" in result.output
 
     def test_history_rejects_non_positive_limit(self):
         runner = CliRunner()

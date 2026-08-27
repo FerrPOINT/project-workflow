@@ -155,6 +155,9 @@ Supervisor не проверяет наличие профиля и не заг�
 <a name="architecture"></a>
 ## 🏗️ Architecture
 
+Подробные границы компонентов, state/audit model и runtime scope описаны в
+[docs/architecture.md](docs/architecture.md).
+
 ```mermaid
 flowchart TD
     CLI[CLI project-workflow] -->|step / history| WE[SupervisorEngine]
@@ -206,14 +209,17 @@ erDiagram
 <a name="quality"></a>
 ## 🛡️ Проверки качества
 
-| Проверка | Команда | Статус |
-|---|---|---|
-| Lint | `ruff check .` | **green** |
-| Type check | `mypy project_workflow scripts` | **без ошибок** |
-| Tests | `pytest -q --timeout=60` | **без падений** |
-| PostgreSQL integration | `pytest -q -m integration tests/test_postgres_integration.py --timeout=120` | **без падений** |
-| Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` | **не ниже 90%** |
-| Compose readiness | `curl --fail http://127.0.0.1:8812/health` | **200** |
+Канонические локальные проверки, PostgreSQL integration gate, строгий
+`ResourceWarning`-прогон, Compose readiness и UI smoke описаны в
+[docs/quality-gate.md](docs/quality-gate.md).
+
+Короткий путь для разработчика:
+
+```bash
+make quality
+make warnings
+make compose-ready
+```
 
 <a name="roadmap"></a>
 ## 🗺️ Готовность
@@ -229,7 +235,7 @@ erDiagram
 - [x] `SupervisorEngine` и supervisor-модули собраны в пакет `project_workflow/supervisor/`
 - [x] API-тесты на все UI routes
 - [x] Runtime hardening: `/health`, корректное завершение и retry подключения к PostgreSQL
-- [x] Coverage >= 90%
+- [x] Coverage >= 94% local baseline
 - [x] mypy `--check-untyped-defs` для supervisor/core.py
 - [x] UI-доработки: execution_type на отдельной строке, русское склонение счётчиков, очистка рабочей БД от мусора
 - [x] Supervisor evaluate: раздельные `task_phase_events`/`task_step_history`, idempotent replay и явный parallel rendering

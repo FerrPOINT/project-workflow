@@ -10,6 +10,7 @@ from sqlalchemy import text
 
 from project_workflow import config
 from project_workflow.application.phase_service import PhaseService
+from project_workflow.domain.exceptions import ConcurrentTransitionError
 from project_workflow.infrastructure.llm import OpenAICompatibleClient, PromptBuilder, ResponseParser
 from project_workflow.supervisor import SupervisorEngine
 from tests._db_helpers import phase_by_code
@@ -235,6 +236,105 @@ def test_catalog_change_during_provider_call_fails_closed_then_retries(superviso
     assert retry["verdict"] == "PASS"
     assert retry["replayed"] is False
     assert chat.call_count == 2
+
+
+def test_missing_workflow_lock_fails_before_provider(supervisor_llm, monkeypatch):
+    engine = SupervisorEngine("RUN-930")
+    phase = engine._get_current_phase_obj()
+    assert phase is not None
+    supervisor_llm("PASS")
+    monkeypatch.setattr(engine.db.workflows, "lock", lambda _workflow_id: None)
+
+    with patch.object(OpenAICompatibleClient, "chat", wraps=OpenAICompatibleClient.chat) as chat:
+        with pytest.raises(ConcurrentTransitionError, match="Воркфлоу изменился"):
+            engine.evaluate_llm("Отчёт не должен дойти до evaluator", phase)
+
+    chat.assert_not_called()
+
+
+def test_lost_workflow_lock_after_provider_returns_retryable_blocked(supervisor_llm, monkeypatch):
+    engine = SupervisorEngine("RUN-931")
+    supervisor_llm("PASS")
+    fixture_chat = OpenAICompatibleClient.chat
+    locks = iter([object(), None])
+    monkeypatch.setattr(engine.db.workflows, "lock", lambda _workflow_id: next(locks))
+
+    with patch.object(OpenAICompatibleClient, "chat", side_effect=fixture_chat) as chat:
+        result = engine.evaluate("Отчёт прошёл, но lock потерян")
+
+    assert result["verdict"] == "BLOCKED"
+    assert result["retryable"] is True
+    assert result["replayed"] is False
+    assert "параллельным запуском" in result["message"] or result["blockers"]
+    assert chat.call_count == 1
+
+
+def test_task_phase_changed_during_provider_call_returns_retryable_blocked(supervisor_llm):
+    engine = SupervisorEngine("RUN-932")
+    phase = engine._get_current_phase_obj()
+    next_phase = phase_by_code(engine.db, "2.REQUIREMENTS")
+    assert phase is not None and next_phase is not None and next_phase.id is not None
+    supervisor_llm("PASS")
+    fixture_chat = OpenAICompatibleClient.chat
+    moved = False
+
+    def move_task_then_answer(*args, **kwargs):
+        nonlocal moved
+        if not moved:
+            moved = True
+            engine.db.tasks.update(
+                engine.task["id"],
+                {"current_phase_id": next_phase.id, "status": "active"},
+            )
+            engine.db.commit()
+        return fixture_chat(*args, **kwargs)
+
+    with patch.object(OpenAICompatibleClient, "chat", side_effect=move_task_then_answer) as chat:
+        result = engine.evaluate("Отчёт для уже устаревшей фазы")
+
+    assert result["verdict"] == "BLOCKED"
+    assert result["retryable"] is True
+    assert result["phase_code"] == phase.code
+    assert engine.current_phase_code == next_phase.code
+    assert chat.call_count == 1
+
+
+def test_successful_commit_returns_concurrent_result_if_task_disappears_after_refresh(supervisor_llm):
+    engine = SupervisorEngine("RUN-933")
+    supervisor_llm("PARTIAL")
+    fixture_chat = OpenAICompatibleClient.chat
+
+    def hide_task_after_commit() -> None:
+        engine.task = None
+        engine.current_phase_code = ""
+
+    with (
+        patch.object(OpenAICompatibleClient, "chat", side_effect=fixture_chat),
+        patch.object(engine, "_refresh_task_state", side_effect=hide_task_after_commit),
+    ):
+        result = engine.evaluate("Частичный отчёт перед потерей snapshot")
+
+    assert result["verdict"] == "BLOCKED"
+    assert result["retryable"] is True
+    assert result["replayed"] is False
+
+
+def test_transition_catalog_error_is_recorded_as_retryable_blocker(supervisor_llm, monkeypatch):
+    engine = SupervisorEngine("RUN-934")
+    supervisor_llm("PASS")
+    monkeypatch.setattr(
+        engine,
+        "_resolve_transition",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(ValueError("broken transition graph")),
+    )
+
+    with patch.object(OpenAICompatibleClient, "chat", wraps=OpenAICompatibleClient.chat) as chat:
+        result = engine.evaluate("Отчёт при повреждённом routing catalog")
+
+    assert result["verdict"] == "BLOCKED"
+    assert result["retryable"] is True
+    assert "Supervisor не смог проверить отчёт" in result["message"]
+    chat.assert_not_called()
 
 
 def test_same_report_replays_after_noop_phase_aggregate_save(supervisor_llm):

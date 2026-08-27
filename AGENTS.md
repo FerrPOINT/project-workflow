@@ -13,6 +13,10 @@
 
 ## Обязательные проверки
 
+Канонический локальный gate и expected output описаны в
+`docs/quality-gate.md`; цели `Makefile` повторяют эти команды через `uv`,
+`constraints.txt` и текущий marker contract.
+
 После любого изменения SQLAlchemy-слоя, application services, состояния UI или
 Supervisor Engine перед commit выполнить следующие проверки:
 
@@ -25,7 +29,7 @@ Supervisor Engine перед commit выполнить следующие про
 
 2. **PostgreSQL integration**
    ```bash
-   pytest -q -m integration tests/test_postgres_integration.py --timeout=60
+   pytest -q -m integration tests/test_postgres_integration.py --timeout=120
    ```
    Ожидается 0 падений и 0 ошибок. Набор включает реальный путь CLI subprocess →
    PostgreSQL → тестовый OpenAI-compatible HTTP endpoint. Два multi-process E2E
@@ -35,7 +39,7 @@ Supervisor Engine перед commit выполнить следующие про
    ```bash
    pytest --cov=project_workflow --cov-report=term --timeout=60
    ```
-   Ожидается общее покрытие не ниже 90%.
+   Ожидается общее покрытие не ниже текущего локального baseline 94%.
 
 4. **Lint**
    ```bash

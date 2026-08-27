@@ -10,6 +10,7 @@ from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.pool import NullPool, StaticPool
 
 from project_workflow.infrastructure.db.models import Base
 from project_workflow.infrastructure.db.session import (
@@ -48,8 +49,21 @@ LEGACY_REVISIONS = [
 ]
 
 
-def _sqlite_engine(tmp_path: Path):
-    return create_engine(f"sqlite:///{tmp_path / 'initial.db'}")
+_SQLITE_ENGINES = []
+
+
+@pytest.fixture(autouse=True)
+def _dispose_sqlite_engines():
+    yield
+    for engine in reversed(_SQLITE_ENGINES):
+        engine.dispose()
+    _SQLITE_ENGINES.clear()
+
+
+def _sqlite_engine(tmp_path: Path, filename: str = "initial.db"):
+    engine = create_engine(f"sqlite:///{tmp_path / filename}", poolclass=NullPool)
+    _SQLITE_ENGINES.append(engine)
+    return engine
 
 
 def _constraint_names(items: list[dict]) -> set[str]:
@@ -122,11 +136,13 @@ def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
 
 
 def test_in_memory_sqlite_migration_keeps_the_schema_alive():
-    engine = create_engine("sqlite://")
+    engine = create_engine("sqlite://", poolclass=StaticPool)
+    try:
+        ensure_migrated(engine)
 
-    ensure_migrated(engine)
-
-    assert schema_is_ready(engine) is True
+        assert schema_is_ready(engine) is True
+    finally:
+        engine.dispose()
 
 
 def test_sqlite_upgrade_downgrade_reupgrade(tmp_path):
@@ -177,7 +193,8 @@ def test_init_db_returns_exit_code_two_without_mutation(tmp_path, monkeypatch, c
     from scripts.init_db import main
 
     database_url = f"sqlite:///{tmp_path / f'{shape}-init.db'}"
-    engine = create_engine(database_url)
+    engine = create_engine(database_url, poolclass=NullPool)
+    _SQLITE_ENGINES.append(engine)
     if shape == "damaged-head":
         ensure_migrated(engine)
         with engine.begin() as connection:

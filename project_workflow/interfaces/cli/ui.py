@@ -54,11 +54,14 @@ def step_cmd(
             return
         console.print(format_result(result))
         raise click.exceptions.Exit(1)
+    uow: SAUnitOfWork | None = None
     try:
         uow = SAUnitOfWork()
         task_key = _require_valid_key(task, uow)
         engine = supervisor.SupervisorEngine(task_key, uow=uow)
     except (RuntimeError, ValueError) as exc:
+        if uow is not None:
+            uow.close()
         result = blocked_result(task, str(exc))
         if jmode:
             out_json(result, exit_code=1)
@@ -66,54 +69,58 @@ def step_cmd(
         console.print(format_result(result))
         raise click.exceptions.Exit(1) from exc
 
-    # --report : evaluate report
-    if report is not None:
-        result = engine.evaluate(report)
-        if jmode:
-            out_json(result, exit_code=1 if result["verdict"] == "BLOCKED" else 0)
-            return
-        console.print(format_result(result))
-        raise click.exceptions.Exit(1 if result["verdict"] == "BLOCKED" else 0)
+    try:
+        # --report : evaluate report
+        if report is not None:
+            result = engine.evaluate(report)
+            if jmode:
+                out_json(result, exit_code=1 if result["verdict"] == "BLOCKED" else 0)
+                return
+            console.print(format_result(result))
+            raise click.exceptions.Exit(1 if result["verdict"] == "BLOCKED" else 0)
 
-    if engine._get_current_phase_obj() is None:
-        result = engine._blocked_result()
-        if jmode:
-            out_json(result, exit_code=1)
-            return
-        console.print(format_result(result))
-        raise click.exceptions.Exit(1)
+        if engine._get_current_phase_obj() is None:
+            result = engine._blocked_result()
+            if jmode:
+                out_json(result, exit_code=1)
+                return
+            console.print(format_result(result))
+            raise click.exceptions.Exit(1)
 
-    # default: show phase prompt/instructions
-    prompt = engine.get_phase_prompt()
-    phase_contract = engine.get_phase_contract()
-    if jmode:
-        # For completed tasks return a compact contract without the heavy prompt.
-        if engine.task and engine.task.get("status") == "done":
+        # default: show phase prompt/instructions
+        prompt = engine.get_phase_prompt()
+        phase_contract = engine.get_phase_contract()
+        if jmode:
+            # For completed tasks return a compact contract without the heavy prompt.
+            if engine.task and engine.task.get("status") == "done":
+                out_json(
+                    {
+                        "ok": True,
+                        "task_key": task_key,
+                        "phase_code": engine.current_phase_code,
+                        "status": "done",
+                        "instructions": engine.format_current_phase_instructions(),
+                        "phase_contract": phase_contract,
+                        "next_phase_code": None,
+                    }
+                )
+                return
             out_json(
                 {
                     "ok": True,
                     "task_key": task_key,
                     "phase_code": engine.current_phase_code,
-                    "status": "done",
-                    "instructions": engine.format_current_phase_instructions(),
+                    "prompt": prompt,
                     "phase_contract": phase_contract,
-                    "next_phase_code": None,
                 }
             )
             return
-        out_json(
-            {
-                "ok": True,
-                "task_key": task_key,
-                "phase_code": engine.current_phase_code,
-                "prompt": prompt,
-                "phase_contract": phase_contract,
-            }
-        )
+        instructions = engine.format_current_phase_instructions()
+        console.print(instructions)
         return
-    instructions = engine.format_current_phase_instructions()
-    console.print(instructions)
-    return
+    finally:
+        if uow is not None:
+            uow.close()
 
 
 # ═══════════════════════════════════════════════════════════════════════
