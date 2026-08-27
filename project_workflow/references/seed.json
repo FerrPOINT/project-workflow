@@ -13,7 +13,7 @@
   {
     "phase_order": 2, "code": "2.REQUIREMENTS", "name": "Требования",
     "description": "Сформулировать проверяемые требования и границы изменения", "execution_type": "sync",
-    "delegate": {"agent": "orchestrator", "hermes_profile": "sdlc-orchestrator"}, "rollback_target": "1.INTAKE",
+    "delegate": {"agent": "orchestrator", "hermes_profile": "sdlc-orchestrator"}, "rollback_target_phase_code": "1.INTAKE",
     "instructions": [
       {"description": "Зафиксировать цель, критерии приёмки, отрицательные сценарии и ограничения", "skills": ["project-workflow-executor", "workflow-writing-plans"]},
       {"description": "Обновить Business-задачу и проверить результат чтения"}
@@ -24,7 +24,7 @@
   {
     "phase_order": 3, "code": "3.DOR_GATE", "name": "Готовность к работе",
     "description": "Независимо подтвердить полноту, тестируемость и разумный размер задачи", "execution_type": "sync",
-    "delegate": {"agent": "codex-operator"}, "rollback_target": "2.REQUIREMENTS", "is_blocker": true,
+    "delegate": {"agent": "codex-operator"}, "rollback_target_phase_code": "2.REQUIREMENTS",
     "instructions": [{"description": "Проверить постановку, критерии, отрицательные сценарии, зависимости и размер задачи", "skills": ["code-review", "task-estimation"]}],
     "checks": ["Постановка готова к разработке", "Критерии можно доказать", "Нет скрытой архитектурной развилки"],
     "evidence": ["Проверка оператора с решением и замечаниями"]
@@ -32,7 +32,7 @@
   {
     "phase_order": 4, "code": "4.START", "name": "Начало работы",
     "description": "Перевести бизнес-задачу в работу и создать изолированную Tech-ветку", "execution_type": "sync",
-    "delegate": {"agent": "ops", "hermes_profile": "sdlc-ops"}, "rollback_target": "2.REQUIREMENTS",
+    "delegate": {"agent": "ops", "hermes_profile": "sdlc-ops"}, "rollback_target_phase_code": "2.REQUIREMENTS",
     "instructions": [
       {"description": "Перевести Business-задачу из Open в In Progress", "skills": ["relevanter-business-operator"]},
       {"description": "Создать Tech-ветку от актуального main и изолированное рабочее пространство", "skills": ["using-rtech", "repo-workflow"]}
@@ -42,32 +42,32 @@
   },
   {
     "phase_order": 5, "code": "5.RESEARCH", "name": "Исследование",
-    "description": "Исследовать сквозной поток данных, владельцев данных и текущее поведение", "execution_type": "parallel", "parallel_with": "5.PREFLIGHT",
-    "delegate": {"agent": "researcher", "hermes_profile": "sdlc-researcher"}, "rollback_target": "4.START",
+    "description": "Исследовать сквозной поток данных, владельцев данных и текущее поведение", "execution_type": "parallel", "parallel_with_phase_code": "5.PREFLIGHT",
+    "delegate": {"agent": "researcher", "hermes_profile": "sdlc-researcher"}, "rollback_target_phase_code": "4.START",
     "instructions": [{"description": "Проследить UI, API, хранение данных, миграции и внешние контракты изменения", "skills": ["workflow-code-intelligence"]}],
     "checks": ["Найдены владельцы изменяемых контрактов", "Текущее поведение подтверждено кодом или работающим приложением", "Определено влияние"],
     "evidence": ["Карта потока данных с файлами и точками интеграции", "Фактическое исходное поведение"]
   },
   {
     "phase_order": 6, "code": "5.PREFLIGHT", "name": "Предварительная проверка",
-    "description": "Проверить репозиторий, окружение и исходное состояние тестов", "execution_type": "parallel", "parallel_with": "5.RESEARCH",
-    "delegate": {"agent": "ops", "hermes_profile": "sdlc-ops"}, "rollback_target": "4.START",
+    "description": "Проверить репозиторий, окружение и исходное состояние тестов", "execution_type": "parallel", "parallel_with_phase_code": "5.RESEARCH",
+    "delegate": {"agent": "ops", "hermes_profile": "sdlc-ops"}, "rollback_target_phase_code": "4.START",
     "instructions": [{"description": "Проверить инструкции репозитория, зависимости, окружение и штатные тесты", "skills": ["repo-workflow", "workflow-systematic-debugging"]}],
     "checks": ["Применимые инструкции прочитаны", "Зависимости окружения доступны", "Исходные тесты имеют однозначный результат"],
     "evidence": ["Точный SHA и статус репозитория", "Команды исходной проверки и их результаты"]
   },
   {
     "phase_order": 7, "code": "6.SOLUTION", "name": "Решение",
-    "description": "Подготовить минимальное решение и анализ влияния", "execution_type": "parallel", "parallel_with": "6.TEST_PLAN",
-    "delegate": {"agent": "orchestrator", "hermes_profile": "sdlc-orchestrator"}, "rollback_target": "5.RESEARCH",
+    "description": "Подготовить минимальное решение и анализ влияния", "execution_type": "parallel", "parallel_with_phase_code": "6.TEST_PLAN",
+    "delegate": {"agent": "orchestrator", "hermes_profile": "sdlc-orchestrator"}, "rollback_target_phase_code": "5.RESEARCH",
     "instructions": [{"description": "Описать минимальные изменения по владельцам, контрактам и данным", "skills": ["workflow-writing-plans", "workflow-code-intelligence"]}],
     "checks": ["Решение закрывает требования", "Не дублирует существующие возможности", "Влияние и совместимость разобраны"],
     "evidence": ["Описание решения по компонентам", "Влияние и список изменяемых контрактов"]
   },
   {
     "phase_order": 8, "code": "6.TEST_PLAN", "name": "План тестирования",
-    "description": "Подготовить план тестирования, выпуска и восстановления", "execution_type": "parallel", "parallel_with": "6.SOLUTION",
-    "delegate": {"agent": "critic", "hermes_profile": "sdlc-critic"}, "rollback_target": "5.RESEARCH", "is_critic": true,
+    "description": "Подготовить план тестирования, выпуска и восстановления", "execution_type": "parallel", "parallel_with_phase_code": "6.SOLUTION",
+    "delegate": {"agent": "critic", "hermes_profile": "sdlc-critic"}, "rollback_target_phase_code": "5.RESEARCH",
     "instructions": [{"description": "Связать критерии приёмки с модульными, интеграционными, проверками приложения и UI", "skills": ["test-driven-development", "workflow-writing-plans"]}],
     "checks": ["Есть положительные и отрицательные проверки", "Покрыты миграции и частичные отказы либо доказана неприменимость", "Определены подтверждения выпуска и отката"],
     "evidence": ["Связь требований и тестов", "План выпуска и восстановления"]
@@ -75,7 +75,7 @@
   {
     "phase_order": 9, "code": "7.PLAN_GATE", "name": "Проверка плана",
     "description": "Независимо проверить минимальность и тестируемость решения", "execution_type": "sync",
-    "delegate": {"agent": "codex-operator"}, "rollback_target": "5.RESEARCH", "is_blocker": true,
+    "delegate": {"agent": "codex-operator"}, "rollback_target_phase_code": "5.RESEARCH",
     "instructions": [{"description": "Проверить решение и план тестирования на костыли, пропуски и лишнюю сложность", "skills": ["code-review", "refactor-simplify"]}],
     "checks": ["План минимален", "Архитектурные границы соблюдены", "Приёмка воспроизводима"],
     "evidence": ["Проверка плана оператором и принятое решение"]
@@ -83,7 +83,7 @@
   {
     "phase_order": 10, "code": "8.IMPLEMENT", "name": "Реализация",
     "description": "Выполнить изменение небольшими проверяемыми коммитами", "execution_type": "sync",
-    "delegate": {"agent": "coder", "hermes_profile": "sdlc-coder"}, "rollback_target": "5.RESEARCH",
+    "delegate": {"agent": "coder", "hermes_profile": "sdlc-coder"}, "rollback_target_phase_code": "5.RESEARCH",
     "instructions": [{"description": "Реализовать код, тесты и документацию по принятому плану", "skills": ["test-driven-development", "repo-workflow"]}],
     "checks": ["Изменение соответствует объёму работ", "Тесты добавлены вместе с поведением", "Рабочее дерево не содержит посторонних файлов"],
     "evidence": ["SHA коммита и сводка изменений", "Результаты целевых тестов"]
@@ -91,7 +91,7 @@
   {
     "phase_order": 11, "code": "9.PR", "name": "Запрос на слияние",
     "description": "Отправить ветку в Tech, создать PR и запустить сборку", "execution_type": "sync",
-    "delegate": {"agent": "ops", "hermes_profile": "sdlc-ops"}, "rollback_target": "8.IMPLEMENT",
+    "delegate": {"agent": "ops", "hermes_profile": "sdlc-ops"}, "rollback_target_phase_code": "8.IMPLEMENT",
     "instructions": [
       {"description": "Отправить ветку и создать Tech PR в main", "skills": ["using-rtech", "repo-workflow"]},
       {"description": "Подтвердить, что Business-задача остаётся In Progress, и проверить активность", "skills": ["relevanter-business-operator"]}
@@ -101,24 +101,24 @@
   },
   {
     "phase_order": 12, "code": "10.REVIEW", "name": "Проверка кода",
-    "description": "Проверить изменения, архитектуру и качество реализации", "execution_type": "parallel", "parallel_with": "10.QA",
-    "delegate": {"agent": "reviewer", "hermes_profile": "sdlc-reviewer"}, "rollback_target": "8.IMPLEMENT",
+    "description": "Проверить изменения, архитектуру и качество реализации", "execution_type": "parallel", "parallel_with_phase_code": "10.QA",
+    "delegate": {"agent": "reviewer", "hermes_profile": "sdlc-reviewer"}, "rollback_target_phase_code": "8.IMPLEMENT",
     "instructions": [{"description": "Провести независимую проверку PR и убедиться в минимальности изменений", "skills": ["repo-workflow", "workflow-code-intelligence"]}],
     "checks": ["Нет функциональных дефектов", "Нет лишнего кода и мусора совместимости", "Контракты и документация согласованы"],
     "evidence": ["Замечания проверки с файлами и строками", "Итоговое решение проверки"]
   },
   {
     "phase_order": 13, "code": "10.QA", "name": "Проверка качества",
-    "description": "Проверить бизнес-поведение через API и UI", "execution_type": "parallel", "parallel_with": "10.DATAFLOW",
-    "delegate": {"agent": "reviewer", "hermes_profile": "sdlc-reviewer"}, "rollback_target": "8.IMPLEMENT",
+    "description": "Проверить бизнес-поведение через API и UI", "execution_type": "parallel", "parallel_with_phase_code": "10.DATAFLOW",
+    "delegate": {"agent": "reviewer", "hermes_profile": "sdlc-reviewer"}, "rollback_target_phase_code": "8.IMPLEMENT",
     "instructions": [{"description": "Выполнить приёмочные, регрессионные, API- и UI-проверки", "skills": ["test-driven-development"]}],
     "checks": ["Критерии приёмки доказаны", "Отрицательные сценарии проходят", "UI и API согласованы"],
     "evidence": ["Команды и результаты проверки качества", "Ответы API и UI-подтверждения"]
   },
   {
     "phase_order": 14, "code": "10.DATAFLOW", "name": "Проверка потока данных",
-    "description": "Проверить данные, миграции, API, документацию и эксплуатацию", "execution_type": "parallel", "parallel_with": "10.REVIEW",
-    "delegate": {"agent": "researcher", "hermes_profile": "sdlc-researcher"}, "rollback_target": "8.IMPLEMENT",
+    "description": "Проверить данные, миграции, API, документацию и эксплуатацию", "execution_type": "parallel", "parallel_with_phase_code": "10.REVIEW",
+    "delegate": {"agent": "researcher", "hermes_profile": "sdlc-researcher"}, "rollback_target_phase_code": "8.IMPLEMENT",
     "instructions": [{"description": "Сверить фактический поток данных и проверить хранение данных, миграции и эксплуатационное влияние", "skills": ["workflow-code-intelligence", "workflow-systematic-debugging"]}],
     "checks": ["Данные и API не расходятся", "Миграции проверены либо неприменимость доказана", "Влияние на эксплуатацию и документацию закрыто"],
     "evidence": ["Фактический поток данных", "Результат чтения БД/API и подтверждения миграции"]
@@ -126,7 +126,7 @@
   {
     "phase_order": 15, "code": "11.RUNTIME", "name": "Приёмка приложения",
     "description": "Запустить кандидат и проверить реальное приложение", "execution_type": "sync",
-    "delegate": {"agent": "ops", "hermes_profile": "sdlc-ops"}, "rollback_target": "8.IMPLEMENT",
+    "delegate": {"agent": "ops", "hermes_profile": "sdlc-ops"}, "rollback_target_phase_code": "8.IMPLEMENT",
     "instructions": [{"description": "Развернуть кандидат штатным Tech-механизмом и проверить API, PostgreSQL, UI, состояние и версию", "skills": ["using-rtech", "workflow-systematic-debugging"]}],
     "checks": ["Кандидат здоров", "API, PostgreSQL и UI подтверждают изменение", "Версия совпадает с SHA кандидата"],
     "evidence": ["Ссылка на развёртывание и хеш образа", "Результат проверки состояния и версии", "Журнал приёмки приложения"]
@@ -134,7 +134,7 @@
   {
     "phase_order": 16, "code": "12.RELEASE_GATE", "name": "Проверка и слияние",
     "description": "Независимо проверить PR и физически выполнить слияние учётной записью Maintainer", "execution_type": "sync",
-    "delegate": {"agent": "codex-operator"}, "rollback_target": "8.IMPLEMENT", "is_blocker": true,
+    "delegate": {"agent": "codex-operator"}, "rollback_target_phase_code": "8.IMPLEMENT",
     "instructions": [{"description": "Проверить точный head PR, изменения, подтверждения и зелёную сборку, затем выполнить слияние", "skills": ["code-review", "using-rtech"]}],
     "checks": ["Проверен точный head SHA", "Сборка зелёная", "PR слит в main учётной записью Maintainer"],
     "evidence": ["Проверка оператора", "Результат чтения слитого PR, SHA слияния и исполнитель"]
@@ -158,7 +158,7 @@
   {
     "phase_order": 19, "code": "15.RETRO", "name": "Улучшения",
     "description": "Зафиксировать фактические метрики и улучшения процесса", "execution_type": "sync",
-    "delegate": {"agent": "critic", "hermes_profile": "sdlc-critic"}, "is_critic": true,
+    "delegate": {"agent": "critic", "hermes_profile": "sdlc-critic"},
     "instructions": [{"description": "Собрать факты выполнения и сформулировать конкретные улучшения без изменения принятой поставки", "skills": ["workflow-writing-plans"]}],
     "checks": ["Метрики основаны на журнале", "Дефекты процесса отделены от дефектов продукта", "Улучшения конкретны или обоснованно отсутствуют"],
     "evidence": ["Ретроспектива с метриками и действиями по улучшению"]

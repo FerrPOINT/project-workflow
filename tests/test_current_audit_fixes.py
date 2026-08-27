@@ -39,7 +39,7 @@ def _workflow_with_project(unit: SAUnitOfWork, suffix: str) -> tuple[int, int]:
     return workflow_id, project_id
 
 
-def test_phase_update_preserves_identity_and_coerces_boolean_flags(uow: SAUnitOfWork):
+def test_phase_update_preserves_identity_and_ignores_ownership_fields(uow: SAUnitOfWork):
     workflow_id, _ = _workflow_with_project(uow, "phase-a")
     other_workflow_id, _ = _workflow_with_project(uow, "phase-b")
     phase_id = uow.phases.create(
@@ -58,10 +58,6 @@ def test_phase_update_preserves_identity_and_coerces_boolean_flags(uow: SAUnitOf
             "id": phase_id + 1000,
             "workflow_id": other_workflow_id,
             "name": "Updated",
-            "is_seed_managed": True,
-            "is_blocker": True,
-            "is_delegated": True,
-            "is_critic": True,
         },
     )
     uow.commit()
@@ -71,16 +67,14 @@ def test_phase_update_preserves_identity_and_coerces_boolean_flags(uow: SAUnitOf
     assert phase.id == phase_id
     assert phase.workflow_id == workflow_id
     assert phase.name == "Updated"
-    assert phase.is_seed_managed is True
-    assert phase.is_blocker is True
-    assert phase.is_delegated is True
-    assert phase.is_critic is True
+    assert not hasattr(phase, "is_seed_managed")
+    assert not hasattr(phase, "is_delegated")
 
 
 def test_task_update_preserves_identity_and_ownership(uow: SAUnitOfWork):
     workflow_id, project_id = _workflow_with_project(uow, "task-a")
     _, other_project_id = _workflow_with_project(uow, "task-b")
-    uow.phases.create(
+    phase_id = uow.phases.create(
         {
             "workflow_id": workflow_id,
             "code": "1.INTAKE",
@@ -94,7 +88,7 @@ def test_task_update_preserves_identity_and_ownership(uow: SAUnitOfWork):
             "workflow_id": workflow_id,
             "task_key": "AUDIT-1",
             "title": "Original",
-            "current_phase": "1.INTAKE",
+            "current_phase_id": phase_id,
         }
     )
     uow.commit()
@@ -127,11 +121,13 @@ def _phase_with_instructions(
             "workflow_id": workflow_id,
             "code": code,
             "name": code,
-            "phase_order": 1,
+            "phase_order": unit.phases.get_next_order(workflow_id),
         }
     )
     instruction_ids = [
-        unit.instructions.create(phase_id, {"description": description, "step_num": index})
+        unit.phase_instructions.create(
+            phase_id, {"description": description, "step_num": index}
+        )
         for index, description in enumerate(descriptions, start=1)
     ]
     unit.commit()
@@ -149,10 +145,10 @@ def test_instruction_service_rejects_duplicates_and_foreign_ids(uow: SAUnitOfWor
             [first_ids[1], second_ids[0], first_ids[0], first_ids[0]],
         )
 
-    reordered = list(uow.instructions.list(first_phase_id))
+    reordered = list(uow.phase_instructions.list(first_phase_id))
     assert [row["id"] for row in reordered] == first_ids
     assert [row["step_num"] for row in reordered] == [1, 2, 3]
-    assert list(uow.instructions.list(second_phase_id))[0]["step_num"] == 1
+    assert list(uow.phase_instructions.list(second_phase_id))[0]["step_num"] == 1
 
 
 def test_instruction_repository_rejects_partial_reorder_without_changes(uow: SAUnitOfWork):
@@ -160,10 +156,10 @@ def test_instruction_repository_rejects_partial_reorder_without_changes(uow: SAU
     phase_id, instruction_ids = _phase_with_instructions(uow, workflow_id, "partial", ["one", "two", "three"])
 
     with pytest.raises(ConflictError, match="полный порядок инструкций фазы"):
-        uow.instructions.reorder(phase_id, [(instruction_ids[1], 1), (instruction_ids[0], 2)])
+        uow.phase_instructions.reorder(phase_id, [(instruction_ids[1], 1), (instruction_ids[0], 2)])
     uow.rollback()
 
-    rows = list(uow.instructions.list(phase_id))
+    rows = list(uow.phase_instructions.list(phase_id))
     assert [row["id"] for row in rows] == instruction_ids
     assert [row["step_num"] for row in rows] == [1, 2, 3]
 
@@ -200,7 +196,7 @@ def test_repository_lists_use_bounded_queries_for_related_data(uow: SAUnitOfWork
                 "project_id": project_id,
                 "workflow_id": workflow_id,
                 "task_key": f"QUERY-{index}",
-                "current_phase": str(phase_id),
+                "current_phase_id": phase_id,
             }
         )
     uow.commit()

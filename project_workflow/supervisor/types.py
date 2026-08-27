@@ -25,9 +25,8 @@ class PhaseContract:
     execution_type: str = "sync"
     delegate_agent: str | None = None
     hermes_profile: str | None = None
-    delegate_toolsets: list[str] = field(default_factory=list)
-    parallel_with: str | None = None
-    rollback_target: str | None = None
+    parallel_with_phase_code: str | None = None
+    rollback_target_phase_code: str | None = None
     group_phases: list[str] | None = None  # set for parallel blocks
     group_details: list[dict[str, Any]] = field(default_factory=list)  # per-phase details for parallel groups
 
@@ -45,9 +44,8 @@ class PhaseContract:
             "execution_type": self.execution_type,
             "delegate_agent": self.delegate_agent,
             "hermes_profile": self.hermes_profile,
-            "delegate_toolsets": self.delegate_toolsets,
-            "parallel_with": self.parallel_with,
-            "rollback_target": self.rollback_target,
+            "parallel_with_phase_code": self.parallel_with_phase_code,
+            "rollback_target_phase_code": self.rollback_target_phase_code,
             "group_phases": self.group_phases,
             "group_details": self.group_details,
         }

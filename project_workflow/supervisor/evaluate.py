@@ -38,7 +38,7 @@ def _contract_fingerprint(
         "contract": contract_data,
         "evaluation_items": [{"id": item_id, "text": text} for item_id, text in evaluation_items],
         "previously_covered_ids": sorted(previously_covered_ids),
-        "delegation_allowed": bool(phase.is_delegated or phase.delegate),
+        "delegation_allowed": phase.delegate is not None,
         "group": [member.code for member in group],
         "transition_routes": transition_routes,
         "phase_graph": [
@@ -48,15 +48,11 @@ def _contract_fingerprint(
                 "name": item.name,
                 "description": item.description,
                 "execution_type": item.execution_type,
-                "parallel_with": item.parallel_with,
-                "rollback_target": item.rollback_target,
-                "is_delegated": item.is_delegated,
+                "parallel_with_phase_code": item.parallel_with_phase_code,
+                "rollback_target_phase_code": item.rollback_target_phase_code,
                 "delegate": {
                     "agent": item.delegate.agent,
                     "hermes_profile": item.delegate.hermes_profile,
-                    "toolsets": item.delegate.toolsets,
-                    "timeout_min": item.delegate.timeout_min,
-                    "max_cycles": item.delegate.max_cycles,
                 }
                 if item.delegate
                 else None,
@@ -139,55 +135,55 @@ def _replay(
     *,
     after_run_id: int | None = None,
 ) -> dict[str, Any] | None:
-    run = engine.db.supervisor_runs.get_by_fingerprint(task_id, phase_id, fingerprint)
+    run = engine.db.step_history.get_by_fingerprint(task_id, phase_id, fingerprint)
     run_id = getattr(run, "id", None) if run is not None else None
     if after_run_id is not None and (run_id is None or int(run_id) <= after_run_id):
         return None
-    response = getattr(run, "response", None) if run is not None else None
+    response = getattr(run, "supervisor_response", None) if run is not None else None
     if not isinstance(response, dict):
         return None
     result = dict(response)
     result["replayed"] = True
     task = engine.db.tasks.get_by_id(task_id)
     verdict = str(response.get("verdict") or "").lower()
-    evaluated_phase = str(response.get("phase") or "")
-    next_phase = str(response.get("next_phase") or "") or None
-    rollback_target = str(response.get("rollback_target") or "") or None
+    evaluated_phase = str(response.get("phase_code") or "")
+    next_phase_code = str(response.get("next_phase_code") or "") or None
+    rollback_phase_code = str(response.get("rollback_phase_code") or "") or None
     expected_phase = evaluated_phase
     expected_status = "active"
     if verdict == "pass":
-        expected_phase = next_phase or evaluated_phase
-        expected_status = "active" if next_phase else "done"
+        expected_phase = next_phase_code or evaluated_phase
+        expected_status = "active" if next_phase_code else "done"
     elif verdict == "rollback":
-        expected_phase = rollback_target or evaluated_phase
+        expected_phase = rollback_phase_code or evaluated_phase
     elif verdict == "blocked":
         expected_status = "blocked"
 
-    current_phase = str(getattr(task, "current_phase", "") or "")
+    current_phase_code = str(getattr(task, "current_phase_code", "") or "")
     current_status = str(getattr(task, "status", "") or "")
-    if (current_phase, current_status) != (expected_phase, expected_status):
-        if current_phase != evaluated_phase or verdict not in {"pass", "partial", "blocked", "rollback", "delegate"}:
-            return None
-        engine._reload_task_state()
-        refreshed_phase = str(engine.task.get("current_phase") or "")
-        refreshed_status = str(engine.task.get("status") or "")
-        if (refreshed_phase, refreshed_status) == (expected_phase, expected_status):
-            return result
-        if refreshed_phase != evaluated_phase:
-            return None
-        phase = engine.phase_map.get(evaluated_phase)
-        if phase is None:
-            return None
-        try:
-            engine._record_evaluation(phase, verdict, next_phase if verdict == "pass" else None, rollback_target)
-        except ConcurrentTransitionError:
-            engine.db.rollback()
-            return _concurrent_result(result)
+    if (current_phase_code, current_status) == (expected_phase, expected_status):
+        return result
+    if current_phase_code != evaluated_phase or run_id is None:
+        return None
+    phase = engine.phase_map.get(evaluated_phase)
+    if phase is None:
+        return None
+    try:
+        engine._record_evaluation(
+            phase,
+            verdict,
+            next_phase_code,
+            rollback_phase_code,
+            int(run_id),
+        )
+    except ConcurrentTransitionError:
+        engine.db.rollback()
+        return _concurrent_result(result)
     return result
 
 
 def _latest_run_id(engine: Any, task_id: int) -> int | None:
-    runs = engine.db.supervisor_runs.list(task_id=task_id, limit=1)
+    runs = engine.db.step_history.list(task_id=task_id, limit=1)
     if not runs:
         return None
     run_id = getattr(runs[0], "id", None)
@@ -199,9 +195,9 @@ def _concurrent_result(result: dict[str, Any]) -> dict[str, Any]:
     blocked.update(
         {
             "verdict": "BLOCKED",
-            "next_phase": None,
+            "next_phase_code": None,
             "next_phase_name": None,
-            "rollback_target": None,
+            "rollback_phase_code": None,
             "blockers": ["Задача была изменена другим параллельным запуском Supervisor."],
             "message": "Повторите отчёт для актуальной фазы задачи.",
             "retryable": True,
@@ -219,9 +215,9 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     if workflow_id is None or engine.db.workflows.lock(workflow_id) is None:
         raise ConcurrentTransitionError("Воркфлоу изменился во время оценки Supervisor")
     engine._reload_evaluation_state()
-    if engine.current_phase != evaluated_phase_code:
+    if engine.current_phase_code != evaluated_phase_code:
         engine.db.rollback()
-        return _concurrent_result({"task_key": engine.task_key, "phase": evaluated_phase_code})
+        return _concurrent_result({"task_key": engine.task_key, "phase_code": evaluated_phase_code})
     phase = engine.phase_map.get(evaluated_phase_code)
     if phase is None:
         engine.db.rollback()
@@ -241,7 +237,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
             checks=[item for member in group for item in member.checks],
             evidence=[item for member in group for item in member.evidence],
             execution_type="parallel",
-            rollback_target=phase.rollback_target,
+            rollback_target_phase_code=phase.rollback_target_phase_code,
         )
 
     task_id = int(engine.task["id"])
@@ -301,11 +297,10 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         llm = ResponseParser.parse(
             raw,
             required_item_ids=item_ids,
-            previously_covered_ids=previously_ids,
         )
-        if llm.verdict == "ROLLBACK" and not phase.rollback_target:
+        if llm.verdict == "ROLLBACK" and not phase.rollback_target_phase_code:
             raise ValueError("Для текущей фазы не настроена цель отката")
-        if llm.verdict == "DELEGATE" and not (phase.is_delegated or phase.delegate):
+        if llm.verdict == "DELEGATE" and phase.delegate is None:
             raise ValueError("Для текущей фазы не настроено делегирование")
     except (
         requests.RequestException,
@@ -321,14 +316,14 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
 
     if engine.db.workflows.lock(workflow_id) is None:
         engine.db.rollback()
-        return _concurrent_result({"task_key": engine.task_key, "phase": evaluated_phase_code})
+        return _concurrent_result({"task_key": engine.task_key, "phase_code": evaluated_phase_code})
     engine._reload_evaluation_state()
     fresh_phase = engine.phase_map.get(evaluated_phase_code)
     if fresh_phase is None:
         engine.db.rollback()
-        if engine.current_phase != evaluated_phase_code:
+        if engine.current_phase_code != evaluated_phase_code:
             engine._reload_task_state()
-            return _concurrent_result({"task_key": engine.task_key, "phase": evaluated_phase_code})
+            return _concurrent_result({"task_key": engine.task_key, "phase_code": evaluated_phase_code})
         return engine._blocked_result()
     phase = fresh_phase
     builder = engine.contract_builder
@@ -345,7 +340,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
             checks=[item for member in group for item in member.checks],
             evidence=[item for member in group for item in member.evidence],
             execution_type="parallel",
-            rollback_target=phase.rollback_target,
+            rollback_target_phase_code=phase.rollback_target_phase_code,
         )
     evaluation_items = (
         builder.build_parallel_evaluation_items(group) if len(group) > 1 else builder.build_evaluation_items(phase)
@@ -398,11 +393,11 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     if _latest_run_id(engine, task_id) != initial_run_id:
         engine.db.rollback()
         engine._reload_task_state()
-        return _concurrent_result({"task_key": engine.task_key, "phase": evaluated_phase_code})
-    if engine.current_phase != evaluated_phase_code:
+        return _concurrent_result({"task_key": engine.task_key, "phase_code": evaluated_phase_code})
+    if engine.current_phase_code != evaluated_phase_code:
         engine.db.rollback()
         engine._reload_task_state()
-        return _concurrent_result({"task_key": engine.task_key, "phase": evaluated_phase_code})
+        return _concurrent_result({"task_key": engine.task_key, "phase_code": evaluated_phase_code})
     if current_contract_fingerprint != initial_contract_fingerprint:
         technical_error = True
         llm = _contract_changed()
@@ -416,24 +411,28 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
 
     verdict_key = llm.verdict.lower()
     blockers = llm.blockers
-    next_phase, next_phase_name, rollback_target = engine._resolve_transition(phase, verdict_key, group)
+    next_phase_code, next_phase_name, rollback_phase_code = engine._resolve_transition(
+        phase, verdict_key, group
+    )
     if verdict_key != "pass" or technical_error:
-        next_phase = None
+        next_phase_code = None
         next_phase_name = None
-        rollback_target = None if technical_error else rollback_target
+        rollback_phase_code = None if technical_error else rollback_phase_code
 
     result: dict[str, Any] = {
         "verdict": VERDICT_LABELS.get(verdict_key, llm.verdict),
         "task_key": engine.task_key,
-        "phase": phase.code,
+        "phase_code": phase.code,
         "phase_name": evaluation_phase.name,
         "covered": covered,
         "missing": missing,
         "blockers": blockers,
-        "current_phase": phase.code,
-        "next_phase": rollback_target if verdict_key == "rollback" else next_phase,
+        "current_phase_code": phase.code,
+        "next_phase_code": (
+            rollback_phase_code if verdict_key == "rollback" else next_phase_code
+        ),
         "next_phase_name": next_phase_name,
-        "rollback_target": rollback_target,
+        "rollback_phase_code": rollback_phase_code,
         "message": llm.message,
         "confidence": llm.confidence,
         "instructions": current_contract.instructions,
@@ -444,26 +443,30 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         "replayed": False,
         "retryable": technical_error,
     }
-    next_phase_contract = builder.build_next_contract(next_phase) if verdict_key == "pass" else None
+    next_phase_contract = (
+        builder.build_next_contract(next_phase_code) if verdict_key == "pass" else None
+    )
     if next_phase_contract is not None:
         result["next_phase_contract"] = next_phase_contract.to_dict()
 
-    next_phase_obj = engine.phase_map.get(next_phase) if next_phase else None
-    rollback_phase_obj = engine.phase_map.get(rollback_target) if rollback_target else None
+    next_phase_obj = engine.phase_map.get(next_phase_code) if next_phase_code else None
+    rollback_phase_obj = (
+        engine.phase_map.get(rollback_phase_code) if rollback_phase_code else None
+    )
     raw_evaluator = llm.raw if technical_error else (raw if raw is not None else llm.raw)
     run_data = {
         "task_id": task_id,
         "phase_id": phase.id,
         "verdict": verdict_key,
-        "report": report,
-        "covered": covered,
-        "missing": missing,
-        "blockers": blockers,
+        "worker_report": report,
+        "covered_item_ids": covered_ids,
+        "missing_item_ids": missing_ids,
+        "blocker_messages": blockers,
         "next_phase_id": next_phase_obj.id if next_phase_obj else None,
         "rollback_phase_id": rollback_phase_obj.id if rollback_phase_obj else None,
-        "report_fingerprint": None if technical_error else fingerprint,
-        "context_snapshot": {
-            "phase": phase.code,
+        "replay_fingerprint": None if technical_error else fingerprint,
+        "evaluation_snapshot": {
+            "phase_code": phase.code,
             "phase_name": evaluation_phase.name,
             "model": client.model if client is not None else None,
             "endpoint_mode": "openai-compatible",
@@ -477,12 +480,19 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
             "covered_item_ids": covered_ids,
             "raw_evaluator": raw_evaluator,
         },
-        "response": result,
+        "supervisor_response": result,
     }
 
     try:
-        engine.db.create_supervisor_run(run_data)
-        engine._record_evaluation(phase, verdict_key, next_phase, rollback_target, commit=False)
+        step_history_id = engine.db.record_step(**run_data)
+        engine._record_evaluation(
+            phase,
+            verdict_key,
+            next_phase_code,
+            rollback_phase_code,
+            step_history_id,
+            commit=False,
+        )
         engine.db.commit()
     except IntegrityError:
         engine.db.rollback()

@@ -94,8 +94,8 @@
         <option value="{{ a.id }}" {% if phase.agent_id == a.id %}selected{% endif %}>{{ a.name }}{% if a.hermes_profile %} · {{ a.hermes_profile }}{% endif %}</option>
         {% endfor %}
       </select></span>
-      {% if phase.rollback_target %}
-      <span>Откат: {{ phase.rollback_target }}</span>
+      {% if rollback_target_phase %}
+      <span>Откат: {{ rollback_target_phase.name }} · {{ rollback_target_phase.code }}</span>
       {% endif %}
     </div>
     <div class="execution-row" style="margin-top:12px">
@@ -111,31 +111,12 @@
         <select id="parallelPartnerSelect" class="inline-input" onchange="scheduleSave()">
           <option value="">— изолированная фаза —</option>
           {% for candidate in parallel_candidates %}
-          <option value="{{ candidate.code }}" {% if phase.parallel_with == candidate.code %}selected{% endif %}>{{ candidate.name }} · {{ candidate.code }}</option>
+          <option value="{{ candidate.id }}" {% if phase.parallel_with_phase_id == candidate.id %}selected{% endif %}>{{ candidate.name }} · {{ candidate.code }}</option>
           {% endfor %}
         </select>
       </label>
     </div>
   </div>
-
-  <!-- Tools -->
-  {% set tools = phase.instructions | map(attribute='tool') | select | unique | list %}
-  {% if tools %}
-  <div class="wiki-section">
-    <div class="wiki-section-title">
-      🧰 Инструменты
-      <span class="count">{{ tools|length }}</span>
-    </div>
-    <div class="catalog">
-      {% for t in tools %}
-      <div class="catalog-card">
-        <span class="card-icon">🛠️</span>
-        <span>{{ t }}</span>
-      </div>
-      {% endfor %}
-    </div>
-  </div>
-  {% endif %}
 
   <!-- Instructions — managed like phases list with inline edit, reorder, add, delete -->
   <div class="wiki-section">
@@ -664,8 +645,10 @@ async function persistPhase() {
     checks: [],
     evidence: [],
     execution_type: document.querySelector('.execution-toggle')?.dataset.mode || 'sync',
-    parallel_with: (document.querySelector('.execution-toggle')?.dataset.mode || 'sync') === 'parallel'
-      ? (document.getElementById('parallelPartnerSelect')?.value || null)
+    parallel_with_phase_id: (document.querySelector('.execution-toggle')?.dataset.mode || 'sync') === 'parallel'
+      ? (document.getElementById('parallelPartnerSelect')?.value
+        ? Number(document.getElementById('parallelPartnerSelect').value)
+        : null)
       : null,
     agent_id: document.getElementById('agentSelect')?.value
       ? Number(document.getElementById('agentSelect').value)

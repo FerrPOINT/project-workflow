@@ -23,16 +23,17 @@ class TestSupervisorContextBuilder:
         builder = SupervisorContextBuilder(all_phases=[])
         assert builder._phase_by_id(None) is None
 
-    def test_phase_status_lookup_done_task(self):
+    def test_phase_status_lookup_requires_event_history(self):
         uow = MagicMock()
-        uow.get_task_history.return_value = []
+        uow.list_phase_events.return_value = []
         builder = SupervisorContextBuilder(
             uow=uow,
-            task={"id": 1, "status": "done", "current_phase": "0.0a"},
+            task={"id": 1, "status": "done", "current_phase_id": 1},
             all_phases=[Phase(id=1, code="0.0a", name="Setup")],
-            current_phase="0.0a",
+            current_phase_code="0.0a",
         )
-        assert builder._phase_status_lookup() == {}
+        with pytest.raises(ValueError, match="журнал событий"):
+            builder._phase_status_lookup()
 
 
 class TestModuleEntryPoints:

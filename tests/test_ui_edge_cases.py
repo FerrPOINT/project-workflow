@@ -17,7 +17,7 @@ from project_workflow.interfaces.ui import (
     _load_workflows,
     app,
 )
-from project_workflow.interfaces.ui.helpers import _resolve_task_phase
+from project_workflow.interfaces.ui.helpers import _resolve_task_phase_id
 
 client = TestClient(app)
 
@@ -55,16 +55,16 @@ class TestBuildParallelPhaseBlocks:
         assert _build_parallel_phase_blocks([]) == []
 
     def test_single(self):
-        blocks = _build_parallel_phase_blocks([{"code": "1", "execution_type": "sync"}])
+        blocks = _build_parallel_phase_blocks([{"id": 1, "code": "1", "execution_type": "sync"}])
         assert len(blocks) == 1
         assert blocks[0]["kind"] == "single"
 
     def test_parallel(self):
         blocks = _build_parallel_phase_blocks(
             [
-                {"code": "1", "execution_type": "sync"},
-                {"code": "2", "execution_type": "parallel", "parallel_with": "3"},
-                {"code": "3", "execution_type": "parallel"},
+                {"id": 1, "code": "1", "execution_type": "sync"},
+                {"id": 2, "code": "2", "execution_type": "parallel", "parallel_with_phase_id": 3},
+                {"id": 3, "code": "3", "execution_type": "parallel"},
             ]
         )
         assert [block["kind"] for block in blocks] == ["single", "parallel"]
@@ -73,32 +73,18 @@ class TestBuildParallelPhaseBlocks:
 
 
 class TestResolveTaskPhase:
-    def test_none_current_phase(self):
-        db = MagicMock()
-        db.get_phases.return_value = []
-        token, phase = _resolve_task_phase(None, _db=db, workflow_id=1)
-        assert token == ""
-        assert phase is None
+    def test_by_id_match(self):
+        phases = [{"id": 1, "code": "1", "name": "One", "phase_order": 1}]
+        assert _resolve_task_phase_id(1, phases)["code"] == "1"
 
-    def test_by_code_match(self):
-        db = MagicMock()
-        db.get_phases.return_value = [{"id": 1, "code": "1", "name": "One", "phase_order": 1}]
-        token, phase = _resolve_task_phase("1", _db=db, workflow_id=1)
-        assert token == "1"
-        assert phase["code"] == "1"
-
-    def test_numeric_id_is_rejected_as_current_phase_code(self):
-        db = MagicMock()
-        db.get_phases.return_value = [{"id": 42, "code": "1", "name": "One", "phase_order": 1}]
-        with pytest.raises(TypeError):
-            _resolve_task_phase(42, _db=db, workflow_id=1)
+    @pytest.mark.parametrize("value", [None, "1", True, 0])
+    def test_invalid_current_phase_id_fails_closed(self, value):
+        with pytest.raises(ValueError):
+            _resolve_task_phase_id(value, [])
 
     def test_unresolvable(self):
-        db = MagicMock()
-        db.get_phases.return_value = []
-        token, phase = _resolve_task_phase("unknown", _db=db, workflow_id=1)
-        assert token == "unknown"
-        assert phase is None
+        with pytest.raises(ValueError, match="отсутствует"):
+            _resolve_task_phase_id(99, [])
 
 
 class TestLoadWorkflows:
@@ -126,50 +112,53 @@ class TestLoadTasks:
                 "id": 1,
                 "task_key": "AAT-1",
                 "status": "done",
-                "current_phase": "-1",
-                "project_id": None,
-                "project_code": None,
-                "project_name": None,
-                "workflow_id": None,
+                "current_phase_id": 1,
+                "current_phase_code": "-1",
+                "current_phase_name": "Start",
+                "project_id": 10,
+                "workflow_id": 1,
                 "updated_at": "2025-02-01",
             }
         ]
-        db.get_workflows.return_value = []
-        db.get_phases.return_value = []
-        db.tasks = MagicMock()
-        db.tasks.get_history_batch.return_value = {
+        db.get_workflows.return_value = [{"id": 1}]
+        db.get_phases.return_value = [{"id": 1, "code": "-1", "name": "Start"}]
+        db.list_phase_events_batch.return_value = {
             1: [
-                {"phase_id": 1, "status": "done", "completed_at": "2025-01-15"},
-                {"phase_id": 1, "status": "done", "completed_at": "2025-01-20"},
+                {"phase_id": 1, "event_type": "completed", "occurred_at": "2025-01-15"},
+                {"phase_id": 1, "event_type": "completed", "occurred_at": "2025-01-20"},
             ]
         }
-        db.get_supervisor_runs.return_value = []
+        db.step_history.latest_for_tasks.return_value = []
+        db.get_projects.return_value = [{"id": 10, "code": "AAT", "name": "AAT"}]
         monkeypatch.setattr("project_workflow.interfaces.ui._app_state", MagicMock(get_db=lambda: db))
         tasks = _load_tasks()
         assert tasks[0]["completed_at"] == "2025-01-20"
 
-    def test_task_done_no_completed_at_fallback(self, monkeypatch):
+    def test_task_done_without_completed_event_fails_closed(self, monkeypatch):
         db = MagicMock()
         db.get_tasks.return_value = [
             {
                 "id": 1,
                 "task_key": "AAT-1",
                 "status": "done",
-                "current_phase": "-1",
-                "project_id": None,
-                "project_code": None,
-                "project_name": None,
-                "workflow_id": None,
+                "current_phase_id": 1,
+                "current_phase_code": "-1",
+                "current_phase_name": "Start",
+                "project_id": 10,
+                "workflow_id": 1,
                 "updated_at": "2025-02-01",
             }
         ]
-        db.get_workflows.return_value = []
-        db.get_phases.return_value = []
-        db.get_task_history.return_value = [{"status": "done", "completed_at": None}]
-        db.get_supervisor_runs.return_value = []
+        db.get_workflows.return_value = [{"id": 1}]
+        db.get_phases.return_value = [{"id": 1, "code": "-1", "name": "Start"}]
+        db.list_phase_events_batch.return_value = {
+            1: [{"phase_id": 1, "event_type": "entered", "occurred_at": "2025-01-15"}]
+        }
+        db.step_history.latest_for_tasks.return_value = []
+        db.get_projects.return_value = [{"id": 10, "code": "AAT", "name": "AAT"}]
         monkeypatch.setattr("project_workflow.interfaces.ui._app_state", MagicMock(get_db=lambda: db))
-        tasks = _load_tasks()
-        assert tasks[0]["completed_at"] == "2025-02-01"
+        with pytest.raises(ValueError, match="нет события completed"):
+            _load_tasks()
 
 
 # ═══════════════════════════════════════════════════════════
@@ -178,7 +167,7 @@ class TestLoadTasks:
 
 
 class TestTaskDetailEdgeCases:
-    def test_task_detail_supervisor_runs_next_contract(self, monkeypatch):
+    def test_task_detail_step_history_next_contract(self, monkeypatch):
         from project_workflow.interfaces.ui import _get_task_detail
 
         db = MagicMock()
@@ -186,21 +175,27 @@ class TestTaskDetailEdgeCases:
             "id": 1,
             "task_key": "AAT-1",
             "status": "active",
-            "current_phase": "1",
+            "current_phase_id": 1,
             "title": "T",
-            "workflow_id": None,
-            "project_id": None,
+            "workflow_id": 1,
+            "project_id": 10,
         }
-        db.get_task_history.return_value = []
-        db.get_workflows.return_value = []
-        db.get_phases.return_value = []
-        db.get_supervisor_runs.return_value = [
+        db.projects.get_by_id.return_value.to_dict.return_value = {
+            "id": 10,
+            "code": "AAT",
+            "name": "AAT",
+        }
+        db.list_phase_events.return_value = [{"phase_id": 1, "event_type": "entered", "occurred_at": "2025-01-01"}]
+        db.get_phases.return_value = [
+            {"id": 1, "code": "1", "name": "Current", "phase_order": 1, "execution_type": "sync"}
+        ]
+        db.list_step_history.return_value = [
             {
                 "verdict": "pass",
-                "phase_code": "1",
-                "context_snapshot": {"phase": "historical.1", "phase_name": "Historical phase"},
-                "response": {
-                    "next_phase": "2",
+                "worker_report": "done",
+                "evaluation_snapshot": {"phase_code": "historical.1", "phase_name": "Historical phase"},
+                "supervisor_response": {
+                    "next_phase_code": "2",
                     "message": "ok",
                     "next_phase_contract": {
                         "phase_code": "2",
@@ -215,12 +210,12 @@ class TestTaskDetailEdgeCases:
         ]
         monkeypatch.setattr("project_workflow.interfaces.ui._app_state", MagicMock(get_db=lambda: db))
         task = _get_task_detail("AAT-1")
-        assert task["supervisor_runs"][0]["next_contract"] is not None
-        assert task["supervisor_runs"][0]["next_contract"]["phase_name"] == "Next"
-        assert task["supervisor_runs"][0]["phase_code"] == "historical.1"
-        assert task["supervisor_runs"][0]["phase_name"] == "Historical phase"
+        assert task["step_history"][0]["next_contract"] is not None
+        assert task["step_history"][0]["next_contract"]["phase_name"] == "Next"
+        assert task["step_history"][0]["phase_code"] == "historical.1"
+        assert task["step_history"][0]["phase_name"] == "Historical phase"
 
-    def test_task_detail_supervisor_runs_no_next_phase(self, monkeypatch):
+    def test_task_detail_step_history_no_next_phase(self, monkeypatch):
         from project_workflow.interfaces.ui import _get_task_detail
 
         db = MagicMock()
@@ -228,20 +223,32 @@ class TestTaskDetailEdgeCases:
             "id": 1,
             "task_key": "AAT-1",
             "status": "active",
-            "current_phase": "1",
+            "current_phase_id": 1,
             "title": "T",
-            "workflow_id": None,
-            "project_id": None,
+            "workflow_id": 1,
+            "project_id": 10,
         }
-        db.get_task_history.return_value = []
-        db.get_workflows.return_value = []
-        db.get_phases.return_value = []
-        db.get_supervisor_runs.return_value = [
-            {"verdict": "pass", "phase_code": "1", "response": {"message": "ok"}, "created_at": "2025-01-01"}
+        db.projects.get_by_id.return_value.to_dict.return_value = {
+            "id": 10,
+            "code": "AAT",
+            "name": "AAT",
+        }
+        db.list_phase_events.return_value = [{"phase_id": 1, "event_type": "entered", "occurred_at": "2025-01-01"}]
+        db.get_phases.return_value = [
+            {"id": 1, "code": "1", "name": "Current", "phase_order": 1, "execution_type": "sync"}
+        ]
+        db.list_step_history.return_value = [
+            {
+                "verdict": "pass",
+                "worker_report": "done",
+                "evaluation_snapshot": {"phase_code": "1", "phase_name": "Current"},
+                "supervisor_response": {"message": "ok"},
+                "created_at": "2025-01-01",
+            }
         ]
         monkeypatch.setattr("project_workflow.interfaces.ui._app_state", MagicMock(get_db=lambda: db))
         task = _get_task_detail("AAT-1")
-        assert task["supervisor_runs"][0]["next_contract"] is None
+        assert task["step_history"][0]["next_contract"] is None
 
     def test_main_entry(self, monkeypatch):
         from project_workflow.interfaces.ui import main

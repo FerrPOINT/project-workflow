@@ -57,7 +57,6 @@
       <div class="execution-row">
         <span class="badge {{ 'badge-parallel' if p.execution_type == 'parallel' else 'badge-sync' }}">{{ 'параллельно' if p.execution_type == 'parallel' else 'последовательно' }}</span>
         {% if p.agent_name %}<span class="badge badge-agent">{{ p.agent_name }}</span>{% endif %}
-        {% if p.is_delegated %}<span class="badge badge-delegate">делегирование</span>{% endif %}
       </div>
     </a>
     <div class="phase-card-actions" aria-label="Действия фазы">

@@ -57,7 +57,7 @@ def test_phase_create_requires_strict_identifiers_and_order(payload):
 def test_phase_update_fields():
     p = PhaseUpdate(name="X")
     assert p.name == "X"
-    with pytest.raises(ValueError, match="не может быть пустым"):
+    with pytest.raises(ValueError, match="parallel_with"):
         PhaseUpdate(parallel_with=" ")
 
 

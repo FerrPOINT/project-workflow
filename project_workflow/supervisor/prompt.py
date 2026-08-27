@@ -19,7 +19,7 @@ def _format_history(ctx: dict[str, Any], limit: int = 5) -> str:
     for item in items[-limit:]:
         code = item.get("phase_code") or "-"
         name = item.get("phase_name") or ""
-        status = item.get("status") or "-"
+        status = item.get("event_type") or "-"
         label = name if name else code
         lines.append(f"- {label}: {status}")
     return "\n".join(lines)
@@ -51,20 +51,17 @@ def _format_parallel_contract(contract: dict[str, Any], group_details: list[dict
         f"- Описание: {contract.get('description') or '-'}\n",
         "- Тип выполнения: параллельно\n",
         f"- Фазы в группе: {', '.join(group_names)}\n",
-        f"- Цель отката: {contract.get('rollback_target') or '-'}\n\n",
+        f"- Цель отката: {contract.get('rollback_target_phase_code') or '-'}\n\n",
         "Параллельные фазы (выполняются одновременно, отчёт — одним сообщением):\n",
     ]
     for detail in group_details:
         name = detail.get("phase_name") or detail.get("phase_code") or "-"
         agent = detail.get("delegate_agent") or "не задан"
         hermes_profile = detail.get("hermes_profile")
-        toolsets = ", ".join(detail.get("delegate_toolsets") or [])
         agent_line = f"Агент: {agent}"
         if hermes_profile:
             agent_line += f" | профиль Hermes: {hermes_profile}"
-        if toolsets:
-            agent_line += f" | наборы инструментов: {toolsets}"
-        partner_code = detail.get("parallel_with") or "-"
+        partner_code = detail.get("parallel_with_phase_code") or "-"
         partner = next(
             (
                 d.get("phase_name") or d.get("phase_code") or partner_code
@@ -107,8 +104,8 @@ def _format_contract(contract: dict[str, Any], human_only: bool = False) -> str:
             [
                 f"- Описание: {contract.get('description') or '-'}\n",
                 f"- Тип выполнения: {execution_type}\n",
-                f"- Параллельно с: {contract.get('parallel_with') or '-'}\n",
-                f"- Цель отката: {contract.get('rollback_target') or '-'}\n",
+                f"- Параллельно с: {contract.get('parallel_with_phase_code') or '-'}\n",
+                f"- Цель отката: {contract.get('rollback_target_phase_code') or '-'}\n",
             ]
         )
     parts.extend(
@@ -119,11 +116,9 @@ def _format_contract(contract: dict[str, Any], human_only: bool = False) -> str:
         ]
     )
     if contract.get("delegate_agent"):
-        toolsets = ", ".join(contract.get("delegate_toolsets") or [])
         parts.append(
             f"Делегировано агенту: {contract['delegate_agent']}"
             + (f" | профиль Hermes: {contract['hermes_profile']}" if contract.get("hermes_profile") else "")
-            + (f" | наборы инструментов: {toolsets}" if toolsets else "")
             + "\n\n"
         )
     return "".join(parts)
@@ -160,14 +155,14 @@ def build_phase_prompt(
     task_key: str,
     phase_map: dict,
     all_phases: list,
-    current_phase: str,
+    current_phase_code: str,
     ctx: dict,
-    phase_id: str | None = None,
+    phase_code: str | None = None,
 ) -> str:
     """Build a stateful human-readable prompt for a given phase (or current)."""
-    target_phase = phase_map.get(phase_id or current_phase)
+    target_phase = phase_map.get(phase_code or current_phase_code)
     if not target_phase:
-        return f"Фаза {phase_id or current_phase} не найдена в воркфлоу."
+        return f"Фаза {phase_code or current_phase_code} не найдена в воркфлоу."
 
     cb = PhaseContractBuilder(all_phases, str(ctx.get("workflow_revision") or ctx.get("workflow_name") or ""))
     is_parallel_target = target_phase.execution_type == "parallel"
@@ -181,7 +176,7 @@ def build_phase_prompt(
             "Отчёт по этой группе присылается ОДНИМ сообщением.\n\n"
         )
     else:
-        if target_phase.code == current_phase:
+        if target_phase.code == current_phase_code:
             raw = ctx.get("current_contract")
             if isinstance(raw, dict):
                 contract = raw
@@ -191,25 +186,17 @@ def build_phase_prompt(
             contract = cb.build(target_phase).to_dict()
         parallel_banner = ""
 
-    cli_actor = ctx.get("cli_actor") or {
-        "description": "Пользователь CLI",
-        "entrypoint": f"project-workflow step --task {task_key} [--report TEXT]",
-    }
-    report_template = ctx.get("report_template") or {
-        "summary": "Краткое описание результата работы над фазой.",
-        "completed": "Перечисли выполненные пункты контракта фазы.",
-        "evidence": "Приложи конкретные артефакты: ссылки, файлы, скриншоты, коммиты.",
-        "blockers": "Укажи явные блокеры или 'нет'.",
-        "next_step": "Опиши одно конкретное следующее действие.",
-    }
-    # Guard against partial report_template dicts from tests.
-    report_template = {
-        "summary": report_template.get("summary", "Краткое описание результата работы над фазой."),
-        "completed": report_template.get("completed", "Перечисли выполненные пункты контракта фазы."),
-        "evidence": report_template.get("evidence", "Приложи конкретные артефакты: ссылки, файлы, скриншоты, коммиты."),
-        "blockers": report_template.get("blockers", "Укажи явные блокеры или 'нет'."),
-        "next_step": report_template.get("next_step", "Опиши одно конкретное следующее действие."),
-    }
+    cli_actor = ctx.get("cli_actor")
+    report_template = ctx.get("report_template")
+    if not isinstance(cli_actor, dict) or not all(
+        isinstance(cli_actor.get(key), str) and cli_actor[key].strip() for key in ("description", "entrypoint")
+    ):
+        raise ValueError("Контекст Supervisor не содержит полного описания CLI-исполнителя")
+    if not isinstance(report_template, dict) or not all(
+        isinstance(report_template.get(key), str) and report_template[key].strip()
+        for key in ("summary", "completed", "evidence", "blockers", "next_step")
+    ):
+        raise ValueError("Контекст Supervisor не содержит полного шаблона отчёта")
 
     return (
         f"Задача: {task_key}\n"
@@ -237,7 +224,7 @@ def format_current_phase_instructions(
     task_key: str,
     phase_map: dict,
     all_phases: list,
-    current_phase: str,
+    current_phase_code: str,
     ctx: dict,
 ) -> str:
     """Human-only CLI output for `step --task X` without a report.
@@ -245,9 +232,9 @@ def format_current_phase_instructions(
     Stripped of internal codes, boilerplate, and LLM context. Returns only
     concrete instructions, checks, and evidence the worker needs right now.
     """
-    target_phase = phase_map.get(current_phase)
+    target_phase = phase_map.get(current_phase_code)
     if not target_phase:
-        return f"Фаза {current_phase} не найдена в воркфлоу."
+        return f"Фаза {current_phase_code} не найдена в воркфлоу."
 
     cb = PhaseContractBuilder(all_phases, str(ctx.get("workflow_revision") or ctx.get("workflow_name") or ""))
     is_parallel_target = target_phase.execution_type == "parallel"

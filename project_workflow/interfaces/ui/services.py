@@ -39,7 +39,7 @@ def _load_workflows() -> list[dict[str, Any]]:
     return _ui_data_service()._load_workflows()
 
 
-def _load_phases(workflow_id: int | None = None) -> list[dict[str, Any]]:
+def _load_phases(workflow_id: int) -> list[dict[str, Any]]:
     """Load phases for UI pages/API."""
     return _ui_data_service()._load_phases(workflow_id)
 

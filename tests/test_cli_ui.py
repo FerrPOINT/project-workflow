@@ -36,7 +36,7 @@ class TestStepCommand:
     def test_step_auto_init_creates_task(self, mock_engine_cls):
         """SupervisorEngine auto-creates task in DB if missing."""
         mock_engine = mock_engine_cls.return_value
-        mock_engine.current_phase = "0"
+        mock_engine.current_phase_code = "0"
         mock_engine.format_current_phase_instructions.return_value = "do stuff"
         runner = CliRunner()
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
@@ -51,7 +51,7 @@ class TestStepCommand:
     @patch("project_workflow.supervisor.SupervisorEngine")
     def test_step_shows_phase(self, mock_engine_cls):
         mock_engine = mock_engine_cls.return_value
-        mock_engine.current_phase = "0.00"
+        mock_engine.current_phase_code = "0.00"
         mock_engine.format_current_phase_instructions.return_value = "phase instructions"
         runner = CliRunner()
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
@@ -66,7 +66,7 @@ class TestStepCommand:
         mock_engine.evaluate.return_value = {
             "verdict": "PASS",
             "phase_name": "Plan",
-            "next_phase": "1",
+            "next_phase_code": "1",
             "next_phase_name": "Build",
             "covered": ["a"],
             "missing": [],
@@ -99,7 +99,7 @@ class TestStepCommand:
         mock_engine.evaluate.return_value = {
             "verdict": "BLOCKED",
             "phase_name": "Plan",
-            "next_phase": None,
+            "next_phase_code": None,
             "next_phase_name": None,
             "covered": [],
             "missing": ["m1"],
@@ -123,7 +123,7 @@ class TestStepCommand:
         mock_engine.evaluate.return_value = {
             "verdict": "PASS",
             "phase_name": "Plan",
-            "next_phase": None,
+            "next_phase_code": None,
             "covered": [],
             "missing": [],
             "blockers": [],
@@ -163,7 +163,7 @@ class TestStepCommand:
     @patch("project_workflow.supervisor.SupervisorEngine")
     def test_step_prompt_json_mode(self, mock_engine_cls):
         mock_engine = mock_engine_cls.return_value
-        mock_engine.current_phase = "0.00"
+        mock_engine.current_phase_code = "0.00"
         mock_engine.get_phase_prompt.return_value = "next steps"
         mock_engine.get_phase_contract.return_value = {
             "phase_code": "0.00",
@@ -180,7 +180,7 @@ class TestStepCommand:
         parsed = json.loads(result.output)
         assert parsed["ok"] is True
         assert parsed["task_key"] == "RUN-1"
-        assert parsed["phase"] == "0.00"
+        assert parsed["phase_code"] == "0.00"
         assert parsed["prompt"] == "next steps"
         assert parsed["phase_contract"]["hermes_profile"] == "sdlc-ops"
         assert parsed["phase_contract"]["skills"] == ["project-workflow-executor"]
@@ -205,30 +205,33 @@ class TestHistoryCommand:
 
     @patch("project_workflow.interfaces.cli.ui.SAUnitOfWork")
     def test_history_shows_records(self, mock_uow_cls):
-        from project_workflow.domain import SupervisorRun
+        from project_workflow.domain import TaskStepHistoryEntry
 
-        run1 = SupervisorRun(
+        run1 = TaskStepHistoryEntry(
             id=1,
             task_id=1,
             phase_id=0,
             verdict="pass",
             next_phase_id=1,
             rollback_phase_id=None,
-            response={"next_phase": "1"},
+            worker_report="done",
+            supervisor_response={"next_phase_code": "1", "message": "Принято"},
             created_at="2024-01-01",
         )
-        run2 = SupervisorRun(
+        run2 = TaskStepHistoryEntry(
             id=2,
             task_id=1,
             phase_id=1,
             verdict="pass",
             next_phase_id=None,
             rollback_phase_id=None,
-            response={},
+            worker_report="done again",
+            supervisor_response={"message": "Принято"},
             created_at="2024-01-02",
         )
         uow = mock_uow_cls.return_value.__enter__.return_value
-        uow.supervisor_runs.list.return_value = [run1, run2]
+        uow.tasks.get_by_key.return_value = type("Task", (), {"id": 1})()
+        uow.step_history.list.return_value = [run1, run2]
 
         def _fake_phase(pid):
             return type("Phase", (), {"code": str(pid), "name": f"Phase {pid}"})()
@@ -244,19 +247,19 @@ class TestHistoryCommand:
     @patch("project_workflow.interfaces.cli.ui.SAUnitOfWork")
     def test_history_empty(self, mock_uow_cls):
         uow = mock_uow_cls.return_value.__enter__.return_value
-        uow.supervisor_runs.list.return_value = []
+        uow.step_history.list.return_value = []
         uow.tasks.get_by_key.return_value = None
         runner = CliRunner()
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
             result = runner.invoke(cli, ["history", "--task", "RUN-1"])
         assert result.exit_code == 0, result.output
         assert "пуста" in result.output
-        uow.supervisor_runs.list.assert_called_once_with(task_id=None, task_key="RUN-1", limit=None)
+        uow.step_history.list.assert_called_once_with(task_id=None, task_key="RUN-1", limit=None)
 
     @patch("project_workflow.interfaces.cli.ui.SAUnitOfWork")
     def test_history_json_mode(self, mock_uow_cls):
         uow = mock_uow_cls.return_value.__enter__.return_value
-        uow.supervisor_runs.list.return_value = []
+        uow.step_history.list.return_value = []
         uow.tasks.get_by_key.return_value = None
         runner = CliRunner()
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
@@ -266,7 +269,7 @@ class TestHistoryCommand:
         assert parsed["ok"] is True
         assert parsed["task_key"] == "RUN-1"
         assert parsed["count"] == 0
-        uow.supervisor_runs.list.assert_called_once_with(task_id=None, task_key="RUN-1", limit=10)
+        uow.step_history.list.assert_called_once_with(task_id=None, task_key="RUN-1", limit=10)
 
     def test_history_rejects_non_positive_limit(self):
         runner = CliRunner()

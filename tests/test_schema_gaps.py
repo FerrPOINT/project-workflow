@@ -102,9 +102,6 @@ def test_phase_item_to_supervisor_with_delegate():
     )
     assert phase.delegate is not None
     assert phase.delegate.agent == "reviewer"
-    assert phase.delegate.toolsets == []
-    assert phase.delegate.timeout_min == 10
-    assert phase.delegate.max_cycles == 3
 
 
 def test_catalog_bootstrap_is_database_idempotent(tmp_path, monkeypatch):
@@ -133,7 +130,7 @@ def test_catalog_bootstrap_is_database_idempotent(tmp_path, monkeypatch):
         ({"phase_order": 1, "code": "P", "name": "Phase", "evidence": [""]}, "description"),
         (
             {"phase_order": 1, "code": "P", "name": "Phase", "parallel_with": "MISSING"},
-            "не может задавать parallel_with",
+            "parallel_with",
         ),
         (
             {
@@ -237,11 +234,11 @@ def test_seed_rejects_noncontiguous_order_duplicate_codes_and_descriptions(tmp_p
                     "phase_order": 1,
                     "code": "A",
                     "name": "Sync",
-                    "parallel_with": "B",
+                    "parallel_with_phase_code": "B",
                 },
                 {"phase_order": 2, "code": "B", "name": "Sync"},
             ],
-            "Последовательная фаза .* не может задавать parallel_with",
+            "Последовательная фаза .* не может задавать parallel_with_phase_id",
         ),
         (
             [
@@ -250,11 +247,11 @@ def test_seed_rejects_noncontiguous_order_duplicate_codes_and_descriptions(tmp_p
                     "code": "A",
                     "name": "Parallel",
                     "execution_type": "parallel",
-                    "parallel_with": "B",
+                    "parallel_with_phase_code": "B",
                 },
                 {"phase_order": 2, "code": "B", "name": "Sync"},
             ],
-            "Целевая фаза parallel_with .* должна быть параллельной",
+            "Целевая фаза parallel_with_phase_id .* должна быть параллельной",
         ),
         (
             [
@@ -264,17 +261,17 @@ def test_seed_rejects_noncontiguous_order_duplicate_codes_and_descriptions(tmp_p
                     "phase_order": 3,
                     "code": "C",
                     "name": "Current",
-                    "rollback_target": "B",
+                    "rollback_target_phase_code": "B",
                 },
             ],
-            "rollback_target фазы .* должен ссылаться на более раннюю фазу",
+            "rollback_target_phase_id фазы .* должен ссылаться на более раннюю фазу",
         ),
     ],
 )
 def test_seed_rejects_invalid_execution_graph(tmp_path, catalog, message):
     if message.startswith("rollback_target"):
-        catalog[1]["rollback_target"] = "C"
-        catalog[2].pop("rollback_target")
+        catalog[1]["rollback_target_phase_code"] = "C"
+        catalog[2].pop("rollback_target_phase_code")
     path = tmp_path / "invalid-graph.json"
     path.write_text(json.dumps(catalog), encoding="utf-8")
     with pytest.raises(ValueError, match=message):
@@ -297,7 +294,7 @@ def test_seed_accepts_isolated_parallel_phase(tmp_path):
         encoding="utf-8",
     )
 
-    assert _load_seed(path)[0].parallel_with is None
+    assert _load_seed(path)[0].parallel_with_phase_code is None
 
 
 def test_invalid_seed_is_detected_before_catalog_writes(tmp_path):
@@ -307,6 +304,54 @@ def test_invalid_seed_is_detected_before_catalog_writes(tmp_path):
     path.write_text("[]", encoding="utf-8")
 
     with pytest.raises(ValueError, match="хотя бы одну фазу"):
+        ensure_phase_catalog(uow, path)
+
+    assert uow.workflows.list() == []
+    assert uow.phases.list() == []
+    assert uow.agents.list() == []
+    uow.close()
+
+
+@pytest.mark.parametrize(
+    "catalog",
+    [
+        [
+            {
+                "phase_order": 1,
+                "code": "one",
+                "name": "One",
+                "delegate": {"agent": "reviewer", "hermes_profile": "profile-one"},
+            },
+            {
+                "phase_order": 2,
+                "code": "two",
+                "name": "Two",
+                "delegate": {"agent": "reviewer", "hermes_profile": "profile-two"},
+            },
+        ],
+        [
+            {
+                "phase_order": 1,
+                "code": "one",
+                "name": "One",
+                "delegate": {"agent": "reviewer", "hermes_profile": "shared-profile"},
+            },
+            {
+                "phase_order": 2,
+                "code": "two",
+                "name": "Two",
+                "delegate": {"agent": "coder", "hermes_profile": "shared-profile"},
+            },
+        ],
+    ],
+)
+def test_seed_rejects_ambiguous_agent_profile_ownership_before_writes(tmp_path, catalog):
+    path = tmp_path / "ambiguous-agents.json"
+    path.write_text(json.dumps(catalog), encoding="utf-8")
+    uow = SAUnitOfWork(f"sqlite:///{tmp_path / 'ambiguous-agents.db'}")
+    ensure_schema(uow.session.get_bind())
+
+    with pytest.raises(ValueError, match="профил"):
         ensure_phase_catalog(uow, path)
 
     assert uow.workflows.list() == []

@@ -15,10 +15,10 @@ class InstructionService:
         self._uow = uow
 
     def list_instructions(self, phase_id: int) -> list[dict[str, Any]]:
-        return list(self._uow.instructions.list(phase_id))
+        return list(self._uow.phase_instructions.list(phase_id))
 
     def get_instruction(self, instruction_id: int) -> dict[str, Any] | None:
-        return self._uow.instructions.get_by_id(instruction_id)
+        return self._uow.phase_instructions.get_by_id(instruction_id)
 
     def _lock_phase(self, phase_id: int) -> None:
         phase = self._uow.phases.get_by_id(phase_id)
@@ -31,12 +31,12 @@ class InstructionService:
             raise NotFoundError(f"Фаза {phase_id} не найдена")
 
     def _lock_instruction(self, instruction_id: int) -> dict[str, Any]:
-        initial = self._uow.instructions.get_by_id(instruction_id)
+        initial = self._uow.phase_instructions.get_by_id(instruction_id)
         if initial is None:
             raise NotFoundError(f"Инструкция {instruction_id} не найдена")
         phase_id = cast(int, initial["phase_id"])
         self._lock_phase(phase_id)
-        fresh = self._uow.instructions.get_by_id(instruction_id)
+        fresh = self._uow.phase_instructions.get_by_id(instruction_id)
         if fresh is None or fresh.get("phase_id") != phase_id:
             raise NotFoundError(f"Инструкция {instruction_id} не найдена")
         return fresh
@@ -44,7 +44,7 @@ class InstructionService:
     def create_instruction(self, phase_id: int, data: dict[str, Any]) -> dict[str, Any]:
         self._lock_phase(phase_id)
 
-        existing_rows = list(self._uow.instructions.list(phase_id))
+        existing_rows = list(self._uow.phase_instructions.list(phase_id))
         requested_step = data.get("step_num")
         if requested_step is None:
             requested_step = len(existing_rows) + 1
@@ -56,15 +56,15 @@ class InstructionService:
 
         create_data = {key: value for key, value in data.items() if key != "step_num"}
         try:
-            iid = self._uow.instructions.create(phase_id, create_data)
+            iid = self._uow.phase_instructions.create(phase_id, create_data)
             if insertion_step <= len(existing_rows):
                 ordered_ids = [cast(int, row["id"]) for row in existing_rows]
                 ordered_ids.insert(insertion_step - 1, iid)
-                self._uow.instructions.reorder(
+                self._uow.phase_instructions.reorder(
                     phase_id,
                     [(instruction_id, index) for index, instruction_id in enumerate(ordered_ids, 1)],
                 )
-            item = self._uow.instructions.get_by_id(iid)
+            item = self._uow.phase_instructions.get_by_id(iid)
             if not item:
                 raise RuntimeError("Не удалось создать инструкцию")
             self._uow.commit()
@@ -76,7 +76,7 @@ class InstructionService:
     def update_instruction(self, instruction_id: int, data: dict[str, Any]) -> None:
         self._lock_instruction(instruction_id)
         try:
-            self._uow.instructions.update(instruction_id, data)
+            self._uow.phase_instructions.update(instruction_id, data)
             self._uow.commit()
         except Exception:
             self._uow.rollback()
@@ -87,14 +87,14 @@ class InstructionService:
         item = self._lock_instruction(instruction_id)
         phase_id = cast(int, item["phase_id"])
         try:
-            self._uow.instructions.delete(instruction_id)
+            self._uow.phase_instructions.delete(instruction_id)
             remaining_ids = [
                 cast(int, row["id"])
-                for row in self._uow.instructions.list(phase_id)
+                for row in self._uow.phase_instructions.list(phase_id)
                 if row["id"] != instruction_id
             ]
             if remaining_ids:
-                self._uow.instructions.reorder(
+                self._uow.phase_instructions.reorder(
                     phase_id,
                     [(item_id, index) for index, item_id in enumerate(remaining_ids, 1)],
                 )
@@ -107,7 +107,7 @@ class InstructionService:
     def reorder_instructions(self, phase_id: int, instruction_ids: list[int]) -> None:
         """Persist a complete, unique instruction order for one locked phase."""
         self._lock_phase(phase_id)
-        existing_rows = list(self._uow.instructions.list(phase_id))
+        existing_rows = list(self._uow.phase_instructions.list(phase_id))
         existing_ids = [cast(int, row["id"]) for row in existing_rows]
         if not instruction_ids:
             raise ValueError("instruction_ids не может быть пустым")
@@ -124,7 +124,7 @@ class InstructionService:
             raise ConflictError("instruction_ids должен содержать полный набор инструкций одной фазы")
         try:
             orders = [(iid, idx + 1) for idx, iid in enumerate(instruction_ids)]
-            self._uow.instructions.reorder(phase_id, orders)
+            self._uow.phase_instructions.reorder(phase_id, orders)
             self._uow.commit()
         except Exception:
             self._uow.rollback()

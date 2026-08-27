@@ -146,7 +146,11 @@ def create_app() -> FastAPI:
         )
 
     @app.exception_handler(StarletteHTTPException)
-    async def _http_error(_request: Request, exc: StarletteHTTPException) -> JSONResponse:
+    async def _http_error(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+        path_parts = request.url.path.strip("/").split("/")
+        is_task_resource = len(path_parts) == 3 and path_parts[:2] == ["api", "tasks"] and bool(path_parts[2])
+        if exc.status_code == 404 and request.method == "DELETE" and is_task_resource:
+            return JSONResponse({"ok": False, "error": "Метод не поддерживается"}, status_code=405)
         if exc.status_code == 404:
             return JSONResponse({"ok": False, "error": "Ресурс не найден"}, status_code=404)
         if exc.status_code == 405:
@@ -174,7 +178,6 @@ def create_app() -> FastAPI:
     app.post("/api/phases", response_model=None)(api.api_phase_create)
     app.delete("/api/phases/{phase_id:int}", response_model=None)(api.api_phase_delete)
     app.get("/api/tasks", response_model=None)(api.api_tasks)
-    app.delete("/api/tasks/{task_key}", response_model=None)(api.api_task_delete)
     app.get("/api/workflows", response_model=None)(api.api_workflows)
     app.post("/api/workflows", response_model=None)(api.api_workflow_create)
     app.put("/api/workflows/{workflow_id}", response_model=None)(api.api_workflow_update)

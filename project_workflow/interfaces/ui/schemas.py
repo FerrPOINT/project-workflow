@@ -63,9 +63,8 @@ class PhaseCreate(StrictRequest):
     execution_type: Literal["sync", "parallel"] = Field(default="sync")
     agent_id: int | None = Field(default=None, gt=0, strict=True)
     code: str | None = Field(default=None)
-    parallel_with: str | None = Field(default=None)
-    rollback_target: str | None = Field(default=None)
-    next_recommendation: str | None = Field(default=None)
+    parallel_with_phase_id: int | None = Field(default=None, gt=0, strict=True)
+    rollback_target_phase_id: int | None = Field(default=None, gt=0, strict=True)
 
     @field_validator("name")
     @classmethod
@@ -76,11 +75,6 @@ class PhaseCreate(StrictRequest):
     @classmethod
     def _code_not_blank(cls, value: str | None) -> str | None:
         return _strip_nonblank(value, "code") if value is not None else None
-
-    @field_validator("parallel_with", "rollback_target")
-    @classmethod
-    def _links_not_blank(cls, value: str | None, info: Any) -> str | None:
-        return _strip_nonblank(value, info.field_name) if value is not None else None
 
     @model_validator(mode="after")
     def _resolve_insert_after(self) -> PhaseCreate:
@@ -125,9 +119,8 @@ class PhaseUpdate(StrictUpdateRequest):
 
     name: str | None = Field(default=None)
     description: str | None = Field(default=None)
-    parallel_with: str | None = Field(default=None)
-    rollback_target: str | None = Field(default=None)
-    next_recommendation: str | None = Field(default=None)
+    parallel_with_phase_id: int | None = Field(default=None, gt=0, strict=True)
+    rollback_target_phase_id: int | None = Field(default=None, gt=0, strict=True)
     agent_id: int | None = Field(default=None, gt=0, strict=True)
     execution_type: Literal["sync", "parallel"] | None = Field(default=None)
     instructions: list[PhaseInstructionItem] | None = Field(default=None)
@@ -138,11 +131,6 @@ class PhaseUpdate(StrictUpdateRequest):
     @classmethod
     def _name_not_blank(cls, value: str | None) -> str | None:
         return _strip_nonblank(value, "name") if value is not None else None
-
-    @field_validator("parallel_with", "rollback_target")
-    @classmethod
-    def _links_not_blank(cls, value: str | None, info: Any) -> str | None:
-        return _strip_nonblank(value, info.field_name) if value is not None else None
 
     @model_validator(mode="after")
     def _descriptions_must_be_unique(self) -> PhaseUpdate:
@@ -182,7 +170,7 @@ class ProjectCreate(StrictRequest):
     code: str = Field(..., min_length=1)
     name: str | None = Field(default=None)
     description: str | None = Field(default="")
-    workflow_id: int | None = Field(default=None, gt=0, strict=True)
+    workflow_id: int = Field(gt=0, strict=True)
     key_prefixes: list[str]
 
     @field_validator("code")

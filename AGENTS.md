@@ -51,7 +51,7 @@ Supervisor Engine перед commit выполнить следующие про
 
 6. **Readiness локального Compose**
    ```bash
-   docker compose up --build -d
+   docker compose up --build -d --wait
    curl --fail http://127.0.0.1:8812/health
    ```
    Ожидается HTTP `200` и `database=ok`, `schema=ok`.

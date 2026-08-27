@@ -11,14 +11,14 @@ PhaseT = TypeVar("PhaseT")
 def group_parallel_phases(
     phases: Sequence[PhaseT],
     *,
-    code_of: Callable[[PhaseT], str],
     execution_type_of: Callable[[PhaseT], str],
-    parallel_with_of: Callable[[PhaseT], str | None],
+    id_of: Callable[[PhaseT], int | str],
+    parallel_with_phase_id_of: Callable[[PhaseT], int | str | None],
 ) -> list[list[PhaseT]]:
     """Return ordered serial items and connected parallel components.
 
     Only phases inside the same continuous parallel run may be connected.
-    ``parallel_with`` is treated as an undirected edge so one-way catalog links
+    ``parallel_with_phase_id`` is treated as an undirected edge so one-way catalog links
     still describe the same runtime component.
     """
 
@@ -35,21 +35,21 @@ def group_parallel_phases(
         while run_end < len(phases) and execution_type_of(phases[run_end]) == "parallel":
             run_end += 1
         run = list(phases[index:run_end])
-        by_code = {code_of(item): item for item in run}
-        edges: dict[str, set[str]] = {code: set() for code in by_code}
+        by_id = {id_of(item): item for item in run}
+        edges: dict[int | str, set[int | str]] = {phase_id: set() for phase_id in by_id}
         for item in run:
-            code = code_of(item)
-            partner = parallel_with_of(item)
-            if partner and partner in by_code and partner != code:
-                edges[code].add(partner)
-                edges[partner].add(code)
+            phase_id = id_of(item)
+            partner = parallel_with_phase_id_of(item)
+            if partner is not None and partner in by_id and partner != phase_id:
+                edges[phase_id].add(partner)
+                edges[partner].add(phase_id)
 
-        assigned: set[str] = set()
+        assigned: set[int | str] = set()
         for item in run:
-            start = code_of(item)
+            start = id_of(item)
             if start in assigned:
                 continue
-            component: set[str] = set()
+            component: set[int | str] = set()
             pending = [start]
             while pending:
                 code = pending.pop()
@@ -58,7 +58,7 @@ def group_parallel_phases(
                 component.add(code)
                 pending.extend(edges.get(code, set()) - component)
             assigned.update(component)
-            result.append([candidate for candidate in run if code_of(candidate) in component])
+            result.append([candidate for candidate in run if id_of(candidate) in component])
 
         index = run_end
 

@@ -140,6 +140,10 @@ def setup_db():
         )
     else:
         default_project_id = default_project.id
+    implementation_phase = phase_by_code(uow, "8.IMPLEMENT", default_workflow.id)
+    assert implementation_phase is not None and implementation_phase.id is not None
+    intake_phase = phase_by_code(uow, "1.INTAKE", default_workflow.id)
+    assert intake_phase is not None and intake_phase.id is not None
     # Ensure sample task exists for task detail tests
     if not uow.tasks.get_by_key("RUN-247"):
         uow.tasks.create(
@@ -149,7 +153,7 @@ def setup_db():
                 "task_key": "RUN-247",
                 "title": "Добавить E2E тесты для workflow",
                 "status": "active",
-                "current_phase": "8.IMPLEMENT",
+                "current_phase_id": implementation_phase.id,
             }
         )
         uow.commit()
@@ -162,15 +166,17 @@ def setup_db():
                 "project_id": default_project_id,
                 "title": "Добавить E2E тесты для workflow",
                 "status": "active",
-                "current_phase": "8.IMPLEMENT",
+                "current_phase_id": implementation_phase.id,
             },
         )
         uow.commit()
     sample_task = uow.tasks.get_by_key("RUN-247")
     assert sample_task is not None
     with sqlite3.connect(str(uow._session.bind.url).replace("sqlite:///", "")) as conn:
-        conn.execute("DELETE FROM task_history WHERE task_id = ?", (sample_task.id,))
+        conn.execute("DELETE FROM task_phase_events WHERE task_id = ?", (sample_task.id,))
         conn.commit()
+    uow.tasks.record_phase_event(sample_task.id, implementation_phase.id, "entered")
+    uow.commit()
     project = uow.projects.get_by_code("UITEST")
     if not project:
         project_id = uow.projects.create(
@@ -193,7 +199,7 @@ def setup_db():
                 "task_key": "UITEST-401",
                 "title": "Проверка project-aware UI",
                 "status": "active",
-                "current_phase": "1.INTAKE",
+                "current_phase_id": intake_phase.id,
             }
         )
     else:
@@ -205,7 +211,7 @@ def setup_db():
                 "project_id": project_id,
                 "title": "Проверка project-aware UI",
                 "status": "active",
-                "current_phase": "1.INTAKE",
+                "current_phase_id": intake_phase.id,
             },
         )
     if not any(agent.name == "reviewer" for agent in uow.agents.list()):
@@ -479,7 +485,7 @@ class TestPhasesPage:
             phase = _as_dict(uow.phases.get_by_id(int(data["phase_id"])))
             assert phase is not None
             assert phase["name"] == "Новая фаза"
-            assert phase["is_seed_managed"] == 0
+            assert "is_seed_managed" not in phase
             assert phase["phase_order"] == 2
         finally:
             for pid in new_phase_ids:
@@ -488,7 +494,7 @@ class TestPhasesPage:
             phases = [p.to_dict() for p in uow.phases.list(workflow_id=workflow["id"])]
             seed_phases_data = db_schema.load_phases_from_seed()
             seed_codes = {p.code for p in seed_phases_data}
-            seed_phases = [p for p in phases if p["code"] in seed_codes or p.get("is_seed_managed")]
+            seed_phases = [p for p in phases if p["code"] in seed_codes]
             extra_phases = [p for p in phases if p not in seed_phases]
             order_index = {phase.code: idx for idx, phase in enumerate(seed_phases_data)}
 
@@ -671,9 +677,9 @@ class TestPhasesPage:
         from project_workflow.interfaces.ui import _build_parallel_phase_blocks
 
         phases = [
-            {"code": "4.5", "execution_type": "parallel", "parallel_with": "5", "phase_num": 16},
-            {"code": "5", "execution_type": "parallel", "parallel_with": None, "phase_num": 17},
-            {"code": "5.5", "execution_type": "sync", "parallel_with": None, "phase_num": 18},
+            {"id": 1, "code": "4.5", "execution_type": "parallel", "parallel_with_phase_id": 2},
+            {"id": 2, "code": "5", "execution_type": "parallel", "parallel_with_phase_id": None},
+            {"id": 3, "code": "5.5", "execution_type": "sync", "parallel_with_phase_id": None},
         ]
 
         blocks = _build_parallel_phase_blocks(phases)
@@ -687,9 +693,9 @@ class TestPhasesPage:
         from project_workflow.interfaces.ui import _build_parallel_phase_blocks
 
         phases = [
-            {"code": "4.5", "execution_type": "sync", "parallel_with": "5", "phase_num": 16},
-            {"code": "5", "execution_type": "sync", "parallel_with": "4.5", "phase_num": 17},
-            {"code": "5.5", "execution_type": "sync", "parallel_with": None, "phase_num": 18},
+            {"id": 1, "code": "4.5", "execution_type": "sync", "parallel_with_phase_id": 2},
+            {"id": 2, "code": "5", "execution_type": "sync", "parallel_with_phase_id": 1},
+            {"id": 3, "code": "5.5", "execution_type": "sync", "parallel_with_phase_id": None},
         ]
 
         blocks = _build_parallel_phase_blocks(phases)
@@ -1004,10 +1010,8 @@ class TestPhaseUpdate:
             assert instructions[0]["skills"] == expected_skills
             assert all(isinstance(item, str) for item in instructions[0]["skills"])
 
-            raw_db = list(ui_app_state.get_db().instructions.list(_phase_id("1.INTAKE")))
-            skills_raw = raw_db[0]["skills"]
-            parsed = json.loads(skills_raw) if isinstance(skills_raw, str) else skills_raw
-            assert parsed == expected_skills
+            raw_db = list(ui_app_state.get_db().phase_instructions.list(_phase_id("1.INTAKE")))
+            assert raw_db[0]["skills"] == expected_skills
         finally:
             client.put(_phase_api_path("1.INTAKE"), json=restore_payload)
 
@@ -1038,7 +1042,7 @@ class TestPhaseUpdate:
         uow = ui_app_state.get_db()
         phase_id = _phase_id("7.PLAN_GATE")
         before_counts = {
-            "instructions": len(list(uow.instructions.list(phase_id))),
+            "instructions": len(list(uow.phase_instructions.list(phase_id))),
             "checks": len(list(uow.phases.get_checks(phase_id))),
             "evidence": len(list(uow.phases.get_evidence(phase_id))),
         }
@@ -1050,7 +1054,7 @@ class TestPhaseUpdate:
             assert resp.status_code == 200
 
             after_counts = {
-                "instructions": len(list(uow.instructions.list(_phase_id("7.PLAN_GATE")))),
+                "instructions": len(list(uow.phase_instructions.list(_phase_id("7.PLAN_GATE")))),
                 "checks": len(list(uow.phases.get_checks(_phase_id("7.PLAN_GATE")))),
                 "evidence": len(list(uow.phases.get_evidence(_phase_id("7.PLAN_GATE")))),
             }
@@ -1185,7 +1189,9 @@ class TestTaskDetail:
         uow = ui_app_state.get_db()
         task = _as_dict(uow.tasks.get_by_key("RUN-247"))
         assert task is not None
-        uow.tasks.update(task["id"], {"current_phase": "1.INTAKE"})
+        intake_id = _phase_id("1.INTAKE")
+        uow.tasks.update(task["id"], {"current_phase_id": intake_id})
+        uow.tasks.record_phase_event(task["id"], intake_id, "entered")
         uow.commit()
         response = client.get("/task/RUN-247")
         assert response.status_code == 200
@@ -1209,15 +1215,15 @@ class TestTaskDetail:
                     "task_key": task_key,
                     "title": "Проверка истории фаз",
                     "status": "active",
-                    "current_phase": "4.START",
+                    "current_phase_id": _phase_id("4.START"),
                 }
             )
             uow.commit()
             task = _as_dict(uow.tasks.get_by_id(task_id))
         assert task is not None
-        uow.tasks.update(task["id"], {"current_phase": "4.START"})
-        uow.tasks.add_history(task["id"], _phase_id("1.INTAKE"), "done")
-        uow.tasks.add_history(task["id"], _phase_id("4.START"), "pending")
+        uow.tasks.update(task["id"], {"current_phase_id": _phase_id("4.START")})
+        uow.tasks.record_phase_event(task["id"], _phase_id("1.INTAKE"), "completed")
+        uow.tasks.record_phase_event(task["id"], _phase_id("4.START"), "entered")
         uow.commit()
 
         response = client.get(f"/task/{task_key}")
@@ -1241,7 +1247,7 @@ class TestTaskDetail:
         task = next(task for task in response.json()["tasks"] if task["task_key"] == "UITEST-401")
         assert task["current_phase_name"] == "Приём задачи"
 
-    def test_task_detail_marks_text_phase_code_as_current(self):
+    def test_task_detail_marks_phase_id_as_current(self):
         uow = ui_app_state.get_db()
         task_key = "UITEST-402"
         task = _as_dict(uow.tasks.get_by_key(task_key))
@@ -1254,15 +1260,15 @@ class TestTaskDetail:
                     "task_key": task_key,
                     "title": "Проверка текстового кода фазы",
                     "status": "active",
-                    "current_phase": "4.START",
+                    "current_phase_id": _phase_id("4.START"),
                 }
             )
             uow.commit()
             task = _as_dict(uow.tasks.get_by_id(task_id))
         assert task is not None
-        uow.tasks.update(task["id"], {"current_phase": "4.START"})
-        uow.tasks.add_history(task["id"], _phase_id("1.INTAKE"), "done")
-        uow.tasks.add_history(task["id"], _phase_id("4.START"), "pending")
+        uow.tasks.update(task["id"], {"current_phase_id": _phase_id("4.START")})
+        uow.tasks.record_phase_event(task["id"], _phase_id("1.INTAKE"), "completed")
+        uow.tasks.record_phase_event(task["id"], _phase_id("4.START"), "entered")
         uow.commit()
 
         response = client.get(f"/task/{task_key}")
@@ -1307,12 +1313,14 @@ class TestProjectsPage:
         assert "source of truth для проектных префиксов" not in response.text
 
     def test_projects_api_create_update_and_delete(self):
+        workflow = _workflow_row("default")
         create = client.post(
             "/api/projects",
             json={
                 "code": "APICRUD",
                 "name": "API CRUD Project",
                 "key_prefixes": ["APICRUD"],
+                "workflow_id": workflow["id"],
             },
         )
         assert create.status_code == 200
@@ -1638,15 +1646,22 @@ class TestUiNetworkFailures:
         assert response.text.count(".catch(showRequestError)") >= minimum_handlers
         assert "Не удалось связаться с сервером" in response.text
 
-    def test_task_delete_reports_http_and_network_errors_without_reloading(self):
+    def test_task_deletion_is_absent_from_ui_and_routes(self):
         response = client.get("/tasks")
 
         assert response.status_code == 200
-        catch_body = response.text.rsplit(".catch(function()", 1)[1].split("});", 1)[0]
-        assert "showRequestError();" in catch_body
-        assert "window.location.reload();" not in response.text
-        assert "const data = await resp.json().catch" in response.text
-        assert "showToast(data.error || 'Не удалось удалить задачу', 'error');" in response.text
+        assert "deleteTask" not in response.text
+        assert "Удалить задачу" not in response.text
+        delete_response = client.delete("/api/tasks/RUN-1")
+        assert delete_response.status_code == 405
+        assert delete_response.json() == {"ok": False, "error": "Метод не поддерживается"}
+        unknown_nested = client.delete("/api/tasks/RUN-1/unknown")
+        assert unknown_nested.status_code == 404
+        assert unknown_nested.json() == {"ok": False, "error": "Ресурс не найден"}
+        assert not any(
+            route.path == "/api/tasks/{task_key}" and "DELETE" in (route.methods or set())
+            for route in app.routes
+        )
 
     def test_async_editors_handle_rejection_and_restore_optimistic_deletion(self):
         phase = _phase_row("1.INTAKE")

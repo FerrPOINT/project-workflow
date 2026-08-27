@@ -75,8 +75,8 @@
     "name": "Parallel Phase A",
     "description": "Параллельная работа A.",
     "execution_type": "parallel",
-    "parallel_with": "manual.parallel-b",
-    "rollback_target": "manual.plan",
+    "parallel_with_phase_code": "manual.parallel-b",
+    "rollback_target_phase_code": "manual.plan",
     "instructions": [
       {
         "step_num": 1,
@@ -112,7 +112,7 @@
     "name": "Parallel Phase B",
     "description": "Параллельная работа B.",
     "execution_type": "parallel",
-    "parallel_with": "manual.parallel-a",
+    "parallel_with_phase_code": "manual.parallel-a",
     "instructions": [
       {
         "step_num": 1,
@@ -259,7 +259,7 @@
         "description": "Integration log"
       }
     ],
-    "rollback_target": "manual.seq-instr"
+    "rollback_target_phase_code": "manual.seq-instr"
   },
   {
     "phase_order": 7,
@@ -283,6 +283,9 @@
         "description": "Delegation record"
       }
     ],
-    "is_delegated": true
+    "delegate": {
+      "agent": "Старший ревьюер",
+      "hermes_profile": "senior-reviewer"
+    }
   }
 ]

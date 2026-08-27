@@ -17,7 +17,14 @@ def _node(
     parallel_with: str | None = None,
     rollback_target: str | None = None,
 ) -> PhaseGraphNode:
-    return PhaseGraphNode(code, order, execution_type, parallel_with, rollback_target)
+    return PhaseGraphNode(
+        code=code,
+        phase_order=order,
+        graph_id=code,
+        execution_type=execution_type,
+        parallel_with_phase_id=parallel_with,
+        rollback_target_phase_id=rollback_target,
+    )
 
 
 def test_isolated_parallel_and_one_way_contiguous_link_are_valid():

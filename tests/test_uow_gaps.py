@@ -24,7 +24,7 @@ class TestUowEdgeCases:
         assert uow._session is not None
         uow.close()
 
-    def test_create_supervisor_run_with_positional_dict(self):
+    def test_record_step_uses_keyword_only_contract(self):
         uow = _fresh_uow()
         with uow:
             project = uow.projects.get_by_code(config.DEFAULT_PROJECT_CODE)
@@ -37,22 +37,21 @@ class TestUowEdgeCases:
                     "task_key": "RUN-UOW-1",
                     "title": "t",
                     "status": "active",
-                    "current_phase": phase.code,
+                    "current_phase_id": phase.id,
                 }
             )
             uow.commit()
 
-        run_id = uow.create_supervisor_run(
-            {
-                "task_id": task_id,
-                "phase_id": phase.id,
-                "verdict": "pass",
-                "report": "r",
-                "covered": [],
-                "missing": [],
-                "blockers": [],
-                "response": {},
-            }
+        run_id = uow.record_step(
+            task_id=task_id,
+            phase_id=phase.id,
+            verdict="pass",
+            worker_report="r",
+            covered_item_ids=[],
+            missing_item_ids=[],
+            blocker_messages=[],
+            evaluation_snapshot={},
+            supervisor_response={},
         )
         assert isinstance(run_id, int)
         uow.close()
@@ -68,7 +67,7 @@ class TestUowEdgeCases:
                 {
                     "project_id": project.id,
                     "task_key": "RUN-UOW-MISSING-WORKFLOW",
-                    "current_phase": phase.code,
+                    "current_phase_id": phase.id,
                 }
             )
 

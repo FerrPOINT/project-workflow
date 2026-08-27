@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
+from sqlalchemy import event
 
 pytestmark = [pytest.mark.unit]
 
@@ -16,6 +17,7 @@ from project_workflow.infrastructure.db.schema import (
 )
 from project_workflow.infrastructure.db.session import ensure_schema
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from project_workflow.infrastructure.db.uow_bootstrap import bootstrap_default_project
 from project_workflow.supervisor.models import Phase
 from tests._db_helpers import phase_by_code
 
@@ -53,13 +55,43 @@ class TestEnsurePhaseCatalog:
             for phase in phases
             if phase.delegate
         )
-        assert all(phase.is_delegated for phase in phases)
 
     def test_idempotent_rerun(self, fresh_db):
         ensure_phase_catalog(fresh_db)
         first_count = len(load_phases_from_db(fresh_db))
         ensure_phase_catalog(fresh_db)
         assert len(load_phases_from_db(fresh_db)) == first_count
+
+    def test_unrelated_workflow_does_not_suppress_default_catalog(self, fresh_db):
+        custom_id = fresh_db.workflows.create({"name": "Custom", "is_default": False})
+        fresh_db.phases.create(
+            {
+                "workflow_id": custom_id,
+                "code": "custom.start",
+                "name": "Custom start",
+                "phase_order": 1,
+            }
+        )
+        fresh_db.commit()
+
+        ensure_phase_catalog(fresh_db)
+
+        default_workflow = fresh_db.workflows.get_default()
+        assert default_workflow is not None
+        assert [phase.code for phase in load_phases_from_db(fresh_db, default_workflow.id)] == [
+            phase.code for phase in load_phases_from_seed()
+        ]
+        assert fresh_db.phases.get_by_code(custom_id, "custom.start") is not None
+
+    def test_default_project_requires_seeded_catalog(self, fresh_db):
+        with pytest.raises(ValueError, match="Начальный воркфлоу не загружен"):
+            bootstrap_default_project(fresh_db)
+        assert fresh_db.projects.get_by_code("RUN") is None
+
+        fresh_db.workflows.ensure_default_exists("Empty default")
+        with pytest.raises(ValueError, match="не содержит фаз"):
+            bootstrap_default_project(fresh_db)
+        assert fresh_db.projects.get_by_code("RUN") is None
 
     def test_existing_catalog_is_not_overwritten_after_restart(self, fresh_db, tmp_path):
         seed_path = tmp_path / "seed.json"
@@ -127,9 +159,7 @@ class TestParseSeedItem:
 class TestReadSeedItems:
     def test_read_seed_items(self, fresh_db, tmp_path):
         seed_path = tmp_path / "seed.json"
-        seed_path.write_text(
-            json.dumps([{"phase_order": 1, "code": "1", "name": "One"}], ensure_ascii=False)
-        )
+        seed_path.write_text(json.dumps([{"phase_order": 1, "code": "1", "name": "One"}], ensure_ascii=False))
         items = load_phases_from_seed(seed_path)
         assert len(items) == 1
         assert items[0].code == "1"
@@ -174,6 +204,25 @@ class TestLoadPhases:
         ensure_phase_catalog(fresh_db)
         phases = load_phases_from_db(fresh_db)
         assert len(phases) > 0
+
+    def test_catalog_load_uses_a_bounded_number_of_queries(self, fresh_db):
+        ensure_phase_catalog(fresh_db)
+        fresh_db.commit()
+        statements: list[str] = []
+        engine = fresh_db.session.get_bind()
+
+        def capture_statement(_conn, _cursor, statement, _parameters, _context, _executemany):
+            if statement.lstrip().upper().startswith("SELECT"):
+                statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", capture_statement)
+        try:
+            phases = load_phases_from_db(fresh_db)
+        finally:
+            event.remove(engine, "before_cursor_execute", capture_statement)
+
+        assert len(phases) == 19
+        assert len(statements) <= 5
 
     def test_load_phase_by_scoped_code(self, fresh_db):
         ensure_phase_catalog(fresh_db)

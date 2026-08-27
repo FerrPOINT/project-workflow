@@ -36,7 +36,7 @@ docker compose exec -T db psql \
   -U project_workflow -d project_workflow -v ON_ERROR_STOP=1 \
   -c 'DROP SCHEMA IF EXISTS project_workflow CASCADE;'
 docker compose run --rm migrate
-docker compose up -d api
+docker compose up -d --wait api
 ```
 
 Для внешнего PostgreSQL выполните эквивалентный `DROP SCHEMA` только после
@@ -52,7 +52,7 @@ docker compose up -d api
 docker compose ls
 docker compose config --volumes
 docker compose down --volumes
-docker compose up --build -d
+docker compose up --build -d --wait
 ```
 
 В текущем Compose определён один volume `postgres_data`. Если конфигурация была

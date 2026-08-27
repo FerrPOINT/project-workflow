@@ -46,7 +46,7 @@ def format_result(result: dict) -> str:
 
     lines: list[str] = []
 
-    if is_pass and not result.get("next_phase"):
+    if is_pass and not result.get("next_phase_code"):
         lines.append("Воркфлоу завершён: задача уже прошла все фазы.")
 
     if verdict == "BLOCKED":
@@ -59,7 +59,7 @@ def format_result(result: dict) -> str:
             lines.append(f"  · {reason}")
 
     if verdict == "ROLLBACK":
-        target = result.get("rollback_target") or result.get("next_phase")
+        target = result.get("rollback_phase_code") or result.get("next_phase_code")
         if target:
             instructions.insert(0, f"Вернись к шагу: {target}")
     elif verdict == "DELEGATE":
@@ -68,7 +68,7 @@ def format_result(result: dict) -> str:
 
     # PASS: first instruction becomes the actionable next step.
     if is_pass:
-        next_name = result.get("next_phase_name") or result.get("next_phase") or ""
+        next_name = result.get("next_phase_name") or result.get("next_phase_code") or ""
         if next_name and instructions:
             instructions.insert(0, f"Перейди к шагу: {next_name}")
         elif next_name:
@@ -113,8 +113,7 @@ def _flatten_parallel_contract(
         name = detail.get("phase_name") or detail.get("phase_code") or "-"
         agent = detail.get("delegate_agent") or "не задан"
         profile = detail.get("hermes_profile")
-        toolsets = ", ".join(detail.get("delegate_toolsets") or [])
-        partner_code = detail.get("parallel_with") or "-"
+        partner_code = detail.get("parallel_with_phase_code") or "-"
         partner = next(
             (
                 d.get("phase_name") or d.get("phase_code") or partner_code
@@ -126,7 +125,6 @@ def _flatten_parallel_contract(
         instructions.append(
             f"{name} — параллельно с {partner}, агент: {agent}"
             + (f" | профиль Hermes: {profile}" if profile else "")
-            + (f" | наборы инструментов: {toolsets}" if toolsets else "")
         )
         for item in detail.get("instructions", []) or []:
             instructions.append(f"  {item}")

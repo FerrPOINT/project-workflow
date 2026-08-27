@@ -43,11 +43,11 @@ class PhaseService:
         return fresh.id
 
     def _replace_instructions(self, phase_id: int, items: list[dict[str, Any]]) -> list[int]:
-        self._uow.instructions.delete_for_phase(phase_id)
+        self._uow.phase_instructions.delete_for_phase(phase_id)
         ids: list[int] = []
         for idx, item in enumerate(items, 1):
             ids.append(
-                self._uow.instructions.create(
+                self._uow.phase_instructions.create(
                     phase_id,
                     {
                         "step_num": idx,
@@ -80,7 +80,7 @@ class PhaseService:
             return {}
         phase_dict = phase.to_dict()
         instructions = []
-        for item in self._uow.instructions.list(resolved):
+        for item in self._uow.phase_instructions.list(resolved):
             normalized = dict(item)
             normalized["skills"] = self.normalize_skills(item.get("skills"))
             instructions.append(normalized)

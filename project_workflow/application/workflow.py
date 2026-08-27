@@ -24,14 +24,11 @@ class WorkflowService:
             "code": f"wf-{wid}-default",
             "name": self.DEFAULT_PHASE_NAME,
             "description": "",
-            "min_time_min": 0,
             "phase_order": 1,
             "agent_id": None,
-            "next_recommendation": None,
-            "parallel_with": None,
-            "rollback_target": None,
+            "parallel_with_phase_id": None,
+            "rollback_target_phase_id": None,
             "execution_type": "sync",
-            "is_seed_managed": False,
         }
         self._uow.phases.create(default_phase)
         workflow = self._uow.workflows.get_by_id(wid)

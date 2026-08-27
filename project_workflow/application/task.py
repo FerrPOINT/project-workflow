@@ -43,23 +43,25 @@ class TaskService:
             raise ConflictError(validated_key.error_message or f"Недопустимый ключ задачи {task_key!r}")
         task_key = validated_key.normalized or task_key
         payload["task_key"] = task_key
-        raw_current_phase = payload.get("current_phase")
-        if raw_current_phase in (None, ""):
-            phases = list(self._uow.phases.list(workflow_id=locked_project.workflow_id))
-            if not phases:
-                raise ValueError(f"Воркфлоу {locked_project.workflow_id} не содержит фаз")
-            current_phase = phases[0].code
+        phases = list(self._uow.phases.list(workflow_id=locked_project.workflow_id))
+        if not phases:
+            raise ValueError(f"Воркфлоу {locked_project.workflow_id} не содержит фаз")
+        raw_current_phase_id = payload.get("current_phase_id")
+        if raw_current_phase_id is None:
+            current_phase_id = phases[0].id
+        elif (
+            not isinstance(raw_current_phase_id, int)
+            or isinstance(raw_current_phase_id, bool)
+            or raw_current_phase_id <= 0
+        ):
+            raise ValueError("current_phase_id должен быть положительным целым числом")
         else:
-            if not isinstance(raw_current_phase, str):
-                raise ValueError("current_phase должен быть строковым кодом фазы")
-            current_phase = raw_current_phase.strip()
-            if not current_phase:
-                raise ValueError("current_phase должен быть непустым кодом фазы")
-        payload["current_phase"] = current_phase
-        if self._uow.phases.get_by_code(locked_project.workflow_id, current_phase) is None:
+            current_phase_id = raw_current_phase_id
+        if current_phase_id is None or not any(phase.id == current_phase_id for phase in phases):
             raise ValueError(
-                f"Фаза {current_phase!r} не найдена в воркфлоу {locked_project.workflow_id}"
+                f"Фаза {current_phase_id!r} не найдена в воркфлоу {locked_project.workflow_id}"
             )
+        payload["current_phase_id"] = current_phase_id
         if self._uow.tasks.get_by_key(task_key) is not None:
             raise ConflictError(f"Задача {task_key!r} уже существует")
         tid = self._uow.tasks.create(payload)
@@ -79,29 +81,5 @@ class TaskService:
 
     def list_tasks(self) -> list[dict[str, Any]]:
         return [t.to_dict() for t in self._uow.tasks.list()]
-
-    def delete_task(self, task_id: int) -> None:
-        task = self._uow.tasks.get_by_id(task_id)
-        if task is None:
-            raise NotFoundError(f"Задача {task_id} не найдена")
-        project = self._uow.projects.get_by_id(task.project_id)
-        if project is None:
-            raise NotFoundError(f"Проект {task.project_id} не найден")
-        if self._uow.workflows.lock(project.workflow_id) is None:
-            raise NotFoundError(f"Воркфлоу {project.workflow_id} не найден")
-        locked_project = self._uow.projects.lock(task.project_id)
-        if locked_project is None:
-            raise NotFoundError(f"Проект {task.project_id} не найден")
-        if locked_project.workflow_id != project.workflow_id:
-            raise ConflictError("Воркфлоу проекта изменился во время удаления задачи")
-        locked_task = self._uow.tasks.lock(task_id)
-        if locked_task is None:
-            raise NotFoundError(f"Задача {task_id} не найдена")
-        if locked_task.project_id != locked_project.id:
-            raise ConflictError("Проект задачи изменился во время удаления")
-        self._uow.tasks.delete(task_id)
-        self._uow.commit()
-        return None
-
 
 __all__ = ["TaskService"]

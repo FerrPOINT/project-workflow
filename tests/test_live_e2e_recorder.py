@@ -39,7 +39,7 @@ def _cycle(
             "phase": phase,
             "payload": {
                 "ok": True,
-                "phase": phase,
+                "phase_code": phase,
                 "prompt": "Параллельная группа: 0.6 + 1\nИнструкции:\n- Провести исследование",
             },
         },
@@ -69,9 +69,9 @@ def _cycle(
             "exit_code": 0,
             "payload": {
                 "verdict": "PASS",
-                "phase": phase,
-                "current_phase": phase,
-                "next_phase": "1.5",
+                "phase_code": phase,
+                "current_phase_code": phase,
+                "next_phase_code": "1.5",
                 "covered": ["check"],
                 "missing": [],
                 "blockers": [],
@@ -151,7 +151,9 @@ def test_supervisor_subprocess_forces_utf8_without_mutating_parent_environment(m
     assert os.environ["PYTHONIOENCODING"] == "cp1251"
 
 
-@pytest.mark.parametrize("field", ["phase", "current_phase", "verdict", "next_phase"])
+@pytest.mark.parametrize(
+    "field", ["phase_code", "current_phase_code", "verdict", "next_phase_code"]
+)
 def test_validate_transcript_rejects_missing_evaluator_transition_field(field):
     events = [_session(), *_cycle()]
     events[-2]["payload"].pop(field)
@@ -160,7 +162,7 @@ def test_validate_transcript_rejects_missing_evaluator_transition_field(field):
         recorder.validate_transcript(events, task="RUN-1")
 
 
-@pytest.mark.parametrize("field", ["phase", "current_phase"])
+@pytest.mark.parametrize("field", ["phase_code", "current_phase_code"])
 def test_validate_transcript_rejects_evaluator_for_another_phase(field):
     events = [_session(), *_cycle()]
     events[-2]["payload"][field] = "other"
@@ -294,7 +296,7 @@ def test_validate_open_cycle_rejects_action_for_another_phase():
 
 def test_validate_transcript_rejects_old_or_foreign_evidence_reference():
     first = _cycle("-1", action_id="A-001")
-    first[-2]["payload"]["next_phase"] = "0.6"
+    first[-2]["payload"]["next_phase_code"] = "0.6"
     first[-1]["to_phase"] = "0.6"
     second = _cycle("0.6", action_id="A-002", evidence_refs=["A-001"])
 
@@ -304,7 +306,7 @@ def test_validate_transcript_rejects_old_or_foreign_evidence_reference():
 
 def test_validate_transcript_rejects_duplicate_action_ids():
     first = _cycle("-1", action_id="A-001")
-    first[-2]["payload"]["next_phase"] = "0.6"
+    first[-2]["payload"]["next_phase_code"] = "0.6"
     first[-1]["to_phase"] = "0.6"
     second = _cycle("0.6", action_id="A-001")
 
@@ -392,7 +394,12 @@ def test_submit_does_not_record_cycle_when_supervisor_fails(tmp_path, monkeypatc
     _write_events(tmp_path, events)
     report = tmp_path / "report.md"
     report.write_text("Выполнено.\nEvidence-Refs: A-001\n", encoding="utf-8")
-    payload = {"phase": "0.6", "current_phase": "0.6", "verdict": "BLOCKED", "next_phase": "0.6"}
+    payload = {
+        "phase_code": "0.6",
+        "current_phase_code": "0.6",
+        "verdict": "BLOCKED",
+        "next_phase_code": "0.6",
+    }
     monkeypatch.setattr(recorder, "run_supervisor", lambda *_args: (1, payload, "provider failed"))
     args = type(
         "Args",
@@ -563,7 +570,7 @@ def test_log_validation_accepts_redaction_that_expands_a_truncated_prefix(tmp_pa
 
 def test_terminal_pass_summary_reports_done_status():
     events = [_session(), *_cycle()]
-    events[-2]["payload"]["next_phase"] = None
+    events[-2]["payload"]["next_phase_code"] = None
     events[-1]["to_phase"] = None
 
     cycles = recorder.validate_transcript(events, task="RUN-1", expected_cycles=1)

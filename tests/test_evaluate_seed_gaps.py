@@ -19,17 +19,12 @@ def _phase(**overrides) -> Phase:
         code="1",
         name="T",
         description="",
-        min_time_min=0,
-        is_blocker=False,
-        is_delegated=False,
-        is_critic=False,
         checks=[],
         evidence=[],
         instructions=[],
         delegate=None,
-        next_recommendation="",
-        parallel_with=None,
-        rollback_target=None,
+        parallel_with_phase_code=None,
+        rollback_target_phase_code=None,
         execution_type="sync",
     )
     defaults.update(overrides)
@@ -63,12 +58,18 @@ class TestEvaluateGaps:
     def _engine(self):
         engine = MagicMock()
         engine.task_key = "RUN-1"
-        engine.task = {"id": 1, "project_id": 1, "current_phase": "1", "status": "active"}
+        engine.task = {
+            "id": 1,
+            "project_id": 1,
+            "current_phase_id": 1,
+            "current_phase_code": "1",
+            "status": "active",
+        }
         engine.workflow_id = 1
-        engine.current_phase = "1"
+        engine.current_phase_code = "1"
         engine._resolve_transition.return_value = (None, None, None)
-        engine.db.supervisor_runs.list.return_value = []
-        engine.db.supervisor_runs.get_by_fingerprint.return_value = None
+        engine.db.step_history.list.return_value = []
+        engine.db.step_history.get_by_fingerprint.return_value = None
         return engine
 
     @staticmethod
@@ -96,13 +97,13 @@ class TestEvaluateGaps:
         mock_parser.parse.return_value = MockLlmResponse(verdict="ROLLBACK")
         mock_client.return_value.chat.return_value = {}
         engine = self._engine()
-        ph = _phase(rollback_target="0")
+        ph = _phase(rollback_target_phase_code="0")
         rollback_phase = _phase(id=2, code="0", name="Previous")
         self._set_phases(engine, ph, rollback_phase)
         engine._resolve_transition.return_value = (None, None, "0")
         result = evaluate_llm_report("rollback", ph, engine)
         assert result["verdict"] == "ROLLBACK"
-        assert result["rollback_target"] == "0"
+        assert result["rollback_phase_code"] == "0"
 
     @patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient")
     @patch("project_workflow.supervisor.evaluate.ResponseParser")
@@ -115,4 +116,4 @@ class TestEvaluateGaps:
         self._set_phases(engine, ph, next_ph)
         engine._resolve_transition.return_value = ("2", "Next", None)
         result = evaluate_llm_report("ok", ph, engine)
-        assert result["next_phase"] == "2"
+        assert result["next_phase_code"] == "2"

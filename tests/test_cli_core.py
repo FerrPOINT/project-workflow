@@ -108,54 +108,25 @@ def test_missing_database_configuration_returns_json_blocked(monkeypatch):
     assert "DATABASE_URL" in payload["message"]
 
 
-@pytest.mark.parametrize("catalog_state", ["empty", "unknown-phase"])
-def test_catalog_errors_are_fail_closed_without_llm_or_audit(catalog_state):
+def test_task_snapshot_cannot_reference_unknown_phase():
+    from sqlalchemy.exc import IntegrityError
+
     uow = SAUnitOfWork()
-    if catalog_state == "empty":
-        workflow_id = uow.workflows.create({"name": "Empty workflow"})
-        project_id = uow.projects.create(
-            {"workflow_id": workflow_id, "code": "EMPTY", "name": "Empty", "key_prefixes": ["EMPTY"]}
-        )
-        task_key = "EMPTY-1"
-        task_id = uow.tasks.create(
-            {
-                "project_id": project_id,
-                "workflow_id": workflow_id,
-                "task_key": task_key,
-                "current_phase": "missing",
-                "status": "active",
-            }
-        )
-    else:
-        project = uow.projects.get_by_code("RUN")
-        task_key = "RUN-991"
-        task_id = uow.tasks.create(
+    project = uow.projects.get_by_code("RUN")
+    assert project is not None
+    with pytest.raises(IntegrityError):
+        uow.tasks.create(
             {
                 "project_id": project.id,
                 "workflow_id": project.workflow_id,
-                "task_key": task_key,
-                "current_phase": "missing",
+                "task_key": "RUN-991",
+                "current_phase_id": 999999,
                 "status": "active",
             }
         )
-    uow.commit()
-
-    runner = CliRunner()
-    with patch(
-        "project_workflow.infrastructure.llm.OpenAICompatibleClient.chat",
-        side_effect=AssertionError("provider must not be called"),
-    ) as provider:
-        result = runner.invoke(runtime_cli, ["--json", "step", "--task", task_key, "--report", "report"])
-
-    assert result.exit_code == 1
-    payload = json.loads(result.output)
-    assert payload["verdict"] == "BLOCKED"
-    assert payload["retryable"] is True
-    assert payload["phase"] == "missing"
-    provider.assert_not_called()
-    assert uow.supervisor_runs.list(task_id=task_id) == []
-    assert uow.tasks.get_history(task_id) == []
-    assert uow.tasks.get_by_id(task_id).current_phase == "missing"
+        uow.commit()
+    uow.rollback()
+    assert uow.tasks.get_by_key("RUN-991") is None
     uow.close()
 
 

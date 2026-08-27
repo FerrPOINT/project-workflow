@@ -26,7 +26,6 @@ class PhaseInstruction:
     """Инструкция для исполнителя текущей CLI-фазы."""
 
     step: str = ""
-    example: str | None = None
     execution_type: str = "sync"
     skills: list[str] = field(default_factory=list)
     id: int | None = None
@@ -39,11 +38,6 @@ class PhaseDelegate:
 
     agent: str = ""
     hermes_profile: str | None = None
-    prompt_template: str = ""
-    context: list[str] = field(default_factory=list)
-    toolsets: list[str] = field(default_factory=list)
-    timeout_min: int = 10
-    max_cycles: int = 3
 
 
 @dataclass
@@ -54,15 +48,10 @@ class Phase:
     code: str = ""
     name: str = ""
     description: str = ""
-    min_time_min: int = 0
-    is_blocker: bool = False
-    is_delegated: bool = False
-    is_critic: bool = False
     checks: list[PhaseCheck] = field(default_factory=list)
     evidence: list[PhaseEvidence] = field(default_factory=list)
     instructions: list[PhaseInstruction] = field(default_factory=list)
     delegate: PhaseDelegate | None = None
-    next_recommendation: str = ""
-    parallel_with: str | None = None
-    rollback_target: str | None = None
+    parallel_with_phase_code: str | None = None
+    rollback_target_phase_code: str | None = None
     execution_type: str = "sync"

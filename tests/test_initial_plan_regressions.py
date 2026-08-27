@@ -87,8 +87,8 @@ def test_batch_reorder_is_complete_single_workflow_and_atomic():
     [
         ({"code": "duplicate"}, 409),
         ({"agent_id": 999999}, 404),
-        ({"parallel_with": "missing"}, 409),
-        ({"rollback_target": "missing"}, 409),
+        ({"execution_type": "parallel", "parallel_with_phase_id": 999999}, 409),
+        ({"rollback_target_phase_id": 999999}, 409),
     ],
 )
 def test_phase_create_validates_references_before_shifting_order(extra, status):
@@ -120,10 +120,10 @@ def test_phase_delete_rejects_links_current_tasks_and_history():
     service.update_phase(first["id"], {"execution_type": "parallel"})
     service.update_phase(
         second["id"],
-        {"execution_type": "parallel", "parallel_with": first["code"]},
+        {"execution_type": "parallel", "parallel_with_phase_id": first["id"]},
     )
     assert client.delete(f"/api/phases/{first['id']}").status_code == 409
-    service.update_phase(second["id"], {"parallel_with": None})
+    service.update_phase(second["id"], {"parallel_with_phase_id": None})
 
     prefix = _unique("DEL").upper()
     project = _app_state.project_service().create_project(
@@ -138,14 +138,15 @@ def test_phase_delete_rejects_links_current_tasks_and_history():
         {
             "project_id": project["id"],
             "task_key": f"{prefix}-1",
-            "current_phase": first["code"],
+            "current_phase_id": first["id"],
         }
     )
     assert client.delete(f"/api/phases/{first['id']}").status_code == 409
 
     uow = _app_state.get_db()
-    uow.tasks.update(task["id"], {"current_phase": third["code"]})
-    uow.tasks.add_history(task["id"], first["id"], "done")
+    uow.tasks.update(task["id"], {"current_phase_id": third["id"]})
+    uow.tasks.record_phase_event(task["id"], third["id"], "entered")
+    uow.tasks.record_phase_event(task["id"], first["id"], "completed")
     uow.commit()
     assert client.delete(f"/api/phases/{first['id']}").status_code == 409
 
@@ -172,7 +173,7 @@ def test_project_description_workflow_and_prefix_guards():
         {
             "project_id": project["id"],
             "task_key": f"{prefix}-42",
-            "current_phase": phases[0]["code"],
+            "current_phase_id": phases[0]["id"],
         }
     )
     assert task["task_key"] == f"{prefix}-42"
@@ -245,7 +246,7 @@ def test_task_filter_returns_nonempty_workflow_specific_dto():
             {
                 "project_id": project["id"],
                 "task_key": task_key,
-                "current_phase": phases[0]["code"],
+                "current_phase_id": phases[0]["id"],
             }
         )
         expected[workflow_id] = task_key
@@ -275,7 +276,7 @@ def test_explicit_project_task_validates_prefix_and_scoped_phase_before_write():
             {
                 "project_id": project["id"],
                 "task_key": f"{prefix}-1",
-                "current_phase": "missing",
+                "current_phase_id": 999999,
             }
         )
     assert not any(task["task_key"] in {"WRONG-1", f"{prefix}-1"} for task in service.list_tasks())
@@ -292,9 +293,8 @@ def test_nullable_phase_fields_distinguish_omitted_from_explicit_null():
         {
             "description": "Present",
             "execution_type": "parallel",
-            "parallel_with": first["code"],
-            "rollback_target": first["code"],
-            "next_recommendation": "Next",
+            "parallel_with_phase_id": first["id"],
+            "rollback_target_phase_id": first["id"],
             "agent_id": agent["id"],
         },
     )
@@ -303,23 +303,21 @@ def test_nullable_phase_fields_distinguish_omitted_from_explicit_null():
         f"/api/phases/{second['id']}",
         json={
             "description": None,
-            "parallel_with": None,
-            "rollback_target": None,
-            "next_recommendation": None,
+            "parallel_with_phase_id": None,
+            "rollback_target_phase_id": None,
             "agent_id": None,
         },
     )
     assert response.status_code == 200
     updated = service.get_phase(second["id"])
     assert updated["description"] is None
-    assert updated["parallel_with"] is None
-    assert updated["rollback_target"] is None
-    assert updated["next_recommendation"] is None
+    assert updated["parallel_with_phase_id"] is None
+    assert updated["rollback_target_phase_id"] is None
     assert updated["agent_id"] is None
 
     with pytest.raises(ConflictError):
-        service.update_phase(first["id"], {"parallel_with": "missing"})
-    assert service.get_phase(first["id"])["parallel_with"] is None
+        service.update_phase(first["id"], {"parallel_with_phase_id": 999999})
+    assert service.get_phase(first["id"])["parallel_with_phase_id"] is None
 
 
 def test_projects_page_exposes_description_editor():
@@ -337,8 +335,14 @@ def test_phase_detail_exposes_explicit_parallel_partner_editor():
     assert response.status_code == 200
     assert 'id="parallelPartnerSelect"' in response.text
     assert "— изолированная фаза —" in response.text
-    assert 'value="6.TEST_PLAN"' in response.text
-    assert 'value="10.REVIEW"' not in response.text
+    test_plan = next(
+        item for item in _app_state.phase_service().list_phases() if item["code"] == "6.TEST_PLAN"
+    )
+    review = next(
+        item for item in _app_state.phase_service().list_phases() if item["code"] == "10.REVIEW"
+    )
+    assert f'value="{test_plan["id"]}"' in response.text
+    assert f'value="{review["id"]}"' not in response.text
     assert "partnerSelect.value = '';" in response.text
 
 
@@ -351,7 +355,7 @@ def test_corrupted_persisted_instruction_skills_fail_loudly(raw_skills):
     )
     uow = _app_state.get_db()
     uow.session.execute(
-        text("UPDATE instructions SET skills = :skills WHERE id = :id"),
+        text("UPDATE phase_instructions SET skills = :skills WHERE id = :id"),
         {"id": instruction["id"], "skills": raw_skills},
     )
     uow.commit()

@@ -86,9 +86,9 @@ class TestPhaseAggregate:
 class TestUpdatePhase:
     def test_update_phase_metadata(self, svc, fresh_db):
         phase = phase_by_code(fresh_db, "2.REQUIREMENTS")
-        svc.update_phase_detail(phase.id, {"next_recommendation": "Updated"})
+        svc.update_phase_detail(phase.id, {"description": "Updated"})
         detail = svc.get_phase_detail(phase.id)
-        assert detail["next_recommendation"] == "Updated"
+        assert detail["description"] == "Updated"
 
     def test_get_phase_detail_empty(self, svc):
         assert svc.get_phase_detail(9999) == {}
@@ -100,9 +100,9 @@ class TestUpdatePhase:
             [phase.code for phase in group]
             for group in group_parallel_phases(
                 phases,
-                code_of=lambda phase: phase.code,
+                id_of=lambda phase: int(phase.id),
                 execution_type_of=lambda phase: phase.execution_type,
-                parallel_with_of=lambda phase: phase.parallel_with,
+                parallel_with_phase_id_of=lambda phase: phase.parallel_with_phase_id,
             )
         ]
 
@@ -112,7 +112,7 @@ class TestUpdatePhase:
         svc.update_phase_detail(phase.id, {"execution_type": "parallel"})
 
         updated = phase_by_code(fresh_db, "7.PLAN_GATE")
-        assert updated.parallel_with is None
+        assert updated.parallel_with_phase_id is None
         assert ["7.PLAN_GATE"] in self._groups(fresh_db)
 
     def test_explicit_partner_joins_contiguous_parallel_component(self, svc, fresh_db):
@@ -120,15 +120,21 @@ class TestUpdatePhase:
 
         svc.update_phase_detail(
             phase.id,
-            {"execution_type": "parallel", "parallel_with": "6.TEST_PLAN"},
+            {
+                "execution_type": "parallel",
+                "parallel_with_phase_id": phase_by_code(fresh_db, "6.TEST_PLAN").id,
+            },
         )
 
-        assert phase_by_code(fresh_db, "7.PLAN_GATE").parallel_with == "6.TEST_PLAN"
+        assert (
+            phase_by_code(fresh_db, "7.PLAN_GATE").parallel_with_phase_id
+            == phase_by_code(fresh_db, "6.TEST_PLAN").id
+        )
         assert ["6.SOLUTION", "6.TEST_PLAN", "7.PLAN_GATE"] in self._groups(fresh_db)
 
     def test_parallel_to_sync_clears_outgoing_and_incoming_links(self, svc, fresh_db):
         phase = phase_by_code(fresh_db, "6.SOLUTION")
 
         svc.update_phase_detail(phase.id, {"execution_type": "sync"})
-        assert phase_by_code(fresh_db, "6.SOLUTION").parallel_with is None
-        assert phase_by_code(fresh_db, "6.TEST_PLAN").parallel_with is None
+        assert phase_by_code(fresh_db, "6.SOLUTION").parallel_with_phase_id is None
+        assert phase_by_code(fresh_db, "6.TEST_PLAN").parallel_with_phase_id is None

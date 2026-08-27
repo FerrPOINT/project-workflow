@@ -18,7 +18,7 @@ class SupervisorContextBuilder:
         project: dict[str, Any] | None = None,
         workflow: dict[str, Any] | None = None,
         all_phases: list[Phase] | None = None,
-        current_phase: str = "",
+        current_phase_code: str = "",
         task_key: str = "",
     ):
         self.uow = uow
@@ -26,7 +26,7 @@ class SupervisorContextBuilder:
         self.project = project
         self.workflow = workflow
         self.all_phases = all_phases or []
-        self.current_phase = current_phase
+        self.current_phase_code = current_phase_code
         self.task_key = task_key
         workflow_revision = str(self.workflow.get("name") or "") if self.workflow else ""
         self._contract_builder = PhaseContractBuilder(self.all_phases, workflow_revision)
@@ -49,13 +49,21 @@ class SupervisorContextBuilder:
 
     def _phase_status_lookup(self) -> dict[str, str]:
         statuses: dict[str, str] = {}
-        for row in self.uow.get_task_history(self.task["id"]):
+        event_status = {
+            "entered": "current",
+            "completed": "done",
+            "blocked": "blocked",
+            "resumed": "current",
+            "rolled_back": "rollback",
+        }
+        events = self.uow.list_phase_events(self.task["id"])
+        if not events:
+            raise ValueError("Для задачи отсутствует обязательный журнал событий фаз")
+        for row in events:
             phase = self._phase_by_id(row["phase_id"])
-            if phase:
-                statuses[phase.code] = str(row["status"])
-        current_phase = str(self.task.get("current_phase") or self.current_phase)
-        if current_phase in self.phase_map and current_phase not in statuses and self.task.get("status") != "done":
-            statuses[current_phase] = "current"
+            if phase is None:
+                raise ValueError(f"Событие ссылается на неизвестную фазу {row['phase_id']}")
+            statuses[phase.code] = event_status[str(row["event_type"])]
         return statuses
 
     def _build_workflow_path(self) -> list[dict[str, Any]]:
@@ -67,56 +75,59 @@ class SupervisorContextBuilder:
                     "code": phase.code,
                     "name": phase.name,
                     "status": status_lookup.get(phase.code, "pending"),
-                    "parallel_with": phase.parallel_with,
-                    "rollback_target": phase.rollback_target,
+                    "parallel_with_phase_code": phase.parallel_with_phase_code,
+                    "rollback_target_phase_code": phase.rollback_target_phase_code,
                 }
             )
         return path
 
     def _build_phase_history(self) -> list[dict[str, Any]]:
         history: list[dict] = []
-        for row in self.uow.get_task_history(self.task["id"]):
+        for row in self.uow.list_phase_events(self.task["id"]):
             phase = self._phase_by_id(row["phase_id"])
             if not phase:
-                continue
+                raise ValueError(f"Событие ссылается на неизвестную фазу {row['phase_id']}")
             history.append(
                 {
                     "phase_code": phase.code,
                     "phase_name": phase.name,
-                    "status": row["status"],
-                    "completed_at": row["completed_at"],
+                    "event_type": row["event_type"],
+                    "occurred_at": row["occurred_at"],
+                    "step_history_id": row.get("step_history_id"),
                 }
             )
         return history
 
     def _build_recent_verdicts(self, limit: int = 5) -> list[dict[str, Any]]:
         verdicts: list[dict] = []
-        for row in self.uow.get_supervisor_runs(task_id=self.task["id"], limit=limit):
+        for row in self.uow.list_step_history(task_id=self.task["id"], limit=limit):
             phase = self._phase_by_id(row.get("phase_id"))
             next_phase = self._phase_by_id(row.get("next_phase_id"))
             rollback_phase = self._phase_by_id(row.get("rollback_phase_id"))
-            response = row.get("response") or {}
+            response = row.get("supervisor_response") or {}
             verdicts.append(
                 {
                     "phase_code": phase.code if phase else None,
                     "verdict": str(row.get("verdict") or "").upper(),
-                    "blockers": row.get("blockers") or [],
-                    "missing": row.get("missing") or [],
+                    "blockers": row.get("blocker_messages") or [],
+                    "missing": row.get("missing_item_ids") or [],
                     "message": response.get("message") if isinstance(response, dict) else None,
-                    "next_phase": next_phase.code if next_phase else None,
-                    "rollback_target": rollback_phase.code if rollback_phase else None,
+                    "next_phase_code": next_phase.code if next_phase else None,
+                    "rollback_phase_code": rollback_phase.code if rollback_phase else None,
                     "created_at": row.get("created_at"),
                 }
             )
         return verdicts
 
     def build(self) -> dict[str, Any]:
-        phase = self.phase_map.get(self.current_phase)
+        phase = self.phase_map.get(self.current_phase_code)
+        if phase is None:
+            raise ValueError("Текущая фаза задачи отсутствует в каталоге воркфлоу")
         workflow_path = self._build_workflow_path()
         completed_phases = [item["code"] for item in workflow_path if item["status"] == "done"]
 
         current_contract = (
-            self._contract_builder.build(phase) if phase else self._contract_builder.build_missing(self.current_phase)
+            self._contract_builder.build(phase)
         )
 
         return {
@@ -126,8 +137,8 @@ class SupervisorContextBuilder:
             "workflow_name": self.workflow.get("name") if self.workflow else None,
             "workflow_id": self.workflow.get("id") if self.workflow else None,
             "task_status": self.task.get("status"),
-            "current_phase": self.current_phase,
-            "current_phase_name": phase.name if phase else "Неизвестная фаза",
+            "current_phase_code": self.current_phase_code,
+            "current_phase_name": phase.name,
             "completed_phases": completed_phases,
             "workflow_revision": self._contract_builder.workflow_revision,
             "all_phases": [

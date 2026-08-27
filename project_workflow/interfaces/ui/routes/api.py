@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import Query, Response
+from fastapi import Query
 from fastapi.responses import JSONResponse
 
 from project_workflow.domain.exceptions import ConflictError, LastPhaseError, NotFoundError
@@ -64,7 +64,8 @@ async def api_phases(workflow_id: int | None = Query(default=None)) -> dict[str,
                 "phase_num": phase.get("phase_num", phase.get("phase_order", 0)),
                 "phase_order": phase.get("phase_order", 0),
                 "execution_type": phase.get("execution_type", "sync"),
-                "parallel_with": phase.get("parallel_with"),
+                "parallel_with_phase_id": phase.get("parallel_with_phase_id"),
+                "rollback_target_phase_id": phase.get("rollback_target_phase_id"),
                 "agent_name": agent["name"] if agent else None,
                 "agent_id": phase.get("agent_id"),
                 "hermes_profile": agent.get("hermes_profile") if agent else None,
@@ -81,22 +82,6 @@ async def api_tasks(workflow_id: int | None = Query(default=None)) -> dict[str, 
     if workflow_id is not None:
         tasks = [t for t in tasks if t.get("workflow_id") == workflow_id]
     return {"ok": True, "tasks": tasks}
-
-
-async def api_task_delete(task_key: str) -> Response:
-    task = _app_state.task_service().get_task_by_key(task_key)
-    if task is None:
-        return _error(f"Задача {task_key!r} не найдена", 404)
-    task_id = task.get("id")
-    if not isinstance(task_id, int):
-        return _error("Некорректный идентификатор задачи", 422)
-    try:
-        _app_state.task_service().delete_task(task_id)
-    except NotFoundError as exc:
-        return _error(str(exc), 404)
-    except ConflictError as exc:
-        return _error(str(exc), 409)
-    return Response(status_code=204)
 
 
 async def api_projects() -> dict[str, Any] | JSONResponse:
@@ -135,9 +120,8 @@ async def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONRespons
         "workflow_id": workflow_id,
         "phase_order": payload.phase_order,
         "execution_type": payload.execution_type,
-        "parallel_with": payload.parallel_with,
-        "rollback_target": payload.rollback_target,
-        "next_recommendation": payload.next_recommendation,
+        "parallel_with_phase_id": payload.parallel_with_phase_id,
+        "rollback_target_phase_id": payload.rollback_target_phase_id,
         "agent_id": payload.agent_id,
     }
     if payload.code:
@@ -163,9 +147,8 @@ async def api_phase_update(phase_id: int, payload: PhaseUpdate) -> dict[str, Any
     scalar_fields = {
         "name",
         "description",
-        "parallel_with",
-        "rollback_target",
-        "next_recommendation",
+        "parallel_with_phase_id",
+        "rollback_target_phase_id",
         "agent_id",
         "execution_type",
     }
@@ -250,8 +233,6 @@ async def api_workflow_delete(workflow_id: int) -> dict[str, Any] | JSONResponse
 
 
 async def api_project_create(payload: ProjectCreate) -> dict[str, Any] | JSONResponse:
-    if "workflow_id" in payload.model_fields_set and payload.workflow_id is None:
-        return _error("workflow_id не может быть null", 422)
     if "description" in payload.model_fields_set and payload.description is None:
         return _error("description не может быть null", 422)
     service = _app_state.project_service()

@@ -46,7 +46,7 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-PG_HOST = os.environ.get("PGHOST", "localhost")
+PG_HOST = os.environ.get("PGHOST", "127.0.0.1")
 PG_PORT = int(os.environ.get("PGPORT", "5432"))
 PG_USER = os.environ.get("PGUSER", "project_workflow")
 PG_PASSWORD = os.environ.get("PGPASSWORD", "project_workflow")
@@ -219,19 +219,23 @@ class TestPostgresInitialMigration:
             task_id = conn.execute(
                 text(
                     "INSERT INTO project_workflow.tasks "
-                    "(project_id, workflow_id, task_key, current_phase, status) "
-                    "VALUES (:project_id, :workflow_id, 'P-1', '1', 'active') RETURNING id"
+                    "(project_id, workflow_id, task_key, current_phase_id, status) "
+                    "VALUES (:project_id, :workflow_id, 'P-1', :phase_id, 'active') RETURNING id"
                 ),
-                {"project_id": project_id, "workflow_id": workflow_id},
+                {
+                    "project_id": project_id,
+                    "workflow_id": workflow_id,
+                    "phase_id": phase_ids[0],
+                },
             ).scalar_one()
             for phase_id in phase_ids:
                 conn.execute(
                     text(
-                        "INSERT INTO project_workflow.supervisor_runs "
-                        "(task_id, phase_id, verdict, report_fingerprint) "
-                        "VALUES (:task_id, :phase_id, 'partial', 'same')"
+                        "INSERT INTO project_workflow.task_step_history "
+                        "(task_id, workflow_id, phase_id, verdict, replay_fingerprint) "
+                        "VALUES (:task_id, :workflow_id, :phase_id, 'partial', 'same')"
                     ),
-                    {"task_id": task_id, "phase_id": phase_id},
+                    {"task_id": task_id, "workflow_id": workflow_id, "phase_id": phase_id},
                 )
 
         with engine.connect() as conn:
@@ -255,7 +259,7 @@ class TestPostgresInitialMigration:
             with engine.begin() as conn:
                 conn.execute(
                     text(
-                        "INSERT INTO project_workflow.instructions "
+                        "INSERT INTO project_workflow.phase_instructions "
                         "(phase_id, step_num, description) VALUES (:phase_id, 0, 'Bad')"
                     ),
                     {"phase_id": phase_ids[0]},
@@ -264,17 +268,170 @@ class TestPostgresInitialMigration:
             with engine.begin() as conn:
                 conn.execute(
                     text(
-                        "INSERT INTO project_workflow.supervisor_runs "
-                        "(task_id, phase_id, verdict, report_fingerprint) "
-                        "VALUES (:task_id, :phase_id, 'partial', 'same')"
+                        "INSERT INTO project_workflow.task_step_history "
+                        "(task_id, workflow_id, phase_id, verdict, replay_fingerprint) "
+                        "VALUES (:task_id, :workflow_id, :phase_id, 'partial', 'same')"
                     ),
-                    {"task_id": task_id, "phase_id": phase_ids[0]},
+                    {"task_id": task_id, "workflow_id": workflow_id, "phase_id": phase_ids[0]},
                 )
         with pytest.raises(IntegrityError):
             with engine.begin() as conn:
                 conn.execute(
                     text("DELETE FROM project_workflow.phases WHERE id = :phase_id"),
                     {"phase_id": phase_ids[0]},
+                )
+
+    def test_database_enforces_task_and_audit_ownership(self, pg_url):
+        engine = get_engine(pg_url)
+        ensure_migrated(engine)
+
+        with engine.begin() as conn:
+            workflow_ids: list[int] = []
+            project_ids: list[int] = []
+            phase_ids: list[int] = []
+            for suffix in ("A", "B"):
+                workflow_id = conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.workflows (name, description, is_default) "
+                        "VALUES (:name, '', 0) RETURNING id"
+                    ),
+                    {"name": f"Workflow {suffix}"},
+                ).scalar_one()
+                project_id = conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.projects "
+                        "(workflow_id, code, name, description, key_prefixes) "
+                        "VALUES (:workflow_id, :code, :name, '', :prefixes) RETURNING id"
+                    ),
+                    {
+                        "workflow_id": workflow_id,
+                        "code": f"P{suffix}",
+                        "name": f"Project {suffix}",
+                        "prefixes": f'["P{suffix}"]',
+                    },
+                ).scalar_one()
+                phase_id = conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.phases "
+                        "(workflow_id, code, name, phase_order) "
+                        "VALUES (:workflow_id, :code, :name, 1) RETURNING id"
+                    ),
+                    {"workflow_id": workflow_id, "code": suffix, "name": f"Phase {suffix}"},
+                ).scalar_one()
+                workflow_ids.append(workflow_id)
+                project_ids.append(project_id)
+                phase_ids.append(phase_id)
+
+        with pytest.raises(IntegrityError):
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.tasks "
+                        "(project_id, workflow_id, task_key, current_phase_id, status) "
+                        "VALUES (:project_id, :workflow_id, 'PA-BAD', :phase_id, 'active')"
+                    ),
+                    {
+                        "project_id": project_ids[0],
+                        "workflow_id": workflow_ids[1],
+                        "phase_id": phase_ids[1],
+                    },
+                )
+
+        with engine.begin() as conn:
+            task_ids = [
+                conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.tasks "
+                        "(project_id, workflow_id, task_key, current_phase_id, status) "
+                        "VALUES (:project_id, :workflow_id, :task_key, :phase_id, 'active') RETURNING id"
+                    ),
+                    {
+                        "project_id": project_ids[index],
+                        "workflow_id": workflow_ids[index],
+                        "task_key": f"P{suffix}-1",
+                        "phase_id": phase_ids[index],
+                    },
+                ).scalar_one()
+                for index, suffix in enumerate(("A", "B"))
+            ]
+
+        with pytest.raises(IntegrityError):
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.task_step_history "
+                        "(task_id, workflow_id, phase_id, verdict) "
+                        "VALUES (:task_id, :workflow_id, :phase_id, 'partial')"
+                    ),
+                    {
+                        "task_id": task_ids[0],
+                        "workflow_id": workflow_ids[0],
+                        "phase_id": phase_ids[1],
+                    },
+                )
+
+        with pytest.raises(IntegrityError):
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.task_phase_events "
+                        "(task_id, workflow_id, phase_id, event_type) "
+                        "VALUES (:task_id, :workflow_id, :phase_id, 'entered')"
+                    ),
+                    {
+                        "task_id": task_ids[0],
+                        "workflow_id": workflow_ids[0],
+                        "phase_id": phase_ids[1],
+                    },
+                )
+
+        with engine.begin() as conn:
+            step_history_id = conn.execute(
+                text(
+                    "INSERT INTO project_workflow.task_step_history "
+                    "(task_id, workflow_id, phase_id, verdict) "
+                    "VALUES (:task_id, :workflow_id, :phase_id, 'partial') RETURNING id"
+                ),
+                {
+                    "task_id": task_ids[0],
+                    "workflow_id": workflow_ids[0],
+                    "phase_id": phase_ids[0],
+                },
+            ).scalar_one()
+            conn.execute(
+                text(
+                    "INSERT INTO project_workflow.task_phase_events "
+                    "(task_id, workflow_id, phase_id, event_type) "
+                    "VALUES (:task_id, :workflow_id, :phase_id, 'entered')"
+                ),
+                {
+                    "task_id": task_ids[0],
+                    "workflow_id": workflow_ids[0],
+                    "phase_id": phase_ids[0],
+                },
+            )
+
+        with pytest.raises(IntegrityError):
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.task_phase_events "
+                        "(task_id, workflow_id, phase_id, step_history_id, event_type) "
+                        "VALUES (:task_id, :workflow_id, :phase_id, :step_history_id, 'entered')"
+                    ),
+                    {
+                        "task_id": task_ids[1],
+                        "workflow_id": workflow_ids[1],
+                        "phase_id": phase_ids[1],
+                        "step_history_id": step_history_id,
+                    },
+                )
+
+        with pytest.raises(IntegrityError):
+            with engine.begin() as conn:
+                conn.execute(
+                    text("DELETE FROM project_workflow.tasks WHERE id = :task_id"),
+                    {"task_id": task_ids[0]},
                 )
 
     def test_bootstrap_is_idempotent(self, pg_url):
@@ -370,13 +527,16 @@ class TestPostgresUoW:
             projects = {p.code: p.id for p in uow.projects.list()}
             assert projects.get("TST") == proj_id
 
+            phase_id = uow.phases.create(
+                {"workflow_id": wf_id, "code": "start", "name": "Start", "phase_order": 1}
+            )
             task_id = uow.tasks.create(
                 {
                     "project_id": proj_id,
                     "workflow_id": wf_id,
                     "task_key": "TST-1",
                     "title": "First task",
-                    "current_phase": "start",
+                    "current_phase_id": phase_id,
                 }
             )
             tasks = {t.task_key: t.id for t in uow.tasks.list()}
@@ -408,23 +568,29 @@ class TestPostgresUoW:
                 "workflow_id": int(workflow.id),
                 "task_key": "RUN-ORDER",
                 "title": "Ordering test",
-                "current_phase": phase.code,
+                "current_phase_id": phase.id,
             }
         )
         history_phases = list(uow.phases.list(int(workflow.id)))[:3]
         for history_phase in history_phases:
             assert history_phase.id is not None
-            uow.tasks.add_history(task_id, int(history_phase.id), "pending")
+            uow.tasks.record_phase_event(task_id, int(history_phase.id), "blocked")
 
-        uow.session.execute(text("CREATE INDEX checks_desc_test_idx ON checks (id DESC)"))
-        uow.session.execute(text("CREATE INDEX evidence_desc_test_idx ON evidence (id DESC)"))
-        uow.session.execute(text("CREATE INDEX task_history_desc_test_idx ON task_history (id DESC)"))
+        uow.session.execute(text("CREATE INDEX checks_desc_test_idx ON phase_checks (id DESC)"))
+        uow.session.execute(
+            text("CREATE INDEX evidence_desc_test_idx ON phase_evidence_requirements (id DESC)")
+        )
+        uow.session.execute(
+            text("CREATE INDEX phase_events_desc_test_idx ON task_phase_events (id DESC)")
+        )
         uow.session.execute(text("CREATE INDEX agents_desc_test_idx ON agents (id DESC)"))
         uow.session.execute(text("CREATE INDEX projects_desc_test_idx ON projects (id DESC)"))
         uow.commit()
-        uow.session.execute(text("CLUSTER checks USING checks_desc_test_idx"))
-        uow.session.execute(text("CLUSTER evidence USING evidence_desc_test_idx"))
-        uow.session.execute(text("CLUSTER task_history USING task_history_desc_test_idx"))
+        uow.session.execute(text("CLUSTER phase_checks USING checks_desc_test_idx"))
+        uow.session.execute(
+            text("CLUSTER phase_evidence_requirements USING evidence_desc_test_idx")
+        )
+        uow.session.execute(text("CLUSTER task_phase_events USING phase_events_desc_test_idx"))
         uow.session.execute(text("CLUSTER agents USING agents_desc_test_idx"))
         uow.session.execute(text("CLUSTER projects USING projects_desc_test_idx"))
         uow.commit()
@@ -433,10 +599,10 @@ class TestPostgresUoW:
 
         phase_checks = list(uow.phases.get_checks(int(phase.id)))
         phase_evidence = list(uow.phases.get_evidence(int(phase.id)))
-        checks = list(uow.checks.list(int(phase.id)))
-        evidence = list(uow.evidence.list(int(phase.id)))
-        history = list(uow.tasks.get_history(task_id))
-        batch_history = list(uow.tasks.get_history_batch([task_id])[task_id])
+        checks = list(uow.phase_checks.list(int(phase.id)))
+        evidence = list(uow.phase_evidence_requirements.list(int(phase.id)))
+        history = list(uow.tasks.list_phase_events(task_id))
+        batch_history = list(uow.tasks.list_phase_events_batch([task_id])[task_id])
         agents = list(uow.agents.list())
         projects = list(uow.projects.list())
 
@@ -444,13 +610,13 @@ class TestPostgresUoW:
         assert [row["id"] for row in phase_evidence] == sorted(row["id"] for row in phase_evidence)
         assert [row["id"] for row in checks] == sorted(row["id"] for row in checks)
         assert [row["id"] for row in evidence] == sorted(row["id"] for row in evidence)
-        assert [row["id"] for row in history] == sorted(row["id"] for row in history)
-        assert [row["id"] for row in batch_history] == sorted(row["id"] for row in batch_history)
+        assert [row.id for row in history] == sorted(row.id for row in history)
+        assert [row.id for row in batch_history] == sorted(row.id for row in batch_history)
         assert [agent.id for agent in agents] == sorted(agent.id for agent in agents)
         assert [item.id for item in projects] == sorted(item.id for item in projects)
         uow.close()
 
-    def test_ensure_phase_catalog_does_not_overwrite_existing_workflow(self, pg_url):
+    def test_ensure_phase_catalog_populates_an_empty_default_workflow(self, pg_url):
         from project_workflow.infrastructure.db import schema as schema_module
 
         ensure_migrated(get_engine(pg_url))
@@ -471,7 +637,9 @@ class TestPostgresUoW:
         with uow:
             default_wf = uow.workflows.get_default()
             phases = uow.phases.list(workflow_id=default_wf.id)
-            assert phases == []
+            assert [phase.code for phase in phases] == [
+                phase.code for phase in schema_module.load_phases_from_seed()
+            ]
 
     def test_uow_commit_and_rollback(self, pg_url):
         ensure_migrated(get_engine(pg_url))
@@ -489,8 +657,14 @@ class TestPostgresUoW:
 
         assert main() == 0
         setup = SAUnitOfWork(pg_url)
+        workflow_id = setup.workflows.get_default().id
         project = ProjectService(setup).create_project(
-            {"code": "RACE", "name": "Race", "key_prefixes": ["RACE"]}
+            {
+                "code": "RACE",
+                "name": "Race",
+                "key_prefixes": ["RACE"],
+                "workflow_id": workflow_id,
+            }
         )
         setup.close()
         barrier = Barrier(2)
@@ -541,6 +715,9 @@ class TestPostgresUoW:
         from scripts.init_db import main
 
         assert main() == 0
+        setup = SAUnitOfWork(pg_url)
+        workflow_id = setup.workflows.get_default().id
+        setup.close()
         barrier = Barrier(2)
 
         def create(code: str) -> str:
@@ -548,7 +725,12 @@ class TestPostgresUoW:
             barrier.wait()
             try:
                 ProjectService(uow).create_project(
-                    {"code": code, "name": code, "key_prefixes": ["SHARED"]}
+                    {
+                        "code": code,
+                        "name": code,
+                        "key_prefixes": ["SHARED"],
+                        "workflow_id": workflow_id,
+                    }
                 )
                 return "created"
             except ConflictError:
@@ -588,20 +770,20 @@ class TestPostgresUoW:
 
         def create_task() -> str:
             uow = SAUnitOfWork(pg_url)
-            original_lookup = uow.phases.get_by_code
+            original_list = uow.phases.list
 
-            def paused_lookup(workflow_id_arg: int, code: str):
+            def paused_list(workflow_id: int):
                 task_holds_workflow_lock.set()
                 assert release_task.wait(10)
-                return original_lookup(workflow_id_arg, code)
+                return original_list(workflow_id)
 
-            uow.phases.get_by_code = paused_lookup
+            uow.phases.list = paused_list
             try:
                 TaskService(uow).create_task(
                     {
                         "project_id": project["id"],
                         "task_key": "PHASERACE-1",
-                        "current_phase": "race.first",
+                        "current_phase_id": first_id,
                     }
                 )
                 return "created"
@@ -943,68 +1125,11 @@ class TestPostgresUoW:
         assert result["retryable"] is True
         verify = SAUnitOfWork(pg_url)
         task = verify.tasks.get_by_key("RUN-90002")
-        assert task is not None and task.status == "blocked" and task.current_phase == "1.INTAKE"
-        run = verify.supervisor_runs.list(task_key="RUN-90002", limit=1)[0]
+        assert task is not None and task.status == "blocked" and task.current_phase_code == "1.INTAKE"
+        run = verify.step_history.list(task_key="RUN-90002", limit=1)[0]
         assert run.verdict == "blocked"
-        assert run.report_fingerprint is None
+        assert run.replay_fingerprint is None
         verify.close()
-
-    def test_task_delete_waits_for_supervisor_commit(self, pg_url):
-        from project_workflow.infrastructure.llm import OpenAICompatibleClient
-        from project_workflow.supervisor import SupervisorEngine
-        from scripts.init_db import main
-
-        assert main() == 0
-        evaluation_holds_workflow = Event()
-        allow_evaluation_commit = Event()
-        delete_started = Event()
-        delete_finished = Event()
-
-        def evaluate() -> dict:
-            uow = SAUnitOfWork(pg_url)
-            original_create_run = uow.create_supervisor_run
-
-            def paused_create_run(*args, **kwargs):
-                evaluation_holds_workflow.set()
-                assert allow_evaluation_commit.wait(10)
-                return original_create_run(*args, **kwargs)
-
-            uow.create_supervisor_run = paused_create_run
-            try:
-                with patch.object(
-                    OpenAICompatibleClient,
-                    "chat",
-                    side_effect=lambda *_args, **kwargs: _pass_response(str(kwargs["user"])),
-                ):
-                    return SupervisorEngine("RUN-90003", uow=uow).evaluate("done")
-            finally:
-                uow.close()
-
-        def delete() -> str:
-            uow = SAUnitOfWork(pg_url)
-            try:
-                task = uow.tasks.get_by_key("RUN-90003")
-                assert task is not None and task.id is not None
-                delete_started.set()
-                TaskService(uow).delete_task(int(task.id))
-                return "deleted"
-            finally:
-                delete_finished.set()
-                uow.close()
-
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            evaluation_result = pool.submit(evaluate)
-            assert evaluation_holds_workflow.wait(10)
-            deletion_result = pool.submit(delete)
-            assert delete_started.wait(10)
-            deletion_was_serialized = not delete_finished.wait(0.5)
-            allow_evaluation_commit.set()
-            evaluated = evaluation_result.result(timeout=20)
-            deleted = deletion_result.result(timeout=20)
-
-        assert deletion_was_serialized
-        assert evaluated["verdict"] == "PASS"
-        assert deleted == "deleted"
 
     def test_assigned_agent_update_waits_for_supervisor_commit(self, pg_url):
         from project_workflow.infrastructure.llm import OpenAICompatibleClient
@@ -1027,14 +1152,14 @@ class TestPostgresUoW:
 
         def evaluate() -> dict:
             uow = SAUnitOfWork(pg_url)
-            original_create_run = uow.create_supervisor_run
+            original_create_run = uow.record_step
 
             def paused_create_run(*args, **kwargs):
                 evaluation_holds_workflow.set()
                 assert allow_evaluation_commit.wait(10)
                 return original_create_run(*args, **kwargs)
 
-            uow.create_supervisor_run = paused_create_run
+            uow.record_step = paused_create_run
             try:
                 with patch.object(
                     OpenAICompatibleClient,
@@ -1089,14 +1214,14 @@ class TestPostgresUoW:
 
         def mutate_instruction() -> str:
             uow = SAUnitOfWork(pg_url)
-            repository_method = getattr(uow.instructions, operation)
+            repository_method = getattr(uow.phase_instructions, operation)
 
             def paused_write(*args, **kwargs):
                 instruction_holds_workflow.set()
                 assert release_instruction.wait(10)
                 return repository_method(*args, **kwargs)
 
-            setattr(uow.instructions, operation, paused_write)
+            setattr(uow.phase_instructions, operation, paused_write)
             try:
                 service = InstructionService(uow)
                 if operation == "update":
@@ -1137,7 +1262,7 @@ class TestPostgresUoW:
 
         verify = SAUnitOfWork(pg_url)
         assert verify.phases.get_by_id(int(phase.id)).name == f"Phase after {operation}"
-        rows = list(verify.instructions.list(int(phase.id)))
+        rows = list(verify.phase_instructions.list(int(phase.id)))
         if operation == "update":
             assert rows[0]["description"] == "updated"
         elif operation == "delete":
@@ -1180,7 +1305,7 @@ def _prepare_concurrent_task(pg_url: str, task_key: str) -> None:
             "project_id": project.id,
             "workflow_id": project.workflow_id,
             "task_key": task_key,
-            "current_phase": phase.code,
+            "current_phase_id": phase.id,
         }
     )
     uow.commit()
@@ -1217,8 +1342,8 @@ def test_concurrent_reports_create_one_transition_and_run(pg_url, same_report):
 
     uow = SAUnitOfWork(pg_url)
     task = uow.tasks.get_by_key(task_key)
-    runs = uow.supervisor_runs.list(task_id=task.id)
-    history = uow.tasks.get_history(task.id)
+    runs = uow.step_history.list(task_id=task.id)
+    history = uow.tasks.list_phase_events(task.id)
     uow.close()
 
     assert len(runs) == 1
@@ -1272,8 +1397,8 @@ def test_concurrent_distinct_partial_reports_do_not_apply_stale_snapshot(pg_url)
     verify = SAUnitOfWork(pg_url)
     task = verify.tasks.get_by_key(task_key)
     assert task is not None
-    assert len(verify.supervisor_runs.list(task_id=task.id)) == 1
-    assert len(verify.tasks.get_history(task.id)) == 1
+    assert len(verify.step_history.list(task_id=task.id)) == 1
+    assert len(verify.tasks.list_phase_events(task.id)) == 1
     verify.close()
 
 
@@ -1490,11 +1615,11 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
             result, payload = _step(env, task_key, report)
             assert result.returncode == 0, result.stderr or result.stdout
             assert payload["verdict"] == "PASS"
-            assert payload["phase"] == expected_phase
+            assert payload["phase_code"] == expected_phase
             assert payload["group_phases"] == expected_groups.get(expected_phase)
 
             if expected_phase == "5.RESEARCH":
-                assert payload["next_phase"] == "6.SOLUTION"
+                assert payload["next_phase_code"] == "6.SOLUTION"
                 assert payload["next_phase_contract"]["group_phases"] == [
                     "6.SOLUTION",
                     "6.TEST_PLAN",
@@ -1512,14 +1637,17 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
                 task = uow.tasks.get_by_key(task_key)
                 assert task is not None
                 phases = {phase.id: phase.code for phase in uow.phases.list(workflow_id=task.workflow_id)}
-                statuses = {phases[row["phase_id"]]: row["status"] for row in uow.tasks.get_history(task.id)}
-                assert task.current_phase == "6.SOLUTION"
-                assert statuses["6.SOLUTION"] == "pending"
-                assert statuses.get("6.TEST_PLAN") != "done"
+                events = [row.to_dict() for row in uow.tasks.list_phase_events(task.id)]
+                event_types = {
+                    phases[row["phase_id"]]: row["event_type"] for row in events
+                }
+                assert task.current_phase_code == "6.SOLUTION"
+                assert event_types["6.SOLUTION"] == "entered"
+                assert event_types.get("6.TEST_PLAN") != "completed"
                 uow.close()
 
             if expected_phase == "6.SOLUTION":
-                assert payload["next_phase"] == "7.PLAN_GATE"
+                assert payload["next_phase_code"] == "7.PLAN_GATE"
 
             if expected_phase == "7.PLAN_GATE":
                 assert payload["next_phase_contract"]["group_phases"] is None
@@ -1531,8 +1659,8 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
         terminal_result, terminal = _run_cli(env, "--json", "step", "--task", task_key)
         history_result, history_payload = _run_cli(env, "--json", "history", "--task", task_key)
         assert terminal_result.returncode == history_result.returncode == 0
-        assert terminal["phase"] == "15.RETRO"
-        assert terminal["next_phase"] is None
+        assert terminal["phase_code"] == "15.RETRO"
+        assert terminal["next_phase_code"] is None
         assert terminal["phase_contract"]["hermes_profile"] == "sdlc-critic"
         assert terminal["status"] == "done"
         assert history_payload["count"] == 15
@@ -1542,7 +1670,7 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
         assert completed_result.returncode == 0
         assert completed["verdict"] == "PASS"
         assert completed["status"] == "done"
-        assert completed["next_phase"] is None
+        assert completed["next_phase_code"] is None
         assert "уже завершён" in completed["message"]
         assert len(provider_state.chat_requests) == completed_request_count
 
@@ -1568,21 +1696,32 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
 
     uow = SAUnitOfWork(pg_url)
     task = uow.tasks.get_by_key(task_key)
-    runs = list(uow.supervisor_runs.list(task_id=task.id, limit=100))
-    task_history = list(uow.tasks.get_history(task.id))
-    assert task.current_phase == "15.RETRO"
+    runs = list(uow.step_history.list(task_id=task.id, limit=100))
+    phase_events = list(uow.tasks.list_phase_events(task.id))
+    assert task.current_phase_code == "15.RETRO"
     assert task.status == "done"
     assert len(runs) == 15
-    assert len(task_history) == 19
-    assert all(row["status"] == "done" for row in task_history)
-    fingerprints = [run.report_fingerprint for run in runs]
+    assert phase_events[0].event_type == "entered"
+    assert phase_events[0].step_history_id is None
+    completed_phase_ids = {
+        event.phase_id for event in phase_events if event.event_type == "completed"
+    }
+    assert completed_phase_ids == {
+        int(phase.id) for phase in uow.phases.list(workflow_id=task.workflow_id)
+    }
+    assert all(
+        event.step_history_id is not None
+        for event in phase_events[1:]
+        if event.event_type in {"completed", "blocked", "resumed", "rolled_back"}
+    )
+    fingerprints = [run.replay_fingerprint for run in runs]
     assert all(fingerprints)
     assert len(set(fingerprints)) == 15
-    assert all(run.context_snapshot["model"] == "e2e-contract-model" for run in runs)
-    assert all(run.context_snapshot["endpoint_mode"] == "openai-compatible" for run in runs)
-    assert all(run.context_snapshot["prompt_version"] == "supervisor-evaluator-v7" for run in runs)
-    assert all(run.context_snapshot["contract_snapshot"]["evaluation_items"] for run in runs)
-    assert all(run.context_snapshot["raw_evaluator"]["verdict"] == "PASS" for run in runs)
+    assert all(run.evaluation_snapshot["model"] == "e2e-contract-model" for run in runs)
+    assert all(run.evaluation_snapshot["endpoint_mode"] == "openai-compatible" for run in runs)
+    assert all(run.evaluation_snapshot["prompt_version"] == "supervisor-evaluator-v7" for run in runs)
+    assert all(run.evaluation_snapshot["contract_snapshot"]["evaluation_items"] for run in runs)
+    assert all(run.evaluation_snapshot["raw_evaluator"]["verdict"] == "PASS" for run in runs)
     uow.close()
 
 
@@ -1591,7 +1730,7 @@ def _advance_to_phase(env: dict[str, str], task_key: str, phases: list[str]) -> 
         result, payload = _step(env, task_key, f"Advance {index} through {phase}")
         assert result.returncode == 0
         assert payload["verdict"] == "PASS"
-        assert payload["phase"] == phase
+        assert payload["phase_code"] == phase
 
 
 @pytest.mark.integration
@@ -1604,7 +1743,7 @@ def test_cli_verdicts_replay_and_fail_closed_through_postgres_and_http(pg_url):
         first_cross_result, first_cross = _step(env, "RUN-82008", "identical cross-phase report")
         second_cross_result, second_cross = _step(env, "RUN-82008", "identical cross-phase report")
         assert first_cross_result.returncode == second_cross_result.returncode == 0
-        assert first_cross["phase"] != second_cross["phase"]
+        assert first_cross["phase_code"] != second_cross["phase_code"]
         assert first_cross["replayed"] is second_cross["replayed"] is False
 
         partial_result, partial = _step(env, "RUN-82002", "MODE=PARTIAL incomplete report")
@@ -1653,7 +1792,7 @@ def test_cli_verdicts_replay_and_fail_closed_through_postgres_and_http(pg_url):
         )
         assert rollback_result.returncode == 0
         assert rollback["verdict"] == "ROLLBACK"
-        assert rollback["rollback_target"] == "8.IMPLEMENT"
+        assert rollback["rollback_phase_code"] == "8.IMPLEMENT"
 
         _advance_to_phase(env, "RUN-82007", phases_before_rollback)
         delegate_result, delegate = _step(env, "RUN-82007", "MODE=DELEGATE hand off review")
@@ -1667,15 +1806,20 @@ def test_cli_verdicts_replay_and_fail_closed_through_postgres_and_http(pg_url):
     http_task = uow.tasks.get_by_key("RUN-82005")
     rollback_task = uow.tasks.get_by_key("RUN-82006")
     delegate_task = uow.tasks.get_by_key("RUN-82007")
-    assert (partial_task.current_phase, partial_task.status) == ("1.INTAKE", "active")
-    assert (blocked_task.current_phase, blocked_task.status) == ("1.INTAKE", "blocked")
-    assert (invalid_task.current_phase, invalid_task.status) == ("1.INTAKE", "blocked")
-    assert (http_task.current_phase, http_task.status) == ("1.INTAKE", "blocked")
-    assert (rollback_task.current_phase, rollback_task.status) == ("8.IMPLEMENT", "active")
-    assert (delegate_task.current_phase, delegate_task.status) == ("10.REVIEW", "active")
-    invalid_runs = list(uow.supervisor_runs.list(task_id=invalid_task.id, limit=10))
+    assert (partial_task.current_phase_code, partial_task.status) == ("1.INTAKE", "active")
+    assert (blocked_task.current_phase_code, blocked_task.status) == ("1.INTAKE", "blocked")
+    assert (invalid_task.current_phase_code, invalid_task.status) == ("1.INTAKE", "blocked")
+    assert (http_task.current_phase_code, http_task.status) == ("1.INTAKE", "blocked")
+    assert (rollback_task.current_phase_code, rollback_task.status) == ("8.IMPLEMENT", "active")
+    assert (delegate_task.current_phase_code, delegate_task.status) == ("10.REVIEW", "active")
+    invalid_runs = list(uow.step_history.list(task_id=invalid_task.id, limit=10))
     assert len(invalid_runs) == 2
-    assert all(run.report_fingerprint is None for run in invalid_runs)
-    assert [item["status"] for item in uow.tasks.get_history(invalid_task.id)] == ["blocked"]
-    assert [item["status"] for item in uow.tasks.get_history(http_task.id)] == ["blocked"]
+    assert all(run.replay_fingerprint is None for run in invalid_runs)
+    assert [
+        item.event_type for item in uow.tasks.list_phase_events(invalid_task.id)
+    ] == ["entered", "blocked", "blocked"]
+    assert [item.event_type for item in uow.tasks.list_phase_events(http_task.id)] == [
+        "entered",
+        "blocked",
+    ]
     uow.close()

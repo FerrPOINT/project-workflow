@@ -7,9 +7,9 @@ from project_workflow.domain import (
     Phase,
     PhaseCode,
     Project,
-    SupervisorRun,
     Task,
     TaskKey,
+    TaskStepHistoryEntry,
     Workflow,
 )
 
@@ -46,12 +46,21 @@ def test_project_to_dict():
 
 
 def test_task_to_dict():
-    t = Task(id=5, task_key="A-1", current_phase="p1")
+    t = Task(
+        id=5,
+        task_key="A-1",
+        workflow_id=2,
+        current_phase_id=3,
+        current_phase_code="p1",
+        current_phase_name="Первая фаза",
+    )
     assert t.to_dict()["task_key"] == "A-1"
-    assert t.to_dict()["current_phase"] == "p1"
+    assert t.to_dict()["current_phase_id"] == 3
+    assert t.to_dict()["current_phase_code"] == "p1"
+    assert t.to_dict()["current_phase_name"] == "Первая фаза"
 
 
-def test_supervisor_run_to_dict():
-    r = SupervisorRun(id=6, task_id=1, phase_id=2, verdict="pass")
+def test_task_step_history_entry_to_dict():
+    r = TaskStepHistoryEntry(id=6, task_id=1, phase_id=2, verdict="pass")
     assert r.to_dict()["verdict"] == "pass"
-    assert r.to_dict()["covered"] == []
+    assert r.to_dict()["covered_item_ids"] == []

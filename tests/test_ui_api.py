@@ -42,6 +42,8 @@ def client():
             }
         )
     if not uow.tasks.get_by_key("RUN-1"):
+        initial_phase = phase_by_code(uow, "1.INTAKE")
+        assert initial_phase is not None and initial_phase.id is not None
         uow.tasks.create(
             {
                 "project_id": uow.projects.get_by_code("DEFAULT").id,
@@ -49,7 +51,7 @@ def client():
                 "task_key": "RUN-1",
                 "title": "Smoke task for dashboard",
                 "status": "active",
-                "current_phase": "1.INTAKE",
+                "current_phase_id": initial_phase.id,
             }
         )
     uow.commit()
@@ -304,7 +306,6 @@ class TestApiPhaseCreate:
             assert new_phase["phase_order"] == 2
             assert new_phase["name"] == "Новая фаза"
             assert new_phase["execution_type"] == "sync"
-            assert new_phase["is_seed_managed"] == 0
         finally:
             uow.workflows.delete(int(workflow_id))
             uow.commit()
@@ -479,6 +480,22 @@ class TestApiProjects:
         assert data["ok"] is True
         assert "projects" in data
 
+    @pytest.mark.parametrize("workflow_id", [None, "1", True])
+    def test_create_project_requires_strict_workflow_id(self, client, workflow_id):
+        payload = {
+            "code": _unique("STRICT-WF"),
+            "name": "Strict workflow",
+            "key_prefixes": ["SWF"],
+        }
+        if workflow_id is not None:
+            payload["workflow_id"] = workflow_id
+
+        response = client.post("/api/projects", json=payload)
+
+        assert response.status_code == 422
+        assert response.json()["ok"] is False
+        assert any(detail["field"] == "workflow_id" for detail in response.json()["details"])
+
     def test_create_and_update_project(self, client):
         from project_workflow.interfaces.ui import _app_state
 
@@ -534,13 +551,14 @@ class TestApiProjects:
             },
         )
         project_id = resp.json()["project_id"]
+        initial_phase_id = _phase_id(client, "1.INTAKE")
         _app_state.task_service().create_task(
             {
                 "project_id": project_id,
                 "task_key": "ZZZ-576",
                 "title": "Task",
                 "status": "active",
-                "current_phase": "1.INTAKE",
+                "current_phase_id": initial_phase_id,
             }
         )
         resp = client.delete(f"/api/projects/{project_id}")
@@ -594,9 +612,7 @@ class TestApiAgents:
         response = client.post("/api/agents", json={"name": _unique("Agent"), "hermes_profile": "Bad Profile"})
         assert response.status_code == 422
         for invalid in ("", 1, {}, []):
-            response = client.post(
-                "/api/agents", json={"name": _unique("Agent"), "hermes_profile": invalid}
-            )
+            response = client.post("/api/agents", json={"name": _unique("Agent"), "hermes_profile": invalid})
             assert response.status_code == 422
 
     def test_delete_agent_assigned_to_phase_forbidden(self, client):
@@ -687,35 +703,22 @@ class TestApiTasks:
 
     def test_api_task_detail_method_is_not_registered(self, client):
         resp = client.get("/api/tasks/NONEXISTENT-99999")
-        assert resp.status_code == 405
-        assert resp.json() == {"ok": False, "error": "Метод не поддерживается"}
+        assert resp.status_code == 404
+        assert resp.json() == {"ok": False, "error": "Ресурс не найден"}
 
-    def test_delete_task_cascade(self, client):
-        from project_workflow.interfaces.ui import _app_state
+    def test_task_delete_api_and_ui_control_are_absent(self, client):
+        delete_response = client.delete("/api/tasks/RUN-905")
+        assert delete_response.status_code == 405
+        assert delete_response.json() == {"ok": False, "error": "Метод не поддерживается"}
 
-        uow = _app_state.get_db()
-        project = uow.projects.get_by_code("DEFAULT")
-        assert project is not None
-        task = _app_state.task_service().create_task(
-            {
-                "project_id": project.id,
-                "task_key": "RUN-905",
-                "title": "To delete",
-                "status": "active",
-                "current_phase": "1.INTAKE",
-            }
-        )
-        phase = phase_by_code(uow, "1.INTAKE")
-        assert phase is not None
-        uow.tasks.add_history(task["id"], phase.id, "done")
-        uow.commit()
-        assert uow.tasks.get_history(task["id"])
+        unknown_delete = client.delete("/api/unknown/RUN-905")
+        assert unknown_delete.status_code == 404
+        assert unknown_delete.json() == {"ok": False, "error": "Ресурс не найден"}
 
-        resp = client.delete(f"/api/tasks/{task['task_key']}")
-        assert resp.status_code == 204
-        assert resp.content == b""
-        assert uow.tasks.get_by_id(task["id"]) is None
-        assert uow.tasks.get_history(task["id"]) == []
+        page = client.get("/tasks")
+        assert page.status_code == 200
+        assert "deleteTask" not in page.text
+        assert "Удалить задачу" not in page.text
 
 
 class TestApiPhaseDelete:
@@ -799,11 +802,8 @@ class TestApiPhaseUpdate:
         phases = client.get("/api/phases").json()["phases"]
         updated = next(phase for phase in phases if phase["code"] == "7.PLAN_GATE")
         assert updated["execution_type"] == "parallel"
-        assert updated["parallel_with"] is None
-        groups = [
-            [phase["code"] for phase in block["phases"]]
-            for block in _build_parallel_phase_blocks(phases)
-        ]
+        assert updated["parallel_with_phase_id"] is None
+        groups = [[phase["code"] for phase in block["phases"]] for block in _build_parallel_phase_blocks(phases)]
         assert ["7.PLAN_GATE"] in groups
 
     def test_parallel_round_trip_does_not_restore_removed_links(self, client):
@@ -814,51 +814,61 @@ class TestApiPhaseUpdate:
 
         phases = client.get("/api/phases").json()["phases"]
         updated = next(phase for phase in phases if phase["code"] == "5.RESEARCH")
-        assert updated["parallel_with"] is None
+        assert updated["parallel_with_phase_id"] is None
         partner = next(phase for phase in phases if phase["code"] == "5.PREFLIGHT")
-        assert partner["parallel_with"] is None
+        assert partner["parallel_with_phase_id"] is None
 
     def test_explicit_null_clears_parallel_component(self, client):
         phase_id = _phase_id(client, "5.RESEARCH")
 
-        response = client.put(f"/api/phases/{phase_id}", json={"parallel_with": None})
+        response = client.put(f"/api/phases/{phase_id}", json={"parallel_with_phase_id": None})
 
         assert response.status_code == 200
         phases = client.get("/api/phases").json()["phases"]
         updated = next(phase for phase in phases if phase["code"] == "5.RESEARCH")
-        assert updated["parallel_with"] is None
+        assert updated["parallel_with_phase_id"] is None
 
     def test_explicit_contiguous_parallel_partner_is_saved(self, client):
         phase_id = _phase_id(client, "7.PLAN_GATE")
 
         response = client.put(
             f"/api/phases/{phase_id}",
-            json={"execution_type": "parallel", "parallel_with": "6.TEST_PLAN"},
+            json={
+                "execution_type": "parallel",
+                "parallel_with_phase_id": _phase_id(client, "6.TEST_PLAN"),
+            },
         )
 
         assert response.status_code == 200
         phases = client.get("/api/phases").json()["phases"]
         updated = next(phase for phase in phases if phase["code"] == "7.PLAN_GATE")
-        assert updated["parallel_with"] == "6.TEST_PLAN"
+        assert updated["parallel_with_phase_id"] == _phase_id(client, "6.TEST_PLAN")
 
     @pytest.mark.parametrize(
-        "payload",
+        ("field", "target_code"),
         [
-            {"parallel_with": "6.TEST_PLAN"},
-            {"execution_type": "parallel", "parallel_with": "8.IMPLEMENT"},
-            {"execution_type": "parallel", "parallel_with": "10.REVIEW"},
-            {"rollback_target": "8.IMPLEMENT"},
+            ("parallel_with_phase_id", "6.TEST_PLAN"),
+            ("parallel_with_phase_id", "8.IMPLEMENT"),
+            ("parallel_with_phase_id", "10.REVIEW"),
+            ("rollback_target_phase_id", "8.IMPLEMENT"),
         ],
     )
-    def test_invalid_phase_graph_update_is_conflict_and_atomic(self, client, payload):
+    def test_invalid_phase_graph_update_is_conflict_and_atomic(self, client, field, target_code):
         phase_id = _phase_id(client, "7.PLAN_GATE")
         before = client.get(f"/api/phases/{phase_id}").json()["phase"]
+        payload = {field: _phase_id(client, target_code)}
+        if field == "parallel_with_phase_id" and target_code != "6.TEST_PLAN":
+            payload["execution_type"] = "parallel"
 
         response = client.put(f"/api/phases/{phase_id}", json=payload)
 
         assert response.status_code == 409
         after = client.get(f"/api/phases/{phase_id}").json()["phase"]
-        for field in ("execution_type", "parallel_with", "rollback_target"):
+        for field in (
+            "execution_type",
+            "parallel_with_phase_id",
+            "rollback_target_phase_id",
+        ):
             assert after[field] == before[field]
 
     def test_update_phase_forbidden_code(self, client):

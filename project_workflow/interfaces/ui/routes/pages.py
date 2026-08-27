@@ -70,7 +70,7 @@ async def phases_page(request: Request, workflow_id: int | None = Query(default=
     if selected_workflow is None and workflows:
         selected_workflow = workflows[0]
     selected_workflow_id = selected_workflow["id"] if selected_workflow else None
-    phases = _load_phases(selected_workflow_id)
+    phases = _load_phases(int(selected_workflow_id)) if selected_workflow_id is not None else []
     phase_blocks = _build_parallel_phase_blocks(phases)
     return templates.TemplateResponse(
         request=request,
@@ -108,6 +108,14 @@ async def phase_detail(request: Request, phase_id: int) -> HTMLResponse:
         None,
     )
     parallel_candidates = []
+    rollback_target_phase = next(
+        (
+            item
+            for item in workflow_phases
+            if item.get("id") == phase.get("rollback_target_phase_id")
+        ),
+        None,
+    )
     if current_index is not None:
         left = current_index - 1
         right = current_index + 1
@@ -135,6 +143,7 @@ async def phase_detail(request: Request, phase_id: int) -> HTMLResponse:
             "agents": agents,
             "workflow_phases": workflow_phases,
             "parallel_candidates": parallel_candidates,
+            "rollback_target_phase": rollback_target_phase,
         },
     )
 
@@ -214,7 +223,7 @@ async def task_detail_page(request: Request, task_key: str) -> HTMLResponse:
             "cycles_done": task.get("completed_cycles", 0),
             "cycles_total": task.get("workflow_cycle_count", 0),
             "phase_history_blocks": task.get("phase_history_blocks", []),
-            "supervisor_runs": task.get("supervisor_runs", []),
+            "step_history": task.get("step_history", []),
         },
     )
 

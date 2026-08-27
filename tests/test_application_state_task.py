@@ -40,6 +40,7 @@ class FakeTask:
 
 @dataclass
 class FakePhase:
+    id: int = 11
     code: str = "1.INTAKE"
 
 
@@ -69,17 +70,17 @@ class TestTaskService:
         assert result["project_id"] == 5
         uow.commit.assert_called_once()
         uow.workflows.lock.assert_called_once_with(1)
-        assert uow.tasks.create.call_args.args[0]["current_phase"] == "1.INTAKE"
+        assert uow.tasks.create.call_args.args[0]["current_phase_id"] == 11
 
-    def test_create_task_rejects_non_string_phase_code(self):
+    def test_create_task_rejects_non_integer_phase_id(self):
         uow = _make_uow()
         uow.projects.lock.return_value = FakeProject(5, "B")
         uow.tasks.create.return_value = 7
         uow.tasks.get_by_id.return_value = FakeTask(7, "B-2", 5)
 
-        with pytest.raises(ValueError, match="строковым кодом фазы"):
+        with pytest.raises(ValueError, match="положительным целым числом"):
             TaskService(uow).create_task(
-                {"task_key": "B-2", "project_id": 5, "current_phase": 0}
+                {"task_key": "B-2", "project_id": 5, "current_phase_id": "11"}
             )
 
         uow.tasks.create.assert_not_called()
@@ -122,22 +123,15 @@ class TestTaskService:
 
         uow.tasks.create.assert_not_called()
 
-    def test_get_list_delete(self):
+    def test_get_and_list(self):
         uow = _make_uow()
         uow.tasks.get_by_id.return_value = FakeTask(1, "A-1", 1)
-        uow.tasks.lock.return_value = FakeTask(1, "A-1", 1)
         uow.tasks.get_by_key.return_value = FakeTask(1, "A-1", 1)
         uow.tasks.list.return_value = [FakeTask(1, "A-1", 1)]
-        uow.projects.get_by_id.return_value = FakeProject(1, "A", 1)
-        uow.projects.lock.return_value = FakeProject(1, "A", 1)
         svc = TaskService(uow)
         assert svc.get_task(1) == {"id": 1, "task_key": "A-1", "project_id": 1}
         assert svc.get_task_by_key("A-1") == {"id": 1, "task_key": "A-1", "project_id": 1}
         assert svc.list_tasks() == [{"id": 1, "task_key": "A-1", "project_id": 1}]
-        assert svc.delete_task(1) is None
-        uow.workflows.lock.assert_called_with(1)
-        uow.projects.lock.assert_called_with(1)
-        uow.tasks.lock.assert_called_once_with(1)
 
 
 class TestAppState:

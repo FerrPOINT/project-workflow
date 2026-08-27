@@ -18,6 +18,7 @@ pytestmark = [pytest.mark.unit]
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SEED_PATH = REPO_ROOT / "project_workflow" / "references" / "seed.json"
 COMPOSE_PATH = REPO_ROOT / "docker-compose.yml"
+AGENTS_PATH = REPO_ROOT / "AGENTS.md"
 
 EXPECTED_CODES = [
     "1.INTAKE",
@@ -94,6 +95,19 @@ def test_compose_publishes_database_and_api_on_loopback_only():
     assert '"8812:8811"' not in compose
 
 
+def test_compose_waits_for_api_readiness():
+    compose = COMPOSE_PATH.read_text(encoding="utf-8")
+    api_block = compose.split("\n  api:\n", maxsplit=1)[1]
+    assert "healthcheck:" in api_block
+    assert "http://127.0.0.1:8811/health" in api_block
+    assert "data.get('ok') is True" in api_block
+
+
+def test_repository_runbook_waits_for_compose_readiness():
+    agents = AGENTS_PATH.read_text(encoding="utf-8")
+    assert "docker compose up --build -d --wait" in agents
+
+
 def test_seed_catalog_has_exact_codes_and_order():
     phases = _items()
     assert [phase["code"] for phase in phases] == EXPECTED_CODES
@@ -103,9 +117,9 @@ def test_seed_catalog_has_exact_codes_and_order():
 def test_seed_catalog_has_exact_assignment_groups():
     groups = group_parallel_phases(
         _items(),
-        code_of=lambda phase: phase["code"],
+        id_of=lambda phase: phase["code"],
         execution_type_of=lambda phase: phase.get("execution_type", "sync"),
-        parallel_with_of=lambda phase: phase.get("parallel_with"),
+        parallel_with_phase_id_of=lambda phase: phase.get("parallel_with_phase_code"),
     )
     codes = [[phase["code"] for phase in group] for group in groups]
     assert len(codes) == 15
@@ -171,9 +185,9 @@ def test_tech_phases_reference_the_canonical_using_rtech_skill():
 
 def test_post_merge_phases_have_no_workflow_rollback_target():
     by_code = {phase["code"]: phase for phase in _items()}
-    assert by_code["12.RELEASE_GATE"]["rollback_target"] == "8.IMPLEMENT"
+    assert by_code["12.RELEASE_GATE"]["rollback_target_phase_code"] == "8.IMPLEMENT"
     for code in ("13.DELIVERY", "14.CLOSE", "15.RETRO"):
-        assert by_code[code].get("rollback_target") is None
+        assert by_code[code].get("rollback_target_phase_code") is None
 
 
 def test_sqlite_bootstrap_preserves_operator_without_fake_hermes_profile(tmp_path):

@@ -5,7 +5,6 @@
 {% block header_actions %}
   <a href="/phases" class="btn btn-secondary">← Назад к фазам</a>
 {% endblock %}
-
 {% block extra_style %}
 .tasks-layout{container:tasks / inline-size;min-width:0}
 .tasks-table-wrap{padding:0;overflow-x:auto}
@@ -14,9 +13,6 @@
 .tasks-table td:nth-child(3),.tasks-table td:nth-child(4){white-space:normal;overflow-wrap:anywhere;min-width:100px}
 .tasks-table .task-key{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent)}
 .tasks-table .task-title{color:var(--text);font-weight:500}
-.btn-danger{background:var(--red);color:#fff;border-color:var(--red)}
-.btn-danger:hover{background:#dc2626}
-.btn-sm{padding:3px 10px;font-size:12px}
 .status-badge{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:6px;font-size:12px;font-weight:500}
 .status-done{background:var(--green-soft);color:var(--green)}
 .status-active{background:var(--accent-soft);color:var(--accent)}
@@ -59,7 +55,6 @@
         <th>Статус</th>
         <th>Вердикт</th>
         <th>Создана</th>
-        <th>Действия</th>
       </tr>
     </thead>
     <tbody>
@@ -91,11 +86,10 @@
           {% else %}—{% endif %}
         </td>
         <td>{{ t.created_at[:16] if t.created_at else '—' }}</td>
-        <td><button type="button" class="btn btn-danger btn-sm" onclick="deleteTask(this)">Удалить</button></td>
       </tr>
       {% else %}
       <tr>
-        <td colspan="9" style="text-align:center;color:var(--text-dim);padding:32px">Нет задач</td>
+        <td colspan="8" style="text-align:center;color:var(--text-dim);padding:32px">Нет задач</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -129,32 +123,8 @@
       <div><span class="label">Прогресс</span><div class="value">{{ t.completed }}/{{ t.total_phases }}</div></div>
       <div><span class="label">Создана</span><div class="value">{{ t.created_at[:10] if t.created_at else '—' }}</div></div>
     </div>
-    <div class="row" style="margin-top:10px;justify-content:flex-end">
-      <button type="button" class="btn btn-danger btn-sm" onclick="deleteTask(this)">Удалить</button>
-    </div>
   </div>
   {% endfor %}
 </div>
 </div>
-{% endblock %}
-
-{% block extra_script %}
-function deleteTask(btn) {
-  const row = btn.closest('tr') || btn.closest('.task-card');
-  const key = row?.dataset.taskKey;
-  if (!key) return;
-  if (!confirm('Удалить задачу ' + key + '?')) return;
-  fetch('/api/tasks/' + encodeURIComponent(key), { method: 'DELETE' })
-    .then(async function(resp) {
-      if (resp.status === 204) {
-        row.remove();
-        return;
-      }
-      const data = await resp.json().catch(function() { return {}; });
-      showToast(data.error || 'Не удалось удалить задачу', 'error');
-    })
-    .catch(function() {
-      showRequestError();
-    });
-}
 {% endblock %}

@@ -17,7 +17,7 @@ class TestSupervisorFullContext:
         # Required top-level keys
         for key in (
             "task_key",
-            "current_phase",
+            "current_phase_code",
             "current_phase_name",
             "completed_phases",
             "all_phases",
@@ -63,7 +63,7 @@ class TestSupervisorFullContext:
     def test_current_phase_when_no_history(self):
         engine = supervisor.SupervisorEngine("RUN-1")
         ctx = engine.get_full_context()
-        assert ctx["current_phase"] == "1.INTAKE"
+        assert ctx["current_phase_code"] == "1.INTAKE"
 
     def test_completed_phases_empty_without_transitions(self):
         engine = supervisor.SupervisorEngine("RUN-1")

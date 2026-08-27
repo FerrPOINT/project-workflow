@@ -25,7 +25,7 @@ class FakePhase:
         self.instructions = kwargs.get("instructions", [])
         self.checks = kwargs.get("checks", [])
         self.evidence = kwargs.get("evidence", [])
-        self.rollback_target = kwargs.get("rollback_target")
+        self.rollback_target_phase_code = kwargs.get("rollback_target_phase_code")
 
 
 class FakeInstruction:
@@ -331,7 +331,7 @@ class TestSupervisorEngineEvaluateLLM:
         supervisor_llm("PASS")
         result = engine.evaluate_llm("I checked git", engine._get_current_phase_obj())
         assert result["verdict"] == "PASS"
-        assert result["phase"] == "1.INTAKE"
+        assert result["phase_code"] == "1.INTAKE"
         assert result["covered"]
         assert result["missing"] == []
 
@@ -348,15 +348,15 @@ class TestSupervisorEngineEvaluateLLM:
         ):
             result = engine.evaluate("")
         assert result["verdict"] == "BLOCKED"
-        assert result["next_phase"] is None
+        assert result["next_phase_code"] is None
         assert result["retryable"] is True
         task = engine.db.tasks.get_by_id(engine.task["id"]).to_dict()
-        assert (task["current_phase"], task["status"]) == ("1.INTAKE", "blocked")
-        history = engine.db.get_task_history(engine.task["id"])
-        assert [item["status"] for item in history] == ["blocked"]
-        run = engine.db.get_supervisor_runs(task_key=engine.task_key, limit=1)[0]
+        assert (task["current_phase_code"], task["status"]) == ("1.INTAKE", "blocked")
+        history = engine.db.list_phase_events(engine.task["id"])
+        assert history[-1]["event_type"] == "blocked"
+        run = engine.db.list_step_history(task_key=engine.task_key, limit=1)[0]
         assert run["verdict"] == "blocked"
-        assert run["report_fingerprint"] is None
+        assert run["replay_fingerprint"] is None
 
     def test_evaluate_llm_uses_previously_covered(self, engine, supervisor_llm):
         """LLM prompt includes previously covered items."""
@@ -482,28 +482,28 @@ class TestSupervisorEngineLLMIntegrationDB:
         supervisor_llm("PASS")
         engine.evaluate("Report")
 
-        runs = engine.db.get_supervisor_runs(task_key="RUN-1003", limit=5)
+        runs = engine.db.list_step_history(task_key="RUN-1003", limit=5)
         assert len(runs) == 1
         run = runs[0]
         assert run["verdict"] == "pass"
-        assert run["report"] == "Report"
-        assert run["covered"]
-        assert run["missing"] == []
-        assert run["report_fingerprint"]
+        assert run["worker_report"] == "Report"
+        assert run["covered_item_ids"]
+        assert run["missing_item_ids"] == []
+        assert run["replay_fingerprint"]
 
     def test_task_phase_advanced_after_llm_pass(self, engine, supervisor_llm):
         supervisor_llm("PASS")
         engine.evaluate("Report")
 
         task = engine.db.tasks.get_by_id(engine.task["id"]).to_dict()
-        assert task["current_phase"] == "2.REQUIREMENTS"
+        assert task["current_phase_code"] == "2.REQUIREMENTS"
 
     def test_task_blocked_after_llm_blocked(self, engine, supervisor_llm):
         supervisor_llm("BLOCKED", blockers=["No access"])
         engine.evaluate("Report")
 
         task = engine.db.tasks.get_by_id(engine.task["id"]).to_dict()
-        assert task["current_phase"] == "1.INTAKE"
+        assert task["current_phase_code"] == "1.INTAKE"
         assert task["status"] == "blocked"
 
     def test_rollback_without_config_is_retryable_and_blocks_current_phase(self, engine, supervisor_llm):
@@ -513,16 +513,16 @@ class TestSupervisorEngineLLMIntegrationDB:
         assert result["verdict"] == "BLOCKED"
         assert result["retryable"] is True
         task = engine.db.tasks.get_by_id(engine.task["id"]).to_dict()
-        assert (task["current_phase"], task["status"]) == ("1.INTAKE", "blocked")
-        assert [item["status"] for item in engine.db.get_task_history(engine.task["id"])] == ["blocked"]
+        assert (task["current_phase_code"], task["status"]) == ("1.INTAKE", "blocked")
+        assert engine.db.list_phase_events(engine.task["id"])[-1]["event_type"] == "blocked"
 
     def test_supervisor_run_failure_rolls_back_db_and_engine_state(self, engine, monkeypatch, supervisor_llm):
         task_id = engine.task["id"]
         original_task = dict(engine.task)
-        original_phase = engine.current_phase
+        original_phase = engine.current_phase_code
         monkeypatch.setattr(
             engine.db,
-            "create_supervisor_run",
+            "record_step",
             lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("supervisor write failed")),
         )
 
@@ -531,12 +531,14 @@ class TestSupervisorEngineLLMIntegrationDB:
             engine.evaluate("Report")
 
         persisted = engine.db.tasks.get_by_id(task_id).to_dict()
-        assert persisted["current_phase"] == original_task["current_phase"]
+        assert persisted["current_phase_id"] == original_task["current_phase_id"]
         assert persisted["status"] == original_task["status"]
         assert engine.task == original_task
-        assert engine.current_phase == original_phase
-        assert engine.db.get_task_history(task_id) == []
-        assert engine.db.get_supervisor_runs(task_key=engine.task_key, limit=5) == []
+        assert engine.current_phase_code == original_phase
+        assert [event["event_type"] for event in engine.db.list_phase_events(task_id)] == [
+            "entered"
+        ]
+        assert engine.db.list_step_history(task_key=engine.task_key, limit=5) == []
 
 
 class TestOpenAICompatibleClientOverrides:
@@ -572,7 +574,7 @@ class TestEvaluatorV7PromptContract:
         assert "affected required item IDs in missing" in prompt
 
     def test_build_user_prompt_exposes_rollback_target(self):
-        phase = FakePhase(rollback_target="8.IMPLEMENT")
+        phase = FakePhase(rollback_target_phase_code="8.IMPLEMENT")
 
         prompt = PromptBuilder.build_user_prompt("RUN-1", phase, "reviewed")
 
