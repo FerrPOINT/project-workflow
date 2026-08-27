@@ -184,10 +184,6 @@ class Project(Base):
     description: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default=text("''"))
     key_prefixes: Mapped[str] = mapped_column(String, nullable=False, default="[]", server_default="[]")
 
-    __table_args__ = (
-        UniqueConstraint("id", "workflow_id", name="uq_projects_id_workflow"),
-    )
-
     workflow: Mapped[Workflow] = relationship("Workflow", back_populates="projects")
     tasks: Mapped[list[Task]] = relationship(
         "Task",
@@ -200,7 +196,9 @@ class Task(Base):
     __tablename__ = "tasks"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    project_id: Mapped[int] = mapped_column(nullable=False)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False
+    )
     workflow_id: Mapped[int] = mapped_column(ForeignKey("workflows.id", ondelete="RESTRICT"), nullable=False)
     task_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     title: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -216,12 +214,6 @@ class Task(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
     __table_args__ = (
-        ForeignKeyConstraint(
-            ["project_id", "workflow_id"],
-            ["projects.id", "projects.workflow_id"],
-            name="fk_tasks_project_workflow",
-            ondelete="RESTRICT",
-        ),
         ForeignKeyConstraint(
             ["current_phase_id", "workflow_id"],
             ["phases.id", "phases.workflow_id"],
