@@ -255,10 +255,15 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         item_id for item_id, text in evaluation_items if item_id in previously or normalize_text(text) in previously
     }
     initial_previously_ids = set(previously_ids)
-    transition_routes = {
-        verdict: engine._resolve_transition(phase, verdict, group)
-        for verdict in ("pass", "rollback", "delegate")
-    }
+    catalog_error: ValueError | None = None
+    try:
+        transition_routes = {
+            verdict: engine._resolve_transition(phase, verdict, group)
+            for verdict in ("pass", "rollback", "delegate")
+        }
+    except ValueError as exc:
+        catalog_error = exc
+        transition_routes = {}
     initial_contract_fingerprint = _contract_fingerprint(
         builder=builder,
         phase=phase,
@@ -292,12 +297,11 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     raw: dict[str, Any] | None = None
     technical_error = False
     try:
+        if catalog_error is not None:
+            raise catalog_error
         client = OpenAICompatibleClient()
         raw = client.chat(system=PromptBuilder.SYSTEM_PROMPT, user=user, temperature=0.1)
-        llm = ResponseParser.parse(
-            raw,
-            required_item_ids=item_ids,
-        )
+        llm = ResponseParser.parse(raw, required_item_ids=item_ids)
         if llm.verdict == "ROLLBACK" and not phase.rollback_target_phase_code:
             raise ValueError("Для текущей фазы не настроена цель отката")
         if llm.verdict == "DELEGATE" and phase.delegate is None:
@@ -351,10 +355,15 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     previously_ids = {
         item_id for item_id, text in evaluation_items if item_id in previously or normalize_text(text) in previously
     }
-    transition_routes = {
-        verdict: engine._resolve_transition(phase, verdict, group)
-        for verdict in ("pass", "rollback", "delegate")
-    }
+    try:
+        transition_routes = {
+            verdict: engine._resolve_transition(phase, verdict, group)
+            for verdict in ("pass", "rollback", "delegate")
+        }
+    except ValueError as exc:
+        technical_error = True
+        llm = _blocked(exc)
+        transition_routes = {}
     current_contract_fingerprint = _contract_fingerprint(
         builder=builder,
         phase=phase,
@@ -411,9 +420,14 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
 
     verdict_key = llm.verdict.lower()
     blockers = llm.blockers
-    next_phase_code, next_phase_name, rollback_phase_code = engine._resolve_transition(
-        phase, verdict_key, group
-    )
+    if technical_error:
+        next_phase_code = None
+        next_phase_name = None
+        rollback_phase_code = None
+    else:
+        next_phase_code, next_phase_name, rollback_phase_code = engine._resolve_transition(
+            phase, verdict_key, group
+        )
     if verdict_key != "pass" or technical_error:
         next_phase_code = None
         next_phase_name = None

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -19,6 +20,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SEED_PATH = REPO_ROOT / "project_workflow" / "references" / "seed.json"
 COMPOSE_PATH = REPO_ROOT / "docker-compose.yml"
 AGENTS_PATH = REPO_ROOT / "AGENTS.md"
+DOCKERFILE_PATH = REPO_ROOT / "Dockerfile"
+CONSTRAINTS_PATH = REPO_ROOT / "constraints.txt"
+LICENSE_PATH = REPO_ROOT / "LICENSE"
 
 EXPECTED_CODES = [
     "1.INTAKE",
@@ -79,10 +83,11 @@ def test_default_bootstrap_uses_run_prefix(tmp_path):
     assert all(project["code"] != "TASK" for project in uow.get_projects())
 
 
-def test_compose_passes_openrouter_evaluator_configuration_to_api():
+def test_compose_pins_app_test_evaluator_configuration_to_api():
     compose = COMPOSE_PATH.read_text(encoding="utf-8")
-    assert "OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}" in compose
-    assert "OPENAI_MODEL: ${OPENAI_MODEL:-z-ai/glm-5.2}" in compose
+    assert "OPENAI_BASE_URL: ${OPENAI_BASE_URL:-http://192.168.10.1:4000/v1}" in compose
+    assert "OPENAI_MODEL: app-test" in compose
+    assert "OPENAI_MODEL: ${OPENAI_MODEL" not in compose
     assert "OPENAI_API_KEY: ${OPENAI_API_KEY:-}" in compose
     assert "OPENAI_REASONING_EFFORT: ${OPENAI_REASONING_EFFORT:-none}" in compose
 
@@ -106,6 +111,55 @@ def test_compose_waits_for_api_readiness():
 def test_repository_runbook_waits_for_compose_readiness():
     agents = AGENTS_PATH.read_text(encoding="utf-8")
     assert "docker compose up --build -d --wait" in agents
+
+
+def test_dependency_constraints_are_exact_and_runtime_image_uses_isolated_venv():
+    constraints = [
+        line.strip()
+        for line in CONSTRAINTS_PATH.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    dockerfile = DOCKERFILE_PATH.read_text(encoding="utf-8")
+    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    digest = "sha256:0bee7276f83efd4a1ee05bbbf4281d95ed28e079220a9457f25a93e3f1e3c31b"
+
+    assert constraints
+    assert all("==" in requirement for requirement in constraints)
+    assert 'requires = ["hatchling==1.32.0"]' in pyproject
+    assert dockerfile.count(digest) == 2
+    assert "ENV PIP_CONSTRAINT=/app/constraints.txt" in dockerfile
+    assert "--constraint constraints.txt" in dockerfile
+    assert "COPY --from=builder /opt/venv /opt/venv" in dockerfile
+    assert "/usr/local/lib/python3.11/site-packages" not in dockerfile
+    assert "COPY --from=builder /usr/local/bin" not in dockerfile
+    assert "pip uninstall -y pip setuptools wheel" in dockerfile
+
+
+def test_repository_contains_declared_mit_license():
+    license_text = LICENSE_PATH.read_text(encoding="utf-8")
+    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+
+    assert license_text.startswith("MIT License\n")
+    assert "Copyright (c) 2026 FerrPOINT" in license_text
+    assert 'license = "MIT"' in pyproject
+    assert 'license-files = ["LICENSE"]' in pyproject
+
+
+@pytest.mark.parametrize("raises", [False, True])
+def test_uow_context_always_closes_session(tmp_path, monkeypatch, raises):
+    uow = SAUnitOfWork(f"sqlite:///{tmp_path / f'uow-{raises}.db'}")
+    close = Mock(wraps=uow.close)
+    monkeypatch.setattr(uow, "close", close)
+
+    if raises:
+        with pytest.raises(RuntimeError, match="synthetic"):
+            with uow:
+                raise RuntimeError("synthetic")
+    else:
+        with uow:
+            pass
+
+    close.assert_called_once_with()
 
 
 def test_seed_catalog_has_exact_codes_and_order():

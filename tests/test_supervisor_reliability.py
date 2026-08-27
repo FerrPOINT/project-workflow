@@ -6,11 +6,13 @@ from unittest.mock import patch
 
 import pytest
 import requests
+from sqlalchemy import text
 
 from project_workflow import config
 from project_workflow.application.phase_service import PhaseService
 from project_workflow.infrastructure.llm import OpenAICompatibleClient, PromptBuilder, ResponseParser
 from project_workflow.supervisor import SupervisorEngine
+from tests._db_helpers import phase_by_code
 
 pytestmark = [pytest.mark.supervisor]
 
@@ -149,13 +151,16 @@ def test_same_report_uses_provider_again_after_instruction_contract_change(super
         assert phase is not None and phase.id is not None
         updated = [
             {
+                "id": instruction.id,
                 "description": instruction.step,
                 "execution_type": instruction.execution_type,
                 "skills": instruction.skills,
             }
             for instruction in phase.instructions
         ]
-        updated.append({"description": "Новая обязательная инструкция", "execution_type": "sync", "skills": []})
+        updated.append(
+            {"id": None, "description": "Новая обязательная инструкция", "execution_type": "sync", "skills": []}
+        )
         PhaseService(engine.db).update_phase_detail(phase.id, {"instructions": updated})
         second = engine.evaluate(report)
 
@@ -207,8 +212,8 @@ def test_catalog_change_during_provider_call_fails_closed_then_retries(superviso
             mutated = True
             phase = engine._get_current_phase_obj()
             assert phase is not None and phase.id is not None
-            checks = [{"description": item.description} for item in phase.checks]
-            checks.append({"description": "Проверка, добавленная конкурентно"})
+            checks = [{"id": item.id, "description": item.description} for item in phase.checks]
+            checks.append({"id": None, "description": "Проверка, добавленная конкурентно"})
             PhaseService(engine.db).update_phase_detail(phase.id, {"checks": checks})
         return fixture_chat(*args, **kwargs)
 
@@ -230,6 +235,76 @@ def test_catalog_change_during_provider_call_fails_closed_then_retries(superviso
     assert retry["verdict"] == "PASS"
     assert retry["replayed"] is False
     assert chat.call_count == 2
+
+
+def test_same_report_replays_after_noop_phase_aggregate_save(supervisor_llm):
+    engine = SupervisorEngine("RUN-919")
+    supervisor_llm("PARTIAL")
+    fixture_chat = OpenAICompatibleClient.chat
+    report = "Контракт сохранён без изменений"
+
+    with patch.object(OpenAICompatibleClient, "chat", side_effect=fixture_chat) as chat:
+        first = engine.evaluate(report)
+        phase = engine._get_current_phase_obj()
+        assert phase is not None and phase.id is not None
+        PhaseService(engine.db).update_phase_detail(
+            phase.id,
+            {
+                "instructions": [
+                    {
+                        "id": item.id,
+                        "description": item.step,
+                        "execution_type": item.execution_type,
+                        "skills": item.skills,
+                    }
+                    for item in phase.instructions
+                ],
+                "checks": [
+                    {"id": item.id, "description": item.description}
+                    for item in phase.checks
+                ],
+                "evidence": [
+                    {"id": item.id, "description": item.item}
+                    for item in phase.evidence
+                ],
+            },
+        )
+        second = engine.evaluate(report)
+
+    assert first["replayed"] is False
+    assert second["replayed"] is True
+    assert chat.call_count == 1
+
+
+def test_inconsistent_parallel_rollback_targets_fail_closed_without_provider_call():
+    engine = SupervisorEngine("RUN-918")
+    solution = phase_by_code(engine.db, "6.SOLUTION")
+    test_plan = phase_by_code(engine.db, "6.TEST_PLAN")
+    different_target = phase_by_code(engine.db, "4.START")
+    assert solution.id is not None and test_plan.id is not None and different_target.id is not None
+    engine.db.tasks.update(
+        int(engine.task["id"]),
+        {"current_phase_id": solution.id, "status": "active"},
+    )
+    engine.db.session.execute(
+        text("UPDATE phases SET rollback_target_phase_id = :target WHERE id = :phase_id"),
+        {"target": different_target.id, "phase_id": test_plan.id},
+    )
+    engine.db.commit()
+    engine._reload_evaluation_state()
+
+    with patch.object(OpenAICompatibleClient, "chat") as chat:
+        result = engine.evaluate("Отчёт не должен уйти провайдеру")
+
+    latest_run = engine.db.list_step_history(task_key="RUN-918", limit=1)[0]
+    events = engine.db.list_phase_events(int(engine.task["id"]))
+    assert chat.call_count == 0
+    assert result["verdict"] == "BLOCKED"
+    assert result["retryable"] is True
+    assert result["current_phase_code"] == "6.SOLUTION"
+    assert latest_run["replay_fingerprint"] is None
+    assert latest_run["verdict"] == "blocked"
+    assert events[-1]["event_type"] == "blocked"
 
 
 @pytest.mark.parametrize(

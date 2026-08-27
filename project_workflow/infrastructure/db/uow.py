@@ -60,10 +60,13 @@ class SAUnitOfWork(UnitOfWork):
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> Literal[False]:
-        if exc_type is not None:
-            self.rollback()
-        else:
-            self.commit()
+        try:
+            if exc_type is not None:
+                self.rollback()
+            else:
+                self.commit()
+        finally:
+            self.close()
         return False
 
     def close(self) -> None:

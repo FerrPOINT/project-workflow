@@ -272,13 +272,18 @@ function setPhaseMode(el, mode) {
 async function togglePhaseMode(el) {
   if (el.dataset.saving === 'true') return;
   const previousMode = el.dataset.mode || 'sync';
+  const partnerSelect = document.getElementById('parallelPartnerSelect');
+  const previousPartner = partnerSelect?.value || '';
   const nextMode = previousMode === 'sync' ? 'parallel' : 'sync';
   setPhaseMode(el, nextMode);
   el.dataset.saving = 'true';
   el.setAttribute('aria-busy', 'true');
   try {
     const saved = await savePhase();
-    if (!saved) setPhaseMode(el, previousMode);
+    if (!saved) {
+      setPhaseMode(el, previousMode);
+      if (partnerSelect) partnerSelect.value = previousPartner;
+    }
   } finally {
     delete el.dataset.saving;
     el.removeAttribute('aria-busy');
@@ -658,13 +663,19 @@ async function persistPhase() {
   document.querySelectorAll('#checks-list li').forEach((li) => {
     if (li.classList.contains('empty-state')) return;
     const inp = li.querySelector('[data-field="description"]');
-    if (inp) data.checks.push({description: inp.value});
+    if (inp) data.checks.push({
+      id: li.dataset.id ? Number(li.dataset.id) : null,
+      description: inp.value,
+    });
   });
 
   document.querySelectorAll('#evidence-list li').forEach((li) => {
     if (li.classList.contains('empty-state')) return;
     const inp = li.querySelector('[data-field="description"]');
-    if (inp) data.evidence.push({description: inp.value});
+    if (inp) data.evidence.push({
+      id: li.dataset.id ? Number(li.dataset.id) : null,
+      description: inp.value,
+    });
   });
 
   try {

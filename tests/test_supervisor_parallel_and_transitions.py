@@ -212,6 +212,13 @@ class TestGetParallelGroup:
         assert engine._resolve_transition(linked_a, "pass", linked_group) == ("b", "B", None)
         assert engine._resolve_transition(isolated_b, "pass", isolated_group) == ("done", "Done", None)
 
+    def test_transition_rejects_parallel_group_with_different_rollback_targets(self, engine):
+        group = engine._get_parallel_group(engine.phase_map["1"])
+        group[1].rollback_target_phase_code = "-1"
+
+        with pytest.raises(ValueError, match="разные цели отката"):
+            engine._resolve_transition(group[0], "rollback", group)
+
 
 # ═══════════════════════════════════════════════════════════════════════
 #  _get_next_phase_after_group

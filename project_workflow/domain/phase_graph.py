@@ -6,6 +6,8 @@ from collections.abc import Hashable, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
+from project_workflow.domain.phase_grouping import group_parallel_phases
+
 
 class PhaseGraphItem(Protocol):
     """Minimum phase shape required by the graph validator."""
@@ -111,4 +113,20 @@ def validate_phase_graph(phases: Sequence[PhaseGraphItem]) -> None:
             raise ValueError(
                 f"Целевая фаза parallel_with_phase_id для {phase.code!r} должна находиться "
                 "в том же непрерывном параллельном сегменте"
+            )
+
+    groups = group_parallel_phases(
+        ordered,
+        id_of=lambda phase: phase.graph_id,
+        execution_type_of=lambda phase: phase.execution_type,
+        parallel_with_phase_id_of=lambda phase: phase.parallel_with_phase_id,
+    )
+    for group in groups:
+        if len(group) < 2:
+            continue
+        rollback_targets = {phase.rollback_target_phase_id for phase in group}
+        if len(rollback_targets) > 1:
+            group_codes = ", ".join(phase.code for phase in group)
+            raise ValueError(
+                f"Связанные параллельные фазы {group_codes} должны иметь общую цель отката"
             )

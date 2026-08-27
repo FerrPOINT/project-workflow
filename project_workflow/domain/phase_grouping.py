@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Hashable, Sequence
 from typing import TypeVar
 
 PhaseT = TypeVar("PhaseT")
@@ -12,8 +12,8 @@ def group_parallel_phases(
     phases: Sequence[PhaseT],
     *,
     execution_type_of: Callable[[PhaseT], str],
-    id_of: Callable[[PhaseT], int | str],
-    parallel_with_phase_id_of: Callable[[PhaseT], int | str | None],
+    id_of: Callable[[PhaseT], Hashable],
+    parallel_with_phase_id_of: Callable[[PhaseT], Hashable | None],
 ) -> list[list[PhaseT]]:
     """Return ordered serial items and connected parallel components.
 
@@ -36,7 +36,7 @@ def group_parallel_phases(
             run_end += 1
         run = list(phases[index:run_end])
         by_id = {id_of(item): item for item in run}
-        edges: dict[int | str, set[int | str]] = {phase_id: set() for phase_id in by_id}
+        edges: dict[Hashable, set[Hashable]] = {phase_id: set() for phase_id in by_id}
         for item in run:
             phase_id = id_of(item)
             partner = parallel_with_phase_id_of(item)
@@ -44,12 +44,12 @@ def group_parallel_phases(
                 edges[phase_id].add(partner)
                 edges[partner].add(phase_id)
 
-        assigned: set[int | str] = set()
+        assigned: set[Hashable] = set()
         for item in run:
             start = id_of(item)
             if start in assigned:
                 continue
-            component: set[int | str] = set()
+            component: set[Hashable] = set()
             pending = [start]
             while pending:
                 code = pending.pop()

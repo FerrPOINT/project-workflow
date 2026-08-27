@@ -134,13 +134,13 @@ class SAPhaseRepository(PhaseRepository):
             .limit(1)
         ).scalar_one_or_none()
         if current_task is not None:
-            kinds.add("current task")
+            kinds.add("текущая задача")
 
         history = self._session.execute(
             select(m.TaskPhaseEvent.id).where(m.TaskPhaseEvent.phase_id == phase_id).limit(1)
         ).scalar_one_or_none()
         if history is not None:
-            kinds.add("task history")
+            kinds.add("история задачи")
 
         run = self._session.execute(
             select(m.TaskStepHistoryEntry.id)
@@ -154,7 +154,7 @@ class SAPhaseRepository(PhaseRepository):
             .limit(1)
         ).scalar_one_or_none()
         if run is not None:
-            kinds.add("supervisor run")
+            kinds.add("проверка Supervisor")
 
         catalog_link = self._session.execute(
             select(m.Phase.id)
@@ -169,7 +169,7 @@ class SAPhaseRepository(PhaseRepository):
             .limit(1)
         ).scalar_one_or_none()
         if catalog_link is not None:
-            kinds.add("phase link")
+            kinds.add("ссылка фазы")
         return kinds
 
     def has_agent_reference(self, agent_id: int) -> bool:

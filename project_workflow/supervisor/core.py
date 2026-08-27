@@ -407,9 +407,12 @@ class SupervisorEngine:
         is_parallel = len(group) > 1
         if is_parallel:
             next_phase_code, next_phase_name = self._get_next_phase_after_group(group)
-            rollback_phase_code = (
-                group[0].rollback_target_phase_code if verdict == "rollback" else None
-            )
+            rollback_targets = {member.rollback_target_phase_code for member in group}
+            if len(rollback_targets) != 1:
+                raise ValueError(
+                    "Связанные параллельные фазы имеют разные цели отката"
+                )
+            rollback_phase_code = rollback_targets.pop() if verdict == "rollback" else None
             if verdict != "pass":
                 next_phase_code = None
                 next_phase_name = None

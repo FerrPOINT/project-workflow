@@ -1,7 +1,7 @@
 """OpenAI-compatible LLM adapter for Supervisor evaluation.
 
-OpenRouter is the default provider. The adapter stays OpenAI-compatible and
-does not implement a fallback evaluator.
+Octo LiteLLM route ``app-test`` is the runtime default. The adapter stays
+OpenAI-compatible and does not implement a fallback evaluator.
 
 PromptBuilder — assembles system + user prompts from phase contracts
 ResponseParser — validates and normalises LLM JSON responses

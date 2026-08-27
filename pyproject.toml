@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling==1.32.0"]
 build-backend = "hatchling.build"
 
 [project]
@@ -7,7 +7,8 @@ name = "project-workflow"
 version = "1.0.0"
 description = "project-workflow — жёсткий пофазовый клиент"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 dependencies = [
     "click>=8.0",
@@ -64,7 +65,6 @@ omit = [
     "*/tests/*",
     "*/templates/*",
     "*/references/*",
-    "*/infrastructure/db/migrations/*",
 ]
 
 [tool.pytest.ini_options]
@@ -78,7 +78,7 @@ markers = [
     "slow: tests that take more than 10 seconds",
 ]
 filterwarnings = [
-    "ignore::DeprecationWarning",
+    "ignore:The default datetime adapter is deprecated as of Python 3.12.*:DeprecationWarning:sqlalchemy.engine.default",
 ]
 addopts = "-m 'not integration'"
 

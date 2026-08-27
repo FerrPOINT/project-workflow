@@ -7,7 +7,7 @@ import pytest
 pytestmark = [pytest.mark.unit]
 
 from project_workflow.application.phase_service import PhaseService
-from project_workflow.domain.exceptions import NotFoundError
+from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.phase_grouping import group_parallel_phases
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from tests._db_helpers import phase_by_code, prepare_sqlite_uow
@@ -47,7 +47,7 @@ class TestPhaseAggregate:
             phase.id,
             {
                 "instructions": [
-                    {"description": "Run tests", "execution_type": "sync", "skills": ["testing"]},
+                    {"id": None, "description": "Run tests", "execution_type": "sync", "skills": ["testing"]},
                 ]
             },
         )
@@ -58,29 +58,137 @@ class TestPhaseAggregate:
 
     def test_invalid_phase_raises(self, svc):
         with pytest.raises(NotFoundError, match="Фаза 9999 не найдена"):
-            svc.update_phase_detail(9999, {"instructions": [{"description": "x"}]})
+            svc.update_phase_detail(9999, {"instructions": [{"id": None, "description": "x"}]})
 
     def test_save_checks(self, svc, fresh_db):
         phase = phase_by_code(fresh_db, "2.REQUIREMENTS")
-        ids = svc.update_phase_detail(phase.id, {"checks": [{"description": "Check A"}]})
+        ids = svc.update_phase_detail(phase.id, {"checks": [{"id": None, "description": "Check A"}]})
         assert len(ids["checks"]) == 1
         detail = svc.get_phase_detail(phase.id)
         assert detail["checks"][0]["description"] == "Check A"
 
     def test_save_checks_replaces_previous(self, svc, fresh_db):
         phase = phase_by_code(fresh_db, "2.REQUIREMENTS")
-        svc.update_phase_detail(phase.id, {"checks": [{"description": "Old"}]})
-        svc.update_phase_detail(phase.id, {"checks": [{"description": "New"}]})
+        first = svc.update_phase_detail(phase.id, {"checks": [{"id": None, "description": "Old"}]})
+        svc.update_phase_detail(
+            phase.id,
+            {"checks": [{"id": first["checks"][0], "description": "New"}]},
+        )
         detail = svc.get_phase_detail(phase.id)
         assert len(detail["checks"]) == 1
         assert detail["checks"][0]["description"] == "New"
 
     def test_save_evidence(self, svc, fresh_db):
         phase = phase_by_code(fresh_db, "2.REQUIREMENTS")
-        ids = svc.update_phase_detail(phase.id, {"evidence": [{"description": "Screenshot"}]})
+        ids = svc.update_phase_detail(phase.id, {"evidence": [{"id": None, "description": "Screenshot"}]})
         assert len(ids["evidence"]) == 1
         detail = svc.get_phase_detail(phase.id)
         assert detail["evidence"][0]["description"] == "Screenshot"
+
+    def test_noop_save_preserves_all_nested_ids(self, svc, fresh_db):
+        phase = phase_by_code(fresh_db, "2.REQUIREMENTS")
+        before = svc.get_phase_detail(phase.id)
+        payload = {
+            "instructions": [
+                {
+                    "id": item["id"],
+                    "description": item["description"],
+                    "execution_type": item["execution_type"],
+                    "skills": item["skills"],
+                }
+                for item in before["instructions"]
+            ],
+            "checks": [
+                {"id": item["id"], "description": item["description"]}
+                for item in before["checks"]
+            ],
+            "evidence": [
+                {"id": item["id"], "description": item["description"]}
+                for item in before["evidence"]
+            ],
+        }
+
+        result = svc.update_phase_detail(phase.id, payload)
+        after = svc.get_phase_detail(phase.id)
+
+        assert result == {
+            "instructions": [item["id"] for item in before["instructions"]],
+            "checks": [item["id"] for item in before["checks"]],
+            "evidence": [item["id"] for item in before["evidence"]],
+        }
+        assert after == before
+
+    def test_edit_add_delete_and_reorder_preserve_retained_instruction_ids(self, svc, fresh_db):
+        phase = phase_by_code(fresh_db, "2.REQUIREMENTS")
+        before = svc.get_phase_detail(phase.id)["instructions"]
+        assert len(before) >= 2
+        retained_id = before[1]["id"]
+
+        result = svc.update_phase_detail(
+            phase.id,
+            {
+                "instructions": [
+                    {
+                        "id": retained_id,
+                        "description": "Изменённая инструкция",
+                        "execution_type": "sync",
+                        "skills": [],
+                    },
+                    {
+                        "id": None,
+                        "description": "Новая инструкция",
+                        "execution_type": "parallel",
+                        "skills": ["testing"],
+                    },
+                ]
+            },
+        )
+        after = svc.get_phase_detail(phase.id)["instructions"]
+
+        assert result["instructions"][0] == retained_id
+        assert [item["id"] for item in after] == result["instructions"]
+        assert [item["step_num"] for item in after] == [1, 2]
+        assert after[0]["description"] == "Изменённая инструкция"
+        assert before[0]["id"] not in result["instructions"]
+
+    def test_foreign_nested_id_rolls_back_complete_aggregate(self, svc, fresh_db):
+        phase = phase_by_code(fresh_db, "2.REQUIREMENTS")
+        other = phase_by_code(fresh_db, "3.DOR_GATE")
+        before = svc.get_phase_detail(phase.id)
+        foreign_check_id = svc.get_phase_detail(other.id)["checks"][0]["id"]
+
+        with pytest.raises(ConflictError, match="не принадлежат фазе"):
+            svc.update_phase_detail(
+                phase.id,
+                {
+                    "description": "Не должно сохраниться",
+                    "checks": [{"id": foreign_check_id, "description": "Чужая проверка"}],
+                },
+            )
+
+        assert svc.get_phase_detail(phase.id) == before
+
+    @pytest.mark.parametrize("field", ["checks", "evidence"])
+    def test_nested_descriptions_can_swap_without_changing_ids(self, svc, fresh_db, field):
+        phase = phase_by_code(fresh_db, "2.REQUIREMENTS")
+        before = svc.get_phase_detail(phase.id)[field]
+        assert len(before) >= 2
+        first, second = before[:2]
+        payload = [
+            {"id": first["id"], "description": second["description"]},
+            {"id": second["id"], "description": first["description"]},
+            *[
+                {"id": item["id"], "description": item["description"]}
+                for item in before[2:]
+            ],
+        ]
+
+        result = svc.update_phase_detail(phase.id, {field: payload})
+        after = svc.get_phase_detail(phase.id)[field]
+
+        assert result[field] == [item["id"] for item in before]
+        assert after[0]["description"] == second["description"]
+        assert after[1]["description"] == first["description"]
 
 
 class TestUpdatePhase:

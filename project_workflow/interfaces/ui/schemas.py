@@ -90,6 +90,7 @@ class PhaseCreate(StrictRequest):
 
 
 class PhaseInstructionItem(StrictRequest):
+    id: int | None = Field(gt=0, strict=True)
     description: str
     execution_type: Literal["sync", "parallel"] = "sync"
     skills: list[str] | None = None
@@ -106,6 +107,7 @@ class PhaseInstructionItem(StrictRequest):
 
 
 class PhaseTextItem(StrictRequest):
+    id: int | None = Field(gt=0, strict=True)
     description: str
 
     @field_validator("description")
@@ -133,7 +135,14 @@ class PhaseUpdate(StrictUpdateRequest):
         return _strip_nonblank(value, "name") if value is not None else None
 
     @model_validator(mode="after")
-    def _descriptions_must_be_unique(self) -> PhaseUpdate:
+    def _nested_items_must_be_unique(self) -> PhaseUpdate:
+        for field_name in ("instructions", "checks", "evidence"):
+            items = getattr(self, field_name)
+            if items is None:
+                continue
+            ids = [item.id for item in items if item.id is not None]
+            if len(ids) != len(set(ids)):
+                raise ValueError(f"Идентификаторы в поле {field_name} должны быть уникальными")
         for field_name in ("checks", "evidence"):
             items = getattr(self, field_name)
             if items is None:

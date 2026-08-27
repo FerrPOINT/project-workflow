@@ -283,18 +283,24 @@ def test_explicit_project_task_validates_prefix_and_scoped_phase_before_write():
 
 
 def test_nullable_phase_fields_distinguish_omitted_from_explicit_null():
-    workflow_id, phases = _workflow_with_phases(2)
-    first, second = phases
+    workflow_id, phases = _workflow_with_phases(3)
+    rollback_target, first, second = phases
     agent = _app_state.agent_service().create_agent({"name": _unique("agent")})
     service = _app_state.phase_service()
-    service.update_phase(first["id"], {"execution_type": "parallel"})
+    service.update_phase(
+        first["id"],
+        {
+            "execution_type": "parallel",
+            "rollback_target_phase_id": rollback_target["id"],
+        },
+    )
     service.update_phase(
         second["id"],
         {
             "description": "Present",
             "execution_type": "parallel",
             "parallel_with_phase_id": first["id"],
-            "rollback_target_phase_id": first["id"],
+            "rollback_target_phase_id": rollback_target["id"],
             "agent_id": agent["id"],
         },
     )
