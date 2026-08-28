@@ -135,6 +135,7 @@
   <h1>{{ task.task_key }}</h1>
   {% if task.title and task.title != task.task_key %}<div class="subtitle">{{ task.title }}</div>{% endif %}
   <div class="detail-meta">
+    <span><b>Воркфлоу:</b> {{ task.workflow_name or '—' }}</span>
     <span><b>Проект:</b> {{ task.project_label }}</span>
     <span><b>Создана:</b> {{ task.created_at[:16] if task.created_at else '—' }}</span>
     <span><b>Обновлена:</b> {{ task.updated_at[:16] if task.updated_at else '—' }}</span>

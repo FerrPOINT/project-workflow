@@ -37,7 +37,10 @@ def test_agent_to_dict():
 
 def test_workflow_to_dict():
     w = Workflow(id=3, name="W", is_default=True)
-    assert w.to_dict()["is_default"] is True
+    data = w.to_dict()
+    assert data["is_default"] is True
+    assert data["theme_icon"] == "workflow"
+    assert data["theme_color"] == "#5E6AD2"
 
 
 def test_project_to_dict():

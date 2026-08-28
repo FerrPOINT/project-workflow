@@ -156,6 +156,9 @@ class SupervisorContextBuilder:
         }
 
     def _cli_actor(self) -> dict[str, Any]:
+        workflow_selector = ""
+        if self.workflow and self.workflow.get("id") is not None:
+            workflow_selector = f" --workflow {self.workflow['id']}"
         return {
             "kind": "cli-user",
             "description": (
@@ -163,7 +166,7 @@ class SupervisorContextBuilder:
                 "и отправляет report по текущей фазе. Supervisor не предполагает конкретную модель, "
                 "OpenAI-compatible провайдера."
             ),
-            "entrypoint": f"project-workflow step --task {self.task_key} [--report TEXT]",
+            "entrypoint": f"project-workflow step --task {self.task_key}{workflow_selector} [--report TEXT]",
         }
 
     @staticmethod

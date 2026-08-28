@@ -55,6 +55,7 @@ SQLite остаётся только для изолированных тест�
 | Рекомендации skills | Имена skills хранятся в PostgreSQL и передаются исполнителю прямо в контракте фазы; содержимое принадлежит [`relevanter/agent-skills`](https://gt.wmtgroup.ru/relevanter/agent-skills). |
 | Hermes profiles | Агенту можно назначить уникальное имя Hermes-профиля; Supervisor передаёт его исполнителю вместе с заданием. |
 | Встроенный supervisor | Автоматическая оценка отчётов и решение о переходе на следующую фазу. |
+| Параллельные workflow | Один task key можно вести в разных workflow; workflow имеет название, простую иконку и цвет темы. |
 | Web UI | Управление шаблонами, фазами, проектами, задачами и агентами через браузер. |
 | CLI freeze | Только `step` и `history`; весь CRUD — через UI. |
 | PostgreSQL | Единый runtime: UI и CLI используют тот же Postgres через `DATABASE_URL`. |
@@ -80,6 +81,9 @@ SQLite остаётся только для изолированных тест�
 ```bash
 # Выполнить текущую фазу задачи и получить вердикт supervisor
 project-workflow step --task RUN-123 --report "Сделал X, проверил Y"
+
+# Если такой task key есть в нескольких workflow
+project-workflow step --task RUN-123 --workflow tester --report "Проверил сценарии"
 
 # История отчётов step и ответов Supervisor
 project-workflow history --task RUN-123 --n 10
@@ -189,9 +193,9 @@ erDiagram
     TASK_STEP_HISTORY ||--o{ TASK_PHASE_EVENTS : вызывает
 ```
 
-`tasks` — единственный текущий snapshot задачи. `task_phase_events` — append-only журнал событий `entered`, `completed`, `blocked`, `resumed` и `rolled_back`. `task_step_history` — история вызовов `step`: отчёт исполнителя, verdict, покрытые и пропущенные пункты, ответ Supervisor, снимок контракта и вычисленные переходы. Отдельная chat-таблица не нужна: одна step-запись хранит законченную пару запроса и ответа.
+`tasks` — единственный текущий snapshot задачи. `task_key` уникален в пределах workflow, поэтому одну внешнюю задачу можно параллельно вести по разным workflow; при неоднозначности CLI использует `--workflow <id-or-name>`. `task_phase_events` — append-only журнал событий `entered`, `completed`, `blocked`, `resumed` и `rolled_back`. `task_step_history` — история вызовов `step`: отчёт исполнителя, verdict, покрытые и пропущенные пункты, ответ Supervisor, снимок контракта и вычисленные переходы. Отдельная chat-таблица не нужна: одна step-запись хранит законченную пару запроса и ответа.
 
-Создание проекта требует явного положительного `workflow_id`; runtime не создаёт и не выбирает default workflow. Удаление задач через REST, UI, application service или repository не поддерживается: snapshot и связанный audit сохраняются, а FK используют `RESTRICT`. Внутренний `workflow_id` в audit-таблицах служит только для составных FK ownership и не дублируется в публичных DTO.
+Создание проекта требует явного положительного `workflow_id`; runtime не создаёт и не выбирает default workflow. `key_prefixes` проектов конфликтуют только внутри одного workflow, поэтому тестерский и девелоперский workflow могут использовать один внешний префикс задач. Удаление задач через REST, UI, application service или repository не поддерживается: snapshot и связанный audit сохраняются, а FK используют `RESTRICT`. Внутренний `workflow_id` в audit-таблицах служит только для составных FK ownership.
 
 Каталог физически хранится в `workflows`, `phases`, `phase_instructions`, `phase_checks` и `phase_evidence_requirements`. Ссылки текущей, parallel- и rollback-фаз являются числовыми FK; коды используются только как явные `*_phase_code` в CLI, seed и Supervisor-контракте.
 
@@ -202,6 +206,7 @@ erDiagram
 - UI-пакет (`project_workflow/interfaces/ui/`) — чистое FastAPI-приложение с отдельными routes, services, dependencies.
 - Конфигурация централизована в `project_workflow.config` на Pydantic Settings; `DATABASE_URL` обязателен.
 - PostgreSQL хранит один редактируемый каталог, snapshot задач, append-only события фаз и историю `step`; packaged JSON seed из 19 фаз используется только при bootstrap пустой БД.
+- Workflow хранит операторское название, иконку из фиксированного набора и HEX-цвет, который применяется как UI theme accent для выбранного workflow.
 - Граф фаз валидируется целиком до записи: порядок всегда `1..N`, rollback направлен назад, а явные parallel-ссылки соединяют только фазы одного непрерывного parallel-сегмента. Isolated parallel допустим; все фазы связанной parallel-группы используют одну общую цель rollback либо не задают её.
 - REST принимает числовые phase resource IDs и строгие JSON-типы; `key_prefixes` — только непустой `list[str]`, а reorder инструкций — полный уникальный набор ID одной фазы. Строковые обходные формы не поддерживаются.
 - При полном обновлении фазы каждый вложенный элемент `instructions`, `checks` и `evidence` обязан передать `id`: положительный integer обновляет существующую запись, `null` создаёт новую, отсутствие элемента удаляет его. Неизвестный или принадлежащий другой фазе ID отклоняет всю транзакцию; сохранение без изменений сохраняет ID и replay fingerprint.

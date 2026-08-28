@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import Query, Request
 from fastapi.responses import HTMLResponse
 
 from project_workflow.application.phase_service import PhaseService
 from project_workflow.config import get_settings
+from project_workflow.domain.exceptions import ConflictError
 from project_workflow.interfaces.ui.services import (
     _build_parallel_phase_blocks,
     _get_task_detail,
@@ -20,6 +23,10 @@ from project_workflow.interfaces.ui.services import (
 )
 from project_workflow.interfaces.ui.state import _app_state
 from project_workflow.interfaces.ui.templates import _group_instructions, templates
+
+
+def _theme_context(workflow: dict[str, Any] | None) -> dict[str, Any]:
+    return {"theme_workflow": workflow}
 
 
 def _error_page(
@@ -59,6 +66,7 @@ async def index(request: Request) -> HTMLResponse:
             "request": request,
             "page": "dashboard",
             "ui_port": get_settings().UI_PORT,
+            **_theme_context(None),
             **dashboard,
         },
     )
@@ -85,6 +93,7 @@ async def phases_page(request: Request, workflow_id: int | None = Query(default=
             "selected_workflow_id": selected_workflow_id,
             "page": "phases",
             "ui_port": get_settings().UI_PORT,
+            **_theme_context(selected_workflow),
         },
     )
 
@@ -103,6 +112,11 @@ async def phase_detail(request: Request, phase_id: int) -> HTMLResponse:
         )
     agents = _app_state.agent_service().list_agents()
     workflow_phases = _app_state.phase_service().list_phases(phase.get("workflow_id"))
+    workflows = _load_workflows()
+    selected_workflow = next(
+        (item for item in workflows if item["id"] == phase.get("workflow_id")),
+        None,
+    )
     current_index = next(
         (index for index, item in enumerate(workflow_phases) if item.get("id") == phase.get("id")),
         None,
@@ -144,6 +158,7 @@ async def phase_detail(request: Request, phase_id: int) -> HTMLResponse:
             "workflow_phases": workflow_phases,
             "parallel_candidates": parallel_candidates,
             "rollback_target_phase": rollback_target_phase,
+            **_theme_context(selected_workflow),
         },
     )
 
@@ -159,6 +174,7 @@ async def tasks_page(request: Request) -> HTMLResponse:
             "tasks": tasks,
             "page": "tasks",
             "ui_port": get_settings().UI_PORT,
+            **_theme_context(None),
         },
     )
 
@@ -177,6 +193,7 @@ async def projects_page(request: Request) -> HTMLResponse:
             "projects": projects,
             "workflows": workflows,
             "selected_project": projects[0] if projects else None,
+            **_theme_context(None),
         },
     )
 
@@ -192,13 +209,29 @@ async def workflows_page(request: Request) -> HTMLResponse:
             "ui_port": get_settings().UI_PORT,
             "workflows": workflows,
             "selected_workflow": workflows[0] if workflows else None,
+            **_theme_context(workflows[0] if workflows else None),
         },
     )
 
 
-async def task_detail_page(request: Request, task_key: str) -> HTMLResponse:
+async def task_detail_page(
+    request: Request,
+    task_key: str,
+    workflow_id: int | None = Query(default=None),
+) -> HTMLResponse:
     """Деталка задачи — линейная история фаз."""
-    task = _get_task_detail(task_key)
+    try:
+        task = _get_task_detail(task_key, workflow_id=workflow_id)
+    except ConflictError as exc:
+        return _error_page(
+            request,
+            title="Задача неоднозначна",
+            message=str(exc),
+            status_code=409,
+            back_url="/tasks",
+            back_label="К списку задач",
+            page="tasks",
+        )
     if not task:
         return _error_page(
             request,
@@ -224,6 +257,7 @@ async def task_detail_page(request: Request, task_key: str) -> HTMLResponse:
             "cycles_total": task.get("workflow_cycle_count", 0),
             "phase_history_blocks": task.get("phase_history_blocks", []),
             "step_history": task.get("step_history", []),
+            **_theme_context(task.get("workflow")),
         },
     )
 
@@ -238,6 +272,7 @@ async def settings_page(request: Request) -> HTMLResponse:
             "page": "settings",
             "ui_port": get_settings().UI_PORT,
             "commands": _load_cli_reference(),
+            **_theme_context(None),
         },
     )
 
@@ -253,6 +288,7 @@ async def agents_page(request: Request) -> HTMLResponse:
             "agents": agents,
             "page": "agents",
             "ui_port": get_settings().UI_PORT,
+            **_theme_context(None),
         },
     )
 
@@ -284,6 +320,11 @@ async def instructions_page(
             page="phases",
         )
     instructions = phase.get("instructions", [])
+    workflows = _load_workflows()
+    selected_workflow = next(
+        (item for item in workflows if item["id"] == phase.get("workflow_id")),
+        None,
+    )
     for instruction in instructions:
         instruction["skills"] = PhaseService.normalize_skills(instruction.get("skills"))
     instruction_groups = _group_instructions(instructions)
@@ -297,5 +338,6 @@ async def instructions_page(
             "phase": phase,
             "instructions": instructions,
             "instruction_groups": instruction_groups,
+            **_theme_context(selected_workflow),
         },
     )

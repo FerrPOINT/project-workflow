@@ -461,6 +461,8 @@ class TestApiWorkflows:
         data = resp.json()
         assert data["ok"] is True
         assert "workflow_id" in data
+        assert data["workflow"]["theme_icon"] == "workflow"
+        assert data["workflow"]["theme_color"] == "#5E6AD2"
 
     def test_create_workflow_requires_name(self, client):
         resp = client.post("/api/workflows", json={"description": "desc"})
@@ -472,17 +474,40 @@ class TestApiWorkflows:
         assert resp.status_code == 422
         assert "code" in resp.text
 
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"name": "Bad icon", "theme_icon": "unknown"},
+            {"name": "Bad color", "theme_color": "not-a-color"},
+        ],
+    )
+    def test_workflow_theme_values_are_validated(self, client, payload):
+        resp = client.post("/api/workflows", json=payload)
+        assert resp.status_code == 422
+
     def test_update_workflow(self, client):
         from project_workflow.interfaces.ui import _app_state
 
         wf = create_empty_workflow(_app_state.get_db(), _unique("upd-wf"))
-        resp = client.put(f"/api/workflows/{wf['id']}", json={"name": "Updated", "description": "new"})
+        resp = client.put(
+            f"/api/workflows/{wf['id']}",
+            json={
+                "name": "Updated",
+                "description": "new",
+                "theme_icon": "shield",
+                "theme_color": "334155",
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["ok"] is True
         assert data["workflow"]["name"] == "Updated"
+        assert data["workflow"]["theme_icon"] == "shield"
+        assert data["workflow"]["theme_color"] == "#334155"
         assert client.put(f"/api/workflows/{wf['id']}", json={"name": None}).status_code == 422
         assert client.put(f"/api/workflows/{wf['id']}", json={"description": None}).status_code == 422
+        assert client.put(f"/api/workflows/{wf['id']}", json={"theme_icon": None}).status_code == 422
+        assert client.put(f"/api/workflows/{wf['id']}", json={"theme_color": None}).status_code == 422
 
     def test_update_workflow_not_found(self, client):
         resp = client.put("/api/workflows/999999", json={"name": "X"})

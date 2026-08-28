@@ -27,10 +27,18 @@ class ProjectService:
             raise ConflictError("Префиксы ключей задач внутри проекта должны быть уникальными")
         return prefixes
 
-    def _ensure_prefixes_available(self, prefixes: list[str], *, project_id: int | None = None) -> None:
+    def _ensure_prefixes_available(
+        self,
+        prefixes: list[str],
+        *,
+        workflow_id: int,
+        project_id: int | None = None,
+    ) -> None:
         requested = set(prefixes)
         for project in self._uow.projects.list():
             if project.id == project_id:
+                continue
+            if project.workflow_id != workflow_id:
                 continue
             existing_prefixes = {prefix.strip().upper() for prefix in project.key_prefixes}
             overlap = requested.intersection(existing_prefixes)
@@ -62,7 +70,7 @@ class ProjectService:
         if "key_prefixes" not in payload:
             raise ValueError("Необходимо указать префиксы ключей задач")
         payload["key_prefixes"] = self._normalized_prefixes(payload["key_prefixes"])
-        self._ensure_prefixes_available(payload["key_prefixes"])
+        self._ensure_prefixes_available(payload["key_prefixes"], workflow_id=workflow_id)
         if self._uow.projects.get_by_code(payload["code"]):
             raise ConflictError(f"Код проекта {payload['code']!r} уже существует")
         pid = self._uow.projects.create(payload)
@@ -86,8 +94,17 @@ class ProjectService:
         if snapshot is None:
             raise NotFoundError(f"Проект {project_id} не найден")
         workflow_ids = {snapshot.workflow_id}
+        target_workflow_id = snapshot.workflow_id
         if "workflow_id" in payload:
-            workflow_ids.add(int(payload["workflow_id"]))
+            workflow_id_raw = payload["workflow_id"]
+            if (
+                not isinstance(workflow_id_raw, int)
+                or isinstance(workflow_id_raw, bool)
+                or workflow_id_raw <= 0
+            ):
+                raise ValueError("workflow_id проекта должен быть положительным целым числом")
+            target_workflow_id = workflow_id_raw
+            workflow_ids.add(target_workflow_id)
         for workflow_id in sorted(workflow_ids):
             if self._uow.workflows.lock(workflow_id) is None:
                 raise NotFoundError(f"Воркфлоу {workflow_id} не найден")
@@ -104,9 +121,19 @@ class ProjectService:
         if "workflow_id" in payload and int(payload["workflow_id"]) != existing.workflow_id:
             if project_tasks:
                 raise ConflictError("Нельзя сменить воркфлоу проекта, пока в нём есть задачи")
+        effective_prefixes: list[str] | None = None
         if "key_prefixes" in payload:
             payload["key_prefixes"] = self._normalized_prefixes(payload["key_prefixes"])
-            self._ensure_prefixes_available(payload["key_prefixes"], project_id=project_id)
+            effective_prefixes = payload["key_prefixes"]
+        if "key_prefixes" in payload or target_workflow_id != existing.workflow_id:
+            if effective_prefixes is None:
+                effective_prefixes = existing.key_prefixes
+            self._ensure_prefixes_available(
+                effective_prefixes,
+                workflow_id=target_workflow_id,
+                project_id=project_id,
+            )
+        if "key_prefixes" in payload:
             inaccessible = [
                 task.task_key
                 for task in project_tasks

@@ -1195,7 +1195,7 @@ class TestTasksPage:
 
         assert response.status_code == 200
         assert ".tasks-layout{container:tasks / inline-size;min-width:0}" in response.text
-        assert ".tasks-table{min-width:940px}" in response.text
+        assert ".tasks-table{min-width:1040px}" in response.text
         assert "flex:0 0 clamp(64px,8cqw,100px)" in response.text
         assert "@container tasks (max-width:720px)" in response.text
         assert "@media(max-width:1200px)" not in response.text
@@ -1461,6 +1461,9 @@ class TestWorkflowsPage:
         assert 'id="workflowForm"' in response.text
         assert 'id="newWorkflowButton"' in response.text
         assert 'id="workflowFormMode"' in response.text
+        assert 'id="workflowThemeIcon"' in response.text
+        assert 'id="workflowThemeColor"' in response.text
+        assert 'id="workflowThemePreview"' in response.text
 
     def test_workflows_page_has_no_code_field_in_editor_or_create_form(self):
         response = client.get("/workflows")
@@ -1480,6 +1483,8 @@ class TestWorkflowsPage:
             json={
                 "name": "API Workflow",
                 "description": "Workflow CRUD from API test",
+                "theme_icon": "bug",
+                "theme_color": "#22c55e",
             },
         )
         assert create.status_code == 200
@@ -1496,6 +1501,8 @@ class TestWorkflowsPage:
             json={
                 "name": "API Workflow Updated",
                 "description": "Updated workflow description",
+                "theme_icon": "rocket",
+                "theme_color": "#0ea5e9",
             },
         )
         assert update.status_code == 200
@@ -1504,6 +1511,8 @@ class TestWorkflowsPage:
         workflow = next(workflow for workflow in workflows if workflow["id"] == workflow_id)
         assert workflow["name"] == "API Workflow Updated"
         assert workflow["description"] == "Updated workflow description"
+        assert workflow["theme_icon"] == "rocket"
+        assert workflow["theme_color"] == "#0EA5E9"
         assert "code" not in workflow
 
         delete = client.delete(f"/api/workflows/{workflow_id}")
@@ -1634,10 +1643,12 @@ class TestSettingsPage:
         step_options = {option["flags"]: option for option in step["options"]}
         history_options = {option["flags"]: option for option in history["options"]}
 
-        assert set(step_options) == {"--task", "--report"}
-        assert set(history_options) == {"--task", "--n"}
+        assert set(step_options) == {"--task", "--workflow", "--report"}
+        assert set(history_options) == {"--task", "--workflow", "--n"}
         assert "default" not in step_options["--task"]
         assert "default" not in step_options["--report"]
+        assert "default" not in step_options["--workflow"]
+        assert "default" not in history_options["--workflow"]
         assert "default" not in history_options["--n"]
         assert "по умолчанию: все" in history_options["--n"]["help"]
 

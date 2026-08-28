@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from project_workflow.domain.workflow_theme import DEFAULT_WORKFLOW_COLOR, DEFAULT_WORKFLOW_ICON
+
 from ..interfaces.ui.helpers import (
     _build_parallel_phase_blocks,
     _resolve_task_phase_id,
@@ -103,6 +105,11 @@ class UIDataService:
         wdb = self._app_state.get_db()
         tasks = wdb.get_tasks()
         workflows = wdb.get_workflows()
+        workflows_by_id = {
+            workflow["id"]: workflow
+            for workflow in workflows
+            if isinstance(workflow.get("id"), int)
+        }
 
         # Batch phase counts and phase lookup maps per workflow.
         phase_counts_by_workflow: dict[int, int] = {}
@@ -153,6 +160,7 @@ class UIDataService:
             project_name = str(task_project["name"])
             workflow_id_raw = t.get("workflow_id")
             workflow_id: int | None = int(workflow_id_raw) if isinstance(workflow_id_raw, int) else None
+            task_workflow = workflows_by_id.get(workflow_id) if workflow_id is not None else None
             workflow_phase_count = (
                 phase_counts_by_workflow.get(workflow_id, 0)
                 if workflow_id is not None
@@ -194,6 +202,17 @@ class UIDataService:
                     "title": t.get("title", ""),
                     "project_id": t.get("project_id"),
                     "workflow_id": workflow_id,
+                    "workflow_name": task_workflow.get("name") if task_workflow else None,
+                    "workflow_theme_icon": (
+                        task_workflow.get("theme_icon", DEFAULT_WORKFLOW_ICON)
+                        if task_workflow
+                        else DEFAULT_WORKFLOW_ICON
+                    ),
+                    "workflow_theme_color": (
+                        task_workflow.get("theme_color", DEFAULT_WORKFLOW_COLOR)
+                        if task_workflow
+                        else DEFAULT_WORKFLOW_COLOR
+                    ),
                     "project_code": project_code,
                     "project_name": project_name,
                     "current_phase_id": t["current_phase_id"],
@@ -374,10 +393,10 @@ class UIDataService:
             step["next_contract"] = dict(next_contract) if isinstance(next_contract, dict) else None
         return step_history
 
-    def _get_task_detail(self, task_key: str) -> dict[str, Any] | None:
+    def _get_task_detail(self, task_key: str, workflow_id: int | None = None) -> dict[str, Any] | None:
         """Загрузить деталку задачи: метаданные + история фаз (линейно, без FORK/JOIN)."""
         wdb = self._app_state.get_db()
-        task = wdb.get_task_by_key(task_key)
+        task = wdb.get_task_by_key(task_key, workflow_id=workflow_id)
         if not task:
             return None
 
@@ -400,6 +419,14 @@ class UIDataService:
         workflow_id, workflow_phases = self._resolve_task_workflow_id(task, wdb)
         if workflow_id is None:
             raise ValueError("У задачи отсутствует корректный workflow_id")
+        workflow_row = wdb.workflows.get_by_id(workflow_id)
+        if workflow_row is None:
+            raise ValueError(f"Для задачи {task_key} не найден воркфлоу {workflow_id}")
+        workflow = workflow_row.to_dict()
+        task["workflow"] = workflow
+        task["workflow_name"] = workflow["name"]
+        task["workflow_theme_icon"] = workflow.get("theme_icon", DEFAULT_WORKFLOW_ICON)
+        task["workflow_theme_color"] = workflow.get("theme_color", DEFAULT_WORKFLOW_COLOR)
         current_phase = _resolve_task_phase_id(task["current_phase_id"], workflow_phases)
         task["current_phase_code"] = current_phase["code"]
         task["current_phase_name"] = current_phase["name"]
@@ -433,7 +460,7 @@ class UIDataService:
         task["total_phases"] = task["progress_total"]
 
         step_history = self._decorate_step_history(
-            list(reversed(wdb.list_step_history(task_key=task_key, limit=200)))
+            list(reversed(wdb.list_step_history(task_id=task["id"], workflow_id=workflow_id, limit=200)))
         )
         task["step_history"] = step_history
 

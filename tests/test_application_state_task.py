@@ -25,7 +25,12 @@ class FakeProject:
         return [self.code]
 
     def to_dict(self) -> dict[str, Any]:
-        return {"id": self.id, "code": self.code, "key_prefixes": [self.code]}
+        return {
+            "id": self.id,
+            "code": self.code,
+            "workflow_id": self.workflow_id,
+            "key_prefixes": [self.code],
+        }
 
 
 @dataclass
@@ -95,6 +100,27 @@ class TestTaskService:
         result = svc.create_task({"task_key": "PRJ-1"})
         assert result["project_id"] == 4
 
+    def test_create_task_without_project_id_can_select_workflow_scope(self):
+        uow = _make_uow()
+        uow.projects.list.return_value = [FakeProject(4, "RUN", 1), FakeProject(5, "RUN", 2)]
+        uow.projects.lock.return_value = FakeProject(5, "RUN", 2)
+        uow.tasks.create.return_value = 8
+        uow.tasks.get_by_id.return_value = FakeTask(8, "RUN-1", 5)
+
+        result = TaskService(uow).create_task({"task_key": "RUN-1", "workflow_id": 2})
+
+        assert result["project_id"] == 5
+        uow.tasks.get_by_key.assert_called_once_with("RUN-1", workflow_id=2)
+
+    def test_create_task_without_project_id_rejects_ambiguous_workflow_scope(self):
+        uow = _make_uow()
+        uow.projects.list.return_value = [FakeProject(4, "RUN", 1), FakeProject(5, "RUN", 2)]
+
+        with pytest.raises(ValueError, match="найдено несколько проектов"):
+            TaskService(uow).create_task({"task_key": "RUN-1"})
+
+        uow.tasks.create.assert_not_called()
+
     def test_create_task_unknown_prefix_fails_without_writes(self):
         uow = _make_uow()
         uow.projects.list.return_value = []
@@ -112,6 +138,7 @@ class TestTaskService:
             TaskService(uow).create_task({"task_key": "B-2", "project_id": 5})
 
         uow.tasks.create.assert_not_called()
+        uow.tasks.get_by_key.assert_called_once_with("B-2", workflow_id=1)
 
     @pytest.mark.parametrize("task_key", ["B", "B-RACE", "b-2", "B-2X"])
     def test_create_task_uses_the_same_numeric_key_contract_as_cli(self, task_key):

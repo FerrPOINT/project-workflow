@@ -126,8 +126,8 @@ class SAUnitOfWork(UnitOfWork):
     def record_step(self, **kwargs: Any) -> int:
         return self.step_history.create(kwargs)
 
-    def get_task_by_key(self, key: str) -> dict[str, Any] | None:
-        task = self.tasks.get_by_key(key)
+    def get_task_by_key(self, key: str, workflow_id: int | None = None) -> dict[str, Any] | None:
+        task = self.tasks.get_by_key(key, workflow_id=workflow_id)
         return task.to_dict() if task is not None else None
 
     def get_phases(self, workflow_id: int) -> list[dict[str, Any]]:

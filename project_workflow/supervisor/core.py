@@ -56,17 +56,26 @@ class SupervisorEngine:
     """Internal supervisor that evaluates workflow progress against DB phase contracts."""
 
     def __init__(
-        self, task_key: str, uow: SAUnitOfWork | None = None, create_if_missing: bool = True
+        self,
+        task_key: str,
+        uow: SAUnitOfWork | None = None,
+        create_if_missing: bool = True,
+        workflow_id: int | None = None,
     ):
         self.task_key = task_key
         self.create_if_missing = create_if_missing
+        self.requested_workflow_id = workflow_id
         self._uow = uow if uow is not None else SAUnitOfWork()
 
         self._workflow_service = WorkflowService(self._uow)
         self._project_service = ProjectService(self._uow)
         self._task_service = TaskService(self._uow)
 
-        self.task = self._ensure_task() if create_if_missing else self._task_service.get_task_by_key(task_key)
+        self.task = (
+            self._ensure_task()
+            if create_if_missing
+            else self._task_service.get_task_by_key(task_key, workflow_id=workflow_id)
+        )
         if self.task is None:
             raise ValueError(f"Задача {task_key} не найдена")
         self._uow.commit()
@@ -126,7 +135,10 @@ class SupervisorEngine:
     # ── Setup / state helpers ────────────────────────────────────────
 
     def _ensure_task(self) -> dict:
-        existing = self._task_service.get_task_by_key(self.task_key)
+        existing = self._task_service.get_task_by_key(
+            self.task_key,
+            workflow_id=self.requested_workflow_id,
+        )
         if existing:
             return existing
 
@@ -145,21 +157,34 @@ class SupervisorEngine:
                     "title": self.task_key,
                     "current_phase_id": current_phase_id,
                     "status": "active",
+                    "workflow_id": self.requested_workflow_id,
                 }
             )
         except ConflictError:
-            existing = self._task_service.get_task_by_key(self.task_key)
+            existing = self._task_service.get_task_by_key(
+                self.task_key,
+                workflow_id=self.requested_workflow_id,
+            )
             if existing is not None and existing.get("project_id") == project["id"]:
                 return existing
             raise
 
     def _resolve_project(self) -> dict[str, Any] | None:
         # Try matching via project key prefixes first.
+        matches: list[dict[str, Any]] = []
         for project in self._project_service.list_projects():
+            if (
+                self.requested_workflow_id is not None
+                and project.get("workflow_id") != self.requested_workflow_id
+            ):
+                continue
             for prefix in project.get("key_prefixes", []):
                 if self.task_key.startswith(prefix + "-") or self.task_key == prefix:
-                    return project
-        return None
+                    matches.append(project)
+                    break
+        if len(matches) > 1:
+            raise ValueError(f"Ключ задачи {self.task_key!r} подходит нескольким проектам; укажите workflow")
+        return matches[0] if matches else None
 
     def _first_phase_id_for_project(self, project_id: int) -> int:
         project = self._project_service.get_project(project_id)

@@ -246,7 +246,7 @@ class TestProjectService:
 
     def test_create_project_rejects_prefix_owned_by_another_project(self):
         uow = _make_uow()
-        existing = MagicMock(id=2, code="OTHER", key_prefixes=["TASK"])
+        existing = MagicMock(id=2, code="OTHER", workflow_id=1, key_prefixes=["TASK"])
         uow.projects.list.return_value = [existing]
         svc = ProjectService(uow)
 
@@ -254,6 +254,20 @@ class TestProjectService:
             svc.create_project({"code": "NEW", "workflow_id": 1, "key_prefixes": ["TASK"]})
 
         uow.projects.create.assert_not_called()
+
+    def test_create_project_allows_same_prefix_in_another_workflow(self):
+        uow = _make_uow()
+        existing = MagicMock(id=2, code="OTHER", workflow_id=2, key_prefixes=["TASK"])
+        uow.projects.list.return_value = [existing]
+        uow.projects.create.return_value = 3
+        uow.projects.get_by_id.return_value = FakeProject(3, "NEW", 1)
+
+        result = ProjectService(uow).create_project(
+            {"code": "NEW", "workflow_id": 1, "key_prefixes": ["TASK"]}
+        )
+
+        assert result == {"id": 3, "code": "NEW", "workflow_id": 1}
+        uow.projects.create.assert_called_once()
 
     def test_update_project_rejects_duplicate_code(self):
         uow = _make_uow()

@@ -69,10 +69,21 @@ def test_request_schemas_reject_unknown_fields():
 def test_workflow_create_update():
     w = WorkflowCreate(name="W")
     assert w.name == "W"
-    wu = WorkflowUpdate(description="D")
+    assert w.theme_icon == "workflow"
+    assert w.theme_color == "#5E6AD2"
+    themed = WorkflowCreate(name="QA", theme_icon=" BUG ", theme_color="22c55e")
+    assert themed.theme_icon == "bug"
+    assert themed.theme_color == "#22C55E"
+    wu = WorkflowUpdate(description="D", theme_icon="Rocket", theme_color="#0ea5e9")
     assert wu.description == "D"
+    assert wu.theme_icon == "rocket"
+    assert wu.theme_color == "#0EA5E9"
     with pytest.raises(ValueError, match="Extra inputs are not permitted"):
         WorkflowCreate.model_validate({"name": "W", "unexpected": "value"})
+    with pytest.raises(ValueError, match="Иконка воркфлоу"):
+        WorkflowCreate.model_validate({"name": "W", "theme_icon": "unknown"})
+    with pytest.raises(ValueError, match="HEX-цветом"):
+        WorkflowUpdate.model_validate({"theme_color": "not-a-color"})
 
 
 def test_project_create_defaults():
@@ -218,6 +229,8 @@ def test_phase_update_requires_nested_id_and_rejects_duplicates():
         (PhaseUpdate, "execution_type"),
         (WorkflowUpdate, "name"),
         (WorkflowUpdate, "description"),
+        (WorkflowUpdate, "theme_icon"),
+        (WorkflowUpdate, "theme_color"),
         (ProjectUpdate, "workflow_id"),
         (AgentUpdate, "description"),
         (InstructionUpdate, "description"),

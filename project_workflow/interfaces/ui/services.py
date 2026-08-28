@@ -64,9 +64,9 @@ def _load_dashboard() -> dict[str, Any]:
     return _ui_data_service()._load_dashboard()
 
 
-def _get_task_detail(task_key: str) -> dict[str, Any] | None:
+def _get_task_detail(task_key: str, workflow_id: int | None = None) -> dict[str, Any] | None:
     """Load task detail for UI pages/API."""
-    return _ui_data_service()._get_task_detail(task_key)
+    return _ui_data_service()._get_task_detail(task_key, workflow_id=workflow_id)
 
 
 __all__ = [

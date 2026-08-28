@@ -45,6 +45,8 @@ class SAWorkflowRepository(WorkflowRepository):
         item = m.Workflow(
             name=data["name"],
             description=data.get("description", ""),
+            theme_icon=data.get("theme_icon", "workflow"),
+            theme_color=data.get("theme_color", "#5E6AD2"),
             is_default=1 if data.get("is_default") else 0,
         )
         self._session.add(item)
@@ -59,6 +61,10 @@ class SAWorkflowRepository(WorkflowRepository):
             row.name = data["name"]
         if "description" in data:
             row.description = data["description"]
+        if "theme_icon" in data:
+            row.theme_icon = data["theme_icon"]
+        if "theme_color" in data:
+            row.theme_color = data["theme_color"]
         if "is_default" in data:
             row.is_default = 1 if data["is_default"] else 0
 

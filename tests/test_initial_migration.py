@@ -345,6 +345,48 @@ def test_sqlite_initial_constraints(tmp_path):
             ),
             {"workflow_id": workflow_id},
         ).scalar_one()
+        project_id = conn.execute(
+            text(
+                "INSERT INTO projects (workflow_id, code, name, key_prefixes) "
+                "VALUES (:workflow_id, 'P1', 'Project 1', '[\"RUN\"]') RETURNING id"
+            ),
+            {"workflow_id": workflow_id},
+        ).scalar_one()
+        conn.execute(
+            text(
+                "INSERT INTO tasks (project_id, workflow_id, task_key, current_phase_id) "
+                "VALUES (:project_id, :workflow_id, 'RUN-42', :phase_id)"
+            ),
+            {"project_id": project_id, "workflow_id": workflow_id, "phase_id": phase_id},
+        )
+        second_workflow_id = conn.execute(
+            text("INSERT INTO workflows (name, description) VALUES ('W2', '') RETURNING id")
+        ).scalar_one()
+        second_phase_id = conn.execute(
+            text(
+                "INSERT INTO phases (workflow_id, code, name, phase_order) "
+                "VALUES (:workflow_id, '1', 'Phase', 1) RETURNING id"
+            ),
+            {"workflow_id": second_workflow_id},
+        ).scalar_one()
+        second_project_id = conn.execute(
+            text(
+                "INSERT INTO projects (workflow_id, code, name, key_prefixes) "
+                "VALUES (:workflow_id, 'P2', 'Project 2', '[\"RUN\"]') RETURNING id"
+            ),
+            {"workflow_id": second_workflow_id},
+        ).scalar_one()
+        conn.execute(
+            text(
+                "INSERT INTO tasks (project_id, workflow_id, task_key, current_phase_id) "
+                "VALUES (:project_id, :workflow_id, 'RUN-42', :phase_id)"
+            ),
+            {
+                "project_id": second_project_id,
+                "workflow_id": second_workflow_id,
+                "phase_id": second_phase_id,
+            },
+        )
 
     with pytest.raises(IntegrityError):
         with engine.begin() as conn:
@@ -360,6 +402,15 @@ def test_sqlite_initial_constraints(tmp_path):
             conn.execute(
                 text("INSERT INTO phase_instructions (phase_id, step_num, description) VALUES (:id, 0, 'Bad')"),
                 {"id": phase_id},
+            )
+    with pytest.raises(IntegrityError):
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO tasks (project_id, workflow_id, task_key, current_phase_id) "
+                    "VALUES (:project_id, :workflow_id, 'RUN-42', :phase_id)"
+                ),
+                {"project_id": project_id, "workflow_id": workflow_id, "phase_id": phase_id},
             )
 
 

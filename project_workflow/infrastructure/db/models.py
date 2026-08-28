@@ -50,6 +50,8 @@ class Workflow(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str] = mapped_column(String, nullable=False, default="", server_default=text("''"))
+    theme_icon: Mapped[str] = mapped_column(String(32), nullable=False, default="workflow", server_default="workflow")
+    theme_color: Mapped[str] = mapped_column(String(7), nullable=False, default="#5E6AD2", server_default="#5E6AD2")
     is_default: Mapped[int] = mapped_column(
         nullable=False,
         default=0,
@@ -203,7 +205,7 @@ class Task(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     project_id: Mapped[int] = mapped_column(nullable=False)
     workflow_id: Mapped[int] = mapped_column(ForeignKey("workflows.id", ondelete="RESTRICT"), nullable=False)
-    task_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    task_key: Mapped[str] = mapped_column(String, nullable=False)
     title: Mapped[str | None] = mapped_column(String, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     current_phase_id: Mapped[int] = mapped_column(nullable=False)
@@ -230,6 +232,7 @@ class Task(Base):
             ondelete="RESTRICT",
         ),
         UniqueConstraint("id", "workflow_id", name="uq_tasks_id_workflow"),
+        UniqueConstraint("workflow_id", "task_key", name="uq_tasks_workflow_task_key"),
         CheckConstraint("status IN ('active', 'done', 'blocked')", name="ck_tasks_status"),
         Index("ix_tasks_project_id", "project_id"),
         Index("ix_tasks_workflow_id", "workflow_id"),

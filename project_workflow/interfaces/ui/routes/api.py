@@ -204,20 +204,32 @@ async def api_phase_batch_order(payload: PhaseOrderUpdate) -> dict[str, Any] | J
 
 async def api_workflow_create(payload: WorkflowCreate) -> dict[str, Any] | JSONResponse:
     service = _app_state.workflow_service()
-    workflow = service.create_workflow({"name": payload.name, "description": payload.description or ""})
+    try:
+        workflow = service.create_workflow(
+            {
+                "name": payload.name,
+                "description": payload.description or "",
+                "theme_icon": payload.theme_icon,
+                "theme_color": payload.theme_color,
+            }
+        )
+    except ValueError as exc:
+        return _error(str(exc), 422)
     workflow_id = workflow["id"]
     return {"ok": True, "workflow_id": workflow_id, "workflow": service.get_workflow(workflow_id)}
 
 
 async def api_workflow_update(workflow_id: int, payload: WorkflowUpdate) -> dict[str, Any] | JSONResponse:
     service = _app_state.workflow_service()
-    updates = _updates_from_payload(payload, ["name", "description"])
+    updates = _updates_from_payload(payload, ["name", "description", "theme_icon", "theme_color"])
     try:
         service.update_workflow(workflow_id, updates)
     except NotFoundError as exc:
         return _error(str(exc), 404)
     except ConflictError as exc:
         return _error(str(exc), 409)
+    except ValueError as exc:
+        return _error(str(exc), 422)
     return {"ok": True, "workflow": service.get_workflow(workflow_id)}
 
 

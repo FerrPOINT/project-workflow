@@ -9,12 +9,17 @@
 .workflow-nav{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 100px);overflow:auto;position:sticky;top:76px}
 .workflow-nav-item{display:block;width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;color:var(--text);text-decoration:none}
 .workflow-nav-item:hover{text-decoration:none;border-color:var(--border-strong);background:var(--surface-hover)}
-.workflow-nav-item.active{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
+.workflow-nav-item.active{border-color:var(--workflow-color,var(--accent));box-shadow:inset 3px 0 0 var(--workflow-color,var(--accent))}
+.workflow-nav-title{display:flex;align-items:center;gap:10px;min-width:0}
+.workflow-mark{width:30px;height:30px;border-radius:8px;background:color-mix(in srgb,var(--workflow-color,var(--accent)) 16%, transparent);border:1px solid var(--workflow-color,var(--accent));color:var(--workflow-color,var(--accent));display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
+.workflow-mark svg{width:17px;height:17px}
 .workflow-name{font-size:15px;font-weight:600;color:var(--text)}
 .workflow-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--text-dim)}
 .workflow-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:rgba(148,163,184,.10);color:var(--text-muted)}
 .timeline-panel{display:flex;flex-direction:column;gap:18px;min-width:0}
 .workflow-summary{background:transparent;border-width:0 0 1px;border-radius:0;padding:0 0 16px}
+.workflow-summary-title{display:flex;align-items:center;gap:12px;margin-bottom:5px}
+.workflow-summary-title .workflow-mark{width:34px;height:34px}
 .workflow-summary .card-title{font-size:20px;color:var(--text);text-transform:none;letter-spacing:-.02em;margin-bottom:5px}
 .empty-note{color:var(--text-dim);font-size:13px;line-height:1.6}
 .timeline{display:flex;flex-direction:column;align-items:stretch;max-width:none;gap:0}
@@ -73,8 +78,15 @@
 <div class="phases-layout">
   <section class="workflow-nav" id="workflowNav">
     {% for workflow in workflows %}
-    <a class="workflow-nav-item {% if selected_workflow_id == workflow.id %}active{% endif %}" href="/phases?workflow_id={{ workflow.id }}" data-workflow-id="{{ workflow.id }}">
-      <div class="workflow-name">{{ workflow.name }}</div>
+    <a class="workflow-nav-item {% if selected_workflow_id == workflow.id %}active{% endif %}" href="/phases?workflow_id={{ workflow.id }}" data-workflow-id="{{ workflow.id }}" style="--workflow-color:{{ workflow.theme_color }}">
+      <div class="workflow-nav-title">
+        <span class="workflow-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="{{ workflow_icon_path(workflow.theme_icon) }}"></path>
+          </svg>
+        </span>
+        <div class="workflow-name">{{ workflow.name }}</div>
+      </div>
       <div class="workflow-meta">
         <span class="workflow-chip">{{ workflow.project_count | pluralize('проект,проекта,проектов') }}</span>
         <span class="workflow-chip">{{ workflow.phase_count | pluralize('фаза,фазы,фаз') }}</span>
@@ -85,7 +97,16 @@
 
   <section class="timeline-panel">
     <div class="card workflow-summary">
-      <div class="card-title">{{ selected_workflow.name if selected_workflow else 'Фазы' }}</div>
+      <div class="workflow-summary-title"{% if selected_workflow %} style="--workflow-color:{{ selected_workflow.theme_color }}"{% endif %}>
+        {% if selected_workflow %}
+        <span class="workflow-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="{{ workflow_icon_path(selected_workflow.theme_icon) }}"></path>
+          </svg>
+        </span>
+        {% endif %}
+        <div class="card-title">{{ selected_workflow.name if selected_workflow else 'Фазы' }}</div>
+      </div>
       {% if selected_workflow and selected_workflow.description %}<div class="empty-note">{{ selected_workflow.description }}</div>
       {% elif selected_workflow %}<div class="empty-note">Порядок выполнения и связанные параллельные группы.</div>
       {% else %}<div class="empty-note">Сначала создайте воркфлоу.</div>{% endif %}

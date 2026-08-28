@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from project_workflow.domain.workflow_theme import DEFAULT_WORKFLOW_COLOR, DEFAULT_WORKFLOW_ICON
+
 
 @dataclass(frozen=True)
 class TaskKey:
@@ -86,6 +88,8 @@ class Workflow:
     name: str = ""
     description: str = ""
     is_default: bool = False
+    theme_icon: str = DEFAULT_WORKFLOW_ICON
+    theme_color: str = DEFAULT_WORKFLOW_COLOR
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -93,6 +97,8 @@ class Workflow:
             "name": self.name,
             "description": self.description,
             "is_default": self.is_default,
+            "theme_icon": self.theme_icon,
+            "theme_color": self.theme_color,
         }
 
 

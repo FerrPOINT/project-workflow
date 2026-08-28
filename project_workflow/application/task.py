@@ -17,8 +17,19 @@ class TaskService:
 
     def create_task(self, data: dict[str, Any]) -> dict[str, Any]:
         payload = dict(data)
+        requested_workflow_id = payload.get("workflow_id")
+        if requested_workflow_id is not None and (
+            not isinstance(requested_workflow_id, int)
+            or isinstance(requested_workflow_id, bool)
+            or requested_workflow_id <= 0
+        ):
+            raise ValueError("workflow_id задачи должен быть положительным целым числом")
         if "project_id" not in payload or payload["project_id"] is None:
-            resolved_project = get_project_for_task_key(self._uow, payload.get("task_key", ""))
+            resolved_project = get_project_for_task_key(
+                self._uow,
+                payload.get("task_key", ""),
+                workflow_id=requested_workflow_id,
+            )
             if resolved_project is None:
                 raise ValueError(f"Для ключа задачи {payload.get('task_key', '')!r} не настроен проект")
             payload["project_id"] = resolved_project["id"]
@@ -26,6 +37,8 @@ class TaskService:
         project = self._uow.projects.get_by_id(project_id)
         if project is None:
             raise NotFoundError(f"Проект {project_id} не найден")
+        if requested_workflow_id is not None and project.workflow_id != requested_workflow_id:
+            raise ConflictError("Проект задачи принадлежит другому воркфлоу")
         if self._uow.workflows.lock(project.workflow_id) is None:
             raise NotFoundError(f"Воркфлоу {project.workflow_id} не найден")
         locked_project = self._uow.projects.lock(project_id)
@@ -62,7 +75,7 @@ class TaskService:
                 f"Фаза {current_phase_id!r} не найдена в воркфлоу {locked_project.workflow_id}"
             )
         payload["current_phase_id"] = current_phase_id
-        if self._uow.tasks.get_by_key(task_key) is not None:
+        if self._uow.tasks.get_by_key(task_key, workflow_id=locked_project.workflow_id) is not None:
             raise ConflictError(f"Задача {task_key!r} уже существует")
         tid = self._uow.tasks.create(payload)
         task = self._uow.tasks.get_by_id(tid)
@@ -75,8 +88,8 @@ class TaskService:
         t = self._uow.tasks.get_by_id(task_id)
         return t.to_dict() if t else None
 
-    def get_task_by_key(self, task_key: str) -> dict[str, Any] | None:
-        t = self._uow.tasks.get_by_key(task_key)
+    def get_task_by_key(self, task_key: str, workflow_id: int | None = None) -> dict[str, Any] | None:
+        t = self._uow.tasks.get_by_key(task_key, workflow_id=workflow_id)
         return t.to_dict() if t else None
 
     def list_tasks(self) -> list[dict[str, Any]]:

@@ -35,6 +35,7 @@ class SATaskStepHistoryRepository(TaskStepHistoryRepository):
         self,
         task_id: int | None = None,
         task_key: str | None = None,
+        workflow_id: int | None = None,
         phase_id: int | None = None,
         limit: int | None = 200,
     ) -> Sequence[TaskStepHistoryEntry]:
@@ -47,6 +48,8 @@ class SATaskStepHistoryRepository(TaskStepHistoryRepository):
             stmt = stmt.join(m.Task, m.TaskStepHistoryEntry.task_id == m.Task.id).where(
                 m.Task.task_key == task_key
             )
+        if workflow_id is not None:
+            stmt = stmt.where(m.TaskStepHistoryEntry.workflow_id == workflow_id)
         if phase_id is not None:
             stmt = stmt.where(m.TaskStepHistoryEntry.phase_id == phase_id)
         rows = self._session.execute(stmt).scalars().all()

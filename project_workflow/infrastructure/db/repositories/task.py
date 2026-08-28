@@ -10,7 +10,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session, joinedload
 
 from project_workflow.domain import Task, TaskPhaseEvent
-from project_workflow.domain.exceptions import NotFoundError
+from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import TaskRepository
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.repositories.converters import _row_to_phase_event, _row_to_task
@@ -22,16 +22,21 @@ class SATaskRepository(TaskRepository):
     def __init__(self, session: Session):
         self._session = session
 
-    def get_by_key(self, task_key: str) -> Task | None:
+    def get_by_key(self, task_key: str, workflow_id: int | None = None) -> Task | None:
         with self._session.no_autoflush:
-            row = self._session.execute(
+            stmt = (
                 select(m.Task)
                 .options(joinedload(m.Task.workflow).selectinload(m.Workflow.phases))
                 .where(m.Task.task_key == task_key)
-            ).scalar_one_or_none()
-        if row is None:
+            )
+            if workflow_id is not None:
+                stmt = stmt.where(m.Task.workflow_id == workflow_id)
+            rows = self._session.execute(stmt.order_by(m.Task.workflow_id, m.Task.id)).scalars().all()
+        if not rows:
             return None
-        return _row_to_task(row)
+        if workflow_id is None and len(rows) > 1:
+            raise ConflictError(f"Задача {task_key!r} есть в нескольких воркфлоу; укажите workflow")
+        return _row_to_task(rows[0])
 
     def get_by_id(self, task_id: int) -> Task | None:
         with self._session.no_autoflush:

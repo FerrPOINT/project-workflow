@@ -135,19 +135,28 @@ class TaskKeyValidator:
         return cls(projects)
 
 
-def get_project_for_task_key(uow: Any, task_key: str) -> dict[str, Any] | None:
+def get_project_for_task_key(
+    uow: Any, task_key: str, workflow_id: int | None = None
+) -> dict[str, Any] | None:
     """Resolve a project row from a task key using configured project prefixes."""
     match = re.fullmatch(r"(?P<prefix>[A-Z][A-Z0-9]*)-(?P<number>[0-9]+)", str(task_key).strip())
     if match is None:
         return None
     prefix = match.group("prefix")
+    matches: list[dict[str, Any]] = []
     for project in uow.projects.list():
         project_dict = project.to_dict() if hasattr(project, "to_dict") else dict(project)
+        if workflow_id is not None and project_dict.get("workflow_id") != workflow_id:
+            continue
         key_prefixes = project_dict.get("key_prefixes", []) or []
         if not isinstance(key_prefixes, list) or not all(
             isinstance(item, str) for item in key_prefixes
         ):
             raise ValueError("key_prefixes проекта должен быть массивом строк")
         if prefix in key_prefixes:
-            return project_dict
-    return None
+            matches.append(project_dict)
+    if not matches:
+        return None
+    if len(matches) > 1:
+        raise ValueError(f"Для ключа задачи {task_key!r} найдено несколько проектов; укажите workflow")
+    return matches[0]

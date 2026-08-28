@@ -257,6 +257,54 @@ def test_task_filter_returns_nonempty_workflow_specific_dto():
         assert tasks[0]["workflow_id"] == workflow_id
 
 
+def test_same_task_key_can_run_in_parallel_workflows():
+    first_workflow, first_phases = _workflow_with_phases(1)
+    second_workflow, second_phases = _workflow_with_phases(1)
+    prefix = f"DUAL{next(_counter)}"
+    first_project = _app_state.project_service().create_project(
+        {
+            "workflow_id": first_workflow,
+            "code": _unique("dual-project-a"),
+            "name": "Dual project A",
+            "key_prefixes": [prefix],
+        }
+    )
+    second_project = _app_state.project_service().create_project(
+        {
+            "workflow_id": second_workflow,
+            "code": _unique("dual-project-b"),
+            "name": "Dual project B",
+            "key_prefixes": [prefix],
+        }
+    )
+    task_key = f"{prefix}-42"
+
+    first_task = _app_state.task_service().create_task(
+        {
+            "project_id": first_project["id"],
+            "task_key": task_key,
+            "current_phase_id": first_phases[0]["id"],
+        }
+    )
+    second_task = _app_state.task_service().create_task(
+        {
+            "project_id": second_project["id"],
+            "task_key": task_key,
+            "current_phase_id": second_phases[0]["id"],
+        }
+    )
+
+    assert first_task["id"] != second_task["id"]
+    assert {first_task["workflow_id"], second_task["workflow_id"]} == {first_workflow, second_workflow}
+    assert client.get(f"/task/{task_key}").status_code == 409
+    first_detail = client.get(f"/task/{task_key}?workflow_id={first_workflow}")
+    second_detail = client.get(f"/task/{task_key}?workflow_id={second_workflow}")
+    assert first_detail.status_code == 200
+    assert second_detail.status_code == 200
+    assert "Dual project A" in first_detail.text
+    assert "Dual project B" in second_detail.text
+
+
 def test_explicit_project_task_validates_prefix_and_scoped_phase_before_write():
     workflow_id, _ = _workflow_with_phases(1)
     prefix = _unique("STRICT").upper()

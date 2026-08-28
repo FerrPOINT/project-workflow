@@ -143,25 +143,65 @@ def out_json(data: dict[str, Any], exit_code: int | None = None) -> None:
     sys.exit(exit_code if exit_code is not None else (0 if data.get("ok", True) else 1))
 
 
-def _get_task_key_validator(uow=None) -> task_validator.TaskKeyValidator:
+def _get_task_key_validator(uow=None, workflow_id: int | None = None) -> task_validator.TaskKeyValidator:
     from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
     if uow is None:
-        uow = SAUnitOfWork()
-    projects_raw = uow.projects.list()
-    projects = [p.to_dict() for p in projects_raw]
+        with SAUnitOfWork() as owned_uow:
+            projects_raw = owned_uow.projects.list()
+            projects = [p.to_dict() for p in projects_raw]
+    else:
+        projects_raw = uow.projects.list()
+        projects = [p.to_dict() for p in projects_raw]
+    if workflow_id is not None:
+        projects = [p for p in projects if p.get("workflow_id") == workflow_id]
     return task_validator.TaskKeyValidator.from_projects(projects)
 
 
-def _require_valid_key(task_key: str, uow=None) -> str:
+def _require_valid_key(task_key: str, uow=None, workflow_id: int | None = None) -> str:
     """Проверить валидность ключа задачи по проектам из БД."""
     if uow is None:
-        validated = _get_task_key_validator().validate(task_key)
+        validator = (
+            _get_task_key_validator()
+            if workflow_id is None
+            else _get_task_key_validator(workflow_id=workflow_id)
+        )
     else:
-        validated = _get_task_key_validator(uow=uow).validate(task_key)
+        validator = (
+            _get_task_key_validator(uow=uow)
+            if workflow_id is None
+            else _get_task_key_validator(uow=uow, workflow_id=workflow_id)
+        )
+    validated = validator.validate(task_key)
     if not validated.is_valid:
         raise TaskKeyValidationError(task_key, validated.error_message or "неизвестный префикс проекта")
     return validated.normalized or task_key
+
+
+def _resolve_workflow_id(uow: Any, workflow: str | None) -> int | None:
+    """Resolve optional workflow selector from an id or exact workflow name."""
+    if workflow is None or not workflow.strip():
+        return None
+    selector = workflow.strip()
+    workflows = [item.to_dict() if hasattr(item, "to_dict") else dict(item) for item in uow.workflows.list()]
+    if selector.isdecimal():
+        workflow_id = int(selector)
+        if any(item.get("id") == workflow_id for item in workflows):
+            return workflow_id
+        raise ValueError(f"Воркфлоу {workflow_id} не найден")
+    matches = [item for item in workflows if str(item.get("name") or "").casefold() == selector.casefold()]
+    if not matches:
+        raise ValueError(f"Воркфлоу {selector!r} не найден")
+    if len(matches) > 1:
+        raise ValueError(f"Название воркфлоу {selector!r} неоднозначно; укажите ID")
+    resolved_workflow_id = matches[0].get("id")
+    if (
+        not isinstance(resolved_workflow_id, int)
+        or isinstance(resolved_workflow_id, bool)
+        or resolved_workflow_id <= 0
+    ):
+        raise ValueError(f"Воркфлоу {selector!r} имеет некорректный id")
+    return resolved_workflow_id
 
 
 def blocked_result(task_key: str, message: str, phase_code: str = "") -> dict[str, Any]:
@@ -198,4 +238,12 @@ def cli(ctx: click.Context, json_mode: bool) -> None:
     ctx.obj["json_mode"] = json_mode
 
 
-__all__ = ["cli", "out_json", "_require_valid_key", "blocked_result", "console", "WARN"]
+__all__ = [
+    "cli",
+    "out_json",
+    "_require_valid_key",
+    "_resolve_workflow_id",
+    "blocked_result",
+    "console",
+    "WARN",
+]

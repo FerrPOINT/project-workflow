@@ -6,6 +6,7 @@ from typing import Any
 
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import UnitOfWork
+from project_workflow.domain.workflow_theme import normalize_theme_color, normalize_theme_icon
 
 
 class WorkflowService:
@@ -16,8 +17,17 @@ class WorkflowService:
     def __init__(self, uow: UnitOfWork):
         self._uow = uow
 
-    def create_workflow(self, data: dict[str, Any]) -> dict[str, Any]:
+    @staticmethod
+    def _normalize_theme_payload(data: dict[str, Any], *, partial: bool = False) -> dict[str, Any]:
         payload = dict(data)
+        if not partial or "theme_icon" in payload:
+            payload["theme_icon"] = normalize_theme_icon(payload.get("theme_icon"))
+        if not partial or "theme_color" in payload:
+            payload["theme_color"] = normalize_theme_color(payload.get("theme_color"))
+        return payload
+
+    def create_workflow(self, data: dict[str, Any]) -> dict[str, Any]:
+        payload = self._normalize_theme_payload(data)
         wid = self._uow.workflows.create(payload)
         default_phase = {
             "workflow_id": wid,
@@ -48,7 +58,8 @@ class WorkflowService:
         workflow = self._uow.workflows.lock(workflow_id)
         if workflow is None:
             raise NotFoundError(f"Воркфлоу {workflow_id} не найден")
-        self._uow.workflows.update(workflow_id, data)
+        payload = self._normalize_theme_payload(data, partial=True)
+        self._uow.workflows.update(workflow_id, payload)
         self._uow.commit()
         return None
 
