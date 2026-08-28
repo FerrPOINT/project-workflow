@@ -257,7 +257,7 @@ def test_task_filter_returns_nonempty_workflow_specific_dto():
         assert tasks[0]["workflow_id"] == workflow_id
 
 
-def test_same_task_key_can_run_in_parallel_workflows():
+def test_same_task_key_can_run_in_parallel_project_instances():
     first_workflow, first_phases = _workflow_with_phases(1)
     second_workflow, second_phases = _workflow_with_phases(1)
     prefix = f"DUAL{next(_counter)}"
@@ -297,8 +297,8 @@ def test_same_task_key_can_run_in_parallel_workflows():
     assert first_task["id"] != second_task["id"]
     assert {first_task["workflow_id"], second_task["workflow_id"]} == {first_workflow, second_workflow}
     assert client.get(f"/task/{task_key}").status_code == 409
-    first_detail = client.get(f"/task/{task_key}?workflow_id={first_workflow}")
-    second_detail = client.get(f"/task/{task_key}?workflow_id={second_workflow}")
+    first_detail = client.get(f"/task/{task_key}?project_id={first_project['id']}")
+    second_detail = client.get(f"/task/{task_key}?project_id={second_project['id']}")
     assert first_detail.status_code == 200
     assert second_detail.status_code == 200
     assert "Dual project A" in first_detail.text

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from project_workflow.domain.workflow_theme import DEFAULT_WORKFLOW_COLOR, DEFAULT_WORKFLOW_ICON
+from project_workflow.domain.project_theme import DEFAULT_PROJECT_COLOR, DEFAULT_PROJECT_ICON
 
 
 @dataclass(frozen=True)
@@ -88,8 +88,6 @@ class Workflow:
     name: str = ""
     description: str = ""
     is_default: bool = False
-    theme_icon: str = DEFAULT_WORKFLOW_ICON
-    theme_color: str = DEFAULT_WORKFLOW_COLOR
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -97,20 +95,20 @@ class Workflow:
             "name": self.name,
             "description": self.description,
             "is_default": self.is_default,
-            "theme_icon": self.theme_icon,
-            "theme_color": self.theme_color,
         }
 
 
 @dataclass
 class Project:
-    """Domain project with task key prefixes."""
+    """Domain project instance with task key prefixes and UI branding."""
 
     id: int | None = None
     workflow_id: int = 0
     code: str = ""
     name: str = ""
     description: str = ""
+    theme_icon: str = DEFAULT_PROJECT_ICON
+    theme_color: str = DEFAULT_PROJECT_COLOR
     key_prefixes: list[str] = field(default_factory=list)
     workflow_name: str | None = None
 
@@ -121,6 +119,8 @@ class Project:
             "code": self.code,
             "name": self.name,
             "description": self.description,
+            "theme_icon": self.theme_icon,
+            "theme_color": self.theme_color,
             "key_prefixes": self.key_prefixes,
             "workflow_name": self.workflow_name,
         }

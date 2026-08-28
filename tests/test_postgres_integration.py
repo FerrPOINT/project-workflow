@@ -483,11 +483,11 @@ class TestPostgresInitialMigration:
         thread_state = local()
         original_get = TaskService.get_task_by_key
 
-        def synchronized_first_get(service, task_key, workflow_id=None):
+        def synchronized_first_get(service, task_key, workflow_id=None, project_id=None):
             if not getattr(thread_state, "initial_lookup_done", False):
                 thread_state.initial_lookup_done = True
                 barrier.wait(timeout=10)
-            return original_get(service, task_key, workflow_id=workflow_id)
+            return original_get(service, task_key, workflow_id=workflow_id, project_id=project_id)
 
         def create() -> int:
             uow = SAUnitOfWork(pg_url)

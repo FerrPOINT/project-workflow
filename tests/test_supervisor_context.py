@@ -31,13 +31,13 @@ class TestSupervisorFullContext:
         engine = supervisor.SupervisorEngine("RUN-987654")
         ctx = engine.get_full_context()
         assert ctx["task_key"] == "RUN-987654"
-        workflow_id = ctx["workflow_id"]
+        project_id = ctx["project_id"]
         assert ctx["cli_actor"]["entrypoint"] == (
-            f"project-workflow step --task RUN-987654 --workflow {workflow_id} [--report TEXT]"
+            f"project-workflow step --task RUN-987654 --project {project_id} [--report TEXT]"
         )
 
         prompt = engine.get_phase_prompt()
-        assert f"project-workflow step --task RUN-987654 --workflow {workflow_id} [--report TEXT]" in prompt
+        assert f"project-workflow step --task RUN-987654 --project {project_id} [--report TEXT]" in prompt
         assert "RUN-42" not in prompt
 
     def test_all_phases_present(self):

@@ -64,6 +64,8 @@ class SAProjectRepository(ProjectRepository):
             code=data["code"],
             name=data["name"],
             description=data.get("description", ""),
+            theme_icon=data.get("theme_icon", "project"),
+            theme_color=data.get("theme_color", "#5E6AD2"),
             key_prefixes=_serialize_key_prefixes(data.get("key_prefixes")),
         )
         self._session.add(item)
@@ -82,6 +84,10 @@ class SAProjectRepository(ProjectRepository):
             row.name = data["name"]
         if "description" in data:
             row.description = data["description"]
+        if "theme_icon" in data:
+            row.theme_icon = data["theme_icon"]
+        if "theme_color" in data:
+            row.theme_color = data["theme_color"]
         if "key_prefixes" in data:
             row.key_prefixes = _serialize_key_prefixes(data["key_prefixes"])
 

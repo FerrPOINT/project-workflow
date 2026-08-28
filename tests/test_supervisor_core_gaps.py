@@ -225,7 +225,7 @@ class TestSupervisorCoreGaps:
         ]
         service.create_task.side_effect = ConflictError("already exists")
         engine._task_service = service
-        engine._resolve_project = MagicMock(return_value={"id": 3})
+        engine._resolve_project = MagicMock(return_value={"id": 3, "workflow_id": 1})
         engine._first_phase_id_for_project = MagicMock(return_value=1)
 
         task = engine._ensure_task()
@@ -242,7 +242,7 @@ class TestSupervisorCoreGaps:
         ]
         service.create_task.side_effect = ConflictError("already exists")
         engine._task_service = service
-        engine._resolve_project = MagicMock(return_value={"id": 3})
+        engine._resolve_project = MagicMock(return_value={"id": 3, "workflow_id": 1})
         engine._first_phase_id_for_project = MagicMock(return_value=1)
 
         with pytest.raises(ConflictError, match="already exists"):

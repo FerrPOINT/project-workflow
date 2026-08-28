@@ -42,7 +42,7 @@
     <div class="card-title" style="margin-bottom:14px">Незавершённые задачи</div>
     <div class="list-stack">
       {% for task in open_tasks %}
-      <a href="/task/{{ task.task_key }}{% if task.workflow_id %}?workflow_id={{ task.workflow_id }}{% endif %}" class="list-item">
+      <a href="/task/{{ task.task_key }}{% if task.project_id %}?project_id={{ task.project_id }}{% endif %}" class="list-item">
         <div class="list-title"><span class="code">{{ task.task_key }}</span>{% if task.title %} — {{ task.title }}{% endif %}</div>
         <div class="list-meta">
           <span>{{ task.project_name }}</span>

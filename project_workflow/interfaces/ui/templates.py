@@ -7,14 +7,15 @@ from typing import Any
 
 from fastapi.templating import Jinja2Templates
 
-from project_workflow.domain.workflow_theme import (
-    DEFAULT_WORKFLOW_ICON,
-    WORKFLOW_THEME_ICONS,
+from project_workflow.domain.project_theme import (
+    DEFAULT_PROJECT_ICON,
+    PROJECT_THEME_ICONS,
 )
 
 BASE_DIR = Path(__file__).parent
 
-WORKFLOW_ICON_PATHS = {
+PROJECT_ICON_PATHS = {
+    "project": "M4 6a2 2 0 0 1 2-2h5l2 2h5a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6z",
     "workflow": "M4 6h16v5H4z M4 14h16v4H4z M8 11v3 M16 11v3",
     "check": "M20 6 9 17l-5-5",
     "bug": "M8 7V5m8 2V5M7 8h10v9a5 5 0 0 1-10 0V8Zm-3 4h3m10 0h3M4 17h3m10 0h3M9 3l3 3 3-3",
@@ -26,17 +27,17 @@ WORKFLOW_ICON_PATHS = {
 }
 
 
-def _workflow_icon_path(icon: str | None) -> str:
-    return WORKFLOW_ICON_PATHS.get(
-        str(icon or DEFAULT_WORKFLOW_ICON).lower(),
-        WORKFLOW_ICON_PATHS[DEFAULT_WORKFLOW_ICON],
+def _project_icon_path(icon: str | None) -> str:
+    return PROJECT_ICON_PATHS.get(
+        str(icon or DEFAULT_PROJECT_ICON).lower(),
+        PROJECT_ICON_PATHS[DEFAULT_PROJECT_ICON],
     )
 
 
-def _workflow_icon_options() -> list[dict[str, str]]:
+def _project_icon_options() -> list[dict[str, str]]:
     return [
-        {"key": key, "label": label, "path": _workflow_icon_path(key)}
-        for key, label in WORKFLOW_THEME_ICONS.items()
+        {"key": key, "label": label, "path": _project_icon_path(key)}
+        for key, label in PROJECT_THEME_ICONS.items()
     ]
 
 
@@ -67,7 +68,7 @@ def _pluralize(value: int, forms: str) -> str:
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 templates.env.filters["group_instructions"] = _group_instructions
 templates.env.filters["pluralize"] = _pluralize
-templates.env.globals["workflow_icon_path"] = _workflow_icon_path
-templates.env.globals["workflow_icon_paths"] = WORKFLOW_ICON_PATHS
-templates.env.globals["workflow_icon_options"] = _workflow_icon_options()
+templates.env.globals["project_icon_path"] = _project_icon_path
+templates.env.globals["project_icon_paths"] = PROJECT_ICON_PATHS
+templates.env.globals["project_icon_options"] = _project_icon_options()
 env = templates.env

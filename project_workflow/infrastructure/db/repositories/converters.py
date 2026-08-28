@@ -48,8 +48,6 @@ def _row_to_workflow(row: m.Workflow) -> Workflow:
         name=row.name,
         description=row.description or "",
         is_default=bool(row.is_default),
-        theme_icon=row.theme_icon or "workflow",
-        theme_color=row.theme_color or "#5E6AD2",
     )
 
 
@@ -69,6 +67,8 @@ def _row_to_project(row: m.Project) -> Project:
         code=row.code,
         name=row.name,
         description=row.description,
+        theme_icon=row.theme_icon or "project",
+        theme_color=row.theme_color or "#5E6AD2",
         key_prefixes=list(prefixes),
         workflow_name=row.workflow.name if row.workflow else None,
     )

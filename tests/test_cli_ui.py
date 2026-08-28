@@ -239,18 +239,20 @@ class TestStepCommand:
 
     @patch("project_workflow.interfaces.cli.ui.SAUnitOfWork")
     @patch("project_workflow.supervisor.SupervisorEngine")
-    def test_step_passes_workflow_selector_to_engine(self, mock_engine_cls, mock_uow_cls):
+    def test_step_passes_project_selector_to_engine(self, mock_engine_cls, mock_uow_cls):
         mock_engine = mock_engine_cls.return_value
         mock_engine.current_phase_code = "1.INTAKE"
         mock_engine.format_current_phase_instructions.return_value = "phase"
-        mock_uow_cls.return_value.workflows.list.return_value = [{"id": 7, "name": "tester"}]
+        mock_uow_cls.return_value.projects.list.return_value = [
+            {"id": 7, "code": "QA", "name": "tester"}
+        ]
         runner = CliRunner()
 
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
-            result = runner.invoke(cli, ["step", "--task", "RUN-1", "--workflow", "tester"])
+            result = runner.invoke(cli, ["step", "--task", "RUN-1", "--project", "tester"])
 
         assert result.exit_code == 0
-        assert mock_engine_cls.call_args.kwargs["workflow_id"] == 7
+        assert mock_engine_cls.call_args.kwargs["project_id"] == 7
 
     @pytest.mark.parametrize(
         ("verdict", "expected"),
@@ -352,7 +354,7 @@ class TestHistoryCommand:
         uow.step_history.list.assert_called_once_with(
             task_id=None,
             task_key="RUN-1",
-            workflow_id=None,
+            project_id=None,
             limit=None,
         )
 
@@ -372,27 +374,27 @@ class TestHistoryCommand:
         uow.step_history.list.assert_called_once_with(
             task_id=None,
             task_key="RUN-1",
-            workflow_id=None,
+            project_id=None,
             limit=10,
         )
 
     @patch("project_workflow.interfaces.cli.ui.SAUnitOfWork")
-    def test_history_passes_workflow_selector_to_lookup(self, mock_uow_cls):
+    def test_history_passes_project_selector_to_lookup(self, mock_uow_cls):
         uow = mock_uow_cls.return_value.__enter__.return_value
-        uow.workflows.list.return_value = [{"id": 9, "name": "tester"}]
+        uow.projects.list.return_value = [{"id": 9, "code": "QA", "name": "tester"}]
         uow.step_history.list.return_value = []
         uow.tasks.get_by_key.return_value = None
         runner = CliRunner()
 
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
-            result = runner.invoke(cli, ["--json", "history", "--task", "RUN-1", "--workflow", "tester"])
+            result = runner.invoke(cli, ["--json", "history", "--task", "RUN-1", "--project", "tester"])
 
         assert result.exit_code == 0
-        uow.tasks.get_by_key.assert_called_once_with("RUN-1", workflow_id=9)
+        uow.tasks.get_by_key.assert_called_once_with("RUN-1", project_id=9)
         uow.step_history.list.assert_called_once_with(
             task_id=None,
             task_key="RUN-1",
-            workflow_id=9,
+            project_id=9,
             limit=None,
         )
 

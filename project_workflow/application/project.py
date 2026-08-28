@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
+from project_workflow.domain.project_theme import normalize_theme_color, normalize_theme_icon
 from project_workflow.domain.repositories import UnitOfWork
 
 
@@ -52,8 +53,17 @@ class ProjectService:
     def _matches_prefix(task_key: str, prefixes: list[str]) -> bool:
         return any(task_key == prefix or task_key.startswith(f"{prefix}-") for prefix in prefixes)
 
-    def create_project(self, data: dict[str, Any]) -> dict[str, Any]:
+    @staticmethod
+    def _normalize_theme_payload(data: dict[str, Any], *, partial: bool = False) -> dict[str, Any]:
         payload = dict(data)
+        if not partial or "theme_icon" in payload:
+            payload["theme_icon"] = normalize_theme_icon(payload.get("theme_icon"))
+        if not partial or "theme_color" in payload:
+            payload["theme_color"] = normalize_theme_color(payload.get("theme_color"))
+        return payload
+
+    def create_project(self, data: dict[str, Any]) -> dict[str, Any]:
+        payload = self._normalize_theme_payload(data)
         self._uow.projects.lock_prefix_namespace()
         workflow_id_raw = payload.get("workflow_id")
         if (
@@ -88,7 +98,7 @@ class ProjectService:
         return p.to_dict() if p else None
 
     def update_project(self, project_id: int, data: dict[str, Any]) -> None:
-        payload = dict(data)
+        payload = self._normalize_theme_payload(data, partial=True)
         self._uow.projects.lock_prefix_namespace()
         snapshot = self._uow.projects.get_by_id(project_id)
         if snapshot is None:

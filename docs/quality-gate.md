@@ -84,8 +84,10 @@ PostgreSQL, integration gate можно запускать с `PGPORT`, указ
 
 - открыть `http://127.0.0.1:8812/`;
 - открыть `http://127.0.0.1:8812/phases`;
+- открыть `http://127.0.0.1:8812/projects`, если менялись project controls,
+  theme или CRUD project;
 - открыть `http://127.0.0.1:8812/workflows`, если менялись workflow controls,
-  theme или CRUD workflow;
+  фазы или CRUD workflow;
 - проверить, что страницы загрузились без console/network ошибок;
 - сохранить screenshot evidence для изменённых экранов.
 

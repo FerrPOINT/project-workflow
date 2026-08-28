@@ -13,9 +13,9 @@
 .tasks-table td:nth-child(4),.tasks-table td:nth-child(5){white-space:normal;overflow-wrap:anywhere;min-width:100px}
 .tasks-table .task-key{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent)}
 .tasks-table .task-title{color:var(--text);font-weight:500}
-.workflow-pill{display:inline-flex;align-items:center;gap:6px;max-width:180px;padding:3px 8px;border-radius:6px;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:600}
-.workflow-pill svg{width:14px;height:14px;flex:0 0 auto}
-.workflow-pill span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.project-pill{display:inline-flex;align-items:center;gap:6px;max-width:180px;padding:3px 8px;border-radius:6px;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:600}
+.project-pill svg{width:14px;height:14px;flex:0 0 auto}
+.project-pill span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .status-badge{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:6px;font-size:12px;font-weight:500}
 .status-done{background:var(--green-soft);color:var(--green)}
 .status-active{background:var(--accent-soft);color:var(--accent)}
@@ -52,7 +52,7 @@
       <tr>
         <th>Ключ</th>
         <th>Проект</th>
-        <th>Воркфлоу</th>
+        <th>Флоу</th>
         <th>Название</th>
         <th>Фаза</th>
         <th>Прогресс</th>
@@ -64,14 +64,14 @@
     <tbody>
       {% for t in tasks %}
       <tr data-task-key="{{ t.task_key }}">
-        <td><a href="/task/{{ t.task_key }}{% if t.workflow_id %}?workflow_id={{ t.workflow_id }}{% endif %}" class="task-key">{{ t.task_key }}</a></td>
-        <td>{{ t.project_code }}</td>
+        <td><a href="/task/{{ t.task_key }}{% if t.project_id %}?project_id={{ t.project_id }}{% endif %}" class="task-key">{{ t.task_key }}</a></td>
         <td>
-          <span class="workflow-pill" style="--accent:{{ t.workflow_theme_color }};--accent-soft:{{ t.workflow_theme_color }}26">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ workflow_icon_path(t.workflow_theme_icon) }}"></path></svg>
-            <span>{{ t.workflow_name or '—' }}</span>
+          <span class="project-pill" style="--accent:{{ t.project_theme_color }};--accent-soft:{{ t.project_theme_color }}26">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ project_icon_path(t.project_theme_icon) }}"></path></svg>
+            <span>{{ t.project_name or t.project_code }}</span>
           </span>
         </td>
+        <td>{{ t.workflow_name or '—' }}</td>
         <td><span class="task-title">{{ t.title if t.title and t.title != t.task_key else '—' }}</span></td>
         <td>{{ t.current_phase_name or '—' }}</td>
         <td>
@@ -110,7 +110,7 @@
   {% for t in tasks %}
   <div class="task-card" data-task-key="{{ t.task_key }}">
     <div class="row">
-      <a href="/task/{{ t.task_key }}{% if t.workflow_id %}?workflow_id={{ t.workflow_id }}{% endif %}" class="task-key">{{ t.task_key }}</a>
+      <a href="/task/{{ t.task_key }}{% if t.project_id %}?project_id={{ t.project_id }}{% endif %}" class="task-key">{{ t.task_key }}</a>
       {% if t.status == 'done' %}
       <span class="status-badge status-done">Завершена</span>
       {% elif t.status == 'blocked' %}
@@ -128,8 +128,8 @@
     </div>
     {% endif %}
     <div class="row">
-      <div><span class="label">Проект</span><div class="value">{{ t.project_code }}</div></div>
-      <div><span class="label">Воркфлоу</span><div class="value">{{ t.workflow_name or '—' }}</div></div>
+      <div><span class="label">Проект</span><div class="value">{{ t.project_name or t.project_code }}</div></div>
+      <div><span class="label">Флоу</span><div class="value">{{ t.workflow_name or '—' }}</div></div>
       <div><span class="label">Фаза</span><div class="value">{{ t.current_phase_name or '—' }}</div></div>
       <div><span class="label">Прогресс</span><div class="value">{{ t.completed }}/{{ t.total_phases }}</div></div>
       <div><span class="label">Создана</span><div class="value">{{ t.created_at[:10] if t.created_at else '—' }}</div></div>

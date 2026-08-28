@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import subprocess
@@ -69,6 +70,19 @@ def test_out_json_failure(capsys):
     with pytest.raises(SystemExit) as exc:
         out_json({"ok": False})
     assert exc.value.code == 1
+
+
+def test_out_json_falls_back_to_utf8_when_stdout_encoding_rejects_cyrillic(monkeypatch):
+    buffer = io.BytesIO()
+    stream = io.TextIOWrapper(buffer, encoding="cp1252")
+    monkeypatch.setattr(sys, "stdout", stream)
+
+    with pytest.raises(SystemExit) as exc:
+        out_json({"ok": True, "message": "Принято"})
+
+    assert exc.value.code == 0
+    stream.flush()
+    assert '"message": "Принято"' in buffer.getvalue().decode("utf-8")
 
 
 def test_require_valid_key():

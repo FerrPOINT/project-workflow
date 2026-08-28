@@ -10,45 +10,29 @@
 {% block extra_style %}
 .workflow-crud{display:grid;grid-template-columns:320px minmax(0,1fr);gap:16px;align-items:start}
 .workflow-nav{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 190px);overflow:auto}
-.workflow-nav-item{width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;cursor:pointer;color:var(--text);display:flex;gap:12px;align-items:flex-start}
-.workflow-nav-item.active{border-color:var(--workflow-color,var(--accent));box-shadow:0 0 0 1px var(--workflow-color,var(--accent))}
-.workflow-mark{width:34px;height:34px;border-radius:8px;background:color-mix(in srgb,var(--workflow-color,var(--accent)) 16%, transparent);border:1px solid var(--workflow-color,var(--accent));color:var(--workflow-color,var(--accent));display:flex;align-items:center;justify-content:center;flex:0 0 auto}
-.workflow-mark svg{width:19px;height:19px}
-.workflow-card-body{min-width:0}
+.workflow-nav-item{width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;cursor:pointer;color:var(--text)}
+.workflow-nav-item.active{border-color:var(--accent);box-shadow:0 0 0 1px rgba(88,166,255,.25)}
 .workflow-name{font-size:15px;font-weight:600;color:var(--text)}
 .workflow-meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--text-dim)}
 .workflow-panel{display:flex;flex-direction:column;gap:16px}
 .form-stack{display:flex;flex-direction:column;gap:12px}
 .label{font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}
 textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:160px;resize:vertical}
-.theme-grid{display:grid;grid-template-columns:minmax(0,1fr) 120px;gap:12px}
-.theme-color-input{height:34px;padding:2px;cursor:pointer}
-.theme-preview{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--panel)}
-.theme-preview .workflow-mark{width:30px;height:30px}
-.theme-preview-name{font-weight:600;color:var(--text)}
 .panel-actions{display:flex;gap:10px;flex-wrap:wrap}
 .empty-note{color:var(--text-dim);font-size:13px;line-height:1.6}
 @media (max-width: 980px){.workflow-crud{grid-template-columns:1fr}.workflow-nav{max-height:none}}
-@media (max-width: 520px){.theme-grid{grid-template-columns:1fr}}
 {% endblock %}
 
 {% block content %}
 <div class="workflow-crud">
   <section class="workflow-nav" id="workflowNav">
     {% for workflow in workflows %}
-    <button type="button" class="workflow-nav-item {% if selected_workflow and selected_workflow.id == workflow.id %}active{% endif %}" data-workflow-id="{{ workflow.id }}" onclick="selectWorkflow({{ workflow.id }})" style="--workflow-color:{{ workflow.theme_color }}">
-      <span class="workflow-mark" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="{{ workflow_icon_path(workflow.theme_icon) }}"></path>
-        </svg>
-      </span>
-      <span class="workflow-card-body">
-        <div class="workflow-name">{{ workflow.name }}</div>
-        <div class="workflow-meta">
-          <span>{{ workflow.project_count | pluralize('проект,проекта,проектов') }}</span>
-          <span>{{ workflow.phase_count | pluralize('фаза,фазы,фаз') }}</span>
-        </div>
-      </span>
+    <button type="button" class="workflow-nav-item {% if selected_workflow and selected_workflow.id == workflow.id %}active{% endif %}" data-workflow-id="{{ workflow.id }}" onclick="selectWorkflow({{ workflow.id }})">
+      <div class="workflow-name">{{ workflow.name }}</div>
+      <div class="workflow-meta">
+        <span>{{ workflow.project_count | pluralize('проект,проекта,проектов') }}</span>
+        <span>{{ workflow.phase_count | pluralize('фаза,фазы,фаз') }}</span>
+      </div>
     </button>
     {% else %}
     <div class="card empty-note">Воркфлоу пока нет.</div>
@@ -66,24 +50,6 @@ textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:160px;resiz
         <div class="label">Описание</div>
         <textarea id="workflowDescription" class="code-area" spellcheck="false">{{ selected_workflow.description if selected_workflow else '' }}</textarea>
       </div>
-      <div class="theme-grid">
-        <div>
-          <div class="label">Иконка</div>
-          <select id="workflowThemeIcon" onchange="updateWorkflowThemePreview()">
-            {% for option in workflow_icon_options %}
-            <option value="{{ option.key }}" {% if selected_workflow and selected_workflow.theme_icon == option.key %}selected{% endif %}>{{ option.label }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div>
-          <div class="label">Цвет</div>
-          <input type="color" id="workflowThemeColor" class="theme-color-input" value="{{ selected_workflow.theme_color if selected_workflow else '#5E6AD2' }}" oninput="updateWorkflowThemePreview()">
-        </div>
-      </div>
-      <div class="theme-preview" id="workflowThemePreview">
-        <span class="workflow-mark" id="workflowThemePreviewIcon" aria-hidden="true"></span>
-        <span class="theme-preview-name" id="workflowThemePreviewName">{{ selected_workflow.name if selected_workflow else 'Новый воркфлоу' }}</span>
-      </div>
       <div class="panel-actions">
         <button class="btn btn-primary" type="submit" id="workflowSubmitButton">Сохранить</button>
         <button class="btn btn-secondary" type="button" id="cancelCreateWorkflowButton" onclick="cancelCreateWorkflow()" style="display:none">Отмена</button>
@@ -96,41 +62,15 @@ textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:160px;resiz
 
 {% block extra_script %}
 const workflowStore = {{ workflows | tojson }};
-const workflowIconPaths = {{ workflow_icon_paths | tojson }};
-const defaultWorkflowThemeIcon = 'workflow';
-const defaultWorkflowThemeColor = '#5E6AD2';
 let selectedWorkflowId = {{ selected_workflow.id if selected_workflow else 'null' }};
 let previousWorkflowId = selectedWorkflowId;
 let workflowFormMode = selectedWorkflowId == null ? 'create' : 'edit';
 
 function workflowById(id){ return workflowStore.find(function(workflow){ return workflow.id === id; }); }
-function workflowIconSvg(icon){
-  var path = workflowIconPaths[icon || defaultWorkflowThemeIcon] || workflowIconPaths[defaultWorkflowThemeIcon];
-  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="' + path + '"></path></svg>';
-}
-function applyPageTheme(color){
-  var resolved = color || defaultWorkflowThemeColor;
-  document.documentElement.style.setProperty('--accent', resolved);
-  document.documentElement.style.setProperty('--accent-hover', resolved);
-  document.documentElement.style.setProperty('--accent-soft', resolved + '26');
-}
-function updateWorkflowThemePreview(){
-  var icon = document.getElementById('workflowThemeIcon').value || defaultWorkflowThemeIcon;
-  var color = document.getElementById('workflowThemeColor').value || defaultWorkflowThemeColor;
-  var name = document.getElementById('workflowName').value.trim() || 'Новый воркфлоу';
-  var preview = document.getElementById('workflowThemePreview');
-  var previewIcon = document.getElementById('workflowThemePreviewIcon');
-  preview.style.setProperty('--workflow-color', color);
-  previewIcon.innerHTML = workflowIconSvg(icon);
-  document.getElementById('workflowThemePreviewName').textContent = name;
-  applyPageTheme(color);
-}
 function currentWorkflowPayload(){
   return {
     name: document.getElementById('workflowName').value.trim(),
     description: document.getElementById('workflowDescription').value.trim(),
-    theme_icon: document.getElementById('workflowThemeIcon').value || defaultWorkflowThemeIcon,
-    theme_color: document.getElementById('workflowThemeColor').value || defaultWorkflowThemeColor,
   };
 }
 function syncWorkflowNav(){
@@ -141,9 +81,6 @@ function syncWorkflowNav(){
 function fillWorkflowForm(workflow){
   document.getElementById('workflowName').value = workflow ? workflow.name : '';
   document.getElementById('workflowDescription').value = workflow ? (workflow.description || '') : '';
-  document.getElementById('workflowThemeIcon').value = workflow ? (workflow.theme_icon || defaultWorkflowThemeIcon) : defaultWorkflowThemeIcon;
-  document.getElementById('workflowThemeColor').value = workflow ? (workflow.theme_color || defaultWorkflowThemeColor) : defaultWorkflowThemeColor;
-  updateWorkflowThemePreview();
 }
 function setWorkflowFormMode(mode){
   workflowFormMode = mode;
@@ -188,16 +125,7 @@ function renderWorkflowNav(){
     button.type = 'button';
     button.className = 'workflow-nav-item';
     button.dataset.workflowId = String(workflow.id);
-    button.style.setProperty('--workflow-color', workflow.theme_color || defaultWorkflowThemeColor);
     button.onclick = function(){ selectWorkflow(workflow.id); };
-
-    var mark = document.createElement('span');
-    mark.className = 'workflow-mark';
-    mark.setAttribute('aria-hidden', 'true');
-    mark.innerHTML = workflowIconSvg(workflow.theme_icon);
-
-    var body = document.createElement('span');
-    body.className = 'workflow-card-body';
 
     var name = document.createElement('div');
     name.className = 'workflow-name';
@@ -213,10 +141,8 @@ function renderWorkflowNav(){
 
     meta.appendChild(projects);
     meta.appendChild(phases);
-    body.appendChild(name);
-    body.appendChild(meta);
-    button.appendChild(mark);
-    button.appendChild(body);
+    button.appendChild(name);
+    button.appendChild(meta);
     nav.appendChild(button);
   });
 }
@@ -290,9 +216,6 @@ function submitWorkflow(){
   saveWorkflow();
 }
 renderWorkflowNav();
-document.getElementById('workflowName').addEventListener('input', updateWorkflowThemePreview);
-document.getElementById('workflowThemeIcon').addEventListener('change', updateWorkflowThemePreview);
-document.getElementById('workflowThemeColor').addEventListener('input', updateWorkflowThemePreview);
 if(selectedWorkflowId == null){
   fillWorkflowForm(null);
   setWorkflowFormMode('create');

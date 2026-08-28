@@ -6,8 +6,8 @@
 (см. test_ui.py::test_only_two_commands_allowed).
 
 Разрешённые команды:
-- step    --task RUN-42 [--workflow FLOW] [--report TEXT]
-- history --task RUN-42 [--workflow FLOW] [--n N]
+- step    --task RUN-42 [--project PROJECT] [--report TEXT]
+- history --task RUN-42 [--project PROJECT] [--n N]
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from ... import supervisor
 from ...domain.exceptions import ConflictError
 from ...infrastructure.db.uow import SAUnitOfWork
 from ...supervisor import format_result
-from .core import WARN, _require_valid_key, _resolve_workflow_id, blocked_result, cli, console, out_json
+from .core import WARN, _require_valid_key, _resolve_project_id, blocked_result, cli, console, out_json
 
 # ── Guard: новые команды запрещены ──────────────────────────────────────
 # Если кто-то добавит @cli.command() сюда — тесты поймают.
@@ -34,13 +34,13 @@ from .core import WARN, _require_valid_key, _resolve_workflow_id, blocked_result
 
 @cli.command()
 @click.option("--task", required=True, help="Ключ задачи (например, RUN-42)")
-@click.option("--workflow", default=None, help="ID или название воркфлоу, если ключ задачи неоднозначен")
+@click.option("--project", default=None, help="ID, код или название проекта, если ключ задачи неоднозначен")
 @click.option("--report", default=None, help="Отчёт исполнителя CLI (оценить и перейти)")
 @click.pass_context
 def step_cmd(
     ctx: click.Context,
     task: str,
-    workflow: str | None,
+    project: str | None,
     report: str | None,
 ) -> None:
     """Движение по workflow: показать текущую фазу или отчитаться и перейти.
@@ -48,7 +48,7 @@ def step_cmd(
     Примеры:
       project-workflow step --task RUN-42                -> текущие инструкции
       project-workflow step --task RUN-42 --report "..."  -> оценить отчёт исполнителя CLI и перейти
-      project-workflow step --task RUN-42 --workflow tester
+      project-workflow step --task RUN-42 --project QA
     """
     jmode = ctx.obj.get("json_mode", False)
     if report is not None and not report.strip():
@@ -61,9 +61,9 @@ def step_cmd(
     uow: SAUnitOfWork | None = None
     try:
         uow = SAUnitOfWork()
-        workflow_id = _resolve_workflow_id(uow, workflow)
-        task_key = _require_valid_key(task, uow, workflow_id=workflow_id)
-        engine = supervisor.SupervisorEngine(task_key, uow=uow, workflow_id=workflow_id)
+        project_id = _resolve_project_id(uow, project)
+        task_key = _require_valid_key(task, uow, project_id=project_id)
+        engine = supervisor.SupervisorEngine(task_key, uow=uow, project_id=project_id)
     except (ConflictError, RuntimeError, ValueError) as exc:
         if uow is not None:
             uow.close()
@@ -135,28 +135,28 @@ def step_cmd(
 
 @cli.command()
 @click.option("--task", required=True, help="Ключ задачи")
-@click.option("--workflow", default=None, help="ID или название воркфлоу, если ключ задачи неоднозначен")
+@click.option("--project", default=None, help="ID, код или название проекта, если ключ задачи неоднозначен")
 @click.option("--n", type=click.IntRange(min=1), default=None, help="Количество записей (по умолчанию: все)")
 @click.pass_context
-def history_cmd(ctx: click.Context, task: str, workflow: str | None, n: int | None) -> None:
+def history_cmd(ctx: click.Context, task: str, project: str | None, n: int | None) -> None:
     """История отчётов, переходов и статусов по задаче.
 
     Примеры:
       project-workflow history --task RUN-42            -> все записи
       project-workflow history --task RUN-42 --n 50     -> последние 50 записей
-      project-workflow history --task RUN-42 --workflow tester
+      project-workflow history --task RUN-42 --project QA
     """
     jmode = ctx.obj.get("json_mode", False)
     try:
         with SAUnitOfWork() as uow:
-            workflow_id = _resolve_workflow_id(uow, workflow)
-            task_key = _require_valid_key(task, uow, workflow_id=workflow_id)
-            task_obj = uow.tasks.get_by_key(task_key, workflow_id=workflow_id)
+            project_id = _resolve_project_id(uow, project)
+            task_key = _require_valid_key(task, uow, project_id=project_id)
+            task_obj = uow.tasks.get_by_key(task_key, project_id=project_id)
             task_id = task_obj.id if task_obj else None
             runs_raw = uow.step_history.list(
                 task_id=task_id,
                 task_key=task_key,
-                workflow_id=workflow_id,
+                project_id=project_id,
                 limit=n,
             )
             runs: list[dict[str, Any]] = []

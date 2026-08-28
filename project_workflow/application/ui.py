@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from project_workflow.domain.workflow_theme import DEFAULT_WORKFLOW_COLOR, DEFAULT_WORKFLOW_ICON
+from project_workflow.domain.project_theme import DEFAULT_PROJECT_COLOR, DEFAULT_PROJECT_ICON
 
 from ..interfaces.ui.helpers import (
     _build_parallel_phase_blocks,
@@ -203,18 +203,10 @@ class UIDataService:
                     "project_id": t.get("project_id"),
                     "workflow_id": workflow_id,
                     "workflow_name": task_workflow.get("name") if task_workflow else None,
-                    "workflow_theme_icon": (
-                        task_workflow.get("theme_icon", DEFAULT_WORKFLOW_ICON)
-                        if task_workflow
-                        else DEFAULT_WORKFLOW_ICON
-                    ),
-                    "workflow_theme_color": (
-                        task_workflow.get("theme_color", DEFAULT_WORKFLOW_COLOR)
-                        if task_workflow
-                        else DEFAULT_WORKFLOW_COLOR
-                    ),
                     "project_code": project_code,
                     "project_name": project_name,
+                    "project_theme_icon": task_project.get("theme_icon", DEFAULT_PROJECT_ICON),
+                    "project_theme_color": task_project.get("theme_color", DEFAULT_PROJECT_COLOR),
                     "current_phase_id": t["current_phase_id"],
                     "current_phase_code": t["current_phase_code"],
                     "current_phase_name": t["current_phase_name"],
@@ -393,10 +385,10 @@ class UIDataService:
             step["next_contract"] = dict(next_contract) if isinstance(next_contract, dict) else None
         return step_history
 
-    def _get_task_detail(self, task_key: str, workflow_id: int | None = None) -> dict[str, Any] | None:
+    def _get_task_detail(self, task_key: str, project_id: int | None = None) -> dict[str, Any] | None:
         """Загрузить деталку задачи: метаданные + история фаз (линейно, без FORK/JOIN)."""
         wdb = self._app_state.get_db()
-        task = wdb.get_task_by_key(task_key, workflow_id=workflow_id)
+        task = wdb.get_task_by_key(task_key, project_id=project_id)
         if not task:
             return None
 
@@ -408,8 +400,11 @@ class UIDataService:
         if project_row is None:
             raise ValueError(f"Для задачи {task_key} не найден проект {project_id}")
         project = project_row.to_dict()
+        task["project"] = project
         task["project_code"] = project["code"]
         task["project_name"] = project["name"]
+        task["project_theme_icon"] = project.get("theme_icon", DEFAULT_PROJECT_ICON)
+        task["project_theme_color"] = project.get("theme_color", DEFAULT_PROJECT_COLOR)
         task["project_label"] = (
             task["project_name"]
             if task["project_name"] == task["project_code"]
@@ -425,8 +420,6 @@ class UIDataService:
         workflow = workflow_row.to_dict()
         task["workflow"] = workflow
         task["workflow_name"] = workflow["name"]
-        task["workflow_theme_icon"] = workflow.get("theme_icon", DEFAULT_WORKFLOW_ICON)
-        task["workflow_theme_color"] = workflow.get("theme_color", DEFAULT_WORKFLOW_COLOR)
         current_phase = _resolve_task_phase_id(task["current_phase_id"], workflow_phases)
         task["current_phase_code"] = current_phase["code"]
         task["current_phase_name"] = current_phase["name"]

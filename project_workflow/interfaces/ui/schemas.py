@@ -7,9 +7,9 @@ from typing import Annotated, Any, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from project_workflow.domain.workflow_theme import (
-    DEFAULT_WORKFLOW_COLOR,
-    DEFAULT_WORKFLOW_ICON,
+from project_workflow.domain.project_theme import (
+    DEFAULT_PROJECT_COLOR,
+    DEFAULT_PROJECT_ICON,
     normalize_theme_color,
     normalize_theme_icon,
 )
@@ -163,47 +163,23 @@ class PhaseUpdate(StrictUpdateRequest):
 class WorkflowCreate(StrictRequest):
     name: str
     description: str = Field(default="")
-    theme_icon: str = Field(default=DEFAULT_WORKFLOW_ICON)
-    theme_color: str = Field(default=DEFAULT_WORKFLOW_COLOR)
 
     @field_validator("name")
     @classmethod
     def _name_not_blank(cls, value: str) -> str:
         return _strip_nonblank(value, "name")
 
-    @field_validator("theme_icon")
-    @classmethod
-    def _theme_icon_valid(cls, value: str) -> str:
-        return normalize_theme_icon(value)
-
-    @field_validator("theme_color")
-    @classmethod
-    def _theme_color_valid(cls, value: str) -> str:
-        return normalize_theme_color(value)
-
 
 class WorkflowUpdate(StrictUpdateRequest):
-    non_nullable_fields = frozenset({"name", "description", "theme_icon", "theme_color"})
+    non_nullable_fields = frozenset({"name", "description"})
 
     name: str | None = Field(default=None)
     description: str | None = Field(default=None)
-    theme_icon: str | None = Field(default=None)
-    theme_color: str | None = Field(default=None)
 
     @field_validator("name")
     @classmethod
     def _name_not_blank(cls, value: str | None) -> str | None:
         return _strip_nonblank(value, "name") if value is not None else None
-
-    @field_validator("theme_icon")
-    @classmethod
-    def _theme_icon_valid(cls, value: str | None) -> str | None:
-        return normalize_theme_icon(value) if value is not None else None
-
-    @field_validator("theme_color")
-    @classmethod
-    def _theme_color_valid(cls, value: str | None) -> str | None:
-        return normalize_theme_color(value) if value is not None else None
 
 
 class ProjectCreate(StrictRequest):
@@ -211,6 +187,8 @@ class ProjectCreate(StrictRequest):
     name: str | None = Field(default=None)
     description: str | None = Field(default="")
     workflow_id: int = Field(gt=0, strict=True)
+    theme_icon: str = Field(default=DEFAULT_PROJECT_ICON)
+    theme_color: str = Field(default=DEFAULT_PROJECT_COLOR)
     key_prefixes: list[str]
 
     @field_validator("code")
@@ -222,6 +200,16 @@ class ProjectCreate(StrictRequest):
     @classmethod
     def _name_not_blank(cls, value: str | None) -> str | None:
         return _strip_nonblank(value, "name") if value is not None else None
+
+    @field_validator("theme_icon")
+    @classmethod
+    def _theme_icon_valid(cls, value: str) -> str:
+        return normalize_theme_icon(value)
+
+    @field_validator("theme_color")
+    @classmethod
+    def _theme_color_valid(cls, value: str) -> str:
+        return normalize_theme_color(value)
 
     @field_validator("key_prefixes", mode="before")
     @classmethod
@@ -259,18 +247,32 @@ class ProjectCreate(StrictRequest):
 
 
 class ProjectUpdate(StrictUpdateRequest):
-    non_nullable_fields = frozenset({"code", "name", "description", "workflow_id", "key_prefixes"})
+    non_nullable_fields = frozenset(
+        {"code", "name", "description", "workflow_id", "theme_icon", "theme_color", "key_prefixes"}
+    )
 
     code: str | None = Field(default=None, min_length=1)
     name: str | None = Field(default=None)
     description: str | None = Field(default=None)
     workflow_id: int | None = Field(default=None, gt=0, strict=True)
+    theme_icon: str | None = Field(default=None)
+    theme_color: str | None = Field(default=None)
     key_prefixes: list[str] | None = Field(default=None)
 
     @field_validator("code", "name")
     @classmethod
     def _identity_not_blank(cls, value: str | None, info: Any) -> str | None:
         return _strip_nonblank(value, info.field_name) if value is not None else None
+
+    @field_validator("theme_icon")
+    @classmethod
+    def _theme_icon_valid(cls, value: str | None) -> str | None:
+        return normalize_theme_icon(value) if value is not None else None
+
+    @field_validator("theme_color")
+    @classmethod
+    def _theme_color_valid(cls, value: str | None) -> str | None:
+        return normalize_theme_color(value) if value is not None else None
 
     @field_validator("key_prefixes", mode="before")
     @classmethod

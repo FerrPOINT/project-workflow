@@ -461,8 +461,8 @@ class TestApiWorkflows:
         data = resp.json()
         assert data["ok"] is True
         assert "workflow_id" in data
-        assert data["workflow"]["theme_icon"] == "workflow"
-        assert data["workflow"]["theme_color"] == "#5E6AD2"
+        assert "theme_icon" not in data["workflow"]
+        assert "theme_color" not in data["workflow"]
 
     def test_create_workflow_requires_name(self, client):
         resp = client.post("/api/workflows", json={"description": "desc"})
@@ -481,7 +481,7 @@ class TestApiWorkflows:
             {"name": "Bad color", "theme_color": "not-a-color"},
         ],
     )
-    def test_workflow_theme_values_are_validated(self, client, payload):
+    def test_workflow_rejects_project_theme_fields(self, client, payload):
         resp = client.post("/api/workflows", json=payload)
         assert resp.status_code == 422
 
@@ -494,16 +494,14 @@ class TestApiWorkflows:
             json={
                 "name": "Updated",
                 "description": "new",
-                "theme_icon": "shield",
-                "theme_color": "334155",
             },
         )
         assert resp.status_code == 200
         data = resp.json()
         assert data["ok"] is True
         assert data["workflow"]["name"] == "Updated"
-        assert data["workflow"]["theme_icon"] == "shield"
-        assert data["workflow"]["theme_color"] == "#334155"
+        assert "theme_icon" not in data["workflow"]
+        assert "theme_color" not in data["workflow"]
         assert client.put(f"/api/workflows/{wf['id']}", json={"name": None}).status_code == 422
         assert client.put(f"/api/workflows/{wf['id']}", json={"description": None}).status_code == 422
         assert client.put(f"/api/workflows/{wf['id']}", json={"theme_icon": None}).status_code == 422
@@ -567,6 +565,8 @@ class TestApiProjects:
                 "name": "Test Project",
                 "description": "desc",
                 "workflow_id": default_wf["id"],
+                "theme_icon": "bug",
+                "theme_color": "22c55e",
                 "key_prefixes": ["TST"],
             },
         )
@@ -574,11 +574,46 @@ class TestApiProjects:
         data = resp.json()
         assert data["ok"] is True
         project_id = data["project_id"]
+        assert data["project"]["theme_icon"] == "bug"
+        assert data["project"]["theme_color"] == "#22C55E"
 
-        resp = client.put(f"/api/projects/{project_id}", json={"name": "Updated", "key_prefixes": ["ABC", "DEF"]})
+        resp = client.put(
+            f"/api/projects/{project_id}",
+            json={
+                "name": "Updated",
+                "theme_icon": "rocket",
+                "theme_color": "#0ea5e9",
+                "key_prefixes": ["ABC", "DEF"],
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["project"]["name"] == "Updated"
+        assert data["project"]["theme_icon"] == "rocket"
+        assert data["project"]["theme_color"] == "#0EA5E9"
+        assert client.put(f"/api/projects/{project_id}", json={"theme_icon": None}).status_code == 422
+        assert client.put(f"/api/projects/{project_id}", json={"theme_color": None}).status_code == 422
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"theme_icon": "unknown"},
+            {"theme_color": "not-a-color"},
+        ],
+    )
+    def test_project_theme_values_are_validated(self, client, payload):
+        from project_workflow.interfaces.ui import _app_state
+
+        default_wf = next(w for w in _app_state.workflow_service().list_workflows() if w.get("is_default"))
+        body = {
+            "code": _unique("BADTHEME"),
+            "name": "Bad theme",
+            "workflow_id": default_wf["id"],
+            "key_prefixes": [_unique("BT").replace("-", "").upper()],
+            **payload,
+        }
+        resp = client.post("/api/projects", json=body)
+        assert resp.status_code == 422
 
     def test_create_project_invalid_prefix(self, client):
         from project_workflow.interfaces.ui import _app_state

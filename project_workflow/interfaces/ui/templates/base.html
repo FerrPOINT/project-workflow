@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru"{% if theme_workflow %} style="--accent:{{ theme_workflow.theme_color }};--accent-hover:{{ theme_workflow.theme_color }};--accent-soft:{{ theme_workflow.theme_color }}26"{% endif %}>
+<html lang="ru"{% if theme_project %} style="--accent:{{ theme_project.theme_color }};--accent-hover:{{ theme_project.theme_color }};--accent-soft:{{ theme_project.theme_color }}26"{% endif %}>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -206,11 +206,11 @@ textarea{resize:vertical;min-height:60px}
       <a class="brand-link" href="/" aria-label="project-workflow">
         <span class="brand-mark" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="{{ workflow_icon_path(theme_workflow.theme_icon if theme_workflow else 'workflow') }}"></path>
+            <path d="{{ project_icon_path(theme_project.theme_icon if theme_project else 'project') }}"></path>
           </svg>
         </span>
         <span class="brand-text">
-          <span class="brand-name">{{ theme_workflow.name if theme_workflow else 'project' }}</span>
+          <span class="brand-name">{{ theme_project.name if theme_project else 'project' }}</span>
           <span class="brand-subname">workflow</span>
         </span>
       </a>

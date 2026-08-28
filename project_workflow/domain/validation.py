@@ -40,6 +40,7 @@ def _prefixes_to_regex(prefixes: list[str]) -> str:
         return r"$^"
     return r"^(?P<prefix>" + "|".join(escaped) + r")-(?P<number>[0-9]+)$"
 
+
 class TaskKeyValidator:
     """Validate task keys using the projects currently configured in the database."""
 
@@ -136,7 +137,10 @@ class TaskKeyValidator:
 
 
 def get_project_for_task_key(
-    uow: Any, task_key: str, workflow_id: int | None = None
+    uow: Any,
+    task_key: str,
+    workflow_id: int | None = None,
+    project_id: int | None = None,
 ) -> dict[str, Any] | None:
     """Resolve a project row from a task key using configured project prefixes."""
     match = re.fullmatch(r"(?P<prefix>[A-Z][A-Z0-9]*)-(?P<number>[0-9]+)", str(task_key).strip())
@@ -146,6 +150,8 @@ def get_project_for_task_key(
     matches: list[dict[str, Any]] = []
     for project in uow.projects.list():
         project_dict = project.to_dict() if hasattr(project, "to_dict") else dict(project)
+        if project_id is not None and project_dict.get("id") != project_id:
+            continue
         if workflow_id is not None and project_dict.get("workflow_id") != workflow_id:
             continue
         key_prefixes = project_dict.get("key_prefixes", []) or []
@@ -158,5 +164,5 @@ def get_project_for_task_key(
     if not matches:
         return None
     if len(matches) > 1:
-        raise ValueError(f"Для ключа задачи {task_key!r} найдено несколько проектов; укажите workflow")
+        raise ValueError(f"Для ключа задачи {task_key!r} найдено несколько проектов; укажите project")
     return matches[0]

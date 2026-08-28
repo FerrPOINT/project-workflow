@@ -34,8 +34,6 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("name", sa.String(), nullable=False),
         sa.Column("description", sa.String(), server_default="", nullable=False),
-        sa.Column("theme_icon", sa.String(length=32), server_default="workflow", nullable=False),
-        sa.Column("theme_color", sa.String(length=7), server_default="#5E6AD2", nullable=False),
         sa.Column("is_default", sa.Integer(), server_default="0", nullable=False),
         sa.CheckConstraint("is_default IN (0, 1)", name="ck_workflows_is_default"),
         sa.PrimaryKeyConstraint("id"),
@@ -119,6 +117,8 @@ def upgrade() -> None:
         sa.Column("code", sa.String(), nullable=False),
         sa.Column("name", sa.String(), nullable=False),
         sa.Column("description", sa.Text(), server_default="", nullable=False),
+        sa.Column("theme_icon", sa.String(length=32), server_default="project", nullable=False),
+        sa.Column("theme_color", sa.String(length=7), server_default="#5E6AD2", nullable=False),
         sa.Column("key_prefixes", sa.String(), server_default="[]", nullable=False),
         sa.ForeignKeyConstraint(["workflow_id"], ["workflows.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
@@ -154,7 +154,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["workflow_id"], ["workflows.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("id", "workflow_id", name="uq_tasks_id_workflow"),
-        sa.UniqueConstraint("workflow_id", "task_key", name="uq_tasks_workflow_task_key"),
+        sa.UniqueConstraint("project_id", "task_key", name="uq_tasks_project_task_key"),
     )
     op.create_index("ix_tasks_project_id", "tasks", ["project_id"])
     op.create_index("ix_tasks_workflow_id", "tasks", ["workflow_id"])

@@ -204,32 +204,20 @@ async def api_phase_batch_order(payload: PhaseOrderUpdate) -> dict[str, Any] | J
 
 async def api_workflow_create(payload: WorkflowCreate) -> dict[str, Any] | JSONResponse:
     service = _app_state.workflow_service()
-    try:
-        workflow = service.create_workflow(
-            {
-                "name": payload.name,
-                "description": payload.description or "",
-                "theme_icon": payload.theme_icon,
-                "theme_color": payload.theme_color,
-            }
-        )
-    except ValueError as exc:
-        return _error(str(exc), 422)
+    workflow = service.create_workflow({"name": payload.name, "description": payload.description or ""})
     workflow_id = workflow["id"]
     return {"ok": True, "workflow_id": workflow_id, "workflow": service.get_workflow(workflow_id)}
 
 
 async def api_workflow_update(workflow_id: int, payload: WorkflowUpdate) -> dict[str, Any] | JSONResponse:
     service = _app_state.workflow_service()
-    updates = _updates_from_payload(payload, ["name", "description", "theme_icon", "theme_color"])
+    updates = _updates_from_payload(payload, ["name", "description"])
     try:
         service.update_workflow(workflow_id, updates)
     except NotFoundError as exc:
         return _error(str(exc), 404)
     except ConflictError as exc:
         return _error(str(exc), 409)
-    except ValueError as exc:
-        return _error(str(exc), 422)
     return {"ok": True, "workflow": service.get_workflow(workflow_id)}
 
 
@@ -254,6 +242,8 @@ async def api_project_create(payload: ProjectCreate) -> dict[str, Any] | JSONRes
                 "code": payload.code,
                 "name": payload.name,
                 "description": payload.description or "",
+                "theme_icon": payload.theme_icon,
+                "theme_color": payload.theme_color,
                 "key_prefixes": list(payload.key_prefixes),
                 "workflow_id": payload.workflow_id,
             }
@@ -270,7 +260,10 @@ async def api_project_create(payload: ProjectCreate) -> dict[str, Any] | JSONRes
 
 async def api_project_update(project_id: int, payload: ProjectUpdate) -> dict[str, Any] | JSONResponse:
     service = _app_state.project_service()
-    updates = _updates_from_payload(payload, ["code", "name", "description", "workflow_id"])
+    updates = _updates_from_payload(
+        payload,
+        ["code", "name", "description", "workflow_id", "theme_icon", "theme_color"],
+    )
     if payload.key_prefixes is not None:
         updates["key_prefixes"] = list(payload.key_prefixes)
     try:

@@ -1323,6 +1323,11 @@ class TestProjectsPage:
         assert 'id="projectForm"' in response.text
         assert 'id="newProjectButton"' in response.text
         assert 'id="projectFormMode"' in response.text
+        assert 'id="projectThemeIcon"' in response.text
+        assert 'id="projectThemeColor"' in response.text
+        assert 'id="projectThemePreview"' in response.text
+        assert "document.querySelector('.brand-name')" in response.text
+        assert "document.querySelector('.brand-mark')" in response.text
         assert 'id="createProjectForm"' not in response.text
 
     def test_projects_page_exposes_workflow_selector(self):
@@ -1346,15 +1351,21 @@ class TestProjectsPage:
                 "name": "API CRUD Project",
                 "key_prefixes": ["APICRUD"],
                 "workflow_id": workflow["id"],
+                "theme_icon": "bug",
+                "theme_color": "#22c55e",
             },
         )
         assert create.status_code == 200
         project_id = create.json()["project_id"]
+        assert create.json()["project"]["theme_icon"] == "bug"
+        assert create.json()["project"]["theme_color"] == "#22C55E"
 
         update = client.put(
             f"/api/projects/{project_id}",
             json={
                 "name": "API CRUD Project Updated",
+                "theme_icon": "rocket",
+                "theme_color": "#0ea5e9",
                 "key_prefixes": ["APICRUD"],
             },
         )
@@ -1364,6 +1375,8 @@ class TestProjectsPage:
         project = next(project for project in projects if project["id"] == project_id)
         assert project["name"] == "API CRUD Project Updated"
         assert project["key_prefixes"] == ["APICRUD"]
+        assert project["theme_icon"] == "rocket"
+        assert project["theme_color"] == "#0EA5E9"
 
         delete = client.delete(f"/api/projects/{project_id}")
         assert delete.status_code == 200
@@ -1461,9 +1474,9 @@ class TestWorkflowsPage:
         assert 'id="workflowForm"' in response.text
         assert 'id="newWorkflowButton"' in response.text
         assert 'id="workflowFormMode"' in response.text
-        assert 'id="workflowThemeIcon"' in response.text
-        assert 'id="workflowThemeColor"' in response.text
-        assert 'id="workflowThemePreview"' in response.text
+        assert 'id="workflowThemeIcon"' not in response.text
+        assert 'id="workflowThemeColor"' not in response.text
+        assert 'id="workflowThemePreview"' not in response.text
 
     def test_workflows_page_has_no_code_field_in_editor_or_create_form(self):
         response = client.get("/workflows")
@@ -1483,8 +1496,6 @@ class TestWorkflowsPage:
             json={
                 "name": "API Workflow",
                 "description": "Workflow CRUD from API test",
-                "theme_icon": "bug",
-                "theme_color": "#22c55e",
             },
         )
         assert create.status_code == 200
@@ -1501,8 +1512,6 @@ class TestWorkflowsPage:
             json={
                 "name": "API Workflow Updated",
                 "description": "Updated workflow description",
-                "theme_icon": "rocket",
-                "theme_color": "#0ea5e9",
             },
         )
         assert update.status_code == 200
@@ -1511,8 +1520,8 @@ class TestWorkflowsPage:
         workflow = next(workflow for workflow in workflows if workflow["id"] == workflow_id)
         assert workflow["name"] == "API Workflow Updated"
         assert workflow["description"] == "Updated workflow description"
-        assert workflow["theme_icon"] == "rocket"
-        assert workflow["theme_color"] == "#0EA5E9"
+        assert "theme_icon" not in workflow
+        assert "theme_color" not in workflow
         assert "code" not in workflow
 
         delete = client.delete(f"/api/workflows/{workflow_id}")
@@ -1643,12 +1652,12 @@ class TestSettingsPage:
         step_options = {option["flags"]: option for option in step["options"]}
         history_options = {option["flags"]: option for option in history["options"]}
 
-        assert set(step_options) == {"--task", "--workflow", "--report"}
-        assert set(history_options) == {"--task", "--workflow", "--n"}
+        assert set(step_options) == {"--task", "--project", "--report"}
+        assert set(history_options) == {"--task", "--project", "--n"}
         assert "default" not in step_options["--task"]
         assert "default" not in step_options["--report"]
-        assert "default" not in step_options["--workflow"]
-        assert "default" not in history_options["--workflow"]
+        assert "default" not in step_options["--project"]
+        assert "default" not in history_options["--project"]
         assert "default" not in history_options["--n"]
         assert "по умолчанию: все" in history_options["--n"]["help"]
 

@@ -39,13 +39,16 @@ def test_workflow_to_dict():
     w = Workflow(id=3, name="W", is_default=True)
     data = w.to_dict()
     assert data["is_default"] is True
-    assert data["theme_icon"] == "workflow"
-    assert data["theme_color"] == "#5E6AD2"
+    assert "theme_icon" not in data
+    assert "theme_color" not in data
 
 
 def test_project_to_dict():
     p = Project(id=4, code="PRJ", key_prefixes=["PRJ"])
-    assert p.to_dict()["key_prefixes"] == ["PRJ"]
+    data = p.to_dict()
+    assert data["key_prefixes"] == ["PRJ"]
+    assert data["theme_icon"] == "project"
+    assert data["theme_color"] == "#5E6AD2"
 
 
 def test_task_to_dict():

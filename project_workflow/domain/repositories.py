@@ -167,7 +167,12 @@ class TaskRepository(ABC):
     def get_by_id(self, task_id: int) -> Task | None: ...
 
     @abstractmethod
-    def get_by_key(self, task_key: str, workflow_id: int | None = None) -> Task | None: ...
+    def get_by_key(
+        self,
+        task_key: str,
+        workflow_id: int | None = None,
+        project_id: int | None = None,
+    ) -> Task | None: ...
 
     @abstractmethod
     def lock(self, task_id: int) -> Task | None: ...
@@ -242,6 +247,7 @@ class TaskStepHistoryRepository(ABC):
         task_id: int | None = None,
         task_key: str | None = None,
         workflow_id: int | None = None,
+        project_id: int | None = None,
         phase_id: int | None = None,
         limit: int | None = 200,
     ) -> Sequence[TaskStepHistoryEntry]: ...

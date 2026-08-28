@@ -22,20 +22,27 @@ class SATaskRepository(TaskRepository):
     def __init__(self, session: Session):
         self._session = session
 
-    def get_by_key(self, task_key: str, workflow_id: int | None = None) -> Task | None:
+    def get_by_key(
+        self,
+        task_key: str,
+        workflow_id: int | None = None,
+        project_id: int | None = None,
+    ) -> Task | None:
         with self._session.no_autoflush:
             stmt = (
                 select(m.Task)
                 .options(joinedload(m.Task.workflow).selectinload(m.Workflow.phases))
                 .where(m.Task.task_key == task_key)
             )
+            if project_id is not None:
+                stmt = stmt.where(m.Task.project_id == project_id)
             if workflow_id is not None:
                 stmt = stmt.where(m.Task.workflow_id == workflow_id)
-            rows = self._session.execute(stmt.order_by(m.Task.workflow_id, m.Task.id)).scalars().all()
+            rows = self._session.execute(stmt.order_by(m.Task.project_id, m.Task.id)).scalars().all()
         if not rows:
             return None
-        if workflow_id is None and len(rows) > 1:
-            raise ConflictError(f"Задача {task_key!r} есть в нескольких воркфлоу; укажите workflow")
+        if workflow_id is None and project_id is None and len(rows) > 1:
+            raise ConflictError(f"Задача {task_key!r} есть в нескольких проектах; укажите project")
         return _row_to_task(rows[0])
 
     def get_by_id(self, task_id: int) -> Task | None:

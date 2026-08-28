@@ -110,7 +110,7 @@ class TestTaskService:
         result = TaskService(uow).create_task({"task_key": "RUN-1", "workflow_id": 2})
 
         assert result["project_id"] == 5
-        uow.tasks.get_by_key.assert_called_once_with("RUN-1", workflow_id=2)
+        uow.tasks.get_by_key.assert_called_once_with("RUN-1", project_id=5)
 
     def test_create_task_without_project_id_rejects_ambiguous_workflow_scope(self):
         uow = _make_uow()
@@ -138,7 +138,7 @@ class TestTaskService:
             TaskService(uow).create_task({"task_key": "B-2", "project_id": 5})
 
         uow.tasks.create.assert_not_called()
-        uow.tasks.get_by_key.assert_called_once_with("B-2", workflow_id=1)
+        uow.tasks.get_by_key.assert_called_once_with("B-2", project_id=5)
 
     @pytest.mark.parametrize("task_key", ["B", "B-RACE", "b-2", "B-2X"])
     def test_create_task_uses_the_same_numeric_key_contract_as_cli(self, task_key):

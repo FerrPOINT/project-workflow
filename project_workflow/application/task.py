@@ -75,7 +75,7 @@ class TaskService:
                 f"Фаза {current_phase_id!r} не найдена в воркфлоу {locked_project.workflow_id}"
             )
         payload["current_phase_id"] = current_phase_id
-        if self._uow.tasks.get_by_key(task_key, workflow_id=locked_project.workflow_id) is not None:
+        if self._uow.tasks.get_by_key(task_key, project_id=locked_project.id) is not None:
             raise ConflictError(f"Задача {task_key!r} уже существует")
         tid = self._uow.tasks.create(payload)
         task = self._uow.tasks.get_by_id(tid)
@@ -88,8 +88,13 @@ class TaskService:
         t = self._uow.tasks.get_by_id(task_id)
         return t.to_dict() if t else None
 
-    def get_task_by_key(self, task_key: str, workflow_id: int | None = None) -> dict[str, Any] | None:
-        t = self._uow.tasks.get_by_key(task_key, workflow_id=workflow_id)
+    def get_task_by_key(
+        self,
+        task_key: str,
+        workflow_id: int | None = None,
+        project_id: int | None = None,
+    ) -> dict[str, Any] | None:
+        t = self._uow.tasks.get_by_key(task_key, workflow_id=workflow_id, project_id=project_id)
         return t.to_dict() if t else None
 
     def list_tasks(self) -> list[dict[str, Any]]:
