@@ -67,9 +67,13 @@ class TestEndToEndWorkflow:
         db_path = tmp_path / "test3.db"
         uow = SAUnitOfWork(f"sqlite:///{db_path}")
         prepare_sqlite_uow(uow)
-        AgentService(uow).create_agent({"name": "coder", "description": "Пишет код"})
+        AgentService(uow).create_agent({"name": "crud-coder", "description": "Пишет код"})
         agents = uow.get_agents()
-        created = [agent for agent in agents if agent["name"] == "coder" and agent["description"] == "Пишет код"]
+        created = [
+            agent
+            for agent in agents
+            if agent["name"] == "crud-coder" and agent["description"] == "Пишет код"
+        ]
         assert len(created) == 1
         assert created[0]["id"] is not None
 

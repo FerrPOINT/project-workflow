@@ -23,6 +23,7 @@ AGENTS_PATH = REPO_ROOT / "AGENTS.md"
 DOCKERFILE_PATH = REPO_ROOT / "Dockerfile"
 CONSTRAINTS_PATH = REPO_ROOT / "constraints.txt"
 LICENSE_PATH = REPO_ROOT / "LICENSE"
+QUALITY_SCRIPT_PATH = REPO_ROOT / "scripts" / "quality.ps1"
 
 EXPECTED_CODES = [
     "1.INTAKE",
@@ -111,6 +112,20 @@ def test_compose_waits_for_api_readiness():
 def test_repository_runbook_waits_for_compose_readiness():
     agents = AGENTS_PATH.read_text(encoding="utf-8")
     assert "docker compose up --build -d --wait" in agents
+    assert "scripts/quality.ps1" in agents
+
+
+def test_windows_quality_helper_mirrors_local_gate():
+    script = QUALITY_SCRIPT_PATH.read_text(encoding="utf-8")
+    assert "--with-requirements\", \"constraints.txt\"" in script
+    assert "--timeout=60" in script
+    assert "--timeout=120" in script
+    assert "test-integration" in script
+    assert "coverage" in script
+    assert "ruff\", \"check\", \".\"" in script
+    assert "mypy\", \"project_workflow\", \"scripts\"" in script
+    assert "curl.exe" in script
+    assert "http://127.0.0.1:8812/health" in script
 
 
 def test_dependency_constraints_are_exact_and_runtime_image_uses_isolated_venv():

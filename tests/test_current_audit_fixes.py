@@ -39,6 +39,16 @@ def _workflow_with_project(unit: SAUnitOfWork, suffix: str) -> tuple[int, int]:
     return workflow_id, project_id
 
 
+def test_agent_name_is_unique_in_repository(uow: SAUnitOfWork):
+    uow.agents.create({"name": "Reviewer", "description": ""})
+    uow.commit()
+
+    with pytest.raises(ConflictError, match="уже существует"):
+        uow.agents.create({"name": "Reviewer", "description": ""})
+
+    uow.rollback()
+
+
 def test_phase_update_preserves_identity_and_ignores_ownership_fields(uow: SAUnitOfWork):
     workflow_id, _ = _workflow_with_project(uow, "phase-a")
     other_workflow_id, _ = _workflow_with_project(uow, "phase-b")

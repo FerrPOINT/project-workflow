@@ -642,6 +642,15 @@ class TestApiAgents:
         assert second.status_code == 409
         assert "уже назначен" in second.json()["error"]
 
+    def test_agent_name_cannot_be_shared(self, client):
+        name = _unique("Agent")
+        first = client.post("/api/agents", json={"name": name})
+        assert first.status_code == 200
+
+        second = client.post("/api/agents", json={"name": name})
+        assert second.status_code == 409
+        assert "уже существует" in second.json()["error"]
+
     def test_invalid_hermes_profile_is_rejected(self, client):
         response = client.post("/api/agents", json={"name": _unique("Agent"), "hermes_profile": "Bad Profile"})
         assert response.status_code == 422

@@ -14,8 +14,8 @@
 ## Обязательные проверки
 
 Канонический локальный gate и expected output описаны в
-`docs/quality-gate.md`; цели `Makefile` повторяют эти команды через `uv`,
-`constraints.txt` и текущий marker contract.
+`docs/quality-gate.md`; цели `Makefile` и `scripts/quality.ps1` повторяют эти
+команды через `uv`, `constraints.txt` и текущий marker contract.
 
 После любого изменения SQLAlchemy-слоя, application services, состояния UI или
 Supervisor Engine перед commit выполнить следующие проверки:
@@ -71,9 +71,9 @@ Supervisor Engine перед commit выполнить следующие про
 - `DATABASE_URL` обязателен в runtime. SQLite используется только в изолированных тестах.
 - `project-workflow` хранит только имена skills. Канонические файлы находятся в
   `https://gt.wmtgroup.ru/relevanter/agent-skills` и загружаются исполнителем.
-- `project-workflow` хранит только уникальное имя Hermes-профиля, назначенного
-  агенту. Профилем владеет Hermes; исполнитель выбирает его командой
-  `hermes --profile <profile> --oneshot <prompt>`.
+- `project-workflow` хранит уникальное имя агента и nullable уникальное имя
+  Hermes-профиля, назначенного агенту. Профилем владеет Hermes; исполнитель
+  выбирает его командой `hermes --profile <profile> --oneshot <prompt>`.
 - Воспроизводимый CLI acceptance описан в `LIVE_TEST_PLAN.md`.
 
 ## Осознанно исключённые возможности

@@ -54,12 +54,17 @@ class SAAgentRepository(AgentRepository):
         ).scalar_one_or_none()
         return _row_to_agent(row) if row else None
 
-    def _flush_profile(self, profile: str | None) -> None:
+    def _flush_unique_constraints(self, name: str, profile: str | None) -> None:
         try:
             self._session.flush()
         except IntegrityError as exc:
-            label = repr(profile) if profile else "the requested value"
-            raise ConflictError(f"Профиль Hermes {label} уже назначен другому агенту") from exc
+            details = f"{exc} {getattr(exc, 'orig', '')}".casefold()
+            if "uq_agents_name" in details or "agents.name" in details:
+                raise ConflictError(f"Агент {name!r} уже существует") from exc
+            if "uq_agents_hermes_profile" in details or "agents.hermes_profile" in details:
+                label = repr(profile) if profile else "заданное значение"
+                raise ConflictError(f"Профиль Hermes {label} уже назначен другому агенту") from exc
+            raise ConflictError("Агент с таким именем или профилем Hermes уже существует") from exc
 
     def create(self, data: dict[str, Any]) -> int:
         item = m.Agent(
@@ -68,7 +73,7 @@ class SAAgentRepository(AgentRepository):
             hermes_profile=data.get("hermes_profile") or None,
         )
         self._session.add(item)
-        self._flush_profile(item.hermes_profile)
+        self._flush_unique_constraints(item.name, item.hermes_profile)
         return int(item.id)
 
     def update(self, agent_id: int, data: dict[str, Any]) -> None:
@@ -81,7 +86,7 @@ class SAAgentRepository(AgentRepository):
             row.description = data["description"]
         if "hermes_profile" in data:
             row.hermes_profile = data["hermes_profile"] or None
-        self._flush_profile(row.hermes_profile)
+        self._flush_unique_constraints(row.name, row.hermes_profile)
 
     def delete(self, agent_id: int) -> None:
         row = self._session.get(m.Agent, agent_id)

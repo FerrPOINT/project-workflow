@@ -20,9 +20,12 @@ git diff --check
 - обычный pytest проходит без падений; PostgreSQL integration tests в нём
   показываются как deselected;
 - отдельный PostgreSQL integration gate проходит на реальном PostgreSQL;
-- coverage остаётся не ниже текущего локального baseline `94%`
-  (`pyproject.toml` оставляет аварийный нижний порог `90%`);
+- coverage остаётся не ниже текущего локального baseline `94%`;
 - `ruff`, `mypy` и `git diff --check` не находят ошибок.
+
+На Unix-like окружении тот же набор доступен через `make quality`; на Windows
+без `make` используйте `pwsh -File scripts/quality.ps1 quality`. Дополнительные
+цели `warnings` и `compose-ready` есть и в `Makefile`, и в PowerShell helper.
 
 ## ResourceWarning Gate
 
@@ -70,7 +73,10 @@ curl --fail http://127.0.0.1:8812/health
 ```
 
 Ожидается HTTP `200`, `database=ok`, `schema=ok`. Стандартный Compose публикует
-PostgreSQL и API только на loopback.
+PostgreSQL и API только на loopback. Для стандартного compose-ready должны быть
+свободны `127.0.0.1:5432` и `127.0.0.1:8812`; если порт 5432 занят другим
+PostgreSQL, integration gate можно запускать с `PGPORT`, указывающим на
+отдельный тестовый PostgreSQL.
 
 ## UI Smoke
 

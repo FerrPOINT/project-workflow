@@ -77,6 +77,8 @@ class TestSupervisorModelContractFinalGaps:
 class TestApplicationServiceFinalGaps:
     def test_agent_service_creation_failed(self):
         uow = MagicMock()
+        uow.agents.get_by_name.return_value = None
+        uow.agents.get_by_hermes_profile.return_value = None
         uow.agents.create.return_value = 1
         uow.agents.get_by_id.return_value = None
         with pytest.raises(RuntimeError, match="Не удалось создать агента"):

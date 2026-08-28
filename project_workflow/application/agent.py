@@ -16,6 +16,15 @@ class AgentService:
         self._uow = uow
 
     @staticmethod
+    def _normalize_name(name: Any) -> str:
+        if not isinstance(name, str):
+            raise ValueError("Имя агента должно быть строкой")
+        value = name.strip()
+        if not value:
+            raise ValueError("Имя агента не может быть пустым")
+        return value
+
+    @staticmethod
     def _normalize_profile(profile: Any) -> str | None:
         if profile is None:
             return None
@@ -38,6 +47,11 @@ class AgentService:
         if owner is not None and owner.id != agent_id:
             raise ConflictError(f"Профиль Hermes {profile!r} уже назначен агенту {owner.name!r}")
 
+    def _validate_name_owner(self, name: str, *, agent_id: int | None = None) -> None:
+        owner = self._uow.agents.get_by_name(name)
+        if owner is not None and owner.id != agent_id:
+            raise ConflictError(f"Агент {name!r} уже существует")
+
     def _lock_assigned_workflows(self, agent_id: int) -> None:
         """Serialize agent changes with evaluations that read its phase assignments."""
         for workflow_id in sorted(set(self._uow.phases.workflow_ids_for_agent(agent_id))):
@@ -46,6 +60,8 @@ class AgentService:
 
     def create_agent(self, data: dict[str, Any]) -> dict[str, Any]:
         payload = dict(data)
+        payload["name"] = self._normalize_name(payload.get("name"))
+        self._validate_name_owner(payload["name"])
         if "hermes_profile" in payload:
             payload["hermes_profile"] = self._normalize_profile(payload["hermes_profile"])
         self._validate_profile_owner(payload.get("hermes_profile"))
@@ -69,12 +85,16 @@ class AgentService:
 
     def update_agent(self, agent_id: int, data: dict[str, Any]) -> None:
         payload = dict(data)
+        if "name" in payload:
+            payload["name"] = self._normalize_name(payload["name"])
         if "hermes_profile" in payload:
             payload["hermes_profile"] = self._normalize_profile(payload["hermes_profile"])
         if self._uow.agents.lock(agent_id) is None:
             raise NotFoundError(f"Агент {agent_id} не найден")
         try:
             self._lock_assigned_workflows(agent_id)
+            if "name" in payload:
+                self._validate_name_owner(payload["name"], agent_id=agent_id)
             self._validate_profile_owner(payload.get("hermes_profile"), agent_id=agent_id)
             self._uow.agents.update(agent_id, payload)
             self._uow.commit()

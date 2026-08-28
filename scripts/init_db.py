@@ -26,11 +26,9 @@ def main() -> int:
         engine = get_engine(settings.DATABASE_URL)
         with initialization_transaction(engine) as connection:
             ensure_migrated(connection)
-            uow = SAUnitOfWork(connection)
-            schema.ensure_phase_catalog(uow)
-            bootstrap_default_project(uow)
-            uow.commit()
-            uow.close()
+            with SAUnitOfWork(connection) as uow:
+                schema.ensure_phase_catalog(uow)
+                bootstrap_default_project(uow)
     except DatabaseRecreateRequired as exc:
         print(str(exc), file=sys.stderr)
         return exc.exit_code

@@ -24,6 +24,7 @@ def test_agent_profile_validation_rejects_invalid_values(profile):
 
 def test_agent_create_rolls_back_when_created_row_cannot_be_read():
     uow = MagicMock()
+    uow.agents.get_by_name.return_value = None
     uow.agents.get_by_hermes_profile.return_value = None
     uow.agents.create.return_value = 10
     uow.agents.get_by_id.return_value = None

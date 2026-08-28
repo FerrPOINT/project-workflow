@@ -257,7 +257,17 @@ def test_init_db_reports_invalid_seed_without_traceback(tmp_path, monkeypatch, c
     from project_workflow.infrastructure.db.session import reset_engine
     from scripts import init_db
 
+    closed = False
+    real_uow_cls = init_db.SAUnitOfWork
+
+    class TrackingUoW(real_uow_cls):
+        def close(self) -> None:
+            nonlocal closed
+            closed = True
+            super().close()
+
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'invalid-seed.db'}")
+    monkeypatch.setattr(init_db, "SAUnitOfWork", TrackingUoW)
     monkeypatch.setattr(
         init_db.schema,
         "ensure_phase_catalog",
@@ -270,6 +280,7 @@ def test_init_db_reports_invalid_seed_without_traceback(tmp_path, monkeypatch, c
         stderr = capsys.readouterr().err
         assert "Некорректный начальный каталог: phase.code" in stderr
         assert "Traceback" not in stderr
+        assert closed is True
     finally:
         config.get_settings.cache_clear()
         reset_engine()
@@ -316,6 +327,13 @@ def test_head_with_column_drift_is_refused(tmp_path, statement):
 def test_sqlite_initial_constraints(tmp_path):
     engine = _sqlite_engine(tmp_path)
     ensure_migrated(engine)
+    with engine.begin() as conn:
+        conn.execute(text("INSERT INTO agents (name, description) VALUES ('Reviewer', '')"))
+
+    with pytest.raises(IntegrityError):
+        with engine.begin() as conn:
+            conn.execute(text("INSERT INTO agents (name, description) VALUES ('Reviewer', '')"))
+
     with engine.begin() as conn:
         workflow_id = conn.execute(
             text("INSERT INTO workflows (name, description, is_default) VALUES ('W', '', 1) RETURNING id")

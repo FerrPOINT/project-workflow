@@ -1084,6 +1084,37 @@ class TestPostgresUoW:
         assert len([agent for agent in verify.agents.list() if agent.hermes_profile == "shared-race-profile"]) == 1
         verify.close()
 
+    def test_concurrent_agent_name_claim_is_domain_conflict(self, pg_url):
+        ensure_migrated(get_engine(pg_url))
+        barrier = Barrier(2)
+
+        def create(index: int) -> str:
+            uow = SAUnitOfWork(pg_url)
+            repository_method = uow.agents.create
+
+            def synchronized_write(*args, **kwargs):
+                barrier.wait(timeout=10)
+                return repository_method(*args, **kwargs)
+
+            uow.agents.create = synchronized_write
+            try:
+                AgentService(uow).create_agent(
+                    {"name": "Shared reviewer", "description": f"attempt {index}"}
+                )
+                return "saved"
+            except ConflictError:
+                return "conflict"
+            finally:
+                uow.close()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(create, range(2)))
+
+        assert sorted(results) == ["conflict", "saved"]
+        verify = SAUnitOfWork(pg_url)
+        assert len([agent for agent in verify.agents.list() if agent.name == "Shared reviewer"]) == 1
+        verify.close()
+
     def test_catalog_mutation_during_supervisor_provider_call_fails_closed(self, pg_url):
         from project_workflow.infrastructure.llm import OpenAICompatibleClient
         from project_workflow.supervisor import SupervisorEngine

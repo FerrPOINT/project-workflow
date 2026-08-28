@@ -140,6 +140,8 @@ Hermes. В базе хранится только непрозрачное им�
 `review_profile`; ключи, skills, память и конфигурация остаются в Hermes.
 Один профиль нельзя назначить двум агентам, чтобы два исполнителя не писали в
 один `HERMES_HOME` одновременно.
+Имя агента также уникально: оно используется как операторская метка в UI,
+seed-каталоге и Supervisor-контрактах.
 
 Внешний исполнитель получает `hermes_profile` в serial- или parallel-контракте
 и запускает Hermes канонической командой:
@@ -204,7 +206,7 @@ erDiagram
 - REST принимает числовые phase resource IDs и строгие JSON-типы; `key_prefixes` — только непустой `list[str]`, а reorder инструкций — полный уникальный набор ID одной фазы. Строковые обходные формы не поддерживаются.
 - При полном обновлении фазы каждый вложенный элемент `instructions`, `checks` и `evidence` обязан передать `id`: положительный integer обновляет существующую запись, `null` создаёт новую, отсутствие элемента удаляет его. Неизвестный или принадлежащий другой фазе ID отклоняет всю транзакцию; сохранение без изменений сохраняет ID и replay fingerprint.
 - Skills являются рекомендациями внутри инструкций фазы; их канонические файлы хранятся в `relevanter/agent-skills`, отдельного runtime registry нет.
-- Hermes profile является уникальной строковой ссылкой на профиль внешнего исполнителя; очистка выполняется только явным `null`. Workflow не копирует конфигурацию или секреты Hermes.
+- Имя агента уникально внутри каталога; Hermes profile является уникальной строковой ссылкой на профиль внешнего исполнителя; очистка выполняется только явным `null`. Workflow не копирует конфигурацию или секреты Hermes.
 
 <a name="quality"></a>
 ## 🛡️ Проверки качества
@@ -213,12 +215,20 @@ erDiagram
 `ResourceWarning`-прогон, Compose readiness и UI smoke описаны в
 [docs/quality-gate.md](docs/quality-gate.md).
 
-Короткий путь для разработчика:
+Короткий путь для разработчика на Unix-like окружении:
 
 ```bash
 make quality
 make warnings
 make compose-ready
+```
+
+На Windows без `make` те же цели доступны через PowerShell:
+
+```powershell
+pwsh -File scripts/quality.ps1 quality
+pwsh -File scripts/quality.ps1 warnings
+pwsh -File scripts/quality.ps1 compose-ready
 ```
 
 <a name="roadmap"></a>

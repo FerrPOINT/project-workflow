@@ -26,6 +26,7 @@ def upgrade() -> None:
         sa.Column("hermes_profile", sa.String(length=251), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
+    op.create_index("uq_agents_name", "agents", ["name"], unique=True)
     op.create_index("uq_agents_hermes_profile", "agents", ["hermes_profile"], unique=True)
 
     op.create_table(
@@ -275,4 +276,5 @@ def downgrade() -> None:
     op.drop_table("phases")
     op.drop_table("workflows")
     op.drop_index("uq_agents_hermes_profile", table_name="agents")
+    op.drop_index("uq_agents_name", table_name="agents")
     op.drop_table("agents")

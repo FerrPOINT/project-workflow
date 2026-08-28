@@ -37,6 +37,7 @@ class Agent(Base):
     hermes_profile: Mapped[str | None] = mapped_column(String(251), nullable=True)
 
     __table_args__ = (
+        Index("uq_agents_name", "name", unique=True),
         Index("uq_agents_hermes_profile", "hermes_profile", unique=True),
     )
 

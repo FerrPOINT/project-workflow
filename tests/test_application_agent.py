@@ -25,6 +25,7 @@ class FakeAgent:
 def _make_uow(agents=None) -> UnitOfWork:
     uow = MagicMock(spec=UnitOfWork)
     uow.agents = agents or MagicMock()
+    uow.agents.get_by_name.return_value = None
     uow.agents.get_by_hermes_profile.return_value = None
     uow.phases.has_agent_reference.return_value = False
     uow.phases.workflow_ids_for_agent.return_value = []
@@ -91,6 +92,37 @@ def test_create_agent_normalizes_hermes_profile():
     AgentService(uow).create_agent({"name": "Coder", "hermes_profile": " profile_1 "})
 
     uow.agents.create.assert_called_once_with({"name": "Coder", "hermes_profile": "profile_1"})
+
+
+def test_create_agent_rejects_duplicate_name():
+    uow = _make_uow()
+    uow.agents.get_by_name.return_value = FakeAgent(7, "Coder")
+
+    with pytest.raises(ConflictError, match="уже существует"):
+        AgentService(uow).create_agent({"name": " Coder "})
+
+    uow.agents.create.assert_not_called()
+
+
+def test_update_agent_rejects_duplicate_name():
+    uow = _make_uow()
+    uow.agents.lock.return_value = FakeAgent(3, "Current")
+    uow.agents.get_by_name.return_value = FakeAgent(7, "Coder")
+
+    with pytest.raises(ConflictError, match="уже существует"):
+        AgentService(uow).update_agent(3, {"name": "Coder"})
+
+    uow.agents.update.assert_not_called()
+
+
+def test_agent_can_keep_own_name():
+    uow = _make_uow()
+    uow.agents.lock.return_value = FakeAgent(7, "Coder")
+    uow.agents.get_by_name.return_value = FakeAgent(7, "Coder")
+
+    AgentService(uow).update_agent(7, {"name": " Coder "})
+
+    uow.agents.update.assert_called_once_with(7, {"name": "Coder"})
 
 
 def test_create_agent_rejects_invalid_hermes_profile():
