@@ -172,7 +172,7 @@ def _get_task_key_validator(uow=None, project_id: int | None = None) -> task_val
 
 
 def _require_valid_key(task_key: str, uow=None, project_id: int | None = None) -> str:
-    """Проверить валидность ключа задачи по проектам из БД."""
+    """Проверить валидность ключа задачи по контурам из БД."""
     if uow is None:
         validator = (
             _get_task_key_validator()
@@ -187,21 +187,21 @@ def _require_valid_key(task_key: str, uow=None, project_id: int | None = None) -
         )
     validated = validator.validate(task_key)
     if not validated.is_valid:
-        raise TaskKeyValidationError(task_key, validated.error_message or "неизвестный префикс проекта")
+        raise TaskKeyValidationError(task_key, validated.error_message or "неизвестный префикс контура")
     return validated.normalized or task_key
 
 
-def _resolve_project_id(uow: Any, project: str | None) -> int | None:
-    """Resolve optional project selector from an id, exact code, or exact name."""
-    if project is None or not project.strip():
+def _resolve_context_id(uow: Any, context: str | None) -> int | None:
+    """Resolve optional workflow context selector from an id, exact code, or exact name."""
+    if context is None or not context.strip():
         return None
-    selector = project.strip()
+    selector = context.strip()
     projects = [item.to_dict() if hasattr(item, "to_dict") else dict(item) for item in uow.projects.list()]
     if selector.isdecimal():
         project_id = int(selector)
         if any(item.get("id") == project_id for item in projects):
             return project_id
-        raise ValueError(f"Проект {project_id} не найден")
+        raise ValueError(f"Контур {project_id} не найден")
     matches = [
         item
         for item in projects
@@ -209,17 +209,22 @@ def _resolve_project_id(uow: Any, project: str | None) -> int | None:
         or str(item.get("name") or "").casefold() == selector.casefold()
     ]
     if not matches:
-        raise ValueError(f"Проект {selector!r} не найден")
+        raise ValueError(f"Контур {selector!r} не найден")
     if len(matches) > 1:
-        raise ValueError(f"Проект {selector!r} неоднозначен; укажите ID")
+        raise ValueError(f"Контур {selector!r} неоднозначен; укажите ID")
     resolved_project_id = matches[0].get("id")
     if (
         not isinstance(resolved_project_id, int)
         or isinstance(resolved_project_id, bool)
         or resolved_project_id <= 0
     ):
-        raise ValueError(f"Проект {selector!r} имеет некорректный id")
+        raise ValueError(f"Контур {selector!r} имеет некорректный id")
     return resolved_project_id
+
+
+def _resolve_project_id(uow: Any, project: str | None) -> int | None:
+    """Backward-compatible alias for old callers; prefer ``_resolve_context_id``."""
+    return _resolve_context_id(uow, project)
 
 
 def blocked_result(task_key: str, message: str, phase_code: str = "") -> dict[str, Any]:
@@ -260,6 +265,7 @@ __all__ = [
     "cli",
     "out_json",
     "_require_valid_key",
+    "_resolve_context_id",
     "_resolve_project_id",
     "blocked_result",
     "console",

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ task.task_key }} — project-workflow{% endblock %}
+{% block title %}{{ task.task_key }} — Workflow Engine{% endblock %}
 {% block header_title %}{{ task.task_key }}{% endblock %}
 {% block header_actions %}
   <a href="/tasks" class="btn btn-secondary">← Назад к списку</a>
@@ -136,7 +136,7 @@
   {% if task.title and task.title != task.task_key %}<div class="subtitle">{{ task.title }}</div>{% endif %}
   <div class="detail-meta">
     <span><b>Воркфлоу:</b> {{ task.workflow_name or '—' }}</span>
-    <span><b>Проект:</b> {{ task.project_label }}</span>
+    <span><b>Контур:</b> {{ task.context_label }}</span>
     <span><b>Создана:</b> {{ task.created_at[:16] if task.created_at else '—' }}</span>
     <span><b>Обновлена:</b> {{ task.updated_at[:16] if task.updated_at else '—' }}</span>
     {% if task.status == 'done' %}<span class="chip done">Завершена</span>{% elif task.status == 'blocked' %}<span class="chip blocked">Заблокирована</span>{% else %}<span class="chip active">В работе</span>{% endif %}

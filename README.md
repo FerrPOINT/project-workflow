@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://capsule-render.vercel.app/api?type=waving&height=180&text=project-workflow&desc=State-driven%20workflow%20platform&fontColor=F8FAFC&fontSize=60&fontAlignY=35&descAlignY=55&color=06B6D4" alt="project-workflow banner" />
+  <img src="https://capsule-render.vercel.app/api?type=waving&height=180&text=Workflow%20Engine&desc=State-driven%20task%20contexts&fontColor=F8FAFC&fontSize=60&fontAlignY=35&descAlignY=55&color=06B6D4" alt="Workflow Engine banner" />
 </p>
 
 <p align="center">
@@ -38,7 +38,7 @@
 
 Пофазовый движок управления задачами.
 Агент отчитывается через CLI, обязательный LLM-supervisor оценивает отчёт и выдаёт вердикт: **PASS**, **PARTIAL**, **ROLLBACK**, **BLOCKED** или **DELEGATE**.
-Всё управление шаблонами workflow, фазами, проектами, агентами и задачами ведётся через Web UI.
+Всё управление шаблонами workflow, фазами, контурами, агентами и задачами ведётся через Web UI.
 
 CLI остаётся минимальным: ровно две команды — `step` и `history`.
 
@@ -55,8 +55,8 @@ SQLite остаётся только для изолированных тест�
 | Рекомендации skills | Имена skills хранятся в PostgreSQL и передаются исполнителю прямо в контракте фазы; содержимое принадлежит [`relevanter/agent-skills`](https://gt.wmtgroup.ru/relevanter/agent-skills). |
 | Hermes profiles | Агенту можно назначить уникальное имя Hermes-профиля; Supervisor передаёт его исполнителю вместе с заданием. |
 | Встроенный supervisor | Автоматическая оценка отчётов и решение о переходе на следующую фазу. |
-| Параллельные project instances | Один task key можно вести в нескольких проектах, каждый со своим workflow, названием, иконкой и цветом темы. |
-| Web UI | Управление шаблонами, фазами, проектами, задачами и агентами через браузер. |
+| Параллельные контуры | Один task key можно вести в нескольких контурах запуска, каждый со своим workflow, названием, иконкой и цветом темы. |
+| Web UI | Управление шаблонами, фазами, контурами, задачами и агентами через браузер. |
 | CLI freeze | Только `step` и `history`; весь CRUD — через UI. |
 | PostgreSQL | Единый runtime: UI и CLI используют тот же Postgres через `DATABASE_URL`. |
 | Автоматические миграции | `docker compose up` сам создаёт схему, таблицы и baseline. |
@@ -82,8 +82,8 @@ SQLite остаётся только для изолированных тест�
 # Выполнить текущую фазу задачи и получить вердикт supervisor
 project-workflow step --task RUN-123 --report "Сделал X, проверил Y"
 
-# Если такой task key есть в нескольких project instances
-project-workflow step --task RUN-123 --project tester --report "Проверил сценарии"
+# Если такой task key есть в нескольких контурах
+project-workflow step --task RUN-123 --context tester --report "Проверил сценарии"
 
 # История отчётов step и ответов Supervisor
 project-workflow history --task RUN-123 --n 10
@@ -121,7 +121,7 @@ docker compose up --build -d --wait
 ```
 
 Перед первым запуском `scripts/init_db.py` применяет единственную baseline migration
-`0001_initial`, загружает packaged-каталог и создаёт default project. Повторный запуск
+`0001_initial`, загружает packaged-каталог и создаёт default context. Повторный запуск
 идемпотентен и не перезаписывает изменения из UI.
 
 Старые Alembic revision намеренно не поддерживаются. При обнаружении прежней или
@@ -181,9 +181,9 @@ flowchart TD
 ```mermaid
 erDiagram
     WORKFLOWS ||--o{ PHASES : содержит
-    WORKFLOWS ||--o{ PROJECTS : использует
+    WORKFLOWS ||--o{ CONTEXTS : использует
     WORKFLOWS ||--o{ TASKS : определяет
-    PROJECTS ||--o{ TASKS : содержит
+    CONTEXTS ||--o{ TASKS : содержит
     PHASES ||--o{ PHASE_INSTRUCTIONS : содержит
     PHASES ||--o{ PHASE_CHECKS : содержит
     PHASES ||--o{ PHASE_EVIDENCE_REQUIREMENTS : требует
@@ -193,9 +193,9 @@ erDiagram
     TASK_STEP_HISTORY ||--o{ TASK_PHASE_EVENTS : вызывает
 ```
 
-`tasks` — единственный текущий snapshot задачи. `task_key` уникален в пределах project instance, поэтому одну внешнюю задачу можно параллельно вести в нескольких проектах, каждый со своим workflow; при неоднозначности CLI использует `--project <id-code-or-name>`. `task_phase_events` — append-only журнал событий `entered`, `completed`, `blocked`, `resumed` и `rolled_back`. `task_step_history` — история вызовов `step`: отчёт исполнителя, verdict, покрытые и пропущенные пункты, ответ Supervisor, снимок контракта и вычисленные переходы. Отдельная chat-таблица не нужна: одна step-запись хранит законченную пару запроса и ответа.
+`tasks` — единственный текущий snapshot задачи. `task_key` уникален в пределах workflow context, поэтому одну внешнюю задачу можно параллельно вести в нескольких контурах, каждый со своим workflow; при неоднозначности CLI использует `--context <id-code-or-name>`. `task_phase_events` — append-only журнал событий `entered`, `completed`, `blocked`, `resumed` и `rolled_back`. `task_step_history` — история вызовов `step`: отчёт исполнителя, verdict, покрытые и пропущенные пункты, ответ Supervisor, снимок контракта и вычисленные переходы. Отдельная chat-таблица не нужна: одна step-запись хранит законченную пару запроса и ответа.
 
-Создание проекта требует явного положительного `workflow_id`; runtime не создаёт и не выбирает default workflow. Проект хранит операторское название, иконку из фиксированного набора, HEX-цвет UI theme и `key_prefixes`. Префиксы конфликтуют только внутри одного workflow, поэтому тестерский и девелоперский project instances могут использовать один внешний префикс задач, если они привязаны к разным workflow. Удаление задач через REST, UI, application service или repository не поддерживается: snapshot и связанный audit сохраняются, а FK используют `RESTRICT`. Внутренний `workflow_id` в audit-таблицах служит только для составных FK ownership.
+Создание контура требует явного положительного `workflow_id`; runtime не создаёт и не выбирает default workflow. Контур хранит операторское название, иконку из фиксированного набора, HEX-цвет UI theme и `key_prefixes`. Префиксы конфликтуют только внутри одного workflow, поэтому тестерский и девелоперский контуры могут использовать один внешний префикс задач, если они привязаны к разным workflow. Удаление задач через REST, UI, application service или repository не поддерживается: snapshot и связанный audit сохраняются, а FK используют `RESTRICT`. Внутренний `workflow_id` в audit-таблицах служит только для составных FK ownership.
 
 Каталог физически хранится в `workflows`, `phases`, `phase_instructions`, `phase_checks` и `phase_evidence_requirements`. Ссылки текущей, parallel- и rollback-фаз являются числовыми FK; коды используются только как явные `*_phase_code` в CLI, seed и Supervisor-контракте.
 
@@ -206,7 +206,7 @@ erDiagram
 - UI-пакет (`project_workflow/interfaces/ui/`) — чистое FastAPI-приложение с отдельными routes, services, dependencies.
 - Конфигурация централизована в `project_workflow.config` на Pydantic Settings; `DATABASE_URL` обязателен.
 - PostgreSQL хранит один редактируемый каталог, snapshot задач, append-only события фаз и историю `step`; packaged JSON seed из 19 фаз используется только при bootstrap пустой БД.
-- Workflow хранит только reusable логику фаз и операторское название; project хранит identity запуска: название, иконку, HEX-цвет, workflow binding и key prefixes.
+- Workflow хранит только reusable логику фаз и операторское название; context хранит identity запуска: название, иконку, HEX-цвет, workflow binding и key prefixes.
 - Граф фаз валидируется целиком до записи: порядок всегда `1..N`, rollback направлен назад, а явные parallel-ссылки соединяют только фазы одного непрерывного parallel-сегмента. Isolated parallel допустим; все фазы связанной parallel-группы используют одну общую цель rollback либо не задают её.
 - REST принимает числовые phase resource IDs и строгие JSON-типы; `key_prefixes` — только непустой `list[str]`, а reorder инструкций — полный уникальный набор ID одной фазы. Строковые обходные формы не поддерживаются.
 - При полном обновлении фазы каждый вложенный элемент `instructions`, `checks` и `evidence` обязан передать `id`: положительный integer обновляет существующую запись, `null` создаёт новую, отсутствие элемента удаляет его. Неизвестный или принадлежащий другой фазе ID отклоняет всю транзакцию; сохранение без изменений сохраняет ID и replay fingerprint.

@@ -175,7 +175,7 @@ async def tasks_page(request: Request) -> HTMLResponse:
 
 
 async def projects_page(request: Request) -> HTMLResponse:
-    """CRUD-страница проектов и их regex-правил."""
+    """CRUD page for workflow contexts and their task key prefixes."""
     projects = _load_projects()
     workflows = _load_workflows()
     return templates.TemplateResponse(
@@ -183,7 +183,7 @@ async def projects_page(request: Request) -> HTMLResponse:
         name="projects.html",
         context={
             "request": request,
-            "page": "projects",
+            "page": "contexts",
             "ui_port": get_settings().UI_PORT,
             "projects": projects,
             "workflows": workflows,
@@ -212,11 +212,13 @@ async def workflows_page(request: Request) -> HTMLResponse:
 async def task_detail_page(
     request: Request,
     task_key: str,
-    project_id: int | None = Query(default=None),
+    context_id: int | None = Query(default=None),
+    project_id: int | None = Query(default=None, include_in_schema=False),
 ) -> HTMLResponse:
     """Деталка задачи — линейная история фаз."""
+    selected_context_id = context_id if context_id is not None else project_id
     try:
-        task = _get_task_detail(task_key, project_id=project_id)
+        task = _get_task_detail(task_key, project_id=selected_context_id)
     except ConflictError as exc:
         return _error_page(
             request,

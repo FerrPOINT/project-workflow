@@ -116,7 +116,7 @@ class TestTaskService:
         uow = _make_uow()
         uow.projects.list.return_value = [FakeProject(4, "RUN", 1), FakeProject(5, "RUN", 2)]
 
-        with pytest.raises(ValueError, match="найдено несколько проектов"):
+        with pytest.raises(ValueError, match="найдено несколько контуров"):
             TaskService(uow).create_task({"task_key": "RUN-1"})
 
         uow.tasks.create.assert_not_called()
@@ -124,7 +124,7 @@ class TestTaskService:
     def test_create_task_unknown_prefix_fails_without_writes(self):
         uow = _make_uow()
         uow.projects.list.return_value = []
-        with pytest.raises(ValueError, match="не настроен проект"):
+        with pytest.raises(ValueError, match="не настроен контур"):
             TaskService(uow).create_task({"task_key": "NEW-1"})
         uow.projects.create.assert_not_called()
         uow.tasks.create.assert_not_called()

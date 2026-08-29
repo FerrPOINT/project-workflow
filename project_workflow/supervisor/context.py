@@ -132,6 +132,9 @@ class SupervisorContextBuilder:
 
         return {
             "task_key": self.task_key,
+            "context_code": self.project.get("code") if self.project else None,
+            "context_name": self.project.get("name") if self.project else None,
+            "context_id": self.project.get("id") if self.project else None,
             "project_code": self.project.get("code") if self.project else None,
             "project_name": self.project.get("name") if self.project else None,
             "project_id": self.project.get("id") if self.project else None,
@@ -157,9 +160,9 @@ class SupervisorContextBuilder:
         }
 
     def _cli_actor(self) -> dict[str, Any]:
-        project_selector = ""
+        context_selector = ""
         if self.project and self.project.get("id") is not None:
-            project_selector = f" --project {self.project['id']}"
+            context_selector = f" --context {self.project['id']}"
         return {
             "kind": "cli-user",
             "description": (
@@ -167,7 +170,7 @@ class SupervisorContextBuilder:
                 "и отправляет report по текущей фазе. Supervisor не предполагает конкретную модель, "
                 "OpenAI-compatible провайдера."
             ),
-            "entrypoint": f"project-workflow step --task {self.task_key}{project_selector} [--report TEXT]",
+            "entrypoint": f"project-workflow step --task {self.task_key}{context_selector} [--report TEXT]",
         }
 
     @staticmethod

@@ -148,26 +148,26 @@ class TestApiWorkflowDelete:
         assert response.status_code == 409
 
 
-class TestApiProjectUpdate:
-    def test_project_not_found(self):
+class TestApiContextUpdate:
+    def test_context_not_found(self):
         with patch("project_workflow.interfaces.ui.routes.api._app_state") as state:
             state.project_service.return_value.update_project.side_effect = NotFoundError("missing")
-            response = client.put("/api/projects/1", json={"name": "X"})
+            response = client.put("/api/contexts/1", json={"name": "X"})
         assert response.status_code == 404
 
     def test_update_description(self):
         with patch("project_workflow.interfaces.ui.routes.api._app_state") as state:
             state.project_service.return_value.get_project.return_value = {"id": 1}
             state.project_service.return_value.get_project.side_effect = [{"id": 1}, {"id": 1}]
-            response = client.put("/api/projects/1", json={"description": "new"})
+            response = client.put("/api/contexts/1", json={"description": "new"})
         assert response.status_code == 200
 
 
-class TestApiProjectDelete:
-    def test_project_delete_not_found(self):
+class TestApiContextDelete:
+    def test_context_delete_not_found(self):
         with patch("project_workflow.interfaces.ui.routes.api._app_state") as state:
             state.project_service.return_value.delete_project.side_effect = NotFoundError("missing")
-            response = client.delete("/api/projects/1")
+            response = client.delete("/api/contexts/1")
         assert response.status_code == 404
 
 

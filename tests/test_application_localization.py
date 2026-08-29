@@ -39,7 +39,7 @@ def test_primary_ui_labels_do_not_expose_internal_english_enums() -> None:
         "Hermes profile:",
         "Добавить skill",
         "Фазы workflow",
-        "Проекты workflow",
+        "Контуры workflow",
         "workflow CLI",
     ):
         assert forbidden not in sources

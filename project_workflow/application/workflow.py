@@ -60,7 +60,7 @@ class WorkflowService:
         if workflow.is_default:
             raise ConflictError("Воркфлоу по умолчанию нельзя удалить")
         if any(project.workflow_id == workflow_id for project in self._uow.projects.list()):
-            raise ConflictError("Воркфлоу связан с проектами, поэтому удалить его нельзя")
+            raise ConflictError("Воркфлоу связан с контурами, поэтому удалить его нельзя")
         starter_code = f"wf-{workflow_id}-default"
         if any(phase.code != starter_code for phase in self._uow.phases.list(workflow_id)):
             raise ConflictError("Воркфлоу содержит дополнительные фазы, поэтому удалить его нельзя")

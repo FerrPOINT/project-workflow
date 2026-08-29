@@ -156,7 +156,7 @@ def test_project_description_workflow_and_prefix_guards():
     other_workflow_id, _ = _workflow_with_phases(1)
     prefix = f"PRJ{next(_counter)}"
     response = client.post(
-        "/api/projects",
+        "/api/contexts",
         json={
             "workflow_id": workflow_id,
             "code": _unique("project"),
@@ -166,7 +166,7 @@ def test_project_description_workflow_and_prefix_guards():
         },
     )
     assert response.status_code == 200
-    project = response.json()["project"]
+    project = response.json()["context"]
     assert project["description"] == "Persist me"
 
     task = _app_state.task_service().create_task(
@@ -179,11 +179,11 @@ def test_project_description_workflow_and_prefix_guards():
     assert task["task_key"] == f"{prefix}-42"
 
     workflow_change = client.put(
-        f"/api/projects/{project['id']}", json={"workflow_id": other_workflow_id}
+        f"/api/contexts/{project['id']}", json={"workflow_id": other_workflow_id}
     )
     assert workflow_change.status_code == 409
     prefix_change = client.put(
-        f"/api/projects/{project['id']}", json={"key_prefixes": [f"NEW{next(_counter)}"]}
+        f"/api/contexts/{project['id']}", json={"key_prefixes": [f"NEW{next(_counter)}"]}
     )
     assert prefix_change.status_code == 409
     unchanged = _app_state.project_service().get_project(project["id"])
@@ -193,12 +193,12 @@ def test_project_description_workflow_and_prefix_guards():
 
 def test_project_explicit_null_non_nullable_fields_are_rejected():
     create = client.post(
-        "/api/projects",
+        "/api/contexts",
         json={"code": _unique("null-project"), "key_prefixes": [f"NULL{next(_counter)}"], "workflow_id": None},
     )
     assert create.status_code == 422
     create_description = client.post(
-        "/api/projects",
+        "/api/contexts",
         json={
             "code": _unique("null-description-project"),
             "key_prefixes": [f"NULL{next(_counter)}"],
@@ -217,9 +217,9 @@ def test_project_explicit_null_non_nullable_fields_are_rejected():
             "key_prefixes": [prefix],
         }
     )
-    update = client.put(f"/api/projects/{project['id']}", json={"workflow_id": None})
+    update = client.put(f"/api/contexts/{project['id']}", json={"workflow_id": None})
     assert update.status_code == 422
-    update_description = client.put(f"/api/projects/{project['id']}", json={"description": None})
+    update_description = client.put(f"/api/contexts/{project['id']}", json={"description": None})
     assert update_description.status_code == 422
     assert _app_state.project_service().get_project(project["id"])["workflow_id"] == workflow_id
 
@@ -257,7 +257,7 @@ def test_task_filter_returns_nonempty_workflow_specific_dto():
         assert tasks[0]["workflow_id"] == workflow_id
 
 
-def test_same_task_key_can_run_in_parallel_project_instances():
+def test_same_task_key_can_run_in_parallel_contexts():
     first_workflow, first_phases = _workflow_with_phases(1)
     second_workflow, second_phases = _workflow_with_phases(1)
     prefix = f"DUAL{next(_counter)}"
@@ -297,8 +297,8 @@ def test_same_task_key_can_run_in_parallel_project_instances():
     assert first_task["id"] != second_task["id"]
     assert {first_task["workflow_id"], second_task["workflow_id"]} == {first_workflow, second_workflow}
     assert client.get(f"/task/{task_key}").status_code == 409
-    first_detail = client.get(f"/task/{task_key}?project_id={first_project['id']}")
-    second_detail = client.get(f"/task/{task_key}?project_id={second_project['id']}")
+    first_detail = client.get(f"/task/{task_key}?context_id={first_project['id']}")
+    second_detail = client.get(f"/task/{task_key}?context_id={second_project['id']}")
     assert first_detail.status_code == 200
     assert second_detail.status_code == 200
     assert "Dual project A" in first_detail.text
@@ -374,8 +374,8 @@ def test_nullable_phase_fields_distinguish_omitted_from_explicit_null():
     assert service.get_phase(first["id"])["parallel_with_phase_id"] is None
 
 
-def test_projects_page_exposes_description_editor():
-    response = client.get("/projects")
+def test_contexts_page_exposes_description_editor():
+    response = client.get("/contexts")
     assert response.status_code == 200
     assert 'id="projectDescription"' in response.text
     assert "description: document.getElementById('projectDescription').value.trim()" in response.text

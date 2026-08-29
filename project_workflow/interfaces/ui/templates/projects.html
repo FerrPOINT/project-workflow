@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 
-{% block title %}Проекты воркфлоу — project-workflow{% endblock %}
-{% block header_title %}Проекты{% endblock %}
+{% block title %}Контуры воркфлоу — Workflow Engine{% endblock %}
+{% block header_title %}Контуры{% endblock %}
 {% block header_actions %}
-  <button type="button" class="btn btn-primary" id="newProjectButton" onclick="startCreateProject()">+ Новый проект</button>
+  <button type="button" class="btn btn-primary" id="newProjectButton" onclick="startCreateProject()">+ Новый контур</button>
   <a href="/tasks" class="btn btn-secondary">← К задачам</a>
 {% endblock %}
 
@@ -57,13 +57,13 @@ textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:140px;resiz
       </span>
     </button>
     {% else %}
-    <div class="card empty-note">Проектов пока нет.</div>
+    <div class="card empty-note">Контуров пока нет.</div>
     {% endfor %}
   </section>
 
   <section class="project-panel">
     <form id="projectForm" class="card form-stack" onsubmit="event.preventDefault(); submitProject();">
-      <div class="card-title" id="projectFormMode">Редактирование проекта</div>
+      <div class="card-title" id="projectFormMode">Редактирование контура</div>
       <div>
         <div class="label">Код</div>
         <input type="text" id="projectCode" value="{{ selected_project.code if selected_project else '' }}">
@@ -92,7 +92,7 @@ textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:140px;resiz
       </div>
       <div class="theme-preview" id="projectThemePreview">
         <span class="project-mark" id="projectThemePreviewIcon" aria-hidden="true"></span>
-        <span class="theme-preview-name" id="projectThemePreviewName">{{ selected_project.name if selected_project else 'Новый проект' }}</span>
+        <span class="theme-preview-name" id="projectThemePreviewName">{{ selected_project.name if selected_project else 'Новый контур' }}</span>
       </div>
       <div>
         <div class="label">Воркфлоу</div>
@@ -121,7 +121,7 @@ textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:140px;resiz
         <button class="btn btn-secondary" type="button" id="cancelCreateButton" onclick="cancelCreateProject()" style="display:none">Отмена</button>
         <button class="btn btn-secondary" type="button" id="deleteProjectButton" onclick="deleteProject()">Удалить</button>
       </div>
-      <div class="empty-note">Один префикс на строку (например: RUN, DEMO). По нему задача автоматически относится к проекту.</div>
+      <div class="empty-note">Один префикс на строку (например: RUN, DEMO). По нему задача автоматически относится к контуру.</div>
     </form>
   </section>
 </div>
@@ -152,7 +152,7 @@ function applyPageTheme(color){
 function updateProjectThemePreview(){
   var icon = document.getElementById('projectThemeIcon').value || defaultProjectThemeIcon;
   var color = document.getElementById('projectThemeColor').value || defaultProjectThemeColor;
-  var name = document.getElementById('projectName').value.trim() || document.getElementById('projectCode').value.trim() || 'Новый проект';
+  var name = document.getElementById('projectName').value.trim() || document.getElementById('projectCode').value.trim() || 'Новый контур';
   var preview = document.getElementById('projectThemePreview');
   var previewIcon = document.getElementById('projectThemePreviewIcon');
   preview.style.setProperty('--project-color', color);
@@ -212,8 +212,8 @@ function fillProjectForm(project){
 function setProjectFormMode(mode){
   projectFormMode = mode;
   var createMode = mode === 'create';
-  document.getElementById('projectFormMode').textContent = createMode ? 'Новый проект' : 'Редактирование проекта';
-  document.getElementById('projectSubmitButton').textContent = createMode ? 'Создать проект' : 'Сохранить';
+  document.getElementById('projectFormMode').textContent = createMode ? 'Новый контур' : 'Редактирование контура';
+  document.getElementById('projectSubmitButton').textContent = createMode ? 'Создать контур' : 'Сохранить';
   document.getElementById('deleteProjectButton').style.display = createMode ? 'none' : '';
   document.getElementById('cancelCreateButton').style.display = createMode && projectStore.length ? '' : 'none';
 }
@@ -245,12 +245,12 @@ function selectProject(id){
   syncNav();
 }
 function reloadProjects(nextId){
-  fetch('/api/projects')
+  fetch('/api/contexts')
     .then(function(r){return r.json()})
     .then(function(d){
-      if(!d.ok){showToast(d.error || 'Ошибка загрузки проектов','error');return;}
+      if(!d.ok){showToast(d.error || 'Ошибка загрузки контуров','error');return;}
       projectStore.length = 0;
-      d.projects.forEach(function(project){ projectStore.push(project); });
+      d.contexts.forEach(function(project){ projectStore.push(project); });
       if(projectStore.length === 0){
         selectedProjectId = null;
         previousProjectId = null;
@@ -260,7 +260,7 @@ function reloadProjects(nextId){
         nav.replaceChildren();
         var empty = document.createElement('div');
         empty.className = 'card empty-note';
-        empty.textContent = 'Проектов пока нет.';
+        empty.textContent = 'Контуров пока нет.';
         nav.appendChild(empty);
         syncNav();
         return;
@@ -324,31 +324,31 @@ function renderProjectNav(){
   });
 }
 function saveProject(){
-  if(selectedProjectId == null){ showToast('Нет выбранного проекта','error'); return; }
+  if(selectedProjectId == null){ showToast('Нет выбранного контура','error'); return; }
   var payload = currentPayload();
-  if(!payload.code){ showToast('Код проекта обязателен','error'); return; }
-  fetch('/api/projects/' + selectedProjectId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+  if(!payload.code){ showToast('Код контура обязателен','error'); return; }
+  fetch('/api/contexts/' + selectedProjectId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json()})
-    .then(function(d){ if(d.ok){ showToast('Проект сохранён','success'); reloadProjects(selectedProjectId); } else { showToast(d.error || 'Ошибка','error'); } })
+    .then(function(d){ if(d.ok){ showToast('Контур сохранён','success'); reloadProjects(selectedProjectId); } else { showToast(d.error || 'Ошибка','error'); } })
     .catch(showRequestError);
 }
 function deleteProject(){
-  if(selectedProjectId == null){ showToast('Нет выбранного проекта','error'); return; }
-  if(!confirm('Удалить проект?')) return;
-  fetch('/api/projects/' + selectedProjectId,{method:'DELETE'})
+  if(selectedProjectId == null){ showToast('Нет выбранного контура','error'); return; }
+  if(!confirm('Удалить контур?')) return;
+  fetch('/api/contexts/' + selectedProjectId,{method:'DELETE'})
     .then(function(r){return r.json()})
-    .then(function(d){ if(d.ok){ showToast('Проект удалён','success'); reloadProjects(null); } else { showToast(d.error || 'Ошибка','error'); } })
+    .then(function(d){ if(d.ok){ showToast('Контур удалён','success'); reloadProjects(null); } else { showToast(d.error || 'Ошибка','error'); } })
     .catch(showRequestError);
 }
 function createProject(){
   var payload = currentPayload();
-  if(!payload.code){ showToast('Код проекта обязателен','error'); return; }
-  fetch('/api/projects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+  if(!payload.code){ showToast('Код контура обязателен','error'); return; }
+  fetch('/api/contexts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json()})
     .then(function(d){
       if(d.ok){
-        showToast('Проект создан','success');
-        reloadProjects(d.project_id);
+        showToast('Контур создан','success');
+        reloadProjects(d.context_id);
       } else {
         showToast(d.error || 'Ошибка','error');
       }

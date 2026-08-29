@@ -31,21 +31,21 @@ class TaskService:
                 workflow_id=requested_workflow_id,
             )
             if resolved_project is None:
-                raise ValueError(f"Для ключа задачи {payload.get('task_key', '')!r} не настроен проект")
+                raise ValueError(f"Для ключа задачи {payload.get('task_key', '')!r} не настроен контур")
             payload["project_id"] = resolved_project["id"]
         project_id = int(payload["project_id"])
         project = self._uow.projects.get_by_id(project_id)
         if project is None:
-            raise NotFoundError(f"Проект {project_id} не найден")
+            raise NotFoundError(f"Контур {project_id} не найден")
         if requested_workflow_id is not None and project.workflow_id != requested_workflow_id:
-            raise ConflictError("Проект задачи принадлежит другому воркфлоу")
+            raise ConflictError("Контур задачи принадлежит другому воркфлоу")
         if self._uow.workflows.lock(project.workflow_id) is None:
             raise NotFoundError(f"Воркфлоу {project.workflow_id} не найден")
         locked_project = self._uow.projects.lock(project_id)
         if locked_project is None:
-            raise NotFoundError(f"Проект {project_id} не найден")
+            raise NotFoundError(f"Контур {project_id} не найден")
         if locked_project.workflow_id != project.workflow_id:
-            raise ConflictError("Воркфлоу проекта изменился во время создания задачи")
+            raise ConflictError("Воркфлоу контура изменился во время создания задачи")
         payload["workflow_id"] = locked_project.workflow_id
         raw_task_key = payload.get("task_key")
         if not isinstance(raw_task_key, str) or not raw_task_key.strip():

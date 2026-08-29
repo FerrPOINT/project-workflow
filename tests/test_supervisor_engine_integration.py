@@ -42,7 +42,7 @@ class TestSupervisorEngineIntegration:
         engine = SupervisorEngine("RUN-1", create_if_missing=True)
         monkeypatch.setattr(engine._task_service, "get_task_by_key", lambda *_a, **_kw: None)
         monkeypatch.setattr(engine, "_resolve_project", lambda: None)
-        with pytest.raises(ValueError, match="Не удалось определить проект"):
+        with pytest.raises(ValueError, match="Не удалось определить контур"):
             engine._ensure_task()
 
     def test_new_task_without_current_phase_id_starts_at_first_phase(self, supervisor_db):

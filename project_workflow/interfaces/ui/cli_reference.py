@@ -22,6 +22,8 @@ def _load_cli_reference() -> list[dict[str, Any]]:
         for param in command.params:
             if not isinstance(param, click.Option):
                 continue
+            if getattr(param, "hidden", False):
+                continue
             flags = [flag for flag in [*param.opts, *param.secondary_opts] if flag]
             if not flags:
                 continue

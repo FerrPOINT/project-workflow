@@ -1,13 +1,13 @@
 """CLI commands — ровно 2 команды: step, history.
 
-ПРАВИЛО ПРОЕКТА: новые CLI-команды ЗАПРЕЩЕНЫ.
-Весь CRUD workflows/phases/projects/agents и администрирование выполняется через Web UI.
+ПРАВИЛО CLI: новые CLI-команды ЗАПРЕЩЕНЫ.
+Весь CRUD workflows/phases/contexts/agents и администрирование выполняется через Web UI.
 Если кто-то добавит @cli.command() сюда — тесты поймают
 (см. test_ui.py::test_only_two_commands_allowed).
 
 Разрешённые команды:
-- step    --task RUN-42 [--project PROJECT] [--report TEXT]
-- history --task RUN-42 [--project PROJECT] [--n N]
+- step    --task RUN-42 [--context CONTEXT] [--report TEXT]
+- history --task RUN-42 [--context CONTEXT] [--n N]
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from ... import supervisor
 from ...domain.exceptions import ConflictError
 from ...infrastructure.db.uow import SAUnitOfWork
 from ...supervisor import format_result
-from .core import WARN, _require_valid_key, _resolve_project_id, blocked_result, cli, console, out_json
+from .core import WARN, _require_valid_key, _resolve_context_id, blocked_result, cli, console, out_json
 
 # ── Guard: новые команды запрещены ──────────────────────────────────────
 # Если кто-то добавит @cli.command() сюда — тесты поймают.
@@ -34,13 +34,15 @@ from .core import WARN, _require_valid_key, _resolve_project_id, blocked_result,
 
 @cli.command()
 @click.option("--task", required=True, help="Ключ задачи (например, RUN-42)")
-@click.option("--project", default=None, help="ID, код или название проекта, если ключ задачи неоднозначен")
+@click.option("--context", default=None, help="ID, код или название контура, если ключ задачи неоднозначен")
+@click.option("--project", "legacy_project", default=None, hidden=True)
 @click.option("--report", default=None, help="Отчёт исполнителя CLI (оценить и перейти)")
 @click.pass_context
 def step_cmd(
     ctx: click.Context,
     task: str,
-    project: str | None,
+    context: str | None,
+    legacy_project: str | None,
     report: str | None,
 ) -> None:
     """Движение по workflow: показать текущую фазу или отчитаться и перейти.
@@ -48,9 +50,17 @@ def step_cmd(
     Примеры:
       project-workflow step --task RUN-42                -> текущие инструкции
       project-workflow step --task RUN-42 --report "..."  -> оценить отчёт исполнителя CLI и перейти
-      project-workflow step --task RUN-42 --project QA
+      project-workflow step --task RUN-42 --context QA
     """
     jmode = ctx.obj.get("json_mode", False)
+    if context and legacy_project:
+        result = blocked_result(task, "Нельзя одновременно указывать --context и устаревший --project")
+        if jmode:
+            out_json(result, exit_code=1)
+            return
+        console.print(format_result(result))
+        raise click.exceptions.Exit(1)
+    context_selector = context or legacy_project
     if report is not None and not report.strip():
         result = blocked_result(task, "Отчёт не может быть пустым")
         if jmode:
@@ -61,7 +71,7 @@ def step_cmd(
     uow: SAUnitOfWork | None = None
     try:
         uow = SAUnitOfWork()
-        project_id = _resolve_project_id(uow, project)
+        project_id = _resolve_context_id(uow, context_selector)
         task_key = _require_valid_key(task, uow, project_id=project_id)
         engine = supervisor.SupervisorEngine(task_key, uow=uow, project_id=project_id)
     except (ConflictError, RuntimeError, ValueError) as exc:
@@ -135,21 +145,36 @@ def step_cmd(
 
 @cli.command()
 @click.option("--task", required=True, help="Ключ задачи")
-@click.option("--project", default=None, help="ID, код или название проекта, если ключ задачи неоднозначен")
+@click.option("--context", default=None, help="ID, код или название контура, если ключ задачи неоднозначен")
+@click.option("--project", "legacy_project", default=None, hidden=True)
 @click.option("--n", type=click.IntRange(min=1), default=None, help="Количество записей (по умолчанию: все)")
 @click.pass_context
-def history_cmd(ctx: click.Context, task: str, project: str | None, n: int | None) -> None:
+def history_cmd(
+    ctx: click.Context,
+    task: str,
+    context: str | None,
+    legacy_project: str | None,
+    n: int | None,
+) -> None:
     """История отчётов, переходов и статусов по задаче.
 
     Примеры:
       project-workflow history --task RUN-42            -> все записи
       project-workflow history --task RUN-42 --n 50     -> последние 50 записей
-      project-workflow history --task RUN-42 --project QA
+      project-workflow history --task RUN-42 --context QA
     """
     jmode = ctx.obj.get("json_mode", False)
+    if context and legacy_project:
+        result = blocked_result(task, "Нельзя одновременно указывать --context и устаревший --project")
+        if jmode:
+            out_json(result, exit_code=1)
+            return
+        console.print(format_result(result))
+        raise click.exceptions.Exit(1)
+    context_selector = context or legacy_project
     try:
         with SAUnitOfWork() as uow:
-            project_id = _resolve_project_id(uow, project)
+            project_id = _resolve_context_id(uow, context_selector)
             task_key = _require_valid_key(task, uow, project_id=project_id)
             task_obj = uow.tasks.get_by_key(task_key, project_id=project_id)
             task_id = task_obj.id if task_obj else None

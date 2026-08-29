@@ -245,7 +245,7 @@ class TestIndexPage:
         assert response.headers["content-type"] == "text/html; charset=utf-8"
         assert "Дашборд" in response.text
         assert "Незавершённые задачи" in response.text
-        assert "Проекты" in response.text
+        assert "Контуры" in response.text
 
     def test_index_has_nav(self):
         response = client.get("/")
@@ -310,11 +310,11 @@ class TestPhasesPage:
         assert "phases" in data
         assert len(data["phases"]) > 0
 
-    def test_sidebar_has_projects_link(self):
+    def test_sidebar_has_contexts_link(self):
         response = client.get("/phases")
         assert response.status_code == 200
-        assert 'href="/projects"' in response.text
-        assert "Проекты" in response.text
+        assert 'href="/contexts"' in response.text
+        assert "Контуры" in response.text
 
     def test_sidebar_has_workflows_link(self):
         response = client.get("/phases")
@@ -330,7 +330,7 @@ class TestPhasesPage:
         assert sidebar_nav is not None
 
         hrefs = re.findall(r'href="([^"]+)"', sidebar_nav.group(1))
-        assert hrefs[:5] == ["/", "/workflows", "/phases", "/tasks", "/projects"]
+        assert hrefs[:5] == ["/", "/workflows", "/phases", "/tasks", "/contexts"]
 
     def test_phases_page_has_workflow_nav_like_projects(self):
         response = client.get("/phases")
@@ -1175,10 +1175,10 @@ class TestTasksPage:
         assert data["ok"] is True
         assert "tasks" in data
 
-    def test_tasks_page_shows_project_column_and_value(self):
+    def test_tasks_page_shows_context_column_and_value(self):
         response = client.get("/tasks")
         assert response.status_code == 200
-        assert "Проект" in response.text
+        assert "Контур" in response.text
         assert "UITEST" in response.text
 
     def test_tasks_page_hides_dead_filters_search_and_pagination(self):
@@ -1260,10 +1260,10 @@ class TestTaskDetail:
         assert response.status_code == 200
         assert "История фаз" in response.text
 
-    def test_task_detail_shows_project_context(self):
+    def test_task_detail_shows_workflow_context(self):
         response = client.get("/task/UITEST-401")
         assert response.status_code == 200
-        assert "Проект" in response.text
+        assert "Контур" in response.text
         assert "UITEST — UI Test Project" in response.text
 
     def test_tasks_api_resolves_negative_phase_code_to_phase_name(self):
@@ -1303,21 +1303,26 @@ class TestTaskDetail:
 
 
 class TestProjectsPage:
-    def test_projects_page_returns_html(self):
-        response = client.get("/projects")
+    def test_contexts_page_returns_html(self):
+        response = client.get("/contexts")
         assert response.status_code == 200
         assert response.headers["content-type"] == "text/html; charset=utf-8"
-        assert "Проекты" in response.text
+        assert "Контуры" in response.text
 
-    def test_projects_page_shows_project_rows_and_key_prefixes(self):
+    def test_legacy_projects_page_alias_returns_contexts(self):
         response = client.get("/projects")
+        assert response.status_code == 200
+        assert "Контуры" in response.text
+
+    def test_contexts_page_shows_rows_and_key_prefixes(self):
+        response = client.get("/contexts")
         assert response.status_code == 200
         assert "UI Test Project" in response.text
         assert "UITEST" in response.text
         assert "Префиксы ключей задач" in response.text
 
-    def test_projects_page_uses_single_editor_with_top_create_button(self):
-        response = client.get("/projects")
+    def test_contexts_page_uses_single_editor_with_top_create_button(self):
+        response = client.get("/contexts")
         assert response.status_code == 200
         assert 'id="projectNav"' in response.text
         assert 'id="projectForm"' in response.text
@@ -1330,25 +1335,25 @@ class TestProjectsPage:
         assert "document.querySelector('.brand-mark')" in response.text
         assert 'id="createProjectForm"' not in response.text
 
-    def test_projects_page_exposes_workflow_selector(self):
-        response = client.get("/projects")
+    def test_contexts_page_exposes_workflow_selector(self):
+        response = client.get("/contexts")
         assert response.status_code == 200
         assert 'id="projectWorkflowId"' in response.text
         assert "Воркфлоу" in response.text
 
-    def test_projects_page_hides_removed_intro_cleanup_block(self):
-        response = client.get("/projects")
+    def test_contexts_page_hides_removed_intro_cleanup_block(self):
+        response = client.get("/contexts")
         assert response.status_code == 200
         assert "CRUD проектов" not in response.text
         assert "source of truth для проектных префиксов" not in response.text
 
-    def test_projects_api_create_update_and_delete(self):
+    def test_contexts_api_create_update_and_delete(self):
         workflow = _workflow_row("default")
         create = client.post(
-            "/api/projects",
+            "/api/contexts",
             json={
                 "code": "APICRUD",
-                "name": "API CRUD Project",
+                "name": "API CRUD Context",
                 "key_prefixes": ["APICRUD"],
                 "workflow_id": workflow["id"],
                 "theme_icon": "bug",
@@ -1356,14 +1361,14 @@ class TestProjectsPage:
             },
         )
         assert create.status_code == 200
-        project_id = create.json()["project_id"]
-        assert create.json()["project"]["theme_icon"] == "bug"
-        assert create.json()["project"]["theme_color"] == "#22C55E"
+        project_id = create.json()["context_id"]
+        assert create.json()["context"]["theme_icon"] == "bug"
+        assert create.json()["context"]["theme_color"] == "#22C55E"
 
         update = client.put(
-            f"/api/projects/{project_id}",
+            f"/api/contexts/{project_id}",
             json={
-                "name": "API CRUD Project Updated",
+                "name": "API CRUD Context Updated",
                 "theme_icon": "rocket",
                 "theme_color": "#0ea5e9",
                 "key_prefixes": ["APICRUD"],
@@ -1371,92 +1376,92 @@ class TestProjectsPage:
         )
         assert update.status_code == 200
 
-        projects = client.get("/api/projects").json()["projects"]
+        projects = client.get("/api/contexts").json()["contexts"]
         project = next(project for project in projects if project["id"] == project_id)
-        assert project["name"] == "API CRUD Project Updated"
+        assert project["name"] == "API CRUD Context Updated"
         assert project["key_prefixes"] == ["APICRUD"]
         assert project["theme_icon"] == "rocket"
         assert project["theme_color"] == "#0EA5E9"
 
-        delete = client.delete(f"/api/projects/{project_id}")
+        delete = client.delete(f"/api/contexts/{project_id}")
         assert delete.status_code == 200
 
-    def test_projects_api_persists_workflow_id(self):
+    def test_contexts_api_persists_workflow_id(self):
         workflow = _workflow_row("default")
 
         create = client.post(
-            "/api/projects",
+            "/api/contexts",
             json={
                 "code": "WFPROJ",
-                "name": "Workflow Bound Project",
+                "name": "Workflow Bound Context",
                 "workflow_id": workflow["id"],
                 "key_prefixes": ["WFPROJ"],
             },
         )
         assert create.status_code == 200
-        project_id = create.json()["project_id"]
+        project_id = create.json()["context_id"]
 
         try:
-            projects = client.get("/api/projects").json()["projects"]
+            projects = client.get("/api/contexts").json()["contexts"]
             project = next(project for project in projects if project["id"] == project_id)
             assert project["workflow_id"] == workflow["id"]
             assert project["workflow_name"] == workflow["name"]
             assert "workflow_code" not in project
         finally:
-            delete = client.delete(f"/api/projects/{project_id}")
+            delete = client.delete(f"/api/contexts/{project_id}")
             assert delete.status_code == 200
 
-    def test_projects_api_update_can_switch_workflow(self):
+    def test_contexts_api_update_can_switch_workflow(self):
         default_workflow = _workflow_row("default")
         workflow_create = client.post(
             "/api/workflows",
             json={
                 "name": "Workflow switch target",
-                "description": "Temporary workflow for project reassignment test",
+                "description": "Temporary workflow for context reassignment test",
             },
         )
         assert workflow_create.status_code == 200
         workflow_id = workflow_create.json()["workflow_id"]
 
         create = client.post(
-            "/api/projects",
+            "/api/contexts",
             json={
                 "code": "WFMOVE",
-                "name": "Workflow move project",
+                "name": "Workflow move context",
                 "workflow_id": default_workflow["id"],
                 "key_prefixes": ["WFMOVE"],
             },
         )
         assert create.status_code == 200
-        project_id = create.json()["project_id"]
+        project_id = create.json()["context_id"]
 
         try:
             update = client.put(
-                f"/api/projects/{project_id}",
+                f"/api/contexts/{project_id}",
                 json={
                     "code": "WFMOVE",
-                    "name": "Workflow move project",
+                    "name": "Workflow move context",
                     "workflow_id": workflow_id,
                     "key_prefixes": ["WFMOVE"],
                 },
             )
             assert update.status_code == 200
 
-            projects = client.get("/api/projects").json()["projects"]
+            projects = client.get("/api/contexts").json()["contexts"]
             project = next(project for project in projects if project["id"] == project_id)
             assert project["workflow_id"] == workflow_id
             assert project["workflow_name"] == "Workflow switch target"
             assert "workflow_code" not in project
         finally:
-            delete_project = client.delete(f"/api/projects/{project_id}")
+            delete_project = client.delete(f"/api/contexts/{project_id}")
             assert delete_project.status_code == 200
             delete_workflow = client.delete(f"/api/workflows/{workflow_id}")
             assert delete_workflow.status_code == 200
 
-    def test_projects_api_prevents_deleting_project_with_tasks(self):
-        projects = client.get("/api/projects").json()["projects"]
+    def test_contexts_api_prevents_deleting_context_with_tasks(self):
+        projects = client.get("/api/contexts").json()["contexts"]
         ui_project = next(project for project in projects if project["code"] == "UITEST")
-        delete = client.delete(f"/api/projects/{ui_project['id']}")
+        delete = client.delete(f"/api/contexts/{ui_project['id']}")
         assert delete.status_code == 409
 
 
@@ -1652,12 +1657,12 @@ class TestSettingsPage:
         step_options = {option["flags"]: option for option in step["options"]}
         history_options = {option["flags"]: option for option in history["options"]}
 
-        assert set(step_options) == {"--task", "--project", "--report"}
-        assert set(history_options) == {"--task", "--project", "--n"}
+        assert set(step_options) == {"--task", "--context", "--report"}
+        assert set(history_options) == {"--task", "--context", "--n"}
         assert "default" not in step_options["--task"]
         assert "default" not in step_options["--report"]
-        assert "default" not in step_options["--project"]
-        assert "default" not in history_options["--project"]
+        assert "default" not in step_options["--context"]
+        assert "default" not in history_options["--context"]
         assert "default" not in history_options["--n"]
         assert "по умолчанию: все" in history_options["--n"]["help"]
 
@@ -1682,7 +1687,7 @@ class TestSettingsPage:
 class TestUiNetworkFailures:
     @pytest.mark.parametrize(
         ("path", "minimum_handlers"),
-        [("/projects", 4), ("/workflows", 4), ("/agents", 3)],
+        [("/contexts", 4), ("/workflows", 4), ("/agents", 3)],
     )
     def test_promise_based_crud_reports_network_errors(self, path, minimum_handlers):
         response = client.get(path)

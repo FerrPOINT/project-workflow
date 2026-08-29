@@ -93,7 +93,7 @@ def test_project_theme_create_update():
     pu = ProjectUpdate(theme_icon="Rocket", theme_color="#0ea5e9")
     assert pu.theme_icon == "rocket"
     assert pu.theme_color == "#0EA5E9"
-    with pytest.raises(ValueError, match="Иконка проекта"):
+    with pytest.raises(ValueError, match="Иконка контура"):
         ProjectCreate.model_validate(
             {"code": "PRJ", "workflow_id": 1, "key_prefixes": ["PRJ"], "theme_icon": "unknown"}
         )

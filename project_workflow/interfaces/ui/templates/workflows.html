@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Воркфлоу — project-workflow{% endblock %}
+{% block title %}Воркфлоу — Workflow Engine{% endblock %}
 {% block header_title %}Воркфлоу{% endblock %}
 {% block header_actions %}
   <button type="button" class="btn btn-primary" id="newWorkflowButton" onclick="startCreateWorkflow()">+ Новый воркфлоу</button>
@@ -30,7 +30,7 @@ textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:160px;resiz
     <button type="button" class="workflow-nav-item {% if selected_workflow and selected_workflow.id == workflow.id %}active{% endif %}" data-workflow-id="{{ workflow.id }}" onclick="selectWorkflow({{ workflow.id }})">
       <div class="workflow-name">{{ workflow.name }}</div>
       <div class="workflow-meta">
-        <span>{{ workflow.project_count | pluralize('проект,проекта,проектов') }}</span>
+        <span>{{ workflow.context_count | pluralize('контур,контура,контуров') }}</span>
         <span>{{ workflow.phase_count | pluralize('фаза,фазы,фаз') }}</span>
       </div>
     </button>
@@ -134,12 +134,12 @@ function renderWorkflowNav(){
     var meta = document.createElement('div');
     meta.className = 'workflow-meta';
 
-    var projects = document.createElement('span');
-    projects.textContent = pluralizeRu(workflow.project_count, 'проект', 'проекта', 'проектов');
+    var contexts = document.createElement('span');
+    contexts.textContent = pluralizeRu(workflow.context_count, 'контур', 'контура', 'контуров');
     var phases = document.createElement('span');
     phases.textContent = pluralizeRu(workflow.phase_count, 'фаза', 'фазы', 'фаз');
 
-    meta.appendChild(projects);
+    meta.appendChild(contexts);
     meta.appendChild(phases);
     button.appendChild(name);
     button.appendChild(meta);

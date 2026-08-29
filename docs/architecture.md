@@ -9,8 +9,8 @@
 - **CLI** предоставляет только `step` и `history`. `step` получает текущий
   контракт фазы или отправляет отчёт исполнителя в Supervisor. `history`
   читает сохранённые записи `task_step_history`.
-- **Web UI** владеет CRUD для workflow, фаз, проектов, агентов и задач через
-  FastAPI/Jinja. Workflow хранит reusable флоу фаз, а project instance хранит
+- **Web UI** владеет CRUD для workflow, фаз, контуров, агентов и задач через
+  FastAPI/Jinja. Workflow хранит reusable флоу фаз, а workflow context хранит
   операторское название, простую иконку и HEX-цвет темы; UI использует те же
   application services и UoW, что и CLI.
 - **SupervisorEngine** маршрутизирует задачу, строит phase contract, вызывает
@@ -23,14 +23,14 @@
 
 ## State And Audit
 
-`tasks` хранит текущий snapshot задачи: статус, project instance, workflow и
-текущую фазу. `task_key` уникален внутри одного project instance, а не глобально
+`tasks` хранит текущий snapshot задачи: статус, workflow context, workflow и
+текущую фазу. `task_key` уникален внутри одного workflow context, а не глобально
 по базе. Это позволяет вести одну внешнюю задачу, например `RUN-42`, в
-нескольких project instances: development, testing, release и т.п. Если ключ
-встречается в нескольких проектах, CLI/UI должны получать явный selector
-project.
+нескольких контурах: development, testing, release и т.п. Если ключ
+встречается в нескольких контурах, CLI/UI должны получать явный selector
+context.
 
-Проектные `key_prefixes` также проверяются внутри workflow. Один и тот же
+Контурные `key_prefixes` также проверяются внутри workflow. Один и тот же
 префикс можно использовать в разных workflow, но внутри одного workflow
 пересечение префиксов остаётся конфликтом.
 
@@ -39,7 +39,7 @@ project.
 Supervisor" вместе со снимком контракта и evaluator response.
 
 Удаление задач намеренно не поддерживается публичным UI/API/repository flow:
-история должна оставаться проверяемой. Связи project/task/phase/history
+история должна оставаться проверяемой. Связи context/task/phase/history
 закреплены составными FK, чтобы записи audit не могли относиться к чужому
 workflow или задаче.
 
@@ -55,9 +55,9 @@ evaluation items, transition routes и накопленное покрытие. 
 удерживается во время provider call; перед commit состояние задачи и каталог
 перечитываются.
 
-Когда `task_key` не уникален между project instances, `step/history` запускаются
-с `--project <id-code-or-name>`. Supervisor добавляет этот selector в
-`cli_actor`, чтобы исполнитель отправлял отчёт в тот же project instance, по
+Когда `task_key` не уникален между workflow contexts, `step/history` запускаются
+с `--context <id-code-or-name>`. Supervisor добавляет этот selector в
+`cli_actor`, чтобы исполнитель отправлял отчёт в тот же контур, по
 которому получил контракт.
 
 ## Runtime Scope

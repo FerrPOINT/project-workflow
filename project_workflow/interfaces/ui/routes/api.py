@@ -87,7 +87,8 @@ async def api_tasks(workflow_id: int | None = Query(default=None)) -> dict[str, 
 async def api_projects() -> dict[str, Any] | JSONResponse:
     from project_workflow.interfaces.ui.services import _load_projects
 
-    return {"ok": True, "projects": _load_projects()}
+    contexts = _load_projects()
+    return {"ok": True, "contexts": contexts, "projects": contexts}
 
 
 async def api_workflows() -> dict[str, Any] | JSONResponse:
@@ -255,7 +256,14 @@ async def api_project_create(payload: ProjectCreate) -> dict[str, Any] | JSONRes
     except ValueError as exc:
         return _error(str(exc), 422)
     project_id = project["id"]
-    return {"ok": True, "project_id": project_id, "project": service.get_project(project_id)}
+    context = service.get_project(project_id)
+    return {
+        "ok": True,
+        "context_id": project_id,
+        "context": context,
+        "project_id": project_id,
+        "project": context,
+    }
 
 
 async def api_project_update(project_id: int, payload: ProjectUpdate) -> dict[str, Any] | JSONResponse:
@@ -274,7 +282,8 @@ async def api_project_update(project_id: int, payload: ProjectUpdate) -> dict[st
         return _error(str(exc), 404)
     except ValueError as exc:
         return _error(str(exc), 422)
-    return {"ok": True, "project": service.get_project(project_id)}
+    context = service.get_project(project_id)
+    return {"ok": True, "context": context, "project": context}
 
 
 async def api_project_delete(project_id: int) -> dict[str, Any] | JSONResponse:

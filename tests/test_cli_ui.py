@@ -239,7 +239,7 @@ class TestStepCommand:
 
     @patch("project_workflow.interfaces.cli.ui.SAUnitOfWork")
     @patch("project_workflow.supervisor.SupervisorEngine")
-    def test_step_passes_project_selector_to_engine(self, mock_engine_cls, mock_uow_cls):
+    def test_step_passes_context_selector_to_engine(self, mock_engine_cls, mock_uow_cls):
         mock_engine = mock_engine_cls.return_value
         mock_engine.current_phase_code = "1.INTAKE"
         mock_engine.format_current_phase_instructions.return_value = "phase"
@@ -249,7 +249,7 @@ class TestStepCommand:
         runner = CliRunner()
 
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
-            result = runner.invoke(cli, ["step", "--task", "RUN-1", "--project", "tester"])
+            result = runner.invoke(cli, ["step", "--task", "RUN-1", "--context", "tester"])
 
         assert result.exit_code == 0
         assert mock_engine_cls.call_args.kwargs["project_id"] == 7
@@ -379,7 +379,7 @@ class TestHistoryCommand:
         )
 
     @patch("project_workflow.interfaces.cli.ui.SAUnitOfWork")
-    def test_history_passes_project_selector_to_lookup(self, mock_uow_cls):
+    def test_history_passes_context_selector_to_lookup(self, mock_uow_cls):
         uow = mock_uow_cls.return_value.__enter__.return_value
         uow.projects.list.return_value = [{"id": 9, "code": "QA", "name": "tester"}]
         uow.step_history.list.return_value = []
@@ -387,7 +387,7 @@ class TestHistoryCommand:
         runner = CliRunner()
 
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
-            result = runner.invoke(cli, ["--json", "history", "--task", "RUN-1", "--project", "tester"])
+            result = runner.invoke(cli, ["--json", "history", "--task", "RUN-1", "--context", "tester"])
 
         assert result.exit_code == 0
         uow.tasks.get_by_key.assert_called_once_with("RUN-1", project_id=9)

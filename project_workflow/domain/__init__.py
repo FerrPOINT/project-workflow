@@ -100,7 +100,7 @@ class Workflow:
 
 @dataclass
 class Project:
-    """Domain project instance with task key prefixes and UI branding."""
+    """Domain workflow context with task key prefixes and UI branding."""
 
     id: int | None = None
     workflow_id: int = 0

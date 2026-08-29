@@ -59,7 +59,8 @@ class UIDataService:
                 {
                     **workflow,
                     "phase_count": phase_counts.get(workflow["id"], 0),
-                    "project_count": project_counts.get(workflow["id"], 0),
+                "context_count": project_counts.get(workflow["id"], 0),
+                "project_count": project_counts.get(workflow["id"], 0),
                 }
             )
         return result
@@ -152,10 +153,10 @@ class UIDataService:
             )
             project_id = t.get("project_id")
             if not isinstance(project_id, int) or isinstance(project_id, bool) or project_id <= 0:
-                raise ValueError(f"У задачи {t['task_key']} отсутствует корректный project_id")
+                raise ValueError(f"У задачи {t['task_key']} отсутствует корректный context_id")
             task_project = projects_by_id.get(project_id)
             if task_project is None:
-                raise ValueError(f"Для задачи {t['task_key']} не найден проект {project_id}")
+                raise ValueError(f"Для задачи {t['task_key']} не найден контур {project_id}")
             project_code = str(task_project["code"])
             project_name = str(task_project["name"])
             workflow_id_raw = t.get("workflow_id")
@@ -200,9 +201,14 @@ class UIDataService:
                     "id": task_id,
                     "task_key": t["task_key"],
                     "title": t.get("title", ""),
+                    "context_id": t.get("project_id"),
                     "project_id": t.get("project_id"),
                     "workflow_id": workflow_id,
                     "workflow_name": task_workflow.get("name") if task_workflow else None,
+                    "context_code": project_code,
+                    "context_name": project_name,
+                    "context_theme_icon": task_project.get("theme_icon", DEFAULT_PROJECT_ICON),
+                    "context_theme_color": task_project.get("theme_color", DEFAULT_PROJECT_COLOR),
                     "project_code": project_code,
                     "project_name": project_name,
                     "project_theme_icon": task_project.get("theme_icon", DEFAULT_PROJECT_ICON),
@@ -231,7 +237,7 @@ class UIDataService:
         return result
 
     def _load_projects(self) -> list[dict[str, Any]]:
-        """Список проектов для UI."""
+        """Load workflow contexts for UI."""
         wdb = self._app_state.get_db()
         projects = wdb.get_projects()
         tasks = wdb.get_tasks()
@@ -255,7 +261,7 @@ class UIDataService:
 
     def _load_dashboard(self) -> dict[str, Any]:
         tasks = self._load_tasks()
-        projects = self._load_projects()
+        contexts = self._load_projects()
 
         open_tasks = [task for task in tasks if task.get("status") != "done"]
         active_tasks = [task for task in tasks if task.get("status") == "active"]
@@ -269,7 +275,8 @@ class UIDataService:
 
         return {
             "stats": {
-                "projects": len(projects),
+                "contexts": len(contexts),
+                "projects": len(contexts),
                 "tasks": len(tasks),
                 "active": len(active_tasks),
                 "done": len(done_tasks),
@@ -279,7 +286,8 @@ class UIDataService:
                 },
             },
             "open_tasks": open_tasks[:8],
-            "projects": sorted(projects, key=lambda item: (-item.get("task_count", 0), item.get("name", "")))[:8],
+            "contexts": sorted(contexts, key=lambda item: (-item.get("task_count", 0), item.get("name", "")))[:8],
+            "projects": sorted(contexts, key=lambda item: (-item.get("task_count", 0), item.get("name", "")))[:8],
         }
 
     def _resolve_task_workflow_id(
@@ -395,12 +403,18 @@ class UIDataService:
         task = dict(task)
         project_id = task.get("project_id")
         if not isinstance(project_id, int) or isinstance(project_id, bool) or project_id <= 0:
-            raise ValueError(f"У задачи {task_key} отсутствует корректный project_id")
+            raise ValueError(f"У задачи {task_key} отсутствует корректный context_id")
         project_row = wdb.projects.get_by_id(project_id)
         if project_row is None:
-            raise ValueError(f"Для задачи {task_key} не найден проект {project_id}")
+            raise ValueError(f"Для задачи {task_key} не найден контур {project_id}")
         project = project_row.to_dict()
         task["project"] = project
+        task["context"] = project
+        task["context_id"] = project_id
+        task["context_code"] = project["code"]
+        task["context_name"] = project["name"]
+        task["context_theme_icon"] = project.get("theme_icon", DEFAULT_PROJECT_ICON)
+        task["context_theme_color"] = project.get("theme_color", DEFAULT_PROJECT_COLOR)
         task["project_code"] = project["code"]
         task["project_name"] = project["name"]
         task["project_theme_icon"] = project.get("theme_icon", DEFAULT_PROJECT_ICON)
@@ -410,6 +424,7 @@ class UIDataService:
             if task["project_name"] == task["project_code"]
             else f"{task['project_code']} — {task['project_name']}"
         )
+        task["context_label"] = task["project_label"]
 
         workflow_id, workflow_phases = self._resolve_task_workflow_id(task, wdb)
         if workflow_id is None:

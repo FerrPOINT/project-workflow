@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Задачи воркфлоу — project-workflow{% endblock %}
+{% block title %}Задачи воркфлоу — Workflow Engine{% endblock %}
 {% block header_title %}Задачи воркфлоу{% endblock %}
 {% block header_actions %}
   <a href="/phases" class="btn btn-secondary">← Назад к фазам</a>
@@ -51,7 +51,7 @@
     <thead>
       <tr>
         <th>Ключ</th>
-        <th>Проект</th>
+        <th>Контур</th>
         <th>Флоу</th>
         <th>Название</th>
         <th>Фаза</th>
@@ -64,7 +64,7 @@
     <tbody>
       {% for t in tasks %}
       <tr data-task-key="{{ t.task_key }}">
-        <td><a href="/task/{{ t.task_key }}{% if t.project_id %}?project_id={{ t.project_id }}{% endif %}" class="task-key">{{ t.task_key }}</a></td>
+        <td><a href="/task/{{ t.task_key }}{% if t.context_id %}?context_id={{ t.context_id }}{% endif %}" class="task-key">{{ t.task_key }}</a></td>
         <td>
           <span class="project-pill" style="--accent:{{ t.project_theme_color }};--accent-soft:{{ t.project_theme_color }}26">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ project_icon_path(t.project_theme_icon) }}"></path></svg>
@@ -110,7 +110,7 @@
   {% for t in tasks %}
   <div class="task-card" data-task-key="{{ t.task_key }}">
     <div class="row">
-      <a href="/task/{{ t.task_key }}{% if t.project_id %}?project_id={{ t.project_id }}{% endif %}" class="task-key">{{ t.task_key }}</a>
+      <a href="/task/{{ t.task_key }}{% if t.context_id %}?context_id={{ t.context_id }}{% endif %}" class="task-key">{{ t.task_key }}</a>
       {% if t.status == 'done' %}
       <span class="status-badge status-done">Завершена</span>
       {% elif t.status == 'blocked' %}
@@ -128,7 +128,7 @@
     </div>
     {% endif %}
     <div class="row">
-      <div><span class="label">Проект</span><div class="value">{{ t.project_name or t.project_code }}</div></div>
+      <div><span class="label">Контур</span><div class="value">{{ t.context_name or t.context_code }}</div></div>
       <div><span class="label">Флоу</span><div class="value">{{ t.workflow_name or '—' }}</div></div>
       <div><span class="label">Фаза</span><div class="value">{{ t.current_phase_name or '—' }}</div></div>
       <div><span class="label">Прогресс</span><div class="value">{{ t.completed }}/{{ t.total_phases }}</div></div>

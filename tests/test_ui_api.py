@@ -113,14 +113,14 @@ class TestIndex:
         assert resp.status_code == 200
 
     def test_projects_page(self, client):
-        resp = client.get("/projects")
+        resp = client.get("/contexts")
         assert resp.status_code == 200
-        assert "Проекты" in resp.text
+        assert "Контуры" in resp.text
 
     def test_tasks_page_has_project_column(self, client):
         resp = client.get("/tasks")
         assert resp.status_code == 200
-        assert "Проект" in resp.text
+        assert "Контур" in resp.text
 
     def test_settings_page_describes_cli_commands(self, client):
         resp = client.get("/settings")
@@ -529,16 +529,16 @@ class TestApiWorkflows:
         assert resp.status_code == 409
 
 
-class TestApiProjects:
-    def test_list_projects(self, client):
-        resp = client.get("/api/projects")
+class TestApiContexts:
+    def test_list_contexts(self, client):
+        resp = client.get("/api/contexts")
         assert resp.status_code == 200
         data = resp.json()
         assert data["ok"] is True
-        assert "projects" in data
+        assert "contexts" in data
 
     @pytest.mark.parametrize("workflow_id", [None, "1", True])
-    def test_create_project_requires_strict_workflow_id(self, client, workflow_id):
+    def test_create_context_requires_strict_workflow_id(self, client, workflow_id):
         payload = {
             "code": _unique("STRICT-WF"),
             "name": "Strict workflow",
@@ -547,22 +547,22 @@ class TestApiProjects:
         if workflow_id is not None:
             payload["workflow_id"] = workflow_id
 
-        response = client.post("/api/projects", json=payload)
+        response = client.post("/api/contexts", json=payload)
 
         assert response.status_code == 422
         assert response.json()["ok"] is False
         assert any(detail["field"] == "workflow_id" for detail in response.json()["details"])
 
-    def test_create_and_update_project(self, client):
+    def test_create_and_update_context(self, client):
         from project_workflow.interfaces.ui import _app_state
 
         default_wf = next(w for w in _app_state.workflow_service().list_workflows() if w.get("is_default"))
         code = _unique("PRJ")
         resp = client.post(
-            "/api/projects",
+            "/api/contexts",
             json={
                 "code": code,
-                "name": "Test Project",
+                "name": "Test Context",
                 "description": "desc",
                 "workflow_id": default_wf["id"],
                 "theme_icon": "bug",
@@ -573,12 +573,12 @@ class TestApiProjects:
         assert resp.status_code == 200
         data = resp.json()
         assert data["ok"] is True
-        project_id = data["project_id"]
-        assert data["project"]["theme_icon"] == "bug"
-        assert data["project"]["theme_color"] == "#22C55E"
+        project_id = data["context_id"]
+        assert data["context"]["theme_icon"] == "bug"
+        assert data["context"]["theme_color"] == "#22C55E"
 
         resp = client.put(
-            f"/api/projects/{project_id}",
+            f"/api/contexts/{project_id}",
             json={
                 "name": "Updated",
                 "theme_icon": "rocket",
@@ -588,11 +588,11 @@ class TestApiProjects:
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert data["project"]["name"] == "Updated"
-        assert data["project"]["theme_icon"] == "rocket"
-        assert data["project"]["theme_color"] == "#0EA5E9"
-        assert client.put(f"/api/projects/{project_id}", json={"theme_icon": None}).status_code == 422
-        assert client.put(f"/api/projects/{project_id}", json={"theme_color": None}).status_code == 422
+        assert data["context"]["name"] == "Updated"
+        assert data["context"]["theme_icon"] == "rocket"
+        assert data["context"]["theme_color"] == "#0EA5E9"
+        assert client.put(f"/api/contexts/{project_id}", json={"theme_icon": None}).status_code == 422
+        assert client.put(f"/api/contexts/{project_id}", json={"theme_color": None}).status_code == 422
 
     @pytest.mark.parametrize(
         "payload",
@@ -601,7 +601,7 @@ class TestApiProjects:
             {"theme_color": "not-a-color"},
         ],
     )
-    def test_project_theme_values_are_validated(self, client, payload):
+    def test_context_theme_values_are_validated(self, client, payload):
         from project_workflow.interfaces.ui import _app_state
 
         default_wf = next(w for w in _app_state.workflow_service().list_workflows() if w.get("is_default"))
@@ -612,15 +612,15 @@ class TestApiProjects:
             "key_prefixes": [_unique("BT").replace("-", "").upper()],
             **payload,
         }
-        resp = client.post("/api/projects", json=body)
+        resp = client.post("/api/contexts", json=body)
         assert resp.status_code == 422
 
-    def test_create_project_invalid_prefix(self, client):
+    def test_create_context_invalid_prefix(self, client):
         from project_workflow.interfaces.ui import _app_state
 
         default_wf = next(w for w in _app_state.workflow_service().list_workflows() if w.get("is_default"))
         resp = client.post(
-            "/api/projects",
+            "/api/contexts",
             json={
                 "code": _unique("PRJ"),
                 "name": "X",
@@ -630,13 +630,13 @@ class TestApiProjects:
         )
         assert resp.status_code == 422
 
-    def test_delete_project_with_tasks_forbidden(self, client):
+    def test_delete_context_with_tasks_forbidden(self, client):
         from project_workflow.interfaces.ui import _app_state
 
         default_wf = next(w for w in _app_state.workflow_service().list_workflows() if w.get("is_default"))
         code = _unique("PRJ")
         resp = client.post(
-            "/api/projects",
+            "/api/contexts",
             json={
                 "code": code,
                 "name": "To Delete",
@@ -644,7 +644,7 @@ class TestApiProjects:
                 "key_prefixes": ["ZZZ"],
             },
         )
-        project_id = resp.json()["project_id"]
+        project_id = resp.json()["context_id"]
         initial_phase_id = _phase_id(client, "1.INTAKE")
         _app_state.task_service().create_task(
             {
@@ -655,7 +655,7 @@ class TestApiProjects:
                 "current_phase_id": initial_phase_id,
             }
         )
-        resp = client.delete(f"/api/projects/{project_id}")
+        resp = client.delete(f"/api/contexts/{project_id}")
         assert resp.status_code == 409
 
 

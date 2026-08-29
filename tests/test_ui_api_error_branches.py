@@ -134,7 +134,7 @@ def test_project_create_rejects_explicit_null_description():
         api.api_project_create(
             ProjectCreate(
                 code="PRJ",
-                name="Проект",
+                name="Контур",
                 description=None,
                 workflow_id=1,
                 key_prefixes=["PRJ"],
@@ -195,8 +195,8 @@ def test_update_routes_map_service_errors(monkeypatch, route, payload, service_m
 @pytest.mark.parametrize(
     ("route", "service_method", "exc", "status"),
     [
-        (api.api_project_delete, "delete_project", NotFoundError("Проект 1 не найден"), 404),
-        (api.api_project_delete, "delete_project", ConflictError("Project conflict"), 409),
+        (api.api_project_delete, "delete_project", NotFoundError("Контур 1 не найден"), 404),
+        (api.api_project_delete, "delete_project", ConflictError("Context conflict"), 409),
         (api.api_agent_delete, "delete_agent", NotFoundError("Агент 1 не найден"), 404),
         (api.api_agent_delete, "delete_agent", ConflictError("Agent conflict"), 409),
     ],

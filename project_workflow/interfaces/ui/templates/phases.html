@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Фазы воркфлоу — project-workflow{% endblock %}
+{% block title %}Фазы воркфлоу — Workflow Engine{% endblock %}
 {% block header_title %}Фазы воркфлоу{% endblock %}
 {% block header_actions %}<a href="/workflows" class="btn btn-secondary">← К воркфлоу</a>{% endblock %}
 
@@ -76,7 +76,7 @@
     <a class="workflow-nav-item {% if selected_workflow_id == workflow.id %}active{% endif %}" href="/phases?workflow_id={{ workflow.id }}" data-workflow-id="{{ workflow.id }}">
       <div class="workflow-name">{{ workflow.name }}</div>
       <div class="workflow-meta">
-        <span class="workflow-chip">{{ workflow.project_count | pluralize('проект,проекта,проектов') }}</span>
+        <span class="workflow-chip">{{ workflow.context_count | pluralize('контур,контура,контуров') }}</span>
         <span class="workflow-chip">{{ workflow.phase_count | pluralize('фаза,фазы,фаз') }}</span>
       </div>
     </a>
