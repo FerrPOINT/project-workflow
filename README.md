@@ -1,226 +1,99 @@
-<p align="center">
-  <img src="https://capsule-render.vercel.app/api?type=waving&height=180&text=Workflow%20Engine&desc=State-driven%20task%20contexts&fontColor=F8FAFC&fontSize=60&fontAlignY=35&descAlignY=55&color=06B6D4" alt="Workflow Engine banner" />
-</p>
+# project-workflow
 
-<p align="center">
-  <a href="#features"><img src="https://img.shields.io/badge/%E2%9C%A8%20Features-0B1220?style=for-the-badge" /></a>
-  <a href="#stack"><img src="https://img.shields.io/badge/%F0%9F%94%A7%20Stack-111827?style=for-the-badge" /></a>
-  <a href="#cli"><img src="https://img.shields.io/badge/%F0%9F%96%A5%EF%B8%8F%20CLI-1F2937?style=for-the-badge" /></a>
-  <a href="#ui"><img src="https://img.shields.io/badge/%F0%9F%8C%90%20Web%20UI-374151?style=for-the-badge" /></a>
-  <a href="#architecture"><img src="https://img.shields.io/badge/%F0%9F%8F%97%EF%B8%8F%20Architecture-4B5563?style=for-the-badge" /></a>
-  <a href="#quality"><img src="https://img.shields.io/badge/%F0%9F%9B%A1%EF%B8%8F%20Quality-6B7280?style=for-the-badge" /></a>
-</p>
+Внутренняя loopback/private утилита для пофазного ведения задач. Агент
+отчитывается через CLI, обязательный LLM Supervisor оценивает отчёт и переводит
+задачу по workflow. Runtime-источник данных - PostgreSQL.
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Python-3.11-blue?style=flat-square&logo=python&logoColor=white" alt="Python" />
-  <img src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
-  <img src="https://img.shields.io/badge/Postgres-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="Postgres" />
-  <img src="https://img.shields.io/badge/SQLAlchemy-D71F00?style=flat-square&logo=sqlalchemy&logoColor=white" alt="SQLAlchemy" />
-  <img src="https://img.shields.io/badge/Pydantic-E92063?style=flat-square&logo=pydantic&logoColor=white" alt="Pydantic" />
-  <img src="https://img.shields.io/badge/uv-000000?style=flat-square&logo=astral&logoColor=white" alt="uv" />
-  <img src="https://img.shields.io/badge/Rich-000000?style=flat-square&logo=rich&logoColor=white" alt="Rich" />
-  <img src="https://img.shields.io/badge/Jinja2-B41717?style=flat-square&logo=jinja&logoColor=white" alt="Jinja2" />
-  <img src="https://img.shields.io/badge/Alembic-6B8E23?style=flat-square&logo=alembic&logoColor=white" alt="Alembic" />
-  <img src="https://img.shields.io/badge/OpenAI%20Compatible-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI Compatible" />
-  <img src="https://img.shields.io/badge/LiteLLM-app--test-5B5BD6?style=flat-square" alt="LiteLLM app-test" />
-</p>
+## Что умеет
 
-<p align="center">
-  <img src="https://img.shields.io/badge/pytest-0A9EDC?style=flat-square&logo=pytest&logoColor=white" alt="pytest" />
-  <img src="https://img.shields.io/badge/ruff-261230?style=flat-square&logo=ruff&logoColor=white" alt="ruff" />
-  <img src="https://img.shields.io/badge/mypy-2E6AFF?style=flat-square&logo=mypy&logoColor=white" alt="mypy" />
-  <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License MIT" />
-</p>
+- Вести задачу по шаблону фаз с инструкциями, checks, evidence и audit history.
+- Запускать несколько неймспейсов параллельно: у каждого свои workflow, задачи,
+  стиль UI, префиксы ключей и CLI-команда.
+- Держать append-only историю фаз и `step`-проверок.
+- Управлять workflow, фазами, неймспейсами, агентами и задачами через Web UI.
+- Оставлять базовый CLI минимальным: только `step` и `history`.
 
----
-
-## Позиционирование
-
-Пофазовый движок управления задачами.
-Агент отчитывается через CLI, обязательный LLM-supervisor оценивает отчёт и выдаёт вердикт: **PASS**, **PARTIAL**, **ROLLBACK**, **BLOCKED** или **DELEGATE**.
-Всё управление шаблонами workflow, фазами, контурами, агентами и задачами ведётся через Web UI.
-
-CLI остаётся минимальным: ровно две команды — `step` и `history`.
-
-В рабочем runtime используется **PostgreSQL**.
-
-SQLite остаётся только для изолированных тестов с явно заданным DSN/engine.
-
-<a name="features"></a>
-## ✨ Возможности
-
-| Возможность | Описание |
-|---------|----------|
-| Пофазовый workflow | Каждая задача строго следует шаблону фаз с инструкциями, чек-листами и артефактами. |
-| Рекомендации skills | Имена skills хранятся в PostgreSQL и передаются исполнителю прямо в контракте фазы; содержимое принадлежит [`relevanter/agent-skills`](https://gt.wmtgroup.ru/relevanter/agent-skills). |
-| Hermes profiles | Агенту можно назначить уникальное имя Hermes-профиля; Supervisor передаёт его исполнителю вместе с заданием. |
-| Встроенный supervisor | Автоматическая оценка отчётов и решение о переходе на следующую фазу. |
-| Параллельные контуры | Один task key можно вести в нескольких контурах запуска, каждый со своим workflow, названием, иконкой и цветом темы. |
-| Web UI | Управление шаблонами, фазами, контурами, задачами и агентами через браузер. |
-| CLI freeze | Только `step` и `history`; весь CRUD — через UI. |
-| PostgreSQL | Единый runtime: UI и CLI используют тот же Postgres через `DATABASE_URL`. |
-| Автоматические миграции | `docker compose up` сам создаёт схему, таблицы и baseline. |
-
-<a name="stack"></a>
-## 🔧 Стек
-
-| Зона | Технология | Роль |
-|------|------|------|
-| Runtime | Python 3.11 | основной язык |
-| Данные | PostgreSQL | runtime БД |
-| ORM & migrations | SQLAlchemy 2 + Alembic | модели, репозитории, UoW, миграции |
-| API | FastAPI + Pydantic | UI и JSON API |
-| UI | Jinja2 + minimal JS | server-side HTML, без frontend-фреймворков |
-| LLM / Supervisor | OpenAI-compatible Chat Completions | единственный evaluator отчётов; Octo LiteLLM `app-test`, без fallback |
-| CLI | Click + Rich | `step` / `history` |
-| Config | Pydantic Settings | `.env`, переменные окружения |
-
-<a name="cli"></a>
-## 🖥️ CLI
-
-```bash
-# Выполнить текущую фазу задачи и получить вердикт supervisor
-project-workflow step --task RUN-123 --report "Сделал X, проверил Y"
-
-# Если такой task key есть в нескольких контурах
-project-workflow step --task RUN-123 --context tester --report "Проверил сценарии"
-
-# История отчётов step и ответов Supervisor
-project-workflow history --task RUN-123 --n 10
-```
-
-CLI ожидает `DATABASE_URL` и доступный OpenAI-compatible evaluator. Каноническая конфигурация использует Octo LiteLLM с модельным маршрутом `app-test`:
-
-```bash
-export DATABASE_URL=postgresql+psycopg://project_workflow:project_workflow@localhost/project_workflow
-export OPENAI_BASE_URL=http://192.168.10.1:4000/v1
-export OPENAI_MODEL=app-test
-export OPENAI_TIMEOUT=120
-export OPENAI_API_KEY=<litellm-master-key>
-export OPENAI_REASONING_EFFORT=none
-```
-
-Если endpoint не поддерживает `reasoning_effort`, задайте `OPENAI_REASONING_EFFORT=`.
-
-Fallback evaluator отсутствует: если провайдер недоступен или вернул некорректный JSON, задача остаётся на текущей фазе, атомарно получает `status=blocked`, событие `blocked` и запись `task_step_history` без fingerprint; команда возвращает retryable `BLOCKED` и exit code `1`. Повтор снова вызывает provider, а успешная оценка снимает техническую блокировку обычным переходом.
-Для Octo LiteLLM непустой `OPENAI_API_KEY` передаётся только через окружение. Пользовательский OpenAI-compatible endpoint может работать без ключа, если это допускает сам endpoint; для `openrouter.ai` клиент требует ключ и блокирует заведомо неуспешный запрос локально.
-Ответ evaluator принимается только по точному JSON-контракту: uppercase verdict, обязательные `message` и finite `confidence` в диапазоне `0..1`, непустые строковые элементы массивов и отсутствие неизвестных полей. Replay действует только для той же задачи, фазы, нормализованного отчёта и неизменившегося contract fingerprint. DB-транзакция не удерживается во время provider-вызова; изменение каталога до применения verdict даёт retryable `BLOCKED` без fingerprint.
-Повторный отчёт после `status=done` не вызывает evaluator и не создаёт новые записи: CLI возвращает `PASS`, `status=done` и `next_phase_code=null`.
-
-Команда `step` возвращает текущий snapshot задачи и, после оценки, одной транзакцией сохраняет пару «отчёт исполнителя → ответ Supervisor» в `task_step_history`, связанные события перехода в `task_phase_events` и новое текущее состояние в `tasks`. Команда `history` читает только `task_step_history` и показывает отчёт, verdict, сообщение Supervisor, оценённую/следующую/rollback-фазу и время; timeline UI строится отдельно по `task_phase_events`.
-
-<a name="ui"></a>
-## 🌐 Web UI
-
-Поддерживаемый локальный запуск Web UI выполняется через Docker Compose:
+## Быстрый запуск
 
 ```bash
 cp .env.example .env
 docker compose up --build -d --wait
-# UI доступен на http://127.0.0.1:8812
+curl --fail http://127.0.0.1:8812/health
 ```
 
-Перед первым запуском `scripts/init_db.py` применяет единственную baseline migration
-`0001_initial`, загружает packaged-каталог и создаёт default context. Повторный запуск
-идемпотентен и не перезаписывает изменения из UI.
+UI доступен на `http://127.0.0.1:8812`.
 
-Старые Alembic revision намеренно не поддерживаются. При обнаружении прежней или
-неверсионированной схемы инициализация завершается сообщением
-«Несовместимую базу данных необходимо пересоздать»; автоматические `drop` и `stamp` не выполняются.
-Перед запуском новой версии существующую схему или Compose volume нужно явно
-пересоздать по [reset-runbook](docs/database-reset.md). Импорт прежних данных не предусмотрен.
+Compose публикует PostgreSQL и API только на `127.0.0.1`. Перед запуском новой
+baseline-схемы старый dev volume нужно пересоздать по
+[docs/database-reset.md](docs/database-reset.md).
 
-В Compose схема и каталог создаются отдельным сервисом `migrate`; API стартует только
-после его успешного завершения.
+## Неймспейсы
 
-Compose публикует PostgreSQL и API только на `127.0.0.1`. Удалённый доступ
-разрешён только через отдельно настроенный защищённый proxy или VPN; прямую
-публикацию портов во внешнюю сеть этот репозиторий не поддерживает.
+Неймспейс - это отдельная рабочая среда. Он хранит:
 
-### Hermes-профили агентов
+- название и описание;
+- привязанный workflow;
+- иконку и цвет темы UI;
+- префиксы задач;
+- пользовательскую CLI-команду.
 
-На странице «Агенты» можно связать workflow-агента с уже существующим профилем
-Hermes. В базе хранится только непрозрачное имя профиля, например
-`review_profile`; ключи, skills, память и конфигурация остаются в Hermes.
-Один профиль нельзя назначить двум агентам, чтобы два исполнителя не писали в
-один `HERMES_HOME` одновременно.
-Имя агента также уникально: оно используется как операторская метка в UI,
-seed-каталоге и Supervisor-контрактах.
+Верхний selector UI полностью переключает рабочую среду: logo/name, accent
+color, dashboard, список задач, detail страниц и `/phases`. Выбор хранится в
+cookie `workflow_namespace_id`; `?namespace_id=` имеет приоритет над cookie.
 
-Внешний исполнитель получает `hermes_profile` в serial- или parallel-контракте
-и запускает Hermes канонической командой:
+Канонический API: `/api/namespaces`. Старые alias routes оставлены только для
+совместимости.
+
+## CLI
+
+Базовый CLI не расширяется:
 
 ```bash
-hermes --profile review_profile --oneshot "<phase prompt>"
+project-workflow step --task RUN-123 --report "Сделал X, проверил Y"
+project-workflow history --task RUN-123 --n 10
 ```
 
-Supervisor не проверяет наличие профиля и не загружает его содержимое: эта граница
-принадлежит executor. Пустое поле означает, что конкретный Hermes-профиль для
-агента не задан.
+Для удобной работы с несколькими неймспейсами создаются wrapper-команды:
 
-<a name="architecture"></a>
-## 🏗️ Architecture
-
-Подробные границы компонентов, state/audit model и runtime scope описаны в
-[docs/architecture.md](docs/architecture.md).
-
-```mermaid
-flowchart TD
-    CLI[CLI project-workflow] -->|step / history| WE[SupervisorEngine]
-    UI[Web UI FastAPI+Jinja2] -->|CRUD / HTML| API[API routes]
-    API -->|UoW| Repo[SQLAlchemy Repositories]
-    WE --> Repo
-    Repo --> DB[(PostgreSQL)]
-    WE --> SV[Supervisor / LLM checks]
-    SV -->|verdict| WE
-    Seed[packaged seed, empty DB only] --> DB
+```bash
+python scripts/install_namespace_clis.py --bin-dir ./.bin
 ```
 
-### Схема состояния и истории
+Скрипт читает неймспейсы из PostgreSQL, создаёт команды из `cli_command`,
+выставляет внутренний `PROJECT_WORKFLOW_NAMESPACE_ID=<id>` и вызывает
+`project-workflow step/history`.
 
-```mermaid
-erDiagram
-    WORKFLOWS ||--o{ PHASES : содержит
-    WORKFLOWS ||--o{ CONTEXTS : использует
-    WORKFLOWS ||--o{ TASKS : определяет
-    CONTEXTS ||--o{ TASKS : содержит
-    PHASES ||--o{ PHASE_INSTRUCTIONS : содержит
-    PHASES ||--o{ PHASE_CHECKS : содержит
-    PHASES ||--o{ PHASE_EVIDENCE_REQUIREMENTS : требует
-    PHASES ||--o{ TASKS : "текущая фаза"
-    TASKS ||--o{ TASK_PHASE_EVENTS : журнал
-    TASKS ||--o{ TASK_STEP_HISTORY : проверки
-    TASK_STEP_HISTORY ||--o{ TASK_PHASE_EVENTS : вызывает
+Пример пользовательского вызова:
+
+```bash
+workflow-qa step --task RUN-42 --report "Проверил сценарии"
+workflow-dev history --task RUN-42
 ```
 
-`tasks` — единственный текущий snapshot задачи. `task_key` уникален в пределах workflow context, поэтому одну внешнюю задачу можно параллельно вести в нескольких контурах, каждый со своим workflow; при неоднозначности CLI использует `--context <id-code-or-name>`. `task_phase_events` — append-only журнал событий `entered`, `completed`, `blocked`, `resumed` и `rolled_back`. `task_step_history` — история вызовов `step`: отчёт исполнителя, verdict, покрытые и пропущенные пункты, ответ Supervisor, снимок контракта и вычисленные переходы. Отдельная chat-таблица не нужна: одна step-запись хранит законченную пару запроса и ответа.
+Так одна внешняя задача может существовать в нескольких неймспейсах независимо,
+а executor получает в `phase_contract.cli_actor.entrypoint` именно configured
+CLI-команду нужной рабочей среды.
 
-Создание контура требует явного положительного `workflow_id`; runtime не создаёт и не выбирает default workflow. Контур хранит операторское название, иконку из фиксированного набора, HEX-цвет UI theme и `key_prefixes`. Префиксы конфликтуют только внутри одного workflow, поэтому тестерский и девелоперский контуры могут использовать один внешний префикс задач, если они привязаны к разным workflow. Удаление задач через REST, UI, application service или repository не поддерживается: snapshot и связанный audit сохраняются, а FK используют `RESTRICT`. Внутренний `workflow_id` в audit-таблицах служит только для составных FK ownership.
+## Разработка
 
-Каталог физически хранится в `workflows`, `phases`, `phase_instructions`, `phase_checks` и `phase_evidence_requirements`. Ссылки текущей, parallel- и rollback-фаз являются числовыми FK; коды используются только как явные `*_phase_code` в CLI, seed и Supervisor-контракте.
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --constraint constraints.txt -e ".[dev,ui]"
+```
 
-### Принципы
+`constraints.txt` фиксирует проверяемый набор зависимостей. Docker-сборка
+использует тот же файл.
 
-- Единый data layer: все операции через SQLAlchemy-модели и репозитории.
-- Единственный evaluator — обязательный OpenAI-compatible LLM.
-- UI-пакет (`project_workflow/interfaces/ui/`) — чистое FastAPI-приложение с отдельными routes, services, dependencies.
-- Конфигурация централизована в `project_workflow.config` на Pydantic Settings; `DATABASE_URL` обязателен.
-- PostgreSQL хранит один редактируемый каталог, snapshot задач, append-only события фаз и историю `step`; packaged JSON seed из 19 фаз используется только при bootstrap пустой БД.
-- Workflow хранит только reusable логику фаз и операторское название; context хранит identity запуска: название, иконку, HEX-цвет, workflow binding и key prefixes.
-- Граф фаз валидируется целиком до записи: порядок всегда `1..N`, rollback направлен назад, а явные parallel-ссылки соединяют только фазы одного непрерывного parallel-сегмента. Isolated parallel допустим; все фазы связанной parallel-группы используют одну общую цель rollback либо не задают её.
-- REST принимает числовые phase resource IDs и строгие JSON-типы; `key_prefixes` — только непустой `list[str]`, а reorder инструкций — полный уникальный набор ID одной фазы. Строковые обходные формы не поддерживаются.
-- При полном обновлении фазы каждый вложенный элемент `instructions`, `checks` и `evidence` обязан передать `id`: положительный integer обновляет существующую запись, `null` создаёт новую, отсутствие элемента удаляет его. Неизвестный или принадлежащий другой фазе ID отклоняет всю транзакцию; сохранение без изменений сохраняет ID и replay fingerprint.
-- Skills являются рекомендациями внутри инструкций фазы; их канонические файлы хранятся в `relevanter/agent-skills`, отдельного runtime registry нет.
-- Имя агента уникально внутри каталога; Hermes profile является уникальной строковой ссылкой на профиль внешнего исполнителя; очистка выполняется только явным `null`. Workflow не копирует конфигурацию или секреты Hermes.
+## Документы
 
-<a name="quality"></a>
-## 🛡️ Проверки качества
+- [docs/architecture.md](docs/architecture.md) - границы CLI/UI/Supervisor,
+  state/audit model, replay/fingerprint и runtime scope.
+- [docs/quality-gate.md](docs/quality-gate.md) - локальный gate, PostgreSQL
+  integration, ResourceWarning, Compose readiness и browser smoke.
+- [LIVE_TEST_PLAN.md](LIVE_TEST_PLAN.md) - executor-driven E2E acceptance.
 
-Канонические локальные проверки, PostgreSQL integration gate, строгий
-`ResourceWarning`-прогон, Compose readiness и UI smoke описаны в
-[docs/quality-gate.md](docs/quality-gate.md).
-
-Короткий путь для разработчика на Unix-like окружении:
+## Проверки
 
 ```bash
 make quality
@@ -228,7 +101,7 @@ make warnings
 make compose-ready
 ```
 
-На Windows без `make` те же цели доступны через PowerShell:
+На Windows без `make`:
 
 ```powershell
 pwsh -File scripts/quality.ps1 quality
@@ -236,52 +109,6 @@ pwsh -File scripts/quality.ps1 warnings
 pwsh -File scripts/quality.ps1 compose-ready
 ```
 
-<a name="roadmap"></a>
-## 🗺️ Готовность
-
-- [x] Конфигурация на Pydantic Settings (`DATABASE_URL` required)
-- [x] SQLAlchemy-модели, репозитории и unit-of-work
-- [x] Одна Alembic baseline migration + единый идемпотентный `scripts/init_db.py`
-- [x] Docker Compose: Postgres + migrate + UI
-- [x] UI/API переведены на SQLAlchemy-сервисы
-- [x] Один runtime dataflow: CLI/UI → Supervisor → OpenAI-compatible evaluator → PostgreSQL
-- [x] Полный pytest suite и отдельный PostgreSQL integration gate
-- [x] Postgres-интеграционные тесты
-- [x] `SupervisorEngine` и supervisor-модули собраны в пакет `project_workflow/supervisor/`
-- [x] API-тесты на все UI routes
-- [x] Runtime hardening: `/health`, корректное завершение и retry подключения к PostgreSQL
-- [x] Coverage >= 94% local baseline
-- [x] mypy `--check-untyped-defs` для supervisor/core.py
-- [x] UI-доработки: execution_type на отдельной строке, русское склонение счётчиков, очистка рабочей БД от мусора
-- [x] Supervisor evaluate: раздельные `task_phase_events`/`task_step_history`, idempotent replay и явный parallel rendering
-- [x] Актуальный packaged Business Tech catalog `sdlc-business-tech-v1` из 19 фаз загружается один раз в пустую PostgreSQL database
-- [x] Tech Pull Request contract: Hermes создаёт PR, Maintainer вручную merge, Hermes проверяет SHA и build
-- [x] Фазы packaged-каталога связаны с именованными Hermes profiles
-- [x] JSON `step` отдаёт полный `phase_contract`, включая `skills`, profile и детали parallel-участников
-- [x] Packaged seed загружается только при bootstrap пустой схемы
-
-## Установка
-
-```bash
-git clone https://github.com/FerrPOINT/project-workflow.git
-cd project-workflow
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install --constraint constraints.txt -e ".[dev,ui]"
-```
-
-`constraints.txt` фиксирует единый проверяемый набор версий для Python 3.10 и
-3.11. Docker-сборка использует тот же файл, устанавливает приложение в
-`/opt/venv` и не переносит глобальный `site-packages` или инструменты сборки в
-финальный runtime-слой.
-
-`project-workflow` — самостоятельная внутренняя delivery-утилита, а не product
-runtime Relevanter. Актуальный packaged-каталог описывает работу через
-Relevanter Business и Relevanter Tech; внешние интеграции остаются во владении
-соответствующих исполнителей.
-
 ## Лицензия
 
 MIT
-
-

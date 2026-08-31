@@ -144,7 +144,8 @@ def setup_db(isolate_ui_runtime_state, request):
         default_project_id = uow.projects.create(
             {
                 "code": config.DEFAULT_PROJECT_CODE,
-                "name": "Default Project",
+                "name": "Default Namespace",
+                "cli_command": config.DEFAULT_NAMESPACE_CLI_COMMAND,
                 "workflow_id": default_workflow.id,
                 "key_prefixes": list(config.DEFAULT_TASK_KEY_PREFIXES),
             }
@@ -196,7 +197,8 @@ def setup_db(isolate_ui_runtime_state, request):
         project_id = uow.projects.create(
             {
                 "code": "UITEST",
-                "name": "UI Test Project",
+                "name": "UI Test Namespace",
+                "cli_command": "workflow-uitest",
                 "workflow_id": default_workflow.id,
                 "key_prefixes": ["UITEST"],
             }
@@ -211,7 +213,7 @@ def setup_db(isolate_ui_runtime_state, request):
                 "project_id": project_id,
                 "workflow_id": default_workflow.id,
                 "task_key": "UITEST-401",
-                "title": "Проверка project-aware UI",
+                "title": "Проверка namespace-aware UI",
                 "status": "active",
                 "current_phase_id": intake_phase.id,
             }
@@ -223,7 +225,7 @@ def setup_db(isolate_ui_runtime_state, request):
             ui_task.id,
             {
                 "project_id": project_id,
-                "title": "Проверка project-aware UI",
+                "title": "Проверка namespace-aware UI",
                 "status": "active",
                 "current_phase_id": intake_phase.id,
             },
@@ -245,7 +247,7 @@ class TestIndexPage:
         assert response.headers["content-type"] == "text/html; charset=utf-8"
         assert "Дашборд" in response.text
         assert "Незавершённые задачи" in response.text
-        assert "Контуры" in response.text
+        assert "Неймспейсы" in response.text
 
     def test_index_has_nav(self):
         response = client.get("/")
@@ -253,10 +255,12 @@ class TestIndexPage:
         assert "Фазы" in response.text
 
     def test_index_shows_real_task_and_project_data(self):
-        response = client.get("/")
+        uow = ui_app_state.get_db()
+        namespace_id = _as_dict(uow.projects.get_by_code("UITEST"))["id"]
+        response = client.get(f"/?namespace_id={namespace_id}")
         assert response.status_code == 200
         assert "UITEST-401" in response.text
-        assert "UI Test Project" in response.text
+        assert "UI Test Namespace" in response.text
 
     def test_index_stays_minimal_and_hides_dashboard_technical_noise(self):
         response = client.get("/")
@@ -310,11 +314,11 @@ class TestPhasesPage:
         assert "phases" in data
         assert len(data["phases"]) > 0
 
-    def test_sidebar_has_contexts_link(self):
+    def test_sidebar_has_namespace_link(self):
         response = client.get("/phases")
         assert response.status_code == 200
-        assert 'href="/contexts"' in response.text
-        assert "Контуры" in response.text
+        assert 'href="/namespace"' in response.text
+        assert "Неймспейс" in response.text
 
     def test_sidebar_has_workflows_link(self):
         response = client.get("/phases")
@@ -330,7 +334,7 @@ class TestPhasesPage:
         assert sidebar_nav is not None
 
         hrefs = re.findall(r'href="([^"]+)"', sidebar_nav.group(1))
-        assert hrefs[:5] == ["/", "/workflows", "/phases", "/tasks", "/contexts"]
+        assert hrefs[:5] == ["/", "/workflows", "/phases", "/tasks", "/namespace"]
 
     def test_phases_page_has_workflow_nav_like_projects(self):
         response = client.get("/phases")
@@ -1175,10 +1179,12 @@ class TestTasksPage:
         assert data["ok"] is True
         assert "tasks" in data
 
-    def test_tasks_page_shows_context_column_and_value(self):
-        response = client.get("/tasks")
+    def test_tasks_page_shows_namespace_column_and_value(self):
+        uow = ui_app_state.get_db()
+        namespace_id = _as_dict(uow.projects.get_by_code("UITEST"))["id"]
+        response = client.get(f"/tasks?namespace_id={namespace_id}")
         assert response.status_code == 200
-        assert "Контур" in response.text
+        assert "Неймспейс" in response.text
         assert "UITEST" in response.text
 
     def test_tasks_page_hides_dead_filters_search_and_pagination(self):
@@ -1205,8 +1211,13 @@ class TestTasksPage:
 class TestTaskDetail:
     """Tests for task detail page."""
 
+    def _default_namespace_id(self) -> int:
+        uow = ui_app_state.get_db()
+        default_namespace = _as_dict(uow.projects.get_by_code(config.DEFAULT_PROJECT_CODE))
+        return default_namespace["id"]
+
     def test_task_detail_returns_html(self):
-        response = client.get("/task/RUN-247")
+        response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
         assert response.status_code == 200
         assert "История фаз" in response.text
 
@@ -1218,7 +1229,7 @@ class TestTaskDetail:
         uow.tasks.update(task["id"], {"current_phase_id": intake_id})
         uow.tasks.record_phase_event(task["id"], intake_id, "entered")
         uow.commit()
-        response = client.get("/task/RUN-247")
+        response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
         assert response.status_code == 200
         assert "Приём задачи" in response.text
         progress_match = re.search(r"(\d+)\s*/\s*(\d+)", response.text)
@@ -1251,20 +1262,22 @@ class TestTaskDetail:
         uow.tasks.record_phase_event(task["id"], _phase_id("4.START"), "entered")
         uow.commit()
 
-        response = client.get(f"/task/{task_key}")
+        response = client.get(f"/task/{task_key}?namespace_id={default_project_id}")
         assert response.status_code == 200
         assert "Приём задачи" in response.text
 
     def test_task_detail_has_phase_history(self):
-        response = client.get("/task/RUN-247")
+        response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
         assert response.status_code == 200
         assert "История фаз" in response.text
 
-    def test_task_detail_shows_workflow_context(self):
-        response = client.get("/task/UITEST-401")
+    def test_task_detail_shows_workflow_namespace(self):
+        uow = ui_app_state.get_db()
+        namespace_id = _as_dict(uow.projects.get_by_code("UITEST"))["id"]
+        response = client.get(f"/task/UITEST-401?namespace_id={namespace_id}")
         assert response.status_code == 200
-        assert "Контур" in response.text
-        assert "UITEST — UI Test Project" in response.text
+        assert "Неймспейс" in response.text
+        assert "UITEST — UI Test Namespace" in response.text
 
     def test_tasks_api_resolves_negative_phase_code_to_phase_name(self):
         response = client.get("/api/tasks")
@@ -1296,33 +1309,33 @@ class TestTaskDetail:
         uow.tasks.record_phase_event(task["id"], _phase_id("4.START"), "entered")
         uow.commit()
 
-        response = client.get(f"/task/{task_key}")
+        response = client.get(f"/task/{task_key}?namespace_id={project_id}")
         assert response.status_code == 200
         assert "Текущая фаза" in response.text
         assert "Начало работы" in response.text
 
 
 class TestProjectsPage:
-    def test_contexts_page_returns_html(self):
-        response = client.get("/contexts")
+    def test_namespace_page_returns_html(self):
+        response = client.get("/namespace")
         assert response.status_code == 200
         assert response.headers["content-type"] == "text/html; charset=utf-8"
-        assert "Контуры" in response.text
+        assert "Неймспейс" in response.text
 
-    def test_legacy_projects_page_alias_returns_contexts(self):
+    def test_legacy_projects_page_alias_returns_namespace(self):
         response = client.get("/projects")
         assert response.status_code == 200
-        assert "Контуры" in response.text
+        assert "Неймспейс" in response.text
 
-    def test_contexts_page_shows_rows_and_key_prefixes(self):
-        response = client.get("/contexts")
+    def test_namespace_page_shows_rows_and_key_prefixes(self):
+        response = client.get("/namespace")
         assert response.status_code == 200
-        assert "UI Test Project" in response.text
+        assert "UI Test Namespace" in response.text
         assert "UITEST" in response.text
         assert "Префиксы ключей задач" in response.text
 
-    def test_contexts_page_uses_single_editor_with_top_create_button(self):
-        response = client.get("/contexts")
+    def test_namespace_page_uses_single_editor_with_top_create_button(self):
+        response = client.get("/namespace")
         assert response.status_code == 200
         assert 'id="projectNav"' in response.text
         assert 'id="projectForm"' in response.text
@@ -1335,14 +1348,14 @@ class TestProjectsPage:
         assert "document.querySelector('.brand-mark')" in response.text
         assert 'id="createProjectForm"' not in response.text
 
-    def test_contexts_page_exposes_workflow_selector(self):
-        response = client.get("/contexts")
+    def test_namespace_page_exposes_workflow_selector(self):
+        response = client.get("/namespace")
         assert response.status_code == 200
         assert 'id="projectWorkflowId"' in response.text
         assert "Воркфлоу" in response.text
 
-    def test_contexts_page_hides_removed_intro_cleanup_block(self):
-        response = client.get("/contexts")
+    def test_namespace_page_hides_removed_intro_cleanup_block(self):
+        response = client.get("/namespace")
         assert response.status_code == 200
         assert "CRUD проектов" not in response.text
         assert "source of truth для проектных префиксов" not in response.text
@@ -1657,12 +1670,10 @@ class TestSettingsPage:
         step_options = {option["flags"]: option for option in step["options"]}
         history_options = {option["flags"]: option for option in history["options"]}
 
-        assert set(step_options) == {"--task", "--context", "--report"}
-        assert set(history_options) == {"--task", "--context", "--n"}
+        assert set(step_options) == {"--task", "--report"}
+        assert set(history_options) == {"--task", "--n"}
         assert "default" not in step_options["--task"]
         assert "default" not in step_options["--report"]
-        assert "default" not in step_options["--context"]
-        assert "default" not in history_options["--context"]
         assert "default" not in history_options["--n"]
         assert "по умолчанию: все" in history_options["--n"]["help"]
 

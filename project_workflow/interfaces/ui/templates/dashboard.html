@@ -4,7 +4,7 @@
 {% block header_title %}Дашборд{% endblock %}
 {% block header_actions %}
   <a href="/tasks" class="btn btn-secondary">Задачи</a>
-  <a href="/contexts" class="btn btn-secondary">Контуры</a>
+  <a href="/namespace" class="btn btn-secondary">Неймспейс</a>
 {% endblock %}
 
 {% block extra_style %}
@@ -25,7 +25,7 @@
 
 {% block content %}
 <div class="dashboard-grid">
-  <section class="metric-card"><div class="metric-label">Контуры</div><div class="metric-value">{{ stats.contexts }}</div></section>
+  <section class="metric-card"><div class="metric-label">Неймспейсы</div><div class="metric-value">{{ stats.namespaces }}</div></section>
   <section class="metric-card"><div class="metric-label">Задачи</div><div class="metric-value">{{ stats.tasks }}</div></section>
   <section class="metric-card"><div class="metric-label">Активные</div><div class="metric-value">{{ stats.active }}</div></section>
   <section class="metric-card"><div class="metric-label">Завершённые</div><div class="metric-value">{{ stats.done }}</div></section>
@@ -42,10 +42,10 @@
     <div class="card-title" style="margin-bottom:14px">Незавершённые задачи</div>
     <div class="list-stack">
       {% for task in open_tasks %}
-      <a href="/task/{{ task.task_key }}{% if task.context_id %}?context_id={{ task.context_id }}{% endif %}" class="list-item">
+      <a href="/task/{{ task.task_key }}{% if task.namespace_id %}?namespace_id={{ task.namespace_id }}{% endif %}" class="list-item">
         <div class="list-title"><span class="code">{{ task.task_key }}</span>{% if task.title %} — {{ task.title }}{% endif %}</div>
         <div class="list-meta">
-          <span>{{ task.project_name }}</span>
+          <span>{{ task.namespace_name }}</span>
           {% if task.workflow_name %}<span>{{ task.workflow_name }}</span>{% endif %}
           <span>{{ task.status_label }}</span>
         </div>
@@ -55,12 +55,12 @@
   </section>
   {% endif %}
 
-  {% if contexts %}
+  {% if namespaces %}
   <section class="card">
-    <div class="card-title" style="margin-bottom:14px">Контуры</div>
+    <div class="card-title" style="margin-bottom:14px">Неймспейсы</div>
     <div class="list-stack">
-      {% for project in contexts %}
-      <a href="/contexts" class="list-item">
+      {% for project in namespaces %}
+      <a href="/namespace?namespace_id={{ project.id }}" class="list-item">
         <div class="list-title">{{ project.name or project.code }}</div>
         <div class="list-meta">
           <span>{{ project.task_count | pluralize('задача,задачи,задач') }}</span>

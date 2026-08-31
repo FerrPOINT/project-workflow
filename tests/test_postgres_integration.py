@@ -195,8 +195,8 @@ class TestPostgresInitialMigration:
             project_id = conn.execute(
                 text(
                     "INSERT INTO project_workflow.projects "
-                    "(workflow_id, code, name, description, key_prefixes) "
-                    "VALUES (:workflow_id, 'P', 'Project', 'persisted', '[\"P\"]') RETURNING id"
+                    "(workflow_id, code, name, description, key_prefixes, cli_command) "
+                    "VALUES (:workflow_id, 'P', 'Project', 'persisted', '[\"P\"]', 'workflow-p') RETURNING id"
                 ),
                 {"workflow_id": workflow_id},
             ).scalar_one()
@@ -300,14 +300,15 @@ class TestPostgresInitialMigration:
                 project_id = conn.execute(
                     text(
                         "INSERT INTO project_workflow.projects "
-                        "(workflow_id, code, name, description, key_prefixes) "
-                        "VALUES (:workflow_id, :code, :name, '', :prefixes) RETURNING id"
+                        "(workflow_id, code, name, description, key_prefixes, cli_command) "
+                        "VALUES (:workflow_id, :code, :name, '', :prefixes, :cli_command) RETURNING id"
                     ),
                     {
                         "workflow_id": workflow_id,
                         "code": f"P{suffix}",
                         "name": f"Project {suffix}",
                         "prefixes": f'["P{suffix}"]',
+                        "cli_command": f"workflow-p{suffix.lower()}",
                     },
                 ).scalar_one()
                 phase_id = conn.execute(

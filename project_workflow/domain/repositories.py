@@ -127,7 +127,7 @@ class PhaseInstructionRepository(ABC):
 
 
 class ProjectRepository(ABC):
-    """Persistence contract for projects."""
+    """Persistence contract for namespaces stored in the legacy projects table."""
 
     @abstractmethod
     def list(self) -> Sequence[Project]: ...
@@ -137,6 +137,9 @@ class ProjectRepository(ABC):
 
     @abstractmethod
     def get_by_code(self, code: str) -> Project | None: ...
+
+    @abstractmethod
+    def get_by_cli_command(self, cli_command: str) -> Project | None: ...
 
     @abstractmethod
     def lock(self, project_id: int) -> Project | None: ...

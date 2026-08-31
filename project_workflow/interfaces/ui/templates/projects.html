@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 
-{% block title %}Контуры воркфлоу — Workflow Engine{% endblock %}
-{% block header_title %}Контуры{% endblock %}
+{% block title %}Неймспейс — Workflow Engine{% endblock %}
+{% block header_title %}Неймспейс{% endblock %}
 {% block header_actions %}
-  <button type="button" class="btn btn-primary" id="newProjectButton" onclick="startCreateProject()">+ Новый контур</button>
-  <a href="/tasks" class="btn btn-secondary">← К задачам</a>
+  <button type="button" class="btn btn-primary" id="newProjectButton" onclick="startCreateProject()">+ Новый неймспейс</button>
+  <a href="/tasks{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary">← К задачам</a>
 {% endblock %}
 
 {% block extra_style %}
@@ -47,7 +47,7 @@ textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:140px;resiz
         </svg>
       </span>
       <span class="project-card-body">
-        <div class="project-code">{{ project.code }}</div>
+        <div class="project-code">{{ project.cli_command }}</div>
         <div class="project-name">{{ project.name }}</div>
         <div class="project-meta">
           <span>{{ project.workflow_name }}</span>
@@ -57,20 +57,21 @@ textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:140px;resiz
       </span>
     </button>
     {% else %}
-    <div class="card empty-note">Контуров пока нет.</div>
+    <div class="card empty-note">Неймспейсов пока нет.</div>
     {% endfor %}
   </section>
 
   <section class="project-panel">
     <form id="projectForm" class="card form-stack" onsubmit="event.preventDefault(); submitProject();">
-      <div class="card-title" id="projectFormMode">Редактирование контура</div>
-      <div>
-        <div class="label">Код</div>
-        <input type="text" id="projectCode" value="{{ selected_project.code if selected_project else '' }}">
-      </div>
+      <div class="card-title" id="projectFormMode">Редактирование неймспейса</div>
+      <input type="hidden" id="projectCode" value="{{ selected_project.code if selected_project else '' }}">
       <div>
         <div class="label">Название</div>
         <input type="text" id="projectName" value="{{ selected_project.name if selected_project else '' }}">
+      </div>
+      <div>
+        <div class="label">CLI-команда</div>
+        <input type="text" id="projectCliCommand" value="{{ selected_project.cli_command if selected_project else '' }}" placeholder="workflow-qa">
       </div>
       <div>
         <div class="label">Описание</div>
@@ -92,7 +93,7 @@ textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:140px;resiz
       </div>
       <div class="theme-preview" id="projectThemePreview">
         <span class="project-mark" id="projectThemePreviewIcon" aria-hidden="true"></span>
-        <span class="theme-preview-name" id="projectThemePreviewName">{{ selected_project.name if selected_project else 'Новый контур' }}</span>
+        <span class="theme-preview-name" id="projectThemePreviewName">{{ selected_project.name if selected_project else 'Новый неймспейс' }}</span>
       </div>
       <div>
         <div class="label">Воркфлоу</div>
@@ -121,7 +122,7 @@ textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:140px;resiz
         <button class="btn btn-secondary" type="button" id="cancelCreateButton" onclick="cancelCreateProject()" style="display:none">Отмена</button>
         <button class="btn btn-secondary" type="button" id="deleteProjectButton" onclick="deleteProject()">Удалить</button>
       </div>
-      <div class="empty-note">Один префикс на строку (например: RUN, DEMO). По нему задача автоматически относится к контуру.</div>
+      <div class="empty-note">Один префикс на строку (например: RUN, DEMO). CLI-wrapper выбирает этот неймспейс автоматически.</div>
     </form>
   </section>
 </div>
@@ -133,7 +134,7 @@ const workflowStore = {{ workflows | tojson }};
 const projectIconPaths = {{ project_icon_paths | tojson }};
 const defaultProjectThemeIcon = 'project';
 const defaultProjectThemeColor = '#5E6AD2';
-let selectedProjectId = {{ selected_project.id if selected_project else 'null' }};
+let selectedProjectId = {{ 'null' if create_mode else (selected_project.id if selected_project else 'null') }};
 let previousProjectId = selectedProjectId;
 let projectFormMode = selectedProjectId == null ? 'create' : 'edit';
 
@@ -152,7 +153,7 @@ function applyPageTheme(color){
 function updateProjectThemePreview(){
   var icon = document.getElementById('projectThemeIcon').value || defaultProjectThemeIcon;
   var color = document.getElementById('projectThemeColor').value || defaultProjectThemeColor;
-  var name = document.getElementById('projectName').value.trim() || document.getElementById('projectCode').value.trim() || 'Новый контур';
+  var name = document.getElementById('projectName').value.trim() || document.getElementById('projectCliCommand').value.trim() || 'Новый неймспейс';
   var preview = document.getElementById('projectThemePreview');
   var previewIcon = document.getElementById('projectThemePreviewIcon');
   preview.style.setProperty('--project-color', color);
@@ -174,6 +175,7 @@ function currentPayload(){
   return {
     code: document.getElementById('projectCode').value.trim(),
     name: document.getElementById('projectName').value.trim(),
+    cli_command: document.getElementById('projectCliCommand').value.trim(),
     description: document.getElementById('projectDescription').value.trim(),
     theme_icon: document.getElementById('projectThemeIcon').value || defaultProjectThemeIcon,
     theme_color: document.getElementById('projectThemeColor').value || defaultProjectThemeColor,
@@ -202,6 +204,7 @@ function syncNav(){
 function fillProjectForm(project){
   document.getElementById('projectCode').value = project ? project.code : '';
   document.getElementById('projectName').value = project ? project.name : '';
+  document.getElementById('projectCliCommand').value = project ? (project.cli_command || '') : '';
   document.getElementById('projectDescription').value = project ? (project.description || '') : '';
   document.getElementById('projectThemeIcon').value = project ? (project.theme_icon || defaultProjectThemeIcon) : defaultProjectThemeIcon;
   document.getElementById('projectThemeColor').value = project ? (project.theme_color || defaultProjectThemeColor) : defaultProjectThemeColor;
@@ -212,8 +215,8 @@ function fillProjectForm(project){
 function setProjectFormMode(mode){
   projectFormMode = mode;
   var createMode = mode === 'create';
-  document.getElementById('projectFormMode').textContent = createMode ? 'Новый контур' : 'Редактирование контура';
-  document.getElementById('projectSubmitButton').textContent = createMode ? 'Создать контур' : 'Сохранить';
+  document.getElementById('projectFormMode').textContent = createMode ? 'Новый неймспейс' : 'Редактирование неймспейса';
+  document.getElementById('projectSubmitButton').textContent = createMode ? 'Создать неймспейс' : 'Сохранить';
   document.getElementById('deleteProjectButton').style.display = createMode ? 'none' : '';
   document.getElementById('cancelCreateButton').style.display = createMode && projectStore.length ? '' : 'none';
 }
@@ -245,12 +248,12 @@ function selectProject(id){
   syncNav();
 }
 function reloadProjects(nextId){
-  fetch('/api/contexts')
+  fetch('/api/namespaces')
     .then(function(r){return r.json()})
     .then(function(d){
-      if(!d.ok){showToast(d.error || 'Ошибка загрузки контуров','error');return;}
+      if(!d.ok){showToast(d.error || 'Ошибка загрузки неймспейсов','error');return;}
       projectStore.length = 0;
-      d.contexts.forEach(function(project){ projectStore.push(project); });
+      d.namespaces.forEach(function(project){ projectStore.push(project); });
       if(projectStore.length === 0){
         selectedProjectId = null;
         previousProjectId = null;
@@ -260,7 +263,7 @@ function reloadProjects(nextId){
         nav.replaceChildren();
         var empty = document.createElement('div');
         empty.className = 'card empty-note';
-        empty.textContent = 'Контуров пока нет.';
+        empty.textContent = 'Неймспейсов пока нет.';
         nav.appendChild(empty);
         syncNav();
         return;
@@ -296,7 +299,7 @@ function renderProjectNav(){
 
     var code = document.createElement('div');
     code.className = 'project-code';
-    code.textContent = project.code;
+    code.textContent = project.cli_command || '';
 
     var name = document.createElement('div');
     name.className = 'project-name';
@@ -324,31 +327,31 @@ function renderProjectNav(){
   });
 }
 function saveProject(){
-  if(selectedProjectId == null){ showToast('Нет выбранного контура','error'); return; }
+  if(selectedProjectId == null){ showToast('Нет выбранного неймспейса','error'); return; }
   var payload = currentPayload();
-  if(!payload.code){ showToast('Код контура обязателен','error'); return; }
-  fetch('/api/contexts/' + selectedProjectId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+  if(!payload.cli_command){ showToast('CLI-команда неймспейса обязательна','error'); return; }
+  fetch('/api/namespaces/' + selectedProjectId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json()})
-    .then(function(d){ if(d.ok){ showToast('Контур сохранён','success'); reloadProjects(selectedProjectId); } else { showToast(d.error || 'Ошибка','error'); } })
+    .then(function(d){ if(d.ok){ showToast('Неймспейс сохранён','success'); reloadProjects(selectedProjectId); } else { showToast(d.error || 'Ошибка','error'); } })
     .catch(showRequestError);
 }
 function deleteProject(){
-  if(selectedProjectId == null){ showToast('Нет выбранного контура','error'); return; }
-  if(!confirm('Удалить контур?')) return;
-  fetch('/api/contexts/' + selectedProjectId,{method:'DELETE'})
+  if(selectedProjectId == null){ showToast('Нет выбранного неймспейса','error'); return; }
+  if(!confirm('Удалить неймспейс?')) return;
+  fetch('/api/namespaces/' + selectedProjectId,{method:'DELETE'})
     .then(function(r){return r.json()})
-    .then(function(d){ if(d.ok){ showToast('Контур удалён','success'); reloadProjects(null); } else { showToast(d.error || 'Ошибка','error'); } })
+    .then(function(d){ if(d.ok){ showToast('Неймспейс удалён','success'); reloadProjects(null); } else { showToast(d.error || 'Ошибка','error'); } })
     .catch(showRequestError);
 }
 function createProject(){
   var payload = currentPayload();
-  if(!payload.code){ showToast('Код контура обязателен','error'); return; }
-  fetch('/api/contexts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+  if(!payload.cli_command){ showToast('CLI-команда неймспейса обязательна','error'); return; }
+  fetch('/api/namespaces',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json()})
     .then(function(d){
       if(d.ok){
-        showToast('Контур создан','success');
-        reloadProjects(d.context_id);
+        showToast('Неймспейс создан','success');
+        reloadProjects(d.namespace_id);
       } else {
         showToast(d.error || 'Ошибка','error');
       }
@@ -371,5 +374,5 @@ if(selectedProjectId == null){
 }
 syncNav();
 document.getElementById('projectName').addEventListener('input', updateProjectThemePreview);
-document.getElementById('projectCode').addEventListener('input', updateProjectThemePreview);
+document.getElementById('projectCliCommand').addEventListener('input', updateProjectThemePreview);
 {% endblock %}

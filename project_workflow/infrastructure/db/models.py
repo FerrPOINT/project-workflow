@@ -185,6 +185,7 @@ class Project(Base):
     description: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default=text("''"))
     theme_icon: Mapped[str] = mapped_column(String(32), nullable=False, default="project", server_default="project")
     theme_color: Mapped[str] = mapped_column(String(7), nullable=False, default="#5E6AD2", server_default="#5E6AD2")
+    cli_command: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     key_prefixes: Mapped[str] = mapped_column(String, nullable=False, default="[]", server_default="[]")
 
     __table_args__ = (

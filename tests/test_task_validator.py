@@ -53,7 +53,7 @@ class TestTaskKeyValidator:
 
     @pytest.mark.parametrize("project_code", [None, "", "   ", 7])
     def test_rejects_noncanonical_project_codes(self, project_code):
-        with pytest.raises(ValueError, match="code контура должен быть непустой строкой"):
+        with pytest.raises(ValueError, match="code неймспейса должен быть непустой строкой"):
             TaskKeyValidator.from_projects([{"code": project_code, "key_prefixes": ["RUN"]}])
 
     def test_validated_key_string_uses_normalized_value(self):

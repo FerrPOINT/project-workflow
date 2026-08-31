@@ -202,7 +202,7 @@ class TestProjectService:
     def test_create_project_requires_explicit_workflow(self):
         uow = _make_uow()
         svc = ProjectService(uow)
-        with pytest.raises(ValueError, match="workflow_id контура"):
+        with pytest.raises(ValueError, match="workflow_id неймспейса"):
             svc.create_project({"code": "PRJ", "key_prefixes": ["PRJ"]})
         uow.workflows.ensure_default_exists.assert_not_called()
         uow.projects.create.assert_not_called()
@@ -312,5 +312,5 @@ class TestWorkflowService:
         uow.projects.list.return_value = [FakeProject(1, "P", 3)]
         uow.workflows.lock.return_value = FakeWorkflow(3, "W")
         svc = WorkflowService(uow)
-        with pytest.raises(ConflictError, match="связан с контурами"):
+        with pytest.raises(ConflictError, match="связан с неймспейсами"):
             svc.delete_workflow(3)

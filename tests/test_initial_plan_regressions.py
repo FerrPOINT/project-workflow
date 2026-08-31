@@ -257,7 +257,7 @@ def test_task_filter_returns_nonempty_workflow_specific_dto():
         assert tasks[0]["workflow_id"] == workflow_id
 
 
-def test_same_task_key_can_run_in_parallel_contexts():
+def test_same_task_key_can_run_in_parallel_namespaces():
     first_workflow, first_phases = _workflow_with_phases(1)
     second_workflow, second_phases = _workflow_with_phases(1)
     prefix = f"DUAL{next(_counter)}"
@@ -265,7 +265,8 @@ def test_same_task_key_can_run_in_parallel_contexts():
         {
             "workflow_id": first_workflow,
             "code": _unique("dual-project-a"),
-            "name": "Dual project A",
+            "name": "Dual Namespace A",
+            "cli_command": f"workflow-dual-a-{prefix.lower()}",
             "key_prefixes": [prefix],
         }
     )
@@ -273,7 +274,8 @@ def test_same_task_key_can_run_in_parallel_contexts():
         {
             "workflow_id": second_workflow,
             "code": _unique("dual-project-b"),
-            "name": "Dual project B",
+            "name": "Dual Namespace B",
+            "cli_command": f"workflow-dual-b-{prefix.lower()}",
             "key_prefixes": [prefix],
         }
     )
@@ -296,13 +298,13 @@ def test_same_task_key_can_run_in_parallel_contexts():
 
     assert first_task["id"] != second_task["id"]
     assert {first_task["workflow_id"], second_task["workflow_id"]} == {first_workflow, second_workflow}
-    assert client.get(f"/task/{task_key}").status_code == 409
-    first_detail = client.get(f"/task/{task_key}?context_id={first_project['id']}")
-    second_detail = client.get(f"/task/{task_key}?context_id={second_project['id']}")
+    assert client.get(f"/task/{task_key}").status_code == 404
+    first_detail = client.get(f"/task/{task_key}?namespace_id={first_project['id']}")
+    second_detail = client.get(f"/task/{task_key}?namespace_id={second_project['id']}")
     assert first_detail.status_code == 200
     assert second_detail.status_code == 200
-    assert "Dual project A" in first_detail.text
-    assert "Dual project B" in second_detail.text
+    assert "Dual Namespace A" in first_detail.text
+    assert "Dual Namespace B" in second_detail.text
 
 
 def test_explicit_project_task_validates_prefix_and_scoped_phase_before_write():

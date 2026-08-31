@@ -23,6 +23,7 @@ def bootstrap_default_project(uow: SAUnitOfWork) -> None:
                 "workflow_id": default_wf.id,
                 "code": code,
                 "name": config.DEFAULT_PROJECT_NAME,
+                "cli_command": config.DEFAULT_NAMESPACE_CLI_COMMAND,
                 "key_prefixes": list(config.DEFAULT_TASK_KEY_PREFIXES),
             }
         )

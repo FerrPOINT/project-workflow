@@ -119,10 +119,12 @@ def upgrade() -> None:
         sa.Column("description", sa.Text(), server_default="", nullable=False),
         sa.Column("theme_icon", sa.String(length=32), server_default="project", nullable=False),
         sa.Column("theme_color", sa.String(length=7), server_default="#5E6AD2", nullable=False),
+        sa.Column("cli_command", sa.String(length=64), nullable=False),
         sa.Column("key_prefixes", sa.String(), server_default="[]", nullable=False),
         sa.ForeignKeyConstraint(["workflow_id"], ["workflows.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("code"),
+        sa.UniqueConstraint("cli_command"),
         sa.UniqueConstraint("id", "workflow_id", name="uq_projects_id_workflow"),
     )
 

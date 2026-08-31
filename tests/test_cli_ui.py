@@ -12,7 +12,7 @@ from click.testing import CliRunner
 pytestmark = [pytest.mark.cli]
 
 from project_workflow.domain.validation import TaskKeyValidator
-from project_workflow.interfaces.cli.core import cli
+from project_workflow.interfaces.cli.core import NAMESPACE_ENV_VAR, cli
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
@@ -428,6 +428,58 @@ class TestHistoryCommand:
         result = runner.invoke(cli, ["history", "--task", "TASK-1", "--n", "0"])
         assert result.exit_code == 2
         assert "Некорректное значение параметра '--n'." in result.output
+
+    def test_history_uses_namespace_env_selector_for_duplicate_task_keys(self):
+        from project_workflow.application.project import ProjectService
+        from project_workflow.application.task import TaskService
+        from project_workflow.application.workflow import WorkflowService
+        from project_workflow.infrastructure.db.uow import SAUnitOfWork
+
+        with SAUnitOfWork() as uow:
+            default_namespace = uow.projects.get_by_code("RUN")
+            assert default_namespace is not None and default_namespace.id is not None
+            qa_workflow = WorkflowService(uow).create_workflow({"name": "QA flow"})
+            qa_namespace = ProjectService(uow).create_project(
+                {
+                    "code": "QAENV",
+                    "name": "QA Namespace",
+                    "workflow_id": qa_workflow["id"],
+                    "cli_command": "workflow-qa-env",
+                    "key_prefixes": ["RUN"],
+                }
+            )
+            TaskService(uow).create_task(
+                {"project_id": default_namespace.id, "task_key": "RUN-4242", "title": "Dev duplicate"}
+            )
+            TaskService(uow).create_task(
+                {"project_id": qa_namespace["id"], "task_key": "RUN-4242", "title": "QA duplicate"}
+            )
+            default_namespace_id = default_namespace.id
+            qa_namespace_id = qa_namespace["id"]
+
+        runner = CliRunner()
+        ambiguous = runner.invoke(cli, ["--json", "history", "--task", "RUN-4242"])
+        assert ambiguous.exit_code == 1
+        assert "нескольких неймспейсах" in json.loads(ambiguous.output)["message"]
+
+        for namespace_id in (default_namespace_id, qa_namespace_id):
+            result = runner.invoke(
+                cli,
+                ["--json", "history", "--task", "RUN-4242"],
+                env={NAMESPACE_ENV_VAR: str(namespace_id)},
+            )
+            assert result.exit_code == 0, result.output
+            assert json.loads(result.output)["task_key"] == "RUN-4242"
+
+    def test_history_rejects_unknown_namespace_env_selector(self):
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            ["--json", "history", "--task", "RUN-1"],
+            env={NAMESPACE_ENV_VAR: "999999"},
+        )
+        assert result.exit_code == 1
+        assert "Неймспейс 999999 не найден" in json.loads(result.output)["message"]
         assert "not in the range" not in result.output
 
 

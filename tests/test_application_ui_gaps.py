@@ -157,7 +157,7 @@ class TestUIDataServiceGaps:
         wdb.step_history.latest_for_tasks.return_value = []
         wdb.get_projects.return_value = []
 
-        with pytest.raises(ValueError, match="не найден контур 7"):
+        with pytest.raises(ValueError, match="не найден неймспейс 7"):
             _service(wdb)._load_tasks()
 
     def test_missing_task_workflow_id_fails_closed_without_project_fallback(self):

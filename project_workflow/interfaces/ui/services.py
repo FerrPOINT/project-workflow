@@ -49,9 +49,9 @@ def _load_phase_detail(phase_id: int) -> dict[str, Any] | None:
     return _ui_data_service()._load_phase_detail(phase_id)
 
 
-def _load_tasks() -> list[dict[str, Any]]:
+def _load_tasks(namespace_id: int | None = None) -> list[dict[str, Any]]:
     """Load tasks for the UI with batched history/supervisor lookups."""
-    return _ui_data_service()._load_tasks()
+    return _ui_data_service()._load_tasks(namespace_id=namespace_id)
 
 
 def _load_projects() -> list[dict[str, Any]]:
@@ -59,9 +59,14 @@ def _load_projects() -> list[dict[str, Any]]:
     return _ui_data_service()._load_projects()
 
 
-def _load_dashboard() -> dict[str, Any]:
+def _load_namespaces() -> list[dict[str, Any]]:
+    """Load namespaces for UI pages/API."""
+    return _ui_data_service()._load_namespaces()
+
+
+def _load_dashboard(namespace_id: int | None = None) -> dict[str, Any]:
     """Load dashboard payload."""
-    return _ui_data_service()._load_dashboard()
+    return _ui_data_service()._load_dashboard(namespace_id=namespace_id)
 
 
 def _get_task_detail(task_key: str, project_id: int | None = None) -> dict[str, Any] | None:
@@ -77,6 +82,7 @@ __all__ = [
     "_load_phase_detail",
     "_load_tasks",
     "_load_projects",
+    "_load_namespaces",
     "_load_dashboard",
     "_get_task_detail",
 ]

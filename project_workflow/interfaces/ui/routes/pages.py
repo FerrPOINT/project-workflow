@@ -15,18 +15,72 @@ from project_workflow.interfaces.ui.services import (
     _get_task_detail,
     _load_cli_reference,
     _load_dashboard,
+    _load_namespaces,
     _load_phase_detail,
     _load_phases,
-    _load_projects,
     _load_tasks,
     _load_workflows,
 )
 from project_workflow.interfaces.ui.state import _app_state
 from project_workflow.interfaces.ui.templates import _group_instructions, templates
 
+NAMESPACE_COOKIE = "workflow_namespace_id"
 
-def _theme_context(project: dict[str, Any] | None) -> dict[str, Any]:
-    return {"theme_project": project}
+
+def _theme_context(namespace: dict[str, Any] | None) -> dict[str, Any]:
+    return {"theme_namespace": namespace, "theme_project": namespace}
+
+
+def _parse_positive_int(raw: str | None) -> int | None:
+    if raw is None or not raw.strip().isdecimal():
+        return None
+    value = int(raw.strip())
+    return value if value > 0 else None
+
+
+def _namespace_context(
+    request: Request,
+    *,
+    page: str,
+    preferred_namespace_id: int | None = None,
+) -> dict[str, Any]:
+    namespaces = _load_namespaces()
+    query_namespace_id = _parse_positive_int(request.query_params.get("namespace_id"))
+    cookie_namespace_id = _parse_positive_int(request.cookies.get(NAMESPACE_COOKIE))
+    selected_id = preferred_namespace_id or query_namespace_id or cookie_namespace_id
+    selected_namespace = next((item for item in namespaces if item.get("id") == selected_id), None)
+    if selected_namespace is None and namespaces:
+        selected_namespace = namespaces[0]
+    return {
+        "request": request,
+        "page": page,
+        "ui_port": get_settings().UI_PORT,
+        "namespaces": namespaces,
+        "projects": namespaces,
+        "selected_namespace": selected_namespace,
+        "selected_project": selected_namespace,
+        **_theme_context(selected_namespace),
+    }
+
+
+def _template_response(
+    *,
+    request: Request,
+    name: str,
+    context: dict[str, Any],
+    status_code: int = 200,
+) -> HTMLResponse:
+    response = templates.TemplateResponse(
+        request=request,
+        name=name,
+        status_code=status_code,
+        context=context,
+    )
+    selected_namespace = context.get("selected_namespace")
+    selected_id = selected_namespace.get("id") if isinstance(selected_namespace, dict) else None
+    if isinstance(selected_id, int):
+        response.set_cookie(NAMESPACE_COOKIE, str(selected_id), samesite="lax")
+    return response
 
 
 def _error_page(
@@ -39,40 +93,43 @@ def _error_page(
     back_label: str,
     page: str,
 ) -> HTMLResponse:
-    return templates.TemplateResponse(
-        request=request,
-        name="error.html",
-        status_code=status_code,
-        context={
-            "request": request,
+    context = _namespace_context(request, page=page)
+    context.update(
+        {
             "title": title,
             "message": message,
             "status_code": status_code,
             "back_url": back_url,
             "back_label": back_label,
-            "page": page,
-            "ui_port": get_settings().UI_PORT,
-        },
+        }
+    )
+    return _template_response(
+        request=request,
+        name="error.html",
+        status_code=status_code,
+        context=context,
     )
 
 
 async def index(request: Request) -> HTMLResponse:
     """Минимальный dashboard без заглушек."""
-    dashboard = _load_dashboard()
-    return templates.TemplateResponse(
+    context = _namespace_context(request, page="dashboard")
+    selected_namespace = context.get("selected_namespace")
+    namespace_id = selected_namespace.get("id") if isinstance(selected_namespace, dict) else None
+    dashboard = _load_dashboard(namespace_id=namespace_id if isinstance(namespace_id, int) else None)
+    context.update(dashboard)
+    return _template_response(
         request=request,
         name="dashboard.html",
-        context={
-            "request": request,
-            "page": "dashboard",
-            "ui_port": get_settings().UI_PORT,
-            **_theme_context(None),
-            **dashboard,
-        },
+        context=context,
     )
 
 
 async def phases_page(request: Request, workflow_id: int | None = Query(default=None)) -> HTMLResponse:
+    context = _namespace_context(request, page="phases")
+    selected_namespace = context.get("selected_namespace")
+    if workflow_id is None and isinstance(selected_namespace, dict):
+        workflow_id = selected_namespace.get("workflow_id")
     workflows = _load_workflows()
     selected_workflow = next((item for item in workflows if item["id"] == workflow_id), None)
     if selected_workflow is None and workflows:
@@ -80,21 +137,20 @@ async def phases_page(request: Request, workflow_id: int | None = Query(default=
     selected_workflow_id = selected_workflow["id"] if selected_workflow else None
     phases = _load_phases(int(selected_workflow_id)) if selected_workflow_id is not None else []
     phase_blocks = _build_parallel_phase_blocks(phases)
-    return templates.TemplateResponse(
-        request=request,
-        name="phases.html",
-        context={
-            "request": request,
+    context.update(
+        {
             "phases": phases,
             "phase_blocks": phase_blocks,
             "phase_count": len(phases),
             "workflows": workflows,
             "selected_workflow": selected_workflow,
             "selected_workflow_id": selected_workflow_id,
-            "page": "phases",
-            "ui_port": get_settings().UI_PORT,
-            **_theme_context(None),
-        },
+        }
+    )
+    return _template_response(
+        request=request,
+        name="phases.html",
+        context=context,
     )
 
 
@@ -141,84 +197,119 @@ async def phase_detail(request: Request, phase_id: int) -> HTMLResponse:
         ]
     for instruction in phase.get("instructions", []):
         instruction["skills"] = PhaseService.normalize_skills(instruction.get("skills"))
-    return templates.TemplateResponse(
-        request=request,
-        name="phase_detail.html",
-        context={
-            "request": request,
-            "page": "phases",
-            "ui_port": get_settings().UI_PORT,
+    context = _namespace_context(request, page="phases")
+    context.update(
+        {
             "phase": phase,
             "agents": agents,
             "workflow_phases": workflow_phases,
             "parallel_candidates": parallel_candidates,
             "rollback_target_phase": rollback_target_phase,
-            **_theme_context(None),
-        },
+        }
+    )
+    return _template_response(
+        request=request,
+        name="phase_detail.html",
+        context=context,
     )
 
 
 async def tasks_page(request: Request) -> HTMLResponse:
     """Список задач workflow."""
-    tasks = _load_tasks()
-    return templates.TemplateResponse(
+    context = _namespace_context(request, page="tasks")
+    selected_namespace = context.get("selected_namespace")
+    namespace_id = selected_namespace.get("id") if isinstance(selected_namespace, dict) else None
+    tasks = _load_tasks(namespace_id=namespace_id if isinstance(namespace_id, int) else None)
+    context.update({"tasks": tasks})
+    return _template_response(
         request=request,
         name="tasks.html",
-        context={
-            "request": request,
-            "tasks": tasks,
-            "page": "tasks",
-            "ui_port": get_settings().UI_PORT,
-            **_theme_context(None),
-        },
+        context=context,
     )
+
+
+async def namespace_page(request: Request) -> HTMLResponse:
+    """CRUD page for namespaces and their task key prefixes."""
+    context = _namespace_context(request, page="namespace")
+    namespaces = context["namespaces"]
+    workflows = _load_workflows()
+    selected_namespace = context.get("selected_namespace")
+    context.update(
+        {
+            "projects": namespaces,
+            "workflows": workflows,
+            "selected_project": selected_namespace,
+            "create_mode": False,
+        }
+    )
+    return _template_response(
+        request=request,
+        name="projects.html",
+        context=context,
+    )
+
+
+async def namespace_new_page(request: Request) -> HTMLResponse:
+    """Create page for a new namespace."""
+    context = _namespace_context(request, page="namespace")
+    context.update(
+        {
+            "projects": context["namespaces"],
+            "workflows": _load_workflows(),
+            "selected_project": None,
+            "create_mode": True,
+        }
+    )
+    return _template_response(request=request, name="projects.html", context=context)
 
 
 async def projects_page(request: Request) -> HTMLResponse:
-    """CRUD page for workflow contexts and their task key prefixes."""
-    projects = _load_projects()
-    workflows = _load_workflows()
-    return templates.TemplateResponse(
-        request=request,
-        name="projects.html",
-        context={
-            "request": request,
-            "page": "contexts",
-            "ui_port": get_settings().UI_PORT,
-            "projects": projects,
-            "workflows": workflows,
-            "selected_project": projects[0] if projects else None,
-            **_theme_context(projects[0] if projects else None),
-        },
-    )
+    """Compatibility alias for legacy context/project pages."""
+    return await namespace_page(request)
 
 
 async def workflows_page(request: Request) -> HTMLResponse:
+    context = _namespace_context(request, page="workflows")
     workflows = _load_workflows()
-    return templates.TemplateResponse(
+    context.update({"workflows": workflows, "selected_workflow": workflows[0] if workflows else None})
+    return _template_response(
         request=request,
         name="workflows.html",
-        context={
-            "request": request,
-            "page": "workflows",
-            "ui_port": get_settings().UI_PORT,
-            "workflows": workflows,
-            "selected_workflow": workflows[0] if workflows else None,
-            **_theme_context(None),
-        },
+        context=context,
     )
 
 
 async def task_detail_page(
     request: Request,
     task_key: str,
+    namespace_id: int | None = Query(default=None),
     context_id: int | None = Query(default=None),
     project_id: int | None = Query(default=None, include_in_schema=False),
 ) -> HTMLResponse:
     """Деталка задачи — линейная история фаз."""
-    selected_context_id = context_id if context_id is not None else project_id
+    selected_context_id = (
+        namespace_id
+        if namespace_id is not None
+        else context_id
+        if context_id is not None
+        else project_id
+    )
+    context = _namespace_context(
+        request,
+        page="tasks",
+        preferred_namespace_id=selected_context_id,
+    )
+    selected_namespace = context.get("selected_namespace")
+    selected_namespace_id = (
+        selected_namespace.get("id")
+        if isinstance(selected_namespace, dict)
+        else selected_context_id
+    )
     try:
-        task = _get_task_detail(task_key, project_id=selected_context_id)
+        task = _get_task_detail(
+            task_key,
+            project_id=selected_namespace_id if isinstance(selected_namespace_id, int) else None,
+        )
     except ConflictError as exc:
         return _error_page(
             request,
@@ -239,14 +330,9 @@ async def task_detail_page(
             back_label="К списку задач",
             page="tasks",
         )
-    return templates.TemplateResponse(
-        request=request,
-        name="task_detail.html",
-        context={
-            "request": request,
+    context.update(
+        {
             "task": task,
-            "page": "tasks",
-            "ui_port": get_settings().UI_PORT,
             "current_phase_name": task.get("current_phase_name"),
             "progress_done": task.get("progress_done", 0),
             "progress_total": task.get("progress_total", 0),
@@ -254,39 +340,36 @@ async def task_detail_page(
             "cycles_total": task.get("workflow_cycle_count", 0),
             "phase_history_blocks": task.get("phase_history_blocks", []),
             "step_history": task.get("step_history", []),
-            **_theme_context(task.get("project")),
-        },
+            **_theme_context(task.get("namespace") or task.get("project")),
+        }
+    )
+    return _template_response(
+        request=request,
+        name="task_detail.html",
+        context=context,
     )
 
 
 async def settings_page(request: Request) -> HTMLResponse:
     """Read-only справка по реальным CLI-командам workflow."""
-    return templates.TemplateResponse(
+    context = _namespace_context(request, page="settings")
+    context.update({"commands": _load_cli_reference()})
+    return _template_response(
         request=request,
         name="settings.html",
-        context={
-            "request": request,
-            "page": "settings",
-            "ui_port": get_settings().UI_PORT,
-            "commands": _load_cli_reference(),
-            **_theme_context(None),
-        },
+        context=context,
     )
 
 
 async def agents_page(request: Request) -> HTMLResponse:
     """Список агентов."""
     agents = _app_state.agent_service().list_agents()
-    return templates.TemplateResponse(
+    context = _namespace_context(request, page="agents")
+    context.update({"agents": agents})
+    return _template_response(
         request=request,
         name="agents.html",
-        context={
-            "request": request,
-            "agents": agents,
-            "page": "agents",
-            "ui_port": get_settings().UI_PORT,
-            **_theme_context(None),
-        },
+        context=context,
     )
 
 
@@ -320,16 +403,16 @@ async def instructions_page(
     for instruction in instructions:
         instruction["skills"] = PhaseService.normalize_skills(instruction.get("skills"))
     instruction_groups = _group_instructions(instructions)
-    return templates.TemplateResponse(
-        request=request,
-        name="instructions.html",
-        context={
-            "request": request,
-            "page": "phases",
-            "ui_port": get_settings().UI_PORT,
+    context = _namespace_context(request, page="phases")
+    context.update(
+        {
             "phase": phase,
             "instructions": instructions,
             "instruction_groups": instruction_groups,
-            **_theme_context(None),
-        },
+        }
+    )
+    return _template_response(
+        request=request,
+        name="instructions.html",
+        context=context,
     )

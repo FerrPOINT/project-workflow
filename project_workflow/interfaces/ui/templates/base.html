@@ -1,5 +1,7 @@
+{% set active_namespace = theme_namespace if theme_namespace is defined and theme_namespace else theme_project %}
+{% set active_namespace_id = active_namespace.id if active_namespace else none %}
 <!DOCTYPE html>
-<html lang="ru"{% if theme_project %} style="--accent:{{ theme_project.theme_color }};--accent-hover:{{ theme_project.theme_color }};--accent-soft:{{ theme_project.theme_color }}26"{% endif %}>
+<html lang="ru"{% if active_namespace %} style="--accent:{{ active_namespace.theme_color }};--accent-hover:{{ active_namespace.theme_color }};--accent-soft:{{ active_namespace.theme_color }}26"{% endif %}>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -55,6 +57,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .header{height:var(--header-height);background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px;position:sticky;top:0;z-index:50}
 .header-title{font-size:15px;font-weight:600}
 .header-actions{display:flex;gap:10px;align-items:center}
+.namespace-switcher{display:flex;align-items:center;gap:6px;min-width:0}
+.namespace-select{width:190px;max-width:26vw;height:32px;font-weight:600;color:var(--text);background:var(--surface)}
+.namespace-icon-action{width:32px;height:32px;border-radius:6px;background:var(--surface);border:1px solid var(--border);color:var(--text-secondary);display:inline-flex;align-items:center;justify-content:center;text-decoration:none;font-size:16px;font-weight:700;line-height:1}
+.namespace-icon-action:hover{background:var(--surface-hover);color:var(--text);text-decoration:none;border-color:var(--accent)}
 .btn{padding:6px 14px;border-radius:6px;font-size:13px;font-weight:500;border:1px solid transparent;cursor:pointer;transition:all .12s;font-family:inherit;white-space:nowrap}
 .btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}
 .btn-primary:hover{background:var(--accent-hover)}
@@ -182,12 +188,15 @@ textarea{resize:vertical;min-height:60px}
   .burger{display:flex}
   .header{padding:0 16px}
   .container{padding:16px}
+  .namespace-select{width:150px;max-width:42vw}
 }
 @media(max-width:480px){
   .container{padding:12px}
   .card{padding:14px}
   .card-value{font-size:22px}
   .header-title{font-size:14px}
+  .header-actions{gap:6px}
+  .namespace-select{width:128px}
 }
 
 /* ── Kanban ───────────────────────────────────────────────────────── */
@@ -206,12 +215,12 @@ textarea{resize:vertical;min-height:60px}
       <a class="brand-link" href="/" aria-label="Workflow Engine">
         <span class="brand-mark" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="{{ project_icon_path(theme_project.theme_icon if theme_project else 'project') }}"></path>
+            <path d="{{ project_icon_path(active_namespace.theme_icon if active_namespace else 'project') }}"></path>
           </svg>
         </span>
         <span class="brand-text">
-          <span class="brand-name">{{ theme_project.name if theme_project else 'workflow' }}</span>
-          <span class="brand-subname">{{ 'workflow' if theme_project else 'engine' }}</span>
+          <span class="brand-name">{{ active_namespace.name if active_namespace else 'workflow' }}</span>
+          <span class="brand-subname">{{ 'неймспейс' if active_namespace else 'engine' }}</span>
         </span>
       </a>
     </div>
@@ -235,9 +244,9 @@ textarea{resize:vertical;min-height:60px}
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
       Задачи
     </a>
-    <a class="sidebar-link {% if page in ['contexts', 'projects'] %}active{% endif %}" href="/contexts">
+    <a class="sidebar-link {% if page == 'namespace' %}active{% endif %}" href="/namespace">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18"/><path d="M5 7V5a2 2 0 0 1 2-2h3"/><path d="M19 7v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7"/><path d="M9 12h6"/><path d="M9 16h4"/></svg>
-      Контуры
+      Неймспейс
     </a>
     <div class="sidebar-section">УПРАВЛЕНИЕ</div>
     <a class="sidebar-link {% if page == 'agents' %}active{% endif %}" href="/agents">
@@ -263,6 +272,17 @@ textarea{resize:vertical;min-height:60px}
       <span class="header-title">{% block header_title %}{% endblock %}</span>
     </div>
     <div class="header-actions">
+      {% if namespaces is defined and namespaces %}
+      <div class="namespace-switcher">
+        <select class="namespace-select" id="namespaceSelector" aria-label="Неймспейс" onchange="switchNamespace(this.value)">
+          {% for namespace in namespaces %}
+          <option value="{{ namespace.id }}" {% if active_namespace_id == namespace.id %}selected{% endif %}>{{ namespace.name }}</option>
+          {% endfor %}
+        </select>
+        <a class="namespace-icon-action" href="/namespace/new{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}" title="Создать неймспейс" aria-label="Создать неймспейс">+</a>
+        <a class="namespace-icon-action" href="/namespace{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}" title="Редактировать неймспейс" aria-label="Редактировать неймспейс">✎</a>
+      </div>
+      {% endif %}
       {% block header_actions %}{% endblock %}
     </div>
   </header>
@@ -298,6 +318,13 @@ function showToast(msg, type){
 }
 function showRequestError(){
   showToast('Не удалось связаться с сервером','error');
+}
+function switchNamespace(namespaceId){
+  if(!namespaceId){return;}
+  document.cookie='workflow_namespace_id='+encodeURIComponent(namespaceId)+'; path=/; SameSite=Lax';
+  var url=new URL(window.location.href);
+  url.searchParams.set('namespace_id', namespaceId);
+  window.location.href=url.toString();
 }
 function pluralizeRu(n, one, few, many){
   if(n % 10 === 1 && n % 100 !== 11){ return n + ' ' + one; }

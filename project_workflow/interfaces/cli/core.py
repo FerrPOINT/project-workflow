@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from collections.abc import Sequence
@@ -23,6 +24,7 @@ from ...domain.validation import TaskKeyValidationError
 console = Console()
 
 WARN = "[yellow]WARN[/yellow]"
+NAMESPACE_ENV_VAR = "PROJECT_WORKFLOW_NAMESPACE_ID"
 
 
 def _format_options(command: click.Command, ctx: click.Context, formatter: click.HelpFormatter) -> None:
@@ -172,7 +174,7 @@ def _get_task_key_validator(uow=None, project_id: int | None = None) -> task_val
 
 
 def _require_valid_key(task_key: str, uow=None, project_id: int | None = None) -> str:
-    """Проверить валидность ключа задачи по контурам из БД."""
+    """Проверить валидность ключа задачи по неймспейсам из БД."""
     if uow is None:
         validator = (
             _get_task_key_validator()
@@ -187,44 +189,70 @@ def _require_valid_key(task_key: str, uow=None, project_id: int | None = None) -
         )
     validated = validator.validate(task_key)
     if not validated.is_valid:
-        raise TaskKeyValidationError(task_key, validated.error_message or "неизвестный префикс контура")
+        raise TaskKeyValidationError(task_key, validated.error_message or "неизвестный префикс неймспейса")
     return validated.normalized or task_key
 
 
-def _resolve_context_id(uow: Any, context: str | None) -> int | None:
-    """Resolve optional workflow context selector from an id, exact code, or exact name."""
-    if context is None or not context.strip():
+def _project_dicts(uow: Any) -> list[dict[str, Any]]:
+    return [item.to_dict() if hasattr(item, "to_dict") else dict(item) for item in uow.projects.list()]
+
+
+def _resolve_namespace_id(uow: Any, namespace: str | None) -> int | None:
+    """Resolve optional namespace selector from an id, exact legacy code, name, or CLI command."""
+    if namespace is None or not namespace.strip():
         return None
-    selector = context.strip()
-    projects = [item.to_dict() if hasattr(item, "to_dict") else dict(item) for item in uow.projects.list()]
+    selector = namespace.strip()
+    projects = _project_dicts(uow)
     if selector.isdecimal():
         project_id = int(selector)
         if any(item.get("id") == project_id for item in projects):
             return project_id
-        raise ValueError(f"Контур {project_id} не найден")
+        raise ValueError(f"Неймспейс {project_id} не найден")
     matches = [
         item
         for item in projects
         if str(item.get("code") or "").casefold() == selector.casefold()
         or str(item.get("name") or "").casefold() == selector.casefold()
+        or str(item.get("cli_command") or "").casefold() == selector.casefold()
     ]
     if not matches:
-        raise ValueError(f"Контур {selector!r} не найден")
+        raise ValueError(f"Неймспейс {selector!r} не найден")
     if len(matches) > 1:
-        raise ValueError(f"Контур {selector!r} неоднозначен; укажите ID")
+        raise ValueError(f"Неймспейс {selector!r} неоднозначен; укажите ID")
     resolved_project_id = matches[0].get("id")
     if (
         not isinstance(resolved_project_id, int)
         or isinstance(resolved_project_id, bool)
         or resolved_project_id <= 0
     ):
-        raise ValueError(f"Контур {selector!r} имеет некорректный id")
+        raise ValueError(f"Неймспейс {selector!r} имеет некорректный id")
     return resolved_project_id
 
 
+def _resolve_namespace_id_from_env(uow: Any) -> int | None:
+    """Resolve the wrapper-selected namespace id from ``PROJECT_WORKFLOW_NAMESPACE_ID``."""
+    raw = os.environ.get(NAMESPACE_ENV_VAR)
+    if raw is None or not raw.strip():
+        return None
+    selector = raw.strip()
+    if not selector.isdecimal():
+        raise ValueError(f"{NAMESPACE_ENV_VAR} должен содержать положительный ID неймспейса")
+    namespace_id = int(selector)
+    if namespace_id <= 0:
+        raise ValueError(f"{NAMESPACE_ENV_VAR} должен содержать положительный ID неймспейса")
+    if not any(item.get("id") == namespace_id for item in _project_dicts(uow)):
+        raise ValueError(f"Неймспейс {namespace_id} не найден")
+    return namespace_id
+
+
+def _resolve_context_id(uow: Any, context: str | None) -> int | None:
+    """Backward-compatible alias for old callers; prefer ``_resolve_namespace_id``."""
+    return _resolve_namespace_id(uow, context)
+
+
 def _resolve_project_id(uow: Any, project: str | None) -> int | None:
-    """Backward-compatible alias for old callers; prefer ``_resolve_context_id``."""
-    return _resolve_context_id(uow, project)
+    """Backward-compatible alias for old callers; prefer ``_resolve_namespace_id``."""
+    return _resolve_namespace_id(uow, project)
 
 
 def blocked_result(task_key: str, message: str, phase_code: str = "") -> dict[str, Any]:
@@ -265,8 +293,11 @@ __all__ = [
     "cli",
     "out_json",
     "_require_valid_key",
+    "_resolve_namespace_id",
+    "_resolve_namespace_id_from_env",
     "_resolve_context_id",
     "_resolve_project_id",
+    "NAMESPACE_ENV_VAR",
     "blocked_result",
     "console",
     "WARN",

@@ -8,12 +8,15 @@ from fastapi import Query
 from fastapi.responses import JSONResponse
 
 from project_workflow.domain.exceptions import ConflictError, LastPhaseError, NotFoundError
+from project_workflow.domain.namespace import legacy_code_from_cli_command
 from project_workflow.interfaces.ui.schemas import (
     AgentCreate,
     AgentUpdate,
     InstructionCreate,
     InstructionReorder,
     InstructionUpdate,
+    NamespaceCreate,
+    NamespaceUpdate,
     PhaseCreate,
     PhaseOrderUpdate,
     PhaseUpdate,
@@ -33,6 +36,32 @@ def _error(message: str, status: int) -> JSONResponse:
 def _updates_from_payload(payload: Any, fields: list[str]) -> dict[str, Any]:
     """Build updates from explicitly supplied fields, preserving nullable clears."""
     return {key: getattr(payload, key) for key in fields if key in payload.model_fields_set}
+
+
+def _with_namespace_aliases(item: dict[str, Any]) -> dict[str, Any]:
+    """Expose canonical namespace keys while preserving legacy aliases."""
+    namespace = dict(item)
+    namespace["namespace_id"] = namespace.get("id")
+    namespace["namespace_code"] = namespace.get("code")
+    namespace["namespace_name"] = namespace.get("name")
+    namespace["namespace_theme_icon"] = namespace.get("theme_icon")
+    namespace["namespace_theme_color"] = namespace.get("theme_color")
+    namespace["namespace_cli_command"] = namespace.get("cli_command")
+    return namespace
+
+
+def _unique_legacy_code(command: str, existing: list[dict[str, Any]]) -> str:
+    desired = legacy_code_from_cli_command(command)
+    used = {str(item.get("code") or "").upper() for item in existing}
+    if desired not in used:
+        return desired
+    suffix = 2
+    base = desired[:28]
+    while True:
+        candidate = f"{base}{suffix}"
+        if candidate not in used:
+            return candidate
+        suffix += 1
 
 
 async def api_settings_get() -> dict[str, Any] | JSONResponse:
@@ -77,18 +106,36 @@ async def api_phases(workflow_id: int | None = Query(default=None)) -> dict[str,
     return result
 
 
-async def api_tasks(workflow_id: int | None = Query(default=None)) -> dict[str, Any] | JSONResponse:
-    tasks = _load_tasks()
+async def api_tasks(
+    workflow_id: int | None = Query(default=None),
+    namespace_id: int | None = Query(default=None),
+) -> dict[str, Any] | JSONResponse:
+    tasks = _load_tasks(namespace_id=namespace_id)
     if workflow_id is not None:
         tasks = [t for t in tasks if t.get("workflow_id") == workflow_id]
     return {"ok": True, "tasks": tasks}
 
 
-async def api_projects() -> dict[str, Any] | JSONResponse:
-    from project_workflow.interfaces.ui.services import _load_projects
+async def api_namespaces() -> dict[str, Any] | JSONResponse:
+    from project_workflow.interfaces.ui.services import _load_namespaces
 
-    contexts = _load_projects()
-    return {"ok": True, "contexts": contexts, "projects": contexts}
+    namespaces = [_with_namespace_aliases(item) for item in _load_namespaces()]
+    return {"ok": True, "namespaces": namespaces}
+
+
+async def api_namespace_get(namespace_id: int) -> dict[str, Any] | JSONResponse:
+    namespace = _app_state.project_service().get_project(namespace_id)
+    if namespace is None:
+        return _error(f"Неймспейс {namespace_id} не найден", 404)
+    payload = _with_namespace_aliases(namespace)
+    return {"ok": True, "namespace": payload}
+
+
+async def api_projects() -> dict[str, Any] | JSONResponse:
+    from project_workflow.interfaces.ui.services import _load_namespaces
+
+    contexts = [_with_namespace_aliases(item) for item in _load_namespaces()]
+    return {"ok": True, "namespaces": contexts, "contexts": contexts, "projects": contexts}
 
 
 async def api_workflows() -> dict[str, Any] | JSONResponse:
@@ -233,6 +280,76 @@ async def api_workflow_delete(workflow_id: int) -> dict[str, Any] | JSONResponse
     return {"ok": True}
 
 
+async def api_namespace_create(payload: NamespaceCreate) -> dict[str, Any] | JSONResponse:
+    if "description" in payload.model_fields_set and payload.description is None:
+        return _error("description не может быть null", 422)
+    service = _app_state.project_service()
+    existing = service.list_projects()
+    try:
+        namespace = service.create_project(
+            {
+                "code": _unique_legacy_code(payload.cli_command, existing),
+                "name": payload.name,
+                "description": payload.description or "",
+                "theme_icon": payload.theme_icon,
+                "theme_color": payload.theme_color,
+                "cli_command": payload.cli_command,
+                "key_prefixes": list(payload.key_prefixes),
+                "workflow_id": payload.workflow_id,
+            }
+        )
+    except ConflictError as exc:
+        return _error(str(exc), 409)
+    except NotFoundError as exc:
+        return _error(str(exc), 404)
+    except ValueError as exc:
+        return _error(str(exc), 422)
+    namespace_id = namespace["id"]
+    context = _with_namespace_aliases(service.get_project(namespace_id) or namespace)
+    return {
+        "ok": True,
+        "namespace_id": namespace_id,
+        "namespace": context,
+        "context_id": namespace_id,
+        "context": context,
+        "project_id": namespace_id,
+        "project": context,
+    }
+
+
+async def api_namespace_update(namespace_id: int, payload: NamespaceUpdate) -> dict[str, Any] | JSONResponse:
+    service = _app_state.project_service()
+    updates = _updates_from_payload(
+        payload,
+        ["name", "description", "workflow_id", "theme_icon", "theme_color", "cli_command"],
+    )
+    if payload.key_prefixes is not None:
+        updates["key_prefixes"] = list(payload.key_prefixes)
+    try:
+        service.update_project(namespace_id, updates)
+    except ConflictError as exc:
+        return _error(str(exc), 409)
+    except NotFoundError as exc:
+        return _error(str(exc), 404)
+    except ValueError as exc:
+        return _error(str(exc), 422)
+    context = _with_namespace_aliases(service.get_project(namespace_id) or {})
+    return {"ok": True, "namespace": context, "context": context, "project": context}
+
+
+async def api_namespace_delete(namespace_id: int) -> dict[str, Any] | JSONResponse:
+    service = _app_state.project_service()
+    try:
+        service.delete_project(namespace_id)
+    except NotFoundError as exc:
+        return _error(str(exc), 404)
+    except ConflictError as exc:
+        return _error(str(exc), 409)
+    except ValueError as exc:
+        return _error(str(exc), 422)
+    return {"ok": True}
+
+
 async def api_project_create(payload: ProjectCreate) -> dict[str, Any] | JSONResponse:
     if "description" in payload.model_fields_set and payload.description is None:
         return _error("description не может быть null", 422)
@@ -245,6 +362,7 @@ async def api_project_create(payload: ProjectCreate) -> dict[str, Any] | JSONRes
                 "description": payload.description or "",
                 "theme_icon": payload.theme_icon,
                 "theme_color": payload.theme_color,
+                "cli_command": payload.cli_command,
                 "key_prefixes": list(payload.key_prefixes),
                 "workflow_id": payload.workflow_id,
             }
@@ -256,9 +374,11 @@ async def api_project_create(payload: ProjectCreate) -> dict[str, Any] | JSONRes
     except ValueError as exc:
         return _error(str(exc), 422)
     project_id = project["id"]
-    context = service.get_project(project_id)
+    context = _with_namespace_aliases(service.get_project(project_id) or project)
     return {
         "ok": True,
+        "namespace_id": project_id,
+        "namespace": context,
         "context_id": project_id,
         "context": context,
         "project_id": project_id,
@@ -270,7 +390,7 @@ async def api_project_update(project_id: int, payload: ProjectUpdate) -> dict[st
     service = _app_state.project_service()
     updates = _updates_from_payload(
         payload,
-        ["code", "name", "description", "workflow_id", "theme_icon", "theme_color"],
+        ["code", "name", "description", "workflow_id", "theme_icon", "theme_color", "cli_command"],
     )
     if payload.key_prefixes is not None:
         updates["key_prefixes"] = list(payload.key_prefixes)
@@ -282,21 +402,12 @@ async def api_project_update(project_id: int, payload: ProjectUpdate) -> dict[st
         return _error(str(exc), 404)
     except ValueError as exc:
         return _error(str(exc), 422)
-    context = service.get_project(project_id)
-    return {"ok": True, "context": context, "project": context}
+    context = _with_namespace_aliases(service.get_project(project_id) or {})
+    return {"ok": True, "namespace": context, "context": context, "project": context}
 
 
 async def api_project_delete(project_id: int) -> dict[str, Any] | JSONResponse:
-    service = _app_state.project_service()
-    try:
-        service.delete_project(project_id)
-    except NotFoundError as exc:
-        return _error(str(exc), 404)
-    except ConflictError as exc:
-        return _error(str(exc), 409)
-    except ValueError as exc:
-        return _error(str(exc), 422)
-    return {"ok": True}
+    return await api_namespace_delete(project_id)
 
 
 async def api_agent_create(payload: AgentCreate) -> dict[str, Any] | JSONResponse:

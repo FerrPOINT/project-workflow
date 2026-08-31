@@ -100,7 +100,7 @@ class Workflow:
 
 @dataclass
 class Project:
-    """Domain workflow context with task key prefixes and UI branding."""
+    """Domain namespace stored in the legacy projects table."""
 
     id: int | None = None
     workflow_id: int = 0
@@ -109,6 +109,7 @@ class Project:
     description: str = ""
     theme_icon: str = DEFAULT_PROJECT_ICON
     theme_color: str = DEFAULT_PROJECT_COLOR
+    cli_command: str = ""
     key_prefixes: list[str] = field(default_factory=list)
     workflow_name: str | None = None
 
@@ -121,6 +122,7 @@ class Project:
             "description": self.description,
             "theme_icon": self.theme_icon,
             "theme_color": self.theme_color,
+            "cli_command": self.cli_command,
             "key_prefixes": self.key_prefixes,
             "workflow_name": self.workflow_name,
         }

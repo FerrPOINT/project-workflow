@@ -7,6 +7,7 @@ from typing import Annotated, Any, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from project_workflow.domain.namespace import normalize_namespace_cli_command
 from project_workflow.domain.project_theme import (
     DEFAULT_PROJECT_COLOR,
     DEFAULT_PROJECT_ICON,
@@ -189,6 +190,7 @@ class ProjectCreate(StrictRequest):
     workflow_id: int = Field(gt=0, strict=True)
     theme_icon: str = Field(default=DEFAULT_PROJECT_ICON)
     theme_color: str = Field(default=DEFAULT_PROJECT_COLOR)
+    cli_command: str | None = Field(default=None, min_length=1, max_length=64)
     key_prefixes: list[str]
 
     @field_validator("code")
@@ -210,6 +212,11 @@ class ProjectCreate(StrictRequest):
     @classmethod
     def _theme_color_valid(cls, value: str) -> str:
         return normalize_theme_color(value)
+
+    @field_validator("cli_command")
+    @classmethod
+    def _cli_command_valid(cls, value: str | None) -> str | None:
+        return normalize_namespace_cli_command(value) if value is not None else None
 
     @field_validator("key_prefixes", mode="before")
     @classmethod
@@ -248,7 +255,16 @@ class ProjectCreate(StrictRequest):
 
 class ProjectUpdate(StrictUpdateRequest):
     non_nullable_fields = frozenset(
-        {"code", "name", "description", "workflow_id", "theme_icon", "theme_color", "key_prefixes"}
+        {
+            "code",
+            "name",
+            "description",
+            "workflow_id",
+            "theme_icon",
+            "theme_color",
+            "cli_command",
+            "key_prefixes",
+        }
     )
 
     code: str | None = Field(default=None, min_length=1)
@@ -257,6 +273,7 @@ class ProjectUpdate(StrictUpdateRequest):
     workflow_id: int | None = Field(default=None, gt=0, strict=True)
     theme_icon: str | None = Field(default=None)
     theme_color: str | None = Field(default=None)
+    cli_command: str | None = Field(default=None, min_length=1, max_length=64)
     key_prefixes: list[str] | None = Field(default=None)
 
     @field_validator("code", "name")
@@ -273,6 +290,11 @@ class ProjectUpdate(StrictUpdateRequest):
     @classmethod
     def _theme_color_valid(cls, value: str | None) -> str | None:
         return normalize_theme_color(value) if value is not None else None
+
+    @field_validator("cli_command")
+    @classmethod
+    def _cli_command_valid(cls, value: str | None) -> str | None:
+        return normalize_namespace_cli_command(value) if value is not None else None
 
     @field_validator("key_prefixes", mode="before")
     @classmethod
@@ -300,6 +322,90 @@ class ProjectUpdate(StrictUpdateRequest):
             if len(prefix) < 2:
                 raise ValueError(f"Префикс '{prefix}' слишком короткий: нужно не менее 2 символов")
         return value
+
+
+class NamespaceCreate(StrictRequest):
+    name: str
+    description: str | None = Field(default="")
+    workflow_id: int = Field(gt=0, strict=True)
+    theme_icon: str = Field(default=DEFAULT_PROJECT_ICON)
+    theme_color: str = Field(default=DEFAULT_PROJECT_COLOR)
+    cli_command: str = Field(..., min_length=1, max_length=64)
+    key_prefixes: list[str]
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str) -> str:
+        return _strip_nonblank(value, "name")
+
+    @field_validator("theme_icon")
+    @classmethod
+    def _theme_icon_valid(cls, value: str) -> str:
+        return normalize_theme_icon(value)
+
+    @field_validator("theme_color")
+    @classmethod
+    def _theme_color_valid(cls, value: str) -> str:
+        return normalize_theme_color(value)
+
+    @field_validator("cli_command")
+    @classmethod
+    def _cli_command_valid(cls, value: str) -> str:
+        return normalize_namespace_cli_command(value)
+
+    @field_validator("key_prefixes", mode="before")
+    @classmethod
+    def _validate_key_prefixes(cls, value: Any) -> list[str]:
+        return ProjectCreate._validate_key_prefixes(value)
+
+    @field_validator("key_prefixes", mode="after")
+    @classmethod
+    def _validate_prefix_format(cls, value: list[str]) -> list[str]:
+        return ProjectCreate._validate_prefix_format(ProjectCreate._ensure_prefixes_not_empty(value))
+
+
+class NamespaceUpdate(StrictUpdateRequest):
+    non_nullable_fields = frozenset(
+        {"name", "description", "workflow_id", "theme_icon", "theme_color", "cli_command", "key_prefixes"}
+    )
+
+    name: str | None = Field(default=None)
+    description: str | None = Field(default=None)
+    workflow_id: int | None = Field(default=None, gt=0, strict=True)
+    theme_icon: str | None = Field(default=None)
+    theme_color: str | None = Field(default=None)
+    cli_command: str | None = Field(default=None, min_length=1, max_length=64)
+    key_prefixes: list[str] | None = Field(default=None)
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str | None) -> str | None:
+        return _strip_nonblank(value, "name") if value is not None else None
+
+    @field_validator("theme_icon")
+    @classmethod
+    def _theme_icon_valid(cls, value: str | None) -> str | None:
+        return normalize_theme_icon(value) if value is not None else None
+
+    @field_validator("theme_color")
+    @classmethod
+    def _theme_color_valid(cls, value: str | None) -> str | None:
+        return normalize_theme_color(value) if value is not None else None
+
+    @field_validator("cli_command")
+    @classmethod
+    def _cli_command_valid(cls, value: str | None) -> str | None:
+        return normalize_namespace_cli_command(value) if value is not None else None
+
+    @field_validator("key_prefixes", mode="before")
+    @classmethod
+    def _validate_key_prefixes(cls, value: Any) -> list[str] | None:
+        return ProjectUpdate._validate_key_prefixes(value)
+
+    @field_validator("key_prefixes", mode="after")
+    @classmethod
+    def _validate_prefix_format(cls, value: list[str] | None) -> list[str] | None:
+        return ProjectUpdate._validate_prefix_format(value)
 
 
 class AgentCreate(StrictRequest):

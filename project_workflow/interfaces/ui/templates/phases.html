@@ -2,7 +2,7 @@
 
 {% block title %}Фазы воркфлоу — Workflow Engine{% endblock %}
 {% block header_title %}Фазы воркфлоу{% endblock %}
-{% block header_actions %}<a href="/workflows" class="btn btn-secondary">← К воркфлоу</a>{% endblock %}
+{% block header_actions %}<a href="/workflows{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary">← К воркфлоу</a>{% endblock %}
 
 {% block extra_style %}
 .phases-layout{display:grid;grid-template-columns:280px minmax(0,1fr);gap:20px;align-items:start}
@@ -76,7 +76,7 @@
     <a class="workflow-nav-item {% if selected_workflow_id == workflow.id %}active{% endif %}" href="/phases?workflow_id={{ workflow.id }}" data-workflow-id="{{ workflow.id }}">
       <div class="workflow-name">{{ workflow.name }}</div>
       <div class="workflow-meta">
-        <span class="workflow-chip">{{ workflow.context_count | pluralize('контур,контура,контуров') }}</span>
+        <span class="workflow-chip">{{ workflow.namespace_count | pluralize('неймспейс,неймспейса,неймспейсов') }}</span>
         <span class="workflow-chip">{{ workflow.phase_count | pluralize('фаза,фазы,фаз') }}</span>
       </div>
     </a>

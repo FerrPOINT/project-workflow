@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from project_workflow.domain import Project
 from project_workflow.domain.exceptions import NotFoundError
+from project_workflow.domain.namespace import default_cli_command_from_code
 from project_workflow.domain.repositories import ProjectRepository
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.repositories.converters import _row_to_project
@@ -42,6 +43,12 @@ class SAProjectRepository(ProjectRepository):
         row = self._session.execute(select(m.Project).where(m.Project.code == code)).scalar_one_or_none()
         return _row_to_project(row) if row else None
 
+    def get_by_cli_command(self, cli_command: str) -> Project | None:
+        row = self._session.execute(
+            select(m.Project).where(m.Project.cli_command == cli_command)
+        ).scalar_one_or_none()
+        return _row_to_project(row) if row else None
+
     def lock(self, project_id: int) -> Project | None:
         row = self._session.execute(
             select(m.Project).where(m.Project.id == project_id).with_for_update()
@@ -66,6 +73,7 @@ class SAProjectRepository(ProjectRepository):
             description=data.get("description", ""),
             theme_icon=data.get("theme_icon", "project"),
             theme_color=data.get("theme_color", "#5E6AD2"),
+            cli_command=data.get("cli_command") or default_cli_command_from_code(data["code"]),
             key_prefixes=_serialize_key_prefixes(data.get("key_prefixes")),
         )
         self._session.add(item)
@@ -75,7 +83,7 @@ class SAProjectRepository(ProjectRepository):
     def update(self, project_id: int, data: dict[str, Any]) -> None:
         row = self._session.get(m.Project, project_id)
         if row is None:
-            raise NotFoundError(f"Проект {project_id} не найден")
+            raise NotFoundError(f"Неймспейс {project_id} не найден")
         if "workflow_id" in data:
             row.workflow_id = data["workflow_id"]
         if "code" in data:
@@ -88,13 +96,15 @@ class SAProjectRepository(ProjectRepository):
             row.theme_icon = data["theme_icon"]
         if "theme_color" in data:
             row.theme_color = data["theme_color"]
+        if "cli_command" in data:
+            row.cli_command = data["cli_command"]
         if "key_prefixes" in data:
             row.key_prefixes = _serialize_key_prefixes(data["key_prefixes"])
 
     def delete(self, project_id: int) -> None:
         row = self._session.get(m.Project, project_id)
         if row is None:
-            raise NotFoundError(f"Проект {project_id} не найден")
+            raise NotFoundError(f"Неймспейс {project_id} не найден")
         self._session.delete(row)
 
 
