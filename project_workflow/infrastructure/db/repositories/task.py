@@ -42,7 +42,7 @@ class SATaskRepository(TaskRepository):
         if not rows:
             return None
         if workflow_id is None and project_id is None and len(rows) > 1:
-            raise ConflictError(f"Задача {task_key!r} есть в нескольких неймспейсах; укажите wrapper-команду")
+            raise ConflictError(f"Задача {task_key!r} доступна через несколько CLI-команд; укажите wrapper-команду")
         return _row_to_task(rows[0])
 
     def get_by_id(self, task_id: int) -> Task | None:

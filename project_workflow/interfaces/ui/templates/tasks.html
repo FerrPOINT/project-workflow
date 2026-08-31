@@ -51,7 +51,7 @@
     <thead>
       <tr>
         <th>Ключ</th>
-        <th>Неймспейс</th>
+        <th>CLI</th>
         <th>Флоу</th>
         <th>Название</th>
         <th>Фаза</th>
@@ -68,7 +68,7 @@
         <td>
           <span class="project-pill" style="--accent:{{ t.namespace_theme_color }};--accent-soft:{{ t.namespace_theme_color }}26">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ project_icon_path(t.namespace_theme_icon) }}"></path></svg>
-            <span>{{ t.namespace_name or t.namespace_code }}</span>
+            <span>{{ t.namespace_cli_command or t.namespace_name or t.namespace_code }}</span>
           </span>
         </td>
         <td>{{ t.workflow_name or '—' }}</td>
@@ -128,7 +128,7 @@
     </div>
     {% endif %}
     <div class="row">
-      <div><span class="label">Неймспейс</span><div class="value">{{ t.namespace_name or t.namespace_code }}</div></div>
+      <div><span class="label">CLI</span><div class="value">{{ t.namespace_cli_command or t.namespace_name or t.namespace_code }}</div></div>
       <div><span class="label">Флоу</span><div class="value">{{ t.workflow_name or '—' }}</div></div>
       <div><span class="label">Фаза</span><div class="value">{{ t.current_phase_name or '—' }}</div></div>
       <div><span class="label">Прогресс</span><div class="value">{{ t.completed }}/{{ t.total_phases }}</div></div>

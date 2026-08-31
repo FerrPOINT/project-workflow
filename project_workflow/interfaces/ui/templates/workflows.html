@@ -30,7 +30,7 @@ textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:160px;resiz
     <button type="button" class="workflow-nav-item {% if selected_workflow and selected_workflow.id == workflow.id %}active{% endif %}" data-workflow-id="{{ workflow.id }}" onclick="selectWorkflow({{ workflow.id }})">
       <div class="workflow-name">{{ workflow.name }}</div>
       <div class="workflow-meta">
-        <span>{{ workflow.namespace_count | pluralize('неймспейс,неймспейса,неймспейсов') }}</span>
+        <span>{{ workflow.namespace_count | pluralize('CLI-команда,CLI-команды,CLI-команд') }}</span>
         <span>{{ workflow.phase_count | pluralize('фаза,фазы,фаз') }}</span>
       </div>
     </button>
@@ -135,7 +135,7 @@ function renderWorkflowNav(){
     meta.className = 'workflow-meta';
 
     var namespaces = document.createElement('span');
-    namespaces.textContent = pluralizeRu(workflow.namespace_count, 'неймспейс', 'неймспейса', 'неймспейсов');
+    namespaces.textContent = pluralizeRu(workflow.namespace_count, 'CLI-команда', 'CLI-команды', 'CLI-команд');
     var phases = document.createElement('span');
     phases.textContent = pluralizeRu(workflow.phase_count, 'фаза', 'фазы', 'фаз');
 

@@ -1,4 +1,4 @@
-"""Namespace branding and theme normalization."""
+"""Branding and theme normalization for configured CLI entries."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ DEFAULT_PROJECT_ICON = "project"
 DEFAULT_PROJECT_COLOR = "#5E6AD2"
 
 PROJECT_THEME_ICONS: dict[str, str] = {
-    "project": "Неймспейс",
+    "project": "Папка",
     "workflow": "Воркфлоу",
     "check": "Проверка",
     "bug": "Тестирование",
@@ -22,15 +22,15 @@ PROJECT_THEME_ICONS: dict[str, str] = {
 
 
 def normalize_theme_icon(value: Any) -> str:
-    """Return a canonical icon key from the fixed namespace icon catalog."""
+    """Return a canonical icon key from the fixed icon catalog."""
     if value is None:
         return DEFAULT_PROJECT_ICON
     if not isinstance(value, str):
-        raise ValueError("Иконка неймспейса должна быть строкой")
+        raise ValueError("Иконка должна быть строкой")
     icon = value.strip().lower()
     if icon not in PROJECT_THEME_ICONS:
         allowed = ", ".join(sorted(PROJECT_THEME_ICONS))
-        raise ValueError(f"Иконка неймспейса должна быть одной из: {allowed}")
+        raise ValueError(f"Иконка должна быть одной из: {allowed}")
     return icon
 
 
@@ -39,10 +39,10 @@ def normalize_theme_color(value: Any) -> str:
     if value is None:
         return DEFAULT_PROJECT_COLOR
     if not isinstance(value, str):
-        raise ValueError("Цвет неймспейса должен быть строкой")
+        raise ValueError("Цвет должен быть строкой")
     color = value.strip()
     if re.fullmatch(r"[0-9a-fA-F]{6}", color):
         color = f"#{color}"
     if not re.fullmatch(r"#[0-9a-fA-F]{6}", color):
-        raise ValueError("Цвет неймспейса должен быть HEX-цветом #RRGGBB")
+        raise ValueError("Цвет должен быть HEX-цветом #RRGGBB")
     return color.upper()

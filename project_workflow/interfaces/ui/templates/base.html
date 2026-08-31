@@ -37,7 +37,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .brand-mark svg{width:18px;height:18px}
 .brand-text{display:flex;flex-direction:column;min-width:0;line-height:1.1}
 .brand-name{font-size:14px;font-weight:700;color:var(--text);max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.brand-subname{font-size:11px;font-weight:600;color:var(--accent);letter-spacing:.04em;text-transform:uppercase}
+.brand-subname{font-size:11px;font-weight:600;color:var(--accent);max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sidebar-close{display:none;background:none;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;padding:0;width:32px;height:32px;align-items:center;justify-content:center}
 .sidebar-nav{flex:1;padding:12px 0;overflow-y:auto}
 .sidebar-section{padding:8px 20px;font-size:10px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-top:8px}
@@ -220,7 +220,7 @@ textarea{resize:vertical;min-height:60px}
         </span>
         <span class="brand-text">
           <span class="brand-name">{{ active_namespace.name if active_namespace else 'workflow' }}</span>
-          <span class="brand-subname">{{ 'неймспейс' if active_namespace else 'engine' }}</span>
+          <span class="brand-subname">{{ active_namespace.cli_command if active_namespace and active_namespace.cli_command else 'engine' }}</span>
         </span>
       </a>
     </div>
@@ -246,7 +246,7 @@ textarea{resize:vertical;min-height:60px}
     </a>
     <a class="sidebar-link {% if page == 'namespace' %}active{% endif %}" href="/namespace">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18"/><path d="M5 7V5a2 2 0 0 1 2-2h3"/><path d="M19 7v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7"/><path d="M9 12h6"/><path d="M9 16h4"/></svg>
-      Неймспейс
+      CLI и стиль
     </a>
     <div class="sidebar-section">УПРАВЛЕНИЕ</div>
     <a class="sidebar-link {% if page == 'agents' %}active{% endif %}" href="/agents">
@@ -274,13 +274,13 @@ textarea{resize:vertical;min-height:60px}
     <div class="header-actions">
       {% if namespaces is defined and namespaces %}
       <div class="namespace-switcher">
-        <select class="namespace-select" id="namespaceSelector" aria-label="Неймспейс" onchange="switchNamespace(this.value)">
+        <select class="namespace-select" id="namespaceSelector" aria-label="Выбор" onchange="switchNamespace(this.value)">
           {% for namespace in namespaces %}
           <option value="{{ namespace.id }}" {% if active_namespace_id == namespace.id %}selected{% endif %}>{{ namespace.name }}</option>
           {% endfor %}
         </select>
-        <a class="namespace-icon-action" href="/namespace/new{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}" title="Создать неймспейс" aria-label="Создать неймспейс">+</a>
-        <a class="namespace-icon-action" href="/namespace{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}" title="Редактировать неймспейс" aria-label="Редактировать неймспейс">✎</a>
+        <a class="namespace-icon-action" href="/namespace/new{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}" title="Добавить" aria-label="Добавить">+</a>
+        <a class="namespace-icon-action" href="/namespace{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}" title="Редактировать выбранное" aria-label="Редактировать выбранное">✎</a>
       </div>
       {% endif %}
       {% block header_actions %}{% endblock %}

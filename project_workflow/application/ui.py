@@ -174,7 +174,7 @@ class UIDataService:
                 raise ValueError(f"У задачи {t['task_key']} отсутствует корректный context_id")
             task_project = projects_by_id.get(project_id)
             if task_project is None:
-                raise ValueError(f"Для задачи {t['task_key']} не найден неймспейс {project_id}")
+                raise ValueError(f"Для задачи {t['task_key']} не найдена запись {project_id}")
             project_code = str(task_project["code"])
             project_name = str(task_project["name"])
             project_cli_command = str(task_project.get("cli_command") or "")
@@ -437,7 +437,7 @@ class UIDataService:
             raise ValueError(f"У задачи {task_key} отсутствует корректный context_id")
         project_row = wdb.projects.get_by_id(project_id)
         if project_row is None:
-            raise ValueError(f"Для задачи {task_key} не найден неймспейс {project_id}")
+            raise ValueError(f"Для задачи {task_key} не найдена запись {project_id}")
         raw_project = project_row.to_dict() if hasattr(project_row, "to_dict") else project_row
         if not isinstance(raw_project, dict) or not raw_project:
             prefix = str(task_key).split("-", 1)[0]

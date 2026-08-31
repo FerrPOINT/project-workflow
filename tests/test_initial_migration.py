@@ -348,7 +348,7 @@ def test_sqlite_initial_constraints(tmp_path):
         project_id = conn.execute(
             text(
                 "INSERT INTO projects (workflow_id, code, name, cli_command, key_prefixes) "
-                "VALUES (:workflow_id, 'P1', 'Namespace 1', 'workflow-p1', '[\"RUN\"]') RETURNING id"
+                "VALUES (:workflow_id, 'P1', 'Environment 1', 'workflow-p1', '[\"RUN\"]') RETURNING id"
             ),
             {"workflow_id": workflow_id},
         ).scalar_one()
@@ -372,7 +372,7 @@ def test_sqlite_initial_constraints(tmp_path):
         second_project_id = conn.execute(
             text(
                 "INSERT INTO projects (workflow_id, code, name, cli_command, key_prefixes) "
-                "VALUES (:workflow_id, 'P2', 'Namespace 2', 'workflow-p2', '[\"RUN\"]') RETURNING id"
+                "VALUES (:workflow_id, 'P2', 'Environment 2', 'workflow-p2', '[\"RUN\"]') RETURNING id"
             ),
             {"workflow_id": second_workflow_id},
         ).scalar_one()

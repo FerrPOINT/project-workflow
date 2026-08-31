@@ -1,4 +1,4 @@
-"""Task-key validation against namespace prefixes stored in PostgreSQL."""
+"""Task-key validation against configured prefixes stored in PostgreSQL."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ def _prefixes_to_regex(prefixes: list[str]) -> str:
 
 
 class TaskKeyValidator:
-    """Validate task keys using the namespaces currently configured in the database."""
+    """Validate task keys using the prefixes currently configured in the database."""
 
     REJECT_PATTERNS = [
         (r"^-", "Ключ не может начинаться с дефиса"),
@@ -56,12 +56,12 @@ class TaskKeyValidator:
         for project in project_prefixes:
             project_code = project.get("code")
             if not isinstance(project_code, str) or not project_code.strip():
-                raise ValueError("code неймспейса должен быть непустой строкой")
+                raise ValueError("code должен быть непустой строкой")
             raw_prefixes = project.get("key_prefixes") or []
             if not isinstance(raw_prefixes, list) or not all(
                 isinstance(prefix, str) for prefix in raw_prefixes
             ):
-                raise ValueError("key_prefixes неймспейса должен быть массивом строк")
+                raise ValueError("key_prefixes должен быть массивом строк")
             prefixes = [prefix.strip() for prefix in raw_prefixes if prefix.strip()]
             if prefixes:
                 self.raw_prefixes.extend(prefixes)
@@ -132,7 +132,7 @@ class TaskKeyValidator:
 
     @classmethod
     def from_projects(cls, projects: list[dict[str, Any]]) -> TaskKeyValidator:
-        """Создать валидатор из namespace rows с key_prefixes."""
+        """Создать валидатор из строк с key_prefixes."""
         return cls(projects)
 
 
@@ -142,7 +142,7 @@ def get_project_for_task_key(
     workflow_id: int | None = None,
     project_id: int | None = None,
 ) -> dict[str, Any] | None:
-    """Resolve a namespace row from a task key using configured prefixes."""
+    """Resolve a row from a task key using configured prefixes."""
     match = re.fullmatch(r"(?P<prefix>[A-Z][A-Z0-9]*)-(?P<number>[0-9]+)", str(task_key).strip())
     if match is None:
         return None
@@ -158,11 +158,11 @@ def get_project_for_task_key(
         if not isinstance(key_prefixes, list) or not all(
             isinstance(item, str) for item in key_prefixes
         ):
-            raise ValueError("key_prefixes неймспейса должен быть массивом строк")
+            raise ValueError("key_prefixes должен быть массивом строк")
         if prefix in key_prefixes:
             matches.append(project_dict)
     if not matches:
         return None
     if len(matches) > 1:
-        raise ValueError(f"Для ключа задачи {task_key!r} найдено несколько неймспейсов; укажите wrapper-команду")
+        raise ValueError(f"Для ключа задачи {task_key!r} подходит несколько CLI-команд; запустите через нужный wrapper")
     return matches[0]

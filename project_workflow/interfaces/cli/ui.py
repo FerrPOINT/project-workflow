@@ -68,7 +68,7 @@ def step_cmd(
     """
     jmode = ctx.obj.get("json_mode", False)
     if (context or legacy_project) and _resolve_namespace_id_from_env_requested():
-        result = blocked_result(task, "Нельзя одновременно выбирать неймспейс через wrapper и legacy-параметр")
+        result = blocked_result(task, "Нельзя одновременно выбирать через wrapper и legacy-параметр")
         if jmode:
             out_json(result, exit_code=1)
             return
@@ -187,7 +187,7 @@ def history_cmd(
     """
     jmode = ctx.obj.get("json_mode", False)
     if (context or legacy_project) and _resolve_namespace_id_from_env_requested():
-        result = blocked_result(task, "Нельзя одновременно выбирать неймспейс через wrapper и legacy-параметр")
+        result = blocked_result(task, "Нельзя одновременно выбирать через wrapper и legacy-параметр")
         if jmode:
             out_json(result, exit_code=1)
             return

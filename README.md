@@ -7,10 +7,10 @@
 ## Что умеет
 
 - Вести задачу по шаблону фаз с инструкциями, checks, evidence и audit history.
-- Запускать несколько неймспейсов параллельно: у каждого свои workflow, задачи,
+- Запускать несколько CLI entrypoints параллельно: у каждого свои workflow, задачи,
   стиль UI, префиксы ключей и CLI-команда.
 - Держать append-only историю фаз и `step`-проверок.
-- Управлять workflow, фазами, неймспейсами, агентами и задачами через Web UI.
+- Управлять workflow, фазами, CLI entrypoints, агентами и задачами через Web UI.
 - Оставлять базовый CLI минимальным: только `step` и `history`.
 
 ## Быстрый запуск
@@ -27,9 +27,9 @@ Compose публикует PostgreSQL и API только на `127.0.0.1`. Пе
 baseline-схемы старый dev volume нужно пересоздать по
 [docs/database-reset.md](docs/database-reset.md).
 
-## Неймспейсы
+## CLI Entry Points
 
-Неймспейс - это отдельная рабочая среда. Он хранит:
+Каждая запись хранит:
 
 - название и описание;
 - привязанный workflow;
@@ -37,7 +37,7 @@ baseline-схемы старый dev volume нужно пересоздать п
 - префиксы задач;
 - пользовательскую CLI-команду.
 
-Верхний selector UI полностью переключает рабочую среду: logo/name, accent
+Верхний selector UI полностью переключает выбранную запись: logo/name, accent
 color, dashboard, список задач, detail страниц и `/phases`. Выбор хранится в
 cookie `workflow_namespace_id`; `?namespace_id=` имеет приоритет над cookie.
 
@@ -53,13 +53,13 @@ project-workflow step --task RUN-123 --report "Сделал X, проверил 
 project-workflow history --task RUN-123 --n 10
 ```
 
-Для удобной работы с несколькими неймспейсами создаются wrapper-команды:
+Для удобной работы с несколькими entrypoints создаются wrapper-команды:
 
 ```bash
 python scripts/install_namespace_clis.py --bin-dir ./.bin
 ```
 
-Скрипт читает неймспейсы из PostgreSQL, создаёт команды из `cli_command`,
+Скрипт читает записи из PostgreSQL, создаёт команды из `cli_command`,
 выставляет внутренний `PROJECT_WORKFLOW_NAMESPACE_ID=<id>` и вызывает
 `project-workflow step/history`.
 
@@ -70,9 +70,9 @@ workflow-qa step --task RUN-42 --report "Проверил сценарии"
 workflow-dev history --task RUN-42
 ```
 
-Так одна внешняя задача может существовать в нескольких неймспейсах независимо,
+Так одна внешняя задача может существовать в нескольких entrypoints независимо,
 а executor получает в `phase_contract.cli_actor.entrypoint` именно configured
-CLI-команду нужной рабочей среды.
+CLI-команду нужной записи.
 
 ## Разработка
 

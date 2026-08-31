@@ -144,7 +144,7 @@ def setup_db(isolate_ui_runtime_state, request):
         default_project_id = uow.projects.create(
             {
                 "code": config.DEFAULT_PROJECT_CODE,
-                "name": "Default Namespace",
+                "name": "Default Environment",
                 "cli_command": config.DEFAULT_NAMESPACE_CLI_COMMAND,
                 "workflow_id": default_workflow.id,
                 "key_prefixes": list(config.DEFAULT_TASK_KEY_PREFIXES),
@@ -197,7 +197,7 @@ def setup_db(isolate_ui_runtime_state, request):
         project_id = uow.projects.create(
             {
                 "code": "UITEST",
-                "name": "UI Test Namespace",
+                "name": "UI Test Environment",
                 "cli_command": "workflow-uitest",
                 "workflow_id": default_workflow.id,
                 "key_prefixes": ["UITEST"],
@@ -213,7 +213,7 @@ def setup_db(isolate_ui_runtime_state, request):
                 "project_id": project_id,
                 "workflow_id": default_workflow.id,
                 "task_key": "UITEST-401",
-                "title": "Проверка namespace-aware UI",
+                "title": "Проверка выбора в UI",
                 "status": "active",
                 "current_phase_id": intake_phase.id,
             }
@@ -225,7 +225,7 @@ def setup_db(isolate_ui_runtime_state, request):
             ui_task.id,
             {
                 "project_id": project_id,
-                "title": "Проверка namespace-aware UI",
+                "title": "Проверка выбора в UI",
                 "status": "active",
                 "current_phase_id": intake_phase.id,
             },
@@ -247,7 +247,7 @@ class TestIndexPage:
         assert response.headers["content-type"] == "text/html; charset=utf-8"
         assert "Дашборд" in response.text
         assert "Незавершённые задачи" in response.text
-        assert "Неймспейсы" in response.text
+        assert "CLI" in response.text
 
     def test_index_has_nav(self):
         response = client.get("/")
@@ -260,7 +260,7 @@ class TestIndexPage:
         response = client.get(f"/?namespace_id={namespace_id}")
         assert response.status_code == 200
         assert "UITEST-401" in response.text
-        assert "UI Test Namespace" in response.text
+        assert "UI Test Environment" in response.text
 
     def test_index_stays_minimal_and_hides_dashboard_technical_noise(self):
         response = client.get("/")
@@ -318,7 +318,7 @@ class TestPhasesPage:
         response = client.get("/phases")
         assert response.status_code == 200
         assert 'href="/namespace"' in response.text
-        assert "Неймспейс" in response.text
+        assert "CLI и стиль" in response.text
 
     def test_sidebar_has_workflows_link(self):
         response = client.get("/phases")
@@ -1184,7 +1184,7 @@ class TestTasksPage:
         namespace_id = _as_dict(uow.projects.get_by_code("UITEST"))["id"]
         response = client.get(f"/tasks?namespace_id={namespace_id}")
         assert response.status_code == 200
-        assert "Неймспейс" in response.text
+        assert "CLI" in response.text
         assert "UITEST" in response.text
 
     def test_tasks_page_hides_dead_filters_search_and_pagination(self):
@@ -1276,8 +1276,8 @@ class TestTaskDetail:
         namespace_id = _as_dict(uow.projects.get_by_code("UITEST"))["id"]
         response = client.get(f"/task/UITEST-401?namespace_id={namespace_id}")
         assert response.status_code == 200
-        assert "Неймспейс" in response.text
-        assert "UITEST — UI Test Namespace" in response.text
+        assert "CLI" in response.text
+        assert "workflow-uitest" in response.text
 
     def test_tasks_api_resolves_negative_phase_code_to_phase_name(self):
         response = client.get("/api/tasks")
@@ -1320,17 +1320,17 @@ class TestProjectsPage:
         response = client.get("/namespace")
         assert response.status_code == 200
         assert response.headers["content-type"] == "text/html; charset=utf-8"
-        assert "Неймспейс" in response.text
+        assert "CLI-команда" in response.text
 
     def test_legacy_projects_page_alias_returns_namespace(self):
         response = client.get("/projects")
         assert response.status_code == 200
-        assert "Неймспейс" in response.text
+        assert "CLI-команда" in response.text
 
     def test_namespace_page_shows_rows_and_key_prefixes(self):
         response = client.get("/namespace")
         assert response.status_code == 200
-        assert "UI Test Namespace" in response.text
+        assert "UI Test Environment" in response.text
         assert "UITEST" in response.text
         assert "Префиксы ключей задач" in response.text
 

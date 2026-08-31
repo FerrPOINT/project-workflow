@@ -1,4 +1,4 @@
-"""Install namespace-specific wrapper commands for project-workflow."""
+"""Install configured wrapper commands for project-workflow."""
 
 from __future__ import annotations
 
@@ -56,10 +56,10 @@ def install_namespace_clis(bin_dir: Path) -> list[Path]:
     for namespace in _load_namespaces():
         namespace_id = namespace.get("id")
         if not isinstance(namespace_id, int) or isinstance(namespace_id, bool) or namespace_id <= 0:
-            raise ValueError("В БД найден неймспейс с некорректным id")
+            raise ValueError("В БД найдена запись с некорректным id")
         command = normalize_namespace_cli_command(namespace.get("cli_command"))
         if command in seen_commands:
-            raise ValueError(f"CLI-команда неймспейса {command!r} встречается несколько раз")
+            raise ValueError(f"CLI-команда {command!r} встречается несколько раз")
         seen_commands.add(command)
 
         posix_path = bin_dir / command
@@ -80,14 +80,14 @@ def _configure_output_encoding() -> None:
 
 def main(argv: list[str] | None = None) -> int:
     _configure_output_encoding()
-    parser = argparse.ArgumentParser(description="Install namespace-specific project-workflow CLI wrappers.")
+    parser = argparse.ArgumentParser(description="Install configured project-workflow CLI wrappers.")
     parser.add_argument("--bin-dir", required=True, type=Path, help="Directory where wrapper commands will be written.")
     args = parser.parse_args(argv)
 
     bin_dir = args.bin_dir.expanduser()
     generated = install_namespace_clis(bin_dir)
     if not generated:
-        print("Неймспейсы не найдены, wrapper-команды не созданы.")
+        print("Записи не найдены, wrapper-команды не созданы.")
         return 0
     for path in generated:
         print(f"Создан wrapper: {path}")

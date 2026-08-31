@@ -4,7 +4,7 @@
 {% block header_title %}Дашборд{% endblock %}
 {% block header_actions %}
   <a href="/tasks" class="btn btn-secondary">Задачи</a>
-  <a href="/namespace" class="btn btn-secondary">Неймспейс</a>
+  <a href="/namespace" class="btn btn-secondary">CLI и стиль</a>
 {% endblock %}
 
 {% block extra_style %}
@@ -25,7 +25,7 @@
 
 {% block content %}
 <div class="dashboard-grid">
-  <section class="metric-card"><div class="metric-label">Неймспейсы</div><div class="metric-value">{{ stats.namespaces }}</div></section>
+  <section class="metric-card"><div class="metric-label">CLI</div><div class="metric-value">{{ stats.namespaces }}</div></section>
   <section class="metric-card"><div class="metric-label">Задачи</div><div class="metric-value">{{ stats.tasks }}</div></section>
   <section class="metric-card"><div class="metric-label">Активные</div><div class="metric-value">{{ stats.active }}</div></section>
   <section class="metric-card"><div class="metric-label">Завершённые</div><div class="metric-value">{{ stats.done }}</div></section>
@@ -57,7 +57,7 @@
 
   {% if namespaces %}
   <section class="card">
-    <div class="card-title" style="margin-bottom:14px">Неймспейсы</div>
+    <div class="card-title" style="margin-bottom:14px">CLI</div>
     <div class="list-stack">
       {% for project in namespaces %}
       <a href="/namespace?namespace_id={{ project.id }}" class="list-item">

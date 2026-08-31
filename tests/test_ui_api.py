@@ -37,7 +37,7 @@ def client():
         uow.projects.create(
             {
                 "code": config.DEFAULT_PROJECT_CODE,
-                "name": "Default Namespace",
+                "name": "Default Environment",
                 "workflow_id": default_workflow.id,
                 "cli_command": config.DEFAULT_NAMESPACE_CLI_COMMAND,
                 "key_prefixes": ["RUN"],
@@ -119,12 +119,12 @@ class TestIndex:
     def test_projects_page(self, client):
         resp = client.get("/contexts")
         assert resp.status_code == 200
-        assert "Неймспейс" in resp.text
+        assert "CLI-команда" in resp.text
 
     def test_tasks_page_has_namespace_column(self, client):
         resp = client.get("/tasks")
         assert resp.status_code == 200
-        assert "Неймспейс" in resp.text
+        assert "CLI" in resp.text
 
     def test_header_has_namespace_selector_and_actions(self, client):
         resp = client.get("/")
@@ -132,7 +132,7 @@ class TestIndex:
         assert 'id="namespaceSelector"' in resp.text
         assert 'href="/namespace/new' in resp.text
         assert 'href="/namespace' in resp.text
-        assert "Неймспейс" in resp.text
+        assert "CLI и стиль" in resp.text
 
     def test_task_links_include_namespace_id(self, client):
         resp = client.get("/tasks")
@@ -688,7 +688,7 @@ class TestApiNamespaces:
         create = client.post(
             "/api/namespaces",
             json={
-                "name": "API Namespace",
+                "name": "API Environment",
                 "description": "desc",
                 "workflow_id": default_wf["id"],
                 "theme_icon": "bug",
@@ -711,10 +711,10 @@ class TestApiNamespaces:
 
         update = client.put(
             f"/api/namespaces/{namespace_id}",
-            json={"name": "Updated Namespace", "theme_icon": "rocket", "cli_command": f"{command}-v2"},
+            json={"name": "Updated Environment", "theme_icon": "rocket", "cli_command": f"{command}-v2"},
         )
         assert update.status_code == 200
-        assert update.json()["namespace"]["name"] == "Updated Namespace"
+        assert update.json()["namespace"]["name"] == "Updated Environment"
         assert update.json()["namespace"]["cli_command"] == f"{command}-v2"
 
         listed = client.get("/api/namespaces")
@@ -790,7 +790,7 @@ class TestApiNamespaces:
         create = client.post(
             "/api/namespaces",
             json={
-                "name": "Green Namespace",
+                "name": "Green Environment",
                 "workflow_id": default_wf["id"],
                 "theme_icon": "shield",
                 "theme_color": "#22C55E",
@@ -804,7 +804,7 @@ class TestApiNamespaces:
 
         assert response.status_code == 200
         assert "--accent:#22C55E" in response.text
-        assert "Green Namespace" in response.text
+        assert "Green Environment" in response.text
         assert "RUN-1" not in response.text
 
 

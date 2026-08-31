@@ -1,4 +1,4 @@
-"""Namespace identity helpers kept separate from legacy storage names."""
+"""CLI identity helpers kept separate from legacy storage names."""
 
 from __future__ import annotations
 
@@ -10,16 +10,16 @@ RESERVED_NAMESPACE_CLI_COMMANDS = frozenset({"project-workflow", "python", "pip"
 
 
 def normalize_namespace_cli_command(value: Any) -> str:
-    """Return a shell-safe basename for a namespace wrapper command."""
+    """Return a shell-safe basename for a wrapper command."""
     if not isinstance(value, str):
-        raise ValueError("CLI-команда неймспейса должна быть строкой")
+        raise ValueError("CLI-команда должна быть строкой")
     command = value.strip().lower()
     if not command:
-        raise ValueError("CLI-команда неймспейса не может быть пустой")
+        raise ValueError("CLI-команда не может быть пустой")
     if NAMESPACE_CLI_COMMAND_PATTERN.fullmatch(command) is None:
-        raise ValueError("CLI-команда неймспейса должна соответствовать [a-z][a-z0-9_-]{1,63}")
+        raise ValueError("CLI-команда должна соответствовать [a-z][a-z0-9_-]{1,63}")
     if command in RESERVED_NAMESPACE_CLI_COMMANDS:
-        raise ValueError(f"CLI-команда неймспейса {command!r} зарезервирована")
+        raise ValueError(f"CLI-команда {command!r} зарезервирована")
     return command
 
 

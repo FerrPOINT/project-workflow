@@ -442,7 +442,7 @@ class TestHistoryCommand:
             qa_namespace = ProjectService(uow).create_project(
                 {
                     "code": "QAENV",
-                    "name": "QA Namespace",
+                    "name": "QA Environment",
                     "workflow_id": qa_workflow["id"],
                     "cli_command": "workflow-qa-env",
                     "key_prefixes": ["RUN"],
@@ -460,7 +460,7 @@ class TestHistoryCommand:
         runner = CliRunner()
         ambiguous = runner.invoke(cli, ["--json", "history", "--task", "RUN-4242"])
         assert ambiguous.exit_code == 1
-        assert "нескольких неймспейсах" in json.loads(ambiguous.output)["message"]
+        assert "несколько CLI-команд" in json.loads(ambiguous.output)["message"]
 
         for namespace_id in (default_namespace_id, qa_namespace_id):
             result = runner.invoke(
@@ -479,7 +479,7 @@ class TestHistoryCommand:
             env={NAMESPACE_ENV_VAR: "999999"},
         )
         assert result.exit_code == 1
-        assert "Неймспейс 999999 не найден" in json.loads(result.output)["message"]
+        assert "Запись 999999 не найдена" in json.loads(result.output)["message"]
         assert "not in the range" not in result.output
 
 

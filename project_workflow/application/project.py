@@ -14,7 +14,7 @@ from project_workflow.domain.repositories import UnitOfWork
 
 
 class ProjectService:
-    """Use cases for namespaces stored in the legacy projects table."""
+    """Use cases for launch configurations stored in the legacy projects table."""
 
     def __init__(self, uow: UnitOfWork):
         self._uow = uow
@@ -29,7 +29,7 @@ class ProjectService:
         if not prefixes:
             raise ValueError("Нужен хотя бы один префикс ключа задачи")
         if len(prefixes) != len(set(prefixes)):
-            raise ConflictError("Префиксы ключей задач внутри неймспейса должны быть уникальными")
+            raise ConflictError("Префиксы ключей задач должны быть уникальными")
         return prefixes
 
     def _ensure_prefixes_available(
@@ -50,7 +50,7 @@ class ProjectService:
             if overlap:
                 duplicate = sorted(overlap)[0]
                 raise ConflictError(
-                    f"Префикс ключа задачи {duplicate!r} уже назначен неймспейсу {project.code!r}"
+                    f"Префикс ключа задачи {duplicate!r} уже назначен записи {project.code!r}"
                 )
 
     @staticmethod
@@ -91,9 +91,9 @@ class ProjectService:
             or isinstance(workflow_id_raw, bool)
             or workflow_id_raw <= 0
         ):
-            raise ValueError("workflow_id неймспейса должен быть положительным целым числом")
+            raise ValueError("workflow_id должен быть положительным целым числом")
         if "code" not in payload or not isinstance(payload["code"], str) or not payload["code"].strip():
-            raise ValueError("Внутренний code неймспейса должен быть непустой строкой")
+            raise ValueError("Внутренний code должен быть непустой строкой")
         payload["code"] = payload["code"].strip().upper()
         if "name" not in payload or not payload["name"]:
             payload["name"] = payload["code"]
@@ -105,14 +105,14 @@ class ProjectService:
         payload["key_prefixes"] = self._normalized_prefixes(payload["key_prefixes"])
         self._ensure_prefixes_available(payload["key_prefixes"], workflow_id=workflow_id)
         if self._uow.projects.get_by_code(payload["code"]):
-            raise ConflictError(f"Внутренний code неймспейса {payload['code']!r} уже существует")
+            raise ConflictError(f"Внутренний code {payload['code']!r} уже существует")
         same_cli_command = self._uow.projects.get_by_cli_command(payload["cli_command"])
         if self._real_project_id(same_cli_command) is not None:
-            raise ConflictError(f"CLI-команда неймспейса {payload['cli_command']!r} уже существует")
+            raise ConflictError(f"CLI-команда {payload['cli_command']!r} уже существует")
         pid = self._uow.projects.create(payload)
         project = self._uow.projects.get_by_id(pid)
         if not project:
-            raise RuntimeError("Не удалось создать неймспейс")
+            raise RuntimeError("Не удалось создать запись")
         self._uow.commit()
         return project.to_dict()
 
@@ -128,7 +128,7 @@ class ProjectService:
         self._uow.projects.lock_prefix_namespace()
         snapshot = self._uow.projects.get_by_id(project_id)
         if snapshot is None:
-            raise NotFoundError(f"Неймспейс {project_id} не найден")
+            raise NotFoundError(f"Запись {project_id} не найдена")
         workflow_ids = {snapshot.workflow_id}
         target_workflow_id = snapshot.workflow_id
         if "workflow_id" in payload:
@@ -138,7 +138,7 @@ class ProjectService:
                 or isinstance(workflow_id_raw, bool)
                 or workflow_id_raw <= 0
             ):
-                raise ValueError("workflow_id неймспейса должен быть положительным целым числом")
+                raise ValueError("workflow_id должен быть положительным целым числом")
             target_workflow_id = workflow_id_raw
             workflow_ids.add(target_workflow_id)
         for workflow_id in sorted(workflow_ids):
@@ -146,25 +146,25 @@ class ProjectService:
                 raise NotFoundError(f"Воркфлоу {workflow_id} не найден")
         existing = self._uow.projects.lock(project_id)
         if existing is None:
-            raise NotFoundError(f"Неймспейс {project_id} не найден")
+            raise NotFoundError(f"Запись {project_id} не найдена")
         if existing.workflow_id != snapshot.workflow_id:
-            raise ConflictError("Воркфлоу неймспейса изменился во время ожидания блокировки")
+            raise ConflictError("Воркфлоу изменился во время ожидания блокировки")
         if "code" in payload and payload["code"] != existing.code:
             if not isinstance(payload["code"], str) or not payload["code"].strip():
-                raise ValueError("Внутренний code неймспейса должен быть непустой строкой")
+                raise ValueError("Внутренний code должен быть непустой строкой")
             payload["code"] = payload["code"].strip().upper()
             same_code = self._uow.projects.get_by_code(payload["code"])
             if same_code is not None and same_code.id != project_id:
-                raise ConflictError(f"Внутренний code неймспейса {payload['code']!r} уже существует")
+                raise ConflictError(f"Внутренний code {payload['code']!r} уже существует")
         if "cli_command" in payload and payload["cli_command"] != existing.cli_command:
             same_cli_command = self._uow.projects.get_by_cli_command(payload["cli_command"])
             same_cli_id = self._real_project_id(same_cli_command)
             if same_cli_id is not None and same_cli_id != project_id:
-                raise ConflictError(f"CLI-команда неймспейса {payload['cli_command']!r} уже существует")
+                raise ConflictError(f"CLI-команда {payload['cli_command']!r} уже существует")
         project_tasks = list(self._uow.tasks.list_by_project(project_id))
         if "workflow_id" in payload and int(payload["workflow_id"]) != existing.workflow_id:
             if project_tasks:
-                raise ConflictError("Нельзя сменить воркфлоу неймспейса, пока в нём есть задачи")
+                raise ConflictError("Нельзя сменить воркфлоу, пока есть задачи")
         effective_prefixes: list[str] | None = None
         if "key_prefixes" in payload:
             payload["key_prefixes"] = self._normalized_prefixes(payload["key_prefixes"])
@@ -185,7 +185,7 @@ class ProjectService:
             ]
             if inaccessible:
                 raise ConflictError(
-                    f"Ключ задачи {sorted(inaccessible)[0]!r} перестанет соответствовать префиксам неймспейса"
+                    f"Ключ задачи {sorted(inaccessible)[0]!r} перестанет соответствовать префиксам"
                 )
         self._uow.projects.update(project_id, payload)
         self._uow.commit()
@@ -195,16 +195,16 @@ class ProjectService:
         self._uow.projects.lock_prefix_namespace()
         snapshot = self._uow.projects.get_by_id(project_id)
         if snapshot is None:
-            raise NotFoundError(f"Неймспейс {project_id} не найден")
+            raise NotFoundError(f"Запись {project_id} не найдена")
         if self._uow.workflows.lock(snapshot.workflow_id) is None:
             raise NotFoundError(f"Воркфлоу {snapshot.workflow_id} не найден")
         existing = self._uow.projects.lock(project_id)
         if existing is None:
-            raise NotFoundError(f"Неймспейс {project_id} не найден")
+            raise NotFoundError(f"Запись {project_id} не найдена")
         if existing.workflow_id != snapshot.workflow_id:
-            raise ConflictError("Воркфлоу неймспейса изменился во время ожидания удаления")
+            raise ConflictError("Воркфлоу изменился во время ожидания удаления")
         if self._uow.tasks.list_by_project(project_id):
-            raise ConflictError("Неймспейс связан с задачами, поэтому удалить его нельзя")
+            raise ConflictError("Есть связанные задачи, поэтому удалить нельзя")
         self._uow.projects.delete(project_id)
         self._uow.commit()
         return None

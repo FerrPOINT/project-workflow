@@ -126,7 +126,7 @@ async def api_namespaces() -> dict[str, Any] | JSONResponse:
 async def api_namespace_get(namespace_id: int) -> dict[str, Any] | JSONResponse:
     namespace = _app_state.project_service().get_project(namespace_id)
     if namespace is None:
-        return _error(f"Неймспейс {namespace_id} не найден", 404)
+        return _error(f"Запись {namespace_id} не найдена", 404)
     payload = _with_namespace_aliases(namespace)
     return {"ok": True, "namespace": payload}
 

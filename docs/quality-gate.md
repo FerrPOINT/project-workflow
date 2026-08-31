@@ -87,11 +87,11 @@ PostgreSQL, integration gate можно запускать с `PGPORT`, указ
 - открыть `http://127.0.0.1:8812/namespace/new`;
 - открыть `http://127.0.0.1:8812/tasks`;
 - открыть `http://127.0.0.1:8812/phases`;
-- открыть detail одной задачи в двух неймспейсах, если менялись selector,
-  task links, theme или namespace-scoped данные;
+- открыть detail одной задачи в двух выбранных записях, если менялись selector,
+  task links, theme или данные выбранной записи;
 - открыть `http://127.0.0.1:8812/workflows`, если менялись workflow controls,
   фазы или CRUD workflow;
-- проверить, что верхний selector переключает неймспейс, меняет логотип,
+- проверить, что верхний selector переключает выбранную запись, меняет логотип,
   цвет темы, список задач, dashboard stats и `/phases`;
 - проверить, что страницы загрузились без console/network ошибок;
 - сохранить full-screen screenshot evidence для изменённых экранов.
@@ -99,16 +99,16 @@ PostgreSQL, integration gate можно запускать с `PGPORT`, указ
 Для backend-only тестовых или документационных изменений browser smoke не
 обязателен.
 
-## Namespace CLI Wrappers
+## CLI Wrappers
 
-После изменений в namespace CRUD, bootstrap или CLI selector path дополнительно
+После изменений в CRUD выбранных записей, bootstrap или CLI selector path дополнительно
 проверять генерацию пользовательских команд:
 
 ```bash
 python scripts/install_namespace_clis.py --bin-dir <dir>
 ```
 
-Скрипт читает неймспейсы из PostgreSQL, создаёт wrapper-команды из
+Скрипт читает записи из PostgreSQL, создаёт wrapper-команды из
 `cli_command`, выставляет `PROJECT_WORKFLOW_NAMESPACE_ID=<id>` и вызывает
 только `project-workflow step/history`. `project-workflow` не получает новых
-публичных команд: wrapper names являются пользовательским namespace entrypoint.
+публичных команд: wrapper names являются пользовательским entrypoint нужной записи.

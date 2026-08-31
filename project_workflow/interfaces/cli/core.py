@@ -174,7 +174,7 @@ def _get_task_key_validator(uow=None, project_id: int | None = None) -> task_val
 
 
 def _require_valid_key(task_key: str, uow=None, project_id: int | None = None) -> str:
-    """Проверить валидность ключа задачи по неймспейсам из БД."""
+    """Проверить валидность ключа задачи по префиксам из БД."""
     if uow is None:
         validator = (
             _get_task_key_validator()
@@ -189,7 +189,7 @@ def _require_valid_key(task_key: str, uow=None, project_id: int | None = None) -
         )
     validated = validator.validate(task_key)
     if not validated.is_valid:
-        raise TaskKeyValidationError(task_key, validated.error_message or "неизвестный префикс неймспейса")
+        raise TaskKeyValidationError(task_key, validated.error_message or "неизвестный префикс")
     return validated.normalized or task_key
 
 
@@ -207,7 +207,7 @@ def _resolve_namespace_id(uow: Any, namespace: str | None) -> int | None:
         project_id = int(selector)
         if any(item.get("id") == project_id for item in projects):
             return project_id
-        raise ValueError(f"Неймспейс {project_id} не найден")
+        raise ValueError(f"Запись {project_id} не найдена")
     matches = [
         item
         for item in projects
@@ -216,16 +216,16 @@ def _resolve_namespace_id(uow: Any, namespace: str | None) -> int | None:
         or str(item.get("cli_command") or "").casefold() == selector.casefold()
     ]
     if not matches:
-        raise ValueError(f"Неймспейс {selector!r} не найден")
+        raise ValueError(f"Запись {selector!r} не найдена")
     if len(matches) > 1:
-        raise ValueError(f"Неймспейс {selector!r} неоднозначен; укажите ID")
+        raise ValueError(f"Выбор {selector!r} неоднозначен; укажите ID")
     resolved_project_id = matches[0].get("id")
     if (
         not isinstance(resolved_project_id, int)
         or isinstance(resolved_project_id, bool)
         or resolved_project_id <= 0
     ):
-        raise ValueError(f"Неймспейс {selector!r} имеет некорректный id")
+        raise ValueError(f"Выбор {selector!r} имеет некорректный id")
     return resolved_project_id
 
 
@@ -236,12 +236,12 @@ def _resolve_namespace_id_from_env(uow: Any) -> int | None:
         return None
     selector = raw.strip()
     if not selector.isdecimal():
-        raise ValueError(f"{NAMESPACE_ENV_VAR} должен содержать положительный ID неймспейса")
+        raise ValueError(f"{NAMESPACE_ENV_VAR} должен содержать положительный ID")
     namespace_id = int(selector)
     if namespace_id <= 0:
-        raise ValueError(f"{NAMESPACE_ENV_VAR} должен содержать положительный ID неймспейса")
+        raise ValueError(f"{NAMESPACE_ENV_VAR} должен содержать положительный ID")
     if not any(item.get("id") == namespace_id for item in _project_dicts(uow)):
-        raise ValueError(f"Неймспейс {namespace_id} не найден")
+        raise ValueError(f"Запись {namespace_id} не найдена")
     return namespace_id
 
 

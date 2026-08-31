@@ -265,7 +265,7 @@ def test_same_task_key_can_run_in_parallel_namespaces():
         {
             "workflow_id": first_workflow,
             "code": _unique("dual-project-a"),
-            "name": "Dual Namespace A",
+            "name": "Dual Environment A",
             "cli_command": f"workflow-dual-a-{prefix.lower()}",
             "key_prefixes": [prefix],
         }
@@ -274,7 +274,7 @@ def test_same_task_key_can_run_in_parallel_namespaces():
         {
             "workflow_id": second_workflow,
             "code": _unique("dual-project-b"),
-            "name": "Dual Namespace B",
+            "name": "Dual Environment B",
             "cli_command": f"workflow-dual-b-{prefix.lower()}",
             "key_prefixes": [prefix],
         }
@@ -303,8 +303,8 @@ def test_same_task_key_can_run_in_parallel_namespaces():
     second_detail = client.get(f"/task/{task_key}?namespace_id={second_project['id']}")
     assert first_detail.status_code == 200
     assert second_detail.status_code == 200
-    assert "Dual Namespace A" in first_detail.text
-    assert "Dual Namespace B" in second_detail.text
+    assert "Dual Environment A" in first_detail.text
+    assert "Dual Environment B" in second_detail.text
 
 
 def test_explicit_project_task_validates_prefix_and_scoped_phase_before_write():

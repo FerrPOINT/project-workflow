@@ -54,13 +54,13 @@ def _row_to_workflow(row: m.Workflow) -> Workflow:
 def _row_to_project(row: m.Project) -> Project:
     raw = row.key_prefixes
     if not isinstance(raw, str):
-        raise ValueError("Сохранённое key_prefixes неймспейса должно быть JSON-массивом строк")
+        raise ValueError("Сохранённое key_prefixes должно быть JSON-массивом строк")
     try:
         prefixes = json.loads(raw)
     except (json.JSONDecodeError, TypeError) as exc:
-        raise ValueError("Сохранённое key_prefixes неймспейса содержит некорректный JSON") from exc
+        raise ValueError("Сохранённое key_prefixes содержит некорректный JSON") from exc
     if not isinstance(prefixes, list) or not all(isinstance(prefix, str) for prefix in prefixes):
-        raise ValueError("Сохранённое key_prefixes неймспейса должно быть JSON-массивом строк")
+        raise ValueError("Сохранённое key_prefixes должно быть JSON-массивом строк")
     return Project(
         id=row.id,
         workflow_id=row.workflow_id,

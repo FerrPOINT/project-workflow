@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 
-{% block title %}Неймспейс — Workflow Engine{% endblock %}
-{% block header_title %}Неймспейс{% endblock %}
+{% block title %}{{ selected_project.name if selected_project else 'Добавить' }} — Workflow Engine{% endblock %}
+{% block header_title %}{{ selected_project.name if selected_project else 'Добавить' }}{% endblock %}
 {% block header_actions %}
-  <button type="button" class="btn btn-primary" id="newProjectButton" onclick="startCreateProject()">+ Новый неймспейс</button>
+  <button type="button" class="btn btn-primary" id="newProjectButton" onclick="startCreateProject()">+ Добавить</button>
   <a href="/tasks{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary">← К задачам</a>
 {% endblock %}
 
@@ -57,13 +57,13 @@ textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:140px;resiz
       </span>
     </button>
     {% else %}
-    <div class="card empty-note">Неймспейсов пока нет.</div>
+    <div class="card empty-note">Пока ничего не создано.</div>
     {% endfor %}
   </section>
 
   <section class="project-panel">
     <form id="projectForm" class="card form-stack" onsubmit="event.preventDefault(); submitProject();">
-      <div class="card-title" id="projectFormMode">Редактирование неймспейса</div>
+      <div class="card-title" id="projectFormMode">Редактирование</div>
       <input type="hidden" id="projectCode" value="{{ selected_project.code if selected_project else '' }}">
       <div>
         <div class="label">Название</div>
@@ -93,7 +93,7 @@ textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:140px;resiz
       </div>
       <div class="theme-preview" id="projectThemePreview">
         <span class="project-mark" id="projectThemePreviewIcon" aria-hidden="true"></span>
-        <span class="theme-preview-name" id="projectThemePreviewName">{{ selected_project.name if selected_project else 'Новый неймспейс' }}</span>
+        <span class="theme-preview-name" id="projectThemePreviewName">{{ selected_project.name if selected_project else 'Без названия' }}</span>
       </div>
       <div>
         <div class="label">Воркфлоу</div>
@@ -122,7 +122,7 @@ textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:140px;resiz
         <button class="btn btn-secondary" type="button" id="cancelCreateButton" onclick="cancelCreateProject()" style="display:none">Отмена</button>
         <button class="btn btn-secondary" type="button" id="deleteProjectButton" onclick="deleteProject()">Удалить</button>
       </div>
-      <div class="empty-note">Один префикс на строку (например: RUN, DEMO). CLI-wrapper выбирает этот неймспейс автоматически.</div>
+      <div class="empty-note">Один префикс на строку (например: RUN, DEMO). CLI-wrapper автоматически выбирает нужный ID.</div>
     </form>
   </section>
 </div>
@@ -153,7 +153,7 @@ function applyPageTheme(color){
 function updateProjectThemePreview(){
   var icon = document.getElementById('projectThemeIcon').value || defaultProjectThemeIcon;
   var color = document.getElementById('projectThemeColor').value || defaultProjectThemeColor;
-  var name = document.getElementById('projectName').value.trim() || document.getElementById('projectCliCommand').value.trim() || 'Новый неймспейс';
+  var name = document.getElementById('projectName').value.trim() || document.getElementById('projectCliCommand').value.trim() || 'Без названия';
   var preview = document.getElementById('projectThemePreview');
   var previewIcon = document.getElementById('projectThemePreviewIcon');
   preview.style.setProperty('--project-color', color);
@@ -215,8 +215,8 @@ function fillProjectForm(project){
 function setProjectFormMode(mode){
   projectFormMode = mode;
   var createMode = mode === 'create';
-  document.getElementById('projectFormMode').textContent = createMode ? 'Новый неймспейс' : 'Редактирование неймспейса';
-  document.getElementById('projectSubmitButton').textContent = createMode ? 'Создать неймспейс' : 'Сохранить';
+  document.getElementById('projectFormMode').textContent = createMode ? 'Добавление' : 'Редактирование';
+  document.getElementById('projectSubmitButton').textContent = createMode ? 'Создать' : 'Сохранить';
   document.getElementById('deleteProjectButton').style.display = createMode ? 'none' : '';
   document.getElementById('cancelCreateButton').style.display = createMode && projectStore.length ? '' : 'none';
 }
@@ -251,7 +251,7 @@ function reloadProjects(nextId){
   fetch('/api/namespaces')
     .then(function(r){return r.json()})
     .then(function(d){
-      if(!d.ok){showToast(d.error || 'Ошибка загрузки неймспейсов','error');return;}
+      if(!d.ok){showToast(d.error || 'Ошибка загрузки','error');return;}
       projectStore.length = 0;
       d.namespaces.forEach(function(project){ projectStore.push(project); });
       if(projectStore.length === 0){
@@ -263,7 +263,7 @@ function reloadProjects(nextId){
         nav.replaceChildren();
         var empty = document.createElement('div');
         empty.className = 'card empty-note';
-        empty.textContent = 'Неймспейсов пока нет.';
+        empty.textContent = 'Пока ничего не создано.';
         nav.appendChild(empty);
         syncNav();
         return;
@@ -327,30 +327,30 @@ function renderProjectNav(){
   });
 }
 function saveProject(){
-  if(selectedProjectId == null){ showToast('Нет выбранного неймспейса','error'); return; }
+  if(selectedProjectId == null){ showToast('Сначала выберите запись','error'); return; }
   var payload = currentPayload();
-  if(!payload.cli_command){ showToast('CLI-команда неймспейса обязательна','error'); return; }
+  if(!payload.cli_command){ showToast('CLI-команда обязательна','error'); return; }
   fetch('/api/namespaces/' + selectedProjectId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json()})
-    .then(function(d){ if(d.ok){ showToast('Неймспейс сохранён','success'); reloadProjects(selectedProjectId); } else { showToast(d.error || 'Ошибка','error'); } })
+    .then(function(d){ if(d.ok){ showToast('Сохранено','success'); reloadProjects(selectedProjectId); } else { showToast(d.error || 'Ошибка','error'); } })
     .catch(showRequestError);
 }
 function deleteProject(){
-  if(selectedProjectId == null){ showToast('Нет выбранного неймспейса','error'); return; }
-  if(!confirm('Удалить неймспейс?')) return;
+  if(selectedProjectId == null){ showToast('Сначала выберите запись','error'); return; }
+  if(!confirm('Удалить?')) return;
   fetch('/api/namespaces/' + selectedProjectId,{method:'DELETE'})
     .then(function(r){return r.json()})
-    .then(function(d){ if(d.ok){ showToast('Неймспейс удалён','success'); reloadProjects(null); } else { showToast(d.error || 'Ошибка','error'); } })
+    .then(function(d){ if(d.ok){ showToast('Удалено','success'); reloadProjects(null); } else { showToast(d.error || 'Ошибка','error'); } })
     .catch(showRequestError);
 }
 function createProject(){
   var payload = currentPayload();
-  if(!payload.cli_command){ showToast('CLI-команда неймспейса обязательна','error'); return; }
+  if(!payload.cli_command){ showToast('CLI-команда обязательна','error'); return; }
   fetch('/api/namespaces',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json()})
     .then(function(d){
       if(d.ok){
-        showToast('Неймспейс создан','success');
+        showToast('Создано','success');
         reloadProjects(d.namespace_id);
       } else {
         showToast(d.error || 'Ошибка','error');
