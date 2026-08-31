@@ -5,6 +5,7 @@
 <p align="center">
   <a href="#features"><img src="https://img.shields.io/badge/%E2%9C%A8%20Features-0B1220?style=for-the-badge" alt="Features" /></a>
   <a href="#stack"><img src="https://img.shields.io/badge/%F0%9F%94%A7%20Stack-111827?style=for-the-badge" alt="Stack" /></a>
+  <a href="#entrypoints"><img src="https://img.shields.io/badge/%F0%9F%A7%A9%20Entry%20Points-18202F?style=for-the-badge" alt="Entry Points" /></a>
   <a href="#cli"><img src="https://img.shields.io/badge/%F0%9F%96%A5%EF%B8%8F%20CLI-1F2937?style=for-the-badge" alt="CLI" /></a>
   <a href="#ui"><img src="https://img.shields.io/badge/%F0%9F%8C%90%20Web%20UI-374151?style=for-the-badge" alt="Web UI" /></a>
   <a href="#architecture"><img src="https://img.shields.io/badge/%F0%9F%8F%97%EF%B8%8F%20Architecture-4B5563?style=for-the-badge" alt="Architecture" /></a>
@@ -79,6 +80,23 @@ CLI намеренно остается маленьким: `step` и `history`.
 | CLI | Click + Rich | compact agent-facing command surface |
 | Quality | pytest, ruff, mypy | local quality gate |
 
+<a name="entrypoints"></a>
+## 🧩 CLI Entry Points
+
+Each namespace/entrypoint stores:
+
+| Field | Role |
+|---|---|
+| Name and description | UI identity and human-facing purpose |
+| Bound workflow | Phase template used by tasks in this entrypoint |
+| Icon and theme color | Header, dashboard and task-detail styling |
+| Task key prefixes | External task key namespace |
+| Custom CLI command | User-facing wrapper, for example `workflow-qa` |
+
+The top UI selector switches logo/name, accent color, dashboard, task list, task detail and `/phases`. The selected entrypoint is stored in cookie `workflow_namespace_id`; `?namespace_id=` has priority over the cookie.
+
+Canonical API: `/api/namespaces`. Legacy alias routes remain only for compatibility.
+
 <a name="cli"></a>
 ## 🖥️ CLI
 
@@ -97,6 +115,8 @@ workflow-dev history --task RUN-42
 ```
 
 The wrapper sets `PROJECT_WORKFLOW_NAMESPACE_ID=<id>` and calls `project-workflow step/history`, so the same external task key can exist independently in different namespaces.
+
+The executor receives the configured wrapper command in `phase_contract.cli_actor.entrypoint`, not a hardcoded global CLI name.
 
 <a name="ui"></a>
 ## 🌐 Web UI
@@ -119,6 +139,16 @@ Compose binds PostgreSQL and API to `127.0.0.1`. Before starting a fresh baselin
 | Phases | `/phases`, phase detail |
 | Workflows | `/workflows` |
 | Agents | `/agents` |
+
+## 🛠️ Development
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --constraint constraints.txt -e ".[dev,ui]"
+```
+
+`constraints.txt` fixes the tested dependency set; Docker uses the same file.
 
 <a name="architecture"></a>
 ## 🏗️ Architecture
@@ -153,6 +183,7 @@ flowchart TD
 | Warning-focused gate | `make warnings` |
 | Compose readiness | `make compose-ready` |
 | Windows quality | `pwsh -File scripts/quality.ps1 quality` |
+| Windows warnings | `pwsh -File scripts/quality.ps1 warnings` |
 | Windows readiness | `pwsh -File scripts/quality.ps1 compose-ready` |
 
 `constraints.txt` pins the tested dependency set; Docker uses the same constraints.
