@@ -16,6 +16,8 @@ from project_workflow.infrastructure.db.session import DatabaseRecreateRequired,
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.cli.core import NAMESPACE_ENV_VAR
 
+WRAPPER_COMMAND_ERROR = "Ошибка: wrapper поддерживает только команды step и history."
+
 
 def _load_namespaces() -> list[dict[str, Any]]:
     with SAUnitOfWork() as uow:
@@ -32,6 +34,10 @@ def _write_executable(path: Path, content: str) -> None:
 def _posix_wrapper(namespace_id: int) -> str:
     return (
         "#!/usr/bin/env sh\n"
+        "if [ \"${1:-}\" != \"step\" ] && [ \"${1:-}\" != \"history\" ]; then\n"
+        f"  echo \"{WRAPPER_COMMAND_ERROR}\" >&2\n"
+        "  exit 2\n"
+        "fi\n"
         f"{NAMESPACE_ENV_VAR}={namespace_id!s} exec project-workflow \"$@\"\n"
     )
 
@@ -40,6 +46,11 @@ def _cmd_wrapper(namespace_id: int) -> str:
     return (
         "@echo off\n"
         "setlocal\n"
+        "if \"%~1\"==\"step\" goto run\n"
+        "if \"%~1\"==\"history\" goto run\n"
+        f"echo {WRAPPER_COMMAND_ERROR} 1>&2\n"
+        "exit /b 2\n"
+        ":run\n"
         f"set \"{NAMESPACE_ENV_VAR}={namespace_id!s}\"\n"
         "project-workflow %*\n"
         "exit /b %ERRORLEVEL%\n"
@@ -48,6 +59,10 @@ def _cmd_wrapper(namespace_id: int) -> str:
 
 def _powershell_wrapper(namespace_id: int) -> str:
     return (
+        "if ($args.Count -lt 1 -or ($args[0] -ne \"step\" -and $args[0] -ne \"history\")) {\n"
+        f"    [Console]::Error.WriteLine(\"{WRAPPER_COMMAND_ERROR}\")\n"
+        "    exit 2\n"
+        "}\n"
         f"$env:{NAMESPACE_ENV_VAR} = \"{namespace_id!s}\"\n"
         "& project-workflow @args\n"
         "exit $LASTEXITCODE\n"

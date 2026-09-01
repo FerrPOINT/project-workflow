@@ -11,7 +11,7 @@ from project_workflow.application.project import ProjectService
 from project_workflow.application.workflow import WorkflowService
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.cli.core import NAMESPACE_ENV_VAR
-from scripts.install_namespace_clis import install_namespace_clis
+from scripts.install_namespace_clis import WRAPPER_COMMAND_ERROR, install_namespace_clis
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -49,6 +49,27 @@ def test_install_namespace_clis_generates_wrappers_for_all_records(tmp_path):
     assert f"$env:{NAMESPACE_ENV_VAR} = \"{qa_namespace_id}\"" in (tmp_path / "workflow-qa-wrap.ps1").read_text(
         encoding="utf-8"
     )
+
+
+def test_install_namespace_clis_wrappers_allow_only_step_and_history(tmp_path):
+    generated = install_namespace_clis(tmp_path)
+    assert tmp_path / "workflow-run" in generated
+
+    posix = (tmp_path / "workflow-run").read_text(encoding="utf-8")
+    cmd = (tmp_path / "workflow-run.cmd").read_text(encoding="utf-8")
+    ps1 = (tmp_path / "workflow-run.ps1").read_text(encoding="utf-8")
+
+    assert '"${1:-}" != "step"' in posix
+    assert '"${1:-}" != "history"' in posix
+    assert WRAPPER_COMMAND_ERROR in posix
+    assert 'if "%~1"=="step" goto run' in cmd
+    assert 'if "%~1"=="history" goto run' in cmd
+    assert "exit /b 2" in cmd
+    assert WRAPPER_COMMAND_ERROR in cmd
+    assert '$args[0] -ne "step"' in ps1
+    assert '$args[0] -ne "history"' in ps1
+    assert "exit 2" in ps1
+    assert WRAPPER_COMMAND_ERROR in ps1
 
 
 def test_install_namespace_clis_missing_database_url_fails_without_traceback(tmp_path):
