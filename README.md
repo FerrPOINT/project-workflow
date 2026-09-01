@@ -63,7 +63,7 @@ Runtime-источник данных — **PostgreSQL**. SQLite использ�
 |---|---|
 | Phase workflow | Задача идет по шаблону фаз с инструкциями, checks, evidence и audit history. |
 | Supervisor gate | Переход фазы проходит через обязательную оценку отчета и фиксирует `PASS` / `ROLLBACK` / `BLOCK`. |
-| Namespace runtime | Несколько entrypoints могут иметь свои workflow, задачи, стиль UI, key prefixes и CLI-команду. |
+| Namespace runtime | Несколько entrypoints могут иметь свои workflow, задачи, стиль UI и CLI-команду. |
 | Web UI | CRUD для workflows, phases, namespaces, agents и tasks. |
 | Append-only history | История фаз и `step`-проверок не затирается. |
 | CLI freeze | Публичный CLI остается управляемым и предсказуемым: `step` / `history`. |
@@ -95,13 +95,12 @@ Each namespace/entrypoint stores:
 | Name and description | UI identity and human-facing purpose |
 | Bound workflow | Phase template used by tasks in this entrypoint |
 | Icon and theme color | Header, dashboard and task-detail styling |
-| Task key prefixes | External task key namespace |
 | Custom CLI command | User-facing wrapper, for example `workflow-qa` |
 
 The top UI selector switches logo/name, accent color, dashboard, task list, task detail and `/phases`.
 The selected entrypoint is stored in cookie `workflow_namespace_id`; `?namespace_id=` has priority over the cookie.
 
-Canonical API: `/api/namespaces`. Legacy alias routes remain only for compatibility.
+Canonical API: `/api/namespaces`; old UI/API alias routes are not part of the public surface.
 
 <a name="cli"></a>
 ## 🖥️ CLI

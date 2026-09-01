@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
+from pathlib import Path
+
 from project_workflow.application.project import ProjectService
 from project_workflow.application.workflow import WorkflowService
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.cli.core import NAMESPACE_ENV_VAR
 from scripts.install_namespace_clis import install_namespace_clis
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_install_namespace_clis_generates_wrappers_for_all_records(tmp_path):
@@ -42,3 +49,22 @@ def test_install_namespace_clis_generates_wrappers_for_all_records(tmp_path):
     assert f"$env:{NAMESPACE_ENV_VAR} = \"{qa_namespace_id}\"" in (tmp_path / "workflow-qa-wrap.ps1").read_text(
         encoding="utf-8"
     )
+
+
+def test_install_namespace_clis_missing_database_url_fails_without_traceback(tmp_path):
+    env = os.environ.copy()
+    env.pop("DATABASE_URL", None)
+    env.update({"PYTHONUTF8": "0", "PYTHONIOENCODING": "cp1252"})
+
+    result = subprocess.run(
+        [sys.executable, "scripts/install_namespace_clis.py", "--bin-dir", str(tmp_path)],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert result.stderr.decode("utf-8").strip() == "Переменная DATABASE_URL обязательна"
+    assert b"Traceback" not in result.stderr

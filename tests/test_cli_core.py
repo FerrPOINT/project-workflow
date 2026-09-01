@@ -149,3 +149,35 @@ def test_cli_help_is_cp1251_safe(args):
     )
 
     assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    ("args", "expected_returncode", "stream_name", "expected_text"),
+    [
+        (["--help"], 0, "stdout", "Использование:"),
+        (["--version"], 0, "stdout", "project-workflow, версия 1.0.0"),
+        (["ui"], 2, "stderr", "Нет такой команды: 'ui'."),
+    ],
+)
+def test_cli_output_is_utf8_when_stdio_encoding_rejects_cyrillic(
+    args,
+    expected_returncode,
+    stream_name,
+    expected_text,
+):
+    env = os.environ.copy()
+    env.update({"PYTHONUTF8": "0", "PYTHONIOENCODING": "cp1252"})
+
+    result = subprocess.run(
+        [sys.executable, "-m", "project_workflow.interfaces.cli", *args],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode == expected_returncode
+    stream = getattr(result, stream_name).decode("utf-8")
+    assert expected_text in stream
+    assert b"UnicodeEncodeError" not in result.stderr

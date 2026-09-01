@@ -8,7 +8,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+from sqlalchemy.exc import SQLAlchemyError
+
 from project_workflow.domain.namespace import normalize_namespace_cli_command
+from project_workflow.infrastructure.db.session import DatabaseRecreateRequired, DatabaseUnavailable
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.cli.core import NAMESPACE_ENV_VAR
 
@@ -73,9 +77,21 @@ def install_namespace_clis(bin_dir: Path) -> list[Path]:
 
 
 def _configure_output_encoding() -> None:
-    reconfigure = getattr(sys.stdout, "reconfigure", None)
-    if callable(reconfigure):
-        reconfigure(encoding="utf-8", errors="replace")
+    sample = "Создан wrapper: Неймспейс"
+    for stream in (sys.stdout, sys.stderr):
+        encoding = getattr(stream, "encoding", None) or "utf-8"
+        try:
+            sample.encode(encoding)
+        except (LookupError, UnicodeEncodeError):
+            reconfigure = getattr(stream, "reconfigure", None)
+            if callable(reconfigure):
+                reconfigure(encoding="utf-8", errors="replace")
+
+
+def _settings_error_message(exc: ValidationError) -> str:
+    if any(tuple(error.get("loc", ())) == ("DATABASE_URL",) for error in exc.errors()):
+        return "Переменная DATABASE_URL обязательна"
+    return "Некорректная конфигурация"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -85,7 +101,23 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     bin_dir = args.bin_dir.expanduser()
-    generated = install_namespace_clis(bin_dir)
+    try:
+        generated = install_namespace_clis(bin_dir)
+    except ValidationError as exc:
+        print(_settings_error_message(exc), file=sys.stderr)
+        return 1
+    except DatabaseRecreateRequired as exc:
+        print(str(exc), file=sys.stderr)
+        return exc.exit_code
+    except DatabaseUnavailable as exc:
+        print(str(exc), file=sys.stderr)
+        return exc.exit_code
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    except (SQLAlchemyError, OSError):
+        print("Не удалось прочитать неймспейсы из базы данных", file=sys.stderr)
+        return 1
     if not generated:
         print("Записи не найдены, wrapper-команды не созданы.")
         return 0

@@ -262,6 +262,14 @@ class TestIndexPage:
         assert "UITEST-401" in response.text
         assert "UI Test Namespace" in response.text
 
+    def test_index_labels_namespace_blocks_as_namespaces_not_cli(self):
+        response = client.get("/")
+        assert response.status_code == 200
+        assert '<div class="metric-label">Неймспейсы</div>' in response.text
+        assert '<div class="card-title" style="margin-bottom:14px">Неймспейсы</div>' in response.text
+        assert '<div class="metric-label">CLI</div>' not in response.text
+        assert '<div class="card-title" style="margin-bottom:14px">CLI</div>' not in response.text
+
     def test_index_stays_minimal_and_hides_dashboard_technical_noise(self):
         response = client.get("/")
         assert response.status_code == 200
@@ -1411,7 +1419,10 @@ class TestProjectsPage:
         response = client.get("/namespaces")
         assert response.status_code == 200
         assert "function rememberNamespaceSelection(id)" in response.text
-        assert "document.cookie='workflow_namespace_id='+encodeURIComponent(id)+'; path=/; SameSite=Lax';" in response.text
+        assert (
+            "document.cookie='workflow_namespace_id='+encodeURIComponent(id)+'; path=/; SameSite=Lax';"
+            in response.text
+        )
         assert "if(selector){ selector.value = String(id); }" in response.text
         assert "url.pathname = '/namespaces';" in response.text
         assert "window.history.replaceState(null, '', url.toString());" in response.text
