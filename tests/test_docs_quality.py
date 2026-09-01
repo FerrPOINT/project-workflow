@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCREENSHOTS = {
     "dashboard.png": (1400, 850),
+    "dashboard-qa.png": (1400, 850),
     "namespaces.png": (1400, 850),
     "namespace-new.png": (1400, 850),
     "phases-qa.png": (1400, 850),
@@ -57,9 +58,27 @@ def test_screenshot_capture_script_checks_full_smoke_data() -> None:
 
     for name in SCREENSHOTS:
         assert f'name: "{name}"' in source
-    for task_key in ("RUN-42", "RUN-77", "RUN-88", "RUN-105", "RUN-120", "RUN-130", "RUN-143", "RUN-160", "RUN-171"):
+    for task_key in (
+        "RUN-42",
+        "RUN-77",
+        "RUN-88",
+        "RUN-105",
+        "RUN-120",
+        "RUN-130",
+        "RUN-143",
+        "RUN-160",
+        "RUN-171",
+        "RUN-180",
+        "RUN-190",
+        "RUN-205",
+    ):
         assert task_key in source
     assert "fullPage: true" in source
+    assert "assertTaskTable" in source
+    assert "assertDashboardTasks" in source
+    assert "assertTaskDetailHistory" in source
     assert "forbiddenVisibleText" in source
+    assert "/Hermes/i" in source
+    assert "/Гермес/i" in source
     assert "sdlc-" in source
     assert "Default Namespace" in source

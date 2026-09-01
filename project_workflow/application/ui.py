@@ -309,8 +309,8 @@ class UIDataService:
                     verdict: _ui_verdict_label(verdict) for verdict in verdict_counts
                 },
             },
-            "open_tasks": open_tasks[:8],
-            "namespaces": sorted(namespaces, key=lambda item: (-item.get("task_count", 0), item.get("name", "")))[:8],
+            "open_tasks": open_tasks,
+            "namespaces": sorted(namespaces, key=lambda item: (-item.get("task_count", 0), item.get("name", ""))),
         }
 
     def _resolve_task_workflow_id(

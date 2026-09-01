@@ -96,6 +96,27 @@ TASK_SCENARIOS = {
             "current_order": 14,
             "verdict": "blocked",
         },
+        {
+            "key": "RUN-180",
+            "title": "Проверить пакет CLI",
+            "status": "active",
+            "current_order": 11,
+            "verdict": "pass",
+        },
+        {
+            "key": "RUN-190",
+            "title": "Сверить страницу списка задач",
+            "status": "active",
+            "current_order": 12,
+            "verdict": "partial",
+        },
+        {
+            "key": "RUN-205",
+            "title": "Повторить smoke-прогон",
+            "status": "blocked",
+            "current_order": 13,
+            "verdict": "blocked",
+        },
     ],
     "workflow-qa": [
         {
@@ -160,6 +181,27 @@ TASK_SCENARIOS = {
             "status": "blocked",
             "current_order": 5,
             "verdict": "blocked",
+        },
+        {
+            "key": "RUN-180",
+            "title": "Проверить пакет CLI",
+            "status": "active",
+            "current_order": 4,
+            "verdict": "pass",
+        },
+        {
+            "key": "RUN-190",
+            "title": "Сверить страницу списка задач",
+            "status": "blocked",
+            "current_order": 5,
+            "verdict": "blocked",
+        },
+        {
+            "key": "RUN-205",
+            "title": "Повторить smoke-прогон",
+            "status": "active",
+            "current_order": 6,
+            "verdict": "partial",
         },
     ],
 }

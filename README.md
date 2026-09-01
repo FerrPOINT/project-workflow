@@ -176,37 +176,43 @@ At startup the app verifies database connectivity; the Compose `migrate` service
 <table>
   <tr>
     <td><strong>Dashboard</strong></td>
-    <td><strong>Namespaces</strong></td>
+    <td><strong>QA dashboard</strong></td>
   </tr>
   <tr>
     <td><img src="docs/screenshots/dashboard.png" alt="Dashboard" /></td>
-    <td><img src="docs/screenshots/namespaces.png" alt="Namespaces" /></td>
+    <td><img src="docs/screenshots/dashboard-qa.png" alt="QA dashboard" /></td>
   </tr>
   <tr>
+    <td><strong>Namespaces</strong></td>
     <td><strong>Namespace creation</strong></td>
-    <td><strong>QA phases</strong></td>
   </tr>
   <tr>
+    <td><img src="docs/screenshots/namespaces.png" alt="Namespaces" /></td>
     <td><img src="docs/screenshots/namespace-new.png" alt="Namespace creation" /></td>
-    <td><img src="docs/screenshots/phases-qa.png" alt="QA phases" /></td>
   </tr>
   <tr>
     <td><strong>Tasks</strong></td>
-    <td><strong>QA tasks</strong></td>
+    <td><strong>QA phases</strong></td>
   </tr>
   <tr>
     <td><img src="docs/screenshots/tasks.png" alt="Tasks" /></td>
-    <td><img src="docs/screenshots/tasks-qa.png" alt="QA tasks" /></td>
+    <td><img src="docs/screenshots/phases-qa.png" alt="QA phases" /></td>
   </tr>
   <tr>
+    <td><strong>QA tasks</strong></td>
     <td><strong>Workflows</strong></td>
-    <td><strong>Agents</strong></td>
   </tr>
   <tr>
+    <td><img src="docs/screenshots/tasks-qa.png" alt="QA tasks" /></td>
     <td><img src="docs/screenshots/workflows.png" alt="Workflows" /></td>
-    <td><img src="docs/screenshots/agents.png" alt="Agents" /></td>
   </tr>
 </table>
+
+Agents:
+
+<p align="center">
+  <img src="docs/screenshots/agents.png" alt="Agents" />
+</p>
 
 Workflow graph:
 

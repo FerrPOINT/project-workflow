@@ -198,7 +198,7 @@
   <h2 class="section-heading" id="supervisor-dialog-title">История проверок</h2>
   <div class="supervisor-activity">
     {% for run in step_history %}
-    <article class="activity-event">
+    <article class="activity-event" data-check-run="{{ loop.index }}">
       <div class="activity-rail"><span class="activity-node {{ run.verdict }}" aria-hidden="true"></span></div>
       <div class="activity-content">
         <header class="activity-header">

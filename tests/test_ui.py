@@ -407,6 +407,52 @@ class TestPhasesPage:
         assert "workflow-nav-item" in response.text
         assert "workflow-chip" in response.text
 
+    def test_phases_page_hides_other_workflows_when_namespace_is_selected(self):
+        uow = ui_app_state.get_db()
+        namespace_id = _as_dict(uow.projects.get_by_code(config.DEFAULT_PROJECT_CODE))["id"]
+        workflow = client.post(
+            "/api/workflows",
+            json={
+                "name": "Foreign nav workflow",
+                "description": "Must not appear while another namespace is selected",
+            },
+        )
+        assert workflow.status_code == 200
+
+        response = client.get(f"/phases?namespace_id={namespace_id}")
+
+        assert response.status_code == 200
+        assert "Foreign nav workflow" not in response.text
+
+    def test_phases_page_rejects_workflow_outside_selected_namespace(self):
+        uow = ui_app_state.get_db()
+        namespace_id = _as_dict(uow.projects.get_by_code(config.DEFAULT_PROJECT_CODE))["id"]
+        workflow = client.post(
+            "/api/workflows",
+            json={
+                "name": "Foreign phase list workflow",
+                "description": "Workflow ownership regression",
+            },
+        )
+        assert workflow.status_code == 200
+        workflow_id = workflow.json()["workflow_id"]
+        phase = client.post(
+            "/api/phases",
+            json={
+                "workflow_id": workflow_id,
+                "phase_order": 1,
+                "name": "Foreign phase list item",
+            },
+        )
+        assert phase.status_code == 200
+
+        response = client.get(f"/phases?namespace_id={namespace_id}&workflow_id={workflow_id}")
+
+        assert response.status_code == 404
+        assert "Воркфлоу недоступен в выбранном неймспейсе" in response.text
+        assert "Foreign phase list item" not in response.text
+        assert 'href="/phase/' not in response.text
+
     def test_phases_page_filters_by_selected_workflow(self):
         uow = ui_app_state.get_db()
         workflow = next(
@@ -423,6 +469,16 @@ class TestPhasesPage:
                 }
             )
             uow.commit()
+        namespace = client.post(
+            "/api/namespaces",
+            json={
+                "name": "UI Phases Namespace",
+                "workflow_id": int(workflow_id),
+                "cli_command": "workflow-ui-phases-filter",
+            },
+        )
+        assert namespace.status_code == 200
+        namespace_id = namespace.json()["namespace_id"]
 
         try:
             if not _as_dict(phase_by_code(uow, "WF-PHASE-901")):
@@ -437,23 +493,13 @@ class TestPhasesPage:
                 )
                 uow.commit()
 
-            response = client.get(f"/phases?workflow_id={workflow_id}")
+            response = client.get(f"/phases?namespace_id={namespace_id}")
             assert response.status_code == 200
             assert "Workflow Scoped Phase" in response.text
-            assert "Task Intake" not in response.text
-            assert f'href="/phases?workflow_id={workflow_id}' in response.text
+            assert "Приём задачи" not in response.text
+            assert f'href="/phases?workflow_id={workflow_id}&namespace_id={namespace_id}' in response.text
         finally:
-            workflow = next(
-                (
-                    item
-                    for item in [w.to_dict() for w in uow.workflows.list()]
-                    if item.get("name") == "UI Phases Workflow"
-                ),
-                None,
-            )
-            if workflow:
-                uow.workflows.delete(workflow["id"])
-                uow.commit()
+            uow.rollback()
 
     def test_phases_api_can_filter_by_workflow(self):
         workflow = _workflow_row("default")
@@ -2004,6 +2050,16 @@ class TestUiNetworkFailures:
         assert response.status_code == 404
         assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
         assert "instructionGroups" not in response.text
+
+    def test_instructions_page_back_link_preserves_selected_namespace(self):
+        uow = ui_app_state.get_db()
+        namespace_id = _as_dict(uow.projects.get_by_code("UITEST"))["id"]
+        phase_id = _phase_id("1.INTAKE")
+
+        response = client.get(f"/instructions?phase_id={phase_id}&namespace_id={namespace_id}")
+
+        assert response.status_code == 200
+        assert f'href="/phase/{phase_id}?namespace_id={namespace_id}"' in response.text
 
     def test_instructions_page_rejects_phase_outside_selected_namespace_workflow(self):
         workflow = client.post(

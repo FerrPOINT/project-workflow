@@ -214,6 +214,27 @@ def _workflow_error_page(request: Request, context: dict[str, Any], workflow_id:
     )
 
 
+def _workflow_not_in_selected_namespace_page(request: Request, context: dict[str, Any]) -> HTMLResponse:
+    selected_namespace = context.get("selected_namespace")
+    namespace_id = selected_namespace.get("id") if isinstance(selected_namespace, dict) else None
+    back_url = f"/phases?namespace_id={namespace_id}" if isinstance(namespace_id, int) else "/phases"
+    context = {
+        **context,
+        "page": "phases",
+        "title": "Воркфлоу не найден",
+        "message": "Воркфлоу недоступен в выбранном неймспейсе.",
+        "status_code": 404,
+        "back_url": back_url,
+        "back_label": "К фазам",
+    }
+    return _template_response(
+        request=request,
+        name="error.html",
+        status_code=404,
+        context=context,
+    )
+
+
 def _phase_not_in_selected_namespace_page(request: Request, context: dict[str, Any]) -> HTMLResponse:
     selected_namespace = context.get("selected_namespace")
     namespace_id = selected_namespace.get("id") if isinstance(selected_namespace, dict) else None
@@ -290,15 +311,30 @@ async def phases_page(request: Request) -> HTMLResponse:
             page="phases",
         )
     selected_namespace = context.get("selected_namespace")
-    if workflow_id is None and isinstance(selected_namespace, dict):
-        workflow_id = selected_namespace.get("workflow_id")
+    selected_namespace_workflow_id = (
+        selected_namespace.get("workflow_id") if isinstance(selected_namespace, dict) else None
+    )
+    has_explicit_namespace = request.query_params.get("namespace_id") is not None
+    if workflow_id is None and isinstance(selected_namespace_workflow_id, int):
+        workflow_id = selected_namespace_workflow_id
     workflows = _load_workflows()
     selected_workflow = next((item for item in workflows if item["id"] == workflow_id), None)
     if workflow_id is not None and selected_workflow is None:
         return _workflow_error_page(request, context, int(workflow_id), page="phases")
+    if (
+        has_explicit_namespace
+        and isinstance(selected_namespace_workflow_id, int)
+        and workflow_id is not None
+        and workflow_id != selected_namespace_workflow_id
+    ):
+        return _workflow_not_in_selected_namespace_page(request, context)
     if selected_workflow is None and workflows:
         selected_workflow = workflows[0]
     selected_workflow_id = selected_workflow["id"] if selected_workflow else None
+    namespace_scoped_view = isinstance(selected_namespace, dict) and (
+        raw_workflow_id is None or has_explicit_namespace
+    )
+    visible_workflows = [selected_workflow] if namespace_scoped_view and selected_workflow else workflows
     phases = _load_phases(int(selected_workflow_id)) if selected_workflow_id is not None else []
     phase_blocks = _build_parallel_phase_blocks(phases)
     context.update(
@@ -306,7 +342,7 @@ async def phases_page(request: Request) -> HTMLResponse:
             "phases": phases,
             "phase_blocks": phase_blocks,
             "phase_count": len(phases),
-            "workflows": workflows,
+            "workflows": visible_workflows,
             "selected_workflow": selected_workflow,
             "selected_workflow_id": selected_workflow_id,
         }

@@ -75,8 +75,8 @@ def test_prepare_ui_smoke_data_creates_neutral_parallel_namespace_fixture(tmp_pa
         agent["hermes_profile"] is None or str(agent["hermes_profile"]).startswith("launch-")
         for agent in agents
     )
-    assert len(TASK_SCENARIOS["workflow-dev"]) >= 8
-    assert len(TASK_SCENARIOS["workflow-qa"]) >= 8
+    assert len(TASK_SCENARIOS["workflow-dev"]) >= 12
+    assert len(TASK_SCENARIOS["workflow-qa"]) >= 12
     assert len(dev_tasks) == len(TASK_SCENARIOS["workflow-dev"])
     assert len(qa_tasks) == len(TASK_SCENARIOS["workflow-qa"])
     assert {task["status"] for task in dev_tasks} == {"active", "blocked", "done"}
@@ -104,8 +104,18 @@ def test_ui_smoke_pages_render_neutral_screenshot_fixture(tmp_path, monkeypatch)
             )
 
         with TestClient(create_app()) as client:
+            dashboard = client.get(f"/?namespace_id={dev['id']}")
+            assert dashboard.status_code == 200
+            dev_open_task_keys = {
+                str(scenario["key"])
+                for scenario in TASK_SCENARIOS["workflow-dev"]
+                if scenario["status"] != "done"
+            }
+            for task_key in dev_open_task_keys:
+                assert task_key in dashboard.text
+
             pages = [
-                "/",
+                f"/?namespace_id={dev['id']}",
                 "/namespaces",
                 "/namespaces/new",
                 "/tasks",

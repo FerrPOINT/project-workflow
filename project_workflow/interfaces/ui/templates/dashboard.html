@@ -39,11 +39,11 @@
 
 <div class="dashboard-panels">
   {% if open_tasks %}
-  <section class="card">
+  <section class="card" data-dashboard-open-tasks>
     <div class="card-title" style="margin-bottom:14px">Незавершённые задачи</div>
     <div class="list-stack">
       {% for task in open_tasks %}
-      <a href="/task/{{ task.task_key }}{% if task.namespace_id %}?namespace_id={{ task.namespace_id }}{% endif %}" class="list-item">
+      <a href="/task/{{ task.task_key }}{% if task.namespace_id %}?namespace_id={{ task.namespace_id }}{% endif %}" class="list-item" data-task-key="{{ task.task_key }}">
         <div class="list-title"><span class="code">{{ task.task_key }}</span>{% if task.title %} — {{ task.title }}{% endif %}</div>
         <div class="list-meta">
           <span>{{ task.namespace_name }}</span>
@@ -57,7 +57,7 @@
   {% endif %}
 
   {% if namespaces %}
-  <section class="card">
+  <section class="card" data-dashboard-namespaces>
     <div class="card-title" style="margin-bottom:14px">Неймспейсы</div>
     <div class="list-stack">
       {% for namespace in namespaces %}
