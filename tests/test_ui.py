@@ -1734,6 +1734,17 @@ class TestProjectsPage:
             response.text,
         )
 
+    def test_namespace_editor_refreshes_header_selector_and_brand_identity(self):
+        response = client.get("/namespaces")
+        assert response.status_code == 200
+        assert "document.querySelector('.brand-name')" in response.text
+        assert "document.querySelector('.brand-subname')" in response.text
+        assert "brandSubname.textContent = command;" in response.text
+        assert "function renderNamespaceSelector()" in response.text
+        assert "selector.replaceChildren();" in response.text
+        assert "option.textContent = namespace.name;" in response.text
+        assert "renderNamespaceSelector();" in response.text
+
     def test_namespace_create_redirects_to_edit_page_after_success(self):
         response = client.get("/namespaces/new")
         assert response.status_code == 200

@@ -130,7 +130,8 @@ function applyPageTheme(color){
 function updateNamespaceThemePreview(){
   var icon = document.getElementById('namespaceThemeIcon').value || defaultNamespaceThemeIcon;
   var color = document.getElementById('namespaceThemeColor').value || defaultNamespaceThemeColor;
-  var name = document.getElementById('namespaceName').value.trim() || document.getElementById('namespaceCliCommand').value.trim() || 'Без названия';
+  var command = document.getElementById('namespaceCliCommand').value.trim() || 'engine';
+  var name = document.getElementById('namespaceName').value.trim() || (command === 'engine' ? '' : command) || 'Без названия';
   var preview = document.getElementById('namespaceThemePreview');
   var previewIcon = document.getElementById('namespaceThemePreviewIcon');
   preview.style.setProperty('--namespace-color', color);
@@ -139,8 +140,10 @@ function updateNamespaceThemePreview(){
   if(namespaceFormMode === 'create'){ return; }
   applyPageTheme(color);
   var brandName = document.querySelector('.brand-name');
+  var brandSubname = document.querySelector('.brand-subname');
   var brandMark = document.querySelector('.brand-mark');
   if(brandName){ brandName.textContent = name; }
+  if(brandSubname){ brandSubname.textContent = command; }
   if(brandMark){ brandMark.innerHTML = namespaceIconSvg(icon); }
 }
 function currentPayload(){
@@ -233,6 +236,7 @@ function reloadNamespaces(nextId){
         empty.className = 'card empty-note';
         empty.textContent = 'Пока ничего не создано.';
         nav.appendChild(empty);
+        renderNamespaceSelector();
         syncNav();
         return;
       }
@@ -240,6 +244,7 @@ function reloadNamespaces(nextId){
       if(!namespaceById(selectedNamespaceId)){ selectedNamespaceId = namespaceStore[0].id; }
       previousNamespaceId = selectedNamespaceId;
       renderNamespaceNav();
+      renderNamespaceSelector();
       setNamespaceFormMode('edit');
       fillNamespaceForm(namespaceById(selectedNamespaceId));
       syncNav();
@@ -292,6 +297,18 @@ function renderNamespaceNav(){
     nav.appendChild(button);
   });
 }
+function renderNamespaceSelector(){
+  var selector = document.getElementById('namespaceSelector');
+  if(!selector){ return; }
+  selector.replaceChildren();
+  namespaceStore.forEach(function(namespace){
+    var option = document.createElement('option');
+    option.value = String(namespace.id);
+    option.textContent = namespace.name;
+    option.selected = namespace.id === selectedNamespaceId;
+    selector.appendChild(option);
+  });
+}
 function saveNamespace(){
   if(selectedNamespaceId == null){ showToast('Сначала выберите неймспейс','error'); return; }
   var payload = currentPayload();
@@ -332,6 +349,7 @@ function submitNamespace(){
   saveNamespace();
 }
 renderNamespaceNav();
+renderNamespaceSelector();
 if(selectedNamespaceId == null){
   setNamespaceFormMode('create');
   fillNamespaceForm(null);
