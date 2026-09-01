@@ -98,7 +98,7 @@
       <div class="panel-actions">
         <button class="btn btn-primary" type="submit" id="namespaceSubmitButton">{{ 'Создать' if create_mode else 'Сохранить' }}</button>
         <button class="btn btn-secondary" type="button" id="cancelCreateButton" onclick="cancelCreateNamespace()" style="display:none">Отмена</button>
-        <button class="btn btn-secondary" type="button" id="deleteNamespaceButton" onclick="deleteNamespace()">Удалить</button>
+        <button class="btn btn-secondary" type="button" id="deleteNamespaceButton" onclick="deleteNamespace()"{% if create_mode %} style="display:none"{% endif %}>Удалить</button>
       </div>
     </form>
   </section>

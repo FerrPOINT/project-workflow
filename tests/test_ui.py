@@ -1795,6 +1795,7 @@ class TestProjectsPage:
         assert 'href="/namespaces/new' in response.text
         assert 'title="Создать" aria-label="Создать">+</a>' in response.text
         assert '<div class="card-title" id="namespaceFormMode">Создание</div>' in response.text
+        assert 'id="deleteNamespaceButton" onclick="deleteNamespace()" style="display:none"' in response.text
         assert "Добавить" not in response.text
 
     def test_namespace_create_page_keeps_current_selection_for_cancel(self):
