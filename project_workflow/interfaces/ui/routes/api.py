@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import Query
+from fastapi import Path, Query
 from fastapi.responses import JSONResponse
 
 from project_workflow.domain.exceptions import ConflictError, LastPhaseError, NotFoundError
@@ -26,6 +26,8 @@ from project_workflow.interfaces.ui.schemas import (
 )
 from project_workflow.interfaces.ui.services import _load_phase_detail, _load_tasks
 from project_workflow.interfaces.ui.state import _app_state
+
+PositivePathId = Annotated[int, Path(gt=0)]
 
 
 def _error(message: str, status: int) -> JSONResponse:
@@ -139,7 +141,7 @@ async def api_namespaces() -> dict[str, Any] | JSONResponse:
     return {"ok": True, "namespaces": namespaces}
 
 
-async def api_namespace_get(namespace_id: int) -> dict[str, Any] | JSONResponse:
+async def api_namespace_get(namespace_id: PositivePathId) -> dict[str, Any] | JSONResponse:
     namespace = _app_state.project_service().get_project(namespace_id)
     if namespace is None:
         return _error(f"Неймспейс {namespace_id} не найден", 404)
@@ -198,7 +200,7 @@ async def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONRespons
     }
 
 
-async def api_phase_update(phase_id: int, payload: PhaseUpdate) -> dict[str, Any] | JSONResponse:
+async def api_phase_update(phase_id: PositivePathId, payload: PhaseUpdate) -> dict[str, Any] | JSONResponse:
     srv = _app_state.get_service()
     scalar_fields = {
         "name",
@@ -226,7 +228,7 @@ async def api_phase_update(phase_id: int, payload: PhaseUpdate) -> dict[str, Any
     return {"ok": True, "ids": ids}
 
 
-async def api_phase_delete(phase_id: int) -> dict[str, Any] | JSONResponse:
+async def api_phase_delete(phase_id: PositivePathId) -> dict[str, Any] | JSONResponse:
     try:
         _app_state.phase_service().delete_phase(phase_id)
     except NotFoundError:
@@ -265,7 +267,7 @@ async def api_workflow_create(payload: WorkflowCreate) -> dict[str, Any] | JSONR
     return {"ok": True, "workflow_id": workflow_id, "workflow": service.get_workflow(workflow_id)}
 
 
-async def api_workflow_update(workflow_id: int, payload: WorkflowUpdate) -> dict[str, Any] | JSONResponse:
+async def api_workflow_update(workflow_id: PositivePathId, payload: WorkflowUpdate) -> dict[str, Any] | JSONResponse:
     service = _app_state.workflow_service()
     updates = _updates_from_payload(payload, ["name", "description"])
     try:
@@ -277,7 +279,7 @@ async def api_workflow_update(workflow_id: int, payload: WorkflowUpdate) -> dict
     return {"ok": True, "workflow": service.get_workflow(workflow_id)}
 
 
-async def api_workflow_delete(workflow_id: int) -> dict[str, Any] | JSONResponse:
+async def api_workflow_delete(workflow_id: PositivePathId) -> dict[str, Any] | JSONResponse:
     service = _app_state.workflow_service()
     try:
         service.delete_workflow(workflow_id)
@@ -321,7 +323,7 @@ async def api_namespace_create(payload: NamespaceCreate) -> dict[str, Any] | JSO
     }
 
 
-async def api_namespace_update(namespace_id: int, payload: NamespaceUpdate) -> dict[str, Any] | JSONResponse:
+async def api_namespace_update(namespace_id: PositivePathId, payload: NamespaceUpdate) -> dict[str, Any] | JSONResponse:
     service = _app_state.project_service()
     updates = _updates_from_payload(
         payload,
@@ -339,7 +341,7 @@ async def api_namespace_update(namespace_id: int, payload: NamespaceUpdate) -> d
     return {"ok": True, "namespace": context}
 
 
-async def api_namespace_delete(namespace_id: int) -> dict[str, Any] | JSONResponse:
+async def api_namespace_delete(namespace_id: PositivePathId) -> dict[str, Any] | JSONResponse:
     service = _app_state.project_service()
     try:
         service.delete_project(namespace_id)
@@ -368,7 +370,7 @@ async def api_agent_create(payload: AgentCreate) -> dict[str, Any] | JSONRespons
     return {"ok": True, "agent_id": agent_id, "agent": service.get_agent(agent_id)}
 
 
-async def api_agent_update(agent_id: int, payload: AgentUpdate) -> dict[str, Any] | JSONResponse:
+async def api_agent_update(agent_id: PositivePathId, payload: AgentUpdate) -> dict[str, Any] | JSONResponse:
     service = _app_state.agent_service()
     updates = _updates_from_payload(payload, ["name", "description"])
     if "hermes_profile" in payload.model_fields_set:
@@ -384,7 +386,7 @@ async def api_agent_update(agent_id: int, payload: AgentUpdate) -> dict[str, Any
     return {"ok": True, "agent": service.get_agent(agent_id)}
 
 
-async def api_agent_delete(agent_id: int) -> dict[str, Any] | JSONResponse:
+async def api_agent_delete(agent_id: PositivePathId) -> dict[str, Any] | JSONResponse:
     service = _app_state.agent_service()
     try:
         service.delete_agent(agent_id)
@@ -395,14 +397,14 @@ async def api_agent_delete(agent_id: int) -> dict[str, Any] | JSONResponse:
     return {"ok": True}
 
 
-async def api_phase_detail(phase_id: int) -> dict[str, Any] | JSONResponse:
+async def api_phase_detail(phase_id: PositivePathId) -> dict[str, Any] | JSONResponse:
     phase = _load_phase_detail(phase_id)
     if not phase:
         return _error(f"Фаза {phase_id} не найдена", 404)
     return {"ok": True, "phase": phase}
 
 
-async def api_instructions_list(phase_id: int) -> dict[str, Any] | JSONResponse:
+async def api_instructions_list(phase_id: PositivePathId) -> dict[str, Any] | JSONResponse:
     phase = _app_state.phase_service().get_phase(phase_id)
     if phase is None:
         return _error(f"Фаза {phase_id} не найдена", 404)
@@ -430,7 +432,10 @@ async def api_instruction_create(payload: InstructionCreate) -> dict[str, Any] |
     return {"ok": True, "instruction": item}
 
 
-async def api_instruction_update(instruction_id: int, payload: InstructionUpdate) -> dict[str, Any] | JSONResponse:
+async def api_instruction_update(
+    instruction_id: PositivePathId,
+    payload: InstructionUpdate,
+) -> dict[str, Any] | JSONResponse:
     updates = _updates_from_payload(payload, ["description", "execution_type"])
     if "skills" in payload.model_fields_set:
         updates["skills"] = payload.skills
@@ -445,7 +450,7 @@ async def api_instruction_update(instruction_id: int, payload: InstructionUpdate
     return {"ok": True, "instruction": _app_state.instruction_service().get_instruction(instruction_id)}
 
 
-async def api_instruction_delete(instruction_id: int) -> dict[str, Any] | JSONResponse:
+async def api_instruction_delete(instruction_id: PositivePathId) -> dict[str, Any] | JSONResponse:
     try:
         _app_state.instruction_service().delete_instruction(instruction_id)
     except NotFoundError as exc:
@@ -455,7 +460,10 @@ async def api_instruction_delete(instruction_id: int) -> dict[str, Any] | JSONRe
     return {"ok": True}
 
 
-async def api_instructions_reorder(phase_id: int, payload: InstructionReorder) -> dict[str, Any] | JSONResponse:
+async def api_instructions_reorder(
+    phase_id: PositivePathId,
+    payload: InstructionReorder,
+) -> dict[str, Any] | JSONResponse:
     try:
         _app_state.instruction_service().reorder_instructions(phase_id, payload.instruction_ids)
     except NotFoundError as exc:

@@ -1044,6 +1044,38 @@ class TestApiTasks:
         assert "Удалить задачу" not in page.text
 
 
+class TestApiPathIds:
+    @pytest.mark.parametrize(
+        ("method", "path", "field", "payload"),
+        [
+            ("get", "/api/phases/0", "phase_id", None),
+            ("put", "/api/phases/0", "phase_id", {"name": "Новая фаза"}),
+            ("delete", "/api/phases/0", "phase_id", None),
+            ("get", "/api/phases/0/instructions", "phase_id", None),
+            ("put", "/api/phases/0/instructions/reorder", "phase_id", {"instruction_ids": [1]}),
+            ("put", "/api/workflows/0", "workflow_id", {"name": "Новый воркфлоу"}),
+            ("delete", "/api/workflows/0", "workflow_id", None),
+            ("get", "/api/namespaces/0", "namespace_id", None),
+            ("put", "/api/namespaces/0", "namespace_id", {"name": "Новая настройка"}),
+            ("delete", "/api/namespaces/0", "namespace_id", None),
+            ("put", "/api/agents/0", "agent_id", {"name": "Новый агент"}),
+            ("delete", "/api/agents/0", "agent_id", None),
+            ("put", "/api/instructions/0", "instruction_id", {"description": "Новый шаг"}),
+            ("delete", "/api/instructions/0", "instruction_id", None),
+        ],
+    )
+    def test_api_resource_paths_reject_zero_ids(self, client, method, path, field, payload):
+        request = getattr(client, method)
+        kwargs = {"json": payload} if payload is not None else {}
+        resp = request(path, **kwargs)
+
+        assert resp.status_code == 422
+        data = resp.json()
+        assert data["ok"] is False
+        assert data["error"] == "Некорректные данные запроса"
+        assert {"field": field, "message": "Значение меньше допустимого"} in data["details"]
+
+
 class TestApiPhaseDelete:
     def test_delete_phase(self, client):
         from project_workflow.interfaces.ui import _app_state
