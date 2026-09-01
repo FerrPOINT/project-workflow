@@ -57,6 +57,7 @@
 | BUG-046 | CLI wrappers / безопасность файлов | `install_namespace_clis.py` мог перезаписать существующий пользовательский файл в `--bin-dir`, если его имя совпадало с configured CLI-командой или её `.cmd/.ps1` wrapper. | Installer сначала preflight-проверяет все target-файлы и пишет wrappers только если путь свободен или уже содержит managed marker; regression проверяет отсутствие частичной записи. | Исправлено |
 | BUG-047 | Web UI / workflow CRUD | После создания нового воркфлоу страница редиректила на `/phases?workflow_id=...` без выбранного `namespace_id`, поэтому явный URL терял текущий набор и зависел только от cookie. | Template regression требует `phaseUrlForWorkflow()` с сохранением `namespace_id`; unassigned workflow остаётся доступен выбранному набору до привязки. | Исправлено |
 | BUG-048 | Application / workflow atomicity | `WorkflowService.create_workflow()` не делал rollback, если создание дефолтной фазы или readback падали после записи workflow в текущую транзакцию. | Service regression требует rollback и отсутствие commit при сбое default phase creation. | Исправлено |
+| BUG-049 | Application / service atomicity | `ProjectService`, `TaskService` и прямой `PhaseServiceApp` не делали rollback, если запись уже прошла, а readback или следующий write падали до commit. | Service regressions требуют rollback и отсутствие commit для namespace create/update/delete, task create и direct phase create/update/delete/reorder; `commit=False` оставляет rollback внешнему владельцу транзакции. | Исправлено |
 
 ## Следующие проверки
 

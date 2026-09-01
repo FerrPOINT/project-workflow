@@ -17,75 +17,81 @@ class TaskService:
 
     def create_task(self, data: dict[str, Any]) -> dict[str, Any]:
         payload = dict(data)
-        requested_workflow_id = payload.get("workflow_id")
-        if requested_workflow_id is not None and (
-            not isinstance(requested_workflow_id, int)
-            or isinstance(requested_workflow_id, bool)
-            or requested_workflow_id <= 0
-        ):
-            raise ValueError("workflow_id задачи должен быть положительным целым числом")
-        if "project_id" not in payload or payload["project_id"] is None:
-            resolved_project = get_project_for_task_key(
-                self._uow,
-                payload.get("task_key", ""),
-                workflow_id=requested_workflow_id,
-            )
-            if resolved_project is None:
-                raise ValueError(f"Для ключа задачи {payload.get('task_key', '')!r} нет подходящего неймспейса")
-            payload["project_id"] = resolved_project["id"]
-        raw_project_id = payload["project_id"]
-        if not isinstance(raw_project_id, int) or isinstance(raw_project_id, bool) or raw_project_id <= 0:
-            raise ValueError("project_id задачи должен быть положительным целым числом")
-        project_id = raw_project_id
-        project = self._uow.projects.get_by_id(project_id)
-        if project is None:
-            raise NotFoundError(f"Неймспейс {project_id} не найден")
-        if requested_workflow_id is not None and project.workflow_id != requested_workflow_id:
-            raise ConflictError("Задача принадлежит другому воркфлоу")
-        if self._uow.workflows.lock(project.workflow_id) is None:
-            raise NotFoundError(f"Воркфлоу {project.workflow_id} не найден")
-        locked_project = self._uow.projects.lock(project_id)
-        if locked_project is None:
-            raise NotFoundError(f"Неймспейс {project_id} не найден")
-        if locked_project.workflow_id != project.workflow_id:
-            raise ConflictError("Воркфлоу изменился во время создания задачи")
-        payload["workflow_id"] = locked_project.workflow_id
-        raw_task_key = payload.get("task_key")
-        if not isinstance(raw_task_key, str) or not raw_task_key.strip():
-            raise ValueError("task_key должен быть непустой строкой")
-        task_key = raw_task_key.strip()
-        validated_key = TaskKeyValidator.from_projects([]).validate(task_key)
-        if not validated_key.is_valid:
-            raise ConflictError(validated_key.error_message or f"Недопустимый ключ задачи {task_key!r}")
-        task_key = validated_key.normalized or task_key
-        payload["task_key"] = task_key
-        phases = list(self._uow.phases.list(workflow_id=locked_project.workflow_id))
-        if not phases:
-            raise ValueError(f"Воркфлоу {locked_project.workflow_id} не содержит фаз")
-        raw_current_phase_id = payload.get("current_phase_id")
-        if raw_current_phase_id is None:
-            current_phase_id = phases[0].id
-        elif (
-            not isinstance(raw_current_phase_id, int)
-            or isinstance(raw_current_phase_id, bool)
-            or raw_current_phase_id <= 0
-        ):
-            raise ValueError("current_phase_id должен быть положительным целым числом")
-        else:
-            current_phase_id = raw_current_phase_id
-        if current_phase_id is None or not any(phase.id == current_phase_id for phase in phases):
-            raise ValueError(
-                f"Фаза {current_phase_id!r} не найдена в воркфлоу {locked_project.workflow_id}"
-            )
-        payload["current_phase_id"] = current_phase_id
-        if self._uow.tasks.get_by_key(task_key, project_id=locked_project.id) is not None:
-            raise ConflictError(f"Задача {task_key!r} уже существует")
-        tid = self._uow.tasks.create(payload)
-        task = self._uow.tasks.get_by_id(tid)
-        if not task:
-            raise RuntimeError("Не удалось создать задачу")
-        self._uow.commit()
-        return task.to_dict()
+        try:
+            requested_workflow_id = payload.get("workflow_id")
+            if requested_workflow_id is not None and (
+                not isinstance(requested_workflow_id, int)
+                or isinstance(requested_workflow_id, bool)
+                or requested_workflow_id <= 0
+            ):
+                raise ValueError("workflow_id задачи должен быть положительным целым числом")
+            if "project_id" not in payload or payload["project_id"] is None:
+                resolved_project = get_project_for_task_key(
+                    self._uow,
+                    payload.get("task_key", ""),
+                    workflow_id=requested_workflow_id,
+                )
+                if resolved_project is None:
+                    raise ValueError(
+                        f"Для ключа задачи {payload.get('task_key', '')!r} нет подходящего неймспейса"
+                    )
+                payload["project_id"] = resolved_project["id"]
+            raw_project_id = payload["project_id"]
+            if not isinstance(raw_project_id, int) or isinstance(raw_project_id, bool) or raw_project_id <= 0:
+                raise ValueError("project_id задачи должен быть положительным целым числом")
+            project_id = raw_project_id
+            project = self._uow.projects.get_by_id(project_id)
+            if project is None:
+                raise NotFoundError(f"Неймспейс {project_id} не найден")
+            if requested_workflow_id is not None and project.workflow_id != requested_workflow_id:
+                raise ConflictError("Задача принадлежит другому воркфлоу")
+            if self._uow.workflows.lock(project.workflow_id) is None:
+                raise NotFoundError(f"Воркфлоу {project.workflow_id} не найден")
+            locked_project = self._uow.projects.lock(project_id)
+            if locked_project is None:
+                raise NotFoundError(f"Неймспейс {project_id} не найден")
+            if locked_project.workflow_id != project.workflow_id:
+                raise ConflictError("Воркфлоу изменился во время создания задачи")
+            payload["workflow_id"] = locked_project.workflow_id
+            raw_task_key = payload.get("task_key")
+            if not isinstance(raw_task_key, str) or not raw_task_key.strip():
+                raise ValueError("task_key должен быть непустой строкой")
+            task_key = raw_task_key.strip()
+            validated_key = TaskKeyValidator.from_projects([]).validate(task_key)
+            if not validated_key.is_valid:
+                raise ConflictError(validated_key.error_message or f"Недопустимый ключ задачи {task_key!r}")
+            task_key = validated_key.normalized or task_key
+            payload["task_key"] = task_key
+            phases = list(self._uow.phases.list(workflow_id=locked_project.workflow_id))
+            if not phases:
+                raise ValueError(f"Воркфлоу {locked_project.workflow_id} не содержит фаз")
+            raw_current_phase_id = payload.get("current_phase_id")
+            if raw_current_phase_id is None:
+                current_phase_id = phases[0].id
+            elif (
+                not isinstance(raw_current_phase_id, int)
+                or isinstance(raw_current_phase_id, bool)
+                or raw_current_phase_id <= 0
+            ):
+                raise ValueError("current_phase_id должен быть положительным целым числом")
+            else:
+                current_phase_id = raw_current_phase_id
+            if current_phase_id is None or not any(phase.id == current_phase_id for phase in phases):
+                raise ValueError(
+                    f"Фаза {current_phase_id!r} не найдена в воркфлоу {locked_project.workflow_id}"
+                )
+            payload["current_phase_id"] = current_phase_id
+            if self._uow.tasks.get_by_key(task_key, project_id=locked_project.id) is not None:
+                raise ConflictError(f"Задача {task_key!r} уже существует")
+            tid = self._uow.tasks.create(payload)
+            task = self._uow.tasks.get_by_id(tid)
+            if not task:
+                raise RuntimeError("Не удалось создать задачу")
+            self._uow.commit()
+            return task.to_dict()
+        except Exception:
+            self._uow.rollback()
+            raise
 
     def get_task(self, task_id: int) -> dict[str, Any] | None:
         t = self._uow.tasks.get_by_id(task_id)
