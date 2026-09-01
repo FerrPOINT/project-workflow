@@ -1601,7 +1601,7 @@ def _openai_compatible_server():
                 self._send_json(503, {"error": "provider unavailable"})
                 return
             if "MODE=INVALID" in user_prompt:
-                content = "not-json"
+                arguments = "not-json"
             else:
                 verdict = "PASS"
                 covered = item_ids
@@ -1615,7 +1615,7 @@ def _openai_compatible_server():
                     verdict, covered, missing = "ROLLBACK", [], item_ids
                 elif "MODE=DELEGATE" in user_prompt:
                     verdict, covered, missing = "DELEGATE", [], item_ids
-                content = json.dumps(
+                arguments = json.dumps(
                     {
                         "verdict": verdict,
                         "covered": covered,
@@ -1630,7 +1630,24 @@ def _openai_compatible_server():
                 {
                     "id": "chatcmpl-e2e",
                     "object": "chat.completion",
-                    "choices": [{"index": 0, "message": {"role": "assistant", "content": content}}],
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {
+                                "role": "assistant",
+                                "content": "",
+                                "tool_calls": [
+                                    {
+                                        "type": "function",
+                                        "function": {
+                                            "name": "submit_verdict",
+                                            "arguments": arguments,
+                                        },
+                                    }
+                                ],
+                            },
+                        }
+                    ],
                 },
             )
 
@@ -1838,10 +1855,17 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
         assert len(provider_state.chat_requests) == 15
         assert provider_state.chat_phases == expected_phases
         assert all(request["model"] == "e2e-contract-model" for request in provider_state.chat_requests)
+        assert all(request["stream"] is False for request in provider_state.chat_requests)
+        assert all(request["parallel_tool_calls"] is False for request in provider_state.chat_requests)
         assert all(
-            request["response_format"] == {"type": "json_object"}
+            request["tool_choice"] == {
+                "type": "function",
+                "function": {"name": "submit_verdict"},
+            }
             for request in provider_state.chat_requests
         )
+        assert all("response_format" not in request for request in provider_state.chat_requests)
+        assert all("reasoning_effort" not in request for request in provider_state.chat_requests)
 
     uow = SAUnitOfWork(pg_url)
     task = uow.tasks.get_by_key(task_key)

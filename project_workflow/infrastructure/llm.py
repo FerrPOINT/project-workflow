@@ -58,7 +58,7 @@ class OpenAICompatibleClient:
         ).strip()
 
     def chat(self, system: str, user: str, temperature: float = 0.1) -> dict[str, Any]:
-        """Send chat request, return parsed JSON content."""
+        """Send chat request and return the one forced verdict tool call."""
         if urlsplit(self.base_url).hostname == "openrouter.ai" and not self.api_key:
             raise LlmConfigurationError("Для OpenRouter требуется OPENAI_API_KEY")
 
@@ -75,13 +75,25 @@ class OpenAICompatibleClient:
                 {"role": "user", "content": user},
             ],
             "temperature": temperature,
-            "response_format": {"type": "json_object"},
-            # Reasoning-capable OpenAI-compatible models may spend part of this
-            # budget before emitting the small JSON verdict.
             "max_tokens": 4000,
+            "stream": False,
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "submit_verdict",
+                        "description": "Submit the workflow supervisor verdict.",
+                        "parameters": _LlmResponse.model_json_schema(),
+                        "strict": True,
+                    },
+                }
+            ],
+            "tool_choice": {
+                "type": "function",
+                "function": {"name": "submit_verdict"},
+            },
+            "parallel_tool_calls": False,
         }
-        if self.reasoning_effort:
-            payload["reasoning_effort"] = self.reasoning_effort
 
         resp = requests.post(
             f"{self.base_url}/chat/completions",
@@ -91,17 +103,21 @@ class OpenAICompatibleClient:
         )
         resp.raise_for_status()
         data = resp.json()
-        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-        if not content.strip():
-            raise ValueError("Empty content from LLM")
-        return self._extract_json(content)
-
-    @staticmethod
-    def _extract_json(text: str) -> dict[str, Any]:
-        """Parse one JSON object without repairing free-form model output."""
-        parsed = json.loads(text)
+        tool_calls = data.get("choices", [{}])[0].get("message", {}).get("tool_calls")
+        if not isinstance(tool_calls, list) or len(tool_calls) != 1:
+            raise ValueError("Supervisor must return exactly one tool call")
+        tool_call = tool_calls[0]
+        if not isinstance(tool_call, dict) or tool_call.get("type") != "function":
+            raise ValueError("Supervisor tool call must be a function")
+        function = tool_call.get("function")
+        if not isinstance(function, dict) or function.get("name") != "submit_verdict":
+            raise ValueError("Unexpected supervisor tool call")
+        arguments = function.get("arguments")
+        if not isinstance(arguments, str):
+            raise ValueError("Supervisor tool arguments must be JSON text")
+        parsed = json.loads(arguments)
         if not isinstance(parsed, dict):
-            raise ValueError("Supervisor response must be a JSON object")
+            raise ValueError("Supervisor tool arguments must be a JSON object")
         return parsed
 
 

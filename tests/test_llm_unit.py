@@ -19,6 +19,23 @@ from project_workflow.supervisor.evaluate import evaluate_llm_report
 from project_workflow.supervisor.models import Phase, PhaseDelegate
 
 
+def _tool_response(arguments: str = "{}", *, name: str = "submit_verdict") -> dict[str, object]:
+    return {
+        "choices": [
+            {
+                "message": {
+                    "tool_calls": [
+                        {
+                            "type": "function",
+                            "function": {"name": name, "arguments": arguments},
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+
+
 def _make_engine():
     engine = MagicMock()
     engine.task_key = "RUN-1"
@@ -206,7 +223,7 @@ class TestOpenAICompatibleClientChatErrors:
         client = OpenAICompatibleClient(base_url="http://provider.internal/v1", api_key="")
         response = MagicMock()
         response.raise_for_status.return_value = None
-        response.json.return_value = {"choices": [{"message": {"content": "{}"}}]}
+        response.json.return_value = _tool_response()
         with patch("requests.post", return_value=response) as post:
             assert client.chat("sys", "user") == {}
 
@@ -226,45 +243,41 @@ class TestOpenAICompatibleClientChatErrors:
             with pytest.raises(Exception, match="bad"):
                 client.chat("sys", "user")
 
-    def test_empty_content(self):
+    def test_missing_tool_call(self):
         resp = MagicMock()
         resp.raise_for_status.return_value = None
-        resp.json.return_value = {"choices": [{"message": {"content": ""}}]}
+        resp.json.return_value = {"choices": [{"message": {"content": "{}"}}]}
         with patch("requests.post", return_value=resp):
             client = OpenAICompatibleClient(api_key="test-key")
-            with pytest.raises(ValueError, match="Empty content"):
+            with pytest.raises(ValueError, match="exactly one tool call"):
                 client.chat("sys", "user")
 
-    def test_whitespace_content(self):
+    def test_duplicate_tool_calls(self):
         resp = MagicMock()
         resp.raise_for_status.return_value = None
-        resp.json.return_value = {"choices": [{"message": {"content": "  "}}]}
+        one = _tool_response()["choices"][0]["message"]["tool_calls"][0]
+        resp.json.return_value = {"choices": [{"message": {"tool_calls": [one, one]}}]}
         with patch("requests.post", return_value=resp):
             client = OpenAICompatibleClient(base_url="https://provider.example/v1")
-            with pytest.raises(ValueError, match="Empty content"):
+            with pytest.raises(ValueError, match="exactly one tool call"):
                 client.chat("sys", "user")
 
-
-class TestExtractJson:
-    def test_markdown_json_is_rejected(self):
-        text = '```json\n{"verdict": "PASS"}\n```'
-        with pytest.raises(ValueError):
-            OpenAICompatibleClient._extract_json(text)
-
-    def test_extract_plain_json(self):
-        text = '{"verdict": "BLOCKED"}'
-        result = OpenAICompatibleClient._extract_json(text)
-        assert result["verdict"] == "BLOCKED"
-
-    def test_free_text_around_json_is_rejected(self):
-        text = 'Some text {"verdict": "PARTIAL"} more text'
-        with pytest.raises(ValueError):
-            OpenAICompatibleClient._extract_json(text)
-
-    def test_invalid_json_is_rejected(self):
-        text = "not json"
-        with pytest.raises(ValueError):
-            OpenAICompatibleClient._extract_json(text)
+    @pytest.mark.parametrize(
+        ("response", "error"),
+        [
+            (_tool_response(name="other"), "Unexpected supervisor tool call"),
+            (_tool_response("not json"), "Expecting value"),
+            (_tool_response("[]"), "must be a JSON object"),
+        ],
+    )
+    def test_invalid_tool_call_is_rejected(self, response, error):
+        resp = MagicMock()
+        resp.raise_for_status.return_value = None
+        resp.json.return_value = response
+        with patch("requests.post", return_value=resp):
+            client = OpenAICompatibleClient(api_key="test-key")
+            with pytest.raises(ValueError, match=error):
+                client.chat("sys", "user")
 
 
 class TestPromptBuilder:
