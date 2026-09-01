@@ -219,6 +219,36 @@ class TestApiPhases:
         assert {"step", "history"}.issubset(names)
         assert "ui" not in names
 
+    def test_api_settings_uses_selected_namespace_cli_command(self, client):
+        from project_workflow.interfaces.ui import _app_state
+
+        default_wf = next(w for w in _app_state.workflow_service().list_workflows() if w.get("is_default"))
+        command = f"workflow-api-settings-{uuid.uuid4().hex[:6]}"
+        created = client.post(
+            "/api/namespaces",
+            json={
+                "name": "API Settings Namespace",
+                "workflow_id": default_wf["id"],
+                "cli_command": command,
+            },
+        )
+        assert created.status_code == 200
+        namespace_id = created.json()["namespace_id"]
+
+        resp = client.get(f"/api/settings?namespace_id={namespace_id}")
+
+        assert resp.status_code == 200
+        usages = {item["name"]: item["usage"] for item in resp.json()["commands"]}
+        assert usages["step"] == f"{command} step"
+        assert usages["history"] == f"{command} history"
+        assert all(not usage.startswith("project-workflow ") for usage in usages.values())
+
+    def test_api_settings_rejects_unknown_namespace(self, client):
+        resp = client.get(f"/api/settings?namespace_id={UNKNOWN_NAMESPACE_ID}")
+
+        assert resp.status_code == 404
+        assert resp.json() == {"ok": False, "error": f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден"}
+
     def test_composite_phase_update_commits_once(self, client, monkeypatch):
         phase_id = _phase_id(client, "1.INTAKE")
         original_commit = SAUnitOfWork.commit

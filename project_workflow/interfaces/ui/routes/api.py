@@ -76,11 +76,17 @@ def _unique_legacy_code(command: str, existing: list[dict[str, Any]]) -> str:
         suffix += 1
 
 
-async def api_settings_get() -> dict[str, Any] | JSONResponse:
+async def api_settings_get(namespace_id: int | None = Query(default=None, gt=0)) -> dict[str, Any] | JSONResponse:
     """Вернуть реестр CLI-команд для UI/интеграций."""
     from project_workflow.interfaces.ui.services import _load_cli_reference
 
-    return {"ok": True, "commands": _load_cli_reference()}
+    entrypoint = None
+    if namespace_id is not None:
+        namespace = _app_state.project_service().get_project(namespace_id)
+        if namespace is None:
+            return _error(f"Неймспейс {namespace_id} не найден", 404)
+        entrypoint = namespace.get("cli_command")
+    return {"ok": True, "commands": _load_cli_reference(entrypoint=entrypoint)}
 
 
 async def api_phases(workflow_id: int | None = Query(default=None, gt=0)) -> dict[str, Any] | JSONResponse:
