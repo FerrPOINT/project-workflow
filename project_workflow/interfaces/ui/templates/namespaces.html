@@ -300,12 +300,13 @@ function renderNamespaceNav(){
 function renderNamespaceSelector(){
   var selector = document.getElementById('namespaceSelector');
   if(!selector){ return; }
+  var selectorNamespaceId = selectedNamespaceId == null ? previousNamespaceId : selectedNamespaceId;
   selector.replaceChildren();
   namespaceStore.forEach(function(namespace){
     var option = document.createElement('option');
     option.value = String(namespace.id);
     option.textContent = namespace.name;
-    option.selected = namespace.id === selectedNamespaceId;
+    option.selected = namespace.id === selectorNamespaceId;
     selector.appendChild(option);
   });
 }

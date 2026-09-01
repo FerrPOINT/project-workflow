@@ -1701,6 +1701,10 @@ class TestProjectsPage:
         assert "let selectedNamespaceId = null;" in response.text
         assert f"let previousNamespaceId = {namespace_id};" in response.text
         assert "if(namespaceFormMode === 'create'){ return; }" in response.text
+        assert "var selectorNamespaceId = selectedNamespaceId == null ? previousNamespaceId : selectedNamespaceId;" in (
+            response.text
+        )
+        assert "option.selected = namespace.id === selectorNamespaceId;" in response.text
 
     def test_namespace_create_page_rejects_invalid_query_namespace_without_create_fallback(self):
         response = client.get("/namespaces/new?namespace_id=abc")
