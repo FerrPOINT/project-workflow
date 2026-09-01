@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -303,7 +302,7 @@ DEMO_AGENT_PROFILES: dict[str, dict[str, Any]] = {
     "orchestrator": {
         "name": "Координатор",
         "description": "Ведёт постановку задачи, синхронизирует переходы и фиксирует решения.",
-        "hermes_profile": "launch-coordinator",
+        "hermes_profile": None,
     },
     "codex-operator": {
         "name": "Оператор",
@@ -313,27 +312,27 @@ DEMO_AGENT_PROFILES: dict[str, dict[str, Any]] = {
     "ops": {
         "name": "Инженер запуска",
         "description": "Отвечает за окружение, миграции, smoke-проверки и готовность приложения.",
-        "hermes_profile": "launch-runtime",
+        "hermes_profile": None,
     },
     "researcher": {
         "name": "Аналитик",
         "description": "Разбирает поток данных, зависимости и фактическое поведение системы.",
-        "hermes_profile": "launch-analyst",
+        "hermes_profile": None,
     },
     "critic": {
         "name": "Контролёр качества",
         "description": "Ищет риски, пропуски в плане и слабые места регрессионного покрытия.",
-        "hermes_profile": "launch-quality",
+        "hermes_profile": None,
     },
     "coder": {
         "name": "Разработчик",
         "description": "Вносит минимальные изменения, добавляет тесты и готовит проверяемый результат.",
-        "hermes_profile": "launch-developer",
+        "hermes_profile": None,
     },
     "reviewer": {
         "name": "Ревьюер",
         "description": "Проверяет реализацию, архитектурные границы и отсутствие лишней сложности.",
-        "hermes_profile": "launch-review",
+        "hermes_profile": None,
     },
 }
 DEMO_AGENT_PROFILES_BY_DISPLAY_NAME = {
@@ -351,11 +350,6 @@ def _assert_smoke_database_url(database_url: str) -> None:
     parts = {part.casefold() for part in db_path.parts}
     if db_path.name.casefold() != "ui-smoke.db" and ".smoke" not in parts:
         raise RuntimeError("Для UI smoke укажите отдельную SQLite-базу .smoke/ui-smoke.db")
-
-
-def _neutral_profile_name(agent_name: str, agent_id: int) -> str:
-    normalized = re.sub(r"[^a-z0-9_-]+", "-", agent_name.casefold()).strip("-_")
-    return f"launch-{normalized or 'agent'}-{agent_id}"
 
 
 def _configure_output_encoding() -> None:
@@ -473,10 +467,7 @@ def _neutralize_agents(uow: SAUnitOfWork) -> None:
         if demo_agent is None:
             if agent.hermes_profile is None:
                 continue
-            neutral_profile = _neutral_profile_name(agent.name, int(agent.id))
-            if agent.hermes_profile == neutral_profile:
-                continue
-            uow.agents.update(int(agent.id), {"hermes_profile": neutral_profile})
+            uow.agents.update(int(agent.id), {"hermes_profile": None})
             continue
         uow.agents.update(int(agent.id), demo_agent)
     uow.commit()

@@ -113,6 +113,7 @@ def test_screenshot_capture_script_checks_full_smoke_data() -> None:
     assert "/Гермес/i" in source
     assert "/project-workflow/i" in source
     assert "sdlc-" in source
+    assert "launch-[a-z0-9_-]+" in source
     assert "Default Namespace" in source
     assert "orchestrator" in source
     assert "codex-operator" in source

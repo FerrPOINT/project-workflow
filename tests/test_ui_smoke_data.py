@@ -74,6 +74,7 @@ def test_prepare_ui_smoke_data_creates_neutral_parallel_namespace_fixture(tmp_pa
 
     assert "hermes" not in visible_text.casefold()
     assert "sdlc-" not in visible_text.casefold()
+    assert "launch-" not in visible_text.casefold()
     assert "sdlc-business-tech-v1" not in visible_text
     assert "Smoke" not in visible_text
     assert DEFAULT_DEMO_WORKFLOW_NAME in visible_text
@@ -81,10 +82,7 @@ def test_prepare_ui_smoke_data_creates_neutral_parallel_namespace_fixture(tmp_pa
     assert dev["name"] == "Разработка"
     assert qa["name"] == "Проверка качества"
     assert dev["workflow_id"] != qa["workflow_id"]
-    assert all(
-        agent["hermes_profile"] is None or str(agent["hermes_profile"]).startswith("launch-")
-        for agent in agents
-    )
+    assert all(agent["hermes_profile"] is None for agent in agents)
     assert len(TASK_SCENARIOS["workflow-dev"]) >= 12
     assert len(TASK_SCENARIOS["workflow-qa"]) >= 12
     assert len(dev_tasks) == len(TASK_SCENARIOS["workflow-dev"])
@@ -167,6 +165,7 @@ def test_prepare_ui_smoke_data_resets_stale_visible_runtime_rows(tmp_path, monke
     assert "hermes" not in rendered_text.casefold()
     assert "orchestrator" not in rendered_text
     assert "codex-operator" not in rendered_text
+    assert "launch-" not in rendered_text.casefold()
 
 
 def test_prepare_ui_smoke_data_rejects_non_smoke_database_url(tmp_path, monkeypatch) -> None:
@@ -237,6 +236,7 @@ def test_ui_smoke_pages_render_neutral_screenshot_fixture(tmp_path, monkeypatch)
     assert "hermes" not in rendered.casefold()
     assert "Supervisor" not in rendered
     assert "sdlc-" not in rendered.casefold()
+    assert "launch-" not in rendered.casefold()
     assert "sdlc-business-tech-v1" not in rendered
     assert "sdlc-orchestrator" not in rendered
     assert "Default Namespace" not in rendered
