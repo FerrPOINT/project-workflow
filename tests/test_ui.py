@@ -1108,7 +1108,7 @@ class TestPhaseDetail:
         phase = _phase_row("4.START")
 
         assert f"const phaseId = {phase['id']};" in response.text
-        assert "fetch('/api/phases/' + phaseId" in response.text
+        assert "fetch(phaseApiUrl('/api/phases/' + phaseId)" in response.text
         assert "fetch('/api/phases/4.START'" not in response.text
 
     def test_phase_detail_empty_name_is_sent_to_backend_validation(self):

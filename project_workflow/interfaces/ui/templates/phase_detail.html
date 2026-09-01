@@ -228,6 +228,7 @@
 
 {% block extra_script %}
 const phaseId = {{ phase.id }};
+const selectedNamespaceId = {{ selected_namespace.id if selected_namespace else 'null' }};
 
 function escapeHtml(value) {
   return String(value)
@@ -248,6 +249,14 @@ function normalizeSkillNames(raw = []) {
     normalized.push(name);
   }
   return normalized;
+}
+
+function phaseApiUrl(path) {
+  const url = new URL(path, window.location.origin);
+  if (selectedNamespaceId !== null) {
+    url.searchParams.set('namespace_id', String(selectedNamespaceId));
+  }
+  return url.pathname + url.search;
 }
 
 /* ---------- Phase header ---------- */
@@ -696,7 +705,7 @@ async function persistPhase() {
   });
 
   try {
-    const resp = await fetch('/api/phases/' + phaseId, {
+    const resp = await fetch(phaseApiUrl('/api/phases/' + phaseId), {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(data),

@@ -60,6 +60,7 @@
 | BUG-049 | Application / service atomicity | `ProjectService`, `TaskService` и прямой `PhaseServiceApp` не делали rollback, если запись уже прошла, а readback или следующий write падали до commit. | Service regressions требуют rollback и отсутствие commit для namespace create/update/delete, task create и direct phase create/update/delete/reorder; `commit=False` оставляет rollback внешнему владельцу транзакции. | Исправлено |
 | BUG-050 | Application / workflow locks | `WorkflowService.update_workflow()` и `delete_workflow()` могли выйти после workflow lock или write failure без rollback, оставляя транзакцию и lock до закрытия UoW. | Regression покрывает update write failure, delete conflicts после lock и delete failure после всех проверок; сервис откатывает транзакцию на этих ветках. | Исправлено |
 | BUG-051 | UI API / phase scope | `/api/phases` игнорировал `namespace_id`: запрос выбранного набора мог вернуть фазы первого или явно чужого workflow. | API regression требует фильтр по namespace workflow, `404` для неизвестного namespace и `409` для пары namespace + чужой workflow. | Исправлено |
+| BUG-052 | UI API / phase scope | `GET/PUT/DELETE /api/phases/{id}` игнорировали выбранный `namespace_id`: detail-запрос мог читать чужую фазу, а update/delete — менять фазу другого workflow. | API regressions требуют `404` для неизвестного namespace, `409` для чужого workflow и атомарное отсутствие изменений; phase detail template передаёт `namespace_id` в save URL. | Исправлено |
 
 ## Следующие проверки
 

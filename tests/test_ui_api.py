@@ -115,6 +115,18 @@ class TestIndex:
         resp = client.get(f"/phase/{_phase_id(client, '1.INTAKE')}")
         assert resp.status_code == 200
 
+    def test_phase_detail_page_scopes_save_api_to_selected_namespace(self, client):
+        namespace = next(item for item in client.get("/api/namespaces").json()["namespaces"])
+        phase_id = _phase_id(client, "1.INTAKE")
+
+        resp = client.get(f"/phase/{phase_id}?namespace_id={namespace['id']}")
+
+        assert resp.status_code == 200
+        assert f"const selectedNamespaceId = {namespace['id']};" in resp.text
+        assert "function phaseApiUrl(path)" in resp.text
+        assert "url.searchParams.set('namespace_id', String(selectedNamespaceId));" in resp.text
+        assert "fetch(phaseApiUrl('/api/phases/' + phaseId)" in resp.text
+
     def test_settings_page(self, client):
         resp = client.get("/settings")
         assert resp.status_code == 200
@@ -241,6 +253,40 @@ class TestApiPhases:
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, dict)
+
+    def test_get_phase_rejects_unknown_namespace_filter(self, client):
+        phase_id = _phase_id(client, "1.INTAKE")
+
+        resp = client.get(f"/api/phases/{phase_id}?namespace_id={UNKNOWN_NAMESPACE_ID}")
+
+        assert resp.status_code == 404
+        assert resp.json() == {
+            "ok": False,
+            "error": f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден",
+        }
+
+    def test_get_phase_rejects_namespace_workflow_owner_conflict(self, client):
+        from project_workflow.interfaces.ui import _app_state
+
+        phase_id = _phase_id(client, "1.INTAKE")
+        workflow = _app_state.workflow_service().create_workflow({"name": _unique("phase-detail-foreign")})
+        namespace = client.post(
+            "/api/namespaces",
+            json={
+                "name": "Foreign phase detail namespace",
+                "workflow_id": workflow["id"],
+                "cli_command": _unique("workflow-phase-detail"),
+            },
+        )
+        assert namespace.status_code == 200
+
+        resp = client.get(f"/api/phases/{phase_id}?namespace_id={namespace.json()['namespace_id']}")
+
+        assert resp.status_code == 409
+        assert resp.json() == {
+            "ok": False,
+            "error": "Фаза недоступна в выбранном неймспейсе",
+        }
 
     def test_non_numeric_phase_identifier_is_rejected(self, client):
         resp = client.get("/api/phases/0.7")
@@ -1248,6 +1294,30 @@ class TestApiPhaseDelete:
             uow.workflows.delete(int(workflow_id))
             uow.commit()
 
+    def test_delete_phase_rejects_namespace_workflow_owner_conflict_atomically(self, client):
+        from project_workflow.interfaces.ui import _app_state
+
+        namespace = next(item for item in client.get("/api/namespaces").json()["namespaces"])
+        uow = _app_state.get_db()
+        workflow = create_empty_workflow(uow, _unique("delete-scope-wf"))
+        workflow_id = workflow["id"]
+        ph1 = _app_state.phase_service().create_phase(
+            {"workflow_id": workflow_id, "code": _unique("delete-scope"), "name": "One", "phase_order": 1}
+        )
+        ph2 = _app_state.phase_service().create_phase(
+            {"workflow_id": workflow_id, "code": _unique("delete-scope"), "name": "Two", "phase_order": 2}
+        )
+
+        resp = client.delete(f"/api/phases/{ph2['id']}?namespace_id={namespace['id']}")
+
+        assert resp.status_code == 409
+        assert resp.json() == {
+            "ok": False,
+            "error": "Фаза недоступна в выбранном неймспейсе",
+        }
+        assert _app_state.phase_service().get_phase(ph1["id"]) is not None
+        assert _app_state.phase_service().get_phase(ph2["id"]) is not None
+
 
 class TestApiInstructionsReorder:
     def test_reorder_instructions(self, client):
@@ -1268,6 +1338,35 @@ class TestApiInstructionsReorder:
 
 
 class TestApiPhaseUpdate:
+    def test_update_phase_rejects_namespace_workflow_owner_conflict_atomically(self, client):
+        from project_workflow.interfaces.ui import _app_state
+
+        phase_id = _phase_id(client, "1.INTAKE")
+        before = client.get(f"/api/phases/{phase_id}").json()["phase"]
+        workflow = _app_state.workflow_service().create_workflow({"name": _unique("phase-update-foreign")})
+        namespace = client.post(
+            "/api/namespaces",
+            json={
+                "name": "Foreign phase update namespace",
+                "workflow_id": workflow["id"],
+                "cli_command": _unique("workflow-phase-update"),
+            },
+        )
+        assert namespace.status_code == 200
+
+        response = client.put(
+            f"/api/phases/{phase_id}?namespace_id={namespace.json()['namespace_id']}",
+            json={"description": "Не должно сохраниться"},
+        )
+
+        assert response.status_code == 409
+        assert response.json() == {
+            "ok": False,
+            "error": "Фаза недоступна в выбранном неймспейсе",
+        }
+        after = client.get(f"/api/phases/{phase_id}").json()["phase"]
+        assert after == before
+
     def test_update_phase_name_and_execution_type(self, client):
         from project_workflow.interfaces.ui import _app_state
 

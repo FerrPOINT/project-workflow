@@ -28,6 +28,7 @@ from project_workflow.interfaces.ui.services import _load_phase_detail, _load_ta
 from project_workflow.interfaces.ui.state import _app_state
 
 PositivePathId = Annotated[int, Path(gt=0)]
+PositiveQueryId = Annotated[int | None, Query(gt=0)]
 
 
 def _error(message: str, status: int) -> JSONResponse:
@@ -74,6 +75,20 @@ def _unique_legacy_code(command: str, existing: list[dict[str, Any]]) -> str:
         if candidate not in used:
             return candidate
         suffix += 1
+
+
+def _phase_namespace_scope_error(phase_id: int, namespace_id: int | None) -> JSONResponse | None:
+    if namespace_id is None:
+        return None
+    namespace = _app_state.project_service().get_project(namespace_id)
+    if namespace is None:
+        return _error(f"Неймспейс {namespace_id} не найден", 404)
+    phase = _app_state.phase_service().get_phase(phase_id)
+    if phase is None:
+        return _error(f"Фаза {phase_id} не найдена", 404)
+    if phase.get("workflow_id") != namespace.get("workflow_id"):
+        return _error("Фаза недоступна в выбранном неймспейсе", 409)
+    return None
 
 
 async def api_settings_get(namespace_id: int | None = Query(default=None, gt=0)) -> dict[str, Any] | JSONResponse:
@@ -225,7 +240,13 @@ async def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONRespons
     }
 
 
-async def api_phase_update(phase_id: PositivePathId, payload: PhaseUpdate) -> dict[str, Any] | JSONResponse:
+async def api_phase_update(
+    phase_id: PositivePathId,
+    payload: PhaseUpdate,
+    namespace_id: PositiveQueryId = None,
+) -> dict[str, Any] | JSONResponse:
+    if error := _phase_namespace_scope_error(phase_id, namespace_id):
+        return error
     srv = _app_state.get_service()
     scalar_fields = {
         "name",
@@ -253,7 +274,12 @@ async def api_phase_update(phase_id: PositivePathId, payload: PhaseUpdate) -> di
     return {"ok": True, "ids": ids}
 
 
-async def api_phase_delete(phase_id: PositivePathId) -> dict[str, Any] | JSONResponse:
+async def api_phase_delete(
+    phase_id: PositivePathId,
+    namespace_id: PositiveQueryId = None,
+) -> dict[str, Any] | JSONResponse:
+    if error := _phase_namespace_scope_error(phase_id, namespace_id):
+        return error
     try:
         _app_state.phase_service().delete_phase(phase_id)
     except NotFoundError:
@@ -429,7 +455,12 @@ async def api_agent_delete(agent_id: PositivePathId) -> dict[str, Any] | JSONRes
     return {"ok": True}
 
 
-async def api_phase_detail(phase_id: PositivePathId) -> dict[str, Any] | JSONResponse:
+async def api_phase_detail(
+    phase_id: PositivePathId,
+    namespace_id: PositiveQueryId = None,
+) -> dict[str, Any] | JSONResponse:
+    if error := _phase_namespace_scope_error(phase_id, namespace_id):
+        return error
     phase = _load_phase_detail(phase_id)
     if not phase:
         return _error(f"Фаза {phase_id} не найдена", 404)
