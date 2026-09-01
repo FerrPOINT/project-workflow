@@ -3,6 +3,7 @@
 import json
 import re
 import sqlite3
+from unittest.mock import patch
 
 import click
 import pytest
@@ -11,6 +12,7 @@ from fastapi.testclient import TestClient
 pytestmark = [pytest.mark.ui]
 
 from project_workflow import config
+from project_workflow.domain.exceptions import ConflictError
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.cli.core import cli
 from project_workflow.interfaces.ui import _app_state as ui_app_state
@@ -1485,8 +1487,11 @@ class TestTaskDetail:
 
     def _default_namespace_id(self) -> int:
         uow = ui_app_state.get_db()
-        default_namespace = _as_dict(uow.projects.get_by_code(config.DEFAULT_PROJECT_CODE))
-        return default_namespace["id"]
+        try:
+            default_namespace = _as_dict(uow.projects.get_by_code(config.DEFAULT_PROJECT_CODE))
+            return default_namespace["id"]
+        finally:
+            uow.close()
 
     def test_task_detail_returns_html(self):
         response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
@@ -1506,6 +1511,26 @@ class TestTaskDetail:
         assert response.headers["content-type"] == "text/html; charset=utf-8"
         assert "Некорректный namespace_id" in response.text
         assert "История фаз" not in response.text
+
+    def test_task_detail_missing_preserves_selected_namespace_in_back_link(self):
+        namespace_id = self._default_namespace_id()
+        response = client.get(f"/task/RUN-NOT-FOUND?namespace_id={namespace_id}")
+
+        assert response.status_code == 404
+        assert "Задача не найдена" in response.text
+        assert f'href="/tasks?namespace_id={namespace_id}"' in response.text
+
+    def test_task_detail_conflict_preserves_selected_namespace_in_back_link(self):
+        namespace_id = self._default_namespace_id()
+        with patch(
+            "project_workflow.interfaces.ui.routes.pages._get_task_detail",
+            side_effect=ConflictError("Дубликат задачи"),
+        ):
+            response = client.get(f"/task/RUN-247?namespace_id={namespace_id}")
+
+        assert response.status_code == 409
+        assert "Задача неоднозначна" in response.text
+        assert f'href="/tasks?namespace_id={namespace_id}"' in response.text
 
     def test_task_detail_current_state_uses_namespace_accent_styles(self):
         response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")

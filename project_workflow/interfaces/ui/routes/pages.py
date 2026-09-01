@@ -256,6 +256,12 @@ def _phase_not_in_selected_namespace_page(request: Request, context: dict[str, A
     )
 
 
+def _tasks_back_url(context: dict[str, Any]) -> str:
+    selected_namespace = context.get("selected_namespace")
+    namespace_id = selected_namespace.get("id") if isinstance(selected_namespace, dict) else None
+    return f"/tasks?namespace_id={namespace_id}" if isinstance(namespace_id, int) else "/tasks"
+
+
 def _phase_matches_selected_namespace(phase: dict[str, Any], context: dict[str, Any]) -> bool:
     selected_namespace = context.get("selected_namespace")
     selected_workflow_id = selected_namespace.get("workflow_id") if isinstance(selected_namespace, dict) else None
@@ -512,7 +518,7 @@ async def task_detail_page(
             title="Задача неоднозначна",
             message=str(exc),
             status_code=409,
-            back_url="/tasks",
+            back_url=_tasks_back_url(context),
             back_label="К списку задач",
             page="tasks",
         )
@@ -522,7 +528,7 @@ async def task_detail_page(
             title="Задача не найдена",
             message=f"Задачи {task_key} нет в текущем каталоге.",
             status_code=404,
-            back_url="/tasks",
+            back_url=_tasks_back_url(context),
             back_label="К списку задач",
             page="tasks",
         )
