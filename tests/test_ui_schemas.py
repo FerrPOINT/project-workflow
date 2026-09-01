@@ -139,9 +139,13 @@ def test_agent_create_update():
     a = AgentCreate(name="Coder", hermes_profile=" code_profile ")
     assert a.name == "Coder"
     assert a.hermes_profile == "code_profile"
+    alias = AgentCreate.model_validate({"name": "Coder", "launch_profile": "ui_profile"})
+    assert alias.hermes_profile == "ui_profile"
     au = AgentUpdate(name="New", hermes_profile=None)
     assert au.name == "New"
     assert au.hermes_profile is None
+    alias_update = AgentUpdate.model_validate({"launch_profile": None})
+    assert alias_update.hermes_profile is None
     with pytest.raises(ValueError, match="для очистки используйте null"):
         AgentUpdate(name="New", hermes_profile="")
     for invalid in (1, {}, []):

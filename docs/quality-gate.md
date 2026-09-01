@@ -93,6 +93,13 @@ python scripts/prepare_ui_smoke_data.py
 python -m project_workflow.interfaces.ui --host 127.0.0.1 --port 8812
 ```
 
+В другом терминале:
+
+```bash
+npm --prefix .smoke install playwright
+SMOKE_BASE_URL=http://127.0.0.1:8812 node scripts/capture_ui_screenshots.mjs
+```
+
 PowerShell:
 
 ```powershell
@@ -102,11 +109,21 @@ python scripts/prepare_ui_smoke_data.py
 python -m project_workflow.interfaces.ui --host 127.0.0.1 --port 8812
 ```
 
+В другом PowerShell:
+
+```powershell
+npm --prefix .smoke install playwright
+$env:SMOKE_BASE_URL = "http://127.0.0.1:8812"
+node scripts/capture_ui_screenshots.mjs
+```
+
 - открыть `http://127.0.0.1:8812/`;
 - открыть `http://127.0.0.1:8812/namespaces`;
 - открыть `http://127.0.0.1:8812/namespaces/new`;
 - открыть `http://127.0.0.1:8812/tasks`;
+- открыть `http://127.0.0.1:8812/tasks?namespace_id=<qa-id>`;
 - открыть `http://127.0.0.1:8812/phases`;
+- открыть `http://127.0.0.1:8812/agents`;
 - открыть detail одной задачи в двух выбранных неймспейсах, если менялись selector,
   task links, theme или данные выбранного неймспейса;
 - открыть `http://127.0.0.1:8812/workflows`, если менялись workflow controls,
@@ -114,7 +131,7 @@ python -m project_workflow.interfaces.ui --host 127.0.0.1 --port 8812
 - проверить, что верхний selector переключает выбранный неймспейс, меняет логотип,
   цвет темы, список задач, dashboard stats и `/phases`;
 - проверить, что страницы загрузились без console/network ошибок;
-- сохранить full-screen screenshot evidence для изменённых экранов;
+- сохранить full-page screenshot evidence через `scripts/capture_ui_screenshots.mjs`;
 - убедиться, что screenshot evidence сделан на нейтральных smoke-данных, а не на
   пустой дефолтной базе;
 - проверить, что screenshot evidence не содержит старое дефолтное имя или

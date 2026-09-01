@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from typing import Any
 
@@ -172,6 +173,11 @@ QA_PHASES = [
 ]
 
 
+def _neutral_profile_name(agent_name: str, agent_id: int) -> str:
+    normalized = re.sub(r"[^a-z0-9_-]+", "-", agent_name.casefold()).strip("-_")
+    return f"launch-{normalized or 'agent'}-{agent_id}"
+
+
 def _configure_output_encoding() -> None:
     sample = "Демо-данные UI подготовлены"
     for stream in (sys.stdout, sys.stderr):
@@ -258,6 +264,17 @@ def _ensure_default_demo_workflow(uow: SAUnitOfWork) -> dict[str, Any]:
         if workflow is None:
             raise RuntimeError("Не удалось обновить демо-воркфлоу")
     return workflow
+
+
+def _neutralize_agent_profiles(uow: SAUnitOfWork) -> None:
+    for agent in uow.agents.list():
+        if agent.id is None or agent.hermes_profile is None:
+            continue
+        neutral_profile = _neutral_profile_name(agent.name, int(agent.id))
+        if agent.hermes_profile == neutral_profile:
+            continue
+        uow.agents.update(int(agent.id), {"hermes_profile": neutral_profile})
+    uow.commit()
 
 
 def _ensure_namespace(
@@ -462,6 +479,7 @@ def _ensure_tasks(uow: SAUnitOfWork, namespace: dict[str, Any]) -> None:
 def prepare_smoke_data() -> None:
     _ensure_bootstrap()
     with SAUnitOfWork() as uow:
+        _neutralize_agent_profiles(uow)
         default_workflow = _ensure_default_demo_workflow(uow)
         qa_workflow_id = _ensure_qa_workflow(uow)
         dev_namespace = _ensure_namespace(

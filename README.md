@@ -192,11 +192,19 @@ At startup the app verifies database connectivity; the Compose `migrate` service
   </tr>
   <tr>
     <td><strong>Tasks</strong></td>
-    <td><strong>Workflows</strong></td>
+    <td><strong>QA tasks</strong></td>
   </tr>
   <tr>
     <td><img src="docs/screenshots/tasks.png" alt="Tasks" /></td>
+    <td><img src="docs/screenshots/tasks-qa.png" alt="QA tasks" /></td>
+  </tr>
+  <tr>
+    <td><strong>Workflows</strong></td>
+    <td><strong>Agents</strong></td>
+  </tr>
+  <tr>
     <td><img src="docs/screenshots/workflows.png" alt="Workflows" /></td>
+    <td><img src="docs/screenshots/agents.png" alt="Agents" /></td>
   </tr>
 </table>
 

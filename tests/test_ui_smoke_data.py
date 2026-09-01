@@ -31,6 +31,7 @@ def test_prepare_ui_smoke_data_creates_neutral_parallel_namespace_fixture(tmp_pa
             namespaces = [namespace.to_dict() for namespace in uow.projects.list()]
             workflows = [workflow.to_dict() for workflow in uow.workflows.list()]
             phases = [phase.to_dict() for phase in uow.phases.list()]
+            agents = [agent.to_dict() for agent in uow.agents.list()]
             visible_text = "\n".join(
                 f"{namespace.get('name', '')} {namespace.get('description', '')}" for namespace in namespaces
             )
@@ -39,6 +40,10 @@ def test_prepare_ui_smoke_data_creates_neutral_parallel_namespace_fixture(tmp_pa
             )
             visible_text += "\n" + "\n".join(
                 f"{phase.get('name', '')} {phase.get('description', '')}" for phase in phases
+            )
+            visible_text += "\n" + "\n".join(
+                f"{agent.get('name', '')} {agent.get('description', '')} {agent.get('hermes_profile', '')}"
+                for agent in agents
             )
             dev = next(namespace for namespace in namespaces if namespace["cli_command"] == "workflow-dev")
             qa = next(namespace for namespace in namespaces if namespace["cli_command"] == "workflow-qa")
@@ -58,6 +63,7 @@ def test_prepare_ui_smoke_data_creates_neutral_parallel_namespace_fixture(tmp_pa
         config.get_settings.cache_clear()
 
     assert "hermes" not in visible_text.casefold()
+    assert "sdlc-" not in visible_text.casefold()
     assert "sdlc-business-tech-v1" not in visible_text
     assert "Smoke" not in visible_text
     assert DEFAULT_DEMO_WORKFLOW_NAME in visible_text
@@ -65,6 +71,10 @@ def test_prepare_ui_smoke_data_creates_neutral_parallel_namespace_fixture(tmp_pa
     assert dev["name"] == "Разработка"
     assert qa["name"] == "Проверка качества"
     assert dev["workflow_id"] != qa["workflow_id"]
+    assert all(
+        agent["hermes_profile"] is None or str(agent["hermes_profile"]).startswith("launch-")
+        for agent in agents
+    )
     assert len(TASK_SCENARIOS["workflow-dev"]) >= 8
     assert len(TASK_SCENARIOS["workflow-qa"]) >= 8
     assert len(dev_tasks) == len(TASK_SCENARIOS["workflow-dev"])
@@ -105,6 +115,7 @@ def test_ui_smoke_pages_render_neutral_screenshot_fixture(tmp_path, monkeypatch)
                 "/workflows",
                 f"/task/{TASK_KEY}?namespace_id={dev['id']}",
                 f"/task/{TASK_KEY}?namespace_id={qa['id']}",
+                f"/agents?namespace_id={dev['id']}",
             ]
             rendered_pages = []
             for path in pages:
@@ -118,6 +129,7 @@ def test_ui_smoke_pages_render_neutral_screenshot_fixture(tmp_path, monkeypatch)
     rendered = "\n".join(rendered_pages)
     assert "hermes" not in rendered.casefold()
     assert "Supervisor" not in rendered
+    assert "sdlc-" not in rendered.casefold()
     assert "sdlc-business-tech-v1" not in rendered
     assert "sdlc-orchestrator" not in rendered
     assert "Default Namespace" not in rendered

@@ -491,7 +491,10 @@ async def agents_page(request: Request) -> HTMLResponse:
     context = _namespace_context(request, page="agents")
     if error_response := _namespace_error_page(request, context, page="agents"):
         return error_response
-    agents = _app_state.agent_service().list_agents()
+    agents = [
+        {**agent, "launch_profile": agent.get("hermes_profile") or ""}
+        for agent in _app_state.agent_service().list_agents()
+    ]
     context.update({"agents": agents})
     return _template_response(
         request=request,

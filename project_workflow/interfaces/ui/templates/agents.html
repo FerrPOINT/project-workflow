@@ -37,7 +37,7 @@
             <input type="text" class="inline-edit" value="{{ a.name }}" data-field="name" onblur="saveRow(this)">
           </td>
           <td style="width:240px">
-            <input type="text" class="inline-edit" value="{{ a.hermes_profile or '' }}" data-field="hermes_profile" onblur="saveRow(this)">
+            <input type="text" class="inline-edit" value="{{ a.launch_profile or '' }}" data-field="launch_profile" onblur="saveRow(this)">
           </td>
           <td>
             <textarea class="inline-textarea" data-field="description" onblur="saveRow(this)">{{ a.description or '' }}</textarea>
@@ -68,7 +68,7 @@ function payloadFromRow(row){
   var data={};
   row.querySelectorAll('[data-field]').forEach(function(field){
     var value=field.value.trim();
-    data[field.dataset.field]=field.dataset.field==='hermes_profile' ? (value || null) : value;
+    data[field.dataset.field]=field.dataset.field==='launch_profile' ? (value || null) : value;
   });
   return data;
 }
@@ -94,7 +94,7 @@ function addAgent(){
   var description=document.getElementById('newDescription').value.trim();
   var launchProfile=document.getElementById('newLaunchProfile').value.trim();
   if(!name){showToast('Имя агента обязательно','error');return;}
-  fetch('/api/agents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,description:description,hermes_profile:launchProfile || null})})
+  fetch('/api/agents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,description:description,launch_profile:launchProfile || null})})
     .then(function(r){return r.json()})
     .then(function(d){if(d.ok){showToast('Добавлено','success');location.reload()}else showToast(d.error||'Ошибка','error')})
     .catch(showRequestError);

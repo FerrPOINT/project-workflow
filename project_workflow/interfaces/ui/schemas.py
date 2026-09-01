@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Annotated, Any, ClassVar, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from project_workflow.domain.namespace import normalize_namespace_cli_command
 from project_workflow.domain.project_theme import (
@@ -246,7 +246,12 @@ class NamespaceUpdate(StrictUpdateRequest):
 class AgentCreate(StrictRequest):
     name: str = Field(..., min_length=1)
     description: str = Field(default="")
-    hermes_profile: str | None = Field(default=None, max_length=251, strict=True)
+    hermes_profile: str | None = Field(
+        default=None,
+        max_length=251,
+        strict=True,
+        validation_alias=AliasChoices("hermes_profile", "launch_profile"),
+    )
 
     @field_validator("name")
     @classmethod
@@ -271,7 +276,12 @@ class AgentUpdate(StrictUpdateRequest):
 
     name: str | None = Field(default=None)
     description: str | None = Field(default=None)
-    hermes_profile: str | None = Field(default=None, max_length=251, strict=True)
+    hermes_profile: str | None = Field(
+        default=None,
+        max_length=251,
+        strict=True,
+        validation_alias=AliasChoices("hermes_profile", "launch_profile"),
+    )
 
     @field_validator("name")
     @classmethod

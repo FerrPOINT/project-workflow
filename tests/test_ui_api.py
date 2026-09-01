@@ -804,9 +804,12 @@ class TestApiNamespaces:
 
 
 class TestApiAgents:
-    def test_agents_page_clears_hermes_profile_with_null(self, client):
+    def test_agents_page_uses_launch_profile_ui_alias(self, client):
         html = client.get("/agents").text
-        assert "field.dataset.field==='hermes_profile' ? (value || null) : value" in html
+        assert 'data-field="launch_profile"' in html
+        assert "field.dataset.field==='launch_profile' ? (value || null) : value" in html
+        assert "launch_profile:launchProfile || null" in html
+        assert "hermes" not in html.casefold()
 
     def test_list_agents(self, client):
         resp = client.get("/api/agents")
@@ -836,6 +839,19 @@ class TestApiAgents:
         assert data["agent"]["description"] == "updated"
         assert data["agent"]["hermes_profile"] is None
         assert client.put(f"/api/agents/{agent_id}", json={"description": None}).status_code == 422
+
+    def test_create_and_update_agent_accepts_launch_profile_alias(self, client):
+        name = _unique("Agent")
+        profile = f"profile_{uuid.uuid4().hex[:8]}"
+        resp = client.post("/api/agents", json={"name": name, "launch_profile": profile})
+        assert resp.status_code == 200
+        data = resp.json()
+        agent_id = data["agent_id"]
+        assert data["agent"]["hermes_profile"] == profile
+
+        resp = client.put(f"/api/agents/{agent_id}", json={"launch_profile": None})
+        assert resp.status_code == 200
+        assert resp.json()["agent"]["hermes_profile"] is None
 
     def test_hermes_profile_cannot_be_shared(self, client):
         profile = f"profile_{uuid.uuid4().hex[:8]}"

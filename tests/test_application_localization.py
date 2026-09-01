@@ -49,6 +49,7 @@ def test_primary_ui_labels_do_not_expose_internal_english_enums() -> None:
         "Фазы workflow",
         "Контуры workflow",
         "workflow CLI",
+        'data-field="hermes_profile"',
     ):
         assert forbidden not in sources
     assert "data-execution-type" in sources

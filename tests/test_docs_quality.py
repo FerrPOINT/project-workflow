@@ -10,7 +10,9 @@ SCREENSHOTS = {
     "namespace-new.png": (1400, 850),
     "phases-qa.png": (1400, 850),
     "tasks.png": (1400, 850),
+    "tasks-qa.png": (1400, 850),
     "workflows.png": (1400, 850),
+    "agents.png": (1400, 850),
     "phases.png": (1400, 900),
     "task-detail-dev.png": (1400, 1200),
     "task-detail-qa.png": (1400, 900),
@@ -48,3 +50,16 @@ def test_readme_screenshots_are_real_full_size_pngs() -> None:
 
         assert width >= min_width, f"{name} width {width} is below {min_width}"
         assert height >= min_height, f"{name} height {height} is below {min_height}"
+
+
+def test_screenshot_capture_script_checks_full_smoke_data() -> None:
+    source = (ROOT / "scripts" / "capture_ui_screenshots.mjs").read_text(encoding="utf-8")
+
+    for name in SCREENSHOTS:
+        assert f'name: "{name}"' in source
+    for task_key in ("RUN-42", "RUN-77", "RUN-88", "RUN-105", "RUN-120", "RUN-130", "RUN-143", "RUN-160", "RUN-171"):
+        assert task_key in source
+    assert "fullPage: true" in source
+    assert "forbiddenVisibleText" in source
+    assert "sdlc-" in source
+    assert "Default Namespace" in source
