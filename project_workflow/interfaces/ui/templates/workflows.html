@@ -62,11 +62,20 @@ textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:160px;resiz
 
 {% block extra_script %}
 const workflowStore = {{ workflows | tojson }};
+const activeNamespaceId = {{ selected_namespace.id if selected_namespace else 'null' }};
 let selectedWorkflowId = {{ selected_workflow.id if selected_workflow else 'null' }};
 let previousWorkflowId = selectedWorkflowId;
 let workflowFormMode = selectedWorkflowId == null ? 'create' : 'edit';
 
 function workflowById(id){ return workflowStore.find(function(workflow){ return workflow.id === id; }); }
+function phaseUrlForWorkflow(workflowId){
+  var url = new URL('/phases', window.location.origin);
+  url.searchParams.set('workflow_id', String(workflowId));
+  if(activeNamespaceId != null){
+    url.searchParams.set('namespace_id', String(activeNamespaceId));
+  }
+  return url.pathname + url.search;
+}
 function currentWorkflowPayload(){
   return {
     name: document.getElementById('workflowName').value.trim(),
@@ -193,7 +202,7 @@ function createWorkflow(){
       if(d.ok){
         showToast('Воркфлоу создан','success');
         reloadWorkflows(d.workflow_id);
-        window.location.href = '/phases?workflow_id=' + d.workflow_id;
+        window.location.href = phaseUrlForWorkflow(d.workflow_id);
       } else {
         showToast(d.error || 'Ошибка','error');
       }
