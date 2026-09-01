@@ -82,7 +82,11 @@ class _UoWMiddleware(BaseHTTPMiddleware):
 
         if request.url.path == "/health":
             return await call_next(request)
-        uow = _app_state.create_uow()
+        try:
+            uow = _app_state.create_uow()
+        except SQLAlchemyError:
+            logger.warning("Database request failed before route dispatch; returning readiness error")
+            return _database_not_ready_response(request)
         token = _uow_ctx.set(uow)
         try:
             return await call_next(request)
