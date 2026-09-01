@@ -11,6 +11,7 @@ from project_workflow.application.agent import AgentService
 from project_workflow.application.instruction_service import InstructionService
 from project_workflow.application.phase import PhaseServiceApp
 from project_workflow.application.project import ProjectService
+from project_workflow.application.workflow import WorkflowService
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 
 pytestmark = [pytest.mark.unit]
@@ -31,6 +32,18 @@ def test_agent_create_rolls_back_when_created_row_cannot_be_read():
 
     with pytest.raises(RuntimeError, match="Не удалось создать агента"):
         AgentService(uow).create_agent({"name": "Review"})
+
+    uow.rollback.assert_called_once_with()
+    uow.commit.assert_not_called()
+
+
+def test_workflow_create_rolls_back_when_default_phase_fails():
+    uow = MagicMock()
+    uow.workflows.create.return_value = 11
+    uow.phases.create.side_effect = RuntimeError("phase write failed")
+
+    with pytest.raises(RuntimeError, match="phase write failed"):
+        WorkflowService(uow).create_workflow({"name": "Broken workflow"})
 
     uow.rollback.assert_called_once_with()
     uow.commit.assert_not_called()

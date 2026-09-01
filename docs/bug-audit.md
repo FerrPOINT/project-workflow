@@ -56,6 +56,7 @@
 | BUG-045 | Web UI / task data consistency | Ошибки целостности данных задач из service layer (`ValueError`) уходили из dashboard, списка, деталки и `/api/tasks` как raw exception вместо контролируемого ответа. | Page/API regressions требуют HTML/JSON `409` с русским сообщением и без частичного рендера таблиц/истории. | Исправлено |
 | BUG-046 | CLI wrappers / безопасность файлов | `install_namespace_clis.py` мог перезаписать существующий пользовательский файл в `--bin-dir`, если его имя совпадало с configured CLI-командой или её `.cmd/.ps1` wrapper. | Installer сначала preflight-проверяет все target-файлы и пишет wrappers только если путь свободен или уже содержит managed marker; regression проверяет отсутствие частичной записи. | Исправлено |
 | BUG-047 | Web UI / workflow CRUD | После создания нового воркфлоу страница редиректила на `/phases?workflow_id=...` без выбранного `namespace_id`, поэтому явный URL терял текущий набор и зависел только от cookie. | Template regression требует `phaseUrlForWorkflow()` с сохранением `namespace_id`; unassigned workflow остаётся доступен выбранному набору до привязки. | Исправлено |
+| BUG-048 | Application / workflow atomicity | `WorkflowService.create_workflow()` не делал rollback, если создание дефолтной фазы или readback падали после записи workflow в текущую транзакцию. | Service regression требует rollback и отсутствие commit при сбое default phase creation. | Исправлено |
 
 ## Следующие проверки
 

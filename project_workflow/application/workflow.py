@@ -18,24 +18,28 @@ class WorkflowService:
 
     def create_workflow(self, data: dict[str, Any]) -> dict[str, Any]:
         payload = dict(data)
-        wid = self._uow.workflows.create(payload)
-        default_phase = {
-            "workflow_id": wid,
-            "code": f"wf-{wid}-default",
-            "name": self.DEFAULT_PHASE_NAME,
-            "description": "",
-            "phase_order": 1,
-            "agent_id": None,
-            "parallel_with_phase_id": None,
-            "rollback_target_phase_id": None,
-            "execution_type": "sync",
-        }
-        self._uow.phases.create(default_phase)
-        workflow = self._uow.workflows.get_by_id(wid)
-        if not workflow:
-            raise RuntimeError("Не удалось создать воркфлоу")
-        self._uow.commit()
-        return workflow.to_dict()
+        try:
+            wid = self._uow.workflows.create(payload)
+            default_phase = {
+                "workflow_id": wid,
+                "code": f"wf-{wid}-default",
+                "name": self.DEFAULT_PHASE_NAME,
+                "description": "",
+                "phase_order": 1,
+                "agent_id": None,
+                "parallel_with_phase_id": None,
+                "rollback_target_phase_id": None,
+                "execution_type": "sync",
+            }
+            self._uow.phases.create(default_phase)
+            workflow = self._uow.workflows.get_by_id(wid)
+            if not workflow:
+                raise RuntimeError("Не удалось создать воркфлоу")
+            self._uow.commit()
+            return workflow.to_dict()
+        except Exception:
+            self._uow.rollback()
+            raise
 
     def list_workflows(self) -> list[dict[str, Any]]:
         return [w.to_dict() for w in self._uow.workflows.list()]
