@@ -330,6 +330,9 @@ function switchNamespace(namespaceId){
     url.pathname='/phases';
     url.searchParams.delete('workflow_id');
   }
+  if(url.pathname === '/namespaces/new'){
+    url.pathname='/namespaces';
+  }
   url.searchParams.set('namespace_id', namespaceId);
   window.location.href=url.toString();
 }

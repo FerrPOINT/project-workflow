@@ -1811,6 +1811,13 @@ class TestProjectsPage:
         )
         assert "option.selected = namespace.id === selectorNamespaceId;" in response.text
 
+    def test_global_namespace_switch_leaves_create_page_for_selected_namespace(self):
+        response = client.get("/namespaces/new")
+        assert response.status_code == 200
+
+        assert "if(url.pathname === '/namespaces/new'){" in response.text
+        assert "url.pathname='/namespaces';" in response.text
+
     def test_namespace_create_page_rejects_invalid_query_namespace_without_create_fallback(self):
         response = client.get("/namespaces/new?namespace_id=abc")
 
