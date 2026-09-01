@@ -45,6 +45,15 @@ def test_readme_does_not_claim_public_task_crud() -> None:
     assert "просмотр задач" in readme
 
 
+def test_readme_does_not_advertise_absent_systemd_unit() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "project-workflow-ui.service" not in readme
+    assert "sudo systemctl" not in readme
+    assert "curl --fail http://127.0.0.1:8811/health" not in readme
+    assert "curl --fail http://127.0.0.1:8812/health" in readme
+
+
 def test_readme_cli_examples_use_configured_wrapper_commands() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 

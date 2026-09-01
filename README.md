@@ -154,12 +154,11 @@ UI: `http://127.0.0.1:8812`.
 
 Compose binds PostgreSQL and API to `127.0.0.1`. Before starting a fresh baseline over an old dev volume, follow [docs/database-reset.md](docs/database-reset.md).
 
-App/systemd mode uses the application port from `.env`:
+Local app mode uses the database from `DATABASE_URL` and the application port from CLI flags:
 
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl restart project-workflow-ui.service
-curl --fail http://127.0.0.1:8811/health
+python -m project_workflow.interfaces.ui --host 127.0.0.1 --port 8812
+curl --fail http://127.0.0.1:8812/health
 ```
 
 At startup the app verifies database connectivity; the Compose `migrate` service applies schema migrations and bootstraps the default workflow catalog.
