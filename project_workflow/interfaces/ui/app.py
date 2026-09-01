@@ -16,7 +16,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from ... import __version__
-from ...infrastructure.db.session import get_engine, reset_engine
+from ...infrastructure.db.session import DatabaseUnavailable, get_engine, reset_engine
 from .routes import api, pages
 
 logger = logging.getLogger(__name__)
@@ -84,7 +84,7 @@ class _UoWMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         try:
             uow = _app_state.create_uow()
-        except SQLAlchemyError:
+        except (DatabaseUnavailable, SQLAlchemyError):
             logger.warning("Database request failed before route dispatch; returning readiness error")
             return _database_not_ready_response(request)
         token = _uow_ctx.set(uow)

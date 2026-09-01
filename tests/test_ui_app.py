@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import OperationalError
 
-from project_workflow.infrastructure.db.session import reset_engine
+from project_workflow.infrastructure.db.session import DatabaseUnavailable, reset_engine
 from project_workflow.interfaces.ui.app import _health, create_app
 
 
@@ -121,3 +121,19 @@ def test_uow_creation_database_errors_return_sanitized_readiness_errors():
     for leaked in ("SELECT", "OperationalError", "Traceback", "dsn-secret"):
         assert leaked not in api_response.text
         assert leaked not in page_response.text
+
+
+def test_uow_creation_database_unavailable_returns_sanitized_readiness_errors():
+    app = create_app()
+    client = TestClient(app, raise_server_exceptions=False)
+
+    with patch("project_workflow.application.state._AppState.create_uow", side_effect=DatabaseUnavailable()):
+        api_response = client.get("/api/namespaces")
+        page_response = client.get("/namespaces")
+
+    assert api_response.status_code == 503
+    assert api_response.json()["error_code"] == "database-not-ready"
+    assert page_response.status_code == 503
+    assert "База данных не готова" in page_response.text
+    assert "DATABASE_URL" not in api_response.text
+    assert "DATABASE_URL" not in page_response.text
