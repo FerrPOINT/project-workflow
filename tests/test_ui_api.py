@@ -16,6 +16,9 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from tests._db_helpers import phase_by_code, prepare_sqlite_uow
 from tests._phase_helpers import create_empty_workflow
 
+UNKNOWN_NAMESPACE_ID = 999999
+UNKNOWN_WORKFLOW_ID = 999998
+
 
 @pytest.fixture
 def client():
@@ -960,6 +963,33 @@ class TestApiTasks:
         data = resp.json()
         assert data["ok"] is True
         assert all(t.get("workflow_id") == default_wf["id"] for t in data["tasks"])
+
+    def test_api_phases_rejects_unknown_workflow_filter(self, client):
+        resp = client.get(f"/api/phases?workflow_id={UNKNOWN_WORKFLOW_ID}")
+
+        assert resp.status_code == 404
+        assert resp.json() == {
+            "ok": False,
+            "error": f"Воркфлоу {UNKNOWN_WORKFLOW_ID} не найден",
+        }
+
+    def test_api_tasks_rejects_unknown_namespace_filter(self, client):
+        resp = client.get(f"/api/tasks?namespace_id={UNKNOWN_NAMESPACE_ID}")
+
+        assert resp.status_code == 404
+        assert resp.json() == {
+            "ok": False,
+            "error": f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден",
+        }
+
+    def test_api_tasks_rejects_unknown_workflow_filter(self, client):
+        resp = client.get(f"/api/tasks?workflow_id={UNKNOWN_WORKFLOW_ID}")
+
+        assert resp.status_code == 404
+        assert resp.json() == {
+            "ok": False,
+            "error": f"Воркфлоу {UNKNOWN_WORKFLOW_ID} не найден",
+        }
 
     def test_workflows_api_exposes_namespace_count_without_legacy_count_aliases(self, client):
         resp = client.get("/api/workflows")

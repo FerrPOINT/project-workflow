@@ -38,6 +38,13 @@ def _parse_positive_int(raw: str | None) -> int | None:
     return value if value > 0 else None
 
 
+def _parse_query_namespace_id(raw: str | None) -> tuple[int | None, bool]:
+    if raw is None:
+        return None, False
+    parsed = _parse_positive_int(raw)
+    return parsed, parsed is None
+
+
 def _namespace_context(
     request: Request,
     *,
@@ -45,13 +52,21 @@ def _namespace_context(
     preferred_namespace_id: int | None = None,
 ) -> dict[str, Any]:
     namespaces = _load_namespaces()
-    query_namespace_id = _parse_positive_int(request.query_params.get("namespace_id"))
+    query_namespace_id, invalid_query_namespace_id = _parse_query_namespace_id(
+        request.query_params.get("namespace_id")
+    )
     cookie_namespace_id = _parse_positive_int(request.cookies.get(NAMESPACE_COOKIE))
     explicit_namespace_id = preferred_namespace_id if preferred_namespace_id is not None else query_namespace_id
-    selected_id = explicit_namespace_id if explicit_namespace_id is not None else cookie_namespace_id
+    selected_id = (
+        None
+        if invalid_query_namespace_id and preferred_namespace_id is None
+        else explicit_namespace_id
+        if explicit_namespace_id is not None
+        else cookie_namespace_id
+    )
     selected_namespace = next((item for item in namespaces if item.get("id") == selected_id), None)
     missing_namespace_id = selected_id if explicit_namespace_id is not None and selected_namespace is None else None
-    if selected_namespace is None and namespaces and missing_namespace_id is None:
+    if selected_namespace is None and namespaces and missing_namespace_id is None and not invalid_query_namespace_id:
         selected_namespace = namespaces[0]
     return {
         "request": request,
@@ -59,6 +74,7 @@ def _namespace_context(
         "ui_port": get_settings().UI_PORT,
         "namespaces": namespaces,
         "selected_namespace": selected_namespace,
+        "invalid_query_namespace_id": invalid_query_namespace_id,
         "missing_namespace_id": missing_namespace_id,
         **_theme_context(selected_namespace),
     }
@@ -113,6 +129,22 @@ def _error_page(
 
 
 def _namespace_error_page(request: Request, context: dict[str, Any], *, page: str) -> HTMLResponse | None:
+    if context.get("invalid_query_namespace_id") is True:
+        context = {
+            **context,
+            "page": page,
+            "title": "Некорректный namespace_id",
+            "message": "Некорректный namespace_id: ожидается положительное целое число.",
+            "status_code": 422,
+            "back_url": "/namespaces",
+            "back_label": "К неймспейсам",
+        }
+        return _template_response(
+            request=request,
+            name="error.html",
+            status_code=422,
+            context=context,
+        )
     missing_namespace_id = context.get("missing_namespace_id")
     if not isinstance(missing_namespace_id, int):
         return None
@@ -124,6 +156,27 @@ def _namespace_error_page(request: Request, context: dict[str, Any], *, page: st
         "status_code": 404,
         "back_url": "/namespaces",
         "back_label": "К неймспейсам",
+    }
+    return _template_response(
+        request=request,
+        name="error.html",
+        status_code=404,
+        context=context,
+    )
+
+
+def _workflow_error_page(request: Request, context: dict[str, Any], workflow_id: int, *, page: str) -> HTMLResponse:
+    selected_namespace = context.get("selected_namespace")
+    namespace_id = selected_namespace.get("id") if isinstance(selected_namespace, dict) else None
+    back_url = f"/workflows?namespace_id={namespace_id}" if isinstance(namespace_id, int) else "/workflows"
+    context = {
+        **context,
+        "page": page,
+        "title": "Воркфлоу не найден",
+        "message": f"Воркфлоу {workflow_id} не найден.",
+        "status_code": 404,
+        "back_url": back_url,
+        "back_label": "К воркфлоу",
     }
     return _template_response(
         request=request,
@@ -158,6 +211,8 @@ async def phases_page(request: Request, workflow_id: int | None = Query(default=
         workflow_id = selected_namespace.get("workflow_id")
     workflows = _load_workflows()
     selected_workflow = next((item for item in workflows if item["id"] == workflow_id), None)
+    if workflow_id is not None and selected_workflow is None:
+        return _workflow_error_page(request, context, int(workflow_id), page="phases")
     if selected_workflow is None and workflows:
         selected_workflow = workflows[0]
     selected_workflow_id = selected_workflow["id"] if selected_workflow else None

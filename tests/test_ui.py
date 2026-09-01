@@ -19,6 +19,7 @@ from tests._db_helpers import phase_by_code
 
 client = TestClient(app)
 UNKNOWN_NAMESPACE_ID = 999999
+UNKNOWN_WORKFLOW_ID = 999998
 
 
 def _as_dict(record: object) -> dict | None:
@@ -284,6 +285,12 @@ class TestIndexPage:
         assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
         assert "UITEST-401" not in response.text
 
+    def test_index_rejects_malformed_query_namespace(self):
+        response = client.get("/?namespace_id=abc")
+        assert response.status_code == 422
+        assert "Некорректный namespace_id" in response.text
+        assert "UITEST-401" not in response.text
+
     def test_index_stays_minimal_and_hides_dashboard_technical_noise(self):
         response = client.get("/")
         assert response.status_code == 200
@@ -340,6 +347,19 @@ class TestPhasesPage:
         response = client.get(f"/phases?namespace_id={UNKNOWN_NAMESPACE_ID}")
         assert response.status_code == 404
         assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
+        assert 'href="/phase/' not in response.text
+
+    def test_phases_reject_negative_query_namespace(self):
+        response = client.get("/phases?namespace_id=-1")
+        assert response.status_code == 422
+        assert "Некорректный namespace_id" in response.text
+        assert 'href="/phase/' not in response.text
+
+    def test_phases_reject_unknown_query_workflow(self):
+        response = client.get(f"/phases?workflow_id={UNKNOWN_WORKFLOW_ID}")
+
+        assert response.status_code == 404
+        assert f"Воркфлоу {UNKNOWN_WORKFLOW_ID} не найден" in response.text
         assert 'href="/phase/' not in response.text
 
     def test_phases_api_returns_json(self):
