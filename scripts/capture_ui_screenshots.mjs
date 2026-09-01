@@ -49,8 +49,14 @@ const taskKeys = [
   "RUN-180",
   "RUN-190",
   "RUN-205",
+  "RUN-215",
+  "RUN-225",
+  "RUN-240",
+  "RUN-255",
+  "RUN-270",
+  "RUN-285",
 ];
-const doneTaskKeys = new Set(["RUN-88", "RUN-160"]);
+const doneTaskKeys = new Set(["RUN-88", "RUN-160", "RUN-270"]);
 const openTaskKeys = taskKeys.filter((key) => !doneTaskKeys.has(key));
 const expectedNamespaceCommands = ["workflow-dev", "workflow-qa"];
 
@@ -147,6 +153,38 @@ function assertSameSet(name, label, actual, expected) {
   }
 }
 
+function pngSize(filePath) {
+  const header = fs.readFileSync(filePath).subarray(0, 24);
+  if (header.toString("ascii", 12, 16) !== "IHDR") {
+    throw new Error(`${path.basename(filePath)} is not a PNG with IHDR header`);
+  }
+  return {
+    width: header.readUInt32BE(16),
+    height: header.readUInt32BE(20),
+  };
+}
+
+async function fullPageMetrics(page) {
+  return page.evaluate(() => ({
+    viewportWidth: window.innerWidth,
+    viewportHeight: window.innerHeight,
+    scrollWidth: Math.ceil(Math.max(document.documentElement.scrollWidth, document.body.scrollWidth)),
+    scrollHeight: Math.ceil(Math.max(document.documentElement.scrollHeight, document.body.scrollHeight)),
+  }));
+}
+
+function assertFullPageScreenshotSize(name, filePath, metrics) {
+  const size = pngSize(filePath);
+  const minWidth = Math.max(metrics.viewportWidth, metrics.scrollWidth);
+  const minHeight = Math.max(metrics.viewportHeight, metrics.scrollHeight);
+  if (size.width < minWidth || size.height < minHeight) {
+    throw new Error(
+      `${name} is not full-page: expected at least ${minWidth}x${minHeight}, got ${size.width}x${size.height}`,
+    );
+  }
+  return size;
+}
+
 async function assertTaskTable(page, name, expectedKeys) {
   const rowKeys = await page.locator(".tasks-table tbody tr[data-task-key]").evaluateAll((rows) =>
     rows.map((row) => row.getAttribute("data-task-key")).filter(Boolean),
@@ -159,7 +197,7 @@ async function assertTaskStateCoverage(page, name) {
   const statuses = await rows.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-status")));
   const verdicts = await rows.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-verdict")));
   assertSameSet(name, "task statuses", statuses, ["active", "blocked", "done"]);
-  assertSameSet(name, "latest verdicts", verdicts, ["blocked", "partial", "pass"]);
+  assertSameSet(name, "latest verdicts", verdicts, ["blocked", "delegate", "partial", "pass", "rollback"]);
 }
 
 async function assertDashboardTasks(page, name, expectedKeys) {
@@ -194,8 +232,11 @@ async function capture(page, outputRoot, { name, url, expected = [], prepare, as
     await assertion(page, name);
   }
   await page.waitForTimeout(1000);
-  await page.screenshot({ path: path.join(outputRoot, name), fullPage: true });
-  console.log(`captured ${name}`);
+  const metrics = await fullPageMetrics(page);
+  const outputPath = path.join(outputRoot, name);
+  await page.screenshot({ path: outputPath, fullPage: true });
+  const size = assertFullPageScreenshotSize(name, outputPath, metrics);
+  console.log(`captured ${name} ${size.width}x${size.height}`);
 }
 
 async function fillNamespaceDraft(page, qaWorkflowId) {

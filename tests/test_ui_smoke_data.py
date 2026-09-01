@@ -32,6 +32,7 @@ def test_prepare_ui_smoke_data_creates_neutral_parallel_namespace_fixture(tmp_pa
 
     try:
         prepare_smoke_data()
+        prepare_smoke_data()
         with SAUnitOfWork() as uow:
             namespaces = [namespace.to_dict() for namespace in uow.projects.list()]
             workflows = [workflow.to_dict() for workflow in uow.workflows.list()]
@@ -54,6 +55,10 @@ def test_prepare_ui_smoke_data_creates_neutral_parallel_namespace_fixture(tmp_pa
             qa = next(namespace for namespace in namespaces if namespace["cli_command"] == "workflow-qa")
             dev_tasks = [task.to_dict() for task in uow.tasks.list_by_project(dev["id"])]
             qa_tasks = [task.to_dict() for task in uow.tasks.list_by_project(qa["id"])]
+            task_ids = [int(task["id"]) for task in [*dev_tasks, *qa_tasks]]
+            latest_verdicts = {
+                run.verdict for run in uow.step_history.latest_for_tasks(task_ids)
+            }
             visible_text += "\n" + "\n".join(
                 f"{task.get('task_key', '')} {task.get('title', '')}" for task in [*dev_tasks, *qa_tasks]
             )
@@ -84,8 +89,17 @@ def test_prepare_ui_smoke_data_creates_neutral_parallel_namespace_fixture(tmp_pa
     assert len(TASK_SCENARIOS["workflow-qa"]) >= 12
     assert len(dev_tasks) == len(TASK_SCENARIOS["workflow-dev"])
     assert len(qa_tasks) == len(TASK_SCENARIOS["workflow-qa"])
+    assert len(dev_tasks) >= 18
+    assert len(qa_tasks) >= 18
     assert {task["status"] for task in dev_tasks} == {"active", "blocked", "done"}
     assert {task["status"] for task in qa_tasks} == {"active", "blocked", "done"}
+    assert latest_verdicts == {"pass", "partial", "blocked", "delegate", "rollback"}
+    expected_profiles = {
+        str(profile["name"]): profile["hermes_profile"] for profile in DEMO_AGENT_PROFILES.values()
+    }
+    for agent in agents:
+        if agent["name"] in expected_profiles:
+            assert agent["hermes_profile"] == expected_profiles[agent["name"]]
     assert dev_task is not None
     assert qa_task is not None
     assert dev_task.task_key == qa_task.task_key == TASK_KEY

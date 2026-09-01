@@ -119,6 +119,48 @@ TASK_SCENARIOS = {
             "current_order": 13,
             "verdict": "blocked",
         },
+        {
+            "key": "RUN-215",
+            "title": "Передать UX-сценарий на ревью",
+            "status": "active",
+            "current_order": 15,
+            "verdict": "delegate",
+        },
+        {
+            "key": "RUN-225",
+            "title": "Проверить сценарий отката",
+            "status": "active",
+            "current_order": 9,
+            "verdict": "rollback",
+        },
+        {
+            "key": "RUN-240",
+            "title": "Дособрать подтверждения по задаче",
+            "status": "active",
+            "current_order": 16,
+            "verdict": "partial",
+        },
+        {
+            "key": "RUN-255",
+            "title": "Проверить отказоустойчивость запуска",
+            "status": "blocked",
+            "current_order": 17,
+            "verdict": "blocked",
+        },
+        {
+            "key": "RUN-270",
+            "title": "Закрыть ручной сценарий проверки",
+            "status": "done",
+            "current_order": -1,
+            "verdict": "pass",
+        },
+        {
+            "key": "RUN-285",
+            "title": "Проверить независимый запуск потока",
+            "status": "active",
+            "current_order": 18,
+            "verdict": "pass",
+        },
     ],
     "workflow-qa": [
         {
@@ -205,6 +247,48 @@ TASK_SCENARIOS = {
             "current_order": 6,
             "verdict": "partial",
         },
+        {
+            "key": "RUN-215",
+            "title": "Проверить передачу UX-сценария",
+            "status": "active",
+            "current_order": 5,
+            "verdict": "delegate",
+        },
+        {
+            "key": "RUN-225",
+            "title": "Подтвердить сценарий отката",
+            "status": "active",
+            "current_order": 4,
+            "verdict": "rollback",
+        },
+        {
+            "key": "RUN-240",
+            "title": "Дособрать проверочные подтверждения",
+            "status": "active",
+            "current_order": 6,
+            "verdict": "partial",
+        },
+        {
+            "key": "RUN-255",
+            "title": "Проверить отказоустойчивость запуска",
+            "status": "blocked",
+            "current_order": 5,
+            "verdict": "blocked",
+        },
+        {
+            "key": "RUN-270",
+            "title": "Закрыть ручной сценарий проверки",
+            "status": "done",
+            "current_order": -1,
+            "verdict": "pass",
+        },
+        {
+            "key": "RUN-285",
+            "title": "Проверить независимый запуск потока",
+            "status": "active",
+            "current_order": 6,
+            "verdict": "pass",
+        },
     ],
 }
 QA_PHASES = [
@@ -251,6 +335,9 @@ DEMO_AGENT_PROFILES: dict[str, dict[str, Any]] = {
         "description": "Проверяет реализацию, архитектурные границы и отсутствие лишней сложности.",
         "hermes_profile": "launch-review",
     },
+}
+DEMO_AGENT_PROFILES_BY_DISPLAY_NAME = {
+    str(profile["name"]): profile for profile in DEMO_AGENT_PROFILES.values()
 }
 
 
@@ -382,7 +469,7 @@ def _neutralize_agents(uow: SAUnitOfWork) -> None:
     for agent in uow.agents.list():
         if agent.id is None:
             continue
-        demo_agent = DEMO_AGENT_PROFILES.get(agent.name)
+        demo_agent = DEMO_AGENT_PROFILES.get(agent.name) or DEMO_AGENT_PROFILES_BY_DISPLAY_NAME.get(agent.name)
         if demo_agent is None:
             if agent.hermes_profile is None:
                 continue
@@ -456,12 +543,23 @@ def _record_demo_step(
     missing = ["Нужно приложить подтверждение результата"] if verdict == "partial" else []
     blockers = ["Ожидается ручное подтверждение владельца"] if verdict == "blocked" else []
     covered = [] if verdict == "blocked" else ["Сценарий выполнен", "Результат сверён с интерфейсом"]
+    messages = {
+        "pass": "Проверка принята",
+        "partial": "Нужна доработка",
+        "blocked": "Нужна доработка",
+        "delegate": "Передать проверку назначенному участнику",
+        "rollback": "Нужен откат к предыдущему шагу",
+    }
     response: dict[str, Any] = {
         "covered": covered,
         "missing": missing,
         "blockers": blockers,
-        "message": "Проверка принята" if verdict == "pass" else "Нужна доработка",
+        "message": messages.get(verdict, "Нужна доработка"),
     }
+    if verdict == "delegate":
+        response["delegate_agent"] = "Ревьюер"
+    if verdict == "rollback":
+        response["rollback_phase_code"] = phase_code
     if next_phase is not None:
         response["next_phase_contract"] = {
             "phase_code": next_phase["code"],

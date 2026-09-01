@@ -5,20 +5,20 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCREENSHOTS = {
-    "dashboard.png": (1400, 850),
-    "dashboard-qa.png": (1400, 850),
+    "dashboard.png": (1400, 1700),
+    "dashboard-qa.png": (1400, 1700),
     "namespaces.png": (1400, 850),
     "namespace-new.png": (1400, 850),
-    "phases-qa.png": (1400, 850),
-    "tasks.png": (1400, 850),
-    "tasks-qa.png": (1400, 850),
+    "phases-qa.png": (1400, 1200),
+    "tasks.png": (1400, 1150),
+    "tasks-qa.png": (1400, 1150),
     "workflows.png": (1400, 850),
-    "agents.png": (1400, 850),
-    "phases.png": (1400, 900),
-    "task-detail-dev.png": (1400, 1200),
-    "task-detail-qa.png": (1400, 900),
+    "agents.png": (1400, 900),
+    "phases.png": (1400, 3000),
+    "task-detail-dev.png": (1400, 3500),
+    "task-detail-qa.png": (1400, 2200),
     "settings.png": (1400, 850),
-    "mobile-dashboard.png": (360, 650),
+    "mobile-dashboard.png": (360, 3000),
 }
 
 
@@ -90,9 +90,17 @@ def test_screenshot_capture_script_checks_full_smoke_data() -> None:
         "RUN-180",
         "RUN-190",
         "RUN-205",
+        "RUN-215",
+        "RUN-225",
+        "RUN-240",
+        "RUN-255",
+        "RUN-270",
+        "RUN-285",
     ):
         assert task_key in source
     assert "fullPage: true" in source
+    assert "assertFullPageScreenshotSize" in source
+    assert "scrollHeight" in source
     assert "assertTaskTable" in source
     assert "assertTaskStateCoverage" in source
     assert "assertDashboardTasks" in source
