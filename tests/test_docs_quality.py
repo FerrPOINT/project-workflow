@@ -117,8 +117,11 @@ def test_screenshot_capture_script_checks_full_smoke_data() -> None:
     assert "Default Namespace" in source
     assert "orchestrator" in source
     assert "codex-operator" in source
+    assert "Профиль запуска" in source
     assert 'name: "settings.png"' in source
     assert "workflow-dev step" in source
+    assert "КЛЮЧ ЗАПУСКА" in source
+    assert "flow-dev" in source
 
 
 def test_screenshot_capture_script_replaces_pngs_only_after_success() -> None:

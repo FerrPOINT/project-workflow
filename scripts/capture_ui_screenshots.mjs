@@ -18,6 +18,7 @@ const forbiddenVisibleText = [
   /launch-[a-z0-9_-]+/i,
   /Default Namespace/i,
   /Supervisor/i,
+  /Профиль запуска/i,
   /\borchestrator\b/i,
   /codex-operator/i,
 ];
@@ -370,7 +371,16 @@ async function captureAll(outputRoot) {
     await capture(page, outputRoot, {
       name: "agents.png",
       url: `/agents?namespace_id=${dev.id}`,
-      expected: ["Агенты", "ПРОФИЛЬ ЗАПУСКА", "Координатор", "Оператор", "Ревьюер"],
+      expected: [
+        "Агенты",
+        "КЛЮЧ ЗАПУСКА",
+        "Координатор",
+        "Оператор",
+        "Ревьюер",
+        "flow-coord",
+        "flow-dev",
+        "flow-review",
+      ],
     });
     await capture(page, outputRoot, {
       name: "settings.png",

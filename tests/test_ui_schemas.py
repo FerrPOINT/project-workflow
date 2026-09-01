@@ -155,7 +155,7 @@ def test_agent_create_update():
 
 @pytest.mark.parametrize("profile", ["UPPER", "space profile", "-leading", "profile.dot"])
 def test_agent_rejects_invalid_hermes_profile(profile):
-    with pytest.raises(ValueError, match="Профиль запуска"):
+    with pytest.raises(ValueError, match="Ключ запуска"):
         AgentCreate(name="Coder", hermes_profile=profile)
 
 

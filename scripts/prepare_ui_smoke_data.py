@@ -302,37 +302,37 @@ DEMO_AGENT_PROFILES: dict[str, dict[str, Any]] = {
     "orchestrator": {
         "name": "Координатор",
         "description": "Ведёт постановку задачи, синхронизирует переходы и фиксирует решения.",
-        "hermes_profile": None,
+        "hermes_profile": "flow-coord",
     },
     "codex-operator": {
         "name": "Оператор",
         "description": "Проверяет план, слияние и ручные решения перед переходом дальше.",
-        "hermes_profile": None,
+        "hermes_profile": "flow-operator",
     },
     "ops": {
         "name": "Инженер запуска",
         "description": "Отвечает за окружение, миграции, smoke-проверки и готовность приложения.",
-        "hermes_profile": None,
+        "hermes_profile": "flow-runtime",
     },
     "researcher": {
         "name": "Аналитик",
         "description": "Разбирает поток данных, зависимости и фактическое поведение системы.",
-        "hermes_profile": None,
+        "hermes_profile": "flow-analysis",
     },
     "critic": {
         "name": "Контролёр качества",
         "description": "Ищет риски, пропуски в плане и слабые места регрессионного покрытия.",
-        "hermes_profile": None,
+        "hermes_profile": "flow-quality",
     },
     "coder": {
         "name": "Разработчик",
         "description": "Вносит минимальные изменения, добавляет тесты и готовит проверяемый результат.",
-        "hermes_profile": None,
+        "hermes_profile": "flow-dev",
     },
     "reviewer": {
         "name": "Ревьюер",
         "description": "Проверяет реализацию, архитектурные границы и отсутствие лишней сложности.",
-        "hermes_profile": None,
+        "hermes_profile": "flow-review",
     },
 }
 DEMO_AGENT_PROFILES_BY_DISPLAY_NAME = {

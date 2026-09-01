@@ -265,9 +265,9 @@ class AgentCreate(StrictRequest):
             return None
         profile = value.strip()
         if not profile:
-            raise ValueError("Профиль запуска не может быть пустым; для очистки используйте null")
+            raise ValueError("Ключ запуска не может быть пустым; для очистки используйте null")
         if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", profile):
-            raise ValueError("Профиль запуска должен соответствовать [a-z0-9][a-z0-9_-]*")
+            raise ValueError("Ключ запуска должен соответствовать [a-z0-9][a-z0-9_-]*")
         return profile
 
 
@@ -295,9 +295,9 @@ class AgentUpdate(StrictUpdateRequest):
             return None
         profile = value.strip()
         if not profile:
-            raise ValueError("Профиль запуска не может быть пустым; для очистки используйте null")
+            raise ValueError("Ключ запуска не может быть пустым; для очистки используйте null")
         if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", profile):
-            raise ValueError("Профиль запуска должен соответствовать [a-z0-9][a-z0-9_-]*")
+            raise ValueError("Ключ запуска должен соответствовать [a-z0-9][a-z0-9_-]*")
         return profile
 
 

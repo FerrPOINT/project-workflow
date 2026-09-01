@@ -82,7 +82,6 @@ def test_prepare_ui_smoke_data_creates_neutral_parallel_namespace_fixture(tmp_pa
     assert dev["name"] == "Разработка"
     assert qa["name"] == "Проверка качества"
     assert dev["workflow_id"] != qa["workflow_id"]
-    assert all(agent["hermes_profile"] is None for agent in agents)
     assert len(TASK_SCENARIOS["workflow-dev"]) >= 12
     assert len(TASK_SCENARIOS["workflow-qa"]) >= 12
     assert len(dev_tasks) == len(TASK_SCENARIOS["workflow-dev"])
@@ -97,6 +96,7 @@ def test_prepare_ui_smoke_data_creates_neutral_parallel_namespace_fixture(tmp_pa
     }
     for agent in agents:
         if agent["name"] in expected_profiles:
+            assert agent["hermes_profile"]
             assert agent["hermes_profile"] == expected_profiles[agent["name"]]
     assert dev_task is not None
     assert qa_task is not None
@@ -106,6 +106,9 @@ def test_prepare_ui_smoke_data_creates_neutral_parallel_namespace_fixture(tmp_pa
     }
     assert "orchestrator" not in visible_text
     assert "codex-operator" not in visible_text
+    assert "flow-coord" in visible_text
+    assert "flow-dev" in visible_text
+    assert "flow-review" in visible_text
 
 
 def test_prepare_ui_smoke_data_resets_stale_visible_runtime_rows(tmp_path, monkeypatch) -> None:
