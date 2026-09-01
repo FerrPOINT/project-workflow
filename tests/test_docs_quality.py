@@ -44,6 +44,13 @@ def test_readme_does_not_claim_public_task_crud() -> None:
     assert "просмотр задач" in readme
 
 
+def test_quality_gate_ui_smoke_matches_settings_screenshot() -> None:
+    quality_gate = (ROOT / "docs" / "quality-gate.md").read_text(encoding="utf-8")
+
+    assert "http://127.0.0.1:8812/settings" in quality_gate
+    assert "CLI settings" in quality_gate or "wrapper-команду" in quality_gate
+
+
 def test_readme_screenshots_are_real_full_size_pngs() -> None:
     screenshots_dir = ROOT / "docs" / "screenshots"
 

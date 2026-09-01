@@ -124,6 +124,7 @@ node scripts/capture_ui_screenshots.mjs
 - открыть `http://127.0.0.1:8812/tasks?namespace_id=<qa-id>`;
 - открыть `http://127.0.0.1:8812/phases`;
 - открыть `http://127.0.0.1:8812/agents`;
+- открыть `http://127.0.0.1:8812/settings`;
 - открыть detail одной задачи в двух выбранных неймспейсах, если менялись selector,
   task links, theme или данные выбранного неймспейса;
 - открыть `http://127.0.0.1:8812/workflows`, если менялись workflow controls,
@@ -135,7 +136,8 @@ node scripts/capture_ui_screenshots.mjs
 - убедиться, что screenshot evidence сделан на нейтральных smoke-данных, а не на
   пустой дефолтной базе;
 - проверить, что screenshot evidence не содержит старое дефолтное имя или
-  runtime-specific упоминания конкретного внешнего исполнителя.
+  runtime-specific упоминания конкретного внешнего исполнителя, а CLI settings
+  показывает выбранную wrapper-команду.
 
 Для backend-only тестовых или документационных изменений browser smoke не
 обязателен.
