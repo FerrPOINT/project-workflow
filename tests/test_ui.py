@@ -453,6 +453,85 @@ class TestPhasesPage:
         assert "Foreign phase list item" not in response.text
         assert 'href="/phase/' not in response.text
 
+    def test_phases_page_rejects_workflow_outside_cookie_selected_namespace(self):
+        uow = ui_app_state.get_db()
+        namespace_id = _as_dict(uow.projects.get_by_code(config.DEFAULT_PROJECT_CODE))["id"]
+        workflow = client.post(
+            "/api/workflows",
+            json={
+                "name": "Cookie foreign phase workflow",
+                "description": "Workflow cookie ownership regression",
+            },
+        )
+        assert workflow.status_code == 200
+        workflow_id = workflow.json()["workflow_id"]
+        namespace = client.post(
+            "/api/namespaces",
+            json={
+                "name": "Cookie foreign namespace",
+                "workflow_id": workflow_id,
+                "cli_command": "workflow-cookie-foreign",
+            },
+        )
+        assert namespace.status_code == 200
+        phase = client.post(
+            "/api/phases",
+            json={
+                "workflow_id": workflow_id,
+                "phase_order": 1,
+                "name": "Cookie foreign phase item",
+            },
+        )
+        assert phase.status_code == 200
+
+        previous_cookie = client.cookies.get("workflow_namespace_id")
+        client.cookies.set("workflow_namespace_id", str(namespace_id))
+        try:
+            response = client.get(f"/phases?workflow_id={workflow_id}")
+        finally:
+            client.cookies.delete("workflow_namespace_id")
+            if previous_cookie is not None:
+                client.cookies.set("workflow_namespace_id", previous_cookie)
+
+        assert response.status_code == 404
+        assert "Воркфлоу недоступен в выбранном неймспейсе" in response.text
+        assert "Cookie foreign phase item" not in response.text
+        assert 'href="/phase/' not in response.text
+
+    def test_phases_page_allows_unassigned_workflow_with_cookie_selected_namespace(self):
+        uow = ui_app_state.get_db()
+        namespace_id = _as_dict(uow.projects.get_by_code(config.DEFAULT_PROJECT_CODE))["id"]
+        workflow = client.post(
+            "/api/workflows",
+            json={
+                "name": "Cookie unassigned workflow",
+                "description": "New workflow still editable before namespace binding",
+            },
+        )
+        assert workflow.status_code == 200
+        workflow_id = workflow.json()["workflow_id"]
+        phase = client.post(
+            "/api/phases",
+            json={
+                "workflow_id": workflow_id,
+                "phase_order": 1,
+                "name": "Cookie unassigned phase item",
+            },
+        )
+        assert phase.status_code == 200
+
+        previous_cookie = client.cookies.get("workflow_namespace_id")
+        client.cookies.set("workflow_namespace_id", str(namespace_id))
+        try:
+            response = client.get(f"/phases?workflow_id={workflow_id}")
+        finally:
+            client.cookies.delete("workflow_namespace_id")
+            if previous_cookie is not None:
+                client.cookies.set("workflow_namespace_id", previous_cookie)
+
+        assert response.status_code == 200
+        assert "Cookie unassigned phase item" in response.text
+
     def test_phases_page_filters_by_selected_workflow(self):
         uow = ui_app_state.get_db()
         workflow = next(

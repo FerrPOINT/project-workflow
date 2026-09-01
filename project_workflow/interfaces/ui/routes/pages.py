@@ -315,14 +315,22 @@ async def phases_page(request: Request) -> HTMLResponse:
         selected_namespace.get("workflow_id") if isinstance(selected_namespace, dict) else None
     )
     has_explicit_namespace = request.query_params.get("namespace_id") is not None
+    cookie_namespace_id = _parse_positive_int(request.cookies.get(NAMESPACE_COOKIE))
+    has_cookie_namespace = (
+        request.query_params.get("namespace_id") is None
+        and isinstance(cookie_namespace_id, int)
+        and isinstance(selected_namespace, dict)
+        and selected_namespace.get("id") == cookie_namespace_id
+    )
     if workflow_id is None and isinstance(selected_namespace_workflow_id, int):
         workflow_id = selected_namespace_workflow_id
     workflows = _load_workflows()
     selected_workflow = next((item for item in workflows if item["id"] == workflow_id), None)
     if workflow_id is not None and selected_workflow is None:
         return _workflow_error_page(request, context, int(workflow_id), page="phases")
+    selected_workflow_has_namespace = bool((selected_workflow or {}).get("namespace_count"))
     if (
-        has_explicit_namespace
+        (has_explicit_namespace or (has_cookie_namespace and selected_workflow_has_namespace))
         and isinstance(selected_namespace_workflow_id, int)
         and workflow_id is not None
         and workflow_id != selected_namespace_workflow_id
@@ -332,7 +340,7 @@ async def phases_page(request: Request) -> HTMLResponse:
         selected_workflow = workflows[0]
     selected_workflow_id = selected_workflow["id"] if selected_workflow else None
     namespace_scoped_view = isinstance(selected_namespace, dict) and (
-        raw_workflow_id is None or has_explicit_namespace
+        raw_workflow_id is None or has_explicit_namespace or has_cookie_namespace
     )
     visible_workflows = [selected_workflow] if namespace_scoped_view and selected_workflow else workflows
     phases = _load_phases(int(selected_workflow_id)) if selected_workflow_id is not None else []
