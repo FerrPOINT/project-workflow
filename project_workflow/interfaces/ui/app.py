@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import ValidationError
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -84,7 +85,7 @@ class _UoWMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         try:
             uow = _app_state.create_uow()
-        except (DatabaseUnavailable, SQLAlchemyError):
+        except (DatabaseUnavailable, SQLAlchemyError, ValidationError):
             logger.warning("Database request failed before route dispatch; returning readiness error")
             return _database_not_ready_response(request)
         token = _uow_ctx.set(uow)

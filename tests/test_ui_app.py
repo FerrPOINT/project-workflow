@@ -6,9 +6,12 @@ import asyncio
 import importlib
 from unittest.mock import MagicMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from sqlalchemy.exc import OperationalError
 
+from project_workflow import config
 from project_workflow.infrastructure.db.session import DatabaseUnavailable, reset_engine
 from project_workflow.interfaces.ui.app import _health, create_app
 
@@ -137,3 +140,32 @@ def test_uow_creation_database_unavailable_returns_sanitized_readiness_errors():
     assert "База данных не готова" in page_response.text
     assert "DATABASE_URL" not in api_response.text
     assert "DATABASE_URL" not in page_response.text
+
+
+def test_uow_creation_config_validation_returns_sanitized_readiness_errors(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    config.get_settings.cache_clear()
+    try:
+        with pytest.raises(ValidationError) as exc_info:
+            config.Settings(_env_file=None)  # type: ignore[call-arg]
+    finally:
+        config.get_settings.cache_clear()
+
+    app = create_app()
+    client = TestClient(app, raise_server_exceptions=False)
+
+    with patch("project_workflow.application.state._AppState.create_uow", side_effect=exc_info.value):
+        api_response = client.get("/api/namespaces")
+        page_response = client.get("/namespaces")
+
+    assert api_response.status_code == 503
+    assert api_response.json() == {
+        "ok": False,
+        "error": "База данных не готова",
+        "error_code": "database-not-ready",
+    }
+    assert page_response.status_code == 503
+    assert "База данных не готова" in page_response.text
+    for leaked in ("DATABASE_URL", "ValidationError", "Traceback", "Переменная DATABASE_URL обязательна"):
+        assert leaked not in api_response.text
+        assert leaked not in page_response.text
