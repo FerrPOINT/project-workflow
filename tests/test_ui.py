@@ -3,6 +3,7 @@
 import json
 import re
 import sqlite3
+from pathlib import Path
 from unittest.mock import patch
 
 import click
@@ -22,6 +23,7 @@ from tests._db_helpers import phase_by_code
 client = TestClient(app)
 UNKNOWN_NAMESPACE_ID = 999999
 UNKNOWN_WORKFLOW_ID = 999998
+TEMPLATES_DIR = Path(__file__).resolve().parents[1] / "project_workflow" / "interfaces" / "ui" / "templates"
 
 
 def _as_dict(record: object) -> dict | None:
@@ -131,6 +133,17 @@ def _phase_restore_payload(phase: dict) -> dict:
             for item in phase.get("evidence", [])
         ],
     }
+
+
+def test_ui_templates_do_not_use_negative_letter_spacing():
+    offenders = []
+    pattern = re.compile(r"letter-spacing\s*:\s*-\s*(?:\d|\.)")
+    for template_path in sorted(TEMPLATES_DIR.glob("*.html")):
+        for line_number, line in enumerate(template_path.read_text(encoding="utf-8").splitlines(), start=1):
+            if pattern.search(line):
+                offenders.append(f"{template_path.name}:{line_number}")
+
+    assert offenders == []
 
 
 @pytest.fixture(autouse=True)
