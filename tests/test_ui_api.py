@@ -993,6 +993,26 @@ class TestApiTasks:
             "error": f"Воркфлоу {UNKNOWN_WORKFLOW_ID} не найден",
         }
 
+    @pytest.mark.parametrize(
+        ("path", "field"),
+        [
+            ("/api/phases?workflow_id=0", "workflow_id"),
+            ("/api/phases?workflow_id=-1", "workflow_id"),
+            ("/api/tasks?workflow_id=0", "workflow_id"),
+            ("/api/tasks?workflow_id=-1", "workflow_id"),
+            ("/api/tasks?namespace_id=0", "namespace_id"),
+            ("/api/tasks?namespace_id=-1", "namespace_id"),
+        ],
+    )
+    def test_api_filters_reject_non_positive_ids(self, client, path, field):
+        resp = client.get(path)
+
+        assert resp.status_code == 422
+        data = resp.json()
+        assert data["ok"] is False
+        assert data["error"] == "Некорректные данные запроса"
+        assert {"field": field, "message": "Значение меньше допустимого"} in data["details"]
+
     def test_workflows_api_exposes_namespace_count_without_legacy_count_aliases(self, client):
         resp = client.get("/api/workflows")
         assert resp.status_code == 200

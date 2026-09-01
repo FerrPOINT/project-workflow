@@ -81,7 +81,7 @@ async def api_settings_get() -> dict[str, Any] | JSONResponse:
     return {"ok": True, "commands": _load_cli_reference()}
 
 
-async def api_phases(workflow_id: int | None = Query(default=None)) -> dict[str, Any] | JSONResponse:
+async def api_phases(workflow_id: int | None = Query(default=None, gt=0)) -> dict[str, Any] | JSONResponse:
     workflows = _app_state.workflow_service().list_workflows()
     selected_workflow = next((item for item in workflows if item["id"] == workflow_id), None)
     if workflow_id is not None and selected_workflow is None:
@@ -119,8 +119,8 @@ async def api_phases(workflow_id: int | None = Query(default=None)) -> dict[str,
 
 
 async def api_tasks(
-    workflow_id: int | None = Query(default=None),
-    namespace_id: int | None = Query(default=None),
+    workflow_id: int | None = Query(default=None, gt=0),
+    namespace_id: int | None = Query(default=None, gt=0),
 ) -> dict[str, Any] | JSONResponse:
     if namespace_id is not None and _app_state.project_service().get_project(namespace_id) is None:
         return _error(f"Неймспейс {namespace_id} не найден", 404)
