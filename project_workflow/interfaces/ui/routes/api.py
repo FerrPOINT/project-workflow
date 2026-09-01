@@ -130,10 +130,14 @@ async def api_tasks(
     workflow_id: int | None = Query(default=None, gt=0),
     namespace_id: int | None = Query(default=None, gt=0),
 ) -> dict[str, Any] | JSONResponse:
-    if namespace_id is not None and _app_state.project_service().get_project(namespace_id) is None:
+    namespace = _app_state.project_service().get_project(namespace_id) if namespace_id is not None else None
+    if namespace_id is not None and namespace is None:
         return _error(f"Неймспейс {namespace_id} не найден", 404)
-    if workflow_id is not None and _app_state.workflow_service().get_workflow(workflow_id) is None:
+    workflow = _app_state.workflow_service().get_workflow(workflow_id) if workflow_id is not None else None
+    if workflow_id is not None and workflow is None:
         return _error(f"Воркфлоу {workflow_id} не найден", 404)
+    if namespace is not None and workflow_id is not None and namespace.get("workflow_id") != workflow_id:
+        return _error("workflow_id не совпадает с владельцем неймспейса", 409)
     tasks = _load_tasks(namespace_id=namespace_id)
     if workflow_id is not None:
         tasks = [t for t in tasks if t.get("workflow_id") == workflow_id]

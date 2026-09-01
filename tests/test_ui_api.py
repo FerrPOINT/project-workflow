@@ -1039,6 +1039,20 @@ class TestApiTasks:
         assert data["ok"] is True
         assert all(t.get("workflow_id") == default_wf["id"] for t in data["tasks"])
 
+    def test_api_tasks_rejects_namespace_workflow_owner_conflict(self, client):
+        from project_workflow.interfaces.ui import _app_state
+
+        namespace = next(item for item in client.get("/api/namespaces").json()["namespaces"])
+        other_workflow = _app_state.workflow_service().create_workflow({"name": _unique("task-filter-wf")})
+
+        resp = client.get(f"/api/tasks?namespace_id={namespace['id']}&workflow_id={other_workflow['id']}")
+
+        assert resp.status_code == 409
+        assert resp.json() == {
+            "ok": False,
+            "error": "workflow_id не совпадает с владельцем неймспейса",
+        }
+
     def test_api_phases_rejects_unknown_workflow_filter(self, client):
         resp = client.get(f"/api/phases?workflow_id={UNKNOWN_WORKFLOW_ID}")
 
