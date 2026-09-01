@@ -51,6 +51,7 @@
 | BUG-040 | REST / workflow CRUD | `POST /api/workflows` не маппил доменные `ConflictError` и `ValueError`, поэтому сервисная ошибка могла уйти наружу как exception вместо JSON `409/422`. | API regression напрямую подменяет workflow service и требует стандартный `{ok:false,error}` с кодами `409/422`. | Исправлено |
 | BUG-041 | Docs / screenshot evidence | Screenshot-fixture для UI допускала runtime-specific `flow-*` профили и не проверяла минимальную наполненность всех CRUD-страниц перед заменой PNG. | Smoke-data использует нейтральные `run-*` ключи и пользовательские названия; capture падает на старые runtime labels, `flow-*`, `smoke` и на неполных namespace/workflow/phase/agent lists; tracked PNG пересняты full-page. | Исправлено |
 | BUG-042 | Docs / запуск | README всё ещё рекламировал отсутствующий `systemd` unit и проверял `/health` на старом порту, хотя supported local path описан через Compose или явный `python -m project_workflow.interfaces.ui --port 8812`. | README regression запрещает `systemctl`, `project-workflow-ui.service` и старый `8811/health`; локальный пример выровнен на `8812`. | Исправлено |
+| BUG-043 | REST / workflow CRUD | `PUT /api/workflows/{id}` не маппил сервисный `ValueError`, поэтому внутренняя validation/repository ошибка могла уйти наружу как exception вместо JSON `422`. | API regression расширяет shared update-route matrix; route теперь возвращает стандартный `{ok:false,error}` с `422`. | Исправлено |
 
 ## Следующие проверки
 

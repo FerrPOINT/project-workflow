@@ -190,6 +190,7 @@ def test_namespace_update_maps_value_error_before_readback(monkeypatch):
             404,
         ),
         (api.api_workflow_update, WorkflowUpdate(name="W"), "update_workflow", ConflictError("Workflow conflict"), 409),
+        (api.api_workflow_update, WorkflowUpdate(name="W"), "update_workflow", ValueError("Workflow value"), 422),
         (api.api_agent_update, AgentUpdate(name="A"), "update_agent", NotFoundError("Агент 1 не найден"), 404),
         (api.api_agent_update, AgentUpdate(name="A"), "update_agent", ConflictError("Agent conflict"), 409),
         (api.api_agent_update, AgentUpdate(name="A"), "update_agent", ValueError("Agent value"), 422),

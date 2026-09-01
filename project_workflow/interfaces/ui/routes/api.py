@@ -291,6 +291,8 @@ async def api_workflow_update(workflow_id: PositivePathId, payload: WorkflowUpda
         return _error(str(exc), 404)
     except ConflictError as exc:
         return _error(str(exc), 409)
+    except ValueError as exc:
+        return _error(str(exc), 422)
     return {"ok": True, "workflow": service.get_workflow(workflow_id)}
 
 
