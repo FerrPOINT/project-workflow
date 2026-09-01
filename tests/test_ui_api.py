@@ -1322,11 +1322,20 @@ class TestApiPhaseUpdate:
         resp = client.put(f"/api/phases/{phase_id}", json={"code": "x.y"})
         assert resp.status_code == 422
 
+    def test_update_phase_rejects_blank_name(self, client):
+        phase_id = _phase_id(client, "1.INTAKE")
+
+        resp = client.put(f"/api/phases/{phase_id}", json={"name": ""})
+
+        assert resp.status_code == 422
+        assert resp.json()["error"] == "Некорректные данные запроса"
+        assert {"field": "name", "message": "Поле name не может быть пустым"} in resp.json()["details"]
+
     def test_update_phase_not_found(self, client):
         resp = client.put("/api/phases/999999", json={"name": "x"})
         assert resp.status_code == 404
 
-    def test_phase_name_is_json_encoded_in_detail_script(self, client):
+    def test_phase_name_is_escaped_and_not_embedded_in_detail_script(self, client):
         phase_id = _phase_id(client, "2.REQUIREMENTS")
         dangerous_name = "O'Reilly </script><script>alert(1)</script>"
         update = client.put(f"/api/phases/{phase_id}", json={"name": dangerous_name})
@@ -1335,9 +1344,10 @@ class TestApiPhaseUpdate:
         response = client.get(f"/phase/{phase_id}")
 
         assert response.status_code == 200
-        assert "\\u0027" in response.text
-        assert "\\u003c/script\\u003e" in response.text
-        assert "meta.name || 'O'Reilly" not in response.text
+        assert "O&#39;Reilly" in response.text
+        assert "&lt;/script&gt;&lt;script&gt;alert(1)&lt;/script&gt;" in response.text
+        assert dangerous_name not in response.text
+        assert "name: meta.name ||" not in response.text
 
 
 class TestPageRoutes:

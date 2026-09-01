@@ -1065,6 +1065,13 @@ class TestPhaseDetail:
         assert "fetch('/api/phases/' + phaseId" in response.text
         assert "fetch('/api/phases/4.START'" not in response.text
 
+    def test_phase_detail_empty_name_is_sent_to_backend_validation(self):
+        response = client.get(_phase_detail_path("4.START"))
+        assert response.status_code == 200
+
+        assert "name: meta.name ||" not in response.text
+        assert "name: meta.name," in response.text
+
     def test_phase_detail_renders_selected_instruction_skills_and_free_text_input(self):
         skills = ["test-driven-development", "workflow-app-ui-delivery"]
         phase_response = client.get(_phase_api_path("1.INTAKE"))

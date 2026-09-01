@@ -645,7 +645,7 @@ async function persistPhase() {
   });
 
   const data = {
-    name: meta.name || {{ phase.name | tojson }},
+    name: meta.name,
     description: meta.description || '',
     checks: [],
     evidence: [],
