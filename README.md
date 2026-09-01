@@ -64,7 +64,7 @@ Runtime-источник данных — **PostgreSQL**. SQLite использ�
 | Phase workflow | Задача идет по шаблону фаз с инструкциями, checks, evidence и audit history. |
 | Supervisor gate | Переход фазы проходит через обязательную оценку отчета и фиксирует `PASS` / `ROLLBACK` / `BLOCK`. |
 | Namespace runtime | Несколько entrypoints могут иметь свои workflow, задачи, стиль UI и CLI-команду. |
-| Web UI | CRUD для workflows, phases, namespaces, agents и tasks. |
+| Web UI | CRUD для workflows, phases, namespaces и agents; просмотр задач и audit history. |
 | Append-only history | История фаз и `step`-проверок не затирается. |
 | CLI freeze | Публичный CLI остается управляемым и предсказуемым: `step` / `history`. |
 | Wrapper commands | `workflow-qa`, `workflow-dev` и другие команды генерируются из записей PostgreSQL. |
