@@ -8,12 +8,14 @@ import click
 
 from ..cli.core import cli as project_workflow
 
+DEFAULT_ENTRYPOINT = "project-workflow"
+
 
 def _usage_entrypoint(entrypoint: str | None) -> str:
     if not isinstance(entrypoint, str):
-        return "project-workflow"
+        return DEFAULT_ENTRYPOINT
     normalized = entrypoint.strip()
-    return normalized or "project-workflow"
+    return normalized or DEFAULT_ENTRYPOINT
 
 
 def _load_cli_reference(entrypoint: str | None = None) -> list[dict[str, Any]]:
@@ -25,6 +27,8 @@ def _load_cli_reference(entrypoint: str | None = None) -> list[dict[str, Any]]:
             continue
 
         help_text = (command.help or command.short_help or "").strip()
+        if usage_entrypoint != DEFAULT_ENTRYPOINT:
+            help_text = help_text.replace(DEFAULT_ENTRYPOINT, usage_entrypoint)
         summary = help_text.splitlines()[0].strip() if help_text else ""
         options = []
         for param in command.params:

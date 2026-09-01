@@ -241,7 +241,11 @@ class TestApiPhases:
         usages = {item["name"]: item["usage"] for item in resp.json()["commands"]}
         assert usages["step"] == f"{command} step"
         assert usages["history"] == f"{command} history"
-        assert all(not usage.startswith("project-workflow ") for usage in usages.values())
+        serialized = repr(resp.json()["commands"])
+        assert f"{command} step --task RUN-42" in serialized
+        assert f"{command} history --task RUN-42" in serialized
+        assert "project-workflow step" not in serialized
+        assert "project-workflow history" not in serialized
 
     def test_api_settings_rejects_unknown_namespace(self, client):
         resp = client.get(f"/api/settings?namespace_id={UNKNOWN_NAMESPACE_ID}")
