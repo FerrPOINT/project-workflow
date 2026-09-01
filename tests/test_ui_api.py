@@ -190,6 +190,52 @@ class TestApiPhases:
         data = resp.json()
         assert "phases" in data
 
+    def test_list_phases_uses_selected_namespace_workflow(self, client):
+        from project_workflow.interfaces.ui import _app_state
+
+        workflow = _app_state.workflow_service().create_workflow({"name": _unique("phase-filter-wf")})
+        namespace = client.post(
+            "/api/namespaces",
+            json={
+                "name": "Phase Filter Namespace",
+                "workflow_id": workflow["id"],
+                "cli_command": _unique("workflow-phase-filter"),
+            },
+        )
+        assert namespace.status_code == 200
+        namespace_id = namespace.json()["namespace_id"]
+
+        resp = client.get(f"/api/phases?namespace_id={namespace_id}")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["workflow"]["id"] == workflow["id"]
+        assert data["phases"]
+        assert {phase["workflow_id"] for phase in data["phases"]} == {workflow["id"]}
+
+    def test_list_phases_rejects_unknown_namespace_filter(self, client):
+        resp = client.get(f"/api/phases?namespace_id={UNKNOWN_NAMESPACE_ID}")
+
+        assert resp.status_code == 404
+        assert resp.json() == {
+            "ok": False,
+            "error": f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден",
+        }
+
+    def test_list_phases_rejects_namespace_workflow_owner_conflict(self, client):
+        from project_workflow.interfaces.ui import _app_state
+
+        namespace = next(item for item in client.get("/api/namespaces").json()["namespaces"])
+        other_workflow = _app_state.workflow_service().create_workflow({"name": _unique("phase-filter-foreign")})
+
+        resp = client.get(f"/api/phases?namespace_id={namespace['id']}&workflow_id={other_workflow['id']}")
+
+        assert resp.status_code == 409
+        assert resp.json() == {
+            "ok": False,
+            "error": "workflow_id не совпадает с владельцем неймспейса",
+        }
+
     def test_get_phase(self, client):
         resp = client.get(f"/api/phases/{_phase_id(client, '1.INTAKE')}")
         assert resp.status_code == 200

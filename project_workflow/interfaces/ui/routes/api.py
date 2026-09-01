@@ -89,7 +89,19 @@ async def api_settings_get(namespace_id: int | None = Query(default=None, gt=0))
     return {"ok": True, "commands": _load_cli_reference(entrypoint=entrypoint)}
 
 
-async def api_phases(workflow_id: int | None = Query(default=None, gt=0)) -> dict[str, Any] | JSONResponse:
+async def api_phases(
+    workflow_id: int | None = Query(default=None, gt=0),
+    namespace_id: int | None = Query(default=None, gt=0),
+) -> dict[str, Any] | JSONResponse:
+    namespace = _app_state.project_service().get_project(namespace_id) if namespace_id is not None else None
+    if namespace_id is not None and namespace is None:
+        return _error(f"Неймспейс {namespace_id} не найден", 404)
+    if namespace is not None:
+        namespace_workflow_id = namespace.get("workflow_id")
+        if workflow_id is not None and namespace_workflow_id != workflow_id:
+            return _error("workflow_id не совпадает с владельцем неймспейса", 409)
+        if workflow_id is None:
+            workflow_id = namespace_workflow_id
     workflows = _app_state.workflow_service().list_workflows()
     selected_workflow = next((item for item in workflows if item["id"] == workflow_id), None)
     if workflow_id is not None and selected_workflow is None:
