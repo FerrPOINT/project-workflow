@@ -816,6 +816,23 @@ class TestPhasesPage:
 
 
 class TestPhaseDetail:
+    def _create_foreign_namespace(self) -> int:
+        workflow = client.post(
+            "/api/workflows",
+            json={"name": "Foreign phase detail workflow", "description": "Workflow for ownership regression"},
+        )
+        assert workflow.status_code == 200
+        namespace = client.post(
+            "/api/namespaces",
+            json={
+                "name": "Foreign phase detail namespace",
+                "workflow_id": workflow.json()["workflow_id"],
+                "cli_command": "workflow-foreign-phase-detail",
+            },
+        )
+        assert namespace.status_code == 200
+        return int(namespace.json()["namespace_id"])
+
     def test_phase_detail_returns_html(self):
         response = client.get(_phase_detail_path("1.INTAKE"))
         assert response.status_code == 200
@@ -869,6 +886,17 @@ class TestPhaseDetail:
         assert response.status_code == 404
         assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
         assert "phaseForm" not in response.text
+
+    def test_phase_detail_rejects_phase_outside_selected_namespace_workflow(self):
+        namespace_id = self._create_foreign_namespace()
+        phase = _phase_row("5.PREFLIGHT")
+
+        response = client.get(f"/phase/{phase['id']}?namespace_id={namespace_id}")
+
+        assert response.status_code == 404
+        assert "Фаза недоступна в выбранном воркфлоу" in response.text
+        assert "phaseForm" not in response.text
+        assert f'href="/phases?namespace_id={namespace_id}"' in response.text
 
     def test_phase_detail_hides_next_recommendation_inline_input(self):
         response = client.get(_phase_detail_path("4.START"))
@@ -1976,6 +2004,31 @@ class TestUiNetworkFailures:
         assert response.status_code == 404
         assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
         assert "instructionGroups" not in response.text
+
+    def test_instructions_page_rejects_phase_outside_selected_namespace_workflow(self):
+        workflow = client.post(
+            "/api/workflows",
+            json={"name": "Foreign instructions workflow", "description": "Workflow for instruction ownership"},
+        )
+        assert workflow.status_code == 200
+        namespace = client.post(
+            "/api/namespaces",
+            json={
+                "name": "Foreign instructions namespace",
+                "workflow_id": workflow.json()["workflow_id"],
+                "cli_command": "workflow-foreign-instructions",
+            },
+        )
+        assert namespace.status_code == 200
+        namespace_id = int(namespace.json()["namespace_id"])
+        phase_id = _phase_id("1.INTAKE")
+
+        response = client.get(f"/instructions?phase_id={phase_id}&namespace_id={namespace_id}")
+
+        assert response.status_code == 404
+        assert "Фаза недоступна в выбранном воркфлоу" in response.text
+        assert "instructionGroups" not in response.text
+        assert f'href="/phases?namespace_id={namespace_id}"' in response.text
 
     def test_instructions_page_rejects_malformed_phase_id_with_html_error(self):
         response = client.get("/instructions?phase_id=abc")

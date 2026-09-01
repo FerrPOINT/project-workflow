@@ -214,6 +214,33 @@ def _workflow_error_page(request: Request, context: dict[str, Any], workflow_id:
     )
 
 
+def _phase_not_in_selected_namespace_page(request: Request, context: dict[str, Any]) -> HTMLResponse:
+    selected_namespace = context.get("selected_namespace")
+    namespace_id = selected_namespace.get("id") if isinstance(selected_namespace, dict) else None
+    back_url = f"/phases?namespace_id={namespace_id}" if isinstance(namespace_id, int) else "/phases"
+    context = {
+        **context,
+        "page": "phases",
+        "title": "Фаза не найдена",
+        "message": "Фаза недоступна в выбранном воркфлоу.",
+        "status_code": 404,
+        "back_url": back_url,
+        "back_label": "К фазам",
+    }
+    return _template_response(
+        request=request,
+        name="error.html",
+        status_code=404,
+        context=context,
+    )
+
+
+def _phase_matches_selected_namespace(phase: dict[str, Any], context: dict[str, Any]) -> bool:
+    selected_namespace = context.get("selected_namespace")
+    selected_workflow_id = selected_namespace.get("workflow_id") if isinstance(selected_namespace, dict) else None
+    return not isinstance(selected_workflow_id, int) or phase.get("workflow_id") == selected_workflow_id
+
+
 def validation_error_page(request: Request, errors: Sequence[Any]) -> HTMLResponse | None:
     """Render route validation failures as HTML for browser-facing pages."""
     path = request.url.path
@@ -292,6 +319,9 @@ async def phases_page(request: Request) -> HTMLResponse:
 
 
 async def phase_detail(request: Request, phase_id: PositivePathId) -> HTMLResponse:
+    context = _namespace_context(request, page="phases")
+    if error_response := _namespace_error_page(request, context, page="phases"):
+        return error_response
     phase = _load_phase_detail(phase_id)
     if not phase:
         return _error_page(
@@ -303,6 +333,8 @@ async def phase_detail(request: Request, phase_id: PositivePathId) -> HTMLRespon
             back_label="К фазам",
             page="phases",
         )
+    if not _phase_matches_selected_namespace(phase, context):
+        return _phase_not_in_selected_namespace_page(request, context)
     agents = _app_state.agent_service().list_agents()
     workflow_phases = _app_state.phase_service().list_phases(phase.get("workflow_id"))
     current_index = next(
@@ -334,9 +366,6 @@ async def phase_detail(request: Request, phase_id: PositivePathId) -> HTMLRespon
         ]
     for instruction in phase.get("instructions", []):
         instruction["skills"] = PhaseService.normalize_skills(instruction.get("skills"))
-    context = _namespace_context(request, page="phases")
-    if error_response := _namespace_error_page(request, context, page="phases"):
-        return error_response
     context.update(
         {
             "phase": phase,
@@ -542,6 +571,8 @@ async def instructions_page(request: Request) -> HTMLResponse:
             }
         )
         return _template_response(request=request, name="error.html", status_code=404, context=context)
+    if not _phase_matches_selected_namespace(phase, context):
+        return _phase_not_in_selected_namespace_page(request, context)
     instructions = phase.get("instructions", [])
     for instruction in instructions:
         instruction["skills"] = PhaseService.normalize_skills(instruction.get("skills"))
