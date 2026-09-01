@@ -82,6 +82,26 @@ PostgreSQL, integration gate можно запускать с `PGPORT`, указ
 
 После любых изменений UI/templates/static JS:
 
+Подготовить отдельную нейтральную smoke-базу, чтобы скриншоты не зависели от
+дефолтного runtime-каталога и показывали две независимые записи для одной
+внешней задачи:
+
+```bash
+export DATABASE_URL=sqlite:///$PWD/.smoke/ui-smoke.db
+rm -f .smoke/ui-smoke.db
+python scripts/prepare_ui_smoke_data.py
+python -m project_workflow.interfaces.ui --host 127.0.0.1 --port 8812
+```
+
+PowerShell:
+
+```powershell
+$env:DATABASE_URL = "sqlite:///$PWD/.smoke/ui-smoke.db"
+Remove-Item -LiteralPath .smoke/ui-smoke.db -ErrorAction SilentlyContinue
+python scripts/prepare_ui_smoke_data.py
+python -m project_workflow.interfaces.ui --host 127.0.0.1 --port 8812
+```
+
 - открыть `http://127.0.0.1:8812/`;
 - открыть `http://127.0.0.1:8812/namespaces`;
 - открыть `http://127.0.0.1:8812/namespaces/new`;
@@ -94,7 +114,11 @@ PostgreSQL, integration gate можно запускать с `PGPORT`, указ
 - проверить, что верхний selector переключает выбранный неймспейс, меняет логотип,
   цвет темы, список задач, dashboard stats и `/phases`;
 - проверить, что страницы загрузились без console/network ошибок;
-- сохранить full-screen screenshot evidence для изменённых экранов.
+- сохранить full-screen screenshot evidence для изменённых экранов;
+- убедиться, что screenshot evidence сделан на нейтральных smoke-данных, а не на
+  пустой дефолтной базе;
+- проверить, что screenshot evidence не содержит старое дефолтное имя или
+  runtime-specific упоминания вроде `Hermes`.
 
 Для backend-only тестовых или документационных изменений browser smoke не
 обязателен.

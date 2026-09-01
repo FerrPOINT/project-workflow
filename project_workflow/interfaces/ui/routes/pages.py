@@ -47,13 +47,11 @@ def _namespace_context(
     namespaces = _load_namespaces()
     query_namespace_id = _parse_positive_int(request.query_params.get("namespace_id"))
     cookie_namespace_id = _parse_positive_int(request.cookies.get(NAMESPACE_COOKIE))
-    selected_id = (
-        preferred_namespace_id
-        or query_namespace_id
-        or cookie_namespace_id
-    )
+    explicit_namespace_id = preferred_namespace_id if preferred_namespace_id is not None else query_namespace_id
+    selected_id = explicit_namespace_id if explicit_namespace_id is not None else cookie_namespace_id
     selected_namespace = next((item for item in namespaces if item.get("id") == selected_id), None)
-    if selected_namespace is None and namespaces:
+    missing_namespace_id = selected_id if explicit_namespace_id is not None and selected_namespace is None else None
+    if selected_namespace is None and namespaces and missing_namespace_id is None:
         selected_namespace = namespaces[0]
     return {
         "request": request,
@@ -61,6 +59,7 @@ def _namespace_context(
         "ui_port": get_settings().UI_PORT,
         "namespaces": namespaces,
         "selected_namespace": selected_namespace,
+        "missing_namespace_id": missing_namespace_id,
         **_theme_context(selected_namespace),
     }
 
@@ -113,9 +112,32 @@ def _error_page(
     )
 
 
+def _namespace_error_page(request: Request, context: dict[str, Any], *, page: str) -> HTMLResponse | None:
+    missing_namespace_id = context.get("missing_namespace_id")
+    if not isinstance(missing_namespace_id, int):
+        return None
+    context = {
+        **context,
+        "page": page,
+        "title": "Неймспейс не найден",
+        "message": f"Неймспейс {missing_namespace_id} не найден.",
+        "status_code": 404,
+        "back_url": "/namespaces",
+        "back_label": "К неймспейсам",
+    }
+    return _template_response(
+        request=request,
+        name="error.html",
+        status_code=404,
+        context=context,
+    )
+
+
 async def index(request: Request) -> HTMLResponse:
     """Минимальный dashboard без заглушек."""
     context = _namespace_context(request, page="dashboard")
+    if error_response := _namespace_error_page(request, context, page="dashboard"):
+        return error_response
     selected_namespace = context.get("selected_namespace")
     namespace_id = selected_namespace.get("id") if isinstance(selected_namespace, dict) else None
     dashboard = _load_dashboard(namespace_id=namespace_id if isinstance(namespace_id, int) else None)
@@ -129,6 +151,8 @@ async def index(request: Request) -> HTMLResponse:
 
 async def phases_page(request: Request, workflow_id: int | None = Query(default=None)) -> HTMLResponse:
     context = _namespace_context(request, page="phases")
+    if error_response := _namespace_error_page(request, context, page="phases"):
+        return error_response
     selected_namespace = context.get("selected_namespace")
     if workflow_id is None and isinstance(selected_namespace, dict):
         workflow_id = selected_namespace.get("workflow_id")
@@ -200,6 +224,8 @@ async def phase_detail(request: Request, phase_id: int) -> HTMLResponse:
     for instruction in phase.get("instructions", []):
         instruction["skills"] = PhaseService.normalize_skills(instruction.get("skills"))
     context = _namespace_context(request, page="phases")
+    if error_response := _namespace_error_page(request, context, page="phases"):
+        return error_response
     context.update(
         {
             "phase": phase,
@@ -219,6 +245,8 @@ async def phase_detail(request: Request, phase_id: int) -> HTMLResponse:
 async def tasks_page(request: Request) -> HTMLResponse:
     """Список задач workflow."""
     context = _namespace_context(request, page="tasks")
+    if error_response := _namespace_error_page(request, context, page="tasks"):
+        return error_response
     selected_namespace = context.get("selected_namespace")
     namespace_id = selected_namespace.get("id") if isinstance(selected_namespace, dict) else None
     tasks = _load_tasks(namespace_id=namespace_id if isinstance(namespace_id, int) else None)
@@ -233,6 +261,8 @@ async def tasks_page(request: Request) -> HTMLResponse:
 async def namespace_page(request: Request) -> HTMLResponse:
     """CRUD page for namespaces and style."""
     context = _namespace_context(request, page="namespace")
+    if error_response := _namespace_error_page(request, context, page="namespace"):
+        return error_response
     workflows = _load_workflows()
     selected_namespace = context.get("selected_namespace")
     context.update(
@@ -264,6 +294,8 @@ async def namespace_new_page(request: Request) -> HTMLResponse:
 
 async def workflows_page(request: Request) -> HTMLResponse:
     context = _namespace_context(request, page="workflows")
+    if error_response := _namespace_error_page(request, context, page="workflows"):
+        return error_response
     workflows = _load_workflows()
     context.update({"workflows": workflows, "selected_workflow": workflows[0] if workflows else None})
     return _template_response(
@@ -284,6 +316,8 @@ async def task_detail_page(
         page="tasks",
         preferred_namespace_id=namespace_id,
     )
+    if error_response := _namespace_error_page(request, context, page="tasks"):
+        return error_response
     selected_namespace = context.get("selected_namespace")
     selected_namespace_id = (
         selected_namespace.get("id")
@@ -338,6 +372,8 @@ async def task_detail_page(
 async def settings_page(request: Request) -> HTMLResponse:
     """Read-only справка по реальным CLI-командам workflow."""
     context = _namespace_context(request, page="settings")
+    if error_response := _namespace_error_page(request, context, page="settings"):
+        return error_response
     context.update({"commands": _load_cli_reference()})
     return _template_response(
         request=request,
@@ -348,8 +384,10 @@ async def settings_page(request: Request) -> HTMLResponse:
 
 async def agents_page(request: Request) -> HTMLResponse:
     """Список агентов."""
-    agents = _app_state.agent_service().list_agents()
     context = _namespace_context(request, page="agents")
+    if error_response := _namespace_error_page(request, context, page="agents"):
+        return error_response
+    agents = _app_state.agent_service().list_agents()
     context.update({"agents": agents})
     return _template_response(
         request=request,
@@ -389,6 +427,8 @@ async def instructions_page(
         instruction["skills"] = PhaseService.normalize_skills(instruction.get("skills"))
     instruction_groups = _group_instructions(instructions)
     context = _namespace_context(request, page="phases")
+    if error_response := _namespace_error_page(request, context, page="phases"):
+        return error_response
     context.update(
         {
             "phase": phase,

@@ -3,8 +3,8 @@
 {% block title %}Дашборд — Workflow Engine{% endblock %}
 {% block header_title %}Дашборд{% endblock %}
 {% block header_actions %}
-  <a href="/tasks" class="btn btn-secondary">Задачи</a>
-  <a href="/namespaces" class="btn btn-secondary">Неймспейсы</a>
+  <a href="/tasks" class="btn btn-secondary dashboard-action">Задачи</a>
+  <a href="/namespaces" class="btn btn-secondary dashboard-action">Неймспейсы</a>
 {% endblock %}
 
 {% block extra_style %}
@@ -21,6 +21,7 @@
 .list-title{font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px}
 .list-meta{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--text-dim)}
 .code{font-family:'JetBrains Mono',monospace;color:var(--accent)}
+@media(max-width:640px){.dashboard-action{display:none}}
 {% endblock %}
 
 {% block content %}

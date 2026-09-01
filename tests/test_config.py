@@ -41,7 +41,7 @@ def test_bootstrap_constants_are_minimal():
     assert config.SEED_PATH.name == "seed.json"
     assert config.DEFAULT_WORKFLOW_NAME == "sdlc-business-tech-v1"
     assert config.DEFAULT_PROJECT_CODE == "RUN"
-    assert config.DEFAULT_PROJECT_NAME == "Hermes + Supervisor SDLC"
+    assert config.DEFAULT_PROJECT_NAME == "Основной"
     assert config.DEFAULT_TASK_KEY_PREFIXES == []
     assert config.CODEX_OPERATOR_AGENT == "codex-operator"
     assert not hasattr(config, "PHASE_ORDER")

@@ -183,6 +183,14 @@ At startup the app verifies database connectivity; the Compose `migrate` service
     <td><img src="docs/screenshots/namespaces.png" alt="Namespaces" /></td>
   </tr>
   <tr>
+    <td><strong>Namespace creation</strong></td>
+    <td><strong>QA phases</strong></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/namespace-new.png" alt="Namespace creation" /></td>
+    <td><img src="docs/screenshots/phases-qa.png" alt="QA phases" /></td>
+  </tr>
+  <tr>
     <td><strong>Tasks</strong></td>
     <td><strong>Workflows</strong></td>
   </tr>
@@ -197,6 +205,19 @@ Workflow graph:
 <p align="center">
   <img src="docs/screenshots/phases.png" alt="Workflow phases" />
 </p>
+
+Same task key in two selected entries:
+
+<table>
+  <tr>
+    <td><strong>Development detail</strong></td>
+    <td><strong>QA detail</strong></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/task-detail-dev.png" alt="Development task detail" /></td>
+    <td><img src="docs/screenshots/task-detail-qa.png" alt="QA task detail" /></td>
+  </tr>
+</table>
 
 Mobile dashboard:
 

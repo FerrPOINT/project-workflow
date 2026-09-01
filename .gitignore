@@ -50,6 +50,8 @@ Thumbs.db
 .smoke/
 *.log
 screenshots/
+!docs/screenshots/
+!docs/screenshots/*.png
 .workflow.db
 info/
 data/state/
