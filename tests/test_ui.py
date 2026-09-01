@@ -358,6 +358,8 @@ class TestPhasesPage:
         assert "url.searchParams.delete('workflow_id');" in response.text
         assert "if(url.pathname.startsWith('/phase/'))" in response.text
         assert "url.pathname='/phases';" in response.text
+        assert "if(url.pathname === '/instructions'){" in response.text
+        assert "url.searchParams.delete('phase_id');" in response.text
 
     def test_phases_reject_unknown_query_namespace(self):
         response = client.get(f"/phases?namespace_id={UNKNOWN_NAMESPACE_ID}")
