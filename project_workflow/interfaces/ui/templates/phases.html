@@ -50,7 +50,7 @@
 {% macro phase_card(p) -%}
 <div class="timeline-item" data-phase-id="{{ p.id }}" data-phase-order="{{ p.phase_num }}" data-execution-type="{{ p.execution_type }}">
   <div class="phase-card-shell">
-    <a href="/phase/{{ p.id }}" class="timeline-card">
+    <a href="/phase/{{ p.id }}{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="timeline-card">
       <div class="timeline-name">{{ p.name }}</div>
       {% set description = p.description | default('') %}
       {% if description %}<div class="timeline-desc">{{ description[:120] }}{% if description|length > 120 %}...{% endif %}</div>{% endif %}
@@ -73,7 +73,7 @@
 <div class="phases-layout">
   <section class="workflow-nav" id="workflowNav">
     {% for workflow in workflows %}
-    <a class="workflow-nav-item {% if selected_workflow_id == workflow.id %}active{% endif %}" href="/phases?workflow_id={{ workflow.id }}" data-workflow-id="{{ workflow.id }}">
+    <a class="workflow-nav-item {% if selected_workflow_id == workflow.id %}active{% endif %}" href="/phases?workflow_id={{ workflow.id }}{% if selected_namespace %}&namespace_id={{ selected_namespace.id }}{% endif %}" data-workflow-id="{{ workflow.id }}">
       <div class="workflow-name">{{ workflow.name }}</div>
       <div class="workflow-meta">
         <span class="workflow-chip">{{ workflow.namespace_count | pluralize('неймспейс,неймспейса,неймспейсов') }}</span>

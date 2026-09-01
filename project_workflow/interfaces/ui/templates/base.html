@@ -279,7 +279,7 @@ textarea{resize:vertical;min-height:60px}
           <option value="{{ namespace.id }}" {% if active_namespace_id == namespace.id %}selected{% endif %}>{{ namespace.name }}</option>
           {% endfor %}
         </select>
-        <a class="namespace-icon-action" href="/namespaces/new{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}" title="Добавить" aria-label="Добавить">+</a>
+        <a class="namespace-icon-action" href="/namespaces/new{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}" title="Создать" aria-label="Создать">+</a>
         <a class="namespace-icon-action" href="/namespaces{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}" title="Редактировать выбранное" aria-label="Редактировать выбранное">✎</a>
       </div>
       {% endif %}
@@ -323,6 +323,13 @@ function switchNamespace(namespaceId){
   if(!namespaceId){return;}
   document.cookie='workflow_namespace_id='+encodeURIComponent(namespaceId)+'; path=/; SameSite=Lax';
   var url=new URL(window.location.href);
+  if(url.pathname === '/phases'){
+    url.searchParams.delete('workflow_id');
+  }
+  if(url.pathname.startsWith('/phase/')){
+    url.pathname='/phases';
+    url.searchParams.delete('workflow_id');
+  }
   url.searchParams.set('namespace_id', namespaceId);
   window.location.href=url.toString();
 }

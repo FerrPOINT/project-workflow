@@ -93,7 +93,7 @@ def _phase_api_path(code: str) -> str:
 
 
 def _phase_href(code: str) -> str:
-    return f'href="/phase/{_phase_id(code)}"'
+    return f'href="/phase/{_phase_id(code)}'
 
 
 def _normalize_skills(raw: object) -> list[str]:
@@ -306,6 +306,14 @@ class TestPhasesPage:
         assert response.status_code == 200
         assert 'href="/phase/' in response.text
 
+    def test_namespace_switch_resets_phase_workflow_scope(self):
+        response = client.get("/phases")
+        assert response.status_code == 200
+        assert "if(url.pathname === '/phases')" in response.text
+        assert "url.searchParams.delete('workflow_id');" in response.text
+        assert "if(url.pathname.startsWith('/phase/'))" in response.text
+        assert "url.pathname='/phases';" in response.text
+
     def test_phases_api_returns_json(self):
         response = client.get("/api/phases")
         assert response.status_code == 200
@@ -377,7 +385,7 @@ class TestPhasesPage:
             assert response.status_code == 200
             assert "Workflow Scoped Phase" in response.text
             assert "Task Intake" not in response.text
-            assert f'href="/phases?workflow_id={workflow_id}"' in response.text
+            assert f'href="/phases?workflow_id={workflow_id}' in response.text
         finally:
             workflow = next(
                 (
@@ -469,8 +477,19 @@ class TestPhasesPage:
 
         phase = _phase_row("4.START")
 
-        assert f'href="/phase/{phase["id"]}"' in response.text
+        assert f'href="/phase/{phase["id"]}' in response.text
         assert 'href="/phase/4.START"' not in response.text
+
+    def test_phase_links_preserve_selected_namespace(self):
+        uow = ui_app_state.get_db()
+        namespace_id = _as_dict(uow.projects.get_by_code("UITEST"))["id"]
+        phase = _phase_row("4.START")
+
+        response = client.get(f"/phases?namespace_id={namespace_id}")
+
+        assert response.status_code == 200
+        assert f'href="/phase/{phase["id"]}?namespace_id={namespace_id}"' in response.text
+        assert f'&namespace_id={namespace_id}" data-workflow-id="' in response.text
 
     def test_phases_page_add_phase_button_uses_server_phase_order_attribute(self):
         response = client.get("/phases")
@@ -772,9 +791,20 @@ class TestPhaseDetail:
         assert "Code:" not in response.text
         assert 'data-field="code"' not in response.text
         assert 'data-field="phase_num"' not in response.text
-        assert 'href="/phases"' in response.text
+        assert 'href="/phases?workflow_id=' in response.text
         assert "← Назад к фазам" in response.text
         assert "Порядок меняется на странице фаз" not in response.text
+
+    def test_phase_detail_back_link_preserves_selected_namespace(self):
+        uow = ui_app_state.get_db()
+        namespace_id = _as_dict(uow.projects.get_by_code("UITEST"))["id"]
+        phase = _phase_row("5.PREFLIGHT")
+        workflow_id = phase["workflow_id"]
+
+        response = client.get(f"/phase/{phase['id']}?namespace_id={namespace_id}")
+
+        assert response.status_code == 200
+        assert f'href="/phases?workflow_id={workflow_id}&namespace_id={namespace_id}"' in response.text
 
     def test_phase_detail_hides_next_recommendation_inline_input(self):
         response = client.get(_phase_detail_path("4.START"))
@@ -1359,6 +1389,15 @@ class TestProjectsPage:
         assert 'id="newProjectButton"' not in response.text
         assert 'id="newNamespaceButton"' not in response.text
 
+    def test_namespace_create_page_uses_plus_without_duplicate_add_label(self):
+        response = client.get("/namespaces/new")
+        assert response.status_code == 200
+        assert "<span class=\"header-title\">Неймспейсы</span>" in response.text
+        assert 'href="/namespaces/new' in response.text
+        assert 'title="Создать" aria-label="Создать">+</a>' in response.text
+        assert '<div class="card-title" id="namespaceFormMode">Создание</div>' in response.text
+        assert "Добавить" not in response.text
+
     def test_namespace_create_page_keeps_current_selection_for_cancel(self):
         uow = ui_app_state.get_db()
         namespace_id = _as_dict(uow.projects.get_by_code("UITEST"))["id"]
@@ -1367,6 +1406,29 @@ class TestProjectsPage:
         assert "let selectedNamespaceId = null;" in response.text
         assert f"let previousNamespaceId = {namespace_id};" in response.text
         assert "if(namespaceFormMode === 'create'){ return; }" in response.text
+
+    def test_namespace_card_selection_updates_global_selection_state(self):
+        response = client.get("/namespaces")
+        assert response.status_code == 200
+        assert "function rememberNamespaceSelection(id)" in response.text
+        assert "document.cookie='workflow_namespace_id='+encodeURIComponent(id)+'; path=/; SameSite=Lax';" in response.text
+        assert "if(selector){ selector.value = String(id); }" in response.text
+        assert "url.pathname = '/namespaces';" in response.text
+        assert "window.history.replaceState(null, '', url.toString());" in response.text
+        assert re.search(
+            r"function selectNamespace\(id\)\{\s*selectedNamespaceId = id;\s*"
+            r"previousNamespaceId = id;\s*setNamespaceFormMode\('edit'\);\s*"
+            r"fillNamespaceForm\(namespaceById\(id\)\);",
+            response.text,
+        )
+
+    def test_namespace_create_redirects_to_edit_page_after_success(self):
+        response = client.get("/namespaces/new")
+        assert response.status_code == 200
+        assert (
+            "window.location.href = '/namespaces?namespace_id=' + encodeURIComponent(d.namespace_id);"
+            in response.text
+        )
 
     def test_namespace_page_exposes_workflow_selector(self):
         response = client.get("/namespaces")

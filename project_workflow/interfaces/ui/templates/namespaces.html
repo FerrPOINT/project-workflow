@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
-{% block title %}{{ edited_namespace.name if edited_namespace else 'Добавить' }} — Workflow Engine{% endblock %}
-{% block header_title %}{{ edited_namespace.name if edited_namespace else 'Добавить' }}{% endblock %}
+{% block title %}Неймспейсы — Workflow Engine{% endblock %}
+{% block header_title %}Неймспейсы{% endblock %}
 {% block header_actions %}{% endblock %}
 
 {% block extra_style %}
@@ -56,7 +56,7 @@
 
   <section class="namespace-panel">
     <form id="namespaceForm" class="card form-stack" onsubmit="event.preventDefault(); submitNamespace();">
-      <div class="card-title" id="namespaceFormMode">Редактирование</div>
+      <div class="card-title" id="namespaceFormMode">{{ 'Создание' if create_mode else 'Редактирование' }}</div>
       <div>
         <div class="label">Название</div>
         <input type="text" id="namespaceName" value="{{ edited_namespace.name if edited_namespace else '' }}">
@@ -96,7 +96,7 @@
         </select>
       </div>
       <div class="panel-actions">
-        <button class="btn btn-primary" type="submit" id="namespaceSubmitButton">Сохранить</button>
+        <button class="btn btn-primary" type="submit" id="namespaceSubmitButton">{{ 'Создать' if create_mode else 'Сохранить' }}</button>
         <button class="btn btn-secondary" type="button" id="cancelCreateButton" onclick="cancelCreateNamespace()" style="display:none">Отмена</button>
         <button class="btn btn-secondary" type="button" id="deleteNamespaceButton" onclick="deleteNamespace()">Удалить</button>
       </div>
@@ -158,6 +158,18 @@ function syncNav(){
     node.classList.toggle('active', Number(node.dataset.namespaceId) === selectedNamespaceId);
   });
 }
+function rememberNamespaceSelection(id){
+  if(id == null){ return; }
+  document.cookie='workflow_namespace_id='+encodeURIComponent(id)+'; path=/; SameSite=Lax';
+  var selector = document.getElementById('namespaceSelector');
+  if(selector){ selector.value = String(id); }
+  var url = new URL(window.location.href);
+  if(url.pathname === '/namespaces' || url.pathname === '/namespaces/new'){
+    url.pathname = '/namespaces';
+    url.searchParams.set('namespace_id', id);
+    window.history.replaceState(null, '', url.toString());
+  }
+}
 function fillNamespaceForm(namespace){
   document.getElementById('namespaceName').value = namespace ? namespace.name : '';
   document.getElementById('namespaceCliCommand').value = namespace ? (namespace.cli_command || '') : '';
@@ -170,7 +182,7 @@ function fillNamespaceForm(namespace){
 function setNamespaceFormMode(mode){
   namespaceFormMode = mode;
   var createMode = mode === 'create';
-  document.getElementById('namespaceFormMode').textContent = createMode ? 'Добавление' : 'Редактирование';
+  document.getElementById('namespaceFormMode').textContent = createMode ? 'Создание' : 'Редактирование';
   document.getElementById('namespaceSubmitButton').textContent = createMode ? 'Создать' : 'Сохранить';
   document.getElementById('deleteNamespaceButton').style.display = createMode ? 'none' : '';
   document.getElementById('cancelCreateButton').style.display = createMode && namespaceStore.length ? '' : 'none';
@@ -180,8 +192,8 @@ function startCreateNamespace(){
     previousNamespaceId = selectedNamespaceId;
   }
   selectedNamespaceId = null;
-  fillNamespaceForm(null);
   setNamespaceFormMode('create');
+  fillNamespaceForm(null);
   syncNav();
 }
 function cancelCreateNamespace(){
@@ -198,9 +210,10 @@ function cancelCreateNamespace(){
 function selectNamespace(id){
   selectedNamespaceId = id;
   previousNamespaceId = id;
-  fillNamespaceForm(namespaceById(id));
   setNamespaceFormMode('edit');
+  fillNamespaceForm(namespaceById(id));
   syncNav();
+  rememberNamespaceSelection(id);
 }
 function reloadNamespaces(nextId){
   fetch('/api/namespaces')
@@ -212,8 +225,8 @@ function reloadNamespaces(nextId){
       if(namespaceStore.length === 0){
         selectedNamespaceId = null;
         previousNamespaceId = null;
-        fillNamespaceForm(null);
         setNamespaceFormMode('create');
+        fillNamespaceForm(null);
         var nav = document.getElementById('namespaceNav');
         nav.replaceChildren();
         var empty = document.createElement('div');
@@ -227,9 +240,10 @@ function reloadNamespaces(nextId){
       if(!namespaceById(selectedNamespaceId)){ selectedNamespaceId = namespaceStore[0].id; }
       previousNamespaceId = selectedNamespaceId;
       renderNamespaceNav();
-      fillNamespaceForm(namespaceById(selectedNamespaceId));
       setNamespaceFormMode('edit');
+      fillNamespaceForm(namespaceById(selectedNamespaceId));
       syncNav();
+      rememberNamespaceSelection(selectedNamespaceId);
     })
     .catch(showRequestError);
 }
@@ -303,7 +317,7 @@ function createNamespace(){
     .then(function(d){
       if(d.ok){
         showToast('Создано','success');
-        reloadNamespaces(d.namespace_id);
+        window.location.href = '/namespaces?namespace_id=' + encodeURIComponent(d.namespace_id);
       } else {
         showToast(d.error || 'Ошибка','error');
       }
@@ -319,8 +333,8 @@ function submitNamespace(){
 }
 renderNamespaceNav();
 if(selectedNamespaceId == null){
-  fillNamespaceForm(null);
   setNamespaceFormMode('create');
+  fillNamespaceForm(null);
 } else {
   setNamespaceFormMode('edit');
 }
