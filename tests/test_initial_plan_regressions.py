@@ -23,6 +23,10 @@ def _unique(prefix: str) -> str:
     return f"{prefix}-{next(_counter)}"
 
 
+def _task_key_stem(prefix: str) -> str:
+    return f"{prefix}{next(_counter)}".upper()
+
+
 def _workflow_with_phases(count: int = 2) -> tuple[int, list[dict]]:
     workflow = create_empty_workflow(_app_state.get_db(), _unique("workflow"))
     phases = [
@@ -125,7 +129,7 @@ def test_phase_delete_rejects_links_current_tasks_and_history():
     assert client.delete(f"/api/phases/{first['id']}").status_code == 409
     service.update_phase(second["id"], {"parallel_with_phase_id": None})
 
-    prefix = _unique("DEL").upper()
+    prefix = _task_key_stem("DEL")
     project = _app_state.project_service().create_project(
         {
             "workflow_id": workflow_id,
@@ -151,27 +155,26 @@ def test_phase_delete_rejects_links_current_tasks_and_history():
     assert client.delete(f"/api/phases/{first['id']}").status_code == 409
 
 
-def test_project_description_workflow_and_prefix_guards():
+def test_namespace_description_workflow_guard_and_prefix_field_rejected():
     workflow_id, phases = _workflow_with_phases(1)
     other_workflow_id, _ = _workflow_with_phases(1)
     prefix = f"PRJ{next(_counter)}"
     response = client.post(
-        "/api/contexts",
+        "/api/namespaces",
         json={
             "workflow_id": workflow_id,
-            "code": _unique("project"),
-            "name": "Project",
+            "name": "Namespace",
             "description": "Persist me",
-            "key_prefixes": [prefix],
+            "cli_command": f"workflow-prj-{next(_counter)}",
         },
     )
     assert response.status_code == 200
-    project = response.json()["context"]
-    assert project["description"] == "Persist me"
+    namespace = response.json()["namespace"]
+    assert namespace["description"] == "Persist me"
 
     task = _app_state.task_service().create_task(
         {
-            "project_id": project["id"],
+            "project_id": namespace["id"],
             "task_key": f"{prefix}-42",
             "current_phase_id": phases[0]["id"],
         }
@@ -179,29 +182,30 @@ def test_project_description_workflow_and_prefix_guards():
     assert task["task_key"] == f"{prefix}-42"
 
     workflow_change = client.put(
-        f"/api/contexts/{project['id']}", json={"workflow_id": other_workflow_id}
+        f"/api/namespaces/{namespace['id']}", json={"workflow_id": other_workflow_id}
     )
     assert workflow_change.status_code == 409
     prefix_change = client.put(
-        f"/api/contexts/{project['id']}", json={"key_prefixes": [f"NEW{next(_counter)}"]}
+        f"/api/namespaces/{namespace['id']}", json={"key_prefixes": [f"NEW{next(_counter)}"]}
     )
-    assert prefix_change.status_code == 409
-    unchanged = _app_state.project_service().get_project(project["id"])
-    assert unchanged["workflow_id"] == workflow_id
-    assert unchanged["key_prefixes"] == [prefix]
+    assert prefix_change.status_code == 422
+    changed = _app_state.project_service().get_project(namespace["id"])
+    assert changed["workflow_id"] == workflow_id
+    assert changed["key_prefixes"] != [prefix]
 
 
-def test_project_explicit_null_non_nullable_fields_are_rejected():
+def test_namespace_explicit_null_non_nullable_fields_are_rejected():
     create = client.post(
-        "/api/contexts",
-        json={"code": _unique("null-project"), "key_prefixes": [f"NULL{next(_counter)}"], "workflow_id": None},
+        "/api/namespaces",
+        json={"name": "Null namespace", "cli_command": f"workflow-null-{next(_counter)}", "workflow_id": None},
     )
     assert create.status_code == 422
     create_description = client.post(
-        "/api/contexts",
+        "/api/namespaces",
         json={
-            "code": _unique("null-description-project"),
-            "key_prefixes": [f"NULL{next(_counter)}"],
+            "name": "Null description namespace",
+            "workflow_id": 1,
+            "cli_command": f"workflow-null-desc-{next(_counter)}",
             "description": None,
         },
     )
@@ -217,9 +221,9 @@ def test_project_explicit_null_non_nullable_fields_are_rejected():
             "key_prefixes": [prefix],
         }
     )
-    update = client.put(f"/api/contexts/{project['id']}", json={"workflow_id": None})
+    update = client.put(f"/api/namespaces/{project['id']}", json={"workflow_id": None})
     assert update.status_code == 422
-    update_description = client.put(f"/api/contexts/{project['id']}", json={"description": None})
+    update_description = client.put(f"/api/namespaces/{project['id']}", json={"description": None})
     assert update_description.status_code == 422
     assert _app_state.project_service().get_project(project["id"])["workflow_id"] == workflow_id
 
@@ -232,7 +236,7 @@ def test_task_filter_returns_nonempty_workflow_specific_dto():
         (first_workflow, first_phases),
         (second_workflow, second_phases),
     ):
-        prefix = _unique("FILTER").upper()
+        prefix = _task_key_stem("FILTER")
         project = _app_state.project_service().create_project(
             {
                 "workflow_id": workflow_id,
@@ -265,7 +269,7 @@ def test_same_task_key_can_run_in_parallel_namespaces():
         {
             "workflow_id": first_workflow,
             "code": _unique("dual-project-a"),
-            "name": "Dual Environment A",
+            "name": "Dual Namespace A",
             "cli_command": f"workflow-dual-a-{prefix.lower()}",
             "key_prefixes": [prefix],
         }
@@ -274,7 +278,7 @@ def test_same_task_key_can_run_in_parallel_namespaces():
         {
             "workflow_id": second_workflow,
             "code": _unique("dual-project-b"),
-            "name": "Dual Environment B",
+            "name": "Dual Namespace B",
             "cli_command": f"workflow-dual-b-{prefix.lower()}",
             "key_prefixes": [prefix],
         }
@@ -303,13 +307,13 @@ def test_same_task_key_can_run_in_parallel_namespaces():
     second_detail = client.get(f"/task/{task_key}?namespace_id={second_project['id']}")
     assert first_detail.status_code == 200
     assert second_detail.status_code == 200
-    assert "Dual Environment A" in first_detail.text
-    assert "Dual Environment B" in second_detail.text
+    assert "Dual Namespace A" in first_detail.text
+    assert "Dual Namespace B" in second_detail.text
 
 
-def test_explicit_project_task_validates_prefix_and_scoped_phase_before_write():
+def test_explicit_project_task_validates_key_shape_and_scoped_phase_before_write():
     workflow_id, _ = _workflow_with_phases(1)
-    prefix = _unique("STRICT").upper()
+    prefix = _task_key_stem("STRICT")
     project = _app_state.project_service().create_project(
         {
             "workflow_id": workflow_id,
@@ -319,8 +323,10 @@ def test_explicit_project_task_validates_prefix_and_scoped_phase_before_write():
         }
     )
     service = _app_state.task_service()
-    with pytest.raises(ConflictError, match="не соответствует"):
-        service.create_task({"project_id": project["id"], "task_key": "WRONG-1"})
+    created = service.create_task({"project_id": project["id"], "task_key": "WRONG-1"})
+    assert created["task_key"] == "WRONG-1"
+    with pytest.raises(ConflictError, match="должен соответствовать"):
+        service.create_task({"project_id": project["id"], "task_key": "BAD-KEY"})
     with pytest.raises(ValueError, match="не найдена в воркфлоу"):
         service.create_task(
             {
@@ -329,7 +335,7 @@ def test_explicit_project_task_validates_prefix_and_scoped_phase_before_write():
                 "current_phase_id": 999999,
             }
         )
-    assert not any(task["task_key"] in {"WRONG-1", f"{prefix}-1"} for task in service.list_tasks())
+    assert not any(task["task_key"] in {"BAD-KEY", f"{prefix}-1"} for task in service.list_tasks())
 
 
 def test_nullable_phase_fields_distinguish_omitted_from_explicit_null():
@@ -376,11 +382,11 @@ def test_nullable_phase_fields_distinguish_omitted_from_explicit_null():
     assert service.get_phase(first["id"])["parallel_with_phase_id"] is None
 
 
-def test_contexts_page_exposes_description_editor():
-    response = client.get("/contexts")
+def test_namespaces_page_exposes_description_editor():
+    response = client.get("/namespaces")
     assert response.status_code == 200
-    assert 'id="projectDescription"' in response.text
-    assert "description: document.getElementById('projectDescription').value.trim()" in response.text
+    assert 'id="namespaceDescription"' in response.text
+    assert "description: document.getElementById('namespaceDescription').value.trim()" in response.text
 
 
 def test_phase_detail_exposes_explicit_parallel_partner_editor():

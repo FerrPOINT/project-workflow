@@ -37,7 +37,7 @@ def client():
         uow.projects.create(
             {
                 "code": config.DEFAULT_PROJECT_CODE,
-                "name": "Default Environment",
+                "name": "Default Namespace",
                 "workflow_id": default_workflow.id,
                 "cli_command": config.DEFAULT_NAMESPACE_CLI_COMMAND,
                 "key_prefixes": ["RUN"],
@@ -116,23 +116,23 @@ class TestIndex:
         resp = client.get("/settings")
         assert resp.status_code == 200
 
-    def test_projects_page(self, client):
-        resp = client.get("/contexts")
+    def test_namespaces_page(self, client):
+        resp = client.get("/namespaces")
         assert resp.status_code == 200
         assert "CLI-команда" in resp.text
 
     def test_tasks_page_has_namespace_column(self, client):
         resp = client.get("/tasks")
         assert resp.status_code == 200
-        assert "CLI" in resp.text
+        assert "Неймспейс" in resp.text
 
     def test_header_has_namespace_selector_and_actions(self, client):
         resp = client.get("/")
         assert resp.status_code == 200
         assert 'id="namespaceSelector"' in resp.text
-        assert 'href="/namespace/new' in resp.text
-        assert 'href="/namespace' in resp.text
-        assert "CLI и стиль" in resp.text
+        assert 'href="/namespaces/new' in resp.text
+        assert 'href="/namespaces' in resp.text
+        assert "Неймспейсы" in resp.text
 
     def test_task_links_include_namespace_id(self, client):
         resp = client.get("/tasks")
@@ -498,7 +498,7 @@ class TestApiWorkflows:
             {"name": "Bad color", "theme_color": "not-a-color"},
         ],
     )
-    def test_workflow_rejects_project_theme_fields(self, client, payload):
+    def test_workflow_rejects_namespace_theme_fields(self, client, payload):
         resp = client.post("/api/workflows", json=payload)
         assert resp.status_code == 422
 
@@ -546,70 +546,67 @@ class TestApiWorkflows:
         assert resp.status_code == 409
 
 
-class TestApiContexts:
-    def test_list_contexts(self, client):
-        resp = client.get("/api/contexts")
+class TestApiNamespacesCrud:
+    def test_list_namespaces(self, client):
+        resp = client.get("/api/namespaces")
         assert resp.status_code == 200
         data = resp.json()
         assert data["ok"] is True
-        assert "contexts" in data
+        assert "namespaces" in data
 
     @pytest.mark.parametrize("workflow_id", [None, "1", True])
-    def test_create_context_requires_strict_workflow_id(self, client, workflow_id):
+    def test_create_namespace_requires_strict_workflow_id(self, client, workflow_id):
         payload = {
-            "code": _unique("STRICT-WF"),
             "name": "Strict workflow",
-            "key_prefixes": ["SWF"],
+            "cli_command": f"workflow-strict-{uuid.uuid4().hex[:6]}",
         }
         if workflow_id is not None:
             payload["workflow_id"] = workflow_id
 
-        response = client.post("/api/contexts", json=payload)
+        response = client.post("/api/namespaces", json=payload)
 
         assert response.status_code == 422
         assert response.json()["ok"] is False
         assert any(detail["field"] == "workflow_id" for detail in response.json()["details"])
 
-    def test_create_and_update_context(self, client):
+    def test_create_and_update_namespace(self, client):
         from project_workflow.interfaces.ui import _app_state
 
         default_wf = next(w for w in _app_state.workflow_service().list_workflows() if w.get("is_default"))
-        code = _unique("PRJ")
+        command = f"workflow-test-{uuid.uuid4().hex[:6]}"
         resp = client.post(
-            "/api/contexts",
+            "/api/namespaces",
             json={
-                "code": code,
-                "name": "Test Context",
+                "name": "Test Namespace",
                 "description": "desc",
                 "workflow_id": default_wf["id"],
                 "theme_icon": "bug",
                 "theme_color": "22c55e",
-                "key_prefixes": ["TST"],
+                "cli_command": command,
             },
         )
         assert resp.status_code == 200
         data = resp.json()
         assert data["ok"] is True
-        project_id = data["context_id"]
-        assert data["context"]["theme_icon"] == "bug"
-        assert data["context"]["theme_color"] == "#22C55E"
+        namespace_id = data["namespace_id"]
+        assert data["namespace"]["theme_icon"] == "bug"
+        assert data["namespace"]["theme_color"] == "#22C55E"
 
         resp = client.put(
-            f"/api/contexts/{project_id}",
+            f"/api/namespaces/{namespace_id}",
             json={
                 "name": "Updated",
                 "theme_icon": "rocket",
                 "theme_color": "#0ea5e9",
-                "key_prefixes": ["ABC", "DEF"],
             },
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert data["context"]["name"] == "Updated"
-        assert data["context"]["theme_icon"] == "rocket"
-        assert data["context"]["theme_color"] == "#0EA5E9"
-        assert client.put(f"/api/contexts/{project_id}", json={"theme_icon": None}).status_code == 422
-        assert client.put(f"/api/contexts/{project_id}", json={"theme_color": None}).status_code == 422
+        assert data["namespace"]["name"] == "Updated"
+        assert data["namespace"]["theme_icon"] == "rocket"
+        assert data["namespace"]["theme_color"] == "#0EA5E9"
+        assert client.put(f"/api/namespaces/{namespace_id}", json={"theme_icon": None}).status_code == 422
+        assert client.put(f"/api/namespaces/{namespace_id}", json={"theme_color": None}).status_code == 422
 
     @pytest.mark.parametrize(
         "payload",
@@ -618,61 +615,58 @@ class TestApiContexts:
             {"theme_color": "not-a-color"},
         ],
     )
-    def test_context_theme_values_are_validated(self, client, payload):
+    def test_namespace_theme_values_are_validated(self, client, payload):
         from project_workflow.interfaces.ui import _app_state
 
         default_wf = next(w for w in _app_state.workflow_service().list_workflows() if w.get("is_default"))
         body = {
-            "code": _unique("BADTHEME"),
             "name": "Bad theme",
             "workflow_id": default_wf["id"],
-            "key_prefixes": [_unique("BT").replace("-", "").upper()],
+            "cli_command": f"workflow-bad-theme-{uuid.uuid4().hex[:6]}",
             **payload,
         }
-        resp = client.post("/api/contexts", json=body)
+        resp = client.post("/api/namespaces", json=body)
         assert resp.status_code == 422
 
-    def test_create_context_invalid_prefix(self, client):
+    def test_create_namespace_rejects_key_prefixes(self, client):
         from project_workflow.interfaces.ui import _app_state
 
         default_wf = next(w for w in _app_state.workflow_service().list_workflows() if w.get("is_default"))
         resp = client.post(
-            "/api/contexts",
+            "/api/namespaces",
             json={
-                "code": _unique("PRJ"),
                 "name": "X",
                 "workflow_id": default_wf["id"],
-                "key_prefixes": ["a"],
+                "cli_command": f"workflow-x-{uuid.uuid4().hex[:6]}",
+                "key_prefixes": ["RUN"],
             },
         )
         assert resp.status_code == 422
 
-    def test_delete_context_with_tasks_forbidden(self, client):
+    def test_delete_namespace_with_tasks_forbidden_from_crud_block(self, client):
         from project_workflow.interfaces.ui import _app_state
 
         default_wf = next(w for w in _app_state.workflow_service().list_workflows() if w.get("is_default"))
-        code = _unique("PRJ")
         resp = client.post(
-            "/api/contexts",
+            "/api/namespaces",
             json={
-                "code": code,
                 "name": "To Delete",
                 "workflow_id": default_wf["id"],
-                "key_prefixes": ["ZZZ"],
+                "cli_command": f"workflow-delete-{uuid.uuid4().hex[:6]}",
             },
         )
-        project_id = resp.json()["context_id"]
+        namespace_id = resp.json()["namespace_id"]
         initial_phase_id = _phase_id(client, "1.INTAKE")
         _app_state.task_service().create_task(
             {
-                "project_id": project_id,
+                "project_id": namespace_id,
                 "task_key": "ZZZ-576",
                 "title": "Task",
                 "status": "active",
                 "current_phase_id": initial_phase_id,
             }
         )
-        resp = client.delete(f"/api/contexts/{project_id}")
+        resp = client.delete(f"/api/namespaces/{namespace_id}")
         assert resp.status_code == 409
 
 
@@ -683,18 +677,16 @@ class TestApiNamespaces:
         default_wf = next(w for w in _app_state.workflow_service().list_workflows() if w.get("is_default"))
         suffix = uuid.uuid4().hex[:6]
         command = f"workflow-api-{suffix}"
-        prefix = f"N{suffix[:5]}".upper()
 
         create = client.post(
             "/api/namespaces",
             json={
-                "name": "API Environment",
+                "name": "API Namespace",
                 "description": "desc",
                 "workflow_id": default_wf["id"],
                 "theme_icon": "bug",
                 "theme_color": "22c55e",
                 "cli_command": command,
-                "key_prefixes": [prefix],
             },
         )
 
@@ -711,10 +703,10 @@ class TestApiNamespaces:
 
         update = client.put(
             f"/api/namespaces/{namespace_id}",
-            json={"name": "Updated Environment", "theme_icon": "rocket", "cli_command": f"{command}-v2"},
+            json={"name": "Updated Namespace", "theme_icon": "rocket", "cli_command": f"{command}-v2"},
         )
         assert update.status_code == 200
-        assert update.json()["namespace"]["name"] == "Updated Environment"
+        assert update.json()["namespace"]["name"] == "Updated Namespace"
         assert update.json()["namespace"]["cli_command"] == f"{command}-v2"
 
         listed = client.get("/api/namespaces")
@@ -737,7 +729,6 @@ class TestApiNamespaces:
             "workflow_id": default_wf["id"],
             "theme_icon": "bug",
             "theme_color": "#22C55E",
-            "key_prefixes": [f"B{uuid.uuid4().hex[:5]}".upper()],
         }
         if cli_command is not None:
             body["cli_command"] = cli_command
@@ -757,7 +748,6 @@ class TestApiNamespaces:
                 "name": "First",
                 "workflow_id": default_wf["id"],
                 "cli_command": command,
-                "key_prefixes": [f"F{uuid.uuid4().hex[:5]}".upper()],
             },
         )
         assert first.status_code == 200
@@ -768,7 +758,6 @@ class TestApiNamespaces:
                 "name": "Second",
                 "workflow_id": default_wf["id"],
                 "cli_command": command,
-                "key_prefixes": [f"S{uuid.uuid4().hex[:5]}".upper()],
             },
         )
 
@@ -777,7 +766,9 @@ class TestApiNamespaces:
     def test_delete_namespace_with_tasks_is_forbidden(self, client):
 
         default_namespace = next(
-            item for item in client.get("/api/namespaces").json()["namespaces"] if item["code"] == "RUN"
+            item
+            for item in client.get("/api/namespaces").json()["namespaces"]
+            if item["cli_command"] == "workflow-run"
         )
         response = client.delete(f"/api/namespaces/{default_namespace['id']}")
         assert response.status_code == 409
@@ -790,12 +781,11 @@ class TestApiNamespaces:
         create = client.post(
             "/api/namespaces",
             json={
-                "name": "Green Environment",
+                "name": "Green Namespace",
                 "workflow_id": default_wf["id"],
                 "theme_icon": "shield",
                 "theme_color": "#22C55E",
                 "cli_command": f"workflow-green-{suffix}",
-                "key_prefixes": [f"G{suffix[:5]}".upper()],
             },
         )
         namespace_id = create.json()["namespace_id"]
@@ -804,7 +794,7 @@ class TestApiNamespaces:
 
         assert response.status_code == 200
         assert "--accent:#22C55E" in response.text
-        assert "Green Environment" in response.text
+        assert "Green Namespace" in response.text
         assert "RUN-1" not in response.text
 
 
@@ -942,6 +932,24 @@ class TestApiTasks:
         data = resp.json()
         assert data["ok"] is True
         assert "tasks" in data
+        assert data["tasks"]
+        sample = data["tasks"][0]
+        assert "namespace_id" in sample
+        assert "namespace_name" in sample
+        assert "namespace_cli_command" in sample
+        forbidden = {
+            "project_id",
+            "project_code",
+            "project_name",
+            "project_label",
+            "context_id",
+            "context_code",
+            "context_name",
+            "context_label",
+            "namespace_code",
+            "key_prefixes",
+        }
+        assert forbidden.isdisjoint(sample)
 
     def test_api_tasks_filtered_by_workflow(self, client):
         from project_workflow.interfaces.ui import _app_state
@@ -952,6 +960,17 @@ class TestApiTasks:
         data = resp.json()
         assert data["ok"] is True
         assert all(t.get("workflow_id") == default_wf["id"] for t in data["tasks"])
+
+    def test_workflows_api_exposes_namespace_count_without_legacy_count_aliases(self, client):
+        resp = client.get("/api/workflows")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["workflows"]
+        workflow = data["workflows"][0]
+        assert "namespace_count" in workflow
+        assert "project_count" not in workflow
+        assert "context_count" not in workflow
 
     def test_api_task_detail_method_is_not_registered(self, client):
         resp = client.get("/api/tasks/NONEXISTENT-99999")

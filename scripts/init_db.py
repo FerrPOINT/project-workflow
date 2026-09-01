@@ -20,7 +20,15 @@ from project_workflow.infrastructure.db.uow_bootstrap import bootstrap_default_p
 __doc__ = """Upgrade the database and bootstrap packaged catalogs once."""
 
 
+def _configure_output_encoding() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(encoding="utf-8", errors="replace")
+
+
 def main() -> int:
+    _configure_output_encoding()
     try:
         settings = get_settings()
         engine = get_engine(settings.DATABASE_URL)

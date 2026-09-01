@@ -344,10 +344,10 @@ class TestApiErrorPaths:
         response = client.get("/api/agents")
         assert response.status_code == 200
 
-    def test_api_contexts(self):
-        response = client.get("/api/contexts")
+    def test_api_namespaces(self):
+        response = client.get("/api/namespaces")
         assert response.status_code == 200
-        assert "contexts" in response.json()
+        assert "namespaces" in response.json()
 
 
 # ═══════════════════════════════════════════════════════════
@@ -369,9 +369,9 @@ class TestPageEdgeCases:
         response = client.get("/tasks")
         assert response.status_code == 200
 
-    def test_contexts_page(self):
+    def test_contexts_page_is_removed(self):
         response = client.get("/contexts")
-        assert response.status_code == 200
+        assert response.status_code == 404
 
     def test_settings_page(self):
         response = client.get("/settings")

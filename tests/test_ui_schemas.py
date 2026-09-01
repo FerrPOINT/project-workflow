@@ -9,11 +9,11 @@ from project_workflow.interfaces.ui.schemas import (
     AgentUpdate,
     InstructionCreate,
     InstructionUpdate,
+    NamespaceCreate,
+    NamespaceUpdate,
     PhaseCreate,
     PhaseOrderUpdate,
     PhaseUpdate,
-    ProjectCreate,
-    ProjectUpdate,
     WorkflowCreate,
     WorkflowUpdate,
 )
@@ -77,45 +77,46 @@ def test_workflow_create_update():
         WorkflowCreate.model_validate({"name": "W", "theme_icon": "bug"})
 
 
-def test_project_theme_create_update():
-    p = ProjectCreate(code="PRJ", workflow_id=1, key_prefixes=["PRJ"])
-    assert p.theme_icon == "project"
+def test_namespace_theme_create_update():
+    p = NamespaceCreate(name="PRJ", workflow_id=1, cli_command="workflow-prj")
+    assert p.theme_icon == "folder"
     assert p.theme_color == "#5E6AD2"
-    themed = ProjectCreate(
-        code="QA",
+    legacy = NamespaceCreate(name="Legacy", workflow_id=1, cli_command="workflow-legacy", theme_icon="project")
+    assert legacy.theme_icon == "folder"
+    themed = NamespaceCreate(
+        name="QA",
         workflow_id=1,
-        key_prefixes=["QA"],
+        cli_command="workflow-qa",
         theme_icon=" BUG ",
         theme_color="22c55e",
     )
     assert themed.theme_icon == "bug"
     assert themed.theme_color == "#22C55E"
-    pu = ProjectUpdate(theme_icon="Rocket", theme_color="#0ea5e9")
+    pu = NamespaceUpdate(theme_icon="Rocket", theme_color="#0ea5e9")
     assert pu.theme_icon == "rocket"
     assert pu.theme_color == "#0EA5E9"
     with pytest.raises(ValueError, match="Иконка"):
-        ProjectCreate.model_validate(
-            {"code": "PRJ", "workflow_id": 1, "key_prefixes": ["PRJ"], "theme_icon": "unknown"}
+        NamespaceCreate.model_validate(
+            {"name": "PRJ", "workflow_id": 1, "cli_command": "workflow-prj", "theme_icon": "unknown"}
         )
     with pytest.raises(ValueError, match="HEX-цветом"):
-        ProjectUpdate.model_validate({"theme_color": "not-a-color"})
+        NamespaceUpdate.model_validate({"theme_color": "not-a-color"})
 
 
-def test_project_create_defaults():
+def test_namespace_create_requires_workflow_and_cli_command():
     with pytest.raises(ValueError, match="Field required"):
-        ProjectCreate(code="PRJ")
+        NamespaceCreate(name="PRJ", cli_command="workflow-prj")
+    with pytest.raises(ValueError, match="Field required"):
+        NamespaceCreate(name="PRJ", workflow_id=1)
 
 
-def test_project_create_rejects_prefixes_from_str():
-    with pytest.raises(ValueError, match="массивом строк"):
-        ProjectCreate(code="PRJ", key_prefixes="aa\nbb")
-
-
-def test_project_prefixes_reject_non_string_items():
-    with pytest.raises(ValueError, match="массивом строк"):
-        ProjectCreate(code="PRJ", key_prefixes=["PRJ", 7])
-    with pytest.raises(ValueError, match="не может быть пустым"):
-        ProjectCreate(code="PRJ", key_prefixes=["PRJ", " "])
+def test_namespace_rejects_key_prefixes_as_unknown_public_field():
+    with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+        NamespaceCreate.model_validate(
+            {"name": "PRJ", "workflow_id": 1, "cli_command": "workflow-prj", "key_prefixes": ["PRJ"]}
+        )
+    with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+        NamespaceUpdate.model_validate({"key_prefixes": []})
 
 
 def test_phase_order_update_requires_non_empty_orders():
@@ -126,28 +127,12 @@ def test_phase_order_update_requires_non_empty_orders():
         PhaseOrderUpdate.model_validate({"orders": [{"phase_id": "1", "phase_order": 1}]})
 
 
-def test_project_create_invalid_prefix():
-    with pytest.raises(ValueError, match="слишком короткий"):
-        ProjectCreate(code="PRJ", key_prefixes=["a"])
-    with pytest.raises(ValueError, match="Недопустимый префикс"):
-        ProjectCreate(code="PRJ", key_prefixes=["1A"])
-
-
 @pytest.mark.parametrize("value", ["bad", 0, -1])
-def test_project_workflow_id_rejects_invalid_explicit_values(value):
+def test_namespace_workflow_id_rejects_invalid_explicit_values(value):
     with pytest.raises(ValueError):
-        ProjectCreate(code="PRJ", key_prefixes=["PRJ"], workflow_id=value)
+        NamespaceCreate(name="PRJ", cli_command="workflow-prj", workflow_id=value)
     with pytest.raises(ValueError):
-        ProjectUpdate(workflow_id=value)
-
-
-def test_project_update_optional_prefixes():
-    p = ProjectUpdate(code="PRJ")
-    assert p.key_prefixes is None
-    with pytest.raises(ValueError, match="не могут быть null"):
-        ProjectUpdate(code="PRJ", key_prefixes=None)
-    with pytest.raises(ValueError, match="массивом строк"):
-        ProjectUpdate(code="PRJ", key_prefixes="")
+        NamespaceUpdate(workflow_id=value)
 
 
 def test_agent_create_update():
@@ -244,9 +229,9 @@ def test_phase_update_requires_nested_id_and_rejects_duplicates():
         (PhaseUpdate, "execution_type"),
         (WorkflowUpdate, "name"),
         (WorkflowUpdate, "description"),
-        (ProjectUpdate, "workflow_id"),
-        (ProjectUpdate, "theme_icon"),
-        (ProjectUpdate, "theme_color"),
+        (NamespaceUpdate, "workflow_id"),
+        (NamespaceUpdate, "theme_icon"),
+        (NamespaceUpdate, "theme_color"),
         (AgentUpdate, "description"),
         (InstructionUpdate, "description"),
         (InstructionUpdate, "execution_type"),

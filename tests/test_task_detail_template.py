@@ -76,7 +76,8 @@ def test_task_detail_renders_group_markers_and_chronological_supervisor_dialog()
         task={
             "task_key": "RUN-1",
             "title": "RUN-1",
-            "project_label": "DEFAULT",
+            "namespace_name": "DEFAULT",
+            "namespace_cli_command": "workflow-default",
             "created_at": "2026-08-21T09:00",
             "updated_at": "2026-08-21T11:00",
             "status": "done",

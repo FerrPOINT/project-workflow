@@ -37,17 +37,15 @@ class TestSchemasFinalGaps:
         with pytest.raises(ValueError):
             schemas.PhaseCreate(workflow_id=1, phase_order=1, agent_id=value)
 
-    def test_project_create_key_prefixes_invalid_type(self):
-        with pytest.raises(ValueError, match="массивом строк"):
-            schemas.ProjectCreate(code="PRJ", key_prefixes=123)
+    def test_namespace_create_rejects_key_prefixes_field(self):
+        with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+            schemas.NamespaceCreate.model_validate(
+                {"name": "PRJ", "workflow_id": 1, "cli_command": "workflow-prj", "key_prefixes": ["PRJ"]}
+            )
 
-    def test_project_update_rejects_string_key_prefixes(self):
-        with pytest.raises(ValueError, match="массивом строк"):
-            schemas.ProjectUpdate(code="PRJ", key_prefixes="aa\nbb")
-
-    def test_project_update_key_prefixes_invalid(self):
-        with pytest.raises(ValueError):
-            schemas.ProjectUpdate(code="PRJ", key_prefixes=["A"])
+    def test_namespace_update_rejects_key_prefixes_field(self):
+        with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+            schemas.NamespaceUpdate.model_validate({"key_prefixes": ["PRJ"]})
 
     def test_phase_create_insert_after(self):
         p = schemas.PhaseCreate(workflow_id=1, name="X", insert_after=3)

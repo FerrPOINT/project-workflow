@@ -28,7 +28,7 @@ NAMESPACE_COOKIE = "workflow_namespace_id"
 
 
 def _theme_context(namespace: dict[str, Any] | None) -> dict[str, Any]:
-    return {"theme_namespace": namespace, "theme_project": namespace}
+    return {"theme_namespace": namespace}
 
 
 def _parse_positive_int(raw: str | None) -> int | None:
@@ -47,7 +47,11 @@ def _namespace_context(
     namespaces = _load_namespaces()
     query_namespace_id = _parse_positive_int(request.query_params.get("namespace_id"))
     cookie_namespace_id = _parse_positive_int(request.cookies.get(NAMESPACE_COOKIE))
-    selected_id = preferred_namespace_id or query_namespace_id or cookie_namespace_id
+    selected_id = (
+        preferred_namespace_id
+        or query_namespace_id
+        or cookie_namespace_id
+    )
     selected_namespace = next((item for item in namespaces if item.get("id") == selected_id), None)
     if selected_namespace is None and namespaces:
         selected_namespace = namespaces[0]
@@ -56,9 +60,7 @@ def _namespace_context(
         "page": page,
         "ui_port": get_settings().UI_PORT,
         "namespaces": namespaces,
-        "projects": namespaces,
         "selected_namespace": selected_namespace,
-        "selected_project": selected_namespace,
         **_theme_context(selected_namespace),
     }
 
@@ -229,22 +231,20 @@ async def tasks_page(request: Request) -> HTMLResponse:
 
 
 async def namespace_page(request: Request) -> HTMLResponse:
-    """CRUD page for namespaces and their task key prefixes."""
+    """CRUD page for namespaces and style."""
     context = _namespace_context(request, page="namespace")
-    namespaces = context["namespaces"]
     workflows = _load_workflows()
     selected_namespace = context.get("selected_namespace")
     context.update(
         {
-            "projects": namespaces,
             "workflows": workflows,
-            "selected_project": selected_namespace,
+            "edited_namespace": selected_namespace,
             "create_mode": False,
         }
     )
     return _template_response(
         request=request,
-        name="projects.html",
+        name="namespaces.html",
         context=context,
     )
 
@@ -254,18 +254,12 @@ async def namespace_new_page(request: Request) -> HTMLResponse:
     context = _namespace_context(request, page="namespace")
     context.update(
         {
-            "projects": context["namespaces"],
             "workflows": _load_workflows(),
-            "selected_project": None,
+            "edited_namespace": None,
             "create_mode": True,
         }
     )
-    return _template_response(request=request, name="projects.html", context=context)
-
-
-async def projects_page(request: Request) -> HTMLResponse:
-    """Compatibility alias for legacy context/project pages."""
-    return await namespace_page(request)
+    return _template_response(request=request, name="namespaces.html", context=context)
 
 
 async def workflows_page(request: Request) -> HTMLResponse:
@@ -283,27 +277,18 @@ async def task_detail_page(
     request: Request,
     task_key: str,
     namespace_id: int | None = Query(default=None),
-    context_id: int | None = Query(default=None),
-    project_id: int | None = Query(default=None, include_in_schema=False),
 ) -> HTMLResponse:
     """Деталка задачи — линейная история фаз."""
-    selected_context_id = (
-        namespace_id
-        if namespace_id is not None
-        else context_id
-        if context_id is not None
-        else project_id
-    )
     context = _namespace_context(
         request,
         page="tasks",
-        preferred_namespace_id=selected_context_id,
+        preferred_namespace_id=namespace_id,
     )
     selected_namespace = context.get("selected_namespace")
     selected_namespace_id = (
         selected_namespace.get("id")
         if isinstance(selected_namespace, dict)
-        else selected_context_id
+        else namespace_id
     )
     try:
         task = _get_task_detail(
@@ -340,7 +325,7 @@ async def task_detail_page(
             "cycles_total": task.get("workflow_cycle_count", 0),
             "phase_history_blocks": task.get("phase_history_blocks", []),
             "step_history": task.get("step_history", []),
-            **_theme_context(task.get("namespace") or task.get("project")),
+            **_theme_context(task.get("namespace")),
         }
     )
     return _template_response(

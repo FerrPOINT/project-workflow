@@ -252,6 +252,27 @@ def test_init_db_hides_database_exception_details(monkeypatch, capsys, error, me
     assert "dsn-secret-marker" not in stderr
 
 
+def test_init_db_configures_output_encoding(monkeypatch):
+    from scripts import init_db
+
+    class Stream:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, str]] = []
+
+        def reconfigure(self, **kwargs: str) -> None:
+            self.calls.append(kwargs)
+
+    stdout = Stream()
+    stderr = Stream()
+    monkeypatch.setattr(init_db.sys, "stdout", stdout)
+    monkeypatch.setattr(init_db.sys, "stderr", stderr)
+
+    init_db._configure_output_encoding()
+
+    assert stdout.calls == [{"encoding": "utf-8", "errors": "replace"}]
+    assert stderr.calls == [{"encoding": "utf-8", "errors": "replace"}]
+
+
 def test_init_db_reports_invalid_seed_without_traceback(tmp_path, monkeypatch, capsys):
     from project_workflow import config
     from project_workflow.infrastructure.db.session import reset_engine
@@ -348,7 +369,7 @@ def test_sqlite_initial_constraints(tmp_path):
         project_id = conn.execute(
             text(
                 "INSERT INTO projects (workflow_id, code, name, cli_command, key_prefixes) "
-                "VALUES (:workflow_id, 'P1', 'Environment 1', 'workflow-p1', '[\"RUN\"]') RETURNING id"
+                "VALUES (:workflow_id, 'P1', 'Namespace 1', 'workflow-p1', '[\"RUN\"]') RETURNING id"
             ),
             {"workflow_id": workflow_id},
         ).scalar_one()
@@ -372,7 +393,7 @@ def test_sqlite_initial_constraints(tmp_path):
         second_project_id = conn.execute(
             text(
                 "INSERT INTO projects (workflow_id, code, name, cli_command, key_prefixes) "
-                "VALUES (:workflow_id, 'P2', 'Environment 2', 'workflow-p2', '[\"RUN\"]') RETURNING id"
+                "VALUES (:workflow_id, 'P2', 'Namespace 2', 'workflow-p2', '[\"RUN\"]') RETURNING id"
             ),
             {"workflow_id": second_workflow_id},
         ).scalar_one()

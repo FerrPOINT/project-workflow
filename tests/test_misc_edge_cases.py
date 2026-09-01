@@ -48,33 +48,26 @@ class TestGetTaskKeyValidator:
         # should not raise and have default patterns
         assert validator is not None
 
-    def test_empty_database_does_not_invent_task_prefixes(self):
+    def test_empty_database_accepts_generic_task_shape(self):
         from project_workflow.interfaces.cli.core import _get_task_key_validator
 
         uow = MagicMock()
         uow.projects.list.return_value = []
         validator = _get_task_key_validator(uow=uow)
         result = validator.validate("RUN-1")
-        assert not result.is_valid
+        assert result.is_valid
+        assert result.project is None
 
 
 class TestRequireValidKey:
-    def test_valid_returns_normalized(self, monkeypatch):
+    def test_valid_returns_normalized(self):
         from project_workflow.interfaces.cli.core import _require_valid_key
 
-        monkeypatch.setattr(
-            "project_workflow.interfaces.cli.core._get_task_key_validator",
-            lambda: MagicMock(validate=lambda k: MagicMock(is_valid=True, normalized=k.upper(), error_message=None)),
-        )
-        assert _require_valid_key("tst-1") == "TST-1"
+        assert _require_valid_key("TST-1") == "TST-1"
 
-    def test_invalid_raises_validation_error(self, monkeypatch):
+    def test_invalid_raises_validation_error(self):
         from project_workflow.domain.validation import TaskKeyValidationError
         from project_workflow.interfaces.cli.core import _require_valid_key
 
-        monkeypatch.setattr(
-            "project_workflow.interfaces.cli.core._get_task_key_validator",
-            lambda: MagicMock(validate=lambda k: MagicMock(is_valid=False, normalized=None, error_message="bad")),
-        )
-        with pytest.raises(TaskKeyValidationError, match="bad"):
+        with pytest.raises(TaskKeyValidationError, match="строчные буквы"):
             _require_valid_key("bad")

@@ -239,7 +239,7 @@ class TestStepCommand:
 
     @patch("project_workflow.interfaces.cli.ui.SAUnitOfWork")
     @patch("project_workflow.supervisor.SupervisorEngine")
-    def test_step_passes_context_selector_to_engine(self, mock_engine_cls, mock_uow_cls):
+    def test_step_passes_namespace_env_selector_to_engine(self, mock_engine_cls, mock_uow_cls):
         mock_engine = mock_engine_cls.return_value
         mock_engine.current_phase_code = "1.INTAKE"
         mock_engine.format_current_phase_instructions.return_value = "phase"
@@ -249,7 +249,11 @@ class TestStepCommand:
         runner = CliRunner()
 
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
-            result = runner.invoke(cli, ["step", "--task", "RUN-1", "--context", "tester"])
+            result = runner.invoke(
+                cli,
+                ["step", "--task", "RUN-1"],
+                env={NAMESPACE_ENV_VAR: "7"},
+            )
 
         assert result.exit_code == 0
         assert mock_engine_cls.call_args.kwargs["project_id"] == 7
@@ -379,7 +383,7 @@ class TestHistoryCommand:
         )
 
     @patch("project_workflow.interfaces.cli.ui.SAUnitOfWork")
-    def test_history_passes_context_selector_to_lookup(self, mock_uow_cls):
+    def test_history_passes_namespace_env_selector_to_lookup(self, mock_uow_cls):
         uow = mock_uow_cls.return_value.__enter__.return_value
         uow.projects.list.return_value = [{"id": 9, "code": "QA", "name": "tester"}]
         uow.step_history.list.return_value = []
@@ -387,7 +391,11 @@ class TestHistoryCommand:
         runner = CliRunner()
 
         with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=_validator()):
-            result = runner.invoke(cli, ["--json", "history", "--task", "RUN-1", "--context", "tester"])
+            result = runner.invoke(
+                cli,
+                ["--json", "history", "--task", "RUN-1"],
+                env={NAMESPACE_ENV_VAR: "9"},
+            )
 
         assert result.exit_code == 0
         uow.tasks.get_by_key.assert_called_once_with("RUN-1", project_id=9)
@@ -442,7 +450,7 @@ class TestHistoryCommand:
             qa_namespace = ProjectService(uow).create_project(
                 {
                     "code": "QAENV",
-                    "name": "QA Environment",
+                    "name": "QA Namespace",
                     "workflow_id": qa_workflow["id"],
                     "cli_command": "workflow-qa-env",
                     "key_prefixes": ["RUN"],
@@ -460,7 +468,7 @@ class TestHistoryCommand:
         runner = CliRunner()
         ambiguous = runner.invoke(cli, ["--json", "history", "--task", "RUN-4242"])
         assert ambiguous.exit_code == 1
-        assert "несколько CLI-команд" in json.loads(ambiguous.output)["message"]
+        assert "несколько неймспейсов" in json.loads(ambiguous.output)["message"]
 
         for namespace_id in (default_namespace_id, qa_namespace_id):
             result = runner.invoke(
@@ -479,8 +487,18 @@ class TestHistoryCommand:
             env={NAMESPACE_ENV_VAR: "999999"},
         )
         assert result.exit_code == 1
-        assert "Запись 999999 не найдена" in json.loads(result.output)["message"]
+        assert "Неймспейс 999999 не найден" in json.loads(result.output)["message"]
         assert "not in the range" not in result.output
+
+    def test_history_rejects_removed_context_selector(self):
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            ["--json", "history", "--task", "RUN-4343", "--context", "tester"],
+        )
+
+        assert result.exit_code == 2
+        assert "Нет такого параметра" in result.output
 
 
 class TestCliGuard:

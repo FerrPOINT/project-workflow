@@ -1,4 +1,4 @@
-{% set active_namespace = theme_namespace if theme_namespace is defined and theme_namespace else theme_project %}
+{% set active_namespace = theme_namespace if theme_namespace is defined else none %}
 {% set active_namespace_id = active_namespace.id if active_namespace else none %}
 <!DOCTYPE html>
 <html lang="ru"{% if active_namespace %} style="--accent:{{ active_namespace.theme_color }};--accent-hover:{{ active_namespace.theme_color }};--accent-soft:{{ active_namespace.theme_color }}26"{% endif %}>
@@ -215,7 +215,7 @@ textarea{resize:vertical;min-height:60px}
       <a class="brand-link" href="/" aria-label="Workflow Engine">
         <span class="brand-mark" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="{{ project_icon_path(active_namespace.theme_icon if active_namespace else 'project') }}"></path>
+            <path d="{{ project_icon_path(active_namespace.theme_icon if active_namespace else default_project_icon) }}"></path>
           </svg>
         </span>
         <span class="brand-text">
@@ -227,6 +227,10 @@ textarea{resize:vertical;min-height:60px}
     <button class="sidebar-close" onclick="closeSidebar()">×</button>
   </div>
   <nav class="sidebar-nav">
+    <a class="sidebar-link {% if page == 'namespace' %}active{% endif %}" href="/namespaces">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18"/><path d="M5 7V5a2 2 0 0 1 2-2h3"/><path d="M19 7v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7"/><path d="M9 12h6"/><path d="M9 16h4"/></svg>
+      Неймспейсы
+    </a>
     <div class="sidebar-section">ОБЗОР</div>
     <a class="sidebar-link {% if page == 'dashboard' %}active{% endif %}" href="/">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
@@ -243,10 +247,6 @@ textarea{resize:vertical;min-height:60px}
     <a class="sidebar-link {% if page == 'tasks' %}active{% endif %}" href="/tasks">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
       Задачи
-    </a>
-    <a class="sidebar-link {% if page == 'namespace' %}active{% endif %}" href="/namespace">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18"/><path d="M5 7V5a2 2 0 0 1 2-2h3"/><path d="M19 7v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7"/><path d="M9 12h6"/><path d="M9 16h4"/></svg>
-      CLI и стиль
     </a>
     <div class="sidebar-section">УПРАВЛЕНИЕ</div>
     <a class="sidebar-link {% if page == 'agents' %}active{% endif %}" href="/agents">
@@ -279,8 +279,8 @@ textarea{resize:vertical;min-height:60px}
           <option value="{{ namespace.id }}" {% if active_namespace_id == namespace.id %}selected{% endif %}>{{ namespace.name }}</option>
           {% endfor %}
         </select>
-        <a class="namespace-icon-action" href="/namespace/new{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}" title="Добавить" aria-label="Добавить">+</a>
-        <a class="namespace-icon-action" href="/namespace{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}" title="Редактировать выбранное" aria-label="Редактировать выбранное">✎</a>
+        <a class="namespace-icon-action" href="/namespaces/new{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}" title="Добавить" aria-label="Добавить">+</a>
+        <a class="namespace-icon-action" href="/namespaces{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}" title="Редактировать выбранное" aria-label="Редактировать выбранное">✎</a>
       </div>
       {% endif %}
       {% block header_actions %}{% endblock %}

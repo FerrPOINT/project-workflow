@@ -31,19 +31,19 @@ class TaskService:
                 workflow_id=requested_workflow_id,
             )
             if resolved_project is None:
-                raise ValueError(f"Для ключа задачи {payload.get('task_key', '')!r} нет подходящей CLI-команды")
+                raise ValueError(f"Для ключа задачи {payload.get('task_key', '')!r} нет подходящего неймспейса")
             payload["project_id"] = resolved_project["id"]
         project_id = int(payload["project_id"])
         project = self._uow.projects.get_by_id(project_id)
         if project is None:
-            raise NotFoundError(f"Запись {project_id} не найдена")
+            raise NotFoundError(f"Неймспейс {project_id} не найден")
         if requested_workflow_id is not None and project.workflow_id != requested_workflow_id:
             raise ConflictError("Задача принадлежит другому воркфлоу")
         if self._uow.workflows.lock(project.workflow_id) is None:
             raise NotFoundError(f"Воркфлоу {project.workflow_id} не найден")
         locked_project = self._uow.projects.lock(project_id)
         if locked_project is None:
-            raise NotFoundError(f"Запись {project_id} не найдена")
+            raise NotFoundError(f"Неймспейс {project_id} не найден")
         if locked_project.workflow_id != project.workflow_id:
             raise ConflictError("Воркфлоу изменился во время создания задачи")
         payload["workflow_id"] = locked_project.workflow_id
@@ -51,7 +51,7 @@ class TaskService:
         if not isinstance(raw_task_key, str) or not raw_task_key.strip():
             raise ValueError("task_key должен быть непустой строкой")
         task_key = raw_task_key.strip()
-        validated_key = TaskKeyValidator.from_projects([locked_project.to_dict()]).validate(task_key)
+        validated_key = TaskKeyValidator.from_projects([]).validate(task_key)
         if not validated_key.is_valid:
             raise ConflictError(validated_key.error_message or f"Недопустимый ключ задачи {task_key!r}")
         task_key = validated_key.normalized or task_key

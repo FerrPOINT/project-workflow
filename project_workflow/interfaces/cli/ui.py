@@ -1,7 +1,7 @@
 """CLI commands — ровно 2 команды: step, history.
 
 ПРАВИЛО CLI: новые CLI-команды ЗАПРЕЩЕНЫ.
-Весь CRUD workflows/phases/namespaces/agents и администрирование выполняется через Web UI.
+Весь CRUD workflows/phases/неймспейсов/agents и администрирование выполняется через Web UI.
 Если кто-то добавит @cli.command() сюда — тесты поймают
 (см. test_ui.py::test_only_two_commands_allowed).
 
@@ -12,7 +12,6 @@
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 import click
@@ -22,20 +21,14 @@ from ...domain.exceptions import ConflictError
 from ...infrastructure.db.uow import SAUnitOfWork
 from ...supervisor import format_result
 from .core import (
-    NAMESPACE_ENV_VAR,
     WARN,
     _require_valid_key,
-    _resolve_context_id,
     _resolve_namespace_id_from_env,
     blocked_result,
     cli,
     console,
     out_json,
 )
-
-
-def _resolve_namespace_id_from_env_requested() -> bool:
-    return bool(os.environ.get(NAMESPACE_ENV_VAR, "").strip())
 
 # ── Guard: новые команды запрещены ──────────────────────────────────────
 # Если кто-то добавит @cli.command() сюда — тесты поймают.
@@ -49,15 +42,11 @@ def _resolve_namespace_id_from_env_requested() -> bool:
 
 @cli.command()
 @click.option("--task", required=True, help="Ключ задачи (например, RUN-42)")
-@click.option("--context", default=None, hidden=True)
-@click.option("--project", "legacy_project", default=None, hidden=True)
 @click.option("--report", default=None, help="Отчёт исполнителя CLI (оценить и перейти)")
 @click.pass_context
 def step_cmd(
     ctx: click.Context,
     task: str,
-    context: str | None,
-    legacy_project: str | None,
     report: str | None,
 ) -> None:
     """Движение по workflow: показать текущую фазу или отчитаться и перейти.
@@ -67,21 +56,6 @@ def step_cmd(
       project-workflow step --task RUN-42 --report "..."  -> оценить отчёт исполнителя CLI и перейти
     """
     jmode = ctx.obj.get("json_mode", False)
-    if (context or legacy_project) and _resolve_namespace_id_from_env_requested():
-        result = blocked_result(task, "Нельзя одновременно выбирать через wrapper и legacy-параметр")
-        if jmode:
-            out_json(result, exit_code=1)
-            return
-        console.print(format_result(result))
-        raise click.exceptions.Exit(1)
-    if context and legacy_project:
-        result = blocked_result(task, "Нельзя одновременно указывать legacy-параметры --context и --project")
-        if jmode:
-            out_json(result, exit_code=1)
-            return
-        console.print(format_result(result))
-        raise click.exceptions.Exit(1)
-    context_selector = context or legacy_project
     if report is not None and not report.strip():
         result = blocked_result(task, "Отчёт не может быть пустым")
         if jmode:
@@ -93,8 +67,6 @@ def step_cmd(
     try:
         uow = SAUnitOfWork()
         project_id = _resolve_namespace_id_from_env(uow)
-        if project_id is None:
-            project_id = _resolve_context_id(uow, context_selector)
         task_key = _require_valid_key(task, uow, project_id=project_id)
         engine = supervisor.SupervisorEngine(task_key, uow=uow, project_id=project_id)
     except (ConflictError, RuntimeError, ValueError) as exc:
@@ -168,15 +140,11 @@ def step_cmd(
 
 @cli.command()
 @click.option("--task", required=True, help="Ключ задачи")
-@click.option("--context", default=None, hidden=True)
-@click.option("--project", "legacy_project", default=None, hidden=True)
 @click.option("--n", type=click.IntRange(min=1), default=None, help="Количество записей (по умолчанию: все)")
 @click.pass_context
 def history_cmd(
     ctx: click.Context,
     task: str,
-    context: str | None,
-    legacy_project: str | None,
     n: int | None,
 ) -> None:
     """История отчётов, переходов и статусов по задаче.
@@ -186,26 +154,9 @@ def history_cmd(
       project-workflow history --task RUN-42 --n 50     -> последние 50 записей
     """
     jmode = ctx.obj.get("json_mode", False)
-    if (context or legacy_project) and _resolve_namespace_id_from_env_requested():
-        result = blocked_result(task, "Нельзя одновременно выбирать через wrapper и legacy-параметр")
-        if jmode:
-            out_json(result, exit_code=1)
-            return
-        console.print(format_result(result))
-        raise click.exceptions.Exit(1)
-    if context and legacy_project:
-        result = blocked_result(task, "Нельзя одновременно указывать legacy-параметры --context и --project")
-        if jmode:
-            out_json(result, exit_code=1)
-            return
-        console.print(format_result(result))
-        raise click.exceptions.Exit(1)
-    context_selector = context or legacy_project
     try:
         with SAUnitOfWork() as uow:
             project_id = _resolve_namespace_id_from_env(uow)
-            if project_id is None:
-                project_id = _resolve_context_id(uow, context_selector)
             task_key = _require_valid_key(task, uow, project_id=project_id)
             task_obj = uow.tasks.get_by_key(task_key, project_id=project_id)
             task_id = task_obj.id if task_obj else None

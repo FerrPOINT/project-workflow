@@ -144,7 +144,7 @@ def setup_db(isolate_ui_runtime_state, request):
         default_project_id = uow.projects.create(
             {
                 "code": config.DEFAULT_PROJECT_CODE,
-                "name": "Default Environment",
+                "name": "Default Namespace",
                 "cli_command": config.DEFAULT_NAMESPACE_CLI_COMMAND,
                 "workflow_id": default_workflow.id,
                 "key_prefixes": list(config.DEFAULT_TASK_KEY_PREFIXES),
@@ -197,7 +197,7 @@ def setup_db(isolate_ui_runtime_state, request):
         project_id = uow.projects.create(
             {
                 "code": "UITEST",
-                "name": "UI Test Environment",
+                "name": "UI Test Namespace",
                 "cli_command": "workflow-uitest",
                 "workflow_id": default_workflow.id,
                 "key_prefixes": ["UITEST"],
@@ -247,7 +247,7 @@ class TestIndexPage:
         assert response.headers["content-type"] == "text/html; charset=utf-8"
         assert "Дашборд" in response.text
         assert "Незавершённые задачи" in response.text
-        assert "CLI" in response.text
+        assert "Неймспейсы" in response.text
 
     def test_index_has_nav(self):
         response = client.get("/")
@@ -260,7 +260,7 @@ class TestIndexPage:
         response = client.get(f"/?namespace_id={namespace_id}")
         assert response.status_code == 200
         assert "UITEST-401" in response.text
-        assert "UI Test Environment" in response.text
+        assert "UI Test Namespace" in response.text
 
     def test_index_stays_minimal_and_hides_dashboard_technical_noise(self):
         response = client.get("/")
@@ -317,8 +317,8 @@ class TestPhasesPage:
     def test_sidebar_has_namespace_link(self):
         response = client.get("/phases")
         assert response.status_code == 200
-        assert 'href="/namespace"' in response.text
-        assert "CLI и стиль" in response.text
+        assert 'href="/namespaces"' in response.text
+        assert "Неймспейсы" in response.text
 
     def test_sidebar_has_workflows_link(self):
         response = client.get("/phases")
@@ -326,7 +326,7 @@ class TestPhasesPage:
         assert 'href="/workflows"' in response.text
         assert "Воркфлоу" in response.text
 
-    def test_sidebar_places_workflows_second_after_dashboard(self):
+    def test_sidebar_places_namespaces_first(self):
         response = client.get("/phases")
         assert response.status_code == 200
 
@@ -334,7 +334,7 @@ class TestPhasesPage:
         assert sidebar_nav is not None
 
         hrefs = re.findall(r'href="([^"]+)"', sidebar_nav.group(1))
-        assert hrefs[:5] == ["/", "/workflows", "/phases", "/tasks", "/namespace"]
+        assert hrefs[:5] == ["/namespaces", "/", "/workflows", "/phases", "/tasks"]
 
     def test_phases_page_has_workflow_nav_like_projects(self):
         response = client.get("/phases")
@@ -1184,7 +1184,7 @@ class TestTasksPage:
         namespace_id = _as_dict(uow.projects.get_by_code("UITEST"))["id"]
         response = client.get(f"/tasks?namespace_id={namespace_id}")
         assert response.status_code == 200
-        assert "CLI" in response.text
+        assert "Неймспейс" in response.text
         assert "UITEST" in response.text
 
     def test_tasks_page_hides_dead_filters_search_and_pagination(self):
@@ -1276,7 +1276,7 @@ class TestTaskDetail:
         namespace_id = _as_dict(uow.projects.get_by_code("UITEST"))["id"]
         response = client.get(f"/task/UITEST-401?namespace_id={namespace_id}")
         assert response.status_code == 200
-        assert "CLI" in response.text
+        assert "Неймспейс" in response.text
         assert "workflow-uitest" in response.text
 
     def test_tasks_api_resolves_negative_phase_code_to_phase_name(self):
@@ -1317,114 +1317,130 @@ class TestTaskDetail:
 
 class TestProjectsPage:
     def test_namespace_page_returns_html(self):
-        response = client.get("/namespace")
+        response = client.get("/namespaces")
         assert response.status_code == 200
         assert response.headers["content-type"] == "text/html; charset=utf-8"
         assert "CLI-команда" in response.text
 
-    def test_legacy_projects_page_alias_returns_namespace(self):
+    def test_removed_namespace_page_alias_returns_404(self):
+        response = client.get("/namespace")
+        assert response.status_code == 404
+
+    def test_removed_projects_page_alias_returns_404(self):
         response = client.get("/projects")
-        assert response.status_code == 200
-        assert "CLI-команда" in response.text
+        assert response.status_code == 404
 
-    def test_namespace_page_shows_rows_and_key_prefixes(self):
-        response = client.get("/namespace")
+    def test_namespace_page_shows_rows_without_key_prefix_settings(self):
+        response = client.get("/namespaces")
         assert response.status_code == 200
-        assert "UI Test Environment" in response.text
-        assert "UITEST" in response.text
-        assert "Префиксы ключей задач" in response.text
+        assert "UI Test Namespace" in response.text
+        assert "workflow-uitest" in response.text
+        assert "UITEST" not in response.text
+        assert "Префиксы ключей задач" not in response.text
+        assert "projectPrefixesList" not in response.text
+        assert "key_prefixes" not in response.text
+        assert '"namespace_code"' not in response.text
+        assert '"project":' not in response.text
+        assert 'const defaultNamespaceThemeIcon = "folder";' in response.text
 
-    def test_namespace_page_uses_single_editor_with_top_create_button(self):
-        response = client.get("/namespace")
+    def test_namespace_page_uses_single_editor_without_duplicate_create_button(self):
+        response = client.get("/namespaces")
         assert response.status_code == 200
-        assert 'id="projectNav"' in response.text
-        assert 'id="projectForm"' in response.text
-        assert 'id="newProjectButton"' in response.text
-        assert 'id="projectFormMode"' in response.text
-        assert 'id="projectThemeIcon"' in response.text
-        assert 'id="projectThemeColor"' in response.text
-        assert 'id="projectThemePreview"' in response.text
+        assert 'id="namespaceNav"' in response.text
+        assert 'id="namespaceForm"' in response.text
+        assert 'id="namespaceFormMode"' in response.text
+        assert 'id="namespaceThemeIcon"' in response.text
+        assert 'id="namespaceThemeColor"' in response.text
+        assert 'id="namespaceThemePreview"' in response.text
         assert "document.querySelector('.brand-name')" in response.text
         assert "document.querySelector('.brand-mark')" in response.text
         assert 'id="createProjectForm"' not in response.text
+        assert 'id="projectForm"' not in response.text
+        assert 'id="newProjectButton"' not in response.text
+        assert 'id="newNamespaceButton"' not in response.text
+
+    def test_namespace_create_page_keeps_current_selection_for_cancel(self):
+        uow = ui_app_state.get_db()
+        namespace_id = _as_dict(uow.projects.get_by_code("UITEST"))["id"]
+        response = client.get(f"/namespaces/new?namespace_id={namespace_id}")
+        assert response.status_code == 200
+        assert "let selectedNamespaceId = null;" in response.text
+        assert f"let previousNamespaceId = {namespace_id};" in response.text
+        assert "if(namespaceFormMode === 'create'){ return; }" in response.text
 
     def test_namespace_page_exposes_workflow_selector(self):
-        response = client.get("/namespace")
+        response = client.get("/namespaces")
         assert response.status_code == 200
-        assert 'id="projectWorkflowId"' in response.text
+        assert 'id="namespaceWorkflowId"' in response.text
         assert "Воркфлоу" in response.text
 
     def test_namespace_page_hides_removed_intro_cleanup_block(self):
-        response = client.get("/namespace")
+        response = client.get("/namespaces")
         assert response.status_code == 200
         assert "CRUD проектов" not in response.text
         assert "source of truth для проектных префиксов" not in response.text
 
-    def test_contexts_api_create_update_and_delete(self):
+    def test_namespaces_api_create_update_and_delete(self):
         workflow = _workflow_row("default")
         create = client.post(
-            "/api/contexts",
+            "/api/namespaces",
             json={
-                "code": "APICRUD",
-                "name": "API CRUD Context",
-                "key_prefixes": ["APICRUD"],
+                "name": "API CRUD Namespace",
+                "cli_command": "workflow-api-crud-ui",
                 "workflow_id": workflow["id"],
                 "theme_icon": "bug",
                 "theme_color": "#22c55e",
             },
         )
         assert create.status_code == 200
-        project_id = create.json()["context_id"]
-        assert create.json()["context"]["theme_icon"] == "bug"
-        assert create.json()["context"]["theme_color"] == "#22C55E"
+        namespace_id = create.json()["namespace_id"]
+        assert create.json()["namespace"]["theme_icon"] == "bug"
+        assert create.json()["namespace"]["theme_color"] == "#22C55E"
 
         update = client.put(
-            f"/api/contexts/{project_id}",
+            f"/api/namespaces/{namespace_id}",
             json={
-                "name": "API CRUD Context Updated",
+                "name": "API CRUD Namespace Updated",
                 "theme_icon": "rocket",
                 "theme_color": "#0ea5e9",
-                "key_prefixes": ["APICRUD"],
             },
         )
         assert update.status_code == 200
 
-        projects = client.get("/api/contexts").json()["contexts"]
-        project = next(project for project in projects if project["id"] == project_id)
-        assert project["name"] == "API CRUD Context Updated"
-        assert project["key_prefixes"] == ["APICRUD"]
-        assert project["theme_icon"] == "rocket"
-        assert project["theme_color"] == "#0EA5E9"
+        namespaces = client.get("/api/namespaces").json()["namespaces"]
+        namespace = next(namespace for namespace in namespaces if namespace["id"] == namespace_id)
+        assert namespace["name"] == "API CRUD Namespace Updated"
+        assert namespace["theme_icon"] == "rocket"
+        assert namespace["theme_color"] == "#0EA5E9"
 
-        delete = client.delete(f"/api/contexts/{project_id}")
+        delete = client.delete(f"/api/namespaces/{namespace_id}")
         assert delete.status_code == 200
 
-    def test_contexts_api_persists_workflow_id(self):
+    def test_namespaces_api_persists_workflow_id(self):
         workflow = _workflow_row("default")
 
         create = client.post(
-            "/api/contexts",
+            "/api/namespaces",
             json={
-                "code": "WFPROJ",
-                "name": "Workflow Bound Context",
+                "name": "Workflow Bound Namespace",
                 "workflow_id": workflow["id"],
-                "key_prefixes": ["WFPROJ"],
+                "cli_command": "workflow-bound-ui",
             },
         )
         assert create.status_code == 200
-        project_id = create.json()["context_id"]
+        namespace_id = create.json()["namespace_id"]
 
         try:
-            projects = client.get("/api/contexts").json()["contexts"]
-            project = next(project for project in projects if project["id"] == project_id)
-            assert project["workflow_id"] == workflow["id"]
-            assert project["workflow_name"] == workflow["name"]
-            assert "workflow_code" not in project
+            namespaces = client.get("/api/namespaces").json()["namespaces"]
+            namespace = next(namespace for namespace in namespaces if namespace["id"] == namespace_id)
+            assert namespace["workflow_id"] == workflow["id"]
+            assert namespace["workflow_name"] == workflow["name"]
+            assert "workflow_code" not in namespace
         finally:
-            delete = client.delete(f"/api/contexts/{project_id}")
+            delete = client.delete(f"/api/namespaces/{namespace_id}")
             assert delete.status_code == 200
 
-    def test_contexts_api_update_can_switch_workflow(self):
+    def test_namespaces_api_update_can_switch_workflow(self):
         default_workflow = _workflow_row("default")
         workflow_create = client.post(
             "/api/workflows",
@@ -1437,44 +1453,41 @@ class TestProjectsPage:
         workflow_id = workflow_create.json()["workflow_id"]
 
         create = client.post(
-            "/api/contexts",
+            "/api/namespaces",
             json={
-                "code": "WFMOVE",
-                "name": "Workflow move context",
+                "name": "Workflow move namespace",
                 "workflow_id": default_workflow["id"],
-                "key_prefixes": ["WFMOVE"],
+                "cli_command": "workflow-move-ui",
             },
         )
         assert create.status_code == 200
-        project_id = create.json()["context_id"]
+        namespace_id = create.json()["namespace_id"]
 
         try:
             update = client.put(
-                f"/api/contexts/{project_id}",
+                f"/api/namespaces/{namespace_id}",
                 json={
-                    "code": "WFMOVE",
-                    "name": "Workflow move context",
+                    "name": "Workflow move namespace",
                     "workflow_id": workflow_id,
-                    "key_prefixes": ["WFMOVE"],
                 },
             )
             assert update.status_code == 200
 
-            projects = client.get("/api/contexts").json()["contexts"]
-            project = next(project for project in projects if project["id"] == project_id)
-            assert project["workflow_id"] == workflow_id
-            assert project["workflow_name"] == "Workflow switch target"
-            assert "workflow_code" not in project
+            namespaces = client.get("/api/namespaces").json()["namespaces"]
+            namespace = next(namespace for namespace in namespaces if namespace["id"] == namespace_id)
+            assert namespace["workflow_id"] == workflow_id
+            assert namespace["workflow_name"] == "Workflow switch target"
+            assert "workflow_code" not in namespace
         finally:
-            delete_project = client.delete(f"/api/contexts/{project_id}")
+            delete_project = client.delete(f"/api/namespaces/{namespace_id}")
             assert delete_project.status_code == 200
             delete_workflow = client.delete(f"/api/workflows/{workflow_id}")
             assert delete_workflow.status_code == 200
 
-    def test_contexts_api_prevents_deleting_context_with_tasks(self):
-        projects = client.get("/api/contexts").json()["contexts"]
-        ui_project = next(project for project in projects if project["code"] == "UITEST")
-        delete = client.delete(f"/api/contexts/{ui_project['id']}")
+    def test_namespaces_api_prevents_deleting_namespace_with_tasks(self):
+        namespaces = client.get("/api/namespaces").json()["namespaces"]
+        ui_namespace = next(namespace for namespace in namespaces if namespace["cli_command"] == "workflow-uitest")
+        delete = client.delete(f"/api/namespaces/{ui_namespace['id']}")
         assert delete.status_code == 409
 
 
@@ -1698,7 +1711,7 @@ class TestSettingsPage:
 class TestUiNetworkFailures:
     @pytest.mark.parametrize(
         ("path", "minimum_handlers"),
-        [("/contexts", 4), ("/workflows", 4), ("/agents", 3)],
+        [("/namespaces", 4), ("/workflows", 4), ("/agents", 3)],
     )
     def test_promise_based_crud_reports_network_errors(self, path, minimum_handlers):
         response = client.get(path)

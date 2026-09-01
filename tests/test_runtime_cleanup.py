@@ -74,13 +74,13 @@ def _items() -> list[dict]:
     return json.loads(SEED_PATH.read_text(encoding="utf-8"))
 
 
-def test_default_bootstrap_uses_run_prefix(tmp_path):
+def test_default_bootstrap_does_not_require_task_prefixes(tmp_path):
     uow = SAUnitOfWork(f"sqlite:///{tmp_path / 'workflow.db'}")
     prepare_sqlite_uow(uow)
 
     assert [workflow["name"] for workflow in uow.get_workflows()] == [config.DEFAULT_WORKFLOW_NAME]
     project = next(project for project in uow.get_projects() if project["code"] == "RUN")
-    assert project["key_prefixes"] == ["RUN"]
+    assert project["key_prefixes"] == []
     assert all(project["code"] != "TASK" for project in uow.get_projects())
 
 
@@ -150,13 +150,13 @@ def test_dependency_constraints_are_exact_and_runtime_image_uses_isolated_venv()
     assert "pip uninstall -y pip setuptools wheel" in dockerfile
 
 
-def test_repository_contains_declared_mit_license():
+def test_repository_contains_declared_proprietary_license():
     license_text = LICENSE_PATH.read_text(encoding="utf-8")
     pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
 
-    assert license_text.startswith("MIT License\n")
-    assert "Copyright (c) 2026 FerrPOINT" in license_text
-    assert 'license = "MIT"' in pyproject
+    assert license_text.startswith("FerrPOINT Proprietary Source-Available Evaluation License v1.0\n")
+    assert "Copyright (c) 2026 FerrPOINT. All rights reserved." in license_text
+    assert 'license = "LicenseRef-FerrPOINT-Proprietary"' in pyproject
     assert 'license-files = ["LICENSE"]' in pyproject
 
 

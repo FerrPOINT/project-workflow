@@ -25,7 +25,7 @@ def test_primary_ui_labels_do_not_expose_internal_english_enums() -> None:
             "phase_detail.html",
             "instructions.html",
             "task_detail.html",
-            "projects.html",
+            "namespaces.html",
             "settings.html",
         )
     )
@@ -89,10 +89,10 @@ def test_cli_result_and_task_key_errors_are_in_russian() -> None:
     )
     assert rendered == "Воркфлоу завершён: задача уже прошла все фазы."
 
-    error = TaskKeyValidator([]).validate("UNKNOWN-1").error_message
+    error = TaskKeyValidator([]).validate("UNKNOWN-TEXT").error_message
     assert error is not None
-    assert "не соответствует" in error
-    assert "Префиксы:" in error
+    assert "должен соответствовать" in error
+    assert "Префиксы:" not in error
 
 
 @pytest.mark.parametrize(

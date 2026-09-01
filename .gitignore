@@ -29,6 +29,7 @@ wheels/
 # Testing
 .coverage*
 .pytest_cache/
+.pytest-strict-tmp/
 htmlcov/
 .tox/
 .nox/
@@ -46,6 +47,7 @@ Thumbs.db
 
 # Project specific
 .artifacts/
+.smoke/
 *.log
 screenshots/
 .workflow.db

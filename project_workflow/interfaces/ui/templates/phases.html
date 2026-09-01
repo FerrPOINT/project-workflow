@@ -76,7 +76,7 @@
     <a class="workflow-nav-item {% if selected_workflow_id == workflow.id %}active{% endif %}" href="/phases?workflow_id={{ workflow.id }}" data-workflow-id="{{ workflow.id }}">
       <div class="workflow-name">{{ workflow.name }}</div>
       <div class="workflow-meta">
-        <span class="workflow-chip">{{ workflow.namespace_count | pluralize('CLI-команда,CLI-команды,CLI-команд') }}</span>
+        <span class="workflow-chip">{{ workflow.namespace_count | pluralize('неймспейс,неймспейса,неймспейсов') }}</span>
         <span class="workflow-chip">{{ workflow.phase_count | pluralize('фаза,фазы,фаз') }}</span>
       </div>
     </a>

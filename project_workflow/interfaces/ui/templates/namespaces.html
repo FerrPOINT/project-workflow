@@ -1,0 +1,330 @@
+{% extends "base.html" %}
+
+{% block title %}{{ edited_namespace.name if edited_namespace else 'Добавить' }} — Workflow Engine{% endblock %}
+{% block header_title %}{{ edited_namespace.name if edited_namespace else 'Добавить' }}{% endblock %}
+{% block header_actions %}{% endblock %}
+
+{% block extra_style %}
+.namespace-crud{display:grid;grid-template-columns:320px minmax(0,1fr);gap:16px;align-items:start}
+.namespace-nav{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 190px);overflow:auto}
+.namespace-nav-item{width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;cursor:pointer;color:var(--text);display:flex;gap:12px;align-items:flex-start}
+.namespace-nav-item.active{border-color:var(--namespace-color,var(--accent));box-shadow:0 0 0 1px var(--namespace-color,var(--accent))}
+.namespace-mark{width:34px;height:34px;border-radius:8px;background:color-mix(in srgb,var(--namespace-color,var(--accent)) 16%, transparent);border:1px solid var(--namespace-color,var(--accent));color:var(--namespace-color,var(--accent));display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.namespace-mark svg{width:19px;height:19px}
+.namespace-card-body{min-width:0}
+.namespace-command{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent);margin-bottom:6px}
+.namespace-name{font-size:15px;font-weight:600;color:var(--text)}
+.namespace-meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--text-dim)}
+.namespace-panel{display:flex;flex-direction:column;gap:16px}
+.form-stack{display:flex;flex-direction:column;gap:12px}
+.label{font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}
+.namespace-description{min-height:96px;resize:vertical}
+.theme-grid{display:grid;grid-template-columns:minmax(0,1fr) 120px;gap:12px}
+.theme-color-input{height:34px;padding:2px;cursor:pointer}
+.theme-preview{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--panel)}
+.theme-preview .namespace-mark{width:30px;height:30px}
+.theme-preview-name{font-weight:600;color:var(--text)}
+.panel-actions{display:flex;gap:10px;flex-wrap:wrap}
+.empty-note{color:var(--text-dim);font-size:13px;line-height:1.6}
+@media (max-width: 980px){.namespace-crud{grid-template-columns:1fr}.namespace-nav{max-height:none}}
+@media (max-width: 520px){.theme-grid{grid-template-columns:1fr}}
+{% endblock %}
+
+{% block content %}
+<div class="namespace-crud">
+  <section class="namespace-nav" id="namespaceNav">
+    {% for namespace in namespaces %}
+    <button type="button" class="namespace-nav-item {% if selected_namespace and selected_namespace.id == namespace.id %}active{% endif %}" data-namespace-id="{{ namespace.id }}" onclick="selectNamespace({{ namespace.id }})" style="--namespace-color:{{ namespace.theme_color }}">
+      <span class="namespace-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="{{ project_icon_path(namespace.theme_icon) }}"></path>
+        </svg>
+      </span>
+      <span class="namespace-card-body">
+        <div class="namespace-command">{{ namespace.cli_command }}</div>
+        <div class="namespace-name">{{ namespace.name }}</div>
+        <div class="namespace-meta">
+          <span>{{ namespace.workflow_name }}</span>
+          <span>{{ namespace.task_count | pluralize('задача,задачи,задач') }}</span>
+        </div>
+      </span>
+    </button>
+    {% else %}
+    <div class="card empty-note">Пока ничего не создано.</div>
+    {% endfor %}
+  </section>
+
+  <section class="namespace-panel">
+    <form id="namespaceForm" class="card form-stack" onsubmit="event.preventDefault(); submitNamespace();">
+      <div class="card-title" id="namespaceFormMode">Редактирование</div>
+      <div>
+        <div class="label">Название</div>
+        <input type="text" id="namespaceName" value="{{ edited_namespace.name if edited_namespace else '' }}">
+      </div>
+      <div>
+        <div class="label">CLI-команда</div>
+        <input type="text" id="namespaceCliCommand" value="{{ edited_namespace.cli_command if edited_namespace else '' }}" placeholder="workflow-qa">
+      </div>
+      <div>
+        <div class="label">Описание</div>
+        <textarea id="namespaceDescription" class="namespace-description">{{ edited_namespace.description if edited_namespace else '' }}</textarea>
+      </div>
+      <div class="theme-grid">
+        <div>
+          <div class="label">Иконка</div>
+          <select id="namespaceThemeIcon" onchange="updateNamespaceThemePreview()">
+            {% for option in project_icon_options %}
+            <option value="{{ option.key }}" {% if edited_namespace and edited_namespace.theme_icon == option.key %}selected{% endif %}>{{ option.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <div class="label">Цвет</div>
+          <input type="color" id="namespaceThemeColor" class="theme-color-input" value="{{ edited_namespace.theme_color if edited_namespace else '#5E6AD2' }}" oninput="updateNamespaceThemePreview()">
+        </div>
+      </div>
+      <div class="theme-preview" id="namespaceThemePreview">
+        <span class="namespace-mark" id="namespaceThemePreviewIcon" aria-hidden="true"></span>
+        <span class="theme-preview-name" id="namespaceThemePreviewName">{{ edited_namespace.name if edited_namespace else 'Без названия' }}</span>
+      </div>
+      <div>
+        <div class="label">Воркфлоу</div>
+        <select id="namespaceWorkflowId">
+          {% for workflow in workflows %}
+          <option value="{{ workflow.id }}" {% if edited_namespace and edited_namespace.workflow_id == workflow.id %}selected{% endif %}>{{ workflow.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="panel-actions">
+        <button class="btn btn-primary" type="submit" id="namespaceSubmitButton">Сохранить</button>
+        <button class="btn btn-secondary" type="button" id="cancelCreateButton" onclick="cancelCreateNamespace()" style="display:none">Отмена</button>
+        <button class="btn btn-secondary" type="button" id="deleteNamespaceButton" onclick="deleteNamespace()">Удалить</button>
+      </div>
+    </form>
+  </section>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+const namespaceStore = {{ namespaces | tojson }};
+const workflowStore = {{ workflows | tojson }};
+const namespaceIconPaths = {{ project_icon_paths | tojson }};
+const defaultNamespaceThemeIcon = {{ default_project_icon | tojson }};
+const defaultNamespaceThemeColor = '#5E6AD2';
+let selectedNamespaceId = {{ 'null' if create_mode else (edited_namespace.id if edited_namespace else 'null') }};
+let previousNamespaceId = {% if create_mode and selected_namespace %}{{ selected_namespace.id }}{% else %}selectedNamespaceId{% endif %};
+let namespaceFormMode = selectedNamespaceId == null ? 'create' : 'edit';
+
+function namespaceById(id){ return namespaceStore.find(function(namespace){ return namespace.id === id; }); }
+function workflowNameById(id){ var workflow = workflowStore.find(function(item){ return item.id === id; }); return workflow ? workflow.name : '—'; }
+function namespaceIconSvg(icon){
+  var path = namespaceIconPaths[icon || defaultNamespaceThemeIcon] || namespaceIconPaths[defaultNamespaceThemeIcon];
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="' + path + '"></path></svg>';
+}
+function applyPageTheme(color){
+  var resolved = color || defaultNamespaceThemeColor;
+  document.documentElement.style.setProperty('--accent', resolved);
+  document.documentElement.style.setProperty('--accent-hover', resolved);
+  document.documentElement.style.setProperty('--accent-soft', resolved + '26');
+}
+function updateNamespaceThemePreview(){
+  var icon = document.getElementById('namespaceThemeIcon').value || defaultNamespaceThemeIcon;
+  var color = document.getElementById('namespaceThemeColor').value || defaultNamespaceThemeColor;
+  var name = document.getElementById('namespaceName').value.trim() || document.getElementById('namespaceCliCommand').value.trim() || 'Без названия';
+  var preview = document.getElementById('namespaceThemePreview');
+  var previewIcon = document.getElementById('namespaceThemePreviewIcon');
+  preview.style.setProperty('--namespace-color', color);
+  previewIcon.innerHTML = namespaceIconSvg(icon);
+  document.getElementById('namespaceThemePreviewName').textContent = name;
+  if(namespaceFormMode === 'create'){ return; }
+  applyPageTheme(color);
+  var brandName = document.querySelector('.brand-name');
+  var brandMark = document.querySelector('.brand-mark');
+  if(brandName){ brandName.textContent = name; }
+  if(brandMark){ brandMark.innerHTML = namespaceIconSvg(icon); }
+}
+function currentPayload(){
+  return {
+    name: document.getElementById('namespaceName').value.trim(),
+    cli_command: document.getElementById('namespaceCliCommand').value.trim(),
+    description: document.getElementById('namespaceDescription').value.trim(),
+    theme_icon: document.getElementById('namespaceThemeIcon').value || defaultNamespaceThemeIcon,
+    theme_color: document.getElementById('namespaceThemeColor').value || defaultNamespaceThemeColor,
+    workflow_id: Number(document.getElementById('namespaceWorkflowId').value || 0) || null,
+  };
+}
+function syncNav(){
+  document.querySelectorAll('#namespaceNav [data-namespace-id]').forEach(function(node){
+    node.classList.toggle('active', Number(node.dataset.namespaceId) === selectedNamespaceId);
+  });
+}
+function fillNamespaceForm(namespace){
+  document.getElementById('namespaceName').value = namespace ? namespace.name : '';
+  document.getElementById('namespaceCliCommand').value = namespace ? (namespace.cli_command || '') : '';
+  document.getElementById('namespaceDescription').value = namespace ? (namespace.description || '') : '';
+  document.getElementById('namespaceThemeIcon').value = namespace ? (namespace.theme_icon || defaultNamespaceThemeIcon) : defaultNamespaceThemeIcon;
+  document.getElementById('namespaceThemeColor').value = namespace ? (namespace.theme_color || defaultNamespaceThemeColor) : defaultNamespaceThemeColor;
+  document.getElementById('namespaceWorkflowId').value = namespace && namespace.workflow_id ? String(namespace.workflow_id) : (workflowStore[0] ? String(workflowStore[0].id) : '');
+  updateNamespaceThemePreview();
+}
+function setNamespaceFormMode(mode){
+  namespaceFormMode = mode;
+  var createMode = mode === 'create';
+  document.getElementById('namespaceFormMode').textContent = createMode ? 'Добавление' : 'Редактирование';
+  document.getElementById('namespaceSubmitButton').textContent = createMode ? 'Создать' : 'Сохранить';
+  document.getElementById('deleteNamespaceButton').style.display = createMode ? 'none' : '';
+  document.getElementById('cancelCreateButton').style.display = createMode && namespaceStore.length ? '' : 'none';
+}
+function startCreateNamespace(){
+  if(selectedNamespaceId != null){
+    previousNamespaceId = selectedNamespaceId;
+  }
+  selectedNamespaceId = null;
+  fillNamespaceForm(null);
+  setNamespaceFormMode('create');
+  syncNav();
+}
+function cancelCreateNamespace(){
+  if(namespaceStore.length === 0){
+    startCreateNamespace();
+    return;
+  }
+  var fallbackId = previousNamespaceId || namespaceStore[0].id;
+  if(!namespaceById(fallbackId)){
+    fallbackId = namespaceStore[0].id;
+  }
+  selectNamespace(fallbackId);
+}
+function selectNamespace(id){
+  selectedNamespaceId = id;
+  previousNamespaceId = id;
+  fillNamespaceForm(namespaceById(id));
+  setNamespaceFormMode('edit');
+  syncNav();
+}
+function reloadNamespaces(nextId){
+  fetch('/api/namespaces')
+    .then(function(r){return r.json()})
+    .then(function(d){
+      if(!d.ok){showToast(d.error || 'Ошибка загрузки','error');return;}
+      namespaceStore.length = 0;
+      d.namespaces.forEach(function(namespace){ namespaceStore.push(namespace); });
+      if(namespaceStore.length === 0){
+        selectedNamespaceId = null;
+        previousNamespaceId = null;
+        fillNamespaceForm(null);
+        setNamespaceFormMode('create');
+        var nav = document.getElementById('namespaceNav');
+        nav.replaceChildren();
+        var empty = document.createElement('div');
+        empty.className = 'card empty-note';
+        empty.textContent = 'Пока ничего не создано.';
+        nav.appendChild(empty);
+        syncNav();
+        return;
+      }
+      selectedNamespaceId = nextId || selectedNamespaceId || previousNamespaceId || namespaceStore[0].id;
+      if(!namespaceById(selectedNamespaceId)){ selectedNamespaceId = namespaceStore[0].id; }
+      previousNamespaceId = selectedNamespaceId;
+      renderNamespaceNav();
+      fillNamespaceForm(namespaceById(selectedNamespaceId));
+      setNamespaceFormMode('edit');
+      syncNav();
+    })
+    .catch(showRequestError);
+}
+function renderNamespaceNav(){
+  var nav = document.getElementById('namespaceNav');
+  nav.replaceChildren();
+  namespaceStore.forEach(function(namespace){
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'namespace-nav-item';
+    button.dataset.namespaceId = String(namespace.id);
+    button.style.setProperty('--namespace-color', namespace.theme_color || defaultNamespaceThemeColor);
+    button.onclick = function(){ selectNamespace(namespace.id); };
+
+    var mark = document.createElement('span');
+    mark.className = 'namespace-mark';
+    mark.setAttribute('aria-hidden', 'true');
+    mark.innerHTML = namespaceIconSvg(namespace.theme_icon);
+
+    var body = document.createElement('span');
+    body.className = 'namespace-card-body';
+
+    var command = document.createElement('div');
+    command.className = 'namespace-command';
+    command.textContent = namespace.cli_command || '';
+
+    var name = document.createElement('div');
+    name.className = 'namespace-name';
+    name.textContent = namespace.name;
+
+    var meta = document.createElement('div');
+    meta.className = 'namespace-meta';
+
+    var workflow = document.createElement('span');
+    workflow.textContent = namespace.workflow_name || workflowNameById(namespace.workflow_id);
+    var tasks = document.createElement('span');
+    tasks.textContent = pluralizeRu(namespace.task_count, 'задача', 'задачи', 'задач');
+
+    meta.appendChild(workflow);
+    meta.appendChild(tasks);
+    body.appendChild(command);
+    body.appendChild(name);
+    body.appendChild(meta);
+    button.appendChild(mark);
+    button.appendChild(body);
+    nav.appendChild(button);
+  });
+}
+function saveNamespace(){
+  if(selectedNamespaceId == null){ showToast('Сначала выберите неймспейс','error'); return; }
+  var payload = currentPayload();
+  if(!payload.cli_command){ showToast('CLI-команда обязательна','error'); return; }
+  fetch('/api/namespaces/' + selectedNamespaceId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+    .then(function(r){return r.json()})
+    .then(function(d){ if(d.ok){ showToast('Сохранено','success'); reloadNamespaces(selectedNamespaceId); } else { showToast(d.error || 'Ошибка','error'); } })
+    .catch(showRequestError);
+}
+function deleteNamespace(){
+  if(selectedNamespaceId == null){ showToast('Сначала выберите неймспейс','error'); return; }
+  if(!confirm('Удалить?')) return;
+  fetch('/api/namespaces/' + selectedNamespaceId,{method:'DELETE'})
+    .then(function(r){return r.json()})
+    .then(function(d){ if(d.ok){ showToast('Удалено','success'); reloadNamespaces(null); } else { showToast(d.error || 'Ошибка','error'); } })
+    .catch(showRequestError);
+}
+function createNamespace(){
+  var payload = currentPayload();
+  if(!payload.cli_command){ showToast('CLI-команда обязательна','error'); return; }
+  fetch('/api/namespaces',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+    .then(function(r){return r.json()})
+    .then(function(d){
+      if(d.ok){
+        showToast('Создано','success');
+        reloadNamespaces(d.namespace_id);
+      } else {
+        showToast(d.error || 'Ошибка','error');
+      }
+    })
+    .catch(showRequestError);
+}
+function submitNamespace(){
+  if(namespaceFormMode === 'create'){
+    createNamespace();
+    return;
+  }
+  saveNamespace();
+}
+renderNamespaceNav();
+if(selectedNamespaceId == null){
+  fillNamespaceForm(null);
+  setNamespaceFormMode('create');
+} else {
+  setNamespaceFormMode('edit');
+}
+syncNav();
+document.getElementById('namespaceName').addEventListener('input', updateNamespaceThemePreview);
+document.getElementById('namespaceCliCommand').addEventListener('input', updateNamespaceThemePreview);
+{% endblock %}

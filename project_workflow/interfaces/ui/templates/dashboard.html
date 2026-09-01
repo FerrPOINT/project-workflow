@@ -4,7 +4,7 @@
 {% block header_title %}Дашборд{% endblock %}
 {% block header_actions %}
   <a href="/tasks" class="btn btn-secondary">Задачи</a>
-  <a href="/namespace" class="btn btn-secondary">CLI и стиль</a>
+  <a href="/namespaces" class="btn btn-secondary">Неймспейсы</a>
 {% endblock %}
 
 {% block extra_style %}
@@ -59,11 +59,11 @@
   <section class="card">
     <div class="card-title" style="margin-bottom:14px">CLI</div>
     <div class="list-stack">
-      {% for project in namespaces %}
-      <a href="/namespace?namespace_id={{ project.id }}" class="list-item">
-        <div class="list-title">{{ project.name or project.code }}</div>
+      {% for namespace in namespaces %}
+      <a href="/namespaces?namespace_id={{ namespace.id }}" class="list-item">
+        <div class="list-title">{{ namespace.name }}</div>
         <div class="list-meta">
-          <span>{{ project.task_count | pluralize('задача,задачи,задач') }}</span>
+          <span>{{ namespace.task_count | pluralize('задача,задачи,задач') }}</span>
         </div>
       </a>
       {% endfor %}

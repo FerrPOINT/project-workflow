@@ -42,7 +42,7 @@ def test_bootstrap_constants_are_minimal():
     assert config.DEFAULT_WORKFLOW_NAME == "sdlc-business-tech-v1"
     assert config.DEFAULT_PROJECT_CODE == "RUN"
     assert config.DEFAULT_PROJECT_NAME == "Hermes + Supervisor SDLC"
-    assert config.DEFAULT_TASK_KEY_PREFIXES == ["RUN"]
+    assert config.DEFAULT_TASK_KEY_PREFIXES == []
     assert config.CODEX_OPERATOR_AGENT == "codex-operator"
     assert not hasattr(config, "PHASE_ORDER")
     assert not hasattr(config, "WORKFLOW_DIR")

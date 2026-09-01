@@ -1,4 +1,4 @@
-"""Tests for namespace-specific CLI wrapper installer."""
+"""Tests for configured CLI wrapper installer."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from project_workflow.interfaces.cli.core import NAMESPACE_ENV_VAR
 from scripts.install_namespace_clis import install_namespace_clis
 
 
-def test_install_namespace_clis_generates_wrappers_for_all_namespaces(tmp_path):
+def test_install_namespace_clis_generates_wrappers_for_all_records(tmp_path):
     with SAUnitOfWork() as uow:
         default_namespace = uow.projects.get_by_code("RUN")
         assert default_namespace is not None and default_namespace.id is not None

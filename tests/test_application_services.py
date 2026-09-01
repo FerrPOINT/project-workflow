@@ -244,20 +244,20 @@ class TestProjectService:
         with pytest.raises(ConflictError, match="связанные задачи"):
             svc.delete_project(7)
 
-    def test_create_project_rejects_prefix_owned_by_another_project(self):
+    def test_create_project_without_key_prefixes(self):
+        uow = _make_uow()
+        uow.projects.create.return_value = 3
+        uow.projects.get_by_id.return_value = FakeProject(3, "NEW", 1)
+
+        result = ProjectService(uow).create_project({"code": "NEW", "workflow_id": 1})
+
+        assert result == {"id": 3, "code": "NEW", "workflow_id": 1}
+        payload = uow.projects.create.call_args.args[0]
+        assert payload["key_prefixes"] == []
+
+    def test_create_project_allows_same_legacy_prefix(self):
         uow = _make_uow()
         existing = MagicMock(id=2, code="OTHER", workflow_id=1, key_prefixes=["TASK"])
-        uow.projects.list.return_value = [existing]
-        svc = ProjectService(uow)
-
-        with pytest.raises(ConflictError, match="уже назначен"):
-            svc.create_project({"code": "NEW", "workflow_id": 1, "key_prefixes": ["TASK"]})
-
-        uow.projects.create.assert_not_called()
-
-    def test_create_project_allows_same_prefix_in_another_workflow(self):
-        uow = _make_uow()
-        existing = MagicMock(id=2, code="OTHER", workflow_id=2, key_prefixes=["TASK"])
         uow.projects.list.return_value = [existing]
         uow.projects.create.return_value = 3
         uow.projects.get_by_id.return_value = FakeProject(3, "NEW", 1)

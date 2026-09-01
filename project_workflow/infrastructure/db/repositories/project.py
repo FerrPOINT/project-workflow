@@ -12,14 +12,17 @@ from sqlalchemy.orm import Session, joinedload
 from project_workflow.domain import Project
 from project_workflow.domain.exceptions import NotFoundError
 from project_workflow.domain.namespace import default_cli_command_from_code
+from project_workflow.domain.project_theme import DEFAULT_PROJECT_COLOR, DEFAULT_PROJECT_ICON
 from project_workflow.domain.repositories import ProjectRepository
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.repositories.converters import _row_to_project
 
 
 def _serialize_key_prefixes(raw: Any) -> str:
-    if not isinstance(raw, list) or not raw or any(not isinstance(prefix, str) for prefix in raw):
-        raise TypeError("key_prefixes должен быть непустым массивом строк")
+    if raw is None:
+        raw = []
+    if not isinstance(raw, list) or any(not isinstance(prefix, str) for prefix in raw):
+        raise TypeError("key_prefixes должен быть массивом строк")
     return json.dumps(raw, ensure_ascii=False)
 
 
@@ -71,8 +74,8 @@ class SAProjectRepository(ProjectRepository):
             code=data["code"],
             name=data["name"],
             description=data.get("description", ""),
-            theme_icon=data.get("theme_icon", "project"),
-            theme_color=data.get("theme_color", "#5E6AD2"),
+            theme_icon=data.get("theme_icon", DEFAULT_PROJECT_ICON),
+            theme_color=data.get("theme_color", DEFAULT_PROJECT_COLOR),
             cli_command=data.get("cli_command") or default_cli_command_from_code(data["code"]),
             key_prefixes=_serialize_key_prefixes(data.get("key_prefixes")),
         )
@@ -83,7 +86,7 @@ class SAProjectRepository(ProjectRepository):
     def update(self, project_id: int, data: dict[str, Any]) -> None:
         row = self._session.get(m.Project, project_id)
         if row is None:
-            raise NotFoundError(f"Запись {project_id} не найдена")
+            raise NotFoundError(f"Неймспейс {project_id} не найден")
         if "workflow_id" in data:
             row.workflow_id = data["workflow_id"]
         if "code" in data:
@@ -104,7 +107,7 @@ class SAProjectRepository(ProjectRepository):
     def delete(self, project_id: int) -> None:
         row = self._session.get(m.Project, project_id)
         if row is None:
-            raise NotFoundError(f"Запись {project_id} не найдена")
+            raise NotFoundError(f"Неймспейс {project_id} не найден")
         self._session.delete(row)
 
 

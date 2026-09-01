@@ -183,7 +183,7 @@ class Project(Base):
     code: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default=text("''"))
-    theme_icon: Mapped[str] = mapped_column(String(32), nullable=False, default="project", server_default="project")
+    theme_icon: Mapped[str] = mapped_column(String(32), nullable=False, default="folder", server_default="folder")
     theme_color: Mapped[str] = mapped_column(String(7), nullable=False, default="#5E6AD2", server_default="#5E6AD2")
     cli_command: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     key_prefixes: Mapped[str] = mapped_column(String, nullable=False, default="[]", server_default="[]")

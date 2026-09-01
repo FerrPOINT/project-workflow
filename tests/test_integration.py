@@ -45,15 +45,16 @@ class TestEndToEndWorkflow:
         uow = SAUnitOfWork(f"sqlite:///{db_path}")
         prepare_sqlite_uow(uow)
         workflow_id = uow.workflows.get_default().id
-        ProjectService(uow).create_project(
+        project = ProjectService(uow).create_project(
             {
                 "code": "AAT",
                 "name": "AAT",
-                "key_prefixes": ["AAT"],
                 "workflow_id": workflow_id,
             }
         )
-        TaskService(uow).create_task({"task_key": "AAT-99", "title": "Integ Test"})
+        TaskService(uow).create_task(
+            {"task_key": "AAT-99", "title": "Integ Test", "project_id": project["id"]}
+        )
         task = uow.get_task_by_key("AAT-99")
         assert task is not None
         assert task["current_phase_code"] == "1.INTAKE"
@@ -140,15 +141,16 @@ class TestEdgeCases:
         phase_id = uow.phases.create(
             {"workflow_id": workflow_id, "code": "history.phase", "name": "Phase 0", "phase_order": 100}
         )
-        ProjectService(uow).create_project(
+        project = ProjectService(uow).create_project(
             {
                 "code": "AATSK",
                 "name": "AATSK",
-                "key_prefixes": ["AAT"],
                 "workflow_id": workflow_id,
             }
         )
-        TaskService(uow).create_task({"task_key": "AAT-99", "title": "Skip Test"})
+        TaskService(uow).create_task(
+            {"task_key": "AAT-99", "title": "Skip Test", "project_id": project["id"]}
+        )
         task = uow.get_task_by_key("AAT-99")
         assert task is not None
         uow.tasks.record_phase_event(task["id"], phase_id, "entered")

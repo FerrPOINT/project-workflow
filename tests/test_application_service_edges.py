@@ -50,10 +50,14 @@ def test_agent_update_locks_assigned_workflows_before_write():
     uow.agents.update.assert_called_once_with(7, {"hermes_profile": "review_profile"})
 
 
-@pytest.mark.parametrize("raw", ["bad", [""], []])
+@pytest.mark.parametrize("raw", ["bad", [""]])
 def test_project_prefix_normalization_rejects_invalid_shapes(raw):
     with pytest.raises(ValueError):
         ProjectService._normalized_prefixes(raw)
+
+
+def test_project_prefix_normalization_allows_empty_legacy_list():
+    assert ProjectService._normalized_prefixes([]) == []
 
 
 def test_project_prefix_normalization_rejects_duplicates():
@@ -61,7 +65,7 @@ def test_project_prefix_normalization_rejects_duplicates():
         ProjectService._normalized_prefixes(["run", "RUN"])
 
 
-def test_project_update_rejects_prefix_change_that_orphans_existing_task():
+def test_project_update_allows_legacy_prefix_change_with_existing_task():
     existing = SimpleNamespace(id=4, code="RUN", workflow_id=1, key_prefixes=["RUN"])
     task = SimpleNamespace(task_key="RUN-42")
     uow = MagicMock()
@@ -71,10 +75,9 @@ def test_project_update_rejects_prefix_change_that_orphans_existing_task():
     uow.projects.list.return_value = [existing]
     uow.tasks.list_by_project.return_value = [task]
 
-    with pytest.raises(ConflictError, match="перестанет соответствовать"):
-        ProjectService(uow).update_project(4, {"key_prefixes": ["NEW"]})
+    ProjectService(uow).update_project(4, {"key_prefixes": ["NEW"]})
 
-    uow.projects.update.assert_not_called()
+    uow.projects.update.assert_called_once_with(4, {"key_prefixes": ["NEW"]})
 
 
 def test_instruction_lock_rejects_phase_removed_after_workflow_lock():

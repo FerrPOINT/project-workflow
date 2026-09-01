@@ -5,7 +5,12 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from project_workflow.domain.project_theme import DEFAULT_PROJECT_COLOR, DEFAULT_PROJECT_ICON
+from project_workflow.domain.project_theme import (
+    DEFAULT_PROJECT_COLOR,
+    DEFAULT_PROJECT_ICON,
+    normalize_theme_color,
+    normalize_theme_icon,
+)
 
 from ..interfaces.ui.helpers import (
     _build_parallel_phase_blocks,
@@ -32,16 +37,21 @@ def _task_progress_counts(*, completed: int, workflow_total: int) -> tuple[int, 
 
 
 def _with_namespace_aliases(project: dict[str, Any]) -> dict[str, Any]:
-    """Expose namespace-owned identity while preserving legacy project/context keys."""
-    namespace = dict(project)
+    """Expose namespace-owned identity for UI payloads."""
+    namespace = {
+        key: value
+        for key, value in project.items()
+        if key not in {"code", "key_prefixes"}
+    }
+    theme_icon = normalize_theme_icon(namespace.get("theme_icon"))
+    theme_color = normalize_theme_color(namespace.get("theme_color"))
+    namespace["theme_icon"] = theme_icon
+    namespace["theme_color"] = theme_color
     namespace["namespace_id"] = namespace.get("id")
-    namespace["namespace_code"] = namespace.get("code")
     namespace["namespace_name"] = namespace.get("name")
-    namespace["namespace_theme_icon"] = namespace.get("theme_icon", DEFAULT_PROJECT_ICON)
-    namespace["namespace_theme_color"] = namespace.get("theme_color", DEFAULT_PROJECT_COLOR)
+    namespace["namespace_theme_icon"] = theme_icon
+    namespace["namespace_theme_color"] = theme_color
     namespace["namespace_cli_command"] = namespace.get("cli_command")
-    namespace.setdefault("theme_icon", DEFAULT_PROJECT_ICON)
-    namespace.setdefault("theme_color", DEFAULT_PROJECT_COLOR)
     namespace.setdefault("cli_command", "")
     return namespace
 
@@ -56,17 +66,17 @@ class UIDataService:
         wdb = self._app_state.get_db()
         workflows = wdb.get_workflows()
         phases = [phase.to_dict() for phase in wdb.phases.list()]
-        projects = wdb.get_projects()
+        namespaces = wdb.get_projects()
         phase_counts: dict[int, int] = {}
-        project_counts: dict[int, int] = {}
+        namespace_counts: dict[int, int] = {}
         for phase in phases:
             wid = phase.get("workflow_id")
             if isinstance(wid, int):
                 phase_counts[wid] = phase_counts.get(wid, 0) + 1
-        for project in projects:
-            wid = project.get("workflow_id")
+        for namespace in namespaces:
+            wid = namespace.get("workflow_id")
             if isinstance(wid, int):
-                project_counts[wid] = project_counts.get(wid, 0) + 1
+                namespace_counts[wid] = namespace_counts.get(wid, 0) + 1
 
         result = []
         for workflow in workflows:
@@ -74,9 +84,7 @@ class UIDataService:
                 {
                     **workflow,
                     "phase_count": phase_counts.get(workflow["id"], 0),
-                    "namespace_count": project_counts.get(workflow["id"], 0),
-                    "context_count": project_counts.get(workflow["id"], 0),
-                    "project_count": project_counts.get(workflow["id"], 0),
+                    "namespace_count": namespace_counts.get(workflow["id"], 0),
                 }
             )
         return result
@@ -154,12 +162,12 @@ class UIDataService:
                 if tid not in latest_runs:
                     latest_runs[tid] = latest_run.to_dict()
 
-        # Batch project lookup.
-        projects_by_id: dict[int, dict[str, Any]] = {}
-        for project in wdb.get_projects():
-            pid = project.get("id")
+        # Batch namespace lookup.
+        namespaces_by_id: dict[int, dict[str, Any]] = {}
+        for namespace in wdb.get_projects():
+            pid = namespace.get("id")
             if isinstance(pid, int):
-                projects_by_id[pid] = project
+                namespaces_by_id[pid] = namespace
 
         result = []
         for t in tasks:
@@ -171,13 +179,14 @@ class UIDataService:
             )
             project_id = t.get("project_id")
             if not isinstance(project_id, int) or isinstance(project_id, bool) or project_id <= 0:
-                raise ValueError(f"У задачи {t['task_key']} отсутствует корректный context_id")
-            task_project = projects_by_id.get(project_id)
-            if task_project is None:
-                raise ValueError(f"Для задачи {t['task_key']} не найдена запись {project_id}")
-            project_code = str(task_project["code"])
-            project_name = str(task_project["name"])
-            project_cli_command = str(task_project.get("cli_command") or "")
+                raise ValueError(f"У задачи {t['task_key']} отсутствует корректный namespace_id")
+            task_namespace = namespaces_by_id.get(project_id)
+            if task_namespace is None:
+                raise ValueError(f"Для задачи {t['task_key']} не найден неймспейс {project_id}")
+            namespace_name = str(task_namespace["name"])
+            namespace_cli_command = str(task_namespace.get("cli_command") or "")
+            namespace_theme_icon = normalize_theme_icon(task_namespace.get("theme_icon"))
+            namespace_theme_color = normalize_theme_color(task_namespace.get("theme_color"))
             workflow_id_raw = t.get("workflow_id")
             workflow_id: int | None = int(workflow_id_raw) if isinstance(workflow_id_raw, int) else None
             task_workflow = workflows_by_id.get(workflow_id) if workflow_id is not None else None
@@ -221,23 +230,12 @@ class UIDataService:
                     "task_key": t["task_key"],
                     "title": t.get("title", ""),
                     "namespace_id": t.get("project_id"),
-                    "namespace_code": project_code,
-                    "namespace_name": project_name,
-                    "namespace_theme_icon": task_project.get("theme_icon", DEFAULT_PROJECT_ICON),
-                    "namespace_theme_color": task_project.get("theme_color", DEFAULT_PROJECT_COLOR),
-                    "namespace_cli_command": project_cli_command,
-                    "context_id": t.get("project_id"),
-                    "project_id": t.get("project_id"),
+                    "namespace_name": namespace_name,
+                    "namespace_theme_icon": namespace_theme_icon,
+                    "namespace_theme_color": namespace_theme_color,
+                    "namespace_cli_command": namespace_cli_command,
                     "workflow_id": workflow_id,
                     "workflow_name": task_workflow.get("name") if task_workflow else None,
-                    "context_code": project_code,
-                    "context_name": project_name,
-                    "context_theme_icon": task_project.get("theme_icon", DEFAULT_PROJECT_ICON),
-                    "context_theme_color": task_project.get("theme_color", DEFAULT_PROJECT_COLOR),
-                    "project_code": project_code,
-                    "project_name": project_name,
-                    "project_theme_icon": task_project.get("theme_icon", DEFAULT_PROJECT_ICON),
-                    "project_theme_color": task_project.get("theme_color", DEFAULT_PROJECT_COLOR),
                     "current_phase_id": t["current_phase_id"],
                     "current_phase_code": t["current_phase_code"],
                     "current_phase_name": t["current_phase_name"],
@@ -274,12 +272,10 @@ class UIDataService:
 
         result = []
         for project in projects:
-            prefixes = project.get("key_prefixes") or []
             result.append(
                 _with_namespace_aliases({
                     **project,
                     "task_count": task_counts.get(project["id"], 0),
-                    "prefixes_count": len(prefixes),
                 })
             )
         return result
@@ -290,7 +286,7 @@ class UIDataService:
 
     def _load_dashboard(self, namespace_id: int | None = None) -> dict[str, Any]:
         tasks = self._load_tasks(namespace_id=namespace_id)
-        contexts = self._load_projects()
+        namespaces = self._load_projects()
 
         open_tasks = [task for task in tasks if task.get("status") != "done"]
         active_tasks = [task for task in tasks if task.get("status") == "active"]
@@ -304,9 +300,7 @@ class UIDataService:
 
         return {
             "stats": {
-                "namespaces": len(contexts),
-                "contexts": len(contexts),
-                "projects": len(contexts),
+                "namespaces": len(namespaces),
                 "tasks": len(tasks),
                 "active": len(active_tasks),
                 "done": len(done_tasks),
@@ -316,9 +310,7 @@ class UIDataService:
                 },
             },
             "open_tasks": open_tasks[:8],
-            "namespaces": sorted(contexts, key=lambda item: (-item.get("task_count", 0), item.get("name", "")))[:8],
-            "contexts": sorted(contexts, key=lambda item: (-item.get("task_count", 0), item.get("name", "")))[:8],
-            "projects": sorted(contexts, key=lambda item: (-item.get("task_count", 0), item.get("name", "")))[:8],
+            "namespaces": sorted(namespaces, key=lambda item: (-item.get("task_count", 0), item.get("name", "")))[:8],
         }
 
     def _resolve_task_workflow_id(
@@ -434,40 +426,21 @@ class UIDataService:
         task = dict(task)
         project_id = task.get("project_id")
         if not isinstance(project_id, int) or isinstance(project_id, bool) or project_id <= 0:
-            raise ValueError(f"У задачи {task_key} отсутствует корректный context_id")
+            raise ValueError(f"У задачи {task_key} отсутствует корректный namespace_id")
         project_row = wdb.projects.get_by_id(project_id)
         if project_row is None:
-            raise ValueError(f"Для задачи {task_key} не найдена запись {project_id}")
+            raise ValueError(f"Для задачи {task_key} не найден неймспейс {project_id}")
         raw_project = project_row.to_dict() if hasattr(project_row, "to_dict") else project_row
         if not isinstance(raw_project, dict) or not raw_project:
             prefix = str(task_key).split("-", 1)[0]
-            raw_project = {"id": project_id, "code": prefix, "name": prefix}
+            raw_project = {"id": project_id, "name": prefix}
         project = _with_namespace_aliases(raw_project)
-        task["project"] = project
         task["namespace"] = project
-        task["context"] = project
         task["namespace_id"] = project_id
-        task["namespace_code"] = project["code"]
         task["namespace_name"] = project["name"]
         task["namespace_theme_icon"] = project.get("theme_icon", DEFAULT_PROJECT_ICON)
         task["namespace_theme_color"] = project.get("theme_color", DEFAULT_PROJECT_COLOR)
         task["namespace_cli_command"] = project.get("cli_command", "")
-        task["context_id"] = project_id
-        task["context_code"] = project["code"]
-        task["context_name"] = project["name"]
-        task["context_theme_icon"] = project.get("theme_icon", DEFAULT_PROJECT_ICON)
-        task["context_theme_color"] = project.get("theme_color", DEFAULT_PROJECT_COLOR)
-        task["project_code"] = project["code"]
-        task["project_name"] = project["name"]
-        task["project_theme_icon"] = project.get("theme_icon", DEFAULT_PROJECT_ICON)
-        task["project_theme_color"] = project.get("theme_color", DEFAULT_PROJECT_COLOR)
-        task["project_label"] = (
-            task["project_name"]
-            if task["project_name"] == task["project_code"]
-            else f"{task['project_code']} — {task['project_name']}"
-        )
-        task["context_label"] = task["project_label"]
-        task["namespace_label"] = task["project_label"]
 
         workflow_id, workflow_phases = self._resolve_task_workflow_id(task, wdb)
         if workflow_id is None:

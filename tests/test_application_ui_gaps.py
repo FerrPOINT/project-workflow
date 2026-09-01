@@ -137,7 +137,7 @@ class TestUIDataServiceGaps:
         assert result[0]["latest_verdict_label"] == "Принято"
         assert result[0]["latest_verdict_phase"] == "1"
 
-    def test_load_tasks_fails_closed_when_context_is_missing(self):
+    def test_load_tasks_fails_closed_when_namespace_is_missing(self):
         wdb = MagicMock()
         wdb.get_tasks.return_value = [
             {
@@ -157,7 +157,7 @@ class TestUIDataServiceGaps:
         wdb.step_history.latest_for_tasks.return_value = []
         wdb.get_projects.return_value = []
 
-        with pytest.raises(ValueError, match="не найдена запись 7"):
+        with pytest.raises(ValueError, match="не найден неймспейс 7"):
             _service(wdb)._load_tasks()
 
     def test_missing_task_workflow_id_fails_closed_without_project_fallback(self):

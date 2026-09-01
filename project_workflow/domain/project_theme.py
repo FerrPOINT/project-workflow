@@ -5,11 +5,11 @@ from __future__ import annotations
 import re
 from typing import Any
 
-DEFAULT_PROJECT_ICON = "project"
+DEFAULT_PROJECT_ICON = "folder"
 DEFAULT_PROJECT_COLOR = "#5E6AD2"
 
 PROJECT_THEME_ICONS: dict[str, str] = {
-    "project": "Папка",
+    "folder": "Папка",
     "workflow": "Воркфлоу",
     "check": "Проверка",
     "bug": "Тестирование",
@@ -20,6 +20,8 @@ PROJECT_THEME_ICONS: dict[str, str] = {
     "wrench": "Поддержка",
 }
 
+_LEGACY_ICON_ALIASES = {"project": DEFAULT_PROJECT_ICON}
+
 
 def normalize_theme_icon(value: Any) -> str:
     """Return a canonical icon key from the fixed icon catalog."""
@@ -27,7 +29,7 @@ def normalize_theme_icon(value: Any) -> str:
         return DEFAULT_PROJECT_ICON
     if not isinstance(value, str):
         raise ValueError("Иконка должна быть строкой")
-    icon = value.strip().lower()
+    icon = _LEGACY_ICON_ALIASES.get(value.strip().lower(), value.strip().lower())
     if icon not in PROJECT_THEME_ICONS:
         allowed = ", ".join(sorted(PROJECT_THEME_ICONS))
         raise ValueError(f"Иконка должна быть одной из: {allowed}")

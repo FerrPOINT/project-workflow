@@ -18,11 +18,11 @@ from project_workflow.interfaces.ui.schemas import (
     InstructionCreate,
     InstructionReorder,
     InstructionUpdate,
+    NamespaceCreate,
+    NamespaceUpdate,
     PhaseCreate,
     PhaseOrderUpdate,
     PhaseUpdate,
-    ProjectCreate,
-    ProjectUpdate,
     WorkflowUpdate,
 )
 
@@ -129,15 +129,14 @@ def test_phase_batch_order_rejects_workflow_owner_mismatch(monkeypatch):
     assert _json(response)["error"] == "workflow_id не совпадает с владельцем фазы"
 
 
-def test_project_create_rejects_explicit_null_description():
+def test_namespace_create_rejects_explicit_null_description():
     response = _run(
-        api.api_project_create(
-            ProjectCreate(
-                code="PRJ",
-                name="Контур",
+        api.api_namespace_create(
+            NamespaceCreate(
+                name="Namespace",
                 description=None,
                 workflow_id=1,
-                key_prefixes=["PRJ"],
+                cli_command="workflow-prj",
             )
         )
     )
@@ -146,17 +145,17 @@ def test_project_create_rejects_explicit_null_description():
     assert _json(response)["error"] == "description не может быть null"
 
 
-def test_project_update_maps_value_error_before_readback(monkeypatch):
+def test_namespace_update_maps_value_error_before_readback(monkeypatch):
     service = SimpleNamespace(
-        update_project=lambda _project_id, _updates: _raise(ValueError("bad prefixes")),
-        get_project=lambda _project_id: pytest.fail("project readback must not happen after error"),
+        update_project=lambda _namespace_id, _updates: _raise(ValueError("bad namespace")),
+        get_project=lambda _namespace_id: pytest.fail("namespace readback must not happen after error"),
     )
     monkeypatch.setattr(api, "_app_state", _State(project_service=service))
 
-    response = _run(api.api_project_update(5, ProjectUpdate(key_prefixes=["PX"])))
+    response = _run(api.api_namespace_update(5, NamespaceUpdate(name="PX")))
 
     assert response.status_code == 422
-    assert _json(response)["error"] == "bad prefixes"
+    assert _json(response)["error"] == "bad namespace"
 
 
 @pytest.mark.parametrize(
@@ -195,8 +194,8 @@ def test_update_routes_map_service_errors(monkeypatch, route, payload, service_m
 @pytest.mark.parametrize(
     ("route", "service_method", "exc", "status"),
     [
-        (api.api_project_delete, "delete_project", NotFoundError("Контур 1 не найден"), 404),
-        (api.api_project_delete, "delete_project", ConflictError("Context conflict"), 409),
+        (api.api_namespace_delete, "delete_project", NotFoundError("Неймспейс 1 не найден"), 404),
+        (api.api_namespace_delete, "delete_project", ConflictError("Namespace conflict"), 409),
         (api.api_agent_delete, "delete_agent", NotFoundError("Агент 1 не найден"), 404),
         (api.api_agent_delete, "delete_agent", ConflictError("Agent conflict"), 409),
     ],

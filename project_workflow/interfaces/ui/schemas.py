@@ -183,147 +183,6 @@ class WorkflowUpdate(StrictUpdateRequest):
         return _strip_nonblank(value, "name") if value is not None else None
 
 
-class ProjectCreate(StrictRequest):
-    code: str = Field(..., min_length=1)
-    name: str | None = Field(default=None)
-    description: str | None = Field(default="")
-    workflow_id: int = Field(gt=0, strict=True)
-    theme_icon: str = Field(default=DEFAULT_PROJECT_ICON)
-    theme_color: str = Field(default=DEFAULT_PROJECT_COLOR)
-    cli_command: str | None = Field(default=None, min_length=1, max_length=64)
-    key_prefixes: list[str]
-
-    @field_validator("code")
-    @classmethod
-    def _code_not_blank(cls, value: str) -> str:
-        return _strip_nonblank(value, "code")
-
-    @field_validator("name")
-    @classmethod
-    def _name_not_blank(cls, value: str | None) -> str | None:
-        return _strip_nonblank(value, "name") if value is not None else None
-
-    @field_validator("theme_icon")
-    @classmethod
-    def _theme_icon_valid(cls, value: str) -> str:
-        return normalize_theme_icon(value)
-
-    @field_validator("theme_color")
-    @classmethod
-    def _theme_color_valid(cls, value: str) -> str:
-        return normalize_theme_color(value)
-
-    @field_validator("cli_command")
-    @classmethod
-    def _cli_command_valid(cls, value: str | None) -> str | None:
-        return normalize_namespace_cli_command(value) if value is not None else None
-
-    @field_validator("key_prefixes", mode="before")
-    @classmethod
-    def _validate_key_prefixes(cls, value: Any) -> list[str]:
-        if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
-            raise ValueError("key_prefixes должен быть массивом строк")
-        return [_strip_nonblank(item, "key_prefixes").upper() for item in value]
-
-    @field_validator("key_prefixes", mode="after")
-    @classmethod
-    def _ensure_prefixes_not_empty(cls, value: list[str]) -> list[str]:
-        if not value:
-            raise ValueError("Нужен хотя бы один префикс ключа задачи")
-        if len(value) != len(set(value)):
-            raise ValueError("Префиксы ключей задач должны быть уникальными")
-        return value
-
-    @model_validator(mode="after")
-    def _require_key_prefixes(self) -> ProjectCreate:
-        if not self.key_prefixes:
-            raise ValueError("Нужен хотя бы один префикс ключа задачи")
-        return self
-
-    @field_validator("key_prefixes", mode="after")
-    @classmethod
-    def _validate_prefix_format(cls, value: list[str]) -> list[str]:
-        for prefix in value:
-            if not re.fullmatch(r"[A-Z][A-Z0-9]*", prefix):
-                raise ValueError(
-                    f"Недопустимый префикс '{prefix}': используйте только заглавные латинские буквы и цифры"
-                )
-            if len(prefix) < 2:
-                raise ValueError(f"Префикс '{prefix}' слишком короткий: нужно не менее 2 символов")
-        return value
-
-
-class ProjectUpdate(StrictUpdateRequest):
-    non_nullable_fields = frozenset(
-        {
-            "code",
-            "name",
-            "description",
-            "workflow_id",
-            "theme_icon",
-            "theme_color",
-            "cli_command",
-            "key_prefixes",
-        }
-    )
-
-    code: str | None = Field(default=None, min_length=1)
-    name: str | None = Field(default=None)
-    description: str | None = Field(default=None)
-    workflow_id: int | None = Field(default=None, gt=0, strict=True)
-    theme_icon: str | None = Field(default=None)
-    theme_color: str | None = Field(default=None)
-    cli_command: str | None = Field(default=None, min_length=1, max_length=64)
-    key_prefixes: list[str] | None = Field(default=None)
-
-    @field_validator("code", "name")
-    @classmethod
-    def _identity_not_blank(cls, value: str | None, info: Any) -> str | None:
-        return _strip_nonblank(value, info.field_name) if value is not None else None
-
-    @field_validator("theme_icon")
-    @classmethod
-    def _theme_icon_valid(cls, value: str | None) -> str | None:
-        return normalize_theme_icon(value) if value is not None else None
-
-    @field_validator("theme_color")
-    @classmethod
-    def _theme_color_valid(cls, value: str | None) -> str | None:
-        return normalize_theme_color(value) if value is not None else None
-
-    @field_validator("cli_command")
-    @classmethod
-    def _cli_command_valid(cls, value: str | None) -> str | None:
-        return normalize_namespace_cli_command(value) if value is not None else None
-
-    @field_validator("key_prefixes", mode="before")
-    @classmethod
-    def _validate_key_prefixes(cls, value: Any) -> list[str] | None:
-        if value is None:
-            return None
-        if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
-            raise ValueError("key_prefixes должен быть массивом строк")
-        return [_strip_nonblank(item, "key_prefixes").upper() for item in value]
-
-    @field_validator("key_prefixes", mode="after")
-    @classmethod
-    def _validate_prefix_format(cls, value: list[str] | None) -> list[str] | None:
-        if value is None:
-            return None
-        if not value:
-            raise ValueError("Нужен хотя бы один префикс ключа задачи")
-        if len(value) != len(set(value)):
-            raise ValueError("Префиксы ключей задач должны быть уникальными")
-        for prefix in value:
-            if not re.fullmatch(r"[A-Z][A-Z0-9]*", prefix):
-                raise ValueError(
-                    f"Недопустимый префикс '{prefix}': используйте только заглавные латинские буквы и цифры"
-                )
-            if len(prefix) < 2:
-                raise ValueError(f"Префикс '{prefix}' слишком короткий: нужно не менее 2 символов")
-        return value
-
-
 class NamespaceCreate(StrictRequest):
     name: str
     description: str | None = Field(default="")
@@ -331,7 +190,6 @@ class NamespaceCreate(StrictRequest):
     theme_icon: str = Field(default=DEFAULT_PROJECT_ICON)
     theme_color: str = Field(default=DEFAULT_PROJECT_COLOR)
     cli_command: str = Field(..., min_length=1, max_length=64)
-    key_prefixes: list[str]
 
     @field_validator("name")
     @classmethod
@@ -353,21 +211,9 @@ class NamespaceCreate(StrictRequest):
     def _cli_command_valid(cls, value: str) -> str:
         return normalize_namespace_cli_command(value)
 
-    @field_validator("key_prefixes", mode="before")
-    @classmethod
-    def _validate_key_prefixes(cls, value: Any) -> list[str]:
-        return ProjectCreate._validate_key_prefixes(value)
-
-    @field_validator("key_prefixes", mode="after")
-    @classmethod
-    def _validate_prefix_format(cls, value: list[str]) -> list[str]:
-        return ProjectCreate._validate_prefix_format(ProjectCreate._ensure_prefixes_not_empty(value))
-
 
 class NamespaceUpdate(StrictUpdateRequest):
-    non_nullable_fields = frozenset(
-        {"name", "description", "workflow_id", "theme_icon", "theme_color", "cli_command", "key_prefixes"}
-    )
+    non_nullable_fields = frozenset({"name", "description", "workflow_id", "theme_icon", "theme_color", "cli_command"})
 
     name: str | None = Field(default=None)
     description: str | None = Field(default=None)
@@ -375,7 +221,6 @@ class NamespaceUpdate(StrictUpdateRequest):
     theme_icon: str | None = Field(default=None)
     theme_color: str | None = Field(default=None)
     cli_command: str | None = Field(default=None, min_length=1, max_length=64)
-    key_prefixes: list[str] | None = Field(default=None)
 
     @field_validator("name")
     @classmethod
@@ -396,16 +241,6 @@ class NamespaceUpdate(StrictUpdateRequest):
     @classmethod
     def _cli_command_valid(cls, value: str | None) -> str | None:
         return normalize_namespace_cli_command(value) if value is not None else None
-
-    @field_validator("key_prefixes", mode="before")
-    @classmethod
-    def _validate_key_prefixes(cls, value: Any) -> list[str] | None:
-        return ProjectUpdate._validate_key_prefixes(value)
-
-    @field_validator("key_prefixes", mode="after")
-    @classmethod
-    def _validate_prefix_format(cls, value: list[str] | None) -> list[str] | None:
-        return ProjectUpdate._validate_prefix_format(value)
 
 
 class AgentCreate(StrictRequest):

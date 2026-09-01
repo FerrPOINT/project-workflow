@@ -1,4 +1,4 @@
-"""Task-key validation against configured prefixes stored in PostgreSQL."""
+"""Task-key validation and explicit run selection helpers."""
 
 from __future__ import annotations
 
@@ -32,17 +32,11 @@ class TaskKeyValidationError(ValueError):
         super().__init__(f"Недопустимый ключ задачи '{key}': {reason}")
 
 
-def _prefixes_to_regex(prefixes: list[str]) -> str:
-    """Build a regex from plain prefixes that captures prefix and number."""
-    escaped = [re.escape(p) for p in prefixes if p]
-    if not escaped:
-        # Match nothing
-        return r"$^"
-    return r"^(?P<prefix>" + "|".join(escaped) + r")-(?P<number>[0-9]+)$"
+TASK_KEY_PATTERN = re.compile(r"^(?P<prefix>[A-Z][A-Z0-9]*)-(?P<number>[0-9]+)$")
 
 
 class TaskKeyValidator:
-    """Validate task keys using the prefixes currently configured in the database."""
+    """Validate task keys without using configurable prefixes as routing rules."""
 
     REJECT_PATTERNS = [
         (r"^-", "Ключ не может начинаться с дефиса"),
@@ -51,8 +45,7 @@ class TaskKeyValidator:
     ]
 
     def __init__(self, project_prefixes: list[dict[str, Any]]):
-        self.pattern_sources: list[tuple[str | None, re.Pattern[str]]] = []
-        self.raw_prefixes: list[str] = []
+        self.prefix_to_project: dict[str, str | None] = {}
         for project in project_prefixes:
             project_code = project.get("code")
             if not isinstance(project_code, str) or not project_code.strip():
@@ -63,13 +56,11 @@ class TaskKeyValidator:
             ):
                 raise ValueError("key_prefixes должен быть массивом строк")
             prefixes = [prefix.strip() for prefix in raw_prefixes if prefix.strip()]
-            if prefixes:
-                self.raw_prefixes.extend(prefixes)
-                pattern = re.compile(_prefixes_to_regex(prefixes))
-                self.pattern_sources.append((project_code.strip(), pattern))
+            for prefix in prefixes:
+                self.prefix_to_project.setdefault(prefix, project_code.strip())
 
     def validate(self, key: str) -> ValidatedTaskKey:
-        """Validate a task key without inventing a default context."""
+        """Validate a task key without inferring a selected workflow."""
         if not key or not isinstance(key, str):
             return ValidatedTaskKey(
                 raw=str(key),
@@ -78,11 +69,10 @@ class TaskKeyValidator:
             )
 
         stripped = key.strip()
-        example_prefix = self.raw_prefixes[0] if self.raw_prefixes else "PREFIX"
         if stripped.upper() != stripped:
             error_msg = (
                 f"Ключ '{key}' содержит строчные буквы. Ключ задаётся В ВЕРХНЕМ РЕГИСТРЕ "
-                f"(например: {example_prefix}-123)"
+                "(например: TASK-123)"
             )
             return ValidatedTaskKey(raw=key, is_valid=False, error_message=error_msg)
 
@@ -91,48 +81,29 @@ class TaskKeyValidator:
                 error_msg = f"Ключ '{key}' не прошёл проверку: {reason}"
                 return ValidatedTaskKey(raw=key, is_valid=False, error_message=error_msg)
 
-        for project_code, pattern in self.pattern_sources:
-            match = pattern.fullmatch(stripped)
-            if match:
-                prefix = match.group("prefix")
-                number = match.group("number")
-                normalized = f"{prefix}-{number}"
-                return ValidatedTaskKey(
-                    raw=key,
-                    is_valid=True,
-                    project=project_code,
-                    prefix=prefix,
-                    issue_number=number,
-                    normalized=normalized,
-                )
-
-        matching_prefix = next(
-            (
-                prefix
-                for prefix in self.raw_prefixes
-                if stripped == prefix or stripped.startswith(f"{prefix}-")
-            ),
-            None,
-        )
-        if matching_prefix is not None:
+        match = TASK_KEY_PATTERN.fullmatch(stripped)
+        if match:
+            prefix = match.group("prefix")
+            number = match.group("number")
+            normalized = f"{prefix}-{number}"
             return ValidatedTaskKey(
                 raw=key,
-                is_valid=False,
-                error_message=(
-                    f"Ключ '{stripped}' должен соответствовать шаблону {matching_prefix}-<номер задачи>"
-                ),
+                is_valid=True,
+                project=self.prefix_to_project.get(prefix),
+                prefix=prefix,
+                issue_number=number,
+                normalized=normalized,
             )
 
-        allowed = ", ".join(self.raw_prefixes) or "нет настроенных префиксов"
-        error_msg = (
-            f"Ключ '{stripped}' не соответствует ни одному разрешённому префиксу. "
-            f"Префиксы: {allowed}"
-        )
+        prefix_hint = stripped.split("-", 1)[0] if "-" in stripped else "TASK"
+        if not re.fullmatch(r"[A-Z][A-Z0-9]*", prefix_hint):
+            prefix_hint = "TASK"
+        error_msg = f"Ключ '{stripped}' должен соответствовать шаблону {prefix_hint}-<номер задачи>"
         return ValidatedTaskKey(raw=key, is_valid=False, error_message=error_msg)
 
     @classmethod
     def from_projects(cls, projects: list[dict[str, Any]]) -> TaskKeyValidator:
-        """Создать валидатор из строк с key_prefixes."""
+        """Create a validator from legacy rows without making prefixes authoritative."""
         return cls(projects)
 
 
@@ -142,11 +113,9 @@ def get_project_for_task_key(
     workflow_id: int | None = None,
     project_id: int | None = None,
 ) -> dict[str, Any] | None:
-    """Resolve a row from a task key using configured prefixes."""
-    match = re.fullmatch(r"(?P<prefix>[A-Z][A-Z0-9]*)-(?P<number>[0-9]+)", str(task_key).strip())
-    if match is None:
+    """Resolve an explicitly scoped row for a valid task key."""
+    if not TaskKeyValidator.from_projects([]).validate(str(task_key)).is_valid:
         return None
-    prefix = match.group("prefix")
     matches: list[dict[str, Any]] = []
     for project in uow.projects.list():
         project_dict = project.to_dict() if hasattr(project, "to_dict") else dict(project)
@@ -154,15 +123,11 @@ def get_project_for_task_key(
             continue
         if workflow_id is not None and project_dict.get("workflow_id") != workflow_id:
             continue
-        key_prefixes = project_dict.get("key_prefixes", []) or []
-        if not isinstance(key_prefixes, list) or not all(
-            isinstance(item, str) for item in key_prefixes
-        ):
-            raise ValueError("key_prefixes должен быть массивом строк")
-        if prefix in key_prefixes:
-            matches.append(project_dict)
+        matches.append(project_dict)
     if not matches:
         return None
     if len(matches) > 1:
-        raise ValueError(f"Для ключа задачи {task_key!r} подходит несколько CLI-команд; запустите через нужный wrapper")
+        raise ValueError(
+            f"Для ключа задачи {task_key!r} доступно несколько неймспейсов; запустите через нужный wrapper"
+        )
     return matches[0]

@@ -15,6 +15,7 @@ from project_workflow.domain import (
     TaskStepHistoryEntry,
     Workflow,
 )
+from project_workflow.domain.project_theme import normalize_theme_color, normalize_theme_icon
 from project_workflow.infrastructure.db import models as m
 
 
@@ -67,8 +68,8 @@ def _row_to_project(row: m.Project) -> Project:
         code=row.code,
         name=row.name,
         description=row.description,
-        theme_icon=row.theme_icon or "project",
-        theme_color=row.theme_color or "#5E6AD2",
+        theme_icon=normalize_theme_icon(row.theme_icon),
+        theme_color=normalize_theme_color(row.theme_color),
         cli_command=getattr(row, "cli_command", "") or "",
         key_prefixes=list(prefixes),
         workflow_name=row.workflow.name if row.workflow else None,

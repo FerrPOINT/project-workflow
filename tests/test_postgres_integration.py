@@ -653,7 +653,7 @@ class TestPostgresUoW:
             ids = {w.id for w in uow.workflows.list()}
             assert wf_id not in ids
 
-    def test_concurrent_task_and_prefix_update_cannot_break_project_invariants(self, pg_url):
+    def test_concurrent_task_and_legacy_prefix_update_can_both_commit(self, pg_url):
         from scripts.init_db import main
 
         assert main() == 0
@@ -700,19 +700,17 @@ class TestPostgresUoW:
             task_result = pool.submit(create_task)
             update_result = pool.submit(update_prefix)
             outcomes = {task_result.result(), update_result.result()}
-        assert "rejected" in outcomes
+        assert outcomes == {"created", "updated"}
 
         verify = SAUnitOfWork(pg_url)
         stored_project = verify.projects.get_by_id(project["id"])
-        stored_task = verify.tasks.get_by_key("RACE-1")
+        stored_task = verify.tasks.get_by_key("RACE-1", project_id=project["id"])
         assert stored_project is not None
-        if stored_task is None:
-            assert stored_project.key_prefixes == ["NEW"]
-        else:
-            assert stored_project.key_prefixes == ["RACE"]
+        assert stored_task is not None
+        assert stored_project.key_prefixes == ["NEW"]
         verify.close()
 
-    def test_concurrent_project_creates_serialize_prefix_namespace(self, pg_url):
+    def test_concurrent_project_creates_allow_same_legacy_prefix(self, pg_url):
         from scripts.init_db import main
 
         assert main() == 0
@@ -742,7 +740,7 @@ class TestPostgresUoW:
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             outcomes = list(pool.map(create, ["PREFIX-A", "PREFIX-B"]))
-        assert sorted(outcomes) == ["created", "rejected"]
+        assert sorted(outcomes) == ["created", "created"]
 
     def test_task_creation_serializes_with_phase_deletion(self, pg_url):
         ensure_migrated(get_engine(pg_url))

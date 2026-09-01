@@ -174,22 +174,12 @@ def _get_task_key_validator(uow=None, project_id: int | None = None) -> task_val
 
 
 def _require_valid_key(task_key: str, uow=None, project_id: int | None = None) -> str:
-    """Проверить валидность ключа задачи по префиксам из БД."""
-    if uow is None:
-        validator = (
-            _get_task_key_validator()
-            if project_id is None
-            else _get_task_key_validator(project_id=project_id)
-        )
-    else:
-        validator = (
-            _get_task_key_validator(uow=uow)
-            if project_id is None
-            else _get_task_key_validator(uow=uow, project_id=project_id)
-        )
+    """Validate task-key shape; selected workflow is resolved separately."""
+    _ = (uow, project_id)
+    validator = task_validator.TaskKeyValidator.from_projects([])
     validated = validator.validate(task_key)
     if not validated.is_valid:
-        raise TaskKeyValidationError(task_key, validated.error_message or "неизвестный префикс")
+        raise TaskKeyValidationError(task_key, validated.error_message or "некорректный формат")
     return validated.normalized or task_key
 
 
@@ -198,7 +188,7 @@ def _project_dicts(uow: Any) -> list[dict[str, Any]]:
 
 
 def _resolve_namespace_id(uow: Any, namespace: str | None) -> int | None:
-    """Resolve optional namespace selector from an id, exact legacy code, name, or CLI command."""
+    """Resolve optional namespace selector from an id, name, command, or internal code."""
     if namespace is None or not namespace.strip():
         return None
     selector = namespace.strip()
@@ -207,7 +197,7 @@ def _resolve_namespace_id(uow: Any, namespace: str | None) -> int | None:
         project_id = int(selector)
         if any(item.get("id") == project_id for item in projects):
             return project_id
-        raise ValueError(f"Запись {project_id} не найдена")
+        raise ValueError(f"Неймспейс {project_id} не найден")
     matches = [
         item
         for item in projects
@@ -216,7 +206,7 @@ def _resolve_namespace_id(uow: Any, namespace: str | None) -> int | None:
         or str(item.get("cli_command") or "").casefold() == selector.casefold()
     ]
     if not matches:
-        raise ValueError(f"Запись {selector!r} не найдена")
+        raise ValueError(f"Неймспейс {selector!r} не найден")
     if len(matches) > 1:
         raise ValueError(f"Выбор {selector!r} неоднозначен; укажите ID")
     resolved_project_id = matches[0].get("id")
@@ -230,30 +220,20 @@ def _resolve_namespace_id(uow: Any, namespace: str | None) -> int | None:
 
 
 def _resolve_namespace_id_from_env(uow: Any) -> int | None:
-    """Resolve the wrapper-selected namespace id from ``PROJECT_WORKFLOW_NAMESPACE_ID``."""
-    raw = os.environ.get(NAMESPACE_ENV_VAR)
+    """Resolve the wrapper-selected namespace id from the environment."""
+    env_name = NAMESPACE_ENV_VAR
+    raw = os.environ.get(env_name)
     if raw is None or not raw.strip():
         return None
     selector = raw.strip()
     if not selector.isdecimal():
-        raise ValueError(f"{NAMESPACE_ENV_VAR} должен содержать положительный ID")
+        raise ValueError(f"{env_name} должен содержать положительный ID")
     namespace_id = int(selector)
     if namespace_id <= 0:
-        raise ValueError(f"{NAMESPACE_ENV_VAR} должен содержать положительный ID")
+        raise ValueError(f"{env_name} должен содержать положительный ID")
     if not any(item.get("id") == namespace_id for item in _project_dicts(uow)):
-        raise ValueError(f"Запись {namespace_id} не найдена")
+        raise ValueError(f"Неймспейс {namespace_id} не найден")
     return namespace_id
-
-
-def _resolve_context_id(uow: Any, context: str | None) -> int | None:
-    """Backward-compatible alias for old callers; prefer ``_resolve_namespace_id``."""
-    return _resolve_namespace_id(uow, context)
-
-
-def _resolve_project_id(uow: Any, project: str | None) -> int | None:
-    """Backward-compatible alias for old callers; prefer ``_resolve_namespace_id``."""
-    return _resolve_namespace_id(uow, project)
-
 
 def blocked_result(task_key: str, message: str, phase_code: str = "") -> dict[str, Any]:
     """Return the single fail-closed CLI error shape."""
@@ -295,8 +275,6 @@ __all__ = [
     "_require_valid_key",
     "_resolve_namespace_id",
     "_resolve_namespace_id_from_env",
-    "_resolve_context_id",
-    "_resolve_project_id",
     "NAMESPACE_ENV_VAR",
     "blocked_result",
     "console",

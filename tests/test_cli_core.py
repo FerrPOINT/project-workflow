@@ -8,7 +8,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import click
 import pytest
@@ -86,24 +86,12 @@ def test_out_json_falls_back_to_utf8_when_stdout_encoding_rejects_cyrillic(monke
 
 
 def test_require_valid_key():
-    validator = MagicMock()
-    validated = MagicMock()
-    validated.is_valid = True
-    validated.normalized = "A-1"
-    validator.validate.return_value = validated
-    with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=validator):
-        assert _require_valid_key("a-1") == "A-1"
+    assert _require_valid_key("A-1") == "A-1"
 
 
 def test_require_valid_key_invalid():
-    validator = MagicMock()
-    validated = MagicMock()
-    validated.is_valid = False
-    validated.error_message = "bad"
-    validator.validate.return_value = validated
-    with patch("project_workflow.interfaces.cli.core._get_task_key_validator", return_value=validator):
-        with pytest.raises(TaskKeyValidationError, match="bad"):
-            _require_valid_key("bad")
+    with pytest.raises(TaskKeyValidationError, match="строчные буквы"):
+        _require_valid_key("bad-1")
 
 
 def test_missing_database_configuration_returns_json_blocked(monkeypatch):

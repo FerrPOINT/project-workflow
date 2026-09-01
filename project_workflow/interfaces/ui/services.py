@@ -55,7 +55,7 @@ def _load_tasks(namespace_id: int | None = None) -> list[dict[str, Any]]:
 
 
 def _load_projects() -> list[dict[str, Any]]:
-    """Load projects for UI pages/API."""
+    """Load namespaces through the storage compatibility repository."""
     return _ui_data_service()._load_projects()
 
 

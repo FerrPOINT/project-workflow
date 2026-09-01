@@ -15,6 +15,7 @@ from project_workflow.domain.project_theme import (
 BASE_DIR = Path(__file__).parent
 
 PROJECT_ICON_PATHS = {
+    "folder": "M4 6a2 2 0 0 1 2-2h5l2 2h5a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6z",
     "project": "M4 6a2 2 0 0 1 2-2h5l2 2h5a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6z",
     "workflow": "M4 6h16v5H4z M4 14h16v4H4z M8 11v3 M16 11v3",
     "check": "M20 6 9 17l-5-5",
@@ -69,6 +70,9 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 templates.env.filters["group_instructions"] = _group_instructions
 templates.env.filters["pluralize"] = _pluralize
 templates.env.globals["project_icon_path"] = _project_icon_path
-templates.env.globals["project_icon_paths"] = PROJECT_ICON_PATHS
+templates.env.globals["project_icon_paths"] = {
+    key: _project_icon_path(key) for key in PROJECT_THEME_ICONS
+}
 templates.env.globals["project_icon_options"] = _project_icon_options()
+templates.env.globals["default_project_icon"] = DEFAULT_PROJECT_ICON
 env = templates.env

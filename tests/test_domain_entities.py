@@ -47,7 +47,7 @@ def test_project_to_dict():
     p = Project(id=4, code="PRJ", key_prefixes=["PRJ"])
     data = p.to_dict()
     assert data["key_prefixes"] == ["PRJ"]
-    assert data["theme_icon"] == "project"
+    assert data["theme_icon"] == "folder"
     assert data["theme_color"] == "#5E6AD2"
 
 

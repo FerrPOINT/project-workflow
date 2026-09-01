@@ -147,7 +147,7 @@ class SupervisorEngine:
 
         project = self._resolve_project()
         if not project:
-            raise ValueError(f"Не удалось определить контур для ключа задачи: {self.task_key}")
+            raise ValueError(f"Не удалось определить неймспейс для ключа задачи: {self.task_key}")
         current_phase_id = self._first_phase_id_for_project(project["id"])
         try:
             return self._task_service.create_task(
@@ -170,26 +170,18 @@ class SupervisorEngine:
             raise
 
     def _resolve_project(self) -> dict[str, Any] | None:
-        # Try matching via project key prefixes first.
         if self.requested_project_id is not None:
             project = self._project_service.get_project(self.requested_project_id)
             if project is None:
-                raise ValueError(f"Контур {self.requested_project_id} не найден")
-            prefixes = project.get("key_prefixes", [])
-            if not isinstance(prefixes, list) or not all(isinstance(prefix, str) for prefix in prefixes):
-                raise ValueError("key_prefixes контура должен быть массивом строк")
-            if not any(self.task_key == prefix or self.task_key.startswith(prefix + "-") for prefix in prefixes):
-                raise ValueError(f"Ключ задачи {self.task_key!r} не соответствует префиксам контура")
+                raise ValueError(f"Неймспейс {self.requested_project_id} не найден")
             return project
-        matches: list[dict[str, Any]] = []
-        for project in self._project_service.list_projects():
-            for prefix in project.get("key_prefixes", []):
-                if self.task_key.startswith(prefix + "-") or self.task_key == prefix:
-                    matches.append(project)
-                    break
-        if len(matches) > 1:
-            raise ValueError(f"Ключ задачи {self.task_key!r} подходит нескольким контурам; укажите context")
-        return matches[0] if matches else None
+        projects = self._project_service.list_projects()
+        if len(projects) > 1:
+            raise ValueError(
+                f"Для ключа задачи {self.task_key!r} доступно несколько неймспейсов; "
+                "запустите через нужный wrapper"
+            )
+        return projects[0] if projects else None
 
     def _first_phase_id_for_project(self, project_id: int) -> int:
         project = self._project_service.get_project(project_id)

@@ -12,7 +12,7 @@ from project_workflow.infrastructure.db.repositories.converters import (
     _row_to_step_history,
     _row_to_task,
 )
-from project_workflow.infrastructure.db.repositories.project import SAProjectRepository
+from project_workflow.infrastructure.db.repositories.project import SAProjectRepository, _serialize_key_prefixes
 
 
 def _row(**kwargs):
@@ -86,10 +86,15 @@ def test_row_to_task_unknown_phase_fails_closed():
         _row_to_task(row)
 
 
-@pytest.mark.parametrize("prefixes", [None, [], "RUN", ["RUN", 1]])
+@pytest.mark.parametrize("prefixes", [None, []])
+def test_project_repository_serializes_empty_legacy_prefixes(prefixes):
+    assert _serialize_key_prefixes(prefixes) == "[]"
+
+
+@pytest.mark.parametrize("prefixes", ["RUN", ["RUN", 1]])
 def test_project_repository_rejects_non_string_prefix_collections(prefixes):
     repository = SAProjectRepository(MagicMock())
-    with pytest.raises(TypeError, match="непустым массивом строк"):
+    with pytest.raises(TypeError, match="массивом строк"):
         repository.create(
             {
                 "workflow_id": 1,
