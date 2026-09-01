@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, aliased
 
 from project_workflow.domain import TaskStepHistoryEntry
+from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.repositories import TaskStepHistoryRepository
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.repositories.converters import _row_to_step_history
@@ -57,6 +58,15 @@ class SATaskStepHistoryRepository(TaskStepHistoryRepository):
             stmt = stmt.where(m.TaskStepHistoryEntry.workflow_id == workflow_id)
         if phase_id is not None:
             stmt = stmt.where(m.TaskStepHistoryEntry.phase_id == phase_id)
+        if task_key is not None and task_id is None and project_id is None:
+            project_stmt = select(m.Task.project_id).where(m.Task.task_key == task_key)
+            if workflow_id is not None:
+                project_stmt = project_stmt.where(m.Task.workflow_id == workflow_id)
+            project_ids = set(self._session.execute(project_stmt).scalars())
+            if len(project_ids) > 1:
+                raise ConflictError(
+                    f"Задача {task_key!r} доступна через несколько неймспейсов; укажите wrapper-команду"
+                )
         rows = self._session.execute(stmt).scalars().all()
         return [_row_to_step_history(row) for row in rows]
 

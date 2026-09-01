@@ -41,7 +41,7 @@ class SATaskRepository(TaskRepository):
             rows = self._session.execute(stmt.order_by(m.Task.project_id, m.Task.id)).scalars().all()
         if not rows:
             return None
-        if workflow_id is None and project_id is None and len(rows) > 1:
+        if project_id is None and len(rows) > 1:
             raise ConflictError(f"Задача {task_key!r} доступна через несколько неймспейсов; укажите wrapper-команду")
         return _row_to_task(rows[0])
 

@@ -52,6 +52,15 @@ def test_primary_ui_labels_do_not_expose_internal_english_enums() -> None:
     assert "Подтверждения" in sources
 
 
+def test_working_pages_do_not_render_internal_launch_profile_values() -> None:
+    phase_detail = (TEMPLATES / "phase_detail.html").read_text(encoding="utf-8")
+    task_detail = (TEMPLATES / "task_detail.html").read_text(encoding="utf-8")
+
+    assert "a.hermes_profile" not in phase_detail
+    assert "detail.hermes_profile" not in task_detail
+    assert "contract.hermes_profile" not in task_detail
+
+
 def test_packaged_phase_names_are_localized_without_changing_codes() -> None:
     catalog = json.loads((ROOT / "project_workflow" / "references" / "seed.json").read_text(encoding="utf-8"))
     by_code = {item["code"]: item["name"] for item in catalog}

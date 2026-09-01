@@ -115,7 +115,7 @@
       {{ item_list('Проверки', detail.required_checks) }}
       {{ item_list('Подтверждения', detail.required_evidence) }}
       {% if detail.skills %}<div class="skill-list">{% for skill in detail.skills %}<span class="skill-chip">{{ skill }}</span>{% endfor %}</div>{% endif %}
-      {% if detail.delegate_agent %}<div class="assignment-description" style="margin-top:9px;margin-bottom:0">Агент: {{ detail.delegate_agent }}{% if detail.hermes_profile %} · профиль запуска: {{ detail.hermes_profile }}{% endif %}</div>{% endif %}
+      {% if detail.delegate_agent %}<div class="assignment-description" style="margin-top:9px;margin-bottom:0">Агент: {{ detail.delegate_agent }}</div>{% endif %}
     </section>
     {% endfor %}
   </div>
@@ -126,7 +126,7 @@
     {{ item_list('Подтверждения', contract.required_evidence) }}
   </div>
   {% if contract.skills %}<div class="skill-list">{% for skill in contract.skills %}<span class="skill-chip">{{ skill }}</span>{% endfor %}</div>{% endif %}
-  {% if contract.delegate_agent %}<div class="assignment-description" style="margin-top:9px;margin-bottom:0">Агент: {{ contract.delegate_agent }}{% if contract.hermes_profile %} · профиль запуска: {{ contract.hermes_profile }}{% endif %}</div>{% endif %}
+  {% if contract.delegate_agent %}<div class="assignment-description" style="margin-top:9px;margin-bottom:0">Агент: {{ contract.delegate_agent }}</div>{% endif %}
   {% endif %}
 {%- endmacro %}
 

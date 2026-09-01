@@ -28,6 +28,7 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.db.uow_bootstrap import bootstrap_default_project
 
 TASK_KEY = "RUN-42"
+DEFAULT_DEMO_WORKFLOW_NAME = "Воркфлоу разработки"
 QA_WORKFLOW_NAME = "Воркфлоу проверки"
 TASK_SCENARIOS = {
     "workflow-dev": [
@@ -170,6 +171,23 @@ def _ensure_qa_workflow(uow: SAUnitOfWork) -> int:
             }
         )
     return workflow_id
+
+
+def _ensure_default_demo_workflow(uow: SAUnitOfWork) -> dict[str, Any]:
+    workflow = next((item.to_dict() for item in uow.workflows.list() if item.is_default), None)
+    if workflow is None:
+        raise RuntimeError("Воркфлоу по умолчанию не найден")
+    workflow_id = int(workflow["id"])
+    payload = {
+        "name": DEFAULT_DEMO_WORKFLOW_NAME,
+        "description": "Нейтральный сценарий разработки для проверки интерфейса.",
+    }
+    if workflow.get("name") != payload["name"] or workflow.get("description") != payload["description"]:
+        WorkflowService(uow).update_workflow(workflow_id, payload)
+        workflow = WorkflowService(uow).get_workflow(workflow_id)
+        if workflow is None:
+            raise RuntimeError("Не удалось обновить демо-воркфлоу")
+    return workflow
 
 
 def _ensure_namespace(
@@ -374,16 +392,14 @@ def _ensure_tasks(uow: SAUnitOfWork, namespace: dict[str, Any]) -> None:
 def prepare_smoke_data() -> None:
     _ensure_bootstrap()
     with SAUnitOfWork() as uow:
-        default_workflow = next((workflow for workflow in uow.workflows.list() if workflow.is_default), None)
-        if default_workflow is None or default_workflow.id is None:
-            raise RuntimeError("Воркфлоу по умолчанию не найден")
+        default_workflow = _ensure_default_demo_workflow(uow)
         qa_workflow_id = _ensure_qa_workflow(uow)
         dev_namespace = _ensure_namespace(
             uow,
             code=DEFAULT_PROJECT_CODE,
             name="Разработка",
             command="workflow-dev",
-            workflow_id=default_workflow.id,
+            workflow_id=int(default_workflow["id"]),
             theme_icon="code",
             theme_color="#3B82F6",
         )

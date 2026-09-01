@@ -91,7 +91,7 @@
       <span>Агент: <select id="agentSelect" class="inline-input" style="width:180px;display:inline" onchange="scheduleSave()">
         <option value="">—</option>
         {% for a in agents %}
-        <option value="{{ a.id }}" {% if phase.agent_id == a.id %}selected{% endif %}>{{ a.name }}{% if a.hermes_profile %} · {{ a.hermes_profile }}{% endif %}</option>
+        <option value="{{ a.id }}" {% if phase.agent_id == a.id %}selected{% endif %}>{{ a.name }}</option>
         {% endfor %}
       </select></span>
       {% if rollback_target_phase %}
