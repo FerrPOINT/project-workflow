@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -11,7 +12,7 @@ from project_workflow.application.project import ProjectService
 from project_workflow.application.workflow import WorkflowService
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.cli.core import CLI_ENTRYPOINT_ENV_VAR, NAMESPACE_ENV_VAR
-from scripts.install_namespace_clis import WRAPPER_COMMAND_ERROR, install_namespace_clis
+from scripts.install_namespace_clis import MANIFEST_NAME, WRAPPER_COMMAND_ERROR, install_namespace_clis
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -84,6 +85,48 @@ def test_install_namespace_clis_wrappers_allow_only_step_history_and_builtin_hel
     assert '$args[0] -ne "--version"' in ps1
     assert "exit 2" in ps1
     assert WRAPPER_COMMAND_ERROR in ps1
+
+
+def test_install_namespace_clis_removes_renamed_managed_wrappers(tmp_path):
+    with SAUnitOfWork() as uow:
+        default_namespace = uow.projects.get_by_code("RUN")
+        assert default_namespace is not None and default_namespace.id is not None
+        ProjectService(uow).update_project(default_namespace.id, {"cli_command": "workflow-before"})
+
+    unmanaged_file = tmp_path / "workflow-user-script"
+    unmanaged_file.write_text("user-owned", encoding="utf-8")
+    install_namespace_clis(tmp_path)
+    assert (tmp_path / "workflow-before").is_file()
+    assert (tmp_path / "workflow-before.cmd").is_file()
+    assert (tmp_path / "workflow-before.ps1").is_file()
+
+    with SAUnitOfWork() as uow:
+        default_namespace = uow.projects.get_by_code("RUN")
+        assert default_namespace is not None and default_namespace.id is not None
+        ProjectService(uow).update_project(default_namespace.id, {"cli_command": "workflow-after"})
+
+    install_namespace_clis(tmp_path)
+
+    assert (tmp_path / "workflow-after").is_file()
+    assert (tmp_path / "workflow-after.cmd").is_file()
+    assert (tmp_path / "workflow-after.ps1").is_file()
+    assert not (tmp_path / "workflow-before").exists()
+    assert not (tmp_path / "workflow-before.cmd").exists()
+    assert not (tmp_path / "workflow-before.ps1").exists()
+    assert unmanaged_file.read_text(encoding="utf-8") == "user-owned"
+
+
+def test_install_namespace_clis_does_not_remove_unmarked_manifest_file(tmp_path):
+    protected_file = tmp_path / "workflow-protected"
+    protected_file.write_text("user-owned", encoding="utf-8")
+    (tmp_path / MANIFEST_NAME).write_text(
+        json.dumps({"managed_files": ["workflow-protected"]}),
+        encoding="utf-8",
+    )
+
+    install_namespace_clis(tmp_path)
+
+    assert protected_file.read_text(encoding="utf-8") == "user-owned"
 
 
 def test_install_namespace_clis_missing_database_url_fails_without_traceback(tmp_path):
