@@ -214,6 +214,12 @@ Agents:
   <img src="docs/screenshots/agents.png" alt="Agents" />
 </p>
 
+CLI settings:
+
+<p align="center">
+  <img src="docs/screenshots/settings.png" alt="CLI settings" />
+</p>
+
 Workflow graph:
 
 <p align="center">

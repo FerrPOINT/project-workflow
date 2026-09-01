@@ -9,8 +9,16 @@ import click
 from ..cli.core import cli as project_workflow
 
 
-def _load_cli_reference() -> list[dict[str, Any]]:
+def _usage_entrypoint(entrypoint: str | None) -> str:
+    if not isinstance(entrypoint, str):
+        return "project-workflow"
+    normalized = entrypoint.strip()
+    return normalized or "project-workflow"
+
+
+def _load_cli_reference(entrypoint: str | None = None) -> list[dict[str, Any]]:
     """Авто-обнаружение пользовательских CLI-команд для справки UI."""
+    usage_entrypoint = _usage_entrypoint(entrypoint)
     commands: list[dict[str, Any]] = []
     for name, command in project_workflow.commands.items():
         if name == "ui" or getattr(command, "hidden", False):
@@ -51,7 +59,7 @@ def _load_cli_reference() -> list[dict[str, Any]]:
             {
                 "name": name,
                 "summary": summary,
-                "usage": f"project-workflow {name}",
+                "usage": f"{usage_entrypoint} {name}",
                 "help": help_text,
                 "options": options,
             }

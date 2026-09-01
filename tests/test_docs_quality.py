@@ -17,6 +17,7 @@ SCREENSHOTS = {
     "phases.png": (1400, 900),
     "task-detail-dev.png": (1400, 1200),
     "task-detail-qa.png": (1400, 900),
+    "settings.png": (1400, 850),
     "mobile-dashboard.png": (360, 650),
 }
 
@@ -80,8 +81,11 @@ def test_screenshot_capture_script_checks_full_smoke_data() -> None:
     assert "forbiddenVisibleText" in source
     assert "/Hermes/i" in source
     assert "/Гермес/i" in source
+    assert "/project-workflow/i" in source
     assert "sdlc-" in source
     assert "Default Namespace" in source
+    assert 'name: "settings.png"' in source
+    assert "workflow-dev step" in source
 
 
 def test_screenshot_capture_script_replaces_pngs_only_after_success() -> None:

@@ -10,7 +10,7 @@ const { chromium } = loadPlaywright();
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const baseUrl = process.env.SMOKE_BASE_URL || "http://127.0.0.1:8812";
 const outputDir = path.resolve(rootDir, process.env.SMOKE_SCREENSHOT_DIR || "docs/screenshots");
-const forbiddenVisibleText = [/Hermes/i, /Гермес/i, /sdlc-/i, /Default Namespace/i, /Supervisor/i];
+const forbiddenVisibleText = [/Hermes/i, /Гермес/i, /project-workflow/i, /sdlc-/i, /Default Namespace/i, /Supervisor/i];
 const screenshotNames = [
   "dashboard.png",
   "dashboard-qa.png",
@@ -24,6 +24,7 @@ const screenshotNames = [
   "task-detail-dev.png",
   "task-detail-qa.png",
   "agents.png",
+  "settings.png",
   "mobile-dashboard.png",
 ];
 const taskKeys = [
@@ -269,6 +270,11 @@ async function captureAll(outputRoot) {
       name: "agents.png",
       url: `/agents?namespace_id=${dev.id}`,
       expected: ["Агенты", "ПРОФИЛЬ ЗАПУСКА", "launch-orchestrator", "launch-reviewer"],
+    });
+    await capture(page, outputRoot, {
+      name: "settings.png",
+      url: `/settings?namespace_id=${dev.id}`,
+      expected: ["CLI", "workflow-dev step", "workflow-dev history", "--report", "--n"],
     });
   } finally {
     await context.close();

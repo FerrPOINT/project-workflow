@@ -1915,10 +1915,13 @@ class TestSettingsPage:
         assert response.headers["content-type"] == "text/html; charset=utf-8"
         assert "Настройки" in response.text
         assert "CLI" in response.text
-        assert "project-workflow step" in response.text
-        assert "project-workflow history" in response.text
+        assert re.search(r"workflow-[a-z0-9_-]+ step", response.text)
+        assert re.search(r"workflow-[a-z0-9_-]+ history", response.text)
+        assert "project-workflow step" not in response.text
+        assert "project-workflow history" not in response.text
         assert "project-workflow ui" not in response.text
         assert "Web UI запускается отдельно" not in response.text
+        assert "собирается автоматически" not in response.text
         assert "--report" in response.text
         assert "--n" in response.text
         assert ">--repo<" not in response.text

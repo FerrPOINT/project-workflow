@@ -147,13 +147,40 @@ class TestIndex:
     def test_settings_page_describes_cli_commands(self, client):
         resp = client.get("/settings")
         assert resp.status_code == 200
-        assert "project-workflow step" in resp.text
-        assert "project-workflow history" in resp.text
+        assert "workflow-run step" in resp.text
+        assert "workflow-run history" in resp.text
+        assert "project-workflow step" not in resp.text
+        assert "project-workflow history" not in resp.text
         assert "project-workflow ui" not in resp.text
+        assert "собирается автоматически" not in resp.text
         assert "--report" in resp.text
         assert "--n" in resp.text
         assert ">--repo<" not in resp.text
         assert ">--skip<" not in resp.text
+
+    def test_settings_page_uses_selected_namespace_cli_command(self, client):
+        from project_workflow.interfaces.ui import _app_state
+
+        default_wf = next(w for w in _app_state.workflow_service().list_workflows() if w.get("is_default"))
+        command = f"workflow-settings-{uuid.uuid4().hex[:6]}"
+        created = client.post(
+            "/api/namespaces",
+            json={
+                "name": "Settings Namespace",
+                "workflow_id": default_wf["id"],
+                "cli_command": command,
+            },
+        )
+        assert created.status_code == 200
+        namespace_id = created.json()["namespace_id"]
+
+        resp = client.get(f"/settings?namespace_id={namespace_id}")
+
+        assert resp.status_code == 200
+        assert f"{command} step" in resp.text
+        assert f"{command} history" in resp.text
+        assert "workflow-run step" not in resp.text
+        assert "project-workflow step" not in resp.text
 
 
 class TestApiPhases:

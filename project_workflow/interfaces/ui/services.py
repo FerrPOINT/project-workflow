@@ -27,11 +27,11 @@ def _ui_data_service() -> UIDataService:
     return UIDataService(_get_app_state())
 
 
-def _load_cli_reference() -> list[dict[str, Any]]:
+def _load_cli_reference(entrypoint: str | None = None) -> list[dict[str, Any]]:
     """Auto-discover CLI commands for the UI reference page."""
     from .cli_reference import _load_cli_reference as _impl
 
-    return _impl()
+    return _impl(entrypoint=entrypoint)
 
 
 def _load_workflows() -> list[dict[str, Any]]:

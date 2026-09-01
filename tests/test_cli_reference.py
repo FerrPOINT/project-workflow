@@ -19,3 +19,12 @@ def test_cli_reference_loads_commands():
         assert "help" in cmd
         assert "options" in cmd
         assert isinstance(cmd["options"], list)
+
+
+def test_cli_reference_can_render_namespace_entrypoint():
+    commands = _load_cli_reference(entrypoint="workflow-qa")
+
+    usages = {cmd["name"]: cmd["usage"] for cmd in commands}
+    assert usages["step"] == "workflow-qa step"
+    assert usages["history"] == "workflow-qa history"
+    assert all(not usage.startswith("project-workflow ") for usage in usages.values())

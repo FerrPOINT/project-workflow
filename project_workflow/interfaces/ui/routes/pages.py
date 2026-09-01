@@ -543,7 +543,9 @@ async def settings_page(request: Request) -> HTMLResponse:
     context = _namespace_context(request, page="settings")
     if error_response := _namespace_error_page(request, context, page="settings"):
         return error_response
-    context.update({"commands": _load_cli_reference()})
+    selected_namespace = context.get("selected_namespace")
+    entrypoint = selected_namespace.get("cli_command") if isinstance(selected_namespace, dict) else None
+    context.update({"commands": _load_cli_reference(entrypoint=entrypoint)})
     return _template_response(
         request=request,
         name="settings.html",
