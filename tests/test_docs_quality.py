@@ -30,6 +30,13 @@ def _png_size(path: Path) -> tuple[int, int]:
     return struct.unpack(">II", header[16:24])
 
 
+def _readme_screenshots_section() -> str:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    start = readme.index("## 🖼️ Screenshots")
+    end = readme.index("## 🛠️ Development")
+    return readme[start:end]
+
+
 def test_readme_does_not_advertise_removed_namespace_prefixes_or_aliases() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8").casefold()
 
@@ -82,6 +89,21 @@ def test_readme_screenshots_are_real_full_size_pngs() -> None:
         assert height >= min_height, f"{name} height {height} is below {min_height}"
 
 
+def test_readme_presents_screenshots_as_full_page_evidence() -> None:
+    section = _readme_screenshots_section()
+
+    assert "<table>" not in section
+    assert "2 selected entries, 18 tasks in each entry" in section
+    assert "`RUN-42` key present independently in both entries" in section
+    for name in SCREENSHOTS:
+        assert f'src="docs/screenshots/{name}"' in section
+    for name in set(SCREENSHOTS) - {"mobile-dashboard.png"}:
+        assert f'src="docs/screenshots/{name}"' in section
+        image_start = section.index(f'src="docs/screenshots/{name}"')
+        image_end = section.index("/>", image_start)
+        assert 'width="100%"' in section[image_start:image_end]
+
+
 def test_screenshot_capture_script_checks_full_smoke_data() -> None:
     source = (ROOT / "scripts" / "capture_ui_screenshots.mjs").read_text(encoding="utf-8")
 
@@ -116,9 +138,13 @@ def test_screenshot_capture_script_checks_full_smoke_data() -> None:
     assert "assertDashboardTasks" in source
     assert "assertDashboardNamespaceCards" in source
     assert "assertSmokeNamespaces" in source
+    assert "assertSmokeTaskApi" in source
     assert "expectedNamespaceCommands" in source
     assert "assertTaskDetailHistory" in source
     assert "assertLocatorCount" in source
+    assert "assertRenderedText" in source
+    assert "page.content()" in source
+    assert "[aria-label], [title], [placeholder], [alt]" in source
     assert "forbiddenVisibleText" in source
     assert "/Hermes/i" in source
     assert "/Гермес/i" in source

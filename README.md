@@ -176,71 +176,78 @@ At startup the app verifies database connectivity; the Compose `migrate` service
 <a name="screenshots"></a>
 ## 🖼️ Screenshots
 
-<table>
-  <tr>
-    <td><strong>Dashboard</strong></td>
-    <td><strong>QA dashboard</strong></td>
-  </tr>
-  <tr>
-    <td><img src="docs/screenshots/dashboard.png" alt="Dashboard" /></td>
-    <td><img src="docs/screenshots/dashboard-qa.png" alt="QA dashboard" /></td>
-  </tr>
-  <tr>
-    <td><strong>Namespaces</strong></td>
-    <td><strong>Namespace creation</strong></td>
-  </tr>
-  <tr>
-    <td><img src="docs/screenshots/namespaces.png" alt="Namespaces" /></td>
-    <td><img src="docs/screenshots/namespace-new.png" alt="Namespace creation" /></td>
-  </tr>
-  <tr>
-    <td><strong>Tasks</strong></td>
-    <td><strong>QA phases</strong></td>
-  </tr>
-  <tr>
-    <td><img src="docs/screenshots/tasks.png" alt="Tasks" /></td>
-    <td><img src="docs/screenshots/phases-qa.png" alt="QA phases" /></td>
-  </tr>
-  <tr>
-    <td><strong>QA tasks</strong></td>
-    <td><strong>Workflows</strong></td>
-  </tr>
-  <tr>
-    <td><img src="docs/screenshots/tasks-qa.png" alt="QA tasks" /></td>
-    <td><img src="docs/screenshots/workflows.png" alt="Workflows" /></td>
-  </tr>
-</table>
+Browser evidence is captured full-page from a neutral fixture: 2 selected entries, 18 tasks in each entry, the same
+`RUN-42` key present independently in both entries, and coverage across active, blocked and done states.
 
-Agents:
+<figure>
+  <figcaption><strong>Dashboard / Разработка</strong></figcaption>
+  <img src="docs/screenshots/dashboard.png" alt="Dashboard Разработка full-page evidence" width="100%" />
+</figure>
 
-<p align="center">
-  <img src="docs/screenshots/agents.png" alt="Agents" />
-</p>
+<figure>
+  <figcaption><strong>Dashboard / Проверка качества</strong></figcaption>
+  <img src="docs/screenshots/dashboard-qa.png" alt="Dashboard Проверка качества full-page evidence" width="100%" />
+</figure>
 
-CLI settings:
+<figure>
+  <figcaption><strong>Неймспейсы</strong></figcaption>
+  <img src="docs/screenshots/namespaces.png" alt="Неймспейсы full-page evidence" width="100%" />
+</figure>
 
-<p align="center">
-  <img src="docs/screenshots/settings.png" alt="CLI settings" />
-</p>
+<figure>
+  <figcaption><strong>Создание неймспейса</strong></figcaption>
+  <img src="docs/screenshots/namespace-new.png" alt="Создание неймспейса full-page evidence" width="100%" />
+</figure>
 
-Workflow graph:
+<figure>
+  <figcaption><strong>Задачи / Разработка</strong></figcaption>
+  <img src="docs/screenshots/tasks.png" alt="Задачи Разработка full-page evidence" width="100%" />
+</figure>
 
-<p align="center">
-  <img src="docs/screenshots/phases.png" alt="Workflow phases" />
-</p>
+<figure>
+  <figcaption><strong>Задачи / Проверка качества</strong></figcaption>
+  <img src="docs/screenshots/tasks-qa.png" alt="Задачи Проверка качества full-page evidence" width="100%" />
+</figure>
 
-Same task key in two selected entries:
+<figure>
+  <figcaption><strong>Воркфлоу</strong></figcaption>
+  <img src="docs/screenshots/workflows.png" alt="Воркфлоу full-page evidence" width="100%" />
+</figure>
 
-<table>
-  <tr>
-    <td><strong>Development detail</strong></td>
-    <td><strong>QA detail</strong></td>
-  </tr>
-  <tr>
-    <td><img src="docs/screenshots/task-detail-dev.png" alt="Development task detail" /></td>
-    <td><img src="docs/screenshots/task-detail-qa.png" alt="QA task detail" /></td>
-  </tr>
-</table>
+<figure>
+  <figcaption><strong>Фазы / Разработка</strong></figcaption>
+  <img src="docs/screenshots/phases.png" alt="Фазы Разработка full-page evidence" width="100%" />
+</figure>
+
+<figure>
+  <figcaption><strong>Фазы / Проверка качества</strong></figcaption>
+  <img src="docs/screenshots/phases-qa.png" alt="Фазы Проверка качества full-page evidence" width="100%" />
+</figure>
+
+<figure>
+  <figcaption><strong>Инструкции</strong></figcaption>
+  <img src="docs/screenshots/instructions.png" alt="Инструкции full-page evidence" width="100%" />
+</figure>
+
+<figure>
+  <figcaption><strong>Агенты</strong></figcaption>
+  <img src="docs/screenshots/agents.png" alt="Агенты full-page evidence" width="100%" />
+</figure>
+
+<figure>
+  <figcaption><strong>CLI</strong></figcaption>
+  <img src="docs/screenshots/settings.png" alt="CLI full-page evidence" width="100%" />
+</figure>
+
+<figure>
+  <figcaption><strong>Одна задача / Разработка</strong></figcaption>
+  <img src="docs/screenshots/task-detail-dev.png" alt="Одна задача Разработка full-page evidence" width="100%" />
+</figure>
+
+<figure>
+  <figcaption><strong>Одна задача / Проверка качества</strong></figcaption>
+  <img src="docs/screenshots/task-detail-qa.png" alt="Одна задача Проверка качества full-page evidence" width="100%" />
+</figure>
 
 Mobile dashboard:
 

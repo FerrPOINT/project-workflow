@@ -21,6 +21,7 @@ def test_primary_ui_labels_do_not_expose_internal_english_enums() -> None:
     sources = "\n".join(
         (TEMPLATES / name).read_text(encoding="utf-8")
         for name in (
+            "base.html",
             "phases.html",
             "phase_detail.html",
             "instructions.html",
@@ -51,6 +52,8 @@ def test_primary_ui_labels_do_not_expose_internal_english_enums() -> None:
         "Контуры workflow",
         "workflow CLI",
         'data-field="hermes_profile"',
+        "hermes",
+        "supervisor",
     ):
         assert forbidden not in sources
     assert "data-execution-type" in sources

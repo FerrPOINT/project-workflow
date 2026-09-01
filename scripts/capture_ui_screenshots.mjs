@@ -137,7 +137,37 @@ async function assertSmokeNamespaces(request) {
   }
 }
 
-async function assertVisibleText(page, name, expected) {
+async function assertSmokeTaskApi(request) {
+  for (const command of expectedNamespaceCommands) {
+    const namespace = await namespaceByCommand(request, command);
+    const response = await request.get(`${baseUrl}/api/tasks?namespace_id=${namespace.id}`);
+    if (!response.ok()) {
+      throw new Error(`${command} tasks request failed: ${response.status()}`);
+    }
+    const payload = await response.json();
+    const tasks = payload.tasks || [];
+    assertSameSet(
+      command,
+      "api tasks",
+      tasks.map((task) => task.task_key),
+      taskKeys,
+    );
+    assertSameSet(
+      command,
+      "api task statuses",
+      tasks.map((task) => task.status),
+      ["active", "blocked", "done"],
+    );
+    assertSameSet(
+      command,
+      "api latest verdicts",
+      tasks.map((task) => task.latest_verdict).filter(Boolean),
+      ["blocked", "delegate", "partial", "pass", "rollback"],
+    );
+  }
+}
+
+async function assertRenderedText(page, name, expected) {
   const bodyText = await page.locator("body").innerText();
   const fieldText = await page.locator("input, textarea, select").evaluateAll((fields) =>
     fields
@@ -153,10 +183,18 @@ async function assertVisibleText(page, name, expected) {
       .filter(Boolean)
       .join("\n"),
   );
-  const visibleText = `${bodyText}\n${fieldText}`;
+  const attributeText = await page.locator("[aria-label], [title], [placeholder], [alt]").evaluateAll((nodes) =>
+    nodes
+      .flatMap((node) => ["aria-label", "title", "placeholder", "alt"].map((name) => node.getAttribute(name)))
+      .filter(Boolean)
+      .join("\n"),
+  );
+  const visibleText = `${bodyText}\n${fieldText}\n${attributeText}`;
+  const fullHtml = await page.content();
+  const searchableText = `${visibleText}\n${fullHtml}`;
   for (const pattern of forbiddenVisibleText) {
-    if (pattern.test(visibleText)) {
-      throw new Error(`${name} contains forbidden visible text: ${pattern}`);
+    if (pattern.test(searchableText)) {
+      throw new Error(`${name} contains forbidden screenshot text: ${pattern}`);
     }
   }
   for (const text of expected) {
@@ -266,7 +304,7 @@ async function capture(page, outputRoot, { name, url, expected = [], prepare, as
     await prepare(page);
     await page.waitForTimeout(1000);
   }
-  await assertVisibleText(page, name, expected);
+  await assertRenderedText(page, name, expected);
   for (const assertion of assertions) {
     await assertion(page, name);
   }
@@ -329,6 +367,7 @@ async function captureAll(outputRoot) {
   const page = await context.newPage();
   try {
     await assertSmokeNamespaces(context.request);
+    await assertSmokeTaskApi(context.request);
     const dev = await namespaceByCommand(context.request, "workflow-dev");
     const qa = await namespaceByCommand(context.request, "workflow-qa");
     const devFirstPhase = await phaseByOrder(context.request, dev.workflow_id, 1);

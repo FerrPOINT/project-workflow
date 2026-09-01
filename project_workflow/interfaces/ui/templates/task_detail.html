@@ -55,7 +55,7 @@
 .parallel-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .parallel-grid .phase-card{height:100%}
 
-.supervisor-activity{display:flex;flex-direction:column}
+.check-activity{display:flex;flex-direction:column}
 .activity-event{display:grid;grid-template-columns:30px minmax(0,1fr);column-gap:12px;align-items:stretch;min-width:0}
 .activity-rail{position:relative;display:flex;justify-content:center;padding-top:4px}
 .activity-rail::after{content:"";position:absolute;top:16px;bottom:0;left:50%;width:1px;background:var(--border-strong)}
@@ -71,10 +71,10 @@
 .dialog-part:first-of-type{border-top:0;padding-top:0}
 .dialog-label{font-size:11px;font-weight:650;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:7px}
 .report-text{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text-secondary);font-size:13px;line-height:1.65}
-.supervisor-card,.assignment-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:13px 15px;min-width:0}
-.supervisor-card{border-top:3px solid var(--border-strong)}
-.supervisor-card.pass{border-top-color:var(--green)}.supervisor-card.partial{border-top-color:var(--yellow)}.supervisor-card.blocked{border-top-color:var(--red)}.supervisor-card.rollback{border-top-color:var(--orange)}.supervisor-card.delegate{border-top-color:var(--accent)}
-.supervisor-message{font-size:13px;line-height:1.55;color:var(--text-secondary)}
+.check-card,.assignment-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:13px 15px;min-width:0}
+.check-card{border-top:3px solid var(--border-strong)}
+.check-card.pass{border-top-color:var(--green)}.check-card.partial{border-top-color:var(--yellow)}.check-card.blocked{border-top-color:var(--red)}.check-card.rollback{border-top-color:var(--orange)}.check-card.delegate{border-top-color:var(--accent)}
+.check-message{font-size:13px;line-height:1.55;color:var(--text-secondary)}
 .result-list{margin-top:10px}.result-list h4,.contract-section h4{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin:0 0 5px}
 .result-list ul,.contract-section ul{margin:0;padding-left:18px}.result-list li,.contract-section li{font-size:12px;line-height:1.55;color:var(--text-secondary);overflow-wrap:anywhere}
 .result-list.covered li{color:var(--text-secondary)}.result-list.missing li{color:var(--yellow)}.result-list.blockers li{color:var(--red)}
@@ -194,9 +194,9 @@
   </div>
 </section>
 
-<section class="detail-section" aria-labelledby="supervisor-dialog-title">
-  <h2 class="section-heading" id="supervisor-dialog-title">История проверок</h2>
-  <div class="supervisor-activity">
+<section class="detail-section" aria-labelledby="check-history-title">
+  <h2 class="section-heading" id="check-history-title">История проверок</h2>
+  <div class="check-activity">
     {% for run in step_history %}
     <article class="activity-event" data-check-run="{{ loop.index }}">
       <div class="activity-rail"><span class="activity-node {{ run.verdict }}" aria-hidden="true"></span></div>
@@ -213,8 +213,8 @@
 
         <div class="dialog-part">
           <div class="dialog-label">Результат проверки</div>
-          <div class="supervisor-card {{ run.verdict }}">
-            <div class="supervisor-message">{{ run.contract.message or run.verdict_label }}</div>
+          <div class="check-card {{ run.verdict }}">
+            <div class="check-message">{{ run.contract.message or run.verdict_label }}</div>
             {% if run.contract.covered %}<div class="result-list covered"><h4>Покрыто</h4><ul>{% for item in run.contract.covered %}<li>{{ item }}</li>{% endfor %}</ul></div>{% endif %}
             {% if run.contract.missing %}<div class="result-list missing"><h4>Осталось</h4><ul>{% for item in run.contract.missing %}<li>{{ item }}</li>{% endfor %}</ul></div>{% endif %}
             {% if run.contract.blockers %}<div class="result-list blockers"><h4>Блокеры</h4><ul>{% for item in run.contract.blockers %}<li>{{ item }}</li>{% endfor %}</ul></div>{% endif %}
