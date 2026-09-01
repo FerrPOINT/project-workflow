@@ -54,6 +54,7 @@
 | BUG-043 | REST / workflow CRUD | `PUT /api/workflows/{id}` не маппил сервисный `ValueError`, поэтому внутренняя validation/repository ошибка могла уйти наружу как exception вместо JSON `422`. | API regression расширяет shared update-route matrix; route теперь возвращает стандартный `{ok:false,error}` с `422`. | Исправлено |
 | BUG-044 | Docs / screenshot evidence | Full-page скриншоты всё ещё снимались в узком desktop viewport и пропускали старые предметные слова из default seed (`бизнес-*`, `Tech`, `PR`, `Maintainer`) в phase/task-detail evidence. | Smoke neutralizer очищает default catalog text, capture падает на эти слова и снимает desktop evidence в `1920x1080`; docs regression проверяет новые размеры PNG. | Исправлено |
 | BUG-045 | Web UI / task data consistency | Ошибки целостности данных задач из service layer (`ValueError`) уходили из dashboard, списка, деталки и `/api/tasks` как raw exception вместо контролируемого ответа. | Page/API regressions требуют HTML/JSON `409` с русским сообщением и без частичного рендера таблиц/истории. | Исправлено |
+| BUG-046 | CLI wrappers / безопасность файлов | `install_namespace_clis.py` мог перезаписать существующий пользовательский файл в `--bin-dir`, если его имя совпадало с configured CLI-командой или её `.cmd/.ps1` wrapper. | Installer сначала preflight-проверяет все target-файлы и пишет wrappers только если путь свободен или уже содержит managed marker; regression проверяет отсутствие частичной записи. | Исправлено |
 
 ## Следующие проверки
 

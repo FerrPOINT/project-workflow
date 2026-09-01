@@ -8,6 +8,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from project_workflow.application.project import ProjectService
 from project_workflow.application.workflow import WorkflowService
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
@@ -85,6 +87,21 @@ def test_install_namespace_clis_wrappers_allow_only_step_history_and_builtin_hel
     assert '$args[0] -ne "--version"' in ps1
     assert "exit 2" in ps1
     assert WRAPPER_COMMAND_ERROR in ps1
+
+
+@pytest.mark.parametrize("suffix", ["", ".cmd", ".ps1"])
+def test_install_namespace_clis_refuses_to_overwrite_unmanaged_command_file(tmp_path, suffix):
+    protected = tmp_path / f"workflow-run{suffix}"
+    protected.write_text("user-owned", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="уже существует"):
+        install_namespace_clis(tmp_path)
+
+    assert protected.read_text(encoding="utf-8") == "user-owned"
+    for generated_suffix in ("", ".cmd", ".ps1"):
+        generated = tmp_path / f"workflow-run{generated_suffix}"
+        if generated != protected:
+            assert not generated.exists()
 
 
 def test_install_namespace_clis_removes_renamed_managed_wrappers(tmp_path):

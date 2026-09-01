@@ -125,6 +125,14 @@ def _contains_wrapper_marker(path: Path) -> bool:
         return False
 
 
+def _ensure_managed_target(path: Path) -> None:
+    if not path.exists():
+        return
+    if path.is_file() and _contains_wrapper_marker(path):
+        return
+    raise ValueError(f"Файл wrapper-команды {path} уже существует и не является управляемым wrapper")
+
+
 def _remove_stale_wrappers(bin_dir: Path, previous: set[str], current: set[str]) -> None:
     root = bin_dir.resolve()
     for name in sorted(previous - current):
@@ -144,6 +152,7 @@ def install_namespace_clis(bin_dir: Path) -> list[Path]:
     seen_commands: set[str] = set()
     managed_files: set[str] = set()
     previous_managed_files = _read_manifest(bin_dir)
+    wrapper_plan: list[tuple[int, str, Path, Path, Path]] = []
     for namespace in _load_namespaces():
         namespace_id = namespace.get("id")
         if not isinstance(namespace_id, int) or isinstance(namespace_id, bool) or namespace_id <= 0:
@@ -153,9 +162,20 @@ def install_namespace_clis(bin_dir: Path) -> list[Path]:
             raise ValueError(f"CLI-команда {command!r} встречается несколько раз")
         seen_commands.add(command)
 
-        posix_path = bin_dir / command
-        cmd_path = bin_dir / f"{command}.cmd"
-        ps1_path = bin_dir / f"{command}.ps1"
+        wrapper_plan.append(
+            (
+                namespace_id,
+                command,
+                bin_dir / command,
+                bin_dir / f"{command}.cmd",
+                bin_dir / f"{command}.ps1",
+            )
+        )
+    for _, _, posix_path, cmd_path, ps1_path in wrapper_plan:
+        _ensure_managed_target(posix_path)
+        _ensure_managed_target(cmd_path)
+        _ensure_managed_target(ps1_path)
+    for namespace_id, command, posix_path, cmd_path, ps1_path in wrapper_plan:
         _write_executable(posix_path, _posix_wrapper(namespace_id, command))
         _write_executable(cmd_path, _cmd_wrapper(namespace_id, command))
         _write_executable(ps1_path, _powershell_wrapper(namespace_id, command))
