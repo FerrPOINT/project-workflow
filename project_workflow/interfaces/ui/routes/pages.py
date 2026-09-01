@@ -337,6 +337,8 @@ async def namespace_page(request: Request) -> HTMLResponse:
 async def namespace_new_page(request: Request) -> HTMLResponse:
     """Create page for a new namespace."""
     context = _namespace_context(request, page="namespace")
+    if error_response := _namespace_error_page(request, context, page="namespace"):
+        return error_response
     context.update(
         {
             "workflows": _load_workflows(),

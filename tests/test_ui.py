@@ -1502,6 +1502,20 @@ class TestProjectsPage:
         assert f"let previousNamespaceId = {namespace_id};" in response.text
         assert "if(namespaceFormMode === 'create'){ return; }" in response.text
 
+    def test_namespace_create_page_rejects_invalid_query_namespace_without_create_fallback(self):
+        response = client.get("/namespaces/new?namespace_id=abc")
+
+        assert response.status_code == 422
+        assert "Некорректный namespace_id" in response.text
+        assert "namespaceForm" not in response.text
+
+    def test_namespace_create_page_rejects_unknown_query_namespace_without_create_fallback(self):
+        response = client.get(f"/namespaces/new?namespace_id={UNKNOWN_NAMESPACE_ID}")
+
+        assert response.status_code == 404
+        assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
+        assert "namespaceForm" not in response.text
+
     def test_namespace_card_selection_updates_global_selection_state(self):
         response = client.get("/namespaces")
         assert response.status_code == 200
