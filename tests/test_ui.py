@@ -362,6 +362,14 @@ class TestPhasesPage:
         assert f"Воркфлоу {UNKNOWN_WORKFLOW_ID} не найден" in response.text
         assert 'href="/phase/' not in response.text
 
+    def test_phases_reject_malformed_query_workflow_with_html_error(self):
+        response = client.get("/phases?workflow_id=abc")
+
+        assert response.status_code == 422
+        assert response.headers["content-type"] == "text/html; charset=utf-8"
+        assert "Некорректный workflow_id" in response.text
+        assert 'href="/phase/' not in response.text
+
     def test_phases_api_returns_json(self):
         response = client.get("/api/phases")
         assert response.status_code == 200
@@ -1332,6 +1340,14 @@ class TestTaskDetail:
         assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
         assert "История фаз" not in response.text
 
+    def test_task_detail_rejects_malformed_query_namespace_with_html_error(self):
+        response = client.get("/task/RUN-247?namespace_id=abc")
+
+        assert response.status_code == 422
+        assert response.headers["content-type"] == "text/html; charset=utf-8"
+        assert "Некорректный namespace_id" in response.text
+        assert "История фаз" not in response.text
+
     def test_task_detail_current_state_uses_namespace_accent_styles(self):
         response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
         assert response.status_code == 200
@@ -1953,4 +1969,12 @@ class TestUiNetworkFailures:
 
         assert response.status_code == 404
         assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
+        assert "instructionGroups" not in response.text
+
+    def test_instructions_page_rejects_malformed_phase_id_with_html_error(self):
+        response = client.get("/instructions?phase_id=abc")
+
+        assert response.status_code == 422
+        assert response.headers["content-type"] == "text/html; charset=utf-8"
+        assert "Некорректный phase_id" in response.text
         assert "instructionGroups" not in response.text

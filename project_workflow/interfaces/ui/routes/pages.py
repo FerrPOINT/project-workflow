@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import Query, Request
+from fastapi import Request
 from fastapi.responses import HTMLResponse
 
 from project_workflow.application.phase_service import PhaseService
@@ -165,6 +165,32 @@ def _namespace_error_page(request: Request, context: dict[str, Any], *, page: st
     )
 
 
+def _query_id_error_page(
+    request: Request,
+    context: dict[str, Any],
+    *,
+    field_name: str,
+    back_url: str,
+    back_label: str,
+    page: str,
+) -> HTMLResponse:
+    context = {
+        **context,
+        "page": page,
+        "title": f"Некорректный {field_name}",
+        "message": f"Некорректный {field_name}: ожидается положительное целое число.",
+        "status_code": 422,
+        "back_url": back_url,
+        "back_label": back_label,
+    }
+    return _template_response(
+        request=request,
+        name="error.html",
+        status_code=422,
+        context=context,
+    )
+
+
 def _workflow_error_page(request: Request, context: dict[str, Any], workflow_id: int, *, page: str) -> HTMLResponse:
     selected_namespace = context.get("selected_namespace")
     namespace_id = selected_namespace.get("id") if isinstance(selected_namespace, dict) else None
@@ -202,10 +228,21 @@ async def index(request: Request) -> HTMLResponse:
     )
 
 
-async def phases_page(request: Request, workflow_id: int | None = Query(default=None)) -> HTMLResponse:
+async def phases_page(request: Request) -> HTMLResponse:
     context = _namespace_context(request, page="phases")
     if error_response := _namespace_error_page(request, context, page="phases"):
         return error_response
+    raw_workflow_id = request.query_params.get("workflow_id")
+    workflow_id = _parse_positive_int(raw_workflow_id)
+    if raw_workflow_id is not None and workflow_id is None:
+        return _query_id_error_page(
+            request,
+            context,
+            field_name="workflow_id",
+            back_url="/phases",
+            back_label="К фазам",
+            page="phases",
+        )
     selected_namespace = context.get("selected_namespace")
     if workflow_id is None and isinstance(selected_namespace, dict):
         workflow_id = selected_namespace.get("workflow_id")
@@ -365,22 +402,13 @@ async def workflows_page(request: Request) -> HTMLResponse:
 async def task_detail_page(
     request: Request,
     task_key: str,
-    namespace_id: int | None = Query(default=None),
 ) -> HTMLResponse:
     """Деталка задачи — линейная история фаз."""
-    context = _namespace_context(
-        request,
-        page="tasks",
-        preferred_namespace_id=namespace_id,
-    )
+    context = _namespace_context(request, page="tasks")
     if error_response := _namespace_error_page(request, context, page="tasks"):
         return error_response
     selected_namespace = context.get("selected_namespace")
-    selected_namespace_id = (
-        selected_namespace.get("id")
-        if isinstance(selected_namespace, dict)
-        else namespace_id
-    )
+    selected_namespace_id = selected_namespace.get("id") if isinstance(selected_namespace, dict) else None
     try:
         task = _get_task_detail(
             task_key,
@@ -453,39 +481,49 @@ async def agents_page(request: Request) -> HTMLResponse:
     )
 
 
-async def instructions_page(
-    request: Request,
-    phase_id: int | None = Query(default=None),
-) -> HTMLResponse:
+async def instructions_page(request: Request) -> HTMLResponse:
     """Dedicated instructions editor page for a phase."""
-    if phase_id is None:
-        return _error_page(
+    context = _namespace_context(request, page="phases")
+    if error_response := _namespace_error_page(request, context, page="phases"):
+        return error_response
+    raw_phase_id = request.query_params.get("phase_id")
+    phase_id = _parse_positive_int(raw_phase_id)
+    if raw_phase_id is not None and phase_id is None:
+        return _query_id_error_page(
             request,
-            title="Фаза не выбрана",
-            message="Откройте инструкции из карточки нужной фазы.",
-            status_code=400,
+            context,
+            field_name="phase_id",
             back_url="/phases",
             back_label="К фазам",
             page="phases",
         )
+    if phase_id is None:
+        context.update(
+            {
+                "title": "Фаза не выбрана",
+                "message": "Откройте инструкции из карточки нужной фазы.",
+                "status_code": 400,
+                "back_url": "/phases",
+                "back_label": "К фазам",
+            }
+        )
+        return _template_response(request=request, name="error.html", status_code=400, context=context)
     phase = _load_phase_detail(phase_id)
     if not phase:
-        return _error_page(
-            request,
-            title="Фаза не найдена",
-            message="Инструкции для указанной фазы недоступны.",
-            status_code=404,
-            back_url="/phases",
-            back_label="К фазам",
-            page="phases",
+        context.update(
+            {
+                "title": "Фаза не найдена",
+                "message": "Инструкции для указанной фазы недоступны.",
+                "status_code": 404,
+                "back_url": "/phases",
+                "back_label": "К фазам",
+            }
         )
+        return _template_response(request=request, name="error.html", status_code=404, context=context)
     instructions = phase.get("instructions", [])
     for instruction in instructions:
         instruction["skills"] = PhaseService.normalize_skills(instruction.get("skills"))
     instruction_groups = _group_instructions(instructions)
-    context = _namespace_context(request, page="phases")
-    if error_response := _namespace_error_page(request, context, page="phases"):
-        return error_response
     context.update(
         {
             "phase": phase,
