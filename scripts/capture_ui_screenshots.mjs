@@ -136,7 +136,7 @@ async function assertTaskDetailHistory(page, name, minRuns) {
   }
 }
 
-async function capture(page, { name, url, expected = [], prepare, assertions = [] }) {
+async function capture(page, outputRoot, { name, url, expected = [], prepare, assertions = [] }) {
   await page.goto(`${baseUrl}${url}`, { waitUntil: "networkidle", timeout: 30000 });
   if (prepare) {
     await prepare(page);
@@ -147,7 +147,7 @@ async function capture(page, { name, url, expected = [], prepare, assertions = [
     await assertion(page, name);
   }
   await page.waitForTimeout(1000);
-  await page.screenshot({ path: path.join(outputDir, name), fullPage: true });
+  await page.screenshot({ path: path.join(outputRoot, name), fullPage: true });
   console.log(`captured ${name}`);
 }
 
@@ -168,80 +168,104 @@ async function fillNamespaceDraft(page, qaWorkflowId) {
   }
 }
 
+function removeTempOutputDir(tempOutputDir) {
+  const relative = path.relative(outputDir, tempOutputDir);
+  const isInsideOutput = relative && !relative.startsWith("..") && !path.isAbsolute(relative);
+  if (!isInsideOutput || !path.basename(tempOutputDir).startsWith(".capture-")) {
+    throw new Error(`refusing to remove unexpected screenshot temp dir: ${tempOutputDir}`);
+  }
+  fs.rmSync(tempOutputDir, { recursive: true, force: true });
+}
+
 async function main() {
   fs.mkdirSync(outputDir, { recursive: true });
-  for (const name of screenshotNames) {
-    fs.rmSync(path.join(outputDir, name), { force: true });
+  const tempOutputDir = fs.mkdtempSync(path.join(outputDir, ".capture-"));
+  try {
+    await captureAll(tempOutputDir);
+    for (const name of screenshotNames) {
+      const source = path.join(tempOutputDir, name);
+      if (!fs.existsSync(source)) {
+        throw new Error(`${name} was not captured`);
+      }
+    }
+    for (const name of screenshotNames) {
+      fs.copyFileSync(path.join(tempOutputDir, name), path.join(outputDir, name));
+    }
+  } finally {
+    removeTempOutputDir(tempOutputDir);
   }
+}
+
+async function captureAll(outputRoot) {
   const browser = await chromium.launch();
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
   const page = await context.newPage();
   try {
     const dev = await namespaceByCommand(context.request, "workflow-dev");
     const qa = await namespaceByCommand(context.request, "workflow-qa");
-    await capture(page, {
+    await capture(page, outputRoot, {
       name: "dashboard.png",
       url: `/?namespace_id=${dev.id}`,
       expected: ["Разработка", "Проверка качества", ...openTaskKeys],
       assertions: [(targetPage, name) => assertDashboardTasks(targetPage, name, openTaskKeys)],
     });
-    await capture(page, {
+    await capture(page, outputRoot, {
       name: "dashboard-qa.png",
       url: `/?namespace_id=${qa.id}`,
       expected: ["Проверка качества", "Разработка", ...openTaskKeys],
       assertions: [(targetPage, name) => assertDashboardTasks(targetPage, name, openTaskKeys)],
     });
-    await capture(page, {
+    await capture(page, outputRoot, {
       name: "namespaces.png",
       url: `/namespaces?namespace_id=${dev.id}`,
       expected: ["Разработка", "Проверка качества", "workflow-dev", "workflow-qa", "Воркфлоу разработки"],
     });
-    await capture(page, {
+    await capture(page, outputRoot, {
       name: "namespace-new.png",
       url: `/namespaces/new?namespace_id=${dev.id}`,
       expected: ["СОЗДАНИЕ", "Разработка", "Проверка качества", "CLI-КОМАНДА"],
       prepare: (targetPage) => fillNamespaceDraft(targetPage, qa.workflow_id),
     });
-    await capture(page, {
+    await capture(page, outputRoot, {
       name: "tasks.png",
       url: `/tasks?namespace_id=${dev.id}`,
       expected: ["workflow-dev", "Воркфлоу разработки", ...taskKeys],
       assertions: [(targetPage, name) => assertTaskTable(targetPage, name, taskKeys)],
     });
-    await capture(page, {
+    await capture(page, outputRoot, {
       name: "tasks-qa.png",
       url: `/tasks?namespace_id=${qa.id}`,
       expected: ["workflow-qa", "Воркфлоу проверки", ...taskKeys],
       assertions: [(targetPage, name) => assertTaskTable(targetPage, name, taskKeys)],
     });
-    await capture(page, {
+    await capture(page, outputRoot, {
       name: "workflows.png",
       url: `/workflows?namespace_id=${dev.id}`,
       expected: ["Воркфлоу разработки", "Воркфлоу проверки"],
     });
-    await capture(page, {
+    await capture(page, outputRoot, {
       name: "phases.png",
       url: `/phases?namespace_id=${dev.id}`,
       expected: ["Воркфлоу разработки", "Приём задачи", "Завершение", "Улучшения"],
     });
-    await capture(page, {
+    await capture(page, outputRoot, {
       name: "phases-qa.png",
       url: `/phases?namespace_id=${qa.id}`,
       expected: ["Воркфлоу проверки", "Проверка сценариев", "Финальный отчёт"],
     });
-    await capture(page, {
+    await capture(page, outputRoot, {
       name: "task-detail-dev.png",
       url: `/task/RUN-42?namespace_id=${dev.id}`,
       expected: ["RUN-42", "Реализовать проверяемое изменение", "workflow-dev", "История проверок"],
       assertions: [(targetPage, name) => assertTaskDetailHistory(targetPage, name, 4)],
     });
-    await capture(page, {
+    await capture(page, outputRoot, {
       name: "task-detail-qa.png",
       url: `/task/RUN-42?namespace_id=${qa.id}`,
       expected: ["RUN-42", "Независимо проверить ту же внешнюю задачу", "workflow-qa", "История проверок"],
       assertions: [(targetPage, name) => assertTaskDetailHistory(targetPage, name, 3)],
     });
-    await capture(page, {
+    await capture(page, outputRoot, {
       name: "agents.png",
       url: `/agents?namespace_id=${dev.id}`,
       expected: ["Агенты", "ПРОФИЛЬ ЗАПУСКА", "launch-orchestrator", "launch-reviewer"],
@@ -260,7 +284,7 @@ async function main() {
   const mobilePage = await mobileContext.newPage();
   try {
     const dev = await namespaceByCommand(mobileContext.request, "workflow-dev");
-    await capture(mobilePage, {
+    await capture(mobilePage, outputRoot, {
       name: "mobile-dashboard.png",
       url: `/?namespace_id=${dev.id}`,
       expected: ["Разработка", ...openTaskKeys],

@@ -82,3 +82,15 @@ def test_screenshot_capture_script_checks_full_smoke_data() -> None:
     assert "/Гермес/i" in source
     assert "sdlc-" in source
     assert "Default Namespace" in source
+
+
+def test_screenshot_capture_script_replaces_pngs_only_after_success() -> None:
+    source = (ROOT / "scripts" / "capture_ui_screenshots.mjs").read_text(encoding="utf-8")
+
+    assert "fs.mkdtempSync(path.join(outputDir, \".capture-\"))" in source
+    assert "fs.copyFileSync(path.join(tempOutputDir, name), path.join(outputDir, name))" in source
+    assert "function removeTempOutputDir(tempOutputDir)" in source
+    assert "path.relative(outputDir, tempOutputDir)" in source
+    assert 'path.basename(tempOutputDir).startsWith(".capture-")' in source
+    assert "fs.rmSync(tempOutputDir, { recursive: true, force: true })" in source
+    assert "fs.rmSync(path.join(outputDir, name)" not in source
