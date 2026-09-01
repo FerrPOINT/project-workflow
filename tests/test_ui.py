@@ -1875,6 +1875,17 @@ class TestProjectsPage:
             response.text,
         )
 
+    def test_namespace_card_selection_updates_header_action_links(self):
+        response = client.get("/namespaces")
+        assert response.status_code == 200
+        assert 'id="namespaceCreateLink"' in response.text
+        assert 'id="namespaceEditLink"' in response.text
+        assert "function updateNamespaceHeaderLinks(id)" in response.text
+        assert "createLink.href = namespaceScopedPath('/namespaces/new', id);" in response.text
+        assert "editLink.href = namespaceScopedPath('/namespaces', id);" in response.text
+        assert "updateNamespaceHeaderLinks(id);" in response.text
+        assert "updateNamespaceHeaderLinks(selectorNamespaceId);" in response.text
+
     def test_namespace_editor_refreshes_header_selector_and_brand_identity(self):
         response = client.get("/namespaces")
         assert response.status_code == 200

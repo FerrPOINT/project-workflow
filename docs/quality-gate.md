@@ -136,11 +136,13 @@ node scripts/capture_ui_screenshots.mjs
   цвет темы, список задач, dashboard stats и `/phases`;
 - проверить, что страницы загрузились без console/network ошибок;
 - сохранить full-page screenshot evidence через `scripts/capture_ui_screenshots.mjs`;
-- убедиться, что screenshot evidence сделан на нейтральных smoke-данных, а не на
-  пустой дефолтной базе;
+- убедиться, что screenshot evidence сделан на полной нейтральной smoke-fixture
+  с задачами, фазами, агентами и двумя неймспейсами, а не на пустой дефолтной
+  базе;
 - проверить, что screenshot evidence не содержит старое дефолтное имя или
-  runtime-specific упоминания конкретного внешнего исполнителя, а CLI settings
-  показывает выбранную wrapper-команду.
+  runtime-specific упоминания конкретного внешнего исполнителя, включая
+  старые `flow-*` ключи и прочие внутренние labels; CLI settings должен
+  показывать выбранную wrapper-команду.
 
 Для backend-only тестовых или документационных изменений browser smoke не
 обязателен.

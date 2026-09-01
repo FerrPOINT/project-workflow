@@ -109,12 +109,15 @@ def test_screenshot_capture_script_checks_full_smoke_data() -> None:
     assert "assertSmokeNamespaces" in source
     assert "expectedNamespaceCommands" in source
     assert "assertTaskDetailHistory" in source
+    assert "assertLocatorCount" in source
     assert "forbiddenVisibleText" in source
     assert "/Hermes/i" in source
     assert "/Гермес/i" in source
     assert "/project-workflow/i" in source
     assert "sdlc-" in source
+    assert "\\bflow-[a-z0-9_-]+\\b" in source
     assert "launch-[a-z0-9_-]+" in source
+    assert "\\bsmoke\\b" in source
     assert "Default Namespace" in source
     assert "orchestrator" in source
     assert "codex-operator" in source
@@ -126,7 +129,7 @@ def test_screenshot_capture_script_checks_full_smoke_data() -> None:
     assert 'name: "settings.png"' in source
     assert "workflow-dev step" in source
     assert "КЛЮЧ ЗАПУСКА" in source
-    assert "flow-dev" in source
+    assert "run-dev" in source
 
 
 def test_screenshot_capture_script_replaces_pngs_only_after_success() -> None:

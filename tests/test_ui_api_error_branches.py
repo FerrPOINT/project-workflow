@@ -23,6 +23,7 @@ from project_workflow.interfaces.ui.schemas import (
     PhaseCreate,
     PhaseOrderUpdate,
     PhaseUpdate,
+    WorkflowCreate,
     WorkflowUpdate,
 )
 
@@ -127,6 +128,26 @@ def test_phase_batch_order_rejects_workflow_owner_mismatch(monkeypatch):
 
     assert response.status_code == 409
     assert _json(response)["error"] == "workflow_id не совпадает с владельцем фазы"
+
+
+@pytest.mark.parametrize(
+    ("exc", "status"),
+    [
+        (ConflictError("Workflow conflict"), 409),
+        (ValueError("Workflow value"), 422),
+    ],
+)
+def test_workflow_create_maps_service_errors(monkeypatch, exc, status):
+    monkeypatch.setattr(
+        api,
+        "_app_state",
+        _State(workflow_service=SimpleNamespace(create_workflow=lambda _data: _raise(exc))),
+    )
+
+    response = _run(api.api_workflow_create(WorkflowCreate(name="Flow")))
+
+    assert response.status_code == status
+    assert _json(response)["error"] == str(exc)
 
 
 def test_namespace_create_rejects_explicit_null_description():

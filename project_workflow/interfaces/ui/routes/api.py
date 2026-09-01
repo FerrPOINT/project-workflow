@@ -272,7 +272,12 @@ async def api_phase_batch_order(payload: PhaseOrderUpdate) -> dict[str, Any] | J
 
 async def api_workflow_create(payload: WorkflowCreate) -> dict[str, Any] | JSONResponse:
     service = _app_state.workflow_service()
-    workflow = service.create_workflow({"name": payload.name, "description": payload.description or ""})
+    try:
+        workflow = service.create_workflow({"name": payload.name, "description": payload.description or ""})
+    except ConflictError as exc:
+        return _error(str(exc), 409)
+    except ValueError as exc:
+        return _error(str(exc), 422)
     workflow_id = workflow["id"]
     return {"ok": True, "workflow_id": workflow_id, "workflow": service.get_workflow(workflow_id)}
 

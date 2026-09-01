@@ -15,7 +15,9 @@ const forbiddenVisibleText = [
   /Гермес/i,
   /project-workflow/i,
   /sdlc-/i,
+  /\bflow-[a-z0-9_-]+\b/i,
   /launch-[a-z0-9_-]+/i,
+  /\bsmoke\b/i,
   /Default Namespace/i,
   /Supervisor/i,
   /Профиль запуска/i,
@@ -217,6 +219,13 @@ async function assertTaskTable(page, name, expectedKeys) {
   assertSameSet(name, "task table", rowKeys, expectedKeys);
 }
 
+async function assertLocatorCount(page, name, selector, expectedMin, label) {
+  const count = await page.locator(selector).count();
+  if (count < expectedMin) {
+    throw new Error(`${name} ${label} is incomplete: expected at least ${expectedMin}, got ${count}`);
+  }
+}
+
 async function assertTaskStateCoverage(page, name) {
   const rows = page.locator(".tasks-table tbody tr[data-task-key]");
   const statuses = await rows.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-status")));
@@ -340,12 +349,14 @@ async function captureAll(outputRoot) {
       name: "namespaces.png",
       url: `/namespaces?namespace_id=${dev.id}`,
       expected: ["Разработка", "Проверка качества", "workflow-dev", "workflow-qa", "Воркфлоу разработки"],
+      assertions: [(targetPage, name) => assertLocatorCount(targetPage, name, ".namespace-nav-item", 2, "namespace list")],
     });
     await capture(page, outputRoot, {
       name: "namespace-new.png",
       url: `/namespaces/new?namespace_id=${dev.id}`,
       expected: ["СОЗДАНИЕ", "Разработка", "Проверка качества", "CLI-КОМАНДА"],
       prepare: (targetPage) => fillNamespaceDraft(targetPage, qa.workflow_id),
+      assertions: [(targetPage, name) => assertLocatorCount(targetPage, name, ".namespace-nav-item", 2, "namespace list")],
     });
     await capture(page, outputRoot, {
       name: "tasks.png",
@@ -369,16 +380,19 @@ async function captureAll(outputRoot) {
       name: "workflows.png",
       url: `/workflows?namespace_id=${dev.id}`,
       expected: ["Воркфлоу разработки", "Воркфлоу проверки"],
+      assertions: [(targetPage, name) => assertLocatorCount(targetPage, name, ".workflow-nav-item", 2, "workflow list")],
     });
     await capture(page, outputRoot, {
       name: "phases.png",
       url: `/phases?namespace_id=${dev.id}`,
       expected: ["Воркфлоу разработки", "Приём задачи", "Завершение", "Улучшения"],
+      assertions: [(targetPage, name) => assertLocatorCount(targetPage, name, "#phasesTimeline .timeline-item", 12, "phase timeline")],
     });
     await capture(page, outputRoot, {
       name: "phases-qa.png",
       url: `/phases?namespace_id=${qa.id}`,
       expected: ["Воркфлоу проверки", "Проверка сценариев", "Финальный отчёт"],
+      assertions: [(targetPage, name) => assertLocatorCount(targetPage, name, "#phasesTimeline .timeline-item", 6, "phase timeline")],
     });
     await capture(page, outputRoot, {
       name: "instructions.png",
@@ -412,10 +426,11 @@ async function captureAll(outputRoot) {
         "Координатор",
         "Оператор",
         "Ревьюер",
-        "flow-coord",
-        "flow-dev",
-        "flow-review",
+        "run-coord",
+        "run-dev",
+        "run-review",
       ],
+      assertions: [(targetPage, name) => assertLocatorCount(targetPage, name, "#agentsTable tr", 7, "agent table")],
     });
     await capture(page, outputRoot, {
       name: "settings.png",

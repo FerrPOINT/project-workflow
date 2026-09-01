@@ -47,6 +47,10 @@
 | BUG-037 | Persistence / strict contract | Legacy namespace repository превращал произвольные `key_prefixes` в строки, а task converter скрывал отсутствующую workflow-связь. Внутренний caller мог обойти строгий REST-контракт или получить правдоподобный DTO из повреждённых данных. | Repository и converter regressions требуют JSON `list[str]` и fail-closed при отсутствии workflow; неизвестный phase code сохраняется только для штатного missing-phase diagnostic. | Исправлено |
 | BUG-038 | Cleanup / документация | В репозитории оставались Alembic revision template, тесты давно удалённых routes и setup-фаз, а README/live plan описывали отсутствующий systemd service и прежние Jira/GitLab contracts. | Caller scan подтверждает отсутствие template consumers; документация описывает фактический Compose и Relevanter Business/Tech, stale route tests удалены. | Исправлено |
 
+| BUG-039 | Web UI / namespace CRUD | На странице неймспейсов выбор другого элемента слева обновлял форму, тему, cookie и URL, но верхние кнопки `+` и редактирования продолжали ссылаться на прежний `namespace_id`. | Template regression проверяет обновление `namespaceCreateLink`/`namespaceEditLink`; Playwright smoke подтвердил живой клик и full-page screenshot evidence. | Исправлено |
+| BUG-040 | REST / workflow CRUD | `POST /api/workflows` не маппил доменные `ConflictError` и `ValueError`, поэтому сервисная ошибка могла уйти наружу как exception вместо JSON `409/422`. | API regression напрямую подменяет workflow service и требует стандартный `{ok:false,error}` с кодами `409/422`. | Исправлено |
+| BUG-041 | Docs / screenshot evidence | Screenshot-fixture для UI допускала runtime-specific `flow-*` профили и не проверяла минимальную наполненность всех CRUD-страниц перед заменой PNG. | Smoke-data использует нейтральные `run-*` ключи и пользовательские названия; capture падает на старые runtime labels, `flow-*`, `smoke` и на неполных namespace/workflow/phase/agent lists; tracked PNG пересняты full-page. | Исправлено |
+
 ## Следующие проверки
 
 - [x] Readiness/bootstrap повторно проверены на лишних и отсутствующих таблицах,

@@ -117,6 +117,16 @@ let namespaceFormMode = selectedNamespaceId == null ? 'create' : 'edit';
 
 function namespaceById(id){ return namespaceStore.find(function(namespace){ return namespace.id === id; }); }
 function workflowNameById(id){ var workflow = workflowStore.find(function(item){ return item.id === id; }); return workflow ? workflow.name : '—'; }
+function namespaceScopedPath(path, id){
+  if(id == null){ return path; }
+  return path + '?namespace_id=' + encodeURIComponent(id);
+}
+function updateNamespaceHeaderLinks(id){
+  var createLink = document.getElementById('namespaceCreateLink');
+  var editLink = document.getElementById('namespaceEditLink');
+  if(createLink){ createLink.href = namespaceScopedPath('/namespaces/new', id); }
+  if(editLink){ editLink.href = namespaceScopedPath('/namespaces', id); }
+}
 function namespaceIconSvg(icon){
   var path = namespaceIconPaths[icon || defaultNamespaceThemeIcon] || namespaceIconPaths[defaultNamespaceThemeIcon];
   return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="' + path + '"></path></svg>';
@@ -166,6 +176,7 @@ function rememberNamespaceSelection(id){
   document.cookie='workflow_namespace_id='+encodeURIComponent(id)+'; path=/; SameSite=Lax';
   var selector = document.getElementById('namespaceSelector');
   if(selector){ selector.value = String(id); }
+  updateNamespaceHeaderLinks(id);
   var url = new URL(window.location.href);
   if(url.pathname === '/namespaces' || url.pathname === '/namespaces/new'){
     url.pathname = '/namespaces';
@@ -301,6 +312,7 @@ function renderNamespaceSelector(){
   var selector = document.getElementById('namespaceSelector');
   if(!selector){ return; }
   var selectorNamespaceId = selectedNamespaceId == null ? previousNamespaceId : selectedNamespaceId;
+  updateNamespaceHeaderLinks(selectorNamespaceId);
   selector.replaceChildren();
   namespaceStore.forEach(function(namespace){
     var option = document.createElement('option');

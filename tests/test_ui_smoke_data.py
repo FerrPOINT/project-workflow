@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -89,14 +91,15 @@ def test_prepare_ui_smoke_data_creates_neutral_parallel_namespace_fixture(tmp_pa
 
     assert "hermes" not in visible_text.casefold()
     assert "sdlc-" not in visible_text.casefold()
+    assert re.search(r"\bflow-[a-z0-9_-]+", visible_text, re.IGNORECASE) is None
     assert "launch-" not in visible_text.casefold()
+    assert "smoke" not in visible_text.casefold()
     assert "project-workflow" not in visible_text.casefold()
     assert "relevanter" not in visible_text.casefold()
     assert "duedate" not in visible_text.casefold()
     assert "business-" not in visible_text.casefold()
     assert "tech-" not in visible_text.casefold()
     assert "sdlc-business-tech-v1" not in visible_text
-    assert "Smoke" not in visible_text
     assert DEFAULT_DEMO_WORKFLOW_NAME in visible_text
     assert QA_WORKFLOW_NAME in visible_text
     assert dev["name"] == "Разработка"
@@ -126,9 +129,9 @@ def test_prepare_ui_smoke_data_creates_neutral_parallel_namespace_fixture(tmp_pa
     }
     assert "orchestrator" not in visible_text
     assert "codex-operator" not in visible_text
-    assert "flow-coord" in visible_text
-    assert "flow-dev" in visible_text
-    assert "flow-review" in visible_text
+    assert "run-coord" in visible_text
+    assert "run-dev" in visible_text
+    assert "run-review" in visible_text
     assert "task-record" in visible_text
     assert "source-check" in visible_text
 
@@ -190,7 +193,9 @@ def test_prepare_ui_smoke_data_resets_stale_visible_runtime_rows(tmp_path, monke
     assert "hermes" not in rendered_text.casefold()
     assert "orchestrator" not in rendered_text
     assert "codex-operator" not in rendered_text
+    assert re.search(r"\bflow-[a-z0-9_-]+", rendered_text, re.IGNORECASE) is None
     assert "launch-" not in rendered_text.casefold()
+    assert "smoke" not in rendered_text.casefold()
 
 
 def test_prepare_ui_smoke_data_rejects_non_smoke_database_url(tmp_path, monkeypatch) -> None:
@@ -267,7 +272,9 @@ def test_ui_smoke_pages_render_neutral_screenshot_fixture(tmp_path, monkeypatch)
     assert "tech-" not in rendered.casefold()
     assert "Supervisor" not in rendered
     assert "sdlc-" not in rendered.casefold()
+    assert re.search(r"\bflow-[a-z0-9_-]+", rendered, re.IGNORECASE) is None
     assert "launch-" not in rendered.casefold()
+    assert "smoke" not in rendered.casefold()
     assert "sdlc-business-tech-v1" not in rendered
     assert "sdlc-orchestrator" not in rendered
     assert "Default Namespace" not in rendered

@@ -113,7 +113,7 @@ TASK_SCENARIOS = {
         },
         {
             "key": "RUN-205",
-            "title": "Повторить smoke-прогон",
+            "title": "Повторить контрольный прогон",
             "status": "blocked",
             "current_order": 13,
             "verdict": "blocked",
@@ -241,7 +241,7 @@ TASK_SCENARIOS = {
         },
         {
             "key": "RUN-205",
-            "title": "Повторить smoke-прогон",
+            "title": "Повторить контрольный прогон",
             "status": "active",
             "current_order": 6,
             "verdict": "partial",
@@ -366,37 +366,37 @@ DEMO_AGENT_PROFILES: dict[str, dict[str, Any]] = {
     "orchestrator": {
         "name": "Координатор",
         "description": "Ведёт постановку задачи, синхронизирует переходы и фиксирует решения.",
-        "hermes_profile": "flow-coord",
+        "hermes_profile": "run-coord",
     },
     "codex-operator": {
         "name": "Оператор",
         "description": "Проверяет план, слияние и ручные решения перед переходом дальше.",
-        "hermes_profile": "flow-operator",
+        "hermes_profile": "run-operator",
     },
     "ops": {
         "name": "Инженер запуска",
-        "description": "Отвечает за окружение, миграции, smoke-проверки и готовность приложения.",
-        "hermes_profile": "flow-runtime",
+        "description": "Отвечает за окружение, миграции, контрольные проверки и готовность приложения.",
+        "hermes_profile": "run-runtime",
     },
     "researcher": {
         "name": "Аналитик",
         "description": "Разбирает поток данных, зависимости и фактическое поведение системы.",
-        "hermes_profile": "flow-analysis",
+        "hermes_profile": "run-analysis",
     },
     "critic": {
         "name": "Контролёр качества",
         "description": "Ищет риски, пропуски в плане и слабые места регрессионного покрытия.",
-        "hermes_profile": "flow-quality",
+        "hermes_profile": "run-quality",
     },
     "coder": {
         "name": "Разработчик",
         "description": "Вносит минимальные изменения, добавляет тесты и готовит проверяемый результат.",
-        "hermes_profile": "flow-dev",
+        "hermes_profile": "run-dev",
     },
     "reviewer": {
         "name": "Ревьюер",
         "description": "Проверяет реализацию, архитектурные границы и отсутствие лишней сложности.",
-        "hermes_profile": "flow-review",
+        "hermes_profile": "run-review",
     },
 }
 DEMO_AGENT_PROFILES_BY_DISPLAY_NAME = {
