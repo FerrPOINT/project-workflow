@@ -10,6 +10,7 @@ const { chromium } = loadPlaywright();
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const baseUrl = process.env.SMOKE_BASE_URL || "http://127.0.0.1:8812";
 const outputDir = path.resolve(rootDir, process.env.SMOKE_SCREENSHOT_DIR || "docs/screenshots");
+const desktopViewport = { width: 1920, height: 1080 };
 const forbiddenVisibleText = [
   /Hermes/i,
   /Гермес/i,
@@ -23,8 +24,12 @@ const forbiddenVisibleText = [
   /Профиль запуска/i,
   /Relevanter/i,
   /dueDate/i,
+  /\bBusiness\b/i,
   /Business-/i,
+  /\bTech\b/i,
   /Tech-/i,
+  /бизнес/i,
+  /Maintainer/i,
   /\borchestrator\b/i,
   /codex-operator/i,
 ];
@@ -320,7 +325,7 @@ async function main() {
 
 async function captureAll(outputRoot) {
   const browser = await chromium.launch();
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
+  const context = await browser.newContext({ viewport: desktopViewport, deviceScaleFactor: 1 });
   const page = await context.newPage();
   try {
     await assertSmokeNamespaces(context.request);

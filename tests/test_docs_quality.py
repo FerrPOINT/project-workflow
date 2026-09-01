@@ -5,20 +5,20 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCREENSHOTS = {
-    "dashboard.png": (1400, 1700),
-    "dashboard-qa.png": (1400, 1700),
-    "namespaces.png": (1400, 850),
-    "namespace-new.png": (1400, 850),
-    "phases-qa.png": (1400, 1200),
-    "tasks.png": (1400, 1150),
-    "tasks-qa.png": (1400, 1150),
-    "workflows.png": (1400, 850),
-    "instructions.png": (1400, 850),
-    "agents.png": (1400, 900),
-    "phases.png": (1400, 3000),
-    "task-detail-dev.png": (1400, 3500),
-    "task-detail-qa.png": (1400, 2200),
-    "settings.png": (1400, 850),
+    "dashboard.png": (1900, 1700),
+    "dashboard-qa.png": (1900, 1700),
+    "namespaces.png": (1900, 1000),
+    "namespace-new.png": (1900, 1000),
+    "phases-qa.png": (1900, 1200),
+    "tasks.png": (1900, 1080),
+    "tasks-qa.png": (1900, 1080),
+    "workflows.png": (1900, 1000),
+    "instructions.png": (1900, 1000),
+    "agents.png": (1900, 1000),
+    "phases.png": (1900, 3000),
+    "task-detail-dev.png": (1900, 3500),
+    "task-detail-qa.png": (1900, 2200),
+    "settings.png": (1900, 1000),
     "mobile-dashboard.png": (360, 3000),
 }
 
@@ -133,8 +133,15 @@ def test_screenshot_capture_script_checks_full_smoke_data() -> None:
     assert "Профиль запуска" in source
     assert "Relevanter" in source
     assert "dueDate" in source
+    assert "\\bBusiness\\b" in source
     assert "Business-" in source
+    assert "\\bTech\\b" in source
     assert "Tech-" in source
+    assert "бизнес" in source
+    assert "Maintainer" in source
+    assert "desktopViewport" in source
+    assert "1920" in source
+    assert "1080" in source
     assert 'name: "settings.png"' in source
     assert "workflow-dev step" in source
     assert "КЛЮЧ ЗАПУСКА" in source

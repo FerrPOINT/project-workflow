@@ -96,9 +96,12 @@ def test_prepare_ui_smoke_data_creates_neutral_parallel_namespace_fixture(tmp_pa
     assert "smoke" not in visible_text.casefold()
     assert "project-workflow" not in visible_text.casefold()
     assert "relevanter" not in visible_text.casefold()
+    assert "бизнес" not in visible_text.casefold()
     assert "duedate" not in visible_text.casefold()
-    assert "business-" not in visible_text.casefold()
-    assert "tech-" not in visible_text.casefold()
+    assert re.search(r"\bBusiness\b", visible_text, re.IGNORECASE) is None
+    assert re.search(r"\bTech\b", visible_text, re.IGNORECASE) is None
+    assert re.search(r"\bPR\b", visible_text) is None
+    assert "maintainer" not in visible_text.casefold()
     assert "sdlc-business-tech-v1" not in visible_text
     assert DEFAULT_DEMO_WORKFLOW_NAME in visible_text
     assert QA_WORKFLOW_NAME in visible_text
@@ -267,9 +270,11 @@ def test_ui_smoke_pages_render_neutral_screenshot_fixture(tmp_path, monkeypatch)
     assert "hermes" not in rendered.casefold()
     assert "project-workflow" not in rendered.casefold()
     assert "relevanter" not in rendered.casefold()
+    assert "бизнес" not in rendered.casefold()
     assert "duedate" not in rendered.casefold()
-    assert "business-" not in rendered.casefold()
-    assert "tech-" not in rendered.casefold()
+    assert re.search(r"\bBusiness\b", rendered, re.IGNORECASE) is None
+    assert re.search(r"\bTech\b", rendered, re.IGNORECASE) is None
+    assert "maintainer" not in rendered.casefold()
     assert "Supervisor" not in rendered
     assert "sdlc-" not in rendered.casefold()
     assert re.search(r"\bflow-[a-z0-9_-]+", rendered, re.IGNORECASE) is None
