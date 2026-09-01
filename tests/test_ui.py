@@ -878,9 +878,14 @@ class TestPhaseDetail:
         assert "Перейди к Phase 0.00 -- Git Identity" not in response.text
         assert "next_recommendation:" not in response.text
 
-    def test_phase_detail_rejects_non_numeric_identifier(self):
-        response = client.get("/phase/0.7")
+    @pytest.mark.parametrize("phase_id", ["0", "0.7", "nonexistent"])
+    def test_phase_detail_rejects_malformed_identifier_with_html_error(self, phase_id):
+        response = client.get(f"/phase/{phase_id}")
+
         assert response.status_code == 422
+        assert response.headers["content-type"] == "text/html; charset=utf-8"
+        assert "Некорректный phase_id" in response.text
+        assert "phaseForm" not in response.text
 
     def test_phase_detail_save_uses_numeric_resource_id(self):
         response = client.get(_phase_detail_path("4.START"))
@@ -981,10 +986,6 @@ class TestPhaseDetail:
         assert "phase-order-badge" not in response.text
         assert "move-up-btn" in response.text
         assert "move-down-btn" in response.text
-
-    def test_phase_detail_rejects_unknown_string_identifier(self):
-        response = client.get("/phase/nonexistent")
-        assert response.status_code == 422
 
     def test_phase_detail_can_update_instruction_description(self):
         phase_response = client.get(_phase_api_path("1.INTAKE"))

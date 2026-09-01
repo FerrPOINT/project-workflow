@@ -135,7 +135,11 @@ def create_app() -> FastAPI:
     app.add_middleware(_UoWMiddleware)
 
     @app.exception_handler(RequestValidationError)
-    async def _validation_error(_request: Request, exc: RequestValidationError) -> JSONResponse:
+    async def _validation_error(request: Request, exc: RequestValidationError) -> JSONResponse | HTMLResponse:
+        if not request.url.path.startswith("/api/"):
+            html_response = pages.validation_error_page(request, exc.errors())
+            if html_response is not None:
+                return html_response
         return JSONResponse(
             {
                 "ok": False,

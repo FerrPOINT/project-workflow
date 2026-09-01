@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Sequence
+from typing import Annotated, Any
 
-from fastapi import Request
+from fastapi import Path, Request
 from fastapi.responses import HTMLResponse
 
 from project_workflow.application.phase_service import PhaseService
@@ -25,6 +26,7 @@ from project_workflow.interfaces.ui.state import _app_state
 from project_workflow.interfaces.ui.templates import _group_instructions, templates
 
 NAMESPACE_COOKIE = "workflow_namespace_id"
+PositivePathId = Annotated[int, Path(gt=0)]
 
 
 def _theme_context(namespace: dict[str, Any] | None) -> dict[str, Any]:
@@ -212,6 +214,23 @@ def _workflow_error_page(request: Request, context: dict[str, Any], workflow_id:
     )
 
 
+def validation_error_page(request: Request, errors: Sequence[Any]) -> HTMLResponse | None:
+    """Render route validation failures as HTML for browser-facing pages."""
+    path = request.url.path
+    phase_id_failed = any("phase_id" in issue.get("loc", ()) for issue in errors)
+    if path.startswith("/phase/") and phase_id_failed:
+        context = _namespace_context(request, page="phases")
+        return _query_id_error_page(
+            request,
+            context,
+            field_name="phase_id",
+            back_url="/phases",
+            back_label="К фазам",
+            page="phases",
+        )
+    return None
+
+
 async def index(request: Request) -> HTMLResponse:
     """Минимальный dashboard без заглушек."""
     context = _namespace_context(request, page="dashboard")
@@ -272,7 +291,7 @@ async def phases_page(request: Request) -> HTMLResponse:
     )
 
 
-async def phase_detail(request: Request, phase_id: int) -> HTMLResponse:
+async def phase_detail(request: Request, phase_id: PositivePathId) -> HTMLResponse:
     phase = _load_phase_detail(phase_id)
     if not phase:
         return _error_page(
