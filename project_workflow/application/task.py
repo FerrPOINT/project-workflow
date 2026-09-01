@@ -33,7 +33,10 @@ class TaskService:
             if resolved_project is None:
                 raise ValueError(f"Для ключа задачи {payload.get('task_key', '')!r} нет подходящего неймспейса")
             payload["project_id"] = resolved_project["id"]
-        project_id = int(payload["project_id"])
+        raw_project_id = payload["project_id"]
+        if not isinstance(raw_project_id, int) or isinstance(raw_project_id, bool) or raw_project_id <= 0:
+            raise ValueError("project_id задачи должен быть положительным целым числом")
+        project_id = raw_project_id
         project = self._uow.projects.get_by_id(project_id)
         if project is None:
             raise NotFoundError(f"Неймспейс {project_id} не найден")

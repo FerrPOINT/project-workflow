@@ -29,13 +29,13 @@ class AgentService:
         if profile is None:
             return None
         if not isinstance(profile, str):
-            raise ValueError("Профиль Hermes должен быть строкой или null")
+            raise ValueError("Профиль запуска должен быть строкой или null")
         value = profile.strip()
         if not value:
-            raise ValueError("Профиль Hermes не может быть пустым")
+            raise ValueError("Профиль запуска не может быть пустым")
         if len(value) > 251 or not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", value):
             raise ValueError(
-                "Профиль Hermes должен соответствовать [a-z0-9][a-z0-9_-]* "
+                "Профиль запуска должен соответствовать [a-z0-9][a-z0-9_-]* "
                 "и содержать не более 251 символа"
             )
         return value
@@ -45,7 +45,7 @@ class AgentService:
             return
         owner = self._uow.agents.get_by_hermes_profile(profile)
         if owner is not None and owner.id != agent_id:
-            raise ConflictError(f"Профиль Hermes {profile!r} уже назначен агенту {owner.name!r}")
+            raise ConflictError(f"Профиль запуска {profile!r} уже назначен агенту {owner.name!r}")
 
     def _validate_name_owner(self, name: str, *, agent_id: int | None = None) -> None:
         owner = self._uow.agents.get_by_name(name)

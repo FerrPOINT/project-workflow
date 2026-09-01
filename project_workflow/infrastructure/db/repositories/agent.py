@@ -63,8 +63,8 @@ class SAAgentRepository(AgentRepository):
                 raise ConflictError(f"Агент {name!r} уже существует") from exc
             if "uq_agents_hermes_profile" in details or "agents.hermes_profile" in details:
                 label = repr(profile) if profile else "заданное значение"
-                raise ConflictError(f"Профиль Hermes {label} уже назначен другому агенту") from exc
-            raise ConflictError("Агент с таким именем или профилем Hermes уже существует") from exc
+                raise ConflictError(f"Профиль запуска {label} уже назначен другому агенту") from exc
+            raise ConflictError("Агент с таким именем или профилем запуска уже существует") from exc
 
     def create(self, data: dict[str, Any]) -> int:
         item = m.Agent(

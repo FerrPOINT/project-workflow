@@ -124,7 +124,7 @@ def _flatten_parallel_contract(
         )
         instructions.append(
             f"{name} — параллельно с {partner}, агент: {agent}"
-            + (f" | профиль Hermes: {profile}" if profile else "")
+            + (f" | профиль запуска: {profile}" if profile else "")
         )
         for item in detail.get("instructions", []) or []:
             instructions.append(f"  {item}")

@@ -118,7 +118,7 @@ python -m project_workflow.interfaces.ui --host 127.0.0.1 --port 8812
 - убедиться, что screenshot evidence сделан на нейтральных smoke-данных, а не на
   пустой дефолтной базе;
 - проверить, что screenshot evidence не содержит старое дефолтное имя или
-  runtime-specific упоминания вроде `Hermes`.
+  runtime-specific упоминания конкретного внешнего исполнителя.
 
 Для backend-only тестовых или документационных изменений browser smoke не
 обязателен.

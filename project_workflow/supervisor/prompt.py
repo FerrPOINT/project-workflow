@@ -60,7 +60,7 @@ def _format_parallel_contract(contract: dict[str, Any], group_details: list[dict
         hermes_profile = detail.get("hermes_profile")
         agent_line = f"Агент: {agent}"
         if hermes_profile:
-            agent_line += f" | профиль Hermes: {hermes_profile}"
+            agent_line += f" | профиль запуска: {hermes_profile}"
         partner_code = detail.get("parallel_with_phase_code") or "-"
         partner = next(
             (
@@ -118,7 +118,7 @@ def _format_contract(contract: dict[str, Any], human_only: bool = False) -> str:
     if contract.get("delegate_agent"):
         parts.append(
             f"Делегировано агенту: {contract['delegate_agent']}"
-            + (f" | профиль Hermes: {contract['hermes_profile']}" if contract.get("hermes_profile") else "")
+            + (f" | профиль запуска: {contract['hermes_profile']}" if contract.get("hermes_profile") else "")
             + "\n\n"
         )
     return "".join(parts)
@@ -135,7 +135,7 @@ def _format_parallel_contract_human(group_details: list[dict[str, Any]]) -> str:
     for detail in group_details:
         agent = detail.get("delegate_agent") or "не задан"
         profile = detail.get("hermes_profile")
-        agent_label = f"{agent} (профиль Hermes: {profile})" if profile else agent
+        agent_label = f"{agent} (профиль запуска: {profile})" if profile else agent
         for item in detail.get("instructions", []) or []:
             instructions.append(f"[{agent_label}] {item}")
         for item in detail.get("required_checks", []) or []:

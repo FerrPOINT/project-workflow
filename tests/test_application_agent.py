@@ -128,7 +128,7 @@ def test_agent_can_keep_own_name():
 def test_create_agent_rejects_invalid_hermes_profile():
     uow = _make_uow()
 
-    with pytest.raises(ValueError, match="Профиль Hermes"):
+    with pytest.raises(ValueError, match="Профиль запуска"):
         AgentService(uow).create_agent({"name": "Coder", "hermes_profile": "Bad Profile"})
 
 

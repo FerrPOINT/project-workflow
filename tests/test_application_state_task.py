@@ -90,6 +90,16 @@ class TestTaskService:
 
         uow.tasks.create.assert_not_called()
 
+    @pytest.mark.parametrize("project_id", [True, 0, -1, "5"])
+    def test_create_task_rejects_non_positive_or_non_integer_project_id(self, project_id):
+        uow = _make_uow()
+
+        with pytest.raises(ValueError, match="project_id"):
+            TaskService(uow).create_task({"task_key": "B-2", "project_id": project_id})
+
+        uow.projects.get_by_id.assert_not_called()
+        uow.tasks.create.assert_not_called()
+
     def test_create_task_without_project_id(self):
         uow = _make_uow()
         uow.projects.list.return_value = [FakeProject(4, "PRJ")]

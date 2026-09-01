@@ -25,7 +25,7 @@
       <thead>
         <tr>
           <th>Имя</th>
-          <th>Профиль Hermes</th>
+          <th>Профиль запуска</th>
           <th>Описание</th>
           <th></th>
         </tr>
@@ -55,7 +55,7 @@
     <div class="card-title" style="margin-bottom:12px">Добавить агента</div>
     <div class="form-grid">
       <label><span class="field-label">Имя</span><input type="text" id="newName"></label>
-      <label><span class="field-label">Профиль Hermes</span><input type="text" id="newHermesProfile"></label>
+      <label><span class="field-label">Профиль запуска</span><input type="text" id="newLaunchProfile"></label>
       <label><span class="field-label">Описание</span><textarea id="newDescription"></textarea></label>
       <button class="btn btn-primary" style="margin-top:23px" onclick="addAgent()">Добавить</button>
     </div>
@@ -92,9 +92,9 @@ function deleteRow(id){
 function addAgent(){
   var name=document.getElementById('newName').value.trim();
   var description=document.getElementById('newDescription').value.trim();
-  var hermesProfile=document.getElementById('newHermesProfile').value.trim();
+  var launchProfile=document.getElementById('newLaunchProfile').value.trim();
   if(!name){showToast('Имя агента обязательно','error');return;}
-  fetch('/api/agents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,description:description,hermes_profile:hermesProfile || null})})
+  fetch('/api/agents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,description:description,hermes_profile:launchProfile || null})})
     .then(function(r){return r.json()})
     .then(function(d){if(d.ok){showToast('Добавлено','success');location.reload()}else showToast(d.error||'Ошибка','error')})
     .catch(showRequestError);

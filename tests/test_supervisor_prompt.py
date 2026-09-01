@@ -48,9 +48,9 @@ def test_format_parallel_contract_human():
         },
     ]
     result = _format_parallel_contract_human(details)
-    assert "[a1 (профиль Hermes: research_profile)] step 1" in result
-    assert "[a1 (профиль Hermes: research_profile)] check 1" in result
-    assert "[a1 (профиль Hermes: research_profile)] evidence 1" in result
+    assert "[a1 (профиль запуска: research_profile)] step 1" in result
+    assert "[a1 (профиль запуска: research_profile)] check 1" in result
+    assert "[a1 (профиль запуска: research_profile)] evidence 1" in result
     assert "[a2] step 2" in result
 
 
@@ -114,7 +114,7 @@ def test_prompt_delegated():
             phase_code="p1",
         )
     assert "Делегировано агенту" in result
-    assert "профиль Hermes: code_profile" in result
+    assert "профиль запуска: code_profile" in result
 
 
 def patch_contract_builder(delegate_agent=None, hermes_profile=None):

@@ -37,7 +37,11 @@ class PhaseServiceApp:
             raise NotFoundError(f"Воркфлоу {workflow_id} не найден")
 
     def _validate_agent(self, agent_id: Any) -> None:
-        if agent_id is not None and self._uow.agents.lock(int(agent_id)) is None:
+        if agent_id is None:
+            return
+        if not isinstance(agent_id, int) or isinstance(agent_id, bool) or agent_id <= 0:
+            raise ValueError("agent_id должен быть положительным целым числом или null")
+        if self._uow.agents.lock(agent_id) is None:
             raise NotFoundError(f"Агент {agent_id} не найден")
 
     @staticmethod
@@ -73,7 +77,10 @@ class PhaseServiceApp:
                 raise ValueError(f"{field} должен быть положительным целым числом или null")
 
     def create_phase(self, data: dict[str, Any], *, commit: bool = True) -> dict[str, Any]:
-        workflow_id = int(data["workflow_id"])
+        workflow_id_raw = data.get("workflow_id")
+        if not isinstance(workflow_id_raw, int) or isinstance(workflow_id_raw, bool) or workflow_id_raw <= 0:
+            raise ValueError("workflow_id должен быть положительным целым числом")
+        workflow_id = workflow_id_raw
         self._validate_agent(data.get("agent_id"))
         self._lock_workflow(workflow_id)
         existing = list(self._uow.phases.list(workflow_id))
@@ -81,9 +88,8 @@ class PhaseServiceApp:
         if order is None:
             order = self._uow.phases.get_next_order(workflow_id)
         else:
-            order = int(order)
-            if order <= 0:
-                raise ValueError("phase_order должен быть положительным")
+            if not isinstance(order, int) or isinstance(order, bool) or order <= 0:
+                raise ValueError("phase_order должен быть положительным целым числом")
             if order > len(existing) + 1:
                 raise ConflictError(f"phase_order должен быть в диапазоне 1..{len(existing) + 1}")
         raw_code = data.get("code")

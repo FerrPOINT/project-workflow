@@ -26,6 +26,7 @@ def test_primary_ui_labels_do_not_expose_internal_english_enums() -> None:
             "instructions.html",
             "task_detail.html",
             "namespaces.html",
+            "agents.html",
             "settings.html",
         )
     )
@@ -37,6 +38,8 @@ def test_primary_ui_labels_do_not_expose_internal_english_enums() -> None:
         "⏱ sync",
         ">Evidence<",
         "Hermes profile:",
+        "Профиль Hermes",
+        "профиль Hermes",
         "Добавить skill",
         "Фазы workflow",
         "Контуры workflow",
@@ -76,6 +79,23 @@ def test_packaged_phase_names_are_localized_without_changing_codes() -> None:
         "выполнить merge",
     ):
         assert forbidden not in user_text
+
+
+def test_user_facing_docs_do_not_name_specific_executor_runtime() -> None:
+    docs = "\n".join(
+        (ROOT / name).read_text(encoding="utf-8")
+        for name in (
+            "AGENTS.md",
+            "README.md",
+            "LIVE_TEST_PLAN.md",
+            "docs/architecture.md",
+            "docs/quality-gate.md",
+            "docs/bug-audit.md",
+        )
+    )
+
+    assert "Hermes" not in docs
+    assert "гермес" not in docs.lower()
 
 
 def test_cli_result_and_task_key_errors_are_in_russian() -> None:

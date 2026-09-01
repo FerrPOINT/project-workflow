@@ -279,7 +279,7 @@ def _load_seed(path: Path | str | None = None) -> list[_SeedPhase]:
         if previous_profile != delegate.hermes_profile:
             raise ValueError(
                 f"Некорректная фаза начального каталога {phase.code!r}: "
-                f"для агента {delegate.agent!r} заданы разные профили Hermes"
+                f"для агента {delegate.agent!r} заданы разные профили запуска"
             )
         if delegate.hermes_profile is None:
             continue
@@ -287,7 +287,7 @@ def _load_seed(path: Path | str | None = None) -> list[_SeedPhase]:
         if previous_agent != delegate.agent:
             raise ValueError(
                 f"Некорректная фаза начального каталога {phase.code!r}: "
-                f"профиль Hermes {delegate.hermes_profile!r} назначен разным агентам"
+                f"профиль запуска {delegate.hermes_profile!r} назначен разным агентам"
             )
     return phases
 
@@ -358,11 +358,11 @@ def ensure_phase_catalog(
     for agent_name, hermes_profile in desired_agents.items():
         existing_agent = existing_agents.get(agent_name)
         if existing_agent is not None and existing_agent.hermes_profile != hermes_profile:
-            raise ValueError(f"Агент {agent_name!r} уже существует с другим профилем Hermes")
+            raise ValueError(f"Агент {agent_name!r} уже существует с другим профилем запуска")
         if hermes_profile is not None:
             profile_owner = uow.agents.get_by_hermes_profile(hermes_profile)
             if profile_owner is not None and profile_owner.name != agent_name:
-                raise ValueError(f"Профиль Hermes {hermes_profile!r} уже назначен агенту {profile_owner.name!r}")
+                raise ValueError(f"Профиль запуска {hermes_profile!r} уже назначен агенту {profile_owner.name!r}")
 
     default_workflow = default_workflow or uow.workflows.ensure_default_exists(config.DEFAULT_WORKFLOW_NAME)
     workflow_id = default_workflow.id

@@ -6,12 +6,20 @@
 {% block extra_style %}
 .tasks-layout{container:tasks / inline-size;min-width:0}
 .tasks-table-wrap{padding:0;overflow-x:auto}
-.tasks-table{min-width:1040px}
-.tasks-table th,.tasks-table td{padding-inline:8px;white-space:nowrap;vertical-align:middle}
-.tasks-table td:nth-child(4),.tasks-table td:nth-child(5){white-space:normal;overflow-wrap:anywhere;min-width:100px}
+.tasks-table{width:100%;min-width:0;table-layout:fixed}
+.tasks-table th,.tasks-table td{padding-inline:8px;white-space:normal;vertical-align:middle;overflow-wrap:anywhere}
+.tasks-table th:nth-child(1),.tasks-table td:nth-child(1){width:7%}
+.tasks-table th:nth-child(2),.tasks-table td:nth-child(2){width:13%}
+.tasks-table th:nth-child(3),.tasks-table td:nth-child(3){width:12%}
+.tasks-table th:nth-child(4),.tasks-table td:nth-child(4){width:18%}
+.tasks-table th:nth-child(5),.tasks-table td:nth-child(5){width:12%}
+.tasks-table th:nth-child(6),.tasks-table td:nth-child(6){width:10%}
+.tasks-table th:nth-child(7),.tasks-table td:nth-child(7){width:9%}
+.tasks-table th:nth-child(8),.tasks-table td:nth-child(8){width:10%}
+.tasks-table th:nth-child(9),.tasks-table td:nth-child(9){width:9%}
 .tasks-table .task-key{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent)}
 .tasks-table .task-title{color:var(--text);font-weight:500}
-.namespace-pill{display:inline-flex;align-items:center;gap:6px;max-width:180px;padding:3px 8px;border-radius:6px;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:600}
+.namespace-pill{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:3px 8px;border-radius:6px;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:600}
 .namespace-pill svg{width:14px;height:14px;flex:0 0 auto}
 .namespace-pill span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .status-badge{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:6px;font-size:12px;font-weight:500}
@@ -19,12 +27,12 @@
 .status-active{background:var(--accent-soft);color:var(--accent)}
 .status-blocked{background:var(--red-soft);color:var(--red)}
 .progress-inline{display:flex;align-items:center;gap:6px;width:100%;min-width:0;font-size:12px;color:var(--text-muted);font-weight:600;white-space:nowrap}
-.progress-inline .bar{flex:0 0 clamp(64px,8cqw,100px);height:14px;background:#1e293b;border:2px solid #94a3b8;border-radius:7px;overflow:hidden;display:inline-block;vertical-align:middle;box-shadow:0 0 0 1px #0f172a}
+.progress-inline .bar{flex:1 1 48px;min-width:36px;height:14px;background:#1e293b;border:2px solid #94a3b8;border-radius:7px;overflow:hidden;display:inline-block;vertical-align:middle;box-shadow:0 0 0 1px #0f172a}
 .progress-inline .bar-fill{display:block;height:100%;background:#38bdf8;border-radius:5px;min-width:4px;box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}
 .progress-inline .bar-fill.done{background:#4ade80}
 .progress-inline .bar-fill.zero{background:transparent;min-width:0;box-shadow:none}
 .task-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-top:12px}
-.task-card .row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px}
+.task-card .row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px;flex-wrap:wrap}
 .task-card .row:last-child{margin-bottom:0}
 .task-card .task-key{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent)}
 .task-card .label{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em}
@@ -35,8 +43,9 @@
 .verdict-blocked{background:var(--red-soft);color:var(--red)}
 .verdict-rollback{background:var(--orange-soft);color:var(--orange)}
 .verdict-delegate{background:var(--accent-soft);color:var(--accent)}
+.task-card-meta{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));align-items:start}
 .table-card-list{display:none}
-@container tasks (max-width:720px){
+@container tasks (max-width:1080px){
   .tasks-table-wrap{display:none}
   .table-card-list{display:flex;flex-direction:column;gap:12px}
 }
@@ -125,7 +134,7 @@
       <span class="task-title" style="font-size:14px">{{ t.title }}</span>
     </div>
     {% endif %}
-    <div class="row">
+    <div class="row task-card-meta">
       <div><span class="label">Неймспейс</span><div class="value">{{ t.namespace_cli_command or t.namespace_name }}</div></div>
       <div><span class="label">Флоу</span><div class="value">{{ t.workflow_name or '—' }}</div></div>
       <div><span class="label">Фаза</span><div class="value">{{ t.current_phase_name or '—' }}</div></div>

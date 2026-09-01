@@ -106,3 +106,48 @@ def test_instruction_lock_rejects_phase_removed_after_workflow_lock():
 def test_phase_link_normalization_rejects_non_positive_or_non_integer_values(data):
     with pytest.raises(ValueError):
         PhaseServiceApp._normalize_links(data)
+
+
+@pytest.mark.parametrize("agent_id", [True, 0, -1, "1"])
+def test_phase_agent_validation_rejects_non_positive_or_non_integer_values(agent_id):
+    uow = MagicMock()
+
+    with pytest.raises(ValueError, match="agent_id"):
+        PhaseServiceApp(uow)._validate_agent(agent_id)
+
+    uow.agents.lock.assert_not_called()
+
+
+def _phase_create_uow() -> MagicMock:
+    uow = MagicMock()
+    uow.workflows.lock.return_value = SimpleNamespace(id=1)
+    uow.phases.list.return_value = []
+    uow.phases.create.return_value = 7
+    created = SimpleNamespace(to_dict=lambda: {"id": 7})
+    uow.phases.get_by_id.return_value = created
+    return uow
+
+
+@pytest.mark.parametrize("workflow_id", [True, 0, -1, "1"])
+def test_phase_create_rejects_non_positive_or_non_integer_workflow_id(workflow_id):
+    uow = _phase_create_uow()
+
+    with pytest.raises(ValueError, match="workflow_id"):
+        PhaseServiceApp(uow).create_phase(
+            {"workflow_id": workflow_id, "phase_order": 1, "name": "Phase"}
+        )
+
+    uow.workflows.lock.assert_not_called()
+    uow.phases.create.assert_not_called()
+
+
+@pytest.mark.parametrize("phase_order", [True, 0, -1, "1"])
+def test_phase_create_rejects_non_positive_or_non_integer_phase_order(phase_order):
+    uow = _phase_create_uow()
+
+    with pytest.raises(ValueError, match="phase_order"):
+        PhaseServiceApp(uow).create_phase(
+            {"workflow_id": 1, "phase_order": phase_order, "name": "Phase"}
+        )
+
+    uow.phases.create.assert_not_called()
