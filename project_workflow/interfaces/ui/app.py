@@ -183,8 +183,23 @@ def create_app() -> FastAPI:
         )
 
     @app.exception_handler(StarletteHTTPException)
-    async def _http_error(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+    async def _http_error(request: Request, exc: StarletteHTTPException) -> JSONResponse | HTMLResponse:
         path_parts = request.url.path.strip("/").split("/")
+        if not request.url.path.startswith("/api/"):
+            if exc.status_code == 404:
+                return pages.http_error_page(
+                    request,
+                    title="Страница не найдена",
+                    message="Такой страницы нет в интерфейсе.",
+                    status_code=404,
+                )
+            if exc.status_code == 405:
+                return pages.http_error_page(
+                    request,
+                    title="Метод не поддерживается",
+                    message="Этот URL есть, но выбранный HTTP-метод для него не поддерживается.",
+                    status_code=405,
+                )
         is_task_resource = len(path_parts) == 3 and path_parts[:2] == ["api", "tasks"] and bool(path_parts[2])
         if exc.status_code == 404 and request.method == "DELETE" and is_task_resource:
             return JSONResponse({"ok": False, "error": "Метод не поддерживается"}, status_code=405)

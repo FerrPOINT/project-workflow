@@ -130,6 +130,26 @@ def _error_page(
     )
 
 
+def http_error_page(
+    request: Request,
+    *,
+    title: str,
+    message: str,
+    status_code: int,
+    back_url: str = "/",
+    back_label: str = "К дашборду",
+) -> HTMLResponse:
+    return _error_page(
+        request,
+        title=title,
+        message=message,
+        status_code=status_code,
+        back_url=back_url,
+        back_label=back_label,
+        page="dashboard",
+    )
+
+
 def _namespace_error_page(request: Request, context: dict[str, Any], *, page: str) -> HTMLResponse | None:
     if context.get("invalid_query_namespace_id") is True:
         context = {

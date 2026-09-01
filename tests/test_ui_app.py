@@ -36,6 +36,30 @@ def test_create_app_routes():
     assert "/api/phases" in routes
 
 
+def test_unknown_page_returns_html_error_template():
+    app = create_app()
+    client = TestClient(app, raise_server_exceptions=False)
+
+    response = client.get("/unknown-page")
+
+    assert response.status_code == 404
+    assert "text/html" in response.headers["content-type"]
+    assert "Страница не найдена" in response.text
+    assert "К дашборду" in response.text
+    assert '"ok":false' not in response.text
+
+
+def test_unknown_api_route_still_returns_json_error():
+    app = create_app()
+    client = TestClient(app, raise_server_exceptions=False)
+
+    response = client.get("/api/unknown-page")
+
+    assert response.status_code == 404
+    assert response.headers["content-type"] == "application/json"
+    assert response.json() == {"ok": False, "error": "Ресурс не найден"}
+
+
 def test_request_logging_middleware():
     app = create_app()
     client = TestClient(app)
