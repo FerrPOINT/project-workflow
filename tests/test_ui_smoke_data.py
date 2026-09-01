@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 from project_workflow import config
 from project_workflow.application import state as app_state
+from project_workflow.application.agent import AgentService
+from project_workflow.application.project import ProjectService
 from project_workflow.application.state import _AppState
+from project_workflow.application.workflow import WorkflowService
 from project_workflow.infrastructure.db.session import reset_engine
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui.app import create_app
@@ -84,6 +88,77 @@ def test_prepare_ui_smoke_data_creates_neutral_parallel_namespace_fixture(tmp_pa
     assert dev_task is not None
     assert qa_task is not None
     assert dev_task.task_key == qa_task.task_key == TASK_KEY
+
+
+def test_prepare_ui_smoke_data_resets_stale_visible_runtime_rows(tmp_path, monkeypatch) -> None:
+    database_url = f"sqlite:///{tmp_path / 'ui-smoke.db'}"
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    config.get_settings.cache_clear()
+    reset_engine()
+
+    try:
+        prepare_smoke_data()
+        with SAUnitOfWork() as uow:
+            workflow = WorkflowService(uow).create_workflow(
+                {"name": "Hermes stale workflow", "description": "old Hermes fixture"}
+            )
+            ProjectService(uow).create_project(
+                {
+                    "code": "OLD",
+                    "name": "Hermes stale namespace",
+                    "description": "old visible runtime",
+                    "workflow_id": workflow["id"],
+                    "theme_icon": "bug",
+                    "theme_color": "#EF4444",
+                    "cli_command": "workflow-old",
+                    "key_prefixes": [],
+                }
+            )
+            AgentService(uow).create_agent(
+                {
+                    "name": "Hermes stale agent",
+                    "description": "old visible runtime",
+                    "hermes_profile": "stale-profile",
+                }
+            )
+
+        prepare_smoke_data()
+        with SAUnitOfWork() as uow:
+            namespaces = [namespace.to_dict() for namespace in uow.projects.list()]
+            task_counts = {
+                namespace["cli_command"]: len(uow.tasks.list_by_project(int(namespace["id"])))
+                for namespace in namespaces
+            }
+            workflows = [workflow.to_dict() for workflow in uow.workflows.list()]
+            agents = [agent.to_dict() for agent in uow.agents.list()]
+            rendered_text = "\n".join(
+                str(value)
+                for row in [*namespaces, *workflows, *agents]
+                for value in row.values()
+                if value is not None
+            )
+    finally:
+        reset_engine()
+        config.get_settings.cache_clear()
+
+    assert {namespace["cli_command"] for namespace in namespaces} == {"workflow-dev", "workflow-qa"}
+    assert task_counts == {command: len(scenarios) for command, scenarios in TASK_SCENARIOS.items()}
+    assert {workflow["name"] for workflow in workflows} == {DEFAULT_DEMO_WORKFLOW_NAME, QA_WORKFLOW_NAME}
+    assert "hermes" not in rendered_text.casefold()
+
+
+def test_prepare_ui_smoke_data_rejects_non_smoke_database_url(tmp_path, monkeypatch) -> None:
+    database_url = f"sqlite:///{tmp_path / 'runtime.db'}"
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    config.get_settings.cache_clear()
+    reset_engine()
+
+    try:
+        with pytest.raises(RuntimeError, match="отдельную SQLite-базу"):
+            prepare_smoke_data()
+    finally:
+        reset_engine()
+        config.get_settings.cache_clear()
 
 
 def test_ui_smoke_pages_render_neutral_screenshot_fixture(tmp_path, monkeypatch) -> None:

@@ -71,7 +71,7 @@
     </thead>
     <tbody>
       {% for t in tasks %}
-      <tr data-task-key="{{ t.task_key }}">
+      <tr data-task-key="{{ t.task_key }}" data-status="{{ t.status }}" data-verdict="{{ t.latest_verdict or '' }}">
         <td><a href="/task/{{ t.task_key }}{% if t.namespace_id %}?namespace_id={{ t.namespace_id }}{% endif %}" class="task-key">{{ t.task_key }}</a></td>
         <td>
           <span class="namespace-pill" style="--accent:{{ t.namespace_theme_color }};--accent-soft:{{ t.namespace_theme_color }}26">
@@ -118,7 +118,7 @@
 
 <div class="table-card-list">
   {% for t in tasks %}
-  <div class="task-card" data-task-key="{{ t.task_key }}">
+  <div class="task-card" data-task-key="{{ t.task_key }}" data-status="{{ t.status }}" data-verdict="{{ t.latest_verdict or '' }}">
     <div class="row">
       <a href="/task/{{ t.task_key }}{% if t.namespace_id %}?namespace_id={{ t.namespace_id }}{% endif %}" class="task-key">{{ t.task_key }}</a>
       {% if t.status == 'done' %}

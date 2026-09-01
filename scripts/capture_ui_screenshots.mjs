@@ -43,6 +43,7 @@ const taskKeys = [
 ];
 const doneTaskKeys = new Set(["RUN-88", "RUN-160"]);
 const openTaskKeys = taskKeys.filter((key) => !doneTaskKeys.has(key));
+const expectedNamespaceCommands = ["workflow-dev", "workflow-qa"];
 
 function loadPlaywright() {
   try {
@@ -55,17 +56,38 @@ function loadPlaywright() {
   }
 }
 
-async function namespaceByCommand(request, command) {
+async function listNamespaces(request) {
   const response = await request.get(`${baseUrl}/api/namespaces`);
   if (!response.ok()) {
     throw new Error(`namespaces request failed: ${response.status()}`);
   }
   const payload = await response.json();
-  const namespace = payload.namespaces.find((item) => item.cli_command === command);
+  return payload.namespaces;
+}
+
+async function namespaceByCommand(request, command) {
+  const namespaces = await listNamespaces(request);
+  const namespace = namespaces.find((item) => item.cli_command === command);
   if (!namespace) {
     throw new Error(`namespace ${command} not found`);
   }
   return namespace;
+}
+
+async function assertSmokeNamespaces(request) {
+  const namespaces = await listNamespaces(request);
+  assertSameSet(
+    "api",
+    "namespace commands",
+    namespaces.map((namespace) => namespace.cli_command),
+    expectedNamespaceCommands,
+  );
+  for (const command of expectedNamespaceCommands) {
+    const namespace = namespaces.find((item) => item.cli_command === command);
+    if (!namespace || namespace.task_count !== taskKeys.length) {
+      throw new Error(`${command} task_count must be ${taskKeys.length}`);
+    }
+  }
 }
 
 async function assertVisibleText(page, name, expected) {
@@ -123,11 +145,26 @@ async function assertTaskTable(page, name, expectedKeys) {
   assertSameSet(name, "task table", rowKeys, expectedKeys);
 }
 
+async function assertTaskStateCoverage(page, name) {
+  const rows = page.locator(".tasks-table tbody tr[data-task-key]");
+  const statuses = await rows.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-status")));
+  const verdicts = await rows.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-verdict")));
+  assertSameSet(name, "task statuses", statuses, ["active", "blocked", "done"]);
+  assertSameSet(name, "latest verdicts", verdicts, ["blocked", "partial", "pass"]);
+}
+
 async function assertDashboardTasks(page, name, expectedKeys) {
   const rowKeys = await page.locator("[data-dashboard-open-tasks] [data-task-key]").evaluateAll((rows) =>
     rows.map((row) => row.getAttribute("data-task-key")).filter(Boolean),
   );
   assertSameSet(name, "dashboard open tasks", rowKeys, expectedKeys);
+}
+
+async function assertDashboardNamespaceCards(page, name) {
+  const namespaceNames = await page.locator("[data-dashboard-namespaces] .list-title").evaluateAll((nodes) =>
+    nodes.map((node) => node.textContent?.trim()).filter(Boolean),
+  );
+  assertSameSet(name, "dashboard namespaces", namespaceNames, ["Разработка", "Проверка качества"]);
 }
 
 async function assertTaskDetailHistory(page, name, minRuns) {
@@ -202,19 +239,26 @@ async function captureAll(outputRoot) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
   const page = await context.newPage();
   try {
+    await assertSmokeNamespaces(context.request);
     const dev = await namespaceByCommand(context.request, "workflow-dev");
     const qa = await namespaceByCommand(context.request, "workflow-qa");
     await capture(page, outputRoot, {
       name: "dashboard.png",
       url: `/?namespace_id=${dev.id}`,
       expected: ["Разработка", "Проверка качества", ...openTaskKeys],
-      assertions: [(targetPage, name) => assertDashboardTasks(targetPage, name, openTaskKeys)],
+      assertions: [
+        (targetPage, name) => assertDashboardTasks(targetPage, name, openTaskKeys),
+        assertDashboardNamespaceCards,
+      ],
     });
     await capture(page, outputRoot, {
       name: "dashboard-qa.png",
       url: `/?namespace_id=${qa.id}`,
       expected: ["Проверка качества", "Разработка", ...openTaskKeys],
-      assertions: [(targetPage, name) => assertDashboardTasks(targetPage, name, openTaskKeys)],
+      assertions: [
+        (targetPage, name) => assertDashboardTasks(targetPage, name, openTaskKeys),
+        assertDashboardNamespaceCards,
+      ],
     });
     await capture(page, outputRoot, {
       name: "namespaces.png",
@@ -231,13 +275,19 @@ async function captureAll(outputRoot) {
       name: "tasks.png",
       url: `/tasks?namespace_id=${dev.id}`,
       expected: ["workflow-dev", "Воркфлоу разработки", ...taskKeys],
-      assertions: [(targetPage, name) => assertTaskTable(targetPage, name, taskKeys)],
+      assertions: [
+        (targetPage, name) => assertTaskTable(targetPage, name, taskKeys),
+        assertTaskStateCoverage,
+      ],
     });
     await capture(page, outputRoot, {
       name: "tasks-qa.png",
       url: `/tasks?namespace_id=${qa.id}`,
       expected: ["workflow-qa", "Воркфлоу проверки", ...taskKeys],
-      assertions: [(targetPage, name) => assertTaskTable(targetPage, name, taskKeys)],
+      assertions: [
+        (targetPage, name) => assertTaskTable(targetPage, name, taskKeys),
+        assertTaskStateCoverage,
+      ],
     });
     await capture(page, outputRoot, {
       name: "workflows.png",

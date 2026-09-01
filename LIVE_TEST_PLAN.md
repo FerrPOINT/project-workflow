@@ -1,4 +1,4 @@
-# Приёмка CLI и Supervisor
+# Приёмка CLI и проверки
 
 В проекте есть два разных уровня проверки. Их нельзя называть одинаково.
 
@@ -7,7 +7,7 @@
 Проверяет продуктовый dataflow без реального исполнителя:
 
 ```text
-CLI subprocess -> PostgreSQL -> тестовый OpenAI-compatible HTTP -> Supervisor -> PostgreSQL
+CLI subprocess -> PostgreSQL -> тестовый OpenAI-compatible HTTP -> проверка -> PostgreSQL
 ```
 
 `test_full_supervisor_runtime_through_cli_postgres_and_http` поднимает stdlib HTTP-сервер
@@ -19,7 +19,7 @@ CLI subprocess -> PostgreSQL -> тестовый OpenAI-compatible HTTP -> Super
 - полный успешный путь без точной привязки документа к изменяемому числу
   evaluator-вызовов;
 - fingerprints, audit snapshot, replay, post-done и переходы;
-- subprocess CLI, PostgreSQL и HTTP-контракт без monkeypatch Supervisor/LLM-клиента.
+- subprocess CLI, PostgreSQL и HTTP-контракт без monkeypatch проверяющего LLM-клиента.
 
 Отчёты и ответы provider в этом тесте синтетические. Он не доказывает, что агент
 выполнял выданные задания, и не является полным бизнес-E2E.
@@ -44,15 +44,15 @@ integration-тесты сохраняют общий 60-секундный пр�
 Проверяет полный цикл с реальными действиями внешнего исполнителя:
 
 ```text
-Supervisor выдал задание
+Проверяющий модуль выдал задание
 -> исполнитель выполнил команды
 -> recorder сохранил команды и результаты
 -> исполнитель отправил отчёт со ссылками на ACTION
 -> реальный внешний OpenAI-compatible provider оценил отчёт
--> Supervisor сохранил audit и выдал следующий шаг
+-> проверяющий модуль сохранил audit и выдал следующий шаг
 ```
 
-Supervisor остаётся evaluator и маршрутизатором. Recorder не исполняет фазы за Supervisor,
+Проверяющий модуль остаётся evaluator и маршрутизатором. Recorder не исполняет фазы за него,
 не меняет БД напрямую и не добавляет продуктовых CLI-команд.
 
 ### Артефакты
@@ -69,10 +69,10 @@ Supervisor остаётся evaluator и маршрутизатором. Recorde
 
 Для каждого обращения к evaluator последовательность обязана содержать:
 
-1. `ASSIGNMENT` — точные `phase_contract` и prompt, полученные от `project-workflow --json step`;
+1. `ASSIGNMENT` — точные `phase_contract` и prompt, полученные от wrapper-команды с `--json step`;
 2. один или несколько `ACTION` — рабочая директория, команда, exit code и безопасный результат;
 3. `REPORT` — точный текст отчёта и `Evidence-Refs` текущих ACTION;
-4. `EVALUATOR` — полный JSON-ответ Supervisor;
+4. `EVALUATOR` — полный JSON-ответ evaluator;
 5. `TRANSITION` — фактическая исходная и следующая фаза.
 
 Для parallel-фаз сохраняется один общий assignment и отдельные ACTION по каждому
@@ -116,11 +116,10 @@ Windows-пути до записи командных логов.
 - Отчёт формируется только после фактических ACTION текущего assignment.
 - Рекомендованные skills загружаются исполнителем из зафиксированного SHA
   `relevanter/agent-skills`; Supervisor передаёт только их имена.
-- Каждая фаза содержит `delegate_agent`, `hermes_profile` и `skills`; parallel
+- Каждая фаза содержит `delegate_agent`, профиль запуска и `skills`; parallel
   assignment дополнительно содержит `group_phases` и отдельные `group_details`.
-- Executor запускает профиль штатно через
-  `hermes --profile <profile> --oneshot <prompt>`. Supervisor не подменяет профиль
-  и не читает его содержимое.
+- Executor запускает выбранный профиль штатным внешним entrypoint. Проверяющий
+  модуль не подменяет профиль и не читает его содержимое.
 - Фаза `9.PR` создаёт Pull Request. Фаза `12.RELEASE_GATE` останавливает прогон
   перед merge; merge выполняет Maintainer. Фаза `13.DELIVERY` проверяет merged
   SHA и результат сборки.
@@ -138,6 +137,6 @@ Windows-пути до записи командных логов.
 - Успешную основную задачу и её audit оставляют в локальной PostgreSQL. Временную
   negative-probe задачу удаляют точечно после сохранения обезличенного лога.
 
-Канонический live-прогон выполняется в изолированном окружении `project-workflow`
+Канонический live-прогон выполняется в изолированном окружении CLI runtime
 с настроенным provider и тестовыми ресурсами Relevanter Business/Tech. Product
 containers Relevanter этим прогоном не изменяются.

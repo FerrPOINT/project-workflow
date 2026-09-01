@@ -10,7 +10,7 @@ from pathlib import Path
 from project_workflow.application.project import ProjectService
 from project_workflow.application.workflow import WorkflowService
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
-from project_workflow.interfaces.cli.core import NAMESPACE_ENV_VAR
+from project_workflow.interfaces.cli.core import CLI_ENTRYPOINT_ENV_VAR, NAMESPACE_ENV_VAR
 from scripts.install_namespace_clis import WRAPPER_COMMAND_ERROR, install_namespace_clis
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -42,13 +42,21 @@ def test_install_namespace_clis_generates_wrappers_for_all_records(tmp_path):
     assert tmp_path / "workflow-qa-wrap.cmd" in generated
     assert tmp_path / "workflow-qa-wrap.ps1" in generated
     assert f"{NAMESPACE_ENV_VAR}={default_namespace_id}" in (tmp_path / "workflow-run").read_text(encoding="utf-8")
-    assert f"{NAMESPACE_ENV_VAR}={qa_namespace_id}" in (tmp_path / "workflow-qa-wrap").read_text(encoding="utf-8")
+    qa_posix = (tmp_path / "workflow-qa-wrap").read_text(encoding="utf-8")
+    assert f"{NAMESPACE_ENV_VAR}={qa_namespace_id}" in qa_posix
+    assert f"{CLI_ENTRYPOINT_ENV_VAR}=workflow-qa-wrap" in qa_posix
     assert f'set "{NAMESPACE_ENV_VAR}={qa_namespace_id}"' in (tmp_path / "workflow-qa-wrap.cmd").read_text(
         encoding="utf-8"
     )
+    assert f'set "{CLI_ENTRYPOINT_ENV_VAR}=workflow-qa-wrap"' in (
+        tmp_path / "workflow-qa-wrap.cmd"
+    ).read_text(encoding="utf-8")
     assert f"$env:{NAMESPACE_ENV_VAR} = \"{qa_namespace_id}\"" in (tmp_path / "workflow-qa-wrap.ps1").read_text(
         encoding="utf-8"
     )
+    assert f"$env:{CLI_ENTRYPOINT_ENV_VAR} = \"workflow-qa-wrap\"" in (
+        tmp_path / "workflow-qa-wrap.ps1"
+    ).read_text(encoding="utf-8")
 
 
 def test_install_namespace_clis_wrappers_allow_only_step_and_history(tmp_path):

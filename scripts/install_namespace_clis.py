@@ -14,7 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from project_workflow.domain.namespace import normalize_namespace_cli_command
 from project_workflow.infrastructure.db.session import DatabaseRecreateRequired, DatabaseUnavailable
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
-from project_workflow.interfaces.cli.core import NAMESPACE_ENV_VAR
+from project_workflow.interfaces.cli.core import CLI_ENTRYPOINT_ENV_VAR, NAMESPACE_ENV_VAR
 
 WRAPPER_COMMAND_ERROR = "Ошибка: wrapper поддерживает только команды step и history."
 
@@ -31,18 +31,18 @@ def _write_executable(path: Path, content: str) -> None:
     path.chmod(current_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
-def _posix_wrapper(namespace_id: int) -> str:
+def _posix_wrapper(namespace_id: int, command: str) -> str:
     return (
         "#!/usr/bin/env sh\n"
         "if [ \"${1:-}\" != \"step\" ] && [ \"${1:-}\" != \"history\" ]; then\n"
         f"  echo \"{WRAPPER_COMMAND_ERROR}\" >&2\n"
         "  exit 2\n"
         "fi\n"
-        f"{NAMESPACE_ENV_VAR}={namespace_id!s} exec project-workflow \"$@\"\n"
+        f"{NAMESPACE_ENV_VAR}={namespace_id!s} {CLI_ENTRYPOINT_ENV_VAR}={command} exec project-workflow \"$@\"\n"
     )
 
 
-def _cmd_wrapper(namespace_id: int) -> str:
+def _cmd_wrapper(namespace_id: int, command: str) -> str:
     return (
         "@echo off\n"
         "setlocal\n"
@@ -52,18 +52,20 @@ def _cmd_wrapper(namespace_id: int) -> str:
         "exit /b 2\n"
         ":run\n"
         f"set \"{NAMESPACE_ENV_VAR}={namespace_id!s}\"\n"
+        f"set \"{CLI_ENTRYPOINT_ENV_VAR}={command}\"\n"
         "project-workflow %*\n"
         "exit /b %ERRORLEVEL%\n"
     )
 
 
-def _powershell_wrapper(namespace_id: int) -> str:
+def _powershell_wrapper(namespace_id: int, command: str) -> str:
     return (
         "if ($args.Count -lt 1 -or ($args[0] -ne \"step\" -and $args[0] -ne \"history\")) {\n"
         f"    [Console]::Error.WriteLine(\"{WRAPPER_COMMAND_ERROR}\")\n"
         "    exit 2\n"
         "}\n"
         f"$env:{NAMESPACE_ENV_VAR} = \"{namespace_id!s}\"\n"
+        f"$env:{CLI_ENTRYPOINT_ENV_VAR} = \"{command}\"\n"
         "& project-workflow @args\n"
         "exit $LASTEXITCODE\n"
     )
@@ -84,9 +86,9 @@ def install_namespace_clis(bin_dir: Path) -> list[Path]:
         posix_path = bin_dir / command
         cmd_path = bin_dir / f"{command}.cmd"
         ps1_path = bin_dir / f"{command}.ps1"
-        _write_executable(posix_path, _posix_wrapper(namespace_id))
-        _write_executable(cmd_path, _cmd_wrapper(namespace_id))
-        _write_executable(ps1_path, _powershell_wrapper(namespace_id))
+        _write_executable(posix_path, _posix_wrapper(namespace_id, command))
+        _write_executable(cmd_path, _cmd_wrapper(namespace_id, command))
+        _write_executable(ps1_path, _powershell_wrapper(namespace_id, command))
         generated.extend([posix_path, cmd_path, ps1_path])
     return generated
 

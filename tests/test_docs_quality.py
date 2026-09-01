@@ -83,7 +83,11 @@ def test_screenshot_capture_script_checks_full_smoke_data() -> None:
         assert task_key in source
     assert "fullPage: true" in source
     assert "assertTaskTable" in source
+    assert "assertTaskStateCoverage" in source
     assert "assertDashboardTasks" in source
+    assert "assertDashboardNamespaceCards" in source
+    assert "assertSmokeNamespaces" in source
+    assert "expectedNamespaceCommands" in source
     assert "assertTaskDetailHistory" in source
     assert "forbiddenVisibleText" in source
     assert "/Hermes/i" in source

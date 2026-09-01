@@ -25,6 +25,34 @@ console = Console()
 
 WARN = "[yellow]WARN[/yellow]"
 NAMESPACE_ENV_VAR = "PROJECT_WORKFLOW_NAMESPACE_ID"
+CLI_ENTRYPOINT_ENV_VAR = "PROJECT_WORKFLOW_CLI_ENTRYPOINT"
+
+
+def _command_path(ctx: click.Context | None) -> str:
+    if ctx is None:
+        return "project-workflow"
+    entrypoint = _entrypoint_override()
+    if entrypoint is None:
+        return ctx.command_path
+    parts = ctx.command_path.split()
+    if not parts:
+        return entrypoint
+    parts[0] = entrypoint
+    return " ".join(parts)
+
+
+def _entrypoint_override() -> str | None:
+    entrypoint = os.environ.get(CLI_ENTRYPOINT_ENV_VAR)
+    if entrypoint is None or not entrypoint.strip():
+        return None
+    return entrypoint.strip()
+
+
+def _rewrite_entrypoint(text: str) -> str:
+    entrypoint = _entrypoint_override()
+    if entrypoint is None:
+        return text
+    return text.replace("project-workflow", entrypoint)
 
 
 def _format_options(command: click.Command, ctx: click.Context, formatter: click.HelpFormatter) -> None:
@@ -66,7 +94,7 @@ class RussianUsageError(click.UsageError):
             file = sys.stderr
         if self.ctx is not None:
             click.echo(self.ctx.get_usage(), file=file)
-            click.echo(f"Для справки: '{self.ctx.command_path} --help'.", file=file)
+            click.echo(f"Для справки: '{_command_path(self.ctx)} --help'.", file=file)
         click.echo(f"Ошибка: {self.message}", file=file)
 
 
@@ -80,7 +108,10 @@ class RussianCommand(click.Command):
     """Click command with Russian help headings and built-in option text."""
 
     def format_usage(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
-        formatter.write_usage(ctx.command_path, " ".join(self.collect_usage_pieces(ctx)), prefix="Использование: ")
+        formatter.write_usage(_command_path(ctx), " ".join(self.collect_usage_pieces(ctx)), prefix="Использование: ")
+
+    def get_help(self, ctx: click.Context) -> str:
+        return _rewrite_entrypoint(super().get_help(ctx))
 
     def format_options(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
         _format_options(self, ctx, formatter)
@@ -104,7 +135,10 @@ class RussianGroup(click.Group):
     command_class = RussianCommand
 
     def format_usage(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
-        formatter.write_usage(ctx.command_path, " ".join(self.collect_usage_pieces(ctx)), prefix="Использование: ")
+        formatter.write_usage(_command_path(ctx), " ".join(self.collect_usage_pieces(ctx)), prefix="Использование: ")
+
+    def get_help(self, ctx: click.Context) -> str:
+        return _rewrite_entrypoint(super().get_help(ctx))
 
     def format_options(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
         _format_options(self, ctx, formatter)
@@ -276,6 +310,7 @@ __all__ = [
     "_resolve_namespace_id",
     "_resolve_namespace_id_from_env",
     "NAMESPACE_ENV_VAR",
+    "CLI_ENTRYPOINT_ENV_VAR",
     "blocked_result",
     "console",
     "WARN",

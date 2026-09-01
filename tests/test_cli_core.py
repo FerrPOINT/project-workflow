@@ -16,7 +16,7 @@ from click.testing import CliRunner
 
 from project_workflow.domain.validation import TaskKeyValidationError
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
-from project_workflow.interfaces.cli.core import _require_valid_key, cli, out_json
+from project_workflow.interfaces.cli.core import CLI_ENTRYPOINT_ENV_VAR, _require_valid_key, cli, out_json
 from project_workflow.interfaces.cli.ui import cli as runtime_cli
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -56,6 +56,23 @@ def test_cli_version_message_is_russian():
 
     assert result.exit_code == 0
     assert result.output == "project-workflow, версия 1.0.0\n"
+
+
+def test_cli_help_uses_wrapper_entrypoint_from_environment():
+    result = CliRunner().invoke(runtime_cli, ["step", "--help"], env={CLI_ENTRYPOINT_ENV_VAR: "workflow-qa"})
+
+    assert result.exit_code == 0
+    assert "Использование: workflow-qa step" in result.output
+    assert "project-workflow step" not in result.output
+
+
+def test_cli_usage_error_uses_wrapper_entrypoint_from_environment():
+    result = CliRunner().invoke(runtime_cli, ["step"], env={CLI_ENTRYPOINT_ENV_VAR: "workflow-qa"})
+
+    assert result.exit_code == 2
+    assert "Использование: workflow-qa step" in result.output
+    assert "Для справки: 'workflow-qa step --help'." in result.output
+    assert "project-workflow step" not in result.output
 
 
 def test_out_json_success(capsys):

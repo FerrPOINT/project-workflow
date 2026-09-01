@@ -5,10 +5,12 @@ from __future__ import annotations
 
 import re
 import sys
+from pathlib import Path
 from typing import Any
 
 from pydantic import ValidationError
-from sqlalchemy import delete
+from sqlalchemy import delete, select
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
 
 from project_workflow.application.phase import PhaseServiceApp
@@ -215,6 +217,18 @@ QA_PHASES = [
 ]
 
 
+def _assert_smoke_database_url(database_url: str) -> None:
+    url = make_url(database_url)
+    if not url.drivername.startswith("sqlite"):
+        raise RuntimeError("Для UI smoke укажите отдельную SQLite-базу .smoke/ui-smoke.db")
+    if url.database in (None, "", ":memory:"):
+        return
+    db_path = Path(url.database)
+    parts = {part.casefold() for part in db_path.parts}
+    if db_path.name.casefold() != "ui-smoke.db" and ".smoke" not in parts:
+        raise RuntimeError("Для UI smoke укажите отдельную SQLite-базу .smoke/ui-smoke.db")
+
+
 def _neutral_profile_name(agent_name: str, agent_id: int) -> str:
     normalized = re.sub(r"[^a-z0-9_-]+", "-", agent_name.casefold()).strip("-_")
     return f"launch-{normalized or 'agent'}-{agent_id}"
@@ -249,12 +263,31 @@ def _namespace_by_command(uow: SAUnitOfWork, command: str) -> dict[str, Any] | N
 
 def _ensure_bootstrap() -> None:
     settings = get_settings()
+    _assert_smoke_database_url(settings.DATABASE_URL)
     engine = get_engine(settings.DATABASE_URL)
     with initialization_transaction(engine) as connection:
         ensure_migrated(connection)
         with SAUnitOfWork(connection) as uow:
             schema.ensure_phase_catalog(uow)
             bootstrap_default_project(uow)
+
+
+def _reset_smoke_rows(uow: SAUnitOfWork) -> None:
+    uow.session.execute(delete(m.TaskPhaseEvent))
+    uow.session.execute(delete(m.TaskStepHistoryEntry))
+    uow.session.execute(delete(m.Task))
+    uow.session.execute(delete(m.Project).where(m.Project.code != DEFAULT_PROJECT_CODE))
+    uow.session.execute(delete(m.Workflow).where(m.Workflow.is_default == 0))
+    referenced_agent_ids = [
+        int(agent_id)
+        for (agent_id,) in uow.session.execute(select(m.Phase.agent_id).where(m.Phase.agent_id.is_not(None)))
+        if agent_id is not None
+    ]
+    if referenced_agent_ids:
+        uow.session.execute(delete(m.Agent).where(m.Agent.id.not_in(referenced_agent_ids)))
+    else:
+        uow.session.execute(delete(m.Agent))
+    uow.commit()
 
 
 def _ensure_qa_workflow(uow: SAUnitOfWork) -> int:
@@ -521,6 +554,7 @@ def _ensure_tasks(uow: SAUnitOfWork, namespace: dict[str, Any]) -> None:
 def prepare_smoke_data() -> None:
     _ensure_bootstrap()
     with SAUnitOfWork() as uow:
+        _reset_smoke_rows(uow)
         _neutralize_agent_profiles(uow)
         default_workflow = _ensure_default_demo_workflow(uow)
         qa_workflow_id = _ensure_qa_workflow(uow)

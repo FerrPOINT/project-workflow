@@ -86,6 +86,9 @@ PostgreSQL, integration gate можно запускать с `PGPORT`, указ
 дефолтного runtime-каталога и показывали две независимые записи для одной
 внешней задачи:
 
+`prepare_ui_smoke_data.py` намеренно принимает только отдельную SQLite smoke-базу
+в `.smoke/ui-smoke.db` или файл `ui-smoke.db`; обычную runtime-БД он отклоняет.
+
 ```bash
 export DATABASE_URL=sqlite:///$PWD/.smoke/ui-smoke.db
 rm -f .smoke/ui-smoke.db
