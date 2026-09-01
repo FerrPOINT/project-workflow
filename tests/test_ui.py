@@ -3,6 +3,7 @@
 import json
 import re
 import sqlite3
+import uuid
 from pathlib import Path
 from unittest.mock import patch
 
@@ -1037,6 +1038,36 @@ class TestPhaseDetail:
         assert "Фаза недоступна в выбранном воркфлоу" in response.text
         assert "phaseForm" not in response.text
         assert f'href="/phases?namespace_id={namespace_id}"' in response.text
+
+    def test_phase_detail_allows_unassigned_workflow_with_selected_namespace_cookie(self):
+        uow = ui_app_state.get_db()
+        try:
+            namespace_id = _as_dict(uow.projects.get_by_code(config.DEFAULT_PROJECT_CODE))["id"]
+        finally:
+            uow.close()
+
+        with TestClient(app) as isolated_client:
+            workflow = isolated_client.post(
+                "/api/workflows",
+                json={
+                    "name": f"Unassigned phase detail workflow {uuid.uuid4().hex[:8]}",
+                    "description": "Workflow remains editable before namespace binding",
+                },
+            )
+            assert workflow.status_code == 200
+            workflow_id = workflow.json()["workflow_id"]
+            phases = isolated_client.get(f"/api/phases?workflow_id={workflow_id}").json()["phases"]
+            phase_id = phases[0]["id"]
+            isolated_client.cookies.set("workflow_namespace_id", str(namespace_id), domain="testserver.local")
+
+            phases_page = isolated_client.get(f"/phases?workflow_id={workflow_id}")
+            response = isolated_client.get(f"/phase/{phase_id}?namespace_id={namespace_id}")
+
+        assert phases_page.status_code == 200
+        assert f'href="/phase/{phase_id}?namespace_id={namespace_id}"' in phases_page.text
+        assert response.status_code == 200
+        assert "Новая фаза" in response.text
+        assert "Фаза недоступна в выбранном воркфлоу" not in response.text
 
     def test_phase_detail_hides_next_recommendation_inline_input(self):
         response = client.get(_phase_detail_path("4.START"))
@@ -2280,6 +2311,34 @@ class TestUiNetworkFailures:
         assert "Фаза недоступна в выбранном воркфлоу" in response.text
         assert "instructionGroups" not in response.text
         assert f'href="/phases?namespace_id={namespace_id}"' in response.text
+
+    def test_instructions_page_allows_unassigned_workflow_with_selected_namespace_cookie(self):
+        uow = ui_app_state.get_db()
+        try:
+            namespace_id = _as_dict(uow.projects.get_by_code(config.DEFAULT_PROJECT_CODE))["id"]
+        finally:
+            uow.close()
+
+        with TestClient(app) as isolated_client:
+            workflow = isolated_client.post(
+                "/api/workflows",
+                json={
+                    "name": f"Unassigned instructions workflow {uuid.uuid4().hex[:8]}",
+                    "description": "Instructions remain editable before namespace binding",
+                },
+            )
+            assert workflow.status_code == 200
+            workflow_id = workflow.json()["workflow_id"]
+            phases = isolated_client.get(f"/api/phases?workflow_id={workflow_id}").json()["phases"]
+            phase_id = phases[0]["id"]
+            isolated_client.cookies.set("workflow_namespace_id", str(namespace_id), domain="testserver.local")
+
+            response = isolated_client.get(f"/instructions?phase_id={phase_id}&namespace_id={namespace_id}")
+
+        assert response.status_code == 200
+        assert "Инструкции фазы Новая фаза" in response.text
+        assert f'href="/phase/{phase_id}?namespace_id={namespace_id}"' in response.text
+        assert "Фаза недоступна в выбранном воркфлоу" not in response.text
 
     def test_instructions_page_rejects_malformed_phase_id_with_html_error(self):
         response = client.get("/instructions?phase_id=abc")

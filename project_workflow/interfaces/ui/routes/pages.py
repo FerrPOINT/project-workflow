@@ -282,10 +282,27 @@ def _tasks_back_url(context: dict[str, Any]) -> str:
     return f"/tasks?namespace_id={namespace_id}" if isinstance(namespace_id, int) else "/tasks"
 
 
+def _workflow_is_unassigned(workflow_id: Any) -> bool:
+    if not isinstance(workflow_id, int):
+        return False
+    workflow = next((item for item in _load_workflows() if item.get("id") == workflow_id), None)
+    if workflow is None:
+        return False
+    try:
+        return int(workflow.get("namespace_count") or 0) == 0
+    except (TypeError, ValueError):
+        return False
+
+
 def _phase_matches_selected_namespace(phase: dict[str, Any], context: dict[str, Any]) -> bool:
     selected_namespace = context.get("selected_namespace")
     selected_workflow_id = selected_namespace.get("workflow_id") if isinstance(selected_namespace, dict) else None
-    return not isinstance(selected_workflow_id, int) or phase.get("workflow_id") == selected_workflow_id
+    phase_workflow_id = phase.get("workflow_id")
+    return (
+        not isinstance(selected_workflow_id, int)
+        or phase_workflow_id == selected_workflow_id
+        or _workflow_is_unassigned(phase_workflow_id)
+    )
 
 
 def validation_error_page(request: Request, errors: Sequence[Any]) -> HTMLResponse | None:
