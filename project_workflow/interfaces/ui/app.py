@@ -11,6 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -31,6 +32,8 @@ _VALIDATION_MESSAGES = {
     "greater_than_equal": "Значение меньше допустимого",
     "too_short": "Недостаточно элементов",
 }
+_DATABASE_NOT_READY_ERROR = "База данных не готова"
+_DATABASE_NOT_READY_CODE = "database-not-ready"
 
 
 def _validation_details(exc: RequestValidationError) -> list[dict[str, str]]:
@@ -44,6 +47,31 @@ def _validation_details(exc: RequestValidationError) -> list[dict[str, str]]:
             message = _VALIDATION_MESSAGES.get(str(issue.get("type")), "Недопустимое значение")
         details.append({"field": location or "request", "message": message})
     return details
+
+
+def _database_not_ready_response(request: Request) -> JSONResponse | HTMLResponse:
+    if request.url.path.startswith("/api/"):
+        return JSONResponse(
+            {
+                "ok": False,
+                "error": _DATABASE_NOT_READY_ERROR,
+                "error_code": _DATABASE_NOT_READY_CODE,
+            },
+            status_code=503,
+        )
+    return HTMLResponse(
+        (
+            '<!doctype html><html lang="ru"><head><meta charset="utf-8">'
+            f"<title>{_DATABASE_NOT_READY_ERROR}</title>"
+            "<style>body{margin:0;font-family:Arial,sans-serif;background:#101114;color:#f5f7fb}"
+            "main{max-width:640px;margin:12vh auto;padding:32px}"
+            "p{color:#aeb4c0;line-height:1.6}</style></head><body><main>"
+            f"<h1>{_DATABASE_NOT_READY_ERROR}</h1>"
+            "<p>Проверьте подключение и примените миграции, затем обновите страницу.</p>"
+            "</main></body></html>"
+        ),
+        status_code=503,
+    )
 
 
 class _UoWMiddleware(BaseHTTPMiddleware):
@@ -160,6 +188,12 @@ def create_app() -> FastAPI:
         if exc.status_code == 405:
             return JSONResponse({"ok": False, "error": "Метод не поддерживается"}, status_code=405)
         return JSONResponse({"ok": False, "error": str(exc.detail)}, status_code=exc.status_code)
+
+    @app.exception_handler(SQLAlchemyError)
+    async def _database_error(request: Request, exc: SQLAlchemyError) -> JSONResponse | HTMLResponse:
+        _ = exc
+        logger.warning("Database request failed; returning readiness error")
+        return _database_not_ready_response(request)
 
     app.get("/health")(_health)
 

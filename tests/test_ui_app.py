@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
+from project_workflow.infrastructure.db.session import reset_engine
 from project_workflow.interfaces.ui.app import _health, create_app
 
 
@@ -70,3 +71,30 @@ def test_lifespan_hides_database_and_shutdown_exception_details():
     asyncio.run(exercise_lifespan())
 
     assert not hasattr(app.state, "startup_error")
+
+
+def test_unmigrated_database_requests_return_sanitized_readiness_errors(tmp_path):
+    from project_workflow.application import state as app_state
+
+    reset_engine()
+    app_state._app_state.__init__(database_url=f"sqlite:///{tmp_path / 'empty.db'}")  # type: ignore[misc]
+    app = create_app()
+    client = TestClient(app, raise_server_exceptions=False)
+    try:
+        api_response = client.get("/api/namespaces")
+        page_response = client.get("/namespaces")
+    finally:
+        app_state._app_state.__init__(database_url=None)  # type: ignore[misc]
+        reset_engine()
+
+    assert api_response.status_code == 503
+    assert api_response.json() == {
+        "ok": False,
+        "error": "База данных не готова",
+        "error_code": "database-not-ready",
+    }
+    assert page_response.status_code == 503
+    assert "База данных не готова" in page_response.text
+    for leaked in ("SELECT", "sqlite", "OperationalError", "Traceback", "empty.db"):
+        assert leaked not in api_response.text
+        assert leaked not in page_response.text
