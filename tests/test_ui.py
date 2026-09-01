@@ -1309,7 +1309,12 @@ class TestTasksPage:
         assert response.status_code == 200
         assert ".tasks-layout{container:tasks / inline-size;min-width:0}" in response.text
         assert ".tasks-table{width:100%;min-width:0;table-layout:fixed}" in response.text
-        assert ".tasks-table th:nth-child(9),.tasks-table td:nth-child(9){width:9%}" in response.text
+        assert ".tasks-table th:nth-child(9),.tasks-table td:nth-child(9){width:8%}" in response.text
+        assert "white-space:nowrap;overflow-wrap:normal" in response.text
+        assert (
+            ".verdict-cell{display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0}"
+            in response.text
+        )
         assert "flex:1 1 48px;min-width:36px" in response.text
         assert (
             ".task-card-meta{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));"

@@ -156,7 +156,7 @@
     <div class="summary-progress"><span class="{% if progress_done >= progress_total and progress_total %}done{% endif %}" style="width:{{ (progress_done / progress_total * 100) if progress_total else 0 }}%"></span></div>
   </div>
   <div class="summary-item {% if cycles_done >= cycles_total and cycles_total %}done{% endif %}">
-    <div class="summary-label">Циклы Supervisor</div>
+    <div class="summary-label">Циклы проверки</div>
     <div class="summary-value">{{ cycles_done }} / {{ cycles_total }}</div>
     <div class="summary-progress"><span class="{% if cycles_done >= cycles_total and cycles_total %}done{% endif %}" style="width:{{ (cycles_done / cycles_total * 100) if cycles_total else 0 }}%"></span></div>
   </div>
@@ -195,7 +195,7 @@
 </section>
 
 <section class="detail-section" aria-labelledby="supervisor-dialog-title">
-  <h2 class="section-heading" id="supervisor-dialog-title">История проверок Supervisor</h2>
+  <h2 class="section-heading" id="supervisor-dialog-title">История проверок</h2>
   <div class="supervisor-activity">
     {% for run in step_history %}
     <article class="activity-event">
@@ -212,7 +212,7 @@
         {% if run.worker_report %}<div class="dialog-part"><div class="dialog-label">Отчёт исполнителя</div><div class="report-text">{{ run.worker_report }}</div></div>{% endif %}
 
         <div class="dialog-part">
-          <div class="dialog-label">Ответ Supervisor</div>
+          <div class="dialog-label">Результат проверки</div>
           <div class="supervisor-card {{ run.verdict }}">
             <div class="supervisor-message">{{ run.contract.message or run.verdict_label }}</div>
             {% if run.contract.covered %}<div class="result-list covered"><h4>Покрыто</h4><ul>{% for item in run.contract.covered %}<li>{{ item }}</li>{% endfor %}</ul></div>{% endif %}
@@ -223,7 +223,7 @@
 
         {% if run.next_contract %}
         <div class="dialog-part">
-          <div class="dialog-label">Задание Supervisor на следующий этап</div>
+          <div class="dialog-label">Следующий этап</div>
           <div class="assignment-card">
             <div class="assignment-head"><span class="phase-code">{{ run.next_contract.phase_code }}</span><span class="assignment-name">{{ run.next_contract.phase_name }}</span></div>
             {% if run.next_contract.description %}<div class="assignment-description">{{ run.next_contract.description }}</div>{% endif %}
@@ -235,7 +235,7 @@
         {% endif %}
       </div>
     </article>
-    {% else %}<div class="empty-state">Проверок Supervisor пока нет.</div>{% endfor %}
+    {% else %}<div class="empty-state">Проверок пока нет.</div>{% endfor %}
   </div>
 </section>
 {% endblock %}

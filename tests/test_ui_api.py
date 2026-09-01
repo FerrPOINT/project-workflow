@@ -128,6 +128,8 @@ class TestIndex:
         resp = client.get("/tasks")
         assert resp.status_code == 200
         assert "Неймспейс" in resp.text
+        assert "verdict-cell" in resp.text
+        assert "white-space:nowrap;overflow-wrap:normal" in resp.text
 
     def test_header_has_namespace_selector_and_actions(self, client):
         resp = client.get("/")

@@ -102,8 +102,11 @@ def test_task_detail_renders_group_markers_and_chronological_supervisor_dialog()
     assert '>27</span><span class="phase-name">Auto-Improve' in html
     assert "phase-parallel-inner-arrow" not in html
     assert html.index("first-report") < html.index("second-report")
-    assert "История проверок Supervisor" in html
-    assert "Задание Supervisor на следующий этап" in html
+    assert "Циклы проверки" in html
+    assert "История проверок" in html
+    assert "Результат проверки" in html
+    assert "Следующий этап" in html
+    assert "Supervisor" not in html
     assert "workflow-code-intelligence" in html
     assert "Dataflow проверен" in html
     assert "Лог исследования" in html

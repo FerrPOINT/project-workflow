@@ -11,18 +11,18 @@
 .tasks-table th:nth-child(1),.tasks-table td:nth-child(1){width:7%}
 .tasks-table th:nth-child(2),.tasks-table td:nth-child(2){width:13%}
 .tasks-table th:nth-child(3),.tasks-table td:nth-child(3){width:12%}
-.tasks-table th:nth-child(4),.tasks-table td:nth-child(4){width:18%}
+.tasks-table th:nth-child(4),.tasks-table td:nth-child(4){width:17%}
 .tasks-table th:nth-child(5),.tasks-table td:nth-child(5){width:12%}
 .tasks-table th:nth-child(6),.tasks-table td:nth-child(6){width:10%}
-.tasks-table th:nth-child(7),.tasks-table td:nth-child(7){width:9%}
-.tasks-table th:nth-child(8),.tasks-table td:nth-child(8){width:10%}
-.tasks-table th:nth-child(9),.tasks-table td:nth-child(9){width:9%}
+.tasks-table th:nth-child(7),.tasks-table td:nth-child(7){width:10%}
+.tasks-table th:nth-child(8),.tasks-table td:nth-child(8){width:11%}
+.tasks-table th:nth-child(9),.tasks-table td:nth-child(9){width:8%}
 .tasks-table .task-key{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent)}
 .tasks-table .task-title{color:var(--text);font-weight:500}
 .namespace-pill{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:3px 8px;border-radius:6px;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:600}
 .namespace-pill svg{width:14px;height:14px;flex:0 0 auto}
 .namespace-pill span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.status-badge{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:6px;font-size:12px;font-weight:500}
+.status-badge{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:6px;font-size:12px;font-weight:500;white-space:nowrap;overflow-wrap:normal}
 .status-done{background:var(--green-soft);color:var(--green)}
 .status-active{background:var(--accent-soft);color:var(--accent)}
 .status-blocked{background:var(--red-soft);color:var(--red)}
@@ -37,7 +37,8 @@
 .task-card .task-key{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent)}
 .task-card .label{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em}
 .task-card .value{font-size:13px;color:var(--text-secondary);font-weight:500}
-.verdict-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;white-space:nowrap}
+.verdict-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;line-height:1.2;white-space:normal;overflow-wrap:normal}
+.verdict-cell{display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0}
 .verdict-pass{background:var(--green-soft);color:var(--green)}
 .verdict-partial{background:rgba(234,179,8,.12);color:#eab308}
 .verdict-blocked{background:var(--red-soft);color:var(--red)}
@@ -98,11 +99,13 @@
         </td>
         <td>
           {% if t.latest_verdict %}
-          <span class="verdict-badge verdict-{{ t.latest_verdict }}">{{ t.latest_verdict_label }}</span>
-          {% if t.latest_verdict_phase %}<span style="font-size:11px;color:var(--text-dim)">{{ t.latest_verdict_phase }}</span>{% endif %}
+          <span class="verdict-cell">
+            <span class="verdict-badge verdict-{{ t.latest_verdict }}">{{ t.latest_verdict_label }}</span>
+            {% if t.latest_verdict_phase %}<span style="font-size:11px;color:var(--text-dim)">{{ t.latest_verdict_phase }}</span>{% endif %}
+          </span>
           {% else %}—{% endif %}
         </td>
-        <td>{{ t.created_at[:16] if t.created_at else '—' }}</td>
+        <td>{{ t.created_at[:10] if t.created_at else '—' }}</td>
       </tr>
       {% else %}
       <tr>

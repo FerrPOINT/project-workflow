@@ -65,6 +65,8 @@ def test_prepare_ui_smoke_data_creates_neutral_parallel_namespace_fixture(tmp_pa
     assert dev["name"] == "Разработка"
     assert qa["name"] == "Проверка качества"
     assert dev["workflow_id"] != qa["workflow_id"]
+    assert len(TASK_SCENARIOS["workflow-dev"]) >= 8
+    assert len(TASK_SCENARIOS["workflow-qa"]) >= 8
     assert len(dev_tasks) == len(TASK_SCENARIOS["workflow-dev"])
     assert len(qa_tasks) == len(TASK_SCENARIOS["workflow-qa"])
     assert {task["status"] for task in dev_tasks} == {"active", "blocked", "done"}
@@ -115,6 +117,7 @@ def test_ui_smoke_pages_render_neutral_screenshot_fixture(tmp_path, monkeypatch)
 
     rendered = "\n".join(rendered_pages)
     assert "hermes" not in rendered.casefold()
+    assert "Supervisor" not in rendered
     assert "sdlc-business-tech-v1" not in rendered
     assert "sdlc-orchestrator" not in rendered
     assert "Default Namespace" not in rendered
