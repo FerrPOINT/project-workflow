@@ -131,7 +131,7 @@
         <button type="button" class="phase-move-btn move-up-btn" onclick="moveInstruction(this, -1)" aria-label="Поднять выше">↑</button>
         <button type="button" class="phase-add-btn" onclick="addInstructionAfter(this)" aria-label="Добавить после">+</button>
         <button type="button" class="phase-move-btn move-down-btn" onclick="moveInstruction(this, 1)" aria-label="Опустить ниже">↓</button>
-        <button type="button" class="phase-delete-btn" onclick="deleteInstruction(this)" aria-label="Удалить"{% if instruction_count <= 1 %} disabled style="opacity:.35;cursor:not-allowed"{% endif %}>×</button>
+        <button type="button" class="phase-delete-btn" onclick="deleteInstruction(this)" aria-label="Удалить">×</button>
       </div>
       <div class="timeline-card" data-instruction-id="{{ i.id }}" data-step-num="{{ i.step_num }}" data-type="{{ i.execution_type }}">
         <input type="text" class="timeline-name-input" value="{{ i.description }}" data-field="description" onblur="saveInstructionDescription(this)">
@@ -445,11 +445,6 @@ async function addInstructionLast() {
 async function deleteInstruction(button) {
   const item = button.closest('.timeline-item');
   if (!item) return;
-  const items = getInstructionItems();
-  if (items.length <= 1) {
-    showToast('Нельзя удалить единственную инструкцию', 'error');
-    return;
-  }
   if (!confirm('Удалить инструкцию?')) return;
   button.disabled = true;
   try {

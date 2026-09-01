@@ -1072,6 +1072,34 @@ class TestPhaseDetail:
         assert "name: meta.name ||" not in response.text
         assert "name: meta.name," in response.text
 
+    def test_phase_detail_allows_deleting_last_instruction_like_api(self):
+        phase_response = client.get(_phase_api_path("1.INTAKE"))
+        assert phase_response.status_code == 200
+        phase = phase_response.json()["phase"]
+        restore_payload = _phase_restore_payload(phase)
+        single_instruction_payload = _phase_restore_payload(phase)
+        single_instruction_payload["instructions"] = [
+            {
+                "id": phase["instructions"][0]["id"],
+                "description": "Единственная инструкция",
+                "execution_type": "sync",
+                "skills": [],
+            }
+        ]
+
+        try:
+            update = client.put(_phase_api_path("1.INTAKE"), json=single_instruction_payload)
+            assert update.status_code == 200
+
+            response = client.get(_phase_detail_path("1.INTAKE"))
+
+            assert response.status_code == 200
+            assert "Нельзя удалить единственную инструкцию" not in response.text
+            assert "items.length <= 1" not in response.text
+            assert 'aria-label="Удалить" disabled' not in response.text
+        finally:
+            client.put(_phase_api_path("1.INTAKE"), json=restore_payload)
+
     def test_phase_detail_renders_selected_instruction_skills_and_free_text_input(self):
         skills = ["test-driven-development", "workflow-app-ui-delivery"]
         phase_response = client.get(_phase_api_path("1.INTAKE"))
