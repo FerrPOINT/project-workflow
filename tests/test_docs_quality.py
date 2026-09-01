@@ -95,6 +95,8 @@ def test_screenshot_capture_script_checks_full_smoke_data() -> None:
     assert "/project-workflow/i" in source
     assert "sdlc-" in source
     assert "Default Namespace" in source
+    assert "orchestrator" in source
+    assert "codex-operator" in source
     assert 'name: "settings.png"' in source
     assert "workflow-dev step" in source
 

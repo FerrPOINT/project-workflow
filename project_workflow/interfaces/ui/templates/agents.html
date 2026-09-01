@@ -7,10 +7,10 @@
 .agent-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
 .agent-table{width:100%}
 .agent-table th{white-space:nowrap}
-.inline-edit,.inline-textarea{background:transparent;border:1px solid transparent;padding:8px 10px;border-radius:6px;color:var(--text);font-size:13px;width:100%;font-family:inherit}
+.inline-edit,.inline-textarea{background:transparent;border:1px solid transparent;padding:7px 10px;border-radius:6px;color:var(--text);font-size:13px;width:100%;font-family:inherit}
 .inline-edit:hover,.inline-textarea:hover{background:var(--panel)}
 .inline-edit:focus,.inline-textarea:focus{background:var(--panel);border-color:var(--accent);outline:none}
-.inline-textarea{min-height:72px;resize:vertical}
+.inline-textarea{min-height:44px;resize:vertical;line-height:1.35}
 .form-grid{display:grid;grid-template-columns:200px 220px minmax(260px,1fr) auto;gap:12px;align-items:start}
 .field-label{display:block;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
 .agent-create{border-top:3px solid var(--accent)}
@@ -39,7 +39,7 @@
           <td style="width:240px">
             <input type="text" class="inline-edit" value="{{ a.launch_profile or '' }}" data-field="launch_profile" onblur="saveRow(this)">
           </td>
-          <td>
+          <td style="min-width:360px">
             <textarea class="inline-textarea" data-field="description" onblur="saveRow(this)">{{ a.description or '' }}</textarea>
           </td>
           <td style="width:60px;text-align:right">

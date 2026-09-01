@@ -10,7 +10,16 @@ const { chromium } = loadPlaywright();
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const baseUrl = process.env.SMOKE_BASE_URL || "http://127.0.0.1:8812";
 const outputDir = path.resolve(rootDir, process.env.SMOKE_SCREENSHOT_DIR || "docs/screenshots");
-const forbiddenVisibleText = [/Hermes/i, /Гермес/i, /project-workflow/i, /sdlc-/i, /Default Namespace/i, /Supervisor/i];
+const forbiddenVisibleText = [
+  /Hermes/i,
+  /Гермес/i,
+  /project-workflow/i,
+  /sdlc-/i,
+  /Default Namespace/i,
+  /Supervisor/i,
+  /\borchestrator\b/i,
+  /codex-operator/i,
+];
 const screenshotNames = [
   "dashboard.png",
   "dashboard-qa.png",
@@ -319,7 +328,7 @@ async function captureAll(outputRoot) {
     await capture(page, outputRoot, {
       name: "agents.png",
       url: `/agents?namespace_id=${dev.id}`,
-      expected: ["Агенты", "ПРОФИЛЬ ЗАПУСКА", "launch-orchestrator", "launch-reviewer"],
+      expected: ["Агенты", "ПРОФИЛЬ ЗАПУСКА", "Координатор", "Оператор", "Ревьюер", "launch-coordinator"],
     });
     await capture(page, outputRoot, {
       name: "settings.png",

@@ -215,6 +215,43 @@ QA_PHASES = [
     ("Отчёт о рисках", "Собрать замечания, риски и подтверждения."),
     ("Финальный отчёт", "Зафиксировать итог проверки."),
 ]
+DEMO_AGENT_PROFILES: dict[str, dict[str, Any]] = {
+    "orchestrator": {
+        "name": "Координатор",
+        "description": "Ведёт постановку задачи, синхронизирует переходы и фиксирует решения.",
+        "hermes_profile": "launch-coordinator",
+    },
+    "codex-operator": {
+        "name": "Оператор",
+        "description": "Проверяет план, слияние и ручные решения перед переходом дальше.",
+        "hermes_profile": None,
+    },
+    "ops": {
+        "name": "Инженер запуска",
+        "description": "Отвечает за окружение, миграции, smoke-проверки и готовность приложения.",
+        "hermes_profile": "launch-runtime",
+    },
+    "researcher": {
+        "name": "Аналитик",
+        "description": "Разбирает поток данных, зависимости и фактическое поведение системы.",
+        "hermes_profile": "launch-analyst",
+    },
+    "critic": {
+        "name": "Контролёр качества",
+        "description": "Ищет риски, пропуски в плане и слабые места регрессионного покрытия.",
+        "hermes_profile": "launch-quality",
+    },
+    "coder": {
+        "name": "Разработчик",
+        "description": "Вносит минимальные изменения, добавляет тесты и готовит проверяемый результат.",
+        "hermes_profile": "launch-developer",
+    },
+    "reviewer": {
+        "name": "Ревьюер",
+        "description": "Проверяет реализацию, архитектурные границы и отсутствие лишней сложности.",
+        "hermes_profile": "launch-review",
+    },
+}
 
 
 def _assert_smoke_database_url(database_url: str) -> None:
@@ -341,14 +378,20 @@ def _ensure_default_demo_workflow(uow: SAUnitOfWork) -> dict[str, Any]:
     return workflow
 
 
-def _neutralize_agent_profiles(uow: SAUnitOfWork) -> None:
+def _neutralize_agents(uow: SAUnitOfWork) -> None:
     for agent in uow.agents.list():
-        if agent.id is None or agent.hermes_profile is None:
+        if agent.id is None:
             continue
-        neutral_profile = _neutral_profile_name(agent.name, int(agent.id))
-        if agent.hermes_profile == neutral_profile:
+        demo_agent = DEMO_AGENT_PROFILES.get(agent.name)
+        if demo_agent is None:
+            if agent.hermes_profile is None:
+                continue
+            neutral_profile = _neutral_profile_name(agent.name, int(agent.id))
+            if agent.hermes_profile == neutral_profile:
+                continue
+            uow.agents.update(int(agent.id), {"hermes_profile": neutral_profile})
             continue
-        uow.agents.update(int(agent.id), {"hermes_profile": neutral_profile})
+        uow.agents.update(int(agent.id), demo_agent)
     uow.commit()
 
 
@@ -555,7 +598,7 @@ def prepare_smoke_data() -> None:
     _ensure_bootstrap()
     with SAUnitOfWork() as uow:
         _reset_smoke_rows(uow)
-        _neutralize_agent_profiles(uow)
+        _neutralize_agents(uow)
         default_workflow = _ensure_default_demo_workflow(uow)
         qa_workflow_id = _ensure_qa_workflow(uow)
         dev_namespace = _ensure_namespace(

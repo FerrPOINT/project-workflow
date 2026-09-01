@@ -16,6 +16,7 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui.app import create_app
 from scripts.prepare_ui_smoke_data import (
     DEFAULT_DEMO_WORKFLOW_NAME,
+    DEMO_AGENT_PROFILES,
     QA_WORKFLOW_NAME,
     TASK_KEY,
     TASK_SCENARIOS,
@@ -88,6 +89,11 @@ def test_prepare_ui_smoke_data_creates_neutral_parallel_namespace_fixture(tmp_pa
     assert dev_task is not None
     assert qa_task is not None
     assert dev_task.task_key == qa_task.task_key == TASK_KEY
+    assert {agent["name"] for agent in agents} >= {
+        str(agent["name"]) for agent in DEMO_AGENT_PROFILES.values()
+    }
+    assert "orchestrator" not in visible_text
+    assert "codex-operator" not in visible_text
 
 
 def test_prepare_ui_smoke_data_resets_stale_visible_runtime_rows(tmp_path, monkeypatch) -> None:
@@ -145,6 +151,8 @@ def test_prepare_ui_smoke_data_resets_stale_visible_runtime_rows(tmp_path, monke
     assert task_counts == {command: len(scenarios) for command, scenarios in TASK_SCENARIOS.items()}
     assert {workflow["name"] for workflow in workflows} == {DEFAULT_DEMO_WORKFLOW_NAME, QA_WORKFLOW_NAME}
     assert "hermes" not in rendered_text.casefold()
+    assert "orchestrator" not in rendered_text
+    assert "codex-operator" not in rendered_text
 
 
 def test_prepare_ui_smoke_data_rejects_non_smoke_database_url(tmp_path, monkeypatch) -> None:
@@ -218,6 +226,10 @@ def test_ui_smoke_pages_render_neutral_screenshot_fixture(tmp_path, monkeypatch)
     assert "sdlc-business-tech-v1" not in rendered
     assert "sdlc-orchestrator" not in rendered
     assert "Default Namespace" not in rendered
+    assert "orchestrator" not in rendered
+    assert "codex-operator" not in rendered
+    assert "Координатор" in rendered
+    assert "Ревьюер" in rendered
     assert DEFAULT_DEMO_WORKFLOW_NAME in rendered
     assert QA_WORKFLOW_NAME in rendered
     assert "workflow-dev" in rendered
