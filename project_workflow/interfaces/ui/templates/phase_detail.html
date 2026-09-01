@@ -134,7 +134,7 @@
         <button type="button" class="phase-delete-btn" onclick="deleteInstruction(this)" aria-label="Удалить">×</button>
       </div>
       <div class="timeline-card" data-instruction-id="{{ i.id }}" data-step-num="{{ i.step_num }}" data-type="{{ i.execution_type }}">
-        <input type="text" class="timeline-name-input" value="{{ i.description }}" data-field="description" onblur="saveInstructionDescription(this)">
+        <input type="text" class="timeline-name-input" value="{{ i.description }}" data-field="description" data-original-description="{{ i.description }}" onblur="saveInstructionDescription(this)">
         <div class="execution-row">
           <button type="button" class="badge {{ 'badge-parallel' if i.execution_type == 'parallel' else 'badge-sync' }}" onclick="toggleInstructionType(this)" aria-label="Режим выполнения: {{ 'параллельно' if i.execution_type == 'parallel' else 'последовательно' }}">
             {% if i.execution_type == 'parallel' %}⚡ параллельно{% else %}⏱ последовательно{% endif %}
@@ -489,14 +489,36 @@ async function toggleInstructionType(badge) {
 async function saveInstructionDescription(input) {
   const card = input.closest('.timeline-card');
   const id = card.dataset.instructionId;
-  const result = await requestPhaseDetail('/api/instructions/' + id, {
-    method: 'PUT',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({description: input.value}),
-  });
-  if (!result) return;
-  const {resp} = result;
-  if (!resp.ok) showToast('Не удалось сохранить описание', 'error');
+  const previousDescription = input.dataset.originalDescription || '';
+  const description = input.value.trim();
+  if (!description) {
+    input.value = previousDescription;
+    showToast('Описание инструкции обязательно', 'error');
+    return;
+  }
+  input.disabled = true;
+  try {
+    const result = await requestPhaseDetail('/api/instructions/' + id, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({description: description}),
+    });
+    if (!result) {
+      input.value = previousDescription;
+      return;
+    }
+    const {resp, data} = result;
+    if (!resp.ok || !data.ok) {
+      input.value = previousDescription;
+      showToast(data.error || 'Не удалось сохранить описание', 'error');
+      return;
+    }
+    const savedDescription = data.instruction?.description || description;
+    input.value = savedDescription;
+    input.dataset.originalDescription = savedDescription;
+  } finally {
+    input.disabled = false;
+  }
 }
 
 async function addSkillToInstruction(input) {

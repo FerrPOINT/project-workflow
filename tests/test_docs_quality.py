@@ -13,6 +13,7 @@ SCREENSHOTS = {
     "tasks.png": (1400, 1150),
     "tasks-qa.png": (1400, 1150),
     "workflows.png": (1400, 850),
+    "instructions.png": (1400, 850),
     "agents.png": (1400, 900),
     "phases.png": (1400, 3000),
     "task-detail-dev.png": (1400, 3500),
@@ -118,6 +119,10 @@ def test_screenshot_capture_script_checks_full_smoke_data() -> None:
     assert "orchestrator" in source
     assert "codex-operator" in source
     assert "Профиль запуска" in source
+    assert "Relevanter" in source
+    assert "dueDate" in source
+    assert "Business-" in source
+    assert "Tech-" in source
     assert 'name: "settings.png"' in source
     assert "workflow-dev step" in source
     assert "КЛЮЧ ЗАПУСКА" in source

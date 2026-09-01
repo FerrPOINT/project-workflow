@@ -1239,6 +1239,29 @@ class TestPhaseDetail:
         finally:
             client.put(_phase_api_path("1.INTAKE"), json=restore_payload)
 
+    def test_phase_detail_instruction_description_reverts_after_rejected_save(self):
+        response = client.get(_phase_detail_path("1.INTAKE"))
+
+        assert response.status_code == 200
+        assert 'data-original-description="' in response.text
+        assert "const previousDescription = input.dataset.originalDescription || '';" in response.text
+        assert "const description = input.value.trim();" in response.text
+        assert "input.value = previousDescription;" in response.text
+        assert "input.dataset.originalDescription = savedDescription;" in response.text
+        assert "showToast('Описание инструкции обязательно', 'error');" in response.text
+
+    def test_instructions_page_instruction_description_reverts_after_rejected_save(self):
+        phase_id = _phase_id("1.INTAKE")
+        response = client.get(f"/instructions?phase_id={phase_id}")
+
+        assert response.status_code == 200
+        assert 'data-original-description="' in response.text
+        assert "const previousDescription = textarea.dataset.originalDescription || '';" in response.text
+        assert "const description = textarea.value.trim();" in response.text
+        assert "textarea.value = previousDescription;" in response.text
+        assert "textarea.dataset.originalDescription = savedDescription;" in response.text
+        assert "showToast('Описание инструкции обязательно', 'error');" in response.text
+
     def test_phase_detail_can_toggle_instruction_execution_type(self):
         phase_response = client.get(_phase_api_path("1.INTAKE"))
         assert phase_response.status_code == 200

@@ -291,13 +291,77 @@ TASK_SCENARIOS = {
     ],
 }
 QA_PHASES = [
-    ("Проверка сценариев", "Зафиксировать ожидаемое поведение и границы проверки."),
-    ("Проверка интерфейса", "Открыть ключевые страницы и сверить состояние с данными."),
-    ("Проверка API", "Сверить ответы JSON с тем, что показывает интерфейс."),
-    ("Регрессия", "Повторить критичные сценарии после исправлений."),
-    ("Отчёт о рисках", "Собрать замечания, риски и подтверждения."),
-    ("Финальный отчёт", "Зафиксировать итог проверки."),
+    (
+        "Проверка сценариев",
+        "Зафиксировать ожидаемое поведение и границы проверки.",
+        [
+            {"description": "Собрать основные сценарии проверки", "skills": ["case-design"]},
+            {"description": "Проверить отрицательные ветки", "skills": ["risk-check"]},
+        ],
+    ),
+    (
+        "Проверка интерфейса",
+        "Открыть ключевые страницы и сверить состояние с данными.",
+        [
+            {"description": "Открыть ключевые страницы интерфейса", "skills": ["ui-check"]},
+            {"description": "Сверить переключение выбранного набора", "skills": ["state-check"]},
+        ],
+    ),
+    (
+        "Проверка API",
+        "Сверить ответы JSON с тем, что показывает интерфейс.",
+        [
+            {"description": "Проверить ответы API по выбранному набору", "skills": ["api-check"]},
+            {"description": "Сверить ошибки валидации", "skills": ["validation-check"]},
+        ],
+    ),
+    (
+        "Регрессия",
+        "Повторить критичные сценарии после исправлений.",
+        [
+            {"description": "Повторить критичные сценарии", "skills": ["regression-check"]},
+            {"description": "Сверить отсутствие побочных изменений", "skills": ["change-check"]},
+        ],
+    ),
+    (
+        "Отчёт о рисках",
+        "Собрать замечания, риски и подтверждения.",
+        [
+            {"description": "Собрать подтверждения и открытые риски", "skills": ["evidence-check"]},
+            {"description": "Подготовить понятный итог проверки", "skills": ["report-check"]},
+        ],
+    ),
+    (
+        "Финальный отчёт",
+        "Зафиксировать итог проверки.",
+        [
+            {"description": "Зафиксировать итоговый вердикт", "skills": ["release-check"]},
+        ],
+    ),
 ]
+NEUTRAL_SKILL_SETS = (
+    ["task-record", "source-check"],
+    ["scope-check"],
+    ["risk-check"],
+    ["ui-check"],
+    ["api-check"],
+    ["regression-check"],
+    ["review-check"],
+    ["delivery-check"],
+)
+VISIBLE_TEXT_REPLACEMENTS = (
+    ("в Relevanter Business", "во внешней системе"),
+    ("Relevanter Business", "внешняя система"),
+    ("Business-задача", "задача"),
+    ("Business-задачи", "задачи"),
+    ("Business-задачу", "задачу"),
+    ("Tech-ветку", "рабочую ветку"),
+    ("Tech-механизмом", "штатным механизмом"),
+    ("Tech PR", "запрос на слияние"),
+    ("dueDate", "дату исполнения"),
+    ("In Progress", "в работе"),
+    ("Open", "начальное состояние"),
+)
 DEMO_AGENT_PROFILES: dict[str, dict[str, Any]] = {
     "orchestrator": {
         "name": "Координатор",
@@ -408,6 +472,58 @@ def _reset_smoke_rows(uow: SAUnitOfWork) -> None:
     uow.commit()
 
 
+def _replace_phase_instructions(
+    uow: SAUnitOfWork,
+    phase_id: int,
+    instructions: list[dict[str, Any]],
+) -> None:
+    uow.session.execute(delete(m.PhaseInstruction).where(m.PhaseInstruction.phase_id == phase_id))
+    uow.session.flush()
+    for step_num, instruction in enumerate(instructions, start=1):
+        uow.phase_instructions.create(
+            phase_id,
+            {
+                "description": instruction["description"],
+                "execution_type": instruction.get("execution_type", "sync"),
+                "skills": instruction.get("skills", []),
+                "step_num": step_num,
+            },
+        )
+
+
+def _neutralize_instruction_skills(uow: SAUnitOfWork, workflow_ids: set[int]) -> None:
+    for phase in uow.phases.list():
+        if phase.id is None or phase.workflow_id is None or int(phase.workflow_id) not in workflow_ids:
+            continue
+        phase_description = _neutralize_visible_text(phase.description)
+        if phase_description != phase.description:
+            uow.phases.update(int(phase.id), {"description": phase_description})
+        for index, instruction in enumerate(uow.phase_instructions.list(int(phase.id))):
+            skills = list(NEUTRAL_SKILL_SETS[index % len(NEUTRAL_SKILL_SETS)])
+            description = _neutralize_visible_text(str(instruction.get("description") or ""))
+            updates: dict[str, Any] = {"skills": skills}
+            if description != instruction.get("description"):
+                updates["description"] = description
+            if instruction.get("skills") != skills or "description" in updates:
+                uow.phase_instructions.update(int(instruction["id"]), updates)
+        for check in uow.phase_checks.list(int(phase.id)):
+            description = _neutralize_visible_text(str(check.get("description") or ""))
+            if description != check.get("description"):
+                uow.phase_checks.update(int(check["id"]), {"description": description})
+        for evidence in uow.phase_evidence_requirements.list(int(phase.id)):
+            description = _neutralize_visible_text(str(evidence.get("description") or ""))
+            if description != evidence.get("description"):
+                uow.phase_evidence_requirements.update(int(evidence["id"]), {"description": description})
+    uow.commit()
+
+
+def _neutralize_visible_text(value: str | None) -> str:
+    text = value or ""
+    for old, new in VISIBLE_TEXT_REPLACEMENTS:
+        text = text.replace(old, new)
+    return text
+
+
 def _ensure_qa_workflow(uow: SAUnitOfWork) -> int:
     workflow = _workflow_by_name(uow, QA_WORKFLOW_NAME)
     if workflow is None:
@@ -419,11 +535,11 @@ def _ensure_qa_workflow(uow: SAUnitOfWork) -> int:
         )
     workflow_id = int(workflow["id"])
     phase_service = PhaseServiceApp(uow)
-    for order, (name, description) in enumerate(QA_PHASES, start=1):
+    for order, (name, description, instructions) in enumerate(QA_PHASES, start=1):
         phases = phase_service.list_phases(workflow_id)
         existing = next((phase for phase in phases if phase["phase_order"] == order), None)
         if existing is None:
-            phase_service.create_phase(
+            created = phase_service.create_phase(
                 {
                     "workflow_id": workflow_id,
                     "phase_order": order,
@@ -431,6 +547,8 @@ def _ensure_qa_workflow(uow: SAUnitOfWork) -> int:
                     "description": description,
                 }
             )
+            phase_id = int(created["id"])
+            _replace_phase_instructions(uow, phase_id, instructions)
             continue
         phase_service.update_phase(
             int(existing["id"]),
@@ -439,6 +557,8 @@ def _ensure_qa_workflow(uow: SAUnitOfWork) -> int:
                 "description": description,
             }
         )
+        _replace_phase_instructions(uow, int(existing["id"]), instructions)
+        uow.commit()
     return workflow_id
 
 
@@ -708,6 +828,7 @@ def prepare_smoke_data() -> None:
             theme_icon="bug",
             theme_color="#22C55E",
         )
+        _neutralize_instruction_skills(uow, {int(default_workflow["id"]), qa_workflow_id})
         _ensure_tasks(uow, dev_namespace)
         _ensure_tasks(uow, qa_namespace)
 

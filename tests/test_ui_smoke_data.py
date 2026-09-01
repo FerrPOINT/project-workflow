@@ -51,6 +51,21 @@ def test_prepare_ui_smoke_data_creates_neutral_parallel_namespace_fixture(tmp_pa
                 f"{agent.get('name', '')} {agent.get('description', '')} {agent.get('hermes_profile', '')}"
                 for agent in agents
             )
+            for phase in phases:
+                if phase["id"] is None:
+                    continue
+                for instruction in uow.phase_instructions.list(int(phase["id"])):
+                    visible_text += (
+                        f"\n{instruction.get('description', '')} "
+                        f"{' '.join(instruction.get('skills') or [])}"
+                    )
+                visible_text += "\n" + "\n".join(
+                    str(check.get("description") or "") for check in uow.phase_checks.list(int(phase["id"]))
+                )
+                visible_text += "\n" + "\n".join(
+                    str(evidence.get("description") or "")
+                    for evidence in uow.phase_evidence_requirements.list(int(phase["id"]))
+                )
             dev = next(namespace for namespace in namespaces if namespace["cli_command"] == "workflow-dev")
             qa = next(namespace for namespace in namespaces if namespace["cli_command"] == "workflow-qa")
             dev_tasks = [task.to_dict() for task in uow.tasks.list_by_project(dev["id"])]
@@ -75,6 +90,11 @@ def test_prepare_ui_smoke_data_creates_neutral_parallel_namespace_fixture(tmp_pa
     assert "hermes" not in visible_text.casefold()
     assert "sdlc-" not in visible_text.casefold()
     assert "launch-" not in visible_text.casefold()
+    assert "project-workflow" not in visible_text.casefold()
+    assert "relevanter" not in visible_text.casefold()
+    assert "duedate" not in visible_text.casefold()
+    assert "business-" not in visible_text.casefold()
+    assert "tech-" not in visible_text.casefold()
     assert "sdlc-business-tech-v1" not in visible_text
     assert "Smoke" not in visible_text
     assert DEFAULT_DEMO_WORKFLOW_NAME in visible_text
@@ -109,6 +129,8 @@ def test_prepare_ui_smoke_data_creates_neutral_parallel_namespace_fixture(tmp_pa
     assert "flow-coord" in visible_text
     assert "flow-dev" in visible_text
     assert "flow-review" in visible_text
+    assert "task-record" in visible_text
+    assert "source-check" in visible_text
 
 
 def test_prepare_ui_smoke_data_resets_stale_visible_runtime_rows(tmp_path, monkeypatch) -> None:
@@ -221,6 +243,7 @@ def test_ui_smoke_pages_render_neutral_screenshot_fixture(tmp_path, monkeypatch)
                 f"/phases?namespace_id={dev['id']}",
                 f"/phases?namespace_id={qa['id']}",
                 f"/phase/{dev_phase.id}?namespace_id={dev['id']}",
+                f"/instructions?phase_id={dev_phase.id}&namespace_id={dev['id']}",
                 "/workflows",
                 f"/task/{TASK_KEY}?namespace_id={dev['id']}",
                 f"/task/{TASK_KEY}?namespace_id={qa['id']}",
@@ -237,6 +260,11 @@ def test_ui_smoke_pages_render_neutral_screenshot_fixture(tmp_path, monkeypatch)
 
     rendered = "\n".join(rendered_pages)
     assert "hermes" not in rendered.casefold()
+    assert "project-workflow" not in rendered.casefold()
+    assert "relevanter" not in rendered.casefold()
+    assert "duedate" not in rendered.casefold()
+    assert "business-" not in rendered.casefold()
+    assert "tech-" not in rendered.casefold()
     assert "Supervisor" not in rendered
     assert "sdlc-" not in rendered.casefold()
     assert "launch-" not in rendered.casefold()

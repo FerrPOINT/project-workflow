@@ -19,6 +19,10 @@ const forbiddenVisibleText = [
   /Default Namespace/i,
   /Supervisor/i,
   /Профиль запуска/i,
+  /Relevanter/i,
+  /dueDate/i,
+  /Business-/i,
+  /Tech-/i,
   /\borchestrator\b/i,
   /codex-operator/i,
 ];
@@ -32,6 +36,7 @@ const screenshotNames = [
   "workflows.png",
   "phases.png",
   "phases-qa.png",
+  "instructions.png",
   "task-detail-dev.png",
   "task-detail-qa.png",
   "agents.png",
@@ -89,6 +94,24 @@ async function namespaceByCommand(request, command) {
     throw new Error(`namespace ${command} not found`);
   }
   return namespace;
+}
+
+async function listPhases(request, workflowId) {
+  const response = await request.get(`${baseUrl}/api/phases?workflow_id=${workflowId}`);
+  if (!response.ok()) {
+    throw new Error(`phases request failed: ${response.status()}`);
+  }
+  const payload = await response.json();
+  return payload.phases;
+}
+
+async function phaseByOrder(request, workflowId, phaseOrder) {
+  const phases = await listPhases(request, workflowId);
+  const phase = phases.find((item) => item.phase_order === phaseOrder);
+  if (!phase) {
+    throw new Error(`phase ${phaseOrder} not found for workflow ${workflowId}`);
+  }
+  return phase;
 }
 
 async function assertSmokeNamespaces(request) {
@@ -294,6 +317,7 @@ async function captureAll(outputRoot) {
     await assertSmokeNamespaces(context.request);
     const dev = await namespaceByCommand(context.request, "workflow-dev");
     const qa = await namespaceByCommand(context.request, "workflow-qa");
+    const devFirstPhase = await phaseByOrder(context.request, dev.workflow_id, 1);
     await capture(page, outputRoot, {
       name: "dashboard.png",
       url: `/?namespace_id=${dev.id}`,
@@ -355,6 +379,17 @@ async function captureAll(outputRoot) {
       name: "phases-qa.png",
       url: `/phases?namespace_id=${qa.id}`,
       expected: ["Воркфлоу проверки", "Проверка сценариев", "Финальный отчёт"],
+    });
+    await capture(page, outputRoot, {
+      name: "instructions.png",
+      url: `/instructions?phase_id=${devFirstPhase.id}&namespace_id=${dev.id}`,
+      expected: [
+        "Инструкции фазы Приём задачи",
+        "task-record",
+        "source-check",
+        "во внешней системе",
+        "Сохранить стабильную ссылку",
+      ],
     });
     await capture(page, outputRoot, {
       name: "task-detail-dev.png",

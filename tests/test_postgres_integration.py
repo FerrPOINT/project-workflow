@@ -51,6 +51,7 @@ PG_PORT = int(os.environ.get("PGPORT", "5432"))
 PG_USER = os.environ.get("PGUSER", "project_workflow")
 PG_PASSWORD = os.environ.get("PGPASSWORD", "project_workflow")
 PG_ADMIN_DB = os.environ.get("PGDATABASE", "project_workflow")
+PG_CONNECT_TIMEOUT = int(os.environ.get("PGCONNECT_TIMEOUT", "10"))
 
 
 @pytest.fixture(scope="function")
@@ -62,7 +63,14 @@ def pg_url(monkeypatch):
     db_name = f"project_workflow_test_{pid}"
     base_url = f"postgresql+psycopg://{PG_USER}:{PG_PASSWORD}@{PG_HOST}:{PG_PORT}/{db_name}"
 
-    admin_conn = psycopg.connect(host=PG_HOST, port=PG_PORT, dbname=PG_ADMIN_DB, user=PG_USER, password=PG_PASSWORD)
+    admin_conn = psycopg.connect(
+        host=PG_HOST,
+        port=PG_PORT,
+        dbname=PG_ADMIN_DB,
+        user=PG_USER,
+        password=PG_PASSWORD,
+        connect_timeout=PG_CONNECT_TIMEOUT,
+    )
     admin_conn.autocommit = True
     with admin_conn.cursor() as cur:
         cur.execute("SET idle_in_transaction_session_timeout = 0")
@@ -77,7 +85,14 @@ def pg_url(monkeypatch):
     yield base_url
 
     reset_engine()
-    admin_conn = psycopg.connect(host=PG_HOST, port=PG_PORT, dbname=PG_ADMIN_DB, user=PG_USER, password=PG_PASSWORD)
+    admin_conn = psycopg.connect(
+        host=PG_HOST,
+        port=PG_PORT,
+        dbname=PG_ADMIN_DB,
+        user=PG_USER,
+        password=PG_PASSWORD,
+        connect_timeout=PG_CONNECT_TIMEOUT,
+    )
     admin_conn.autocommit = True
     with admin_conn.cursor() as cur:
         cur.execute(f"DROP DATABASE IF EXISTS {db_name} WITH (FORCE)")

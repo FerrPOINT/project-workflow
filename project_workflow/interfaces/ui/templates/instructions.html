@@ -53,7 +53,7 @@
         </div>
         <div class="instruction-body">
           <div class="instruction-desc">
-            <textarea class="instruction-text" onchange="updateInstruction(this)">{{ instruction.description }}</textarea>
+            <textarea class="instruction-text" data-original-description="{{ instruction.description }}" onchange="updateInstruction(this)">{{ instruction.description }}</textarea>
           </div>
           <div class="execution-row">
             <span class="type-badge {{ instruction.execution_type }}" data-execution-type="{{ instruction.execution_type }}" onclick="toggleType(this)" role="button" tabindex="0">{{ 'параллельно' if instruction.execution_type == 'parallel' else 'последовательно' }}</span>
@@ -191,14 +191,36 @@ async function requestInstruction(url, options) {
 async function updateInstruction(textarea) {
   const row = textarea.closest('.instruction-row');
   const id = parseInt(row.dataset.instructionId, 10);
-  const result = await requestInstruction('/api/instructions/' + id, {
-    method: 'PUT',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({description: textarea.value.trim()}),
-  });
-  if (!result) return;
-  const {resp, data} = result;
-  if (!resp.ok || !data.ok) showToast(data.error || 'Ошибка сохранения', 'error');
+  const previousDescription = textarea.dataset.originalDescription || '';
+  const description = textarea.value.trim();
+  if (!description) {
+    textarea.value = previousDescription;
+    showToast('Описание инструкции обязательно', 'error');
+    return;
+  }
+  textarea.disabled = true;
+  try {
+    const result = await requestInstruction('/api/instructions/' + id, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({description: description}),
+    });
+    if (!result) {
+      textarea.value = previousDescription;
+      return;
+    }
+    const {resp, data} = result;
+    if (!resp.ok || !data.ok) {
+      textarea.value = previousDescription;
+      showToast(data.error || 'Ошибка сохранения', 'error');
+      return;
+    }
+    const savedDescription = data.instruction?.description || description;
+    textarea.value = savedDescription;
+    textarea.dataset.originalDescription = savedDescription;
+  } finally {
+    textarea.disabled = false;
+  }
 }
 
 async function toggleType(badge) {

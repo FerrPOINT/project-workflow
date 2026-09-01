@@ -999,6 +999,9 @@ class TestApiInstructions:
         assert resp.status_code == 200
         assert resp.json()["instruction"]["skills"] == []
 
+        assert client.post("/api/instructions", json={"phase_id": phase_id, "description": "   "}).status_code == 422
+        assert client.put(f"/api/instructions/{instruction_id}", json={"description": ""}).status_code == 422
+        assert client.put(f"/api/instructions/{instruction_id}", json={"description": "   "}).status_code == 422
         assert client.put(f"/api/instructions/{instruction_id}", json={"skills": "search"}).status_code == 422
         assert client.put(f"/api/instructions/{instruction_id}", json={"description": None}).status_code == 422
 
