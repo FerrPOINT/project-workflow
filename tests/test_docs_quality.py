@@ -44,6 +44,17 @@ def test_readme_does_not_claim_public_task_crud() -> None:
     assert "просмотр задач" in readme
 
 
+def test_readme_cli_examples_use_configured_wrapper_commands() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "workflow-run step --task RUN-123" in readme
+    assert "workflow-run history --task RUN-123" in readme
+    assert "workflow-qa step --task RUN-42" in readme
+    assert "workflow-dev history --task RUN-42" in readme
+    assert "project-workflow step --task" not in readme
+    assert "project-workflow history --task" not in readme
+
+
 def test_quality_gate_ui_smoke_matches_settings_screenshot() -> None:
     quality_gate = (ROOT / "docs" / "quality-gate.md").read_text(encoding="utf-8")
 

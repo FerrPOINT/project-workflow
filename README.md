@@ -111,28 +111,32 @@ CLI expects `DATABASE_URL`:
 export DATABASE_URL=postgresql+psycopg://project_workflow:project_workflow@localhost:5432/project_workflow
 ```
 
-Run the current phase and receive the supervisor verdict:
-
-```bash
-project-workflow step --task RUN-123 --report "Сделал X, проверил Y"
-```
-
-Read phase and supervisor history:
-
-```bash
-project-workflow history --task RUN-123 --n 10
-```
-
-Generate namespace wrapper commands:
+Generate user-facing wrapper commands:
 
 ```bash
 python scripts/install_namespace_clis.py --bin-dir ./.bin
+```
 
+Run the selected workflow through its configured command:
+
+```bash
+workflow-run step --task RUN-123 --report "Сделал X, проверил Y"
+```
+
+Read phase and supervisor history from the same entrypoint:
+
+```bash
+workflow-run history --task RUN-123 --n 10
+```
+
+Parallel entrypoints use their own configured commands:
+
+```bash
 workflow-qa step --task RUN-42 --report "Проверил сценарии"
 workflow-dev history --task RUN-42
 ```
 
-The wrapper sets `PROJECT_WORKFLOW_NAMESPACE_ID=<id>` and calls `project-workflow step/history`, so the same external task key can exist independently in different namespaces.
+The wrapper sets `PROJECT_WORKFLOW_NAMESPACE_ID=<id>` and calls the internal `step/history` CLI, so the same external task key can exist independently in different namespaces.
 The executor receives the configured wrapper command in `phase_contract.cli_actor.entrypoint`, not a hardcoded global CLI name.
 
 <a name="ui"></a>
