@@ -34,7 +34,8 @@ def _write_executable(path: Path, content: str) -> None:
 def _posix_wrapper(namespace_id: int, command: str) -> str:
     return (
         "#!/usr/bin/env sh\n"
-        "if [ \"${1:-}\" != \"step\" ] && [ \"${1:-}\" != \"history\" ]; then\n"
+        "if [ \"${1:-}\" != \"step\" ] && [ \"${1:-}\" != \"history\" ] "
+        "&& [ \"${1:-}\" != \"--help\" ] && [ \"${1:-}\" != \"--version\" ]; then\n"
         f"  echo \"{WRAPPER_COMMAND_ERROR}\" >&2\n"
         "  exit 2\n"
         "fi\n"
@@ -48,6 +49,8 @@ def _cmd_wrapper(namespace_id: int, command: str) -> str:
         "setlocal\n"
         "if \"%~1\"==\"step\" goto run\n"
         "if \"%~1\"==\"history\" goto run\n"
+        "if \"%~1\"==\"--help\" goto run\n"
+        "if \"%~1\"==\"--version\" goto run\n"
         f"echo {WRAPPER_COMMAND_ERROR} 1>&2\n"
         "exit /b 2\n"
         ":run\n"
@@ -60,7 +63,8 @@ def _cmd_wrapper(namespace_id: int, command: str) -> str:
 
 def _powershell_wrapper(namespace_id: int, command: str) -> str:
     return (
-        "if ($args.Count -lt 1 -or ($args[0] -ne \"step\" -and $args[0] -ne \"history\")) {\n"
+        "if ($args.Count -lt 1 -or ($args[0] -ne \"step\" -and $args[0] -ne \"history\" "
+        "-and $args[0] -ne \"--help\" -and $args[0] -ne \"--version\")) {\n"
         f"    [Console]::Error.WriteLine(\"{WRAPPER_COMMAND_ERROR}\")\n"
         "    exit 2\n"
         "}\n"

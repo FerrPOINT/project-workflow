@@ -55,6 +55,14 @@ def _rewrite_entrypoint(text: str) -> str:
     return text.replace("project-workflow", entrypoint)
 
 
+def _version_callback(ctx: click.Context, param: click.Parameter, value: bool) -> None:
+    _ = param
+    if not value or ctx.resilient_parsing:
+        return
+    click.echo(f"{_entrypoint_override() or 'project-workflow'}, версия {__version__}")
+    ctx.exit()
+
+
 def _format_options(command: click.Command, ctx: click.Context, formatter: click.HelpFormatter) -> None:
     records = [record for param in command.get_params(ctx) if (record := param.get_help_record(ctx))]
     if records:
@@ -287,10 +295,12 @@ def blocked_result(task_key: str, message: str, phase_code: str = "") -> dict[st
 
 
 @click.group(cls=RussianGroup)
-@click.version_option(
-    version=__version__,
-    prog_name="project-workflow",
-    message="project-workflow, версия %(version)s",
+@click.option(
+    "--version",
+    is_flag=True,
+    is_eager=True,
+    expose_value=False,
+    callback=_version_callback,
     help="Показать версию и выйти.",
 )
 @click.option(

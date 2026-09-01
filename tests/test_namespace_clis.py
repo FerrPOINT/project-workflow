@@ -59,7 +59,7 @@ def test_install_namespace_clis_generates_wrappers_for_all_records(tmp_path):
     ).read_text(encoding="utf-8")
 
 
-def test_install_namespace_clis_wrappers_allow_only_step_and_history(tmp_path):
+def test_install_namespace_clis_wrappers_allow_only_step_history_and_builtin_help(tmp_path):
     generated = install_namespace_clis(tmp_path)
     assert tmp_path / "workflow-run" in generated
 
@@ -69,13 +69,19 @@ def test_install_namespace_clis_wrappers_allow_only_step_and_history(tmp_path):
 
     assert '"${1:-}" != "step"' in posix
     assert '"${1:-}" != "history"' in posix
+    assert '"${1:-}" != "--help"' in posix
+    assert '"${1:-}" != "--version"' in posix
     assert WRAPPER_COMMAND_ERROR in posix
     assert 'if "%~1"=="step" goto run' in cmd
     assert 'if "%~1"=="history" goto run' in cmd
+    assert 'if "%~1"=="--help" goto run' in cmd
+    assert 'if "%~1"=="--version" goto run' in cmd
     assert "exit /b 2" in cmd
     assert WRAPPER_COMMAND_ERROR in cmd
     assert '$args[0] -ne "step"' in ps1
     assert '$args[0] -ne "history"' in ps1
+    assert '$args[0] -ne "--help"' in ps1
+    assert '$args[0] -ne "--version"' in ps1
     assert "exit 2" in ps1
     assert WRAPPER_COMMAND_ERROR in ps1
 

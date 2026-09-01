@@ -12,7 +12,7 @@ from click.testing import CliRunner
 pytestmark = [pytest.mark.cli]
 
 from project_workflow.domain.validation import TaskKeyValidator
-from project_workflow.interfaces.cli.core import NAMESPACE_ENV_VAR, cli
+from project_workflow.interfaces.cli.core import CLI_ENTRYPOINT_ENV_VAR, NAMESPACE_ENV_VAR, cli
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
@@ -528,3 +528,15 @@ class TestCliGuard:
         assert result.exit_code != 0
         assert "Нет такой команды: 'ui'." in result.output
         assert "No such command" not in result.output
+
+    def test_version_uses_wrapper_entrypoint_name(self):
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            ["--version"],
+            env={CLI_ENTRYPOINT_ENV_VAR: "workflow-qa"},
+        )
+
+        assert result.exit_code == 0
+        assert result.output.strip().startswith("workflow-qa, версия ")
+        assert "project-workflow" not in result.output
