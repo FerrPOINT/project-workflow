@@ -138,7 +138,10 @@ async def api_tasks(
         return _error(f"Воркфлоу {workflow_id} не найден", 404)
     if namespace is not None and workflow_id is not None and namespace.get("workflow_id") != workflow_id:
         return _error("workflow_id не совпадает с владельцем неймспейса", 409)
-    tasks = _load_tasks(namespace_id=namespace_id)
+    try:
+        tasks = _load_tasks(namespace_id=namespace_id)
+    except ValueError as exc:
+        return _error(str(exc), 409)
     if workflow_id is not None:
         tasks = [t for t in tasks if t.get("workflow_id") == workflow_id]
     return {"ok": True, "tasks": tasks}

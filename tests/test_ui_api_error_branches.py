@@ -266,6 +266,15 @@ def test_instructions_list_rejects_unknown_phase(monkeypatch):
     assert _json(response)["error"] == "Фаза 44 не найдена"
 
 
+def test_tasks_api_maps_data_consistency_error(monkeypatch):
+    monkeypatch.setattr(api, "_load_tasks", lambda namespace_id=None: _raise(ValueError("Журнал задач повреждён")))
+
+    response = _run(api.api_tasks(workflow_id=None, namespace_id=None))
+
+    assert response.status_code == 409
+    assert _json(response)["error"] == "Журнал задач повреждён"
+
+
 @pytest.mark.parametrize(
     ("route", "args", "service_method", "exc", "status"),
     [

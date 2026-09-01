@@ -282,6 +282,30 @@ def _tasks_back_url(context: dict[str, Any]) -> str:
     return f"/tasks?namespace_id={namespace_id}" if isinstance(namespace_id, int) else "/tasks"
 
 
+def _task_data_error_page(
+    request: Request,
+    context: dict[str, Any],
+    *,
+    title: str,
+    message: str,
+) -> HTMLResponse:
+    context = {
+        **context,
+        "page": "tasks",
+        "title": title,
+        "message": message,
+        "status_code": 409,
+        "back_url": _tasks_back_url(context),
+        "back_label": "К списку задач",
+    }
+    return _template_response(
+        request=request,
+        name="error.html",
+        status_code=409,
+        context=context,
+    )
+
+
 def _workflow_is_unassigned(workflow_id: Any) -> bool:
     if not isinstance(workflow_id, int):
         return False
@@ -329,7 +353,15 @@ async def index(request: Request) -> HTMLResponse:
         return error_response
     selected_namespace = context.get("selected_namespace")
     namespace_id = selected_namespace.get("id") if isinstance(selected_namespace, dict) else None
-    dashboard = _load_dashboard(namespace_id=namespace_id if isinstance(namespace_id, int) else None)
+    try:
+        dashboard = _load_dashboard(namespace_id=namespace_id if isinstance(namespace_id, int) else None)
+    except ValueError as exc:
+        return _task_data_error_page(
+            request,
+            context,
+            title="Данные задач некорректны",
+            message=str(exc),
+        )
     context.update(dashboard)
     return _template_response(
         request=request,
@@ -476,7 +508,15 @@ async def tasks_page(request: Request) -> HTMLResponse:
         return error_response
     selected_namespace = context.get("selected_namespace")
     namespace_id = selected_namespace.get("id") if isinstance(selected_namespace, dict) else None
-    tasks = _load_tasks(namespace_id=namespace_id if isinstance(namespace_id, int) else None)
+    try:
+        tasks = _load_tasks(namespace_id=namespace_id if isinstance(namespace_id, int) else None)
+    except ValueError as exc:
+        return _task_data_error_page(
+            request,
+            context,
+            title="Данные задач некорректны",
+            message=str(exc),
+        )
     context.update({"tasks": tasks})
     return _template_response(
         request=request,
@@ -558,6 +598,13 @@ async def task_detail_page(
             back_url=_tasks_back_url(context),
             back_label="К списку задач",
             page="tasks",
+        )
+    except ValueError as exc:
+        return _task_data_error_page(
+            request,
+            context,
+            title="Состояние задачи некорректно",
+            message=str(exc),
         )
     if not task:
         return _error_page(

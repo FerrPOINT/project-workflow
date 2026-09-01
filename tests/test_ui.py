@@ -307,6 +307,19 @@ class TestIndexPage:
         assert "Некорректный namespace_id" in response.text
         assert "UITEST-401" not in response.text
 
+    def test_index_data_error_returns_controlled_html_error(self):
+        with patch(
+            "project_workflow.interfaces.ui.routes.pages._load_dashboard",
+            side_effect=ValueError("Список задач повреждён"),
+        ):
+            response = client.get("/")
+
+        assert response.status_code == 409
+        assert response.headers["content-type"] == "text/html; charset=utf-8"
+        assert "Данные задач некорректны" in response.text
+        assert "Список задач повреждён" in response.text
+        assert "Незавершённые задачи" not in response.text
+
     def test_index_stays_minimal_and_hides_dashboard_technical_noise(self):
         response = client.get("/")
         assert response.status_code == 200
@@ -1579,6 +1592,25 @@ class TestTasksPage:
         assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
         assert "RUN-247" not in response.text
 
+    def test_tasks_data_error_returns_controlled_html_error(self):
+        uow = ui_app_state.get_db()
+        try:
+            namespace_id = _as_dict(uow.projects.get_by_code("UITEST"))["id"]
+        finally:
+            uow.close()
+        with patch(
+            "project_workflow.interfaces.ui.routes.pages._load_tasks",
+            side_effect=ValueError("Список задач повреждён"),
+        ):
+            response = client.get(f"/tasks?namespace_id={namespace_id}")
+
+        assert response.status_code == 409
+        assert response.headers["content-type"] == "text/html; charset=utf-8"
+        assert "Данные задач некорректны" in response.text
+        assert "Список задач повреждён" in response.text
+        assert f'href="/tasks?namespace_id={namespace_id}"' in response.text
+        assert "<table" not in response.text
+
     def test_tasks_page_hides_dead_filters_search_and_pagination(self):
         response = client.get("/tasks?search=NO_SUCH_TASK_999&page=2&status=done")
         assert response.status_code == 200
@@ -1660,6 +1692,21 @@ class TestTaskDetail:
         assert response.status_code == 409
         assert "Задача неоднозначна" in response.text
         assert f'href="/tasks?namespace_id={namespace_id}"' in response.text
+
+    def test_task_detail_data_error_returns_controlled_html_error(self):
+        namespace_id = self._default_namespace_id()
+        with patch(
+            "project_workflow.interfaces.ui.routes.pages._get_task_detail",
+            side_effect=ValueError("Журнал задачи повреждён"),
+        ):
+            response = client.get(f"/task/RUN-247?namespace_id={namespace_id}")
+
+        assert response.status_code == 409
+        assert response.headers["content-type"] == "text/html; charset=utf-8"
+        assert "Состояние задачи некорректно" in response.text
+        assert "Журнал задачи повреждён" in response.text
+        assert f'href="/tasks?namespace_id={namespace_id}"' in response.text
+        assert "История фаз" not in response.text
 
     def test_task_detail_current_state_uses_namespace_accent_styles(self):
         response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
