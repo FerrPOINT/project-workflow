@@ -1444,6 +1444,31 @@ class TestTasksPage:
         assert "Неймспейс" in response.text
         assert "UITEST" in response.text
 
+    def test_tasks_page_mobile_cards_show_empty_state_for_empty_namespace(self):
+        create = client.post(
+            "/api/namespaces",
+            json={
+                "name": "Пустой набор",
+                "description": "Без задач",
+                "workflow_id": _workflow_row("default")["id"],
+                "theme_icon": "code",
+                "theme_color": "#3B82F6",
+                "cli_command": "workflow-empty-tasks",
+            },
+        )
+        assert create.status_code == 200
+        namespace_id = create.json()["namespace_id"]
+        try:
+            response = client.get(f"/tasks?namespace_id={namespace_id}")
+        finally:
+            delete = client.delete(f"/api/namespaces/{namespace_id}")
+            assert delete.status_code == 200
+
+        assert response.status_code == 200
+        match = re.search(r'<div class="table-card-list">(.*?)</div>\s*</div>', response.text, re.S)
+        assert match is not None
+        assert "Нет задач" in match.group(1)
+
     def test_tasks_reject_unknown_query_namespace(self):
         response = client.get(f"/tasks?namespace_id={UNKNOWN_NAMESPACE_ID}")
         assert response.status_code == 404

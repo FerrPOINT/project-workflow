@@ -45,6 +45,7 @@
 .verdict-rollback{background:var(--orange-soft);color:var(--orange)}
 .verdict-delegate{background:var(--accent-soft);color:var(--accent)}
 .task-card-meta{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));align-items:start}
+.task-empty{text-align:center;color:var(--text-dim);border-style:dashed}
 .table-card-list{display:none}
 @container tasks (max-width:1080px){
   .tasks-table-wrap{display:none}
@@ -145,6 +146,8 @@
       <div><span class="label">Создана</span><div class="value">{{ t.created_at[:10] if t.created_at else '—' }}</div></div>
     </div>
   </div>
+  {% else %}
+  <div class="task-card task-empty">Нет задач</div>
   {% endfor %}
 </div>
 </div>
