@@ -150,13 +150,15 @@ def test_dependency_constraints_are_exact_and_runtime_image_uses_isolated_venv()
     assert "pip uninstall -y pip setuptools wheel" in dockerfile
 
 
-def test_repository_contains_declared_mit_license():
+def test_repository_contains_declared_proprietary_license():
     license_text = LICENSE_PATH.read_text(encoding="utf-8")
     pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
 
-    assert license_text.startswith("MIT License\n")
+    assert license_text.startswith(
+        "FerrPOINT Proprietary Source-Available Evaluation License v1.0\n"
+    )
     assert "Copyright (c) 2026 FerrPOINT" in license_text
-    assert 'license = "MIT"' in pyproject
+    assert 'license = "LicenseRef-FerrPOINT-Proprietary"' in pyproject
     assert 'license-files = ["LICENSE"]' in pyproject
 
 
