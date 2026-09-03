@@ -38,6 +38,23 @@ class StrictUpdateRequest(StrictRequest):
         return value
 
 
+class RuntimeStepRequest(StrictRequest):
+    """One private, role-scoped Supervisor step."""
+
+    task: str = Field(min_length=1, max_length=128)
+    report: str | None = Field(default=None, max_length=32_000)
+
+    @field_validator("task")
+    @classmethod
+    def _task_not_blank(cls, value: str) -> str:
+        return _strip_nonblank(value, "task")
+
+    @field_validator("report")
+    @classmethod
+    def _report_not_blank(cls, value: str | None) -> str | None:
+        return _strip_nonblank(value, "report") if value is not None else None
+
+
 def _strip_nonblank(value: str, field_name: str) -> str:
     normalized = value.strip()
     if not normalized:

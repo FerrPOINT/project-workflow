@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     OPENAI_REASONING_EFFORT: str = "none"
 
+    # Private role-token map used only by the isolated agent runtime endpoint.
+    # Shape: {"analyst":"<token>", ...}. Empty keeps the endpoint fail-closed.
+    PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON: str = ""
+
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def _require_database_url(cls, value: object) -> str:

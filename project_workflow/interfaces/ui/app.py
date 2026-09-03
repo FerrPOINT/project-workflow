@@ -16,7 +16,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from ... import __version__
 from ...infrastructure.db.session import get_engine, reset_engine
-from .routes import api, pages
+from .routes import api, pages, runtime_api
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +158,11 @@ def create_app() -> FastAPI:
         return JSONResponse({"ok": False, "error": str(exc.detail)}, status_code=exc.status_code)
 
     app.get("/health")(_health)
+
+    # Private agent bridge. It is authenticated independently from the UI and
+    # is expected to stay on the internal Docker network.
+    app.post("/internal/runtime/step", response_model=None)(runtime_api.runtime_step)
+    app.get("/internal/runtime/history", response_model=None)(runtime_api.runtime_history)
 
     # Pages
     app.get("/", response_class=HTMLResponse)(pages.index)
