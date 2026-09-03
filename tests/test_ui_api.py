@@ -127,6 +127,30 @@ class TestIndex:
         assert "url.searchParams.set('namespace_id', String(selectedNamespaceId));" in resp.text
         assert "fetch(phaseApiUrl('/api/phases/' + phaseId)" in resp.text
 
+    def test_phase_detail_page_scopes_instruction_api_to_selected_namespace(self, client):
+        namespace = next(item for item in client.get("/api/namespaces").json()["namespaces"])
+        phase_id = _phase_id(client, "1.INTAKE")
+
+        resp = client.get(f"/phase/{phase_id}?namespace_id={namespace['id']}")
+
+        assert resp.status_code == 200
+        assert "fetch(phaseApiUrl(`/api/phases/${phaseId}/instructions/reorder`)" in resp.text
+        assert "requestPhaseDetail(phaseApiUrl('/api/instructions')" in resp.text
+        assert "requestPhaseDetail(phaseApiUrl('/api/instructions/' + id)" in resp.text
+
+    def test_instructions_page_scopes_instruction_api_to_selected_namespace(self, client):
+        namespace = next(item for item in client.get("/api/namespaces").json()["namespaces"])
+        phase_id = _phase_id(client, "1.INTAKE")
+
+        resp = client.get(f"/instructions?phase_id={phase_id}&namespace_id={namespace['id']}")
+
+        assert resp.status_code == 200
+        assert f"const selectedNamespaceId = {namespace['id']};" in resp.text
+        assert "function instructionApiUrl(path)" in resp.text
+        assert "fetch(instructionApiUrl('/api/phases/' + PHASE_ID + '/instructions/reorder')" in resp.text
+        assert "requestInstruction(instructionApiUrl('/api/instructions/' + id)" in resp.text
+        assert "requestInstruction(instructionApiUrl('/api/instructions')" in resp.text
+
     def test_settings_page(self, client):
         resp = client.get("/settings")
         assert resp.status_code == 200
@@ -1100,6 +1124,58 @@ class TestApiInstructions:
         resp = client.delete(f"/api/instructions/{instruction_id}")
         assert resp.status_code == 200
         assert _app_state.instruction_service().get_instruction(instruction_id) is None
+
+    def test_instruction_endpoints_reject_namespace_workflow_owner_conflicts_atomically(self, client):
+        from project_workflow.interfaces.ui import _app_state
+
+        phase_id = _phase_id(client, "1.INTAKE")
+        created = client.post(
+            "/api/instructions",
+            json={"phase_id": phase_id, "description": "Scoped instruction"},
+        )
+        assert created.status_code == 200
+        instruction_id = created.json()["instruction"]["id"]
+        before = _app_state.instruction_service().get_instruction(instruction_id)
+        before_rows = client.get(f"/api/phases/{phase_id}/instructions").json()["instructions"]
+        workflow = _app_state.workflow_service().create_workflow({"name": _unique("instruction-scope-foreign")})
+        namespace = client.post(
+            "/api/namespaces",
+            json={
+                "name": "Foreign instruction namespace",
+                "workflow_id": workflow["id"],
+                "cli_command": _unique("workflow-instruction-scope"),
+            },
+        )
+        assert namespace.status_code == 200
+        namespace_id = namespace.json()["namespace_id"]
+        expected_error = {
+            "ok": False,
+            "error": "Фаза недоступна в выбранном неймспейсе",
+        }
+
+        responses = [
+            client.get(f"/api/phases/{phase_id}/instructions?namespace_id={namespace_id}"),
+            client.post(
+                f"/api/instructions?namespace_id={namespace_id}",
+                json={"phase_id": phase_id, "description": "Не должно создаться"},
+            ),
+            client.put(
+                f"/api/instructions/{instruction_id}?namespace_id={namespace_id}",
+                json={"description": "Не должно сохраниться"},
+            ),
+            client.put(
+                f"/api/phases/{phase_id}/instructions/reorder?namespace_id={namespace_id}",
+                json={"instruction_ids": [row["id"] for row in before_rows]},
+            ),
+            client.delete(f"/api/instructions/{instruction_id}?namespace_id={namespace_id}"),
+        ]
+
+        for response in responses:
+            assert response.status_code == 409
+            assert response.json() == expected_error
+        assert _app_state.instruction_service().get_instruction(instruction_id) == before
+        after_rows = client.get(f"/api/phases/{phase_id}/instructions").json()["instructions"]
+        assert after_rows == before_rows
 
 
 class TestApiTasks:

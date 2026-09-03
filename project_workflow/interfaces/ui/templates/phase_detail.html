@@ -357,7 +357,7 @@ function updateInstructionControls() {
 async function persistInstructionOrder() {
   const ids = getInstructionItems().map((item) => parseInt(item.dataset.instructionId, 10));
   try {
-    const resp = await fetch(`/api/phases/${phaseId}/instructions/reorder`, {
+    const resp = await fetch(phaseApiUrl(`/api/phases/${phaseId}/instructions/reorder`), {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({instruction_ids: ids}),
@@ -410,7 +410,7 @@ async function addInstructionAfter(button) {
   const stepNum = currentStep > 0 ? currentStep + 1 : 1;
   button.disabled = true;
   try {
-    const result = await requestPhaseDetail('/api/instructions', {
+    const result = await requestPhaseDetail(phaseApiUrl('/api/instructions'), {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({phase_id: phaseId, description: 'Новая инструкция', step_num: stepNum}),
@@ -434,7 +434,7 @@ async function addInstructionLast() {
   const btn = timeline?.nextElementSibling;
   if (btn) btn.disabled = true;
   try {
-    const result = await requestPhaseDetail('/api/instructions', {
+    const result = await requestPhaseDetail(phaseApiUrl('/api/instructions'), {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({phase_id: phaseId, description: 'Новая инструкция', step_num: stepNum}),
@@ -458,7 +458,7 @@ async function deleteInstruction(button) {
   button.disabled = true;
   try {
     const id = item.dataset.instructionId;
-    const result = await requestPhaseDetail('/api/instructions/' + id, {method: 'DELETE'});
+    const result = await requestPhaseDetail(phaseApiUrl('/api/instructions/' + id), {method: 'DELETE'});
     if (!result) return;
     const {resp, data} = result;
     if (!resp.ok || !data.ok) {
@@ -478,7 +478,7 @@ async function toggleInstructionType(badge) {
   const nextType = isSync ? 'parallel' : 'sync';
   badge.disabled = true;
   try {
-    const result = await requestPhaseDetail('/api/instructions/' + id, {
+    const result = await requestPhaseDetail(phaseApiUrl('/api/instructions/' + id), {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({execution_type: nextType}),
@@ -507,7 +507,7 @@ async function saveInstructionDescription(input) {
   }
   input.disabled = true;
   try {
-    const result = await requestPhaseDetail('/api/instructions/' + id, {
+    const result = await requestPhaseDetail(phaseApiUrl('/api/instructions/' + id), {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({description: description}),
@@ -541,7 +541,7 @@ async function addSkillToInstruction(input) {
   const skills = normalizeSkillNames([...existing, skill]);
   input.disabled = true;
   try {
-    const result = await requestPhaseDetail('/api/instructions/' + id, {
+    const result = await requestPhaseDetail(phaseApiUrl('/api/instructions/' + id), {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({skills: skills}),
@@ -566,7 +566,7 @@ async function removeSkillFromInstruction(button) {
     .filter((b) => !b.classList.contains('badge-sync') && !b.classList.contains('badge-parallel'))
     .map((b) => b.textContent.replace('×', '').trim());
   const skills = normalizeSkillNames(existing.filter((s) => s !== skillName));
-  const result = await requestPhaseDetail('/api/instructions/' + id, {
+  const result = await requestPhaseDetail(phaseApiUrl('/api/instructions/' + id), {
     method: 'PUT',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({skills: skills}),

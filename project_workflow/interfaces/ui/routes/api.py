@@ -91,6 +91,26 @@ def _phase_namespace_scope_error(phase_id: int, namespace_id: int | None) -> JSO
     return None
 
 
+def _instruction_namespace_scope_error(instruction_id: int, namespace_id: int | None) -> JSONResponse | None:
+    if namespace_id is None:
+        return None
+    namespace = _app_state.project_service().get_project(namespace_id)
+    if namespace is None:
+        return _error(f"Неймспейс {namespace_id} не найден", 404)
+    instruction = _app_state.instruction_service().get_instruction(instruction_id)
+    if instruction is None:
+        return _error(f"Инструкция {instruction_id} не найдена", 404)
+    phase_id = instruction.get("phase_id")
+    if not isinstance(phase_id, int) or isinstance(phase_id, bool):
+        return _error(f"Инструкция {instruction_id} не найдена", 404)
+    phase = _app_state.phase_service().get_phase(phase_id)
+    if phase is None:
+        return _error(f"Фаза {phase_id} не найдена", 404)
+    if phase.get("workflow_id") != namespace.get("workflow_id"):
+        return _error("Фаза недоступна в выбранном неймспейсе", 409)
+    return None
+
+
 async def api_settings_get(namespace_id: int | None = Query(default=None, gt=0)) -> dict[str, Any] | JSONResponse:
     """Вернуть реестр CLI-команд для UI/интеграций."""
     from project_workflow.interfaces.ui.services import _load_cli_reference
@@ -467,7 +487,12 @@ async def api_phase_detail(
     return {"ok": True, "phase": phase}
 
 
-async def api_instructions_list(phase_id: PositivePathId) -> dict[str, Any] | JSONResponse:
+async def api_instructions_list(
+    phase_id: PositivePathId,
+    namespace_id: PositiveQueryId = None,
+) -> dict[str, Any] | JSONResponse:
+    if error := _phase_namespace_scope_error(phase_id, namespace_id):
+        return error
     phase = _app_state.phase_service().get_phase(phase_id)
     if phase is None:
         return _error(f"Фаза {phase_id} не найдена", 404)
@@ -475,7 +500,12 @@ async def api_instructions_list(phase_id: PositivePathId) -> dict[str, Any] | JS
     return {"ok": True, "phase": phase, "instructions": instructions}
 
 
-async def api_instruction_create(payload: InstructionCreate) -> dict[str, Any] | JSONResponse:
+async def api_instruction_create(
+    payload: InstructionCreate,
+    namespace_id: PositiveQueryId = None,
+) -> dict[str, Any] | JSONResponse:
+    if error := _phase_namespace_scope_error(payload.phase_id, namespace_id):
+        return error
     try:
         item = _app_state.instruction_service().create_instruction(
             payload.phase_id,
@@ -498,7 +528,10 @@ async def api_instruction_create(payload: InstructionCreate) -> dict[str, Any] |
 async def api_instruction_update(
     instruction_id: PositivePathId,
     payload: InstructionUpdate,
+    namespace_id: PositiveQueryId = None,
 ) -> dict[str, Any] | JSONResponse:
+    if error := _instruction_namespace_scope_error(instruction_id, namespace_id):
+        return error
     updates = _updates_from_payload(payload, ["description", "execution_type"])
     if "skills" in payload.model_fields_set:
         updates["skills"] = payload.skills
@@ -513,7 +546,12 @@ async def api_instruction_update(
     return {"ok": True, "instruction": _app_state.instruction_service().get_instruction(instruction_id)}
 
 
-async def api_instruction_delete(instruction_id: PositivePathId) -> dict[str, Any] | JSONResponse:
+async def api_instruction_delete(
+    instruction_id: PositivePathId,
+    namespace_id: PositiveQueryId = None,
+) -> dict[str, Any] | JSONResponse:
+    if error := _instruction_namespace_scope_error(instruction_id, namespace_id):
+        return error
     try:
         _app_state.instruction_service().delete_instruction(instruction_id)
     except NotFoundError as exc:
@@ -526,7 +564,10 @@ async def api_instruction_delete(instruction_id: PositivePathId) -> dict[str, An
 async def api_instructions_reorder(
     phase_id: PositivePathId,
     payload: InstructionReorder,
+    namespace_id: PositiveQueryId = None,
 ) -> dict[str, Any] | JSONResponse:
+    if error := _phase_namespace_scope_error(phase_id, namespace_id):
+        return error
     try:
         _app_state.instruction_service().reorder_instructions(phase_id, payload.instruction_ids)
     except NotFoundError as exc:

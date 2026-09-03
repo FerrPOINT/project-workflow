@@ -87,6 +87,15 @@
 
 {% block extra_script %}
 const PHASE_ID = {{ phase.id }};
+const selectedNamespaceId = {{ selected_namespace.id if selected_namespace else 'null' }};
+
+function instructionApiUrl(path) {
+  const url = new URL(path, window.location.origin);
+  if (selectedNamespaceId !== null) {
+    url.searchParams.set('namespace_id', String(selectedNamespaceId));
+  }
+  return url.pathname + url.search;
+}
 
 function getRows() {
   return Array.from(document.querySelectorAll('#instructionsLayout .instruction-row'));
@@ -143,7 +152,7 @@ function updateMoveButtons() {
 async function persistOrder() {
   const ids = getRows().map(r => parseInt(r.dataset.instructionId, 10));
   try {
-    const resp = await fetch('/api/phases/' + PHASE_ID + '/instructions/reorder', {
+    const resp = await fetch(instructionApiUrl('/api/phases/' + PHASE_ID + '/instructions/reorder'), {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({instruction_ids: ids}),
@@ -200,7 +209,7 @@ async function updateInstruction(textarea) {
   }
   textarea.disabled = true;
   try {
-    const result = await requestInstruction('/api/instructions/' + id, {
+    const result = await requestInstruction(instructionApiUrl('/api/instructions/' + id), {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({description: description}),
@@ -227,7 +236,7 @@ async function toggleType(badge) {
   const row = badge.closest('.instruction-row');
   const id = parseInt(row.dataset.instructionId, 10);
   const nextType = (badge.dataset.executionType || 'sync') === 'sync' ? 'parallel' : 'sync';
-  const result = await requestInstruction('/api/instructions/' + id, {
+  const result = await requestInstruction(instructionApiUrl('/api/instructions/' + id), {
     method: 'PUT',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({execution_type: nextType}),
@@ -248,7 +257,7 @@ async function deleteInstruction(button) {
   const row = button.closest('.instruction-row');
   const id = parseInt(row.dataset.instructionId, 10);
   if (!confirm('Удалить инструкцию?')) return;
-  const result = await requestInstruction('/api/instructions/' + id, {method: 'DELETE'});
+  const result = await requestInstruction(instructionApiUrl('/api/instructions/' + id), {method: 'DELETE'});
   if (!result) return;
   const {resp, data} = result;
   if (!resp.ok || !data.ok) {
@@ -263,7 +272,7 @@ async function addInstruction() {
   const input = document.getElementById('newInstructionText');
   const description = input.value.trim();
   if (!description) return;
-  const result = await requestInstruction('/api/instructions', {
+  const result = await requestInstruction(instructionApiUrl('/api/instructions'), {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({phase_id: PHASE_ID, description: description}),
@@ -281,7 +290,7 @@ async function updateSkills(input) {
   const row = input.closest('.instruction-row');
   const id = parseInt(row.dataset.instructionId, 10);
   const selected = input.value.split(',').map(value => value.trim()).filter(Boolean);
-  const result = await requestInstruction('/api/instructions/' + id, {
+  const result = await requestInstruction(instructionApiUrl('/api/instructions/' + id), {
     method: 'PUT',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({skills: selected}),

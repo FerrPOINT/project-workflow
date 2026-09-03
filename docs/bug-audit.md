@@ -61,6 +61,7 @@
 | BUG-050 | Application / workflow locks | `WorkflowService.update_workflow()` и `delete_workflow()` могли выйти после workflow lock или write failure без rollback, оставляя транзакцию и lock до закрытия UoW. | Regression покрывает update write failure, delete conflicts после lock и delete failure после всех проверок; сервис откатывает транзакцию на этих ветках. | Исправлено |
 | BUG-051 | UI API / phase scope | `/api/phases` игнорировал `namespace_id`: запрос выбранного набора мог вернуть фазы первого или явно чужого workflow. | API regression требует фильтр по namespace workflow, `404` для неизвестного namespace и `409` для пары namespace + чужой workflow. | Исправлено |
 | BUG-052 | UI API / phase scope | `GET/PUT/DELETE /api/phases/{id}` игнорировали выбранный `namespace_id`: detail-запрос мог читать чужую фазу, а update/delete — менять фазу другого workflow. | API regressions требуют `404` для неизвестного namespace, `409` для чужого workflow и атомарное отсутствие изменений; phase detail template передаёт `namespace_id` в save URL. | Исправлено |
+| BUG-053 | UI API / instruction scope | `GET/POST/PUT/DELETE /api/instructions` и reorder endpoint не проверяли выбранный `namespace_id`, поэтому страница выбранного набора могла мутировать инструкции фазы из другого workflow. | API regression проверяет list/create/update/delete/reorder через чужой namespace и неизменность строк; `phase_detail` и `/instructions` добавляют `namespace_id` ко всем instruction-запросам. | Исправлено |
 
 ## Следующие проверки
 
