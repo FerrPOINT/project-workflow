@@ -108,7 +108,7 @@ class OpenAICompatibleClient:
 class PromptBuilder:
     """Build prompts from phase contracts + task context."""
 
-    PROMPT_VERSION = "supervisor-evaluator-v7"
+    PROMPT_VERSION = "supervisor-evaluator-v8"
 
     SYSTEM_PROMPT = (
         "You are a strict workflow supervisor. "

@@ -439,6 +439,58 @@ def test_invalid_evaluator_contract_uses_fail_closed_audit(task_number, invalid_
     assert run["replay_fingerprint"] is None
 
 
+def test_invalid_evaluator_contract_is_retried_inside_one_evaluation(supervisor_llm):
+    engine = SupervisorEngine("RUN-926")
+    supervisor_llm("PASS")
+    valid_chat = OpenAICompatibleClient.chat
+    calls: list[str] = []
+
+    def invalid_then_valid(*args, **kwargs):
+        calls.append(str(kwargs.get("user") or ""))
+        if len(calls) == 1:
+            return {
+                "verdict": "pass",
+                "covered": [],
+                "missing": [],
+                "blockers": [],
+                "message": "ok",
+                "confidence": 0.5,
+            }
+        return valid_chat(*args, **kwargs)
+
+    with patch.object(OpenAICompatibleClient, "chat", side_effect=invalid_then_valid):
+        result = engine.evaluate("Отчёт")
+
+    assert result["verdict"] == "PASS"
+    assert result["retryable"] is False
+    assert len(calls) == 2
+    assert calls[0] != calls[1]
+    assert "PREVIOUS RESPONSE WAS INVALID" in calls[1]
+    assert len(engine.db.list_step_history(task_key=engine.task_key, limit=10)) == 1
+
+
+def test_invalid_evaluator_contract_stays_fail_closed_after_bounded_retries():
+    engine = SupervisorEngine("RUN-927")
+    invalid = {
+        "verdict": "pass",
+        "covered": [],
+        "missing": [],
+        "blockers": [],
+        "message": "ok",
+        "confidence": 0.5,
+    }
+
+    with patch.object(OpenAICompatibleClient, "chat", return_value=invalid) as chat:
+        result = engine.evaluate("Отчёт")
+
+    assert result["verdict"] == "BLOCKED"
+    assert result["retryable"] is True
+    assert chat.call_count == 3
+    runs = engine.db.list_step_history(task_key=engine.task_key, limit=10)
+    assert len(runs) == 1
+    assert runs[0]["replay_fingerprint"] is None
+
+
 def test_retryable_provider_error_has_no_fingerprint_and_blocks_current_phase():
     engine = SupervisorEngine("RUN-910")
     with patch.object(OpenAICompatibleClient, "chat", side_effect=requests.ConnectionError("down")) as chat:
@@ -602,6 +654,6 @@ def test_audit_snapshot_contains_contract_and_provider_metadata(supervisor_llm):
     snapshot = run.evaluation_snapshot
     assert snapshot["model"]
     assert snapshot["endpoint_mode"] == "openai-compatible"
-    assert snapshot["prompt_version"] == "supervisor-evaluator-v7"
+    assert snapshot["prompt_version"] == "supervisor-evaluator-v8"
     assert snapshot["contract_snapshot"]["evaluation_items"]
     assert snapshot["raw_evaluator"]["verdict"] == "PARTIAL"
