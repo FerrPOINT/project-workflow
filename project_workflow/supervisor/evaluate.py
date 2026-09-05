@@ -21,6 +21,8 @@ from .checks import normalize_text
 from .models import Phase
 from .types import VERDICT_LABELS
 
+_MAX_EVALUATOR_RESPONSE_ATTEMPTS = 3
+
 
 def _contract_fingerprint(
     *,
@@ -208,6 +210,43 @@ def _concurrent_result(result: dict[str, Any]) -> dict[str, Any]:
     return blocked
 
 
+def _evaluate_strict_response(
+    client: OpenAICompatibleClient,
+    *,
+    user: str,
+    item_ids: list[str],
+    phase: Phase,
+) -> tuple[dict[str, Any], LlmVerdict]:
+    """Retry only malformed evaluator output and never relax the wire contract."""
+    prompt = user
+    last_error: Exception | None = None
+    for attempt_number in range(1, _MAX_EVALUATOR_RESPONSE_ATTEMPTS + 1):
+        try:
+            raw = client.chat(
+                system=PromptBuilder.SYSTEM_PROMPT,
+                user=prompt,
+                temperature=0.1,
+            )
+            llm = ResponseParser.parse(raw, required_item_ids=item_ids)
+            if llm.verdict == "ROLLBACK" and not phase.rollback_target_phase_code:
+                raise ValueError("Для текущей фазы не настроена цель отката")
+            if llm.verdict == "DELEGATE" and phase.delegate is None:
+                raise ValueError("Для текущей фазы не настроено делегирование")
+            return raw, llm
+        except (TypeError, ValueError, KeyError, IndexError, AttributeError) as exc:
+            last_error = exc
+            if attempt_number == _MAX_EVALUATOR_RESPONSE_ATTEMPTS:
+                raise
+            prompt = (
+                user
+                + "\n\nPREVIOUS RESPONSE WAS INVALID. Return a new response that satisfies "
+                "the exact JSON schema and classifies every required item ID exactly once. "
+                "Return only one bare JSON object without Markdown or commentary."
+            )
+    assert last_error is not None
+    raise last_error
+
+
 def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any]:
     """Evaluate once; the workflow remains the only owner of routing."""
     evaluated_phase_code = phase.code
@@ -300,12 +339,12 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         if catalog_error is not None:
             raise catalog_error
         client = OpenAICompatibleClient()
-        raw = client.chat(system=PromptBuilder.SYSTEM_PROMPT, user=user, temperature=0.1)
-        llm = ResponseParser.parse(raw, required_item_ids=item_ids)
-        if llm.verdict == "ROLLBACK" and not phase.rollback_target_phase_code:
-            raise ValueError("Для текущей фазы не настроена цель отката")
-        if llm.verdict == "DELEGATE" and phase.delegate is None:
-            raise ValueError("Для текущей фазы не настроено делегирование")
+        raw, llm = _evaluate_strict_response(
+            client,
+            user=user,
+            item_ids=item_ids,
+            phase=phase,
+        )
     except (
         requests.RequestException,
         OSError,

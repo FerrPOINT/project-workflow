@@ -557,11 +557,11 @@ class TestOpenAICompatibleClientOverrides:
         assert client.timeout == 300
 
 
-class TestEvaluatorV7PromptContract:
+class TestEvaluatorV8PromptContract:
     """The live provider receives explicit contradiction and chronology rules."""
 
-    def test_prompt_version_is_v7(self):
-        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v7"
+    def test_prompt_version_is_v8(self):
+        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v8"
 
     def test_contradictory_current_facts_prohibit_pass(self):
         prompt = PromptBuilder.SYSTEM_PROMPT
