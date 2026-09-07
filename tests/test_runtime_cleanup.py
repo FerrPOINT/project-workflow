@@ -89,6 +89,7 @@ def test_compose_pins_app_test_evaluator_configuration_to_api():
     assert "OPENAI_BASE_URL: ${OPENAI_BASE_URL:-http://192.168.10.1:4000/v1}" in compose
     assert "OPENAI_MODEL: app-test" in compose
     assert "OPENAI_MODEL: ${OPENAI_MODEL" not in compose
+    assert "OPENAI_MAX_TOKENS: ${OPENAI_MAX_TOKENS:-4000}" in compose
     assert "OPENAI_API_KEY: ${OPENAI_API_KEY:-}" in compose
     assert "OPENAI_REASONING_EFFORT: ${OPENAI_REASONING_EFFORT:-none}" in compose
 

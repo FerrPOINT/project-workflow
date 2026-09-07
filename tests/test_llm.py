@@ -53,6 +53,7 @@ class TestOpenAICompatibleClient:
             "OPENAI_BASE_URL",
             "OPENAI_MODEL",
             "OPENAI_TIMEOUT",
+            "OPENAI_MAX_TOKENS",
             "OPENAI_API_KEY",
             "OPENAI_REASONING_EFFORT",
         ):
@@ -62,6 +63,7 @@ class TestOpenAICompatibleClient:
         assert client.base_url == "http://192.168.10.1:4000/v1"
         assert client.model == "app-test"
         assert client.timeout == 120
+        assert client.max_tokens == 4000
         assert client.api_key == ""
         assert client.reasoning_effort == "none"
 
@@ -71,6 +73,7 @@ class TestOpenAICompatibleClient:
         monkeypatch.setenv("OPENAI_BASE_URL", "https://provider.example/v1/")
         monkeypatch.setenv("OPENAI_MODEL", "provider-model")
         monkeypatch.setenv("OPENAI_TIMEOUT", "45")
+        monkeypatch.setenv("OPENAI_MAX_TOKENS", "1200")
         monkeypatch.setenv("OPENAI_API_KEY", "secret")
         monkeypatch.setenv("OPENAI_REASONING_EFFORT", "low")
         get_settings.cache_clear()
@@ -78,6 +81,7 @@ class TestOpenAICompatibleClient:
         assert client.base_url == "https://provider.example/v1"
         assert client.model == "provider-model"
         assert client.timeout == 45
+        assert client.max_tokens == 1200
         assert client.api_key == "secret"
         assert client.reasoning_effort == "low"
 
@@ -88,6 +92,7 @@ class TestOpenAICompatibleClient:
             "OPENAI_BASE_URL",
             "OPENAI_MODEL",
             "OPENAI_TIMEOUT",
+            "OPENAI_MAX_TOKENS",
             "OPENAI_API_KEY",
             "OPENAI_REASONING_EFFORT",
         ):
@@ -97,6 +102,7 @@ class TestOpenAICompatibleClient:
             "OPENAI_BASE_URL=https://dotenv.example/v1\n"
             "OPENAI_MODEL=dotenv-model\n"
             "OPENAI_TIMEOUT=35\n"
+            "OPENAI_MAX_TOKENS=900\n"
             "OPENAI_API_KEY=dotenv-secret\n",
             encoding="utf-8",
         )
@@ -107,6 +113,7 @@ class TestOpenAICompatibleClient:
         assert client.base_url == "https://dotenv.example/v1"
         assert client.model == "dotenv-model"
         assert client.timeout == 35
+        assert client.max_tokens == 900
         assert client.api_key == "dotenv-secret"
         assert client.reasoning_effort == "none"
 
