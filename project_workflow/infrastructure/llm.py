@@ -45,6 +45,7 @@ class OpenAICompatibleClient:
         base_url: str | None = None,
         model: str | None = None,
         timeout: int | None = None,
+        max_tokens: int | None = None,
         api_key: str | None = None,
         reasoning_effort: str | None = None,
     ):
@@ -52,6 +53,9 @@ class OpenAICompatibleClient:
         self.base_url = (base_url or settings.OPENAI_BASE_URL).rstrip("/")
         self.model = model or settings.OPENAI_MODEL
         self.timeout = timeout or settings.OPENAI_TIMEOUT
+        self.max_tokens = settings.OPENAI_MAX_TOKENS if max_tokens is None else max_tokens
+        if self.max_tokens <= 0:
+            raise ValueError("max_tokens must be positive")
         self.api_key = (api_key if api_key is not None else settings.OPENAI_API_KEY).strip()
         self.reasoning_effort = (
             settings.OPENAI_REASONING_EFFORT if reasoning_effort is None else reasoning_effort
@@ -78,7 +82,7 @@ class OpenAICompatibleClient:
             "response_format": {"type": "json_object"},
             # Reasoning-capable OpenAI-compatible models may spend part of this
             # budget before emitting the small JSON verdict.
-            "max_tokens": 4000,
+            "max_tokens": self.max_tokens,
         }
         if self.reasoning_effort:
             payload["reasoning_effort"] = self.reasoning_effort
