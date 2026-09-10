@@ -82,8 +82,8 @@ function saveRow(el){
     .then(function(d){if(d.ok)showToast('Сохранено','success');else showToast(d.error||'Ошибка','error')})
     .catch(showRequestError);
 }
-function deleteRow(id){
-  if(!confirm('Удалить агента?'))return;
+async function deleteRow(id){
+  if(!await requestConfirmation({eyebrow:'Удаление агента',title:'Удалить агента?',message:'Агент будет удалён из списка.',confirmLabel:'Удалить'}))return;
   fetch('/api/agents/'+id,{method:'DELETE'})
     .then(function(r){return r.json()})
     .then(function(d){if(d.ok){showToast('Удалено','success');location.reload()}else showToast(d.error||'Ошибка','error')})

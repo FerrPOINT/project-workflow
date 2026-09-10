@@ -9,7 +9,9 @@
 
 {% block extra_style %}
 .workflow-crud{display:grid;grid-template-columns:320px minmax(0,1fr);gap:16px;align-items:start}
-.workflow-nav{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 190px);overflow:auto}
+.workflow-nav{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 190px);overflow-y:auto;scrollbar-width:none;overscroll-behavior:contain}
+.workflow-nav::-webkit-scrollbar{width:0;height:0}
+.workflow-nav:focus-visible{outline:2px solid var(--accent-hover);outline-offset:2px}
 .workflow-nav-item{width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;cursor:pointer;color:var(--text)}
 .workflow-nav-item.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent-soft)}
 .workflow-name{font-size:15px;font-weight:600;color:var(--text)}
@@ -58,6 +60,7 @@ textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:160px;resiz
     </form>
   </section>
 </div>
+
 {% endblock %}
 
 {% block extra_script %}
@@ -209,12 +212,24 @@ function createWorkflow(){
     })
     .catch(showRequestError);
 }
-function deleteWorkflow(){
+async function deleteWorkflow(){
   if(selectedWorkflowId == null){ showToast('Воркфлоу не выбран','error'); return; }
-  if(!confirm('Удалить воркфлоу?')) return;
-  fetch('/api/workflows/' + selectedWorkflowId,{method:'DELETE'})
+  var workflow = workflowById(selectedWorkflowId);
+  var message = workflow
+    ? '«' + workflow.name + '» будет удалён. Пустые неймспейсы будут переведены на воркфлоу по умолчанию.'
+    : 'Воркфлоу будет удалён.';
+  if(!await requestConfirmation({eyebrow:'Удаление воркфлоу',title:'Удалить воркфлоу?',message:message,confirmLabel:'Удалить'})) return;
+  var workflowId = selectedWorkflowId;
+  fetch('/api/workflows/' + workflowId,{method:'DELETE'})
     .then(function(r){return r.json()})
-    .then(function(d){ if(d.ok){ showToast('Воркфлоу удалён','success'); reloadWorkflows(null); } else { showToast(d.error || 'Ошибка','error'); } })
+    .then(function(d){
+      if(d.ok){
+        showToast('Воркфлоу удалён','success');
+        reloadWorkflows(null);
+      } else {
+        showToast(d.error || 'Ошибка','error');
+      }
+    })
     .catch(showRequestError);
 }
 function submitWorkflow(){

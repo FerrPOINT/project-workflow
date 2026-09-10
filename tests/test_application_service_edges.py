@@ -63,33 +63,16 @@ def test_workflow_update_rolls_back_when_write_fails_after_lock():
 
 
 @pytest.mark.parametrize(
-    ("workflow", "projects", "phases", "message"),
+    ("workflow", "message"),
     [
-        (
-            SimpleNamespace(id=7, is_default=True),
-            [],
-            [],
-            "Воркфлоу по умолчанию нельзя удалить",
-        ),
-        (
-            SimpleNamespace(id=7, is_default=False),
-            [SimpleNamespace(workflow_id=7)],
-            [],
-            "Воркфлоу используется",
-        ),
-        (
-            SimpleNamespace(id=7, is_default=False),
-            [],
-            [SimpleNamespace(code="wf-7-default"), SimpleNamespace(code="extra-phase")],
-            "дополнительные фазы",
-        ),
+        (SimpleNamespace(id=7, is_default=True), "Воркфлоу по умолчанию нельзя удалить"),
+        (SimpleNamespace(id=7, is_default=False), "Нельзя удалить воркфлоу без воркфлоу по умолчанию"),
     ],
 )
-def test_workflow_delete_rolls_back_when_conflict_happens_after_lock(workflow, projects, phases, message):
+def test_workflow_delete_rolls_back_when_conflict_happens_after_lock(workflow, message):
     uow = MagicMock()
     uow.workflows.lock.return_value = workflow
-    uow.projects.list.return_value = projects
-    uow.phases.list.return_value = phases
+    uow.workflows.get_default.return_value = None
 
     with pytest.raises(ConflictError, match=message):
         WorkflowService(uow).delete_workflow(7)
@@ -99,11 +82,49 @@ def test_workflow_delete_rolls_back_when_conflict_happens_after_lock(workflow, p
     uow.workflows.delete.assert_not_called()
 
 
+def test_workflow_delete_reassigns_empty_namespaces_and_removes_phase_links():
+    uow = MagicMock()
+    uow.workflows.lock.return_value = SimpleNamespace(id=7, is_default=False)
+    uow.workflows.get_default.return_value = SimpleNamespace(id=1, is_default=True)
+    uow.projects.list.return_value = [SimpleNamespace(id=4, workflow_id=7)]
+    uow.tasks.list_by_project.return_value = []
+    uow.phases.list.return_value = [
+        SimpleNamespace(id=10, code="wf-7-default"),
+        SimpleNamespace(id=11, code="review"),
+    ]
+
+    WorkflowService(uow).delete_workflow(7)
+
+    uow.projects.update.assert_called_once_with(4, {"workflow_id": 1})
+    assert uow.phases.update.call_args_list == [
+        ((10, {"parallel_with_phase_id": None, "rollback_target_phase_id": None}),),
+        ((11, {"parallel_with_phase_id": None, "rollback_target_phase_id": None}),),
+    ]
+    uow.workflows.delete.assert_called_once_with(7)
+    uow.commit.assert_called_once_with()
+
+
+def test_workflow_delete_rejects_namespaces_with_tasks():
+    uow = MagicMock()
+    uow.workflows.lock.return_value = SimpleNamespace(id=7, is_default=False)
+    uow.workflows.get_default.return_value = SimpleNamespace(id=1, is_default=True)
+    uow.projects.list.return_value = [SimpleNamespace(id=4, workflow_id=7)]
+    uow.tasks.list_by_project.return_value = [SimpleNamespace(id=22)]
+
+    with pytest.raises(ConflictError, match="задачи"):
+        WorkflowService(uow).delete_workflow(7)
+
+    uow.projects.update.assert_not_called()
+    uow.workflows.delete.assert_not_called()
+    uow.rollback.assert_called_once_with()
+
+
 def test_workflow_delete_rolls_back_when_delete_fails_after_checks():
     uow = MagicMock()
     uow.workflows.lock.return_value = SimpleNamespace(id=7, is_default=False)
+    uow.workflows.get_default.return_value = SimpleNamespace(id=1, is_default=True)
     uow.projects.list.return_value = []
-    uow.phases.list.return_value = [SimpleNamespace(code="wf-7-default")]
+    uow.phases.list.return_value = [SimpleNamespace(id=10, code="wf-7-default")]
     uow.workflows.delete.side_effect = RuntimeError("workflow delete failed")
 
     with pytest.raises(RuntimeError, match="workflow delete failed"):

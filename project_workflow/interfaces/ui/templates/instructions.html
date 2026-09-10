@@ -256,7 +256,7 @@ async function toggleType(badge) {
 async function deleteInstruction(button) {
   const row = button.closest('.instruction-row');
   const id = parseInt(row.dataset.instructionId, 10);
-  if (!confirm('Удалить инструкцию?')) return;
+  if (!await requestConfirmation({eyebrow:'Удаление инструкции',title:'Удалить инструкцию?',message:'Инструкция будет удалена без возможности восстановления.',confirmLabel:'Удалить'})) return;
   const result = await requestInstruction(instructionApiUrl('/api/instructions/' + id), {method: 'DELETE'});
   if (!result) return;
   const {resp, data} = result;

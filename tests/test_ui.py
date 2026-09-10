@@ -2189,6 +2189,47 @@ class TestWorkflowsPage:
         assert delete.status_code == 409
 
 
+def test_workflows_page_uses_product_modal_not_browser_confirm():
+    response = client.get("/workflows")
+
+    assert response.status_code == 200
+    assert "id=\"confirmDialog\"" in response.text
+    assert "requestConfirmation({eyebrow:'Удаление воркфлоу'" in response.text
+    assert "confirm('Удалить воркфлоу?')" not in response.text
+
+
+def test_workflows_list_hides_native_scrollbar_but_keeps_scrollable_region():
+    response = client.get("/workflows")
+
+    assert response.status_code == 200
+    expected_rule = (
+        ".workflow-nav{display:flex;flex-direction:column;gap:10px;"
+        "max-height:calc(100vh - 190px);overflow-y:auto;"
+    )
+    assert expected_rule in response.text
+    assert ".workflow-nav::-webkit-scrollbar{width:0;height:0}" in response.text
+    assert "scrollbar-width:none" in response.text
+
+
+def test_ui_deletions_use_product_modal_not_browser_confirm():
+    templates = {
+        name: (TEMPLATES_DIR / name).read_text(encoding="utf-8")
+        for name in (
+            "agents.html",
+            "instructions.html",
+            "namespaces.html",
+            "phase_detail.html",
+            "phases.html",
+            "workflows.html",
+        )
+    }
+    base = (TEMPLATES_DIR / "base.html").read_text(encoding="utf-8")
+
+    assert 'id="confirmDialog"' in base
+    assert "function requestConfirmation" in base
+    assert all("confirm(" not in template for template in templates.values())
+
+
 class TestAgentsPage:
     def test_agents_page_shows_name_and_description_without_sort_field(self):
         response = client.get("/agents")

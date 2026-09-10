@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import stat
 import sys
 from pathlib import Path
@@ -211,6 +212,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     bin_dir = args.bin_dir.expanduser()
+    if not os.environ.get("DATABASE_URL", "").strip():
+        print("Переменная DATABASE_URL обязательна", file=sys.stderr)
+        return 1
     try:
         generated = install_namespace_clis(bin_dir)
     except ValidationError as exc:

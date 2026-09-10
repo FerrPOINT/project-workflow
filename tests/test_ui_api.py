@@ -717,15 +717,18 @@ class TestApiWorkflows:
         resp = client.delete(f"/api/workflows/{default['id']}")
         assert resp.status_code == 409
 
-    def test_delete_workflow_with_phases_forbidden(self, client):
+    def test_delete_workflow_with_phases_cascades_for_empty_namespace(self, client):
         from project_workflow.interfaces.ui import _app_state
 
         wf = create_empty_workflow(_app_state.get_db(), _unique("del-wf"))
         _app_state.phase_service().create_phase(
             {"workflow_id": wf["id"], "code": _unique("delph"), "name": "Phase", "phase_order": 1}
         )
+
         resp = client.delete(f"/api/workflows/{wf['id']}")
-        assert resp.status_code == 409
+
+        assert resp.status_code == 200
+        assert _app_state.workflow_service().get_workflow(wf["id"]) is None
 
 
 class TestApiNamespacesCrud:

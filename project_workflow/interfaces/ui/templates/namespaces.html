@@ -331,9 +331,9 @@ function saveNamespace(){
     .then(function(d){ if(d.ok){ showToast('Сохранено','success'); reloadNamespaces(selectedNamespaceId); } else { showToast(d.error || 'Ошибка','error'); } })
     .catch(showRequestError);
 }
-function deleteNamespace(){
+async function deleteNamespace(){
   if(selectedNamespaceId == null){ showToast('Сначала выберите неймспейс','error'); return; }
-  if(!confirm('Удалить?')) return;
+  if(!await requestConfirmation({eyebrow:'Удаление неймспейса',title:'Удалить неймспейс?',message:'Неймспейс без задач будет удалён.',confirmLabel:'Удалить'})) return;
   fetch('/api/namespaces/' + selectedNamespaceId,{method:'DELETE'})
     .then(function(r){return r.json()})
     .then(function(d){ if(d.ok){ showToast('Удалено','success'); reloadNamespaces(null); } else { showToast(d.error || 'Ошибка','error'); } })

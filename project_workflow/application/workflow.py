@@ -68,11 +68,32 @@ class WorkflowService:
         try:
             if workflow.is_default:
                 raise ConflictError("Воркфлоу по умолчанию нельзя удалить")
-            if any(project.workflow_id == workflow_id for project in self._uow.projects.list()):
-                raise ConflictError("Воркфлоу используется, поэтому удалить его нельзя")
-            starter_code = f"wf-{workflow_id}-default"
-            if any(phase.code != starter_code for phase in self._uow.phases.list(workflow_id)):
-                raise ConflictError("Воркфлоу содержит дополнительные фазы, поэтому удалить его нельзя")
+
+            fallback = self._uow.workflows.get_default()
+            if fallback is None or fallback.id is None:
+                raise ConflictError("Нельзя удалить воркфлоу без воркфлоу по умолчанию")
+
+            projects = [project for project in self._uow.projects.list() if project.workflow_id == workflow_id]
+            project_ids: list[int] = []
+            for project in projects:
+                project_id = project.id
+                if project_id is None:
+                    raise ConflictError("Неймспейс воркфлоу повреждён")
+                if self._uow.tasks.list_by_project(project_id):
+                    raise ConflictError("Воркфлоу содержит задачи; сначала перенесите или удалите их")
+                project_ids.append(project_id)
+
+            phases = list(self._uow.phases.list(workflow_id))
+            for phase in phases:
+                if phase.id is None:
+                    raise ConflictError("Фаза воркфлоу повреждена")
+                self._uow.phases.update(
+                    phase.id,
+                    {"parallel_with_phase_id": None, "rollback_target_phase_id": None},
+                )
+            for project_id in project_ids:
+                self._uow.projects.update(project_id, {"workflow_id": fallback.id})
+
             self._uow.workflows.delete(workflow_id)
             self._uow.commit()
         except Exception:

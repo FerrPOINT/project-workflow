@@ -136,7 +136,7 @@ async function deletePhase(button){
   const items=getPhaseTimelineItems();
   if(!item)return;
   if(items.length<=1){showToast('Нельзя удалить единственную фазу воркфлоу','error');return;}
-  if(!confirm('Удалить фазу?'))return;
+  if(!await requestConfirmation({eyebrow:'Удаление фазы',title:'Удалить фазу?',message:'Фаза и её настройки будут удалены.',confirmLabel:'Удалить'}))return;
   button.disabled=true;
   try{
     const resp=await fetch('/api/phases/'+item.dataset.phaseId,{method:'DELETE'});

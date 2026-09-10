@@ -454,7 +454,7 @@ async function addInstructionLast() {
 async function deleteInstruction(button) {
   const item = button.closest('.timeline-item');
   if (!item) return;
-  if (!confirm('Удалить инструкцию?')) return;
+  if (!await requestConfirmation({eyebrow:'Удаление инструкции',title:'Удалить инструкцию?',message:'Инструкция будет удалена без возможности восстановления.',confirmLabel:'Удалить'})) return;
   button.disabled = true;
   try {
     const id = item.dataset.instructionId;

@@ -39,7 +39,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .brand-name{font-size:14px;font-weight:700;color:var(--text);max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .brand-subname{font-size:11px;font-weight:600;color:var(--accent);max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sidebar-close{display:none;background:none;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;padding:0;width:32px;height:32px;align-items:center;justify-content:center}
-.sidebar-nav{flex:1;padding:12px 0;overflow-y:auto}
+.sidebar-nav{flex:1;padding:12px 0;overflow-y:auto;scrollbar-width:none;overscroll-behavior:contain}
+.sidebar-nav::-webkit-scrollbar{width:0;height:0}
+.sidebar-nav:focus-visible{outline:2px solid var(--accent-hover);outline-offset:-2px}
 .sidebar-section{padding:8px 20px;font-size:10px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-top:8px}
 .sidebar-link{display:flex;align-items:center;gap:10px;padding:8px 20px;color:var(--text-muted);font-size:13px;font-weight:500;transition:all .12s;text-decoration:none;border-left:2px solid transparent}
 .sidebar-link:hover{color:var(--text);background:var(--surface)}
@@ -66,6 +68,15 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .btn-primary:hover{background:var(--accent-hover)}
 .btn-secondary{background:var(--surface);color:var(--text-secondary);border-color:var(--border)}
 .btn-secondary:hover{background:var(--surface-hover);color:var(--text)}
+.btn-danger{background:var(--red);color:#fff;border-color:var(--red)}
+.btn-danger:hover{filter:brightness(1.08)}
+.modal-backdrop[hidden]{display:none}
+.modal-backdrop{position:fixed;inset:0;z-index:300;display:grid;place-items:center;padding:20px;background:rgba(5,6,10,.72);backdrop-filter:blur(5px)}
+.modal-card{width:min(100%,420px);background:var(--surface);border:1px solid var(--border-strong);border-radius:14px;padding:22px;box-shadow:0 24px 64px rgba(0,0,0,.48)}
+.modal-eyebrow{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--red)}
+.modal-title{margin:8px 0 0;font-size:20px;line-height:1.25;color:var(--text)}
+.modal-copy{margin-top:10px;color:var(--text-muted);line-height:1.55}
+.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;flex-wrap:wrap}
 .burger{display:none;background:none;border:none;color:var(--text-muted);font-size:22px;cursor:pointer;padding:0;width:36px;height:36px;align-items:center;justify-content:center;margin-right:8px}
 .container{width:100%;padding:24px}
 
@@ -293,6 +304,17 @@ textarea{resize:vertical;min-height:60px}
 </main>
 
 <div class="toast toast-success" id="toast" aria-hidden="true">Сохранено</div>
+<div class="modal-backdrop" id="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="confirmDialogTitle" aria-hidden="true" hidden>
+  <section class="modal-card" role="document">
+    <div class="modal-eyebrow" id="confirmDialogEyebrow">Подтверждение</div>
+    <h2 class="modal-title" id="confirmDialogTitle">Подтвердите действие</h2>
+    <p class="modal-copy" id="confirmDialogCopy"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-secondary" id="confirmDialogCancel">Отмена</button>
+      <button type="button" class="btn btn-danger" id="confirmDialogAccept">Удалить</button>
+    </div>
+  </section>
+</div>
 
 <script>
 function openSidebar(){
@@ -318,6 +340,39 @@ function showToast(msg, type){
 }
 function showRequestError(){
   showToast('Не удалось связаться с сервером','error');
+}
+function requestConfirmation(options){
+  var dialog = document.getElementById('confirmDialog');
+  var cancel = document.getElementById('confirmDialogCancel');
+  var accept = document.getElementById('confirmDialogAccept');
+  var trigger = document.activeElement;
+  document.getElementById('confirmDialogEyebrow').textContent = options.eyebrow || 'Подтверждение';
+  document.getElementById('confirmDialogTitle').textContent = options.title || 'Подтвердите действие';
+  document.getElementById('confirmDialogCopy').textContent = options.message || '';
+  accept.textContent = options.confirmLabel || 'Удалить';
+  dialog.hidden = false;
+  dialog.setAttribute('aria-hidden', 'false');
+  accept.focus();
+  return new Promise(function(resolve){
+    function close(value){
+      dialog.hidden = true;
+      dialog.setAttribute('aria-hidden', 'true');
+      cancel.removeEventListener('click', onCancel);
+      accept.removeEventListener('click', onAccept);
+      dialog.removeEventListener('click', onBackdrop);
+      document.removeEventListener('keydown', onKeyDown);
+      if(trigger && typeof trigger.focus === 'function'){ trigger.focus(); }
+      resolve(value);
+    }
+    function onCancel(){ close(false); }
+    function onAccept(){ close(true); }
+    function onBackdrop(event){ if(event.target === dialog){ close(false); } }
+    function onKeyDown(event){ if(event.key === 'Escape'){ close(false); } }
+    cancel.addEventListener('click', onCancel);
+    accept.addEventListener('click', onAccept);
+    dialog.addEventListener('click', onBackdrop);
+    document.addEventListener('keydown', onKeyDown);
+  });
 }
 function switchNamespace(namespaceId){
   if(!namespaceId){return;}
