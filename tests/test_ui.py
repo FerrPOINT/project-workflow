@@ -880,6 +880,13 @@ class TestPhaseDetail:
         assert "li.querySelector('input')?.focus();" in add_check
         assert "li.querySelector('input')?.focus();" in add_evidence
 
+    def test_phase_save_ignores_transient_blank_check_and_evidence_rows(self):
+        response = client.get(_phase_detail_path("1.INTAKE"))
+
+        assert response.status_code == 200
+        assert response.text.count("if (inp && inp.value.trim()) data.") == 2
+        assert response.text.count("description: inp.value.trim(),") == 2
+
     def test_phases_page_hides_code_and_number_visual_noise(self):
         response = client.get("/phases")
         assert response.status_code == 200
@@ -1341,6 +1348,13 @@ class TestProjectsPage:
         assert 'id="projectForm"' in response.text
         assert 'id="newProjectButton"' in response.text
         assert 'id="projectFormMode"' in response.text
+
+    def test_namespace_form_does_not_send_derived_legacy_code_to_strict_api(self):
+        response = client.get("/namespace/new")
+
+        assert response.status_code == 200
+        payload = response.text.split("function currentPayload()", 1)[1].split("function addPrefixRow", 1)[0]
+        assert "code:" not in payload
         assert 'id="projectThemeIcon"' in response.text
         assert 'id="projectThemeColor"' in response.text
         assert 'id="projectThemePreview"' in response.text
