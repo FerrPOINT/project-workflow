@@ -104,6 +104,52 @@ def _history_rows(uow: SAUnitOfWork, task_key: str, namespace_id: int, limit: in
     return rows
 
 
+def execute_namespace_step(
+    uow: SAUnitOfWork,
+    *,
+    namespace_id: int,
+    task: str,
+    report: str | None,
+    title: str | None = None,
+) -> dict[str, Any]:
+    """Execute one Supervisor step inside an already-authorized namespace."""
+    task_key = _require_valid_key(task, uow, project_id=namespace_id)
+    engine = supervisor.SupervisorEngine(task_key, uow=uow, project_id=namespace_id)
+    if title is not None and engine.task is not None:
+        current_title = str(engine.task.get("title") or "")
+        task_id = engine.task.get("id")
+        if task_id is not None and current_title in {"", task_key}:
+            uow.tasks.update(int(task_id), {"title": title})
+            uow.commit()
+            engine.task["title"] = title
+    if report is None:
+        if engine._get_current_phase_obj() is None:
+            result = engine._blocked_result()
+            return {
+                "ok": False,
+                "exit_code": 1,
+                "output": format_result(result),
+                "result": result,
+            }
+        result = {
+            "ok": True,
+            "task_key": task_key,
+            "phase_code": engine.current_phase_code,
+            "status": engine.task.get("status") if engine.task else None,
+            "instructions": engine.format_current_phase_instructions(),
+            "phase_contract": engine.get_phase_contract(),
+        }
+        return {"ok": True, "exit_code": 0, "output": result["instructions"], "result": result}
+    result = engine.evaluate(report)
+    exit_code = 1 if result["verdict"] == "BLOCKED" else 0
+    return {
+        "ok": exit_code == 0,
+        "exit_code": exit_code,
+        "output": format_result(result),
+        "result": result,
+    }
+
+
 def runtime_step(
     payload: RuntimeStepRequest,
     authorization: str | None = Header(default=None),
@@ -118,34 +164,12 @@ def runtime_step(
     try:
         with SAUnitOfWork() as uow:
             namespace_id = _namespace_id(uow, role)
-            task_key = _require_valid_key(payload.task, uow, project_id=namespace_id)
-            engine = supervisor.SupervisorEngine(task_key, uow=uow, project_id=namespace_id)
-            if payload.report is None:
-                if engine._get_current_phase_obj() is None:
-                    result = engine._blocked_result()
-                    return {
-                        "ok": False,
-                        "exit_code": 1,
-                        "output": format_result(result),
-                        "result": result,
-                    }
-                result = {
-                    "ok": True,
-                    "task_key": task_key,
-                    "phase_code": engine.current_phase_code,
-                    "status": engine.task.get("status") if engine.task else None,
-                    "instructions": engine.format_current_phase_instructions(),
-                    "phase_contract": engine.get_phase_contract(),
-                }
-                return {"ok": True, "exit_code": 0, "output": result["instructions"], "result": result}
-            result = engine.evaluate(payload.report)
-            exit_code = 1 if result["verdict"] == "BLOCKED" else 0
-            return {
-                "ok": exit_code == 0,
-                "exit_code": exit_code,
-                "output": format_result(result),
-                "result": result,
-            }
+            return execute_namespace_step(
+                uow,
+                namespace_id=namespace_id,
+                task=payload.task,
+                report=payload.report,
+            )
     except (ConflictError, RuntimeError, ValueError) as exc:
         return _error(str(exc), 409)
 

@@ -9,6 +9,8 @@ from fastapi.responses import JSONResponse
 
 from project_workflow.domain.exceptions import ConflictError, LastPhaseError, NotFoundError
 from project_workflow.domain.namespace import legacy_code_from_cli_command
+from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from project_workflow.interfaces.ui.routes.runtime_api import execute_namespace_step
 from project_workflow.interfaces.ui.schemas import (
     AgentCreate,
     AgentUpdate,
@@ -22,6 +24,7 @@ from project_workflow.interfaces.ui.schemas import (
     PhaseUpdate,
     ProjectCreate,
     ProjectUpdate,
+    UiTaskStepRequest,
     WorkflowCreate,
     WorkflowUpdate,
 )
@@ -114,6 +117,23 @@ async def api_tasks(
     if workflow_id is not None:
         tasks = [t for t in tasks if t.get("workflow_id") == workflow_id]
     return {"ok": True, "tasks": tasks}
+
+
+async def api_task_step(payload: UiTaskStepRequest) -> dict[str, Any] | JSONResponse:
+    """Create/read or advance one workflow task from the private UI."""
+    try:
+        with SAUnitOfWork() as uow:
+            if uow.projects.get_by_id(payload.namespace_id) is None:
+                return _error("Namespace не найден", 404)
+            return execute_namespace_step(
+                uow,
+                namespace_id=payload.namespace_id,
+                task=payload.task,
+                report=payload.report,
+                title=payload.title,
+            )
+    except (ConflictError, RuntimeError, ValueError) as exc:
+        return _error(str(exc), 409)
 
 
 async def api_namespaces() -> dict[str, Any] | JSONResponse:

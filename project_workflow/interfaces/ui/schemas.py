@@ -55,6 +55,18 @@ class RuntimeStepRequest(StrictRequest):
         return _strip_nonblank(value, "report") if value is not None else None
 
 
+class UiTaskStepRequest(RuntimeStepRequest):
+    """Create/read or advance one task from the trusted private UI."""
+
+    namespace_id: int = Field(gt=0, strict=True)
+    title: str | None = Field(default=None, max_length=512)
+
+    @field_validator("title")
+    @classmethod
+    def _title_not_blank(cls, value: str | None) -> str | None:
+        return _strip_nonblank(value, "title") if value is not None else None
+
+
 def _strip_nonblank(value: str, field_name: str) -> str:
     normalized = value.strip()
     if not normalized:

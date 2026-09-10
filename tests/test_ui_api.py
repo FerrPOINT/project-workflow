@@ -126,6 +126,16 @@ class TestIndex:
         assert resp.status_code == 200
         assert "CLI" in resp.text
 
+    def test_tasks_page_exposes_ui_task_start_form(self, client):
+        resp = client.get("/tasks")
+
+        assert resp.status_code == 200
+        assert 'data-testid="task-start-form"' in resp.text
+        assert 'data-testid="task-start-key"' in resp.text
+        assert 'data-testid="task-start-title"' in resp.text
+        assert 'data-testid="task-start-submit"' in resp.text
+        assert resp.text.count("<script>") == 1
+
     def test_header_has_namespace_selector_and_actions(self, client):
         resp = client.get("/")
         assert resp.status_code == 200
@@ -1159,7 +1169,84 @@ class TestPageRoutes:
     def test_task_detail_page(self, client):
         resp = client.get("/task/RUN-1")
         assert resp.status_code == 200
+        assert 'data-testid="task-runtime-panel"' in resp.text
+        assert 'data-testid="task-runtime-current"' in resp.text
+        assert 'data-testid="task-runtime-report"' in resp.text
+        assert 'data-testid="task-runtime-submit"' in resp.text
+        assert resp.text.count("<script>") == 1
 
     def test_phase_detail_page_not_found(self, client):
         resp = client.get("/phase/999999")
         assert resp.status_code == 404
+
+
+class TestUiTaskStep:
+    def _namespace_id(self) -> int:
+        from project_workflow import config
+        from project_workflow.interfaces.ui import _app_state
+
+        uow = _app_state.get_db()
+        project = uow.projects.get_by_code(config.DEFAULT_PROJECT_CODE)
+        assert project is not None and project.id is not None
+        return int(project.id)
+
+    def test_initializes_new_task_in_selected_namespace(self, client):
+        namespace_id = self._namespace_id()
+
+        response = client.post(
+            "/api/tasks/step",
+            json={
+                "namespace_id": namespace_id,
+                "task": "RUN-77",
+                "title": "Полный SDLC-цикл через UI",
+            },
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["ok"] is True
+        assert body["result"]["task_key"] == "RUN-77"
+        assert body["result"]["phase_code"] == "1.INTAKE"
+
+        detail = client.get(f"/task/RUN-77?namespace_id={namespace_id}")
+        assert detail.status_code == 200
+        assert "Полный SDLC-цикл через UI" in detail.text
+
+    def test_rejects_task_key_from_another_namespace(self, client):
+        response = client.post(
+            "/api/tasks/step",
+            json={"namespace_id": self._namespace_id(), "task": "FOREIGN-1"},
+        )
+
+        assert response.status_code == 409
+        assert response.json()["ok"] is False
+
+    def test_evaluates_hermes_report_from_ui(self, client, supervisor_llm):
+        namespace_id = self._namespace_id()
+        current = client.post(
+            "/api/tasks/step",
+            json={"namespace_id": namespace_id, "task": "RUN-78"},
+        )
+        assert current.status_code == 200
+        supervisor_llm("PASS")
+
+        evaluated = client.post(
+            "/api/tasks/step",
+            json={
+                "namespace_id": namespace_id,
+                "task": "RUN-78",
+                "report": "Hermes выполнил текущую фазу и приложил проверяемые evidence.",
+            },
+        )
+
+        assert evaluated.status_code == 200
+        assert evaluated.json()["result"]["verdict"] == "PASS"
+
+    def test_rejects_unknown_namespace(self, client):
+        response = client.post(
+            "/api/tasks/step",
+            json={"namespace_id": 999999, "task": "RUN-79"},
+        )
+
+        assert response.status_code == 404
+        assert response.json() == {"ok": False, "error": "Namespace не найден"}

@@ -38,14 +38,35 @@
 .verdict-rollback{background:var(--orange-soft);color:var(--orange)}
 .verdict-delegate{background:var(--accent-soft);color:var(--accent)}
 .table-card-list{display:none}
+.task-start{margin-bottom:16px;padding:16px;display:grid;gap:12px}
+.task-start-fields{display:grid;grid-template-columns:minmax(160px,.65fr) minmax(240px,1.35fr) auto;gap:10px;align-items:end}
+.task-start label{display:grid;gap:6px;font-size:12px;color:var(--text-muted)}
+.task-start input{width:100%;min-width:0;padding:9px 11px;border:1px solid var(--border-strong);border-radius:7px;background:var(--panel);color:var(--text);font:inherit}
+.task-start-message{min-height:18px;font-size:12px;color:var(--text-muted)}
+.task-start-message.error{color:var(--red)}
 @container tasks (max-width:720px){
   .tasks-table-wrap{display:none}
   .table-card-list{display:flex;flex-direction:column;gap:12px}
+  .task-start-fields{grid-template-columns:1fr}
 }
 {% endblock %}
 
 {% block content %}
 <div class="tasks-layout">
+{% if selected_namespace %}
+<form class="card task-start" data-testid="task-start-form" id="taskStartForm">
+  <div class="task-start-fields">
+    <label>Номер тикета
+      <input data-testid="task-start-key" id="taskStartKey" name="task" required maxlength="128" autocomplete="off" placeholder="{{ (selected_namespace.key_prefixes or ['TASK'])[0] }}-1">
+    </label>
+    <label>Название задачи
+      <input data-testid="task-start-title" id="taskStartTitle" name="title" required maxlength="512" autocomplete="off" placeholder="Краткое проверяемое название">
+    </label>
+    <button class="btn btn-primary" data-testid="task-start-submit" id="taskStartSubmit" type="submit">Создать и открыть</button>
+  </div>
+  <div class="task-start-message" data-testid="task-start-message" id="taskStartMessage" aria-live="polite"></div>
+</form>
+{% endif %}
 <div class="card tasks-table-wrap">
   <table class="tasks-table">
     <thead>
@@ -138,4 +159,35 @@
   {% endfor %}
 </div>
 </div>
+{% endblock %}
+
+{% block extra_script %}
+{% if selected_namespace %}
+const taskStartNamespaceId = {{ selected_namespace.id | tojson }};
+const taskStartForm = document.getElementById('taskStartForm');
+const taskStartMessage = document.getElementById('taskStartMessage');
+taskStartForm?.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const submit = document.getElementById('taskStartSubmit');
+  const task = document.getElementById('taskStartKey').value.trim();
+  const title = document.getElementById('taskStartTitle').value.trim();
+  taskStartMessage.classList.remove('error');
+  taskStartMessage.textContent = 'Создаём задачу и читаем первую фазу…';
+  submit.disabled = true;
+  try {
+    const response = await fetch('/api/tasks/step', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({namespace_id: taskStartNamespaceId, task, title}),
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) throw new Error(payload.error || 'Не удалось создать задачу');
+    window.location.assign(`/task/${encodeURIComponent(task)}?namespace_id=${taskStartNamespaceId}`);
+  } catch (error) {
+    taskStartMessage.classList.add('error');
+    taskStartMessage.textContent = error instanceof Error ? error.message : 'Не удалось создать задачу';
+    submit.disabled = false;
+  }
+});
+{% endif %}
 {% endblock %}
