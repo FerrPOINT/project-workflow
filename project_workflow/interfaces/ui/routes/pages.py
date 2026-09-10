@@ -13,6 +13,7 @@ from project_workflow.domain.exceptions import ConflictError
 from project_workflow.interfaces.ui.services import (
     _build_parallel_phase_blocks,
     _get_task_detail,
+    _load_agents,
     _load_cli_reference,
     _load_dashboard,
     _load_namespaces,
@@ -20,6 +21,7 @@ from project_workflow.interfaces.ui.services import (
     _load_phases,
     _load_tasks,
     _load_workflows,
+    _visibility_is_restricted,
 )
 from project_workflow.interfaces.ui.state import _app_state
 from project_workflow.interfaces.ui.templates import _group_instructions, templates
@@ -59,6 +61,7 @@ def _namespace_context(
         "projects": namespaces,
         "selected_namespace": selected_namespace,
         "selected_project": selected_namespace,
+        "visibility_restricted": _visibility_is_restricted(),
         **_theme_context(selected_namespace),
     }
 
@@ -132,6 +135,16 @@ async def phases_page(request: Request, workflow_id: int | None = Query(default=
         workflow_id = selected_namespace.get("workflow_id")
     workflows = _load_workflows()
     selected_workflow = next((item for item in workflows if item["id"] == workflow_id), None)
+    if workflow_id is not None and selected_workflow is None:
+        return _error_page(
+            request,
+            title="Воркфлоу не найден",
+            message="Указанный воркфлоу недоступен в этом интерфейсе.",
+            status_code=404,
+            back_url="/phases",
+            back_label="К фазам",
+            page="phases",
+        )
     if selected_workflow is None and workflows:
         selected_workflow = workflows[0]
     selected_workflow_id = selected_workflow["id"] if selected_workflow else None
@@ -166,7 +179,7 @@ async def phase_detail(request: Request, phase_id: int) -> HTMLResponse:
             back_label="К фазам",
             page="phases",
         )
-    agents = _app_state.agent_service().list_agents()
+    agents = _load_agents()
     workflow_phases = _app_state.phase_service().list_phases(phase.get("workflow_id"))
     current_index = next(
         (index for index, item in enumerate(workflow_phases) if item.get("id") == phase.get("id")),
@@ -251,6 +264,16 @@ async def namespace_page(request: Request) -> HTMLResponse:
 
 async def namespace_new_page(request: Request) -> HTMLResponse:
     """Create page for a new namespace."""
+    if _visibility_is_restricted():
+        return _error_page(
+            request,
+            title="Добавление недоступно",
+            message="Этот интерфейс ограничен заранее настроенными namespaces.",
+            status_code=404,
+            back_url="/namespace",
+            back_label="К namespaces",
+            page="namespace",
+        )
     context = _namespace_context(request, page="namespace")
     context.update(
         {
@@ -363,7 +386,7 @@ async def settings_page(request: Request) -> HTMLResponse:
 
 async def agents_page(request: Request) -> HTMLResponse:
     """Список агентов."""
-    agents = _app_state.agent_service().list_agents()
+    agents = _load_agents()
     context = _namespace_context(request, page="agents")
     context.update({"agents": agents})
     return _template_response(

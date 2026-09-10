@@ -37,6 +37,24 @@ def test_local_ui_defaults_to_loopback(monkeypatch):
     assert config.Settings(_env_file=None).UI_HOST == "127.0.0.1"
 
 
+def test_visible_namespace_codes_are_normalized(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")
+    monkeypatch.setenv("UI_VISIBLE_NAMESPACE_CODES", " hana, HARC,hana ")
+
+    settings = config.Settings(_env_file=None)
+
+    assert settings.UI_VISIBLE_NAMESPACE_CODES == "HANA,HARC"
+    assert settings.visible_namespace_codes == frozenset({"HANA", "HARC"})
+
+
+def test_visible_namespace_codes_reject_invalid_values(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")
+    monkeypatch.setenv("UI_VISIBLE_NAMESPACE_CODES", "HANA,not valid")
+
+    with pytest.raises(ValidationError, match="namespace codes"):
+        config.Settings(_env_file=None)
+
+
 def test_bootstrap_constants_are_minimal():
     assert config.SEED_PATH.name == "seed.json"
     assert config.DEFAULT_WORKFLOW_NAME == "sdlc-business-tech-v1"

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 from pathlib import Path
 
@@ -26,6 +27,7 @@ class Settings(BaseSettings):
 
     UI_HOST: str = "127.0.0.1"
     UI_PORT: int = 8811
+    UI_VISIBLE_NAMESPACE_CODES: str = ""
 
     LOG_LEVEL: str = "INFO"
 
@@ -47,6 +49,25 @@ class Settings(BaseSettings):
         if not url:
             raise ValueError("Переменная DATABASE_URL обязательна")
         return url
+
+    @field_validator("UI_VISIBLE_NAMESPACE_CODES", mode="before")
+    @classmethod
+    def _normalize_visible_namespace_codes(cls, value: object) -> str:
+        raw = str(value or "").strip()
+        if not raw:
+            return ""
+        codes = [item.strip().upper() for item in raw.split(",")]
+        if any(not re.fullmatch(r"[A-Z][A-Z0-9_]*", code) for code in codes):
+            raise ValueError(
+                "UI_VISIBLE_NAMESPACE_CODES должен содержать namespace codes через запятую"
+            )
+        return ",".join(dict.fromkeys(codes))
+
+    @property
+    def visible_namespace_codes(self) -> frozenset[str]:
+        return frozenset(
+            code for code in self.UI_VISIBLE_NAMESPACE_CODES.split(",") if code
+        )
 
 
 @lru_cache

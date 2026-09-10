@@ -52,6 +52,13 @@ Supervisor остаётся в API-процессе и не передаётся
 
 Runtime-источник данных — **PostgreSQL**. SQLite используется только для изолированных тестов и локальных smoke-сценариев.
 
+Для изолированного UI можно задать server-side allowlist стабильных namespace
+codes через `UI_VISIBLE_NAMESPACE_CODES=CODE1,CODE2`. Тогда списки и прямые
+UI/API URL доступны только для графа этих namespaces, весь каталог становится
+read-only, а task step/history разрешены только внутри видимого графа. Остальные
+записи и их история остаются в PostgreSQL без изменений. Пустое значение
+сохраняет обычный unrestricted-режим.
+
 ## 📌 Snapshot
 
 | Поле | Значение |

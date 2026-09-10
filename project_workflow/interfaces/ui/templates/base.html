@@ -279,7 +279,7 @@ textarea{resize:vertical;min-height:60px}
           <option value="{{ namespace.id }}" {% if active_namespace_id == namespace.id %}selected{% endif %}>{{ namespace.name }}</option>
           {% endfor %}
         </select>
-        <a class="namespace-icon-action" href="/namespace/new{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}" title="Добавить" aria-label="Добавить">+</a>
+        {% if not visibility_restricted %}<a class="namespace-icon-action" href="/namespace/new{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}" title="Добавить" aria-label="Добавить">+</a>{% endif %}
         <a class="namespace-icon-action" href="/namespace{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}" title="Редактировать выбранное" aria-label="Редактировать выбранное">✎</a>
       </div>
       {% endif %}

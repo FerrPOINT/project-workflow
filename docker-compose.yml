@@ -34,6 +34,7 @@ services:
       DB_SCHEMA: project_workflow
       UI_HOST: 0.0.0.0
       UI_PORT: 8811
+      UI_VISIBLE_NAMESPACE_CODES: ${UI_VISIBLE_NAMESPACE_CODES:-}
       LOG_LEVEL: INFO
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-http://192.168.10.1:4000/v1}
       OPENAI_MODEL: app-test

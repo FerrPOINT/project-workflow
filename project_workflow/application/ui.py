@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from project_workflow import config
 from project_workflow.domain.project_theme import DEFAULT_PROJECT_COLOR, DEFAULT_PROJECT_ICON
 
 from ..interfaces.ui.helpers import (
@@ -52,9 +53,66 @@ class UIDataService:
     def __init__(self, app_state: _AppState):
         self._app_state = app_state
 
+    @staticmethod
+    def _visible_namespace_codes() -> frozenset[str]:
+        return config.get_settings().visible_namespace_codes
+
+    def visibility_is_restricted(self) -> bool:
+        return bool(self._visible_namespace_codes())
+
+    def _visible_project_rows(self, wdb: Any) -> list[dict[str, Any]]:
+        projects = list(wdb.get_projects())
+        allowed = self._visible_namespace_codes()
+        if not allowed:
+            return projects
+        return [
+            project
+            for project in projects
+            if str(project.get("code") or "").upper() in allowed
+        ]
+
+    def _visible_workflow_ids(self, wdb: Any) -> set[int] | None:
+        if not self.visibility_is_restricted():
+            return None
+        return {
+            int(project["workflow_id"])
+            for project in self._visible_project_rows(wdb)
+            if isinstance(project.get("workflow_id"), int)
+        }
+
+    def is_namespace_visible(self, namespace_id: int) -> bool:
+        return any(
+            project.get("id") == namespace_id
+            for project in self._visible_project_rows(self._app_state.get_db())
+        )
+
+    def is_workflow_visible(self, workflow_id: int) -> bool:
+        visible_ids = self._visible_workflow_ids(self._app_state.get_db())
+        return visible_ids is None or workflow_id in visible_ids
+
+    def is_phase_visible(self, phase_id: int) -> bool:
+        phase = self._app_state.get_db().phases.get_by_id(phase_id)
+        return bool(
+            phase is not None
+            and phase.workflow_id is not None
+            and self.is_workflow_visible(int(phase.workflow_id))
+        )
+
+    def is_agent_visible(self, agent_id: int) -> bool:
+        if not self.visibility_is_restricted():
+            return self._app_state.get_db().agents.get_by_id(agent_id) is not None
+        return any(agent.get("id") == agent_id for agent in self._load_agents())
+
     def _load_workflows(self) -> list[dict[str, Any]]:
         wdb = self._app_state.get_db()
         workflows = wdb.get_workflows()
+        visible_workflow_ids = self._visible_workflow_ids(wdb)
+        if visible_workflow_ids is not None:
+            workflows = [
+                workflow
+                for workflow in workflows
+                if workflow.get("id") in visible_workflow_ids
+            ]
         phases = [phase.to_dict() for phase in wdb.phases.list()]
         projects = wdb.get_projects()
         phase_counts: dict[int, int] = {}
@@ -82,6 +140,8 @@ class UIDataService:
         return result
 
     def _load_phases(self, workflow_id: int) -> list[dict[str, Any]]:
+        if not self.is_workflow_visible(workflow_id):
+            return []
         wdb = self._app_state.get_db()
         rows = wdb.get_phases(workflow_id=workflow_id)
         agents_by_id = {agent["id"]: agent for agent in wdb.get_agents()}
@@ -114,6 +174,9 @@ class UIDataService:
         if not phase:
             return None
         phase = dict(phase)
+        workflow_id = phase.get("workflow_id")
+        if not isinstance(workflow_id, int) or not self.is_workflow_visible(workflow_id):
+            return None
         phase["phase_num"] = phase.get("phase_num", phase.get("phase_order"))
         return phase
 
@@ -121,6 +184,15 @@ class UIDataService:
         """Load tasks for the UI with batched history/supervisor lookups."""
         wdb = self._app_state.get_db()
         tasks = wdb.get_tasks()
+        if self.visibility_is_restricted():
+            visible_project_ids = {
+                int(project["id"])
+                for project in self._visible_project_rows(wdb)
+                if isinstance(project.get("id"), int)
+            }
+            tasks = [
+                task for task in tasks if task.get("project_id") in visible_project_ids
+            ]
         if namespace_id is not None:
             tasks = [task for task in tasks if task.get("project_id") == namespace_id]
         workflows = wdb.get_workflows()
@@ -264,7 +336,7 @@ class UIDataService:
     def _load_projects(self) -> list[dict[str, Any]]:
         """Load namespaces from the legacy projects table for UI."""
         wdb = self._app_state.get_db()
-        projects = wdb.get_projects()
+        projects = self._visible_project_rows(wdb)
         tasks = wdb.get_tasks()
         task_counts: dict[int, int] = {}
         for task in tasks:
@@ -283,6 +355,20 @@ class UIDataService:
                 })
             )
         return result
+
+    def _load_agents(self) -> list[dict[str, Any]]:
+        wdb = self._app_state.get_db()
+        agents = list(wdb.get_agents())
+        visible_workflow_ids = self._visible_workflow_ids(wdb)
+        if visible_workflow_ids is None:
+            return agents
+        visible_agent_ids = {
+            int(phase.agent_id)
+            for workflow_id in visible_workflow_ids
+            for phase in wdb.phases.list(workflow_id)
+            if isinstance(phase.agent_id, int)
+        }
+        return [agent for agent in agents if agent.get("id") in visible_agent_ids]
 
     def _load_namespaces(self) -> list[dict[str, Any]]:
         """Canonical loader for namespaces."""
@@ -442,6 +528,9 @@ class UIDataService:
         if not isinstance(raw_project, dict) or not raw_project:
             prefix = str(task_key).split("-", 1)[0]
             raw_project = {"id": project_id, "code": prefix, "name": prefix}
+        allowed = self._visible_namespace_codes()
+        if allowed and str(raw_project.get("code") or "").upper() not in allowed:
+            return None
         project = _with_namespace_aliases(raw_project)
         task["project"] = project
         task["namespace"] = project

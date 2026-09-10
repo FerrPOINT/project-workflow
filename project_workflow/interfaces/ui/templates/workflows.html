@@ -3,7 +3,7 @@
 {% block title %}Воркфлоу — Workflow Engine{% endblock %}
 {% block header_title %}Воркфлоу{% endblock %}
 {% block header_actions %}
-  <button type="button" class="btn btn-primary" id="newWorkflowButton" onclick="startCreateWorkflow()">+ Новый воркфлоу</button>
+  {% if not visibility_restricted %}<button type="button" class="btn btn-primary" id="newWorkflowButton" onclick="startCreateWorkflow()">+ Новый воркфлоу</button>{% endif %}
   <a href="/phases{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary">← К фазам</a>
 {% endblock %}
 

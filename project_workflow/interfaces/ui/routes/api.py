@@ -28,12 +28,45 @@ from project_workflow.interfaces.ui.schemas import (
     WorkflowCreate,
     WorkflowUpdate,
 )
-from project_workflow.interfaces.ui.services import _load_phase_detail, _load_tasks
+from project_workflow.interfaces.ui.services import (
+    _is_agent_visible,
+    _is_namespace_visible,
+    _is_phase_visible,
+    _is_workflow_visible,
+    _load_agents,
+    _load_phase_detail,
+    _load_phases,
+    _load_tasks,
+    _load_workflows,
+    _visibility_is_restricted,
+)
 from project_workflow.interfaces.ui.state import _app_state
 
 
 def _error(message: str, status: int) -> JSONResponse:
     return JSONResponse({"ok": False, "error": message}, status_code=status)
+
+
+def _namespace_is_hidden(namespace_id: int) -> bool:
+    return _visibility_is_restricted() and not _is_namespace_visible(namespace_id)
+
+
+def _workflow_is_hidden(workflow_id: int) -> bool:
+    return _visibility_is_restricted() and not _is_workflow_visible(workflow_id)
+
+
+def _phase_is_hidden(phase_id: int) -> bool:
+    return _visibility_is_restricted() and not _is_phase_visible(phase_id)
+
+
+def _agent_is_hidden(agent_id: int) -> bool:
+    return _visibility_is_restricted() and not _is_agent_visible(agent_id)
+
+
+def _deny_restricted_catalog_write() -> JSONResponse | None:
+    if not _visibility_is_restricted():
+        return None
+    return _error("Каталог недоступен для изменения в ограниченном интерфейсе", 403)
 
 
 def _updates_from_payload(payload: Any, fields: list[str]) -> dict[str, Any]:
@@ -75,13 +108,15 @@ async def api_settings_get() -> dict[str, Any] | JSONResponse:
 
 
 async def api_phases(workflow_id: int | None = Query(default=None)) -> dict[str, Any] | JSONResponse:
-    workflows = _app_state.workflow_service().list_workflows()
+    workflows = _load_workflows()
     selected_workflow = next((item for item in workflows if item["id"] == workflow_id), None)
+    if workflow_id is not None and selected_workflow is None:
+        return _error(f"Воркфлоу {workflow_id} не найден", 404)
     if selected_workflow is None and workflow_id is None and workflows:
         selected_workflow = workflows[0]
     selected_workflow_id = selected_workflow["id"] if selected_workflow else workflow_id
-    phases = _app_state.phase_service().list_phases(selected_workflow_id)
-    agents = {a["id"]: a for a in _app_state.agent_service().list_agents()}
+    phases = _load_phases(selected_workflow_id) if selected_workflow_id is not None else []
+    agents = {a["id"]: a for a in _load_agents()}
 
     rows = []
     for phase in phases:
@@ -113,6 +148,10 @@ async def api_tasks(
     workflow_id: int | None = Query(default=None),
     namespace_id: int | None = Query(default=None),
 ) -> dict[str, Any] | JSONResponse:
+    if namespace_id is not None and _namespace_is_hidden(namespace_id):
+        return _error("Namespace не найден", 404)
+    if workflow_id is not None and _workflow_is_hidden(workflow_id):
+        return _error(f"Воркфлоу {workflow_id} не найден", 404)
     tasks = _load_tasks(namespace_id=namespace_id)
     if workflow_id is not None:
         tasks = [t for t in tasks if t.get("workflow_id") == workflow_id]
@@ -121,6 +160,8 @@ async def api_tasks(
 
 async def api_task_step(payload: UiTaskStepRequest) -> dict[str, Any] | JSONResponse:
     """Create/read or advance one workflow task from the private UI."""
+    if _namespace_is_hidden(payload.namespace_id):
+        return _error("Namespace не найден", 404)
     try:
         with SAUnitOfWork() as uow:
             if uow.projects.get_by_id(payload.namespace_id) is None:
@@ -144,6 +185,8 @@ async def api_namespaces() -> dict[str, Any] | JSONResponse:
 
 
 async def api_namespace_get(namespace_id: int) -> dict[str, Any] | JSONResponse:
+    if _namespace_is_hidden(namespace_id):
+        return _error(f"Запись {namespace_id} не найдена", 404)
     namespace = _app_state.project_service().get_project(namespace_id)
     if namespace is None:
         return _error(f"Запись {namespace_id} не найдена", 404)
@@ -159,13 +202,11 @@ async def api_projects() -> dict[str, Any] | JSONResponse:
 
 
 async def api_workflows() -> dict[str, Any] | JSONResponse:
-    from project_workflow.interfaces.ui.services import _load_workflows
-
     return {"ok": True, "workflows": _load_workflows()}
 
 
 async def api_agents() -> dict[str, Any] | JSONResponse:
-    rows = _app_state.agent_service().list_agents()
+    rows = _load_agents()
     return {
         "ok": True,
         "agents": [
@@ -180,7 +221,13 @@ async def api_agents() -> dict[str, Any] | JSONResponse:
 
 
 async def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONResponse:
+    if denied := _deny_restricted_catalog_write():
+        return denied
     workflow_id = payload.workflow_id
+    if _workflow_is_hidden(workflow_id):
+        return _error(f"Воркфлоу {workflow_id} не найден", 404)
+    if payload.agent_id is not None and _agent_is_hidden(payload.agent_id):
+        return _error(f"Агент {payload.agent_id} не найден", 404)
     assert payload.phase_order is not None
     data = {
         "name": payload.name,
@@ -211,6 +258,12 @@ async def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONRespons
 
 
 async def api_phase_update(phase_id: int, payload: PhaseUpdate) -> dict[str, Any] | JSONResponse:
+    if denied := _deny_restricted_catalog_write():
+        return denied
+    if _phase_is_hidden(phase_id):
+        return _error(f"Фаза {phase_id} не найдена", 404)
+    if payload.agent_id is not None and _agent_is_hidden(payload.agent_id):
+        return _error(f"Агент {payload.agent_id} не найден", 404)
     srv = _app_state.get_service()
     scalar_fields = {
         "name",
@@ -239,6 +292,10 @@ async def api_phase_update(phase_id: int, payload: PhaseUpdate) -> dict[str, Any
 
 
 async def api_phase_delete(phase_id: int) -> dict[str, Any] | JSONResponse:
+    if denied := _deny_restricted_catalog_write():
+        return denied
+    if _phase_is_hidden(phase_id):
+        return _error(f"Фаза {phase_id} не найдена", 404)
     try:
         _app_state.phase_service().delete_phase(phase_id)
     except NotFoundError:
@@ -249,9 +306,13 @@ async def api_phase_delete(phase_id: int) -> dict[str, Any] | JSONResponse:
 
 
 async def api_phase_batch_order(payload: PhaseOrderUpdate) -> dict[str, Any] | JSONResponse:
+    if denied := _deny_restricted_catalog_write():
+        return denied
     batch: list[tuple[int, int]] = []
     for item in payload.orders:
         resolved_phase_id = item.phase_id
+        if _phase_is_hidden(resolved_phase_id):
+            return _error(f"Фаза {resolved_phase_id} не найдена", 404)
         if item.workflow_id is not None:
             phase = _app_state.phase_service().get_phase(resolved_phase_id)
             if phase is None:
@@ -271,6 +332,8 @@ async def api_phase_batch_order(payload: PhaseOrderUpdate) -> dict[str, Any] | J
 
 
 async def api_workflow_create(payload: WorkflowCreate) -> dict[str, Any] | JSONResponse:
+    if denied := _deny_restricted_catalog_write():
+        return denied
     service = _app_state.workflow_service()
     workflow = service.create_workflow({"name": payload.name, "description": payload.description or ""})
     workflow_id = workflow["id"]
@@ -278,6 +341,10 @@ async def api_workflow_create(payload: WorkflowCreate) -> dict[str, Any] | JSONR
 
 
 async def api_workflow_update(workflow_id: int, payload: WorkflowUpdate) -> dict[str, Any] | JSONResponse:
+    if denied := _deny_restricted_catalog_write():
+        return denied
+    if _workflow_is_hidden(workflow_id):
+        return _error(f"Воркфлоу {workflow_id} не найден", 404)
     service = _app_state.workflow_service()
     updates = _updates_from_payload(payload, ["name", "description"])
     try:
@@ -290,6 +357,10 @@ async def api_workflow_update(workflow_id: int, payload: WorkflowUpdate) -> dict
 
 
 async def api_workflow_delete(workflow_id: int) -> dict[str, Any] | JSONResponse:
+    if denied := _deny_restricted_catalog_write():
+        return denied
+    if _workflow_is_hidden(workflow_id):
+        return _error(f"Воркфлоу {workflow_id} не найден", 404)
     service = _app_state.workflow_service()
     try:
         service.delete_workflow(workflow_id)
@@ -301,6 +372,10 @@ async def api_workflow_delete(workflow_id: int) -> dict[str, Any] | JSONResponse
 
 
 async def api_namespace_create(payload: NamespaceCreate) -> dict[str, Any] | JSONResponse:
+    if denied := _deny_restricted_catalog_write():
+        return denied
+    if _workflow_is_hidden(payload.workflow_id):
+        return _error(f"Воркфлоу {payload.workflow_id} не найден", 404)
     if "description" in payload.model_fields_set and payload.description is None:
         return _error("description не может быть null", 422)
     service = _app_state.project_service()
@@ -338,6 +413,12 @@ async def api_namespace_create(payload: NamespaceCreate) -> dict[str, Any] | JSO
 
 
 async def api_namespace_update(namespace_id: int, payload: NamespaceUpdate) -> dict[str, Any] | JSONResponse:
+    if denied := _deny_restricted_catalog_write():
+        return denied
+    if _namespace_is_hidden(namespace_id):
+        return _error(f"Запись {namespace_id} не найдена", 404)
+    if payload.workflow_id is not None and _workflow_is_hidden(payload.workflow_id):
+        return _error(f"Воркфлоу {payload.workflow_id} не найден", 404)
     service = _app_state.project_service()
     updates = _updates_from_payload(
         payload,
@@ -358,6 +439,10 @@ async def api_namespace_update(namespace_id: int, payload: NamespaceUpdate) -> d
 
 
 async def api_namespace_delete(namespace_id: int) -> dict[str, Any] | JSONResponse:
+    if denied := _deny_restricted_catalog_write():
+        return denied
+    if _namespace_is_hidden(namespace_id):
+        return _error(f"Запись {namespace_id} не найдена", 404)
     service = _app_state.project_service()
     try:
         service.delete_project(namespace_id)
@@ -371,6 +456,10 @@ async def api_namespace_delete(namespace_id: int) -> dict[str, Any] | JSONRespon
 
 
 async def api_project_create(payload: ProjectCreate) -> dict[str, Any] | JSONResponse:
+    if denied := _deny_restricted_catalog_write():
+        return denied
+    if _workflow_is_hidden(payload.workflow_id):
+        return _error(f"Воркфлоу {payload.workflow_id} не найден", 404)
     if "description" in payload.model_fields_set and payload.description is None:
         return _error("description не может быть null", 422)
     service = _app_state.project_service()
@@ -407,6 +496,12 @@ async def api_project_create(payload: ProjectCreate) -> dict[str, Any] | JSONRes
 
 
 async def api_project_update(project_id: int, payload: ProjectUpdate) -> dict[str, Any] | JSONResponse:
+    if denied := _deny_restricted_catalog_write():
+        return denied
+    if _namespace_is_hidden(project_id):
+        return _error(f"Запись {project_id} не найдена", 404)
+    if payload.workflow_id is not None and _workflow_is_hidden(payload.workflow_id):
+        return _error(f"Воркфлоу {payload.workflow_id} не найден", 404)
     service = _app_state.project_service()
     updates = _updates_from_payload(
         payload,
@@ -427,10 +522,14 @@ async def api_project_update(project_id: int, payload: ProjectUpdate) -> dict[st
 
 
 async def api_project_delete(project_id: int) -> dict[str, Any] | JSONResponse:
+    if denied := _deny_restricted_catalog_write():
+        return denied
     return await api_namespace_delete(project_id)
 
 
 async def api_agent_create(payload: AgentCreate) -> dict[str, Any] | JSONResponse:
+    if denied := _deny_restricted_catalog_write():
+        return denied
     service = _app_state.agent_service()
     try:
         agent_id = service.create_agent(
@@ -448,6 +547,10 @@ async def api_agent_create(payload: AgentCreate) -> dict[str, Any] | JSONRespons
 
 
 async def api_agent_update(agent_id: int, payload: AgentUpdate) -> dict[str, Any] | JSONResponse:
+    if denied := _deny_restricted_catalog_write():
+        return denied
+    if _agent_is_hidden(agent_id):
+        return _error(f"Агент {agent_id} не найден", 404)
     service = _app_state.agent_service()
     updates = _updates_from_payload(payload, ["name", "description"])
     if "hermes_profile" in payload.model_fields_set:
@@ -464,6 +567,10 @@ async def api_agent_update(agent_id: int, payload: AgentUpdate) -> dict[str, Any
 
 
 async def api_agent_delete(agent_id: int) -> dict[str, Any] | JSONResponse:
+    if denied := _deny_restricted_catalog_write():
+        return denied
+    if _agent_is_hidden(agent_id):
+        return _error(f"Агент {agent_id} не найден", 404)
     service = _app_state.agent_service()
     try:
         service.delete_agent(agent_id)
@@ -482,6 +589,8 @@ async def api_phase_detail(phase_id: int) -> dict[str, Any] | JSONResponse:
 
 
 async def api_instructions_list(phase_id: int) -> dict[str, Any] | JSONResponse:
+    if _phase_is_hidden(phase_id):
+        return _error(f"Фаза {phase_id} не найдена", 404)
     phase = _app_state.phase_service().get_phase(phase_id)
     if phase is None:
         return _error(f"Фаза {phase_id} не найдена", 404)
@@ -490,6 +599,10 @@ async def api_instructions_list(phase_id: int) -> dict[str, Any] | JSONResponse:
 
 
 async def api_instruction_create(payload: InstructionCreate) -> dict[str, Any] | JSONResponse:
+    if denied := _deny_restricted_catalog_write():
+        return denied
+    if _phase_is_hidden(payload.phase_id):
+        return _error(f"Фаза {payload.phase_id} не найдена", 404)
     try:
         item = _app_state.instruction_service().create_instruction(
             payload.phase_id,
@@ -510,6 +623,12 @@ async def api_instruction_create(payload: InstructionCreate) -> dict[str, Any] |
 
 
 async def api_instruction_update(instruction_id: int, payload: InstructionUpdate) -> dict[str, Any] | JSONResponse:
+    if denied := _deny_restricted_catalog_write():
+        return denied
+    if _visibility_is_restricted():
+        current = _app_state.instruction_service().get_instruction(instruction_id)
+        if current is None or _phase_is_hidden(int(current["phase_id"])):
+            return _error(f"Инструкция {instruction_id} не найдена", 404)
     updates = _updates_from_payload(payload, ["description", "execution_type"])
     if "skills" in payload.model_fields_set:
         updates["skills"] = payload.skills
@@ -525,6 +644,12 @@ async def api_instruction_update(instruction_id: int, payload: InstructionUpdate
 
 
 async def api_instruction_delete(instruction_id: int) -> dict[str, Any] | JSONResponse:
+    if denied := _deny_restricted_catalog_write():
+        return denied
+    if _visibility_is_restricted():
+        current = _app_state.instruction_service().get_instruction(instruction_id)
+        if current is None or _phase_is_hidden(int(current["phase_id"])):
+            return _error(f"Инструкция {instruction_id} не найдена", 404)
     try:
         _app_state.instruction_service().delete_instruction(instruction_id)
     except NotFoundError as exc:
@@ -535,6 +660,10 @@ async def api_instruction_delete(instruction_id: int) -> dict[str, Any] | JSONRe
 
 
 async def api_instructions_reorder(phase_id: int, payload: InstructionReorder) -> dict[str, Any] | JSONResponse:
+    if denied := _deny_restricted_catalog_write():
+        return denied
+    if _phase_is_hidden(phase_id):
+        return _error(f"Фаза {phase_id} не найдена", 404)
     try:
         _app_state.instruction_service().reorder_instructions(phase_id, payload.instruction_ids)
     except NotFoundError as exc:

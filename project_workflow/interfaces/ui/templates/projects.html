@@ -3,7 +3,7 @@
 {% block title %}{{ selected_project.name if selected_project else 'Добавить' }} — Workflow Engine{% endblock %}
 {% block header_title %}{{ selected_project.name if selected_project else 'Добавить' }}{% endblock %}
 {% block header_actions %}
-  <button type="button" class="btn btn-primary" id="newProjectButton" onclick="startCreateProject()">+ Добавить</button>
+  {% if not visibility_restricted %}<button type="button" class="btn btn-primary" id="newProjectButton" onclick="startCreateProject()">+ Добавить</button>{% endif %}
   <a href="/tasks{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary">← К задачам</a>
 {% endblock %}
 

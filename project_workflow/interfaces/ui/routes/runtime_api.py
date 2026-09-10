@@ -68,6 +68,14 @@ def _namespace_id(uow: SAUnitOfWork, role: str) -> int:
     return value
 
 
+def _namespace_is_visible(uow: SAUnitOfWork, namespace_id: int) -> bool:
+    namespace = uow.projects.get_by_id(namespace_id)
+    if namespace is None:
+        return False
+    allowed = config.get_settings().visible_namespace_codes
+    return not allowed or str(namespace.code).upper() in allowed
+
+
 def _history_rows(uow: SAUnitOfWork, task_key: str, namespace_id: int, limit: int | None) -> list[dict[str, Any]]:
     task = uow.tasks.get_by_key(task_key, project_id=namespace_id)
     task_id = task.id if task else None
@@ -113,6 +121,8 @@ def execute_namespace_step(
     title: str | None = None,
 ) -> dict[str, Any]:
     """Execute one Supervisor step inside an already-authorized namespace."""
+    if not _namespace_is_visible(uow, namespace_id):
+        raise ValueError("Namespace не найден")
     task_key = _require_valid_key(task, uow, project_id=namespace_id)
     engine = supervisor.SupervisorEngine(task_key, uow=uow, project_id=namespace_id)
     if title is not None and engine.task is not None:
@@ -164,6 +174,8 @@ def runtime_step(
     try:
         with SAUnitOfWork() as uow:
             namespace_id = _namespace_id(uow, role)
+            if not _namespace_is_visible(uow, namespace_id):
+                return _error("Namespace не найден", 404)
             return execute_namespace_step(
                 uow,
                 namespace_id=namespace_id,
@@ -189,6 +201,8 @@ def runtime_history(
     try:
         with SAUnitOfWork() as uow:
             namespace_id = _namespace_id(uow, role)
+            if not _namespace_is_visible(uow, namespace_id):
+                return _error("Namespace не найден", 404)
             task_key = _require_valid_key(task, uow, project_id=namespace_id)
             rows = _history_rows(uow, task_key, namespace_id, n)
             return {

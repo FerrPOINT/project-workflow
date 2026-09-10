@@ -51,7 +51,7 @@
     </table>
   </section>
 
-  <section class="card agent-create">
+  {% if not visibility_restricted %}<section class="card agent-create">
     <div class="card-title" style="margin-bottom:12px">Добавить агента</div>
     <div class="form-grid">
       <label><span class="field-label">Имя</span><input type="text" id="newName"></label>
@@ -59,7 +59,7 @@
       <label><span class="field-label">Описание</span><textarea id="newDescription"></textarea></label>
       <button class="btn btn-primary" style="margin-top:23px" onclick="addAgent()">Добавить</button>
     </div>
-  </section>
+  </section>{% endif %}
 </div>
 {% endblock %}
 
