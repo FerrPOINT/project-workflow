@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse
 from project_workflow.application.phase_service import PhaseService
 from project_workflow.config import get_settings
 from project_workflow.domain.exceptions import ConflictError
+from project_workflow.interfaces.ui.platform_services import load_other_services
 from project_workflow.interfaces.ui.services import (
     _build_parallel_phase_blocks,
     _get_task_detail,
@@ -46,7 +47,6 @@ def _parse_query_namespace_id(raw: str | None) -> tuple[int | None, bool]:
     parsed = _parse_positive_int(raw)
     return parsed, parsed is None
 
-
 def _namespace_context(
     request: Request,
     *,
@@ -78,6 +78,7 @@ def _namespace_context(
         "selected_namespace": selected_namespace,
         "invalid_query_namespace_id": invalid_query_namespace_id,
         "missing_namespace_id": missing_namespace_id,
+        "other_services": load_other_services(get_settings().PLATFORM_SERVICES_URL),
         **_theme_context(selected_namespace),
     }
 

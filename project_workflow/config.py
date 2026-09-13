@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     OPENAI_REASONING_EFFORT: str = "none"
 
+    PLATFORM_SERVICES_URL: str = "http://localhost:7771/api/v1/runtime/services"
+
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def _require_database_url(cls, value: object) -> str:
