@@ -200,6 +200,8 @@ textarea{resize:vertical;min-height:60px}
   .header{padding:0 16px}
   .container{padding:16px}
   .namespace-select{width:150px;max-width:42vw}
+  .header{flex-wrap:wrap;height:auto;min-height:var(--header-height);row-gap:8px;padding-block:8px}
+  .header-actions{flex-wrap:wrap;justify-content:flex-end}
 }
 @media(max-width:480px){
   .container{padding:12px}
@@ -207,7 +209,11 @@ textarea{resize:vertical;min-height:60px}
   .card-value{font-size:22px}
   .header-title{font-size:14px}
   .header-actions{gap:6px}
-  .namespace-select{width:128px}
+  .namespace-select{width:128px;min-width:0}
+  .namespace-switcher{min-width:0}
+  .namespace-select{max-width:38vw}
+  .namespace-switcher .namespace-select{flex:1 1 128px}
+  .header-actions{width:100%}
 }
 
 /* ── Kanban ───────────────────────────────────────────────────────── */
