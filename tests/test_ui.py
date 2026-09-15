@@ -2204,7 +2204,7 @@ def test_workflows_list_uses_themed_scrollbar_and_sticky_region():
     assert response.status_code == 200
     expected_rule = (
         ".workflow-nav{display:flex;flex-direction:column;gap:10px;"
-        "max-height:calc(100vh - 190px);overflow-y:auto;"
+        "max-height:calc(100vh - 100px);overflow-y:auto;"
     )
     assert expected_rule in response.text
     # Колонка получает общий тонкий скроллбар в стиле темы вместо скрытого нативного
