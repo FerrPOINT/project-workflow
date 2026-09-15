@@ -302,7 +302,7 @@ textarea{resize:vertical;min-height:60px}
       <select class="namespace-select service-switcher" id="serviceSwitcher" aria-label="Сервисы платформы" onchange="if(this.value){window.location.href=this.value}">
         <option value="">Сервисы ▾</option>
         {% for service in other_services %}
-        <option value="{{ service.url }}">{{ service.label }}{% if service.health == 'healthy' %} •{% elif service.health == 'unreachable' %} ✕{% endif %}</option>
+        <option value="{{ service.url }}">{{ service.label }}{% if service.health == 'healthy' %} •{% elif service.health == 'unreachable' %} ✕{% else %} ?{% endif %}</option>
         {% endfor %}
       </select>
       {% endif %}

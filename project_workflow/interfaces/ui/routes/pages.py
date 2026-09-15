@@ -78,7 +78,10 @@ def _namespace_context(
         "selected_namespace": selected_namespace,
         "invalid_query_namespace_id": invalid_query_namespace_id,
         "missing_namespace_id": missing_namespace_id,
-        "other_services": load_other_services(get_settings().PLATFORM_SERVICES_URL),
+        "other_services": load_other_services(
+            get_settings().PLATFORM_SERVICES_URL,
+            request_url=str(request.url),
+        ),
         **_theme_context(selected_namespace),
     }
 

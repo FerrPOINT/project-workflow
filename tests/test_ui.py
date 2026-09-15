@@ -1182,6 +1182,20 @@ class TestPhaseDetail:
         assert "function removeSkillFromInstruction(button)" in response.text
         assert 'placeholder="Добавить навык"' in response.text
 
+    def test_phase_detail_skill_names_do_not_leak_into_js_string_context(self):
+        """Навыки попадают в JS только через data-атрибуты (autoescape), не в строки.
+
+        Регрессия XSS: раньше имя навыка подставлялось в onclick='...{{ s }}...'
+        и могло разорвать JS-строку. Сейчас обработчик читает data-skill.
+        """
+        response = client.get(_phase_detail_path("1.INTAKE"))
+        assert response.status_code == 200
+        # Навык передаётся через data-атрибут (HTML-контекст, автоэскейпится)
+        assert 'onclick="removeSkillFromInstruction(this)"' in response.text
+        assert "removeSkillFromInstruction(this, '" not in response.text
+        # Имя фазы не интерполируется в JS-литералы (эталон tojson-фикса 5054858)
+        assert "meta.name || '" not in response.text
+
     def test_phase_detail_serializes_phase_mode_toggles(self):
         response = client.get(_phase_detail_path("1.INTAKE"))
 

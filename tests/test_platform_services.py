@@ -1,4 +1,6 @@
 """Platform service catalog switcher (catalog v1.1)."""
+from pathlib import Path
+
 from project_workflow.interfaces.ui.platform_services import (
     _normalize,
     load_other_services,
@@ -22,6 +24,31 @@ def test_fallback_without_catalog_url():
     services = load_other_services(None)
     assert all(s["key"] != "project-workflow" for s in services)
     assert len(services) >= 5
+
+
+def test_fallback_reuses_remote_request_host():
+    services = load_other_services(None, request_url="http://192.168.1.135:8811/tasks")
+
+    assert {service["url"] for service in services} == {
+        "http://192.168.1.135:7712",
+        "http://192.168.1.135:7722",
+        "http://192.168.1.135:7732",
+        "http://192.168.1.135:7742",
+        "http://192.168.1.135:7772",
+    }
+
+
+def test_fallback_preserves_localhost_without_request_url():
+    services = load_other_services(None)
+    assert all("localhost" in str(service["url"]) for service in services)
+
+
+def test_service_switcher_marks_unknown_health_instead_of_silently_hiding_it():
+    template = (Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/base.html").read_text(
+        encoding="utf-8"
+    )
+
+    assert "{% else %} ?{% endif %}" in template
 
 
 def test_fallback_on_unreachable_catalog(monkeypatch):
