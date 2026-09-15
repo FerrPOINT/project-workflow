@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
 from project_workflow import config
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from project_workflow.infrastructure.llm import OpenAICompatibleClient
 from project_workflow.interfaces.ui.app import create_app
 
 
@@ -98,3 +100,42 @@ def test_runtime_token_is_bound_to_one_namespace(monkeypatch, supervisor_llm):
     assert completed.json()["result"]["verdict"] == "PASS"
     assert history.status_code == 200
     assert history.json()["result"]["count"] == 1
+    assert history.json()["result"]["records"][0]["retryable"] is False
+
+
+def test_runtime_history_exposes_retryable_supervisor_failure(monkeypatch):
+    token = "d" * 32
+    monkeypatch.setenv(
+        "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON",
+        json.dumps({"developer": token}),
+    )
+    config.get_settings.cache_clear()
+    _namespace("DEVELOPER", "workflow-developer", "DEV")
+
+    with TestClient(create_app()) as client:
+        current = client.post(
+            "/internal/runtime/step",
+            headers=_headers(token),
+            json={"task": "DEV-1"},
+        )
+        with patch.object(
+            OpenAICompatibleClient,
+            "chat",
+            side_effect=ValueError("invalid evaluator response"),
+        ):
+            blocked = client.post(
+                "/internal/runtime/step",
+                headers=_headers(token),
+                json={"task": "DEV-1", "report": "Отчёт"},
+            )
+        history = client.get(
+            "/internal/runtime/history",
+            headers=_headers(token),
+            params={"task": "DEV-1"},
+        )
+
+    assert current.status_code == 200
+    assert blocked.status_code == 200
+    assert blocked.json()["result"]["retryable"] is True
+    assert history.status_code == 200
+    assert history.json()["result"]["records"][0]["retryable"] is True

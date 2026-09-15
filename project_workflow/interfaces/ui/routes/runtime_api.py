@@ -91,6 +91,9 @@ def _history_rows(uow: SAUnitOfWork, task_key: str, namespace_id: int, limit: in
         limit=limit,
     ):
         item = entry.to_dict()
+        supervisor_response = item.get("supervisor_response")
+        if not isinstance(supervisor_response, dict):
+            supervisor_response = {}
         phase = uow.phases.get_by_id(int(item.get("phase_id") or 0))
         next_id = item.get("next_phase_id")
         rollback_id = item.get("rollback_phase_id")
@@ -103,7 +106,8 @@ def _history_rows(uow: SAUnitOfWork, task_key: str, namespace_id: int, limit: in
                 "phase_code": phase.code,
                 "verdict": item.get("verdict"),
                 "worker_report": item.get("worker_report"),
-                "supervisor_message": (item.get("supervisor_response") or {}).get("message"),
+                "supervisor_message": supervisor_response.get("message"),
+                "retryable": supervisor_response.get("retryable") is True,
                 "next_phase_code": next_phase.code if next_phase else None,
                 "rollback_phase_code": rollback.code if rollback else None,
                 "created_at": item.get("created_at"),
