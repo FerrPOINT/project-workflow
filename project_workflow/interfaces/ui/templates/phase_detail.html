@@ -689,18 +689,18 @@ async function persistPhase() {
   document.querySelectorAll('#checks-list li').forEach((li) => {
     if (li.classList.contains('empty-state')) return;
     const inp = li.querySelector('[data-field="description"]');
-    if (inp) data.checks.push({
+    if (inp && inp.value.trim()) data.checks.push({
       id: li.dataset.id ? Number(li.dataset.id) : null,
-      description: inp.value,
+      description: inp.value.trim(),
     });
   });
 
   document.querySelectorAll('#evidence-list li').forEach((li) => {
     if (li.classList.contains('empty-state')) return;
     const inp = li.querySelector('[data-field="description"]');
-    if (inp) data.evidence.push({
+    if (inp && inp.value.trim()) data.evidence.push({
       id: li.dataset.id ? Number(li.dataset.id) : null,
-      description: inp.value,
+      description: inp.value.trim(),
     });
   });
 
