@@ -42,6 +42,14 @@
 Центр управления workflow, фазами, namespaces, агентами и задачами живет в Web UI.
 CLI намеренно остается маленьким: `step` и `history`; дополнительные namespace-команды работают как wrappers поверх этих двух операций.
 
+Для изолированных контейнеров агентов доступен private runtime bridge
+`/internal/runtime/step` и `/internal/runtime/history`. Он включается только при
+заданном `PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON`: каждому role token сервер
+однозначно сопоставляет namespace с CLI-командой `workflow-<role>`. Ключ LLM
+Supervisor остаётся в API-процессе и не передаётся в shell агента. Endpoint не
+является пользовательским API и должен публиковаться только во внутреннюю сеть
+или на host loopback.
+
 Runtime-источник данных — **PostgreSQL**. SQLite используется только для изолированных тестов и локальных smoke-сценариев.
 
 ## 📌 Snapshot
