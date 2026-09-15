@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import Path, Query
+from fastapi import Cookie, Path, Query
 from fastapi.responses import JSONResponse
 
 from project_workflow.domain.exceptions import ConflictError, LastPhaseError, NotFoundError
 from project_workflow.domain.namespace import legacy_code_from_cli_command
 from project_workflow.domain.project_theme import normalize_theme_color, normalize_theme_icon
+from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from project_workflow.interfaces.ui.routes.runtime_api import execute_namespace_step
 from project_workflow.interfaces.ui.schemas import (
     AgentCreate,
     AgentUpdate,
@@ -21,6 +23,7 @@ from project_workflow.interfaces.ui.schemas import (
     PhaseCreate,
     PhaseOrderUpdate,
     PhaseUpdate,
+    UiTaskStepRequest,
     WorkflowCreate,
     WorkflowUpdate,
 )
@@ -192,6 +195,38 @@ async def api_tasks(
     if workflow_id is not None:
         tasks = [t for t in tasks if t.get("workflow_id") == workflow_id]
     return {"ok": True, "tasks": tasks}
+
+
+async def api_task_step(
+    payload: UiTaskStepRequest,
+    workflow_namespace_id: str | None = Cookie(default=None),
+) -> dict[str, Any] | JSONResponse:
+    """Create/read or advance one workflow task from the private UI.
+
+    Namespace берётся из серверной cookie-сессии UI, а не из тела запроса:
+    браузерный клиент не может адресовать чужой namespace (fail-closed
+    модель master). Тело с namespace_id отклоняется 422.
+    """
+    raw_namespace = (workflow_namespace_id or "").strip()
+    try:
+        namespace_id = int(raw_namespace) if raw_namespace.isdigit() else None
+    except ValueError:
+        namespace_id = None
+    if namespace_id is None or namespace_id <= 0:
+        return _error("Не выбран неймспейс: откройте задачи внутри нужного namespace", 409)
+    try:
+        with SAUnitOfWork() as uow:
+            if uow.projects.get_by_id(namespace_id) is None:
+                return _error("Namespace не найден", 404)
+            return execute_namespace_step(
+                uow,
+                namespace_id=namespace_id,
+                task=payload.task,
+                report=payload.report,
+                title=payload.title,
+            )
+    except (ConflictError, RuntimeError, ValueError) as exc:
+        return _error(str(exc), 409)
 
 
 async def api_namespaces() -> dict[str, Any] | JSONResponse:

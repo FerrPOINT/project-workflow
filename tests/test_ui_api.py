@@ -167,6 +167,16 @@ class TestIndex:
         assert "verdict-cell" in resp.text
         assert "white-space:nowrap;overflow-wrap:normal" in resp.text
 
+    def test_tasks_page_exposes_ui_task_start_form(self, client):
+        resp = client.get("/tasks")
+
+        assert resp.status_code == 200
+        assert 'data-testid="task-start-form"' in resp.text
+        assert 'data-testid="task-start-key"' in resp.text
+        assert 'data-testid="task-start-title"' in resp.text
+        assert 'data-testid="task-start-submit"' in resp.text
+        assert resp.text.count("<script>") == 1
+
     def test_header_has_namespace_selector_and_actions(self, client):
         resp = client.get("/")
         assert resp.status_code == 200
@@ -1590,7 +1600,128 @@ class TestPageRoutes:
     def test_task_detail_page(self, client):
         resp = client.get("/task/RUN-1")
         assert resp.status_code == 200
+        assert 'data-testid="task-runtime-panel"' in resp.text
+        assert 'data-testid="task-runtime-current"' in resp.text
+        assert 'data-testid="task-runtime-report"' in resp.text
+        assert 'data-testid="task-runtime-submit"' in resp.text
+        assert resp.text.count("<script>") == 1
 
     def test_phase_detail_page_not_found(self, client):
         resp = client.get("/phase/999999")
         assert resp.status_code == 404
+
+
+class TestUiTaskStep:
+    def _namespace_id(self) -> int:
+        from project_workflow import config
+        from project_workflow.interfaces.ui import _app_state
+
+        uow = _app_state.get_db()
+        project = uow.projects.get_by_code(config.DEFAULT_PROJECT_CODE)
+        assert project is not None and project.id is not None
+        return int(project.id)
+
+    def test_initializes_new_task_in_cookie_namespace(self, client):
+        namespace_id = self._namespace_id()
+        client.cookies.set("workflow_namespace_id", str(namespace_id))
+
+        response = client.post(
+            "/api/tasks/step",
+            json={
+                "task": "RUN-77",
+                "title": "Полный SDLC-цикл через UI",
+            },
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["ok"] is True
+        assert body["result"]["task_key"] == "RUN-77"
+        assert body["result"]["phase_code"] == "1.INTAKE"
+
+        detail = client.get(f"/task/RUN-77?namespace_id={namespace_id}")
+        assert detail.status_code == 200
+        assert "Полный SDLC-цикл через UI" in detail.text
+
+    def test_rejects_body_namespace_id_as_strict_payload(self, client):
+        client.cookies.set("workflow_namespace_id", str(self._namespace_id()))
+
+        response = client.post(
+            "/api/tasks/step",
+            json={"namespace_id": self._namespace_id(), "task": "RUN-79"},
+        )
+
+        assert response.status_code == 422
+
+    def test_fails_closed_without_namespace_cookie(self, client):
+        client.cookies.delete("workflow_namespace_id")
+
+        response = client.post("/api/tasks/step", json={"task": "RUN-80"})
+
+        assert response.status_code == 409
+        assert response.json()["ok"] is False
+
+    def test_rejects_task_key_outside_namespace_prefixes(self, client):
+        namespace_id = self._namespace_id()
+        client.cookies.set("workflow_namespace_id", str(namespace_id))
+
+        response = client.post(
+            "/api/tasks/step",
+            json={"task": "FOREIGN-1"},
+        )
+
+        # Сид-namespace не задаёт key_prefixes (префиксы — метаданные, не маршрут),
+        # поэтому ключ допустим; изоляция подтверждается на namespace с префиксами ниже.
+        assert response.status_code == 200
+        assert response.json()["result"]["task_key"] == "FOREIGN-1"
+
+        from project_workflow.interfaces.ui import _app_state
+
+        uow = _app_state.get_db()
+        uow.projects.create(
+            {
+                "code": "ISOLATED",
+                "name": "Изолированный",
+                "workflow_id": uow.workflows.list()[0].id,
+                "cli_command": "workflow-isolated",
+                "key_prefixes": ["ISO"],
+            }
+        )
+        uow.commit()
+        isolated = uow.projects.get_by_code("ISOLATED")
+        assert isolated is not None and isolated.id is not None
+        client.cookies.set("workflow_namespace_id", str(isolated.id))
+
+        foreign = client.post(
+            "/api/tasks/step",
+            json={"task": "FOREIGN-2"},
+        )
+        allowed = client.post(
+            "/api/tasks/step",
+            json={"task": "ISO-1"},
+        )
+
+        assert foreign.status_code == 409
+        assert foreign.json()["ok"] is False
+        assert allowed.status_code == 200
+        assert allowed.json()["result"]["task_key"] == "ISO-1"
+
+    def test_evaluates_hermes_report_from_ui(self, client, supervisor_llm):
+        client.cookies.set("workflow_namespace_id", str(self._namespace_id()))
+        current = client.post(
+            "/api/tasks/step",
+            json={"task": "RUN-78"},
+        )
+        assert current.status_code == 200
+        supervisor_llm("PASS")
+
+        evaluated = client.post(
+            "/api/tasks/step",
+            json={
+                "task": "RUN-78",
+                "report": "Hermes выполнил текущую фазу и приложил проверяемые evidence.",
+            },
+        )
+
+        assert evaluated.status_code == 200
+        assert evaluated.json()["result"]["verdict"] == "PASS"

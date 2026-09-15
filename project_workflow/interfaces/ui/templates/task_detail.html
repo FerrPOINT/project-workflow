@@ -88,6 +88,11 @@
 .skill-list{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}.skill-chip{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent);border:1px solid var(--accent);border-radius:5px;padding:2px 6px}
 .terminal-card{border:1px solid rgba(34,197,94,.3);border-top:3px solid var(--green);background:var(--green-soft);border-radius:8px;padding:13px 15px;font-weight:650;color:var(--green)}
 .empty-state{border:1px dashed var(--border-strong);border-radius:8px;padding:24px;text-align:center;color:var(--text-muted)}
+.runtime-panel{display:grid;gap:12px;background:var(--surface);border:1px solid var(--border);border-top:3px solid var(--blue);border-radius:8px;padding:16px}
+.runtime-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.runtime-panel textarea{width:100%;min-height:150px;resize:vertical;padding:10px 12px;border:1px solid var(--border-strong);border-radius:7px;background:var(--panel);color:var(--text);font:inherit;line-height:1.5}
+.runtime-output{margin:0;max-height:360px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid var(--border);border-radius:7px;background:var(--panel);padding:12px;color:var(--text-secondary);font-size:12px;line-height:1.55}
+.runtime-message{min-height:18px;color:var(--text-muted);font-size:12px}.runtime-message.error{color:var(--red)}
 
 @media(max-width:800px){.summary-bar{grid-template-columns:1fr}.contract-grid{grid-template-columns:1fr}.parallel-grid,.contract-participants{grid-template-columns:1fr}}
 @media(max-width:480px){
@@ -161,6 +166,24 @@
     <div class="summary-progress"><span class="{% if cycles_done >= cycles_total and cycles_total %}done{% endif %}" style="width:{{ (cycles_done / cycles_total * 100) if cycles_total else 0 }}%"></span></div>
   </div>
 </div>
+
+{% if task.status != 'done' %}
+<section class="detail-section" aria-labelledby="runtime-panel-title" data-testid="task-runtime-panel">
+  <h2 class="section-heading" id="runtime-panel-title">Текущая работа исполнителя</h2>
+  <div class="runtime-panel">
+    <div class="runtime-actions">
+      <button class="btn btn-secondary" data-testid="task-runtime-current" id="taskRuntimeCurrent" type="button">Показать текущее задание</button>
+    </div>
+    <label for="taskRuntimeReport" class="dialog-label">Проверяемый отчёт назначенного исполнителя</label>
+    <textarea data-testid="task-runtime-report" id="taskRuntimeReport" maxlength="32000" placeholder="Вставьте полный фактический отчёт исполнителя с evidence refs"></textarea>
+    <div class="runtime-actions">
+      <button class="btn btn-primary" data-testid="task-runtime-submit" id="taskRuntimeSubmit" type="button">Передать отчёт на проверку</button>
+      <span class="runtime-message" data-testid="task-runtime-message" id="taskRuntimeMessage" aria-live="polite"></span>
+    </div>
+    <pre class="runtime-output" data-testid="task-runtime-output" id="taskRuntimeOutput" hidden></pre>
+  </div>
+</section>
+{% endif %}
 
 <section class="detail-section" aria-labelledby="phase-history-title">
   <h2 class="section-heading" id="phase-history-title">История фаз</h2>
@@ -238,4 +261,53 @@
     {% else %}<div class="empty-state">Проверок пока нет.</div>{% endfor %}
   </div>
 </section>
+{% endblock %}
+
+{% block extra_script %}
+{% if task.status != 'done' %}
+const taskRuntimeKey = {{ task.task_key | tojson }};
+const taskRuntimeMessage = document.getElementById('taskRuntimeMessage');
+const taskRuntimeOutput = document.getElementById('taskRuntimeOutput');
+
+async function taskRuntimeStep(report) {
+  const current = document.getElementById('taskRuntimeCurrent');
+  const submit = document.getElementById('taskRuntimeSubmit');
+  current.disabled = true;
+  submit.disabled = true;
+  taskRuntimeMessage.classList.remove('error');
+  taskRuntimeMessage.textContent = report === null ? 'Читаем назначение…' : 'Проверяем отчёт…';
+  try {
+    const body = {task: taskRuntimeKey};
+    if (report !== null) body.report = report;
+    const response = await fetch('/api/tasks/step', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || 'Операция не выполнена');
+    taskRuntimeOutput.hidden = false;
+    taskRuntimeOutput.textContent = payload.output || JSON.stringify(payload.result, null, 2);
+    taskRuntimeMessage.textContent = payload.ok ? 'Готово' : 'Проверка вернула блокирующий результат';
+    if (report !== null) window.setTimeout(() => window.location.reload(), 350);
+  } catch (error) {
+    taskRuntimeMessage.classList.add('error');
+    taskRuntimeMessage.textContent = error instanceof Error ? error.message : 'Операция не выполнена';
+  } finally {
+    current.disabled = false;
+    submit.disabled = false;
+  }
+}
+
+document.getElementById('taskRuntimeCurrent')?.addEventListener('click', () => taskRuntimeStep(null));
+document.getElementById('taskRuntimeSubmit')?.addEventListener('click', () => {
+  const report = document.getElementById('taskRuntimeReport').value.trim();
+  if (!report) {
+    taskRuntimeMessage.classList.add('error');
+    taskRuntimeMessage.textContent = 'Добавьте фактический отчёт исполнителя';
+    return;
+  }
+  taskRuntimeStep(report);
+});
+{% endif %}
 {% endblock %}
