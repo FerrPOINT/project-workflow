@@ -2198,7 +2198,7 @@ def test_workflows_page_uses_product_modal_not_browser_confirm():
     assert "confirm('Удалить воркфлоу?')" not in response.text
 
 
-def test_workflows_list_hides_native_scrollbar_but_keeps_scrollable_region():
+def test_workflows_list_uses_themed_scrollbar_and_sticky_region():
     response = client.get("/workflows")
 
     assert response.status_code == 200
@@ -2207,8 +2207,11 @@ def test_workflows_list_hides_native_scrollbar_but_keeps_scrollable_region():
         "max-height:calc(100vh - 190px);overflow-y:auto;"
     )
     assert expected_rule in response.text
-    assert ".workflow-nav::-webkit-scrollbar{width:0;height:0}" in response.text
-    assert "scrollbar-width:none" in response.text
+    # Колонка получает общий тонкий скроллбар в стиле темы вместо скрытого нативного
+    assert 'class="workflow-nav side-nav-scroll" id="workflowNav"' in response.text
+    assert ".side-nav-scroll{scrollbar-width:thin" in response.text
+    # Скроллбар больше не прячется — длинные списки остаются обнаружимыми
+    assert ".workflow-nav::-webkit-scrollbar{width:0;height:0}" not in response.text
 
 
 def test_ui_deletions_use_product_modal_not_browser_confirm():

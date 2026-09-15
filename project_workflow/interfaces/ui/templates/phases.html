@@ -71,7 +71,7 @@
 
 {% block content %}
 <div class="phases-layout">
-  <section class="workflow-nav" id="workflowNav">
+  <section class="workflow-nav side-nav-scroll" id="workflowNav">
     {% for workflow in workflows %}
     <a class="workflow-nav-item {% if selected_workflow_id == workflow.id %}active{% endif %}" href="/phases?workflow_id={{ workflow.id }}{% if selected_namespace %}&namespace_id={{ selected_namespace.id }}{% endif %}" data-workflow-id="{{ workflow.id }}">
       <div class="workflow-name">{{ workflow.name }}</div>

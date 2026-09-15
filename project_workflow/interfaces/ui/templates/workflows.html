@@ -9,8 +9,7 @@
 
 {% block extra_style %}
 .workflow-crud{display:grid;grid-template-columns:320px minmax(0,1fr);gap:16px;align-items:start}
-.workflow-nav{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 190px);overflow-y:auto;scrollbar-width:none;overscroll-behavior:contain}
-.workflow-nav::-webkit-scrollbar{width:0;height:0}
+.workflow-nav{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 190px);overflow-y:auto;overscroll-behavior:contain;position:sticky;top:76px;padding-right:2px}
 .workflow-nav:focus-visible{outline:2px solid var(--accent-hover);outline-offset:2px}
 .workflow-nav-item{width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;cursor:pointer;color:var(--text)}
 .workflow-nav-item.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent-soft)}
@@ -27,7 +26,7 @@ textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:160px;resiz
 
 {% block content %}
 <div class="workflow-crud">
-  <section class="workflow-nav" id="workflowNav">
+  <section class="workflow-nav side-nav-scroll" id="workflowNav">
     {% for workflow in workflows %}
     <button type="button" class="workflow-nav-item {% if selected_workflow and selected_workflow.id == workflow.id %}active{% endif %}" data-workflow-id="{{ workflow.id }}" onclick="selectWorkflow({{ workflow.id }})">
       <div class="workflow-name">{{ workflow.name }}</div>

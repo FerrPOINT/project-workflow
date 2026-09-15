@@ -216,6 +216,15 @@ textarea{resize:vertical;min-height:60px}
   .header-actions{width:100%}
 }
 
+/* ── Side nav lists (workflows / namespaces / phases) ──────────────── */
+.side-nav-scroll{scrollbar-width:thin;scrollbar-color:var(--surface-active) transparent}
+.side-nav-scroll::-webkit-scrollbar{width:8px}
+.side-nav-scroll::-webkit-scrollbar-track{background:transparent;border-radius:999px}
+.side-nav-scroll::-webkit-scrollbar-thumb{background:var(--surface-active);border-radius:999px;border:2px solid transparent;background-clip:padding-box}
+.side-nav-scroll::-webkit-scrollbar-thumb:hover{background:var(--text-dim);border:2px solid transparent;background-clip:padding-box}
+.side-nav-scroll{overscroll-behavior:contain;scroll-snap-type:y proximity}
+.side-nav-scroll > *{scroll-snap-align:start}
+
 /* ── Kanban ───────────────────────────────────────────────────────── */
 {% block extra_style %}{% endblock %}
 </style>

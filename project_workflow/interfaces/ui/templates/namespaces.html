@@ -6,7 +6,7 @@
 
 {% block extra_style %}
 .namespace-crud{display:grid;grid-template-columns:320px minmax(0,1fr);gap:16px;align-items:start}
-.namespace-nav{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 190px);overflow:auto}
+.namespace-nav{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 190px);overflow:auto;position:sticky;top:76px;padding-right:2px}
 .namespace-nav-item{width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;cursor:pointer;color:var(--text);display:flex;gap:12px;align-items:flex-start}
 .namespace-nav-item.active{border-color:var(--namespace-color,var(--accent));box-shadow:0 0 0 1px var(--namespace-color,var(--accent))}
 .namespace-mark{width:34px;height:34px;border-radius:8px;background:color-mix(in srgb,var(--namespace-color,var(--accent)) 16%, transparent);border:1px solid var(--namespace-color,var(--accent));color:var(--namespace-color,var(--accent));display:flex;align-items:center;justify-content:center;flex:0 0 auto}
@@ -32,7 +32,7 @@
 
 {% block content %}
 <div class="namespace-crud">
-  <section class="namespace-nav" id="namespaceNav">
+  <section class="namespace-nav side-nav-scroll" id="namespaceNav">
     {% for namespace in namespaces %}
     <button type="button" class="namespace-nav-item {% if selected_namespace and selected_namespace.id == namespace.id %}active{% endif %}" data-namespace-id="{{ namespace.id }}" onclick="selectNamespace({{ namespace.id }})" style="--namespace-color:{{ namespace.theme_color }}">
       <span class="namespace-mark" aria-hidden="true">
