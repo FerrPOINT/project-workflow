@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -51,6 +52,11 @@ def _records(uow: SAUnitOfWork, model: Any, **filters: Any) -> list[Any]:
     return list(uow.session.execute(stmt).scalars())
 
 
+def _workflow_ids(workflows: Sequence[Any]) -> list[int]:
+    """Return only persisted workflow identifiers for fixture references."""
+    return [workflow.id for workflow in workflows if workflow.id is not None]
+
+
 def seed() -> None:
     settings = get_settings()
     engine = get_engine(settings.DATABASE_URL)
@@ -72,7 +78,7 @@ def seed() -> None:
                 "description": "Длинное описание воркфлоу для проверки переносов и переполнения ячеек в списках.",
             })
             uow.commit()
-        wf_ids = [int(w.id) for w in uow.workflows.list()]
+        wf_ids = _workflow_ids(uow.workflows.list())
 
         # ── агенты: 10 с длинными описаниями ─────────────────────────────
         agent_rows = [
