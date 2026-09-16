@@ -2228,9 +2228,10 @@ def test_workflows_list_uses_themed_scrollbar_and_sticky_region():
         "max-height:calc(100vh - 100px);overflow-y:auto;"
     )
     assert expected_rule in response.text
-    # Колонка получает общий тонкий скроллбар в стиле темы вместо скрытого нативного
+    # Колонка наследует глобальный тематический скроллбар приложения
     assert 'class="workflow-nav side-nav-scroll" id="workflowNav"' in response.text
-    assert ".side-nav-scroll{scrollbar-width:thin" in response.text
+    assert "html{scrollbar-width:thin;scrollbar-color:var(--surface-active) transparent}" in response.text
+    assert "*{scrollbar-width:thin;scrollbar-color:var(--surface-active) transparent}" in response.text
     # Скроллбар больше не прячется — длинные списки остаются обнаружимыми
     assert ".workflow-nav::-webkit-scrollbar{width:0;height:0}" not in response.text
 

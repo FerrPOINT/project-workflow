@@ -19,6 +19,15 @@
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{font-feature-settings:"cv01","ss03"}
+/* ── Единый скроллбар всего приложения в стиле темы ─────────────────── */
+html{scrollbar-width:thin;scrollbar-color:var(--surface-active) transparent}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--surface-active);border-radius:999px;border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:var(--text-dim)}
+::-webkit-scrollbar-corner{background:transparent}
+/* Скроллящиеся области приложения наследуют тот же стиль */
+*{scrollbar-width:thin;scrollbar-color:var(--surface-active) transparent}
 body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,-apple-system,sans-serif;line-height:1.5;font-size:14px;min-height:100vh;display:flex;overflow-x:hidden}
 a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
 button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--accent-hover);outline-offset:2px}
@@ -39,8 +48,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .brand-name{font-size:14px;font-weight:700;color:var(--text);max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .brand-subname{font-size:11px;font-weight:600;color:var(--accent);max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sidebar-close{display:none;background:none;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;padding:0;width:32px;height:32px;align-items:center;justify-content:center}
-.sidebar-nav{flex:1;padding:12px 0;overflow-y:auto;scrollbar-width:none;overscroll-behavior:contain}
-.sidebar-nav::-webkit-scrollbar{width:0;height:0}
+.sidebar-nav{flex:1;padding:12px 0;overflow-y:auto;overscroll-behavior:contain}
 .sidebar-nav:focus-visible{outline:2px solid var(--accent-hover);outline-offset:-2px}
 .sidebar-section{padding:8px 20px;font-size:10px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-top:8px}
 .sidebar-link{display:flex;align-items:center;gap:10px;padding:8px 20px;color:var(--text-muted);font-size:13px;font-weight:500;transition:all .12s;text-decoration:none;border-left:2px solid transparent}
@@ -216,12 +224,8 @@ textarea{resize:vertical;min-height:60px}
   .header-actions{width:100%}
 }
 
-/* ── Side nav lists (workflows / namespaces / phases) ──────────────── */
-.side-nav-scroll{scrollbar-width:thin;scrollbar-color:var(--surface-active) transparent}
-.side-nav-scroll::-webkit-scrollbar{width:8px}
-.side-nav-scroll::-webkit-scrollbar-track{background:transparent;border-radius:999px}
-.side-nav-scroll::-webkit-scrollbar-thumb{background:var(--surface-active);border-radius:999px;border:2px solid transparent;background-clip:padding-box}
-.side-nav-scroll::-webkit-scrollbar-thumb:hover{background:var(--text-dim);border:2px solid transparent;background-clip:padding-box}
+/* ── Side nav lists (workflows / namespaces / phases) ────────────────
+   Скроллбар наследует глобальный тематический стиль (см. шапку стилей). */
 .side-nav-scroll{overscroll-behavior:contain;scroll-snap-type:y proximity}
 .side-nav-scroll > *{scroll-snap-align:start}
 
