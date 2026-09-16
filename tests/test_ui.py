@@ -1646,7 +1646,10 @@ class TestTasksPage:
 
         assert response.status_code == 200
         assert ".tasks-layout{container:tasks / inline-size;min-width:0}" in response.text
-        assert ".tasks-table{width:100%;min-width:0;table-layout:fixed}" in response.text
+        assert (
+            ".tasks-table{width:100%;min-width:0;table-layout:fixed;"
+            "border-collapse:separate;border-spacing:0}"
+        ) in response.text
         assert ".tasks-table th:nth-child(9),.tasks-table td:nth-child(9){width:8%}" in response.text
         assert "white-space:nowrap;overflow-wrap:normal" in response.text
         assert (

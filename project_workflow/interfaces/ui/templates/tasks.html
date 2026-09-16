@@ -5,9 +5,14 @@
 {% block header_actions %}{% endblock %}
 {% block extra_style %}
 .tasks-layout{container:tasks / inline-size;min-width:0}
-.tasks-table-wrap{padding:0;overflow-x:auto}
-.tasks-table{width:100%;min-width:0;table-layout:fixed}
-.tasks-table th,.tasks-table td{padding-inline:8px;white-space:normal;vertical-align:middle;overflow-wrap:anywhere}
+.tasks-table-wrap{overflow-x:auto}
+.tasks-table{width:100%;min-width:0;table-layout:fixed;border-collapse:separate;border-spacing:0}
+.tasks-table thead th{background:var(--panel);position:sticky;top:calc(var(--header-height))}
+.tasks-table thead th:first-child{border-top-left-radius:9px}
+.tasks-table thead th:last-child{border-top-right-radius:9px}
+.tasks-table th,.tasks-table td{padding-inline:12px;white-space:normal;vertical-align:middle;overflow-wrap:anywhere}
+.tasks-table th{padding-block:11px}
+.tasks-table td{padding-block:10px}
 .tasks-table th:nth-child(1),.tasks-table td:nth-child(1){width:7%}
 .tasks-table th:nth-child(2),.tasks-table td:nth-child(2){width:13%}
 .tasks-table th:nth-child(3),.tasks-table td:nth-child(3){width:12%}
