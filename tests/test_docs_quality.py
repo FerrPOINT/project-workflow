@@ -5,8 +5,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCREENSHOTS = {
-    "dashboard.png": (1900, 1700),
-    "dashboard-qa.png": (1900, 1700),
+    "dashboard.png": (1900, 1500),
+    "dashboard-qa.png": (1900, 1500),
     "namespaces.png": (1900, 1000),
     "namespace-new.png": (1900, 1000),
     "phases-qa.png": (1900, 1200),
@@ -16,10 +16,10 @@ SCREENSHOTS = {
     "instructions.png": (1900, 1000),
     "agents.png": (1900, 1000),
     "phases.png": (1900, 3000),
-    "task-detail-dev.png": (1900, 3500),
-    "task-detail-qa.png": (1900, 2200),
+    "task-detail-dev.png": (1900, 2500),
+    "task-detail-qa.png": (1900, 1500),
     "settings.png": (1900, 1000),
-    "mobile-dashboard.png": (360, 3000),
+    "mobile-dashboard.png": (360, 2400),
 }
 
 
@@ -86,6 +86,24 @@ def test_readme_cli_examples_use_configured_wrapper_commands() -> None:
     assert "project-workflow history --task" not in readme
 
 
+def test_compose_and_env_example_forward_runtime_settings() -> None:
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
+
+    assert "OPENAI_MODEL: ${OPENAI_MODEL:-app-test}" in compose
+    assert "PLATFORM_SERVICES_URL: ${PLATFORM_SERVICES_URL:-http://localhost:7771/api/v1/runtime/services}" in compose
+    assert "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON: ${PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON:-}" in compose
+    assert "PLATFORM_SERVICES_URL=http://localhost:7771/api/v1/runtime/services" in env_example
+    assert "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON=" in env_example
+
+
+def test_readme_route_table_lists_read_only_task_and_instruction_pages() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "`/task/{task_key}` (только наблюдение)" in readme
+    assert "`/instructions?phase_id={phase_id}`" in readme
+
+
 def test_quality_gate_ui_smoke_matches_settings_screenshot() -> None:
     quality_gate = (ROOT / "docs" / "quality-gate.md").read_text(encoding="utf-8")
 
@@ -144,6 +162,10 @@ def test_screenshot_capture_script_checks_full_smoke_data() -> None:
         "RUN-285",
     ):
         assert task_key in source
+    assert "assertReadOnlyTaskUi" in source
+    assert "#taskStartForm" in source
+    assert "#taskRuntimeStep" in source
+    assert "/api/tasks/step" in source
     assert "fullPage: true" in source
     assert "assertFullPageScreenshotSize" in source
     assert "scrollHeight" in source

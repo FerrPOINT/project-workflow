@@ -262,9 +262,12 @@ class TestInstructionsApi:
 
 
 class TestInstructionsPage:
-    def test_instructions_page_requires_phase_id(self):
+    def test_instructions_page_without_phase_shows_guidance(self):
         response = client.get("/instructions")
-        assert response.status_code == 400
+        assert response.status_code == 200
+        assert "Выберите фазу" in response.text
+        assert "Инструкции открываются из карточки нужной фазы" in response.text
+        assert "HTTP 400" not in response.text
 
     def test_instructions_page_renders_existing_phase(self):
         phase_id = _seed_phase_id()

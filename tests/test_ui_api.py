@@ -176,6 +176,18 @@ class TestIndex:
         assert "Создать и открыть" not in resp.text
         assert "taskStartForm" not in resp.text
 
+    @pytest.mark.parametrize("method", ["get", "post", "put", "patch", "delete"])
+    def test_task_mutation_step_route_is_not_registered(self, client, method):
+        request_kwargs = {"json": {"task": "RUN-905"}} if method in {"post", "put", "patch"} else {}
+        response = getattr(client, method)("/api/tasks/step", **request_kwargs)
+
+        expected_status = 405 if method == "delete" else 404
+        assert response.status_code == expected_status
+        assert response.json() == {
+            "ok": False,
+            "error": "Метод не поддерживается" if method == "delete" else "Ресурс не найден",
+        }
+
     def test_header_has_namespace_selector_and_actions(self, client):
         resp = client.get("/")
         assert resp.status_code == 200

@@ -691,14 +691,14 @@ async def instructions_page(request: Request) -> HTMLResponse:
     if phase_id is None:
         context.update(
             {
-                "title": "Фаза не выбрана",
-                "message": "Откройте инструкции из карточки нужной фазы.",
-                "status_code": 400,
+                "title": "Выберите фазу",
+                "message": "Инструкции открываются из карточки нужной фазы.",
                 "back_url": "/phases",
                 "back_label": "К фазам",
+                "empty_state": True,
             }
         )
-        return _template_response(request=request, name="error.html", status_code=400, context=context)
+        return _template_response(request=request, name="error.html", context=context)
     phase = _load_phase_detail(phase_id)
     if not phase:
         context.update(

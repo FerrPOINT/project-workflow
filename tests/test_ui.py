@@ -640,8 +640,12 @@ class TestPhasesPage:
         # Reordering/deletion lives on cards; adding lives between complete blocks.
         assert 'class="phase-card-actions"' in response.text
         assert 'class="move-up-btn"' in response.text
-        assert 'class="move-down-btn"' in response.text
-        assert response.text.index('class="phase-card-actions"') < response.text.index('class="phase-add-btn"')
+        assert "Параллельно" in response.text
+        assert "Последовательно" in response.text
+        assert "min-width:44px;height:44px" in response.text
+        assert "content:'Выше'" in response.text
+        assert "content:'Ниже'" in response.text
+        assert "content:'Удалить'" in response.text
 
     def test_phases_add_button_breaks_the_vertical_connector_line(self):
         response = client.get("/phases")
@@ -1662,6 +1666,9 @@ class TestTasksPage:
             "align-items:start}"
             in response.text
         )
+        assert 'class="task-card-context"' in (TEMPLATES_DIR / "tasks.html").read_text(encoding="utf-8")
+        assert 'class="task-card-context-item"' in (TEMPLATES_DIR / "tasks.html").read_text(encoding="utf-8")
+        assert "<details class=\"task-card-more\">" not in (TEMPLATES_DIR / "tasks.html").read_text(encoding="utf-8")
         assert "@container tasks (max-width:1080px)" in response.text
         assert "@media(max-width:1200px)" not in response.text
         assert 'style="padding:0;overflow-x:auto"' not in response.text

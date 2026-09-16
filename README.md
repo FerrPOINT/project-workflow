@@ -176,8 +176,8 @@ At startup the app verifies database connectivity; the Compose `migrate` service
 |---|---|
 | Dashboard | `/` |
 | Namespaces | `/namespaces`, `/namespaces/new` |
-| Tasks | `/tasks`, task detail (только наблюдение) |
-| Phases | `/phases`, phase detail |
+| Tasks | `/tasks`, `/task/{task_key}` (только наблюдение) |
+| Phases | `/phases`, `/phase/{phase_id}`, `/instructions?phase_id={phase_id}` |
 | Workflows | `/workflows` |
 | Agents | `/agents` |
 | Settings | `/settings` |

@@ -291,6 +291,19 @@ async function assertDashboardNamespaceCards(page, name) {
   assertSameSet(name, "dashboard namespaces", namespaceNames, ["Разработка", "Проверка качества"]);
 }
 
+async function assertReadOnlyTaskUi(page, name) {
+  const forbidden = ["#taskStartForm", "#taskRuntimeStep", "[data-testid='task-runtime-panel']"];
+  for (const selector of forbidden) {
+    if ((await page.locator(selector).count()) !== 0) {
+      throw new Error(`${name} exposes removed task control: ${selector}`);
+    }
+  }
+  const html = await page.content();
+  if (html.includes("/api/tasks/step")) {
+    throw new Error(`${name} references removed task mutation endpoint`);
+  }
+}
+
 async function assertTaskDetailHistory(page, name, minRuns) {
   const runCount = await page.locator("[data-check-run]").count();
   if (runCount < minRuns) {
@@ -409,6 +422,7 @@ async function captureAll(outputRoot) {
       assertions: [
         (targetPage, name) => assertTaskTable(targetPage, name, taskKeys),
         assertTaskStateCoverage,
+        assertReadOnlyTaskUi,
       ],
     });
     await capture(page, outputRoot, {
@@ -418,6 +432,7 @@ async function captureAll(outputRoot) {
       assertions: [
         (targetPage, name) => assertTaskTable(targetPage, name, taskKeys),
         assertTaskStateCoverage,
+        assertReadOnlyTaskUi,
       ],
     });
     await capture(page, outputRoot, {
@@ -453,13 +468,19 @@ async function captureAll(outputRoot) {
       name: "task-detail-dev.png",
       url: `/task/RUN-42?namespace_id=${dev.id}`,
       expected: ["RUN-42", "Реализовать проверяемое изменение", "workflow-dev", "История проверок"],
-      assertions: [(targetPage, name) => assertTaskDetailHistory(targetPage, name, 4)],
+      assertions: [
+        (targetPage, name) => assertTaskDetailHistory(targetPage, name, 4),
+        assertReadOnlyTaskUi,
+      ],
     });
     await capture(page, outputRoot, {
       name: "task-detail-qa.png",
       url: `/task/RUN-42?namespace_id=${qa.id}`,
       expected: ["RUN-42", "Независимо проверить ту же внешнюю задачу", "workflow-qa", "История проверок"],
-      assertions: [(targetPage, name) => assertTaskDetailHistory(targetPage, name, 3)],
+      assertions: [
+        (targetPage, name) => assertTaskDetailHistory(targetPage, name, 3),
+        assertReadOnlyTaskUi,
+      ],
     });
     await capture(page, outputRoot, {
       name: "agents.png",

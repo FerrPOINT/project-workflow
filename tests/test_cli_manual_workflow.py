@@ -120,6 +120,34 @@ def manual_env(tmp_path, monkeypatch):
 
 
 class TestManualWorkflowEndToEnd:
+    def test_first_step_creates_task_and_history_is_empty(self, manual_env):
+        runner = _runner(manual_env)
+
+        result = runner.invoke(cli, ["--json", "step", "--task", "MANUAL-8"])
+
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["ok"] is True
+        assert data["task_key"] == "MANUAL-8"
+        assert data["phase_code"] == "manual.intake"
+
+        history = runner.invoke(cli, ["--json", "history", "--task", "MANUAL-8"])
+        assert history.exit_code == 0, history.output
+        assert json.loads(history.output) == {
+            "ok": True,
+            "task_key": "MANUAL-8",
+            "count": 0,
+            "records": [],
+        }
+
+        with SAUnitOfWork() as uow:
+            task = uow.tasks.get_by_key("MANUAL-8", project_id=manual_env.project_id)
+            assert task is not None
+            phase = uow.phases.get_by_id(task.current_phase_id)
+            assert phase is not None
+            assert phase.code == "manual.intake"
+            assert task.status == "active"
+
     def test_sync_phase_passes_and_advances(self, manual_env, supervisor_llm):
         runner = _runner(manual_env)
         supervisor_llm("PASS")

@@ -15,6 +15,11 @@
   выполняются только CLI `step`. Выбор в верхней панели полностью задаёт
   связанный workflow, задачи, название, простую иконку, цвет темы,
   и CLI-команду.
+- **Внешний runtime bridge** обслуживает изолированные контейнеры исполнителей
+  через `POST /internal/runtime/step` и `GET /internal/runtime/history`. Он
+  аутентифицируется role token из `PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON`, не
+  доступен как browser UI API и должен публиковаться только во внутреннюю сеть
+  или на host loopback.
 - **SupervisorEngine** маршрутизирует задачу, строит phase contract, вызывает
   обязательный OpenAI-compatible evaluator и сохраняет результат атомарно.
 - **PostgreSQL** - единственный runtime data store. SQLite допустим только в

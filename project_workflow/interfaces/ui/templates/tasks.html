@@ -36,12 +36,18 @@
 .progress-inline .bar-fill{display:block;height:100%;background:var(--accent);border-radius:inherit;min-width:2px;transition:width .3s}
 .progress-inline .bar-fill.done{background:var(--green)}
 .progress-inline .bar-fill.zero{background:transparent;min-width:0}
-.task-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-top:12px}
-.task-card .row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px;flex-wrap:wrap}
+.task-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-top:8px}
+.task-card .row{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;gap:8px;flex-wrap:wrap}
 .task-card .row:last-child{margin-bottom:0}
 .task-card .task-key{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent)}
 .task-card .label{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em}
 .task-card .value{font-size:13px;color:var(--text-secondary);font-weight:500}
+.task-card-title{margin:7px 0 9px;font-size:14px;color:var(--text);font-weight:600;line-height:1.35}
+.task-card-context{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 12px;border-top:1px solid var(--border);padding-top:8px}
+.task-card-context-item{min-width:0;font-size:12px;line-height:1.35;color:var(--text-secondary);overflow-wrap:anywhere}
+.task-card-context-item strong{color:var(--text-muted);font-weight:600}
+.task-card-context-item.context-wide{grid-column:1 / -1}
+.task-card-context-item.context-wide .context-value{color:var(--text);font-weight:500}
 .verdict-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;line-height:1.2;white-space:normal;overflow-wrap:normal}
 .verdict-cell{display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0}
 .verdict-pass{background:var(--green-soft);color:var(--green)}
@@ -139,16 +145,14 @@
       {% endif %}
     </div>
     {% if t.title and t.title != t.task_key %}
-    <div class="row" style="margin-bottom:10px">
-      <span class="task-title" style="font-size:14px">{{ t.title }}</span>
-    </div>
+    <div class="task-card-title">{{ t.title }}</div>
     {% endif %}
-    <div class="row task-card-meta">
-      <div><span class="label">Неймспейс</span><div class="value">{{ t.namespace_cli_command or t.namespace_name }}</div></div>
-      <div><span class="label">Флоу</span><div class="value">{{ t.workflow_name or '—' }}</div></div>
-      <div><span class="label">Фаза</span><div class="value">{{ t.current_phase_name or '—' }}</div></div>
-      <div><span class="label">Прогресс</span><div class="value">{{ t.completed }}/{{ t.total_phases }}</div></div>
-      <div><span class="label">Создана</span><div class="value">{{ t.created_at[:10] if t.created_at else '—' }}</div></div>
+    <div class="task-card-context">
+      <div class="task-card-context-item"><strong>Неймспейс:</strong> {{ t.namespace_cli_command or t.namespace_name }}</div>
+      <div class="task-card-context-item"><strong>Флоу:</strong> {{ t.workflow_name or '—' }}</div>
+      <div class="task-card-context-item"><strong>Фаза:</strong> {{ t.current_phase_name or '—' }}</div>
+      <div class="task-card-context-item"><strong>Прогресс:</strong> {{ t.completed }}/{{ t.total_phases }}</div>
+      <div class="task-card-context-item"><strong>Создана:</strong> {{ t.created_at[:10] if t.created_at else '—' }}</div>
     </div>
   </div>
   {% else %}

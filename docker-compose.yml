@@ -36,11 +36,13 @@ services:
       UI_PORT: 8811
       LOG_LEVEL: INFO
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-http://192.168.10.1:4000/v1}
-      OPENAI_MODEL: app-test
+      OPENAI_MODEL: ${OPENAI_MODEL:-app-test}
       OPENAI_TIMEOUT: ${OPENAI_TIMEOUT:-120}
       OPENAI_MAX_TOKENS: ${OPENAI_MAX_TOKENS:-4000}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_REASONING_EFFORT: ${OPENAI_REASONING_EFFORT:-none}
+      PLATFORM_SERVICES_URL: ${PLATFORM_SERVICES_URL:-http://localhost:7771/api/v1/runtime/services}
+      PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON: ${PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import json, urllib.request; data = json.load(urllib.request.urlopen('http://127.0.0.1:8811/health', timeout=3)); assert data.get('ok') is True"]
       interval: 5s

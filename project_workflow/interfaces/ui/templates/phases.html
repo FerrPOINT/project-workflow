@@ -24,12 +24,18 @@
 .timeline-card .timeline-name{padding-right:130px}
 .timeline-card:hover{transform:none}
 .phase-card-actions{position:absolute;right:12px;top:12px;display:flex;gap:6px;z-index:2}
-.phase-card-actions button{width:30px;height:28px;border-radius:6px;border:1px solid var(--border-strong);background:var(--panel);color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px}
+.phase-card-actions button{min-width:36px;height:36px;border-radius:6px;border:1px solid var(--border-strong);background:var(--panel);color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600}
 .phase-card-actions button:hover:not(:disabled){color:var(--text);border-color:var(--accent);background:var(--surface-hover)}
 .phase-card-actions .phase-delete-btn:hover:not(:disabled){color:var(--red);border-color:var(--red)}
 .phase-card-actions button:disabled{opacity:.3;cursor:not-allowed}
 .execution-row{margin-top:10px;min-height:0}
-.execution-toggle{width:auto!important;padding:0 9px!important;font-size:11px!important}
+.execution-toggle{width:auto!important;padding:0 10px!important;font-size:11px!important}
+.phase-card-actions .move-up-btn,.phase-card-actions .move-down-btn{font-size:0}
+.phase-card-actions .move-up-btn::after{content:'Выше';font-size:11px}
+.phase-card-actions .move-down-btn::after{content:'Ниже';font-size:11px}
+.phase-card-actions .phase-delete-btn{font-size:0}
+.phase-card-actions .phase-delete-btn::after{content:'Удалить';font-size:11px}
+@media(max-width:760px){.phase-card-actions{gap:8px}.phase-card-actions button{min-width:44px;height:44px}.execution-toggle{padding:0 12px!important}}
 .timeline-parallel-group{display:block;border-color:rgba(245,158,11,.58);background:rgba(255,255,255,.012);box-shadow:none;padding:14px}
 .timeline-parallel-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
 .timeline-parallel-label{border-color:var(--border-strong);background:var(--panel);color:var(--text-muted)}
@@ -62,7 +68,7 @@
     <div class="phase-card-actions" aria-label="Действия фазы">
       <button type="button" class="move-up-btn" onclick="movePhase(this,-1)" title="Поднять выше" aria-label="Поднять фазу выше">↑</button>
       <button type="button" class="move-down-btn" onclick="movePhase(this,1)" title="Опустить ниже" aria-label="Опустить фазу ниже">↓</button>
-      <button type="button" class="execution-toggle" onclick="togglePhaseType(this)" title="Изменить режим выполнения" aria-label="Изменить режим выполнения">{{ 'P' if p.execution_type == 'parallel' else 'S' }}</button>
+      <button type="button" class="execution-toggle" onclick="togglePhaseType(this)" title="Изменить режим выполнения" aria-label="Изменить режим выполнения">{{ 'Параллельно' if p.execution_type == 'parallel' else 'Последовательно' }}</button>
       <button type="button" class="phase-delete-btn" onclick="deletePhase(this)" title="Удалить фазу" aria-label="Удалить фазу"{% if phase_count <= 1 %} disabled{% endif %}>×</button>
     </div>
   </div>
