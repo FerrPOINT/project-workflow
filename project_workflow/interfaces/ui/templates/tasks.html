@@ -52,11 +52,11 @@
 .task-card-meta{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));align-items:start}
 .task-empty{text-align:center;color:var(--text-dim);border-style:dashed}
 .table-card-list{display:none}
-.task-start{margin-bottom:16px;padding:16px;display:grid;gap:12px}
-.task-start-fields{display:grid;grid-template-columns:minmax(160px,.65fr) minmax(240px,1.35fr) auto;gap:10px;align-items:end}
-.task-start label{display:grid;gap:6px;font-size:12px;color:var(--text-muted)}
+.task-start{margin-bottom:12px;padding:12px 16px}
+.task-start-fields{display:grid;grid-template-columns:minmax(150px,.6fr) minmax(220px,1.4fr) auto;gap:10px;align-items:center}
 .task-start input{width:100%;min-width:0;padding:9px 11px;border:1px solid var(--border-strong);border-radius:7px;background:var(--panel);color:var(--text);font:inherit}
-.task-start-message{min-height:18px;font-size:12px;color:var(--text-muted)}
+.task-start-message{display:none;font-size:12px;color:var(--text-muted);padding-top:8px}
+.task-start-message:not(:empty){display:block}
 .task-start-message.error{color:var(--red)}
 @container tasks (max-width:1080px){
   .tasks-table-wrap{display:none}
@@ -70,12 +70,8 @@
 {% if selected_namespace %}
 <form class="card task-start" data-testid="task-start-form" id="taskStartForm">
   <div class="task-start-fields">
-    <label>Номер тикета
-      <input data-testid="task-start-key" id="taskStartKey" name="task" required maxlength="128" autocomplete="off" placeholder="{{ (selected_namespace.key_prefixes or ['TASK'])[0] }}-1">
-    </label>
-    <label>Название задачи
-      <input data-testid="task-start-title" id="taskStartTitle" name="title" required maxlength="512" autocomplete="off" placeholder="Краткое проверяемое название">
-    </label>
+    <input data-testid="task-start-key" id="taskStartKey" name="task" required maxlength="128" autocomplete="off" placeholder="Номер тикета ({{ (selected_namespace.key_prefixes or ['TASK'])[0] }}-1)" aria-label="Номер тикета">
+    <input data-testid="task-start-title" id="taskStartTitle" name="title" required maxlength="512" autocomplete="off" placeholder="Название задачи" aria-label="Название задачи">
     <button class="btn btn-primary" data-testid="task-start-submit" id="taskStartSubmit" type="submit">Создать и открыть</button>
   </div>
   <div class="task-start-message" data-testid="task-start-message" id="taskStartMessage" aria-live="polite"></div>

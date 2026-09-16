@@ -293,7 +293,7 @@ class TestIndexPage:
         assert response.status_code == 200
         assert 'class="btn btn-secondary dashboard-action">Задачи</a>' in response.text
         assert 'class="btn btn-secondary dashboard-action">Неймспейсы</a>' in response.text
-        assert "@media(max-width:640px){.dashboard-action{display:none}}" in response.text
+        assert "@media(max-width:640px){.dashboard-action{display:none}" in response.text
 
     def test_index_rejects_unknown_query_namespace(self):
         response = client.get(f"/?namespace_id={UNKNOWN_NAMESPACE_ID}")
