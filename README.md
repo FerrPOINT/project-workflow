@@ -39,15 +39,16 @@
 **project-workflow** — внутренняя private-платформа для пофазного ведения задач.
 Агент отчитывается через CLI, обязательный LLM Supervisor проверяет отчет и выдает вердикт: **PASS**, **ROLLBACK** или **BLOCK**.
 
-Центр управления workflow, фазами, namespaces, агентами и задачами живет в Web UI.
-CLI намеренно остается маленьким: `step` и `history`; дополнительные namespace-команды работают как wrappers поверх этих двух операций.
+Центр управления workflow, фазами, namespaces и агентами живет в Web UI. UI задач —
+наблюдательный: он показывает список, состояние, историю, checks/evidence и verdict,
+но не создаёт и не продвигает задачи. CLI намеренно остается маленьким: `step` и
+`history`; первое `step` создаёт задачу, последующие передают отчёты и двигают её
+по workflow. Дополнительные namespace-команды работают как wrappers поверх этих двух операций.
 
-Для изолированных контейнеров агентов доступен private runtime bridge
-`/internal/runtime/step` и `/internal/runtime/history`. Он включается только при
-заданном `PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON`: каждому role token сервер
-однозначно сопоставляет namespace с CLI-командой `workflow-<role>`. Ключ LLM
-Supervisor остаётся в API-процессе и не передаётся в shell агента. Endpoint не
-является пользовательским API и должен публиковаться только во внутреннюю сеть
+Для изолированных контейнеров исполнителей сохранён private runtime bridge
+`/internal/runtime/step` и `/internal/runtime/history`: это отдельный service-to-service
+контракт с role tokens, не пользовательский UI API. Он включается только при
+`PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON` и должен быть доступен лишь во внутренней сети
 или на host loopback.
 
 Runtime-источник данных — **PostgreSQL**. SQLite используется только для изолированных тестов и локальных smoke-сценариев.
@@ -72,7 +73,7 @@ Runtime-источник данных — **PostgreSQL**. SQLite использ�
 | Phase workflow | Задача идет по шаблону фаз с инструкциями, checks, evidence и audit history. |
 | Supervisor gate | Переход фазы проходит через обязательную оценку отчета и фиксирует `PASS` / `ROLLBACK` / `BLOCK`. |
 | Namespace runtime | Несколько entrypoints могут иметь свои workflow, задачи, стиль UI и CLI-команду. |
-| Web UI | CRUD для workflows, phases, namespaces и agents; просмотр задач и audit history. |
+| Web UI | CRUD для workflows, phases, namespaces и agents; read-only просмотр задач и audit history. |
 | Append-only history | История фаз и `step`-проверок не затирается. |
 | CLI freeze | Публичный CLI остается управляемым и предсказуемым: `step` / `history`. |
 | Wrapper commands | `workflow-qa`, `workflow-dev` и другие команды генерируются из записей PostgreSQL. |
@@ -175,7 +176,7 @@ At startup the app verifies database connectivity; the Compose `migrate` service
 |---|---|
 | Dashboard | `/` |
 | Namespaces | `/namespaces`, `/namespaces/new` |
-| Tasks | `/tasks`, task detail |
+| Tasks | `/tasks`, task detail (только наблюдение) |
 | Phases | `/phases`, phase detail |
 | Workflows | `/workflows` |
 | Agents | `/agents` |

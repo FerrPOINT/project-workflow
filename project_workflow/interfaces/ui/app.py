@@ -217,8 +217,7 @@ def create_app() -> FastAPI:
 
     app.get("/health")(_health)
 
-    # Private agent bridge. It is authenticated independently from the UI and
-    # is expected to stay on the internal Docker network.
+    # Private bridge for isolated agent containers; separate from browser UI.
     app.post("/internal/runtime/step", response_model=None)(runtime_api.runtime_step)
     app.get("/internal/runtime/history", response_model=None)(runtime_api.runtime_history)
 
@@ -241,7 +240,6 @@ def create_app() -> FastAPI:
     app.get("/api/phases/{phase_id:int}", response_model=None)(api.api_phase_detail)
     app.post("/api/phases", response_model=None)(api.api_phase_create)
     app.delete("/api/phases/{phase_id:int}", response_model=None)(api.api_phase_delete)
-    app.post("/api/tasks/step", response_model=None)(api.api_task_step)
     app.get("/api/tasks", response_model=None)(api.api_tasks)
     app.get("/api/workflows", response_model=None)(api.api_workflows)
     app.post("/api/workflows", response_model=None)(api.api_workflow_create)

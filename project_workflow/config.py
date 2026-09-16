@@ -38,8 +38,8 @@ class Settings(BaseSettings):
 
     PLATFORM_SERVICES_URL: str = "http://localhost:7771/api/v1/runtime/services"
 
-    # Private role-token map used only by the isolated agent runtime endpoint.
-    # Shape: {"analyst":"<token>", ...}. Empty keeps the endpoint fail-closed.
+    # Private role-token map for isolated agent containers, not the browser UI.
+    # Shape: {"analyst":"<token>", ...}. Empty keeps the bridge fail-closed.
     PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON: str = ""
 
     @field_validator("DATABASE_URL", mode="before")

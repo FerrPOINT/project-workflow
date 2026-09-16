@@ -129,19 +129,11 @@ def execute_namespace_step(
     namespace_id: int,
     task: str,
     report: str | None,
-    title: str | None = None,
 ) -> dict[str, Any]:
     """Execute one Supervisor step inside an already-authorized namespace."""
     task_key = _require_valid_key(task, uow, project_id=namespace_id)
     _assert_task_key_in_namespace(uow, namespace_id, task_key)
     engine = supervisor.SupervisorEngine(task_key, uow=uow, project_id=namespace_id)
-    if title is not None and engine.task is not None:
-        current_title = str(engine.task.get("title") or "")
-        task_id = engine.task.get("id")
-        if task_id is not None and current_title in {"", task_key}:
-            uow.tasks.update(int(task_id), {"title": title})
-            uow.commit()
-            engine.task["title"] = title
     if report is None:
         if engine._get_current_phase_obj() is None:
             result = engine._blocked_result()
