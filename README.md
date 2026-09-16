@@ -310,7 +310,7 @@ flowchart TD
 | Windows warnings | `pwsh -File scripts/quality.ps1 warnings` |
 | Windows readiness | `pwsh -File scripts/quality.ps1 compose-ready` |
 
-`make quality` includes unit tests, PostgreSQL integration tests, coverage, ruff and mypy. UI-facing changes also require browser smoke and screenshots.
+`make quality` включает unit/UI-тесты, PostgreSQL integration tests, coverage, ruff и mypy. Тот же набор автоматически выполняет GitHub Actions на push и pull request в `master`; `compose-smoke` отдельно собирает Compose-стек и проверяет readiness. UI-facing changes также требуют локальный browser smoke и screenshots.
 
 ## 🗺️ Roadmap
 

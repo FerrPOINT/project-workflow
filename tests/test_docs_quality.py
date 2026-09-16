@@ -61,6 +61,20 @@ def test_readme_does_not_advertise_absent_systemd_unit() -> None:
     assert "curl --fail http://127.0.0.1:8812/health" in readme
 
 
+def test_hosted_ci_covers_quality_and_compose_readiness() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "branches: [master]" in workflow
+    assert "postgres:16-alpine" in workflow
+    assert "pytest -q --timeout=60" in workflow
+    assert "pytest -q -m integration tests/test_postgres_integration.py --timeout=120" in workflow
+    assert "pytest --cov=project_workflow --cov-report=term --timeout=60" in workflow
+    assert "ruff check ." in workflow
+    assert "mypy project_workflow scripts" in workflow
+    assert "docker compose up --build -d --wait" in workflow
+    assert "http://127.0.0.1:8812/health" in workflow
+
+
 def test_readme_cli_examples_use_configured_wrapper_commands() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 

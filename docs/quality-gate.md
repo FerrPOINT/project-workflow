@@ -1,8 +1,10 @@
 # Quality Gate
 
-Этот файл фиксирует локальный quality gate для `project-workflow`. Hosted CI в
-текущем scope не используется; перед commit разработчик запускает релевантные
-локальные проверки.
+Этот файл фиксирует локальный quality gate для `project-workflow`. GitHub Actions
+в `.github/workflows/ci.yml` повторяет этот обязательный набор на каждом push и
+pull request в `master`: job `quality` запускает тесты и статический анализ с
+PostgreSQL 16, а `compose-smoke` собирает стек и проверяет `/health`. Перед
+commit разработчик всё равно запускает релевантные локальные проверки.
 
 ## Базовый gate
 

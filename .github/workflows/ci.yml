@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: project_workflow
+          POSTGRES_PASSWORD: project_workflow
+          POSTGRES_DB: project_workflow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U project_workflow -d project_workflow"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: project_workflow
+      PGPASSWORD: project_workflow
+      PGDATABASE: project_workflow
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.10.10"
+          enable-cache: true
+      - name: Unit and UI tests
+        run: uv run --isolated --with-requirements constraints.txt --all-extras pytest -q --timeout=60
+      - name: PostgreSQL integration tests
+        run: uv run --isolated --with-requirements constraints.txt --all-extras pytest -q -m integration tests/test_postgres_integration.py --timeout=120
+      - name: Coverage
+        run: uv run --isolated --with-requirements constraints.txt --all-extras pytest --cov=project_workflow --cov-report=term --timeout=60
+      - name: Lint
+        run: uv run --isolated --with-requirements constraints.txt --all-extras ruff check .
+      - name: Type check
+        run: uv run --isolated --with-requirements constraints.txt --all-extras mypy project_workflow scripts
+      - name: Diff hygiene
+        run: git diff --check
+
+  compose-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compose config
+        run: docker compose config -q
+      - name: Build and start
+        run: docker compose up --build -d --wait
+      - name: Readiness
+        run: curl --fail --retry 10 --retry-connrefused http://127.0.0.1:8812/health
+      - name: Compose logs
+        if: failure()
+        run: docker compose logs --no-color
+      - name: Compose cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans
