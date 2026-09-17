@@ -69,6 +69,20 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .header-actions{display:flex;gap:10px;align-items:center}
 .namespace-switcher{display:flex;align-items:center;gap:6px;min-width:0}
 .namespace-select{width:190px;max-width:26vw;height:32px;font-weight:600;color:var(--text);background:var(--surface)}
+.service-menu{position:relative}
+.service-menu summary{height:36px;padding:0 10px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);color:var(--text-secondary);display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer;list-style:none;white-space:nowrap}
+.service-menu summary::-webkit-details-marker{display:none}
+.service-menu summary:hover,.service-menu[open] summary{background:var(--surface-hover);color:var(--text);border-color:var(--accent)}
+.service-menu-chevron{font-size:11px;color:var(--text-muted);transition:transform .15s}
+.service-menu[open] .service-menu-chevron{transform:rotate(180deg)}
+.service-menu-popover{position:absolute;right:0;top:calc(100% + 8px);z-index:250;width:260px;max-width:calc(100vw - 24px);padding:6px;background:var(--surface);border:1px solid var(--border-strong);border-radius:8px;box-shadow:0 16px 40px rgba(0,0,0,.45)}
+.service-menu-item{min-height:40px;padding:8px 10px;border-radius:6px;display:flex;align-items:center;gap:10px;color:var(--text-secondary);text-decoration:none}
+.service-menu-item:hover,.service-menu-item:focus-visible{background:var(--surface-hover);color:var(--text);text-decoration:none}
+.service-menu-item[aria-current="page"]{background:var(--accent-soft);color:var(--text);font-weight:600}
+.service-health{width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:var(--text-dim)}
+.service-health.healthy{background:var(--green)}
+.service-health.unreachable{background:var(--red)}
+.service-menu-current{margin-left:auto;font-size:11px;color:var(--accent)}
 .namespace-icon-action{width:32px;height:32px;border-radius:6px;background:var(--surface);border:1px solid var(--border);color:var(--text-secondary);display:inline-flex;align-items:center;justify-content:center;text-decoration:none;font-size:16px;font-weight:700;line-height:1}
 .namespace-icon-action:hover{background:var(--surface-hover);color:var(--text);text-decoration:none;border-color:var(--accent)}
 .btn{padding:6px 14px;border-radius:6px;font-size:13px;font-weight:500;border:1px solid transparent;cursor:pointer;transition:all .12s;font-family:inherit;white-space:nowrap}
@@ -222,6 +236,7 @@ textarea{resize:vertical;min-height:60px}
   .namespace-select{max-width:38vw}
   .namespace-switcher .namespace-select{flex:1 1 128px}
   .header-actions{width:100%}
+  .service-menu-popover{left:0;right:auto}
 }
 
 /* ── Side nav lists (workflows / namespaces / phases) ────────────────
@@ -302,14 +317,22 @@ textarea{resize:vertical;min-height:60px}
       <span class="header-title">{% block header_title %}{% endblock %}</span>
     </div>
     <div class="header-actions">
-      {% if other_services %}
-      <select class="namespace-select service-switcher" id="serviceSwitcher" aria-label="Сервисы платформы" onchange="if(this.value){window.location.href=this.value}">
-        <option value="">Сервисы ▾</option>
+      <details class="service-menu" id="serviceMenu">
+        <summary aria-label="Открыть список сервисов платформы">Сервисы <span class="service-menu-chevron" aria-hidden="true">▾</span></summary>
+        <div class="service-menu-popover" role="menu" aria-label="Сервисы платформы">
+          <a class="service-menu-item" href="/" role="menuitem" aria-current="page">
+            <span class="service-health healthy" role="img" aria-label="Работает"></span>
+            <span>Project Workflow</span>
+            <span class="service-menu-current">Текущий</span>
+          </a>
         {% for service in other_services %}
-        <option value="{{ service.url }}">{{ service.label }}{% if service.health == 'healthy' %} •{% elif service.health == 'unreachable' %} ✕{% else %} ?{% endif %}</option>
+          <a class="service-menu-item" href="{{ service.url }}" role="menuitem">
+            <span class="service-health {{ service.health }}" role="img" aria-label="{% if service.health == 'healthy' %}Работает{% elif service.health == 'unreachable' %}Недоступен{% else %}Состояние неизвестно{% endif %}"></span>
+            <span>{{ service.label }}</span>
+          </a>
         {% endfor %}
-      </select>
-      {% endif %}
+        </div>
+      </details>
       {% if namespaces is defined and namespaces %}
       <div class="namespace-switcher">
         <select class="namespace-select" id="namespaceSelector" aria-label="Выбор" onchange="switchNamespace(this.value)">
@@ -354,6 +377,16 @@ function closeSidebar(){
   document.getElementById('sidebarOverlay').classList.remove('show');
   document.body.style.overflow='';
 }
+var serviceMenu=document.getElementById('serviceMenu');
+document.addEventListener('click',function(event){
+  if(serviceMenu&&serviceMenu.open&&!serviceMenu.contains(event.target)){serviceMenu.open=false;}
+});
+document.addEventListener('keydown',function(event){
+  if(event.key==='Escape'&&serviceMenu&&serviceMenu.open){
+    serviceMenu.open=false;
+    serviceMenu.querySelector('summary').focus();
+  }
+});
 function showToast(msg, type){
   var t=document.getElementById('toast');
   if(t._hideTimer){clearTimeout(t._hideTimer);}

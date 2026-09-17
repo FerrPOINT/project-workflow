@@ -43,12 +43,17 @@ def test_fallback_preserves_localhost_without_request_url():
     assert all("localhost" in str(service["url"]) for service in services)
 
 
-def test_service_switcher_marks_unknown_health_instead_of_silently_hiding_it():
+def test_service_switcher_is_accessible_and_localizes_health():
     template = (Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/base.html").read_text(
         encoding="utf-8"
     )
 
-    assert "{% else %} ?{% endif %}" in template
+    assert 'class="service-menu-popover" role="menu"' in template
+    assert 'aria-current="page"' in template
+    assert "Project Workflow" in template
+    assert "Состояние неизвестно" in template
+    assert "event.key==='Escape'" in template
+    assert ".service-menu-popover{left:0;right:auto}" in template
 
 
 def test_fallback_on_unreachable_catalog(monkeypatch):
