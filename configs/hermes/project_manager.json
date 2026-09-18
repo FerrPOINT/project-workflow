@@ -73,13 +73,13 @@
         {
           "code": "draft.publish",
           "name": "Публикация в Бэклог",
-          "description": "Атомарно завершить PM workflow без запуска Analyst.",
+          "description": "Атомарно завершить PM workflow и передать Бэклог в очередь Analyst.",
           "instructions": [
             {"text": "Оставить итоговый комментарий в Task: согласованная цель, границы, критерии, ограничения, зависимости и факт подтверждения.", "skills": ["relevanter-business-operator"]},
-            {"text": "Последним действием вызвать publish_task_draft с exact sessionId, свежим expectedModifiedOn, корректным названием и Markdown-описанием; убедиться, что Task стала Бэклог и Analyst не запущен.", "skills": ["relevanter-business-operator"]}
+            {"text": "Последним действием вызвать publish_task_draft с exact sessionId, свежим expectedModifiedOn, корректным названием и Markdown-описанием; убедиться, что Task стала Бэклог / Готово и автоматически поставлена в очередь Analyst. Не запускать Analyst вручную и не отправлять ему сообщение.", "skills": ["relevanter-business-operator"]}
           ],
-          "checks": ["Переход выполнен только Драфт → Бэклог", "Analyst не запущен автоматически"],
-          "evidence": ["Business comment ref", "Readback Бэклог и neutral status"]
+          "checks": ["Переход выполнен только Драфт → Бэклог", "Бэклог получил статус Готово и ожидает автоматического запуска Analyst"],
+          "evidence": ["Business comment ref", "Readback Бэклог / Готово и queued Analyst assignment"]
         }
       ]
     }]

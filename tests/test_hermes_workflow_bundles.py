@@ -47,6 +47,17 @@ def test_every_terminal_phase_requires_business_comment_and_terminal_action() ->
             assert expected in text, f"{path.name}/{mode['key']}"
 
 
+def test_project_manager_publication_hands_backlog_to_analyst_automatically() -> None:
+    bundle = load_bundle(CONFIG_ROOT / "project_manager.json")
+    terminal = bundle["workflow"]["modes"][0]["phases"][-1]
+    text = " ".join(item["text"] for item in terminal["instructions"]).lower()
+
+    assert "бэклог / готово" in text
+    assert "автоматически поставлена в очередь analyst" in text
+    assert "analyst не запущен" not in text
+    assert "не запускать analyst вручную" in text
+
+
 def test_every_instruction_skill_is_pinned_or_supplied_by_the_runtime() -> None:
     for path in CONFIG_ROOT.glob("*.json"):
         bundle = load_bundle(path)
