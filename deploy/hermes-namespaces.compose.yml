@@ -8,7 +8,7 @@ x-project-workflow: &project-workflow
   restart: unless-stopped
   tmpfs:
     - /tmp:rw,noexec,nosuid,size=128m
-  networks: [team-demo]
+  networks: [team-demo, workflow-db]
   healthcheck:
     test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/ready', timeout=3)"]
     interval: 10s
@@ -71,3 +71,6 @@ networks:
   team-demo:
     external: true
     name: ${TEAM_DEMO_NETWORK:?required}
+  workflow-db:
+    external: true
+    name: ${TEAM_DEMO_WORKFLOW_NETWORK:?required}
