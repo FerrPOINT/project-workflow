@@ -1,354 +1,125 @@
 <p align="center">
-  <img src="docs/assets/project-workflow-banner.jpg" alt="project-workflow banner" />
+  <img src="docs/assets/project-workflow-banner.jpg" alt="Project Workflow - phased work orchestration" />
 </p>
 
 <p align="center">
-  <a href="#features"><img src="https://img.shields.io/badge/%E2%9C%A8%20Features-0B1220?style=for-the-badge" alt="Features" /></a>
-  <a href="#stack"><img src="https://img.shields.io/badge/%F0%9F%94%A7%20Stack-111827?style=for-the-badge" alt="Stack" /></a>
-  <a href="#entrypoints"><img src="https://img.shields.io/badge/%F0%9F%A7%A9%20Entry%20Points-18202F?style=for-the-badge" alt="Entry Points" /></a>
-  <a href="#cli"><img src="https://img.shields.io/badge/%F0%9F%96%A5%EF%B8%8F%20CLI-1F2937?style=for-the-badge" alt="CLI" /></a>
-  <a href="#ui"><img src="https://img.shields.io/badge/%F0%9F%8C%90%20Web%20UI-374151?style=for-the-badge" alt="Web UI" /></a>
-  <a href="#screenshots"><img src="https://img.shields.io/badge/%F0%9F%96%BC%EF%B8%8F%20Screens-475569?style=for-the-badge" alt="Screenshots" /></a>
-  <a href="#architecture"><img src="https://img.shields.io/badge/%F0%9F%8F%97%EF%B8%8F%20Architecture-4B5563?style=for-the-badge" alt="Architecture" /></a>
-  <a href="#quality"><img src="https://img.shields.io/badge/%F0%9F%9B%A1%EF%B8%8F%20Quality-6B7280?style=for-the-badge" alt="Quality" /></a>
+  <a href="#capabilities"><img src="https://img.shields.io/badge/Capabilities-1d4ed8?style=for-the-badge" alt="Capabilities" /></a>
+  <a href="#quick-start"><img src="https://img.shields.io/badge/Quick_Start-1e40af?style=for-the-badge" alt="Quick start" /></a>
+  <a href="#visual-proof"><img src="https://img.shields.io/badge/Visual_Proof-0f766e?style=for-the-badge" alt="Visual proof" /></a>
+  <a href="#safety"><img src="https://img.shields.io/badge/Safety-334155?style=for-the-badge" alt="Safety" /></a>
+  <a href="#quality"><img src="https://img.shields.io/badge/Quality-475569?style=for-the-badge" alt="Quality" /></a>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python" />
-  <img src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
-  <img src="https://img.shields.io/badge/Postgres-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="Postgres" />
-  <img src="https://img.shields.io/badge/SQLAlchemy-D71F00?style=flat-square&logo=sqlalchemy&logoColor=white" alt="SQLAlchemy" />
-  <img src="https://img.shields.io/badge/Pydantic-E92063?style=flat-square&logo=pydantic&logoColor=white" alt="Pydantic" />
-  <img src="https://img.shields.io/badge/uv-000000?style=flat-square&logo=astral&logoColor=white" alt="uv" />
-  <img src="https://img.shields.io/badge/Rich-000000?style=flat-square&logo=rich&logoColor=white" alt="Rich" />
-  <img src="https://img.shields.io/badge/Jinja2-B41717?style=flat-square&logo=jinja&logoColor=white" alt="Jinja2" />
-  <img src="https://img.shields.io/badge/Alembic-6B8E23?style=flat-square&logo=alembic&logoColor=white" alt="Alembic" />
+  <img src="https://img.shields.io/badge/Python-3.10%2B-3776ab?style=flat-square&logo=python&logoColor=white" alt="Python 3.10 or later" />
+  <img src="https://img.shields.io/badge/FastAPI-API-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
+  <img src="https://img.shields.io/badge/PostgreSQL-Runtime-4169e1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL runtime" />
+  <img src="https://img.shields.io/badge/SQLAlchemy-2-d71f00?style=flat-square&logo=sqlalchemy&logoColor=white" alt="SQLAlchemy 2" />
+  <img src="https://img.shields.io/badge/CI-.github%2Fworkflows%2Fci.yml-15803d?style=flat-square" alt="Repository CI" />
 </p>
 
-<p align="center">
-  <img src="https://img.shields.io/badge/pytest-0A9EDC?style=flat-square&logo=pytest&logoColor=white" alt="pytest" />
-  <img src="https://img.shields.io/badge/ruff-261230?style=flat-square&logo=ruff&logoColor=white" alt="ruff" />
-  <img src="https://img.shields.io/badge/mypy-2E6AFF?style=flat-square&logo=mypy&logoColor=white" alt="mypy" />
-  <img src="https://img.shields.io/badge/source--available-FerrPOINT-111827?style=flat-square" alt="FerrPOINT source-available" />
-</p>
+> **Project Workflow** is a private, self-hosted control plane for phased tasks. An executor reports through the CLI; the mandatory Supervisor evaluates the report and records `PASS`, `ROLLBACK` or `BLOCK` against append-only phase history.
 
----
+<a name="overview"></a>
+## Overview
 
-## 🎯 Позиционирование
+The PostgreSQL runtime is the source of truth for workflow templates, phases, namespaces, agents, tasks and Supervisor history. The FastAPI/Jinja2 UI owns workflow configuration and read-only task observation: `/task/{task_key}` (только наблюдение) and `/instructions?phase_id={phase_id}` expose context without bypassing the executor/Supervisor path. В UI доступен просмотр задач, а не их создание или продвижение. The public CLI stays deliberately compact around `step` and `history`.
 
-**project-workflow** — внутренняя private-платформа для пофазного ведения задач.
-Агент отчитывается через CLI, обязательный LLM Supervisor проверяет отчет и выдает вердикт: **PASS**, **ROLLBACK** или **BLOCK**.
-
-Центр управления workflow, фазами, namespaces и агентами живет в Web UI. UI задач —
-наблюдательный: он показывает список, состояние, историю, checks/evidence и verdict,
-но не создаёт и не продвигает задачи. CLI намеренно остается маленьким: `step` и
-`history`; первое `step` создаёт задачу, последующие передают отчёты и двигают её
-по workflow. Дополнительные namespace-команды работают как wrappers поверх этих двух операций.
-
-Для изолированных контейнеров исполнителей сохранён private runtime bridge
-`/internal/runtime/step` и `/internal/runtime/history`: это отдельный service-to-service
-контракт с role tokens, не пользовательский UI API. Он включается только при
-`PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON` и должен быть доступен лишь во внутренней сети
-или на host loopback.
-
-Runtime-источник данных — **PostgreSQL**. SQLite используется только для изолированных тестов и локальных smoke-сценариев.
-
-## 📌 Snapshot
-
-| Поле | Значение |
-|---|---|
-| Статус | Internal `1.0.0` |
-| Runtime | PostgreSQL + SQLAlchemy/Alembic |
-| Docker UI/API | `http://127.0.0.1:8812` |
-| App/systemd port | `8811` внутри приложения |
-| CLI selector | `PROJECT_WORKFLOW_NAMESPACE_ID` |
-| UI selector | cookie `workflow_namespace_id`, query override `?namespace_id=` |
-| License | FerrPOINT Proprietary Source-Available Evaluation License v1.0 |
-
-<a name="features"></a>
-## ✨ Features
-
-| Feature | Описание |
-|---|---|
-| Phase workflow | Задача идет по шаблону фаз с инструкциями, checks, evidence и audit history. |
-| Supervisor gate | Переход фазы проходит через обязательную оценку отчета и фиксирует `PASS` / `ROLLBACK` / `BLOCK`. |
-| Namespace runtime | Несколько entrypoints могут иметь свои workflow, задачи, стиль UI и CLI-команду. |
-| Web UI | CRUD для workflows, phases, namespaces и agents; read-only просмотр задач и audit history. |
-| Append-only history | История фаз и `step`-проверок не затирается. |
-| CLI freeze | Публичный CLI остается управляемым и предсказуемым: `step` / `history`. |
-| Wrapper commands | `workflow-qa`, `workflow-dev` и другие команды генерируются из записей PostgreSQL. |
-| Automatic baseline | `docker compose up` поднимает Postgres, применяет миграции и загружает стартовый каталог. |
-
-<a name="stack"></a>
-## 🔧 Core Stack
-
-| Zone | Tech | Роль |
+| Surface | Current behavior | Boundary |
 |---|---|---|
-| Runtime | Python 3.10+ | application runtime and packaging target |
-| Data | PostgreSQL | source of truth for UI, CLI and supervisor state |
-| ORM | SQLAlchemy 2 | models, repositories, unit-of-work |
-| Migrations | Alembic | schema history and baseline |
-| API/UI | FastAPI + Jinja2 | server-side UI and JSON endpoints |
-| Validation | Pydantic | settings, schemas and DTO boundaries |
-| CLI | Click + Rich | compact agent-facing command surface |
-| Tooling | uv + constraints.txt | repeatable local and container dependency set |
-| Quality | pytest, ruff, mypy | local quality gate |
+| Workflow | Manage templates, phases, instructions, checks and evidence requirements. | Phase decisions are Supervisor-gated and recorded in history. |
+| Namespaces | Bind a workflow, UI identity and wrapper CLI command to an entry point. | A namespace changes task context; it does not create a separate hidden runtime. |
+| Tasks | Observe state, phase history, checks, evidence and verdicts in the UI. | The UI does not create or advance tasks. |
+| CLI | `step` creates/advances a task through its configured namespace; `history` reads its phase/Supervisor record. | User-facing wrapper commands remain thin namespace selectors over those operations. |
+| Runtime bridge | Optional internal service-to-service `step` and `history` endpoints support isolated executors. | It is not a user UI API and requires configured runtime role tokens. |
 
-<a name="entrypoints"></a>
-## 🧩 CLI Entry Points
+<a name="capabilities"></a>
+## Capabilities
 
-Each namespace/entrypoint stores:
+- **Phased execution.** Define ordered and parallel workflow phases with instructions, checks, evidence requirements and rollback targets.
+- **Mandatory Supervisor gate.** Every submitted report receives an auditable verdict: `PASS`, `ROLLBACK` or `BLOCK`.
+- **Namespace isolation.** Give each entry point its own workflow, visual identity and configured wrapper command while keeping CLI semantics consistent.
+- **Read-only task observation.** Inspect task state, history, checks, evidence and verdicts without bypassing the executor/Supervisor path.
+- **PostgreSQL-first runtime.** Use SQLAlchemy and Alembic for the production runtime; SQLite is limited to isolated tests and screenshot smoke fixtures.
 
-| Field | Role |
-|---|---|
-| Name and description | UI identity and human-facing purpose |
-| Bound workflow | Phase template used by tasks in this entrypoint |
-| Icon and theme color | Header, dashboard and task-detail styling |
-| Custom CLI command | User-facing wrapper, for example `workflow-qa` |
+<a name="quick-start"></a>
+## Quick Start
 
-The top UI selector switches logo/name, accent color, dashboard, task list, task detail and `/phases`.
-The selected entrypoint is stored in cookie `workflow_namespace_id`; `?namespace_id=` has priority over the cookie.
-
-Canonical API: `/api/namespaces`; old UI/API alias routes are not part of the public surface.
-
-<a name="cli"></a>
-## 🖥️ CLI
-
-CLI expects `DATABASE_URL`:
+The repository Compose profile starts PostgreSQL, applies migrations/bootstrap data and exposes the UI/API only on loopback.
 
 ```bash
-export DATABASE_URL=postgresql+psycopg://project_workflow:project_workflow@localhost:5432/project_workflow
-```
-
-Generate user-facing wrapper commands:
-
-```bash
-python scripts/install_namespace_clis.py --bin-dir ./.bin
-```
-
-Run the selected workflow through its configured command:
-
-```bash
-workflow-run step --task RUN-123 --report "Сделал X, проверил Y"
-```
-
-Read phase and supervisor history from the same entrypoint:
-
-```bash
-workflow-run history --task RUN-123 --n 10
-```
-
-Parallel entrypoints use their own configured commands:
-
-```bash
-workflow-qa step --task RUN-42 --report "Проверил сценарии"
-workflow-dev history --task RUN-42
-```
-
-The wrapper sets `PROJECT_WORKFLOW_NAMESPACE_ID=<id>` and calls the internal `step/history` CLI, so the same external task key can exist independently in different namespaces.
-The executor receives the configured wrapper command in `phase_contract.cli_actor.entrypoint`, not a hardcoded global CLI name.
-
-<a name="ui"></a>
-## 🌐 Web UI
-
-Docker Compose mode:
-
-```bash
-cp .env.example .env
 docker compose up --build -d --wait
 curl --fail http://127.0.0.1:8812/health
 ```
 
-UI: `http://127.0.0.1:8812`.
+The health response confirms the application, database and schema state. Repository Compose publishes PostgreSQL and API on loopback; deployment-specific OpenAI, platform-service and internal-runtime bridge settings are supplied through environment variables, never committed credentials.
 
-Compose binds PostgreSQL and API to `127.0.0.1`. Before starting a fresh baseline over an old dev volume, follow [docs/database-reset.md](docs/database-reset.md).
+For a local developer install, quality commands and the runtime environment, read [docs/quality-gate.md](docs/quality-gate.md), [docs/database-reset.md](docs/database-reset.md) and [AGENTS.md](AGENTS.md).
 
-Local app mode uses the database from `DATABASE_URL` and the application port from CLI flags:
+### CLI entry points
 
-```bash
-python -m project_workflow.interfaces.ui --host 127.0.0.1 --port 8812
-curl --fail http://127.0.0.1:8812/health
-```
-
-At startup the app verifies database connectivity; the Compose `migrate` service applies schema migrations and bootstraps the default workflow catalog.
-
-| Area | Route |
-|---|---|
-| Dashboard | `/` |
-| Namespaces | `/namespaces`, `/namespaces/new` |
-| Tasks | `/tasks`, `/task/{task_key}` (только наблюдение) |
-| Phases | `/phases`, `/phase/{phase_id}`, `/instructions?phase_id={phase_id}` |
-| Workflows | `/workflows` |
-| Agents | `/agents` |
-| Settings | `/settings` |
-
-<a name="screenshots"></a>
-## 🖼️ Screenshots
-
-Browser evidence is captured full-page from a neutral fixture: 2 selected entries, 18 tasks in each entry, the same
-`RUN-42` key present independently in both entries, and coverage across active, blocked and done states.
-
-<figure>
-  <figcaption><strong>Dashboard / Разработка</strong></figcaption>
-  <img src="docs/screenshots/dashboard.png" alt="Dashboard Разработка full-page evidence" width="100%" />
-</figure>
-
-<figure>
-  <figcaption><strong>Dashboard / Проверка качества</strong></figcaption>
-  <img src="docs/screenshots/dashboard-qa.png" alt="Dashboard Проверка качества full-page evidence" width="100%" />
-</figure>
-
-<figure>
-  <figcaption><strong>Неймспейсы</strong></figcaption>
-  <img src="docs/screenshots/namespaces.png" alt="Неймспейсы full-page evidence" width="100%" />
-</figure>
-
-<figure>
-  <figcaption><strong>Создание неймспейса</strong></figcaption>
-  <img src="docs/screenshots/namespace-new.png" alt="Создание неймспейса full-page evidence" width="100%" />
-</figure>
-
-<figure>
-  <figcaption><strong>Задачи / Разработка</strong></figcaption>
-  <img src="docs/screenshots/tasks.png" alt="Задачи Разработка full-page evidence" width="100%" />
-</figure>
-
-<figure>
-  <figcaption><strong>Задачи / Проверка качества</strong></figcaption>
-  <img src="docs/screenshots/tasks-qa.png" alt="Задачи Проверка качества full-page evidence" width="100%" />
-</figure>
-
-<figure>
-  <figcaption><strong>Воркфлоу</strong></figcaption>
-  <img src="docs/screenshots/workflows.png" alt="Воркфлоу full-page evidence" width="100%" />
-</figure>
-
-<figure>
-  <figcaption><strong>Фазы / Разработка</strong></figcaption>
-  <img src="docs/screenshots/phases.png" alt="Фазы Разработка full-page evidence" width="100%" />
-</figure>
-
-<figure>
-  <figcaption><strong>Фазы / Проверка качества</strong></figcaption>
-  <img src="docs/screenshots/phases-qa.png" alt="Фазы Проверка качества full-page evidence" width="100%" />
-</figure>
-
-<figure>
-  <figcaption><strong>Инструкции</strong></figcaption>
-  <img src="docs/screenshots/instructions.png" alt="Инструкции full-page evidence" width="100%" />
-</figure>
-
-<figure>
-  <figcaption><strong>Агенты</strong></figcaption>
-  <img src="docs/screenshots/agents.png" alt="Агенты full-page evidence" width="100%" />
-</figure>
-
-<figure>
-  <figcaption><strong>CLI</strong></figcaption>
-  <img src="docs/screenshots/settings.png" alt="CLI full-page evidence" width="100%" />
-</figure>
-
-<figure>
-  <figcaption><strong>Одна задача / Разработка</strong></figcaption>
-  <img src="docs/screenshots/task-detail-dev.png" alt="Одна задача Разработка full-page evidence" width="100%" />
-</figure>
-
-<figure>
-  <figcaption><strong>Одна задача / Проверка качества</strong></figcaption>
-  <img src="docs/screenshots/task-detail-qa.png" alt="Одна задача Проверка качества full-page evidence" width="100%" />
-</figure>
-
-Mobile dashboard:
-
-<p align="center">
-  <img src="docs/screenshots/mobile-dashboard.png" alt="Mobile dashboard" width="390" />
-</p>
-
-## 🛠️ Development
+Install namespace wrappers from the active PostgreSQL catalog:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install --constraint constraints.txt -e ".[dev,ui]"
+python scripts/install_namespace_clis.py --bin-dir ./.bin
+workflow-run step --task RUN-123 --report "Сделал X, проверил Y"
+workflow-run history --task RUN-123 --n 10
+workflow-qa step --task RUN-42 --report "Проверил сценарии"
+workflow-dev history --task RUN-42
 ```
 
-`constraints.txt` fixes the tested dependency set; Docker uses the same file.
+The wrapper sets `PROJECT_WORKFLOW_NAMESPACE_ID` and invokes only the internal `step/history` CLI. The same external task key can therefore be tracked independently in separate namespaces.
 
-<a name="architecture"></a>
-## 🏗️ Architecture
+<a name="visual-proof"></a>
+## Visual Proof
 
-```mermaid
-flowchart TD
-    CLI[project-workflow CLI] -->|step / history| App[Application services]
-    Wrap[Namespace wrapper] -->|PROJECT_WORKFLOW_NAMESPACE_ID| CLI
-    UI[FastAPI + Jinja2 UI] -->|HTML / JSON| App
-    App --> Domain[Domain validation + contracts]
-    App --> UoW[SQLAlchemy Unit of Work]
-    UoW --> Repo[Repositories]
-    Repo --> DB[(PostgreSQL)]
-    App --> Supervisor[LLM Supervisor]
-    Supervisor -->|PASS / ROLLBACK / BLOCK| App
-```
+The root README uses a neutral isolated fixture rather than the operational task dashboard. The fixture uses generic namespace names and UI-testing copy, without credentials, task keys, URLs or filesystem paths. The broader screenshot set and its capture process remain covered by [docs/quality-gate.md](docs/quality-gate.md).
 
-### Принципы
+### Namespace configuration
 
-- Runtime state lives in PostgreSQL; code paths should not grow hidden in-memory truth.
-- Domain validation stays outside SQLAlchemy models.
-- UI routes validate requests, call application services and return HTML/API responses.
-- Supervisor decisions are auditable and connected to phase history.
-- Compatibility aliases stay only where current runtime still needs them.
+<figure>
+  <img src="docs/screenshots/namespaces.png" alt="Project Workflow namespace configuration from the neutral isolated fixture" width="100%" />
+  <figcaption>Namespace identity, workflow binding and wrapper-command configuration.</figcaption>
+</figure>
+
+### Namespace configuration on mobile
+
+<figure>
+  <img src="docs/screenshots/mobile-namespaces.png" alt="Project Workflow mobile namespace configuration from the neutral isolated fixture" width="390" />
+  <figcaption>Mobile 390x844 evidence: cards stack and the editor remains a single-column form.</figcaption>
+</figure>
+
+<a name="safety"></a>
+## Safety Boundaries
+
+- **Authority split.** Executors submit reports through the CLI; Supervisor verdicts control phase progression. The UI is an observer for tasks rather than a manual advancement path.
+- **Runtime isolation.** The internal runtime bridge is enabled only with `PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON` and belongs on an internal network or host loopback.
+- **Data boundary.** PostgreSQL is the runtime source of truth. SQLite exists only for isolated tests and screenshot fixtures, never as a replacement production state store.
+- **Configuration boundary.** API credentials, runtime role tokens and external-provider settings are environment values; do not put them in README examples, committed files or screenshot evidence.
+- **Network boundary.** This is an internal, loopback/private-contour utility. It intentionally does not claim public multi-tenant ingress, external-user security middleware or public observability scope.
 
 <a name="quality"></a>
-## 🛡️ Quality Bar
+## Quality and Verification
 
-| Проверка | Команда |
+| Gate | Command |
 |---|---|
-| Full local gate | `make quality` |
-| Warning-focused gate | `make warnings` |
-| Compose readiness | `make compose-ready` |
-| Windows quality | `pwsh -File scripts/quality.ps1 quality` |
-| Windows warnings | `pwsh -File scripts/quality.ps1 warnings` |
-| Windows readiness | `pwsh -File scripts/quality.ps1 compose-ready` |
+| Documentation regression checks | `pytest -q tests/test_docs_quality.py --timeout=60` |
+| README assets and anchors | `python scripts/verify_readme.py` |
+| Unit/UI tests | `pytest -q --timeout=60` |
+| PostgreSQL integration | `pytest -q -m integration tests/test_postgres_integration.py --timeout=120` |
+| Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` |
+| Lint and type checks | `ruff check .` and `mypy project_workflow scripts` |
+| Compose readiness | `docker compose up --build -d --wait` and `curl --fail http://127.0.0.1:8812/health` |
 
-`make quality` включает unit/UI-тесты, PostgreSQL integration tests, coverage, ruff и mypy. Тот же набор автоматически выполняет GitHub Actions на push и pull request в `master`; `compose-smoke` отдельно собирает Compose-стек и проверяет readiness. UI-facing changes также требуют локальный browser smoke и screenshots.
+`make quality` and `pwsh -File scripts/quality.ps1 quality` collect the documented local gates. GitHub Actions repeats unit/UI, PostgreSQL integration, coverage, lint, mypy, diff hygiene and Compose readiness for every push and pull request to `master`.
 
-## 🗺️ Roadmap
+## Documentation Map
 
-- [x] PostgreSQL runtime, SQLAlchemy repositories and Alembic baseline
-- [x] FastAPI/Jinja2 Web UI for workflows, phases, namespaces, agents and tasks
-- [x] Namespace selector, theme metadata and wrapper CLI commands
-- [x] Supervisor verdict audit trail for phase transitions
-- [x] FerrPOINT proprietary source-available licensing
-- [ ] Automated browser screenshot smoke in the regular quality gate
-- [ ] Broader API-route regression coverage for namespace/workflow mutations
-- [ ] Further application-service split where legacy compatibility still hides domain boundaries
-
-## 🧭 Project Map
-
-```text
-project-workflow/
-├── project_workflow/ # domain, application services, CLI, UI and supervisor
-├── tests/            # unit, integration, UI and regression coverage
-├── scripts/          # quality, DB init and namespace CLI helpers
-├── docs/             # architecture, quality gate, bug audit and screenshots
-├── docker-compose.yml
-├── pyproject.toml
-└── constraints.txt
-```
-
-## 📚 Документы
-
-- [docs/architecture.md](docs/architecture.md) — CLI/UI/Supervisor boundaries, state/audit model and runtime scope.
-- [docs/quality-gate.md](docs/quality-gate.md) — local gate, PostgreSQL integration, Compose readiness and browser smoke.
-- [docs/bug-audit.md](docs/bug-audit.md) — defect audit notes.
-- [docs/database-reset.md](docs/database-reset.md) — safe reset for old local Compose volumes.
-- [LIVE_TEST_PLAN.md](LIVE_TEST_PLAN.md) — executor-driven E2E acceptance.
+- **Product/runtime:** [docs/quality-gate.md](docs/quality-gate.md), [LIVE_TEST_PLAN.md](LIVE_TEST_PLAN.md), [docs/database-reset.md](docs/database-reset.md)
+- **Architecture:** [project_workflow/interfaces/ui/app.py](project_workflow/interfaces/ui/app.py), [project_workflow/infrastructure/db/session.py](project_workflow/infrastructure/db/session.py), [project_workflow/interfaces/ui/routes/runtime_api.py](project_workflow/interfaces/ui/routes/runtime_api.py)
+- **Repository conventions:** [AGENTS.md](AGENTS.md), [pyproject.toml](pyproject.toml), [.github/workflows/ci.yml](.github/workflows/ci.yml)
 
 <a name="license"></a>
-## 🔒 License
+## License
 
-Proprietary source-available. Not open source.
-
-Viewing/evaluation only.
-
-Commercial, production, resale, redistribution, SaaS/hosting use require written license from FerrPOINT. См. [LICENSE](LICENSE), [NOTICE](NOTICE) и [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+FerrPOINT Proprietary Source-Available Evaluation License v1.0. This repository is not open source. Viewing and evaluation are allowed under [LICENSE](LICENSE); commercial, production, resale, redistribution and SaaS/hosting use require written FerrPOINT permission.

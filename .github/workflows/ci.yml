@@ -50,6 +50,8 @@ jobs:
         run: uv run --isolated --with-requirements constraints.txt --all-extras ruff check .
       - name: Type check
         run: uv run --isolated --with-requirements constraints.txt --all-extras mypy project_workflow scripts
+      - name: Documentation and README evidence gate
+        run: uv run --isolated --with-requirements constraints.txt --all-extras pytest -q tests/test_docs_quality.py --timeout=60
       - name: Diff hygiene
         run: git diff --check
 
