@@ -244,14 +244,6 @@ curl --fail http://127.0.0.1:8812/health
   <img src="docs/screenshots/task-detail-qa.png" alt="Одна задача / Проверка качества full-page evidence" width="100%" />
 </figure>
 
-![Мобильный интерфейс: колонка 1](docs/screenshots/m-col-left.png) ![Мобильный интерфейс: колонка 2](docs/screenshots/m-col-right.png)
-
-<details><summary>Исходные кадры (мобильные)</summary>
-
-<img src="docs/screenshots/mobile-namespaces.png" alt="Неймспейсы на мобильном full-page evidence" width="375" />
-
-</details>
-
 На мобильных ширинах карточки стекаются, редактор остаётся одноколоночной формой.
 
 <a name="architecture"></a>

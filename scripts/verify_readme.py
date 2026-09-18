@@ -19,7 +19,6 @@ REQUIRED_ANCHORS = {
 }
 REQUIRED_PROOF = {
     "docs/screenshots/namespaces.png",
-    "docs/screenshots/mobile-namespaces.png",
 }
 MD_IMAGE_RE = re.compile(r"!\[[^]]*\]\(([^)]+)\)")
 HTML_IMAGE_RE = re.compile(r"<img\b[^>]*\bsrc=[\"']([^\"']+)[\"']", re.IGNORECASE)

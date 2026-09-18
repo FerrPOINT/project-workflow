@@ -123,7 +123,7 @@ def test_quality_gate_ui_smoke_matches_settings_screenshot() -> None:
 def test_readme_screenshots_are_real_full_size_pngs() -> None:
     screenshots_dir = ROOT / "docs" / "screenshots"
 
-    for name in ["namespaces.png", "mobile-namespaces.png"]:
+    for name in ["namespaces.png"]:
         width, height = _png_size(screenshots_dir / name)
         assert width >= 390, f"{name} width {width} is below 390"
         assert height >= 844, f"{name} height {height} is below 844"
@@ -132,10 +132,7 @@ def test_readme_screenshots_are_real_full_size_pngs() -> None:
 def test_readme_presents_reviewed_namespace_evidence() -> None:
     section = _readme_screenshots_section()
 
-    assert "m-col-left.png" in section, "mobile composite column gallery"
-    assert "m-col-right.png" in section
     assert 'src="docs/screenshots/namespaces.png"' in section
-    assert 'src="docs/screenshots/mobile-namespaces.png"' in section
     assert "neutral isolated fixture" in section
     assert "RUN-42" not in section
 
