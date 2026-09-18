@@ -302,7 +302,7 @@ python -m pip install --constraint constraints.txt -e ".[dev,ui]"
 | Lint и типы | `ruff check .` и `mypy project_workflow scripts` |
 | Windows quality | `pwsh -File scripts/quality.ps1 quality` |
 
-`make quality` включает unit/UI-тесты, PostgreSQL integration tests, coverage, ruff и mypy. Тот же набор автоматически выполняет GitHub Actions на push и pull request в `master`; `compose-smoke` отдельно собирает Compose-стек и проверяет readiness.
+`make quality` включает unit/UI-тесты, PostgreSQL integration tests, coverage, ruff и mypy. Тот же набор автоматически выполняет GitHub Actions на push и pull request в `master`.
 
 ## 🗺️ Roadmap
 
