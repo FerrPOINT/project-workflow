@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 
 import uvicorn
 
@@ -21,7 +22,8 @@ def main() -> None:
 
     uow = _app_state.get_uow()
     try:
-        uow._bootstrap_smoke_project_and_workflow()
+        if os.environ.get("PROJECT_WORKFLOW_MANAGED_CONFIGURATION") != "1":
+            uow._bootstrap_smoke_project_and_workflow()
     finally:
         uow.close()
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
