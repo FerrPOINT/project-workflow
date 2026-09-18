@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import time
@@ -14,6 +15,7 @@ from sqlalchemy import text
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from ... import __version__
+from ...config import get_settings
 from ...infrastructure.db.session import get_engine
 from .routes import api, pages
 
@@ -58,8 +60,12 @@ class _ManagedConfigurationMiddleware(BaseHTTPMiddleware):
 class _UnitOfWorkMiddleware:
     """Provide one lazily-created, reliably closed UoW per UI request."""
 
-    def __init__(self, app):
+    def __init__(self, app, max_concurrent_db_requests: int | None = None):
         self.app = app
+        if max_concurrent_db_requests is None:
+            settings = get_settings()
+            max_concurrent_db_requests = settings.DB_POOL_SIZE + max(settings.DB_MAX_OVERFLOW, 0)
+        self._request_slots = asyncio.Semaphore(max(1, max_concurrent_db_requests))
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -67,8 +73,13 @@ class _UnitOfWorkMiddleware:
             return
         from project_workflow.application.state import _app_state
 
-        with _app_state.request_scope():
-            await self.app(scope, receive, send)
+        # Route handlers use synchronous SQLAlchemy calls from async FastAPI
+        # endpoints.  Do not let more requests enter that blocking section than
+        # the pool can serve: a waiter would otherwise block the event loop and
+        # prevent an earlier response from closing its request-scoped UoW.
+        async with self._request_slots:
+            with _app_state.request_scope():
+                await self.app(scope, receive, send)
 
 
 async def _health() -> JSONResponse:

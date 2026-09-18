@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from project_workflow.application.state import _AppState
-from project_workflow.interfaces.ui.app import _health, create_app
+from project_workflow.interfaces.ui.app import _health, _UnitOfWorkMiddleware, create_app
 
 
 def test_health_ok():
@@ -105,3 +105,44 @@ def test_request_without_database_work_does_not_create_uow():
             pass
 
     get_uow.assert_not_called()
+
+
+def test_request_uow_middleware_limits_concurrency_to_database_capacity():
+    """Sync DB calls must not block the event loop while the size-one pool is busy."""
+
+    async def scenario() -> int:
+        active = 0
+        max_active = 0
+        completed = 0
+        first_entered = asyncio.Event()
+        release_first = asyncio.Event()
+
+        async def inner(scope, receive, send):
+            nonlocal active, completed, max_active
+            active += 1
+            max_active = max(max_active, active)
+            if completed == 0:
+                first_entered.set()
+                await release_first.wait()
+            active -= 1
+            completed += 1
+
+        middleware = _UnitOfWorkMiddleware(inner, max_concurrent_db_requests=1)
+        scope = {"type": "http"}
+
+        async def receive():
+            return {"type": "http.disconnect"}
+
+        async def send(message):
+            return None
+
+        first = asyncio.create_task(middleware(scope, receive, send))
+        await first_entered.wait()
+        second = asyncio.create_task(middleware(scope, receive, send))
+        await asyncio.sleep(0)
+        observed = max_active
+        release_first.set()
+        await asyncio.gather(first, second)
+        return observed
+
+    assert asyncio.run(scenario()) == 1
