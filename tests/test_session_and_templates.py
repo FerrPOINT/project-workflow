@@ -84,6 +84,25 @@ class TestSessionHelpers:
         assert calls[-1][1]["pool_size"] == 10
         assert calls[-1][1]["max_overflow"] == 20
 
+    def test_get_engine_reuses_password_protected_postgresql_url(self):
+        from unittest.mock import MagicMock, patch
+
+        from sqlalchemy.engine import make_url
+
+        from project_workflow.infrastructure.db import session as session_module
+
+        reset_engine()
+        database_url = "postgresql+psycopg://user:secret@db/workflow"
+        fake_engine = MagicMock()
+        fake_engine.url = make_url(database_url)
+        with patch.object(session_module, "_create_postgres_engine", return_value=fake_engine) as create:
+            first = get_engine(database_url)
+            second = get_engine(database_url)
+        assert first is second
+        create.assert_called_once_with(database_url)
+        reset_engine()
+        fake_engine.dispose.assert_called_once()
+
     def test_get_engine_postgresql_retry_exhausted(self, monkeypatch):
         from unittest.mock import patch
 

@@ -13,7 +13,7 @@ from typing import Any
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, event
-from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.engine import Connection, Engine, make_url
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import NullPool
@@ -59,8 +59,10 @@ def get_engine(url: str | None = None) -> Engine:
     """Return a cached or newly created SQLAlchemy engine."""
     global _engine
     target = _normalize_url(url)
-    normalized_target = str(target)
-    if _engine is None or str(_engine.url) != normalized_target:
+    target_url = make_url(target)
+    if _engine is None or _engine.url != target_url:
+        if _engine is not None:
+            _engine.dispose()
         if _is_sqlite(target):
             db_path = target.replace("sqlite:///", "")
             Path(db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -138,6 +140,8 @@ def _set_sqlite_pragma(dbapi_conn: Any, connection_record: Any) -> None:
 def reset_engine() -> None:
     """Reset cached engine; useful in tests after monkeypatching DB path."""
     global _engine, _SessionLocal
+    if _engine is not None:
+        _engine.dispose()
     _engine = None
     _SessionLocal = None
 
