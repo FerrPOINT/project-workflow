@@ -55,6 +55,22 @@ class _ManagedConfigurationMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+class _UnitOfWorkMiddleware:
+    """Provide one lazily-created, reliably closed UoW per UI request."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        from project_workflow.application.state import _app_state
+
+        with _app_state.request_scope():
+            await self.app(scope, receive, send)
+
+
 async def _health() -> JSONResponse:
     """Liveness/readiness probe with DB connectivity check."""
     from ...infrastructure.db import session as _session
@@ -138,6 +154,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="project-workflow UI", version=__version__, lifespan=_lifespan)
     app.add_middleware(_RequestLoggingMiddleware)
     app.add_middleware(_ManagedConfigurationMiddleware)
+    app.add_middleware(_UnitOfWorkMiddleware)
 
     app.get("/live")(_live)
     app.get("/ready")(_ready)
