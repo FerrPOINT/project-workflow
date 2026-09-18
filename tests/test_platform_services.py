@@ -1,9 +1,12 @@
 """Platform service catalog switcher (catalog v1.1)."""
+import io
+import json
 from pathlib import Path
 
 from project_workflow.interfaces.ui.platform_services import (
     _normalize,
     load_other_services,
+    load_service_catalog,
 )
 
 
@@ -66,3 +69,47 @@ def test_fallback_on_unreachable_catalog(monkeypatch):
     monkeypatch.setattr(ps, "urlopen", boom)
     services = load_other_services("http://127.0.0.1:1/api")
     assert services  # fail-safe fallback
+    assert load_service_catalog("http://127.0.0.1:1/api").source == "fallback-unreachable"
+
+
+def test_runtime_catalog_order_and_source(monkeypatch):
+    import project_workflow.interfaces.ui.platform_services as ps
+
+    class Response(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            self.close()
+
+    payload = {"services": [
+        {"key": "wiki", "label": "Wiki", "ui_url": "http://localhost:7732"},
+        {"key": "admin-panel", "label": "Admin Panel", "ui_url": "http://localhost:7772"},
+        {"key": "java-agent", "label": "Java Agent", "ui_url": None},
+    ]}
+    monkeypatch.setattr(ps, "_cached_services", [], raising=False)
+    monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: Response(json.dumps(payload).encode()))
+    catalog = load_service_catalog("http://admin/api")
+    assert catalog.source == "runtime"
+    assert [service["key"] for service in catalog.services] == ["admin-panel", "wiki"]
+
+
+def test_malformed_runtime_catalog_uses_invalid_fallback(monkeypatch):
+    import project_workflow.interfaces.ui.platform_services as ps
+
+    class Response(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            self.close()
+
+    monkeypatch.setattr(ps, "_cached_services", [], raising=False)
+    for body in (b"not-json", b'{"services": {}}', b'{"services": [{"key": 1}]}'):
+        monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: Response(body))
+        catalog = load_service_catalog("http://admin/api")
+        assert catalog.source == "fallback-invalid"
+        assert len(catalog.services) == 5
+
+    monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: Response(b'{"services": []}'))
+    assert load_service_catalog("http://admin/api").source == "fallback-empty"

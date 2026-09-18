@@ -6,16 +6,31 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{% block title %}Workflow Engine{% endblock %}</title>
+<script>try{var savedTheme=localStorage.getItem('workflow-theme');if(['dark','gray','light'].includes(savedTheme)){document.documentElement.dataset.theme=savedTheme}}catch(_error){}</script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 :root{
   --bg:#111217;--panel:#17181d;--surface:#202126;--surface-hover:#27282e;--surface-active:#2d2e35;
-  --text:#f7f8f8;--text-secondary:#d0d6e0;--text-muted:#969ba5;--text-dim:#727780;
+  --text:#f7f8f8;--text-secondary:#d0d6e0;--text-muted:#969ba5;--text-dim:#a1a6af;
   --accent:#5e6ad2;--accent-hover:#828fff;--accent-soft:rgba(94,106,210,.15);
   --border:rgba(255,255,255,.06);--border-strong:rgba(255,255,255,.10);
   --green:#22c55e;--green-soft:rgba(34,197,94,.12);--red:#ef4444;--red-soft:rgba(239,68,68,.12);
   --orange:#f59e0b;--orange-soft:rgba(245,158,11,.12);--yellow:#eab308;--yellow-soft:rgba(234,179,8,.12);--blue:#3b82f6;
   --sidebar-width:240px;--header-height:52px;
+}
+html[data-theme='gray']{
+  --bg:#23242a;--panel:#2d2e35;--surface:#373941;--surface-hover:#43464f;--surface-active:#50535c;
+  --text:#f4f4f5;--text-secondary:#e4e4e7;--text-muted:#c4c6ce;--text-dim:#b4b8c1;
+  --border:rgba(255,255,255,.15);--border-strong:rgba(255,255,255,.24);
+  --green:#86efac;--red:#fca5a5;--orange:#fdba74;--yellow:#fde047;--blue:#93c5fd;
+}
+html[data-theme='light']{
+  --bg:#f4f4f5;--panel:#fff;--surface:#fff;--surface-hover:#eeeef0;--surface-active:#e4e4e7;
+  --text:#18181b;--text-secondary:#3f3f46;--text-muted:#52525b;--text-dim:#52525b;
+  --accent:#4f46e5;--accent-hover:#4338ca;--accent-soft:rgba(79,70,229,.12);
+  --border:rgba(24,24,27,.16);--border-strong:rgba(24,24,27,.28);
+  --green:#15803d;--green-soft:rgba(21,128,61,.12);--red:#b91c1c;--red-soft:rgba(185,28,28,.1);
+  --orange:#9a3412;--orange-soft:rgba(154,52,18,.1);--yellow:#a16207;--yellow-soft:rgba(161,98,7,.12);--blue:#1d4ed8;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{font-feature-settings:"cv01","ss03"}
@@ -70,6 +85,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .namespace-switcher{display:flex;align-items:center;gap:6px;min-width:0}
 .namespace-select{width:190px;max-width:26vw;height:32px;font-weight:600;color:var(--text);background:var(--surface)}
 .service-menu{position:relative}
+.theme-select{height:36px;max-width:110px;padding:0 8px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);color:var(--text);font:inherit;font-size:12px}
 .service-menu summary{height:36px;padding:0 10px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);color:var(--text-secondary);display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer;list-style:none;white-space:nowrap}
 .service-menu summary::-webkit-details-marker{display:none}
 .service-menu summary:hover,.service-menu[open] summary{background:var(--surface-hover);color:var(--text);border-color:var(--accent)}
@@ -83,6 +99,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .service-health.healthy{background:var(--green)}
 .service-health.unreachable{background:var(--red)}
 .service-menu-current{margin-left:auto;font-size:11px;color:var(--accent)}
+.service-menu-source{padding:8px 10px 3px;margin-top:4px;border-top:1px solid var(--border);color:var(--text-dim);font-size:11px}
 .namespace-icon-action{width:32px;height:32px;border-radius:6px;background:var(--surface);border:1px solid var(--border);color:var(--text-secondary);display:inline-flex;align-items:center;justify-content:center;text-decoration:none;font-size:16px;font-weight:700;line-height:1}
 .namespace-icon-action:hover{background:var(--surface-hover);color:var(--text);text-decoration:none;border-color:var(--accent)}
 .btn{padding:6px 14px;border-radius:6px;font-size:13px;font-weight:500;border:1px solid transparent;cursor:pointer;transition:all .12s;font-family:inherit;white-space:nowrap}
@@ -317,20 +334,27 @@ textarea{resize:vertical;min-height:60px}
       <span class="header-title">{% block header_title %}{% endblock %}</span>
     </div>
     <div class="header-actions">
+      <select class="theme-select" id="themeSelector" aria-label="Тема" onchange="setPlatformTheme(this.value)">
+        <option value="dark">Тёмная</option>
+        <option value="gray">Серая</option>
+        <option value="light">Светлая</option>
+      </select>
       <details class="service-menu" id="serviceMenu">
         <summary aria-label="Открыть список сервисов платформы">Сервисы <span class="service-menu-chevron" aria-hidden="true">▾</span></summary>
         <div class="service-menu-popover" role="menu" aria-label="Сервисы платформы">
-          <a class="service-menu-item" href="/" role="menuitem" aria-current="page">
-            <span class="service-health healthy" role="img" aria-label="Работает"></span>
-            <span>Project Workflow</span>
-            <span class="service-menu-current">Текущий</span>
-          </a>
         {% for service in other_services %}
           <a class="service-menu-item" href="{{ service.url }}" role="menuitem">
             <span class="service-health {{ service.health }}" role="img" aria-label="{% if service.health == 'healthy' %}Работает{% elif service.health == 'unreachable' %}Недоступен{% else %}Состояние неизвестно{% endif %}"></span>
             <span>{{ service.label }}</span>
           </a>
         {% endfor %}
+          <a class="service-menu-item" href="/" role="menuitem" aria-current="page">
+            <span class="service-health healthy" role="img" aria-label="Работает"></span>
+            <span>Project Workflow</span>
+            <span class="service-menu-current">Текущий</span>
+          </a>
+          {% set catalog_source = services_source|default('fallback-unreachable') %}
+          <div class="service-menu-source" role="status">Источник: {{ 'каталог' if catalog_source == 'runtime' else 'резервный список' if catalog_source.startswith('fallback') else 'сохранённый каталог' }}</div>
         </div>
       </details>
       {% if namespaces is defined and namespaces %}
@@ -456,6 +480,17 @@ function switchNamespace(namespaceId){
   url.searchParams.set('namespace_id', namespaceId);
   window.location.href=url.toString();
 }
+function setPlatformTheme(theme){
+  if(!['dark','gray','light'].includes(theme)){return;}
+  document.documentElement.dataset.theme=theme;
+  try{localStorage.setItem('workflow-theme',theme)}catch(_error){}
+}
+try{
+  var savedTheme=localStorage.getItem('workflow-theme');
+  if(['dark','gray','light'].includes(savedTheme)){
+    document.getElementById('themeSelector').value=savedTheme;
+  }
+}catch(_error){}
 function pluralizeRu(n, one, few, many){
   if(n % 10 === 1 && n % 100 !== 11){ return n + ' ' + one; }
   if(n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)){ return n + ' ' + few; }

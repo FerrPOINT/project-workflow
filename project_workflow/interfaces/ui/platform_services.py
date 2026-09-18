@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import time
+from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 from urllib.request import urlopen
@@ -25,6 +26,13 @@ _CACHE_TTL_SECONDS = 60.0
 _cached_at = 0.0
 _cached_services: list[dict[str, Any]] = []
 _VALID_HEALTH = {"healthy", "unreachable", "unknown"}
+_ORDER = {service["key"]: index for index, service in enumerate(_FALLBACK_SERVICES)}
+
+
+@dataclass(frozen=True)
+class ServiceCatalog:
+    services: list[dict[str, Any]]
+    source: str
 
 
 def _normalize(entry: dict[str, Any]) -> dict[str, Any] | None:
@@ -63,18 +71,27 @@ def _with_request_host(services: list[dict[str, Any]], request_url: str | None) 
     return adjusted
 
 
-def load_other_services(catalog_url: str | None, *, request_url: str | None = None) -> list[dict[str, Any]]:
-    """Return other UI services from catalog v1.1, cached and fail-safe."""
+def load_service_catalog(catalog_url: str | None, *, request_url: str | None = None) -> ServiceCatalog:
+    """Return other UI services and the source used to render them."""
     global _cached_at, _cached_services
     if not catalog_url:
-        return _with_request_host(_FALLBACK_SERVICES, request_url)
+        return ServiceCatalog(_with_request_host(_FALLBACK_SERVICES, request_url), "fallback-unreachable")
     now = time.monotonic()
     if _cached_services and now - _cached_at < _CACHE_TTL_SECONDS:
-        return _with_request_host(_cached_services, request_url)
+        return ServiceCatalog(_with_request_host(_cached_services, request_url), "runtime")
     try:
         with urlopen(catalog_url, timeout=2.0) as response:  # nosec B310: configured internal URL
-            payload = json.loads(response.read().decode("utf-8"))
-        raw_entries = payload.get("services", [])
+            body = response.read()
+    except Exception:
+        return ServiceCatalog(
+            _with_request_host(_cached_services or _FALLBACK_SERVICES, request_url),
+            "runtime-cached" if _cached_services else "fallback-unreachable",
+        )
+    try:
+        payload = json.loads(body.decode("utf-8"))
+        if not isinstance(payload, dict) or not isinstance(payload.get("services"), list):
+            raise ValueError("invalid catalog")
+        raw_entries = payload["services"]
         services = [
             normalized
             for entry in raw_entries
@@ -82,9 +99,21 @@ def load_other_services(catalog_url: str | None, *, request_url: str | None = No
             and (normalized := _normalize(entry)) is not None
         ]
     except Exception:
-        return _with_request_host(_cached_services or _FALLBACK_SERVICES, request_url)
+        return ServiceCatalog(
+            _with_request_host(_cached_services or _FALLBACK_SERVICES, request_url),
+            "runtime-cached" if _cached_services else "fallback-invalid",
+        )
     if not services:
-        return _with_request_host(_cached_services or _FALLBACK_SERVICES, request_url)
+        return ServiceCatalog(
+            _with_request_host(_cached_services or _FALLBACK_SERVICES, request_url),
+            "runtime-cached" if _cached_services else ("fallback-empty" if not raw_entries else "fallback-invalid"),
+        )
+    services.sort(key=lambda service: (_ORDER.get(service["key"], len(_ORDER)), service["key"]))
     _cached_services = services
     _cached_at = now
-    return _with_request_host(services, request_url)
+    return ServiceCatalog(_with_request_host(services, request_url), "runtime")
+
+
+def load_other_services(catalog_url: str | None, *, request_url: str | None = None) -> list[dict[str, Any]]:
+    """Compatibility helper for callers that only need the navigation links."""
+    return load_service_catalog(catalog_url, request_url=request_url).services
