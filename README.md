@@ -245,8 +245,8 @@ curl --fail http://127.0.0.1:8812/health
 </figure>
 
 <table><tr>
-<td valign="top" width="50%"><img src="docs/screenshots/mobile-dashboard.png" alt="Дашборд на мобильном full-page evidence" width="100%" /></td>
-<td valign="top" width="50%"><img src="docs/screenshots/mobile-namespaces.png" alt="Неймспейсы на мобильном full-page evidence" width="100%" /></td>
+<td style="border:none;padding:0;vertical-align:top;" width="50%"><img src="docs/screenshots/mobile-dashboard.png" alt="Дашборд на мобильном full-page evidence" width="100%" /></td>
+<td style="border:none;padding:0;vertical-align:top;" width="50%"><img src="docs/screenshots/mobile-namespaces.png" alt="Неймспейсы на мобильном full-page evidence" width="100%" /></td>
 </tr></table>
 
 На мобильных ширинах карточки стекаются, редактор остаётся одноколоночной формой.
