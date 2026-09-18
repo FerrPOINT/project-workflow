@@ -244,7 +244,7 @@ curl --fail http://127.0.0.1:8812/health
   <img src="docs/screenshots/task-detail-qa.png" alt="Одна задача / Проверка качества full-page evidence" width="100%" />
 </figure>
 
-<img src="docs/screenshots/mobile-dashboard.png" alt="Дашборд на мобильном full-page evidence" width="44%" align="left" /> <img src="docs/screenshots/mobile-namespaces.png" alt="Неймспейсы на мобильном full-page evidence" width="44%" align="left" />
+<img src="docs/screenshots/mobile-dashboard.png" alt="Дашборд на мобильном full-page evidence" width="48%" align="left" /> <img src="docs/screenshots/mobile-namespaces.png" alt="Неймспейсы на мобильном full-page evidence" width="48%" align="right" />
 
 На мобильных ширинах карточки стекаются, редактор остаётся одноколоночной формой.
 
