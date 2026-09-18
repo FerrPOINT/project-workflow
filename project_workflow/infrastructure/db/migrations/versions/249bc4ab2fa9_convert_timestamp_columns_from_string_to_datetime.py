@@ -30,6 +30,25 @@ _TABLES_COLUMNS = [
 def _convert_text_to_timestamp(table: str, column: str) -> None:
     dialect = op.get_context().dialect.name
     if dialect == "postgresql":
+        bind = op.get_bind()
+        schema = "project_workflow"
+        inspector = sa.inspect(bind)
+        if table not in inspector.get_table_names(schema=schema):
+            return
+        columns = {item["name"]: item for item in inspector.get_columns(table, schema=schema)}
+        current = columns.get(column)
+        if current is None:
+            return
+        if isinstance(current["type"], sa.DateTime):
+            op.alter_column(
+                table,
+                column,
+                schema=schema,
+                existing_type=current["type"],
+                existing_nullable=current["nullable"],
+                server_default=sa.text("now()"),
+            )
+            return
         # Drop the old text default first; it cannot be cast to timestamp.
         op.execute(sa.text(f"ALTER TABLE {table} ALTER COLUMN {column} DROP DEFAULT"))
         # Normalize placeholder values to a valid timestamp string.

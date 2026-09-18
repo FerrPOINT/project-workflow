@@ -75,6 +75,7 @@ class SAWorkflowRepository(WorkflowRepository):
             text("DELETE FROM phases WHERE workflow_id = :wid"),
             {"wid": workflow_id},
         )
+        self._session.execute(text("DELETE FROM workflow_modes WHERE workflow_id = :wid"), {"wid": workflow_id})
         self._session.delete(row)
 
     def ensure_default_exists(self, name: str = "Default Workflow") -> Workflow:

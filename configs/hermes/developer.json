@@ -1,0 +1,186 @@
+{
+  "schemaVersion": 1,
+  "namespace": "hermes-developer",
+  "role": "developer",
+  "skillsHub": {
+    "commit": "50b92c54e0e04c510c9669dfb52dab0d4632d028",
+    "hashes": {
+      "development": "abc08fe23954152a5f6829c99378cb3c0f1de7e50865991c9b2f672b68d07051",
+      "git-workflow": "8800fe48cba52585861330187ddf4495cc0b3470fdb9fc3bd72000a30a17d626",
+      "systematic-debugging": "8e00ee37485d02dd22b8ff30ef71f94ee17c8d93f92cc2aabd31a428b2b3124d",
+      "test-driven-development": "68012f4050920bb94f4377d797bae242029b0db831718080fe0252978e253c3f"
+    }
+  },
+  "workflow": {
+    "name": "Hermes Developer",
+    "description": "Один Developer workflow с отдельными backend-selected режимами первичной разработки и доработки.",
+    "modes": [
+      {
+        "key": "initial",
+        "name": "Первичная разработка",
+        "phases": [
+          {
+            "code": "initial.context",
+            "name": "Изучение задачи",
+            "description": "Проверить требования, архитектуру и репозиторный контекст.",
+            "instructions": [
+              {"text": "Прочитать Business Task целиком, все комментарии, историю и список вложений; изучить handoff Analyst и Architect и доступные вложения.", "skills": ["relevanter-project-context"]},
+              {"text": "Прочитать repository instructions и определить точные файлы, публичные контракты, проверки и запрещённые изменения.", "skills": ["development", "relevanter-tech-operator"]}
+            ],
+            "checks": ["Требования и архитектурный handoff прочитаны", "Write scope и критерии известны"],
+            "evidence": ["Business refs", "Pinned repository revision"]
+          },
+          {
+            "code": "initial.workspace",
+            "name": "Подготовка workspace",
+            "description": "Работать только в выданном disposable attempt workspace.",
+            "instructions": [
+              {"text": "Прочитать backend assignment, проверить mode initial, cycle, lease, project, base branch и exact pinned revision; не вычислять mode самостоятельно.", "skills": ["relevanter-project-context", "relevanter-tech-operator"]},
+              {"text": "Проверить чистоту свежего attempt workspace и создать разрешённую task branch; при грязном или неоднозначном состоянии остановиться и карантинировать slot.", "skills": ["git-workflow", "relevanter-tech-operator"]}
+            ],
+            "checks": ["Mode и lease совпадают с assignment", "Workspace свежий и branch разрешена"],
+            "evidence": ["Lease/attempt readback", "Base SHA и git status"]
+          },
+          {
+            "code": "initial.regression",
+            "name": "Красная проверка",
+            "description": "Создать минимальную проверку требуемого поведения.",
+            "instructions": [
+              {"text": "Найти ближайшую существующую test boundary и добавить regression test, который падает по требуемой причине.", "skills": ["test-driven-development", "development"]},
+              {"text": "Если test-first объективно неприменим, зафиксировать проверяемую причину и выбрать самый узкий воспроизводимый check.", "skills": ["test-driven-development"]}
+            ],
+            "checks": ["RED подтверждает нужный дефект или отсутствующее поведение", "Проверка относится к публичной границе"],
+            "evidence": ["Команда и RED output summary", "Test file diff"]
+          },
+          {
+            "code": "initial.implementation",
+            "name": "Реализация",
+            "description": "Внести минимальные согласованные изменения.",
+            "instructions": [
+              {"text": "Реализовать согласованный slice без дублирования владельцев, второго хранилища и несогласованных расширений.", "skills": ["development"]},
+              {"text": "Сохранить совместимость, idempotency, права, tenant-границы, restart и partial-failure поведение из архитектурного handoff.", "skills": ["development", "systematic-debugging"]}
+            ],
+            "checks": ["Изменения укладываются в write scope", "Нет тестового мусора, секретов и случайных generated files"],
+            "evidence": ["Scoped diff", "Связь diff с критериями"]
+          },
+          {
+            "code": "initial.validation",
+            "name": "Целевая проверка",
+            "description": "Подтвердить реализацию быстрыми проверками.",
+            "instructions": [
+              {"text": "Запустить только changed-file и package-scoped test, lint, type или compile checks; не запускать полный workspace build до общего gate.", "skills": ["development", "test-driven-development"]},
+              {"text": "Перечитать diff и проверить negative, permission, stale/retry и cleanup сценарии задачи.", "skills": ["systematic-debugging"]}
+            ],
+            "checks": ["RED стал GREEN", "Все targeted checks завершились терминально"],
+            "evidence": ["Команды и terminal results", "Итоговый diff audit"]
+          },
+          {
+            "code": "initial.delivery",
+            "name": "Commit, push и MR",
+            "description": "Поставить все изменения до завершения стадии.",
+            "instructions": [
+              {"text": "Добавить только файлы Task, исключить secrets/cache/runtime output, создать непустой commit при наличии изменений и push разрешённой ветки без force.", "skills": ["git-workflow", "relevanter-tech-operator"]},
+              {"text": "Создать или обновить существующий MR, перечитать exact remote SHA, base, status и подтвердить чистый workspace; неопределённый push сначала reconcile.", "skills": ["git-workflow", "relevanter-tech-operator"]}
+            ],
+            "checks": ["Все созданные изменения закоммичены и отправлены", "Remote SHA перечитан и workspace чист"],
+            "evidence": ["Commit SHA", "MR ref и exact head/base/status"]
+          },
+          {
+            "code": "initial.handoff",
+            "name": "Передача на ревью",
+            "description": "Зафиксировать проверяемый результат разработки.",
+            "instructions": [
+              {"text": "Оставить в Task итоговый комментарий: что изменено, файлы и контракты, проверки, commit/MR, известные ограничения и что должен проверить Reviewer.", "skills": ["relevanter-business-operator"]},
+              {"text": "После exact SHA readback и чистого workspace последним действием вызвать complete_assigned_stage с outcome passed.", "skills": ["relevanter-business-operator", "relevanter-tech-operator"]}
+            ],
+            "checks": ["Business comment опубликован", "Commit, push и clean workspace подтверждены до terminal action"],
+            "evidence": ["Business comment ref", "Подтверждение terminal action"]
+          }
+        ]
+      },
+      {
+        "key": "rework",
+        "name": "Доработка",
+        "phases": [
+          {
+            "code": "rework.context",
+            "name": "Изучение ReworkRequest",
+            "description": "Работать только по frozen findings текущего цикла.",
+            "instructions": [
+              {"text": "Прочитать Business Task целиком, все комментарии, историю и список вложений; изучить frozen ReworkRequest текущего cycle и его evidence refs.", "skills": ["relevanter-project-context"]},
+              {"text": "Проверить backend assignment: mode rework, точный cycle, attempt, lease, branch/MR и pinned revision; не принимать mode из prompt.", "skills": ["relevanter-project-context", "relevanter-tech-operator"]}
+            ],
+            "checks": ["ReworkRequest соответствует текущему cycle", "Каждый finding имеет reproduction/expected/actual/evidence"],
+            "evidence": ["ReworkRequest ref", "Assignment и lease readback"]
+          },
+          {
+            "code": "rework.reproduce",
+            "name": "Воспроизведение дефектов",
+            "description": "Подтвердить каждый finding до изменения кода.",
+            "instructions": [
+              {"text": "Воспроизвести findings по указанным шагам на pinned revision и записать фактический результат.", "skills": ["systematic-debugging"]},
+              {"text": "Если finding не воспроизводится или противоречит Task, не менять код: зафиксировать evidence и задать конкретный вопрос.", "skills": ["systematic-debugging", "relevanter-business-operator"]}
+            ],
+            "checks": ["Каждый finding воспроизведён либо доказан неприменимым", "Причина дефекта локализована"],
+            "evidence": ["Reproduction commands", "Root-cause summary"]
+          },
+          {
+            "code": "rework.regression",
+            "name": "Регрессионные тесты",
+            "description": "Закрепить каждый подтверждённый дефект.",
+            "instructions": [
+              {"text": "Добавить или уточнить минимальный regression test для каждого подтверждённого finding и получить RED.", "skills": ["test-driven-development"]},
+              {"text": "Не переписывать несвязанные тесты и не ослаблять существующие проверки ради GREEN.", "skills": ["test-driven-development"]}
+            ],
+            "checks": ["Каждый исправляемый finding имеет RED regression", "Тесты не маскируют дефект"],
+            "evidence": ["Finding-to-test mapping", "RED output summary"]
+          },
+          {
+            "code": "rework.fix",
+            "name": "Минимальное исправление",
+            "description": "Исправить root cause без переделки всего решения.",
+            "instructions": [
+              {"text": "Внести минимальные изменения, необходимые для frozen findings, сохраняя принятые контракты и архитектуру.", "skills": ["development", "systematic-debugging"]},
+              {"text": "Не добавлять новые продуктовые возможности и не рефакторить несвязанный код.", "skills": ["development"]}
+            ],
+            "checks": ["Исправлен root cause", "Diff ограничен findings текущего цикла"],
+            "evidence": ["Scoped fix diff", "Обоснование минимальности"]
+          },
+          {
+            "code": "rework.validation",
+            "name": "Повторная проверка",
+            "description": "Подтвердить исправления и отсутствие локальной регрессии.",
+            "instructions": [
+              {"text": "Запустить targeted regression и ближайшие package checks; полный build оставить общему gate.", "skills": ["test-driven-development", "development"]},
+              {"text": "Повторить reproduction каждого finding и проверить связанные negative/retry сценарии.", "skills": ["systematic-debugging"]}
+            ],
+            "checks": ["Все regression tests GREEN", "Все findings подтверждённо закрыты"],
+            "evidence": ["Terminal check results", "Finding closure matrix"]
+          },
+          {
+            "code": "rework.delivery",
+            "name": "Commit и push доработки",
+            "description": "Добавить доработку в ту же task branch и MR.",
+            "instructions": [
+              {"text": "Проверить diff, исключить secrets/cache, создать commit с привязкой к cycle и push в существующую task branch без force.", "skills": ["git-workflow", "relevanter-tech-operator"]},
+              {"text": "Перечитать exact remote SHA и MR, подтвердить чистый workspace; неопределённый push сначала reconcile, а не повторять вслепую.", "skills": ["git-workflow", "relevanter-tech-operator"]}
+            ],
+            "checks": ["Все исправления закоммичены и отправлены", "MR head и clean workspace подтверждены"],
+            "evidence": ["Rework commit SHA", "MR readback"]
+          },
+          {
+            "code": "rework.handoff",
+            "name": "Возврат на ревью",
+            "description": "Передать доказательства закрытия findings.",
+            "instructions": [
+              {"text": "Оставить в Task итоговый комментарий: cycle, каждый finding и исправление, regression evidence, commit/MR и что повторно проверить Reviewer.", "skills": ["relevanter-business-operator"]},
+              {"text": "После exact SHA readback и чистого workspace последним действием вызвать complete_assigned_stage с outcome passed; следующий этап выбирает backend и это всегда Review.", "skills": ["relevanter-business-operator", "relevanter-tech-operator"]}
+            ],
+            "checks": ["Каждый finding имеет disposition", "Task возвращается только в Review"],
+            "evidence": ["Business comment ref", "Подтверждение terminal action"]
+          }
+        ]
+      }
+    ]
+  }
+}

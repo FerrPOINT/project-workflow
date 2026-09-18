@@ -5,9 +5,29 @@ from __future__ import annotations
 import re
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from project_workflow import config
+
+
+class RuntimeAssignmentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    taskId: str = Field(min_length=1, max_length=200)
+    taskKey: str = Field(min_length=1, max_length=200)
+    title: str = Field(min_length=1, max_length=500)
+    role: str = Field(min_length=1, max_length=64)
+    namespace: str = Field(pattern=r"^hermes-[a-z][a-z0-9-]{0,62}$")
+    workflow: str = Field(min_length=1, max_length=200)
+    mode: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,31}$")
+    cycleNumber: int = Field(ge=0)
+    attempt: int = Field(ge=1)
+    runId: str = Field(min_length=1, max_length=200)
+
+
+class RuntimeCompletionRequest(RuntimeAssignmentRequest):
+    expectedPhaseCode: str = Field(min_length=1, max_length=200)
+    operationKey: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
 class OptionalIntMixin:
@@ -32,6 +52,7 @@ class _PhaseOrderItem(BaseModel):
 
 class PhaseCreate(BaseModel, OptionalIntMixin):
     workflow_id: int | str | None = Field(default=None, description="Parent workflow id or code")
+    mode_id: int | None = Field(default=None, description="Workflow mode; omitted means default")
     phase_order: int | None = Field(default=None, description="1-based insertion position")
     insert_after: int | None = Field(default=None, description="Insert after this 0-based index")
     name: str = Field(default="Новая фаза")
@@ -84,6 +105,18 @@ class WorkflowUpdate(BaseModel):
     name: str | None = Field(default=None)
     description: str | None = Field(default=None)
     code: str | None = Field(default=None)
+
+
+class WorkflowModeCreate(BaseModel):
+    key: str = Field(..., min_length=1, max_length=32)
+    name: str = Field(..., min_length=1, max_length=80)
+    mode_order: int | None = Field(default=None, ge=1)
+
+
+class WorkflowModeUpdate(BaseModel):
+    key: str | None = Field(default=None, min_length=1, max_length=32)
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    mode_order: int | None = Field(default=None, ge=1)
 
 
 class ProjectCreate(BaseModel, OptionalIntMixin):

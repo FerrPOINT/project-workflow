@@ -45,6 +45,9 @@ def ensure_smoke_phases(uow: SAUnitOfWork) -> None:
     smoke_wf = uow.workflows.get_by_name(config.SMOKE_WORKFLOW_NAME)
     if not smoke_wf:
         return
+    if smoke_wf.id is None:
+        return
+    mode = uow.workflow_modes.ensure_default(smoke_wf.id)
     seed_phases = schema.load_phases_from_seed(config.SMOKE_SEED_PATH)
     # Ensure agents referenced by selected_agent exist first.
     for phase in seed_phases:
@@ -53,10 +56,11 @@ def ensure_smoke_phases(uow: SAUnitOfWork) -> None:
             uow.agents.create({"name": agent_name, "description": f"Smoke seed agent for {phase.code}"})
     uow.commit()
 
-    existing_by_code = {p.code: p for p in uow.phases.list(workflow_id=smoke_wf.id)}
+    existing_by_code = {p.code: p for p in uow.phases.list(workflow_id=smoke_wf.id, mode_id=mode.id)}
     for order, phase in enumerate(seed_phases, start=1):
         data = {
             "workflow_id": smoke_wf.id,
+            "mode_id": mode.id,
             "code": phase.code,
             "name": phase.name,
             "description": phase.description,
@@ -111,6 +115,8 @@ def bootstrap_default_project(uow: SAUnitOfWork) -> None:
     code = "TASK"
     if uow.projects.get_by_code(code) is None:
         default_wf = uow.workflows.ensure_default_exists()
+        if default_wf.id is not None:
+            uow.workflow_modes.ensure_default(default_wf.id)
         uow.projects.create(
             {
                 "workflow_id": default_wf.id,

@@ -18,6 +18,7 @@ from project_workflow.domain.repositories import (
     SupervisorRunRepository,
     TaskRepository,
     UnitOfWork,
+    WorkflowModeRepository,
     WorkflowRepository,
 )
 from project_workflow.infrastructure.db.models import Base
@@ -30,6 +31,7 @@ from project_workflow.infrastructure.db.repositories import (
     SAProjectRepository,
     SASupervisorRunRepository,
     SATaskRepository,
+    SAWorkflowModeRepository,
     SAWorkflowRepository,
 )
 from project_workflow.infrastructure.db.session import get_session
@@ -63,6 +65,7 @@ class SAUnitOfWork(UnitOfWork):
 
     def _init_repositories(self) -> None:
         self._workflows: SAWorkflowRepository = SAWorkflowRepository(self._session)
+        self._workflow_modes: SAWorkflowModeRepository = SAWorkflowModeRepository(self._session)
         self._phases: SAPhaseRepository = SAPhaseRepository(self._session)
         self._instructions: SAInstructionRepository = SAInstructionRepository(self._session)
         self._checks: SACheckRepository = SACheckRepository(self._session)
@@ -95,6 +98,10 @@ class SAUnitOfWork(UnitOfWork):
     @property
     def workflows(self) -> WorkflowRepository:
         return self._workflows
+
+    @property
+    def workflow_modes(self) -> WorkflowModeRepository:
+        return self._workflow_modes
 
     @property
     def phases(self) -> PhaseRepository:
@@ -132,8 +139,24 @@ class SAUnitOfWork(UnitOfWork):
     def session(self) -> Session:
         return self._session
 
-    def add_task_history(self, task_id: int, phase_id: int | str, status: str) -> None:
-        self.tasks.add_history(task_id, int(phase_id), status)
+    def add_task_history(
+        self,
+        task_id: int,
+        phase_id: int | str,
+        status: str,
+        mode_id: int | None = None,
+        cycle_number: int | None = None,
+    ) -> None:
+        phase = self.get_phase(phase_id, mode_id=mode_id)
+        if phase is None:
+            raise NotFoundError(f"Phase {phase_id} not found")
+        self.tasks.add_history(
+            task_id,
+            int(phase["id"]),
+            status,
+            mode_id=mode_id,
+            cycle_number=cycle_number,
+        )
         self.commit()
 
     def create_supervisor_run(self, *args: Any, **kwargs: Any) -> int:
@@ -152,6 +175,9 @@ class SAUnitOfWork(UnitOfWork):
         if "workflow_id" not in data or data["workflow_id"] is None:
             default_wf = self.workflows.ensure_default_exists()
             data["workflow_id"] = default_wf.id if default_wf else None
+        if "mode_id" not in data or data["mode_id"] is None:
+            mode = self.workflow_modes.ensure_default(int(data["workflow_id"]))
+            data["mode_id"] = mode.id
         if "code" not in data:
             data["code"] = str(data.get("id")) if data.get("id") is not None else str(data.get("phase_order", "0"))
         result = PhaseServiceApp(self).create_phase(data)
@@ -169,10 +195,14 @@ class SAUnitOfWork(UnitOfWork):
             raise RuntimeError("create_instruction requires phase_id")
         return self.instructions.create(int(phase_id), data)
 
-    def get_phase_by_code(self, code: str) -> Any | None:
-        return row_to_dict(self.phases.get_by_code(code))
+    def get_phase_by_code(
+        self, code: str, workflow_id: int | None = None, mode_id: int | None = None
+    ) -> Any | None:
+        return row_to_dict(self.phases.get_by_code(code, workflow_id=workflow_id, mode_id=mode_id))
 
-    def get_phase(self, token: Any) -> Any | None:
+    def get_phase(
+        self, token: Any, workflow_id: int | None = None, mode_id: int | None = None
+    ) -> Any | None:
         """Resolve a phase by id or code."""
         numeric_id: int | None = None
         if isinstance(token, int):
@@ -183,7 +213,7 @@ class SAUnitOfWork(UnitOfWork):
             row = self.phases.get_by_id(numeric_id)
             if row is not None:
                 return row_to_dict(row)
-        row = self.phases.get_by_code(str(token))
+        row = self.phases.get_by_code(str(token), workflow_id=workflow_id, mode_id=mode_id)
         if row is None:
             try:
                 row = self.phases.get_by_id(int(token))
@@ -233,11 +263,14 @@ class SAUnitOfWork(UnitOfWork):
         result = TaskService(self).create_task(data)
         return result["id"]
 
-    def get_phases(self, workflow_id: int | None = None) -> list[Any]:
+    def get_phases(self, workflow_id: int | None = None, mode_id: int | None = None) -> list[Any]:
         if workflow_id is None:
             default_wf = self.workflows.ensure_default_exists()
             workflow_id = default_wf.id if default_wf else None
-        return rows_to_dicts(self.phases.list(workflow_id=workflow_id))
+        if mode_id is None and workflow_id is not None:
+            mode = self.workflow_modes.ensure_default(workflow_id)
+            mode_id = mode.id
+        return rows_to_dicts(self.phases.list(workflow_id=workflow_id, mode_id=mode_id))
 
     def get_all_phases(self) -> list[Any]:
         """Return phases across every workflow (used by dashboard aggregation)."""
@@ -255,8 +288,11 @@ class SAUnitOfWork(UnitOfWork):
     def get_workflows(self) -> list[Any]:
         return rows_to_dicts(self.workflows.list())
 
-    def list_phases(self, workflow_id: int | None = None) -> list[Any]:
-        return self.get_phases(workflow_id)
+    def get_workflow_modes(self, workflow_id: int) -> list[Any]:
+        return rows_to_dicts(self.workflow_modes.list(workflow_id))
+
+    def list_phases(self, workflow_id: int | None = None, mode_id: int | None = None) -> list[Any]:
+        return self.get_phases(workflow_id, mode_id)
 
     def list_projects(self) -> list[Any]:
         return self.get_projects()

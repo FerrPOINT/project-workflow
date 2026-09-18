@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -36,6 +37,24 @@ class _RequestLoggingMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class _ManagedConfigurationMiddleware(BaseHTTPMiddleware):
+    """Keep versioned Hermes namespace configuration immutable on managed DEV."""
+
+    async def dispatch(self, request: Request, call_next):
+        managed = os.environ.get("PROJECT_WORKFLOW_MANAGED_CONFIGURATION") == "1"
+        mutates_configuration = (
+            request.url.path.startswith("/api/")
+            and not request.url.path.startswith("/api/runtime/")
+            and request.method in {"POST", "PUT", "PATCH", "DELETE"}
+        )
+        if managed and mutates_configuration:
+            return JSONResponse(
+                {"ok": False, "error": "Managed workflow configuration is read-only"},
+                status_code=403,
+            )
+        return await call_next(request)
+
+
 async def _health() -> JSONResponse:
     """Liveness/readiness probe with DB connectivity check."""
     from ...infrastructure.db import session as _session
@@ -56,6 +75,42 @@ async def _health() -> JSONResponse:
         status = 503
     health["db_latency_ms"] = round((time.perf_counter() - start) * 1000, 2)
     return JSONResponse(health, status_code=status)
+
+
+async def _live() -> JSONResponse:
+    return JSONResponse({"ok": True, "version": __version__})
+
+
+async def _ready() -> JSONResponse:
+    database = await _health()
+    if database.status_code != 200:
+        return database
+    if os.environ.get("PROJECT_WORKFLOW_RUNTIME_REQUIRED") == "1":
+        role = os.environ.get("PROJECT_WORKFLOW_ROLE", "").strip()
+        namespace = os.environ.get("PROJECT_WORKFLOW_NAMESPACE", "").strip()
+        token = os.environ.get("PROJECT_WORKFLOW_RUNTIME_TOKEN", "").strip()
+        managed = os.environ.get("PROJECT_WORKFLOW_MANAGED_CONFIGURATION") == "1"
+        if not role or not namespace or not token or not managed:
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "version": __version__,
+                    "database": "ok",
+                    "runtime_config": "error",
+                    "namespace": namespace,
+                    "managed_configuration": managed,
+                },
+                status_code=503,
+            )
+    return JSONResponse(
+        {
+            "ok": True,
+            "version": __version__,
+            "database": "ok",
+            "runtime_config": "ok",
+            "managed_configuration": os.environ.get("PROJECT_WORKFLOW_MANAGED_CONFIGURATION") == "1",
+        }
+    )
 
 
 @asynccontextmanager
@@ -82,8 +137,11 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     app = FastAPI(title="project-workflow UI", version=__version__, lifespan=_lifespan)
     app.add_middleware(_RequestLoggingMiddleware)
+    app.add_middleware(_ManagedConfigurationMiddleware)
 
-    app.get("/health")(_health)
+    app.get("/live")(_live)
+    app.get("/ready")(_ready)
+    app.get("/health")(_ready)
 
     # Pages
     app.get("/", response_class=HTMLResponse)(pages.index)
@@ -100,6 +158,8 @@ def create_app() -> FastAPI:
 
     # API
     app.get("/api/settings", response_model=None)(api.api_settings_get)
+    app.post("/api/runtime/assignment/current", response_model=None)(api.api_runtime_current)
+    app.post("/api/runtime/assignment/complete", response_model=None)(api.api_runtime_complete)
     app.get("/api/skills", response_model=None)(api.api_skills)
     app.get("/api/phases", response_model=None)(api.api_phases)
     app.get("/api/phases/{phase_id}", response_model=None)(api.api_phase_detail)
@@ -111,6 +171,10 @@ def create_app() -> FastAPI:
     app.post("/api/workflows", response_model=None)(api.api_workflow_create)
     app.put("/api/workflows/{workflow_id}", response_model=None)(api.api_workflow_update)
     app.delete("/api/workflows/{workflow_id}", response_model=None)(api.api_workflow_delete)
+    app.get("/api/workflows/{workflow_id}/modes", response_model=None)(api.api_workflow_modes)
+    app.post("/api/workflows/{workflow_id}/modes", response_model=None)(api.api_workflow_mode_create)
+    app.put("/api/workflow-modes/{mode_id}", response_model=None)(api.api_workflow_mode_update)
+    app.delete("/api/workflow-modes/{mode_id}", response_model=None)(api.api_workflow_mode_delete)
     app.get("/api/projects", response_model=None)(api.api_projects)
     app.post("/api/projects", response_model=None)(api.api_project_create)
     app.put("/api/projects/{project_id}", response_model=None)(api.api_project_update)

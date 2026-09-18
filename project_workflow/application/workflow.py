@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from project_workflow.domain import WorkflowMode
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.repositories import UnitOfWork
 
@@ -19,9 +20,29 @@ class WorkflowService:
     def create_workflow(self, data: dict[str, Any]) -> dict[str, Any]:
         payload = dict(data)
         wid = self._uow.workflows.create(payload)
+        default_mode_key = str(payload.get("_default_mode_key") or "default").strip().lower()
+        default_mode_name = str(payload.get("_default_mode_name") or default_mode_key).strip()
+        default_mode: WorkflowMode | None
+        if default_mode_key == "default":
+            default_mode = self._uow.workflow_modes.ensure_default(wid)
+        else:
+            mode_id = self._uow.workflow_modes.create(
+                {
+                    "workflow_id": wid,
+                    "key": default_mode_key,
+                    "name": default_mode_name,
+                    "mode_order": 1,
+                }
+            )
+            default_mode = self._uow.workflow_modes.get_by_id(mode_id)
+            if default_mode is None:
+                raise RuntimeError("Default workflow mode creation failed")
+        if default_mode.id is None:
+            raise RuntimeError("Default workflow mode has no id")
         if not payload.get("_skip_default_phase"):
             default_phase = {
                 "workflow_id": wid,
+                "mode_id": default_mode.id,
                 "code": f"wf-{wid}-default",
                 "name": self.DEFAULT_PHASE_NAME,
                 "description": "",
@@ -83,5 +104,8 @@ class WorkflowService:
 
     def ensure_default_exists(self) -> dict[str, Any]:
         wf = self._uow.workflows.ensure_default_exists()
+        if wf.id is not None:
+            self._uow.workflow_modes.ensure_default(wf.id)
+            self._uow.commit()
         result = wf.to_dict()
         return result

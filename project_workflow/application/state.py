@@ -20,6 +20,7 @@ from . import (
     PhaseServiceApp,
     ProjectService,
     TaskService,
+    WorkflowModeService,
     WorkflowService,
 )
 
@@ -37,7 +38,7 @@ class _AppState:
     def _database_url_normalized(self) -> str:
         target = self._database_url
         if target.startswith("sqlite:///"):
-            target = str(Path(target[10:]).resolve())
+            target = Path(target[10:]).resolve().as_posix()
             target = f"sqlite:///{target}"
         return target
 
@@ -71,6 +72,9 @@ class _AppState:
 
     def workflow_service(self) -> WorkflowService:
         return WorkflowService(self.get_uow())
+
+    def workflow_mode_service(self) -> WorkflowModeService:
+        return WorkflowModeService(self.get_uow())
 
     def phase_service(self) -> PhaseServiceApp:
         return PhaseServiceApp(self.get_uow())

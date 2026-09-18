@@ -17,5 +17,14 @@ from .phase import PhaseServiceApp
 from .project import ProjectService
 from .task import TaskService
 from .workflow import WorkflowService
+from .workflow_mode import WorkflowModeService
 
-__all__ = ["AgentService", "InstructionService", "PhaseServiceApp", "ProjectService", "TaskService", "WorkflowService"]
+__all__ = [
+    "AgentService",
+    "InstructionService",
+    "PhaseServiceApp",
+    "ProjectService",
+    "TaskService",
+    "WorkflowService",
+    "WorkflowModeService",
+]

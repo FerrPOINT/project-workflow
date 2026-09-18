@@ -8,6 +8,7 @@ Create Date: 2026-07-09 00:00:00.000000
 
 from collections.abc import Sequence
 
+import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -20,7 +21,8 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     """Drop unused wizard_memories table."""
     op.execute("SET search_path TO project_workflow")
-    op.drop_table("wizard_memories")
+    if "wizard_memories" in sa.inspect(op.get_bind()).get_table_names(schema="project_workflow"):
+        op.drop_table("wizard_memories")
 
 
 def downgrade() -> None:

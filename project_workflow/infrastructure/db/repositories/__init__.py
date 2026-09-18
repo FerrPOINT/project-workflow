@@ -20,6 +20,7 @@ from project_workflow.infrastructure.db.repositories.project import SAProjectRep
 from project_workflow.infrastructure.db.repositories.supervisor_run import SASupervisorRunRepository
 from project_workflow.infrastructure.db.repositories.task import SATaskRepository
 from project_workflow.infrastructure.db.repositories.workflow import SAWorkflowRepository
+from project_workflow.infrastructure.db.repositories.workflow_mode import SAWorkflowModeRepository
 
 __all__ = [
     "SAAgentRepository",
@@ -31,6 +32,7 @@ __all__ = [
     "SASupervisorRunRepository",
     "SATaskRepository",
     "SAWorkflowRepository",
+    "SAWorkflowModeRepository",
     "_iso",
     "_row_to_agent",
     "_row_to_phase",

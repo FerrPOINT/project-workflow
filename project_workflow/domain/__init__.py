@@ -34,6 +34,9 @@ class Phase:
 
     id: int | None = None
     workflow_id: int | None = None
+    mode_id: int | None = None
+    mode_key: str = "default"
+    mode_name: str = "Default"
     code: str = ""
     name: str = ""
     description: str = ""
@@ -54,6 +57,9 @@ class Phase:
         return {
             "id": self.id,
             "workflow_id": self.workflow_id,
+            "mode_id": self.mode_id,
+            "mode_key": self.mode_key,
+            "mode_name": self.mode_name,
             "code": self.code,
             "name": self.name,
             "description": self.description,
@@ -107,6 +113,26 @@ class Workflow:
 
 
 @dataclass
+class WorkflowMode:
+    """Named phase sequence within one workflow."""
+
+    id: int | None = None
+    workflow_id: int = 0
+    key: str = "default"
+    name: str = "Default"
+    mode_order: int = 1
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "workflow_id": self.workflow_id,
+            "key": self.key,
+            "name": self.name,
+            "mode_order": self.mode_order,
+        }
+
+
+@dataclass
 class Project:
     """Domain project with task key prefixes."""
 
@@ -139,6 +165,9 @@ class Task:
     description: str = ""
     current_phase: str = "-1"
     current_phase_name: str = ""
+    current_mode_id: int | None = None
+    current_mode_key: str = "default"
+    cycle_number: int = 0
     status: str = "active"
     created_at: str | None = None
     updated_at: str | None = None
@@ -152,6 +181,9 @@ class Task:
             "description": self.description,
             "current_phase": self.current_phase,
             "current_phase_name": self.current_phase_name,
+            "current_mode_id": self.current_mode_id,
+            "current_mode_key": self.current_mode_key,
+            "cycle_number": self.cycle_number,
             "status": self.status,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
@@ -165,6 +197,9 @@ class SupervisorRun:
     id: int | None = None
     task_id: int = 0
     phase_id: int = 0
+    mode_id: int = 0
+    cycle_number: int = 0
+    attempt_number: int = 1
     verdict: str = ""
     report: str = ""
     covered: list[str] = field(default_factory=list)
@@ -181,6 +216,9 @@ class SupervisorRun:
             "id": self.id,
             "task_id": self.task_id,
             "phase_id": self.phase_id,
+            "mode_id": self.mode_id,
+            "cycle_number": self.cycle_number,
+            "attempt_number": self.attempt_number,
             "verdict": self.verdict,
             "report": self.report,
             "covered": self.covered,

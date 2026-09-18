@@ -25,6 +25,9 @@ def _row_to_phase(row: m.Phase) -> Phase:
     return Phase(
         id=row.id,
         workflow_id=row.workflow_id,
+        mode_id=row.mode_id,
+        mode_key=row.mode.key if row.mode else "default",
+        mode_name=row.mode.name if row.mode else "Default",
         code=row.code,
         name=row.name,
         description=row.description or "",
@@ -82,6 +85,14 @@ def _row_to_task(row: m.Task) -> Task:
     except (AttributeError, TypeError) as exc:
         logger.warning("Failed to resolve task phase name: %s", exc)
         phase_name = current_phase
+    current_mode_id = getattr(row, "current_mode_id", None)
+    try:
+        current_mode_key = next(
+            (mode.key for mode in row.project.workflow.modes if mode.id == current_mode_id),
+            "default",
+        )
+    except (AttributeError, TypeError):
+        current_mode_key = "default"
     return Task(
         id=getattr(row, "id", None),
         project_id=row.project_id,
@@ -90,6 +101,9 @@ def _row_to_task(row: m.Task) -> Task:
         description=row.description or "",
         current_phase=current_phase,
         current_phase_name=phase_name or "",
+        current_mode_id=current_mode_id,
+        current_mode_key=current_mode_key,
+        cycle_number=getattr(row, "cycle_number", 0) or 0,
         status=row.status or "active",
         created_at=_iso(row.created_at),
         updated_at=_iso(row.updated_at),
@@ -129,6 +143,9 @@ def _row_to_supervisor_run(row: m.SupervisorRun) -> SupervisorRun:
         id=row.id,
         task_id=row.task_id,
         phase_id=row.phase_id,
+        mode_id=row.mode_id,
+        cycle_number=row.cycle_number or 0,
+        attempt_number=row.attempt_number or 1,
         verdict=row.verdict,
         report=row.report or "",
         covered=_parse(row.covered),

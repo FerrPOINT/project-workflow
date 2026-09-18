@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "namespace": "hermes-tester",
+  "role": "tester",
+  "skillsHub": {
+    "commit": "50b92c54e0e04c510c9669dfb52dab0d4632d028",
+    "hashes": {
+      "systematic-debugging": "8e00ee37485d02dd22b8ff30ef71f94ee17c8d93f92cc2aabd31a428b2b3124d",
+      "testing-workflow": "91556d68a3d4da1c185b9c1db707e84bbe934d2ac7ea533ef76a0d2d456800f1"
+    }
+  },
+  "workflow": {
+    "name": "Hermes Tester",
+    "description": "Системная проверка критериев с evidence и управляемым возвратом в Доработку.",
+    "modes": [{
+      "key": "testing",
+      "name": "Тестирование",
+      "phases": [
+        {
+          "code": "testing.context",
+          "name": "Изучение задачи",
+          "description": "Собрать требования и exact candidate.",
+          "instructions": [
+            {"text": "Прочитать Business Task целиком, все комментарии, историю и список вложений; изучить требования, архитектуру, Developer/Reviewer handoff и доступные вложения.", "skills": ["relevanter-project-context"]},
+            {"text": "Подтвердить exact candidate SHA/environment и не смешивать результаты другого build или среды.", "skills": ["testing-workflow", "relevanter-project-context"]}
+          ],
+          "checks": ["Все критерии и review disposition прочитаны", "Candidate identity подтверждена"],
+          "evidence": ["Business refs", "Exact SHA/environment readback"]
+        },
+        {
+          "code": "testing.plan",
+          "name": "План проверки",
+          "description": "Покрыть риск и критерии без бессмысленного полного прогона.",
+          "instructions": [
+            {"text": "Составить матрицу acceptance criteria к positive, negative, permission, tenant, retry/restart и regression сценариям.", "skills": ["testing-workflow"]},
+            {"text": "Определить автоматизируемые и ручные проверки, предусловия и ожидаемый наблюдаемый результат.", "skills": ["testing-workflow"]}
+          ],
+          "checks": ["Каждый критерий покрыт", "Приоритет проверок соответствует риску"],
+          "evidence": ["Test matrix", "Список предусловий"]
+        },
+        {
+          "code": "testing.preflight",
+          "name": "Preflight среды",
+          "description": "Проверить готовность среды без её самовольного изменения.",
+          "instructions": [
+            {"text": "Проверить доступ, health, model/config version, тестовые данные и необходимые identities read-only командами.", "skills": ["testing-workflow", "deployed-acceptance"]},
+            {"text": "При несовпадении среды с candidate остановиться и зафиксировать инфраструктурный blocker, а не продуктовый defect.", "skills": ["systematic-debugging"]}
+          ],
+          "checks": ["Среда соответствует candidate", "Предусловия воспроизводимы"],
+          "evidence": ["Health/config readback", "Test data refs"]
+        },
+        {
+          "code": "testing.functional",
+          "name": "Функциональные сценарии",
+          "description": "Проверить основной пользовательский поток.",
+          "instructions": [
+            {"text": "Выполнить acceptance scenarios через реальные публичные границы и фиксировать фактический результат каждого шага.", "skills": ["testing-workflow", "deployed-acceptance"]},
+            {"text": "Для UI использовать штатную authenticated browser-проверку и стабильные selectors, если она входит в scope.", "skills": ["testing-workflow", "deployed-acceptance"]}
+          ],
+          "checks": ["Основной путь завершён", "Результаты соответствуют критериям, а не ожиданиям агента"],
+          "evidence": ["Scenario results", "API/UI evidence refs"]
+        },
+        {
+          "code": "testing.resilience",
+          "name": "Негативные и regression сценарии",
+          "description": "Проверить ошибки, повтор и изоляцию.",
+          "instructions": [
+            {"text": "Проверить validation, permission, tenant isolation, duplicate delivery, restart, stale result и partial failure сценарии из плана.", "skills": ["testing-workflow", "systematic-debugging"]},
+            {"text": "Перепроверить связанные прежние дефекты и отсутствие утечки технического мусора пользователю.", "skills": ["testing-workflow"]}
+          ],
+          "checks": ["Негативные сценарии безопасно отклоняются", "Regression scope подтверждён"],
+          "evidence": ["Negative scenario results", "Regression results"]
+        },
+        {
+          "code": "testing.findings",
+          "name": "Дефекты и triage",
+          "description": "Сформировать воспроизводимые findings.",
+          "instructions": [
+            {"text": "Для каждого дефекта записать summary, reproduction, expected, actual и immutable evidence refs; отделить product defect от environment blocker.", "skills": ["systematic-debugging", "testing-workflow"]},
+            {"text": "Если данных недостаточно, задать один конкретный вопрос и не завершать стадию.", "skills": ["relevanter-business-operator"]}
+          ],
+          "checks": ["Каждый defect воспроизводим", "Дубли объединены, ложные срабатывания исключены"],
+          "evidence": ["Final findings list", "Triage disposition"]
+        },
+        {
+          "code": "testing.outcome",
+          "name": "Результат тестирования",
+          "description": "Опубликовать evidence и разрешённый outcome.",
+          "instructions": [
+            {"text": "Оставить в Task итоговый комментарий: candidate, покрытие, результаты сценариев, defects/blockers, evidence и вывод о готовности.", "skills": ["relevanter-business-operator"]},
+            {"text": "Если исправления не требуются, последним действием вызвать complete_assigned_stage с passed; если требуются, вызвать needs_rework с полным findings JSON. Stage, agent и mode не выбирать.", "skills": ["relevanter-business-operator", "testing-workflow"]}
+          ],
+          "checks": ["Комментарий соответствует evidence", "Outcome не скрывает defects или blockers"],
+          "evidence": ["Business comment ref", "Terminal outcome readback"]
+        }
+      ]
+    }]
+  }
+}

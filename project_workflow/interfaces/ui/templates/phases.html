@@ -15,6 +15,9 @@
 .workflow-meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--text-dim)}
 .workflow-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:rgba(148,163,184,.12);color:var(--text-dim)}
 .timeline-panel{display:flex;flex-direction:column;gap:16px}
+.mode-tabs{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.mode-tab{display:inline-flex;align-items:center;padding:7px 12px;border:1px solid var(--border);border-radius:999px;color:var(--text-dim);text-decoration:none;background:var(--surface)}
+.mode-tab.active{border-color:var(--accent);color:var(--text);box-shadow:0 0 0 1px rgba(88,166,255,.25)}
 .empty-note{color:var(--text-dim);font-size:13px;line-height:1.6}
 @media (max-width: 980px){.phases-layout{grid-template-columns:1fr}.workflow-nav{max-height:none}}
 {% endblock %}
@@ -76,6 +79,20 @@
       {% endif %}
     </div>
 
+    {% if selected_workflow %}
+    <div class="card mode-tabs" data-testid="workflow-mode-tabs">
+      {% for mode in modes %}
+      <a class="mode-tab {% if selected_mode_id == mode.id %}active{% endif %}"
+         href="/phases?workflow_id={{ selected_workflow.id }}&mode_id={{ mode.id }}"
+         data-mode-key="{{ mode.key }}">{{ mode.name }}</a>
+      {% endfor %}
+      <button type="button" class="btn btn-secondary" onclick="createMode()">+ Режим</button>
+      {% if selected_mode and selected_mode.key != 'default' %}
+      <button type="button" class="btn btn-secondary" onclick="deleteCurrentMode()">Удалить режим</button>
+      {% endif %}
+    </div>
+    {% endif %}
+
     <div class="timeline" id="phasesTimeline">
       {% for block in phase_blocks %}
         {% if block.kind == 'parallel' %}
@@ -110,6 +127,39 @@ function getPhaseTimelineItems() {
   return Array.from(document.querySelectorAll('#phasesTimeline .timeline-item'));
 }
 
+const selectedWorkflowId = {{ selected_workflow_id if selected_workflow_id else 'null' }};
+const selectedModeId = {{ selected_mode_id if selected_mode_id else 'null' }};
+
+async function createMode() {
+  if (!selectedWorkflowId) return;
+  const key = prompt('Ключ режима (например, rework):');
+  if (!key) return;
+  const name = prompt('Название режима:', key);
+  if (!name) return;
+  const resp = await fetch('/api/workflows/' + selectedWorkflowId + '/modes', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({key, name}),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok || !data.ok) {
+    showToast(data.error || 'Не удалось создать режим', 'error');
+    return;
+  }
+  window.location.href = '/phases?workflow_id=' + selectedWorkflowId + '&mode_id=' + data.mode.id;
+}
+
+async function deleteCurrentMode() {
+  if (!selectedModeId || !confirm('Удалить пустой режим?')) return;
+  const resp = await fetch('/api/workflow-modes/' + selectedModeId, {method: 'DELETE'});
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok || !data.ok) {
+    showToast(data.error || 'Не удалось удалить режим', 'error');
+    return;
+  }
+  window.location.href = '/phases?workflow_id=' + selectedWorkflowId;
+}
+
 async function addPhaseAfter(button) {
   const item = button.closest('.timeline-item');
   if (!item) return;
@@ -135,6 +185,7 @@ async function addPhaseAfter(button) {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
         workflow_id: parseInt(workflowId, 10),
+        mode_id: selectedModeId,
         phase_order: insertOrder,
       }),
     });

@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "namespace": "hermes-project-manager",
+  "role": "project_manager",
+  "skillsHub": {
+    "commit": "50b92c54e0e04c510c9669dfb52dab0d4632d028",
+    "hashes": {
+      "domain-modeling": "c4c376cfb67e9eadd2e456edc9126a13dc30f20245bb7ea56b7d8be532f8cee5"
+    }
+  },
+  "workflow": {
+    "name": "Hermes Project Manager",
+    "description": "Подготовка полного Драфта и guarded публикация только в Бэклог.",
+    "modes": [{
+      "key": "draft",
+      "name": "Подготовка Драфта",
+      "phases": [
+        {
+          "code": "draft.context",
+          "name": "Изучение запроса",
+          "description": "Собрать полный доступный контекст Драфта.",
+          "instructions": [
+            {"text": "Прочитать Business Task целиком, все комментарии, историю и список вложений; изучить доступные вложения и не придумывать отсутствующие факты.", "skills": ["relevanter-project-context"]},
+            {"text": "Проверить название: ровно три-четыре смысловых слова и не более 80 символов; при необходимости обновить его через guarded draft-команду.", "skills": ["relevanter-business-operator"]}
+          ],
+          "checks": ["Все доступные комментарии и вложения просмотрены", "Название соответствует контракту"],
+          "evidence": ["Список прочитанных refs", "Текущая Task revision"]
+        },
+        {
+          "code": "draft.discovery",
+          "name": "Проверка постановки",
+          "description": "Найти только существенные пробелы.",
+          "instructions": [
+            {"text": "Проверить результат, пользователя, сценарий, границы, критерии, ограничения и зависимости.", "skills": ["domain-modeling"]},
+            {"text": "Если есть существенный пробел, задать один самый важный вопрос; не спрашивать очевидное и уже указанное.", "skills": ["relevanter-business-operator"]}
+          ],
+          "checks": ["За один turn задан не более чем один вопрос", "Приоритет, сроки и оценка не выдуманы"],
+          "evidence": ["Список закрытых и открытых решений", "Business message ref вопроса"]
+        },
+        {
+          "code": "draft.structure",
+          "name": "Структура Task",
+          "description": "Сохранить согласованные поля и связи.",
+          "instructions": [
+            {"text": "Обновить только подтверждённые название, описание, приоритет, оценку, даты, component, milestone, labels и assignee.", "skills": ["relevanter-business-operator"]},
+            {"text": "Проверить same-project parent, зависимости, связи и подзадачи; применять expectedModifiedOn и останавливаться при конфликте.", "skills": ["relevanter-business-operator", "relevanter-project-context"]}
+          ],
+          "checks": ["Patch не меняет project, kind, stage или status", "Все ссылки принадлежат тому же проекту"],
+          "evidence": ["Readback сохранённых полей", "Новая Task revision"]
+        },
+        {
+          "code": "draft.acceptance",
+          "name": "Проверяемый результат",
+          "description": "Довести Драфт до самодостаточной постановки.",
+          "instructions": [
+            {"text": "Сформулировать цель, границы, пользовательский сценарий и критерии приёмки читаемым Markdown.", "skills": ["domain-modeling"]},
+            {"text": "Перечитать полную структуру Task и проверить отсутствие противоречий и незакрытых существенных пробелов.", "skills": ["relevanter-project-context"]}
+          ],
+          "checks": ["Драфт можно передать Analyst без догадок", "Описание и критерии читаемы пользователю"],
+          "evidence": ["Полный readback Драфта", "Список критериев приёмки"]
+        },
+        {
+          "code": "draft.confirmation",
+          "name": "Подтверждение пользователя",
+          "description": "Получить явный human gate.",
+          "instructions": [
+            {"text": "Показать итоговый Драфт с короткими разделами и предложить единственное действие «В Бэклог».", "skills": ["relevanter-business-operator"]},
+            {"text": "Без явного подтверждения не публиковать; при изменениях вернуться к структуре Task и снова перечитать revision.", "skills": ["relevanter-business-operator"]}
+          ],
+          "checks": ["Есть явное подтверждение текущей версии", "Подтверждение относится к последней Task revision"],
+          "evidence": ["Business message ref подтверждения", "Подтверждённая Task revision"]
+        },
+        {
+          "code": "draft.publish",
+          "name": "Публикация в Бэклог",
+          "description": "Атомарно завершить PM workflow без запуска Analyst.",
+          "instructions": [
+            {"text": "Оставить итоговый комментарий в Task: согласованная цель, границы, критерии, ограничения, зависимости и факт подтверждения.", "skills": ["relevanter-business-operator"]},
+            {"text": "Последним действием вызвать publish_task_draft с exact sessionId, свежим expectedModifiedOn, корректным названием и Markdown-описанием; убедиться, что Task стала Бэклог и Analyst не запущен.", "skills": ["relevanter-business-operator"]}
+          ],
+          "checks": ["Переход выполнен только Драфт → Бэклог", "Analyst не запущен автоматически"],
+          "evidence": ["Business comment ref", "Readback Бэклог и neutral status"]
+        }
+      ]
+    }]
+  }
+}

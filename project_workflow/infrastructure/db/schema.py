@@ -38,7 +38,7 @@ def _normalized_url(uow: UnitOfWork) -> str:
         if url.startswith("sqlite:///"):
             from pathlib import Path as _Path
 
-            target = str(_Path(url[10:]).resolve())
+            target = _Path(url[10:]).resolve().as_posix()
             url = f"sqlite:///{target}"
         return url
     return ""
@@ -50,7 +50,7 @@ def mark_catalog_not_ensured(url: str | None = None) -> None:
         if url.startswith("sqlite:///"):
             from pathlib import Path as _Path
 
-            target = str(_Path(url[10:]).resolve())
+            target = _Path(url[10:]).resolve().as_posix()
             url = f"sqlite:///{target}"
         _CATALOG_ENSURED_URLS.discard(url)
     else:
@@ -130,11 +130,14 @@ def _build_phase_from_db(
 def load_phases_from_db(
     uow: UnitOfWork,
     workflow_id: int | str | None = None,
+    mode_id: int | str | None = None,
 ) -> list[Phase]:
     """Load all wizard phases from a UnitOfWork instance."""
     if isinstance(workflow_id, str):
         workflow_id = int(workflow_id) if workflow_id.isdigit() else None
-    rows = uow.phases.list(workflow_id)
+    if isinstance(mode_id, str):
+        mode_id = int(mode_id) if mode_id.isdigit() else None
+    rows = uow.phases.list(workflow_id, mode_id)
     phases = [_build_phase_from_db(r, uow) for r in rows]
     if not phases:
         # Fallback intake phase so the wizard always has a current phase.
@@ -165,11 +168,14 @@ def get_phase_from_db(
     uow: UnitOfWork,
     phase_code: str,
     workflow_id: int | str | None = None,
+    mode_id: int | str | None = None,
 ) -> Phase | None:
     """Find a single phase by code using a UnitOfWork."""
     if isinstance(workflow_id, str):
         workflow_id = int(workflow_id) if workflow_id.isdigit() else None
-    for r in uow.phases.list(workflow_id):
+    if isinstance(mode_id, str):
+        mode_id = int(mode_id) if mode_id.isdigit() else None
+    for r in uow.phases.list(workflow_id, mode_id):
         if r.code == phase_code:
             return _build_phase_from_db(r, uow)
     return None
@@ -338,8 +344,11 @@ def ensure_phase_catalog(
         default_workflow = uow.workflows.ensure_default_exists()
         workflow_id = default_workflow.id
         assert workflow_id is not None
+        mode = uow.workflow_modes.ensure_default(workflow_id)
 
-        existing_by_code: dict[str, Any] = {p.code: p for p in uow.phases.list(workflow_id)}
+        existing_by_code: dict[str, Any] = {
+            p.code: p for p in uow.phases.list(workflow_id, mode_id=mode.id)
+        }
 
         for order, phase in enumerate(seed_phases, start=1):
             existing = existing_by_code.get(phase.code)
@@ -355,6 +364,7 @@ def ensure_phase_catalog(
                         break
             data = {
                 "workflow_id": workflow_id,
+                "mode_id": mode.id,
                 "code": phase.code,
                 "name": phase.name,
                 "description": phase.description,

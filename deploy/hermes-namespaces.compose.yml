@@ -1,0 +1,73 @@
+x-project-workflow: &project-workflow
+  image: ${PROJECT_WORKFLOW_IMAGE:?exact SHA-tagged image is required}
+  command: [python, -m, project_workflow.interfaces.ui, --host, 0.0.0.0, --port, "8080"]
+  user: "10000:10000"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  restart: unless-stopped
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,size=128m
+  networks: [team-demo]
+  healthcheck:
+    test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/ready', timeout=3)"]
+    interval: 10s
+    timeout: 5s
+    retries: 12
+    start_period: 15s
+
+services:
+  project-workflow-project-manager:
+    <<: *project-workflow
+    env_file: ["${HERMES_OPERATOR_ROOT:?required}/project-workflow-project_manager.env"]
+    environment:
+      PROJECT_WORKFLOW_MANAGED_CONFIGURATION: "1"
+      DATABASE_URL: ${PROJECT_WORKFLOW_PROJECT_MANAGER_DATABASE_URL:?required}
+      PROJECT_WORKFLOW_RUNTIME_REQUIRED: "1"
+  project-workflow-analyst:
+    <<: *project-workflow
+    env_file: ["${HERMES_OPERATOR_ROOT:?required}/project-workflow-analyst.env"]
+    environment:
+      PROJECT_WORKFLOW_MANAGED_CONFIGURATION: "1"
+      DATABASE_URL: ${PROJECT_WORKFLOW_ANALYST_DATABASE_URL:?required}
+      PROJECT_WORKFLOW_RUNTIME_REQUIRED: "1"
+  project-workflow-architect:
+    <<: *project-workflow
+    env_file: ["${HERMES_OPERATOR_ROOT:?required}/project-workflow-architect.env"]
+    environment:
+      PROJECT_WORKFLOW_MANAGED_CONFIGURATION: "1"
+      DATABASE_URL: ${PROJECT_WORKFLOW_ARCHITECT_DATABASE_URL:?required}
+      PROJECT_WORKFLOW_RUNTIME_REQUIRED: "1"
+  project-workflow-developer:
+    <<: *project-workflow
+    env_file: ["${HERMES_OPERATOR_ROOT:?required}/project-workflow-developer.env"]
+    environment:
+      PROJECT_WORKFLOW_MANAGED_CONFIGURATION: "1"
+      DATABASE_URL: ${PROJECT_WORKFLOW_DEVELOPER_DATABASE_URL:?required}
+      PROJECT_WORKFLOW_RUNTIME_REQUIRED: "1"
+  project-workflow-reviewer:
+    <<: *project-workflow
+    env_file: ["${HERMES_OPERATOR_ROOT:?required}/project-workflow-reviewer.env"]
+    environment:
+      PROJECT_WORKFLOW_MANAGED_CONFIGURATION: "1"
+      DATABASE_URL: ${PROJECT_WORKFLOW_REVIEWER_DATABASE_URL:?required}
+      PROJECT_WORKFLOW_RUNTIME_REQUIRED: "1"
+  project-workflow-tester:
+    <<: *project-workflow
+    env_file: ["${HERMES_OPERATOR_ROOT:?required}/project-workflow-tester.env"]
+    environment:
+      PROJECT_WORKFLOW_MANAGED_CONFIGURATION: "1"
+      DATABASE_URL: ${PROJECT_WORKFLOW_TESTER_DATABASE_URL:?required}
+      PROJECT_WORKFLOW_RUNTIME_REQUIRED: "1"
+  project-workflow-devops:
+    <<: *project-workflow
+    env_file: ["${HERMES_OPERATOR_ROOT:?required}/project-workflow-devops.env"]
+    environment:
+      PROJECT_WORKFLOW_MANAGED_CONFIGURATION: "1"
+      DATABASE_URL: ${PROJECT_WORKFLOW_DEVOPS_DATABASE_URL:?required}
+      PROJECT_WORKFLOW_RUNTIME_REQUIRED: "1"
+
+networks:
+  team-demo:
+    external: true
+    name: ${TEAM_DEMO_NETWORK:?required}

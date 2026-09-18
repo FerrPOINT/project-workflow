@@ -8,6 +8,7 @@ Run them explicitly with:
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import psycopg
 import pytest
@@ -89,7 +90,24 @@ class TestPostgresSession:
             from sqlalchemy import text
 
             version = conn.execute(text("SELECT version_num FROM project_workflow.alembic_version")).scalar()
-        assert version is not None
+            mode_table = conn.execute(
+                text(
+                    """SELECT count(*) FROM information_schema.tables
+                       WHERE table_schema='project_workflow' AND table_name='workflow_modes'"""
+                )
+            ).scalar_one()
+            phase_columns = {
+                row[0]
+                for row in conn.execute(
+                    text(
+                        """SELECT column_name FROM information_schema.columns
+                           WHERE table_schema='project_workflow' AND table_name='phases'"""
+                    )
+                )
+            }
+        assert version == "d4f6a8c2e901"
+        assert mode_table == 1
+        assert "mode_id" in phase_columns
 
 
 @pytest.mark.integration
@@ -145,3 +163,21 @@ class TestPostgresUoW:
         with uow:
             ids = {w.id for w in uow.workflows.list()}
             assert wf_id not in ids
+
+    def test_install_and_verify_exact_hermes_bundle(self, pg_url):
+        from scripts.install_hermes_workflow import install, load_bundle
+
+        bundle = load_bundle(Path(__file__).resolve().parents[1] / "configs" / "hermes" / "developer.json")
+
+        installed = install(bundle, check_only=False, database_url=pg_url)
+        checked = install(bundle, check_only=True, database_url=pg_url)
+
+        assert installed == {
+            "namespace": "hermes-developer",
+            "role": "developer",
+            "workflow": "Hermes Developer",
+            "modes": 2,
+            "phases": 14,
+            "checked": False,
+        }
+        assert checked == {**installed, "checked": True}

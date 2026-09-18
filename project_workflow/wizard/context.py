@@ -25,6 +25,8 @@ class WizardContextBuilder:
         current_phase: str = "",
         task_key: str = "",
         repo: str | None = None,
+        mode: dict[str, Any] | None = None,
+        cycle_number: int = 0,
     ):
         self.uow = uow
         self.task = task or {}
@@ -34,6 +36,8 @@ class WizardContextBuilder:
         self.current_phase = current_phase
         self.task_key = task_key
         self.repo = repo
+        self.mode = mode or {"key": "default", "name": "Default"}
+        self.cycle_number = cycle_number
         self._contract_builder = PhaseContractBuilder(self.all_phases)
         self._phase_map: dict[str, Phase] | None = None
 
@@ -55,6 +59,10 @@ class WizardContextBuilder:
     def _phase_status_lookup(self) -> dict[str, str]:
         statuses: dict[str, str] = {}
         for row in self.uow.get_task_history(self.task["id"]):
+            if row.get("mode_id") != self.task.get("current_mode_id"):
+                continue
+            if int(row.get("cycle_number") or 0) != self.cycle_number:
+                continue
             phase = self._phase_by_id(row["phase_id"])
             if phase:
                 statuses[phase.code] = str(row["status"])
@@ -89,6 +97,8 @@ class WizardContextBuilder:
                     "phase_code": phase.code,
                     "phase_name": phase.name,
                     "status": row["status"],
+                    "mode_id": row.get("mode_id"),
+                    "cycle_number": row.get("cycle_number", 0),
                     "completed_at": row["completed_at"],
                 }
             )
@@ -133,6 +143,9 @@ class WizardContextBuilder:
             "project_name": self.project.get("name") if self.project else None,
             "workflow_name": self.workflow.get("name") if self.workflow else None,
             "workflow_id": self.workflow.get("id") if self.workflow else None,
+            "mode": self.mode.get("key", "default"),
+            "mode_name": self.mode.get("name", "Default"),
+            "cycle_number": self.cycle_number,
             "task_status": self.task.get("status"),
             "current_phase": self.current_phase,
             "current_phase_name": phase.name if phase else "Unknown phase",

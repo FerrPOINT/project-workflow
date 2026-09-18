@@ -51,7 +51,29 @@ class Workflow(Base):
     phases: Mapped[list[Phase]] = relationship(
         "Phase", back_populates="workflow", cascade="all, delete-orphan", passive_deletes=True
     )
+    modes: Mapped[list[WorkflowMode]] = relationship(
+        "WorkflowMode", back_populates="workflow", cascade="all, delete-orphan", passive_deletes=True
+    )
     projects: Mapped[list[Project]] = relationship("Project", back_populates="workflow", cascade="all, delete-orphan")
+
+
+class WorkflowMode(Base):
+    __tablename__ = "workflow_modes"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    workflow_id: Mapped[int] = mapped_column(ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False)
+    key: Mapped[str] = mapped_column(String, nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    mode_order: Mapped[int] = mapped_column(nullable=False, default=1, server_default="1")
+    __table_args__ = (
+        UniqueConstraint("workflow_id", "key", name="uq_workflow_modes_workflow_key"),
+        UniqueConstraint("workflow_id", "mode_order", name="uq_workflow_modes_workflow_order"),
+    )
+
+    workflow: Mapped[Workflow] = relationship("Workflow", back_populates="modes")
+    phases: Mapped[list[Phase]] = relationship(
+        "Phase", back_populates="mode", passive_deletes=True
+    )
 
 
 class Phase(Base):
@@ -59,6 +81,7 @@ class Phase(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     workflow_id: Mapped[int] = mapped_column(ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False)
+    mode_id: Mapped[int] = mapped_column(ForeignKey("workflow_modes.id", ondelete="CASCADE"), nullable=False)
     code: Mapped[str] = mapped_column(String, nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -94,7 +117,7 @@ class Phase(Base):
         server_default="0",
     )
     __table_args__ = (
-        UniqueConstraint("workflow_id", "code", name="uq_phases_workflow_code"),
+        UniqueConstraint("mode_id", "code", name="uq_phases_mode_code"),
         CheckConstraint(
             "execution_type IN ('sync', 'parallel')",
             name="ck_phases_execution_type",
@@ -106,6 +129,7 @@ class Phase(Base):
     )
 
     workflow: Mapped[Workflow] = relationship("Workflow", back_populates="phases")
+    mode: Mapped[WorkflowMode] = relationship("WorkflowMode", back_populates="phases")
     agent: Mapped[Agent | None] = relationship("Agent", back_populates="phases")
     instructions: Mapped[list[Instruction]] = relationship(
         "Instruction", back_populates="phase", cascade="all, delete-orphan"
@@ -196,6 +220,10 @@ class Task(Base):
         default="-1",
         server_default="-1",
     )
+    current_mode_id: Mapped[int | None] = mapped_column(
+        ForeignKey("workflow_modes.id", ondelete="SET NULL"), nullable=True
+    )
+    cycle_number: Mapped[int] = mapped_column(nullable=False, default=0, server_default="0")
     status: Mapped[str] = mapped_column(
         String,
         default="active",
@@ -203,7 +231,10 @@ class Task(Base):
     )
     created_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    __table_args__ = (CheckConstraint("status IN ('active', 'done', 'blocked')", name="ck_tasks_status"),)
+    __table_args__ = (
+        CheckConstraint("status IN ('active', 'done', 'blocked')", name="ck_tasks_status"),
+        CheckConstraint("cycle_number >= 0", name="ck_tasks_cycle_number"),
+    )
 
     project: Mapped[Project] = relationship("Project", back_populates="tasks")
 
@@ -217,6 +248,8 @@ class TaskHistory(Base):
         nullable=False,
     )
     phase_id: Mapped[int] = mapped_column(ForeignKey("phases.id"), nullable=False)
+    mode_id: Mapped[int] = mapped_column(ForeignKey("workflow_modes.id"), nullable=False)
+    cycle_number: Mapped[int] = mapped_column(nullable=False, default=0, server_default="0")
     status: Mapped[str] = mapped_column(
         String,
         default="pending",
@@ -224,7 +257,10 @@ class TaskHistory(Base):
     )
     completed_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     __table_args__ = (
-        UniqueConstraint("task_id", "phase_id", name="uq_task_history_task_phase"),
+        UniqueConstraint(
+            "task_id", "mode_id", "cycle_number", "phase_id", name="uq_task_history_task_mode_cycle_phase"
+        ),
+        CheckConstraint("cycle_number >= 0", name="ck_task_history_cycle_number"),
         CheckConstraint(
             "status IN ('pending', 'done', 'partial', 'blocked', 'rollback', 'delegated')",
             name="ck_task_history_status",
@@ -241,6 +277,9 @@ class SupervisorRun(Base):
         nullable=False,
     )
     phase_id: Mapped[int] = mapped_column(ForeignKey("phases.id"), nullable=False)
+    mode_id: Mapped[int] = mapped_column(ForeignKey("workflow_modes.id"), nullable=False)
+    cycle_number: Mapped[int] = mapped_column(nullable=False, default=0, server_default="0")
+    attempt_number: Mapped[int] = mapped_column(nullable=False, default=1, server_default="1")
     verdict: Mapped[str] = mapped_column(String, nullable=False)
     report: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     covered: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
@@ -252,6 +291,8 @@ class SupervisorRun(Base):
     response: Mapped[str] = mapped_column(Text, nullable=False, default="{}", server_default="{}")
     created_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
     __table_args__ = (
+        CheckConstraint("cycle_number >= 0", name="ck_supervisor_runs_cycle_number"),
+        CheckConstraint("attempt_number >= 1", name="ck_supervisor_runs_attempt_number"),
         CheckConstraint(
             "verdict IN ('pass', 'partial', 'soft_fail', 'hard_fail', 'blocked', 'rollback', 'delegate')",
             name="ck_supervisor_runs_verdict",

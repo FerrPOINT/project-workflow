@@ -55,9 +55,17 @@ class SASupervisorRunRepository(SupervisorRunRepository):
         return [_row_to_supervisor_run(r) for r in rows]
 
     def create(self, data: dict[str, Any]) -> int:
+        mode_id = data.get("mode_id")
+        if mode_id is None:
+            mode_id = self._session.execute(
+                select(m.Phase.mode_id).where(m.Phase.id == data["phase_id"])
+            ).scalar_one()
         item = m.SupervisorRun(
             task_id=data["task_id"],
             phase_id=data["phase_id"],
+            mode_id=mode_id,
+            cycle_number=data.get("cycle_number", 0),
+            attempt_number=data.get("attempt_number", 1),
             verdict=data["verdict"],
             report=data.get("report", ""),
             covered=json.dumps(data.get("covered", []), ensure_ascii=False),

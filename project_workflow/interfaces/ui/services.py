@@ -48,9 +48,9 @@ def _load_workflows() -> list[dict[str, Any]]:
     return _ui_data_service()._load_workflows()
 
 
-def _load_phases(workflow_id: int | None = None) -> list[dict[str, Any]]:
+def _load_phases(workflow_id: int | None = None, mode_id: int | None = None) -> list[dict[str, Any]]:
     """Load phases for UI pages/API."""
-    return _ui_data_service()._load_phases(workflow_id)
+    return _ui_data_service()._load_phases(workflow_id, mode_id)
 
 
 def _load_phase_detail(phase_id: int | str) -> dict[str, Any] | None:

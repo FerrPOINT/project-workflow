@@ -98,6 +98,14 @@ class WizardEngine:
         )
         self.workflow_id = self.project["workflow_id"] if self.project else None
         self.workflow = self._workflow_service.get_workflow(self.workflow_id) if self.workflow_id else None
+        self.mode_id = self.task.get("current_mode_id")
+        if self.workflow_id and self.mode_id is None:
+            default_mode = self._uow.workflow_modes.ensure_default(int(self.workflow_id))
+            self.mode_id = default_mode.id
+            self._task_service.update_task(self.task["id"], {"current_mode_id": self.mode_id})
+            self.task = self._task_service.get_task(self.task["id"]) or self.task
+        self.mode = self._uow.workflow_modes.get_by_id(int(self.mode_id)) if self.mode_id else None
+        self.cycle_number = int(self.task.get("cycle_number") or 0)
         self._all_phases: list[Phase] | None = None
         self._phase_map: dict[str, Phase] | None = None
         self.current_phase = self._resolve_current_phase()
@@ -118,7 +126,9 @@ class WizardEngine:
     @property
     def all_phases(self) -> list[Phase]:
         if self._all_phases is None:
-            self._all_phases = schema.load_phases_from_db(self._uow, workflow_id=self.workflow_id)
+            self._all_phases = schema.load_phases_from_db(
+                self._uow, workflow_id=self.workflow_id, mode_id=self.mode_id
+            )
         return self._all_phases
 
     @all_phases.setter
@@ -308,6 +318,8 @@ class WizardEngine:
             current_phase=self.current_phase,
             task_key=self.task_key,
             repo=self.repo,
+            mode=self.mode.to_dict() if self.mode else None,
+            cycle_number=self.cycle_number,
         )
         ctx = builder.build()
         self._cache.set(self.task_key, self.current_phase, ctx)
@@ -463,8 +475,12 @@ class WizardEngine:
             context_snapshot={
                 "phase": assessment.phase_code,
                 "phase_name": assessment.phase_name,
+                "mode": self.mode.key if self.mode else "default",
+                "cycle_number": self.cycle_number,
                 "current_contract": {"phase_code": assessment.phase_code},
             },
+            mode_id=self.mode_id,
+            cycle_number=self.cycle_number,
             response=assessment.to_result_dict(),
         )
         self._uow.commit()

@@ -138,9 +138,12 @@ function renderWorkflowNav(){
     projects.textContent = pluralizeRu(workflow.project_count, 'проект', 'проекта', 'проектов');
     var phases = document.createElement('span');
     phases.textContent = pluralizeRu(workflow.phase_count, 'фаза', 'фазы', 'фаз');
+    var modes = document.createElement('span');
+    modes.textContent = pluralizeRu(workflow.mode_count || 1, 'режим', 'режима', 'режимов');
 
     meta.appendChild(projects);
     meta.appendChild(phases);
+    meta.appendChild(modes);
     button.appendChild(name);
     button.appendChild(meta);
     nav.appendChild(button);

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import os
+import secrets
 from typing import Any
 
-from fastapi import Query
+from fastapi import Query, Request
 from fastapi.responses import JSONResponse
 
 from project_workflow.infrastructure.db.schema import (
@@ -22,7 +24,11 @@ from project_workflow.interfaces.ui.schemas import (
     PhaseUpdate,
     ProjectCreate,
     ProjectUpdate,
+    RuntimeAssignmentRequest,
+    RuntimeCompletionRequest,
     WorkflowCreate,
+    WorkflowModeCreate,
+    WorkflowModeUpdate,
     WorkflowUpdate,
 )
 from project_workflow.interfaces.ui.seed import _update_config_phase_order
@@ -35,6 +41,79 @@ from project_workflow.interfaces.ui.skills import (
     _load_skills_catalog as _load_skills_catalog_direct,
 )
 from project_workflow.interfaces.ui.state import _app_state
+
+
+def _runtime_authorized(request: Request) -> bool:
+    expected = os.environ.get("PROJECT_WORKFLOW_RUNTIME_TOKEN", "")
+    authorization = request.headers.get("authorization", "")
+    return bool(expected) and authorization.startswith("Bearer ") and secrets.compare_digest(
+        authorization[len("Bearer ") :], expected
+    )
+
+
+def _runtime_assignment(payload: RuntimeAssignmentRequest):
+    from project_workflow.application.runtime import RuntimeAssignment
+
+    return RuntimeAssignment(
+        task_id=payload.taskId,
+        task_key=payload.taskKey,
+        title=payload.title,
+        role=payload.role,
+        namespace=payload.namespace,
+        workflow_name=payload.workflow,
+        mode_key=payload.mode,
+        cycle_number=payload.cycleNumber,
+        attempt=payload.attempt,
+        run_id=payload.runId,
+    )
+
+
+async def api_runtime_current(
+    request: Request, payload: RuntimeAssignmentRequest
+) -> dict[str, Any] | JSONResponse:
+    if not _runtime_authorized(request):
+        return _error("Unauthorized", 401)
+    from project_workflow.application.runtime import RuntimeAssignmentError, RuntimeWorkflowService
+
+    uow = _app_state.get_uow()
+    try:
+        result = RuntimeWorkflowService(
+            uow,
+            namespace_role=os.environ.get("PROJECT_WORKFLOW_ROLE", ""),
+            namespace_name=os.environ.get("PROJECT_WORKFLOW_NAMESPACE", ""),
+        ).current(_runtime_assignment(payload))
+        return {"ok": True, **result}
+    except RuntimeAssignmentError as exc:
+        uow.rollback()
+        return _error(str(exc), 409)
+    finally:
+        uow.close()
+
+
+async def api_runtime_complete(
+    request: Request, payload: RuntimeCompletionRequest
+) -> dict[str, Any] | JSONResponse:
+    if not _runtime_authorized(request):
+        return _error("Unauthorized", 401)
+    from project_workflow.application.runtime import RuntimeAssignmentError, RuntimeWorkflowService
+
+    uow = _app_state.get_uow()
+    try:
+        result = RuntimeWorkflowService(
+            uow,
+            namespace_role=os.environ.get("PROJECT_WORKFLOW_ROLE", ""),
+            namespace_name=os.environ.get("PROJECT_WORKFLOW_NAMESPACE", ""),
+        ).complete_current(
+            _runtime_assignment(payload),
+            expected_phase_code=payload.expectedPhaseCode,
+            operation_key=payload.operationKey,
+        )
+        return {"ok": True, **result}
+    except RuntimeAssignmentError as exc:
+        uow.rollback()
+        return _error(str(exc), 409)
+    finally:
+        uow.close()
 
 
 def _error(message: str, status: int) -> JSONResponse:
@@ -68,13 +147,15 @@ async def api_skills(refresh: int = Query(default=0)) -> dict[str, Any] | JSONRe
     return {"ok": True, "skills": _load_skills_catalog_direct(refresh=bool(refresh))}
 
 
-async def api_phases(workflow_id: int | None = Query(default=None)) -> dict[str, Any] | JSONResponse:
+async def api_phases(
+    workflow_id: int | None = Query(default=None), mode_id: int | None = Query(default=None)
+) -> dict[str, Any] | JSONResponse:
     workflows = _app_state.workflow_service().list_workflows()
     selected_workflow = next((item for item in workflows if item["id"] == workflow_id), None)
     if selected_workflow is None and workflow_id is None and workflows:
         selected_workflow = workflows[0]
     selected_workflow_id = selected_workflow["id"] if selected_workflow else workflow_id
-    phases = _app_state.phase_service().list_phases(selected_workflow_id)
+    phases = _app_state.phase_service().list_phases(selected_workflow_id, mode_id)
     agents = {a["id"]: a for a in _app_state.agent_service().list_agents()}
 
     rows = []
@@ -87,6 +168,8 @@ async def api_phases(workflow_id: int | None = Query(default=None)) -> dict[str,
                 "description": phase.get("description", ""),
                 "code": phase.get("code", ""),
                 "workflow_id": phase.get("workflow_id"),
+                "mode_id": phase.get("mode_id"),
+                "mode_key": phase.get("mode_key", "default"),
                 "phase_num": phase.get("phase_num", phase.get("phase_order", 0)),
                 "phase_order": phase.get("phase_order", 0),
                 "execution_type": phase.get("execution_type", "sync"),
@@ -146,17 +229,14 @@ async def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONRespons
 
     resolved_workflow_id: int | None = None
     if isinstance(workflow_id, str) and not workflow_id.isdigit():
-        workflow_row = _app_state.workflow_service().get_workflow(int(workflow_id))
-        if not workflow_row:
-            return _error(f"Workflow {workflow_id!r} не найден", 400)
-        resolved_workflow_id = int(workflow_row["id"])
+        return _error(f"Workflow {workflow_id!r} не найден", 400)
     else:
         resolved_workflow_id = int(workflow_id)
     if resolved_workflow_id is None or not _app_state.workflow_service().get_workflow(resolved_workflow_id):
         return _error(f"Workflow {resolved_workflow_id} не найден", 400)
     workflow_id = resolved_workflow_id
 
-    workflow_phases = _app_state.phase_service().list_phases(workflow_id)
+    workflow_phases = _app_state.phase_service().list_phases(workflow_id, payload.mode_id)
     order_list = sorted([p["phase_order"] for p in workflow_phases if isinstance(p.get("phase_order"), int)])
     new_order = payload.phase_order
     if new_order > (max(order_list, default=0) + 1):
@@ -172,6 +252,7 @@ async def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONRespons
         "name": payload.name,
         "description": payload.description or "",
         "workflow_id": workflow_id,
+        "mode_id": payload.mode_id,
         "phase_order": new_order,
         "execution_type": payload.execution_type or "sync",
         "parallel_with": payload.parallel_with,
@@ -180,7 +261,8 @@ async def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONRespons
     if payload.code:
         data["code"] = payload.code
     phase = _app_state.phase_service().create_phase(data)
-    _update_config_phase_order(uow)
+    if phase.get("mode_key") == "default":
+        _update_config_phase_order(uow)
     return {"ok": True, "phase_id": phase["id"], "phase_order": new_order, "phase": phase}
 
 
@@ -228,7 +310,7 @@ async def api_phase_update(phase_id: int, payload: PhaseUpdate) -> dict[str, Any
 
     uow = _app_state.get_db()
     phase = _app_state.phase_service().get_phase(resolved_phase_id)
-    if phase:
+    if phase and phase.get("mode_key") == "default":
         persist_phase_update_to_seed(uow, phase["code"], payload.model_dump(exclude_unset=True))
 
     return {"ok": True, "ids": {"instructions": inst_ids, "checks": check_ids, "evidence": ev_ids}}
@@ -239,11 +321,12 @@ async def api_phase_delete(phase_id: int) -> dict[str, Any] | JSONResponse:
     if not phase:
         return _error(f"Фаза {phase_id} не найдена", 404)
     workflow_id = phase.get("workflow_id")
-    workflow_phases = _app_state.phase_service().list_phases(workflow_id)
+    workflow_phases = _app_state.phase_service().list_phases(workflow_id, phase.get("mode_id"))
     if len(workflow_phases) <= 1:
         return _error("Нельзя удалить единственную фазу workflow", 409)
     _app_state.phase_service().delete_phase(phase_id)
-    _update_config_phase_order(_app_state.get_db())
+    if phase.get("mode_key") == "default":
+        _update_config_phase_order(_app_state.get_db())
     return {"ok": True}
 
 
@@ -253,6 +336,7 @@ async def api_phase_batch_order(payload: PhaseOrderUpdate) -> dict[str, Any] | J
         return _error("Список order пуст", 400)
 
     workflow_id: int | None = None
+    mode_id: int | None = None
     for item in payload.orders:
         if item.workflow_id is not None:
             workflow_id = item.workflow_id
@@ -264,6 +348,7 @@ async def api_phase_batch_order(payload: PhaseOrderUpdate) -> dict[str, Any] | J
             phase = _app_state.phase_service().get_phase(first_id)
             if phase:
                 workflow_id = phase.get("workflow_id")
+                mode_id = phase.get("mode_id")
 
     batch: list[tuple[int, int]] = []
     ordered_phase_ids: list[int] = []
@@ -273,8 +358,15 @@ async def api_phase_batch_order(payload: PhaseOrderUpdate) -> dict[str, Any] | J
             return _error(f"Некорректный phase_id: {item.phase_id!r}", 400)
         batch.append((resolved_phase_id, item.phase_order))
         ordered_phase_ids.append(resolved_phase_id)
+        phase = _app_state.phase_service().get_phase(resolved_phase_id)
+        if not phase:
+            return _error(f"Фаза {resolved_phase_id} не найдена", 404)
+        if mode_id is None:
+            mode_id = phase.get("mode_id")
+        if phase.get("workflow_id") != workflow_id or phase.get("mode_id") != mode_id:
+            return _error("Все фазы должны принадлежать одному workflow mode", 400)
 
-    workflow_phases = _app_state.phase_service().list_phases(workflow_id)
+    workflow_phases = _app_state.phase_service().list_phases(workflow_id, mode_id)
     for phase in workflow_phases:
         if phase["id"] not in ordered_phase_ids:
             batch.append((phase["id"], phase.get("phase_order", 0)))
@@ -289,8 +381,9 @@ async def api_phase_batch_order(payload: PhaseOrderUpdate) -> dict[str, Any] | J
             phase = _app_state.phase_service().get_phase(phase_id)
             if phase:
                 ordered_phases.append(phase)
-        persist_phase_order_to_seed(uow, [p["code"] for p in ordered_phases])
-    _update_config_phase_order(uow)
+        if ordered_phases and ordered_phases[0].get("mode_key") == "default":
+            persist_phase_order_to_seed(uow, [p["code"] for p in ordered_phases])
+            _update_config_phase_order(uow)
     return {"ok": True, "updated": len(payload.orders)}
 
 
@@ -324,7 +417,9 @@ async def api_workflow_delete(workflow_id: int) -> dict[str, Any] | JSONResponse
     existing = service.get_workflow(workflow_id)
     if not existing:
         return _error(f"Workflow {workflow_id} не найден", 404)
-    phases = _app_state.phase_service().list_phases(workflow_id)
+    phases = [
+        phase for phase in _app_state.get_db().get_all_phases() if phase.get("workflow_id") == workflow_id
+    ]
     projects = [p for p in _app_state.project_service().list_projects() if p.get("workflow_id") == workflow_id]
     starter_code = f"wf-{workflow_id}-default"
     non_starter_phases = [p for p in phases if p.get("code") != starter_code]
@@ -333,6 +428,62 @@ async def api_workflow_delete(workflow_id: int) -> dict[str, Any] | JSONResponse
     if existing.get("is_default"):
         return _error("Нельзя удалить workflow по умолчанию", 400)
     service.delete_workflow(workflow_id)
+    return {"ok": True}
+
+
+async def api_workflow_modes(workflow_id: int) -> dict[str, Any] | JSONResponse:
+    if not _app_state.workflow_service().get_workflow(workflow_id):
+        return _error(f"Workflow {workflow_id} не найден", 404)
+    return {"ok": True, "modes": _app_state.workflow_mode_service().list_modes(workflow_id)}
+
+
+async def api_workflow_mode_create(
+    workflow_id: int, payload: WorkflowModeCreate
+) -> dict[str, Any] | JSONResponse:
+    try:
+        mode = _app_state.workflow_mode_service().create_mode(workflow_id, payload.model_dump())
+    except ValueError as exc:
+        return _error(str(exc), 400)
+    except Exception as exc:
+        from project_workflow.domain.exceptions import ConflictError, NotFoundError
+
+        if isinstance(exc, NotFoundError):
+            return _error(str(exc), 404)
+        if isinstance(exc, ConflictError):
+            return _error(str(exc), 409)
+        raise
+    return {"ok": True, "mode": mode}
+
+
+async def api_workflow_mode_update(
+    mode_id: int, payload: WorkflowModeUpdate
+) -> dict[str, Any] | JSONResponse:
+    try:
+        mode = _app_state.workflow_mode_service().update_mode(mode_id, payload.model_dump(exclude_unset=True))
+    except ValueError as exc:
+        return _error(str(exc), 400)
+    except Exception as exc:
+        from project_workflow.domain.exceptions import ConflictError, NotFoundError
+
+        if isinstance(exc, NotFoundError):
+            return _error(str(exc), 404)
+        if isinstance(exc, ConflictError):
+            return _error(str(exc), 409)
+        raise
+    return {"ok": True, "mode": mode}
+
+
+async def api_workflow_mode_delete(mode_id: int) -> dict[str, Any] | JSONResponse:
+    try:
+        _app_state.workflow_mode_service().delete_mode(mode_id)
+    except Exception as exc:
+        from project_workflow.domain.exceptions import ConflictError, NotFoundError
+
+        if isinstance(exc, NotFoundError):
+            return _error(str(exc), 404)
+        if isinstance(exc, ConflictError):
+            return _error(str(exc), 409)
+        raise
     return {"ok": True}
 
 
