@@ -25,7 +25,8 @@ class RuntimeAssignmentRequest(BaseModel):
     runId: str = Field(min_length=1, max_length=200)
 
 
-class RuntimeCompletionRequest(RuntimeAssignmentRequest):
+class RuntimeStepRequest(RuntimeAssignmentRequest):
+    report: str = Field(min_length=1, max_length=100_000)
     expectedPhaseCode: str = Field(min_length=1, max_length=200)
     operationKey: str = Field(pattern=r"^[0-9a-f]{64}$")
 

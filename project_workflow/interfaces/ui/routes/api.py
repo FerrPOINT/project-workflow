@@ -25,7 +25,7 @@ from project_workflow.interfaces.ui.schemas import (
     ProjectCreate,
     ProjectUpdate,
     RuntimeAssignmentRequest,
-    RuntimeCompletionRequest,
+    RuntimeStepRequest,
     WorkflowCreate,
     WorkflowModeCreate,
     WorkflowModeUpdate,
@@ -90,8 +90,8 @@ async def api_runtime_current(
         uow.close()
 
 
-async def api_runtime_complete(
-    request: Request, payload: RuntimeCompletionRequest
+async def api_runtime_step(
+    request: Request, payload: RuntimeStepRequest
 ) -> dict[str, Any] | JSONResponse:
     if not _runtime_authorized(request):
         return _error("Unauthorized", 401)
@@ -103,11 +103,34 @@ async def api_runtime_complete(
             uow,
             namespace_role=os.environ.get("PROJECT_WORKFLOW_ROLE", ""),
             namespace_name=os.environ.get("PROJECT_WORKFLOW_NAMESPACE", ""),
-        ).complete_current(
+        ).step(
             _runtime_assignment(payload),
+            report=payload.report,
             expected_phase_code=payload.expectedPhaseCode,
             operation_key=payload.operationKey,
         )
+        return {"ok": True, **result}
+    except RuntimeAssignmentError as exc:
+        uow.rollback()
+        return _error(str(exc), 409)
+    finally:
+        uow.close()
+
+
+async def api_runtime_history(
+    request: Request, payload: RuntimeAssignmentRequest
+) -> dict[str, Any] | JSONResponse:
+    if not _runtime_authorized(request):
+        return _error("Unauthorized", 401)
+    from project_workflow.application.runtime import RuntimeAssignmentError, RuntimeWorkflowService
+
+    uow = _app_state.get_uow()
+    try:
+        result = RuntimeWorkflowService(
+            uow,
+            namespace_role=os.environ.get("PROJECT_WORKFLOW_ROLE", ""),
+            namespace_name=os.environ.get("PROJECT_WORKFLOW_NAMESPACE", ""),
+        ).history(_runtime_assignment(payload))
         return {"ok": True, **result}
     except RuntimeAssignmentError as exc:
         uow.rollback()

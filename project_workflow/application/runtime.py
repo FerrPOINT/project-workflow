@@ -12,7 +12,8 @@ import hashlib
 from dataclasses import dataclass
 from typing import Any
 
-from project_workflow.domain.repositories import UnitOfWork
+from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from project_workflow.wizard import WizardEngine, format_result
 
 
 class RuntimeAssignmentError(ValueError):
@@ -36,7 +37,7 @@ class RuntimeAssignment:
 class RuntimeWorkflowService:
     PROJECT_CODE = "HERMES"
 
-    def __init__(self, uow: UnitOfWork, *, namespace_role: str, namespace_name: str):
+    def __init__(self, uow: SAUnitOfWork, *, namespace_role: str, namespace_name: str):
         self._uow = uow
         self._namespace_role = namespace_role
         self._namespace_name = namespace_name
@@ -44,75 +45,72 @@ class RuntimeWorkflowService:
     def current(self, assignment: RuntimeAssignment) -> dict[str, Any]:
         task, phases = self._bind(assignment)
         if task.status == "done":
-            return self._result(assignment, task, None, complete=True)
+            return {
+                **self._result(assignment, task, None, complete=True),
+                "output": "Workflow completed.",
+            }
         phase = next((item for item in phases if item.code == task.current_phase), None)
         if phase is None:
             raise RuntimeAssignmentError("current phase is not part of the assigned mode")
-        return self._result(assignment, task, phase, complete=False)
+        engine = WizardEngine(
+            assignment.task_id,
+            uow=self._uow,
+            create_if_missing=False,
+            bootstrap=False,
+        )
+        if engine.current_phase != phase.code:
+            raise RuntimeAssignmentError("Supervisor phase does not match the active assignment")
+        return {
+            **self._result(assignment, task, phase, complete=False),
+            "output": engine.format_current_phase_instructions(),
+        }
 
-    def complete_current(
+    def step(
         self,
         assignment: RuntimeAssignment,
         *,
+        report: str,
         expected_phase_code: str,
         operation_key: str,
     ) -> dict[str, Any]:
-        expected_operation_key = self.operation_key_for(assignment, expected_phase_code)
+        expected_operation_key = self.operation_key_for(assignment, expected_phase_code, report)
         if operation_key != expected_operation_key:
             raise RuntimeAssignmentError("operation key does not match the active assignment")
         task, phases = self._bind(assignment)
         if task.status == "done":
-            return self._result(assignment, task, None, complete=True)
+            replay = self._replayed_step(task.id, operation_key)
+            if replay is None:
+                raise RuntimeAssignmentError("assigned workflow is already complete")
+            return self._step_result(assignment, task, None, replay, replayed=True)
         if task.current_phase != expected_phase_code:
-            if task.id is None:
-                raise RuntimeAssignmentError("runtime task has no id")
-            completed_phase = next((item for item in phases if item.code == expected_phase_code), None)
-            history = self._uow.tasks.get_history(task.id)
-            if completed_phase is not None and completed_phase.id is not None and any(
-                row["phase_id"] == completed_phase.id
-                and row["mode_id"] == task.current_mode_id
-                and row["cycle_number"] == assignment.cycle_number
-                and row["status"] == "done"
-                for row in history
-            ):
+            replay = self._replayed_step(task.id, operation_key)
+            if replay is not None:
                 current = next((item for item in phases if item.code == task.current_phase), None)
-                return self._result(assignment, task, current, complete=False)
+                return self._step_result(assignment, task, current, replay, replayed=True)
             raise RuntimeAssignmentError("expected phase is stale or belongs to another assignment")
-        index = next((index for index, item in enumerate(phases) if item.code == task.current_phase), None)
-        if index is None:
-            raise RuntimeAssignmentError("current phase is not part of the assigned mode")
-        phase = phases[index]
-        if task.id is None or phase.id is None:
+        if task.id is None:
             raise RuntimeAssignmentError("runtime cursor is incomplete")
-        self._uow.tasks.add_history(
-            task.id,
-            phase.id,
-            "done",
-            mode_id=task.current_mode_id,
-            cycle_number=assignment.cycle_number,
+        engine = WizardEngine(
+            assignment.task_id,
+            uow=self._uow,
+            create_if_missing=False,
+            operation_key=operation_key,
+            bootstrap=False,
         )
-        next_phase = phases[index + 1] if index + 1 < len(phases) else None
-        if next_phase is None:
-            self._uow.tasks.update(task.id, {"status": "done"})
-        else:
-            if next_phase.id is None:
-                raise RuntimeAssignmentError("next phase is incomplete")
-            self._uow.tasks.add_history(
-                task.id,
-                next_phase.id,
-                "pending",
-                mode_id=task.current_mode_id,
-                cycle_number=assignment.cycle_number,
-            )
-            self._uow.tasks.update(task.id, {"current_phase": next_phase.code, "status": "active"})
-        self._uow.commit()
+        if engine.current_phase != expected_phase_code:
+            raise RuntimeAssignmentError("Supervisor phase does not match the active assignment")
+        evaluation = engine.evaluate(report)
         updated = self._uow.tasks.get_by_id(task.id)
         if updated is None:
             raise RuntimeAssignmentError("runtime cursor disappeared")
-        return self._result(assignment, updated, next_phase, complete=next_phase is None)
+        current = next((item for item in phases if item.code == updated.current_phase), None)
+        complete = updated.status == "done"
+        if complete:
+            current = None
+        return self._step_result(assignment, updated, current, evaluation, replayed=False)
 
     @staticmethod
-    def operation_key_for(assignment: RuntimeAssignment, phase_code: str) -> str:
+    def operation_key_for(assignment: RuntimeAssignment, phase_code: str, report: str) -> str:
         identity = "\0".join(
             (
                 assignment.task_id,
@@ -120,9 +118,55 @@ class RuntimeWorkflowService:
                 assignment.mode_key,
                 str(assignment.cycle_number),
                 phase_code,
+                report,
             )
         )
         return hashlib.sha256(identity.encode("utf-8")).hexdigest()
+
+    def history(self, assignment: RuntimeAssignment, *, limit: int = 200) -> dict[str, Any]:
+        task, _phases = self._bind(assignment)
+        if task.id is None:
+            raise RuntimeAssignmentError("runtime task has no id")
+        records = [
+            row.to_dict()
+            for row in self._uow.supervisor_runs.list(task_id=task.id, limit=limit)
+            if row.mode_id == task.current_mode_id and row.cycle_number == assignment.cycle_number
+        ]
+        return {
+            "taskKey": assignment.task_key,
+            "workflow": assignment.workflow_name,
+            "mode": assignment.mode_key,
+            "cycleNumber": assignment.cycle_number,
+            "attempt": assignment.attempt,
+            "runId": assignment.run_id,
+            "count": len(records),
+            "records": records,
+        }
+
+    def _replayed_step(self, task_id: int | None, operation_key: str) -> dict[str, Any] | None:
+        if task_id is None:
+            return None
+        for row in self._uow.supervisor_runs.list(task_id=task_id, limit=200):
+            if row.context_snapshot.get("operation_key") == operation_key:
+                return row.response
+        return None
+
+    def _step_result(
+        self,
+        assignment: RuntimeAssignment,
+        task: Any,
+        phase: Any | None,
+        evaluation: dict[str, Any],
+        *,
+        replayed: bool,
+    ) -> dict[str, Any]:
+        state = self._result(assignment, task, phase, complete=task.status == "done")
+        return {
+            **state,
+            "replayed": replayed,
+            "output": format_result(evaluation),
+            "result": evaluation,
+        }
 
     def _bind(self, assignment: RuntimeAssignment):
         self._validate(assignment)

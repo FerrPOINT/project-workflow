@@ -22,8 +22,9 @@ def _payload(**updates):
     return value
 
 
-def _completion(phase: str, **updates):
+def _step(phase: str, report: str | None = None, **updates):
     assignment = _payload(**updates)
+    report = report or f"step {phase.rsplit('.', 1)[-1]}"
     operation_key = hashlib.sha256(
         "\0".join(
             (
@@ -32,11 +33,13 @@ def _completion(phase: str, **updates):
                 assignment["mode"],
                 str(assignment["cycleNumber"]),
                 phase,
+                report,
             )
         ).encode("utf-8")
     ).hexdigest()
     return {
         **assignment,
+        "report": report,
         "expectedPhaseCode": phase,
         "operationKey": operation_key,
     }
@@ -80,10 +83,12 @@ def test_runtime_uses_backend_mode_and_keeps_cycles_separate(monkeypatch):
     monkeypatch.setenv("PROJECT_WORKFLOW_NAMESPACE", "hermes-developer")
     initial, rework = _install_developer_workflow()
 
+    from project_workflow.interfaces.ui import _app_state
     from project_workflow.interfaces.ui.app import create_app
 
     client = TestClient(create_app())
     headers = {"Authorization": "Bearer runtime-secret"}
+    workflows_before = [item["name"] for item in _app_state.workflow_service().list_workflows()]
 
     assert client.post("/api/runtime/assignment/current", json=_payload(), headers={}).status_code == 401
     wrong_role = client.post(
@@ -101,14 +106,16 @@ def test_runtime_uses_backend_mode_and_keeps_cycles_separate(monkeypatch):
     assert current.status_code == 200
     assert current.json()["phase"]["code"] == "initial.1"
     assert current.json()["mode"] == "initial"
+    assert [item["name"] for item in _app_state.workflow_service().list_workflows()] == workflows_before
 
-    first = client.post("/api/runtime/assignment/complete", json=_completion("initial.1"), headers=headers)
+    first = client.post("/api/runtime/assignment/step", json=_step("initial.1"), headers=headers)
     assert first.json()["phase"]["code"] == "initial.2"
     duplicate = client.post(
-        "/api/runtime/assignment/complete", json=_completion("initial.1"), headers=headers
+        "/api/runtime/assignment/step", json=_step("initial.1"), headers=headers
     )
     assert duplicate.json()["phase"]["code"] == "initial.2"
-    done = client.post("/api/runtime/assignment/complete", json=_completion("initial.2"), headers=headers)
+    assert duplicate.json()["replayed"] is True
+    done = client.post("/api/runtime/assignment/step", json=_step("initial.2"), headers=headers)
     assert done.json()["complete"] is True
     completed_current = client.post(
         "/api/runtime/assignment/current", json=_payload(), headers=headers
@@ -119,8 +126,8 @@ def test_runtime_uses_backend_mode_and_keeps_cycles_separate(monkeypatch):
     assert completed_current.json()["phase"] is None
 
     wrong_operation = client.post(
-        "/api/runtime/assignment/complete",
-        json={**_completion("initial.2"), "operationKey": "a" * 64},
+        "/api/runtime/assignment/step",
+        json={**_step("initial.2"), "operationKey": "a" * 64},
         headers=headers,
     )
     assert wrong_operation.status_code == 409
@@ -131,8 +138,6 @@ def test_runtime_uses_backend_mode_and_keeps_cycles_separate(monkeypatch):
     )
     assert rework_current.status_code == 200
     assert rework_current.json()["phase"]["code"] == "rework.1"
-
-    from project_workflow.interfaces.ui import _app_state
 
     task = _app_state.task_service().get_task_by_key("business-task-ref-42")
     assert task is not None
@@ -159,6 +164,24 @@ def test_runtime_rejects_caller_selected_extra_fields(monkeypatch):
         headers={"Authorization": "Bearer runtime-secret"},
     )
     assert response.status_code == 422
+
+
+def test_runtime_history_is_assignment_scoped(monkeypatch):
+    monkeypatch.setenv("PROJECT_WORKFLOW_RUNTIME_TOKEN", "runtime-secret")
+    monkeypatch.setenv("PROJECT_WORKFLOW_ROLE", "developer")
+    monkeypatch.setenv("PROJECT_WORKFLOW_NAMESPACE", "hermes-developer")
+    _install_developer_workflow()
+    from project_workflow.interfaces.ui.app import create_app
+
+    client = TestClient(create_app())
+    headers = {"Authorization": "Bearer runtime-secret"}
+    assert client.post("/api/runtime/assignment/current", json=_payload(), headers=headers).status_code == 200
+    assert client.post("/api/runtime/assignment/step", json=_step("initial.1"), headers=headers).status_code == 200
+
+    history = client.post("/api/runtime/assignment/history", json=_payload(), headers=headers)
+    assert history.status_code == 200
+    assert history.json()["count"] == 1
+    assert history.json()["records"][0]["context_snapshot"]["operation_key"] == _step("initial.1")["operationKey"]
 
 
 def test_runtime_keys_cursor_by_immutable_task_ref_not_display_ticket(monkeypatch):

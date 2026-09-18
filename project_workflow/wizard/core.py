@@ -71,17 +71,25 @@ class WizardEngine:
     """Internal supervisor that evaluates workflow progress against DB phase contracts."""
 
     def __init__(
-        self, task_key: str, repo: str | None = None, uow: SAUnitOfWork | None = None, create_if_missing: bool = True
+        self,
+        task_key: str,
+        repo: str | None = None,
+        uow: SAUnitOfWork | None = None,
+        create_if_missing: bool = True,
+        operation_key: str | None = None,
+        bootstrap: bool = True,
     ):
         self.task_key = task_key
         self.repo = repo
         self.create_if_missing = create_if_missing
+        self.operation_key = operation_key
         self._uow = uow if uow is not None else SAUnitOfWork()
 
-        self._uow.create_all()
-        bootstrap_smoke_project_and_workflow(self._uow)
-        schema.ensure_phase_catalog(self._uow)
-        self._ensure_smoke_phases()
+        if bootstrap:
+            self._uow.create_all()
+            bootstrap_smoke_project_and_workflow(self._uow)
+            schema.ensure_phase_catalog(self._uow)
+            self._ensure_smoke_phases()
 
         self._workflow_service = WorkflowService(self._uow)
         self._project_service = ProjectService(self._uow)
@@ -478,6 +486,7 @@ class WizardEngine:
                 "mode": self.mode.key if self.mode else "default",
                 "cycle_number": self.cycle_number,
                 "current_contract": {"phase_code": assessment.phase_code},
+                **({"operation_key": self.operation_key} if self.operation_key else {}),
             },
             mode_id=self.mode_id,
             cycle_number=self.cycle_number,

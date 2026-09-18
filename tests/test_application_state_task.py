@@ -112,6 +112,7 @@ class TestAppState:
     def test_service_factories(self):
         state = MagicMock(spec=_AppState)
         state.get_uow.return_value = MagicMock()
+        state._service_uow = lambda: state.get_uow()
         # Bind real methods to the mock so we exercise the implementation logic.
         from project_workflow.application.state import _AppState as RealState
 
