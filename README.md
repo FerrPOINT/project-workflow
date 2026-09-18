@@ -3,10 +3,13 @@
 </p>
 
 <p align="center">
-  <a href="#capabilities"><img src="https://img.shields.io/badge/Capabilities-1d4ed8?style=for-the-badge" alt="Capabilities" /></a>
-  <a href="#quick-start"><img src="https://img.shields.io/badge/Quick_Start-1e40af?style=for-the-badge" alt="Quick start" /></a>
-  <a href="#visual-proof"><img src="https://img.shields.io/badge/Visual_Proof-0f766e?style=for-the-badge" alt="Visual proof" /></a>
-  <a href="#safety"><img src="https://img.shields.io/badge/Safety-334155?style=for-the-badge" alt="Safety" /></a>
+  <a href="#overview"><img src="https://img.shields.io/badge/Overview-1d4ed8?style=for-the-badge" alt="Overview" /></a>
+  <a href="#capabilities"><img src="https://img.shields.io/badge/Capabilities-1e40af?style=for-the-badge" alt="Capabilities" /></a>
+  <a href="#entrypoints"><img src="https://img.shields.io/badge/Entry_Points-18202f?style=for-the-badge" alt="Entry Points" /></a>
+  <a href="#quick-start"><img src="https://img.shields.io/badge/Quick_Start-1e3a8a?style=for-the-badge" alt="Quick start" /></a>
+  <a href="#ui"><img src="https://img.shields.io/badge/Web_UI-0f766e?style=for-the-badge" alt="Web UI" /></a>
+  <a href="#visual-proof"><img src="https://img.shields.io/badge/Visual_Proof-155e75?style=for-the-badge" alt="Visual proof" /></a>
+  <a href="#architecture"><img src="https://img.shields.io/badge/Architecture-334155?style=for-the-badge" alt="Architecture" /></a>
   <a href="#quality"><img src="https://img.shields.io/badge/Quality-475569?style=for-the-badge" alt="Quality" /></a>
 </p>
 
@@ -15,111 +18,336 @@
   <img src="https://img.shields.io/badge/FastAPI-API-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/PostgreSQL-Runtime-4169e1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL runtime" />
   <img src="https://img.shields.io/badge/SQLAlchemy-2-d71f00?style=flat-square&logo=sqlalchemy&logoColor=white" alt="SQLAlchemy 2" />
+  <img src="https://img.shields.io/badge/Pydantic-E92063?style=flat-square&logo=pydantic&logoColor=white" alt="Pydantic" />
+  <img src="https://img.shields.io/badge/Alembic-6B8E23?style=flat-square&logo=alembic&logoColor=white" alt="Alembic" />
+  <img src="https://img.shields.io/badge/uv-000000?style=flat-square&logo=astral&logoColor=white" alt="uv" />
   <img src="https://img.shields.io/badge/CI-.github%2Fworkflows%2Fci.yml-15803d?style=flat-square" alt="Repository CI" />
 </p>
 
-> **Project Workflow** is a private, self-hosted control plane for phased tasks. An executor reports through the CLI; the mandatory Supervisor evaluates the report and records `PASS`, `ROLLBACK` or `BLOCK` against append-only phase history.
+---
+
+## 🎯 Позиционирование
+
+**project-workflow** — внутренняя private-платформа для пофазного ведения задач. Агент отчитывается через CLI, обязательный LLM Supervisor проверяет отчёт и выдаёт вердикт: **PASS**, **ROLLBACK** или **BLOCK**.
+
+Центр управления workflow, фазами, namespaces и агентами живёт в Web UI. В UI доступен просмотр задач, а не их создание или продвижение. CLI намеренно остаётся маленьким: `step` и `history`; первое `step` создаёт задачу, последующие передают отчёты и двигают её по workflow. Дополнительные namespace-команды работают как wrappers поверх этих двух операций.
+
+Для изолированных контейнеров исполнителей сохранён private runtime bridge `/internal/runtime/step` и `/internal/runtime/history`: это отдельный service-to-service контракт с role tokens, не пользовательский UI API. Он включается только при `PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON` и должен быть доступен лишь во внутренней сети или на host loopback.
+
+Runtime-источник данных — **PostgreSQL**. SQLite используется только для изолированных тестов и локальных smoke-сценариев.
 
 <a name="overview"></a>
-## Overview
 
-The PostgreSQL runtime is the source of truth for workflow templates, phases, namespaces, agents, tasks and Supervisor history. The FastAPI/Jinja2 UI owns workflow configuration and read-only task observation: `/task/{task_key}` (только наблюдение) and `/instructions?phase_id={phase_id}` expose context without bypassing the executor/Supervisor path. В UI доступен просмотр задач, а не их создание или продвижение. The public CLI stays deliberately compact around `step` and `history`.
+## 📌 Snapshot
 
-| Surface | Current behavior | Boundary |
-|---|---|---|
-| Workflow | Manage templates, phases, instructions, checks and evidence requirements. | Phase decisions are Supervisor-gated and recorded in history. |
-| Namespaces | Bind a workflow, UI identity and wrapper CLI command to an entry point. | A namespace changes task context; it does not create a separate hidden runtime. |
-| Tasks | Observe state, phase history, checks, evidence and verdicts in the UI. | The UI does not create or advance tasks. |
-| CLI | `step` creates/advances a task through its configured namespace; `history` reads its phase/Supervisor record. | User-facing wrapper commands remain thin namespace selectors over those operations. |
-| Runtime bridge | Optional internal service-to-service `step` and `history` endpoints support isolated executors. | It is not a user UI API and requires configured runtime role tokens. |
+| Поле | Значение |
+|---|---|
+| Статус | Internal `1.0.0` |
+| Runtime | PostgreSQL + SQLAlchemy/Alembic |
+| Docker UI/API | `http://127.0.0.1:8812` |
+| App/systemd port | `8811` внутри приложения |
+| CLI selector | `PROJECT_WORKFLOW_NAMESPACE_ID` |
+| UI selector | cookie `workflow_namespace_id`, query override `?namespace_id=` |
+| License | FerrPOINT Proprietary Source-Available Evaluation License v1.0 |
 
 <a name="capabilities"></a>
-## Capabilities
 
-- **Phased execution.** Define ordered and parallel workflow phases with instructions, checks, evidence requirements and rollback targets.
-- **Mandatory Supervisor gate.** Every submitted report receives an auditable verdict: `PASS`, `ROLLBACK` or `BLOCK`.
-- **Namespace isolation.** Give each entry point its own workflow, visual identity and configured wrapper command while keeping CLI semantics consistent.
-- **Read-only task observation.** Inspect task state, history, checks, evidence and verdicts without bypassing the executor/Supervisor path.
-- **PostgreSQL-first runtime.** Use SQLAlchemy and Alembic for the production runtime; SQLite is limited to isolated tests and screenshot smoke fixtures.
+## ✨ Возможности
 
-<a name="quick-start"></a>
-## Quick Start
+| Feature | Описание |
+|---|---|
+| Phase workflow | Задача идёт по шаблону фаз с инструкциями, checks, evidence и audit history. |
+| Supervisor gate | Переход фазы проходит через обязательную оценку отчёта и фиксирует `PASS` / `ROLLBACK` / `BLOCK`. |
+| Namespace runtime | Несколько entrypoints могут иметь свои workflow, задачи, стиль UI и CLI-команду. |
+| Web UI | Управление workflows, phases, namespaces и agents; просмотр задач и audit history. |
+| Append-only history | История фаз и `step`-проверок не затирается. |
+| CLI freeze | Публичный CLI остаётся управляемым и предсказуемым: `step` / `history`. |
+| Wrapper commands | `workflow-qa`, `workflow-dev` и другие команды генерируются из записей PostgreSQL. |
+| Automatic baseline | `docker compose up` поднимает Postgres, применяет миграции и загружает стартовый каталог. |
 
-The repository Compose profile starts PostgreSQL, applies migrations/bootstrap data and exposes the UI/API only on loopback.
+## 🔧 Стек
+
+| Zone | Tech | Роль |
+|---|---|---|
+| Runtime | Python 3.10+ | application runtime и packaging target |
+| Data | PostgreSQL | source of truth для UI, CLI и supervisor state |
+| ORM | SQLAlchemy 2 | models, repositories, unit-of-work |
+| Migrations | Alembic | schema history и baseline |
+| API/UI | FastAPI + Jinja2 | server-side UI и JSON endpoints |
+| Validation | Pydantic | settings, schemas и DTO boundaries |
+| CLI | Click + Rich | компактный agent-facing command surface |
+| Tooling | uv + constraints.txt | повторяемый локальный и container dependency set |
+| Quality | pytest, ruff, mypy | локальный quality gate |
+
+<a name="entrypoints"></a>
+
+## 🧩 CLI Entry Points
+
+Каждый namespace/entrypoint хранит:
+
+| Field | Role |
+|---|---|
+| Name и description | UI identity и human-facing purpose |
+| Bound workflow | Phase template для задач этого entrypoint |
+| Icon и theme color | Стилизация header, dashboard и task-detail |
+| Custom CLI command | Пользовательская wrapper-команда, например `workflow-qa` |
+
+Верхний UI selector переключает logo/name, accent color, dashboard, task list, task detail и `/phases`. Выбранный entrypoint хранится в cookie `workflow_namespace_id`; `?namespace_id=` имеет приоритет над cookie.
+
+Канонический API: `/api/namespaces`; старые UI/API alias-роуты не входят в публичную поверхность.
+
+## 🖥️ CLI
+
+CLI ожидает `DATABASE_URL`:
 
 ```bash
-docker compose up --build -d --wait
-curl --fail http://127.0.0.1:8812/health
+export DATABASE_URL=postgresql+psycopg://project_workflow:project_workflow@localhost:5432/project_workflow
 ```
 
-The health response confirms the application, database and schema state. Repository Compose publishes PostgreSQL and API on loopback; deployment-specific OpenAI, platform-service and internal-runtime bridge settings are supplied through environment variables, never committed credentials.
-
-For a local developer install, quality commands and the runtime environment, read [docs/quality-gate.md](docs/quality-gate.md), [docs/database-reset.md](docs/database-reset.md) and [AGENTS.md](AGENTS.md).
-
-### CLI entry points
-
-Install namespace wrappers from the active PostgreSQL catalog:
+Генерация пользовательских wrapper-команд:
 
 ```bash
 python scripts/install_namespace_clis.py --bin-dir ./.bin
+```
+
+Запуск выбранного workflow через настроенную команду:
+
+```bash
 workflow-run step --task RUN-123 --report "Сделал X, проверил Y"
+```
+
+Чтение истории фаз и supervisor-а того же entrypoint:
+
+```bash
 workflow-run history --task RUN-123 --n 10
+```
+
+Параллельные entrypoints используют собственные настроенные команды:
+
+```bash
 workflow-qa step --task RUN-42 --report "Проверил сценарии"
 workflow-dev history --task RUN-42
 ```
 
-The wrapper sets `PROJECT_WORKFLOW_NAMESPACE_ID` and invokes only the internal `step/history` CLI. The same external task key can therefore be tracked independently in separate namespaces.
+Wrapper выставляет `PROJECT_WORKFLOW_NAMESPACE_ID=<id>` и вызывает внутренний `step/history` CLI, поэтому один и тот же внешний task key может существовать независимо в разных namespaces. Исполнитель получает настроенную wrapper-команду в `phase_contract.cli_actor.entrypoint`, а не хардкоженное глобальное имя CLI.
+
+<a name="ui"></a>
+
+<a name="quick-start"></a>
+
+## 🌐 Web UI
+
+Docker Compose mode:
+
+```bash
+cp .env.example .env
+docker compose up --build -d --wait
+curl --fail http://127.0.0.1:8812/health
+```
+
+UI: `http://127.0.0.1:8812`.
+
+Compose привязывает PostgreSQL и API к `127.0.0.1`. Перед стартом свежего baseline поверх старого dev-тома следуйте [docs/database-reset.md](docs/database-reset.md).
+
+Локальный app mode использует БД из `DATABASE_URL` и порт приложения из CLI-флагов:
+
+```bash
+python -m project_workflow.interfaces.ui --host 127.0.0.1 --port 8812
+curl --fail http://127.0.0.1:8812/health
+```
+
+При старте приложение проверяет connectivity БД; Compose `migrate`-сервис применяет миграции схемы и загружает дефолтный workflow-каталог.
+
+| Area | Route |
+|---|---|
+| Dashboard | `/` |
+| Namespaces | `/namespaces`, `/namespaces/new` |
+| Tasks | `/tasks`, `/task/{task_key}` (только наблюдение) |
+| Phases | `/phases`, `/phase/{phase_id}`, `/instructions?phase_id={phase_id}` |
+| Workflows | `/workflows` |
+| Agents | `/agents` |
+| Settings | `/settings` |
 
 <a name="visual-proof"></a>
-## Visual Proof
 
-The root README uses a neutral isolated fixture rather than the operational task dashboard. The fixture uses generic namespace names and UI-testing copy, without credentials, task keys, URLs or filesystem paths. The broader screenshot set and its capture process remain covered by [docs/quality-gate.md](docs/quality-gate.md).
+## 🖼️ Визуальные доказательства
 
-### Namespace configuration
-
-<figure>
-  <img src="docs/screenshots/namespaces.png" alt="Project Workflow namespace configuration from the neutral isolated fixture" width="100%" />
-  <figcaption>Namespace identity, workflow binding and wrapper-command configuration.</figcaption>
-</figure>
-
-### Namespace configuration on mobile
+Браузерные свидетельства сняты full-page с нейтральной изолированной фикстурой (neutral isolated fixture): generic namespace-имена и UI-testing copy, без credentials, реальных task keys, URL и filesystem-путей. Покрытие — active, blocked и done состояния задач.
 
 <figure>
-  <img src="docs/screenshots/mobile-namespaces.png" alt="Project Workflow mobile namespace configuration from the neutral isolated fixture" width="390" />
-  <figcaption>Mobile 390x844 evidence: cards stack and the editor remains a single-column form.</figcaption>
+  <figcaption><strong>Дашборд / Разработка</strong></figcaption>
+  <img src="docs/screenshots/dashboard.png" alt="Дашборд / Разработка full-page evidence" width="100%" />
 </figure>
 
-<a name="safety"></a>
-## Safety Boundaries
+<figure>
+  <figcaption><strong>Дашборд / Проверка качества</strong></figcaption>
+  <img src="docs/screenshots/dashboard-qa.png" alt="Дашборд / Проверка качества full-page evidence" width="100%" />
+</figure>
 
-- **Authority split.** Executors submit reports through the CLI; Supervisor verdicts control phase progression. The UI is an observer for tasks rather than a manual advancement path.
-- **Runtime isolation.** The internal runtime bridge is enabled only with `PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON` and belongs on an internal network or host loopback.
-- **Data boundary.** PostgreSQL is the runtime source of truth. SQLite exists only for isolated tests and screenshot fixtures, never as a replacement production state store.
-- **Configuration boundary.** API credentials, runtime role tokens and external-provider settings are environment values; do not put them in README examples, committed files or screenshot evidence.
-- **Network boundary.** This is an internal, loopback/private-contour utility. It intentionally does not claim public multi-tenant ingress, external-user security middleware or public observability scope.
+<figure>
+  <figcaption><strong>Неймспейсы</strong></figcaption>
+  <img src="docs/screenshots/namespaces.png" alt="Неймспейсы full-page evidence" width="100%" />
+</figure>
+
+<figure>
+  <figcaption><strong>Создание неймспейса</strong></figcaption>
+  <img src="docs/screenshots/namespace-new.png" alt="Создание неймспейса full-page evidence" width="100%" />
+</figure>
+
+<figure>
+  <figcaption><strong>Задачи / Разработка</strong></figcaption>
+  <img src="docs/screenshots/tasks.png" alt="Задачи / Разработка full-page evidence" width="100%" />
+</figure>
+
+<figure>
+  <figcaption><strong>Задачи / Проверка качества</strong></figcaption>
+  <img src="docs/screenshots/tasks-qa.png" alt="Задачи / Проверка качества full-page evidence" width="100%" />
+</figure>
+
+<figure>
+  <figcaption><strong>Воркфлоу</strong></figcaption>
+  <img src="docs/screenshots/workflows.png" alt="Воркфлоу full-page evidence" width="100%" />
+</figure>
+
+<figure>
+  <figcaption><strong>Фазы / Разработка</strong></figcaption>
+  <img src="docs/screenshots/phases.png" alt="Фазы / Разработка full-page evidence" width="100%" />
+</figure>
+
+<figure>
+  <figcaption><strong>Фазы / Проверка качества</strong></figcaption>
+  <img src="docs/screenshots/phases-qa.png" alt="Фазы / Проверка качества full-page evidence" width="100%" />
+</figure>
+
+<figure>
+  <figcaption><strong>Инструкции</strong></figcaption>
+  <img src="docs/screenshots/instructions.png" alt="Инструкции full-page evidence" width="100%" />
+</figure>
+
+<figure>
+  <figcaption><strong>Агенты</strong></figcaption>
+  <img src="docs/screenshots/agents.png" alt="Агенты full-page evidence" width="100%" />
+</figure>
+
+<figure>
+  <figcaption><strong>CLI-настройки</strong></figcaption>
+  <img src="docs/screenshots/settings.png" alt="CLI-настройки full-page evidence" width="100%" />
+</figure>
+
+<figure>
+  <figcaption><strong>Одна задача / Разработка</strong></figcaption>
+  <img src="docs/screenshots/task-detail-dev.png" alt="Одна задача / Разработка full-page evidence" width="100%" />
+</figure>
+
+<figure>
+  <figcaption><strong>Одна задача / Проверка качества</strong></figcaption>
+  <img src="docs/screenshots/task-detail-qa.png" alt="Одна задача / Проверка качества full-page evidence" width="100%" />
+</figure>
+
+<figure>
+  <figcaption><strong>Дашборд на мобильном</strong></figcaption>
+  <img src="docs/screenshots/mobile-dashboard.png" alt="Дашборд на мобильном full-page evidence" width="100%" />
+</figure>
+
+<figure>
+  <figcaption><strong>Неймспейсы на мобильном</strong></figcaption>
+  <img src="docs/screenshots/mobile-namespaces.png" alt="Неймспейсы на мобильном full-page evidence" width="100%" />
+</figure>
+
+На мобильных ширинах карточки стекаются, редактор остаётся одноколоночной формой.
+
+<a name="architecture"></a>
+
+## 🏗️ Архитектура
+
+```mermaid
+flowchart TD
+    CLI[project-workflow CLI] -->|step / history| App[Application services]
+    Wrap[Namespace wrapper] -->|PROJECT_WORKFLOW_NAMESPACE_ID| CLI
+    UI[FastAPI + Jinja2 UI] -->|HTML / JSON| App
+    App --> Domain[Domain validation + contracts]
+    App --> UoW[SQLAlchemy Unit of Work]
+    UoW --> Repo[Repositories]
+    Repo --> DB[(PostgreSQL)]
+    App --> Supervisor[LLM Supervisor]
+    Supervisor -->|PASS / ROLLBACK / BLOCK| App
+```
+
+### Принципы
+
+- Runtime state живёт в PostgreSQL; код-пути не должны растить скрытое in-memory truth.
+- Domain validation остаётся вне SQLAlchemy-моделей.
+- UI-роуты валидируют запросы, вызывают application services и возвращают HTML/API-ответы.
+- Решения Supervisor-а аудируемы и связаны с историей фаз.
+- Compatibility aliases остаются только там, где текущий runtime их ещё требует.
 
 <a name="quality"></a>
-## Quality and Verification
 
-| Gate | Command |
+## 🛠️ Разработка
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --constraint constraints.txt -e ".[dev,ui]"
+```
+
+`constraints.txt` фиксирует протестированный dependency set; Docker использует тот же файл.
+
+<a name="safety"></a>
+
+## 🛡️ Качество и проверки
+
+| Проверка | Команда |
 |---|---|
-| Documentation regression checks | `pytest -q tests/test_docs_quality.py --timeout=60` |
-| README assets and anchors | `python scripts/verify_readme.py` |
+| Full local gate | `make quality` |
+| Warning-focused gate | `make warnings` |
+| Compose readiness | `make compose-ready` |
+| Documentation regression | `pytest -q tests/test_docs_quality.py --timeout=60` |
+| README assets и anchors | `python scripts/verify_readme.py` |
 | Unit/UI tests | `pytest -q --timeout=60` |
 | PostgreSQL integration | `pytest -q -m integration tests/test_postgres_integration.py --timeout=120` |
 | Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` |
-| Lint and type checks | `ruff check .` and `mypy project_workflow scripts` |
-| Compose readiness | `docker compose up --build -d --wait` and `curl --fail http://127.0.0.1:8812/health` |
+| Lint и типы | `ruff check .` и `mypy project_workflow scripts` |
+| Windows quality | `pwsh -File scripts/quality.ps1 quality` |
 
-`make quality` and `pwsh -File scripts/quality.ps1 quality` collect the documented local gates. GitHub Actions repeats unit/UI, PostgreSQL integration, coverage, lint, mypy, diff hygiene and Compose readiness for every push and pull request to `master`.
+`make quality` включает unit/UI-тесты, PostgreSQL integration tests, coverage, ruff и mypy. Тот же набор автоматически выполняет GitHub Actions на push и pull request в `master`; `compose-smoke` отдельно собирает Compose-стек и проверяет readiness.
 
-## Documentation Map
+## 🗺️ Roadmap
 
-- **Product/runtime:** [docs/quality-gate.md](docs/quality-gate.md), [LIVE_TEST_PLAN.md](LIVE_TEST_PLAN.md), [docs/database-reset.md](docs/database-reset.md)
-- **Architecture:** [project_workflow/interfaces/ui/app.py](project_workflow/interfaces/ui/app.py), [project_workflow/infrastructure/db/session.py](project_workflow/infrastructure/db/session.py), [project_workflow/interfaces/ui/routes/runtime_api.py](project_workflow/interfaces/ui/routes/runtime_api.py)
-- **Repository conventions:** [AGENTS.md](AGENTS.md), [pyproject.toml](pyproject.toml), [.github/workflows/ci.yml](.github/workflows/ci.yml)
+- [x] PostgreSQL runtime, SQLAlchemy repositories и Alembic baseline
+- [x] FastAPI/Jinja2 Web UI для workflows, phases, namespaces, agents и tasks
+- [x] Namespace selector, theme metadata и wrapper CLI commands
+- [x] Supervisor verdict audit trail для phase transitions
+- [x] FerrPOINT proprietary source-available licensing
+- [ ] Automated browser screenshot smoke в регулярном quality gate
+- [ ] Более широкое API-route regression покрытие для namespace/workflow мутаций
+- [ ] Дальнейшее разделение application services, где legacy compatibility ещё скрывает доменные границы
+
+## 🧭 Карта проекта
+
+```text
+project-workflow/
+├── project_workflow/ # domain, application services, CLI, UI и supervisor
+├── tests/            # unit, integration, UI и regression coverage
+├── scripts/          # quality, DB init и namespace CLI helpers
+├── docs/             # architecture, quality gate, bug audit и screenshots
+├── docker-compose.yml
+├── pyproject.toml
+└── constraints.txt
+```
+
+## 📚 Документы
+
+- [docs/architecture.md](docs/architecture.md) — CLI/UI/Supervisor boundaries, state/audit model и runtime scope.
+- [docs/quality-gate.md](docs/quality-gate.md) — local gate, PostgreSQL integration, Compose readiness и browser smoke.
+- [docs/bug-audit.md](docs/bug-audit.md) — defect audit notes.
+- [docs/database-reset.md](docs/database-reset.md) — безопасный reset старых локальных Compose-томов.
+- [LIVE_TEST_PLAN.md](LIVE_TEST_PLAN.md) — executor-driven E2E acceptance.
 
 <a name="license"></a>
-## License
 
-FerrPOINT Proprietary Source-Available Evaluation License v1.0. This repository is not open source. Viewing and evaluation are allowed under [LICENSE](LICENSE); commercial, production, resale, redistribution and SaaS/hosting use require written FerrPOINT permission.
+## 🔒 Лицензия
+
+Proprietary source-available. Not open source. Viewing/evaluation only.
+
+Commercial, production, resale, redistribution, SaaS/hosting use require written license from FerrPOINT. См. [LICENSE](LICENSE), [NOTICE](NOTICE) и [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
