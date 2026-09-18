@@ -43,10 +43,10 @@ class RuntimeWorkflowService:
 
     def current(self, assignment: RuntimeAssignment) -> dict[str, Any]:
         task, phases = self._bind(assignment)
+        if task.status == "done":
+            return self._result(assignment, task, None, complete=True)
         phase = next((item for item in phases if item.code == task.current_phase), None)
         if phase is None:
-            if task.status == "done":
-                return self._result(assignment, task, None, complete=True)
             raise RuntimeAssignmentError("current phase is not part of the assigned mode")
         return self._result(assignment, task, phase, complete=False)
 

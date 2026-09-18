@@ -110,6 +110,13 @@ def test_runtime_uses_backend_mode_and_keeps_cycles_separate(monkeypatch):
     assert duplicate.json()["phase"]["code"] == "initial.2"
     done = client.post("/api/runtime/assignment/complete", json=_completion("initial.2"), headers=headers)
     assert done.json()["complete"] is True
+    completed_current = client.post(
+        "/api/runtime/assignment/current", json=_payload(), headers=headers
+    )
+    assert completed_current.status_code == 200
+    assert completed_current.json()["status"] == "done"
+    assert completed_current.json()["complete"] is True
+    assert completed_current.json()["phase"] is None
 
     wrong_operation = client.post(
         "/api/runtime/assignment/complete",
