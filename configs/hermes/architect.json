@@ -76,11 +76,11 @@
           "name": "Передача разработке",
           "description": "Опубликовать самодостаточное архитектурное решение.",
           "instructions": [
-            {"text": "Оставить в Task итоговый комментарий: выбранное решение, компоненты, контракты, dataflow, миграции, права, риски, rollback, план файлов и проверки.", "skills": ["relevanter-business-operator"]},
-            {"text": "Проверить ссылки на evidence и отсутствие незакрытых P0-вопросов, затем последним действием вызвать complete_assigned_stage с outcome passed.", "skills": ["relevanter-business-operator"]}
+            {"text": "Подготовить итоговый комментарий: выбранное решение, компоненты, контракты, dataflow, миграции, права, риски, rollback, план файлов и проверки.", "skills": ["relevanter-business-operator"]},
+            {"text": "Проверить ссылки на evidence и отсутствие незакрытых P0-вопросов. На этой фазе terminal action не вызывать: сначала завершить фазу через workflow_phase complete.", "skills": ["relevanter-business-operator", "project-workflow-executor"]}
           ],
-          "checks": ["Архитектурный комментарий опубликован", "Developer может начать без выбора архитектуры"],
-          "evidence": ["Business comment ref", "Подтверждение terminal action"]
+          "checks": ["Архитектурный комментарий подготовлен", "Developer может начать без выбора архитектуры"],
+          "evidence": ["Подготовленный итоговый Markdown", "Ссылки на evidence"]
         }
       ]
     }]

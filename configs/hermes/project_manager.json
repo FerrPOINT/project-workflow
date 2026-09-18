@@ -75,11 +75,11 @@
           "name": "Публикация в Бэклог",
           "description": "Атомарно завершить PM workflow и передать Бэклог в очередь Analyst.",
           "instructions": [
-            {"text": "Оставить итоговый комментарий в Task: согласованная цель, границы, критерии, ограничения, зависимости и факт подтверждения.", "skills": ["relevanter-business-operator"]},
-            {"text": "Последним действием вызвать publish_task_draft с exact sessionId, свежим expectedModifiedOn, корректным названием и Markdown-описанием; убедиться, что Task стала Бэклог / Готово и автоматически поставлена в очередь Analyst. Не запускать Analyst вручную и не отправлять ему сообщение.", "skills": ["relevanter-business-operator"]}
+            {"text": "Подготовить итоговый пользовательский Markdown: согласованная цель, границы, критерии, ограничения, зависимости и факт подтверждения.", "skills": ["relevanter-business-operator"]},
+            {"text": "Перечитать Task и подготовить exact sessionId, свежий expectedModifiedOn, корректное название и Markdown-описание для terminal action. На этой фазе Task ещё не публиковать и terminal action не вызывать: сначала завершить фазу через workflow_phase complete и убедиться, что runtime вернул complete=true.", "skills": ["relevanter-business-operator", "project-workflow-executor"]}
           ],
-          "checks": ["Переход выполнен только Драфт → Бэклог", "Бэклог получил статус Готово и ожидает автоматического запуска Analyst"],
-          "evidence": ["Business comment ref", "Readback Бэклог / Готово и queued Analyst assignment"]
+          "checks": ["Итоговый Markdown подготовлен", "Подготовлены данные публикации для последней подтверждённой Task revision", "Все проверки последней фазы выполнены"],
+          "evidence": ["Подготовленный итоговый Markdown", "Подтверждённая Task revision", "Подготовленные title и descriptionMarkdown"]
         }
       ]
     }]

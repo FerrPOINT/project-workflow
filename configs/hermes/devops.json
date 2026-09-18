@@ -54,8 +54,8 @@
           "name": "Установка candidate",
           "description": "Изменить только назначенный изолированный runtime.",
           "instructions": [
-            {"text": "Запустить только предоставленный ограниченный deployment path для exact versioned workflow/skills configuration и exact images в назначенный namespace; если выпуск выполняет внешний Owner-оператор, дождаться его immutable receipt.", "skills": ["exact-sha-deployment", "devops-service-health-checks"]},
-            {"text": "Выполнить model/workspace upgrade штатным путём; не изменять основной DEV, общие БД, volumes или соседние сервисы.", "skills": ["devops-service-health-checks"]}
+            {"text": "Из Developer handoff взять точный PR ref и вызвать release_candidate <sessionId> <PR-ref>. Не выполнять merge, build, HTTP или host-команды напрямую: trusted command сама проверяет связь PR с этой Task, required Verify, exact remote SHA и integration ancestry, затем запускает или reconciles только штатный Deploy main. При pending=true не завершать фазу и повторять reconcile того же gate до ok=true.", "skills": ["exact-sha-deployment", "devops-service-health-checks"]},
+            {"text": "Использовать terminal build и его immutable artifacts как receipt штатных backup, model/workspace upgrade, exact image switch и rollback boundary; не изменять основной DEV, общие БД, volumes или соседние сервисы.", "skills": ["exact-sha-deployment", "devops-service-health-checks"]}
           ],
           "checks": ["Установлены exact versions", "Изменён только разрешённый runtime scope"],
           "evidence": ["Deploy command transcript ref", "Upgrade result ref"]
@@ -65,8 +65,8 @@
           "name": "Health и восстановление",
           "description": "Убедиться, что runtime полностью поднялся.",
           "instructions": [
-            {"text": "Проверить live/ready всех application services, Kafka, identities, Hermes endpoints и workspace pool.", "skills": ["devops-service-health-checks"]},
-            {"text": "При провале health или upgrade остановиться, собрать evidence и выполнить подготовленный rollback; blind retry запрещён.", "skills": ["devops-service-health-checks"]}
+            {"text": "Перечитать результат release_candidate: Deploy build обязан быть SUCCESSFUL на merge SHA, а публичный HTTP readback изолированного target — отвечать успешно. Exact version/image/model/backup проверять по immutable artifacts terminal build, не по HTML.", "skills": ["exact-sha-deployment", "devops-service-health-checks"]},
+            {"text": "При провале health или upgrade остановиться и использовать terminal job evidence; повтор release_candidate разрешён только для reconcile того же PR/SHA/build и не создаёт слепой повтор.", "skills": ["exact-sha-deployment", "devops-service-health-checks"]}
           ],
           "checks": ["Все обязательные readiness checks зелёные", "Partial failure отсутствует или выполнен rollback"],
           "evidence": ["Health/readiness snapshot", "Rollback result при необходимости"]
@@ -76,11 +76,11 @@
           "name": "Runtime acceptance",
           "description": "Проверить поставленный пользовательский поток.",
           "instructions": [
-            {"text": "Выполнить согласованный authenticated acceptance-smoke через публичные границы и проверить сохранность прежних данных.", "skills": ["devops-service-health-checks", "deployed-acceptance"]},
-            {"text": "Проверить restart/recovery активного run и отсутствие утечки secrets, raw IDs и технического мусора пользователю.", "skills": ["devops-service-health-checks", "deployed-acceptance"]}
+            {"text": "Проверить публичный smoke exact deployed candidate и автоматизированное acceptance evidence из terminal job; не подменять Tester acceptance одним health-check и не ждать внешнего оператора.", "skills": ["devops-service-health-checks", "deployed-acceptance"]},
+            {"text": "Проверить сохранность прежних данных и отсутствие утечки secrets, raw IDs и технического мусора; restart/recovery считать доказанным только при наличии immutable job evidence.", "skills": ["devops-service-health-checks", "deployed-acceptance"]}
           ],
           "checks": ["Основной пользовательский путь работает", "Restart и данные выдержали проверку"],
-          "evidence": ["Authenticated smoke refs", "Restart/recovery refs"]
+          "evidence": ["Automated smoke refs", "Restart/recovery refs"]
         },
         {
           "code": "deploy.readback",
@@ -98,11 +98,11 @@
           "name": "Завершение деплоя",
           "description": "Опубликовать итог и завершить процесс.",
           "instructions": [
-            {"text": "Оставить в Task итоговый комментарий: exact release, изменённый scope, backup, health, acceptance, readback, rollback status и evidence refs.", "skills": ["relevanter-business-operator"]},
-            {"text": "После подтверждения успешного runtime последним действием вызвать complete_assigned_stage с passed. Stage, agent и mode не выбирать.", "skills": ["relevanter-business-operator", "devops-service-health-checks"]}
+            {"text": "Подготовить итоговый комментарий: exact release, изменённый scope, backup, health, acceptance, readback, rollback status и evidence refs.", "skills": ["relevanter-business-operator"]},
+            {"text": "После подтверждения успешного runtime завершить фазу через workflow_phase complete. На этой фазе terminal action не вызывать; stage, agent и mode не выбирать.", "skills": ["relevanter-business-operator", "devops-service-health-checks", "project-workflow-executor"]}
           ],
-          "checks": ["Комментарий содержит проверяемый release record", "Terminal action выполнен после readback"],
-          "evidence": ["Business comment ref", "Terminal outcome readback"]
+          "checks": ["Подготовленный комментарий содержит проверяемый release record", "Runtime readback завершён до закрытия фазы"],
+          "evidence": ["Подготовленный итоговый Markdown", "Exact runtime readback"]
         }
       ]
     }]
