@@ -132,7 +132,7 @@ def test_readme_screenshots_are_real_full_size_pngs() -> None:
 def test_readme_presents_reviewed_namespace_evidence() -> None:
     section = _readme_screenshots_section()
 
-    assert "<table>" not in section
+    assert section.count("<table>") == 1, "exactly one gallery table (two-column mobile layout)"
     assert 'src="docs/screenshots/namespaces.png"' in section
     assert 'src="docs/screenshots/mobile-namespaces.png"' in section
     assert "neutral isolated fixture" in section
