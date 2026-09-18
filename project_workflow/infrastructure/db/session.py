@@ -78,7 +78,8 @@ def get_engine(url: str | None = None) -> Engine:
 def _create_postgres_engine(target: str) -> Engine:
     """Create a PostgreSQL engine with search_path and connection retry."""
     connect_args = {}
-    schema = get_settings().DB_SCHEMA
+    settings = get_settings()
+    schema = settings.DB_SCHEMA
     if schema:
         connect_args["options"] = f"-csearch_path={schema}"
     last_exc: Exception | None = None
@@ -87,8 +88,8 @@ def _create_postgres_engine(target: str) -> Engine:
             engine = create_engine(
                 target,
                 pool_pre_ping=True,
-                pool_size=10,
-                max_overflow=20,
+                pool_size=settings.DB_POOL_SIZE,
+                max_overflow=settings.DB_MAX_OVERFLOW,
                 connect_args=connect_args,
                 echo=False,
             )

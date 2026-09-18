@@ -21,6 +21,8 @@ services:
     <<: *project-workflow
     env_file: ["${HERMES_OPERATOR_ROOT:?required}/project-workflow-project_manager.env"]
     environment:
+      DB_POOL_SIZE: "1"
+      DB_MAX_OVERFLOW: "0"
       PROJECT_WORKFLOW_MANAGED_CONFIGURATION: "1"
       DATABASE_URL: ${PROJECT_WORKFLOW_PROJECT_MANAGER_DATABASE_URL:?required}
       PROJECT_WORKFLOW_RUNTIME_REQUIRED: "1"
@@ -28,6 +30,8 @@ services:
     <<: *project-workflow
     env_file: ["${HERMES_OPERATOR_ROOT:?required}/project-workflow-analyst.env"]
     environment:
+      DB_POOL_SIZE: "1"
+      DB_MAX_OVERFLOW: "0"
       PROJECT_WORKFLOW_MANAGED_CONFIGURATION: "1"
       DATABASE_URL: ${PROJECT_WORKFLOW_ANALYST_DATABASE_URL:?required}
       PROJECT_WORKFLOW_RUNTIME_REQUIRED: "1"
@@ -35,6 +39,8 @@ services:
     <<: *project-workflow
     env_file: ["${HERMES_OPERATOR_ROOT:?required}/project-workflow-architect.env"]
     environment:
+      DB_POOL_SIZE: "1"
+      DB_MAX_OVERFLOW: "0"
       PROJECT_WORKFLOW_MANAGED_CONFIGURATION: "1"
       DATABASE_URL: ${PROJECT_WORKFLOW_ARCHITECT_DATABASE_URL:?required}
       PROJECT_WORKFLOW_RUNTIME_REQUIRED: "1"
@@ -42,6 +48,8 @@ services:
     <<: *project-workflow
     env_file: ["${HERMES_OPERATOR_ROOT:?required}/project-workflow-developer.env"]
     environment:
+      DB_POOL_SIZE: "1"
+      DB_MAX_OVERFLOW: "0"
       PROJECT_WORKFLOW_MANAGED_CONFIGURATION: "1"
       DATABASE_URL: ${PROJECT_WORKFLOW_DEVELOPER_DATABASE_URL:?required}
       PROJECT_WORKFLOW_RUNTIME_REQUIRED: "1"
@@ -49,6 +57,8 @@ services:
     <<: *project-workflow
     env_file: ["${HERMES_OPERATOR_ROOT:?required}/project-workflow-reviewer.env"]
     environment:
+      DB_POOL_SIZE: "1"
+      DB_MAX_OVERFLOW: "0"
       PROJECT_WORKFLOW_MANAGED_CONFIGURATION: "1"
       DATABASE_URL: ${PROJECT_WORKFLOW_REVIEWER_DATABASE_URL:?required}
       PROJECT_WORKFLOW_RUNTIME_REQUIRED: "1"
@@ -56,6 +66,8 @@ services:
     <<: *project-workflow
     env_file: ["${HERMES_OPERATOR_ROOT:?required}/project-workflow-tester.env"]
     environment:
+      DB_POOL_SIZE: "1"
+      DB_MAX_OVERFLOW: "0"
       PROJECT_WORKFLOW_MANAGED_CONFIGURATION: "1"
       DATABASE_URL: ${PROJECT_WORKFLOW_TESTER_DATABASE_URL:?required}
       PROJECT_WORKFLOW_RUNTIME_REQUIRED: "1"
@@ -63,6 +75,8 @@ services:
     <<: *project-workflow
     env_file: ["${HERMES_OPERATOR_ROOT:?required}/project-workflow-devops.env"]
     environment:
+      DB_POOL_SIZE: "1"
+      DB_MAX_OVERFLOW: "0"
       PROJECT_WORKFLOW_MANAGED_CONFIGURATION: "1"
       DATABASE_URL: ${PROJECT_WORKFLOW_DEVOPS_DATABASE_URL:?required}
       PROJECT_WORKFLOW_RUNTIME_REQUIRED: "1"

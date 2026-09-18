@@ -2,14 +2,16 @@
 """Install one versioned Hermes workflow into one isolated namespace DB.
 
 The script is deliberately fail-closed: it updates the named workflow and its
-declared modes, but refuses undeclared workflows, modes or phases. Cleanup is a
-separate audited operation; an install never guesses which data is disposable.
+declared modes, but refuses undeclared workflows, modes or phases. A managed
+namespace may remove only the known empty bootstrap workflows after auditing
+that they have no Task references.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -136,6 +138,38 @@ def install(
         workflow_spec = bundle["workflow"]
         existing_workflows = list(uow.workflows.list())
         foreign = [item.name for item in existing_workflows if item.name != workflow_spec["name"]]
+        if foreign and not check_only and os.environ.get("PROJECT_WORKFLOW_MANAGED_CONFIGURATION") == "1":
+            removable = {"Default Workflow", "Smoke Test Workflow"}
+            unknown = sorted(set(foreign) - removable)
+            if unknown:
+                raise RuntimeError(f"namespace contains undeclared workflows: {unknown}")
+            removable_agent_ids: set[int] = set()
+            for item in existing_workflows:
+                if item.name not in removable or item.id is None:
+                    continue
+                projects = [
+                    project for project in uow.projects.list() if project.workflow_id == item.id
+                ]
+                project_ids = {project.id for project in projects if project.id is not None}
+                if any(task.project_id in project_ids for task in uow.tasks.list()):
+                    raise RuntimeError(f"refusing to remove populated demo workflow: {item.name}")
+                removable_agent_ids.update(
+                    phase.agent_id
+                    for phase in uow.phases.list(workflow_id=item.id)
+                    if phase.agent_id is not None
+                )
+                for project in projects:
+                    if project.id is not None:
+                        uow.projects.delete(project.id)
+                uow.workflows.delete(item.id)
+            retained_agent_ids = {
+                phase.agent_id for phase in uow.phases.list() if phase.agent_id is not None
+            }
+            for agent_id in removable_agent_ids - retained_agent_ids:
+                uow.agents.delete(agent_id)
+            uow.commit()
+            existing_workflows = list(uow.workflows.list())
+            foreign = [item.name for item in existing_workflows if item.name != workflow_spec["name"]]
         if foreign:
             raise RuntimeError(f"namespace contains undeclared workflows: {foreign}")
         workflow = uow.workflows.get_by_name(workflow_spec["name"])

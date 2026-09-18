@@ -96,6 +96,8 @@ def test_dev_topology_declares_exactly_seven_private_runtime_services() -> None:
     assert "ports:" not in compose
     assert "PROJECT_WORKFLOW_RUNTIME_REQUIRED" in compose
     assert compose.count('PROJECT_WORKFLOW_MANAGED_CONFIGURATION: "1"') == 7
+    assert compose.count('DB_POOL_SIZE: "1"') == 7
+    assert compose.count('DB_MAX_OVERFLOW: "0"') == 7
     assert "config root must contain exactly seven canonical role bundles" in installer
 
 
@@ -117,3 +119,18 @@ def test_installer_applies_and_verifies_exact_bundle(tmp_path: Path) -> None:
 
     with pytest.raises(RuntimeError, match="workflow description"):
         install(bundle, check_only=True, database_url=database_url)
+
+
+def test_managed_installer_removes_only_empty_bootstrap_workflows(tmp_path: Path, monkeypatch) -> None:
+    database_url = f"sqlite:///{(tmp_path / 'managed.db').as_posix()}"
+    with SAUnitOfWork(database_url) as uow:
+        uow.init()
+    monkeypatch.setenv("PROJECT_WORKFLOW_MANAGED_CONFIGURATION", "1")
+
+    bundle = load_bundle(CONFIG_ROOT / "analyst.json")
+    install(bundle, check_only=False, database_url=database_url)
+
+    with SAUnitOfWork(database_url) as uow:
+        assert [workflow.name for workflow in uow.workflows.list()] == ["Hermes Analyst"]
+        assert list(uow.projects.list()) == []
+        assert list(uow.agents.list()) == []

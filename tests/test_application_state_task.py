@@ -154,3 +154,12 @@ class TestAppState:
             state.reset()
             uow3 = state.get_uow()
             assert uow3 is not None
+
+    def test_managed_get_uow_does_not_seed_demo_workflows(self, tmp_path, monkeypatch):
+        from project_workflow.infrastructure.db.session import reset_engine
+
+        monkeypatch.setenv("PROJECT_WORKFLOW_MANAGED_CONFIGURATION", "1")
+        reset_engine()
+        state = _AppState(f"sqlite:///{tmp_path / 'managed.db'}")
+        with state.get_uow() as uow:
+            assert list(uow.workflows.list()) == []

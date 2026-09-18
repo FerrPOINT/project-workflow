@@ -7,6 +7,7 @@ circular imports.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -67,7 +68,8 @@ class _AppState:
         uow = SAUnitOfWork(engine)
         from ..infrastructure.db import schema
 
-        schema.ensure_phase_catalog(uow)
+        if os.environ.get("PROJECT_WORKFLOW_MANAGED_CONFIGURATION") != "1":
+            schema.ensure_phase_catalog(uow)
         return uow
 
     def workflow_service(self) -> WorkflowService:

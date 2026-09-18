@@ -28,6 +28,8 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = os.getenv("DATABASE_URL", "")
     DB_SCHEMA: str = "project_workflow"
+    DB_POOL_SIZE: int = 10
+    DB_MAX_OVERFLOW: int = 20
 
     UI_HOST: str = "0.0.0.0"
     UI_PORT: int = 8811

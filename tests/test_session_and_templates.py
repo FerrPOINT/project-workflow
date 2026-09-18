@@ -81,6 +81,8 @@ class TestSessionHelpers:
             engine = _create_postgres_engine("postgresql://u:***@h/d")
         assert engine is fake_engine
         assert len(calls) == 3
+        assert calls[-1][1]["pool_size"] == 10
+        assert calls[-1][1]["max_overflow"] == 20
 
     def test_get_engine_postgresql_retry_exhausted(self, monkeypatch):
         from unittest.mock import patch
