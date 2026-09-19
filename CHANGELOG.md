@@ -1,0 +1,17 @@
+# Changelog
+
+Все значимые изменения проекта документируются здесь.
+Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
+версионирование — [SemVer](https://semver.org/lang/ru/).
+
+## [Unreleased]
+
+### Added
+- Central SSO и token-mode CLI transport (`feat/central-sso-cli`, #43): browser-сессии central auth и personal tokens как транспорт CLI.
+- Hosted CI (quality + compose-readiness) на каждый push/PR.
+
+### Changed
+- UI: улучшен контраст dark brand subtitle (#44).
+
+### Removed
+- Мобильные галереи и auth-скриншоты из README — desktop-only evidence standard.
