@@ -73,11 +73,11 @@
           "name": "Результат ревью",
           "description": "Опубликовать результат и выбрать только разрешённый outcome.",
           "instructions": [
-            {"text": "Оставить в Task итоговый комментарий: exact SHA, проверенный scope, findings/dispositions, тесты, риски и вывод.", "skills": ["relevanter-business-operator"]},
-            {"text": "Если изменений не требуется, последним действием вызвать complete_assigned_stage с passed; если требуется исправление, вызвать needs_rework с полным findings JSON. Следующую stage, agent и mode не передавать.", "skills": ["relevanter-business-operator", "code-review"]}
+            {"text": "Подготовить итоговый комментарий: exact SHA, проверенный scope, findings/dispositions, тесты, риски и вывод.", "skills": ["relevanter-business-operator"]},
+            {"text": "Подготовить outcome passed либо needs_rework и полный findings JSON для подтверждённых дефектов. На этой фазе terminal action не вызывать: сначала завершить фазу через workflow_phase complete. Следующую stage, agent и mode не выбирать.", "skills": ["relevanter-business-operator", "code-review", "project-workflow-executor"]}
           ],
-          "checks": ["Комментарий и outcome согласованы", "needs_rework содержит хотя бы один полный finding"],
-          "evidence": ["Business comment ref", "Terminal outcome readback"]
+          "checks": ["Подготовленный комментарий и outcome согласованы", "needs_rework содержит хотя бы один полный finding"],
+          "evidence": ["Подготовленный итоговый Markdown", "Подготовленный outcome и findings"]
         }
       ]
     }]

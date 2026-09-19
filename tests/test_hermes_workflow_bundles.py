@@ -12,6 +12,7 @@ LOCAL_RUNTIME_SKILLS = {
     "relevanter-business-operator",
     "relevanter-project-context",
     "relevanter-tech-operator",
+    "project-workflow-executor",
     "deployed-acceptance",
     "exact-sha-deployment",
 }
@@ -36,15 +37,17 @@ def test_seven_clean_role_namespace_bundles_are_complete() -> None:
     assert all(mode["key"] != "default" for bundle in bundles for mode in bundle["workflow"]["modes"])
 
 
-def test_every_terminal_phase_requires_business_comment_and_terminal_action() -> None:
+def test_every_terminal_phase_prepares_handoff_before_terminal_action() -> None:
     for path in CONFIG_ROOT.glob("*.json"):
         bundle = load_bundle(path)
         for mode in bundle["workflow"]["modes"]:
             terminal = mode["phases"][-1]
             text = " ".join(item["text"] for item in terminal["instructions"]).lower()
-            assert "коммент" in text, f"{path.name}/{mode['key']}"
-            expected = "publish_task_draft" if bundle["role"] == "project_manager" else "complete_assigned_stage"
-            assert expected in text, f"{path.name}/{mode['key']}"
+            assert "markdown" in text or "комментар" in text, f"{path.name}/{mode['key']}"
+            assert "workflow_phase complete" in text, f"{path.name}/{mode['key']}"
+            assert "terminal action не вызывать" in text, f"{path.name}/{mode['key']}"
+            assert "publish_task_draft" not in text, f"{path.name}/{mode['key']}"
+            assert "complete_assigned_stage" not in text, f"{path.name}/{mode['key']}"
 
 
 def test_project_manager_publication_hands_backlog_to_analyst_automatically() -> None:
@@ -52,10 +55,9 @@ def test_project_manager_publication_hands_backlog_to_analyst_automatically() ->
     terminal = bundle["workflow"]["modes"][0]["phases"][-1]
     text = " ".join(item["text"] for item in terminal["instructions"]).lower()
 
-    assert "бэклог / готово" in text
-    assert "автоматически поставлена в очередь analyst" in text
-    assert "analyst не запущен" not in text
-    assert "не запускать analyst вручную" in text
+    assert "task ещё не публиковать" in text
+    assert "workflow_phase complete" in text
+    assert "terminal action не вызывать" in text
 
 
 def test_every_instruction_skill_is_pinned_or_supplied_by_the_runtime() -> None:

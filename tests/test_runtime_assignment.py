@@ -161,6 +161,33 @@ def test_runtime_rejects_caller_selected_extra_fields(monkeypatch):
     assert response.status_code == 422
 
 
+def test_runtime_rejects_stale_cycle_and_same_cycle_mode_switch(monkeypatch):
+    monkeypatch.setenv("PROJECT_WORKFLOW_RUNTIME_TOKEN", "runtime-secret")
+    monkeypatch.setenv("PROJECT_WORKFLOW_ROLE", "developer")
+    monkeypatch.setenv("PROJECT_WORKFLOW_NAMESPACE", "hermes-developer")
+    _install_developer_workflow()
+    from project_workflow.interfaces.ui.app import create_app
+
+    client = TestClient(create_app())
+    headers = {"Authorization": "Bearer runtime-secret"}
+    rework = client.post(
+        "/api/runtime/assignment/current",
+        json=_payload(mode="rework", cycleNumber=1, runId="run-rework"),
+        headers=headers,
+    )
+    assert rework.status_code == 200
+    assert rework.json()["mode"] == "rework"
+
+    stale = client.post("/api/runtime/assignment/current", json=_payload(), headers=headers)
+    assert stale.status_code == 409
+    same_cycle_switch = client.post(
+        "/api/runtime/assignment/current",
+        json=_payload(mode="initial", cycleNumber=1, runId="run-wrong-mode"),
+        headers=headers,
+    )
+    assert same_cycle_switch.status_code == 409
+
+
 def test_runtime_keys_cursor_by_immutable_task_ref_not_display_ticket(monkeypatch):
     monkeypatch.setenv("PROJECT_WORKFLOW_RUNTIME_TOKEN", "runtime-secret")
     monkeypatch.setenv("PROJECT_WORKFLOW_ROLE", "developer")

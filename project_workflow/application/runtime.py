@@ -175,6 +175,10 @@ class RuntimeWorkflowService:
             task = self._uow.tasks.get_by_id(task_id)
         elif task.project_id != project.id:
             raise RuntimeAssignmentError("task cursor belongs to another runtime project")
+        elif assignment.cycle_number < task.cycle_number:
+            raise RuntimeAssignmentError("assignment cycle is older than the active runtime cursor")
+        elif assignment.cycle_number == task.cycle_number and task.current_mode_id != mode.id:
+            raise RuntimeAssignmentError("assignment mode conflicts with the active runtime cursor")
         elif task.current_mode_id != mode.id or task.cycle_number != assignment.cycle_number:
             if task.id is None:
                 raise RuntimeAssignmentError("runtime task has no id")
