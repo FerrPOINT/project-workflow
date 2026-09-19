@@ -6,6 +6,7 @@
 
 {% block extra_style %}
 .phases-layout{display:grid;grid-template-columns:280px minmax(0,1fr);gap:20px;align-items:start}
+.phases-layout-single{grid-template-columns:minmax(0,1fr)}
 .workflow-nav{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 100px);overflow:auto;position:sticky;top:76px}
 .workflow-nav-item{display:block;width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;color:var(--text);text-decoration:none}
 .workflow-nav-item:hover{text-decoration:none;border-color:var(--border-strong);background:var(--surface-hover)}
@@ -17,6 +18,11 @@
 .workflow-summary{background:transparent;border-width:0 0 1px;border-radius:0;padding:0 0 16px;display:flex;align-items:center;justify-content:space-between;gap:16px}
 .workflow-summary-copy{min-width:0}
 .workflow-summary .card-title{font-size:20px;color:var(--text);text-transform:none;letter-spacing:0;margin-bottom:5px}
+.phase-view-controls{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+.phase-view-switch{display:inline-flex;align-items:center;padding:2px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface)}
+.phase-view-switch button{min-height:40px;padding:0 12px;border:0;border-radius:4px;background:transparent;color:var(--text-secondary);font:inherit;font-size:13px;cursor:pointer}
+.phase-view-switch button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent-readable);font-weight:600}
+.phase-view-switch button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .phase-jump-select{flex:0 1 240px;min-width:180px;min-height:40px;max-width:100%}
 .empty-note{color:var(--text-dim);font-size:13px;line-height:1.6}
 .timeline{display:flex;flex-direction:column;align-items:stretch;max-width:none;gap:0}
@@ -51,17 +57,35 @@
 .timeline-connector::after{top:calc(50% + 21px);bottom:0}
 .phase-add-btn{position:relative;z-index:1;width:40px;height:40px;border-radius:50%;border:1px dashed var(--accent);background:var(--panel);color:var(--accent);cursor:pointer;font-size:18px;line-height:1}
 .phase-add-btn:hover{background:var(--accent);color:#fff;border-style:solid}
+.timeline.is-compact{border-top:1px solid var(--border)}
+.timeline.is-compact .timeline-block{border-bottom:1px solid var(--border)}
+.timeline.is-compact .timeline-card{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:56px;padding:8px 104px 8px 12px;border:0;border-radius:0}
+.timeline.is-compact .timeline-card .timeline-name{padding-right:0;overflow-wrap:anywhere}
+.timeline.is-compact .phase-card-copy{flex:1 1 auto;min-width:0}
+.timeline.is-compact .timeline-desc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.timeline.is-compact .execution-row{flex:0 1 auto;width:auto;max-width:45%;min-width:0;margin:0;flex-wrap:wrap;justify-content:flex-end}
+.timeline.is-compact .execution-row .badge{overflow-wrap:anywhere}
+.timeline.is-compact .phase-card-actions{top:auto;bottom:8px}
+.timeline.is-compact .timeline-parallel-group{padding:0;border:0;border-left:3px solid var(--orange);border-bottom:1px solid var(--border);border-radius:0;background:transparent;box-shadow:none}
+.timeline.is-compact .timeline-parallel-header{min-height:32px;padding:4px 12px;margin:0;background:var(--orange-soft)}
+.timeline.is-compact .timeline-parallel-grid{display:block}
+.timeline.is-compact .timeline-parallel-grid .timeline-item:not(:last-child){border-bottom:1px solid var(--border)}
+.timeline.is-compact .timeline-connector{height:0}
+.timeline.is-compact .timeline-connector::before,.timeline.is-compact .timeline-connector::after{display:none}
+.timeline.is-compact .timeline-connector .phase-add-btn{position:absolute;right:58px;bottom:8px;border-style:solid;border-radius:6px}
 @media(max-width:1050px){.phases-layout{grid-template-columns:1fr}.workflow-nav{position:static;max-height:none}}
-@media(max-width:760px){.workflow-summary{flex-wrap:wrap}.phase-jump-select{flex:1 1 100%}.timeline-parallel-grid{grid-template-columns:1fr}.timeline-parallel-group{padding:10px}.timeline-card,.timeline-parallel-grid .timeline-card{min-height:0}}
+@media(max-width:760px){.workflow-summary{flex-wrap:wrap}.phase-view-controls{width:100%;justify-content:space-between}.phase-jump-select{flex:1 1 100%}.timeline-parallel-grid{grid-template-columns:1fr}.timeline-parallel-group{padding:10px}.timeline-card,.timeline-parallel-grid .timeline-card{min-height:0}.timeline.is-compact .timeline-card{display:block;min-height:56px}.timeline.is-compact .timeline-desc{display:none}.timeline.is-compact .execution-row{width:auto;max-width:none;margin-top:4px;justify-content:flex-start}}
 {% endblock %}
 
 {% macro phase_card(p) -%}
 <div class="timeline-item" id="phase-{{ p.id }}" data-phase-id="{{ p.id }}" data-phase-order="{{ p.phase_num }}" data-execution-type="{{ p.execution_type }}">
   <div class="phase-card-shell">
     <a href="/phase/{{ p.id }}{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="timeline-card">
-      <div class="timeline-name">{{ p.name }}</div>
-      {% set description = p.description | default('') %}
-      {% if description %}<div class="timeline-desc">{{ description[:120] }}{% if description|length > 120 %}...{% endif %}</div>{% endif %}
+      <div class="phase-card-copy">
+        <div class="timeline-name">{{ p.name }}</div>
+        {% set description = p.description | default('') %}
+        {% if description %}<div class="timeline-desc">{{ description[:120] }}{% if description|length > 120 %}...{% endif %}</div>{% endif %}
+      </div>
       <div class="execution-row">
         <span class="badge {{ 'badge-parallel' if p.execution_type == 'parallel' else 'badge-sync' }}">{{ 'параллельно' if p.execution_type == 'parallel' else 'последовательно' }}</span>
         {% if p.agent_name %}<span class="badge badge-agent">{{ p.agent_name }}</span>{% endif %}
@@ -81,7 +105,8 @@
 {%- endmacro %}
 
 {% block content %}
-<div class="phases-layout">
+<div class="phases-layout{% if workflows | length <= 1 %} phases-layout-single{% endif %}">
+  {% if workflows | length > 1 %}
   <section class="workflow-nav side-nav-scroll" id="workflowNav">
     {% for workflow in workflows %}
     <a class="workflow-nav-item {% if selected_workflow_id == workflow.id %}active{% endif %}" href="/phases?workflow_id={{ workflow.id }}{% if selected_namespace %}&namespace_id={{ selected_namespace.id }}{% endif %}" data-workflow-id="{{ workflow.id }}">
@@ -91,8 +116,9 @@
         <span class="workflow-chip">{{ workflow.phase_count | pluralize('фаза,фазы,фаз') }}</span>
       </div>
     </a>
-    {% else %}<div class="card empty-note">Воркфлоу пока нет.</div>{% endfor %}
+    {% endfor %}
   </section>
+  {% endif %}
 
   <section class="timeline-panel">
     <div class="card workflow-summary">
@@ -102,15 +128,23 @@
         {% elif selected_workflow %}<div class="empty-note">Порядок выполнения и связанные параллельные группы.</div>
         {% else %}<div class="empty-note">Сначала создайте воркфлоу.</div>{% endif %}
       </div>
-      {% if phase_count >= 8 %}
-      <select id="phaseJump" class="phase-jump-select" aria-label="Перейти к фазе" onchange="jumpToPhase(this)">
-        <option value="">Перейти к фазе</option>
-        {% for phase in phases %}<option value="{{ phase.id }}">{{ phase.name }}</option>{% endfor %}
-      </select>
+      {% if phase_count > 1 %}
+      <div class="phase-view-controls">
+        <div class="phase-view-switch" role="group" aria-label="Отображение фаз">
+          <button type="button" data-phase-view="compact" aria-pressed="{{ 'true' if phase_count >= 8 else 'false' }}" onclick="setPhaseView('compact')">Список</button>
+          <button type="button" data-phase-view="timeline" aria-pressed="{{ 'false' if phase_count >= 8 else 'true' }}" onclick="setPhaseView('timeline')">Схема</button>
+        </div>
+        {% if phase_count >= 8 %}
+        <select id="phaseJump" class="phase-jump-select" aria-label="Перейти к фазе" onchange="jumpToPhase(this)">
+          <option value="">Перейти к фазе</option>
+          {% for phase in phases %}<option value="{{ phase.id }}">{{ phase.name }}</option>{% endfor %}
+        </select>
+        {% endif %}
+      </div>
       {% endif %}
     </div>
 
-    <div class="timeline" id="phasesTimeline">
+    <div class="timeline{% if phase_count >= 8 %} is-compact{% endif %}" id="phasesTimeline"{% if selected_workflow_id %} data-workflow-id="{{ selected_workflow_id }}"{% endif %}>
       {% for block in phase_blocks %}
         {% if block.kind == 'parallel' %}
         <section class="timeline-block timeline-parallel-group">
@@ -136,6 +170,17 @@
 {% block extra_script %}
 function getPhaseTimelineItems(){return Array.from(document.querySelectorAll('#phasesTimeline .timeline-item'));}
 
+function setPhaseView(view,persist=true){
+  const timeline=document.getElementById('phasesTimeline');
+  if(!timeline||!['compact','timeline'].includes(view))return;
+  timeline.classList.toggle('is-compact',view==='compact');
+  document.querySelectorAll('[data-phase-view]').forEach(button=>{
+    button.setAttribute('aria-pressed',String(button.dataset.phaseView===view));
+  });
+  document.querySelectorAll('.phase-card-actions[open]').forEach(menu=>{menu.open=false;});
+  if(persist){try{localStorage.setItem('phase-view-mode',view);}catch(_error){}}
+}
+
 function jumpToPhase(select){
   const phaseId=select.value;
   select.value='';
@@ -147,7 +192,7 @@ function jumpToPhase(select){
 }
 
 async function addPhaseAfter(button){
-  const workflowId=new URLSearchParams(window.location.search).get('workflow_id')||document.querySelector('.workflow-nav-item.active')?.dataset.workflowId;
+  const workflowId=document.getElementById('phasesTimeline')?.dataset.workflowId;
   const currentOrder=parseInt(button.dataset.afterOrder||'0',10);
   if(!workflowId||currentOrder<0){showToast('Не удалось определить позицию фазы','error');return;}
   button.disabled=true;
@@ -210,6 +255,10 @@ async function movePhase(button,direction){
 }
 
 document.addEventListener('DOMContentLoaded',()=>{
+  try{
+    const savedView=localStorage.getItem('phase-view-mode');
+    if(savedView==='compact'||savedView==='timeline')setPhaseView(savedView,false);
+  }catch(_error){}
   const items=getPhaseTimelineItems();
   items.forEach((item,index)=>{
     const up=item.querySelector('.move-up-btn');

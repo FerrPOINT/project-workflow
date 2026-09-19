@@ -431,11 +431,27 @@ class TestPhasesPage:
         hrefs = re.findall(r'href="([^"]+)"', sidebar_nav.group(1))
         assert hrefs[:5] == ["/namespaces", "/", "/workflows", "/phases", "/tasks"]
 
-    def test_phases_page_has_workflow_nav_like_projects(self):
+    def test_phases_page_hides_duplicate_nav_for_single_workflow(self):
         response = client.get("/phases")
         assert response.status_code == 200
+        assert 'class="phases-layout phases-layout-single"' in response.text
+        assert 'id="workflowNav"' not in response.text
+        assert f'data-workflow-id="{_workflow_row("default")["id"]}"' in response.text
+
+    def test_phases_page_keeps_nav_for_multiple_workflows(self):
+        created = client.post(
+            "/api/workflows",
+            json={"name": "Another phase workflow", "description": "Visible in workflow navigation"},
+        )
+        assert created.status_code == 200
+        workflow_id = created.json()["workflow_id"]
+
+        response = TestClient(app).get(f"/phases?workflow_id={workflow_id}")
+
+        assert response.status_code == 200
+        assert 'class="phases-layout"' in response.text
         assert 'id="workflowNav"' in response.text
-        assert "workflow-nav-item" in response.text
+        assert 'class="workflow-nav-item active"' in response.text
         assert "workflow-chip" in response.text
 
     def test_phases_page_hides_other_workflows_when_namespace_is_selected(self):
@@ -607,7 +623,8 @@ class TestPhasesPage:
             assert response.status_code == 200
             assert "Workflow Scoped Phase" in response.text
             assert "Приём задачи" not in response.text
-            assert f'href="/phases?workflow_id={workflow_id}&namespace_id={namespace_id}' in response.text
+            assert 'id="workflowNav"' not in response.text
+            assert f'id="phasesTimeline" data-workflow-id="{workflow_id}"' in response.text
         finally:
             uow.rollback()
 
@@ -660,6 +677,17 @@ class TestPhasesPage:
         assert "focus({preventScroll:true})" in response.text
         assert ".namespace-icon-action{width:40px;height:40px;flex:0 0 40px" in response.text
 
+    def test_long_phase_list_defaults_to_compact_with_switchable_timeline(self):
+        response = client.get("/phases")
+
+        assert response.status_code == 200
+        assert 'class="timeline is-compact" id="phasesTimeline"' in response.text
+        assert 'data-phase-view="compact" aria-pressed="true"' in response.text
+        assert 'data-phase-view="timeline" aria-pressed="false"' in response.text
+        assert 'role="group" aria-label="Отображение фаз"' in response.text
+        assert "function setPhaseView(view,persist=true)" in response.text
+        assert "localStorage.getItem('phase-view-mode')" in response.text
+
     def test_phases_add_button_breaks_the_vertical_connector_line(self):
         response = client.get("/phases")
 
@@ -688,17 +716,13 @@ class TestPhasesPage:
             response.text,
         )
 
-    def test_phases_page_add_phase_button_carries_workflow_id_from_active_nav(self):
+    def test_phases_page_add_phase_button_uses_timeline_workflow_id(self):
         response = client.get("/phases")
         assert response.status_code == 200
 
         workflow = _workflow_row("default")
-        nav_match = re.search(
-            r'class="workflow-nav-item active"[^\u003e]*data-workflow-id="(\d+)"',
-            response.text,
-        )
-        assert nav_match is not None
-        assert int(nav_match.group(1)) == workflow["id"]
+        assert f'id="phasesTimeline" data-workflow-id="{workflow["id"]}"' in response.text
+        assert "document.getElementById('phasesTimeline')?.dataset.workflowId" in response.text
 
     def test_phases_page_links_phase_detail_by_numeric_resource_id(self):
         response = client.get("/phases")
@@ -718,7 +742,8 @@ class TestPhasesPage:
 
         assert response.status_code == 200
         assert f'href="/phase/{phase["id"]}?namespace_id={namespace_id}"' in response.text
-        assert f'&namespace_id={namespace_id}" data-workflow-id="' in response.text
+        assert f'id="phasesTimeline" data-workflow-id="{_workflow_row("default")["id"]}"' in response.text
+        assert 'id="workflowNav"' not in response.text
 
     def test_phases_page_add_phase_button_uses_server_phase_order_attribute(self):
         response = client.get("/phases")
