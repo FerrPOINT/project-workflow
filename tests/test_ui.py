@@ -2188,16 +2188,37 @@ class TestWorkflowsPage:
         assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
         assert "workflowForm" not in response.text
 
-    def test_workflows_page_uses_single_editor_with_left_nav(self):
+    def test_workflows_page_uses_single_editor_without_redundant_nav(self):
         response = client.get("/workflows")
         assert response.status_code == 200
+        assert 'class="workflow-crud is-single"' in response.text
         assert 'id="workflowNav"' in response.text
         assert 'id="workflowForm"' in response.text
         assert 'id="newWorkflowButton"' in response.text
         assert 'id="workflowFormMode"' in response.text
+        assert 'id="workflowSelect"' in response.text
+        assert 'class="workflow-description"' in response.text
+        assert 'spellcheck="false"' not in response.text
         assert 'id="workflowThemeIcon"' not in response.text
         assert 'id="workflowThemeColor"' not in response.text
         assert 'id="workflowThemePreview"' not in response.text
+
+    def test_workflows_page_offers_compact_picker_for_multiple_workflows(self):
+        created = client.post("/api/workflows", json={"name": "Secondary UI workflow"})
+        assert created.status_code == 200
+        workflow_id = created.json()["workflow_id"]
+        try:
+            response = client.get("/workflows")
+            assert response.status_code == 200
+            assert 'class="workflow-crud "' in response.text
+            assert f'<option value="{workflow_id}"' in response.text
+            assert "Secondary UI workflow</option>" in response.text
+            assert ".workflow-picker{display:block}" in response.text
+            assert ".workflow-nav{display:none}" in response.text
+            assert "classList.toggle('is-single', workflowStore.length <= 1)" in response.text
+        finally:
+            deleted = client.delete(f"/api/workflows/{workflow_id}")
+            assert deleted.status_code == 200
 
     def test_workflows_page_has_no_code_field_in_editor_or_create_form(self):
         response = client.get("/workflows")
