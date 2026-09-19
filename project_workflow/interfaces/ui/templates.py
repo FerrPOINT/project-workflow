@@ -8,8 +8,10 @@ from typing import Any
 from fastapi.templating import Jinja2Templates
 
 from project_workflow.domain.project_theme import (
+    DEFAULT_PROJECT_COLOR,
     DEFAULT_PROJECT_ICON,
     PROJECT_THEME_ICONS,
+    normalize_theme_color,
 )
 
 BASE_DIR = Path(__file__).parent
@@ -66,9 +68,25 @@ def _pluralize(value: int, forms: str) -> str:
     return f"{n} {many}"
 
 
+def _accent_foreground(color: str | None) -> str:
+    try:
+        normalized = normalize_theme_color(color)
+    except ValueError:
+        normalized = DEFAULT_PROJECT_COLOR
+
+    def linear_channel(value: int) -> float:
+        channel = value / 255
+        return channel / 12.92 if channel <= 0.04045 else ((channel + 0.055) / 1.055) ** 2.4
+
+    red, green, blue = (linear_channel(int(normalized[index : index + 2], 16)) for index in (1, 3, 5))
+    luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue
+    return "#000000" if (luminance + 0.05) / 0.05 >= 1.05 / (luminance + 0.05) else "#FFFFFF"
+
+
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 templates.env.filters["group_instructions"] = _group_instructions
 templates.env.filters["pluralize"] = _pluralize
+templates.env.filters["accent_foreground"] = _accent_foreground
 templates.env.globals["project_icon_path"] = _project_icon_path
 templates.env.globals["project_icon_paths"] = {
     key: _project_icon_path(key) for key in PROJECT_THEME_ICONS

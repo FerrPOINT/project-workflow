@@ -19,7 +19,7 @@ from project_workflow.infrastructure.db.session import (
     reset_engine,
 )
 from project_workflow.interfaces.ui import templates as templates_module
-from project_workflow.interfaces.ui.templates import _group_instructions
+from project_workflow.interfaces.ui.templates import _accent_foreground, _group_instructions
 
 
 class TestSessionHelpers:
@@ -341,6 +341,21 @@ class TestSqlitePragmaEdgeCases:
 
 
 class TestTemplateHelpers:
+    @pytest.mark.parametrize(
+        ("color", "expected"),
+        [
+            ("#000000", "#FFFFFF"),
+            ("#FFFFFF", "#000000"),
+            ("#3B82F6", "#000000"),
+            ("#757575", "#FFFFFF"),
+            ("#777777", "#000000"),
+            (None, "#FFFFFF"),
+            ("invalid", "#FFFFFF"),
+        ],
+    )
+    def test_accent_foreground_keeps_theme_buttons_readable(self, color, expected):
+        assert _accent_foreground(color) == expected
+
     def test_group_instructions_groups_parallel_with_previous(self):
         instructions = [
             {"id": 1, "execution_type": "sync"},
@@ -368,6 +383,7 @@ class TestTemplateHelpers:
     def test_templates_env_exposes_filters(self):
         assert "group_instructions" in templates_module.env.filters
         assert "pluralize" in templates_module.env.filters
+        assert "accent_foreground" in templates_module.env.filters
 
     def test_verdict_templates_use_russian_ui_labels(self):
         template_dir = templates_module.BASE_DIR / "templates"
