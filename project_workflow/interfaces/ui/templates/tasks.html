@@ -22,15 +22,17 @@
 .tasks-table th:nth-child(7),.tasks-table td:nth-child(7){width:10%}
 .tasks-table th:nth-child(8),.tasks-table td:nth-child(8){width:11%}
 .tasks-table th:nth-child(9),.tasks-table td:nth-child(9){width:8%}
-.tasks-table .task-key{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent)}
+.tasks-table .task-key{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent-readable)}
+.task-key-date{display:none;margin-top:3px;color:var(--text-muted);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tasks-table .task-title{color:var(--text);font-weight:500}
-.namespace-pill{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:3px 8px;border-radius:6px;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:600}
+.task-title-context{display:none;margin-top:3px;color:var(--text-muted);font-size:11px;line-height:1.4}
+.namespace-pill{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:3px 8px;border-radius:6px;background:var(--accent-soft);color:var(--text);font-size:12px;font-weight:600}
 .namespace-pill svg{width:14px;height:14px;flex:0 0 auto}
 .namespace-pill span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.status-badge{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:6px;font-size:12px;font-weight:500;white-space:nowrap;overflow-wrap:normal}
-.status-done{background:var(--green-soft);color:var(--green)}
-.status-active{background:var(--accent-soft);color:var(--accent)}
-.status-blocked{background:var(--red-soft);color:var(--red)}
+.status-badge{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:3px 10px;border-radius:6px;font-size:12px;font-weight:500;white-space:normal;overflow-wrap:anywhere}
+.status-done{background:var(--green-soft);color:var(--text)}
+.status-active{background:var(--accent-soft);color:var(--text)}
+.status-blocked{background:var(--red-soft);color:var(--text)}
 .progress-inline{display:flex;align-items:center;gap:6px;width:100%;min-width:0;font-size:12px;color:var(--text-muted);font-weight:600;white-space:nowrap}
 .progress-inline .bar{flex:1 1 48px;min-width:36px;height:6px;background:var(--panel);border:1px solid var(--border-strong);border-radius:999px;overflow:hidden;display:inline-block;vertical-align:middle}
 .progress-inline .bar-fill{display:block;height:100%;background:var(--accent);border-radius:inherit;min-width:2px;transition:width .3s}
@@ -39,7 +41,7 @@
 .task-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-top:8px}
 .task-card .row{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;gap:8px;flex-wrap:wrap}
 .task-card .row:last-child{margin-bottom:0}
-.task-card .task-key{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent)}
+.task-card .task-key{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent-readable)}
 .task-card .label{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em}
 .task-card .value{font-size:13px;color:var(--text-secondary);font-weight:500}
 .task-card-title{margin:7px 0 9px;font-size:14px;color:var(--text);font-weight:600;line-height:1.35}
@@ -48,17 +50,29 @@
 .task-card-context-item strong{color:var(--text-muted);font-weight:600}
 .task-card-context-item.context-wide{grid-column:1 / -1}
 .task-card-context-item.context-wide .context-value{color:var(--text);font-weight:500}
-.verdict-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;line-height:1.2;white-space:normal;overflow-wrap:normal}
+.verdict-badge{display:inline-flex;align-items:center;gap:4px;max-width:100%;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;line-height:1.2;white-space:normal;overflow-wrap:anywhere}
 .verdict-cell{display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0}
-.verdict-pass{background:var(--green-soft);color:var(--green)}
-.verdict-partial{background:rgba(234,179,8,.12);color:#eab308}
-.verdict-blocked{background:var(--red-soft);color:var(--red)}
-.verdict-rollback{background:var(--orange-soft);color:var(--orange)}
-.verdict-delegate{background:var(--accent-soft);color:var(--accent)}
+.verdict-phase{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--text-dim)}
+.verdict-pass{background:var(--green-soft);color:var(--text)}
+.verdict-partial{background:var(--yellow-soft);color:var(--text)}
+.verdict-blocked{background:var(--red-soft);color:var(--text)}
+.verdict-rollback{background:var(--orange-soft);color:var(--text)}
+.verdict-delegate{background:var(--accent-soft);color:var(--text)}
 .task-card-meta{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));align-items:start}
 .task-empty{text-align:center;color:var(--text-dim);border-style:dashed}
 .table-card-list{display:none}
-@container tasks (max-width:1080px){
+@container tasks (min-width:980px) and (max-width:1180px){
+  .tasks-table th:nth-child(2),.tasks-table td:nth-child(2),.tasks-table th:nth-child(3),.tasks-table td:nth-child(3),.tasks-table th:nth-child(9),.tasks-table td:nth-child(9){display:none}
+  .tasks-table th:nth-child(1),.tasks-table td:nth-child(1){width:9%}
+  .tasks-table th:nth-child(4),.tasks-table td:nth-child(4){width:30%}
+  .tasks-table th:nth-child(5),.tasks-table td:nth-child(5){width:19%}
+  .tasks-table th:nth-child(6),.tasks-table td:nth-child(6){width:11%}
+  .tasks-table th:nth-child(7),.tasks-table td:nth-child(7){width:15%}
+  .tasks-table th:nth-child(8),.tasks-table td:nth-child(8){width:16%}
+  .task-key-date{display:block}
+  .task-title-context{display:block}
+}
+@container tasks (max-width:980px){
   .tasks-table-wrap{display:none}
   .table-card-list{display:flex;flex-direction:column;gap:12px}
 }
@@ -84,7 +98,10 @@
     <tbody>
       {% for t in tasks %}
       <tr data-task-key="{{ t.task_key }}" data-status="{{ t.status }}" data-verdict="{{ t.latest_verdict or '' }}">
-        <td><a href="/task/{{ t.task_key }}{% if t.namespace_id %}?namespace_id={{ t.namespace_id }}{% endif %}" class="task-key">{{ t.task_key }}</a></td>
+        <td>
+          <a href="/task/{{ t.task_key }}{% if t.namespace_id %}?namespace_id={{ t.namespace_id }}{% endif %}" class="task-key">{{ t.task_key }}</a>
+          <span class="task-key-date" title="Создана: {{ t.created_at[:10] if t.created_at else '—' }}">{{ t.created_at[:10] if t.created_at else '—' }}</span>
+        </td>
         <td>
           <span class="namespace-pill" style="--accent:{{ t.namespace_theme_color }};--accent-soft:{{ t.namespace_theme_color }}26">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ project_icon_path(t.namespace_theme_icon) }}"></path></svg>
@@ -92,7 +109,10 @@
           </span>
         </td>
         <td>{{ t.workflow_name or '—' }}</td>
-        <td><span class="task-title">{{ t.title if t.title and t.title != t.task_key else '—' }}</span></td>
+        <td>
+          <span class="task-title">{{ t.title if t.title and t.title != t.task_key else '—' }}</span>
+          <span class="task-title-context">{{ t.namespace_cli_command or t.namespace_name }} · {{ t.workflow_name or '—' }}</span>
+        </td>
         <td>{{ t.current_phase_name or '—' }}</td>
         <td>
           <span class="progress-inline">
@@ -113,7 +133,7 @@
           {% if t.latest_verdict %}
           <span class="verdict-cell">
             <span class="verdict-badge verdict-{{ t.latest_verdict }}">{{ t.latest_verdict_label }}</span>
-            {% if t.latest_verdict_phase %}<span style="font-size:11px;color:var(--text-dim)">{{ t.latest_verdict_phase }}</span>{% endif %}
+            {% if t.latest_verdict_phase %}<span class="verdict-phase" title="{{ t.latest_verdict_phase }}">{{ t.latest_verdict_phase }}</span>{% endif %}
           </span>
           {% else %}—{% endif %}
         </td>

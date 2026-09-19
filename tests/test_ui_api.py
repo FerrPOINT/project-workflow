@@ -165,7 +165,7 @@ class TestIndex:
         assert resp.status_code == 200
         assert "Неймспейс" in resp.text
         assert "verdict-cell" in resp.text
-        assert "white-space:nowrap;overflow-wrap:normal" in resp.text
+        assert "white-space:normal;overflow-wrap:anywhere" in resp.text
 
     def test_tasks_page_is_read_only(self, client):
         resp = client.get("/tasks")

@@ -1708,7 +1708,7 @@ class TestTasksPage:
             "border-collapse:separate;border-spacing:0}"
         ) in response.text
         assert ".tasks-table th:nth-child(9),.tasks-table td:nth-child(9){width:8%}" in response.text
-        assert "white-space:nowrap;overflow-wrap:normal" in response.text
+        assert "white-space:normal;overflow-wrap:anywhere" in response.text
         assert (
             ".verdict-cell{display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0}"
             in response.text
@@ -1722,7 +1722,23 @@ class TestTasksPage:
         assert 'class="task-card-context"' in (TEMPLATES_DIR / "tasks.html").read_text(encoding="utf-8")
         assert 'class="task-card-context-item"' in (TEMPLATES_DIR / "tasks.html").read_text(encoding="utf-8")
         assert "<details class=\"task-card-more\">" not in (TEMPLATES_DIR / "tasks.html").read_text(encoding="utf-8")
-        assert "@container tasks (max-width:1080px)" in response.text
+        assert "@container tasks (min-width:980px) and (max-width:1180px)" in response.text
+        assert "@container tasks (max-width:980px)" in response.text
+        assert 'class="task-key-date" title="Создана:' in response.text
+        assert 'class="task-title-context"' in response.text
+        assert (
+            ".tasks-table .task-key{font-family:'JetBrains Mono',monospace;"
+            "font-size:12px;color:var(--accent-readable)}"
+        ) in response.text
+        assert ".status-blocked{background:var(--red-soft);color:var(--text)}" in response.text
+        assert ".verdict-delegate{background:var(--accent-soft);color:var(--text)}" in response.text
+        assert (
+            ".verdict-phase{display:block;max-width:100%;overflow:hidden;"
+            "text-overflow:ellipsis;white-space:nowrap"
+        ) in response.text
+        assert 'class="verdict-phase" title="{{ t.latest_verdict_phase }}"' in (
+            TEMPLATES_DIR / "tasks.html"
+        ).read_text(encoding="utf-8")
         assert "@media(max-width:1200px)" not in response.text
         assert 'style="padding:0;overflow-x:auto"' not in response.text
 
