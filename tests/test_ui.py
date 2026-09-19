@@ -284,9 +284,9 @@ class TestIndexPage:
         response = client.get("/")
         assert response.status_code == 200
         assert '<div class="metric-label">Неймспейсы</div>' in response.text
-        assert '<div class="card-title" style="margin-bottom:14px">Неймспейсы</div>' in response.text
+        assert 'id="dashboardNamespacesTitle">Неймспейсы · ' in response.text
         assert '<div class="metric-label">CLI</div>' not in response.text
-        assert '<div class="card-title" style="margin-bottom:14px">CLI</div>' not in response.text
+        assert 'id="dashboardNamespacesTitle">CLI' not in response.text
 
     def test_dashboard_mobile_hides_duplicate_header_shortcuts(self):
         response = client.get("/")
@@ -294,6 +294,62 @@ class TestIndexPage:
         assert 'class="btn btn-secondary dashboard-action">Задачи</a>' in response.text
         assert 'class="btn btn-secondary dashboard-action">Неймспейсы</a>' in response.text
         assert "@media(max-width:640px){.dashboard-action{display:none}" in response.text
+
+    def test_dashboard_previews_recent_items_and_links_to_full_lists(self):
+        dashboard = {
+            "stats": {
+                "namespaces": 8,
+                "tasks": 12,
+                "active": 12,
+                "done": 0,
+                "verdicts": {},
+                "verdict_labels": {},
+            },
+            "open_tasks": [
+                {
+                    "task_key": f"PREVIEW-{number}",
+                    "title": f"Preview task {number}",
+                    "namespace_id": 1,
+                    "namespace_name": "Preview namespace",
+                    "workflow_name": "Preview workflow",
+                    "status_label": "В работе",
+                }
+                for number in range(1, 13)
+            ],
+            "namespaces": [
+                {"id": number, "name": f"Preview namespace {number}", "task_count": number}
+                for number in range(1, 9)
+            ],
+        }
+        with patch("project_workflow.interfaces.ui.routes.pages._load_dashboard", return_value=dashboard):
+            response = client.get("/")
+
+        assert response.status_code == 200
+        assert response.text.count('data-task-key="PREVIEW-') == 8
+        assert 'data-task-key="PREVIEW-9"' not in response.text
+        assert 'class="dashboard-row" data-namespace-id="6"' in response.text
+        assert 'class="dashboard-row" data-namespace-id="7"' not in response.text
+        assert "Показано 8 из 12" in response.text
+        assert "Показано 6 из 8" in response.text
+        assert 'class="dashboard-section-link" href="/tasks' in response.text
+        assert 'class="dashboard-section-link" href="/namespaces"' in response.text
+        assert '<section class="card" data-dashboard-' not in response.text
+        assert ".code{font-family:'JetBrains Mono',monospace;color:var(--accent-readable)}" in response.text
+
+    def test_dashboard_keeps_empty_sections_navigable(self):
+        dashboard = {
+            "stats": {"namespaces": 0, "tasks": 0, "active": 0, "done": 0, "verdicts": {}, "verdict_labels": {}},
+            "open_tasks": [],
+            "namespaces": [],
+        }
+        with patch("project_workflow.interfaces.ui.routes.pages._load_dashboard", return_value=dashboard):
+            response = client.get("/")
+
+        assert response.status_code == 200
+        assert "Незавершённых задач нет." in response.text
+        assert "Неймспейсов пока нет." in response.text
+        assert 'href="/tasks' in response.text
+        assert 'href="/namespaces"' in response.text
 
     def test_index_rejects_unknown_query_namespace(self):
         response = client.get(f"/?namespace_id={UNKNOWN_NAMESPACE_ID}")

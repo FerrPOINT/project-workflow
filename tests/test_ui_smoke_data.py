@@ -240,8 +240,15 @@ def test_ui_smoke_pages_render_neutral_screenshot_fixture(tmp_path, monkeypatch)
                 for scenario in TASK_SCENARIOS["workflow-dev"]
                 if scenario["status"] != "done"
             }
+            preview_keys = set(re.findall(r'data-task-key="([^"]+)"', dashboard.text))
+            assert len(preview_keys) == min(8, len(dev_open_task_keys))
+            assert preview_keys <= dev_open_task_keys
+            assert f"Показано 8 из {len(dev_open_task_keys)}" in dashboard.text
+
+            tasks_page = client.get(f"/tasks?namespace_id={dev['id']}")
+            assert tasks_page.status_code == 200
             for task_key in dev_open_task_keys:
-                assert task_key in dashboard.text
+                assert task_key in tasks_page.text
 
             pages = [
                 f"/?namespace_id={dev['id']}",
