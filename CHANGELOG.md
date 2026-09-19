@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+### Fixed
+- Workflow shell доступен с touch и клавиатуры (#49); улучшены phase controls и accessibility (#48).
 ### Added
 - Central SSO и token-mode CLI transport (`feat/central-sso-cli`, #43): browser-сессии central auth и personal tokens как транспорт CLI.
 - Hosted CI (quality + compose-readiness) на каждый push/PR.
