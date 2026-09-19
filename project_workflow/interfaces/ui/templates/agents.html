@@ -4,103 +4,150 @@
 {% block header_title %}Агенты{% endblock %}
 
 {% block extra_style %}
-.agent-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
-.agent-table{width:100%}
-.agent-table th{white-space:nowrap}
-.inline-edit,.inline-textarea{background:transparent;border:1px solid transparent;padding:7px 10px;border-radius:6px;color:var(--text);font-size:13px;width:100%;font-family:inherit}
-.inline-edit:hover,.inline-textarea:hover{background:var(--panel)}
-.inline-edit:focus,.inline-textarea:focus{background:var(--panel);border-color:var(--accent);outline:none}
-.inline-textarea{min-height:44px;resize:vertical;line-height:1.35}
-.form-grid{display:grid;grid-template-columns:200px 220px minmax(260px,1fr) auto;gap:12px;align-items:start}
-.field-label{display:block;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
-.agent-field-label{display:none}
-.agent-create{border-top:3px solid var(--accent)}
-@media (max-width: 820px){.form-grid{grid-template-columns:1fr}.agent-table thead{display:none}.agent-table tr{display:block;border-top:1px solid var(--border)}.agent-table td{display:block;width:100%!important;min-width:0!important;padding:8px 0}.agent-field-label{display:block}.agent-table .icon-btn{width:40px;height:40px;margin-left:auto}}
+.agent-layout{display:grid;gap:20px}
+.agent-section-title{font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
+.agent-list{border-top:1px solid var(--border)}
+.agent-list-header,.agent-summary{display:grid;grid-template-columns:minmax(130px,1fr) minmax(130px,1fr) minmax(0,2fr) 16px;gap:12px;align-items:center}
+.agent-list-header{padding:8px;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase}
+.agent-entry{border-bottom:1px solid var(--border)}
+.agent-summary{padding:12px 8px;cursor:pointer;list-style:none;min-height:48px}
+.agent-summary::-webkit-details-marker{display:none}
+.agent-summary:hover{background:var(--surface-hover)}
+.agent-summary::after{content:'▸';color:var(--text-muted);font-size:14px;line-height:1;transition:transform .12s}
+.agent-entry[open] .agent-summary::after{transform:rotate(90deg)}
+.agent-name{font-size:13px;font-weight:600;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.agent-profile,.agent-description{font-size:12px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.agent-profile{font-family:'JetBrains Mono',monospace}
+.agent-editor{background:var(--surface);border-top:1px solid var(--border);padding:14px 12px}
+.agent-fields{display:grid;grid-template-columns:minmax(150px,1fr) minmax(150px,1fr) minmax(0,2fr);gap:12px}
+.agent-field-label{display:block;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
+.agent-fields textarea{min-height:66px}
+.agent-editor-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;flex-wrap:wrap}
+.agent-delete{margin-right:auto;color:var(--red);border-color:var(--border)}
+.agent-delete:hover{color:var(--red);border-color:var(--red);background:var(--red-soft)}
+.agent-create{border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.agent-create summary{padding:12px 8px;cursor:pointer;color:var(--accent-readable);font-size:13px;font-weight:600;list-style:none}
+.agent-create summary::-webkit-details-marker{display:none}
+.agent-create summary:hover{background:var(--surface-hover)}
+.agent-create .agent-editor{border-top:1px solid var(--border)}
+.agent-empty{padding:16px 8px;color:var(--text-muted);font-size:13px}
+@media(max-width:820px){
+  .agent-list-header{display:none}
+  .agent-summary{grid-template-columns:minmax(0,1fr) minmax(0,auto) 16px;gap:4px 10px}
+  .agent-summary::after{grid-column:3;grid-row:1}
+  .agent-description{grid-column:1/-1;grid-row:2}
+  .agent-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .agent-fields .agent-description-field{grid-column:1/-1}
+}
+@media(max-width:480px){.agent-fields{grid-template-columns:minmax(0,1fr)}.agent-fields .agent-description-field{grid-column:auto}}
 {% endblock %}
 
 {% block content %}
 <div class="agent-layout">
-  <section class="card">
-    <div class="card-title" style="margin-bottom:12px">Список агентов</div>
-    <table class="agent-table">
-      <thead>
-        <tr>
-          <th>Имя</th>
-          <th>Ключ запуска</th>
-          <th>Описание</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody id="agentsTable">
-        {% for a in agents %}
-        <tr data-id="{{ a.id }}">
-          <td style="width:220px">
-            <label class="field-label agent-field-label" for="agentName{{ a.id }}">Имя</label>
-            <input type="text" id="agentName{{ a.id }}" class="inline-edit" value="{{ a.name }}" data-field="name" aria-label="Имя агента {{ a.name }}" onblur="saveRow(this)">
-          </td>
-          <td style="width:240px">
-            <label class="field-label agent-field-label" for="agentLaunchProfile{{ a.id }}">Ключ запуска</label>
-            <input type="text" id="agentLaunchProfile{{ a.id }}" class="inline-edit" value="{{ a.launch_profile or '' }}" data-field="launch_profile" aria-label="Ключ запуска агента {{ a.name }}" onblur="saveRow(this)">
-          </td>
-          <td style="min-width:360px">
-            <label class="field-label agent-field-label" for="agentDescription{{ a.id }}">Описание</label>
-            <textarea id="agentDescription{{ a.id }}" class="inline-textarea" data-field="description" aria-label="Описание агента {{ a.name }}" onblur="saveRow(this)">{{ a.description or '' }}</textarea>
-          </td>
-          <td style="width:60px;text-align:right">
-            <button class="icon-btn" aria-label="Удалить агента {{ a.name }}" title="Удалить агента {{ a.name }}" onclick="deleteRow({{ a.id }})">×</button>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+  <section aria-labelledby="agentsTitle">
+    <h2 class="agent-section-title" id="agentsTitle">Агенты · <span id="agentCount">{{ agents|length }}</span></h2>
+    <div class="agent-list-header" aria-hidden="true"><span>Имя</span><span>Ключ запуска</span><span>Описание</span></div>
+    <div class="agent-list" id="agentsList">
+      {% for a in agents %}
+      <details class="agent-entry" data-id="{{ a.id }}">
+        <summary class="agent-summary" aria-label="Редактировать агента {{ a.name }}">
+          <span class="agent-name">{{ a.name }}</span>
+          <span class="agent-profile">{{ a.launch_profile or 'Без ключа' }}</span>
+          <span class="agent-description">{{ a.description or 'Без описания' }}</span>
+        </summary>
+        <form class="agent-editor" onsubmit="saveAgent(event,this)">
+          <div class="agent-fields">
+            <label><span class="agent-field-label">Имя</span><input type="text" name="name" value="{{ a.name }}" required></label>
+            <label><span class="agent-field-label">Ключ запуска</span><input type="text" name="launch_profile" value="{{ a.launch_profile or '' }}" pattern="[a-z0-9][a-z0-9_-]*" maxlength="251"></label>
+            <label class="agent-description-field"><span class="agent-field-label">Описание</span><textarea name="description">{{ a.description or '' }}</textarea></label>
+          </div>
+          <div class="agent-editor-actions">
+            <button class="btn btn-secondary agent-delete" type="button" onclick="deleteAgent(this)">Удалить</button>
+            <button class="btn btn-secondary" type="button" onclick="cancelAgent(this)">Отмена</button>
+            <button class="btn btn-primary" type="submit">Сохранить</button>
+          </div>
+        </form>
+      </details>
+      {% endfor %}
+      <p class="agent-empty" id="agentsEmpty" {% if agents %}hidden{% endif %}>Агентов пока нет.</p>
+    </div>
   </section>
 
-  <section class="card agent-create">
-    <div class="card-title" style="margin-bottom:12px">Добавить агента</div>
-    <div class="form-grid">
-      <label><span class="field-label">Имя</span><input type="text" id="newName"></label>
-      <label><span class="field-label">Ключ запуска</span><input type="text" id="newLaunchProfile"></label>
-      <label><span class="field-label">Описание</span><textarea id="newDescription"></textarea></label>
-      <button class="btn btn-primary" style="margin-top:23px" onclick="addAgent()">Добавить</button>
-    </div>
+  <section aria-label="Добавить агента">
+    <details class="agent-create" id="agentCreatePanel">
+      <summary>+ Добавить агента</summary>
+      <form class="agent-editor" onsubmit="addAgent(event)">
+        <div class="agent-fields">
+          <label><span class="agent-field-label">Имя</span><input type="text" id="newName" required></label>
+          <label><span class="agent-field-label">Ключ запуска</span><input type="text" id="newLaunchProfile" pattern="[a-z0-9][a-z0-9_-]*" maxlength="251"></label>
+          <label class="agent-description-field"><span class="agent-field-label">Описание</span><textarea id="newDescription"></textarea></label>
+        </div>
+        <div class="agent-editor-actions"><button class="btn btn-primary" type="submit">Добавить</button></div>
+      </form>
+    </details>
   </section>
 </div>
 {% endblock %}
 
 {% block extra_script %}
-function payloadFromRow(row){
-  var data={};
-  row.querySelectorAll('[data-field]').forEach(function(field){
-    var value=field.value.trim();
-    data[field.dataset.field]=field.dataset.field==='launch_profile' ? (value || null) : value;
-  });
-  return data;
+function cancelAgent(button){
+  var entry=button.closest('.agent-entry');
+  entry.querySelector('form').reset();
+  entry.open=false;
 }
-function saveRow(el){
-  var row=el.closest('tr');
-  var id=row.dataset.id;
-  var data=payloadFromRow(row);
-  if(!data.name){showToast('Имя агента обязательно','error');return;}
-  fetch('/api/agents/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
-    .then(function(r){return r.json()})
-    .then(function(d){if(d.ok)showToast('Сохранено','success');else showToast(d.error||'Ошибка','error')})
-    .catch(showRequestError);
+async function saveAgent(event,form){
+  event.preventDefault();
+  var entry=form.closest('.agent-entry');
+  var name=form.elements.namedItem('name').value.trim();
+  var launchProfile=form.elements.namedItem('launch_profile').value.trim();
+  var description=form.elements.namedItem('description').value.trim();
+  if(!name){showToast('Имя агента обязательно','error');return;}
+  var button=form.querySelector('[type="submit"]');
+  button.disabled=true;
+  try{
+    var response=await fetch('/api/agents/'+entry.dataset.id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,description:description,launch_profile:launchProfile||null})});
+    var data=await response.json();
+    if(!data.ok){showToast(data.error||'Ошибка','error');return;}
+    [['name',name],['launch_profile',launchProfile],['description',description]].forEach(function(item){
+      var field=form.elements.namedItem(item[0]);
+      field.value=item[1];
+      field.defaultValue=item[1];
+    });
+    entry.querySelector('.agent-name').textContent=name;
+    entry.querySelector('.agent-profile').textContent=launchProfile||'Без ключа';
+    entry.querySelector('.agent-description').textContent=description||'Без описания';
+    entry.querySelector('summary').setAttribute('aria-label','Редактировать агента '+name);
+    entry.open=false;
+    showToast('Сохранено','success');
+  }catch(error){showRequestError(error)}finally{button.disabled=false}
 }
-async function deleteRow(id){
+async function deleteAgent(button){
+  var entry=button.closest('.agent-entry');
   if(!await requestConfirmation({eyebrow:'Удаление агента',title:'Удалить агента?',message:'Агент будет удалён из списка.',confirmLabel:'Удалить'}))return;
-  fetch('/api/agents/'+id,{method:'DELETE'})
-    .then(function(r){return r.json()})
-    .then(function(d){if(d.ok){showToast('Удалено','success');location.reload()}else showToast(d.error||'Ошибка','error')})
-    .catch(showRequestError);
+  button.disabled=true;
+  try{
+    var response=await fetch('/api/agents/'+entry.dataset.id,{method:'DELETE'});
+    var data=await response.json();
+    if(!data.ok){showToast(data.error||'Ошибка','error');return;}
+    entry.remove();
+    var count=document.querySelectorAll('.agent-entry').length;
+    document.getElementById('agentCount').textContent=count;
+    document.getElementById('agentsEmpty').hidden=count>0;
+    showToast('Удалено','success');
+  }catch(error){showRequestError(error)}finally{button.disabled=false}
 }
-function addAgent(){
+async function addAgent(event){
+  event.preventDefault();
   var name=document.getElementById('newName').value.trim();
   var description=document.getElementById('newDescription').value.trim();
   var launchProfile=document.getElementById('newLaunchProfile').value.trim();
   if(!name){showToast('Имя агента обязательно','error');return;}
-  fetch('/api/agents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,description:description,launch_profile:launchProfile || null})})
-    .then(function(r){return r.json()})
-    .then(function(d){if(d.ok){showToast('Добавлено','success');location.reload()}else showToast(d.error||'Ошибка','error')})
-    .catch(showRequestError);
+  var button=event.target.querySelector('[type="submit"]');
+  button.disabled=true;
+  try{
+    var response=await fetch('/api/agents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,description:description,launch_profile:launchProfile||null})});
+    var data=await response.json();
+    if(data.ok){showToast('Добавлено','success');location.reload()}else showToast(data.error||'Ошибка','error');
+  }catch(error){showRequestError(error)}finally{button.disabled=false}
 }
 {% endblock %}
