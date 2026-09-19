@@ -405,6 +405,23 @@ class TestPhasesPage:
         assert response.headers["content-type"] == "text/html; charset=utf-8"
         assert "Фазы" in response.text
 
+    def test_mobile_back_action_preserves_namespace_context(self):
+        uow = ui_app_state.get_db()
+        namespace_id = _as_dict(uow.projects.get_by_code(config.DEFAULT_PROJECT_CODE))["id"]
+        response = client.get(f"/phases?namespace_id={namespace_id}")
+
+        assert response.status_code == 200
+        back_href = f'href="/workflows?namespace_id={namespace_id}"'
+        assert response.text.count(back_href) == 2
+        assert 'class="btn btn-secondary phases-header-action"' in response.text
+        assert 'class="phases-mobile-actions"' in response.text
+        assert (
+            '<span class="phases-desktop-title">Фазы воркфлоу</span>'
+            '<span class="phases-mobile-title">Фазы</span>'
+        ) in response.text
+        assert ".header .phases-header-action{display:none}" in response.text
+        assert ".phases-mobile-actions{display:flex" in response.text
+
     def test_phases_has_phase_rows(self):
         response = client.get("/phases")
         assert response.status_code == 200
