@@ -52,6 +52,24 @@ def test_every_terminal_phase_prepares_handoff_before_terminal_action() -> None:
             assert "complete_assigned_stage" not in text, f"{path.name}/{mode['key']}"
 
 
+def test_architect_phases_are_bounded_and_advance_without_open_ended_discovery() -> None:
+    bundle = load_bundle(CONFIG_ROOT / "architect.json")
+    phases = bundle["workflow"]["modes"][0]["phases"]
+
+    for phase in phases[:-1]:
+        text = " ".join(item["text"] for item in phase["instructions"]).lower()
+        assert "step --report" in text, phase["code"]
+
+    ownership = " ".join(item["text"] for item in phases[1]["instructions"]).lower()
+    assert "не более чем шести" in ownership
+    assert "не перечислять дерево репозитория" in ownership
+    assert "не повторять недоступный запрос" in ownership
+
+    for phase in phases[2:5]:
+        text = " ".join(item["text"] for item in phase["instructions"]).lower()
+        assert "новые business- и tech-чтения" in text, phase["code"]
+
+
 def test_project_manager_publication_hands_backlog_to_analyst_automatically() -> None:
     bundle = load_bundle(CONFIG_ROOT / "project_manager.json")
     terminal = bundle["workflow"]["modes"][0]["phases"][-1]
