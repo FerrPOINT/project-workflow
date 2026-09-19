@@ -1911,7 +1911,7 @@ class TestProjectsPage:
         assert response.status_code == 200
         assert '<h1 class="header-title">Неймспейсы</h1>' in response.text
         assert 'href="/namespaces/new' in response.text
-        assert 'title="Создать" aria-label="Создать">+</a>' in response.text
+        assert 'title="Создать пространство" aria-label="Создать пространство">+</a>' in response.text
         assert '<div class="card-title" id="namespaceFormMode">Создание</div>' in response.text
         assert 'id="deleteNamespaceButton" onclick="deleteNamespace()" style="display:none"' in response.text
         assert "Добавить" not in response.text
