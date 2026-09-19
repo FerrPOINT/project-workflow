@@ -12,12 +12,12 @@
 .namespace-mark{width:34px;height:34px;border-radius:8px;background:color-mix(in srgb,var(--namespace-color,var(--accent)) 16%, transparent);border:1px solid var(--namespace-color,var(--accent));color:var(--namespace-color,var(--accent));display:flex;align-items:center;justify-content:center;flex:0 0 auto}
 .namespace-mark svg{width:19px;height:19px}
 .namespace-card-body{min-width:0}
-.namespace-command{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent);margin-bottom:6px}
+.namespace-command{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent-readable);margin-bottom:6px}
 .namespace-name{font-size:15px;font-weight:600;color:var(--text)}
 .namespace-meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--text-dim)}
 .namespace-panel{display:flex;flex-direction:column;gap:16px}
 .form-stack{display:flex;flex-direction:column;gap:12px}
-.label{font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}
+.label{display:block;font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}
 .namespace-description{min-height:96px;resize:vertical}
 .theme-grid{display:grid;grid-template-columns:minmax(0,1fr) 120px;gap:12px}
 .theme-color-input{height:34px;padding:2px;cursor:pointer}
@@ -58,20 +58,20 @@
     <form id="namespaceForm" class="card form-stack" onsubmit="event.preventDefault(); submitNamespace();">
       <div class="card-title" id="namespaceFormMode">{{ 'Создание' if create_mode else 'Редактирование' }}</div>
       <div>
-        <div class="label">Название</div>
+        <label class="label" for="namespaceName">Название</label>
         <input type="text" id="namespaceName" value="{{ edited_namespace.name if edited_namespace else '' }}">
       </div>
       <div>
-        <div class="label">CLI-команда</div>
+        <label class="label" for="namespaceCliCommand">CLI-команда</label>
         <input type="text" id="namespaceCliCommand" value="{{ edited_namespace.cli_command if edited_namespace else '' }}" placeholder="workflow-qa">
       </div>
       <div>
-        <div class="label">Описание</div>
+        <label class="label" for="namespaceDescription">Описание</label>
         <textarea id="namespaceDescription" class="namespace-description">{{ edited_namespace.description if edited_namespace else '' }}</textarea>
       </div>
       <div class="theme-grid">
         <div>
-          <div class="label">Иконка</div>
+          <label class="label" for="namespaceThemeIcon">Иконка</label>
           <select id="namespaceThemeIcon" onchange="updateNamespaceThemePreview()">
             {% for option in project_icon_options %}
             <option value="{{ option.key }}" {% if edited_namespace and edited_namespace.theme_icon == option.key %}selected{% endif %}>{{ option.label }}</option>
@@ -79,7 +79,7 @@
           </select>
         </div>
         <div>
-          <div class="label">Цвет</div>
+          <label class="label" for="namespaceThemeColor">Цвет</label>
           <input type="color" id="namespaceThemeColor" class="theme-color-input" value="{{ edited_namespace.theme_color if edited_namespace else '#5E6AD2' }}" oninput="updateNamespaceThemePreview()">
         </div>
       </div>
@@ -88,7 +88,7 @@
         <span class="theme-preview-name" id="namespaceThemePreviewName">{{ edited_namespace.name if edited_namespace else 'Без названия' }}</span>
       </div>
       <div>
-        <div class="label">Воркфлоу</div>
+        <label class="label" for="namespaceWorkflowId">Воркфлоу</label>
         <select id="namespaceWorkflowId">
           {% for workflow in workflows %}
           <option value="{{ workflow.id }}" {% if edited_namespace and edited_namespace.workflow_id == workflow.id %}selected{% endif %}>{{ workflow.name }}</option>

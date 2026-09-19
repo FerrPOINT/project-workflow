@@ -1549,11 +1549,12 @@ class TestTimelineHTML:
         assert response.status_code == 200
         assert 'href="/phase/' in response.text
 
-    def test_phase_controls_use_namespace_accent_styles(self):
+    def test_phase_controls_keep_namespace_accent_with_readable_text(self):
         response = client.get("/phases")
         assert response.status_code == 200
-        assert ".badge-agent{background:var(--accent-soft);color:var(--accent)}" in response.text
-        assert "background:var(--accent-soft);color:var(--accent);cursor:pointer" in response.text
+        assert ".badge-agent{background:var(--accent-soft);color:var(--accent-readable)}" in response.text
+        assert "background:var(--accent-soft);color:var(--accent-readable);cursor:pointer" in response.text
+        assert "--accent:" in response.text
         assert "rgba(88,166,255,.12)" not in response.text
 
 
