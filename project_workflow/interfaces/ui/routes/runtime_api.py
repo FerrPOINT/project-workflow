@@ -18,6 +18,7 @@ from project_workflow.interfaces.ui.schemas import RuntimeStepRequest
 from project_workflow.supervisor import format_result
 
 _ROLE_RE = re.compile(r"^[a-z][a-z0-9-]{1,31}$")
+_CATALOG_ROLE = "fleet-control"
 
 
 def _error(message: str, status: int) -> JSONResponse:
@@ -55,7 +56,14 @@ def _authorized_role(authorization: str | None) -> str | None:
         return None
     supplied = authorization[len(prefix) :]
     matched: str | None = None
-    for role, expected in _runtime_tokens().items():
+    runtime_tokens = _runtime_tokens()
+    catalog_token = config.get_settings().PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN.strip()
+    if catalog_token:
+        if len(catalog_token) < 32 or catalog_token in runtime_tokens.values():
+            raise RuntimeError("Некорректная конфигурация Fleet catalog token")
+        if hmac.compare_digest(supplied, catalog_token):
+            matched = _CATALOG_ROLE
+    for role, expected in runtime_tokens.items():
         if hmac.compare_digest(supplied, expected):
             matched = role
     return matched
@@ -173,6 +181,8 @@ def runtime_step(
         return _error(str(exc), 503)
     if role is None:
         return _error("Недействительный runtime token", 401)
+    if role == _CATALOG_ROLE:
+        return _error("Токен каталога не разрешает выполнение шагов", 403)
     try:
         with SAUnitOfWork() as uow:
             namespace_id = _namespace_id(uow, role)
@@ -198,6 +208,8 @@ def runtime_history(
         return _error(str(exc), 503)
     if role is None:
         return _error("Недействительный runtime token", 401)
+    if role == _CATALOG_ROLE:
+        return _error("Токен каталога не разрешает чтение истории", 403)
     try:
         with SAUnitOfWork() as uow:
             namespace_id = _namespace_id(uow, role)
@@ -212,3 +224,28 @@ def runtime_history(
             }
     except (ConflictError, RuntimeError, ValueError) as exc:
         return _error(str(exc), 409)
+
+
+async def runtime_catalog(
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any] | JSONResponse:
+    """Expose only the namespace/workflow directory to Fleet Control."""
+    try:
+        role = _authorized_role(authorization)
+    except RuntimeError as exc:
+        return _error(str(exc), 503)
+    if role is None:
+        return _error("Недействительный runtime token", 401)
+    if role != _CATALOG_ROLE:
+        return _error("Токен не разрешает чтение каталога", 403)
+    from . import api
+
+    namespaces = await api.api_namespaces()
+    workflows = await api.api_workflows()
+    if not isinstance(namespaces, dict) or not isinstance(workflows, dict):
+        return _error("Каталог временно недоступен", 503)
+    return {
+        "ok": True,
+        "namespaces": namespaces["namespaces"],
+        "workflows": workflows["workflows"],
+    }

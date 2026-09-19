@@ -41,6 +41,42 @@ def test_runtime_step_is_fail_closed_without_configured_token():
     assert response.json() == {"ok": False, "error": "Недействительный runtime token"}
 
 
+def test_fleet_catalog_token_cannot_execute_steps_or_read_history(monkeypatch):
+    catalog_token = "f" * 32
+    worker_token = "w" * 32
+    monkeypatch.setenv(
+        "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON",
+        json.dumps({"worker": worker_token}),
+    )
+    monkeypatch.setenv("PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN", catalog_token)
+    config.get_settings.cache_clear()
+    _namespace("WORKER", "workflow-worker", "WRK")
+
+    with TestClient(create_app()) as client:
+        catalog = client.get("/internal/runtime/catalog", headers=_headers(catalog_token))
+        missing = client.get("/internal/runtime/catalog")
+        wrong_role = client.get("/internal/runtime/catalog", headers=_headers(worker_token))
+        step = client.post(
+            "/internal/runtime/step",
+            headers=_headers(catalog_token),
+            json={"task": "WRK-1"},
+        )
+        history = client.get(
+            "/internal/runtime/history",
+            headers=_headers(catalog_token),
+            params={"task": "WRK-1"},
+        )
+
+    assert catalog.status_code == 200
+    assert catalog.json()["ok"] is True
+    assert any(item["name"] == "WORKER" for item in catalog.json()["namespaces"])
+    assert catalog.json()["workflows"]
+    assert missing.status_code == 401
+    assert wrong_role.status_code == 403
+    assert step.status_code == 403
+    assert history.status_code == 403
+
+
 def test_runtime_step_is_unavailable_for_malformed_or_duplicate_tokens(monkeypatch):
     for value in (
         "not-json",
