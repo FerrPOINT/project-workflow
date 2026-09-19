@@ -12,8 +12,12 @@ concurrency:
 
 jobs:
   quality:
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: project-workflow
     services:
       postgres:
         image: postgres:16-alpine
@@ -36,6 +40,15 @@ jobs:
       PGDATABASE: project_workflow
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: project-workflow
+      - uses: actions/checkout@v4
+        with:
+          repository: FerrPOINT/services-base
+          ref: main
+          path: services-base
+          ssh-key: ${{ secrets.SERVICES_BASE_DEPLOY_KEY }}
+          persist-credentials: false
       - uses: astral-sh/setup-uv@v6
         with:
           version: "0.10.10"
@@ -52,3 +65,33 @@ jobs:
         run: uv run --isolated --with-requirements constraints.txt --all-extras pytest -q tests/test_docs_quality.py --timeout=60
       - name: Diff hygiene
         run: git diff --check
+  compose-smoke:
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: project-workflow
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: project-workflow
+      - uses: actions/checkout@v4
+        with:
+          repository: FerrPOINT/services-base
+          ref: main
+          path: services-base
+          ssh-key: ${{ secrets.SERVICES_BASE_DEPLOY_KEY }}
+          persist-credentials: false
+      - name: Compose config
+        run: docker compose config -q
+      - name: Build and start
+        run: docker compose up --build -d --wait
+      - name: Readiness
+        run: curl --fail --retry 10 --retry-connrefused http://127.0.0.1:8812/health
+      - name: Compose logs
+        if: failure()
+        run: docker compose logs --no-color
+      - name: Compose cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans

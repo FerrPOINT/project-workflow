@@ -331,7 +331,7 @@ textarea{resize:vertical;min-height:60px}
   <header class="header">
     <div style="display:flex;align-items:center">
       <button class="burger" id="burgerBtn" onclick="openSidebar()">☰</button>
-      <span class="header-title">{% block header_title %}{% endblock %}</span>
+      <h1 class="header-title">{% block header_title %}{% endblock %}</h1>
     </div>
     <div class="header-actions">
       <select class="theme-select" id="themeSelector" aria-label="Тема" onchange="setPlatformTheme(this.value)">
@@ -369,6 +369,7 @@ textarea{resize:vertical;min-height:60px}
       </div>
       {% endif %}
       {% block header_actions %}{% endblock %}
+      <a class="btn btn-secondary" href="/logout">Выйти</a>
     </div>
   </header>
 

@@ -1,14 +1,22 @@
 # Архитектура project-workflow
 
 `project-workflow` - внутренняя loopback/private утилита для пофазного ведения
-задач. Она не является внешним production-сервисом и не владеет
-аутентификацией, CI/CD, метриками или публичной публикацией портов.
+задач. Она не владеет human identity, browser sessions или personal tokens:
+ими управляет Central Auth. Приложение проверяет их через server-side OIDC и
+introspection, а также сохраняет отдельный private runtime bridge для машинных
+исполнителей.
 
 ## Границы компонентов
 
 - **CLI** предоставляет только `step` и `history`. Пользовательские команды для
   отдельных неймспейсов создаются wrapper-скриптами и внутри вызывают тот же
-  `project-workflow step/history`.
+  `project-workflow step/history`. В token mode команды используют защищённый
+  HTTP API через общий `sdlc-cli-core`; direct DB mode остаётся локальным
+  legacy/dev вариантом.
+- **Browser SSO** использует Authorization Code + PKCE, проверяет signature,
+  issuer, audience, expiry, state и nonce, хранит access token только в
+  зашифрованной HttpOnly cookie и проверяет активность central session на
+  защищённых запросах. Недоступность Central Auth даёт `503` без local login.
 - **Web UI** владеет CRUD для workflow, фаз, неймспейсов и агентов через
   FastAPI/Jinja. Задачи в UI доступны только для наблюдения: список, состояние,
   phase/audit history, checks/evidence и verdict. Создание и переходы задач

@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import click
@@ -21,6 +22,7 @@ from ...domain.exceptions import ConflictError
 from ...infrastructure.db.uow import SAUnitOfWork
 from ...supervisor import format_result
 from .core import (
+    NAMESPACE_ENV_VAR,
     WARN,
     _require_valid_key,
     _resolve_namespace_id_from_env,
@@ -35,9 +37,30 @@ from .core import (
 # См. test_ui.py::test_only_two_commands_allowed
 
 
+def _token_namespace_id() -> int | None:
+    raw = os.environ.get(NAMESPACE_ENV_VAR)
+    if raw is None or not raw.strip():
+        return None
+    selector = raw.strip()
+    if not selector.isdecimal() or int(selector) <= 0:
+        raise ValueError(f"{NAMESPACE_ENV_VAR} должен содержать положительный ID")
+    return int(selector)
+
+
 # ═══════════════════════════════════════════════════════════════════════
 #  COMMAND: step
 # ═══════════════════════════════════════════════════════════════════════
+
+
+def _platform_request(method: str, path: str, *, body: dict | None = None, params: dict | None = None) -> dict:
+    from sdlc_cli_core import ApiClient, ApiError
+
+    try:
+        return ApiClient(os.environ.get("PROJECT_WORKFLOW_URL", "http://localhost:8812")).request_json(
+            method, path, body=body, params=params,
+        )
+    except ApiError as exc:
+        raise ValueError(str(exc)) from exc
 
 
 @cli.command()
@@ -63,6 +86,24 @@ def step_cmd(
             return
         console.print(format_result(result))
         raise click.exceptions.Exit(1)
+    if os.environ.get("SDLC_API_TOKEN"):
+        try:
+            body: dict[str, Any] = {"task": task, "report": report}
+            namespace_id = _token_namespace_id()
+            if namespace_id is not None:
+                body["namespace_id"] = namespace_id
+            response = _platform_request("POST", "api/cli/step", body=body)
+        except ValueError as exc:
+            response = {"ok": False, "exit_code": 1, "output": str(exc), "result": blocked_result(task, str(exc))}
+        result = response.get("result", response)
+        exit_code = int(response.get("exit_code", 0 if response.get("ok") else 1))
+        if jmode:
+            out_json(result, exit_code=exit_code)
+            return
+        console.print(str(response.get("output", result)))
+        if exit_code:
+            raise click.exceptions.Exit(exit_code)
+        return
     uow: SAUnitOfWork | None = None
     try:
         uow = SAUnitOfWork()
@@ -154,6 +195,35 @@ def history_cmd(
       project-workflow history --task RUN-42 --n 50     -> последние 50 записей
     """
     jmode = ctx.obj.get("json_mode", False)
+    if os.environ.get("SDLC_API_TOKEN"):
+        try:
+            params = {"task": task, "n": n}
+            namespace_id = _token_namespace_id()
+            if namespace_id is not None:
+                params["namespace_id"] = namespace_id
+            response = _platform_request("GET", "api/cli/history", params=params)
+        except ValueError as exc:
+            result = blocked_result(task, str(exc))
+            if jmode:
+                out_json(result, exit_code=1)
+                return
+            console.print(format_result(result))
+            raise click.exceptions.Exit(1) from exc
+        result = response.get("result", response)
+        if jmode:
+            out_json({"ok": True, **result})
+            return
+        records = result.get("records", [])
+        if not records:
+            console.print(f"{WARN} История для {task} пуста.")
+        else:
+            console.print(f"[bold]История: {task}[/bold] (последние {len(records)} записей)")
+            for record in records:
+                phase = record.get("phase_code", "-")
+                verdict = record.get("verdict", "-")
+                created_at = record.get("created_at", "-")
+                console.print(f"{phase} · {verdict} · {created_at}")
+        return
     try:
         with SAUnitOfWork() as uow:
             project_id = _resolve_namespace_id_from_env(uow)

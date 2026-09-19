@@ -1894,7 +1894,7 @@ class TestProjectsPage:
     def test_namespace_create_page_uses_plus_without_duplicate_add_label(self):
         response = client.get("/namespaces/new")
         assert response.status_code == 200
-        assert "<span class=\"header-title\">Неймспейсы</span>" in response.text
+        assert '<h1 class="header-title">Неймспейсы</h1>' in response.text
         assert 'href="/namespaces/new' in response.text
         assert 'title="Создать" aria-label="Создать">+</a>' in response.text
         assert '<div class="card-title" id="namespaceFormMode">Создание</div>' in response.text
@@ -2229,21 +2229,17 @@ def test_workflows_page_uses_product_modal_not_browser_confirm():
     assert "confirm('Удалить воркфлоу?')" not in response.text
 
 
-def test_workflows_list_uses_themed_scrollbar_and_sticky_region():
+def test_workflows_list_scrolls_with_page_and_labels_fields():
     response = client.get("/workflows")
 
     assert response.status_code == 200
-    expected_rule = (
-        ".workflow-nav{display:flex;flex-direction:column;gap:10px;"
-        "max-height:calc(100vh - 100px);overflow-y:auto;"
-    )
-    assert expected_rule in response.text
-    # Колонка наследует глобальный тематический скроллбар приложения
+    assert ".workflow-nav{display:flex;flex-direction:column;gap:10px;align-self:start}" in response.text
+    assert "max-height:calc(100vh - 100px);overflow-y:auto" not in response.text
     assert 'class="workflow-nav side-nav-scroll" id="workflowNav"' in response.text
     assert "html{scrollbar-width:thin;scrollbar-color:var(--surface-active) transparent}" in response.text
-    assert "*{scrollbar-width:thin;scrollbar-color:var(--surface-active) transparent}" in response.text
-    # Скроллбар больше не прячется — длинные списки остаются обнаружимыми
-    assert ".workflow-nav::-webkit-scrollbar{width:0;height:0}" not in response.text
+    assert '<h1 class="header-title">Воркфлоу</h1>' in response.text
+    assert '<label class="label" for="workflowName">Название</label>' in response.text
+    assert '<label class="label" for="workflowDescription">Описание</label>' in response.text
 
 
 def test_ui_deletions_use_product_modal_not_browser_confirm():

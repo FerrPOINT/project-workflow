@@ -16,7 +16,10 @@ services:
       - "127.0.0.1:5432:5432"
 
   migrate:
-    build: .
+    build:
+      context: .
+      additional_contexts:
+        services_base: ../services-base
     command: ["python", "scripts/init_db.py"]
     environment:
       DATABASE_URL: postgresql+psycopg://project_workflow:project_workflow@db:5432/project_workflow
@@ -26,7 +29,10 @@ services:
         condition: service_healthy
 
   api:
-    build: .
+    build:
+      context: .
+      additional_contexts:
+        services_base: ../services-base
     ports:
       - "127.0.0.1:8812:8811"
     environment:
