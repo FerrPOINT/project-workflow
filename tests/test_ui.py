@@ -2143,7 +2143,7 @@ class TestWorkflowsPage:
         assert "CRUD workflow" not in response.text
         assert "именованные workflow-контейнеры" not in response.text
 
-    def test_workflows_create_redirect_preserves_selected_namespace(self):
+    def test_workflows_create_redirect_omits_namespace_until_bound(self):
         uow = ui_app_state.get_db()
         try:
             namespace_id = _as_dict(uow.projects.get_by_code("UITEST"))["id"]
@@ -2153,9 +2153,9 @@ class TestWorkflowsPage:
         response = client.get(f"/workflows?namespace_id={namespace_id}")
 
         assert response.status_code == 200
-        assert f"const activeNamespaceId = {namespace_id};" in response.text
         assert "function phaseUrlForWorkflow(workflowId)" in response.text
-        assert "url.searchParams.set('namespace_id', String(activeNamespaceId));" in response.text
+        assert "url.searchParams.set('workflow_id', String(workflowId));" in response.text
+        assert "url.searchParams.set('namespace_id', String(activeNamespaceId));" not in response.text
         assert "window.location.href = phaseUrlForWorkflow(d.workflow_id);" in response.text
         assert "window.location.href = '/phases?workflow_id=' + d.workflow_id;" not in response.text
 
