@@ -44,8 +44,10 @@ def test_every_terminal_phase_prepares_handoff_before_terminal_action() -> None:
             terminal = mode["phases"][-1]
             text = " ".join(item["text"] for item in terminal["instructions"]).lower()
             assert "markdown" in text or "комментар" in text, f"{path.name}/{mode['key']}"
-            assert "workflow_phase complete" in text, f"{path.name}/{mode['key']}"
+            assert "step --report" in text, f"{path.name}/{mode['key']}"
+            assert "complete=true" in text, f"{path.name}/{mode['key']}"
             assert "terminal action не вызывать" in text, f"{path.name}/{mode['key']}"
+            assert "workflow_phase" not in text, f"{path.name}/{mode['key']}"
             assert "publish_task_draft" not in text, f"{path.name}/{mode['key']}"
             assert "complete_assigned_stage" not in text, f"{path.name}/{mode['key']}"
 
@@ -56,8 +58,25 @@ def test_project_manager_publication_hands_backlog_to_analyst_automatically() ->
     text = " ".join(item["text"] for item in terminal["instructions"]).lower()
 
     assert "task ещё не публиковать" in text
-    assert "workflow_phase complete" in text
+    assert "step --report" in text
+    assert "complete=true" in text
     assert "terminal action не вызывать" in text
+
+
+def test_active_bundles_do_not_contain_legacy_workflow_terms() -> None:
+    forbidden = (
+        "supervisor",
+        "run-",
+        "phase contract",
+        "demo assignment",
+        "team_demo_",
+        "stagecomplete",
+        "workflow_phase",
+    )
+    for path in CONFIG_ROOT.glob("*.json"):
+        text = path.read_text(encoding="utf-8").lower()
+        for term in forbidden:
+            assert term not in text, f"{path.name}: {term}"
 
 
 def test_every_instruction_skill_is_pinned_or_supplied_by_the_runtime() -> None:
