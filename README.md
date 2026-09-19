@@ -34,6 +34,12 @@
 
 Для изолированных контейнеров исполнителей сохранён private runtime bridge `/internal/runtime/step` и `/internal/runtime/history`: это отдельный service-to-service контракт с role tokens, не пользовательский UI API. Он включается только при `PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON` и должен быть доступен лишь во внутренней сети или на host loopback.
 
+Browser UI поддерживает общий Central Auth Authorization Code + PKCE. При
+заданном `AUTH_ISSUER` все UI и human API routes требуют активную центральную
+сессию; локального password fallback нет. Публичный issuer и внутренний адрес
+обмена/JWKS задаются отдельно через `AUTH_ISSUER` и
+`AUTH_INTERNAL_BASE_URL`.
+
 Runtime-источник данных — **PostgreSQL**. SQLite используется только для изолированных тестов и локальных smoke-сценариев.
 
 <a name="overview"></a>
@@ -98,11 +104,25 @@ Runtime-источник данных — **PostgreSQL**. SQLite использ�
 
 ## 🖥️ CLI
 
-CLI ожидает `DATABASE_URL`:
+По умолчанию локальный CLI ожидает `DATABASE_URL`:
 
 ```bash
 export DATABASE_URL=postgresql+psycopg://project_workflow:project_workflow@localhost:5432/project_workflow
 ```
+
+Платформенный token mode не подключается к БД напрямую. При заданном
+`SDLC_API_TOKEN` команды `step` и `history` используют защищённый HTTP API и
+общий transport package `sdlc-cli-core`:
+
+```bash
+export PROJECT_WORKFLOW_URL=http://localhost:8812
+export SDLC_API_TOKEN='<personal token from Admin Panel>'
+workflow-dev step --task RUN-42 --report "Проверил сценарий"
+```
+
+Central Auth проверяет срок, отзыв и scopes
+`project-workflow:read/write`. Значение токена не передаётся в URL и не
+сохраняется приложением.
 
 Генерация пользовательских wrapper-команд:
 

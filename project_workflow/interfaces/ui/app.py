@@ -18,7 +18,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from ... import __version__
 from ...infrastructure.db.session import DatabaseUnavailable, get_engine, reset_engine
-from .routes import api, pages, runtime_api
+from .routes import api, cli_api, pages, runtime_api
+from .sso import install_sso
 
 logger = logging.getLogger(__name__)
 
@@ -166,6 +167,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Интерфейс project-workflow", version=__version__, lifespan=_lifespan)
     app.add_middleware(_RequestLoggingMiddleware)
     app.add_middleware(_UoWMiddleware)
+    install_sso(app)
 
     @app.exception_handler(RequestValidationError)
     async def _validation_error(request: Request, exc: RequestValidationError) -> JSONResponse | HTMLResponse:
@@ -235,6 +237,8 @@ def create_app() -> FastAPI:
     app.get("/agents", response_class=HTMLResponse)(pages.agents_page)
 
     # API
+    app.post("/api/cli/step", response_model=None)(cli_api.cli_step)
+    app.get("/api/cli/history", response_model=None)(cli_api.cli_history)
     app.get("/api/settings", response_model=None)(api.api_settings_get)
     app.get("/api/phases", response_model=None)(api.api_phases)
     app.get("/api/phases/{phase_id:int}", response_model=None)(api.api_phase_detail)

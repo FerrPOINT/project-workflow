@@ -83,7 +83,7 @@ Supervisor Engine перед commit выполнить следующие про
 
 | Возможность | Решение | Причина |
 |---|---|---|
-| CI/CD pipeline (GitLab/GitHub) | **Не добавлять** | Репозиторий обслуживается вручную; обязательных локальных проверок достаточно. |
+| CI/CD pipeline (GitHub) | **Использовать** | Quality, coverage, PostgreSQL integration и Compose smoke воспроизводят обязательный локальный gate. |
 | Security middleware (CORS, CSP, HTTPS redirect, rate limits) | **Не добавлять** | UI доступен только на loopback либо в защищённом private/VPN-контуре. |
 | Локальные credentials в `docker-compose.yml` | **Допустимо только локально** | Compose публикуется только на loopback; внешний runtime обязан передавать собственный `DATABASE_URL`. |
 | Observability / metrics / structured JSON logs | **Не добавлять** | Request logging и `/health` достаточны для внутренней утилиты. |

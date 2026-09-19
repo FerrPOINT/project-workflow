@@ -12,12 +12,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY pyproject.toml constraints.txt README.md LICENSE alembic.ini ./
 COPY scripts/ ./scripts/
 COPY project_workflow/ ./project_workflow/
+COPY --from=services_base python/cli-core /tmp/sdlc-cli-core
 
 ENV PIP_CONSTRAINT=/app/constraints.txt
 
 RUN python -m venv /opt/venv \
     && /opt/venv/bin/python -m pip install --no-cache-dir --no-compile \
-        --constraint constraints.txt ".[ui]" \
+        --constraint constraints.txt /tmp/sdlc-cli-core ".[ui]" \
     && /opt/venv/bin/python -m pip check \
     && /opt/venv/bin/python -m pip uninstall -y pip setuptools wheel
 
