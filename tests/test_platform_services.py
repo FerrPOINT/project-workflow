@@ -59,6 +59,20 @@ def test_service_switcher_is_accessible_and_localizes_health():
     assert ".service-menu-popover{left:0;right:auto}" in template
 
 
+def test_shell_controls_have_mobile_touch_targets_and_sidebar_focus_management():
+    template = (Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/base.html").read_text(
+        encoding="utf-8"
+    )
+
+    assert ".service-menu summary{height:40px" in template
+    assert ".namespace-icon-action{width:40px;height:40px" in template
+    assert ".sidebar-link{display:flex;min-height:40px" in template
+    assert 'aria-label="Открыть навигацию" aria-controls="sidebar" aria-expanded="false"' in template
+    assert 'aria-label="Закрыть навигацию"' in template
+    assert "sidebar.inert=mobile&&!sidebar.classList.contains('open')" in template
+    assert "if(event.key==='Tab'&&sidebar.classList.contains('open'))" in template
+
+
 def test_fallback_on_unreachable_catalog(monkeypatch):
     def boom(*args, **kwargs):
         raise RuntimeError("down")

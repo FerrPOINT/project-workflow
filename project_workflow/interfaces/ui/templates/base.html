@@ -56,18 +56,18 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 }
 .sidebar-header{padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
 .sidebar-logo{min-width:0;color:var(--text)}
-.brand-link{display:flex;align-items:center;gap:10px;color:inherit;text-decoration:none;min-width:0}
+.brand-link{display:flex;align-items:center;gap:10px;color:inherit;text-decoration:none;min-width:0;min-height:40px}
 .brand-link:hover{color:inherit;text-decoration:none}
 .brand-mark{width:32px;height:32px;border-radius:8px;background:var(--accent-soft);border:1px solid var(--accent);color:var(--accent-readable);display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
 .brand-mark svg{width:18px;height:18px}
 .brand-text{display:flex;flex-direction:column;min-width:0;line-height:1.1}
 .brand-name{font-size:14px;font-weight:700;color:var(--text);max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .brand-subname{font-size:11px;font-weight:600;color:var(--text-secondary);max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sidebar-close{display:none;background:none;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;padding:0;width:32px;height:32px;align-items:center;justify-content:center}
+.sidebar-close{display:none;background:none;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;padding:0;width:40px;height:40px;align-items:center;justify-content:center}
 .sidebar-nav{flex:1;padding:12px 0;overflow-y:auto;overscroll-behavior:contain}
 .sidebar-nav:focus-visible{outline:2px solid var(--accent-hover);outline-offset:-2px}
 .sidebar-section{padding:8px 20px;font-size:10px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-top:8px}
-.sidebar-link{display:flex;align-items:center;gap:10px;padding:8px 20px;color:var(--text-muted);font-size:13px;font-weight:500;transition:all .12s;text-decoration:none;border-left:2px solid transparent}
+.sidebar-link{display:flex;min-height:40px;align-items:center;gap:10px;padding:8px 20px;color:var(--text-muted);font-size:13px;font-weight:500;transition:all .12s;text-decoration:none;border-left:2px solid transparent}
 .sidebar-link:hover{color:var(--text);background:var(--surface)}
 .sidebar-link.active{color:var(--text);background:var(--surface-active);border-left-color:var(--accent)}
 .sidebar-link .badge{margin-left:auto;font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px;background:var(--accent-soft);color:var(--accent-readable)}
@@ -83,11 +83,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .header{height:var(--header-height);background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px;position:sticky;top:0;z-index:50}
 .header-title{font-size:15px;font-weight:600}
 .header-actions{display:flex;gap:10px;align-items:center}
+.header .btn{display:inline-flex;min-height:40px;align-items:center}
 .namespace-switcher{display:flex;align-items:center;gap:6px;min-width:0}
-.namespace-select{width:190px;max-width:26vw;height:32px;font-weight:600;color:var(--text);background:var(--surface)}
+.namespace-select{width:190px;max-width:26vw;min-height:40px;font-weight:600;color:var(--text);background:var(--surface)}
 .service-menu{position:relative}
-.theme-select{height:36px;max-width:110px;padding:0 8px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);color:var(--text);font:inherit;font-size:12px}
-.service-menu summary{height:36px;padding:0 10px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);color:var(--text-secondary);display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer;list-style:none;white-space:nowrap}
+.theme-select{height:40px;max-width:110px;padding:0 8px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);color:var(--text);font:inherit;font-size:12px}
+.service-menu summary{height:40px;padding:0 10px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);color:var(--text-secondary);display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer;list-style:none;white-space:nowrap}
 .service-menu summary::-webkit-details-marker{display:none}
 .service-menu summary:hover,.service-menu[open] summary{background:var(--surface-hover);color:var(--text);border-color:var(--accent)}
 .service-menu-chevron{font-size:11px;color:var(--text-muted);transition:transform .15s}
@@ -101,7 +102,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .service-health.unreachable{background:var(--red)}
 .service-menu-current{margin-left:auto;font-size:11px;color:var(--accent-readable)}
 .service-menu-source{padding:8px 10px 3px;margin-top:4px;border-top:1px solid var(--border);color:var(--text-dim);font-size:11px}
-.namespace-icon-action{width:32px;height:32px;border-radius:6px;background:var(--surface);border:1px solid var(--border);color:var(--text-secondary);display:inline-flex;align-items:center;justify-content:center;text-decoration:none;font-size:16px;font-weight:700;line-height:1}
+.namespace-icon-action{width:40px;height:40px;border-radius:6px;background:var(--surface);border:1px solid var(--border);color:var(--text-secondary);display:inline-flex;align-items:center;justify-content:center;text-decoration:none;font-size:16px;font-weight:700;line-height:1}
 .namespace-icon-action:hover{background:var(--surface-hover);color:var(--text);text-decoration:none;border-color:var(--accent)}
 .btn{padding:6px 14px;border-radius:6px;font-size:13px;font-weight:500;border:1px solid transparent;cursor:pointer;transition:all .12s;font-family:inherit;white-space:nowrap}
 .btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}
@@ -117,7 +118,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .modal-title{margin:8px 0 0;font-size:20px;line-height:1.25;color:var(--text)}
 .modal-copy{margin-top:10px;color:var(--text-muted);line-height:1.55}
 .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;flex-wrap:wrap}
-.burger{display:none;background:none;border:none;color:var(--text-muted);font-size:22px;cursor:pointer;padding:0;width:36px;height:36px;align-items:center;justify-content:center;margin-right:8px}
+.burger{display:none;background:none;border:none;color:var(--text-muted);font-size:22px;cursor:pointer;padding:0;width:40px;height:40px;align-items:center;justify-content:center;margin-right:8px}
 .container{width:100%;padding:24px}
 
 /* ── Cards ─────────────────────────────────────────────────────────── */
@@ -287,7 +288,7 @@ textarea{resize:vertical;min-height:60px}
         </span>
       </a>
     </div>
-    <button class="sidebar-close" onclick="closeSidebar()">×</button>
+    <button class="sidebar-close" type="button" aria-label="Закрыть навигацию" onclick="closeSidebar()">×</button>
   </div>
   <nav class="sidebar-nav">
     <a class="sidebar-link {% if page == 'namespace' %}active{% endif %}" href="/namespaces">
@@ -331,7 +332,7 @@ textarea{resize:vertical;min-height:60px}
 <main class="main">
   <header class="header">
     <div style="display:flex;align-items:center">
-      <button class="burger" id="burgerBtn" onclick="openSidebar()">☰</button>
+      <button class="burger" id="burgerBtn" type="button" aria-label="Открыть навигацию" aria-controls="sidebar" aria-expanded="false" onclick="openSidebar()">☰</button>
       <h1 class="header-title">{% block header_title %}{% endblock %}</h1>
     </div>
     <div class="header-actions">
@@ -360,13 +361,13 @@ textarea{resize:vertical;min-height:60px}
       </details>
       {% if namespaces is defined and namespaces %}
       <div class="namespace-switcher">
-        <select class="namespace-select" id="namespaceSelector" aria-label="Выбор" onchange="switchNamespace(this.value)">
+        <select class="namespace-select" id="namespaceSelector" aria-label="Выбор пространства" onchange="switchNamespace(this.value)">
           {% for namespace in namespaces %}
           <option value="{{ namespace.id }}" {% if active_namespace_id == namespace.id %}selected{% endif %}>{{ namespace.name }}</option>
           {% endfor %}
         </select>
-        <a class="namespace-icon-action" id="namespaceCreateLink" href="/namespaces/new{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}" title="Создать" aria-label="Создать">+</a>
-        <a class="namespace-icon-action" id="namespaceEditLink" href="/namespaces{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}" title="Редактировать выбранное" aria-label="Редактировать выбранное">✎</a>
+        <a class="namespace-icon-action" id="namespaceCreateLink" href="/namespaces/new{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}" title="Создать пространство" aria-label="Создать пространство">+</a>
+        <a class="namespace-icon-action" id="namespaceEditLink" href="/namespaces{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}" title="Редактировать пространство" aria-label="Редактировать пространство">✎</a>
       </div>
       {% endif %}
       {% block header_actions %}{% endblock %}
@@ -393,21 +394,54 @@ textarea{resize:vertical;min-height:60px}
 </div>
 
 <script>
+function syncSidebarLayout(){
+  var sidebar=document.getElementById('sidebar');
+  var mobile=window.matchMedia('(max-width: 768px)').matches;
+  if(!mobile&&sidebar.classList.contains('open')){
+    sidebar.classList.remove('open');
+    document.getElementById('sidebarOverlay').classList.remove('show');
+    document.getElementById('burgerBtn').setAttribute('aria-expanded','false');
+    document.body.style.overflow='';
+  }
+  sidebar.inert=mobile&&!sidebar.classList.contains('open');
+}
 function openSidebar(){
   document.getElementById('sidebar').classList.add('open');
   document.getElementById('sidebarOverlay').classList.add('show');
+  document.getElementById('burgerBtn').setAttribute('aria-expanded','true');
   document.body.style.overflow='hidden';
+  syncSidebarLayout();
+  document.querySelector('.sidebar-close').focus();
 }
 function closeSidebar(){
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('sidebarOverlay').classList.remove('show');
+  document.getElementById('burgerBtn').setAttribute('aria-expanded','false');
   document.body.style.overflow='';
+  syncSidebarLayout();
+  document.getElementById('burgerBtn').focus();
 }
+syncSidebarLayout();
+window.addEventListener('resize',syncSidebarLayout);
 var serviceMenu=document.getElementById('serviceMenu');
 document.addEventListener('click',function(event){
   if(serviceMenu&&serviceMenu.open&&!serviceMenu.contains(event.target)){serviceMenu.open=false;}
 });
 document.addEventListener('keydown',function(event){
+  var sidebar=document.getElementById('sidebar');
+  if(event.key==='Tab'&&sidebar.classList.contains('open')){
+    var focusables=Array.from(sidebar.querySelectorAll('button,a,select,[tabindex]')).filter(function(el){
+      return !el.disabled&&el.tabIndex>=0&&el.getClientRects().length;
+    });
+    if(focusables.length){
+      var first=focusables[0],last=focusables[focusables.length-1];
+      if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+      else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+    }
+  }
+  if(event.key==='Escape'&&sidebar.classList.contains('open')){
+    closeSidebar();
+  }
   if(event.key==='Escape'&&serviceMenu&&serviceMenu.open){
     serviceMenu.open=false;
     serviceMenu.querySelector('summary').focus();
