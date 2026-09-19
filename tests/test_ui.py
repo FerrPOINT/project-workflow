@@ -421,6 +421,18 @@ class TestPhasesPage:
         assert 'href="/workflows"' in response.text
         assert "Воркфлоу" in response.text
 
+    def test_shared_shell_collapses_sidebar_without_losing_logout_or_contrast(self):
+        response = client.get("/workflows")
+        assert response.status_code == 200
+        assert "@media(max-width:1120px)" in response.text
+        assert "window.matchMedia('(max-width: 1120px)')" in response.text
+        assert 'class="sidebar-logout" href="/logout"' in response.text
+        assert 'class="btn btn-secondary header-logout" href="/logout"' in response.text
+        assert ".header .header-logout{display:none}" in response.text
+        assert "color:var(--accent-foreground);border-color:var(--accent)" in response.text
+        assert "color:var(--accent-hover-foreground)" in response.text
+        assert "--accent-foreground:" in response.text
+
     def test_sidebar_places_namespaces_first(self):
         response = client.get("/phases")
         assert response.status_code == 200
