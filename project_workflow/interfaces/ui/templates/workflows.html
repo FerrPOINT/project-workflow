@@ -9,23 +9,43 @@
 
 {% block extra_style %}
 .workflow-crud{display:grid;grid-template-columns:320px minmax(0,1fr);gap:16px;align-items:start}
+.workflow-crud.is-single{grid-template-columns:minmax(0,760px)}
+.workflow-crud.is-single .workflow-nav{display:none}
 .workflow-nav{display:flex;flex-direction:column;gap:10px;align-self:start}
 .workflow-nav:focus-visible{outline:2px solid var(--accent-hover);outline-offset:2px}
 .workflow-nav-item{width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;cursor:pointer;color:var(--text)}
 .workflow-nav-item.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent-soft)}
-.workflow-name{font-size:15px;font-weight:600;color:var(--text)}
+.workflow-name{font-size:15px;font-weight:600;color:var(--text);overflow-wrap:anywhere}
 .workflow-meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--text-dim)}
-.workflow-panel{display:flex;flex-direction:column;gap:16px}
+.workflow-picker{display:none}
+.workflow-panel{display:flex;flex-direction:column;gap:16px;max-width:760px;min-width:0}
 .form-stack{display:flex;flex-direction:column;gap:12px}
 .label{font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}
-textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:160px;resize:vertical}
+.workflow-description{min-height:96px}
 .panel-actions{display:flex;gap:10px;flex-wrap:wrap}
+.workflow-delete{margin-left:auto;color:var(--text);border-color:var(--red)}
+.workflow-delete:hover{color:var(--text);background:var(--red-soft)}
 .empty-note{color:var(--text-dim);font-size:13px;line-height:1.6}
-@media (max-width: 980px){.workflow-crud{grid-template-columns:1fr}}
+@media (max-width: 980px){
+  .workflow-crud,.workflow-crud.is-single{grid-template-columns:minmax(0,1fr)}
+  .workflow-nav{display:none}
+  .workflow-picker{display:block}
+  .workflow-picker select{min-height:40px}
+  .workflow-crud.is-single .workflow-picker{display:none}
+}
 {% endblock %}
 
 {% block content %}
-<div class="workflow-crud">
+<div class="workflow-crud {% if workflows|length <= 1 %}is-single{% endif %}" id="workflowCrud">
+  <div class="workflow-picker" id="workflowPicker">
+    <label class="label" for="workflowSelect">Воркфлоу</label>
+    <select id="workflowSelect" onchange="selectWorkflow(Number(this.value))">
+      <option value="" disabled>Выберите воркфлоу</option>
+      {% for workflow in workflows %}
+      <option value="{{ workflow.id }}" {% if selected_workflow and selected_workflow.id == workflow.id %}selected{% endif %}>{{ workflow.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
   <section class="workflow-nav side-nav-scroll" id="workflowNav">
     {% for workflow in workflows %}
     <button type="button" class="workflow-nav-item {% if selected_workflow and selected_workflow.id == workflow.id %}active{% endif %}" data-workflow-id="{{ workflow.id }}" onclick="selectWorkflow({{ workflow.id }})">
@@ -49,12 +69,12 @@ textarea.code-area{font-family:'JetBrains Mono',monospace;min-height:160px;resiz
       </div>
       <div>
         <label class="label" for="workflowDescription">Описание</label>
-        <textarea id="workflowDescription" class="code-area" spellcheck="false">{{ selected_workflow.description if selected_workflow else '' }}</textarea>
+        <textarea id="workflowDescription" class="workflow-description">{{ selected_workflow.description if selected_workflow else '' }}</textarea>
       </div>
       <div class="panel-actions">
         <button class="btn btn-primary" type="submit" id="workflowSubmitButton">Сохранить</button>
         <button class="btn btn-secondary" type="button" id="cancelCreateWorkflowButton" onclick="cancelCreateWorkflow()" style="display:none">Отмена</button>
-        <button class="btn btn-secondary" type="button" id="deleteWorkflowButton" onclick="deleteWorkflow()">Удалить</button>
+        <button class="btn btn-secondary workflow-delete" type="button" id="deleteWorkflowButton" onclick="deleteWorkflow()">Удалить</button>
       </div>
     </form>
   </section>
@@ -84,6 +104,9 @@ function syncWorkflowNav(){
   document.querySelectorAll('#workflowNav [data-workflow-id]').forEach(function(node){
     node.classList.toggle('active', Number(node.dataset.workflowId) === selectedWorkflowId);
   });
+  var picker = document.getElementById('workflowSelect');
+  picker.options[0].textContent = workflowFormMode === 'create' ? 'Новый воркфлоу' : 'Выберите воркфлоу';
+  picker.value = selectedWorkflowId == null ? '' : String(selectedWorkflowId);
 }
 function fillWorkflowForm(workflow){
   document.getElementById('workflowName').value = workflow ? workflow.name : '';
@@ -126,8 +149,26 @@ function selectWorkflow(id){
 }
 function renderWorkflowNav(){
   var nav = document.getElementById('workflowNav');
+  var picker = document.getElementById('workflowSelect');
+  document.getElementById('workflowCrud').classList.toggle('is-single', workflowStore.length <= 1);
   nav.replaceChildren();
+  picker.replaceChildren();
+  var placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.disabled = true;
+  placeholder.textContent = 'Выберите воркфлоу';
+  picker.appendChild(placeholder);
+  if(workflowStore.length === 0){
+    var empty = document.createElement('div');
+    empty.className = 'card empty-note';
+    empty.textContent = 'Воркфлоу пока нет.';
+    nav.appendChild(empty);
+  }
   workflowStore.forEach(function(workflow){
+    var option = document.createElement('option');
+    option.value = String(workflow.id);
+    option.textContent = workflow.name;
+    picker.appendChild(option);
     var button = document.createElement('button');
     button.type = 'button';
     button.className = 'workflow-nav-item';
@@ -165,12 +206,7 @@ function reloadWorkflows(nextId){
         previousWorkflowId = null;
         fillWorkflowForm(null);
         setWorkflowFormMode('create');
-        var nav = document.getElementById('workflowNav');
-        nav.replaceChildren();
-        var empty = document.createElement('div');
-        empty.className = 'card empty-note';
-        empty.textContent = 'Воркфлоу пока нет.';
-        nav.appendChild(empty);
+        renderWorkflowNav();
         syncWorkflowNav();
         return;
       }
