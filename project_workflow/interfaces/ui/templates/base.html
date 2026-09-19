@@ -76,6 +76,18 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .sidebar-link .badge{margin-left:auto;font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px;background:var(--accent-soft);color:var(--accent-readable)}
 .sidebar-footer{padding:12px 20px;border-top:1px solid var(--border);font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:8px}
 .sidebar-logout{display:none;margin-left:auto;color:var(--text-secondary);font-weight:600}
+.sidebar-utilities{display:none}
+.sidebar-service-menu summary{cursor:pointer;list-style:none}
+.sidebar-service-menu summary::-webkit-details-marker{display:none}
+.sidebar-service-menu summary::after{content:'▾';margin-left:auto;color:var(--text-muted);font-size:11px}
+.sidebar-service-menu[open] summary::after{transform:rotate(180deg)}
+.sidebar-service-links{padding:2px 12px 8px 20px}
+.sidebar-service-link{display:flex;align-items:center;gap:10px;min-height:40px;padding:8px 12px 8px 20px;color:var(--text-secondary);font-size:12px;text-decoration:none}
+.sidebar-service-link:hover,.sidebar-service-link:focus-visible{background:var(--surface-hover);color:var(--text);text-decoration:none}
+.sidebar-service-link[aria-current="page"]{color:var(--text);font-weight:600}
+.sidebar-theme{padding:10px 20px 14px}
+.sidebar-theme label{display:block;margin-bottom:6px;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase}
+.sidebar-theme .theme-select{width:100%;max-width:none}
 .dot{width:6px;height:6px;border-radius:50%}
 .dot.green{background:var(--green)}.dot.yellow{background:var(--orange)}.dot.red{background:var(--red)}
 
@@ -85,6 +97,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 /* ── Main ──────────────────────────────────────────────────────────── */
 .main{flex:1;margin-left:var(--sidebar-width);min-height:100vh;width:calc(100% - var(--sidebar-width))}
 .header{height:var(--header-height);background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px;position:sticky;top:0;z-index:50}
+.header-title-group{display:flex;align-items:center;flex:0 0 auto}
 .header-title{font-size:15px;font-weight:600}
 .header-actions{display:flex;gap:10px;align-items:center}
 .header .btn{display:inline-flex;min-height:40px;align-items:center}
@@ -247,24 +260,30 @@ textarea{resize:vertical;min-height:60px}
   .header .header-logout{display:none}
 }
 @media(max-width:930px){
-  .header{flex-wrap:wrap;height:auto;min-height:var(--header-height);row-gap:8px;padding-block:8px}
-  .header-actions{width:100%;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .header{flex-wrap:wrap;align-items:flex-start;height:auto;min-height:var(--header-height);row-gap:8px;padding-block:8px}
+  .header-actions{width:auto;flex:1;min-width:0;gap:6px;flex-wrap:wrap;justify-content:flex-end}
   .namespace-select{width:150px;max-width:42vw}
 }
 @media(max-width:768px){
   .container{padding:16px}
+}
+@media(max-width:640px){
+  .sidebar-utilities{display:block}
+  .header-actions > .theme-select,.header-actions > .service-menu{display:none}
 }
 @media(max-width:480px){
   .container{padding:12px}
   .card{padding:14px}
   .card-value{font-size:22px}
   .header-title{font-size:14px}
+  .header-actions{min-width:200px}
   .namespace-select{width:128px;min-width:0}
-  .namespace-switcher{min-width:0}
+  .namespace-switcher{min-width:200px}
   .namespace-select{max-width:38vw}
   .namespace-switcher .namespace-select{flex:1 1 128px}
   .service-menu-popover{left:0;right:auto}
 }
+@media(max-width:350px){.header-actions{width:100%;flex:none}}
 
 /* ── Side nav lists (workflows / namespaces / phases) ────────────────
    Скроллбар наследует глобальный тематический стиль (см. шапку стилей). */
@@ -329,6 +348,32 @@ textarea{resize:vertical;min-height:60px}
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
       Настройки
     </a>
+    <div class="sidebar-utilities">
+      <div class="sidebar-section">ПЛАТФОРМА</div>
+      <div class="sidebar-theme">
+        <label for="sidebarThemeSelector">Тема</label>
+        <select class="theme-select" id="sidebarThemeSelector" onchange="setPlatformTheme(this.value)">
+          <option value="dark">Тёмная</option>
+          <option value="gray">Серая</option>
+          <option value="light">Светлая</option>
+        </select>
+      </div>
+      <details class="sidebar-service-menu">
+        <summary class="sidebar-link">Сервисы</summary>
+        <div class="sidebar-service-links">
+          {% for service in other_services %}
+          <a class="sidebar-service-link" href="{{ service.url }}">
+            <span class="service-health {{ service.health }}" role="img" aria-label="{% if service.health == 'healthy' %}Работает{% elif service.health == 'unreachable' %}Недоступен{% else %}Состояние неизвестно{% endif %}"></span>
+            <span>{{ service.label }}</span>
+          </a>
+          {% endfor %}
+          <a class="sidebar-service-link" href="/" aria-current="page">
+            <span class="service-health healthy" role="img" aria-label="Работает"></span>
+            <span>Project Workflow</span>
+          </a>
+        </div>
+      </details>
+    </div>
     </nav>
     <div class="sidebar-footer">
     <span class="dot green"></span>
@@ -340,7 +385,7 @@ textarea{resize:vertical;min-height:60px}
 <!-- Main -->
 <main class="main">
   <header class="header">
-    <div style="display:flex;align-items:center">
+    <div class="header-title-group">
       <button class="burger" id="burgerBtn" type="button" aria-label="Открыть навигацию" aria-controls="sidebar" aria-expanded="false" onclick="openSidebar()">☰</button>
       <h1 class="header-title">{% block header_title %}{% endblock %}</h1>
     </div>
@@ -439,7 +484,7 @@ document.addEventListener('click',function(event){
 document.addEventListener('keydown',function(event){
   var sidebar=document.getElementById('sidebar');
   if(event.key==='Tab'&&sidebar.classList.contains('open')){
-    var focusables=Array.from(sidebar.querySelectorAll('button,a,select,[tabindex]')).filter(function(el){
+    var focusables=Array.from(sidebar.querySelectorAll('button,a,select,summary,[tabindex]')).filter(function(el){
       return !el.disabled&&el.tabIndex>=0&&el.getClientRects().length;
     });
     if(focusables.length){
@@ -528,12 +573,13 @@ function switchNamespace(namespaceId){
 function setPlatformTheme(theme){
   if(!['dark','gray','light'].includes(theme)){return;}
   document.documentElement.dataset.theme=theme;
+  document.querySelectorAll('.theme-select').forEach(function(select){select.value=theme;});
   try{localStorage.setItem('workflow-theme',theme)}catch(_error){}
 }
 try{
   var savedTheme=localStorage.getItem('workflow-theme');
   if(['dark','gray','light'].includes(savedTheme)){
-    document.getElementById('themeSelector').value=savedTheme;
+    document.querySelectorAll('.theme-select').forEach(function(select){select.value=savedTheme;});
   }
 }catch(_error){}
 function pluralizeRu(n, one, few, many){
