@@ -2439,7 +2439,19 @@ class TestAgentsPage:
         response = client.get("/agents")
 
         assert response.status_code == 200
-        assert response.text.count(".catch(showRequestError)") >= 3
+        assert response.text.count("catch(error){showRequestError(error)}") == 3
+
+    def test_agents_page_uses_compact_explicit_editor(self):
+        response = client.get("/agents")
+
+        assert response.status_code == 200
+        assert 'class="agent-list" id="agentsList"' in response.text
+        assert 'class="agent-entry" data-id=' in response.text
+        assert 'onsubmit="saveAgent(event,this)"' in response.text
+        assert 'onclick="cancelAgent(this)"' in response.text
+        assert 'class="agent-create" id="agentCreatePanel"' in response.text
+        assert 'onblur="saveRow(this)"' not in response.text
+        assert 'function cancelAgent(button)' in response.text
 
     def test_agents_api_create_and_update_description(self):
         create = client.post(
@@ -2564,11 +2576,12 @@ class TestUiNetworkFailures:
         ("path", "minimum_handlers"),
         [("/namespaces", 4), ("/workflows", 4), ("/agents", 3)],
     )
-    def test_promise_based_crud_reports_network_errors(self, path, minimum_handlers):
+    def test_crud_reports_network_errors(self, path, minimum_handlers):
         response = client.get(path)
 
         assert response.status_code == 200
-        assert response.text.count(".catch(showRequestError)") >= minimum_handlers
+        handler = "catch(error){showRequestError(error)}" if path == "/agents" else ".catch(showRequestError)"
+        assert response.text.count(handler) >= minimum_handlers
         assert "Не удалось связаться с сервером" in response.text
 
     def test_task_deletion_is_absent_from_ui_and_routes(self):

@@ -1007,9 +1007,9 @@ class TestApiNamespaces:
 class TestApiAgents:
     def test_agents_page_uses_launch_profile_ui_alias(self, client):
         html = client.get("/agents").text
-        assert 'data-field="launch_profile"' in html
-        assert "field.dataset.field==='launch_profile' ? (value || null) : value" in html
-        assert "launch_profile:launchProfile || null" in html
+        assert 'name="launch_profile"' in html
+        assert "form.elements.namedItem('launch_profile')" in html
+        assert "launch_profile:launchProfile||null" in html
         assert "hermes" not in html.casefold()
 
     def test_list_agents(self, client):
