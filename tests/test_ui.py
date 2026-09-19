@@ -489,6 +489,18 @@ class TestPhasesPage:
         assert "color:var(--accent-hover-foreground)" in response.text
         assert "--accent-foreground:" in response.text
 
+    def test_mobile_shell_keeps_theme_and_services_in_drawer(self):
+        response = client.get("/agents")
+
+        assert response.status_code == 200
+        assert 'class="sidebar-utilities"' in response.text
+        assert 'class="sidebar-service-menu"' in response.text
+        assert 'id="sidebarThemeSelector"' in response.text
+        assert 'id="themeSelector"' in response.text
+        assert ".header-actions > .theme-select,.header-actions > .service-menu{display:none}" in response.text
+        assert ".header-actions{width:auto;flex:1;min-width:0" in response.text
+        assert response.text.count("document.querySelectorAll('.theme-select').forEach") == 2
+
     def test_sidebar_places_namespaces_first(self):
         response = client.get("/phases")
         assert response.status_code == 200
