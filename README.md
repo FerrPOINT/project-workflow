@@ -34,6 +34,11 @@
 
 Для изолированных контейнеров исполнителей сохранён private runtime bridge `/internal/runtime/step` и `/internal/runtime/history`: это отдельный service-to-service контракт с role tokens, не пользовательский UI API. Он включается только при `PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON` и должен быть доступен лишь во внутренней сети или на host loopback.
 
+Fleet Control читает каталог через `GET /internal/runtime/catalog` с отдельным
+`PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN` (не менее 32 символов). Этот токен
+не разрешает `step` и `history` и не меняет `PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON`.
+Маршрут должен оставаться во внутренней сети или на host loopback.
+
 Browser UI поддерживает общий Central Auth Authorization Code + PKCE. При
 заданном `AUTH_ISSUER` все UI и human API routes требуют активную центральную
 сессию; локального password fallback нет. Публичный issuer и внутренний адрес

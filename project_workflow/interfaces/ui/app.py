@@ -222,6 +222,7 @@ def create_app() -> FastAPI:
     # Private bridge for isolated agent containers; separate from browser UI.
     app.post("/internal/runtime/step", response_model=None)(runtime_api.runtime_step)
     app.get("/internal/runtime/history", response_model=None)(runtime_api.runtime_history)
+    app.get("/internal/runtime/catalog", response_model=None)(runtime_api.runtime_catalog)
 
     # Pages
     app.get("/", response_class=HTMLResponse)(pages.index)
