@@ -160,6 +160,8 @@ def create_app() -> FastAPI:
     app.get("/api/settings", response_model=None)(api.api_settings_get)
     app.post("/api/runtime/assignment/current", response_model=None)(api.api_runtime_current)
     app.post("/api/runtime/assignment/complete", response_model=None)(api.api_runtime_complete)
+    app.post("/api/runtime/assignment/step", response_model=None)(api.api_runtime_step)
+    app.post("/api/runtime/assignment/history", response_model=None)(api.api_runtime_history)
     app.get("/api/skills", response_model=None)(api.api_skills)
     app.get("/api/phases", response_model=None)(api.api_phases)
     app.get("/api/phases/{phase_id}", response_model=None)(api.api_phase_detail)

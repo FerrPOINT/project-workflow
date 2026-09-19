@@ -30,6 +30,17 @@ class RuntimeCompletionRequest(RuntimeAssignmentRequest):
     operationKey: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
+class RuntimeStepRequest(RuntimeCompletionRequest):
+    report: str = Field(min_length=1, max_length=65536)
+
+    @field_validator("report")
+    @classmethod
+    def _report_must_be_meaningful(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("report must not be blank")
+        return value
+
+
 class OptionalIntMixin:
     """Normalize optional integer fields coming from HTML/JSON forms."""
 

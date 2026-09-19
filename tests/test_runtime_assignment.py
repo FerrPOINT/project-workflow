@@ -42,6 +42,28 @@ def _completion(phase: str, **updates):
     }
 
 
+def _step(phase: str, report: str, **updates):
+    assignment = _payload(**updates)
+    operation_key = hashlib.sha256(
+        "\0".join(
+            (
+                assignment["taskId"],
+                assignment["runId"],
+                assignment["mode"],
+                str(assignment["cycleNumber"]),
+                phase,
+                report,
+            )
+        ).encode("utf-8")
+    ).hexdigest()
+    return {
+        **assignment,
+        "report": report,
+        "expectedPhaseCode": phase,
+        "operationKey": operation_key,
+    }
+
+
 def _install_developer_workflow():
     from project_workflow.interfaces.ui import _app_state
 
@@ -143,6 +165,57 @@ def test_runtime_uses_backend_mode_and_keeps_cycles_separate(monkeypatch):
     }
     assert task["current_mode_id"] == rework["id"]
     assert task["cycle_number"] == 1
+
+
+def test_agent_cli_step_and_history_routes_match_two_command_contract(monkeypatch):
+    monkeypatch.setenv("PROJECT_WORKFLOW_RUNTIME_TOKEN", "runtime-secret")
+    monkeypatch.setenv("PROJECT_WORKFLOW_ROLE", "developer")
+    monkeypatch.setenv("PROJECT_WORKFLOW_NAMESPACE", "hermes-developer")
+    _install_developer_workflow()
+
+    from project_workflow.interfaces.ui.app import create_app
+
+    client = TestClient(create_app())
+    headers = {"Authorization": "Bearer runtime-secret"}
+    report = "Проверил контракт фазы и сохранил evidence."
+    payload = _step("initial.1", report)
+
+    current = client.post("/api/runtime/assignment/current", json=_payload(), headers=headers)
+    assert current.status_code == 200
+
+    advanced = client.post("/api/runtime/assignment/step", json=payload, headers=headers)
+    assert advanced.status_code == 200
+    assert advanced.json()["reportAccepted"] is True
+    assert advanced.json()["phase"]["code"] == "initial.2"
+
+    duplicate = client.post("/api/runtime/assignment/step", json=payload, headers=headers)
+    assert duplicate.status_code == 200
+    assert duplicate.json()["phase"]["code"] == "initial.2"
+
+    history = client.post("/api/runtime/assignment/history", json=_payload(), headers=headers)
+    assert history.status_code == 200
+    assert history.json()["count"] == 1
+    assert history.json()["records"] == [
+        {
+            "phaseCode": "initial.1",
+            "phaseName": "initial 1",
+            "mode": "initial",
+            "cycleNumber": 0,
+            "attempt": 1,
+            "runId": "run-initial",
+            "verdict": "pass",
+            "report": report,
+            "createdAt": history.json()["records"][0]["createdAt"],
+        }
+    ]
+
+    assert client.post("/api/runtime/assignment/step", json=payload, headers={}).status_code == 401
+    invalid = client.post(
+        "/api/runtime/assignment/step",
+        json={**payload, "report": "   "},
+        headers=headers,
+    )
+    assert invalid.status_code == 422
 
 
 def test_runtime_rejects_caller_selected_extra_fields(monkeypatch):

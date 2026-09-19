@@ -56,8 +56,9 @@ class RuntimeWorkflowService:
         *,
         expected_phase_code: str,
         operation_key: str,
+        report: str | None = None,
     ) -> dict[str, Any]:
-        expected_operation_key = self.operation_key_for(assignment, expected_phase_code)
+        expected_operation_key = self.operation_key_for(assignment, expected_phase_code, report)
         if operation_key != expected_operation_key:
             raise RuntimeAssignmentError("operation key does not match the active assignment")
         task, phases = self._bind(assignment)
@@ -91,6 +92,26 @@ class RuntimeWorkflowService:
             mode_id=task.current_mode_id,
             cycle_number=assignment.cycle_number,
         )
+        if report is not None:
+            self._uow.supervisor_runs.create(
+                {
+                    "task_id": task.id,
+                    "phase_id": phase.id,
+                    "mode_id": task.current_mode_id,
+                    "cycle_number": assignment.cycle_number,
+                    "attempt_number": assignment.attempt,
+                    "verdict": "pass",
+                    "report": report,
+                    "context_snapshot": {
+                        "taskKey": assignment.task_key,
+                        "runId": assignment.run_id,
+                        "phaseCode": phase.code,
+                        "phaseName": phase.name,
+                        "mode": assignment.mode_key,
+                    },
+                    "response": {"operationKey": operation_key},
+                }
+            )
         next_phase = phases[index + 1] if index + 1 < len(phases) else None
         if next_phase is None:
             self._uow.tasks.update(task.id, {"status": "done"})
@@ -112,17 +133,42 @@ class RuntimeWorkflowService:
         return self._result(assignment, updated, next_phase, complete=next_phase is None)
 
     @staticmethod
-    def operation_key_for(assignment: RuntimeAssignment, phase_code: str) -> str:
-        identity = "\0".join(
-            (
-                assignment.task_id,
-                assignment.run_id,
-                assignment.mode_key,
-                str(assignment.cycle_number),
-                phase_code,
-            )
-        )
+    def operation_key_for(
+        assignment: RuntimeAssignment, phase_code: str, report: str | None = None
+    ) -> str:
+        identity_parts = [
+            assignment.task_id,
+            assignment.run_id,
+            assignment.mode_key,
+            str(assignment.cycle_number),
+            phase_code,
+        ]
+        if report is not None:
+            identity_parts.append(report)
+        identity = "\0".join(identity_parts)
         return hashlib.sha256(identity.encode("utf-8")).hexdigest()
+
+    def history(self, assignment: RuntimeAssignment) -> dict[str, Any]:
+        task, _ = self._bind(assignment)
+        if task.id is None:
+            raise RuntimeAssignmentError("runtime task has no id")
+        records: list[dict[str, Any]] = []
+        for run in self._uow.supervisor_runs.list(task_id=task.id, limit=200):
+            context = run.context_snapshot
+            records.append(
+                {
+                    "phaseCode": str(context.get("phaseCode", run.phase_id)),
+                    "phaseName": str(context.get("phaseName", context.get("phaseCode", run.phase_id))),
+                    "mode": str(context.get("mode", assignment.mode_key)),
+                    "cycleNumber": run.cycle_number,
+                    "attempt": run.attempt_number,
+                    "runId": str(context.get("runId", "")),
+                    "verdict": run.verdict,
+                    "report": run.report,
+                    "createdAt": run.created_at,
+                }
+            )
+        return {"taskKey": assignment.task_key, "records": records, "count": len(records)}
 
     def _bind(self, assignment: RuntimeAssignment):
         self._validate(assignment)
