@@ -8,20 +8,27 @@
 {% endblock %}
 
 {% block extra_style %}
-.dashboard-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
-.metric-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 14px;display:flex;align-items:baseline;gap:10px;min-width:0}
-.metric-label{font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.metric-value{font-size:20px;font-weight:700;color:var(--text);margin-left:auto}
+.dashboard-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:20px}
+.metric-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;display:flex;align-items:center;gap:8px;min-width:0;min-height:56px}
+.metric-label{font-size:11px;font-weight:600;line-height:1.2;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;overflow-wrap:anywhere;min-width:0}
+.metric-value{font-size:20px;font-weight:700;color:var(--text);margin-left:auto;flex:none}
 .metric-verdict-blocked .metric-value{color:var(--red)}
 .metric-verdict-rollback .metric-value{color:var(--orange)}
-.metric-verdict-delegate .metric-value{color:var(--accent)}
-.dashboard-panels{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;align-items:start}
-.list-stack{display:flex;flex-direction:column;gap:12px}
-.list-item{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px}
-.list-title{font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px}
-.list-meta{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--text-dim)}
-.code{font-family:'JetBrains Mono',monospace;color:var(--accent)}
-@media(max-width:640px){.dashboard-action{display:none}.dashboard-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.metric-label{font-size:10px}}
+.metric-verdict-delegate .metric-value{color:var(--accent-readable)}
+.dashboard-panels{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,280px);gap:24px;align-items:start}
+.dashboard-section{min-width:0}
+.dashboard-section-heading{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.dashboard-section-title{font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em}
+.dashboard-section-link{font-size:12px;font-weight:600;white-space:nowrap}
+.dashboard-list{border-top:1px solid var(--border)}
+.dashboard-row{display:block;padding:10px 8px;border-bottom:1px solid var(--border);color:inherit;min-width:0}
+.dashboard-row:hover{background:var(--surface-hover);color:inherit;text-decoration:none}
+.list-title{font-size:13px;font-weight:600;line-height:1.35;color:var(--text);margin-bottom:3px;overflow-wrap:anywhere}
+.list-meta{display:flex;gap:4px 10px;flex-wrap:wrap;font-size:11px;color:var(--text-dim)}
+.code{font-family:'JetBrains Mono',monospace;color:var(--accent-readable)}
+.dashboard-section-footer,.dashboard-empty{margin-top:8px;font-size:12px;color:var(--text-muted)}
+@media(max-width:780px){.dashboard-panels{grid-template-columns:minmax(0,1fr);gap:20px}}
+@media(max-width:640px){.dashboard-action{display:none}.dashboard-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 {% endblock %}
 
 {% block content %}
@@ -38,12 +45,15 @@
 </div>
 
 <div class="dashboard-panels">
-  {% if open_tasks %}
-  <section class="card" data-dashboard-open-tasks>
-    <div class="card-title" style="margin-bottom:14px">Незавершённые задачи</div>
-    <div class="list-stack">
-      {% for task in open_tasks %}
-      <a href="/task/{{ task.task_key }}{% if task.namespace_id %}?namespace_id={{ task.namespace_id }}{% endif %}" class="list-item" data-task-key="{{ task.task_key }}">
+  <section class="dashboard-section" data-dashboard-open-tasks aria-labelledby="dashboardTasksTitle">
+    <div class="dashboard-section-heading">
+      <h2 class="dashboard-section-title" id="dashboardTasksTitle">Незавершённые задачи · {{ open_tasks|length }}</h2>
+      <a class="dashboard-section-link" href="/tasks{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}">Все задачи</a>
+    </div>
+    {% if open_tasks %}
+    <div class="dashboard-list">
+      {% for task in open_tasks[:8] %}
+      <a href="/task/{{ task.task_key }}{% if task.namespace_id %}?namespace_id={{ task.namespace_id }}{% endif %}" class="dashboard-row" data-task-key="{{ task.task_key }}">
         <div class="list-title"><span class="code">{{ task.task_key }}</span>{% if task.title %} — {{ task.title }}{% endif %}</div>
         <div class="list-meta">
           <span>{{ task.namespace_name }}</span>
@@ -53,15 +63,21 @@
       </a>
       {% endfor %}
     </div>
+    {% if open_tasks|length > 8 %}<div class="dashboard-section-footer">Показано 8 из {{ open_tasks|length }}</div>{% endif %}
+    {% else %}
+    <p class="dashboard-empty">Незавершённых задач нет.</p>
+    {% endif %}
   </section>
-  {% endif %}
 
-  {% if namespaces %}
-  <section class="card" data-dashboard-namespaces>
-    <div class="card-title" style="margin-bottom:14px">Неймспейсы</div>
-    <div class="list-stack">
-      {% for namespace in namespaces %}
-      <a href="/namespaces?namespace_id={{ namespace.id }}" class="list-item">
+  <section class="dashboard-section" data-dashboard-namespaces aria-labelledby="dashboardNamespacesTitle">
+    <div class="dashboard-section-heading">
+      <h2 class="dashboard-section-title" id="dashboardNamespacesTitle">Неймспейсы · {{ namespaces|length }}</h2>
+      <a class="dashboard-section-link" href="/namespaces">Все неймспейсы</a>
+    </div>
+    {% if namespaces %}
+    <div class="dashboard-list">
+      {% for namespace in namespaces[:6] %}
+      <a href="/namespaces?namespace_id={{ namespace.id }}" class="dashboard-row" data-namespace-id="{{ namespace.id }}">
         <div class="list-title">{{ namespace.name }}</div>
         <div class="list-meta">
           <span>{{ namespace.task_count | pluralize('задача,задачи,задач') }}</span>
@@ -69,8 +85,11 @@
       </a>
       {% endfor %}
     </div>
+    {% if namespaces|length > 6 %}<div class="dashboard-section-footer">Показано 6 из {{ namespaces|length }}</div>{% endif %}
+    {% else %}
+    <p class="dashboard-empty">Неймспейсов пока нет.</p>
+    {% endif %}
   </section>
-  {% endif %}
 
 </div>
 {% endblock %}
