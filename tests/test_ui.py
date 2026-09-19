@@ -647,6 +647,19 @@ class TestPhasesPage:
         assert "min-height:40px" in response.text
         assert "event.key!=='Escape'" in response.text
 
+    def test_long_phase_list_has_named_jump_to_phase_control(self):
+        response = client.get("/phases")
+        phase = _phase_row("4.START")
+
+        assert response.status_code == 200
+        assert 'id="phaseJump"' in response.text
+        assert 'aria-label="Перейти к фазе"' in response.text
+        assert f'<option value="{phase["id"]}">' in response.text
+        assert f'id="phase-{phase["id"]}"' in response.text
+        assert "function jumpToPhase(select)" in response.text
+        assert "focus({preventScroll:true})" in response.text
+        assert ".namespace-icon-action{width:40px;height:40px;flex:0 0 40px" in response.text
+
     def test_phases_add_button_breaks_the_vertical_connector_line(self):
         response = client.get("/phases")
 

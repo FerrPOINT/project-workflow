@@ -14,8 +14,10 @@
 .workflow-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--text-dim)}
 .workflow-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:rgba(148,163,184,.10);color:var(--text-muted)}
 .timeline-panel{display:flex;flex-direction:column;gap:18px;min-width:0}
-.workflow-summary{background:transparent;border-width:0 0 1px;border-radius:0;padding:0 0 16px}
+.workflow-summary{background:transparent;border-width:0 0 1px;border-radius:0;padding:0 0 16px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.workflow-summary-copy{min-width:0}
 .workflow-summary .card-title{font-size:20px;color:var(--text);text-transform:none;letter-spacing:0;margin-bottom:5px}
+.phase-jump-select{flex:0 1 240px;min-width:180px;min-height:40px;max-width:100%}
 .empty-note{color:var(--text-dim);font-size:13px;line-height:1.6}
 .timeline{display:flex;flex-direction:column;align-items:stretch;max-width:none;gap:0}
 .timeline-block,.timeline-item{width:100%}
@@ -50,11 +52,11 @@
 .phase-add-btn{position:relative;z-index:1;width:40px;height:40px;border-radius:50%;border:1px dashed var(--accent);background:var(--panel);color:var(--accent);cursor:pointer;font-size:18px;line-height:1}
 .phase-add-btn:hover{background:var(--accent);color:#fff;border-style:solid}
 @media(max-width:1050px){.phases-layout{grid-template-columns:1fr}.workflow-nav{position:static;max-height:none}}
-@media(max-width:760px){.timeline-parallel-grid{grid-template-columns:1fr}.timeline-parallel-group{padding:10px}.timeline-card,.timeline-parallel-grid .timeline-card{min-height:0}}
+@media(max-width:760px){.workflow-summary{flex-wrap:wrap}.phase-jump-select{flex:1 1 100%}.timeline-parallel-grid{grid-template-columns:1fr}.timeline-parallel-group{padding:10px}.timeline-card,.timeline-parallel-grid .timeline-card{min-height:0}}
 {% endblock %}
 
 {% macro phase_card(p) -%}
-<div class="timeline-item" data-phase-id="{{ p.id }}" data-phase-order="{{ p.phase_num }}" data-execution-type="{{ p.execution_type }}">
+<div class="timeline-item" id="phase-{{ p.id }}" data-phase-id="{{ p.id }}" data-phase-order="{{ p.phase_num }}" data-execution-type="{{ p.execution_type }}">
   <div class="phase-card-shell">
     <a href="/phase/{{ p.id }}{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="timeline-card">
       <div class="timeline-name">{{ p.name }}</div>
@@ -94,10 +96,18 @@
 
   <section class="timeline-panel">
     <div class="card workflow-summary">
-      <div class="card-title">{{ selected_workflow.name if selected_workflow else 'Фазы' }}</div>
-      {% if selected_workflow and selected_workflow.description %}<div class="empty-note">{{ selected_workflow.description }}</div>
-      {% elif selected_workflow %}<div class="empty-note">Порядок выполнения и связанные параллельные группы.</div>
-      {% else %}<div class="empty-note">Сначала создайте воркфлоу.</div>{% endif %}
+      <div class="workflow-summary-copy">
+        <div class="card-title">{{ selected_workflow.name if selected_workflow else 'Фазы' }}</div>
+        {% if selected_workflow and selected_workflow.description %}<div class="empty-note">{{ selected_workflow.description }}</div>
+        {% elif selected_workflow %}<div class="empty-note">Порядок выполнения и связанные параллельные группы.</div>
+        {% else %}<div class="empty-note">Сначала создайте воркфлоу.</div>{% endif %}
+      </div>
+      {% if phase_count >= 8 %}
+      <select id="phaseJump" class="phase-jump-select" aria-label="Перейти к фазе" onchange="jumpToPhase(this)">
+        <option value="">Перейти к фазе</option>
+        {% for phase in phases %}<option value="{{ phase.id }}">{{ phase.name }}</option>{% endfor %}
+      </select>
+      {% endif %}
     </div>
 
     <div class="timeline" id="phasesTimeline">
@@ -125,6 +135,16 @@
 
 {% block extra_script %}
 function getPhaseTimelineItems(){return Array.from(document.querySelectorAll('#phasesTimeline .timeline-item'));}
+
+function jumpToPhase(select){
+  const phaseId=select.value;
+  select.value='';
+  const item=document.getElementById('phase-'+phaseId);
+  if(!item)return;
+  const headerHeight=document.querySelector('.header')?.getBoundingClientRect().height||0;
+  window.scrollTo({top:window.scrollY+item.getBoundingClientRect().top-headerHeight-12,behavior:'auto'});
+  item.querySelector('.timeline-card')?.focus({preventScroll:true});
+}
 
 async function addPhaseAfter(button){
   const workflowId=new URLSearchParams(window.location.search).get('workflow_id')||document.querySelector('.workflow-nav-item.active')?.dataset.workflowId;
