@@ -293,7 +293,7 @@ class TestIndexPage:
         assert response.status_code == 200
         assert 'class="btn btn-secondary dashboard-action">Задачи</a>' in response.text
         assert 'class="btn btn-secondary dashboard-action">Неймспейсы</a>' in response.text
-        assert "@media(max-width:640px){.dashboard-action{display:none}" in response.text
+        assert "@media(max-width:640px){.header .dashboard-action{display:none}" in response.text
 
     def test_dashboard_previews_recent_items_and_links_to_full_lists(self):
         dashboard = {
