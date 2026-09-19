@@ -21,21 +21,21 @@
 .timeline-block,.timeline-item{width:100%}
 .phase-card-shell{position:relative}
 .timeline-card{min-height:112px;padding:16px 18px;border-radius:9px}
-.timeline-card .timeline-name{padding-right:130px}
+.timeline-card .timeline-name{padding-right:48px}
 .timeline-card:hover{transform:none}
-.phase-card-actions{position:absolute;right:12px;top:12px;display:flex;gap:6px;z-index:2}
-.phase-card-actions button{min-width:36px;height:36px;border-radius:6px;border:1px solid var(--border-strong);background:var(--panel);color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600}
-.phase-card-actions button:hover:not(:disabled){color:var(--text);border-color:var(--accent);background:var(--surface-hover)}
-.phase-card-actions .phase-delete-btn:hover:not(:disabled){color:var(--red);border-color:var(--red)}
-.phase-card-actions button:disabled{opacity:.3;cursor:not-allowed}
+.phase-card-actions{position:absolute;right:12px;top:12px;z-index:2}
+.phase-card-actions[open]{z-index:20}
+.phase-card-actions summary{display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:6px;border:1px solid var(--border-strong);background:var(--panel);color:var(--text-secondary);cursor:pointer;list-style:none;font-size:22px;line-height:1}
+.phase-card-actions summary::-webkit-details-marker{display:none}
+.phase-card-actions summary:hover,.phase-card-actions[open] summary{color:var(--text);border-color:var(--accent);background:var(--surface-hover)}
+.phase-actions-menu{position:absolute;right:0;top:44px;width:200px;padding:4px;background:var(--panel);border:1px solid var(--border-strong);border-radius:8px;box-shadow:0 12px 32px rgba(0,0,0,.45)}
+.phase-actions-menu button{display:block;width:100%;min-height:40px;padding:8px 10px;text-align:left;border:0;border-radius:5px;background:transparent;color:var(--text-secondary);font:inherit;font-size:13px;cursor:pointer}
+.phase-actions-menu button:hover:not(:disabled){color:var(--text);background:var(--surface-hover)}
+.phase-actions-menu button:disabled{opacity:.4;cursor:not-allowed}
+.phase-actions-menu .phase-delete-btn{height:40px;margin-top:4px;border-top:1px solid var(--border-strong);color:var(--red)}
+.phase-actions-menu .phase-delete-btn:hover:not(:disabled){color:var(--red);background:var(--red-soft)}
 .execution-row{margin-top:10px;min-height:0}
-.execution-toggle{width:auto!important;padding:0 10px!important;font-size:11px!important}
-.phase-card-actions .move-up-btn,.phase-card-actions .move-down-btn{font-size:0}
-.phase-card-actions .move-up-btn::after{content:'Выше';font-size:11px}
-.phase-card-actions .move-down-btn::after{content:'Ниже';font-size:11px}
-.phase-card-actions .phase-delete-btn{font-size:0}
-.phase-card-actions .phase-delete-btn::after{content:'Удалить';font-size:11px}
-@media(max-width:760px){.phase-card-actions{gap:8px}.phase-card-actions button{min-width:44px;height:44px}.execution-toggle{padding:0 12px!important}}
+.phase-actions-menu .execution-toggle{display:block;width:100%!important;height:auto;min-height:40px;padding:8px 10px!important;font-size:13px!important;border:0;box-shadow:none}
 .timeline-parallel-group{display:block;border-color:rgba(245,158,11,.58);background:rgba(255,255,255,.012);box-shadow:none;padding:14px}
 .timeline-parallel-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
 .timeline-parallel-label{border-color:var(--border-strong);background:var(--panel);color:var(--text-muted)}
@@ -43,13 +43,13 @@
 .timeline-parallel-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .timeline-parallel-grid .timeline-card{min-height:132px}
 .timeline-parallel-grid .badge-parallel{background:var(--panel);color:var(--text-muted);border-color:var(--border-strong)}
-.timeline-connector{height:56px;display:flex;align-items:center;justify-content:center;position:relative}
+.timeline-connector{height:52px;display:flex;align-items:center;justify-content:center;position:relative}
 .timeline-connector::before,.timeline-connector::after{content:'';position:absolute;left:50%;width:1px;transform:translateX(-50%);background:var(--border-strong)}
 .timeline-connector::before{top:0;bottom:calc(50% + 21px)}
 .timeline-connector::after{top:calc(50% + 21px);bottom:0}
-.phase-add-btn{position:relative;z-index:1;width:30px;height:30px;border-radius:50%;border:1px dashed var(--accent);background:var(--panel);color:var(--accent);cursor:pointer;font-size:18px;line-height:1}
+.phase-add-btn{position:relative;z-index:1;width:40px;height:40px;border-radius:50%;border:1px dashed var(--accent);background:var(--panel);color:var(--accent);cursor:pointer;font-size:18px;line-height:1}
 .phase-add-btn:hover{background:var(--accent);color:#fff;border-style:solid}
-@media(max-width:1050px){.phases-layout{grid-template-columns:1fr}.workflow-nav{position:static;max-height:none}.timeline-card{padding-top:52px}.timeline-card .timeline-name{padding-right:0}.phase-card-actions{left:12px;right:auto}}
+@media(max-width:1050px){.phases-layout{grid-template-columns:1fr}.workflow-nav{position:static;max-height:none}}
 @media(max-width:760px){.timeline-parallel-grid{grid-template-columns:1fr}.timeline-parallel-group{padding:10px}.timeline-card,.timeline-parallel-grid .timeline-card{min-height:0}}
 {% endblock %}
 
@@ -65,12 +65,15 @@
         {% if p.agent_name %}<span class="badge badge-agent">{{ p.agent_name }}</span>{% endif %}
       </div>
     </a>
-    <div class="phase-card-actions" aria-label="Действия фазы">
-      <button type="button" class="move-up-btn" onclick="movePhase(this,-1)" title="Поднять выше" aria-label="Поднять фазу выше">↑</button>
-      <button type="button" class="move-down-btn" onclick="movePhase(this,1)" title="Опустить ниже" aria-label="Опустить фазу ниже">↓</button>
-      <button type="button" class="execution-toggle" onclick="togglePhaseType(this)" title="Изменить режим выполнения" aria-label="Изменить режим выполнения">{{ 'Параллельно' if p.execution_type == 'parallel' else 'Последовательно' }}</button>
-      <button type="button" class="phase-delete-btn" onclick="deletePhase(this)" title="Удалить фазу" aria-label="Удалить фазу"{% if phase_count <= 1 %} disabled{% endif %}>×</button>
-    </div>
+    <details class="phase-card-actions">
+      <summary aria-label="Действия фазы {{ p.name }}" title="Действия фазы {{ p.name }}"><span aria-hidden="true">⋯</span></summary>
+      <div class="phase-actions-menu">
+        <button type="button" class="move-up-btn" onclick="movePhase(this,-1)" aria-label="Поднять фазу {{ p.name }} выше">Поднять выше</button>
+        <button type="button" class="move-down-btn" onclick="movePhase(this,1)" aria-label="Опустить фазу {{ p.name }} ниже">Опустить ниже</button>
+        <button type="button" class="execution-toggle" onclick="togglePhaseType(this)" aria-label="Изменить режим выполнения фазы {{ p.name }}">{{ 'Параллельно' if p.execution_type == 'parallel' else 'Последовательно' }}</button>
+        <button type="button" class="phase-delete-btn" onclick="deletePhase(this)" aria-label="Удалить фазу {{ p.name }}"{% if phase_count <= 1 %} disabled{% endif %}>Удалить</button>
+      </div>
+    </details>
   </div>
 </div>
 {%- endmacro %}
@@ -193,6 +196,18 @@ document.addEventListener('DOMContentLoaded',()=>{
     const down=item.querySelector('.move-down-btn');
     if(up)up.disabled=index===0;
     if(down)down.disabled=index===items.length-1;
+  });
+  const menus=Array.from(document.querySelectorAll('.phase-card-actions'));
+  menus.forEach(menu=>menu.addEventListener('toggle',()=>{
+    if(menu.open)menus.forEach(other=>{if(other!==menu)other.open=false;});
+  }));
+  document.addEventListener('click',event=>{
+    menus.forEach(menu=>{if(menu.open&&!menu.contains(event.target))menu.open=false;});
+  });
+  document.addEventListener('keydown',event=>{
+    if(event.key!=='Escape')return;
+    const open=menus.find(menu=>menu.open);
+    if(open){open.open=false;open.querySelector('summary')?.focus();}
   });
 });
 {% endblock %}

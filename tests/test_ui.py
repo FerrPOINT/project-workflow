@@ -632,20 +632,20 @@ class TestPhasesPage:
         assert "fetch('/api/phases/order'" in response.text
         assert "fetch('/api/phases'," in response.text
 
-    def test_phases_page_has_add_phase_button_between_reorder_buttons(self):
+    def test_phases_page_keeps_insertion_visible_and_groups_other_actions(self):
         response = client.get("/phases")
         assert response.status_code == 200
         assert 'class="phase-add-btn"' in response.text
         assert 'onclick="addPhaseAfter(this)"' in response.text
-        # Reordering/deletion lives on cards; adding lives between complete blocks.
-        assert 'class="phase-card-actions"' in response.text
+        assert '<details class="phase-card-actions">' in response.text
+        assert 'class="phase-actions-menu"' in response.text
+        assert 'summary aria-label="Действия фазы ' in response.text
         assert 'class="move-up-btn"' in response.text
         assert "Параллельно" in response.text
         assert "Последовательно" in response.text
-        assert "min-width:44px;height:44px" in response.text
-        assert "content:'Выше'" in response.text
-        assert "content:'Ниже'" in response.text
-        assert "content:'Удалить'" in response.text
+        assert "width:40px;height:40px" in response.text
+        assert "min-height:40px" in response.text
+        assert "event.key!=='Escape'" in response.text
 
     def test_phases_add_button_breaks_the_vertical_connector_line(self):
         response = client.get("/phases")
@@ -656,14 +656,14 @@ class TestPhasesPage:
         assert ".timeline-connector::after{top:calc(50% + 21px);bottom:0}" in response.text
         assert ".timeline-connector::before{content:'';position:absolute;top:0;bottom:0" not in response.text
 
-    def test_phase_card_reserves_action_space_only_for_its_heading(self):
+    def test_phase_card_reserves_space_for_menu_only_in_its_heading(self):
         response = client.get("/phases")
 
         assert response.status_code == 200
         assert ".timeline-card{min-height:112px;padding:16px 18px" in response.text
-        assert ".timeline-card .timeline-name{padding-right:130px}" in response.text
+        assert ".timeline-card .timeline-name{padding-right:48px}" in response.text
         assert ".timeline-card{min-height:112px;padding:16px 148px" not in response.text
-        assert ".timeline-card .timeline-name{padding-right:0}" in response.text
+        assert ".timeline-card{padding-top:52px}" not in response.text
 
     def test_parallel_phase_places_agent_beside_execution_type(self):
         response = client.get("/phases")
@@ -1005,6 +1005,20 @@ class TestPhaseDetail:
         assert "data-instruction-id" in response.text
         assert "move-up-btn" in response.text
         assert "move-down-btn" in response.text
+
+    def test_phase_detail_names_inline_fields_and_exposes_keyboard_mode_toggle(self):
+        response = client.get(_phase_detail_path("1.INTAKE"))
+
+        assert response.status_code == 200
+        assert 'aria-label="Название фазы"' in response.text
+        assert 'aria-label="Описание фазы"' in response.text
+        assert '<label for="agentSelect">Агент:</label>' in response.text
+        assert '<button type="button" class="execution-toggle"' in response.text
+        assert 'aria-pressed="false"' in response.text
+        assert 'aria-label="Описание инструкции ' in response.text
+        assert 'aria-label="Добавить навык к инструкции ' in response.text
+        assert 'aria-label="Описание проверки ' in response.text
+        assert 'aria-label="Описание подтверждения ' in response.text
 
     def test_phase_detail_keeps_sequential_cards_when_phase_instructions_are_sync(self):
         response = client.get(_phase_detail_path("4.START"))

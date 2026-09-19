@@ -34,10 +34,9 @@
 .check-list .status-icon.ok{color:var(--green)}
 .check-list .status-icon.fail{color:var(--red)}
 .check-list .status-icon.wait{color:var(--text-dim)}
-.check-list .check-text{flex:1;font-size:14px;color:var(--text-secondary);word-break:break-word}
+.check-list .check-text{flex:1;min-width:0;font-size:14px;color:var(--text-secondary);word-break:break-word}
 .check-list .check-meta{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-dim);flex-shrink:0;white-space:nowrap}
-.check-list .item-delete{flex-shrink:0;opacity:0;transition:opacity .12s;background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:18px;padding:0 4px;border-radius:4px}
-.check-list>li:hover .item-delete{opacity:1}
+.check-list .item-delete{flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px;border-radius:4px}
 .check-list .item-delete:hover{color:var(--red)}
 
 /* Evidence */
@@ -45,36 +44,40 @@
 .evidence-list>li{padding:10px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
 .evidence-list>li:last-child{border-bottom:none}
 .evidence-list .file-icon{flex-shrink:0;font-size:18px}
-.evidence-list .file-name{flex:1;font-size:14px;color:var(--text-secondary);word-break:break-word}
+.evidence-list .file-name{flex:1;min-width:0;font-size:14px;color:var(--text-secondary);word-break:break-word}
 .evidence-list .file-status{font-size:11px;color:var(--text-dim);flex-shrink:0;white-space:nowrap}
-.evidence-list .item-delete{flex-shrink:0;opacity:0;transition:opacity .12s;background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:18px;padding:0 4px;border-radius:4px}
-.evidence-list>li:hover .item-delete{opacity:1}
+.evidence-list .item-delete{flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px;border-radius:4px}
 .evidence-list .item-delete:hover{color:var(--red)}
 
 /* Add buttons */
-.wiki-add-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:1px dashed var(--border);border-radius:6px;color:var(--text-muted);font-size:13px;font-weight:500;cursor:pointer;background:transparent;margin-top:10px;transition:all .12s}
+.wiki-add-btn{display:inline-flex;align-items:center;min-height:40px;gap:6px;padding:8px 14px;border:1px dashed var(--border);border-radius:6px;color:var(--text-muted);font-size:13px;font-weight:500;cursor:pointer;background:transparent;margin-top:10px;transition:all .12s}
 .wiki-add-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
 
 /* Inline edit */
-.inline-input{background:transparent;border:1px solid transparent;padding:6px 10px;border-radius:4px;color:var(--text);font-size:14px;width:100%;font-family:inherit;outline:none;word-break:break-word}
+.inline-input{background:transparent;border:1px solid transparent;min-height:40px;padding:6px 10px;border-radius:4px;color:var(--text);font-size:14px;width:100%;font-family:inherit;outline:none;word-break:break-word}
 .inline-input:hover{background:var(--panel)}
 .inline-input:focus{background:var(--panel);border-color:var(--accent)}
 
-.timeline-name-input{font-size:14px;font-weight:500;color:var(--text);line-height:1.4;background:transparent;border:none;border-bottom:1px dashed var(--border);padding:2px 0;width:100%;font-family:inherit;outline:none}
+.timeline-name-input{font-size:14px;font-weight:500;color:var(--text);line-height:1.4;background:transparent;border:none;border-bottom:1px dashed var(--border);min-height:40px;padding:2px 0;width:100%;font-family:inherit;outline:none}
 .timeline-name-input:hover{background:var(--panel)}
 .timeline-name-input:focus{background:var(--panel);border-bottom-color:var(--accent);padding:2px 8px}
 .empty-state{color:var(--text-dim);font-size:13px;padding:16px 0}
 
 /* Phase execution mode toggle */
-.execution-toggle{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:6px;border:1px solid var(--border);cursor:pointer;transition:all .12s;font-size:12px;user-select:none}
+.execution-toggle{display:inline-flex;align-items:center;min-height:40px;gap:6px;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;transition:all .12s;font-size:12px;user-select:none}
 .execution-toggle:hover{background:var(--panel);border-color:var(--accent)}
 .execution-toggle[aria-busy="true"]{opacity:.55;cursor:wait;pointer-events:none}
 .mode-sync{color:var(--green)}
 .mode-parallel{color:var(--orange)}
 /* Skill remove inside badge */
-.timeline-badges .badge .skill-remove-btn{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border:none;border-radius:999px;background:transparent;color:var(--text-dim);cursor:pointer;font-size:12px;line-height:1;padding:0;margin-left:2px}
+.timeline-badges .badge .skill-remove-btn{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border:none;border-radius:6px;background:transparent;color:var(--text-muted);cursor:pointer;font-size:16px;line-height:1;padding:0;margin-left:2px}
 .timeline-badges .badge .skill-remove-btn:hover{color:var(--red);background:rgba(239,68,68,.12)}
-.timeline-badges input.skill-candidate{width:180px;height:24px;font-size:11px;padding:0 6px;background:var(--panel);border:1px solid var(--border);border-radius:4px;color:var(--text-secondary)}
+.timeline-badges input.skill-candidate{width:180px;height:40px;font-size:13px;padding:0 8px;background:var(--panel);border:1px solid var(--border);border-radius:4px;color:var(--text-secondary)}
+.wiki-header .btn{display:inline-flex;align-items:center;min-height:40px}
+.wiki-page .timeline-row{grid-template-columns:minmax(0,1fr);gap:8px}
+.wiki-page .phase-order-controls{width:100%;flex-direction:row;flex-wrap:nowrap;justify-content:flex-start;gap:4px;padding-top:0}
+.wiki-page .phase-order-controls .phase-move-btn,.wiki-page .phase-order-controls .phase-add-btn,.wiki-page .phase-order-controls .phase-delete-btn{width:40px;height:40px;flex:0 0 40px}
+.wiki-page .timeline-card button.badge{min-height:40px}
 
 {% endblock %}
 
@@ -84,11 +87,11 @@
   <!-- Header -->
   <div class="wiki-header">
     <div style="margin-bottom:10px"><a href="/phases?workflow_id={{ phase.workflow_id }}{% if selected_namespace %}&namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary">← Назад к фазам</a></div>
-    <input type="text" class="inline-input" value="{{ phase.name }}" data-field="name" onblur="scheduleSave()" style="font-size:26px;font-weight:600;margin:0 0 10px;width:100%">
-    <input type="text" class="inline-input wiki-subtitle" value="{{ phase.description or '' }}" data-field="description" onblur="scheduleSave()" style="width:100%">
+    <input type="text" class="inline-input" value="{{ phase.name }}" data-field="name" aria-label="Название фазы" onblur="scheduleSave()" style="font-size:26px;font-weight:600;margin:0 0 10px;width:100%">
+    <input type="text" class="inline-input wiki-subtitle" value="{{ phase.description or '' }}" data-field="description" aria-label="Описание фазы" onblur="scheduleSave()" style="width:100%">
 
     <div class="wiki-meta">
-      <span>Агент: <select id="agentSelect" class="inline-input" style="width:180px;display:inline" onchange="scheduleSave()">
+      <span><label for="agentSelect">Агент:</label> <select id="agentSelect" class="inline-input" style="width:180px;display:inline" onchange="scheduleSave()">
         <option value="">—</option>
         {% for a in agents %}
         <option value="{{ a.id }}" {% if phase.agent_id == a.id %}selected{% endif %}>{{ a.name }}</option>
@@ -99,13 +102,13 @@
       {% endif %}
     </div>
     <div class="execution-row" style="margin-top:12px">
-      <span class="execution-toggle" data-mode="{{ phase.execution_type or 'sync' }}" onclick="togglePhaseMode(this)">
+      <button type="button" class="execution-toggle" data-mode="{{ phase.execution_type or 'sync' }}" aria-pressed="{{ 'true' if phase.execution_type == 'parallel' else 'false' }}" onclick="togglePhaseMode(this)">
         {% if phase.execution_type == 'parallel' %}
         <b class="mode-parallel">⚡ параллельно</b>
         {% else %}
         <b class="mode-sync">⏱ последовательно</b>
         {% endif %}
-      </span>
+      </button>
       <label id="parallelPartnerRow" {% if phase.execution_type != 'parallel' %}hidden{% endif %}>
         Связать с:
         <select id="parallelPartnerSelect" class="inline-input" onchange="scheduleSave()">
@@ -128,13 +131,13 @@
     {% macro instruction_body(i, instruction_count) %}
     <div class="timeline-row" >
       <div class="phase-order-controls">
-        <button type="button" class="phase-move-btn move-up-btn" onclick="moveInstruction(this, -1)" aria-label="Поднять выше">↑</button>
-        <button type="button" class="phase-add-btn" onclick="addInstructionAfter(this)" aria-label="Добавить после">+</button>
-        <button type="button" class="phase-move-btn move-down-btn" onclick="moveInstruction(this, 1)" aria-label="Опустить ниже">↓</button>
-        <button type="button" class="phase-delete-btn" onclick="deleteInstruction(this)" aria-label="Удалить">×</button>
+        <button type="button" class="phase-move-btn move-up-btn" onclick="moveInstruction(this, -1)" aria-label="Поднять инструкцию {{ i.step_num }} выше">↑</button>
+        <button type="button" class="phase-add-btn" onclick="addInstructionAfter(this)" aria-label="Добавить инструкцию после {{ i.step_num }}">+</button>
+        <button type="button" class="phase-move-btn move-down-btn" onclick="moveInstruction(this, 1)" aria-label="Опустить инструкцию {{ i.step_num }} ниже">↓</button>
+        <button type="button" class="phase-delete-btn" onclick="deleteInstruction(this)" aria-label="Удалить инструкцию {{ i.step_num }}">×</button>
       </div>
       <div class="timeline-card" data-instruction-id="{{ i.id }}" data-step-num="{{ i.step_num }}" data-type="{{ i.execution_type }}">
-        <input type="text" class="timeline-name-input" value="{{ i.description }}" data-field="description" data-original-description="{{ i.description }}" onblur="saveInstructionDescription(this)">
+        <input type="text" class="timeline-name-input" value="{{ i.description }}" data-field="description" data-original-description="{{ i.description }}" aria-label="Описание инструкции {{ i.step_num }}" onblur="saveInstructionDescription(this)">
         <div class="execution-row">
           <button type="button" class="badge {{ 'badge-parallel' if i.execution_type == 'parallel' else 'badge-sync' }}" onclick="toggleInstructionType(this)" aria-label="Режим выполнения: {{ 'параллельно' if i.execution_type == 'parallel' else 'последовательно' }}">
             {% if i.execution_type == 'parallel' %}⚡ параллельно{% else %}⏱ последовательно{% endif %}
@@ -144,10 +147,10 @@
           {% for s in i.skills or [] %}
           <span class="badge" style="background:var(--accent-soft);color:var(--accent)">
             {{ s }}
-            <button type="button" class="skill-remove-btn" data-skill="{{ s }}" onclick="removeSkillFromInstruction(this)" aria-label="Убрать {{ s }}">×</button>
+            <button type="button" class="skill-remove-btn" data-skill="{{ s }}" onclick="removeSkillFromInstruction(this)" aria-label="Убрать навык {{ s }} из инструкции {{ i.step_num }}">×</button>
           </span>
           {% endfor %}
-          <input class="skill-candidate" type="text" placeholder="Добавить навык" onchange="addSkillToInstruction(this)">
+          <input class="skill-candidate" type="text" placeholder="Добавить навык" aria-label="Добавить навык к инструкции {{ i.step_num }}" onchange="addSkillToInstruction(this)">
         </div>
       </div>
     </div>
@@ -193,8 +196,8 @@
       {% for c in phase.checks %}
       <li data-id="{{ c.id }}">
         <span class="status-icon wait">○</span>
-        <input type="text" class="inline-input check-text" value="{{ c.description }}" data-field="description" onblur="scheduleSave()">
-        <button class="item-delete" onclick="deleteItem(this)">×</button>
+        <input type="text" class="inline-input check-text" value="{{ c.description }}" data-field="description" aria-label="Описание проверки {{ loop.index }}" onblur="scheduleSave()">
+        <button type="button" class="item-delete" aria-label="Удалить проверку {{ loop.index }}" onclick="deleteItem(this)">×</button>
       </li>
       {% else %}
       <li class="empty-state">Нет проверок</li>
@@ -213,8 +216,8 @@
       {% for e in phase.evidence %}
       <li data-id="{{ e.id }}">
         <span class="file-icon">📄</span>
-        <input type="text" class="inline-input file-name" value="{{ e.description }}" data-field="description" onblur="scheduleSave()">
-        <button class="item-delete" onclick="deleteItem(this)">×</button>
+        <input type="text" class="inline-input file-name" value="{{ e.description }}" data-field="description" aria-label="Описание подтверждения {{ loop.index }}" onblur="scheduleSave()">
+        <button type="button" class="item-delete" aria-label="Удалить подтверждение {{ loop.index }}" onclick="deleteItem(this)">×</button>
       </li>
       {% else %}
       <li class="empty-state">Нет подтверждений</li>
@@ -263,6 +266,7 @@ function phaseApiUrl(path) {
 function setPhaseMode(el, mode) {
   const b = el.querySelector('b');
   el.dataset.mode = mode;
+  el.setAttribute('aria-pressed', String(mode === 'parallel'));
   if (mode === 'parallel') {
     b.className = 'mode-parallel';
     b.textContent = '⚡ параллельно';
@@ -624,9 +628,9 @@ function addCheck() {
   const li = document.createElement('li');
   li.innerHTML = `
     <span class="status-icon wait">○</span>
-    <input type="text" class="inline-input check-text" value="" data-field="description" onblur="saveNewTextItem(this)">
+    <input type="text" class="inline-input check-text" value="" data-field="description" aria-label="Описание новой проверки" onblur="saveNewTextItem(this)">
     <span class="check-meta">—</span>
-    <button class="item-delete" onclick="deleteItem(this)">×</button>
+    <button type="button" class="item-delete" aria-label="Удалить новую проверку" onclick="deleteItem(this)">×</button>
   `;
   list.appendChild(li);
   syncTextItemList(list);
@@ -640,9 +644,9 @@ function addEvidence() {
   const li = document.createElement('li');
   li.innerHTML = `
     <span class="file-icon">📄</span>
-    <input type="text" class="inline-input file-name" value="" data-field="description" onblur="saveNewTextItem(this)">
+    <input type="text" class="inline-input file-name" value="" data-field="description" aria-label="Описание нового подтверждения" onblur="saveNewTextItem(this)">
     <span class="file-status">—</span>
-    <button class="item-delete" onclick="deleteItem(this)">×</button>
+    <button type="button" class="item-delete" aria-label="Удалить новое подтверждение" onclick="deleteItem(this)">×</button>
   `;
   list.appendChild(li);
   syncTextItemList(list);
