@@ -107,9 +107,16 @@ def load_bundle(path: Path) -> dict[str, Any]:
         if "комментар" not in first_instruction or "вложен" not in first_instruction:
             raise ValueError(f"mode {key} must begin by reading all Task comments and attachments")
         terminal_text = " ".join(item["text"] for item in phases[-1]["instructions"]).lower()
-        terminal_action = "publish_task_draft" if role == "project_manager" else "complete_assigned_stage"
-        if "коммент" not in terminal_text or terminal_action not in terminal_text:
-            raise ValueError(f"mode {key} must end with a Business comment and terminal action")
+        if (
+            ("комментар" not in terminal_text and "markdown" not in terminal_text)
+            or "workflow_phase complete" not in terminal_text
+            or "terminal action не вызывать" not in terminal_text
+            or "publish_task_draft" in terminal_text
+            or "complete_assigned_stage" in terminal_text
+        ):
+            raise ValueError(
+                f"mode {key} must prepare its handoff and complete the workflow before terminal action"
+            )
         mode["mode_order"] = mode_order
     unused_hub_skills = set(hashes) - referenced_hub_skills
     if unused_hub_skills:

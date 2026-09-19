@@ -33,7 +33,7 @@
           "description": "Покрыть риск и критерии без бессмысленного полного прогона.",
           "instructions": [
             {"text": "Составить матрицу acceptance criteria к positive, negative, permission, tenant, retry/restart и regression сценариям.", "skills": ["testing-workflow"]},
-            {"text": "Определить автоматизируемые и ручные проверки, предусловия и ожидаемый наблюдаемый результат.", "skills": ["testing-workflow"]}
+            {"text": "Определить автоматизированные и доступные из назначенного workspace/runtime проверки, предусловия и ожидаемый наблюдаемый результат; не ждать внешнего оператора.", "skills": ["testing-workflow"]}
           ],
           "checks": ["Каждый критерий покрыт", "Приоритет проверок соответствует риску"],
           "evidence": ["Test matrix", "Список предусловий"]
@@ -55,7 +55,7 @@
           "description": "Проверить основной пользовательский поток.",
           "instructions": [
             {"text": "Выполнить acceptance scenarios через реальные публичные границы и фиксировать фактический результат каждого шага.", "skills": ["testing-workflow", "deployed-acceptance"]},
-            {"text": "Для UI использовать штатную authenticated browser-проверку и стабильные selectors, если она входит в scope.", "skills": ["testing-workflow", "deployed-acceptance"]}
+            {"text": "Для UI использовать воспроизводимый automated browser test со стабильными selectors на exact candidate. Если такого теста нет, оформить needs_rework для его добавления, не ждать внешнего оператора.", "skills": ["testing-workflow", "deployed-acceptance"]}
           ],
           "checks": ["Основной путь завершён", "Результаты соответствуют критериям, а не ожиданиям агента"],
           "evidence": ["Scenario results", "API/UI evidence refs"]
@@ -87,11 +87,11 @@
           "name": "Результат тестирования",
           "description": "Опубликовать evidence и разрешённый outcome.",
           "instructions": [
-            {"text": "Оставить в Task итоговый комментарий: candidate, покрытие, результаты сценариев, defects/blockers, evidence и вывод о готовности.", "skills": ["relevanter-business-operator"]},
-            {"text": "Если исправления не требуются, последним действием вызвать complete_assigned_stage с passed; если требуются, вызвать needs_rework с полным findings JSON. Stage, agent и mode не выбирать.", "skills": ["relevanter-business-operator", "testing-workflow"]}
+            {"text": "Подготовить итоговый комментарий: candidate, покрытие, результаты сценариев, defects/blockers, evidence и вывод о готовности.", "skills": ["relevanter-business-operator"]},
+            {"text": "Подготовить outcome passed либо needs_rework и полный findings JSON для подтверждённых дефектов. На этой фазе terminal action не вызывать: сначала завершить фазу через workflow_phase complete. Stage, agent и mode не выбирать.", "skills": ["relevanter-business-operator", "testing-workflow", "project-workflow-executor"]}
           ],
-          "checks": ["Комментарий соответствует evidence", "Outcome не скрывает defects или blockers"],
-          "evidence": ["Business comment ref", "Terminal outcome readback"]
+          "checks": ["Подготовленный комментарий соответствует evidence", "Outcome не скрывает defects или blockers"],
+          "evidence": ["Подготовленный итоговый Markdown", "Подготовленный outcome и findings"]
         }
       ]
     }]

@@ -90,11 +90,11 @@
             "name": "Передача на ревью",
             "description": "Зафиксировать проверяемый результат разработки.",
             "instructions": [
-              {"text": "Оставить в Task итоговый комментарий: что изменено, файлы и контракты, проверки, commit/MR, известные ограничения и что должен проверить Reviewer.", "skills": ["relevanter-business-operator"]},
-              {"text": "После exact SHA readback и чистого workspace последним действием вызвать complete_assigned_stage с outcome passed.", "skills": ["relevanter-business-operator", "relevanter-tech-operator"]}
+              {"text": "Подготовить итоговый комментарий: что изменено, файлы и контракты, проверки, commit/MR, известные ограничения и что должен проверить Reviewer.", "skills": ["relevanter-business-operator"]},
+              {"text": "После exact SHA readback и проверки чистого workspace завершить фазу через workflow_phase complete. На этой фазе terminal action не вызывать.", "skills": ["relevanter-business-operator", "relevanter-tech-operator", "project-workflow-executor"]}
             ],
-            "checks": ["Business comment опубликован", "Commit, push и clean workspace подтверждены до terminal action"],
-            "evidence": ["Business comment ref", "Подтверждение terminal action"]
+            "checks": ["Итоговый комментарий подготовлен", "Commit, push и clean workspace подтверждены до завершения фазы"],
+            "evidence": ["Подготовленный итоговый Markdown", "Exact remote SHA и MR ref"]
           }
         ]
       },
@@ -173,11 +173,11 @@
             "name": "Возврат на ревью",
             "description": "Передать доказательства закрытия findings.",
             "instructions": [
-              {"text": "Оставить в Task итоговый комментарий: cycle, каждый finding и исправление, regression evidence, commit/MR и что повторно проверить Reviewer.", "skills": ["relevanter-business-operator"]},
-              {"text": "После exact SHA readback и чистого workspace последним действием вызвать complete_assigned_stage с outcome passed; следующий этап выбирает backend и это всегда Review.", "skills": ["relevanter-business-operator", "relevanter-tech-operator"]}
+              {"text": "Подготовить итоговый комментарий: cycle, каждый finding и исправление, regression evidence, commit/MR и что повторно проверить Reviewer.", "skills": ["relevanter-business-operator"]},
+              {"text": "После exact SHA readback и проверки чистого workspace завершить фазу через workflow_phase complete. На этой фазе terminal action не вызывать; следующую stage выбирает только backend.", "skills": ["relevanter-business-operator", "relevanter-tech-operator", "project-workflow-executor"]}
             ],
-            "checks": ["Каждый finding имеет disposition", "Task возвращается только в Review"],
-            "evidence": ["Business comment ref", "Подтверждение terminal action"]
+            "checks": ["Каждый finding имеет disposition", "Итоговый handoff подготовлен для Review"],
+            "evidence": ["Подготовленный итоговый Markdown", "Exact remote SHA и MR ref"]
           }
         ]
       }

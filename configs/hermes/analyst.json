@@ -76,11 +76,11 @@
           "name": "Передача архитектуре",
           "description": "Зафиксировать полный результат анализа в Business.",
           "instructions": [
-            {"text": "Оставить в Task итоговый комментарий с разделами: результат анализа, требования, критерии приёмки, ограничения, зависимости, риски и вопросы со статусом.", "skills": ["relevanter-business-operator"]},
-            {"text": "Проверить, что комментарий содержит ссылки на evidence и не содержит внутренних логов, затем последним действием вызвать complete_assigned_stage с outcome passed.", "skills": ["relevanter-business-operator"]}
+            {"text": "Подготовить итоговый комментарий с разделами: результат анализа, требования, критерии приёмки, ограничения, зависимости, риски и вопросы со статусом.", "skills": ["relevanter-business-operator"]},
+            {"text": "Проверить, что подготовленный комментарий содержит ссылки на evidence и не содержит внутренних логов. На этой фазе terminal action не вызывать: сначала завершить фазу через workflow_phase complete.", "skills": ["relevanter-business-operator", "project-workflow-executor"]}
           ],
-          "checks": ["Итоговый комментарий опубликован", "Архитектор получает самодостаточный handoff"],
-          "evidence": ["Business comment ref", "Подтверждение terminal action"]
+          "checks": ["Итоговый комментарий подготовлен", "Архитектор получает самодостаточный handoff"],
+          "evidence": ["Подготовленный итоговый Markdown", "Ссылки на evidence"]
         }
       ]
     }]
