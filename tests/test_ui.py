@@ -2283,6 +2283,17 @@ class TestWorkflowsPage:
         assert 'id="workflowThemeColor"' not in response.text
         assert 'id="workflowThemePreview"' not in response.text
 
+    def test_workflows_mobile_actions_leave_sticky_header(self):
+        response = client.get("/workflows")
+
+        assert response.status_code == 200
+        assert 'id="newWorkflowButton"' in response.text
+        assert 'id="mobileNewWorkflowButton"' in response.text
+        assert response.text.count('onclick="startCreateWorkflow()"') == 2
+        assert 'class="workflow-mobile-actions"' in response.text
+        assert ".header .workflow-header-action{display:none}" in response.text
+        assert response.text.count("← К фазам") == 2
+
     def test_workflows_page_offers_compact_picker_for_multiple_workflows(self):
         created = client.post("/api/workflows", json={"name": "Secondary UI workflow"})
         assert created.status_code == 200

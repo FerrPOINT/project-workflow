@@ -3,8 +3,8 @@
 {% block title %}Воркфлоу — Workflow Engine{% endblock %}
 {% block header_title %}Воркфлоу{% endblock %}
 {% block header_actions %}
-  <button type="button" class="btn btn-primary" id="newWorkflowButton" onclick="startCreateWorkflow()">+ Новый воркфлоу</button>
-  <a href="/phases{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary">← К фазам</a>
+  <button type="button" class="btn btn-primary workflow-header-action" id="newWorkflowButton" onclick="startCreateWorkflow()">+ Новый воркфлоу</button>
+  <a href="/phases{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary workflow-header-action">← К фазам</a>
 {% endblock %}
 
 {% block extra_style %}
@@ -26,6 +26,7 @@
 .workflow-delete{margin-left:auto;color:var(--text);border-color:var(--red)}
 .workflow-delete:hover{color:var(--text);background:var(--red-soft)}
 .empty-note{color:var(--text-dim);font-size:13px;line-height:1.6}
+.workflow-mobile-actions{display:none}
 @media (max-width: 980px){
   .workflow-crud,.workflow-crud.is-single{grid-template-columns:minmax(0,1fr)}
   .workflow-nav{display:none}
@@ -33,9 +34,18 @@
   .workflow-picker select{min-height:40px}
   .workflow-crud.is-single .workflow-picker{display:none}
 }
+@media(max-width:640px){
+  .header .workflow-header-action{display:none}
+  .workflow-mobile-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;max-width:760px;margin-bottom:12px}
+  .workflow-mobile-actions .btn{display:inline-flex;align-items:center;min-height:40px}
+}
 {% endblock %}
 
 {% block content %}
+<div class="workflow-mobile-actions">
+  <button type="button" class="btn btn-primary" id="mobileNewWorkflowButton" onclick="startCreateWorkflow()">+ Новый воркфлоу</button>
+  <a href="/phases{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary">← К фазам</a>
+</div>
 <div class="workflow-crud {% if workflows|length <= 1 %}is-single{% endif %}" id="workflowCrud">
   <div class="workflow-picker" id="workflowPicker">
     <label class="label" for="workflowSelect">Воркфлоу</label>
