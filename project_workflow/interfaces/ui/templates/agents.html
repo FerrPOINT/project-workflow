@@ -19,12 +19,14 @@
 .agent-profile,.agent-description{font-size:12px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .agent-profile{font-family:'JetBrains Mono',monospace}
 .agent-editor{background:var(--surface);border-top:1px solid var(--border);padding:14px 12px}
+.agent-editor input,.agent-editor .btn{min-height:40px}
 .agent-fields{display:grid;grid-template-columns:minmax(150px,1fr) minmax(150px,1fr) minmax(0,2fr);gap:12px}
 .agent-field-label{display:block;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
 .agent-fields textarea{min-height:66px}
 .agent-editor-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;flex-wrap:wrap}
 .agent-delete{margin-right:auto;color:var(--red);border-color:var(--border)}
 .agent-delete:hover{color:var(--red);border-color:var(--red);background:var(--red-soft)}
+html[data-theme='dark'] .agent-delete,html[data-theme='dark'] .agent-delete:hover{color:#f87171}
 .agent-create{border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
 .agent-create summary{padding:12px 8px;cursor:pointer;color:var(--accent-readable);font-size:13px;font-weight:600;list-style:none}
 .agent-create summary::-webkit-details-marker{display:none}
