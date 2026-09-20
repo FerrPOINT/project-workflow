@@ -2478,6 +2478,18 @@ def test_ui_deletions_use_product_modal_not_browser_confirm():
 
 
 class TestAgentsPage:
+    def test_form_editors_have_touch_sized_controls(self):
+        for path, rule in (
+            ("/namespaces", ".namespace-panel input,.namespace-panel select,.namespace-panel .btn{min-height:40px}"),
+            ("/workflows", ".workflow-panel input,.workflow-panel .btn{min-height:40px}"),
+            ("/agents", ".agent-editor input,.agent-editor .btn{min-height:40px}"),
+        ):
+            response = client.get(path)
+            assert response.status_code == 200
+            assert rule in response.text
+            if path == "/agents":
+                assert "html[data-theme='dark'] .agent-delete" in response.text
+
     def test_agents_page_shows_name_and_description_without_sort_field(self):
         response = client.get("/agents")
         assert response.status_code == 200
