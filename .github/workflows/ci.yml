@@ -42,13 +42,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: project-workflow
-      - uses: actions/checkout@v4
-        with:
-          repository: FerrPOINT/services-base
-          ref: main
-          path: services-base
-          ssh-key: ${{ secrets.SERVICES_BASE_DEPLOY_KEY }}
-          persist-credentials: false
       - uses: astral-sh/setup-uv@v6
         with:
           version: "0.10.10"
@@ -76,13 +69,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: project-workflow
-      - uses: actions/checkout@v4
-        with:
-          repository: FerrPOINT/services-base
-          ref: main
-          path: services-base
-          ssh-key: ${{ secrets.SERVICES_BASE_DEPLOY_KEY }}
-          persist-credentials: false
       - name: Compose config
         run: docker compose config -q
       - name: Build and start

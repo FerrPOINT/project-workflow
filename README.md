@@ -45,6 +45,12 @@ Browser UI поддерживает общий Central Auth Authorization Code +
 обмена/JWKS задаются отдельно через `AUTH_ISSUER` и
 `AUTH_INTERNAL_BASE_URL`.
 
+**Режим без авторизации (по умолчанию):** если `AUTH_ISSUER` не задан, SSO
+middleware не активируется — UI и API работают без входа. Для standalone
+запуска достаточно одного репозитория: `docker compose up -d --wait` поднимает
+db + migrate + api на `127.0.0.1:8812` без Central Auth и без соседних
+репозиториев.
+
 Runtime-источник данных — **PostgreSQL**. SQLite используется только для изолированных тестов и локальных smoke-сценариев.
 
 <a name="overview"></a>
@@ -117,7 +123,8 @@ export DATABASE_URL=postgresql+psycopg://project_workflow:project_workflow@local
 
 Платформенный token mode не подключается к БД напрямую. При заданном
 `SDLC_API_TOKEN` команды `step` и `history` используют защищённый HTTP API и
-общий transport package `sdlc-cli-core`:
+общий transport package `sdlc-cli-core` (ставится отдельно из
+`services-base/python/cli-core`; в standalone-сборку не входит):
 
 ```bash
 export PROJECT_WORKFLOW_URL=http://localhost:8812

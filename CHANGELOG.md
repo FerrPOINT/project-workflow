@@ -6,6 +6,9 @@
 
 ## [Unreleased]
 
+### Changed
+- Standalone-режим: репозиторий собирается и запускается без соседнего `services-base` (убраны extra `cli-platform`, uv source, Docker additional_context и CI checkout). Token-режим CLI без `sdlc-cli-core` выдаёт понятную ошибку; запуск без `AUTH_ISSUER` работает без авторизации.
+
 ### Fixed
 - Workflow shell доступен с touch и клавиатуры (#49); улучшены phase controls и accessibility (#48).
 ### Added

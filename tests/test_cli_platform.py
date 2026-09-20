@@ -88,3 +88,16 @@ def test_server_cli_namespace_selection_is_unambiguous(monkeypatch):
     )
     with pytest.raises(ValueError, match="PROJECT_WORKFLOW_NAMESPACE_ID"):
         _cli_namespace_id(ambiguous, "RUN-7", None)
+
+
+def test_token_step_explains_missing_transport(monkeypatch):
+    """Token mode without sdlc-cli-core must fail with an actionable message, not ImportError."""
+    monkeypatch.setenv("SDLC_API_TOKEN", "sdlc_pat_test")
+    monkeypatch.setattr(ui, "SAUnitOfWork", lambda: (_ for _ in ()).throw(AssertionError("DB opened")))
+    monkeypatch.setitem(__import__("sys").modules, "sdlc_cli_core", None)  # force ImportError on lazy import
+    result = CliRunner().invoke(cli, ["--json", "step", "--task", "RUN-7"])
+    assert result.exit_code != 0
+    payload = json.loads(result.output)
+    assert payload["verdict"] == "BLOCKED"
+    assert "sdlc-cli-core" in payload["message"]
+    assert "DATABASE_URL" in payload["message"]

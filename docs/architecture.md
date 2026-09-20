@@ -11,7 +11,8 @@ introspection, а также сохраняет отдельный private runti
 - **CLI** предоставляет только `step` и `history`. Пользовательские команды для
   отдельных неймспейсов создаются wrapper-скриптами и внутри вызывают тот же
   `project-workflow step/history`. В token mode команды используют защищённый
-  HTTP API через общий `sdlc-cli-core`; direct DB mode остаётся локальным
+  HTTP API через общий `sdlc-cli-core` (опциональный пакет из services-base;
+  без него CLI работает в локальном direct DB режиме); direct DB mode остаётся локальным
   legacy/dev вариантом.
 - **Browser SSO** использует Authorization Code + PKCE, проверяет signature,
   issuer, audience, expiry, state и nonce, хранит access token только в
