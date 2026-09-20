@@ -84,25 +84,29 @@ review.
 ### Central Auth SSO
 
 В `services-base` зарегистрирован OIDC client `project-workflow` с redirect URI
-`http://localhost:8812/sso/callback`. Для локального общего контура создайте
-`.env` с адресами, достижимыми с браузера и из контейнера API:
+`http://localhost:8812/sso/callback`. Для локального общего контура API должен
+быть подключён к сети `sdlc-ux_platform` через версионируемый
+`services-base/deploy/project-workflow.local.override.yml`. В этом режиме
+адреса, достижимые с браузера и из контейнера API, выглядят так:
 
 ```dotenv
 AUTH_ISSUER=http://localhost:7701
-AUTH_INTERNAL_BASE_URL=http://host.docker.internal:7701
+AUTH_INTERNAL_BASE_URL=http://auth:7701
 AUTH_PUBLIC_ORIGIN=http://localhost:8812
 AUTH_SESSION_SECRET=[CHANGE_ME_AT_LEAST_32_CHARACTERS]
 AUTH_COOKIE_SECURE=false
 ```
 
 `AUTH_INTERNAL_BASE_URL` обязан быть достижим из контейнера API. Если Central
-Auth запущен в том же Compose/network, используйте имя сервиса, например
-`http://auth:7701`. Если он опубликован на host, сначала проверьте адрес из
-контейнера (`docker compose exec api ...`); `host.docker.internal` подходит
-только там, где host-gateway действительно доступен. `AUTH_ISSUER` должен точно
-совпадать с issuer Central Auth, а `AUTH_PUBLIC_ORIGIN` — с зарегистрированным
-redirect URI. После смены настроек перезапустите API:
-`docker compose up -d --force-recreate api`.
+Auth опубликован только на host, сначала проверьте URL из контейнера API;
+`host.docker.internal` подходит только там, где host-gateway действительно
+доступен. Недоступный адрес даёт `503` на OIDC callback, а не успешный SSO.
+`AUTH_ISSUER` должен точно совпадать с issuer Central Auth, а
+`AUTH_PUBLIC_ORIGIN` — с зарегистрированным redirect URI. После смены
+настроек общего стенда повторите
+`pwsh -File services-base/deploy/start-workspace.ps1` из корня workspace:
+скрипт применяет оба Compose-файла и сохраняет volumes. Для отдельного
+Compose перезапускайте API с тем же набором `-f`, с которым он был поднят.
 
 Проверка: открыть `/` → redirect на Central Auth → завершить login → callback
 возвращает на исходную страницу. Без cookie `/api/*` отвечает `401`; runtime

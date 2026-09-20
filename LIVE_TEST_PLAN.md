@@ -42,24 +42,36 @@ integration-тесты сохраняют общий 60-секундный пр�
 ## 1.1 Browser Auth Acceptance
 
 Проверка Central Auth не заменяет standalone gate и выполняется только при
-изменении SSO boundary или deployment env. Поднять Central Auth с зарегистрированным
-client `project-workflow` и redirect URI `http://localhost:8812/sso/callback`,
-затем перед стартом API задать:
+изменении SSO boundary или deployment env. Для общего локального стенда поднять
+Central Auth с client `project-workflow` и redirect URI
+`http://localhost:8812/sso/callback` командой из корня workspace:
 
-```bash
-export AUTH_ISSUER=http://localhost:7701
-export AUTH_INTERNAL_BASE_URL=http://host.docker.internal:7701
-export AUTH_PUBLIC_ORIGIN=http://localhost:8812
-export AUTH_SESSION_SECRET=[CHANGE_ME_AT_LEAST_32_CHARACTERS]
-docker compose up -d --force-recreate api
+```powershell
+pwsh -File services-base/deploy/start-workspace.ps1
+```
+
+Версионируемый `services-base/deploy/project-workflow.local.override.yml`
+подключает API к сети `sdlc-ux_platform` и задаёт
+`AUTH_INTERNAL_BASE_URL=http://auth:7701`. Перед browser E2E проверить
+`http://auth:7701/health` из контейнера API; публичный `AUTH_ISSUER` остаётся
+`http://localhost:7701`. Для отдельного Compose с Auth на хосте
+`host.docker.internal:7701` допустим только после такого же preflight из
+контейнера: если адрес недоступен, callback завершится `503` и этот режим
+нельзя считать проверенным.
+
+Из корня workspace preflight для общего стенда:
+
+```powershell
+docker compose --env-file .local/local.env --project-directory project-workflow -p project-workflow-local -f project-workflow/docker-compose.yml -f services-base/deploy/project-workflow.local.override.yml exec -T api python -c "import urllib.request; urllib.request.urlopen('http://auth:7701/health', timeout=3)"
 ```
 
 E2E evidence обязано подтвердить: anonymous `/` редиректит на `/login`, login
 в Central Auth возвращает на исходную страницу, cookie-сессия открывает UI,
 anonymous `/api/*` получает `401`, а `/logout` очищает сессию. Для HTTPS
-установить `AUTH_COOKIE_SECURE=true`. После проверки убрать `AUTH_ISSUER` и
-повторить standalone `/health` + browser smoke: no-auth режим не должен
-требовать Central Auth.
+установить `AUTH_COOKIE_SECURE=true`. Standalone `/health` + browser smoke
+повторить в отдельном Compose-проекте без интеграционного override и без
+`AUTH_ISSUER`; не переиспользовать для этого рабочие контейнеры и volumes.
+No-auth режим не должен требовать Central Auth.
 
 ## 2. Executor-driven business E2E
 
