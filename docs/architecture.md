@@ -129,6 +129,7 @@ evaluation items, transition routes и накопленное покрытие. 
 
 ## References
 
+- [UI Shell Contract](ui-shell.md) — sidebar/header/work-area behavior and page width classes.
 - [README](../README.md) — deployment modes and local launch.
 - [Quality Gate](quality-gate.md) — repeatable verification commands.
 - [Database Reset](database-reset.md) — destructive local database recovery.
