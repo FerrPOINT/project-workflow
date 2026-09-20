@@ -76,6 +76,20 @@ def test_architect_phases_are_bounded_and_advance_without_open_ended_discovery()
         assert "новые business- и tech-чтения" in text, phase["code"]
 
 
+def test_every_filesystem_role_pins_tech_reads_to_assignment_revision() -> None:
+    for role in ("analyst", "architect", "developer", "reviewer", "tester", "devops"):
+        bundle = load_bundle(CONFIG_ROOT / f"{role}.json")
+        for mode in bundle["workflow"]["modes"]:
+            context = " ".join(item["text"] for item in mode["phases"][0]["instructions"])
+            assert "workspaceLease.tech.targetRevision" in context, (role, mode["key"])
+            assert "repository.get.headRevision" in context, (role, mode["key"])
+            assert "запрещено спрашивать у пользователя путь или ревизию" in context, (
+                role,
+                mode["key"],
+            )
+            assert "остановиться fail-closed" in context, (role, mode["key"])
+
+
 def test_project_manager_publication_hands_backlog_to_analyst_automatically() -> None:
     bundle = load_bundle(CONFIG_ROOT / "project_manager.json")
     terminal = bundle["workflow"]["modes"][0]["phases"][-1]

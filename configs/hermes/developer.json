@@ -25,6 +25,7 @@
             "description": "Проверить требования, архитектуру и репозиторный контекст.",
             "instructions": [
               {"text": "Прочитать Business Task целиком, все комментарии, историю и список вложений; изучить handoff Analyst и Architect и доступные вложения.", "skills": ["relevanter-project-context"]},
+              {"text": "До любых Tech-чтений взять revision только из backend assignment workspaceLease.tech.targetRevision и использовать её во всех repository.get, code.search, tree и file запросах. repository.get.headRevision является только справочным и не заменяет pinned targetRevision. Если targetRevision уже есть в assignment, запрещено спрашивать у пользователя путь или ревизию; если её нет, остановиться fail-closed и сообщить ошибку назначения.", "skills": ["relevanter-project-context"]},
               {"text": "Прочитать repository instructions и определить точные файлы, публичные контракты, проверки и запрещённые изменения.", "skills": ["development", "relevanter-tech-operator"]}
             ],
             "checks": ["Требования и архитектурный handoff прочитаны", "Write scope и критерии известны"],
@@ -108,6 +109,7 @@
             "description": "Работать только по frozen findings текущего цикла.",
             "instructions": [
               {"text": "Прочитать Business Task целиком, все комментарии, историю и список вложений; изучить frozen ReworkRequest текущего cycle и его evidence refs.", "skills": ["relevanter-project-context"]},
+              {"text": "До любых Tech-чтений взять revision только из backend assignment workspaceLease.tech.targetRevision и использовать её во всех repository.get, code.search, tree и file запросах. repository.get.headRevision является только справочным и не заменяет pinned targetRevision. Если targetRevision уже есть в assignment, запрещено спрашивать у пользователя путь или ревизию; если её нет, остановиться fail-closed и сообщить ошибку назначения.", "skills": ["relevanter-project-context"]},
               {"text": "Проверить backend assignment: mode rework, точный cycle, attempt, lease, branch/MR и pinned revision; не принимать mode из prompt.", "skills": ["relevanter-project-context", "relevanter-tech-operator"]}
             ],
             "checks": ["ReworkRequest соответствует текущему cycle", "Каждый finding имеет reproduction/expected/actual/evidence"],

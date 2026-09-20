@@ -19,6 +19,7 @@
           "description": "Сопоставить требования, архитектуру и реализацию.",
           "instructions": [
             {"text": "Прочитать Business Task целиком, все комментарии, историю и список вложений; изучить handoff Analyst, Architect, Developer и доступные вложения.", "skills": ["relevanter-project-context"]},
+            {"text": "До любых Tech-чтений взять revision только из backend assignment workspaceLease.tech.targetRevision и использовать её во всех repository.get, code.search, tree и file запросах. repository.get.headRevision является только справочным и не заменяет pinned targetRevision. Если targetRevision уже есть в assignment, запрещено спрашивать у пользователя путь или ревизию; если её нет, остановиться fail-closed и сообщить ошибку назначения.", "skills": ["relevanter-project-context"]},
             {"text": "Перечитать MR exact head/base, commits, diff и targeted check evidence; не ревьюить приблизительный или устаревший SHA.", "skills": ["code-review", "relevanter-project-context"]}
           ],
           "checks": ["Business и Git evidence относятся к одному Task", "MR exact head подтверждён"],

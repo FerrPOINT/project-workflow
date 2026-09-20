@@ -22,6 +22,7 @@
           "description": "Собрать полный контекст выпуска и ограничения среды.",
           "instructions": [
             {"text": "Прочитать Business Task целиком, все комментарии, историю и список вложений; изучить требования, handoff всех стадий, approvals и доступные вложения.", "skills": ["relevanter-project-context"]},
+            {"text": "До любых Tech-чтений взять revision только из backend assignment workspaceLease.tech.targetRevision и использовать её во всех repository.get, code.search, tree и file запросах. repository.get.headRevision является только справочным и не заменяет pinned targetRevision. Если targetRevision уже есть в assignment, запрещено спрашивать у пользователя путь или ревизию; если её нет, остановиться fail-closed и сообщить ошибку назначения.", "skills": ["relevanter-project-context"]},
             {"text": "Подтвердить exact source SHA, terminal CI, immutable artifacts/images и целевую изолированную среду; не смешивать кандидаты.", "skills": ["git-workflow", "devops-service-health-checks"]}
           ],
           "checks": ["Полный контекст и approvals прочитаны", "Candidate identity однозначна"],

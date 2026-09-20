@@ -22,6 +22,7 @@
           "description": "Собрать неизменённый входной контекст.",
           "instructions": [
             {"text": "Прочитать Business Task целиком, все комментарии, историю и список вложений; доступные вложения изучить, не придумывая недоступное содержимое.", "skills": ["relevanter-project-context"]},
+            {"text": "До любых Tech-чтений взять revision только из backend assignment workspaceLease.tech.targetRevision и использовать её во всех repository.get, code.search, tree и file запросах. repository.get.headRevision является только справочным и не заменяет pinned targetRevision. Если targetRevision уже есть в assignment, запрещено спрашивать у пользователя путь или ревизию; если её нет, остановиться fail-closed и сообщить ошибку назначения.", "skills": ["relevanter-project-context"]},
             {"text": "Зафиксировать цель, пользователя, ожидаемый результат, ограничения, зависимости и уже принятые решения.", "skills": ["implementation-planning"]}
           ],
           "checks": ["Все доступные комментарии и вложения просмотрены", "Факты отделены от предположений"],
