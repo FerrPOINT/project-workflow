@@ -65,6 +65,12 @@ def test_architect_phases_are_bounded_and_advance_without_open_ended_discovery()
     assert "не перечислять дерево репозитория" in ownership
     assert "не повторять недоступный запрос" in ownership
 
+    context = " ".join(item["text"] for item in phases[0]["instructions"])
+    assert "workspaceLease.tech.targetRevision" in context
+    assert "repository.get.headRevision" in context
+    assert "запрещено спрашивать у пользователя путь или ревизию" in context
+    assert "остановиться fail-closed" in context
+
     for phase in phases[2:5]:
         text = " ".join(item["text"] for item in phase["instructions"]).lower()
         assert "новые business- и tech-чтения" in text, phase["code"]
