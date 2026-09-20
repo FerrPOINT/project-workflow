@@ -2696,6 +2696,27 @@ class TestUiNetworkFailures:
         assert response.status_code == 200
         assert f'href="/phase/{phase_id}?namespace_id={namespace_id}"' in response.text
 
+    def test_instructions_page_has_readable_mobile_editor(self):
+        phase_id = _phase_id("1.INTAKE")
+        response = client.get(f"/instructions?phase_id={phase_id}")
+
+        assert response.status_code == 200
+        assert len(re.findall(rf'href="/phase/{phase_id}(?:\?namespace_id=\d+)?"', response.text)) == 2
+        assert 'class="instructions-mobile-actions"' in response.text
+        assert 'class="instructions-context"' in response.text
+        assert '<span class="instructions-mobile-title">Шаги</span>' in response.text
+        assert "Добавляй, удаляй и меняй порядок инструкций" not in response.text
+        assert 'class="instruction-text" rows="1"' in response.text
+        assert 'aria-label="Описание инструкции 1"' in response.text
+        assert 'class="type-badge sync"' in response.text
+        assert 'aria-pressed="false" onclick="toggleType(this)"' in response.text
+        assert 'aria-label="Новая инструкция"' in response.text
+        assert ".order-btn{width:40px;height:40px" in response.text
+        assert ".row-actions .icon-btn{width:40px;height:40px}" in response.text
+        assert "function resizeInstructionTextarea(field)" in response.text
+        assert "document.fonts.ready.then(resizeInstructionTextareas);" in response.text
+        assert "window.addEventListener('resize', resizeInstructionTextareas);" in response.text
+
     def test_instructions_page_rejects_phase_outside_selected_namespace_workflow(self):
         workflow = client.post(
             "/api/workflows",
