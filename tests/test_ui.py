@@ -293,7 +293,8 @@ class TestIndexPage:
         assert response.status_code == 200
         assert 'class="btn btn-secondary dashboard-action">Задачи</a>' in response.text
         assert 'class="btn btn-secondary dashboard-action">Неймспейсы</a>' in response.text
-        assert "@media(max-width:640px){.header .dashboard-action{display:none}" in response.text
+        assert "@media(max-width:930px){.header .dashboard-action{display:none}" in response.text
+        assert 'class="dashboard-section-link" href="/namespaces">Все неймспейсы</a>' in response.text
 
     def test_dashboard_previews_recent_items_and_links_to_full_lists(self):
         dashboard = {
@@ -2326,6 +2327,7 @@ class TestWorkflowsPage:
         assert 'id="mobileNewWorkflowButton"' in response.text
         assert response.text.count('onclick="startCreateWorkflow()"') == 2
         assert 'class="workflow-mobile-actions"' in response.text
+        assert "@media(max-width:930px){" in response.text
         assert ".header .workflow-header-action{display:none}" in response.text
         assert response.text.count("← К фазам") == 2
 
