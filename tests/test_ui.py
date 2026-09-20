@@ -422,6 +422,8 @@ class TestPhasesPage:
         ) in response.text
         assert ".header .phases-header-action{display:none}" in response.text
         assert ".phases-mobile-actions{display:flex" in response.text
+        assert "@media(max-width:930px){.header .phases-header-action{display:none}" in response.text
+        assert ".phases-desktop-title{display:none}.phases-mobile-title{display:inline}" in response.text
 
     def test_phases_has_phase_rows(self):
         response = client.get("/phases")
@@ -1733,6 +1735,14 @@ class TestTasksPage:
         response = client.get("/tasks")
         assert response.status_code == 200
         assert "Задачи" in response.text
+
+    def test_tasks_mobile_header_uses_compact_title(self):
+        response = client.get("/tasks")
+
+        assert response.status_code == 200
+        assert '<span class="tasks-desktop-title">Задачи воркфлоу</span>' in response.text
+        assert '<span class="tasks-mobile-title">Задачи</span>' in response.text
+        assert "@media(max-width:760px){.tasks-desktop-title{display:none}" in response.text
 
     def test_tasks_has_task_rows(self):
         response = client.get("/tasks")
