@@ -53,7 +53,13 @@ def _token_namespace_id() -> int | None:
 
 
 def _platform_request(method: str, path: str, *, body: dict | None = None, params: dict | None = None) -> dict:
-    from sdlc_cli_core import ApiClient, ApiError
+    try:
+        from sdlc_cli_core import ApiClient, ApiError
+    except ImportError as exc:  # pragma: no cover - exercised via test_token_step_explains_missing_transport
+        raise ValueError(
+            "Токен-режим требует пакет sdlc-cli-core (services-base/python/cli-core); "
+            "без него используйте локальный режим с DATABASE_URL"
+        ) from exc
 
     try:
         return ApiClient(os.environ.get("PROJECT_WORKFLOW_URL", "http://localhost:8812")).request_json(
