@@ -1927,10 +1927,39 @@ class TestTaskDetail:
     def test_task_detail_current_state_uses_namespace_accent_styles(self):
         response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
         assert response.status_code == 200
-        assert ".chip.active,.verdict-delegate{color:var(--accent);background:var(--accent-soft)}" in response.text
+        assert (
+            ".chip.active,.verdict-delegate{color:var(--accent-readable);background:var(--accent-soft)}"
+            in response.text
+        )
         assert ".phase-node.done{background:var(--green)}.phase-node.current{background:var(--accent)" in response.text
         assert ".phase-card.current{border-color:var(--accent);border-top:3px solid var(--accent)}" in response.text
+        assert ".phase-card.current .phase-status{color:var(--accent-readable)}" in response.text
         assert "rgba(59,130,246" not in response.text
+
+    def test_task_detail_mobile_navigation_keeps_links_accessible(self):
+        namespace_id = self._default_namespace_id()
+        response = client.get(f"/task/RUN-247?namespace_id={namespace_id}")
+
+        assert response.status_code == 200
+        assert response.text.count(f'href="/tasks?namespace_id={namespace_id}"') == 2
+        assert '<span class="task-detail-mobile-title">Задача</span>' in response.text
+        assert 'class="task-detail-mobile-actions"' in response.text
+        assert "@media(max-width:350px){.detail-jump-nav{top:105px}" in response.text
+        assert (
+            "#task-summary,#phase-history-title,#check-history-title,.detail-section{scroll-margin-top:171px}"
+            in response.text
+        )
+        assert ".detail-jump-nav a{display:inline-flex;align-items:center;min-height:40px" in response.text
+
+    def test_task_detail_check_history_uses_native_disclosure_summary(self):
+        template = (TEMPLATES_DIR / "task_detail.html").read_text(encoding="utf-8")
+
+        assert re.search(
+            r'<details class="activity-details"[^>]*>\s*<summary class="activity-event-summary">', template
+        )
+        assert 'class="activity-event" data-check-run=' in template
+        assert '<span class="activity-header">' in template
+        assert ".activity-event-summary{display:flex;align-items:flex-start;gap:8px;min-height:40px" in template
 
     def test_task_detail_shows_current_phase_and_progress(self):
         uow = ui_app_state.get_db()
