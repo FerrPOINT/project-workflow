@@ -39,6 +39,28 @@ python -m project_workflow.interfaces.cli --help
 Два составных subprocess E2E имеют локальный marker `timeout(120)`; остальные
 integration-тесты сохраняют общий 60-секундный предел.
 
+## 1.1 Browser Auth Acceptance
+
+Проверка Central Auth не заменяет standalone gate и выполняется только при
+изменении SSO boundary или deployment env. Поднять Central Auth с зарегистрированным
+client `project-workflow` и redirect URI `http://localhost:8812/sso/callback`,
+затем перед стартом API задать:
+
+```bash
+export AUTH_ISSUER=http://localhost:7701
+export AUTH_INTERNAL_BASE_URL=http://host.docker.internal:7701
+export AUTH_PUBLIC_ORIGIN=http://localhost:8812
+export AUTH_SESSION_SECRET=[CHANGE_ME_AT_LEAST_32_CHARACTERS]
+docker compose up -d --force-recreate api
+```
+
+E2E evidence обязано подтвердить: anonymous `/` редиректит на `/login`, login
+в Central Auth возвращает на исходную страницу, cookie-сессия открывает UI,
+anonymous `/api/*` получает `401`, а `/logout` очищает сессию. Для HTTPS
+установить `AUTH_COOKIE_SECURE=true`. После проверки убрать `AUTH_ISSUER` и
+повторить standalone `/health` + browser smoke: no-auth режим не должен
+требовать Central Auth.
+
 ## 2. Executor-driven business E2E
 
 Проверяет полный цикл с реальными действиями внешнего исполнителя:

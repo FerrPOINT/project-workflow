@@ -1,3 +1,5 @@
+# Project Workflow
+
 <p align="center">
   <img src="docs/assets/project-workflow-banner.jpg" alt="Project Workflow - phased work orchestration" />
 </p>
@@ -54,6 +56,58 @@ db + migrate + api на `127.0.0.1:8812` без Central Auth и без сосе�
 Runtime-источник данных — **PostgreSQL**. SQLite используется только для изолированных тестов и локальных smoke-сценариев.
 
 <a name="overview"></a>
+
+## Режимы запуска и авторизации
+
+| Режим | Когда использовать | Настройки | Поведение |
+|---|---|---|---|
+| Standalone без авторизации | Локальная разработка, loopback/VPN, один репозиторий | Не задавать `AUTH_*` | `docker compose up --build -d --wait` запускает db, migrate и api; UI/API открыты без входа. |
+| Central Auth SSO | Общий private-контур и несколько пользователей | `AUTH_ISSUER`, `AUTH_INTERNAL_BASE_URL`, `AUTH_PUBLIC_ORIGIN`, `AUTH_SESSION_SECRET` | UI и human API требуют Central Auth через Authorization Code + PKCE; при недоступности Auth запросы fail closed с `503`. |
+| Personal-token CLI | CLI запускается вне БД сервиса | `SDLC_API_TOKEN`, `PROJECT_WORKFLOW_URL`, отдельно установленный `sdlc-cli-core` | Central Auth интроспектирует token и scopes `project-workflow:read/write`; token не хранится приложением. |
+
+### Standalone без авторизации
+
+Это default-режим: пустой `AUTH_ISSUER` не устанавливает SSO middleware. Для
+старта не нужны Central Auth, `services-base` или дополнительные Docker build
+contexts:
+
+```bash
+cp .env.example .env
+docker compose up --build -d --wait
+curl --fail http://127.0.0.1:8812/health
+```
+
+UI: `http://127.0.0.1:8812`. Стандартный Compose публикует API и PostgreSQL
+только на loopback; не делайте этот режим общедоступным без отдельного security
+review.
+
+### Central Auth SSO
+
+В `services-base` зарегистрирован OIDC client `project-workflow` с redirect URI
+`http://localhost:8812/sso/callback`. Для локального общего контура создайте
+`.env` с адресами, достижимыми с браузера и из контейнера API:
+
+```dotenv
+AUTH_ISSUER=http://localhost:7701
+AUTH_INTERNAL_BASE_URL=http://host.docker.internal:7701
+AUTH_PUBLIC_ORIGIN=http://localhost:8812
+AUTH_SESSION_SECRET=[CHANGE_ME_AT_LEAST_32_CHARACTERS]
+AUTH_COOKIE_SECURE=false
+```
+
+`AUTH_INTERNAL_BASE_URL` обязан быть достижим из контейнера API. Если Central
+Auth запущен в том же Compose/network, используйте имя сервиса, например
+`http://auth:7701`. Если он опубликован на host, сначала проверьте адрес из
+контейнера (`docker compose exec api ...`); `host.docker.internal` подходит
+только там, где host-gateway действительно доступен. `AUTH_ISSUER` должен точно
+совпадать с issuer Central Auth, а `AUTH_PUBLIC_ORIGIN` — с зарегистрированным
+redirect URI. После смены настроек перезапустите API:
+`docker compose up -d --force-recreate api`.
+
+Проверка: открыть `/` → redirect на Central Auth → завершить login → callback
+возвращает на исходную страницу. Без cookie `/api/*` отвечает `401`; runtime
+bridge `/internal/runtime/*` не использует browser SSO и защищается только
+собственными role tokens.
 
 ## 📌 Snapshot
 

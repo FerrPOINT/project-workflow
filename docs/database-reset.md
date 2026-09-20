@@ -80,3 +80,9 @@ bindings на общедоступный интерфейс.
 
 Локальные проверки, hosted CI и реальный provider-run фиксируются как разные
 классы evidence. Успешный reset сам по себе не подтверждает работу внешнего LLM.
+
+## References
+
+- [README](../README.md) — standalone and Central Auth launch modes.
+- [Architecture](architecture.md) — PostgreSQL and runtime ownership.
+- [Quality Gate](quality-gate.md) — readiness verification after reset.

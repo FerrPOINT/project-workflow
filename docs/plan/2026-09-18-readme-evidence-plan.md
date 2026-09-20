@@ -15,3 +15,9 @@
 2. Extend `tests/test_docs_quality.py` so the existing CI quality job validates the root README anchors, reviewed evidence and no local-path/placeholder leaks.
 3. Capture and inspect the mobile namespace page through an isolated fixture only.
 4. Run documentation tests, full project quality gates, Compose health and hosted CI before publishing to `master`.
+
+## References
+
+- [README](../../README.md) — current curated evidence.
+- [Quality Gate](../quality-gate.md) — screenshot capture and verification.
+- [Architecture](../architecture.md) — product boundaries.

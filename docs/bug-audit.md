@@ -71,3 +71,9 @@
 - [x] Caller-sweep подтверждает production-consumers для `TaskRepository.lock()` и
   `PhaseRepository.workflow_ids_for_agent()`; удалённые test-only методы не имеют
   runtime-вызовов, а `create_all` ограничен явным SQLite test helper `ensure_schema()`.
+
+## References
+
+- [Architecture](architecture.md) — current runtime boundaries.
+- [Quality Gate](quality-gate.md) — verification commands for regressions.
+- [Database Reset](database-reset.md) — recovery after invalid local baseline.

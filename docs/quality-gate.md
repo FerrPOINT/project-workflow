@@ -162,3 +162,10 @@ python scripts/install_namespace_clis.py --bin-dir <dir>
 `cli_command`, выставляет `PROJECT_WORKFLOW_NAMESPACE_ID=<id>` и вызывает
 только `project-workflow step/history`. `project-workflow` не получает новых
 публичных команд: wrapper names являются пользовательской CLI-командой нужного неймспейса.
+
+## References
+
+- [README](../README.md) — launch modes and command overview.
+- [Architecture](architecture.md) — runtime and auth boundaries.
+- [Live Acceptance](../LIVE_TEST_PLAN.md) — executor-driven E2E evidence.
+- [Database Reset](database-reset.md) — clean local Compose baseline.

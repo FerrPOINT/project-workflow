@@ -196,6 +196,19 @@ def test_callback_exchanges_code_and_sets_encrypted_session(monkeypatch):
         assert session["sub"] == "central-sub"
 
 
+def test_sso_is_disabled_without_issuer(monkeypatch):
+    """Standalone mode must keep UI and API available without Central Auth."""
+    monkeypatch.delenv("AUTH_ISSUER", raising=False)
+    app = FastAPI()
+    sso.install_sso(app)
+    app.get("/")(lambda: {"ok": True})
+    app.get("/api/tasks")(lambda: {"ok": True})
+
+    with TestClient(app, follow_redirects=False) as client:
+        assert client.get("/").status_code == 200
+        assert client.get("/api/tasks").status_code == 200
+
+
 def test_sso_configuration_and_cookie_validation_fail_closed(monkeypatch):
     settings = Settings(
         DATABASE_URL="postgresql+psycopg://unused@localhost/unused",
