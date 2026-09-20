@@ -1155,6 +1155,24 @@ class TestPhaseDetail:
         assert 'aria-label="Описание проверки ' in response.text
         assert 'aria-label="Описание подтверждения ' in response.text
 
+    def test_phase_detail_descriptions_expand_as_multiline_fields(self):
+        response = client.get(_phase_detail_path("1.INTAKE"))
+
+        assert response.status_code == 200
+        assert '<textarea class="inline-input wiki-subtitle"' in response.text
+        assert '<textarea class="timeline-name-input"' in response.text
+        assert '<textarea class="inline-input check-text"' in response.text
+        assert '<textarea class="inline-input file-name"' in response.text
+        assert '<span class="phase-detail-desktop-title">Детали фазы</span>' in response.text
+        assert '<span class="phase-detail-mobile-title">Фаза</span>' in response.text
+        assert "function resizeInlineTextarea(field)" in response.text
+        assert "document.querySelectorAll('.wiki-page textarea').forEach(resizeInlineTextarea);" in response.text
+        assert "if (event.target.matches('.wiki-page textarea')) resizeInlineTextarea(event.target);" in response.text
+        assert "document.fonts.ready.then(resizeAllInlineTextareas);" in response.text
+        assert "window.addEventListener('resize', resizeAllInlineTextareas);" in response.text
+        assert "color:var(--accent-readable)" in response.text
+        assert "flex:0 0 40px" in response.text
+
     def test_phase_detail_keeps_sequential_cards_when_phase_instructions_are_sync(self):
         response = client.get(_phase_detail_path("4.START"))
         assert response.status_code == 200
@@ -1315,11 +1333,11 @@ class TestPhaseDetail:
             response = client.get(_phase_detail_path("1.INTAKE"))
             assert response.status_code == 200
             assert (
-                f'<span class="badge" style="background:var(--accent-soft);color:var(--accent)">'
+                f'<span class="badge" style="background:var(--accent-soft);color:var(--accent-readable)">'
                 f"\n            {skills[0]}" in response.text
             )
             assert (
-                f'<span class="badge" style="background:var(--accent-soft);color:var(--accent)">'
+                f'<span class="badge" style="background:var(--accent-soft);color:var(--accent-readable)">'
                 f"\n            {skills[1]}" in response.text
             )
             assert 'class="skill-candidate" type="text" placeholder="Добавить навык"' in response.text
@@ -1399,8 +1417,8 @@ class TestPhaseDetail:
         assert 'onblur="saveNewTextItem(this)"' in add_evidence
         assert "syncTextItemList(list);" in add_check
         assert "syncTextItemList(list);" in add_evidence
-        assert "li.querySelector('input')?.focus();" in add_check
-        assert "li.querySelector('input')?.focus();" in add_evidence
+        assert "li.querySelector('textarea')?.focus();" in add_check
+        assert "li.querySelector('textarea')?.focus();" in add_evidence
 
     def test_phases_page_hides_code_and_number_visual_noise(self):
         response = client.get("/phases")
