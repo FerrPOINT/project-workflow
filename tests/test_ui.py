@@ -2543,8 +2543,9 @@ class TestSettingsPage:
         response = client.get("/settings")
         assert response.status_code == 200
         assert response.headers["content-type"] == "text/html; charset=utf-8"
-        assert "Настройки" in response.text
-        assert "CLI" in response.text
+        assert "Команды CLI" in response.text
+        assert '<span class="cli-mobile-title">CLI</span>' in response.text
+        assert 'class="sidebar-cli-icon" aria-hidden="true">&gt;_</span>' in response.text
         assert re.search(r"workflow-[a-z0-9_-]+ step", response.text)
         assert re.search(r"workflow-[a-z0-9_-]+ history", response.text)
         assert "project-workflow step" not in response.text
