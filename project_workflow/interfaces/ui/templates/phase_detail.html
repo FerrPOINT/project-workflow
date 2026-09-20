@@ -1,11 +1,13 @@
 {% extends "base.html" %}
 
 {% block title %}{{ phase.name }} — Workflow Engine{% endblock %}
-{% block header_title %}Детали фазы{% endblock %}
+{% block header_title %}<span class="phase-detail-desktop-title">Детали фазы</span><span class="phase-detail-mobile-title">Фаза</span>{% endblock %}
 
 {% block extra_style %}
 /* ── Wiki-style phase page ─────────────────────────────────────────── */
 .wiki-page{max-width:1100px;margin:0 auto;padding:0 24px}
+.phase-detail-mobile-title{display:none}
+@media(max-width:480px){.phase-detail-desktop-title{display:none}.phase-detail-mobile-title{display:inline}}
 
 /* Phase header */
 .wiki-header{margin-bottom:28px;padding-bottom:16px;border-bottom:1px solid var(--border-strong)}
@@ -28,7 +30,7 @@
 
 /* Check list */
 .check-list{list-style:none;padding:0;margin:0}
-.check-list>li{padding:10px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
+.check-list>li{padding:10px 0;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:12px}
 .check-list>li:last-child{border-bottom:none}
 .check-list .status-icon{flex-shrink:0;font-size:18px;width:24px;text-align:center}
 .check-list .status-icon.ok{color:var(--green)}
@@ -41,7 +43,7 @@
 
 /* Evidence */
 .evidence-list{list-style:none;padding:0;margin:0}
-.evidence-list>li{padding:10px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
+.evidence-list>li{padding:10px 0;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:12px}
 .evidence-list>li:last-child{border-bottom:none}
 .evidence-list .file-icon{flex-shrink:0;font-size:18px}
 .evidence-list .file-name{flex:1;min-width:0;font-size:14px;color:var(--text-secondary);word-break:break-word}
@@ -57,6 +59,7 @@
 .inline-input{background:transparent;border:1px solid transparent;min-height:40px;padding:6px 10px;border-radius:4px;color:var(--text);font-size:14px;width:100%;font-family:inherit;outline:none;word-break:break-word}
 .inline-input:hover{background:var(--panel)}
 .inline-input:focus{background:var(--panel);border-color:var(--accent)}
+.wiki-page textarea.inline-input,.wiki-page textarea.timeline-name-input{display:block;min-height:40px;box-sizing:border-box;overflow:hidden;resize:none;overflow-wrap:anywhere}
 
 .timeline-name-input{font-size:14px;font-weight:500;color:var(--text);line-height:1.4;background:transparent;border:none;border-bottom:1px dashed var(--border);min-height:40px;padding:2px 0;width:100%;font-family:inherit;outline:none}
 .timeline-name-input:hover{background:var(--panel)}
@@ -70,7 +73,8 @@
 .mode-sync{color:var(--green)}
 .mode-parallel{color:var(--orange)}
 /* Skill remove inside badge */
-.timeline-badges .badge .skill-remove-btn{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border:none;border-radius:6px;background:transparent;color:var(--text-muted);cursor:pointer;font-size:16px;line-height:1;padding:0;margin-left:2px}
+.timeline-badges .badge{max-width:100%;overflow-wrap:anywhere}
+.timeline-badges .badge .skill-remove-btn{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;flex:0 0 40px;border:none;border-radius:6px;background:transparent;color:var(--text-muted);cursor:pointer;font-size:16px;line-height:1;padding:0;margin-left:2px}
 .timeline-badges .badge .skill-remove-btn:hover{color:var(--red);background:rgba(239,68,68,.12)}
 .timeline-badges input.skill-candidate{width:180px;height:40px;font-size:13px;padding:0 8px;background:var(--panel);border:1px solid var(--border);border-radius:4px;color:var(--text-secondary)}
 .wiki-header .btn{display:inline-flex;align-items:center;min-height:40px}
@@ -88,7 +92,7 @@
   <div class="wiki-header">
     <div style="margin-bottom:10px"><a href="/phases?workflow_id={{ phase.workflow_id }}{% if selected_namespace %}&namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary">← Назад к фазам</a></div>
     <input type="text" class="inline-input" value="{{ phase.name }}" data-field="name" aria-label="Название фазы" onblur="scheduleSave()" style="font-size:26px;font-weight:600;margin:0 0 10px;width:100%">
-    <input type="text" class="inline-input wiki-subtitle" value="{{ phase.description or '' }}" data-field="description" aria-label="Описание фазы" onblur="scheduleSave()" style="width:100%">
+    <textarea class="inline-input wiki-subtitle" rows="1" data-field="description" aria-label="Описание фазы" onblur="scheduleSave()">{{ phase.description or '' }}</textarea>
 
     <div class="wiki-meta">
       <span><label for="agentSelect">Агент:</label> <select id="agentSelect" class="inline-input" style="width:180px;display:inline" onchange="scheduleSave()">
@@ -137,7 +141,7 @@
         <button type="button" class="phase-delete-btn" onclick="deleteInstruction(this)" aria-label="Удалить инструкцию {{ i.step_num }}">×</button>
       </div>
       <div class="timeline-card" data-instruction-id="{{ i.id }}" data-step-num="{{ i.step_num }}" data-type="{{ i.execution_type }}">
-        <input type="text" class="timeline-name-input" value="{{ i.description }}" data-field="description" data-original-description="{{ i.description }}" aria-label="Описание инструкции {{ i.step_num }}" onblur="saveInstructionDescription(this)">
+        <textarea class="timeline-name-input" rows="1" data-field="description" data-original-description="{{ i.description }}" aria-label="Описание инструкции {{ i.step_num }}" onblur="saveInstructionDescription(this)">{{ i.description }}</textarea>
         <div class="execution-row">
           <button type="button" class="badge {{ 'badge-parallel' if i.execution_type == 'parallel' else 'badge-sync' }}" onclick="toggleInstructionType(this)" aria-label="Режим выполнения: {{ 'параллельно' if i.execution_type == 'parallel' else 'последовательно' }}">
             {% if i.execution_type == 'parallel' %}⚡ параллельно{% else %}⏱ последовательно{% endif %}
@@ -145,7 +149,7 @@
         </div>
         <div class="timeline-badges">
           {% for s in i.skills or [] %}
-          <span class="badge" style="background:var(--accent-soft);color:var(--accent)">
+          <span class="badge" style="background:var(--accent-soft);color:var(--accent-readable)">
             {{ s }}
             <button type="button" class="skill-remove-btn" data-skill="{{ s }}" onclick="removeSkillFromInstruction(this)" aria-label="Убрать навык {{ s }} из инструкции {{ i.step_num }}">×</button>
           </span>
@@ -196,7 +200,7 @@
       {% for c in phase.checks %}
       <li data-id="{{ c.id }}">
         <span class="status-icon wait">○</span>
-        <input type="text" class="inline-input check-text" value="{{ c.description }}" data-field="description" aria-label="Описание проверки {{ loop.index }}" onblur="scheduleSave()">
+        <textarea class="inline-input check-text" rows="1" data-field="description" aria-label="Описание проверки {{ loop.index }}" onblur="scheduleSave()">{{ c.description }}</textarea>
         <button type="button" class="item-delete" aria-label="Удалить проверку {{ loop.index }}" onclick="deleteItem(this)">×</button>
       </li>
       {% else %}
@@ -216,7 +220,7 @@
       {% for e in phase.evidence %}
       <li data-id="{{ e.id }}">
         <span class="file-icon">📄</span>
-        <input type="text" class="inline-input file-name" value="{{ e.description }}" data-field="description" aria-label="Описание подтверждения {{ loop.index }}" onblur="scheduleSave()">
+        <textarea class="inline-input file-name" rows="1" data-field="description" aria-label="Описание подтверждения {{ loop.index }}" onblur="scheduleSave()">{{ e.description }}</textarea>
         <button type="button" class="item-delete" aria-label="Удалить подтверждение {{ loop.index }}" onclick="deleteItem(this)">×</button>
       </li>
       {% else %}
@@ -252,6 +256,15 @@ function normalizeSkillNames(raw = []) {
     normalized.push(name);
   }
   return normalized;
+}
+
+function resizeInlineTextarea(field) {
+  field.style.height = 'auto';
+  field.style.height = `${field.scrollHeight + field.offsetHeight - field.clientHeight}px`;
+}
+
+function resizeAllInlineTextareas() {
+  document.querySelectorAll('.wiki-page textarea').forEach(resizeInlineTextarea);
 }
 
 function phaseApiUrl(path) {
@@ -506,6 +519,7 @@ async function saveInstructionDescription(input) {
   const description = input.value.trim();
   if (!description) {
     input.value = previousDescription;
+    resizeInlineTextarea(input);
     showToast('Описание инструкции обязательно', 'error');
     return;
   }
@@ -531,6 +545,7 @@ async function saveInstructionDescription(input) {
     input.dataset.originalDescription = savedDescription;
   } finally {
     input.disabled = false;
+    resizeInlineTextarea(input);
   }
 }
 
@@ -628,13 +643,13 @@ function addCheck() {
   const li = document.createElement('li');
   li.innerHTML = `
     <span class="status-icon wait">○</span>
-    <input type="text" class="inline-input check-text" value="" data-field="description" aria-label="Описание новой проверки" onblur="saveNewTextItem(this)">
+    <textarea class="inline-input check-text" rows="1" data-field="description" aria-label="Описание новой проверки" onblur="saveNewTextItem(this)"></textarea>
     <span class="check-meta">—</span>
     <button type="button" class="item-delete" aria-label="Удалить новую проверку" onclick="deleteItem(this)">×</button>
   `;
   list.appendChild(li);
   syncTextItemList(list);
-  li.querySelector('input')?.focus();
+  li.querySelector('textarea')?.focus();
 }
 
 function addEvidence() {
@@ -644,13 +659,13 @@ function addEvidence() {
   const li = document.createElement('li');
   li.innerHTML = `
     <span class="file-icon">📄</span>
-    <input type="text" class="inline-input file-name" value="" data-field="description" aria-label="Описание нового подтверждения" onblur="saveNewTextItem(this)">
+    <textarea class="inline-input file-name" rows="1" data-field="description" aria-label="Описание нового подтверждения" onblur="saveNewTextItem(this)"></textarea>
     <span class="file-status">—</span>
     <button type="button" class="item-delete" aria-label="Удалить новое подтверждение" onclick="deleteItem(this)">×</button>
   `;
   list.appendChild(li);
   syncTextItemList(list);
-  li.querySelector('input')?.focus();
+  li.querySelector('textarea')?.focus();
 }
 
 /* ---------- Debounced phase meta save ---------- */
@@ -737,5 +752,11 @@ async function persistPhase() {
 document.addEventListener('DOMContentLoaded', () => {
   renderInstructionTimeline(getInstructionItems());
   updateInstructionControls();
+  resizeAllInlineTextareas();
+  if (document.fonts) document.fonts.ready.then(resizeAllInlineTextareas);
 });
+document.addEventListener('input', (event) => {
+  if (event.target.matches('.wiki-page textarea')) resizeInlineTextarea(event.target);
+});
+window.addEventListener('resize', resizeAllInlineTextareas);
 {% endblock %}
