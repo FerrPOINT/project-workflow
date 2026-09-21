@@ -214,7 +214,8 @@ async function deletePhase(button){
   const items=getPhaseTimelineItems();
   if(!item)return;
   if(items.length<=1){showToast('Нельзя удалить единственную фазу воркфлоу','error');return;}
-  if(!await requestConfirmation({eyebrow:'Удаление фазы',title:'Удалить фазу?',message:'Фаза и её настройки будут удалены.',confirmLabel:'Удалить'}))return;
+  const phaseName=item.querySelector('.timeline-name')?.textContent.trim()||'эту фазу';
+  if(!await requestConfirmation({eyebrow:'Удаление фазы',title:'Удалить фазу «'+phaseName+'»?',message:'Фаза «'+phaseName+'» и её настройки будут удалены.',confirmLabel:'Удалить'}))return;
   button.disabled=true;
   try{
     const resp=await fetch('/api/phases/'+item.dataset.phaseId,{method:'DELETE'});
@@ -271,14 +272,16 @@ document.addEventListener('DOMContentLoaded',()=>{
     if(down)down.disabled=index===items.length-1;
   });
   const menus=Array.from(document.querySelectorAll('.phase-card-actions'));
+  const confirmationDialog=document.getElementById('confirmDialog');
   menus.forEach(menu=>menu.addEventListener('toggle',()=>{
     if(menu.open)menus.forEach(other=>{if(other!==menu)other.open=false;});
   }));
   document.addEventListener('click',event=>{
+    if(confirmationDialog.contains(event.target))return;
     menus.forEach(menu=>{if(menu.open&&!menu.contains(event.target))menu.open=false;});
   });
   document.addEventListener('keydown',event=>{
-    if(event.key!=='Escape')return;
+    if(event.key!=='Escape'||!confirmationDialog.hidden)return;
     const open=menus.find(menu=>menu.open);
     if(open){open.open=false;open.querySelector('summary')?.focus();}
   });

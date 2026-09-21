@@ -766,6 +766,10 @@ class TestPhasesPage:
         assert "width:40px;height:40px" in response.text
         assert "min-height:40px" in response.text
         assert "event.key!=='Escape'" in response.text
+        assert "const phaseName=item.querySelector('.timeline-name')?.textContent.trim()||'эту фазу'" in response.text
+        assert "title:'Удалить фазу «'+phaseName+'»?'" in response.text
+        assert "if(confirmationDialog.contains(event.target))return" in response.text
+        assert "if(event.key!=='Escape'||!confirmationDialog.hidden)return" in response.text
 
     def test_long_phase_list_has_named_jump_to_phase_control(self):
         response = client.get("/phases")
