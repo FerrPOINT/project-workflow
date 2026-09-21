@@ -41,7 +41,11 @@ html[data-theme='dark'] .agent-delete,html[data-theme='dark'] .agent-delete:hove
   .agent-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
   .agent-fields .agent-description-field{grid-column:1/-1}
 }
-@media(max-width:480px){.agent-fields{grid-template-columns:minmax(0,1fr)}.agent-fields .agent-description-field{grid-column:auto}}
+@media(max-width:480px){
+  .agent-fields{grid-template-columns:minmax(0,1fr)}
+  .agent-fields .agent-description-field{grid-column:auto}
+  .agent-editor input,.agent-editor .btn,.agent-create summary{min-height:44px}
+}
 {% endblock %}
 
 {% block content %}
@@ -96,6 +100,7 @@ function cancelAgent(button){
   var entry=button.closest('.agent-entry');
   entry.querySelector('form').reset();
   entry.open=false;
+  entry.querySelector('summary').focus();
 }
 async function saveAgent(event,form){
   event.preventDefault();
@@ -120,21 +125,29 @@ async function saveAgent(event,form){
     entry.querySelector('.agent-description').textContent=description||'Без описания';
     entry.querySelector('summary').setAttribute('aria-label','Редактировать агента '+name);
     entry.open=false;
+    entry.querySelector('summary').focus();
     showToast('Сохранено','success');
   }catch(error){showRequestError(error)}finally{button.disabled=false}
 }
 async function deleteAgent(button){
   var entry=button.closest('.agent-entry');
-  if(!await requestConfirmation({eyebrow:'Удаление агента',title:'Удалить агента?',message:'Агент будет удалён из списка.',confirmLabel:'Удалить'}))return;
+  var name=entry.querySelector('.agent-name').textContent.trim();
+  if(!await requestConfirmation({eyebrow:'Удаление агента',title:'Удалить агента «'+name+'»?',message:'Агент «'+name+'» будет удалён из списка.',confirmLabel:'Удалить'}))return;
   button.disabled=true;
   try{
     var response=await fetch('/api/agents/'+entry.dataset.id,{method:'DELETE'});
     var data=await response.json();
     if(!data.ok){showToast(data.error||'Ошибка','error');return;}
+    var next=entry.nextElementSibling;
+    var previous=entry.previousElementSibling;
+    var focusTarget=(next&&next.matches('.agent-entry')&&next.querySelector('summary'))
+      ||(previous&&previous.matches('.agent-entry')&&previous.querySelector('summary'))
+      ||document.querySelector('#agentCreatePanel summary');
     entry.remove();
     var count=document.querySelectorAll('.agent-entry').length;
     document.getElementById('agentCount').textContent=count;
     document.getElementById('agentsEmpty').hidden=count>0;
+    if(focusTarget)focusTarget.focus();
     showToast('Удалено','success');
   }catch(error){showRequestError(error)}finally{button.disabled=false}
 }
