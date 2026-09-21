@@ -2515,6 +2515,12 @@ def test_ui_deletions_use_product_modal_not_browser_confirm():
 
     assert 'id="confirmDialog"' in base
     assert "function requestConfirmation" in base
+    assert "background.forEach(function(element){ element.inert = true; })" in base
+    assert "background.forEach(function(element,index){ element.inert = previousInert[index]; })" in base
+    assert "if(event.key === 'Tab')" in base
+    assert "sidebar.inert=!document.getElementById('confirmDialog').hidden" in base
+    assert ".btn-danger{background:#b42332;color:#fff" in base
+    assert "html[data-theme='dark'] .modal-eyebrow{color:#ff6b6b}" in base
     assert all("confirm(" not in template for template in templates.values())
 
 

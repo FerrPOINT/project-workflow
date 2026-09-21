@@ -127,12 +127,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .btn-primary:hover{background:var(--accent-hover);color:var(--accent-hover-foreground)}
 .btn-secondary{background:var(--surface);color:var(--text-secondary);border-color:var(--border)}
 .btn-secondary:hover{background:var(--surface-hover);color:var(--text)}
-.btn-danger{background:var(--red);color:#fff;border-color:var(--red)}
+.btn-danger{background:#b42332;color:#fff;border-color:#b42332}
 .btn-danger:hover{filter:brightness(1.08)}
 .modal-backdrop[hidden]{display:none}
 .modal-backdrop{position:fixed;inset:0;z-index:300;display:grid;place-items:center;padding:20px;background:rgba(5,6,10,.72);backdrop-filter:blur(5px)}
 .modal-card{width:min(100%,420px);background:var(--surface);border:1px solid var(--border-strong);border-radius:14px;padding:22px;box-shadow:0 24px 64px rgba(0,0,0,.48)}
 .modal-eyebrow{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--red)}
+html[data-theme='dark'] .modal-eyebrow{color:#ff6b6b}
 .modal-title{margin:8px 0 0;font-size:20px;line-height:1.25;color:var(--text)}
 .modal-copy{margin-top:10px;color:var(--text-muted);line-height:1.55}
 .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;flex-wrap:wrap}
@@ -458,7 +459,7 @@ function syncSidebarLayout(){
     document.getElementById('burgerBtn').setAttribute('aria-expanded','false');
     document.body.style.overflow='';
   }
-  sidebar.inert=mobile&&!sidebar.classList.contains('open');
+  sidebar.inert=!document.getElementById('confirmDialog').hidden||(mobile&&!sidebar.classList.contains('open'));
 }
 function openSidebar(){
   document.getElementById('sidebar').classList.add('open');
@@ -521,17 +522,22 @@ function requestConfirmation(options){
   var cancel = document.getElementById('confirmDialogCancel');
   var accept = document.getElementById('confirmDialogAccept');
   var trigger = document.activeElement;
+  var background = [document.querySelector('.sidebar'), document.querySelector('.main')];
+  var previousInert = background.map(function(element){ return element.inert; });
   document.getElementById('confirmDialogEyebrow').textContent = options.eyebrow || 'Подтверждение';
   document.getElementById('confirmDialogTitle').textContent = options.title || 'Подтвердите действие';
   document.getElementById('confirmDialogCopy').textContent = options.message || '';
   accept.textContent = options.confirmLabel || 'Удалить';
   dialog.hidden = false;
   dialog.setAttribute('aria-hidden', 'false');
+  background.forEach(function(element){ element.inert = true; });
   accept.focus();
   return new Promise(function(resolve){
     function close(value){
       dialog.hidden = true;
       dialog.setAttribute('aria-hidden', 'true');
+      background.forEach(function(element,index){ element.inert = previousInert[index]; });
+      syncSidebarLayout();
       cancel.removeEventListener('click', onCancel);
       accept.removeEventListener('click', onAccept);
       dialog.removeEventListener('click', onBackdrop);
@@ -542,7 +548,18 @@ function requestConfirmation(options){
     function onCancel(){ close(false); }
     function onAccept(){ close(true); }
     function onBackdrop(event){ if(event.target === dialog){ close(false); } }
-    function onKeyDown(event){ if(event.key === 'Escape'){ close(false); } }
+    function onKeyDown(event){
+      if(event.key === 'Escape'){ close(false); }
+      if(event.key === 'Tab'){
+        if(event.shiftKey && (document.activeElement === cancel || !dialog.contains(document.activeElement))){
+          event.preventDefault();
+          accept.focus();
+        }else if(!event.shiftKey && (document.activeElement === accept || !dialog.contains(document.activeElement))){
+          event.preventDefault();
+          cancel.focus();
+        }
+      }
+    }
     cancel.addEventListener('click', onCancel);
     accept.addEventListener('click', onAccept);
     dialog.addEventListener('click', onBackdrop);
