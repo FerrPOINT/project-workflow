@@ -2,20 +2,22 @@
 
 `project-workflow` is server-rendered, but follows the Base [UI Shell
 Standard](https://github.com/FerrPOINT/services-base/blob/main/docs/platform/UI_SHELL_STANDARD.md).
-The implementation keeps one left sidebar, one global header and a fluid right
-work area across authenticated routes. Jinja templates must preserve this DOM
-and behavior contract rather than create route-local shell variants.
+The implementation keeps the shared 264 px/72 px left sidebar, 60 px header
+and full-width right work area across authenticated routes. Jinja templates must
+preserve this DOM and behavior contract rather than create route-local shell
+variants or project-local content-width classes.
 
 ## Page Geometry
 
-- Dashboard, tasks, workflows, phases, instructions and agents use the
-  available right work width. Tables, lists and timelines use `minmax(0, 1fr)`;
-  technical horizontal scrolling remains local to its data container.
-- Namespace, workflow, phase and agent editors use a readable constrained
-  content column or bounded split pane. Their max-width never constrains task
-  lists, dashboards or phase timelines.
-- Task/phase details use a fluid primary column plus bounded contextual blocks;
-  supporting content moves below the primary content before document overflow.
+- Dashboard, tasks, workflows, phases, instructions and agents use `wide`.
+  Tables, lists and timelines use `minmax(0, 1fr)`; technical horizontal
+  scrolling remains local to its data container.
+- Namespace, workflow, phase and agent editors use `reading/form`: only the
+  inner form column is bounded to 760 px. It never constrains task lists,
+  dashboards or phase timelines.
+- Task/phase details use `detail-with-aside`: a fluid primary column plus a
+  320 px contextual rail; supporting content moves below it before document
+  overflow.
 - Every page keeps `main` and page containers shrinkable (`min-width: 0`).
   No route may widen `body` beyond the viewport.
 
