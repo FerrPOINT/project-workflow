@@ -26,6 +26,7 @@
 .panel-actions{display:flex;gap:10px;flex-wrap:wrap}
 .workflow-delete{margin-left:auto;color:var(--text);border-color:var(--red)}
 .workflow-delete:hover{color:var(--text);background:var(--red-soft)}
+.workflow-delete-hint{font-size:12px;color:var(--text-muted);line-height:1.5}
 .empty-note{color:var(--text-dim);font-size:13px;line-height:1.6}
 .workflow-mobile-actions{display:none}
 @media (max-width: 980px){
@@ -59,7 +60,7 @@
   </div>
   <section class="workflow-nav side-nav-scroll" id="workflowNav">
     {% for workflow in workflows %}
-    <button type="button" class="workflow-nav-item {% if selected_workflow and selected_workflow.id == workflow.id %}active{% endif %}" data-workflow-id="{{ workflow.id }}" onclick="selectWorkflow({{ workflow.id }})">
+    <button type="button" class="workflow-nav-item {% if selected_workflow and selected_workflow.id == workflow.id %}active{% endif %}" data-workflow-id="{{ workflow.id }}" aria-controls="workflowForm" aria-pressed="{{ 'true' if selected_workflow and selected_workflow.id == workflow.id else 'false' }}" onclick="selectWorkflow({{ workflow.id }})">
       <div class="workflow-name">{{ workflow.name }}</div>
       <div class="workflow-meta">
         <span>{{ workflow.namespace_count | pluralize('неймспейс,неймспейса,неймспейсов') }}</span>
@@ -72,11 +73,11 @@
   </section>
 
   <section class="workflow-panel">
-    <form id="workflowForm" class="card form-stack" onsubmit="event.preventDefault(); submitWorkflow();">
+    <form id="workflowForm" class="card form-stack" aria-labelledby="workflowFormMode" onsubmit="event.preventDefault(); submitWorkflow();">
       <div class="card-title" id="workflowFormMode">Редактирование воркфлоу</div>
       <div>
         <label class="label" for="workflowName">Название</label>
-        <input type="text" id="workflowName" value="{{ selected_workflow.name if selected_workflow else '' }}">
+        <input type="text" id="workflowName" value="{{ selected_workflow.name if selected_workflow else '' }}" required>
       </div>
       <div>
         <label class="label" for="workflowDescription">Описание</label>
@@ -87,6 +88,7 @@
         <button class="btn btn-secondary" type="button" id="cancelCreateWorkflowButton" onclick="cancelCreateWorkflow()" style="display:none">Отмена</button>
         <button class="btn btn-secondary workflow-delete" type="button" id="deleteWorkflowButton" onclick="deleteWorkflow()">Удалить</button>
       </div>
+      <p class="workflow-delete-hint" id="workflowDeleteHint" hidden>Воркфлоу по умолчанию нельзя удалить.</p>
     </form>
   </section>
 </div>
@@ -113,7 +115,9 @@ function currentWorkflowPayload(){
 }
 function syncWorkflowNav(){
   document.querySelectorAll('#workflowNav [data-workflow-id]').forEach(function(node){
-    node.classList.toggle('active', Number(node.dataset.workflowId) === selectedWorkflowId);
+    var active = Number(node.dataset.workflowId) === selectedWorkflowId;
+    node.classList.toggle('active', active);
+    node.setAttribute('aria-pressed', String(active));
   });
   var picker = document.getElementById('workflowSelect');
   picker.options[0].textContent = workflowFormMode === 'create' ? 'Новый воркфлоу' : 'Выберите воркфлоу';
@@ -126,9 +130,15 @@ function fillWorkflowForm(workflow){
 function setWorkflowFormMode(mode){
   workflowFormMode = mode;
   var createMode = mode === 'create';
+  var workflow = workflowById(selectedWorkflowId);
+  var protectedDefault = !createMode && Boolean(workflow && workflow.is_default);
+  var deleteButton = document.getElementById('deleteWorkflowButton');
   document.getElementById('workflowFormMode').textContent = createMode ? 'Новый воркфлоу' : 'Редактирование воркфлоу';
   document.getElementById('workflowSubmitButton').textContent = createMode ? 'Создать воркфлоу' : 'Сохранить';
-  document.getElementById('deleteWorkflowButton').style.display = createMode ? 'none' : '';
+  deleteButton.textContent = 'Удалить';
+  deleteButton.style.display = createMode ? 'none' : '';
+  deleteButton.disabled = protectedDefault;
+  document.getElementById('workflowDeleteHint').hidden = !protectedDefault;
   document.getElementById('cancelCreateWorkflowButton').style.display = createMode && workflowStore.length ? '' : 'none';
 }
 function startCreateWorkflow(){
@@ -139,6 +149,7 @@ function startCreateWorkflow(){
   fillWorkflowForm(null);
   setWorkflowFormMode('create');
   syncWorkflowNav();
+  document.getElementById('workflowName').focus();
 }
 function cancelCreateWorkflow(){
   if(workflowStore.length === 0){
@@ -150,6 +161,7 @@ function cancelCreateWorkflow(){
     fallbackId = workflowStore[0].id;
   }
   selectWorkflow(fallbackId);
+  document.getElementById('workflowName').focus();
 }
 function selectWorkflow(id){
   selectedWorkflowId = id;
@@ -184,6 +196,8 @@ function renderWorkflowNav(){
     button.type = 'button';
     button.className = 'workflow-nav-item';
     button.dataset.workflowId = String(workflow.id);
+    button.setAttribute('aria-controls', 'workflowForm');
+    button.setAttribute('aria-pressed', 'false');
     button.onclick = function(){ selectWorkflow(workflow.id); };
 
     var name = document.createElement('div');
@@ -206,7 +220,7 @@ function renderWorkflowNav(){
   });
 }
 function reloadWorkflows(nextId){
-  fetch('/api/workflows')
+  return fetch('/api/workflows')
     .then(function(r){return r.json()})
     .then(function(d){
       if(!d.ok){showToast(d.error || 'Ошибка загрузки воркфлоу','error');return;}
@@ -234,14 +248,14 @@ function reloadWorkflows(nextId){
 function saveWorkflow(){
   if(selectedWorkflowId == null){ showToast('Воркфлоу не выбран','error'); return; }
   var payload = currentWorkflowPayload();
-  fetch('/api/workflows/' + selectedWorkflowId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+  return fetch('/api/workflows/' + selectedWorkflowId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json()})
-    .then(function(d){ if(d.ok){ showToast('Воркфлоу сохранён','success'); reloadWorkflows(selectedWorkflowId); } else { showToast(d.error || 'Ошибка','error'); } })
+    .then(function(d){ if(d.ok){ showToast('Воркфлоу сохранён','success'); return reloadWorkflows(selectedWorkflowId); } showToast(d.error || 'Ошибка','error'); })
     .catch(showRequestError);
 }
 function createWorkflow(){
   var payload = currentWorkflowPayload();
-  fetch('/api/workflows',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+  return fetch('/api/workflows',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json()})
     .then(function(d){
       if(d.ok){
@@ -257,29 +271,41 @@ function createWorkflow(){
 async function deleteWorkflow(){
   if(selectedWorkflowId == null){ showToast('Воркфлоу не выбран','error'); return; }
   var workflow = workflowById(selectedWorkflowId);
+  var title = workflow ? 'Удалить воркфлоу «' + workflow.name + '»?' : 'Удалить воркфлоу?';
   var message = workflow
     ? '«' + workflow.name + '» будет удалён. Пустые неймспейсы будут переведены на воркфлоу по умолчанию.'
     : 'Воркфлоу будет удалён.';
-  if(!await requestConfirmation({eyebrow:'Удаление воркфлоу',title:'Удалить воркфлоу?',message:message,confirmLabel:'Удалить'})) return;
+  if(!await requestConfirmation({eyebrow:'Удаление воркфлоу',title:title,message:message,confirmLabel:'Удалить'})) return;
   var workflowId = selectedWorkflowId;
-  fetch('/api/workflows/' + workflowId,{method:'DELETE'})
+  var button = document.getElementById('deleteWorkflowButton');
+  button.disabled = true;
+  button.textContent = 'Удаление…';
+  return fetch('/api/workflows/' + workflowId,{method:'DELETE'})
     .then(function(r){return r.json()})
     .then(function(d){
       if(d.ok){
         showToast('Воркфлоу удалён','success');
-        reloadWorkflows(null);
+        return reloadWorkflows(null);
       } else {
         showToast(d.error || 'Ошибка','error');
       }
     })
-    .catch(showRequestError);
+    .catch(showRequestError)
+    .finally(function(){ setWorkflowFormMode(workflowFormMode); });
 }
 function submitWorkflow(){
-  if(workflowFormMode === 'create'){
-    createWorkflow();
+  var nameInput = document.getElementById('workflowName');
+  if(!nameInput.value.trim()){
+    showToast('Введите название воркфлоу','error');
+    nameInput.focus();
     return;
   }
-  saveWorkflow();
+  var button = document.getElementById('workflowSubmitButton');
+  if(button.disabled)return;
+  button.disabled = true;
+  button.textContent = workflowFormMode === 'create' ? 'Создание…' : 'Сохранение…';
+  var operation = workflowFormMode === 'create' ? createWorkflow() : saveWorkflow();
+  Promise.resolve(operation).finally(function(){ button.disabled = false; setWorkflowFormMode(workflowFormMode); });
 }
 renderWorkflowNav();
 if(selectedWorkflowId == null){

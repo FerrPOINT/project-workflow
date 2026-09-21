@@ -2360,6 +2360,16 @@ class TestWorkflowsPage:
         assert 'id="workflowFormMode"' in response.text
         assert 'id="workflowSelect"' in response.text
         assert 'class="workflow-description"' in response.text
+        assert 'id="workflowName"' in response.text and "required" in response.text
+        assert 'id="workflowDeleteHint" hidden' in response.text
+        assert 'aria-controls="workflowForm" aria-pressed="true"' in response.text
+        assert "node.setAttribute('aria-pressed', String(active))" in response.text
+        assert response.text.count("document.getElementById('workflowName').focus()") == 2
+        assert "deleteButton.disabled = protectedDefault" in response.text
+        assert "title = workflow ? 'Удалить воркфлоу «' + workflow.name + '»?'" in response.text
+        assert "Promise.resolve(operation).finally" in response.text
+        assert "button.textContent = workflowFormMode === 'create' ? 'Создание…' : 'Сохранение…'" in response.text
+        assert "button.textContent = 'Удаление…'" in response.text
         assert 'spellcheck="false"' not in response.text
         assert 'id="workflowThemeIcon"' not in response.text
         assert 'id="workflowThemeColor"' not in response.text
