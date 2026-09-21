@@ -1,0 +1,1769 @@
+[
+  {
+    "viewport": {
+      "width": 375,
+      "height": 812
+    },
+    "theme": "dark",
+    "route": "dashboard",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 61,
+      "sidebarWidth": 320,
+      "mainLeft": 0,
+      "burgerVisible": true,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Дашборд",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 120
+    }
+  },
+  {
+    "viewport": {
+      "width": 375,
+      "height": 812
+    },
+    "theme": "dark",
+    "route": "workflows",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 61,
+      "sidebarWidth": 320,
+      "mainLeft": 0,
+      "burgerVisible": true,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Воркфлоу",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 120
+    }
+  },
+  {
+    "viewport": {
+      "width": 375,
+      "height": 812
+    },
+    "theme": "dark",
+    "route": "phases",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 61,
+      "sidebarWidth": 320,
+      "mainLeft": 0,
+      "burgerVisible": true,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Фазы",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 120
+    }
+  },
+  {
+    "viewport": {
+      "width": 375,
+      "height": 812
+    },
+    "theme": "dark",
+    "route": "tasks",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 61,
+      "sidebarWidth": 320,
+      "mainLeft": 0,
+      "burgerVisible": true,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Задачи",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 120
+    }
+  },
+  {
+    "viewport": {
+      "width": 375,
+      "height": 812
+    },
+    "theme": "dark",
+    "route": "task-detail",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 61,
+      "sidebarWidth": 320,
+      "mainLeft": 0,
+      "burgerVisible": true,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Задачи",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 120
+    }
+  },
+  {
+    "viewport": {
+      "width": 375,
+      "height": 812
+    },
+    "theme": "dark",
+    "route": "settings",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 61,
+      "sidebarWidth": 320,
+      "mainLeft": 0,
+      "burgerVisible": true,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Команды CLI",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 120
+    }
+  },
+  {
+    "viewport": {
+      "width": 375,
+      "height": 812
+    },
+    "theme": "dark",
+    "drawer": {
+      "width": 320,
+      "focusInsideBefore": true,
+      "focusInsideAfter": true,
+      "focusReturned": true
+    }
+  },
+  {
+    "viewport": {
+      "width": 375,
+      "height": 812
+    },
+    "theme": "gray",
+    "route": "dashboard",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 61,
+      "sidebarWidth": 320,
+      "mainLeft": 0,
+      "burgerVisible": true,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Дашборд",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 120
+    }
+  },
+  {
+    "viewport": {
+      "width": 375,
+      "height": 812
+    },
+    "theme": "gray",
+    "route": "workflows",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 61,
+      "sidebarWidth": 320,
+      "mainLeft": 0,
+      "burgerVisible": true,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Воркфлоу",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 120
+    }
+  },
+  {
+    "viewport": {
+      "width": 375,
+      "height": 812
+    },
+    "theme": "gray",
+    "route": "phases",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 61,
+      "sidebarWidth": 320,
+      "mainLeft": 0,
+      "burgerVisible": true,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Фазы",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 120
+    }
+  },
+  {
+    "viewport": {
+      "width": 375,
+      "height": 812
+    },
+    "theme": "gray",
+    "route": "tasks",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 61,
+      "sidebarWidth": 320,
+      "mainLeft": 0,
+      "burgerVisible": true,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Задачи",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 120
+    }
+  },
+  {
+    "viewport": {
+      "width": 375,
+      "height": 812
+    },
+    "theme": "gray",
+    "route": "task-detail",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 61,
+      "sidebarWidth": 320,
+      "mainLeft": 0,
+      "burgerVisible": true,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Задачи",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 120
+    }
+  },
+  {
+    "viewport": {
+      "width": 375,
+      "height": 812
+    },
+    "theme": "gray",
+    "route": "settings",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 61,
+      "sidebarWidth": 320,
+      "mainLeft": 0,
+      "burgerVisible": true,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Команды CLI",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 120
+    }
+  },
+  {
+    "viewport": {
+      "width": 375,
+      "height": 812
+    },
+    "theme": "gray",
+    "drawer": {
+      "width": 320,
+      "focusInsideBefore": true,
+      "focusInsideAfter": true,
+      "focusReturned": true
+    }
+  },
+  {
+    "viewport": {
+      "width": 375,
+      "height": 812
+    },
+    "theme": "light",
+    "route": "dashboard",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 61,
+      "sidebarWidth": 320,
+      "mainLeft": 0,
+      "burgerVisible": true,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Дашборд",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 120
+    }
+  },
+  {
+    "viewport": {
+      "width": 375,
+      "height": 812
+    },
+    "theme": "light",
+    "route": "workflows",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 61,
+      "sidebarWidth": 320,
+      "mainLeft": 0,
+      "burgerVisible": true,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Воркфлоу",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 120
+    }
+  },
+  {
+    "viewport": {
+      "width": 375,
+      "height": 812
+    },
+    "theme": "light",
+    "route": "phases",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 61,
+      "sidebarWidth": 320,
+      "mainLeft": 0,
+      "burgerVisible": true,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Фазы",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 120
+    }
+  },
+  {
+    "viewport": {
+      "width": 375,
+      "height": 812
+    },
+    "theme": "light",
+    "route": "tasks",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 61,
+      "sidebarWidth": 320,
+      "mainLeft": 0,
+      "burgerVisible": true,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Задачи",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 120
+    }
+  },
+  {
+    "viewport": {
+      "width": 375,
+      "height": 812
+    },
+    "theme": "light",
+    "route": "task-detail",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 61,
+      "sidebarWidth": 320,
+      "mainLeft": 0,
+      "burgerVisible": true,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Задачи",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 120
+    }
+  },
+  {
+    "viewport": {
+      "width": 375,
+      "height": 812
+    },
+    "theme": "light",
+    "route": "settings",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 61,
+      "sidebarWidth": 320,
+      "mainLeft": 0,
+      "burgerVisible": true,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Команды CLI",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 120
+    }
+  },
+  {
+    "viewport": {
+      "width": 375,
+      "height": 812
+    },
+    "theme": "light",
+    "drawer": {
+      "width": 320,
+      "focusInsideBefore": true,
+      "focusInsideAfter": true,
+      "focusReturned": true
+    }
+  },
+  {
+    "viewport": {
+      "width": 768,
+      "height": 900
+    },
+    "theme": "dark",
+    "route": "dashboard",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 72,
+      "mainLeft": 72,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Дашборд",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 768,
+      "height": 900
+    },
+    "theme": "dark",
+    "route": "workflows",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 72,
+      "mainLeft": 72,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Воркфлоу",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 768,
+      "height": 900
+    },
+    "theme": "dark",
+    "route": "phases",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 72,
+      "mainLeft": 72,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Фазы",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 768,
+      "height": 900
+    },
+    "theme": "dark",
+    "route": "tasks",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 72,
+      "mainLeft": 72,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Задачи",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 768,
+      "height": 900
+    },
+    "theme": "dark",
+    "route": "task-detail",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 72,
+      "mainLeft": 72,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Задачи",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 768,
+      "height": 900
+    },
+    "theme": "dark",
+    "route": "settings",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 72,
+      "mainLeft": 72,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Команды CLI",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 768,
+      "height": 900
+    },
+    "theme": "gray",
+    "route": "dashboard",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 72,
+      "mainLeft": 72,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Дашборд",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 768,
+      "height": 900
+    },
+    "theme": "gray",
+    "route": "workflows",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 72,
+      "mainLeft": 72,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Воркфлоу",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 768,
+      "height": 900
+    },
+    "theme": "gray",
+    "route": "phases",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 72,
+      "mainLeft": 72,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Фазы",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 768,
+      "height": 900
+    },
+    "theme": "gray",
+    "route": "tasks",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 72,
+      "mainLeft": 72,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Задачи",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 768,
+      "height": 900
+    },
+    "theme": "gray",
+    "route": "task-detail",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 72,
+      "mainLeft": 72,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Задачи",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 768,
+      "height": 900
+    },
+    "theme": "gray",
+    "route": "settings",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 72,
+      "mainLeft": 72,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Команды CLI",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 768,
+      "height": 900
+    },
+    "theme": "light",
+    "route": "dashboard",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 72,
+      "mainLeft": 72,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Дашборд",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 768,
+      "height": 900
+    },
+    "theme": "light",
+    "route": "workflows",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 72,
+      "mainLeft": 72,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Воркфлоу",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 768,
+      "height": 900
+    },
+    "theme": "light",
+    "route": "phases",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 72,
+      "mainLeft": 72,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Фазы",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 768,
+      "height": 900
+    },
+    "theme": "light",
+    "route": "tasks",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 72,
+      "mainLeft": 72,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Задачи",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 768,
+      "height": 900
+    },
+    "theme": "light",
+    "route": "task-detail",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 72,
+      "mainLeft": 72,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Задачи",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 768,
+      "height": 900
+    },
+    "theme": "light",
+    "route": "settings",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 72,
+      "mainLeft": 72,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Команды CLI",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "theme": "dark",
+    "route": "dashboard",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Дашборд",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "theme": "dark",
+    "route": "workflows",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Воркфлоу",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "theme": "dark",
+    "route": "phases",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Фазы",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "theme": "dark",
+    "route": "tasks",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Задачи",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "theme": "dark",
+    "route": "task-detail",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Задачи",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "theme": "dark",
+    "route": "settings",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Команды CLI",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "theme": "gray",
+    "route": "dashboard",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Дашборд",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "theme": "gray",
+    "route": "workflows",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Воркфлоу",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "theme": "gray",
+    "route": "phases",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Фазы",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "theme": "gray",
+    "route": "tasks",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Задачи",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "theme": "gray",
+    "route": "task-detail",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Задачи",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "theme": "gray",
+    "route": "settings",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Команды CLI",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "theme": "light",
+    "route": "dashboard",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Дашборд",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "theme": "light",
+    "route": "workflows",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Воркфлоу",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "theme": "light",
+    "route": "phases",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Фазы",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "theme": "light",
+    "route": "tasks",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Задачи",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "theme": "light",
+    "route": "task-detail",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Задачи",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "theme": "light",
+    "route": "settings",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Команды CLI",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 2560,
+      "height": 1200
+    },
+    "theme": "dark",
+    "route": "dashboard",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Дашборд",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 2560,
+      "height": 1200
+    },
+    "theme": "dark",
+    "route": "workflows",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Воркфлоу",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 2560,
+      "height": 1200
+    },
+    "theme": "dark",
+    "route": "phases",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Фазы",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 2560,
+      "height": 1200
+    },
+    "theme": "dark",
+    "route": "tasks",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Задачи",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 2560,
+      "height": 1200
+    },
+    "theme": "dark",
+    "route": "task-detail",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Задачи",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 2560,
+      "height": 1200
+    },
+    "theme": "dark",
+    "route": "settings",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Команды CLI",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 2560,
+      "height": 1200
+    },
+    "theme": "gray",
+    "route": "dashboard",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Дашборд",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 2560,
+      "height": 1200
+    },
+    "theme": "gray",
+    "route": "workflows",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Воркфлоу",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 2560,
+      "height": 1200
+    },
+    "theme": "gray",
+    "route": "phases",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Фазы",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 2560,
+      "height": 1200
+    },
+    "theme": "gray",
+    "route": "tasks",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Задачи",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 2560,
+      "height": 1200
+    },
+    "theme": "gray",
+    "route": "task-detail",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Задачи",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 2560,
+      "height": 1200
+    },
+    "theme": "gray",
+    "route": "settings",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Команды CLI",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 2560,
+      "height": 1200
+    },
+    "theme": "light",
+    "route": "dashboard",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Дашборд",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 2560,
+      "height": 1200
+    },
+    "theme": "light",
+    "route": "workflows",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Воркфлоу",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 2560,
+      "height": 1200
+    },
+    "theme": "light",
+    "route": "phases",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Фазы",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 2560,
+      "height": 1200
+    },
+    "theme": "light",
+    "route": "tasks",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Задачи",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 2560,
+      "height": 1200
+    },
+    "theme": "light",
+    "route": "task-detail",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Задачи",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  },
+  {
+    "viewport": {
+      "width": 2560,
+      "height": 1200
+    },
+    "theme": "light",
+    "route": "settings",
+    "errors": [],
+    "metrics": {
+      "horizontalOverflow": 0,
+      "headerHeight": 60,
+      "sidebarWidth": 264,
+      "mainLeft": 264,
+      "burgerVisible": false,
+      "smallControls": [],
+      "unlabeledControls": 0,
+      "activeRoute": true,
+      "activeLinks": [
+        "Команды CLI",
+        "Project Workflow"
+      ],
+      "expectedHeaderMax": 60
+    }
+  }
+]

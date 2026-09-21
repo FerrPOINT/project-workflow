@@ -497,14 +497,19 @@ class TestPhasesPage:
         assert 'href="/workflows"' in response.text
         assert "Воркфлоу" in response.text
 
-    def test_shared_shell_collapses_sidebar_without_losing_logout_or_contrast(self):
+    def test_shared_shell_uses_desktop_rail_and_mobile_drawer_contract(self):
         response = client.get("/workflows")
         assert response.status_code == 200
-        assert "@media(max-width:1120px)" in response.text
-        assert "window.matchMedia('(max-width: 1120px)')" in response.text
+        assert "--sidebar-width:264px;--header-height:60px" in response.text
+        assert "@media(max-width:1279px) and (min-width:768px)" in response.text
+        assert ":root{--sidebar-width:72px}" in response.text
+        assert "@media(max-width:767px)" in response.text
+        assert "window.matchMedia('(max-width: 767px)')" in response.text
         assert 'class="sidebar-logout" href="/logout"' in response.text
         assert 'class="btn btn-secondary header-logout" href="/logout"' in response.text
         assert ".header .header-logout{display:none}" in response.text
+        assert "sidebar.setAttribute('role','dialog')" in response.text
+        assert "sidebar.setAttribute('aria-modal','true')" in response.text
         assert "color:var(--accent-foreground);border-color:var(--accent)" in response.text
         assert "color:var(--accent-hover-foreground)" in response.text
         assert "--accent-foreground:" in response.text
@@ -531,7 +536,10 @@ class TestPhasesPage:
         hrefs = re.findall(r'href="([^"]+)"', sidebar_nav.group(1))
         assert hrefs[:5] == ["/namespaces", "/", "/workflows", "/phases", "/tasks"]
         assert 'aria-label="Основная навигация"' in response.text
-        assert '<a class="sidebar-link active" href="/phases" aria-current="page">' in response.text
+        assert re.search(
+            r'<a class="sidebar-link active" href="/phases"[^>]*aria-current="page">',
+            response.text,
+        )
         assert sidebar_nav.group(1).count('aria-current="page"') == 2
 
     def test_phases_page_hides_duplicate_nav_for_single_workflow(self):
