@@ -4,17 +4,22 @@
 
 {% block extra_style %}
 .cli-mobile-title{display:none}
-.cli-reference{display:flex;flex-direction:column;gap:16px;max-width:980px}
-.cli-command{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px}
-.cli-command h3{margin:0 0 10px;font-size:16px;color:var(--text)}
-.cli-usage{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent-readable);background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:12px;overflow-x:auto;margin-bottom:12px}
+.cli-reference{display:flex;flex-direction:column;gap:12px;max-width:980px}
+.cli-command{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px}
+.cli-command h2{margin:0 0 10px;font-size:16px;color:var(--text)}
+.cli-usage-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:stretch;margin-bottom:12px}
+.cli-usage{display:block;min-width:0;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent-readable);background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:11px 12px;overflow-x:auto;white-space:nowrap}
+.cli-copy{min-height:40px;align-self:stretch}
+.cli-copy:disabled{opacity:.6;cursor:wait}
 .cli-summary{font-size:14px;line-height:1.6;color:var(--text-secondary);margin-bottom:12px}
 .cli-options{display:flex;flex-direction:column;gap:10px}
 .cli-option{display:grid;grid-template-columns:minmax(180px,260px) 1fr;gap:12px;padding:10px 0;border-top:1px solid var(--border)}
 .cli-option:first-child{border-top:none;padding-top:0}
 .cli-option-flags{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text)}
 .cli-option-help{font-size:13px;color:var(--text-secondary);line-height:1.5}
-@media (max-width: 820px){.cli-option{grid-template-columns:1fr}}
+.cli-empty{max-width:680px;color:var(--text-muted);line-height:1.6}
+@media (max-width: 820px){.cli-option{grid-template-columns:1fr}.cli-reference{max-width:680px}}
+@media (max-width: 520px){.cli-usage-row{grid-template-columns:minmax(0,1fr)}.cli-copy{justify-self:start}}
 @media (max-width: 480px){.cli-desktop-title{display:none}.cli-mobile-title{display:inline}}
 {% endblock %}
 
@@ -22,8 +27,11 @@
 <div class="cli-reference">
   {% for command in commands %}
   <section class="cli-command">
-    <h3>{{ command.name }}</h3>
-    <div class="cli-usage">{{ command.usage }}</div>
+    <h2>{{ command.name }}</h2>
+    <div class="cli-usage-row">
+      <code class="cli-usage" id="cliUsage{{ loop.index }}">{{ command.usage }}</code>
+      <button class="btn btn-secondary cli-copy" type="button" aria-label="Копировать команду {{ command.name }}" onclick="copyCliUsage(this, 'cliUsage{{ loop.index }}')">Копировать</button>
+    </div>
     {% if command.summary %}
     <div class="cli-summary">{{ command.summary }}</div>
     {% endif %}
@@ -43,6 +51,51 @@
     </div>
     {% endif %}
   </section>
+  {% else %}
+  <div class="card cli-empty" role="status">Доступные CLI-команды не найдены.</div>
   {% endfor %}
 </div>
+{% endblock %}
+
+{% block extra_script %}
+function fallbackCopyCliUsage(text){
+  var field = document.createElement('textarea');
+  field.value = text;
+  field.setAttribute('readonly', '');
+  field.style.position = 'fixed';
+  field.style.opacity = '0';
+  document.body.appendChild(field);
+  field.select();
+  var copied = document.execCommand('copy');
+  field.remove();
+  if(!copied){ throw new Error('copy command failed'); }
+}
+async function copyCliUsage(button, usageId){
+  if(button.disabled){ return; }
+  var usage = document.getElementById(usageId);
+  if(!usage){ showToast('Команда не найдена','error'); return; }
+  clearTimeout(button._copyTimer);
+  button.disabled = true;
+  button.textContent = 'Копирование…';
+  try{
+    var text = usage.textContent.trim();
+    if(navigator.clipboard && window.isSecureContext){
+      await navigator.clipboard.writeText(text);
+    }else{
+      fallbackCopyCliUsage(text);
+    }
+    button.textContent = 'Скопировано';
+    showToast('Команда скопирована','success');
+  }catch(_error){
+    button.textContent = 'Копировать';
+    showToast('Не удалось скопировать команду','error');
+  }finally{
+    button.disabled = false;
+    button.focus();
+    if(button.textContent === 'Скопировано'){
+      clearTimeout(button._copyTimer);
+      button._copyTimer = setTimeout(function(){ button.textContent = 'Копировать'; }, 1600);
+    }
+  }
+}
 {% endblock %}
