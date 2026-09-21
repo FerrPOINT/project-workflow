@@ -7,6 +7,10 @@ and full-width right work area across authenticated routes. Jinja templates must
 preserve this DOM and behavior contract rather than create route-local shell
 variants or project-local content-width classes.
 
+**Implementation status (2026-09-21):** `base.html` implements the contract at
+desktop, tablet and mobile breakpoints; regression tests pin its geometry,
+drawer semantics and keyboard behavior.
+
 ## Page Geometry
 
 - Dashboard, tasks, workflows, phases, instructions and agents use `wide`.

@@ -18,7 +18,7 @@
   --border:rgba(255,255,255,.06);--border-strong:rgba(255,255,255,.10);
   --green:#22c55e;--green-soft:rgba(34,197,94,.12);--red:#ef4444;--red-soft:rgba(239,68,68,.12);
   --orange:#f59e0b;--orange-soft:rgba(245,158,11,.12);--yellow:#eab308;--yellow-soft:rgba(234,179,8,.12);--blue:#3b82f6;
-  --sidebar-width:240px;--header-height:52px;
+  --sidebar-width:264px;--header-height:60px;
 }
 html[data-theme='gray']{
   --bg:#23242a;--panel:#2d2e35;--surface:#373941;--surface-hover:#43464f;--surface-active:#50535c;
@@ -57,9 +57,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
   display:flex;flex-direction:column;position:fixed;height:100vh;z-index:100;
   transition:transform .25s ease;
 }
-.sidebar-header{padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.sidebar-header{height:var(--header-height);padding:0 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex:0 0 auto}
 .sidebar-logo{min-width:0;color:var(--text)}
-.brand-link{display:flex;align-items:center;gap:10px;color:inherit;text-decoration:none;min-width:0;min-height:40px}
+.brand-link{display:flex;align-items:center;gap:10px;color:inherit;text-decoration:none;min-width:40px;min-height:40px;padding:4px}
 .brand-link:hover{color:inherit;text-decoration:none}
 .brand-mark{width:32px;height:32px;border-radius:8px;background:var(--accent-soft);border:1px solid var(--accent);color:var(--accent-readable);display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
 .brand-mark svg{width:18px;height:18px}
@@ -70,13 +70,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .sidebar-nav{flex:1;padding:12px 0;overflow-y:auto;overscroll-behavior:contain}
 .sidebar-nav:focus-visible{outline:2px solid var(--accent-hover);outline-offset:-2px}
 .sidebar-section{padding:8px 20px;font-size:10px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-top:8px}
-.sidebar-link{display:flex;min-height:40px;align-items:center;gap:10px;padding:8px 20px;color:var(--text-muted);font-size:13px;font-weight:500;transition:all .12s;text-decoration:none;border-left:2px solid transparent}
+.sidebar-link{display:flex;min-height:44px;align-items:center;gap:10px;padding:8px 20px;color:var(--text-muted);font-size:13px;font-weight:500;transition:all .12s;text-decoration:none;border-left:2px solid transparent}
 .sidebar-cli-icon{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;flex:0 0 16px;font:700 12px/1 'JetBrains Mono',monospace}
 .sidebar-link:hover{color:var(--text);background:var(--surface)}
 .sidebar-link.active{color:var(--text);background:var(--surface-active);border-left-color:var(--accent)}
 .sidebar-link .badge{margin-left:auto;font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px;background:var(--accent-soft);color:var(--accent-readable)}
-.sidebar-footer{padding:12px 20px;border-top:1px solid var(--border);font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:8px}
-.sidebar-logout{display:none;margin-left:auto;color:var(--text-secondary);font-weight:600}
+.sidebar-footer{min-height:52px;padding:8px 20px;border-top:1px solid var(--border);font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:8px}
+.sidebar-logout{display:none;min-width:40px;min-height:40px;margin-left:auto;align-items:center;justify-content:center;color:var(--text-secondary);font-weight:600}
 .sidebar-utilities{display:none}
 .sidebar-service-menu summary{cursor:pointer;list-style:none}
 .sidebar-service-menu summary::-webkit-details-marker{display:none}
@@ -100,7 +100,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .header{height:var(--header-height);background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px;position:sticky;top:0;z-index:50}
 .header-title-group{display:flex;align-items:center;flex:0 0 auto}
 .header-title{font-size:15px;font-weight:600}
-.header-actions{display:flex;gap:10px;align-items:center}
+.header-actions{display:flex;min-width:0;gap:10px;align-items:center}
 .header .btn{display:inline-flex;min-height:40px;align-items:center}
 .namespace-switcher{display:flex;align-items:center;gap:6px;min-width:0}
 .namespace-select{width:190px;max-width:26vw;min-height:40px;font-weight:600;color:var(--text);background:var(--surface)}
@@ -137,7 +137,7 @@ html[data-theme='dark'] .modal-eyebrow{color:#ff6b6b}
 .modal-title{margin:8px 0 0;font-size:20px;line-height:1.25;color:var(--text)}
 .modal-copy{margin-top:10px;color:var(--text-muted);line-height:1.55}
 .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;flex-wrap:wrap}
-.burger{display:none;background:none;border:none;color:var(--text-muted);font-size:22px;cursor:pointer;padding:0;width:40px;height:40px;align-items:center;justify-content:center;margin-right:8px}
+.burger{display:none;background:none;border:none;color:var(--text-muted);font-size:22px;cursor:pointer;padding:0;width:44px;height:44px;align-items:center;justify-content:center;margin-right:4px}
 .container{width:100%;padding:24px}
 
 /* ── Cards ─────────────────────────────────────────────────────────── */
@@ -250,18 +250,34 @@ textarea{resize:vertical;min-height:60px}
 @media (max-width: 720px){.timeline-row{grid-template-columns:1fr}.phase-order-controls{flex-direction:row;flex-wrap:wrap;justify-content:flex-start;padding-top:0;gap:6px}}
 
 /* ── Responsive breakpoints ──────────────────────────────────────── */
-@media(max-width:1120px){
-  .sidebar{transform:translateX(-100%)}
+@media(max-width:1279px) and (min-width:768px){
+  :root{--sidebar-width:72px}
+  .sidebar-header{padding:0 16px;justify-content:center}
+  .sidebar-logo{width:40px}
+  .brand-link{justify-content:center}
+  .brand-text,.sidebar-section,.sidebar-link .badge,.sidebar-status-label{display:none}
+  .sidebar-nav{padding:8px}
+  .sidebar-link{justify-content:center;padding:8px;border-left:0;border-radius:6px}
+  .sidebar-link.active{border-left-color:transparent;box-shadow:inset 3px 0 0 var(--accent)}
+  .sidebar-label{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+  .sidebar-footer{justify-content:center;padding-inline:8px}
+  .header{padding-inline:16px}
+  .header-actions{gap:6px}
+  .theme-select{max-width:90px}
+  .namespace-select{width:140px;max-width:20vw}
+}
+@media(max-width:767px){
+  .sidebar{width:min(320px,calc(100vw - 32px));transform:translateX(-100%)}
   .sidebar.open{transform:translateX(0)}
   .sidebar-overlay.show{display:block}
   .sidebar-close{display:flex}
-  .sidebar-logout{display:inline}
+  .sidebar-logout{display:inline-flex}
   .main{margin-left:0;width:100%}
   .burger{display:flex}
   .header{padding-inline:16px}
   .header .header-logout{display:none}
 }
-@media(max-width:930px){
+@media(max-width:767px){
   .header{flex-wrap:wrap;align-items:flex-start;height:auto;min-height:var(--header-height);row-gap:8px;padding-block:8px}
   .header-actions{width:auto;flex:1;min-width:0;gap:6px;flex-wrap:wrap;justify-content:flex-end}
   .namespace-select{width:150px;max-width:42vw}
@@ -320,35 +336,35 @@ textarea{resize:vertical;min-height:60px}
     <button class="sidebar-close" type="button" aria-label="Закрыть навигацию" onclick="closeSidebar()">×</button>
   </div>
   <nav class="sidebar-nav" aria-label="Основная навигация">
-    <a class="sidebar-link {% if page == 'namespace' %}active{% endif %}" href="/namespaces" {% if page == 'namespace' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page == 'namespace' %}active{% endif %}" href="/namespaces" aria-label="Неймспейсы" title="Неймспейсы" {% if page == 'namespace' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18"/><path d="M5 7V5a2 2 0 0 1 2-2h3"/><path d="M19 7v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7"/><path d="M9 12h6"/><path d="M9 16h4"/></svg>
-      Неймспейсы
+      <span class="sidebar-label">Неймспейсы</span>
     </a>
     <div class="sidebar-section">ОБЗОР</div>
-    <a class="sidebar-link {% if page == 'dashboard' %}active{% endif %}" href="/" {% if page == 'dashboard' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page == 'dashboard' %}active{% endif %}" href="/" aria-label="Дашборд" title="Дашборд" {% if page == 'dashboard' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-      Дашборд
+      <span class="sidebar-label">Дашборд</span>
     </a>
-    <a class="sidebar-link {% if page == 'workflows' %}active{% endif %}" href="/workflows" {% if page == 'workflows' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page == 'workflows' %}active{% endif %}" href="/workflows" aria-label="Воркфлоу" title="Воркфлоу" {% if page == 'workflows' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 10v4"/><path d="M17 10v4"/></svg>
-      Воркфлоу
+      <span class="sidebar-label">Воркфлоу</span>
     </a>
-    <a class="sidebar-link {% if page == 'phases' %}active{% endif %}" href="/phases" {% if page == 'phases' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page == 'phases' %}active{% endif %}" href="/phases" aria-label="Фазы" title="Фазы" {% if page == 'phases' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-      Фазы
+      <span class="sidebar-label">Фазы</span>
     </a>
-    <a class="sidebar-link {% if page == 'tasks' %}active{% endif %}" href="/tasks" {% if page == 'tasks' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page == 'tasks' %}active{% endif %}" href="/tasks" aria-label="Задачи" title="Задачи" {% if page == 'tasks' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-      Задачи
+      <span class="sidebar-label">Задачи</span>
     </a>
     <div class="sidebar-section">УПРАВЛЕНИЕ</div>
-    <a class="sidebar-link {% if page == 'agents' %}active{% endif %}" href="/agents" {% if page == 'agents' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page == 'agents' %}active{% endif %}" href="/agents" aria-label="Агенты" title="Агенты" {% if page == 'agents' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4z"/><path d="M2 20c0-2.21 3.58-4 8-4s8 1.79 8 4"/></svg>
-      Агенты
+      <span class="sidebar-label">Агенты</span>
     </a>
-    <a class="sidebar-link {% if page == 'settings' %}active{% endif %}" href="/settings" {% if page == 'settings' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page == 'settings' %}active{% endif %}" href="/settings" aria-label="Команды CLI" title="Команды CLI" {% if page == 'settings' %}aria-current="page"{% endif %}>
       <span class="sidebar-cli-icon" aria-hidden="true">&gt;_</span>
-      Команды CLI
+      <span class="sidebar-label">Команды CLI</span>
     </a>
     <div class="sidebar-utilities">
       <div class="sidebar-section">ПЛАТФОРМА</div>
@@ -361,7 +377,7 @@ textarea{resize:vertical;min-height:60px}
         </select>
       </div>
       <details class="sidebar-service-menu">
-        <summary class="sidebar-link">Сервисы</summary>
+        <summary class="sidebar-link"><span class="sidebar-label">Сервисы</span></summary>
         <div class="sidebar-service-links">
           {% for service in other_services %}
           <a class="sidebar-service-link" href="{{ service.url }}">
@@ -379,7 +395,7 @@ textarea{resize:vertical;min-height:60px}
     </nav>
     <div class="sidebar-footer">
     <span class="dot green"></span>
-    <span>Сервис работает</span>
+    <span class="sidebar-status-label">Сервис работает</span>
     <a class="sidebar-logout" href="/logout">Выйти</a>
     </div>
 </aside>
@@ -453,8 +469,19 @@ textarea{resize:vertical;min-height:60px}
 function syncSidebarLayout(){
   var sidebar=document.getElementById('sidebar');
   var main=document.querySelector('.main');
-  var mobile=window.matchMedia('(max-width: 1120px)').matches;
+  var mobile=window.matchMedia('(max-width: 767px)').matches;
   var dialogOpen=!document.getElementById('confirmDialog').hidden;
+  if(mobile){
+    sidebar.setAttribute('role','dialog');
+    sidebar.setAttribute('aria-modal','true');
+    sidebar.setAttribute('aria-label','Навигация Project Workflow');
+    sidebar.setAttribute('aria-hidden',sidebar.classList.contains('open')?'false':'true');
+  }else{
+    sidebar.removeAttribute('role');
+    sidebar.removeAttribute('aria-modal');
+    sidebar.removeAttribute('aria-label');
+    sidebar.removeAttribute('aria-hidden');
+  }
   if(!mobile&&sidebar.classList.contains('open')){
     sidebar.classList.remove('open');
     document.getElementById('sidebarOverlay').classList.remove('show');
