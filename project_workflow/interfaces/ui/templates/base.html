@@ -319,34 +319,34 @@ textarea{resize:vertical;min-height:60px}
     </div>
     <button class="sidebar-close" type="button" aria-label="Закрыть навигацию" onclick="closeSidebar()">×</button>
   </div>
-  <nav class="sidebar-nav">
-    <a class="sidebar-link {% if page == 'namespace' %}active{% endif %}" href="/namespaces">
+  <nav class="sidebar-nav" aria-label="Основная навигация">
+    <a class="sidebar-link {% if page == 'namespace' %}active{% endif %}" href="/namespaces" {% if page == 'namespace' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18"/><path d="M5 7V5a2 2 0 0 1 2-2h3"/><path d="M19 7v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7"/><path d="M9 12h6"/><path d="M9 16h4"/></svg>
       Неймспейсы
     </a>
     <div class="sidebar-section">ОБЗОР</div>
-    <a class="sidebar-link {% if page == 'dashboard' %}active{% endif %}" href="/">
+    <a class="sidebar-link {% if page == 'dashboard' %}active{% endif %}" href="/" {% if page == 'dashboard' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
       Дашборд
     </a>
-    <a class="sidebar-link {% if page == 'workflows' %}active{% endif %}" href="/workflows">
+    <a class="sidebar-link {% if page == 'workflows' %}active{% endif %}" href="/workflows" {% if page == 'workflows' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 10v4"/><path d="M17 10v4"/></svg>
       Воркфлоу
     </a>
-    <a class="sidebar-link {% if page == 'phases' %}active{% endif %}" href="/phases">
+    <a class="sidebar-link {% if page == 'phases' %}active{% endif %}" href="/phases" {% if page == 'phases' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
       Фазы
     </a>
-    <a class="sidebar-link {% if page == 'tasks' %}active{% endif %}" href="/tasks">
+    <a class="sidebar-link {% if page == 'tasks' %}active{% endif %}" href="/tasks" {% if page == 'tasks' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
       Задачи
     </a>
     <div class="sidebar-section">УПРАВЛЕНИЕ</div>
-    <a class="sidebar-link {% if page == 'agents' %}active{% endif %}" href="/agents">
+    <a class="sidebar-link {% if page == 'agents' %}active{% endif %}" href="/agents" {% if page == 'agents' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4z"/><path d="M2 20c0-2.21 3.58-4 8-4s8 1.79 8 4"/></svg>
       Агенты
     </a>
-    <a class="sidebar-link {% if page == 'settings' %}active{% endif %}" href="/settings">
+    <a class="sidebar-link {% if page == 'settings' %}active{% endif %}" href="/settings" {% if page == 'settings' %}aria-current="page"{% endif %}>
       <span class="sidebar-cli-icon" aria-hidden="true">&gt;_</span>
       Команды CLI
     </a>
@@ -452,19 +452,24 @@ textarea{resize:vertical;min-height:60px}
 <script>
 function syncSidebarLayout(){
   var sidebar=document.getElementById('sidebar');
+  var main=document.querySelector('.main');
   var mobile=window.matchMedia('(max-width: 1120px)').matches;
+  var dialogOpen=!document.getElementById('confirmDialog').hidden;
   if(!mobile&&sidebar.classList.contains('open')){
     sidebar.classList.remove('open');
     document.getElementById('sidebarOverlay').classList.remove('show');
     document.getElementById('burgerBtn').setAttribute('aria-expanded','false');
+    document.getElementById('burgerBtn').setAttribute('aria-label','Открыть навигацию');
     document.body.style.overflow='';
   }
-  sidebar.inert=!document.getElementById('confirmDialog').hidden||(mobile&&!sidebar.classList.contains('open'));
+  sidebar.inert=dialogOpen||(mobile&&!sidebar.classList.contains('open'));
+  main.inert=dialogOpen||(mobile&&sidebar.classList.contains('open'));
 }
 function openSidebar(){
   document.getElementById('sidebar').classList.add('open');
   document.getElementById('sidebarOverlay').classList.add('show');
   document.getElementById('burgerBtn').setAttribute('aria-expanded','true');
+  document.getElementById('burgerBtn').setAttribute('aria-label','Закрыть навигацию');
   document.body.style.overflow='hidden';
   syncSidebarLayout();
   document.querySelector('.sidebar-close').focus();
@@ -473,6 +478,7 @@ function closeSidebar(){
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('sidebarOverlay').classList.remove('show');
   document.getElementById('burgerBtn').setAttribute('aria-expanded','false');
+  document.getElementById('burgerBtn').setAttribute('aria-label','Открыть навигацию');
   document.body.style.overflow='';
   syncSidebarLayout();
   document.getElementById('burgerBtn').focus();

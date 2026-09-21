@@ -69,10 +69,9 @@ def test_shell_controls_have_mobile_touch_targets_and_sidebar_focus_management()
     assert ".sidebar-link{display:flex;min-height:40px" in template
     assert 'aria-label="Открыть навигацию" aria-controls="sidebar" aria-expanded="false"' in template
     assert 'aria-label="Закрыть навигацию"' in template
-    assert (
-        "sidebar.inert=!document.getElementById('confirmDialog').hidden||(mobile&&!sidebar.classList.contains('open'))"
-        in template
-    )
+    assert "sidebar.inert=dialogOpen||(mobile&&!sidebar.classList.contains('open'))" in template
+    assert "main.inert=dialogOpen||(mobile&&sidebar.classList.contains('open'))" in template
+    assert "setAttribute('aria-label','Закрыть навигацию')" in template
     assert "if(event.key==='Tab'&&sidebar.classList.contains('open'))" in template
 
 

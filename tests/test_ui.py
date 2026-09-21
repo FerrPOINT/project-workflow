@@ -525,11 +525,14 @@ class TestPhasesPage:
         response = client.get("/phases")
         assert response.status_code == 200
 
-        sidebar_nav = re.search(r'<nav class="sidebar-nav">(.*?)</nav>', response.text, re.S)
+        sidebar_nav = re.search(r'<nav class="sidebar-nav"[^>]*>(.*?)</nav>', response.text, re.S)
         assert sidebar_nav is not None
 
         hrefs = re.findall(r'href="([^"]+)"', sidebar_nav.group(1))
         assert hrefs[:5] == ["/namespaces", "/", "/workflows", "/phases", "/tasks"]
+        assert 'aria-label="Основная навигация"' in response.text
+        assert '<a class="sidebar-link active" href="/phases" aria-current="page">' in response.text
+        assert sidebar_nav.group(1).count('aria-current="page"') == 2
 
     def test_phases_page_hides_duplicate_nav_for_single_workflow(self):
         response = client.get("/phases")
@@ -2518,7 +2521,8 @@ def test_ui_deletions_use_product_modal_not_browser_confirm():
     assert "background.forEach(function(element){ element.inert = true; })" in base
     assert "background.forEach(function(element,index){ element.inert = previousInert[index]; })" in base
     assert "if(event.key === 'Tab')" in base
-    assert "sidebar.inert=!document.getElementById('confirmDialog').hidden" in base
+    assert "var dialogOpen=!document.getElementById('confirmDialog').hidden" in base
+    assert "sidebar.inert=dialogOpen||(mobile&&!sidebar.classList.contains('open'))" in base
     assert ".btn-danger{background:#b42332;color:#fff" in base
     assert "html[data-theme='dark'] .modal-eyebrow{color:#ff6b6b}" in base
     assert all("confirm(" not in template for template in templates.values())
