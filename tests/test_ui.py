@@ -2110,17 +2110,44 @@ class TestProjectsPage:
         response = client.get("/namespaces")
         assert response.status_code == 200
         assert 'id="namespaceNav"' in response.text
+        assert 'id="namespacePicker"' in response.text
+        assert 'id="namespaceSelect"' in response.text
         assert 'id="namespaceForm"' in response.text
+        assert 'aria-labelledby="namespaceFormMode"' in response.text
         assert 'id="namespaceFormMode"' in response.text
         assert 'id="namespaceThemeIcon"' in response.text
         assert 'id="namespaceThemeColor"' in response.text
         assert 'id="namespaceThemePreview"' in response.text
+        assert 'aria-controls="namespaceForm"' in response.text
+        assert 'aria-pressed="true"' in response.text
         assert "document.querySelector('.brand-name')" in response.text
         assert "document.querySelector('.brand-mark')" in response.text
         assert 'id="createProjectForm"' not in response.text
         assert 'id="projectForm"' not in response.text
         assert 'id="newProjectButton"' not in response.text
         assert 'id="newNamespaceButton"' not in response.text
+
+    def test_namespace_editor_exposes_validation_and_safe_action_states(self):
+        response = client.get("/namespaces")
+        assert response.status_code == 200
+        assert re.search(r'id="namespaceName" value="[^"]*" required', response.text)
+        assert 'required minlength="2" maxlength="64" pattern="[a-z][a-z0-9_\\-]{1,63}"' in response.text
+        assert 'aria-describedby="namespaceCliHelp"' in response.text
+        assert 'id="namespaceWorkflowId" required' in response.text
+        assert 'id="namespaceDeleteHint" hidden' in response.text
+        assert "var protectedByTasks = !createMode && Boolean(namespace && Number(namespace.task_count) > 0);" in (
+            response.text
+        )
+        assert "button.textContent = 'Удаление…';" in response.text
+        assert "button.textContent = namespaceFormMode === 'create' ? 'Создание…' : 'Сохранение…';" in response.text
+        assert "'Удалить неймспейс «' + namespace.name + '»?'" in response.text
+
+    def test_namespace_theme_preview_keeps_primary_action_text_readable(self):
+        response = client.get("/namespaces")
+        assert response.status_code == 200
+        assert "function accentForeground(color)" in response.text
+        assert "document.documentElement.style.setProperty('--accent-foreground', foreground);" in response.text
+        assert "document.documentElement.style.setProperty('--accent-hover-foreground', foreground);" in response.text
 
     def test_namespace_create_page_uses_plus_without_duplicate_add_label(self):
         response = client.get("/namespaces/new")
