@@ -2563,6 +2563,9 @@ class TestAgentsPage:
         assert 'class="agent-create" id="agentCreatePanel"' in response.text
         assert 'onblur="saveRow(this)"' not in response.text
         assert 'function cancelAgent(button)' in response.text
+        assert response.text.count("entry.querySelector('summary').focus()") == 2
+        assert "title:'Удалить агента «'+name+'»?'" in response.text
+        assert ".agent-editor input,.agent-editor .btn,.agent-create summary{min-height:44px}" in response.text
 
     def test_agents_api_create_and_update_description(self):
         create = client.post(
