@@ -2666,6 +2666,22 @@ class TestSettingsPage:
         assert ">--skip<" not in response.text
         assert "по умолчанию: все" in response.text
         assert "default:" not in response.text
+        assert "<h2>step</h2>" in response.text
+        assert 'id="cliUsage1"' in response.text
+        assert 'aria-label="Копировать команду step"' in response.text
+        assert "function fallbackCopyCliUsage(text)" in response.text
+        assert "async function copyCliUsage(button, usageId)" in response.text
+        assert "clearTimeout(button._copyTimer);" in response.text
+        assert "await navigator.clipboard.writeText(text);" in response.text
+        assert "showToast('Команда скопирована','success');" in response.text
+
+    def test_settings_page_has_explicit_empty_cli_state(self):
+        with patch("project_workflow.interfaces.ui.routes.pages._load_cli_reference", return_value=[]):
+            response = client.get("/settings")
+
+        assert response.status_code == 200
+        assert 'class="card cli-empty" role="status"' in response.text
+        assert "Доступные CLI-команды не найдены." in response.text
 
     def test_settings_page_rejects_unknown_query_namespace(self):
         response = client.get(f"/settings?namespace_id={UNKNOWN_NAMESPACE_ID}")
