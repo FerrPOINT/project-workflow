@@ -4,10 +4,23 @@
 {% block header_title %}<span class="phase-detail-desktop-title">Детали фазы</span><span class="phase-detail-mobile-title">Фаза</span>{% endblock %}
 
 {% block extra_style %}
-/* ── Wiki-style phase page ─────────────────────────────────────────── */
-.wiki-page{max-width:1100px;margin:0 auto;padding:0 24px}
+/* ── Structured phase editor ───────────────────────────────────────── */
+.phase-editor-layout{display:grid;grid-template-columns:220px minmax(0,1fr);gap:32px;align-items:start;max-width:1280px;margin:0 auto}
+.phase-outline{position:sticky;top:76px;max-height:calc(100vh - 96px);overflow:auto;border-right:1px solid var(--border);padding:8px 20px 8px 0}
+.phase-outline-title{margin:0 0 10px;font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0}
+.phase-outline-list{display:grid;gap:2px;margin:0;padding:0;list-style:none}
+.phase-outline-link{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:40px;padding:7px 8px 7px 12px;border-left:3px solid transparent;color:var(--text-secondary);text-decoration:none;font-size:14px}
+.phase-outline-link:hover{color:var(--text);background:var(--surface-hover);text-decoration:none}
+.phase-outline-link[aria-current="location"]{border-left-color:var(--accent);color:var(--text);background:var(--accent-soft);font-weight:600}
+.phase-outline-count{font-size:11px;font-weight:500;color:var(--text-dim)}
+.phase-editor-main{min-width:0;max-width:980px}
+.phase-section-picker{display:none;margin-bottom:16px}
+.phase-section-select{width:100%;min-height:40px}
+.phase-editor-section{scroll-margin-top:84px}
+.wiki-page{max-width:none;margin:0;padding:0}
 .phase-detail-mobile-title{display:none}
 @media(max-width:480px){.phase-detail-desktop-title{display:none}.phase-detail-mobile-title{display:inline}}
+@media(max-width:960px){.phase-editor-layout{display:block;max-width:920px}.phase-outline{display:none}.phase-section-picker{display:block}.phase-editor-main{max-width:none}}
 
 /* Phase header */
 .wiki-header{margin-bottom:28px;padding-bottom:16px;border-bottom:1px solid var(--border-strong)}
@@ -86,10 +99,32 @@
 {% endblock %}
 
 {% block content %}
-<div class="wiki-page">
+<div class="phase-editor-layout">
+  <nav class="phase-outline" aria-labelledby="phase-outline-title">
+    <h2 class="phase-outline-title" id="phase-outline-title">Структура фазы</h2>
+    <ul class="phase-outline-list">
+      <li><a class="phase-outline-link" href="#phase-overview" data-phase-section-link="phase-overview" aria-current="location"><span>Основное</span></a></li>
+      <li><a class="phase-outline-link" href="#phase-instructions" data-phase-section-link="phase-instructions"><span>Инструкции</span><span class="phase-outline-count">{{ phase.instructions|length }}</span></a></li>
+      <li><a class="phase-outline-link" href="#phase-checks" data-phase-section-link="phase-checks"><span>Проверки</span><span class="phase-outline-count">{{ phase.checks|length }}</span></a></li>
+      <li><a class="phase-outline-link" href="#phase-evidence" data-phase-section-link="phase-evidence"><span>Подтверждения</span><span class="phase-outline-count">{{ phase.evidence|length }}</span></a></li>
+    </ul>
+  </nav>
+
+  <div class="phase-editor-main">
+    <div class="phase-section-picker">
+      <label class="sr-only" for="phaseSectionSelect">Раздел редактора</label>
+      <select class="phase-section-select" id="phaseSectionSelect">
+        <option value="phase-overview">Основное</option>
+        <option value="phase-instructions">Инструкции ({{ phase.instructions|length }})</option>
+        <option value="phase-checks">Проверки ({{ phase.checks|length }})</option>
+        <option value="phase-evidence">Подтверждения ({{ phase.evidence|length }})</option>
+      </select>
+    </div>
+
+    <div class="wiki-page">
 
   <!-- Header -->
-  <div class="wiki-header">
+  <div class="wiki-header phase-editor-section" id="phase-overview" data-phase-section tabindex="-1">
     <div style="margin-bottom:10px"><a href="/phases?workflow_id={{ phase.workflow_id }}{% if selected_namespace %}&namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary">← Назад к фазам</a></div>
     <input type="text" class="inline-input" value="{{ phase.name }}" data-field="name" aria-label="Название фазы" onblur="scheduleSave()" style="font-size:26px;font-weight:600;margin:0 0 10px;width:100%">
     <textarea class="inline-input wiki-subtitle" rows="1" data-field="description" aria-label="Описание фазы" onblur="scheduleSave()">{{ phase.description or '' }}</textarea>
@@ -126,7 +161,7 @@
   </div>
 
   <!-- Instructions — managed like phases list with inline edit, reorder, add, delete -->
-  <div class="wiki-section">
+  <div class="wiki-section phase-editor-section" id="phase-instructions" data-phase-section tabindex="-1">
     <div class="wiki-section-title">
       📋 Инструкции
       <span class="count">{{ phase.instructions|length }}</span>
@@ -191,7 +226,7 @@
   </div>
 
   <!-- Checks -->
-  <div class="wiki-section">
+  <div class="wiki-section phase-editor-section" id="phase-checks" data-phase-section tabindex="-1">
     <div class="wiki-section-title">
       ✅ Проверки
       <span class="count">{{ phase.checks|length }}</span>
@@ -211,7 +246,7 @@
   </div>
 
   <!-- Evidence -->
-  <div class="wiki-section">
+  <div class="wiki-section phase-editor-section" id="phase-evidence" data-phase-section tabindex="-1">
     <div class="wiki-section-title">
       📎 Подтверждения
       <span class="count">{{ phase.evidence|length }}</span>
@@ -230,12 +265,75 @@
     <button class="wiki-add-btn" onclick="addEvidence()">+ Добавить подтверждение</button>
   </div>
 
+    </div>
+  </div>
 </div>
 {% endblock %}
 
 {% block extra_script %}
 const phaseId = {{ phase.id }};
 const selectedNamespaceId = {{ selected_namespace.id if selected_namespace else 'null' }};
+const phaseSectionIds = ['phase-overview', 'phase-instructions', 'phase-checks', 'phase-evidence'];
+let phaseSectionNavigationLock = null;
+let phaseSectionNavigationTimer = null;
+
+function setActivePhaseSection(sectionId) {
+  if (!phaseSectionIds.includes(sectionId)) return;
+  document.querySelectorAll('[data-phase-section-link]').forEach((link) => {
+    if (link.dataset.phaseSectionLink === sectionId) link.setAttribute('aria-current', 'location');
+    else link.removeAttribute('aria-current');
+  });
+  const select = document.getElementById('phaseSectionSelect');
+  if (select && select.value !== sectionId) select.value = sectionId;
+}
+
+function jumpToPhaseSection(sectionId) {
+  if (!phaseSectionIds.includes(sectionId)) return;
+  const section = document.getElementById(sectionId);
+  if (!section) return;
+  phaseSectionNavigationLock = sectionId;
+  window.clearTimeout(phaseSectionNavigationTimer);
+  phaseSectionNavigationTimer = window.setTimeout(() => {
+    phaseSectionNavigationLock = null;
+  }, 400);
+  section.scrollIntoView({behavior: 'auto', block: 'start'});
+  setActivePhaseSection(sectionId);
+  const url = new URL(window.location.href);
+  url.hash = sectionId;
+  window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+}
+
+function initializePhaseOutline() {
+  document.querySelectorAll('[data-phase-section-link]').forEach((link) => {
+    link.addEventListener('click', (event) => {
+      event.preventDefault();
+      jumpToPhaseSection(link.dataset.phaseSectionLink);
+    });
+  });
+  document.getElementById('phaseSectionSelect')?.addEventListener('change', (event) => {
+    jumpToPhaseSection(event.target.value);
+  });
+  const sections = phaseSectionIds.map((id) => document.getElementById(id)).filter(Boolean);
+  const observer = new IntersectionObserver(() => {
+    if (phaseSectionNavigationLock) {
+      setActivePhaseSection(phaseSectionNavigationLock);
+      return;
+    }
+    const anchor = 96;
+    const atPageEnd = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
+    const activeSection = atPageEnd
+      ? sections[sections.length - 1]
+      : sections.reduce((current, section) => (
+          section.getBoundingClientRect().top <= anchor ? section : current
+        ), sections[0]);
+    if (activeSection) setActivePhaseSection(activeSection.id);
+  }, {rootMargin: '-84px 0px -58% 0px', threshold: [0, .1, .5]});
+  sections.forEach((section) => observer.observe(section));
+  const requestedSection = window.location.hash.slice(1);
+  if (phaseSectionIds.includes(requestedSection)) {
+    requestAnimationFrame(() => jumpToPhaseSection(requestedSection));
+  }
+}
 
 function escapeHtml(value) {
   return String(value)
@@ -750,6 +848,7 @@ async function persistPhase() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  initializePhaseOutline();
   renderInstructionTimeline(getInstructionItems());
   updateInstructionControls();
   resizeAllInlineTextareas();

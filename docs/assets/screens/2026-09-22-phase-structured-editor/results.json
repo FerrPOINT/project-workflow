@@ -1,0 +1,38 @@
+{
+  "ok": true,
+  "baseUrl": "http://127.0.0.1:8812",
+  "selectedPhase": {
+    "href": "/phase/11?namespace_id=1",
+    "counts": {
+      "instructions": 2,
+      "checks": 4,
+      "evidence": 3
+    },
+    "score": 9
+  },
+  "phaseCount": 19,
+  "checks": 24,
+  "themes": [
+    "light",
+    "gray",
+    "dark"
+  ],
+  "widths": [
+    320,
+    375,
+    768,
+    960,
+    961,
+    1280,
+    1920,
+    2560
+  ],
+  "deepLinks": [
+    "phase-checks",
+    "phase-evidence"
+  ],
+  "keyboard": "outline Enter",
+  "pageErrors": [],
+  "httpErrors": [],
+  "mutations": []
+}

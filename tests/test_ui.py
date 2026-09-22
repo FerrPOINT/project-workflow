@@ -1300,6 +1300,26 @@ class TestPhaseDetail:
         assert "fetch(phaseApiUrl('/api/phases/' + phaseId)" in response.text
         assert "fetch('/api/phases/4.START'" not in response.text
 
+    def test_phase_detail_has_responsive_structured_outline(self):
+        response = client.get(_phase_detail_path("4.START"))
+
+        assert response.status_code == 200
+        assert 'class="phase-editor-layout"' in response.text
+        assert 'aria-labelledby="phase-outline-title"' in response.text
+        assert 'data-phase-section-link="phase-overview" aria-current="location"' in response.text
+        assert 'data-phase-section-link="phase-instructions"' in response.text
+        assert 'data-phase-section-link="phase-checks"' in response.text
+        assert 'data-phase-section-link="phase-evidence"' in response.text
+        assert 'id="phaseSectionSelect"' in response.text
+        assert 'id="phase-overview" data-phase-section tabindex="-1"' in response.text
+        assert 'id="phase-instructions" data-phase-section tabindex="-1"' in response.text
+        assert 'id="phase-checks" data-phase-section tabindex="-1"' in response.text
+        assert 'id="phase-evidence" data-phase-section tabindex="-1"' in response.text
+        assert "function initializePhaseOutline()" in response.text
+        assert "phaseSectionNavigationLock = sectionId" in response.text
+        assert "section.scrollIntoView({behavior: 'auto', block: 'start'});" in response.text
+        assert "@media(max-width:960px)" in response.text
+
     def test_phase_detail_empty_name_is_sent_to_backend_validation(self):
         response = client.get(_phase_detail_path("4.START"))
         assert response.status_code == 200
