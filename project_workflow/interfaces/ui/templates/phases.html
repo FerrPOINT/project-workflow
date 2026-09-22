@@ -18,6 +18,12 @@
 .workflow-summary{background:transparent;border-width:0 0 1px;border-radius:0;padding:0 0 16px;display:flex;align-items:center;justify-content:space-between;gap:16px}
 .workflow-summary-copy{min-width:0}
 .workflow-summary .card-title{font-size:20px;color:var(--text);text-transform:none;letter-spacing:0;margin-bottom:5px}
+.workflow-mode-tabs{display:flex;gap:6px;max-width:100%;overflow-x:auto;padding:2px 2px 6px;scrollbar-width:thin}
+.workflow-mode-tab{display:inline-flex;align-items:center;gap:7px;min-height:40px;flex:0 0 auto;padding:7px 12px;border:1px solid var(--border-strong);border-radius:7px;background:var(--surface);color:var(--text-secondary);text-decoration:none}
+.workflow-mode-tab:hover{text-decoration:none;border-color:var(--accent);background:var(--surface-hover);color:var(--text)}
+.workflow-mode-tab[aria-selected="true"]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-readable);font-weight:600}
+.workflow-mode-tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.workflow-mode-key{font:11px/1.4 'JetBrains Mono',monospace;color:var(--text-dim)}
 .phase-view-controls{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}
 .phase-view-switch{display:inline-flex;align-items:center;padding:2px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface)}
 .phase-view-switch button{min-height:40px;padding:0 12px;border:0;border-radius:4px;background:transparent;color:var(--text-secondary);font:inherit;font-size:13px;cursor:pointer}
@@ -83,7 +89,7 @@
 {% macro phase_card(p) -%}
 <div class="timeline-item" id="phase-{{ p.id }}" data-phase-id="{{ p.id }}" data-phase-order="{{ p.phase_num }}" data-execution-type="{{ p.execution_type }}">
   <div class="phase-card-shell">
-    <a href="/phase/{{ p.id }}{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="timeline-card">
+    <a href="/phase/{{ p.id }}?mode={{ selected_mode.key | urlencode }}{% if selected_namespace %}&namespace_id={{ selected_namespace.id }}{% endif %}" class="timeline-card">
       <div class="phase-card-copy">
         <div class="timeline-name">{{ p.name }}</div>
         {% set description = p.description | default('') %}
@@ -148,7 +154,18 @@
       {% endif %}
     </div>
 
-    <div class="timeline{% if phase_count >= 8 %} is-compact{% endif %}" id="phasesTimeline"{% if selected_workflow_id %} data-workflow-id="{{ selected_workflow_id }}"{% endif %}>
+    {% if workflow_modes %}
+    <nav class="workflow-mode-tabs" role="tablist" aria-label="Режим воркфлоу" data-testid="workflow-mode-tabs">
+      {% for mode in workflow_modes %}
+      {% set mode_active = selected_mode and selected_mode.id == mode.id %}
+      <a class="workflow-mode-tab" role="tab" aria-selected="{{ 'true' if mode_active else 'false' }}"{% if mode_active %} aria-current="page" data-testid="workflow-mode-tab-active"{% else %} data-testid="workflow-mode-tab"{% endif %} data-mode-key="{{ mode.key }}" href="/phases?workflow_id={{ selected_workflow_id }}{% if selected_namespace %}&namespace_id={{ selected_namespace.id }}{% endif %}&mode={{ mode.key | urlencode }}">
+        <span>{{ mode.name }}</span><code class="workflow-mode-key">{{ mode.key }}</code>
+      </a>
+      {% endfor %}
+    </nav>
+    {% endif %}
+
+    <div class="timeline{% if phase_count >= 8 %} is-compact{% endif %}" id="phasesTimeline"{% if selected_workflow_id %} data-workflow-id="{{ selected_workflow_id }}"{% endif %}{% if selected_mode %} data-mode-id="{{ selected_mode.id }}" data-mode-key="{{ selected_mode.key }}"{% endif %}>
       {% for block in phase_blocks %}
         {% if block.kind == 'parallel' %}
         <section class="timeline-block timeline-parallel-group">
@@ -196,12 +213,14 @@ function jumpToPhase(select){
 }
 
 async function addPhaseAfter(button){
-  const workflowId=document.getElementById('phasesTimeline')?.dataset.workflowId;
+  const timeline=document.getElementById('phasesTimeline');
+  const workflowId=timeline?.dataset.workflowId;
+  const modeId=timeline?.dataset.modeId;
   const currentOrder=parseInt(button.dataset.afterOrder||'0',10);
-  if(!workflowId||currentOrder<0){showToast('Не удалось определить позицию фазы','error');return;}
+  if(!workflowId||!modeId||currentOrder<0){showToast('Не удалось определить позицию фазы','error');return;}
   button.disabled=true;
   try{
-    const resp=await fetch('/api/phases',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workflow_id:parseInt(workflowId,10),phase_order:currentOrder+1})});
+    const resp=await fetch('/api/phases',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workflow_id:parseInt(workflowId,10),mode_id:parseInt(modeId,10),phase_order:currentOrder+1})});
     const data=await resp.json().catch(()=>({}));
     if(!resp.ok||!data.ok){showToast(data.error||'Не удалось добавить фазу','error');return;}
     window.location.reload();
@@ -271,6 +290,17 @@ document.addEventListener('DOMContentLoaded',()=>{
     if(up)up.disabled=index===0;
     if(down)down.disabled=index===items.length-1;
   });
+  const modeTabs=Array.from(document.querySelectorAll('[role="tab"][data-mode-key]'));
+  modeTabs.forEach((tab,index)=>tab.addEventListener('keydown',event=>{
+    let targetIndex=null;
+    if(event.key==='ArrowRight')targetIndex=(index+1)%modeTabs.length;
+    if(event.key==='ArrowLeft')targetIndex=(index-1+modeTabs.length)%modeTabs.length;
+    if(event.key==='Home')targetIndex=0;
+    if(event.key==='End')targetIndex=modeTabs.length-1;
+    if(targetIndex===null)return;
+    event.preventDefault();
+    modeTabs[targetIndex]?.focus();
+  }));
   const menus=Array.from(document.querySelectorAll('.phase-card-actions'));
   const confirmationDialog=document.getElementById('confirmDialog');
   menus.forEach(menu=>menu.addEventListener('toggle',()=>{
