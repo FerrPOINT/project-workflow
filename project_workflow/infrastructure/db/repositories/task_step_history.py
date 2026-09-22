@@ -89,7 +89,10 @@ class SATaskStepHistoryRepository(TaskStepHistoryRepository):
                 )
                 .label("rn"),
             )
+            .join(m.Task, m.TaskStepHistoryEntry.task_id == m.Task.id)
             .where(m.TaskStepHistoryEntry.task_id.in_(task_ids))
+            .where(m.TaskStepHistoryEntry.mode_id == m.Task.mode_id)
+            .where(m.TaskStepHistoryEntry.cycle_number == m.Task.cycle_number)
             .cte("latest_step_history")
         )
         history_entry = aliased(m.TaskStepHistoryEntry, cte)

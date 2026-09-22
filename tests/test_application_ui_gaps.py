@@ -24,6 +24,86 @@ def _service(wdb):
 
 
 class TestUIDataServiceGaps:
+    def test_rework_list_and_dashboard_use_current_mode_and_cycle_only(self):
+        wdb = MagicMock()
+        task = {
+            "id": 1,
+            "task_key": "RUN-1",
+            "title": "Rework",
+            "project_id": 1,
+            "workflow_id": 1,
+            "mode_id": 20,
+            "mode_key": "rework",
+            "cycle_number": 1,
+            "status": "active",
+            "current_phase_id": 201,
+            "current_phase_code": "fix",
+            "current_phase_name": "Fix",
+        }
+        wdb.get_tasks.return_value = [task]
+        wdb.get_workflows.return_value = [{"id": 1, "name": "Flow"}]
+        wdb.get_phases.return_value = [
+            {"id": 201, "workflow_id": 1, "mode_id": 20, "code": "fix", "name": "Fix"}
+        ]
+        wdb.list_phase_events_batch.return_value = {
+            1: [
+                {
+                    "phase_id": 101, "mode_id": 10, "cycle_number": 0,
+                    "event_type": "completed", "occurred_at": "2026-01-01",
+                },
+                {
+                    "phase_id": 201, "mode_id": 20, "cycle_number": 1,
+                    "event_type": "entered", "occurred_at": "2026-01-02",
+                },
+            ]
+        }
+        wdb.step_history.latest_for_tasks.return_value = []
+        wdb.get_projects.return_value = [{"id": 1, "name": "Runs", "workflow_id": 1}]
+
+        result = _service(wdb)._load_dashboard()
+
+        assert result["open_tasks"][0]["mode_key"] == "rework"
+        assert result["open_tasks"][0]["cycle_number"] == 1
+        assert result["open_tasks"][0]["completed"] == 0
+        assert result["open_tasks"][0]["total_phases"] == 1
+        wdb.get_phases.assert_called_once_with(workflow_id=1, mode_id=20)
+
+    def test_rework_detail_separates_current_projection_from_audit(self):
+        wdb = MagicMock()
+        wdb.get_task_by_key.return_value = {
+            "id": 1,
+            "task_key": "RUN-1",
+            "project_id": 1,
+            "workflow_id": 1,
+            "mode_id": 20,
+            "mode_key": "rework",
+            "cycle_number": 1,
+            "status": "active",
+            "current_phase_id": 201,
+        }
+        wdb.get_phases.return_value = [
+            {"id": 201, "workflow_id": 1, "mode_id": 20, "phase_order": 1, "code": "fix", "name": "Fix"}
+        ]
+        wdb.list_phase_events.return_value = [
+            {"phase_id": 101, "mode_id": 10, "cycle_number": 0, "event_type": "completed", "occurred_at": "2026-01-01"},
+            {"phase_id": 201, "mode_id": 20, "cycle_number": 1, "event_type": "entered", "occurred_at": "2026-01-02"},
+        ]
+        wdb.list_step_history.return_value = []
+        project = MagicMock()
+        project.to_dict.return_value = {"id": 1, "name": "Runs"}
+        workflow = MagicMock()
+        workflow.to_dict.return_value = {"id": 1, "name": "Flow"}
+        wdb.projects.get_by_id.return_value = project
+        wdb.workflows.get_by_id.return_value = workflow
+
+        result = _service(wdb)._get_task_detail("RUN-1")
+
+        assert result["current_phase_code"] == "fix"
+        assert [event["phase_id"] for event in result["phase_events"]] == [201]
+        assert [event["phase_id"] for event in result["phase_events_audit"]] == [101, 201]
+        assert result["completed"] == 0
+        wdb.get_phases.assert_called_once_with(workflow_id=1, mode_id=20)
+
     @pytest.mark.parametrize(
         ("status", "expected_total"),
         [("done", 3), ("active", 3)],

@@ -138,17 +138,19 @@ class UIDataService:
             if isinstance(workflow.get("id"), int)
         }
 
-        # Batch phase counts and phase lookup maps per workflow.
-        phase_counts_by_workflow: dict[int, int] = {}
-        phases_by_workflow: dict[int | None, list[dict[str, Any]]] = {}
-        all_phases: list[dict[str, Any]] = []
-        for workflow in workflows:
-            wid = workflow["id"]
-            phases = wdb.get_phases(workflow_id=wid)
-            phases_by_workflow[wid] = phases
-            all_phases.extend(phases)
-            phase_counts_by_workflow[wid] = len(phases)
-        phases_by_workflow[None] = all_phases
+        # Each technical cursor is rendered against its persisted mode only.
+        phases_by_execution: dict[tuple[int, int], list[dict[str, Any]]] = {}
+        for task in tasks:
+            workflow_id = task.get("workflow_id")
+            mode_id = task.get("mode_id")
+            if isinstance(workflow_id, int):
+                key = (workflow_id, mode_id if isinstance(mode_id, int) else 0)
+                if key not in phases_by_execution:
+                    phases_by_execution[key] = (
+                        wdb.get_phases(workflow_id=workflow_id, mode_id=mode_id)
+                        if isinstance(mode_id, int)
+                        else wdb.get_phases(workflow_id=workflow_id)
+                    )
 
         # Batch load history and latest supervisor runs for all tasks in one go.
         task_ids = [t["id"] for t in tasks if isinstance(t.get("id"), int)]
@@ -172,7 +174,16 @@ class UIDataService:
         result = []
         for t in tasks:
             task_id = t["id"]
-            phase_events = list(history_batch.get(task_id, []))
+            all_task_events = list(history_batch.get(task_id, []))
+            if isinstance(t.get("mode_id"), int) and isinstance(t.get("cycle_number"), int):
+                phase_events = [
+                    event
+                    for event in all_task_events
+                    if event.get("mode_id") == t.get("mode_id")
+                    and event.get("cycle_number") == t.get("cycle_number")
+                ]
+            else:
+                phase_events = all_task_events
             latest_event_by_phase = {event["phase_id"]: event for event in phase_events}
             completed = sum(
                 1 for event in latest_event_by_phase.values() if event.get("event_type") == "completed"
@@ -190,18 +201,21 @@ class UIDataService:
             workflow_id_raw = t.get("workflow_id")
             workflow_id: int | None = int(workflow_id_raw) if isinstance(workflow_id_raw, int) else None
             task_workflow = workflows_by_id.get(workflow_id) if workflow_id is not None else None
-            workflow_phase_count = (
-                phase_counts_by_workflow.get(workflow_id, 0)
+            mode_id_raw = t.get("mode_id")
+            mode_id = int(mode_id_raw) if isinstance(mode_id_raw, int) else 0
+            execution_phases = (
+                phases_by_execution.get((workflow_id, mode_id), [])
                 if workflow_id is not None
-                else 0
+                else []
             )
+            workflow_phase_count = len(execution_phases)
             completed, total_phases = _task_progress_counts(
                 completed=completed,
                 workflow_total=workflow_phase_count,
             )
 
             _resolve_task_phase_id(
-                t["current_phase_id"], phases_by_workflow.get(workflow_id, [])
+                t["current_phase_id"], execution_phases
             )
 
             completed_at = ""
@@ -236,6 +250,9 @@ class UIDataService:
                     "namespace_cli_command": namespace_cli_command,
                     "workflow_id": workflow_id,
                     "workflow_name": task_workflow.get("name") if task_workflow else None,
+                    "mode_id": t.get("mode_id"),
+                    "mode_key": t.get("mode_key"),
+                    "cycle_number": t.get("cycle_number"),
                     "current_phase_id": t["current_phase_id"],
                     "current_phase_code": t["current_phase_code"],
                     "current_phase_name": t["current_phase_name"],
@@ -319,7 +336,10 @@ class UIDataService:
         workflow_id = task.get("workflow_id")
         if not isinstance(workflow_id, int) or isinstance(workflow_id, bool) or workflow_id <= 0:
             return None, []
-        return workflow_id, wdb.get_phases(workflow_id=workflow_id)
+        mode_id = task.get("mode_id")
+        if not isinstance(mode_id, int) or isinstance(mode_id, bool) or mode_id <= 0:
+            return workflow_id, wdb.get_phases(workflow_id=workflow_id)
+        return workflow_id, wdb.get_phases(workflow_id=workflow_id, mode_id=mode_id)
 
     def _compute_completion_time(self, task: dict[str, Any], history: list[dict[str, Any]]) -> str:
         if task.get("status") != "done":
@@ -459,10 +479,20 @@ class UIDataService:
         task["workflow_cycle_count"] = len(_build_parallel_phase_blocks(workflow_phases))
         task["total_phases"] = len(workflow_phases)
 
-        history = wdb.list_phase_events(task["id"])
+        history_audit = wdb.list_phase_events(task["id"])
+        if isinstance(task.get("mode_id"), int) and isinstance(task.get("cycle_number"), int):
+            history = [
+                event
+                for event in history_audit
+                if event.get("mode_id") == task.get("mode_id")
+                and event.get("cycle_number") == task.get("cycle_number")
+            ]
+        else:
+            history = history_audit
         if not history:
             raise ValueError("Для задачи отсутствует обязательный журнал событий фаз")
         task["phase_events"] = history
+        task["phase_events_audit"] = history_audit
         task["completed_at"] = self._compute_completion_time(task, history)
 
         task["phase_history_blocks"] = self._build_phase_history_blocks(
@@ -483,10 +513,20 @@ class UIDataService:
         )
         task["total_phases"] = task["progress_total"]
 
-        step_history = self._decorate_step_history(
+        step_history_audit = self._decorate_step_history(
             list(reversed(wdb.list_step_history(task_id=task["id"], workflow_id=workflow_id, limit=200)))
         )
+        if isinstance(task.get("mode_id"), int) and isinstance(task.get("cycle_number"), int):
+            step_history = [
+                step
+                for step in step_history_audit
+                if step.get("mode_id") == task.get("mode_id")
+                and step.get("cycle_number") == task.get("cycle_number")
+            ]
+        else:
+            step_history = step_history_audit
         task["step_history"] = step_history
+        task["step_history_audit"] = step_history_audit
 
         if step_history:
             task["latest_verdict"] = step_history[-1].get("verdict")

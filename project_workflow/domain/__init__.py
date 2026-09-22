@@ -198,6 +198,38 @@ class Task:
         }
 
 
+@dataclass(frozen=True)
+class TaskRuntimeAssignment:
+    """Immutable adapter acceptance record for one Business operation key."""
+
+    id: int | None = None
+    operation_key: str = ""
+    task_id: int = 0
+    project_id: int = 0
+    workflow_id: int = 0
+    mode_id: int = 0
+    mode_key: str = "default"
+    cycle_number: int = 0
+    assignment_revision: int = 0
+    payload: dict[str, Any] = field(default_factory=dict)
+    created_at: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "operation_key": self.operation_key,
+            "task_id": self.task_id,
+            "project_id": self.project_id,
+            "workflow_id": self.workflow_id,
+            "mode_id": self.mode_id,
+            "mode_key": self.mode_key,
+            "cycle_number": self.cycle_number,
+            "assignment_revision": self.assignment_revision,
+            "payload": dict(self.payload),
+            "created_at": self.created_at,
+        }
+
+
 @dataclass
 class TaskStepHistoryEntry:
     """One persisted evaluation produced by the CLI ``step`` flow."""

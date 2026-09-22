@@ -590,6 +590,54 @@ class TestPostgresInitialMigration:
         assert len([task for task in verify.tasks.list() if task.task_key == "RUN-90001"]) == 1
         verify.close()
 
+    def test_concurrent_runtime_assignment_reconciles_one_ledger_record(self, pg_url):
+        ensure_migrated(get_engine(pg_url))
+        setup = SAUnitOfWork(pg_url)
+        workflow_id = setup.workflows.create({"name": "Runtime assignment race"})
+        project_id = setup.projects.create(
+            {
+                "workflow_id": workflow_id,
+                "code": "RACE",
+                "name": "Race",
+                "cli_command": "race",
+                "key_prefixes": ["RACE"],
+            }
+        )
+        setup.phases.create(
+            {"workflow_id": workflow_id, "code": "start", "name": "Start", "phase_order": 1}
+        )
+        setup.commit()
+        setup.close()
+        barrier = Barrier(2)
+
+        def assign() -> dict:
+            uow = SAUnitOfWork(pg_url)
+            barrier.wait(timeout=10)
+            try:
+                return TaskService(uow).assign_runtime_task(
+                    project_id=project_id,
+                    task_key="RACE-1",
+                    mode_key="default",
+                    cycle_number=0,
+                    operation_key="runtime-race-operation",
+                    expected_revision=0,
+                    expected_status="missing",
+                )
+            finally:
+                uow.close()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda _: assign(), range(2)))
+
+        assert {result["id"] for result in results} == {results[0]["id"]}
+        verify = SAUnitOfWork(pg_url)
+        task = verify.tasks.get_by_key("RACE-1", project_id=project_id)
+        assert task is not None
+        assert [item.operation_key for item in verify.tasks.list_assignments(task.id)] == [
+            "runtime-race-operation"
+        ]
+        verify.close()
+
     def test_orm_create_all_is_rejected_for_postgresql(self, pg_url):
         engine = get_engine(pg_url)
         with pytest.raises(RuntimeError, match="изолированных тестах SQLite"):

@@ -632,6 +632,8 @@ async def task_detail_page(
             "cycles_total": task.get("workflow_cycle_count", 0),
             "phase_history_blocks": task.get("phase_history_blocks", []),
             "step_history": task.get("step_history", []),
+            "phase_events_audit": task.get("phase_events_audit", []),
+            "step_history_audit": task.get("step_history_audit", []),
             **_theme_context(task.get("namespace")),
         }
     )

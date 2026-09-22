@@ -135,10 +135,13 @@ class SAUnitOfWork(UnitOfWork):
         task = self.tasks.get_by_key(key, workflow_id=workflow_id, project_id=project_id)
         return task.to_dict() if task is not None else None
 
-    def get_phases(self, workflow_id: int) -> list[dict[str, Any]]:
+    def get_phases(self, workflow_id: int, mode_id: int | None = None) -> list[dict[str, Any]]:
         if not isinstance(workflow_id, int) or isinstance(workflow_id, bool) or workflow_id <= 0:
             raise ValueError("workflow_id должен быть положительным целым числом")
-        return [phase.to_dict() for phase in self.phases.list(workflow_id=workflow_id)]
+        return [
+            phase.to_dict()
+            for phase in self.phases.list(workflow_id=workflow_id, mode_id=mode_id)
+        ]
 
     def get_projects(self) -> list[dict[str, Any]]:
         return [project.to_dict() for project in self.projects.list()]

@@ -12,6 +12,7 @@ from project_workflow.domain import (
     Project,
     Task,
     TaskPhaseEvent,
+    TaskRuntimeAssignment,
     TaskStepHistoryEntry,
     Workflow,
     WorkflowMode,
@@ -115,6 +116,28 @@ def _row_to_task(row: m.Task) -> Task:
         status=row.status or "active",
         created_at=_iso(row.created_at),
         updated_at=_iso(row.updated_at),
+    )
+
+
+def _row_to_runtime_assignment(row: m.TaskRuntimeAssignment) -> TaskRuntimeAssignment:
+    try:
+        payload = json.loads(row.payload)
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise ValueError("Сохранённый payload runtime assignment содержит некорректный JSON") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("Сохранённый payload runtime assignment должен быть JSON-объектом")
+    return TaskRuntimeAssignment(
+        id=row.id,
+        operation_key=row.operation_key,
+        task_id=row.task_id,
+        project_id=row.project_id,
+        workflow_id=row.workflow_id,
+        mode_id=row.mode_id,
+        mode_key=row.mode.key if row.mode else "default",
+        cycle_number=row.cycle_number,
+        assignment_revision=row.assignment_revision,
+        payload=payload,
+        created_at=_iso(row.created_at),
     )
 
 

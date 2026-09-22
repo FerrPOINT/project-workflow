@@ -36,6 +36,13 @@
 
 Для изолированных контейнеров исполнителей сохранён private runtime bridge `/internal/runtime/step` и `/internal/runtime/history`: это отдельный service-to-service контракт с role tokens, не пользовательский UI API. Он включается только при `PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON` и должен быть доступен лишь во внутренней сети или на host loopback.
 
+Business/Fleet adapter назначает точный mode/cycle через
+`POST /internal/runtime/assign` и отдельный
+`PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON`. Assignment token не является runtime
+token, не передаётся в Hermes-контейнер или его shell и должен храниться только
+у server-owned adapter. Совпадение assignment, runtime или catalog token
+считается ошибкой конфигурации и закрывает endpoint.
+
 Fleet Control читает каталог через `GET /internal/runtime/catalog` с отдельным
 `PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN` (не менее 32 символов). Этот токен
 не разрешает `step` и `history` и не меняет `PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON`.

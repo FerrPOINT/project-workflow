@@ -31,6 +31,11 @@ introspection, а также сохраняет отдельный private runti
   аутентифицируется role token из `PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON`, не
   доступен как browser UI API и должен публиковаться только во внутреннюю сеть
   или на host loopback.
+- **Business assignment adapter** отдельно вызывает
+  `POST /internal/runtime/assign` с credential из
+  `PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON`. Этот server-owned secret не
+  передаётся Hermes/runtime shell и не может совпадать с runtime или catalog
+  token; namespace выводится сервером из роли credential.
 - **SupervisorEngine** маршрутизирует задачу, строит phase contract, вызывает
   обязательный OpenAI-compatible evaluator и сохраняет результат атомарно.
 - **PostgreSQL** - единственный runtime data store. SQLite допустим только в

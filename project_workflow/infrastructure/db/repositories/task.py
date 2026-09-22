@@ -3,17 +3,22 @@
 from __future__ import annotations
 
 import datetime
+import json
 from collections.abc import Mapping, Sequence
 from typing import Any
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session, joinedload
 
-from project_workflow.domain import Task, TaskPhaseEvent
+from project_workflow.domain import Task, TaskPhaseEvent, TaskRuntimeAssignment
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import TaskRepository
 from project_workflow.infrastructure.db import models as m
-from project_workflow.infrastructure.db.repositories.converters import _row_to_phase_event, _row_to_task
+from project_workflow.infrastructure.db.repositories.converters import (
+    _row_to_phase_event,
+    _row_to_runtime_assignment,
+    _row_to_task,
+)
 
 
 class SATaskRepository(TaskRepository):
@@ -127,6 +132,40 @@ class SATaskRepository(TaskRepository):
                 setattr(row, key, val)
         if data:
             row.updated_at = datetime.datetime.now(datetime.timezone.utc)
+
+    def get_assignment_by_operation_key(self, operation_key: str) -> TaskRuntimeAssignment | None:
+        with self._session.no_autoflush:
+            row = self._session.execute(
+                select(m.TaskRuntimeAssignment)
+                .options(joinedload(m.TaskRuntimeAssignment.mode))
+                .where(m.TaskRuntimeAssignment.operation_key == operation_key)
+            ).scalar_one_or_none()
+        return _row_to_runtime_assignment(row) if row else None
+
+    def create_assignment(self, data: dict[str, Any]) -> int:
+        item = m.TaskRuntimeAssignment(
+            operation_key=data["operation_key"],
+            task_id=data["task_id"],
+            project_id=data["project_id"],
+            workflow_id=data["workflow_id"],
+            mode_id=data["mode_id"],
+            cycle_number=data["cycle_number"],
+            assignment_revision=data["assignment_revision"],
+            payload=json.dumps(data["payload"], ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+        )
+        self._session.add(item)
+        self._session.flush()
+        return int(item.id)
+
+    def list_assignments(self, task_id: int) -> Sequence[TaskRuntimeAssignment]:
+        with self._session.no_autoflush:
+            rows = self._session.execute(
+                select(m.TaskRuntimeAssignment)
+                .options(joinedload(m.TaskRuntimeAssignment.mode))
+                .where(m.TaskRuntimeAssignment.task_id == task_id)
+                .order_by(m.TaskRuntimeAssignment.assignment_revision)
+            ).scalars().all()
+        return [_row_to_runtime_assignment(row) for row in rows]
 
     def update_if_state(
         self,

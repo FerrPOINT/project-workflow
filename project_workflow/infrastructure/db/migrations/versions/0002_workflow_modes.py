@@ -43,7 +43,7 @@ def _upgrade_postgresql_constraints() -> None:
         ondelete="CASCADE",
     )
     op.create_foreign_key(
-        "fk_phases_parallel_with_mode_workflow",
+        "fk_phases_parallel_with_workflow",
         "phases",
         "phases",
         ["parallel_with_phase_id", "mode_id", "workflow_id"],
@@ -51,7 +51,7 @@ def _upgrade_postgresql_constraints() -> None:
         ondelete="RESTRICT",
     )
     op.create_foreign_key(
-        "fk_phases_rollback_target_mode_workflow",
+        "fk_phases_rollback_target_workflow",
         "phases",
         "phases",
         ["rollback_target_phase_id", "mode_id", "workflow_id"],
@@ -70,8 +70,9 @@ def _upgrade_postgresql_constraints() -> None:
     op.create_unique_constraint(
         "uq_tasks_project_assignment_operation", "tasks", ["project_id", "assignment_operation_key"]
     )
+    op.drop_constraint("fk_tasks_current_phase_workflow", "tasks", type_="foreignkey")
     op.create_foreign_key(
-        "fk_tasks_current_phase_mode_workflow",
+        "fk_tasks_current_phase_workflow",
         "tasks",
         "phases",
         ["current_phase_id", "mode_id", "workflow_id"],
@@ -90,13 +91,19 @@ def _upgrade_postgresql_constraints() -> None:
         "task_step_history",
         ["id", "task_id", "mode_id", "cycle_number"],
     )
+    for name in (
+        "fk_task_step_history_phase_workflow",
+        "fk_task_step_history_next_phase_workflow",
+        "fk_task_step_history_rollback_phase_workflow",
+    ):
+        op.drop_constraint(name, "task_step_history", type_="foreignkey")
     for name, local in (
         ("phase", "phase_id"),
         ("next_phase", "next_phase_id"),
         ("rollback_phase", "rollback_phase_id"),
     ):
         op.create_foreign_key(
-            f"fk_task_step_history_{name}_mode_workflow",
+            f"fk_task_step_history_{name}_workflow",
             "task_step_history",
             "phases",
             [local, "mode_id", "workflow_id"],
@@ -115,8 +122,9 @@ def _upgrade_postgresql_constraints() -> None:
     op.create_check_constraint(
         "ck_task_phase_events_cycle_nonnegative", "task_phase_events", "cycle_number >= 0"
     )
+    op.drop_constraint("fk_task_phase_events_phase_workflow", "task_phase_events", type_="foreignkey")
     op.create_foreign_key(
-        "fk_task_phase_events_phase_mode_workflow",
+        "fk_task_phase_events_phase_workflow",
         "task_phase_events",
         "phases",
         ["phase_id", "mode_id", "workflow_id"],
@@ -131,6 +139,59 @@ def _upgrade_postgresql_constraints() -> None:
         ["step_history_id", "task_id", "mode_id", "cycle_number"],
         ["id", "task_id", "mode_id", "cycle_number"],
         ondelete="RESTRICT",
+    )
+
+
+def _create_assignment_ledger() -> None:
+    op.create_table(
+        "task_runtime_assignments",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("operation_key", sa.String(length=128), nullable=False),
+        sa.Column("task_id", sa.Integer(), nullable=False),
+        sa.Column("project_id", sa.Integer(), nullable=False),
+        sa.Column("workflow_id", sa.Integer(), nullable=False),
+        sa.Column("mode_id", sa.Integer(), nullable=False),
+        sa.Column("cycle_number", sa.Integer(), nullable=False),
+        sa.Column("assignment_revision", sa.Integer(), nullable=False),
+        sa.Column("payload", sa.Text(), server_default="{}", nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.CheckConstraint("cycle_number >= 0", name="ck_task_runtime_assignments_cycle_nonnegative"),
+        sa.CheckConstraint("assignment_revision > 0", name="ck_task_runtime_assignments_revision_positive"),
+        sa.ForeignKeyConstraint(
+            ["task_id", "workflow_id"],
+            ["tasks.id", "tasks.workflow_id"],
+            name="fk_task_runtime_assignments_task_workflow",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["project_id", "workflow_id"],
+            ["projects.id", "projects.workflow_id"],
+            name="fk_task_runtime_assignments_project_workflow",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["mode_id", "workflow_id"],
+            ["workflow_modes.id", "workflow_modes.workflow_id"],
+            name="fk_task_runtime_assignments_mode_workflow",
+            ondelete="RESTRICT",
+        ),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("operation_key", name="uq_task_runtime_assignments_operation_key"),
+        sa.UniqueConstraint(
+            "task_id", "assignment_revision", name="uq_task_runtime_assignments_task_revision"
+        ),
+    )
+    op.create_index(
+        "ix_task_runtime_assignments_task_id", "task_runtime_assignments", ["task_id"]
+    )
+    op.execute(
+        sa.text(
+            "INSERT INTO task_runtime_assignments "
+            "(operation_key, task_id, project_id, workflow_id, mode_id, cycle_number, "
+            "assignment_revision, payload) "
+            "SELECT assignment_operation_key, id, project_id, workflow_id, mode_id, cycle_number, "
+            "assignment_revision, '{}' FROM tasks WHERE assignment_operation_key IS NOT NULL"
+        )
     )
 
 
@@ -207,6 +268,7 @@ def upgrade() -> None:
 
     if not _is_sqlite():
         _upgrade_postgresql_constraints()
+        _create_assignment_ledger()
         return
 
     # SQLite cannot rewrite a referenced parent table while foreign-key
@@ -230,14 +292,14 @@ def upgrade() -> None:
             ondelete="CASCADE",
         )
         batch.create_foreign_key(
-            "fk_phases_parallel_with_mode_workflow",
+            "fk_phases_parallel_with_workflow",
             "phases",
             ["parallel_with_phase_id", "mode_id", "workflow_id"],
             ["id", "mode_id", "workflow_id"],
             ondelete="RESTRICT",
         )
         batch.create_foreign_key(
-            "fk_phases_rollback_target_mode_workflow",
+            "fk_phases_rollback_target_workflow",
             "phases",
             ["rollback_target_phase_id", "mode_id", "workflow_id"],
             ["id", "mode_id", "workflow_id"],
@@ -256,7 +318,7 @@ def upgrade() -> None:
             "uq_tasks_project_assignment_operation", ["project_id", "assignment_operation_key"]
         )
         batch.create_foreign_key(
-            "fk_tasks_current_phase_mode_workflow",
+            "fk_tasks_current_phase_workflow",
             "phases",
             ["current_phase_id", "mode_id", "workflow_id"],
             ["id", "mode_id", "workflow_id"],
@@ -281,7 +343,7 @@ def upgrade() -> None:
             ("rollback_phase", "rollback_phase_id"),
         ):
             batch.create_foreign_key(
-                f"fk_task_step_history_{name}_mode_workflow",
+                f"fk_task_step_history_{name}_workflow",
                 "phases",
                 [local, "mode_id", "workflow_id"],
                 ["id", "mode_id", "workflow_id"],
@@ -300,7 +362,7 @@ def upgrade() -> None:
         batch.alter_column("cycle_number", nullable=False, server_default="0")
         batch.create_check_constraint("ck_task_phase_events_cycle_nonnegative", "cycle_number >= 0")
         batch.create_foreign_key(
-            "fk_task_phase_events_phase_mode_workflow",
+            "fk_task_phase_events_phase_workflow",
             "phases",
             ["phase_id", "mode_id", "workflow_id"],
             ["id", "mode_id", "workflow_id"],
@@ -355,6 +417,7 @@ def upgrade() -> None:
                 )
             )
         op.execute("PRAGMA foreign_keys=ON")
+    _create_assignment_ledger()
 
 
 def downgrade() -> None:

@@ -51,17 +51,19 @@ def _configured_tokens(setting_name: str) -> dict[str, str]:
     return result
 
 
-def _runtime_tokens() -> dict[str, str]:
-    return _configured_tokens("PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON")
-
-
-def _assignment_tokens() -> dict[str, str]:
-    tokens = _configured_tokens("PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON")
-    runtime_tokens = _runtime_tokens()
+def _token_configuration() -> tuple[dict[str, str], dict[str, str], str]:
+    runtime_tokens = _configured_tokens("PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON")
+    assignment_tokens = _configured_tokens("PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON")
     catalog_token = config.get_settings().PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN.strip()
-    if set(tokens.values()) & set(runtime_tokens.values()) or catalog_token in tokens.values():
+    if catalog_token and len(catalog_token) < 32:
+        raise RuntimeError("Некорректная конфигурация Fleet catalog token")
+    runtime_values = set(runtime_tokens.values())
+    assignment_values = set(assignment_tokens.values())
+    if runtime_values & assignment_values:
         raise RuntimeError("Assignment tokens должны отличаться от runtime и catalog tokens")
-    return tokens
+    if catalog_token and catalog_token in runtime_values | assignment_values:
+        raise RuntimeError("Service tokens разных ролей должны быть уникальными")
+    return runtime_tokens, assignment_tokens, catalog_token
 
 
 def _authorized_role(authorization: str | None) -> str | None:
@@ -70,11 +72,8 @@ def _authorized_role(authorization: str | None) -> str | None:
         return None
     supplied = authorization[len(prefix) :]
     matched: str | None = None
-    runtime_tokens = _runtime_tokens()
-    catalog_token = config.get_settings().PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN.strip()
+    runtime_tokens, _, catalog_token = _token_configuration()
     if catalog_token:
-        if len(catalog_token) < 32 or catalog_token in runtime_tokens.values():
-            raise RuntimeError("Некорректная конфигурация Fleet catalog token")
         if hmac.compare_digest(supplied, catalog_token):
             matched = _CATALOG_ROLE
     for role, expected in runtime_tokens.items():
@@ -88,9 +87,7 @@ def _authorized_assignment_role(authorization: str | None) -> str | None:
     if not authorization or not authorization.startswith(prefix):
         return None
     supplied = authorization[len(prefix) :]
-    runtime_tokens = _runtime_tokens()
-    assignment_tokens = _assignment_tokens()
-    catalog_token = config.get_settings().PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN.strip()
+    runtime_tokens, assignment_tokens, catalog_token = _token_configuration()
     if supplied in runtime_tokens.values() or supplied == catalog_token:
         return None
     for role, expected in assignment_tokens.items():

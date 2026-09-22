@@ -13,6 +13,7 @@ from project_workflow.domain import (
     Project,
     Task,
     TaskPhaseEvent,
+    TaskRuntimeAssignment,
     TaskStepHistoryEntry,
     Workflow,
     WorkflowMode,
@@ -198,6 +199,15 @@ class TaskRepository(ABC):
 
     @abstractmethod
     def update(self, task_id: int, data: dict[str, Any]) -> None: ...
+
+    @abstractmethod
+    def get_assignment_by_operation_key(self, operation_key: str) -> TaskRuntimeAssignment | None: ...
+
+    @abstractmethod
+    def create_assignment(self, data: dict[str, Any]) -> int: ...
+
+    @abstractmethod
+    def list_assignments(self, task_id: int) -> Sequence[TaskRuntimeAssignment]: ...
 
     @abstractmethod
     def update_if_state(

@@ -101,6 +101,7 @@ def test_compose_and_env_example_forward_runtime_settings() -> None:
     assert "OPENAI_MODEL: ${OPENAI_MODEL:-app-test}" in compose
     assert "PLATFORM_SERVICES_URL: ${PLATFORM_SERVICES_URL:-http://localhost:7771/api/v1/runtime/services}" in compose
     assert "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON: ${PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON:-}" in compose
+    assert "PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON: ${PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON:-}" in compose
     assert "AUTH_ISSUER: ${AUTH_ISSUER:-}" in compose
     assert "AUTH_INTERNAL_BASE_URL: ${AUTH_INTERNAL_BASE_URL:-}" in compose
     assert "AUTH_PUBLIC_ORIGIN: ${AUTH_PUBLIC_ORIGIN:-http://localhost:8812}" in compose
@@ -108,6 +109,7 @@ def test_compose_and_env_example_forward_runtime_settings() -> None:
     assert "AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}" in compose
     assert "PLATFORM_SERVICES_URL=http://localhost:7771/api/v1/runtime/services" in env_example
     assert "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON=" in env_example
+    assert "PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON=" in env_example
     assert "AUTH_ISSUER=" in env_example
     assert "AUTH_INTERNAL_BASE_URL=" in env_example
     assert "AUTH_PUBLIC_ORIGIN=http://localhost:8812" in env_example

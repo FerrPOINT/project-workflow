@@ -29,6 +29,17 @@ def _headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def _assignment(task: str, operation_key: str) -> dict[str, object]:
+    return {
+        "task": task,
+        "mode_key": "default",
+        "cycle_number": 0,
+        "operation_key": operation_key,
+        "expected_revision": 0,
+        "expected_status": "missing",
+    }
+
+
 def test_runtime_step_is_fail_closed_without_configured_token():
     with TestClient(create_app()) as client:
         response = client.post(
@@ -98,15 +109,40 @@ def test_runtime_step_is_unavailable_for_malformed_or_duplicate_tokens(monkeypat
 def test_runtime_token_is_bound_to_one_namespace(monkeypatch, supervisor_llm):
     analyst_token = "a" * 32
     architect_token = "b" * 32
+    assignment_token = "c" * 32
     monkeypatch.setenv(
         "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON",
         json.dumps({"analyst": analyst_token, "architect": architect_token}),
+    )
+    monkeypatch.setenv(
+        "PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON",
+        json.dumps({"analyst": assignment_token}),
     )
     config.get_settings.cache_clear()
     _namespace("ANALYST", "workflow-analyst", "ANA")
     _namespace("ARCHITECT", "workflow-architect", "ARC")
 
     with TestClient(create_app()) as client:
+        assigned = client.post(
+            "/internal/runtime/assign",
+            headers=_headers(assignment_token),
+            json=_assignment("ANA-1", "assign-ana-1"),
+        )
+        operation_collision = client.post(
+            "/internal/runtime/assign",
+            headers=_headers(assignment_token),
+            json=_assignment("ANA-2", "assign-ana-1"),
+        )
+        forbidden_assignment = client.post(
+            "/internal/runtime/assign",
+            headers=_headers(analyst_token),
+            json=_assignment("ANA-2", "assign-ana-2"),
+        )
+        forbidden_step = client.post(
+            "/internal/runtime/step",
+            headers=_headers(assignment_token),
+            json={"task": "ANA-1"},
+        )
         current = client.post(
             "/internal/runtime/step",
             headers=_headers(analyst_token),
@@ -129,6 +165,11 @@ def test_runtime_token_is_bound_to_one_namespace(monkeypatch, supervisor_llm):
             params={"task": "ANA-1"},
         )
 
+    assert assigned.status_code == 200
+    assert assigned.json()["result"]["task_key"] == "ANA-1"
+    assert operation_collision.status_code == 409
+    assert forbidden_assignment.status_code == 403
+    assert forbidden_step.status_code == 401
     assert current.status_code == 200
     assert current.json()["result"]["task_key"] == "ANA-1"
     assert foreign.status_code == 409
@@ -141,14 +182,24 @@ def test_runtime_token_is_bound_to_one_namespace(monkeypatch, supervisor_llm):
 
 def test_runtime_history_exposes_retryable_supervisor_failure(monkeypatch):
     token = "d" * 32
+    assignment_token = "e" * 32
     monkeypatch.setenv(
         "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON",
         json.dumps({"developer": token}),
+    )
+    monkeypatch.setenv(
+        "PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON",
+        json.dumps({"developer": assignment_token}),
     )
     config.get_settings.cache_clear()
     _namespace("DEVELOPER", "workflow-developer", "DEV")
 
     with TestClient(create_app()) as client:
+        assigned = client.post(
+            "/internal/runtime/assign",
+            headers=_headers(assignment_token),
+            json=_assignment("DEV-1", "assign-dev-1"),
+        )
         current = client.post(
             "/internal/runtime/step",
             headers=_headers(token),
@@ -170,8 +221,35 @@ def test_runtime_history_exposes_retryable_supervisor_failure(monkeypatch):
             params={"task": "DEV-1"},
         )
 
+    assert assigned.status_code == 200
     assert current.status_code == 200
     assert blocked.status_code == 200
     assert blocked.json()["result"]["retryable"] is True
     assert history.status_code == 200
     assert history.json()["result"]["records"][0]["retryable"] is True
+
+
+def test_token_collision_closes_runtime_and_assignment_endpoints(monkeypatch):
+    shared = "s" * 32
+    monkeypatch.setenv(
+        "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON",
+        json.dumps({"analyst": shared}),
+    )
+    monkeypatch.setenv(
+        "PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON",
+        json.dumps({"analyst": shared}),
+    )
+    config.get_settings.cache_clear()
+
+    with TestClient(create_app()) as client:
+        step = client.post(
+            "/internal/runtime/step", headers=_headers(shared), json={"task": "ANA-1"}
+        )
+        assignment = client.post(
+            "/internal/runtime/assign",
+            headers=_headers(shared),
+            json=_assignment("ANA-1", "collision"),
+        )
+
+    assert step.status_code == 503
+    assert assignment.status_code == 503

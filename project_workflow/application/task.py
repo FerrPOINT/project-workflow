@@ -6,10 +6,10 @@ from typing import Any
 
 from sqlalchemy.exc import IntegrityError
 
+from project_workflow.application.execution_mode import resolve_execution_selection
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import UnitOfWork
 from project_workflow.domain.validation import TaskKeyValidator, get_project_for_task_key
-from project_workflow.application.execution_mode import resolve_execution_selection
 
 
 class TaskService:
@@ -120,9 +120,6 @@ class TaskService:
         expected_cycle_number: int | None = None,
     ) -> dict[str, Any]:
         """Persist one authorized Business assignment atomically and idempotently."""
-        project = self._uow.projects.lock(project_id)
-        if project is None or project.workflow_id is None:
-            raise NotFoundError(f"Неймспейс {project_id} не найден")
         operation_key = operation_key.strip()
         mode_key = mode_key.strip()
         if not operation_key or len(operation_key) > 128:
@@ -133,11 +130,29 @@ class TaskService:
         if not validated_key.is_valid:
             raise ConflictError(validated_key.error_message or f"Недопустимый ключ задачи {task_key!r}")
         task_key = validated_key.normalized or task_key
+        project = self._uow.projects.lock(project_id)
+        if project is None or project.workflow_id is None:
+            raise NotFoundError(f"Неймспейс {project_id} не найден")
         mode = self._uow.workflows.get_mode_by_key(project.workflow_id, mode_key)
         if mode is None or mode.id is None:
             raise ConflictError(f"Режим {mode_key!r} не найден в воркфлоу {project.workflow_id}")
         if cycle_number < 0 or expected_revision < 0:
             raise ValueError("cycle_number и expected_revision должны быть неотрицательными")
+        payload = {
+            "project_id": project_id,
+            "task_key": task_key,
+            "workflow_id": project.workflow_id,
+            "mode_key": mode.key,
+            "cycle_number": cycle_number,
+            "operation_key": operation_key,
+            "expected_revision": expected_revision,
+            "expected_status": expected_status,
+            "expected_mode_key": expected_mode_key,
+            "expected_cycle_number": expected_cycle_number,
+        }
+        replay = self._uow.tasks.get_assignment_by_operation_key(operation_key)
+        if replay is not None:
+            return self._reconcile_assignment(replay.to_dict(), payload)
         phases = list(self._uow.phases.list(workflow_id=project.workflow_id, mode_id=mode.id))
         if not phases or phases[0].id is None:
             raise ConflictError(f"Режим {mode_key!r} не содержит начальной фазы")
@@ -147,26 +162,38 @@ class TaskService:
                 raise ConflictError("Ожидаемое состояние отсутствующей задачи не совпадает")
             if cycle_number != 0:
                 raise ConflictError("Начальный Business assignment должен иметь cycle_number=0")
-            tid = self._uow.tasks.create(
-                {
-                    "project_id": project_id,
-                    "workflow_id": project.workflow_id,
-                    "mode_id": mode.id,
-                    "mode_key": mode.key,
-                    "cycle_number": cycle_number,
-                    "assignment_operation_key": operation_key,
-                    "assignment_revision": 1,
-                    "task_key": task_key,
-                    "title": task_key,
-                    "current_phase_id": phases[0].id,
-                    "status": "active",
-                }
-            )
             try:
+                tid = self._uow.tasks.create(
+                    {
+                        "project_id": project_id,
+                        "workflow_id": project.workflow_id,
+                        "mode_id": mode.id,
+                        "mode_key": mode.key,
+                        "cycle_number": cycle_number,
+                        "assignment_operation_key": operation_key,
+                        "assignment_revision": 1,
+                        "task_key": task_key,
+                        "title": task_key,
+                        "current_phase_id": phases[0].id,
+                        "status": "active",
+                    }
+                )
+                self._uow.tasks.create_assignment(
+                    {
+                        "operation_key": operation_key,
+                        "task_id": tid,
+                        "project_id": project_id,
+                        "workflow_id": project.workflow_id,
+                        "mode_id": mode.id,
+                        "cycle_number": cycle_number,
+                        "assignment_revision": 1,
+                        "payload": payload,
+                    }
+                )
                 self._uow.commit()
             except IntegrityError as exc:
                 self._uow.rollback()
-                raise ConflictError("operation_key уже использован для другой задачи") from exc
+                return self._reconcile_after_integrity_error(operation_key, payload, exc)
             created = self._uow.tasks.get_by_id(tid)
             if created is None:
                 raise RuntimeError("Не удалось сохранить runtime assignment")
@@ -175,10 +202,6 @@ class TaskService:
         locked = self._uow.tasks.lock(int(current.id or 0))
         if locked is None:
             raise ConflictError("Задача исчезла во время runtime assignment")
-        if locked.assignment_operation_key == operation_key:
-            if locked.mode_id != mode.id or locked.cycle_number != cycle_number:
-                raise ConflictError("Повторный operation_key содержит другой assignment")
-            return locked.to_dict()
         if locked.assignment_revision != expected_revision or locked.status != expected_status:
             raise ConflictError("Ожидаемое prior state/revision задачи устарело")
         if expected_mode_key is not None and locked.mode_key != expected_mode_key:
@@ -192,27 +215,86 @@ class TaskService:
                 raise ConflictError("Нельзя сменить режим или цикл активной задачи")
         elif cycle_number != locked.cycle_number + 1:
             raise ConflictError("Business cycle должен быть строго следующим")
-        self._uow.tasks.update(
-            int(locked.id or 0),
-            {
-                "mode_id": mode.id,
-                "cycle_number": cycle_number,
-                "assignment_operation_key": operation_key,
-                "assignment_revision": locked.assignment_revision + 1,
-                "current_phase_id": phases[0].id,
-                "status": "active",
-            },
-        )
-        self._uow.tasks.record_phase_event(int(locked.id or 0), int(phases[0].id), "entered")
+        next_revision = locked.assignment_revision + 1
         try:
+            self._uow.tasks.update(
+                int(locked.id or 0),
+                {
+                    "mode_id": mode.id,
+                    "cycle_number": cycle_number,
+                    "assignment_operation_key": operation_key,
+                    "assignment_revision": next_revision,
+                    "current_phase_id": phases[0].id,
+                    "status": "active",
+                },
+            )
+            self._uow.tasks.record_phase_event(int(locked.id or 0), int(phases[0].id), "entered")
+            self._uow.tasks.create_assignment(
+                {
+                    "operation_key": operation_key,
+                    "task_id": int(locked.id or 0),
+                    "project_id": project_id,
+                    "workflow_id": project.workflow_id,
+                    "mode_id": mode.id,
+                    "cycle_number": cycle_number,
+                    "assignment_revision": next_revision,
+                    "payload": payload,
+                }
+            )
             self._uow.commit()
         except IntegrityError as exc:
             self._uow.rollback()
-            raise ConflictError("operation_key уже использован для другой задачи") from exc
+            return self._reconcile_after_integrity_error(operation_key, payload, exc)
         assigned = self._uow.tasks.get_by_id(int(locked.id or 0))
         if assigned is None:
             raise RuntimeError("Не удалось обновить runtime assignment")
         return assigned.to_dict()
+
+    def _reconcile_after_integrity_error(
+        self, operation_key: str, payload: dict[str, Any], cause: IntegrityError
+    ) -> dict[str, Any]:
+        replay = self._uow.tasks.get_assignment_by_operation_key(operation_key)
+        if replay is None:
+            raise ConflictError("Runtime assignment конфликтует с уже сохранённым состоянием") from cause
+        return self._reconcile_assignment(replay.to_dict(), payload, cause)
+
+    def _reconcile_assignment(
+        self,
+        assignment: dict[str, Any],
+        payload: dict[str, Any],
+        cause: Exception | None = None,
+    ) -> dict[str, Any]:
+        if assignment.get("payload") != payload:
+            raise ConflictError("operation_key уже использован для другого runtime assignment") from cause
+        task = self._uow.tasks.get_by_id(int(assignment["task_id"]))
+        if task is None:
+            raise ConflictError("Runtime assignment ссылается на отсутствующую задачу") from cause
+        if (
+            task.project_id != assignment.get("project_id")
+            or task.workflow_id != assignment.get("workflow_id")
+            or task.task_key != payload.get("task_key")
+        ):
+            raise ConflictError("operation_key уже использован для другой задачи") from cause
+        result = task.to_dict()
+        phases = list(
+            self._uow.phases.list(
+                workflow_id=int(assignment["workflow_id"]), mode_id=int(assignment["mode_id"])
+            )
+        )
+        first_phase = phases[0] if phases else None
+        result.update(
+            {
+                "mode_id": assignment["mode_id"],
+                "mode_key": assignment["mode_key"],
+                "cycle_number": assignment["cycle_number"],
+                "assignment_operation_key": assignment["operation_key"],
+                "assignment_revision": assignment["assignment_revision"],
+                "current_phase_id": first_phase.id if first_phase else None,
+                "current_phase_code": first_phase.code if first_phase else None,
+                "current_phase_name": first_phase.name if first_phase else None,
+            }
+        )
+        return result
 
     def get_task(self, task_id: int) -> dict[str, Any] | None:
         t = self._uow.tasks.get_by_id(task_id)

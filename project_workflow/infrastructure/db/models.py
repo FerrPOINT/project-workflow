@@ -302,6 +302,61 @@ class Task(Base):
     )
 
 
+class TaskRuntimeAssignment(Base):
+    """Append-only acceptance ledger for adapter-owned runtime assignments."""
+
+    __tablename__ = "task_runtime_assignments"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    operation_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    task_id: Mapped[int] = mapped_column(nullable=False)
+    project_id: Mapped[int] = mapped_column(nullable=False)
+    workflow_id: Mapped[int] = mapped_column(nullable=False)
+    mode_id: Mapped[int] = mapped_column(nullable=False)
+    cycle_number: Mapped[int] = mapped_column(nullable=False)
+    assignment_revision: Mapped[int] = mapped_column(nullable=False)
+    payload: Mapped[str] = mapped_column(Text, nullable=False, default="{}", server_default="{}")
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["task_id", "workflow_id"],
+            ["tasks.id", "tasks.workflow_id"],
+            name="fk_task_runtime_assignments_task_workflow",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["project_id", "workflow_id"],
+            ["projects.id", "projects.workflow_id"],
+            name="fk_task_runtime_assignments_project_workflow",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["mode_id", "workflow_id"],
+            ["workflow_modes.id", "workflow_modes.workflow_id"],
+            name="fk_task_runtime_assignments_mode_workflow",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("operation_key", name="uq_task_runtime_assignments_operation_key"),
+        UniqueConstraint(
+            "task_id", "assignment_revision", name="uq_task_runtime_assignments_task_revision"
+        ),
+        CheckConstraint("cycle_number >= 0", name="ck_task_runtime_assignments_cycle_nonnegative"),
+        CheckConstraint("assignment_revision > 0", name="ck_task_runtime_assignments_revision_positive"),
+        Index("ix_task_runtime_assignments_task_id", "task_id"),
+    )
+    mode: Mapped[WorkflowMode] = relationship(
+        "WorkflowMode",
+        primaryjoin=(
+            "and_(TaskRuntimeAssignment.mode_id == WorkflowMode.id, "
+            "TaskRuntimeAssignment.workflow_id == WorkflowMode.workflow_id)"
+        ),
+        foreign_keys="[TaskRuntimeAssignment.mode_id, TaskRuntimeAssignment.workflow_id]",
+        viewonly=True,
+    )
+
+
 class TaskStepHistoryEntry(Base):
     __tablename__ = "task_step_history"
 

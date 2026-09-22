@@ -254,7 +254,8 @@ def test_runtime_assignment_persists_cycles_only_after_terminal(modes_db):
     assert assigned["current_phase_id"] == rework_phase
     assert service.assign_runtime_task(
         project_id=project_id, task_key="RUN-1", mode_key="rework", cycle_number=1,
-        operation_key="rework-1", expected_revision=999, expected_status="active",
+        operation_key="rework-1", expected_revision=1, expected_status="done",
+        expected_mode_key="default", expected_cycle_number=0,
     )["assignment_revision"] == assigned["assignment_revision"]
     modes_db.tasks.update(initial["id"], {"status": "done"})
     modes_db.commit()
@@ -265,6 +266,70 @@ def test_runtime_assignment_persists_cycles_only_after_terminal(modes_db):
     )
     assert next_assigned["cycle_number"] == 2
     assert default_phase != rework_phase
+
+
+def test_assignment_ledger_reconciles_delayed_replay_and_rejects_cross_task_reuse(modes_db):
+    workflow_id = modes_db.workflows.create({"name": "Assignment ledger"})
+    default = modes_db.workflows.get_mode_by_key(workflow_id, "default")
+    rework = modes_db.workflows.create_mode(
+        {"workflow_id": workflow_id, "key": "rework", "name": "Rework", "mode_order": 2}
+    )
+    default_phase = modes_db.phases.create(
+        {"workflow_id": workflow_id, "mode_id": default.id, "code": "start", "name": "Start", "phase_order": 1}
+    )
+    modes_db.phases.create(
+        {"workflow_id": workflow_id, "mode_id": rework, "code": "fix", "name": "Fix", "phase_order": 1}
+    )
+    project_id = modes_db.projects.create(
+        {"workflow_id": workflow_id, "code": "LED", "name": "Ledger", "cli_command": "ledger", "key_prefixes": ["LED"]}
+    )
+    service = TaskService(modes_db)
+    first_request = {
+        "project_id": project_id,
+        "task_key": "LED-1",
+        "mode_key": "default",
+        "cycle_number": 0,
+        "operation_key": "business-operation-a",
+        "expected_revision": 0,
+        "expected_status": "missing",
+    }
+    first = service.assign_runtime_task(**first_request)
+    modes_db.tasks.update(first["id"], {"status": "done"})
+    modes_db.commit()
+    second = service.assign_runtime_task(
+        project_id=project_id,
+        task_key="LED-1",
+        mode_key="rework",
+        cycle_number=1,
+        operation_key="business-operation-b",
+        expected_revision=1,
+        expected_status="done",
+        expected_mode_key="default",
+        expected_cycle_number=0,
+    )
+
+    delayed = service.assign_runtime_task(**first_request)
+    assert delayed["assignment_operation_key"] == "business-operation-a"
+    assert delayed["assignment_revision"] == 1
+    assert delayed["mode_key"] == "default"
+    assert delayed["cycle_number"] == 0
+    assert delayed["current_phase_id"] == default_phase
+    assert second["assignment_operation_key"] == "business-operation-b"
+    assert [item.operation_key for item in modes_db.tasks.list_assignments(first["id"])] == [
+        "business-operation-a",
+        "business-operation-b",
+    ]
+
+    with pytest.raises(ConflictError, match="другой runtime assignment"):
+        service.assign_runtime_task(
+            project_id=project_id,
+            task_key="LED-2",
+            mode_key="default",
+            cycle_number=0,
+            operation_key="business-operation-a",
+            expected_revision=0,
+            expected_status="missing",
+        )
 
 
 def test_supervisor_context_switch_keeps_current_path_and_full_history(modes_db):
