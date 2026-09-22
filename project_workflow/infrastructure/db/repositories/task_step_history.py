@@ -39,6 +39,8 @@ class SATaskStepHistoryRepository(TaskStepHistoryRepository):
         workflow_id: int | None = None,
         project_id: int | None = None,
         phase_id: int | None = None,
+        mode_id: int | None = None,
+        cycle_number: int | None = None,
         limit: int | None = 200,
     ) -> Sequence[TaskStepHistoryEntry]:
         stmt = select(m.TaskStepHistoryEntry).order_by(m.TaskStepHistoryEntry.id.desc())
@@ -58,6 +60,10 @@ class SATaskStepHistoryRepository(TaskStepHistoryRepository):
             stmt = stmt.where(m.TaskStepHistoryEntry.workflow_id == workflow_id)
         if phase_id is not None:
             stmt = stmt.where(m.TaskStepHistoryEntry.phase_id == phase_id)
+        if mode_id is not None:
+            stmt = stmt.where(m.TaskStepHistoryEntry.mode_id == mode_id)
+        if cycle_number is not None:
+            stmt = stmt.where(m.TaskStepHistoryEntry.cycle_number == cycle_number)
         if task_key is not None and task_id is None and project_id is None:
             project_stmt = select(m.Task.project_id).where(m.Task.task_key == task_key)
             if workflow_id is not None:
@@ -91,38 +97,48 @@ class SATaskStepHistoryRepository(TaskStepHistoryRepository):
         return [_row_to_step_history(row) for row in rows]
 
     def get_by_fingerprint(
-        self, task_id: int, phase_id: int, replay_fingerprint: str
+        self, task_id: int, phase_id: int, replay_fingerprint: str,
+        mode_id: int | None = None, cycle_number: int | None = None,
     ) -> TaskStepHistoryEntry | None:
-        row = self._session.execute(
-            select(m.TaskStepHistoryEntry).where(
-                m.TaskStepHistoryEntry.task_id == task_id,
-                m.TaskStepHistoryEntry.phase_id == phase_id,
-                m.TaskStepHistoryEntry.replay_fingerprint == replay_fingerprint,
-            )
-        ).scalar_one_or_none()
+        stmt = select(m.TaskStepHistoryEntry).where(
+            m.TaskStepHistoryEntry.task_id == task_id,
+            m.TaskStepHistoryEntry.phase_id == phase_id,
+            m.TaskStepHistoryEntry.replay_fingerprint == replay_fingerprint,
+        )
+        if mode_id is not None:
+            stmt = stmt.where(m.TaskStepHistoryEntry.mode_id == mode_id)
+        if cycle_number is not None:
+            stmt = stmt.where(m.TaskStepHistoryEntry.cycle_number == cycle_number)
+        row = self._session.execute(stmt).scalar_one_or_none()
         return _row_to_step_history(row) if row is not None else None
 
     def create(self, data: dict[str, Any]) -> int:
-        task_workflow_id = self._session.execute(
-            select(m.Task.workflow_id).where(m.Task.id == data["task_id"])
-        ).scalar_one_or_none()
-        if task_workflow_id is None:
+        task_row = self._session.get(m.Task, data["task_id"])
+        if task_row is None:
             raise ValueError("Задача для записи step не найдена")
+        task_workflow_id = task_row.workflow_id
+        mode_id = data.get("mode_id", task_row.mode_id)
+        cycle_number = data.get("cycle_number", task_row.cycle_number)
         phase_ids = {
             phase_id
             for field in ("phase_id", "next_phase_id", "rollback_phase_id")
             if (phase_id := data.get(field)) is not None
         }
-        workflow_ids = set(
+        phase_rows = list(
             self._session.execute(
-                select(m.Phase.workflow_id).where(m.Phase.id.in_(phase_ids))
+                select(m.Phase).where(m.Phase.id.in_(phase_ids))
             ).scalars()
         )
-        if workflow_ids != {task_workflow_id}:
-            raise ValueError("Запись step может ссылаться только на фазы воркфлоу задачи")
+        if (
+            len(phase_rows) != len(phase_ids)
+            or any(row.workflow_id != task_workflow_id or row.mode_id != mode_id for row in phase_rows)
+        ):
+            raise ValueError("Запись step может ссылаться только на фазы режима воркфлоу задачи")
         item = m.TaskStepHistoryEntry(
             task_id=data["task_id"],
             workflow_id=task_workflow_id,
+            mode_id=mode_id,
+            cycle_number=cycle_number,
             phase_id=data["phase_id"],
             verdict=data["verdict"],
             worker_report=data["worker_report"],

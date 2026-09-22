@@ -247,6 +247,8 @@ def create_app() -> FastAPI:
     app.delete("/api/phases/{phase_id:int}", response_model=None)(api.api_phase_delete)
     app.get("/api/tasks", response_model=None)(api.api_tasks)
     app.get("/api/workflows", response_model=None)(api.api_workflows)
+    app.get("/api/workflows/{workflow_id:int}/modes", response_model=None)(api.api_workflow_modes)
+    app.post("/api/workflows/{workflow_id:int}/modes", response_model=None)(api.api_workflow_mode_create)
     app.post("/api/workflows", response_model=None)(api.api_workflow_create)
     app.put("/api/workflows/{workflow_id}", response_model=None)(api.api_workflow_update)
     app.delete("/api/workflows/{workflow_id}", response_model=None)(api.api_workflow_delete)

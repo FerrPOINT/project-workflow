@@ -17,6 +17,7 @@ from ..application.project import ProjectService
 from ..application.task import TaskService
 from ..application.workflow import WorkflowService
 from ..domain.exceptions import ConflictError
+from ..application.execution_mode import ExecutionSelection, resolve_execution_selection
 from ..infrastructure.db import schema
 from ..infrastructure.db.uow import SAUnitOfWork
 from .context import SupervisorContextBuilder
@@ -78,6 +79,18 @@ class SupervisorEngine:
         )
         if self.task is None:
             raise ValueError(f"Задача {task_key} не найдена")
+        task_workflow_id = self._require_task_workflow_id(self.task)
+        if isinstance(self.task.get("mode_id"), int) and self.task.get("mode_id", 0) > 0:
+            selection = resolve_execution_selection(self._uow, task_workflow_id)
+            if int(self.task["mode_id"]) != selection.mode_id:
+                raise ConflictError("Задача принадлежит другому режиму; выбор mode выполняется Business")
+            if int(self.task.get("cycle_number") or 0) != selection.cycle_number:
+                raise ConflictError("Задача принадлежит другому циклу; выбор cycle выполняется Business")
+            self.execution_mode_id = selection.mode_id
+            self.execution_cycle_number = selection.cycle_number
+        else:
+            self.execution_mode_id = None
+            self.execution_cycle_number = 0
         self._uow.commit()
         self.project = (
             self._project_service.get_project(self.task["project_id"])
@@ -106,7 +119,9 @@ class SupervisorEngine:
     @property
     def all_phases(self) -> list[Phase]:
         if self._all_phases is None:
-            self._all_phases = schema.load_phases_from_db(self._uow, workflow_id=self.workflow_id)
+            self._all_phases = schema.load_phases_from_db(
+                self._uow, workflow_id=self.workflow_id, mode_id=self.execution_mode_id
+            )
         return self._all_phases
 
     @all_phases.setter
@@ -140,7 +155,9 @@ class SupervisorEngine:
             project_id=self.requested_project_id,
         )
         if existing:
-            return existing
+            workflow_id = self._require_task_workflow_id(existing)
+            selection = resolve_execution_selection(self._uow, workflow_id)
+            return self._task_service.prepare_runtime_assignment(existing, selection)
 
         if not self.create_if_missing:
             raise ValueError(f"Задача {self.task_key} не найдена, а create_if_missing=False")
@@ -148,7 +165,8 @@ class SupervisorEngine:
         project = self._resolve_project()
         if not project:
             raise ValueError(f"Не удалось определить неймспейс для ключа задачи: {self.task_key}")
-        current_phase_id = self._first_phase_id_for_project(project["id"])
+        selection = resolve_execution_selection(self._uow, int(project["workflow_id"]))
+        current_phase_id = self._first_phase_id_for_project(project["id"], selection=selection)
         try:
             return self._task_service.create_task(
                 {
@@ -158,6 +176,8 @@ class SupervisorEngine:
                     "current_phase_id": current_phase_id,
                     "status": "active",
                     "workflow_id": project["workflow_id"],
+                    "mode_key": selection.mode_key,
+                    "cycle_number": selection.cycle_number,
                 }
             )
         except ConflictError:
@@ -183,10 +203,13 @@ class SupervisorEngine:
             )
         return projects[0] if projects else None
 
-    def _first_phase_id_for_project(self, project_id: int) -> int:
+    def _first_phase_id_for_project(
+        self, project_id: int, *, selection: ExecutionSelection | None = None
+    ) -> int:
         project = self._project_service.get_project(project_id)
         workflow_id = project["workflow_id"] if project else None
-        phases = schema.load_phases_from_db(self._uow, workflow_id=workflow_id)
+        selection = selection or resolve_execution_selection(self._uow, int(workflow_id))
+        phases = schema.load_phases_from_db(self._uow, workflow_id=workflow_id, mode_id=selection.mode_id)
         if not phases:
             raise ValueError("Каталог фаз воркфлоу пуст")
         phase_id = phases[0].id
@@ -514,7 +537,7 @@ class SupervisorEngine:
         self.workflow_id = self._require_task_workflow_id(self.task) if self.task else None
         self.workflow = self._workflow_service.get_workflow(self.workflow_id) if self.workflow_id else None
         self._all_phases = (
-            schema.load_phases_from_db(self._uow, workflow_id=self.workflow_id)
+            schema.load_phases_from_db(self._uow, workflow_id=self.workflow_id, mode_id=self.execution_mode_id)
             if self.workflow_id
             else []
         )

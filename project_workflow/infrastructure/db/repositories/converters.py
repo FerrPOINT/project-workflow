@@ -14,6 +14,7 @@ from project_workflow.domain import (
     TaskPhaseEvent,
     TaskStepHistoryEntry,
     Workflow,
+    WorkflowMode,
 )
 from project_workflow.domain.project_theme import normalize_theme_color, normalize_theme_icon
 from project_workflow.infrastructure.db import models as m
@@ -31,6 +32,8 @@ def _row_to_phase(row: m.Phase) -> Phase:
     return Phase(
         id=row.id,
         workflow_id=row.workflow_id,
+        mode_id=row.mode_id,
+        mode_key=row.mode.key if row.mode else None,
         code=row.code,
         name=row.name,
         description=row.description,
@@ -49,6 +52,17 @@ def _row_to_workflow(row: m.Workflow) -> Workflow:
         name=row.name,
         description=row.description or "",
         is_default=bool(row.is_default),
+        modes=[_row_to_mode(mode) for mode in sorted(row.modes, key=lambda item: item.mode_order)]
+    )
+
+
+def _row_to_mode(row: m.WorkflowMode) -> WorkflowMode:
+    return WorkflowMode(
+        id=row.id,
+        workflow_id=row.workflow_id,
+        key=row.key,
+        name=row.name,
+        mode_order=row.mode_order,
     )
 
 
@@ -87,6 +101,9 @@ def _row_to_task(row: m.Task) -> Task:
         id=getattr(row, "id", None),
         project_id=row.project_id,
         workflow_id=row.workflow_id,
+        mode_id=row.mode_id,
+        mode_key=next((item.key for item in workflow.modes if item.id == row.mode_id), "default"),
+        cycle_number=row.cycle_number,
         task_key=row.task_key,
         title=row.title or "",
         description=row.description or "",
@@ -134,6 +151,10 @@ def _row_to_step_history(row: m.TaskStepHistoryEntry) -> TaskStepHistoryEntry:
     return TaskStepHistoryEntry(
         id=row.id,
         task_id=row.task_id,
+        workflow_id=row.workflow_id,
+        mode_id=row.mode_id,
+        mode_key=getattr(row, "mode", None).key if getattr(row, "mode", None) else "default",
+        cycle_number=row.cycle_number,
         phase_id=row.phase_id,
         verdict=row.verdict,
         worker_report=row.worker_report or "",
@@ -153,6 +174,10 @@ def _row_to_phase_event(row: m.TaskPhaseEvent) -> TaskPhaseEvent:
     return TaskPhaseEvent(
         id=row.id,
         task_id=row.task_id,
+        workflow_id=row.workflow_id,
+        mode_id=row.mode_id,
+        mode_key=getattr(row, "mode", None).key if getattr(row, "mode", None) else "default",
+        cycle_number=row.cycle_number,
         phase_id=row.phase_id,
         step_history_id=row.step_history_id,
         event_type=row.event_type,

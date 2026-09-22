@@ -103,7 +103,11 @@ def record_transition(
         _update_task(
             db,
             task_state,
-            {"current_phase_id": rollback_phase_id, "status": "active"},
+            {
+                "current_phase_id": rollback_phase_id,
+                "status": "active",
+                "cycle_number": int(task.get("cycle_number") or 0) + 1,
+            },
         )
         db.tasks.record_phase_event(task_id, phase_id, "rolled_back", step_history_id)
         db.tasks.record_phase_event(task_id, rollback_phase_id, "entered", step_history_id)
@@ -169,7 +173,11 @@ def record_parallel_transition(
         _update_task(
             db,
             task_state,
-            {"current_phase_id": rollback_phase_id, "status": "active"},
+            {
+                "current_phase_id": rollback_phase_id,
+                "status": "active",
+                "cycle_number": int(task.get("cycle_number") or 0) + 1,
+            },
         )
         for phase_id in group_phase_ids:
             db.tasks.record_phase_event(task_id, phase_id, "rolled_back", step_history_id)

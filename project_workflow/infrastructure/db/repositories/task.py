@@ -87,9 +87,21 @@ class SATaskRepository(TaskRepository):
         workflow_id = data.get("workflow_id")
         if not isinstance(workflow_id, int) or isinstance(workflow_id, bool) or workflow_id <= 0:
             raise ValueError("workflow_id задачи должен быть положительным целым числом")
+        mode_id = data.get("mode_id")
+        if mode_id is None:
+            mode_id = self._session.execute(
+                select(m.WorkflowMode.id).where(
+                    m.WorkflowMode.workflow_id == workflow_id,
+                    m.WorkflowMode.key == "default",
+                )
+            ).scalar_one_or_none()
+        if mode_id is None:
+            raise ValueError("mode_id задачи должен указывать режим воркфлоу")
         item = m.Task(
             project_id=data["project_id"],
             workflow_id=workflow_id,
+            mode_id=mode_id,
+            cycle_number=data.get("cycle_number", 0),
             task_key=data["task_key"],
             title=data.get("title"),
             description=data.get("description"),
@@ -141,16 +153,13 @@ class SATaskRepository(TaskRepository):
         event_type: str,
         step_history_id: int | None = None,
     ) -> None:
-        task_workflow_id = self._session.execute(
-            select(m.Task.workflow_id).where(m.Task.id == task_id)
-        ).scalar_one_or_none()
-        phase_workflow_id = self._session.execute(
-            select(m.Phase.workflow_id).where(m.Phase.id == phase_id)
-        ).scalar_one_or_none()
-        if task_workflow_id is None:
+        task_row = self._session.get(m.Task, task_id)
+        phase_row = self._session.get(m.Phase, phase_id)
+        if task_row is None:
             raise NotFoundError(f"Задача {task_id} не найдена")
-        if phase_workflow_id != task_workflow_id:
-            raise ValueError("Событие фазы должно принадлежать воркфлоу задачи")
+        if phase_row is None or phase_row.workflow_id != task_row.workflow_id or phase_row.mode_id != task_row.mode_id:
+            raise ValueError("Событие фазы должно принадлежать режиму и воркфлоу задачи")
+        task_workflow_id = task_row.workflow_id
         if step_history_id is not None:
             owner_task_id = self._session.execute(
                 select(m.TaskStepHistoryEntry.task_id).where(
@@ -163,6 +172,8 @@ class SATaskRepository(TaskRepository):
             m.TaskPhaseEvent(
                 task_id=task_id,
                 workflow_id=task_workflow_id,
+                mode_id=task_row.mode_id,
+                cycle_number=task_row.cycle_number,
                 phase_id=phase_id,
                 step_history_id=step_history_id,
                 event_type=event_type,

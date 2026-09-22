@@ -278,6 +278,9 @@ def history_cmd(
                         "supervisor_message": (r.get("supervisor_response") or {}).get("message"),
                         "next_phase_code": r.get("next_phase_code"),
                         "rollback_phase_code": r.get("rollback_phase_code"),
+                        "mode_id": r.get("mode_id"),
+                        "mode_key": r.get("mode_key"),
+                        "cycle_number": r.get("cycle_number"),
                         "created_at": r.get("created_at"),
                     }
                     for r in runs

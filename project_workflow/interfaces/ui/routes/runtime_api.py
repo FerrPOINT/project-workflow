@@ -126,6 +126,10 @@ def _history_rows(uow: SAUnitOfWork, task_key: str, namespace_id: int, limit: in
                 "next_phase_code": next_phase.code if next_phase else None,
                 "rollback_phase_code": rollback.code if rollback else None,
                 "created_at": item.get("created_at"),
+                "workflow_id": item.get("workflow_id"),
+                "mode_id": item.get("mode_id"),
+                "mode_key": item.get("mode_key"),
+                "cycle_number": item.get("cycle_number"),
             }
         )
     return rows
@@ -158,6 +162,10 @@ def execute_namespace_step(
             "status": engine.task.get("status") if engine.task else None,
             "instructions": engine.format_current_phase_instructions(),
             "phase_contract": engine.get_phase_contract(),
+            "workflow_id": engine.task.get("workflow_id") if engine.task else None,
+            "mode_id": engine.task.get("mode_id") if engine.task else None,
+            "mode_key": engine.task.get("mode_key") if engine.task else None,
+            "cycle_number": engine.task.get("cycle_number") if engine.task else None,
         }
         return {"ok": True, "exit_code": 0, "output": result["instructions"], "result": result}
     result = engine.evaluate(report)

@@ -88,10 +88,18 @@ class PhaseServiceApp:
         try:
             self._validate_agent(data.get("agent_id"))
             self._lock_workflow(workflow_id)
-            existing = list(self._uow.phases.list(workflow_id))
+            mode_id = data.get("mode_id")
+            if mode_id is None:
+                default_mode = self._uow.workflows.get_mode_by_key(workflow_id, "default")
+                if default_mode is None or default_mode.id is None:
+                    raise NotFoundError(f"Для воркфлоу {workflow_id} не найден режим по умолчанию")
+                mode_id = default_mode.id
+            elif self._uow.workflows.get_mode(int(mode_id), workflow_id) is None:
+                raise ConflictError("mode_id не принадлежит указанному воркфлоу")
+            existing = list(self._uow.phases.list(workflow_id, mode_id=mode_id))
             order = data.get("phase_order")
             if order is None:
-                order = self._uow.phases.get_next_order(workflow_id)
+                order = self._uow.phases.get_next_order(workflow_id, mode_id=mode_id)
             else:
                 if not isinstance(order, int) or isinstance(order, bool) or order <= 0:
                     raise ValueError("phase_order должен быть положительным целым числом")
@@ -127,9 +135,10 @@ class PhaseServiceApp:
             )
             self._validate_graph(prospective)
             if any(phase.phase_order == order for phase in existing):
-                self._uow.phases.shift_orders(workflow_id, order, delta=1)
+                self._uow.phases.shift_orders(workflow_id, order, delta=1, mode_id=mode_id)
             phase_data = {
                 "workflow_id": workflow_id,
+                "mode_id": mode_id,
                 "code": code,
                 "name": validated.get("name", self.DEFAULT_PHASE_NAME),
                 "description": validated.get("description", ""),
@@ -150,8 +159,8 @@ class PhaseServiceApp:
             self._rollback_if_owning_transaction(commit)
             raise
 
-    def list_phases(self, workflow_id: int | None = None) -> list[dict[str, Any]]:
-        return [p.to_dict() for p in self._uow.phases.list(workflow_id=workflow_id)]
+    def list_phases(self, workflow_id: int | None = None, mode_id: int | None = None) -> list[dict[str, Any]]:
+        return [p.to_dict() for p in self._uow.phases.list(workflow_id=workflow_id, mode_id=mode_id)]
 
     def get_phase(self, phase_id: int) -> dict[str, Any] | None:
         p = self._uow.phases.get_by_id(phase_id)
@@ -165,11 +174,15 @@ class PhaseServiceApp:
             raise ConflictError("Для фазы не найден владеющий воркфлоу")
         workflow_id = phase.workflow_id
         updates = dict(data)
+        if "mode_id" in updates:
+            if updates["mode_id"] != phase.mode_id:
+                raise ConflictError("Фаза уже принадлежит режиму; перенос между режимами не поддерживается")
+            updates.pop("mode_id")
         if "agent_id" in updates:
             self._validate_agent(updates["agent_id"])
         self._lock_workflow(workflow_id)
         self._normalize_links(updates)
-        phases = list(self._uow.phases.list(workflow_id))
+        phases = list(self._uow.phases.list(workflow_id, mode_id=phase.mode_id))
         phase = next((item for item in phases if item.id == phase_id), None)
         if phase is None:
             raise NotFoundError(f"Фаза {phase_id} не найдена")
@@ -220,7 +233,7 @@ class PhaseServiceApp:
             if references:
                 raise ConflictError(f"На фазу ссылаются: {', '.join(sorted(references))}")
             self._uow.phases.delete(phase_id)
-            self._uow.phases.resequence(workflow_id)
+            self._uow.phases.resequence(workflow_id, mode_id=phase.mode_id)
             if commit:
                 self._uow.commit()
         except Exception:
@@ -249,9 +262,13 @@ class PhaseServiceApp:
             if len(workflow_ids) != 1:
                 raise ConflictError("Все перемещаемые фазы должны принадлежать одному воркфлоу")
             workflow_id = workflow_ids.pop()
+            mode_ids = {phase.mode_id for phase in phases if phase is not None}
+            if len(mode_ids) != 1:
+                raise ConflictError("Все перемещаемые фазы должны принадлежать одному режиму")
+            mode_id = mode_ids.pop()
             self._lock_workflow(workflow_id)
 
-            locked_phases = list(self._uow.phases.list(workflow_id))
+            locked_phases = list(self._uow.phases.list(workflow_id, mode_id=mode_id))
             current_ids = {phase.id for phase in locked_phases}
             if set(phase_ids) != current_ids:
                 raise ConflictError("Порядок должен содержать каждую фазу воркфлоу ровно один раз")
@@ -267,7 +284,7 @@ class PhaseServiceApp:
             ]
             self._validate_graph(prospective)
 
-            self._uow.phases.reorder(workflow_id, orders)
+            self._uow.phases.reorder(workflow_id, orders, mode_id=mode_id)
             if commit:
                 self._uow.commit()
             return len(orders)

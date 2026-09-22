@@ -11,7 +11,7 @@ from sqlalchemy import or_, select, text
 from sqlalchemy.orm import Session, joinedload
 
 from project_workflow.domain import Phase
-from project_workflow.domain.exceptions import LastPhaseError, NotFoundError
+from project_workflow.domain.exceptions import ConflictError, LastPhaseError, NotFoundError
 from project_workflow.domain.repositories import PhaseRepository
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.repositories.converters import _row_to_phase
@@ -23,10 +23,35 @@ class SAPhaseRepository(PhaseRepository):
     def __init__(self, session: Session):
         self._session = session
 
-    def list(self, workflow_id: int | None = None) -> Sequence[Phase]:
+    def _validate_mode_references(
+        self,
+        workflow_id: int,
+        mode_id: int,
+        data: dict[str, Any],
+    ) -> None:
+        """Reject graph edges that cross workflow or execution-mode boundaries.
+
+        SQLite's legacy-table rebuild cannot retain the self-referential composite
+        FKs while Alembic rewrites ``phases``.  Keep the invariant at the
+        repository boundary as well, so migrated SQLite and PostgreSQL behave the
+        same for normal writes.
+        """
+        for field in ("parallel_with_phase_id", "rollback_target_phase_id"):
+            target_id = data.get(field)
+            if target_id is None:
+                continue
+            target = self._session.get(m.Phase, target_id)
+            if target is None:
+                raise NotFoundError(f"Фаза {target_id} не найдена")
+            if target.workflow_id != workflow_id or target.mode_id != mode_id:
+                raise ConflictError(f"{field} должна ссылаться на фазу того же воркфлоу и режима")
+
+    def list(self, workflow_id: int | None = None, mode_id: int | None = None) -> Sequence[Phase]:
         stmt = select(m.Phase).options(joinedload(m.Phase.workflow)).order_by(m.Phase.workflow_id, m.Phase.phase_order)
         if workflow_id is not None:
             stmt = stmt.where(m.Phase.workflow_id == workflow_id)
+        if mode_id is not None:
+            stmt = stmt.where(m.Phase.mode_id == mode_id)
         rows = self._session.execute(stmt.execution_options(populate_existing=True)).scalars().all()
         return [_row_to_phase(r) for r in rows]
 
@@ -34,15 +59,30 @@ class SAPhaseRepository(PhaseRepository):
         row = self._session.get(m.Phase, phase_id)
         return _row_to_phase(row) if row else None
 
-    def get_by_code(self, workflow_id: int, code: str) -> Phase | None:
-        row = self._session.execute(
-            select(m.Phase).where(m.Phase.workflow_id == workflow_id, m.Phase.code == code)
-        ).scalar_one_or_none()
+    def get_by_code(self, workflow_id: int, code: str, mode_id: int | None = None) -> Phase | None:
+        stmt = select(m.Phase).where(m.Phase.workflow_id == workflow_id, m.Phase.code == code)
+        if mode_id is not None:
+            stmt = stmt.where(m.Phase.mode_id == mode_id)
+        row = self._session.execute(stmt).scalar_one_or_none()
         return _row_to_phase(row) if row else None
 
     def create(self, data: dict[str, Any]) -> int:
+        workflow_id = data["workflow_id"]
+        mode_id = data.get("mode_id")
+        if mode_id is None:
+            mode = self._session.execute(
+                select(m.WorkflowMode).where(
+                    m.WorkflowMode.workflow_id == workflow_id,
+                    m.WorkflowMode.key == "default",
+                )
+            ).scalar_one_or_none()
+            if mode is None:
+                raise NotFoundError(f"Для воркфлоу {workflow_id} не найден режим по умолчанию")
+            mode_id = mode.id
+        self._validate_mode_references(workflow_id, mode_id, data)
         item = m.Phase(
-            workflow_id=data["workflow_id"],
+            workflow_id=workflow_id,
+            mode_id=mode_id,
             code=data["code"],
             name=data["name"],
             description=data.get("description"),
@@ -60,6 +100,7 @@ class SAPhaseRepository(PhaseRepository):
         row = self._session.get(m.Phase, phase_id)
         if row is None:
             raise NotFoundError(f"Фаза {phase_id} не найдена")
+        self._validate_mode_references(row.workflow_id, row.mode_id, data)
         for key, val in data.items():
             if key in {"id", "workflow_id"}:
                 continue
@@ -90,31 +131,38 @@ class SAPhaseRepository(PhaseRepository):
             )
         self._session.delete(row)
 
-    def shift_orders(self, workflow_id: int, start_order: int, delta: int = 1) -> None:
-        offset = self.get_next_order(workflow_id) + 1000
+    def shift_orders(
+        self, workflow_id: int, start_order: int, delta: int = 1, mode_id: int | None = None
+    ) -> None:
+        offset = self.get_next_order(workflow_id, mode_id) + 1000
+        mode_clause = " AND mode_id = :mid" if mode_id is not None else ""
         self._session.execute(
             text(
                 "UPDATE phases SET phase_order = phase_order + :offset "
-                "WHERE workflow_id = :wid AND phase_order >= :start"
+                f"WHERE workflow_id = :wid AND phase_order >= :start{mode_clause}"
             ),
-            {"offset": offset, "wid": workflow_id, "start": start_order},
+            {"offset": offset, "wid": workflow_id, "start": start_order, "mid": mode_id},
         )
         self._session.execute(
             text(
                 "UPDATE phases SET phase_order = phase_order - :offset + :delta "
-                "WHERE workflow_id = :wid AND phase_order >= :shifted_start"
+                f"WHERE workflow_id = :wid AND phase_order >= :shifted_start{mode_clause}"
             ),
             {
                 "offset": offset,
                 "delta": delta,
                 "wid": workflow_id,
                 "shifted_start": start_order + offset,
+                "mid": mode_id,
             },
         )
 
-    def get_next_order(self, workflow_id: int) -> int:
+    def get_next_order(self, workflow_id: int, mode_id: int | None = None) -> int:
+        stmt = select(m.Phase.phase_order).where(m.Phase.workflow_id == workflow_id)
+        if mode_id is not None:
+            stmt = stmt.where(m.Phase.mode_id == mode_id)
         max_order = self._session.execute(
-            select(m.Phase.phase_order).where(m.Phase.workflow_id == workflow_id).order_by(m.Phase.phase_order.desc())
+            stmt.order_by(m.Phase.phase_order.desc())
         ).scalar()
         return (max_order or 0) + 1
 
@@ -187,11 +235,15 @@ class SAPhaseRepository(PhaseRepository):
         ).scalars()
         return [int(workflow_id) for workflow_id in rows]
 
-    def resequence(self, workflow_id: int) -> None:
+    def resequence(self, workflow_id: int, mode_id: int | None = None) -> None:
+        mode_clause = " AND mode_id = :mid" if mode_id is not None else ""
         rows = list(
             self._session.execute(
                 select(m.Phase.id)
-                .where(m.Phase.workflow_id == workflow_id)
+                .where(
+                    m.Phase.workflow_id == workflow_id,
+                    *([m.Phase.mode_id == mode_id] if mode_id is not None else []),
+                )
                 .order_by(m.Phase.phase_order, m.Phase.id)
             ).scalars()
         )
@@ -199,8 +251,8 @@ class SAPhaseRepository(PhaseRepository):
             return
         offset = len(rows) + 1000
         self._session.execute(
-            text("UPDATE phases SET phase_order = phase_order + :offset WHERE workflow_id = :wid"),
-            {"offset": offset, "wid": workflow_id},
+            text(f"UPDATE phases SET phase_order = phase_order + :offset WHERE workflow_id = :wid{mode_clause}"),
+            {"offset": offset, "wid": workflow_id, "mid": mode_id},
         )
         for order, phase_id in enumerate(rows, 1):
             self._session.execute(
@@ -210,27 +262,29 @@ class SAPhaseRepository(PhaseRepository):
         self._session.flush()
         self._session.expire_all()
 
-    def reorder(self, workflow_id: int, orders: Sequence[tuple[int, int]]) -> None:
+    def reorder(self, workflow_id: int, orders: Sequence[tuple[int, int]], mode_id: int | None = None) -> None:
         if not orders:
             return
-        offset = self.get_next_order(workflow_id) + len(orders) + 1000
+        offset = self.get_next_order(workflow_id, mode_id) + len(orders) + 1000
+        mode_clause = " AND mode_id = :mid" if mode_id is not None else ""
         self._session.execute(
             text(
                 "UPDATE phases SET phase_order = phase_order + :offset "
-                "WHERE workflow_id = :wid"
+                f"WHERE workflow_id = :wid{mode_clause}"
             ),
-            {"offset": offset, "wid": workflow_id},
+            {"offset": offset, "wid": workflow_id, "mid": mode_id},
         )
         for phase_id, phase_order in orders:
             self._session.execute(
                 text(
                     "UPDATE phases SET phase_order = :phase_order "
-                    "WHERE id = :phase_id AND workflow_id = :workflow_id"
+                    f"WHERE id = :phase_id AND workflow_id = :workflow_id{mode_clause}"
                 ),
                 {
                     "phase_order": phase_order,
                     "phase_id": phase_id,
                     "workflow_id": workflow_id,
+                    "mid": mode_id,
                 },
             )
         self._session.flush()

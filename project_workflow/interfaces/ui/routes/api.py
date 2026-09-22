@@ -22,6 +22,7 @@ from project_workflow.interfaces.ui.schemas import (
     PhaseOrderUpdate,
     PhaseUpdate,
     WorkflowCreate,
+    WorkflowModeCreate,
     WorkflowUpdate,
 )
 from project_workflow.interfaces.ui.services import _load_phase_detail, _load_tasks
@@ -127,6 +128,7 @@ async def api_settings_get(namespace_id: int | None = Query(default=None, gt=0))
 async def api_phases(
     workflow_id: int | None = Query(default=None, gt=0),
     namespace_id: int | None = Query(default=None, gt=0),
+    mode_id: int | None = Query(default=None, gt=0, alias="modeId"),
 ) -> dict[str, Any] | JSONResponse:
     namespace = _app_state.project_service().get_project(namespace_id) if namespace_id is not None else None
     if namespace_id is not None and namespace is None:
@@ -144,7 +146,17 @@ async def api_phases(
     if selected_workflow is None and workflow_id is None and workflows:
         selected_workflow = workflows[0]
     selected_workflow_id = selected_workflow["id"] if selected_workflow else workflow_id
-    phases = _app_state.phase_service().list_phases(selected_workflow_id)
+    resolved_mode_id = mode_id
+    if resolved_mode_id is None and selected_workflow_id is not None:
+        default_mode = _app_state.workflow_service()._uow.workflows.get_mode_by_key(selected_workflow_id, "default")
+        resolved_mode_id = default_mode.id if default_mode is not None else None
+    if mode_id is not None:
+        if (
+            selected_workflow_id is None
+            or _app_state.workflow_service()._uow.workflows.get_mode(mode_id, selected_workflow_id) is None
+        ):
+            return _error("modeId не принадлежит выбранному воркфлоу", 409)
+    phases = _app_state.phase_service().list_phases(selected_workflow_id, mode_id=resolved_mode_id)
     agents = {a["id"]: a for a in _app_state.agent_service().list_agents()}
 
     rows = []
@@ -157,6 +169,8 @@ async def api_phases(
                 "description": phase.get("description", ""),
                 "code": phase.get("code", ""),
                 "workflow_id": phase.get("workflow_id"),
+                "mode_id": phase.get("mode_id"),
+                "mode_key": phase.get("mode_key"),
                 "phase_num": phase.get("phase_num", phase.get("phase_order", 0)),
                 "phase_order": phase.get("phase_order", 0),
                 "execution_type": phase.get("execution_type", "sync"),
@@ -170,6 +184,7 @@ async def api_phases(
     result: dict[str, Any] = {"ok": True, "phases": rows}
     if selected_workflow is not None:
         result["workflow"] = selected_workflow
+        result["modes"] = _app_state.workflow_service().list_modes(int(selected_workflow["id"]))
     return result
 
 
@@ -236,6 +251,7 @@ async def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONRespons
         "name": payload.name,
         "description": payload.description,
         "workflow_id": workflow_id,
+        "mode_id": payload.mode_id,
         "phase_order": payload.phase_order,
         "execution_type": payload.execution_type,
         "parallel_with_phase_id": payload.parallel_with_phase_id,
@@ -275,6 +291,7 @@ async def api_phase_update(
         "rollback_target_phase_id",
         "agent_id",
         "execution_type",
+        "mode_id",
     }
     selected_fields = scalar_fields.intersection(payload.model_fields_set)
     aggregate = {field: getattr(payload, field) for field in selected_fields}
@@ -355,6 +372,27 @@ async def api_workflow_update(workflow_id: PositivePathId, payload: WorkflowUpda
     except ValueError as exc:
         return _error(str(exc), 422)
     return {"ok": True, "workflow": service.get_workflow(workflow_id)}
+
+
+async def api_workflow_modes(workflow_id: PositivePathId) -> dict[str, Any] | JSONResponse:
+    service = _app_state.workflow_service()
+    try:
+        return {"ok": True, "workflow_id": workflow_id, "modes": service.list_modes(workflow_id)}
+    except NotFoundError as exc:
+        return _error(str(exc), 404)
+
+
+async def api_workflow_mode_create(
+    workflow_id: PositivePathId, payload: WorkflowModeCreate
+) -> dict[str, Any] | JSONResponse:
+    service = _app_state.workflow_service()
+    try:
+        mode = service.create_mode(workflow_id, payload.model_dump(exclude_none=True))
+    except NotFoundError as exc:
+        return _error(str(exc), 404)
+    except (ConflictError, ValueError) as exc:
+        return _error(str(exc), 409)
+    return {"ok": True, "mode": mode}
 
 
 async def api_workflow_delete(workflow_id: PositivePathId) -> dict[str, Any] | JSONResponse:

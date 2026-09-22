@@ -80,6 +80,7 @@ class _PhaseOrderItem(StrictRequest):
 
 class PhaseCreate(StrictRequest):
     workflow_id: int = Field(gt=0, strict=True, description="Parent workflow id")
+    mode_id: int | None = Field(default=None, gt=0, strict=True, validation_alias=AliasChoices("mode_id", "modeId"))
     phase_order: int | None = Field(default=None, gt=0, strict=True, description="1-based insertion position")
     insert_after: int | None = Field(default=None, ge=0, strict=True, description="Insert after this 0-based index")
     name: str = Field(default="Новая фаза")
@@ -144,6 +145,7 @@ class PhaseUpdate(StrictUpdateRequest):
     non_nullable_fields = frozenset({"name", "execution_type", "instructions", "checks", "evidence"})
 
     name: str | None = Field(default=None)
+    mode_id: int | None = Field(default=None, gt=0, strict=True, validation_alias=AliasChoices("mode_id", "modeId"))
     description: str | None = Field(default=None)
     parallel_with_phase_id: int | None = Field(default=None, gt=0, strict=True)
     rollback_target_phase_id: int | None = Field(default=None, gt=0, strict=True)
@@ -185,6 +187,20 @@ class WorkflowCreate(StrictRequest):
     @classmethod
     def _name_not_blank(cls, value: str) -> str:
         return _strip_nonblank(value, "name")
+
+
+class WorkflowModeCreate(StrictRequest):
+    key: str = Field(min_length=1, max_length=128)
+    name: str = Field(min_length=1)
+    mode_order: int | None = Field(default=None, gt=0, strict=True)
+
+    @field_validator("key", "name")
+    @classmethod
+    def _mode_text_not_blank(cls, value: str, info: Any) -> str:
+        normalized = _strip_nonblank(value, info.field_name)
+        if info.field_name == "key" and re.fullmatch(r"[a-z0-9][a-z0-9._-]*", normalized) is None:
+            raise ValueError("Ключ режима должен соответствовать [a-z0-9][a-z0-9._-]*")
+        return normalized
 
 
 class WorkflowUpdate(StrictUpdateRequest):

@@ -36,6 +36,8 @@ class Phase:
 
     id: int | None = None
     workflow_id: int | None = None
+    mode_id: int | None = None
+    mode_key: str | None = None
     code: str = ""
     name: str = ""
     description: str | None = ""
@@ -50,6 +52,8 @@ class Phase:
         return {
             "id": self.id,
             "workflow_id": self.workflow_id,
+            "mode_id": self.mode_id,
+            "mode_key": self.mode_key,
             "code": self.code,
             "name": self.name,
             "description": self.description,
@@ -88,6 +92,7 @@ class Workflow:
     name: str = ""
     description: str = ""
     is_default: bool = False
+    modes: list[WorkflowMode] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -95,6 +100,27 @@ class Workflow:
             "name": self.name,
             "description": self.description,
             "is_default": self.is_default,
+            "modes": [mode.to_dict() for mode in self.modes],
+        }
+
+
+@dataclass
+class WorkflowMode:
+    """Execution mode catalog owned by one workflow."""
+
+    id: int | None = None
+    workflow_id: int | None = None
+    key: str = "default"
+    name: str = "Default"
+    mode_order: int = 1
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "workflow_id": self.workflow_id,
+            "key": self.key,
+            "name": self.name,
+            "mode_order": self.mode_order,
         }
 
 
@@ -135,6 +161,9 @@ class Task:
     id: int | None = None
     project_id: int = 0
     workflow_id: int = 0
+    mode_id: int = 0
+    mode_key: str = "default"
+    cycle_number: int = 0
     task_key: str = ""
     title: str = ""
     description: str = ""
@@ -150,6 +179,9 @@ class Task:
             "id": self.id,
             "project_id": self.project_id,
             "workflow_id": self.workflow_id,
+            "mode_id": self.mode_id,
+            "mode_key": self.mode_key,
+            "cycle_number": self.cycle_number,
             "task_key": self.task_key,
             "title": self.title,
             "description": self.description,
@@ -168,6 +200,10 @@ class TaskStepHistoryEntry:
 
     id: int | None = None
     task_id: int = 0
+    workflow_id: int = 0
+    mode_id: int = 0
+    mode_key: str = "default"
+    cycle_number: int = 0
     phase_id: int = 0
     verdict: str = ""
     worker_report: str = ""
@@ -185,6 +221,10 @@ class TaskStepHistoryEntry:
         return {
             "id": self.id,
             "task_id": self.task_id,
+            "workflow_id": self.workflow_id,
+            "mode_id": self.mode_id,
+            "mode_key": self.mode_key,
+            "cycle_number": self.cycle_number,
             "phase_id": self.phase_id,
             "verdict": self.verdict,
             "worker_report": self.worker_report,
@@ -206,6 +246,10 @@ class TaskPhaseEvent:
 
     id: int | None = None
     task_id: int = 0
+    workflow_id: int = 0
+    mode_id: int = 0
+    mode_key: str = "default"
+    cycle_number: int = 0
     phase_id: int = 0
     step_history_id: int | None = None
     event_type: str = ""
@@ -215,6 +259,10 @@ class TaskPhaseEvent:
         return {
             "id": self.id,
             "task_id": self.task_id,
+            "workflow_id": self.workflow_id,
+            "mode_id": self.mode_id,
+            "mode_key": self.mode_key,
+            "cycle_number": self.cycle_number,
             "phase_id": self.phase_id,
             "step_history_id": self.step_history_id,
             "event_type": self.event_type,

@@ -15,6 +15,7 @@ from project_workflow.domain import (
     TaskPhaseEvent,
     TaskStepHistoryEntry,
     Workflow,
+    WorkflowMode,
 )
 
 
@@ -45,18 +46,30 @@ class WorkflowRepository(ABC):
     @abstractmethod
     def ensure_default_exists(self, name: str) -> Workflow: ...
 
+    @abstractmethod
+    def list_modes(self, workflow_id: int) -> Sequence[WorkflowMode]: ...
+
+    @abstractmethod
+    def get_mode(self, mode_id: int, workflow_id: int | None = None) -> WorkflowMode | None: ...
+
+    @abstractmethod
+    def get_mode_by_key(self, workflow_id: int, key: str) -> WorkflowMode | None: ...
+
+    @abstractmethod
+    def create_mode(self, data: dict[str, Any]) -> int: ...
+
 
 class PhaseRepository(ABC):
     """Persistence contract for phases."""
 
     @abstractmethod
-    def list(self, workflow_id: int | None = None) -> Sequence[Phase]: ...
+    def list(self, workflow_id: int | None = None, mode_id: int | None = None) -> Sequence[Phase]: ...
 
     @abstractmethod
     def get_by_id(self, phase_id: int) -> Phase | None: ...
 
     @abstractmethod
-    def get_by_code(self, workflow_id: int, code: str) -> Phase | None: ...
+    def get_by_code(self, workflow_id: int, code: str, mode_id: int | None = None) -> Phase | None: ...
 
     @abstractmethod
     def create(self, data: dict[str, Any]) -> int: ...
@@ -68,10 +81,10 @@ class PhaseRepository(ABC):
     def delete(self, phase_id: int) -> None: ...
 
     @abstractmethod
-    def shift_orders(self, workflow_id: int, start_order: int, delta: int = 1) -> None: ...
+    def shift_orders(self, workflow_id: int, start_order: int, delta: int = 1, mode_id: int | None = None) -> None: ...
 
     @abstractmethod
-    def get_next_order(self, workflow_id: int) -> int: ...
+    def get_next_order(self, workflow_id: int, mode_id: int | None = None) -> int: ...
 
     @abstractmethod
     def reference_kinds(self, phase_id: int) -> set[str]: ...
@@ -83,10 +96,10 @@ class PhaseRepository(ABC):
     def workflow_ids_for_agent(self, agent_id: int) -> Sequence[int]: ...
 
     @abstractmethod
-    def resequence(self, workflow_id: int) -> None: ...
+    def resequence(self, workflow_id: int, mode_id: int | None = None) -> None: ...
 
     @abstractmethod
-    def reorder(self, workflow_id: int, orders: Sequence[tuple[int, int]]) -> None: ...
+    def reorder(self, workflow_id: int, orders: Sequence[tuple[int, int]], mode_id: int | None = None) -> None: ...
 
     @abstractmethod
     def get_checks(self, phase_id: int) -> Sequence[dict[str, Any]]: ...
@@ -252,6 +265,8 @@ class TaskStepHistoryRepository(ABC):
         workflow_id: int | None = None,
         project_id: int | None = None,
         phase_id: int | None = None,
+        mode_id: int | None = None,
+        cycle_number: int | None = None,
         limit: int | None = 200,
     ) -> Sequence[TaskStepHistoryEntry]: ...
 
@@ -260,7 +275,8 @@ class TaskStepHistoryRepository(ABC):
 
     @abstractmethod
     def get_by_fingerprint(
-        self, task_id: int, phase_id: int, replay_fingerprint: str
+        self, task_id: int, phase_id: int, replay_fingerprint: str, mode_id: int | None = None,
+        cycle_number: int | None = None,
     ) -> TaskStepHistoryEntry | None: ...
 
     @abstractmethod
