@@ -48,7 +48,6 @@ const screenshotNames = [
   "task-detail-qa.png",
   "agents.png",
   "settings.png",
-  "mobile-dashboard.png",
 ];
 const taskKeys = [
   "RUN-42",
@@ -507,25 +506,6 @@ async function captureAll(outputRoot) {
     await browser.close();
   }
 
-  const mobile = await chromium.launch();
-  const mobileContext = await mobile.newContext({
-    viewport: { width: 390, height: 844 },
-    deviceScaleFactor: 1,
-    isMobile: true,
-  });
-  const mobilePage = await mobileContext.newPage();
-  try {
-    const dev = await namespaceByCommand(mobileContext.request, "workflow-dev");
-    await capture(mobilePage, outputRoot, {
-      name: "mobile-dashboard.png",
-      url: `/?namespace_id=${dev.id}`,
-      expected: ["Разработка", ...openTaskKeys],
-      assertions: [(targetPage, name) => assertDashboardTasks(targetPage, name, openTaskKeys)],
-    });
-  } finally {
-    await mobileContext.close();
-    await mobile.close();
-  }
 }
 
 main().catch((error) => {

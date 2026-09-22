@@ -30,7 +30,6 @@ SCREENSHOTS = {
     "task-detail-dev.png": (1900, 2500),
     "task-detail-qa.png": (1900, 1500),
     "settings.png": (1900, 1000),
-    "mobile-dashboard.png": (360, 2400),
 }
 
 
