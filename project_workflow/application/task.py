@@ -202,6 +202,12 @@ class TaskService:
         locked = self._uow.tasks.lock(int(current.id or 0))
         if locked is None:
             raise ConflictError("Задача исчезла во время runtime assignment")
+        # A concurrent request can win after our initial ledger read but before
+        # this row lock. Reconcile the durable operation before treating its
+        # advanced projection as a stale expected revision.
+        replay = self._uow.tasks.get_assignment_by_operation_key(operation_key)
+        if replay is not None:
+            return self._reconcile_assignment(replay.to_dict(), payload)
         if locked.assignment_revision != expected_revision or locked.status != expected_status:
             raise ConflictError("Ожидаемое prior state/revision задачи устарело")
         if expected_mode_key is not None and locked.mode_key != expected_mode_key:

@@ -27,7 +27,10 @@ class InstructionService:
         workflow = self._uow.workflows.lock(phase.workflow_id)
         if workflow is None:
             raise NotFoundError(f"Воркфлоу {phase.workflow_id} не найден")
-        if not any(item.id == phase_id for item in self._uow.phases.list(phase.workflow_id)):
+        if not any(
+            item.id == phase_id
+            for item in self._uow.phases.list(phase.workflow_id, mode_id=phase.mode_id)
+        ):
             raise NotFoundError(f"Фаза {phase_id} не найдена")
 
     def _lock_instruction(self, instruction_id: int) -> dict[str, Any]:

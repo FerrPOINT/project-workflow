@@ -7,7 +7,10 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
 
 from project_workflow.application.execution_mode import resolve_execution_selection
+from project_workflow.application.instruction_service import InstructionService
+from project_workflow.application.phase_service import PhaseService
 from project_workflow.application.task import TaskService
+from project_workflow.application.workflow import WorkflowService
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.infrastructure.db.session import run_alembic_command
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
@@ -330,6 +333,105 @@ def test_assignment_ledger_reconciles_delayed_replay_and_rejects_cross_task_reus
             expected_revision=0,
             expected_status="missing",
         )
+
+
+def test_non_default_mode_phase_content_can_be_edited_and_deleted(modes_db):
+    workflow_id = modes_db.workflows.create({"name": "Mode content"})
+    rework_id = modes_db.workflows.create_mode(
+        {"workflow_id": workflow_id, "key": "rework", "name": "Rework", "mode_order": 2}
+    )
+    phase_id = modes_db.phases.create(
+        {
+            "workflow_id": workflow_id,
+            "mode_id": rework_id,
+            "code": "fix",
+            "name": "Fix",
+            "phase_order": 1,
+        }
+    )
+    aggregate = PhaseService(modes_db)
+    created = aggregate.update_phase_detail(
+        phase_id,
+        {
+            "instructions": [
+                {"id": None, "description": "Inspect", "skills": ["review"], "execution_type": "sync"}
+            ],
+            "checks": [{"id": None, "description": "Check"}],
+            "evidence": [{"id": None, "description": "Evidence"}],
+        },
+    )
+    detail = aggregate.get_phase_detail(phase_id)
+    assert detail["mode_id"] == rework_id
+    assert detail["instructions"][0]["skills"] == ["review"]
+    assert detail["checks"][0]["description"] == "Check"
+
+    instruction_service = InstructionService(modes_db)
+    instruction_service.update_instruction(
+        created["instructions"][0], {"description": "Inspect again", "skills": ["review", "debug"]}
+    )
+    instruction_service.delete_instruction(created["instructions"][0])
+    aggregate.update_phase_detail(phase_id, {"checks": [], "evidence": []})
+    cleaned = aggregate.get_phase_detail(phase_id)
+    assert cleaned["instructions"] == []
+    assert cleaned["checks"] == []
+    assert cleaned["evidence"] == []
+
+
+def test_delete_workflow_clears_self_references_in_every_mode(modes_db):
+    fallback = modes_db.workflows.get_default()
+    assert fallback is not None and fallback.id is not None
+    workflow_id = modes_db.workflows.create({"name": "Delete all modes"})
+    default = modes_db.workflows.get_mode_by_key(workflow_id, "default")
+    assert default is not None and default.id is not None
+    modes_db.phases.create(
+        {
+            "workflow_id": workflow_id,
+            "mode_id": default.id,
+            "code": "default",
+            "name": "Default",
+            "phase_order": 1,
+        }
+    )
+    rework_id = modes_db.workflows.create_mode(
+        {"workflow_id": workflow_id, "key": "rework", "name": "Rework", "mode_order": 2}
+    )
+    first_id = modes_db.phases.create(
+        {
+            "workflow_id": workflow_id,
+            "mode_id": rework_id,
+            "code": "fix-a",
+            "name": "Fix A",
+            "phase_order": 1,
+            "execution_type": "parallel",
+        }
+    )
+    second_id = modes_db.phases.create(
+        {
+            "workflow_id": workflow_id,
+            "mode_id": rework_id,
+            "code": "fix-b",
+            "name": "Fix B",
+            "phase_order": 2,
+            "rollback_target_phase_id": first_id,
+        }
+    )
+    modes_db.phases.update(first_id, {"parallel_with_phase_id": second_id})
+    project_id = modes_db.projects.create(
+        {
+            "workflow_id": workflow_id,
+            "code": "DELETE-MODES",
+            "name": "Delete modes",
+            "cli_command": "delete-modes",
+            "key_prefixes": ["DELETE"],
+        }
+    )
+    modes_db.commit()
+
+    WorkflowService(modes_db).delete_workflow(workflow_id)
+
+    assert modes_db.workflows.get_by_id(workflow_id) is None
+    moved = modes_db.projects.get_by_id(project_id)
+    assert moved is not None and moved.workflow_id == fallback.id
 
 
 def test_supervisor_context_switch_keeps_current_path_and_full_history(modes_db):

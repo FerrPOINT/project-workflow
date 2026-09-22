@@ -123,6 +123,11 @@ def test_runtime_token_is_bound_to_one_namespace(monkeypatch, supervisor_llm):
     _namespace("ARCHITECT", "workflow-architect", "ARC")
 
     with TestClient(create_app()) as client:
+        unassigned = client.post(
+            "/internal/runtime/step",
+            headers=_headers(analyst_token),
+            json={"task": "ANA-2"},
+        )
         assigned = client.post(
             "/internal/runtime/assign",
             headers=_headers(assignment_token),
@@ -165,6 +170,7 @@ def test_runtime_token_is_bound_to_one_namespace(monkeypatch, supervisor_llm):
             params={"task": "ANA-1"},
         )
 
+    assert unassigned.status_code == 409
     assert assigned.status_code == 200
     assert assigned.json()["result"]["task_key"] == "ANA-1"
     assert operation_collision.status_code == 409
@@ -178,6 +184,8 @@ def test_runtime_token_is_bound_to_one_namespace(monkeypatch, supervisor_llm):
     assert history.status_code == 200
     assert history.json()["result"]["count"] == 1
     assert history.json()["result"]["records"][0]["retryable"] is False
+    with SAUnitOfWork() as uow:
+        assert uow.tasks.get_by_key("ANA-2") is None
 
 
 def test_runtime_history_exposes_retryable_supervisor_failure(monkeypatch):

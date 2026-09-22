@@ -64,7 +64,10 @@ class SATaskRepository(TaskRepository):
     def lock(self, task_id: int) -> Task | None:
         with self._session.no_autoflush:
             row = self._session.execute(
-                select(m.Task).where(m.Task.id == task_id).with_for_update()
+                select(m.Task)
+                .where(m.Task.id == task_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
             ).scalar_one_or_none()
         return _row_to_task(row) if row else None
 

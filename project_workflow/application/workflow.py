@@ -108,7 +108,12 @@ class WorkflowService:
                     raise ConflictError("Воркфлоу содержит задачи; сначала перенесите или удалите их")
                 project_ids.append(project_id)
 
-            phases = list(self._uow.phases.list(workflow_id))
+            phases = [
+                phase
+                for mode in self._uow.workflows.list_modes(workflow_id)
+                if mode.id is not None
+                for phase in self._uow.phases.list(workflow_id, mode_id=mode.id)
+            ]
             for phase in phases:
                 if phase.id is None:
                     raise ConflictError("Фаза воркфлоу повреждена")

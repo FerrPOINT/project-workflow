@@ -37,7 +37,13 @@ def cli_step(payload: CliStepRequest) -> dict | JSONResponse:
     try:
         with SAUnitOfWork() as uow:
             namespace_id = _cli_namespace_id(uow, payload.task, payload.namespace_id)
-            return execute_namespace_step(uow, namespace_id=namespace_id, task=payload.task, report=payload.report)
+            return execute_namespace_step(
+                uow,
+                namespace_id=namespace_id,
+                task=payload.task,
+                report=payload.report,
+                create_if_missing=True,
+            )
     except (ConflictError, RuntimeError, ValueError) as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=409)
 

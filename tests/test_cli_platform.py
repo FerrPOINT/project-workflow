@@ -8,6 +8,7 @@ from click.testing import CliRunner
 
 from project_workflow.interfaces.cli import ui
 from project_workflow.interfaces.cli.core import cli
+from project_workflow.interfaces.ui.routes import cli_api
 from project_workflow.interfaces.ui.routes.cli_api import _cli_namespace_id
 
 
@@ -88,6 +89,36 @@ def test_server_cli_namespace_selection_is_unambiguous(monkeypatch):
     )
     with pytest.raises(ValueError, match="PROJECT_WORKFLOW_NAMESPACE_ID"):
         _cli_namespace_id(ambiguous, "RUN-7", None)
+
+
+def test_server_cli_step_keeps_legacy_create_if_missing(monkeypatch):
+    class UowContext:
+        def __enter__(self):
+            return object()
+
+        def __exit__(self, *_args):
+            return False
+
+    calls = []
+
+    monkeypatch.setattr(cli_api, "SAUnitOfWork", UowContext)
+    monkeypatch.setattr(cli_api, "_cli_namespace_id", lambda *_args: 7)
+
+    def execute(_uow, **kwargs):
+        calls.append(kwargs)
+        return {"ok": True}
+
+    monkeypatch.setattr(cli_api, "execute_namespace_step", execute)
+
+    assert cli_api.cli_step(cli_api.CliStepRequest(task="RUN-7")) == {"ok": True}
+    assert calls == [
+        {
+            "namespace_id": 7,
+            "task": "RUN-7",
+            "report": None,
+            "create_if_missing": True,
+        }
+    ]
 
 
 def test_token_step_explains_missing_transport(monkeypatch):

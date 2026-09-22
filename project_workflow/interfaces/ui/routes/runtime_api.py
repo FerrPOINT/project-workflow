@@ -168,12 +168,16 @@ def execute_namespace_step(
     namespace_id: int,
     task: str,
     report: str | None,
+    create_if_missing: bool,
 ) -> dict[str, Any]:
     """Execute one Supervisor step inside an already-authorized namespace."""
     task_key = _require_valid_key(task, uow, project_id=namespace_id)
     _assert_task_key_in_namespace(uow, namespace_id, task_key)
     engine = supervisor.SupervisorEngine(
-        task_key, uow=uow, create_if_missing=False, project_id=namespace_id
+        task_key,
+        uow=uow,
+        create_if_missing=create_if_missing,
+        project_id=namespace_id,
     )
     if report is None:
         if engine._get_current_phase_obj() is None:
@@ -280,6 +284,7 @@ def runtime_step(
                 namespace_id=namespace_id,
                 task=payload.task,
                 report=payload.report,
+                create_if_missing=False,
             )
     except (ConflictError, RuntimeError, ValueError) as exc:
         return _error(str(exc), 409)

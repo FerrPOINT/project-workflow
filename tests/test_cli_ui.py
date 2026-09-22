@@ -46,6 +46,8 @@ class TestStepCommand:
         assert mock_engine_cls.call_count == 1
         first_call = mock_engine_cls.call_args_list[0]
         assert first_call[0] == ("RUN-1",)
+        assert first_call.kwargs["project_id"] is None
+        assert "create_if_missing" not in first_call.kwargs
         mock_engine.format_current_phase_instructions.assert_called_once()
 
     @patch("project_workflow.supervisor.SupervisorEngine")

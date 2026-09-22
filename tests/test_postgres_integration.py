@@ -638,6 +638,106 @@ class TestPostgresInitialMigration:
         ]
         verify.close()
 
+    def test_concurrent_existing_task_assignment_rechecks_ledger_after_row_lock(self, pg_url):
+        from project_workflow.infrastructure.db.repositories.project import SAProjectRepository
+        from project_workflow.infrastructure.db.repositories.task import SATaskRepository
+
+        ensure_migrated(get_engine(pg_url))
+        setup = SAUnitOfWork(pg_url)
+        workflow_id = setup.workflows.create({"name": "Existing assignment race"})
+        default = setup.workflows.get_mode_by_key(workflow_id, "default")
+        assert default is not None and default.id is not None
+        rework_id = setup.workflows.create_mode(
+            {"workflow_id": workflow_id, "key": "rework", "name": "Rework", "mode_order": 2}
+        )
+        setup.phases.create(
+            {"workflow_id": workflow_id, "mode_id": default.id, "code": "start", "name": "Start", "phase_order": 1}
+        )
+        setup.phases.create(
+            {"workflow_id": workflow_id, "mode_id": rework_id, "code": "fix", "name": "Fix", "phase_order": 1}
+        )
+        project_id = setup.projects.create(
+            {
+                "workflow_id": workflow_id,
+                "code": "EXISTING-RACE",
+                "name": "Existing race",
+                "cli_command": "existing-race",
+                "key_prefixes": ["EXISTING"],
+            }
+        )
+        initial = TaskService(setup).assign_runtime_task(
+            project_id=project_id,
+            task_key="EXISTING-1",
+            mode_key="default",
+            cycle_number=0,
+            operation_key="existing-race-a",
+            expected_revision=0,
+            expected_status="missing",
+        )
+        setup.tasks.update(initial["id"], {"status": "done"})
+        setup.commit()
+        setup.close()
+
+        lookup_started = Barrier(2)
+        lookup_finished = Barrier(2)
+        thread_state = local()
+        original_project_get = SAProjectRepository.get_by_id
+        original_assignment_get = SATaskRepository.get_assignment_by_operation_key
+
+        def unlocked_project(repo, candidate_project_id):
+            return original_project_get(repo, candidate_project_id)
+
+        def synchronized_initial_lookup(repo, operation_key):
+            if operation_key == "existing-race-b" and not getattr(thread_state, "looked_up", False):
+                thread_state.looked_up = True
+                lookup_started.wait(timeout=10)
+                result = original_assignment_get(repo, operation_key)
+                lookup_finished.wait(timeout=10)
+                return result
+            return original_assignment_get(repo, operation_key)
+
+        def assign() -> dict:
+            uow = SAUnitOfWork(pg_url)
+            try:
+                return TaskService(uow).assign_runtime_task(
+                    project_id=project_id,
+                    task_key="EXISTING-1",
+                    mode_key="rework",
+                    cycle_number=1,
+                    operation_key="existing-race-b",
+                    expected_revision=1,
+                    expected_status="done",
+                    expected_mode_key="default",
+                    expected_cycle_number=0,
+                )
+            finally:
+                uow.close()
+
+        with (
+            patch.object(SAProjectRepository, "lock", unlocked_project),
+            patch.object(
+                SATaskRepository,
+                "get_assignment_by_operation_key",
+                synchronized_initial_lookup,
+            ),
+            ThreadPoolExecutor(max_workers=2) as pool,
+        ):
+            results = list(pool.map(lambda _: assign(), range(2)))
+
+        assert {result["assignment_revision"] for result in results} == {2}
+        assert {result["assignment_operation_key"] for result in results} == {"existing-race-b"}
+        assert {result["status"] for result in results} == {"active"}
+        verify = SAUnitOfWork(pg_url)
+        task = verify.tasks.get_by_key("EXISTING-1", project_id=project_id)
+        assert task is not None
+        assert task.mode_id == rework_id
+        assert task.cycle_number == 1
+        assert [item.operation_key for item in verify.tasks.list_assignments(task.id)] == [
+            "existing-race-a",
+            "existing-race-b",
+        ]
+        verify.close()
+
     def test_orm_create_all_is_rejected_for_postgresql(self, pg_url):
         engine = get_engine(pg_url)
         with pytest.raises(RuntimeError, match="изолированных тестах SQLite"):

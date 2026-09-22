@@ -115,9 +115,10 @@ def step_cmd(
         uow = SAUnitOfWork()
         project_id = _resolve_namespace_id_from_env(uow)
         task_key = _require_valid_key(task, uow, project_id=project_id)
-        engine = supervisor.SupervisorEngine(
-            task_key, uow=uow, create_if_missing=False, project_id=project_id
-        )
+        # The local CLI keeps its documented compatibility contract: the first
+        # step materializes the technical cursor in the workflow's default mode.
+        # Business-controlled runtime assignment remains a separate API path.
+        engine = supervisor.SupervisorEngine(task_key, uow=uow, project_id=project_id)
     except (ConflictError, RuntimeError, ValueError) as exc:
         if uow is not None:
             uow.close()
