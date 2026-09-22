@@ -246,15 +246,17 @@ def _metadata_is_current(target: Engine | Connection) -> bool:
 
 
 def ensure_migrated(engine: Engine | Connection | None = None) -> None:
-    """Apply the baseline only to an empty or exact ``0001_initial`` database."""
+    """Apply migrations to empty, legacy ``0001_initial``, or exact-head databases."""
     target = engine or get_engine()
     bound_engine = target.engine if isinstance(target, Connection) else target
     schema = None if _is_sqlite(str(bound_engine.url)) else get_settings().DB_SCHEMA
     revisions = database_revisions(target)
     existing_tables = set(inspect(target).get_table_names(schema=schema)) - {"alembic_version"}
-    incompatible_revision = bool(revisions) and revisions != {migration_head()}
+    head = migration_head()
+    compatible_upgrade_revisions = {head, "0001_initial"}
+    incompatible_revision = bool(revisions) and not revisions.issubset(compatible_upgrade_revisions)
     exact_tables = existing_tables == expected_tables()
-    incompatible_schema = revisions == {migration_head()} and (
+    incompatible_schema = revisions == {head} and (
         not exact_tables or not _metadata_is_current(target)
     )
     unversioned_database = not revisions and bool(existing_tables)

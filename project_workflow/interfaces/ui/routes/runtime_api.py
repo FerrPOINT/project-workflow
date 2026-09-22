@@ -11,10 +11,11 @@ from fastapi import Header, Query
 from fastapi.responses import JSONResponse
 
 from project_workflow import config, supervisor
+from project_workflow.application.task import TaskService
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.cli.core import _require_valid_key, _resolve_namespace_id
-from project_workflow.interfaces.ui.schemas import RuntimeStepRequest
+from project_workflow.interfaces.ui.schemas import RuntimeAssignmentRequest, RuntimeStepRequest
 from project_workflow.supervisor import format_result
 
 _ROLE_RE = re.compile(r"^[a-z][a-z0-9-]{1,31}$")
@@ -25,8 +26,8 @@ def _error(message: str, status: int) -> JSONResponse:
     return JSONResponse({"ok": False, "error": message}, status_code=status)
 
 
-def _runtime_tokens() -> dict[str, str]:
-    raw = config.get_settings().PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON.strip()
+def _configured_tokens(setting_name: str) -> dict[str, str]:
+    raw = str(getattr(config.get_settings(), setting_name)).strip()
     if not raw:
         return {}
     try:
@@ -50,6 +51,19 @@ def _runtime_tokens() -> dict[str, str]:
     return result
 
 
+def _runtime_tokens() -> dict[str, str]:
+    return _configured_tokens("PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON")
+
+
+def _assignment_tokens() -> dict[str, str]:
+    tokens = _configured_tokens("PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON")
+    runtime_tokens = _runtime_tokens()
+    catalog_token = config.get_settings().PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN.strip()
+    if set(tokens.values()) & set(runtime_tokens.values()) or catalog_token in tokens.values():
+        raise RuntimeError("Assignment tokens должны отличаться от runtime и catalog tokens")
+    return tokens
+
+
 def _authorized_role(authorization: str | None) -> str | None:
     prefix = "Bearer "
     if not authorization or not authorization.startswith(prefix):
@@ -67,6 +81,22 @@ def _authorized_role(authorization: str | None) -> str | None:
         if hmac.compare_digest(supplied, expected):
             matched = role
     return matched
+
+
+def _authorized_assignment_role(authorization: str | None) -> str | None:
+    prefix = "Bearer "
+    if not authorization or not authorization.startswith(prefix):
+        return None
+    supplied = authorization[len(prefix) :]
+    runtime_tokens = _runtime_tokens()
+    assignment_tokens = _assignment_tokens()
+    catalog_token = config.get_settings().PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN.strip()
+    if supplied in runtime_tokens.values() or supplied == catalog_token:
+        return None
+    for role, expected in assignment_tokens.items():
+        if hmac.compare_digest(supplied, expected):
+            return role
+    return None
 
 
 def _namespace_id(uow: SAUnitOfWork, role: str) -> int:
@@ -145,7 +175,9 @@ def execute_namespace_step(
     """Execute one Supervisor step inside an already-authorized namespace."""
     task_key = _require_valid_key(task, uow, project_id=namespace_id)
     _assert_task_key_in_namespace(uow, namespace_id, task_key)
-    engine = supervisor.SupervisorEngine(task_key, uow=uow, project_id=namespace_id)
+    engine = supervisor.SupervisorEngine(
+        task_key, uow=uow, create_if_missing=False, project_id=namespace_id
+    )
     if report is None:
         if engine._get_current_phase_obj() is None:
             result = engine._blocked_result()
@@ -176,6 +208,58 @@ def execute_namespace_step(
         "output": format_result(result),
         "result": result,
     }
+
+
+def runtime_assign(
+    payload: RuntimeAssignmentRequest,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any] | JSONResponse:
+    """Accept one authorized Business assignment and persist its technical cursor."""
+    try:
+        role = _authorized_assignment_role(authorization)
+    except RuntimeError as exc:
+        return _error(str(exc), 503)
+    if role is None:
+        try:
+            # A valid execution/catalog credential is deliberately distinguishable
+            # from an unknown credential: only the adapter credential may assign.
+            if _authorized_role(authorization) is not None:
+                return _error("Runtime token не разрешает назначение задач", 403)
+        except RuntimeError as exc:
+            return _error(str(exc), 503)
+        return _error("Недействительный runtime token", 401)
+    try:
+        with SAUnitOfWork() as uow:
+            namespace_id = _namespace_id(uow, role)
+            task_key = _require_valid_key(payload.task, uow, project_id=namespace_id)
+            _assert_task_key_in_namespace(uow, namespace_id, task_key)
+            task = TaskService(uow).assign_runtime_task(
+                project_id=namespace_id,
+                task_key=task_key,
+                mode_key=payload.mode_key,
+                cycle_number=payload.cycle_number,
+                operation_key=payload.operation_key,
+                expected_revision=payload.expected_revision,
+                expected_status=payload.expected_status,
+                expected_mode_key=payload.expected_mode_key,
+                expected_cycle_number=payload.expected_cycle_number,
+            )
+            return {
+                "ok": True,
+                "exit_code": 0,
+                "result": {
+                    "task_key": task_key,
+                    "workflow_id": task["workflow_id"],
+                    "mode_id": task["mode_id"],
+                    "mode_key": task["mode_key"],
+                    "cycle_number": task["cycle_number"],
+                    "assignment_operation_key": task["assignment_operation_key"],
+                    "assignment_revision": task["assignment_revision"],
+                    "status": task["status"],
+                },
+            }
+    except (ConflictError, RuntimeError, ValueError) as exc:
+        return _error(str(exc), 409)
 
 
 def runtime_step(

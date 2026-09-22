@@ -134,27 +134,94 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0001_initial"
+        assert version == migration_head() == "0002_workflow_modes"
         assert schema_is_ready(engine) is True
 
-    def test_downgrade_and_reupgrade(self, pg_url):
-        from project_workflow.infrastructure.db.models import Base
-
+    def test_downgrade_refuses_lossy_mode_collapse(self, pg_url):
         engine = get_engine(pg_url)
         ensure_migrated(engine)
-        run_alembic_command("downgrade", engine, "base")
+        with pytest.raises(RuntimeError, match="Downgrade from workflow modes"):
+            run_alembic_command("downgrade", engine, "base")
+        assert schema_is_ready(engine) is True
 
-        tables_after_downgrade = set(
-            inspect(engine).get_table_names(schema="project_workflow")
-        )
-        assert tables_after_downgrade.isdisjoint(Base.metadata.tables)
-        assert "project_workflow" not in inspect(engine).get_schema_names()
+    def test_populated_0001_upgrade_preserves_rows_and_backfills_per_workflow(self, pg_url):
+        engine = get_engine(pg_url)
+        run_alembic_command("upgrade", engine, "0001_initial")
+        with engine.begin() as conn:
+            workflow_ids = [
+                conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.workflows (name, description, is_default) "
+                        "VALUES (:name, '', 0) RETURNING id"
+                    ),
+                    {"name": f"Legacy PG {suffix}"},
+                ).scalar_one()
+                for suffix in ("A", "B")
+            ]
+            for index, workflow_id in enumerate(workflow_ids, 1):
+                phase_id = conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.phases "
+                        "(workflow_id, code, name, phase_order, execution_type) "
+                        "VALUES (:workflow_id, :code, 'Legacy', 1, 'sync') RETURNING id"
+                    ),
+                    {"workflow_id": workflow_id, "code": f"legacy-{index}"},
+                ).scalar_one()
+                project_id = conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.projects "
+                        "(workflow_id, code, name, description, theme_icon, theme_color, cli_command, key_prefixes) "
+                        "VALUES (:workflow_id, :code, 'Legacy', '', 'folder', '#5E6AD2', :cli, '[]') RETURNING id"
+                    ),
+                    {"workflow_id": workflow_id, "code": f"LPG{index}", "cli": f"legacy-pg-{index}"},
+                ).scalar_one()
+                task_id = conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.tasks "
+                        "(project_id, workflow_id, task_key, title, current_phase_id, status) "
+                        "VALUES (:project_id, :workflow_id, :task_key, 'Legacy', :phase_id, 'active') RETURNING id"
+                    ),
+                    {
+                        "project_id": project_id,
+                        "workflow_id": workflow_id,
+                        "task_key": f"LPG{index}-1",
+                        "phase_id": phase_id,
+                    },
+                ).scalar_one()
+                history_id = conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.task_step_history "
+                        "(task_id, workflow_id, phase_id, verdict, replay_fingerprint) "
+                        "VALUES (:task_id, :workflow_id, :phase_id, 'partial', :fingerprint) RETURNING id"
+                    ),
+                    {
+                        "task_id": task_id,
+                        "workflow_id": workflow_id,
+                        "phase_id": phase_id,
+                        "fingerprint": f"legacy-pg-{index}",
+                    },
+                ).scalar_one()
+                conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.task_phase_events "
+                        "(task_id, workflow_id, phase_id, step_history_id, event_type) "
+                        "VALUES (:task_id, :workflow_id, :phase_id, :history_id, 'entered')"
+                    ),
+                    {"task_id": task_id, "workflow_id": workflow_id, "phase_id": phase_id, "history_id": history_id},
+                )
 
-        ensure_migrated(engine)
-        assert "project_workflow" in inspect(engine).get_schema_names()
-        assert set(Base.metadata.tables).issubset(
-            inspect(engine).get_table_names(schema="project_workflow")
-        )
+        run_alembic_command("upgrade", engine)
+        with engine.connect() as conn:
+            mode_rows = conn.execute(
+                text(
+                    "SELECT workflow_id, id FROM project_workflow.workflow_modes "
+                    "WHERE key = 'default' ORDER BY workflow_id"
+                )
+            ).all()
+            assert len(mode_rows) == 2 and mode_rows[0].id != mode_rows[1].id
+            assert conn.execute(text("SELECT count(*) FROM project_workflow.tasks")).scalar_one() == 2
+            assert conn.execute(text("SELECT count(*) FROM project_workflow.task_step_history")).scalar_one() == 2
+            assert conn.execute(text("SELECT count(*) FROM project_workflow.task_phase_events")).scalar_one() == 2
 
     def test_legacy_revision_is_refused_without_mutation(self, pg_url):
         from project_workflow.infrastructure.db.session import (

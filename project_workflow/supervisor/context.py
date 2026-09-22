@@ -47,6 +47,28 @@ class SupervisorContextBuilder:
                 return phase
         return None
 
+    def _historical_phase_by_id(self, phase_id: int | str | None) -> Phase | None:
+        """Resolve an immutable historical phase from its persisted catalog row."""
+        phase = self._phase_by_id(phase_id)
+        if phase is not None or phase_id is None or self.uow is None:
+            return phase
+        historical = self.uow.phases.get_by_id(int(phase_id))
+        if historical is None:
+            return None
+        return Phase(
+            id=historical.id,
+            code=historical.code,
+            name=historical.name,
+            description=historical.description,
+            phase_order=historical.phase_order,
+            agent_id=historical.agent_id,
+            parallel_with_phase_id=historical.parallel_with_phase_id,
+            rollback_target_phase_id=historical.rollback_target_phase_id,
+            execution_type=historical.execution_type,
+            parallel_with_phase_code=historical.parallel_with_phase_code,
+            rollback_target_phase_code=historical.rollback_target_phase_code,
+        )
+
     def _phase_status_lookup(self) -> dict[str, str]:
         statuses: dict[str, str] = {}
         event_status = {
@@ -56,11 +78,15 @@ class SupervisorContextBuilder:
             "resumed": "current",
             "rolled_back": "rollback",
         }
-        events = self.uow.list_phase_events(self.task["id"])
+        events = self.uow.list_phase_events(
+            self.task["id"],
+            mode_id=self.task.get("mode_id"),
+            cycle_number=self.task.get("cycle_number", 0),
+        )
         if not events:
             raise ValueError("Для задачи отсутствует обязательный журнал событий фаз")
         for row in events:
-            phase = self._phase_by_id(row["phase_id"])
+            phase = self._historical_phase_by_id(row["phase_id"])
             if phase is None:
                 raise ValueError(f"Событие ссылается на неизвестную фазу {row['phase_id']}")
             statuses[phase.code] = event_status[str(row["event_type"])]
@@ -84,7 +110,7 @@ class SupervisorContextBuilder:
     def _build_phase_history(self) -> list[dict[str, Any]]:
         history: list[dict] = []
         for row in self.uow.list_phase_events(self.task["id"]):
-            phase = self._phase_by_id(row["phase_id"])
+            phase = self._historical_phase_by_id(row["phase_id"])
             if not phase:
                 raise ValueError(f"Событие ссылается на неизвестную фазу {row['phase_id']}")
             history.append(
@@ -92,6 +118,8 @@ class SupervisorContextBuilder:
                     "phase_code": phase.code,
                     "phase_name": phase.name,
                     "event_type": row["event_type"],
+                    "mode_id": row.get("mode_id"),
+                    "cycle_number": row.get("cycle_number", 0),
                     "occurred_at": row["occurred_at"],
                     "step_history_id": row.get("step_history_id"),
                 }
@@ -101,9 +129,9 @@ class SupervisorContextBuilder:
     def _build_recent_verdicts(self, limit: int = 5) -> list[dict[str, Any]]:
         verdicts: list[dict] = []
         for row in self.uow.list_step_history(task_id=self.task["id"], limit=limit):
-            phase = self._phase_by_id(row.get("phase_id"))
-            next_phase = self._phase_by_id(row.get("next_phase_id"))
-            rollback_phase = self._phase_by_id(row.get("rollback_phase_id"))
+            phase = self._historical_phase_by_id(row.get("phase_id"))
+            next_phase = self._historical_phase_by_id(row.get("next_phase_id"))
+            rollback_phase = self._historical_phase_by_id(row.get("rollback_phase_id"))
             response = row.get("supervisor_response") or {}
             verdicts.append(
                 {
@@ -114,6 +142,8 @@ class SupervisorContextBuilder:
                     "message": response.get("message") if isinstance(response, dict) else None,
                     "next_phase_code": next_phase.code if next_phase else None,
                     "rollback_phase_code": rollback_phase.code if rollback_phase else None,
+                    "mode_id": row.get("mode_id"),
+                    "cycle_number": row.get("cycle_number", 0),
                     "created_at": row.get("created_at"),
                 }
             )
@@ -145,6 +175,9 @@ class SupervisorContextBuilder:
             "workflow_name": self.workflow.get("name") if self.workflow else None,
             "workflow_id": self.workflow.get("id") if self.workflow else None,
             "task_status": self.task.get("status"),
+            "mode_id": self.task.get("mode_id"),
+            "mode_key": self.task.get("mode_key"),
+            "cycle_number": self.task.get("cycle_number", 0),
             "current_phase_code": self.current_phase_code,
             "current_phase_name": phase.name,
             "completed_phases": completed_phases,

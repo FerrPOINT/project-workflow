@@ -6,10 +6,11 @@ from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from project_workflow.domain import Workflow, WorkflowMode
-from project_workflow.domain.exceptions import NotFoundError
+from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import WorkflowRepository
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.repositories.converters import _row_to_mode, _row_to_workflow
@@ -111,7 +112,11 @@ class SAWorkflowRepository(WorkflowRepository):
             mode_order=data["mode_order"],
         )
         self._session.add(item)
-        self._session.flush()
+        try:
+            self._session.flush()
+        except IntegrityError as exc:
+            self._session.rollback()
+            raise ConflictError("Ключ и порядок режима должны быть уникальны в воркфлоу") from exc
         return int(item.id)
 
 

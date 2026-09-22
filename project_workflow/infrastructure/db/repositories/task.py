@@ -102,6 +102,8 @@ class SATaskRepository(TaskRepository):
             workflow_id=workflow_id,
             mode_id=mode_id,
             cycle_number=data.get("cycle_number", 0),
+            assignment_operation_key=data.get("assignment_operation_key"),
+            assignment_revision=data.get("assignment_revision", 0),
             task_key=data["task_key"],
             title=data.get("title"),
             description=data.get("description"),
@@ -180,13 +182,16 @@ class SATaskRepository(TaskRepository):
             )
         )
 
-    def list_phase_events(self, task_id: int) -> Sequence[TaskPhaseEvent]:
+    def list_phase_events(
+        self, task_id: int, mode_id: int | None = None, cycle_number: int | None = None
+    ) -> Sequence[TaskPhaseEvent]:
         with self._session.no_autoflush:
-            rows = self._session.execute(
-                select(m.TaskPhaseEvent)
-                .where(m.TaskPhaseEvent.task_id == task_id)
-                .order_by(m.TaskPhaseEvent.id)
-            ).scalars().all()
+            stmt = select(m.TaskPhaseEvent).where(m.TaskPhaseEvent.task_id == task_id)
+            if mode_id is not None:
+                stmt = stmt.where(m.TaskPhaseEvent.mode_id == mode_id)
+            if cycle_number is not None:
+                stmt = stmt.where(m.TaskPhaseEvent.cycle_number == cycle_number)
+            rows = self._session.execute(stmt.order_by(m.TaskPhaseEvent.id)).scalars().all()
         return [_row_to_phase_event(row) for row in rows]
 
     def list_phase_events_batch(self, task_ids: Sequence[int]) -> Mapping[int, Sequence[TaskPhaseEvent]]:

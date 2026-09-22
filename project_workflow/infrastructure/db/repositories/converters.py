@@ -104,6 +104,8 @@ def _row_to_task(row: m.Task) -> Task:
         mode_id=row.mode_id,
         mode_key=next((item.key for item in workflow.modes if item.id == row.mode_id), "default"),
         cycle_number=row.cycle_number,
+        assignment_operation_key=row.assignment_operation_key,
+        assignment_revision=row.assignment_revision,
         task_key=row.task_key,
         title=row.title or "",
         description=row.description or "",

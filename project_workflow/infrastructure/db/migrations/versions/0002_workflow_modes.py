@@ -20,6 +20,120 @@ def _is_sqlite() -> bool:
     return op.get_bind().dialect.name == "sqlite"
 
 
+def _upgrade_postgresql_constraints() -> None:
+    """Add mode-scoped constraints without rewriting referenced parent tables."""
+    op.drop_constraint("fk_phases_parallel_with_workflow", "phases", type_="foreignkey")
+    op.drop_constraint("fk_phases_rollback_target_workflow", "phases", type_="foreignkey")
+    op.drop_constraint("uq_phases_workflow_code", "phases", type_="unique")
+    op.drop_constraint("uq_phases_workflow_order", "phases", type_="unique")
+    op.alter_column("phases", "mode_id", nullable=False)
+    op.create_unique_constraint("uq_phases_id_mode_workflow", "phases", ["id", "mode_id", "workflow_id"])
+    op.create_unique_constraint(
+        "uq_phases_workflow_mode_code", "phases", ["workflow_id", "mode_id", "code"]
+    )
+    op.create_unique_constraint(
+        "uq_phases_workflow_mode_order", "phases", ["workflow_id", "mode_id", "phase_order"]
+    )
+    op.create_foreign_key(
+        "fk_phases_mode_workflow",
+        "phases",
+        "workflow_modes",
+        ["mode_id", "workflow_id"],
+        ["id", "workflow_id"],
+        ondelete="CASCADE",
+    )
+    op.create_foreign_key(
+        "fk_phases_parallel_with_mode_workflow",
+        "phases",
+        "phases",
+        ["parallel_with_phase_id", "mode_id", "workflow_id"],
+        ["id", "mode_id", "workflow_id"],
+        ondelete="RESTRICT",
+    )
+    op.create_foreign_key(
+        "fk_phases_rollback_target_mode_workflow",
+        "phases",
+        "phases",
+        ["rollback_target_phase_id", "mode_id", "workflow_id"],
+        ["id", "mode_id", "workflow_id"],
+        ondelete="RESTRICT",
+    )
+
+    op.alter_column("tasks", "mode_id", nullable=False)
+    op.alter_column("tasks", "cycle_number", nullable=False, server_default="0")
+    op.alter_column("tasks", "assignment_revision", nullable=False, server_default="0")
+    op.create_check_constraint("ck_tasks_cycle_number_nonnegative", "tasks", "cycle_number >= 0")
+    op.create_check_constraint(
+        "ck_tasks_assignment_revision_nonnegative", "tasks", "assignment_revision >= 0"
+    )
+    op.create_unique_constraint("uq_tasks_id_mode_workflow", "tasks", ["id", "mode_id", "workflow_id"])
+    op.create_unique_constraint(
+        "uq_tasks_project_assignment_operation", "tasks", ["project_id", "assignment_operation_key"]
+    )
+    op.create_foreign_key(
+        "fk_tasks_current_phase_mode_workflow",
+        "tasks",
+        "phases",
+        ["current_phase_id", "mode_id", "workflow_id"],
+        ["id", "mode_id", "workflow_id"],
+        ondelete="RESTRICT",
+    )
+
+    op.drop_index("uq_task_step_history_replay", table_name="task_step_history")
+    op.alter_column("task_step_history", "mode_id", nullable=False)
+    op.alter_column("task_step_history", "cycle_number", nullable=False, server_default="0")
+    op.create_check_constraint(
+        "ck_task_step_history_cycle_nonnegative", "task_step_history", "cycle_number >= 0"
+    )
+    op.create_unique_constraint(
+        "uq_task_step_history_execution",
+        "task_step_history",
+        ["id", "task_id", "mode_id", "cycle_number"],
+    )
+    for name, local in (
+        ("phase", "phase_id"),
+        ("next_phase", "next_phase_id"),
+        ("rollback_phase", "rollback_phase_id"),
+    ):
+        op.create_foreign_key(
+            f"fk_task_step_history_{name}_mode_workflow",
+            "task_step_history",
+            "phases",
+            [local, "mode_id", "workflow_id"],
+            ["id", "mode_id", "workflow_id"],
+            ondelete="RESTRICT",
+        )
+    op.create_index(
+        "uq_task_step_history_replay",
+        "task_step_history",
+        ["task_id", "mode_id", "cycle_number", "phase_id", "replay_fingerprint"],
+        unique=True,
+    )
+
+    op.alter_column("task_phase_events", "mode_id", nullable=False)
+    op.alter_column("task_phase_events", "cycle_number", nullable=False, server_default="0")
+    op.create_check_constraint(
+        "ck_task_phase_events_cycle_nonnegative", "task_phase_events", "cycle_number >= 0"
+    )
+    op.create_foreign_key(
+        "fk_task_phase_events_phase_mode_workflow",
+        "task_phase_events",
+        "phases",
+        ["phase_id", "mode_id", "workflow_id"],
+        ["id", "mode_id", "workflow_id"],
+        ondelete="RESTRICT",
+    )
+    op.drop_constraint("fk_task_phase_events_step_task", "task_phase_events", type_="foreignkey")
+    op.create_foreign_key(
+        "fk_task_phase_events_step_task_execution",
+        "task_phase_events",
+        "task_step_history",
+        ["step_history_id", "task_id", "mode_id", "cycle_number"],
+        ["id", "task_id", "mode_id", "cycle_number"],
+        ondelete="RESTRICT",
+    )
+
+
 def upgrade() -> None:
     if _is_sqlite():
         # SQLite needs this disabled while Alembic rebuilds the referenced
@@ -44,6 +158,8 @@ def upgrade() -> None:
         op.add_column(table, sa.Column("mode_id", sa.Integer(), nullable=True))
     for table in ("tasks", "task_step_history", "task_phase_events"):
         op.add_column(table, sa.Column("cycle_number", sa.Integer(), server_default="0", nullable=True))
+    op.add_column("tasks", sa.Column("assignment_operation_key", sa.String(length=128), nullable=True))
+    op.add_column("tasks", sa.Column("assignment_revision", sa.Integer(), server_default="0", nullable=True))
 
     # SQLite and PostgreSQL both support this INSERT ... SELECT form.
     op.execute(
@@ -89,11 +205,14 @@ def upgrade() -> None:
         if op.get_bind().execute(sa.text(f"SELECT 1 FROM {table} WHERE mode_id IS NULL LIMIT 1")).first():
             raise RuntimeError(f"Не удалось определить default mode для таблицы {table}")
 
+    if not _is_sqlite():
+        _upgrade_postgresql_constraints()
+        return
+
     # SQLite cannot rewrite a referenced parent table while foreign-key
     # enforcement is enabled (the legacy tasks table still points at phases).
-    # Its backfill remains fully data-safe; new SQLite schemas are created from
-    # ORM metadata and therefore receive the complete composite constraints.
-    # Replace workflow-scoped phase graph FKs with mode-scoped ones.
+    # Its backfill remains fully data-safe; rebuild each dependent table so the
+    # upgraded SQLite schema has the same composite constraints as ORM metadata.
     with op.batch_alter_table("phases", recreate="always") as batch:
         batch.drop_constraint("fk_phases_parallel_with_workflow", type_="foreignkey")
         batch.drop_constraint("fk_phases_rollback_target_workflow", type_="foreignkey")
@@ -110,28 +229,32 @@ def upgrade() -> None:
             ["id", "workflow_id"],
             ondelete="CASCADE",
         )
-        if not _is_sqlite():
-            batch.create_foreign_key(
-                "fk_phases_parallel_with_mode_workflow",
-                "phases",
-                ["parallel_with_phase_id", "mode_id", "workflow_id"],
-                ["id", "mode_id", "workflow_id"],
-                ondelete="RESTRICT",
-            )
-            batch.create_foreign_key(
-                "fk_phases_rollback_target_mode_workflow",
-                "phases",
-                ["rollback_target_phase_id", "mode_id", "workflow_id"],
-                ["id", "mode_id", "workflow_id"],
-                ondelete="RESTRICT",
-            )
+        batch.create_foreign_key(
+            "fk_phases_parallel_with_mode_workflow",
+            "phases",
+            ["parallel_with_phase_id", "mode_id", "workflow_id"],
+            ["id", "mode_id", "workflow_id"],
+            ondelete="RESTRICT",
+        )
+        batch.create_foreign_key(
+            "fk_phases_rollback_target_mode_workflow",
+            "phases",
+            ["rollback_target_phase_id", "mode_id", "workflow_id"],
+            ["id", "mode_id", "workflow_id"],
+            ondelete="RESTRICT",
+        )
 
     with op.batch_alter_table("tasks", recreate="always") as batch:
         batch.drop_constraint("fk_tasks_current_phase_workflow", type_="foreignkey")
         batch.alter_column("mode_id", nullable=False)
         batch.alter_column("cycle_number", nullable=False, server_default="0")
+        batch.alter_column("assignment_revision", nullable=False, server_default="0")
         batch.create_check_constraint("ck_tasks_cycle_number_nonnegative", "cycle_number >= 0")
+        batch.create_check_constraint("ck_tasks_assignment_revision_nonnegative", "assignment_revision >= 0")
         batch.create_unique_constraint("uq_tasks_id_mode_workflow", ["id", "mode_id", "workflow_id"])
+        batch.create_unique_constraint(
+            "uq_tasks_project_assignment_operation", ["project_id", "assignment_operation_key"]
+        )
         batch.create_foreign_key(
             "fk_tasks_current_phase_mode_workflow",
             "phases",
@@ -171,7 +294,8 @@ def upgrade() -> None:
         )
 
     with op.batch_alter_table("task_phase_events", recreate="always") as batch:
-        batch.drop_constraint("fk_task_phase_events_phase_workflow", type_="foreignkey")
+        for name in ("fk_task_phase_events_phase_workflow", "fk_task_phase_events_step_task"):
+            batch.drop_constraint(name, type_="foreignkey")
         batch.alter_column("mode_id", nullable=False)
         batch.alter_column("cycle_number", nullable=False, server_default="0")
         batch.create_check_constraint("ck_task_phase_events_cycle_nonnegative", "cycle_number >= 0")
@@ -182,10 +306,17 @@ def upgrade() -> None:
             ["id", "mode_id", "workflow_id"],
             ondelete="RESTRICT",
         )
+        batch.create_foreign_key(
+            "fk_task_phase_events_step_task_execution",
+            "task_step_history",
+            ["step_history_id", "task_id", "mode_id", "cycle_number"],
+            ["id", "task_id", "mode_id", "cycle_number"],
+            ondelete="RESTRICT",
+        )
     if _is_sqlite():
-        # SQLite cannot retain these self-referential composite FKs during the
-        # legacy table rebuild. Triggers provide the same cross-mode guard for
-        # direct SQL writes; repository validation covers the normal API path.
+        # Keep explicit guards in addition to the composite FKs: SQLite's
+        # handling of UPDATE/DELETE on referenced self-rows is less strict
+        # across versions, and these triggers make the reverse invariant clear.
         for name, column in (
             ("phases_parallel_mode_guard", "parallel_with_phase_id"),
             ("phases_rollback_mode_guard", "rollback_target_phase_id"),
@@ -208,8 +339,27 @@ def upgrade() -> None:
                     "BEGIN SELECT RAISE(ABORT, 'phase reference must stay within mode'); END"
                 )
             )
+            op.execute(
+                sa.text(
+                    f"CREATE TRIGGER {name}_target_update BEFORE UPDATE OF id, mode_id, workflow_id ON phases "
+                    f"WHEN EXISTS (SELECT 1 FROM phases source WHERE source.{column} = OLD.id "
+                    "AND (source.mode_id <> NEW.mode_id OR source.workflow_id <> NEW.workflow_id)) "
+                    "BEGIN SELECT RAISE(ABORT, 'referenced phase mode cannot change'); END"
+                )
+            )
+            op.execute(
+                sa.text(
+                    f"CREATE TRIGGER {name}_target_delete BEFORE DELETE ON phases "
+                    f"WHEN EXISTS (SELECT 1 FROM phases source WHERE source.{column} = OLD.id) "
+                    "BEGIN SELECT RAISE(ABORT, 'referenced phase cannot be deleted'); END"
+                )
+            )
         op.execute("PRAGMA foreign_keys=ON")
 
 
 def downgrade() -> None:
-    raise NotImplementedError("workflow mode history is irreversible once deployed")
+    raise RuntimeError(
+        "Downgrade from workflow modes is intentionally refused: it would discard "
+        "persisted mode/cycle assignments and merge append-only history. Export and "
+        "plan a data migration before attempting a rollback."
+    )

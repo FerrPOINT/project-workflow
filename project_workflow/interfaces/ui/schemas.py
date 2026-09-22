@@ -54,6 +54,33 @@ class RuntimeStepRequest(StrictRequest):
     def _report_not_blank(cls, value: str | None) -> str | None:
         return _strip_nonblank(value, "report") if value is not None else None
 
+
+class RuntimeAssignmentRequest(StrictRequest):
+    """Business-owned persisted assignment accepted only on the role-token bridge."""
+
+    task: str = Field(min_length=1, max_length=128)
+    mode_key: str = Field(min_length=1, max_length=128)
+    cycle_number: int = Field(ge=0, strict=True)
+    operation_key: str = Field(min_length=1, max_length=128)
+    expected_revision: int = Field(ge=0, strict=True)
+    expected_status: Literal["missing", "active", "done", "blocked"]
+    expected_mode_key: str | None = Field(default=None, min_length=1, max_length=128)
+    expected_cycle_number: int | None = Field(default=None, ge=0, strict=True)
+
+    @field_validator("task", "mode_key", "operation_key", "expected_mode_key")
+    @classmethod
+    def _assignment_text_not_blank(cls, value: str | None, info: Any) -> str | None:
+        if value is None:
+            return None
+        return _strip_nonblank(value, info.field_name)
+
+    @field_validator("mode_key")
+    @classmethod
+    def _mode_key_valid(cls, value: str) -> str:
+        if re.fullmatch(r"[a-z0-9][a-z0-9._-]*", value) is None:
+            raise ValueError("Ключ режима должен соответствовать [a-z0-9][a-z0-9._-]*")
+        return value
+
 def _strip_nonblank(value: str, field_name: str) -> str:
     normalized = value.strip()
     if not normalized:

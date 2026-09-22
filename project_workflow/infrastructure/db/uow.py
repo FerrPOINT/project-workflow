@@ -152,8 +152,15 @@ class SAUnitOfWork(UnitOfWork):
     def get_workflows(self) -> list[dict[str, Any]]:
         return [workflow.to_dict() for workflow in self.workflows.list()]
 
-    def list_phase_events(self, task_id: int) -> list[dict[str, Any]]:
-        return [event.to_dict() for event in self.tasks.list_phase_events(task_id)]
+    def list_phase_events(
+        self, task_id: int, mode_id: int | None = None, cycle_number: int | None = None
+    ) -> list[dict[str, Any]]:
+        return [
+            event.to_dict()
+            for event in self.tasks.list_phase_events(
+                task_id, mode_id=mode_id, cycle_number=cycle_number
+            )
+        ]
 
     def list_phase_events_batch(self, task_ids: list[int]) -> dict[int, list[dict[str, Any]]]:
         return {

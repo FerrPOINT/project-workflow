@@ -268,7 +268,7 @@ class TestSessionHelpers:
 
         monkeypatch.chdir(tmp_path)
 
-        assert migration_head() == "0001_initial"
+        assert migration_head() == "0002_workflow_modes"
 
     def test_ensure_migrated_postgresql_branch(self, tmp_path):
         from unittest.mock import MagicMock, patch

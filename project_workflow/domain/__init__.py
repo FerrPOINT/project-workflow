@@ -164,6 +164,8 @@ class Task:
     mode_id: int = 0
     mode_key: str = "default"
     cycle_number: int = 0
+    assignment_operation_key: str | None = None
+    assignment_revision: int = 0
     task_key: str = ""
     title: str = ""
     description: str = ""
@@ -182,6 +184,8 @@ class Task:
             "mode_id": self.mode_id,
             "mode_key": self.mode_key,
             "cycle_number": self.cycle_number,
+            "assignment_operation_key": self.assignment_operation_key,
+            "assignment_revision": self.assignment_revision,
             "task_key": self.task_key,
             "title": self.title,
             "description": self.description,

@@ -18,9 +18,9 @@ class PhaseServiceApp:
     def __init__(self, uow: UnitOfWork):
         self._uow = uow
 
-    def _generate_code(self, workflow_id: int, order: int) -> str:
+    def _generate_code(self, workflow_id: int, order: int, mode_id: int | None = None) -> str:
         prefix = f"wf-{workflow_id}-phase-"
-        existing = self._uow.phases.list(workflow_id)
+        existing = self._uow.phases.list(workflow_id, mode_id=mode_id)
         max_num = 0
         for phase in existing:
             if phase.code.startswith(prefix):
@@ -107,7 +107,7 @@ class PhaseServiceApp:
                     raise ConflictError(f"phase_order должен быть в диапазоне 1..{len(existing) + 1}")
             raw_code = data.get("code")
             if raw_code is None:
-                code = self._generate_code(workflow_id, order)
+                code = self._generate_code(workflow_id, order, mode_id=mode_id)
             elif not isinstance(raw_code, str) or not raw_code.strip():
                 raise ValueError("code должен быть непустой строкой")
             else:

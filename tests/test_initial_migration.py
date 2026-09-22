@@ -72,8 +72,8 @@ def _constraint_names(items: list[dict]) -> set[str]:
 
 def test_repository_has_exactly_one_base_and_head():
     versions = Path(__file__).parents[1] / "project_workflow" / "infrastructure" / "db" / "migrations" / "versions"
-    assert [path.name for path in versions.glob("*.py")] == ["0001_initial_schema.py"]
-    assert migration_head() == "0001_initial"
+    assert sorted(path.name for path in versions.glob("*.py")) == ["0001_initial_schema.py", "0002_workflow_modes.py"]
+    assert migration_head() == "0002_workflow_modes"
 
 
 def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
@@ -125,7 +125,7 @@ def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
         }
         assert actual_fks == expected_fks, table_name
 
-    assert database_revisions(engine) == {"0001_initial"}
+    assert database_revisions(engine) == {"0002_workflow_modes"}
     assert schema_is_ready(engine) is True
     with engine.connect() as connection:
         context = MigrationContext.configure(
@@ -133,6 +133,97 @@ def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
             opts={"compare_type": True, "compare_server_default": True},
         )
         assert compare_metadata(context, Base.metadata) == []
+
+
+def test_sqlite_upgrade_populated_legacy_backfills_each_workflow_mode(tmp_path):
+    engine = _sqlite_engine(tmp_path, "legacy-populated.db")
+    run_alembic_command("upgrade", engine, "0001_initial")
+    with engine.begin() as conn:
+        workflow_ids = [
+            conn.execute(
+                text("INSERT INTO workflows (name, description, is_default) VALUES (:name, '', 0) RETURNING id"),
+                {"name": f"Legacy {suffix}"},
+            ).scalar_one()
+            for suffix in ("A", "B")
+        ]
+        rows: list[tuple[int, int, int, int]] = []
+        for index, workflow_id in enumerate(workflow_ids, 1):
+            phase_id = conn.execute(
+                text(
+                    "INSERT INTO phases (workflow_id, code, name, phase_order) "
+                    "VALUES (:workflow_id, :code, :name, 1) RETURNING id"
+                ),
+                {"workflow_id": workflow_id, "code": f"legacy-{index}", "name": "Legacy"},
+            ).scalar_one()
+            project_id = conn.execute(
+                text(
+                    "INSERT INTO projects "
+                    "(workflow_id, code, name, description, key_prefixes, cli_command) "
+                    "VALUES (:workflow_id, :code, :name, '', '[]', :cli) RETURNING id"
+                ),
+                {"workflow_id": workflow_id, "code": f"LP{index}", "name": "Legacy", "cli": f"legacy-{index}"},
+            ).scalar_one()
+            task_id = conn.execute(
+                text(
+                    "INSERT INTO tasks (project_id, workflow_id, task_key, current_phase_id, status) "
+                    "VALUES (:project_id, :workflow_id, :task_key, :phase_id, 'active') RETURNING id"
+                ),
+                {
+                    "project_id": project_id,
+                    "workflow_id": workflow_id,
+                    "task_key": f"LP{index}-1",
+                    "phase_id": phase_id,
+                },
+            ).scalar_one()
+            history_id = conn.execute(
+                text(
+                    "INSERT INTO task_step_history "
+                    "(task_id, workflow_id, phase_id, verdict, replay_fingerprint) "
+                    "VALUES (:task_id, :workflow_id, :phase_id, 'partial', :fingerprint) RETURNING id"
+                ),
+                {
+                    "task_id": task_id,
+                    "workflow_id": workflow_id,
+                    "phase_id": phase_id,
+                    "fingerprint": f"legacy-{index}",
+                },
+            ).scalar_one()
+            conn.execute(
+                text(
+                    "INSERT INTO task_phase_events "
+                    "(task_id, workflow_id, phase_id, step_history_id, event_type) "
+                    "VALUES (:task_id, :workflow_id, :phase_id, :history_id, 'entered')"
+                ),
+                {"task_id": task_id, "workflow_id": workflow_id, "phase_id": phase_id, "history_id": history_id},
+            )
+            rows.append((workflow_id, project_id, task_id, phase_id))
+
+    run_alembic_command("upgrade", engine)
+    with engine.connect() as conn:
+        mode_rows = conn.execute(
+            text("SELECT workflow_id, id FROM workflow_modes WHERE key = 'default' ORDER BY workflow_id")
+        ).all()
+        assert len(mode_rows) == 2
+        assert mode_rows[0].id != mode_rows[1].id
+        for workflow_id, _project_id, task_id, phase_id in rows:
+            mode_id = conn.execute(
+                text("SELECT id FROM workflow_modes WHERE workflow_id = :workflow_id AND key = 'default'"),
+                {"workflow_id": workflow_id},
+            ).scalar_one()
+            assert conn.execute(
+                text("SELECT mode_id, cycle_number FROM tasks WHERE id = :id"), {"id": task_id}
+            ).one() == (mode_id, 0)
+            assert conn.execute(
+                text("SELECT mode_id, cycle_number FROM task_step_history WHERE task_id = :id"),
+                {"id": task_id},
+            ).one() == (mode_id, 0)
+            assert conn.execute(
+                text("SELECT mode_id, cycle_number FROM task_phase_events WHERE task_id = :id"),
+                {"id": task_id},
+            ).one() == (mode_id, 0)
+            assert conn.execute(
+                text("SELECT mode_id FROM phases WHERE id = :id"), {"id": phase_id}
+            ).scalar_one() == mode_id
 
 
 def test_in_memory_sqlite_migration_keeps_the_schema_alive():
@@ -145,13 +236,13 @@ def test_in_memory_sqlite_migration_keeps_the_schema_alive():
         engine.dispose()
 
 
-def test_sqlite_upgrade_downgrade_reupgrade(tmp_path):
+def test_sqlite_downgrade_refuses_lossy_mode_collapse(tmp_path):
     engine = _sqlite_engine(tmp_path)
     ensure_migrated(engine)
-    run_alembic_command("downgrade", engine, "base")
-    assert set(inspect(engine).get_table_names()).isdisjoint(Base.metadata.tables)
-    ensure_migrated(engine)
-    assert set(Base.metadata.tables).issubset(inspect(engine).get_table_names())
+    with pytest.raises(RuntimeError, match="Downgrade from workflow modes"):
+        run_alembic_command("downgrade", engine, "base")
+    assert database_revisions(engine) == {"0002_workflow_modes"}
+    assert schema_is_ready(engine) is True
 
 
 @pytest.mark.parametrize("legacy_revision", LEGACY_REVISIONS)
@@ -321,7 +412,7 @@ def test_head_with_damaged_or_polluted_schema_is_refused(tmp_path, mutation):
     assert schema_is_ready(engine) is False
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0001_initial"}
+    assert database_revisions(engine) == {"0002_workflow_modes"}
     if mutation == "extra":
         with engine.connect() as connection:
             assert connection.execute(text("SELECT id FROM unexpected_table")).scalar_one() == 42

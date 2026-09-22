@@ -11,7 +11,6 @@ from project_workflow.application.task import TaskService
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.infrastructure.db.session import run_alembic_command
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
-from project_workflow.supervisor.core import SupervisorEngine
 from tests._db_helpers import prepared_sqlite_uow
 
 
@@ -49,19 +48,29 @@ def test_new_workflow_has_default_mode_and_catalogs_are_scoped(modes_db):
     modes_db.rollback()
 
 
-def test_business_environment_selects_exact_mode_and_cycle(modes_db, monkeypatch):
+def test_duplicate_mode_key_or_order_is_domain_conflict(modes_db):
+    workflow_id = modes_db.workflows.create({"name": "Mode conflicts"})
+    with pytest.raises(ConflictError):
+        modes_db.workflows.create_mode(
+            {"workflow_id": workflow_id, "key": "default", "name": "Duplicate", "mode_order": 2}
+        )
+    with pytest.raises(ConflictError):
+        modes_db.workflows.create_mode(
+            {"workflow_id": workflow_id, "key": "another", "name": "Duplicate order", "mode_order": 1}
+        )
+    modes_db.rollback()
+
+
+def test_process_environment_cannot_select_mode_or_cycle(modes_db, monkeypatch):
     workflow_id = modes_db.workflows.create({"name": "Selection"})
     modes_db.workflows.create_mode(
         {"workflow_id": workflow_id, "key": "rework", "name": "Rework", "mode_order": 2}
     )
-    monkeypatch.setenv("PROJECT_WORKFLOW_MODE_KEY", "rework")
-    monkeypatch.setenv("PROJECT_WORKFLOW_CYCLE_NUMBER", "3")
-    selection = resolve_execution_selection(modes_db, workflow_id)
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE_KEY", "missing")
+    monkeypatch.setenv("PROJECT_WORKFLOW_CYCLE_NUMBER", "99")
+    selection = resolve_execution_selection(modes_db, workflow_id, mode_key="rework", cycle_number=3)
     assert selection.mode_key == "rework"
     assert selection.cycle_number == 3
-    monkeypatch.setenv("PROJECT_WORKFLOW_MODE_KEY", "missing")
-    with pytest.raises(ConflictError):
-        resolve_execution_selection(modes_db, workflow_id)
 
 
 def test_legacy_task_creation_uses_workflow_default_mode(modes_db):
@@ -160,9 +169,41 @@ def test_history_replay_identity_includes_mode_and_cycle(modes_db):
     assert modes_db.step_history.get_by_fingerprint(task["id"], rework_phase, "same", rework, 1) is not None
 
 
-def test_runtime_step_assigns_non_default_and_rework_cycles_only_after_terminal(
-    modes_db, monkeypatch
-):
+def test_event_history_link_cannot_cross_mode_or_cycle(modes_db):
+    workflow_id = modes_db.workflows.create({"name": "Event identity"})
+    default = modes_db.workflows.get_mode_by_key(workflow_id, "default")
+    rework = modes_db.workflows.create_mode(
+        {"workflow_id": workflow_id, "key": "rework", "name": "Rework", "mode_order": 2}
+    )
+    initial_phase = modes_db.phases.create(
+        {"workflow_id": workflow_id, "mode_id": default.id, "code": "p", "name": "Initial", "phase_order": 1}
+    )
+    rework_phase = modes_db.phases.create(
+        {"workflow_id": workflow_id, "mode_id": rework, "code": "p", "name": "Rework", "phase_order": 1}
+    )
+    project_id = modes_db.projects.create(
+        {"workflow_id": workflow_id, "code": "EVT", "name": "Events", "cli_command": "evt", "key_prefixes": ["EVT"]}
+    )
+    task = TaskService(modes_db).create_task(
+        {"project_id": project_id, "task_key": "EVT-1", "current_phase_id": initial_phase}
+    )
+    history_id = modes_db.step_history.create(
+        {
+            "task_id": task["id"], "phase_id": initial_phase, "verdict": "pass", "worker_report": "x",
+            "covered_item_ids": [], "missing_item_ids": [], "blocker_messages": [],
+            "evaluation_snapshot": {}, "supervisor_response": {}, "replay_fingerprint": "evt",
+        }
+    )
+    modes_db.tasks.update(
+        task["id"], {"mode_id": rework, "current_phase_id": rework_phase, "cycle_number": 1}
+    )
+    with pytest.raises(IntegrityError):
+        modes_db.tasks.record_phase_event(task["id"], rework_phase, "completed", history_id)
+        modes_db.commit()
+    modes_db.rollback()
+
+
+def test_runtime_assignment_persists_cycles_only_after_terminal(modes_db):
     workflow_id = modes_db.workflows.create({"name": "Runtime"})
     default = modes_db.workflows.get_mode_by_key(workflow_id, "default")
     rework = modes_db.workflows.create_mode(
@@ -183,36 +224,95 @@ def test_runtime_step_assigns_non_default_and_rework_cycles_only_after_terminal(
             "key_prefixes": ["RUN"],
         }
     )
-    initial = TaskService(modes_db).create_task(
-        {"project_id": project_id, "task_key": "RUN-1", "current_phase_id": default_phase}
+    service = TaskService(modes_db)
+    initial = service.assign_runtime_task(
+        project_id=project_id,
+        task_key="RUN-1",
+        mode_key="default",
+        cycle_number=0,
+        operation_key="initial",
+        expected_revision=0,
+        expected_status="missing",
     )
+    assert initial["current_phase_id"] == default_phase
+    modes_db.tasks.update(initial["id"], {"status": "active"})
+    modes_db.commit()
+    with pytest.raises(ConflictError, match="активной задачи"):
+        service.assign_runtime_task(
+            project_id=project_id, task_key="RUN-1", mode_key="rework", cycle_number=1,
+            operation_key="rework-1", expected_revision=1, expected_status="active",
+            expected_mode_key="default", expected_cycle_number=0,
+        )
     modes_db.tasks.update(initial["id"], {"status": "done"})
     modes_db.commit()
-    monkeypatch.setenv("PROJECT_WORKFLOW_MODE_KEY", "rework")
-    monkeypatch.setenv("PROJECT_WORKFLOW_CYCLE_NUMBER", "1")
-    engine = SupervisorEngine("RUN-1", uow=modes_db, project_id=project_id)
-    assert engine.task["mode_id"] == rework and engine.task["cycle_number"] == 1
-    assert engine.task["current_phase_id"] == rework_phase
-    modes_db.tasks.update(engine.task["id"], {"status": "done"})
+    assigned = service.assign_runtime_task(
+        project_id=project_id, task_key="RUN-1", mode_key="rework", cycle_number=1,
+        operation_key="rework-1", expected_revision=1, expected_status="done",
+        expected_mode_key="default", expected_cycle_number=0,
+    )
+    assert assigned["mode_id"] == rework and assigned["cycle_number"] == 1
+    assert assigned["current_phase_id"] == rework_phase
+    assert service.assign_runtime_task(
+        project_id=project_id, task_key="RUN-1", mode_key="rework", cycle_number=1,
+        operation_key="rework-1", expected_revision=999, expected_status="active",
+    )["assignment_revision"] == assigned["assignment_revision"]
+    modes_db.tasks.update(initial["id"], {"status": "done"})
     modes_db.commit()
-    monkeypatch.setenv("PROJECT_WORKFLOW_CYCLE_NUMBER", "2")
-    engine = SupervisorEngine("RUN-1", uow=modes_db, project_id=project_id)
-    assert engine.task["mode_id"] == rework and engine.task["cycle_number"] == 2
-    assert engine.task["current_phase_id"] == rework_phase
-    modes_db.tasks.update(engine.task["id"], {"status": "active"})
-    modes_db.commit()
-    monkeypatch.setenv("PROJECT_WORKFLOW_MODE_KEY", "default")
-    with pytest.raises(ConflictError, match="активной задачи"):
-        SupervisorEngine("RUN-1", uow=modes_db, project_id=project_id)
+    next_assigned = service.assign_runtime_task(
+        project_id=project_id, task_key="RUN-1", mode_key="rework", cycle_number=2,
+        operation_key="rework-2", expected_revision=2, expected_status="done",
+        expected_mode_key="rework", expected_cycle_number=1,
+    )
+    assert next_assigned["cycle_number"] == 2
     assert default_phase != rework_phase
 
 
-def test_explicit_mode_mismatch_fails_closed(modes_db, monkeypatch):
+def test_supervisor_context_switch_keeps_current_path_and_full_history(modes_db):
+    from project_workflow.supervisor.core import SupervisorEngine
+
+    workflow_id = modes_db.workflows.create({"name": "Context"})
+    default = modes_db.workflows.get_mode_by_key(workflow_id, "default")
+    rework = modes_db.workflows.create_mode(
+        {"workflow_id": workflow_id, "key": "rework", "name": "Rework", "mode_order": 2}
+    )
+    default_phase = modes_db.phases.create(
+        {"workflow_id": workflow_id, "mode_id": default.id, "code": "p", "name": "Initial", "phase_order": 1}
+    )
+    rework_phase = modes_db.phases.create(
+        {"workflow_id": workflow_id, "mode_id": rework, "code": "p", "name": "Rework", "phase_order": 1}
+    )
+    project_id = modes_db.projects.create(
+        {"workflow_id": workflow_id, "code": "CTX", "name": "Context", "cli_command": "ctx", "key_prefixes": ["CTX"]}
+    )
+    service = TaskService(modes_db)
+    initial = service.assign_runtime_task(
+        project_id=project_id, task_key="CTX-1", mode_key="default", cycle_number=0,
+        operation_key="ctx-initial", expected_revision=0, expected_status="missing",
+    )
+    modes_db.tasks.update(initial["id"], {"status": "done"})
+    modes_db.commit()
+    assigned = service.assign_runtime_task(
+        project_id=project_id, task_key="CTX-1", mode_key="rework", cycle_number=1,
+        operation_key="ctx-rework", expected_revision=1, expected_status="done",
+        expected_mode_key="default", expected_cycle_number=0,
+    )
+    assert assigned["current_phase_id"] == rework_phase
+    engine = SupervisorEngine("CTX-1", uow=modes_db, create_if_missing=False, project_id=project_id)
+    context = engine.get_full_context(use_cache=False)
+    assert context["mode_key"] == "rework"
+    assert context["cycle_number"] == 1
+    assert context["current_phase_code"] == "p"
+    assert len(context["phase_history"]) == 2
+    assert {entry["cycle_number"] for entry in context["phase_history"]} == {0, 1}
+    assert engine.format_current_phase_instructions()
+    assert default_phase != rework_phase
+
+
+def test_explicit_unknown_mode_fails_closed(modes_db):
     workflow_id = modes_db.workflows.create({"name": "Strict"})
     modes_db.workflows.create_mode({"workflow_id": workflow_id, "key": "rework", "name": "Rework", "mode_order": 2})
-    monkeypatch.setenv("PROJECT_WORKFLOW_MODE_KEY", "default")
-    with pytest.raises(ConflictError, match="не совпадает"):
-        resolve_execution_selection(modes_db, workflow_id, mode_key="rework")
+    with pytest.raises(ConflictError, match="не найден"):
+        resolve_execution_selection(modes_db, workflow_id, mode_key="missing", cycle_number=1)
 
 
 def test_cli_surface_remains_step_and_history_only():

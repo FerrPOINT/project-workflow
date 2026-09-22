@@ -246,6 +246,8 @@ class Task(Base):
     workflow_id: Mapped[int] = mapped_column(ForeignKey("workflows.id", ondelete="RESTRICT"), nullable=False)
     mode_id: Mapped[int] = mapped_column(nullable=False)
     cycle_number: Mapped[int] = mapped_column(nullable=False, server_default="0")
+    assignment_operation_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    assignment_revision: Mapped[int] = mapped_column(nullable=False, server_default="0")
     task_key: Mapped[str] = mapped_column(String, nullable=False)
     title: Mapped[str | None] = mapped_column(String, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -275,8 +277,12 @@ class Task(Base):
         UniqueConstraint("id", "workflow_id", name="uq_tasks_id_workflow"),
         UniqueConstraint("id", "mode_id", "workflow_id", name="uq_tasks_id_mode_workflow"),
         UniqueConstraint("project_id", "task_key", name="uq_tasks_project_task_key"),
+        UniqueConstraint(
+            "project_id", "assignment_operation_key", name="uq_tasks_project_assignment_operation"
+        ),
         CheckConstraint("status IN ('active', 'done', 'blocked')", name="ck_tasks_status"),
         CheckConstraint("cycle_number >= 0", name="ck_tasks_cycle_number_nonnegative"),
+        CheckConstraint("assignment_revision >= 0", name="ck_tasks_assignment_revision_nonnegative"),
         Index("ix_tasks_project_id", "project_id"),
         Index("ix_tasks_workflow_id", "workflow_id"),
         Index("ix_tasks_current_phase_id", "current_phase_id"),
@@ -402,9 +408,14 @@ class TaskPhaseEvent(Base):
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
-            ["step_history_id", "task_id"],
-            ["task_step_history.id", "task_step_history.task_id"],
-            name="fk_task_phase_events_step_task",
+            ["step_history_id", "task_id", "mode_id", "cycle_number"],
+            [
+                "task_step_history.id",
+                "task_step_history.task_id",
+                "task_step_history.mode_id",
+                "task_step_history.cycle_number",
+            ],
+            name="fk_task_phase_events_step_task_execution",
             ondelete="RESTRICT",
         ),
         Index("ix_task_phase_events_task_id_id", "task_id", "id"),
