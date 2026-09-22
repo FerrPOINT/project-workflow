@@ -837,7 +837,9 @@ class TestPhasesPage:
 
         workflow = _workflow_row("default")
         assert f'id="phasesTimeline" data-workflow-id="{workflow["id"]}"' in response.text
-        assert "document.getElementById('phasesTimeline')?.dataset.workflowId" in response.text
+        assert "const timeline=document.getElementById('phasesTimeline')" in response.text
+        assert "const workflowId=timeline?.dataset.workflowId" in response.text
+        assert "const modeId=timeline?.dataset.modeId" in response.text
 
     def test_phases_page_links_phase_detail_by_numeric_resource_id(self):
         response = client.get("/phases")
@@ -856,7 +858,7 @@ class TestPhasesPage:
         response = client.get(f"/phases?namespace_id={namespace_id}")
 
         assert response.status_code == 200
-        assert f'href="/phase/{phase["id"]}?namespace_id={namespace_id}"' in response.text
+        assert f'href="/phase/{phase["id"]}?mode=default&namespace_id={namespace_id}"' in response.text
         assert f'id="phasesTimeline" data-workflow-id="{_workflow_row("default")["id"]}"' in response.text
         assert 'id="workflowNav"' not in response.text
 
@@ -1222,7 +1224,10 @@ class TestPhaseDetail:
         response = client.get(f"/phase/{phase['id']}?namespace_id={namespace_id}")
 
         assert response.status_code == 200
-        assert f'href="/phases?workflow_id={workflow_id}&namespace_id={namespace_id}"' in response.text
+        assert (
+            f'href="/phases?workflow_id={workflow_id}&mode=default&namespace_id={namespace_id}"'
+            in response.text
+        )
 
     def test_phase_detail_rejects_unknown_query_namespace(self):
         phase = _phase_row("5.PREFLIGHT")
@@ -1268,7 +1273,7 @@ class TestPhaseDetail:
             response = isolated_client.get(f"/phase/{phase_id}?namespace_id={namespace_id}")
 
         assert phases_page.status_code == 200
-        assert f'href="/phase/{phase_id}?namespace_id={namespace_id}"' in phases_page.text
+        assert f'href="/phase/{phase_id}?mode=default&namespace_id={namespace_id}"' in phases_page.text
         assert response.status_code == 200
         assert "Новая фаза" in response.text
         assert "Фаза недоступна в выбранном воркфлоу" not in response.text
@@ -2825,14 +2830,14 @@ class TestUiNetworkFailures:
         response = client.get(f"/instructions?phase_id={phase_id}&namespace_id={namespace_id}")
 
         assert response.status_code == 200
-        assert f'href="/phase/{phase_id}?namespace_id={namespace_id}"' in response.text
+        assert f'href="/phase/{phase_id}?mode=default&namespace_id={namespace_id}"' in response.text
 
     def test_instructions_page_has_readable_mobile_editor(self):
         phase_id = _phase_id("1.INTAKE")
         response = client.get(f"/instructions?phase_id={phase_id}")
 
         assert response.status_code == 200
-        assert len(re.findall(rf'href="/phase/{phase_id}(?:\?namespace_id=\d+)?"', response.text)) == 2
+        assert len(re.findall(rf'href="/phase/{phase_id}\?mode=default(?:&namespace_id=\d+)?"', response.text)) == 2
         assert 'class="instructions-mobile-actions"' in response.text
         assert 'class="instructions-context"' in response.text
         assert '<span class="instructions-mobile-title">Шаги</span>' in response.text
@@ -2898,7 +2903,7 @@ class TestUiNetworkFailures:
 
         assert response.status_code == 200
         assert "Инструкции фазы Новая фаза" in response.text
-        assert f'href="/phase/{phase_id}?namespace_id={namespace_id}"' in response.text
+        assert f'href="/phase/{phase_id}?mode=default&namespace_id={namespace_id}"' in response.text
         assert "Фаза недоступна в выбранном воркфлоу" not in response.text
 
     def test_instructions_page_rejects_malformed_phase_id_with_html_error(self):

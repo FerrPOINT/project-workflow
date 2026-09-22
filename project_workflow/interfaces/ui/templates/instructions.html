@@ -3,7 +3,7 @@
 {% block title %}Инструкции фазы {{ phase.name }} — Workflow Engine{% endblock %}
 {% block header_title %}<span class="instructions-desktop-title">Инструкции фазы {{ phase.name }}</span><span class="instructions-mobile-title">Шаги</span>{% endblock %}
 {% block header_actions %}
-  <a href="/phase/{{ phase.id }}{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary instructions-header-action">← К фазе</a>
+  <a href="/phase/{{ phase.id }}?mode={{ selected_mode.key | urlencode }}{% if selected_namespace %}&namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary instructions-header-action">← К фазе</a>
 {% endblock %}
 
 {% block extra_style %}
@@ -38,7 +38,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="instructions-mobile-actions"><a href="/phase/{{ phase.id }}{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary">← К фазе</a></div>
+<div class="instructions-mobile-actions"><a href="/phase/{{ phase.id }}?mode={{ selected_mode.key | urlencode }}{% if selected_namespace %}&namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary">← К фазе</a></div>
 <h2 class="instructions-context">{{ phase.name }}</h2>
 
 <div class="instructions-layout" id="instructionsLayout">
