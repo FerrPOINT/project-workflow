@@ -5,7 +5,10 @@ from __future__ import annotations
 import pytest
 
 from project_workflow.application.task import TaskService
+from project_workflow.application.workflow import WorkflowService
 from project_workflow.domain.exceptions import ConflictError
+from project_workflow.domain.runtime_assignment import canonical_json
+from project_workflow.infrastructure.db.models import TaskRuntimeAssignment as DBTaskRuntimeAssignment
 from tests._db_helpers import prepared_sqlite_uow
 
 
@@ -27,6 +30,12 @@ def _binding(**overrides: object) -> dict[str, object]:
         "workspace_generation": 2,
         "lease_generation": 5,
         "exact_input_refs": [
+            {
+                "revision": "2",
+                "ref": "comment:DEV-1:4",
+                "kind": "comment",
+                "sha256": "b" * 64,
+            },
             {
                 "kind": "business_task",
                 "ref": "business-task:DEV-1",
@@ -90,21 +99,43 @@ def test_runtime_assignment_persists_and_replays_exact_immutable_binding(tmp_pat
         }
 
         assigned = TaskService(uow).assign_runtime_task(**request)
-        replay = TaskService(uow).assign_runtime_task(**request)
+        reordered = {
+            **request,
+            "exact_input_refs": [
+                dict(reversed(list(item.items())))
+                for item in reversed(request["exact_input_refs"])
+            ],
+        }
+        replay = TaskService(uow).assign_runtime_task(**reordered)
         ledger = uow.tasks.list_assignments(assigned["id"])
 
         assert assigned["execution_scope"] == "delivery"
         assert assigned["binding_ref"] == "binding:DEV-1@1"
-        assert assigned["exact_input_refs"] == request["exact_input_refs"]
+        assert [item["kind"] for item in assigned["exact_input_refs"]] == ["business_task", "comment"]
         assert replay == assigned
         assert len(ledger) == 1
         assert ledger[0].role_key == "developer"
         assert ledger[0].task_workspace_ref == "task-workspace:tw-1"
-        assert ledger[0].exact_input_refs == request["exact_input_refs"]
+        assert ledger[0].exact_input_refs == assigned["exact_input_refs"]
+        assert ledger[0].payload_sha256 is not None and len(ledger[0].payload_sha256) == 64
+        stored = uow._session.get(DBTaskRuntimeAssignment, ledger[0].id)
+        assert stored is not None
+        assert stored.exact_input_refs == canonical_json(ledger[0].exact_input_refs)
+        assert stored.payload == canonical_json(ledger[0].payload)
 
         mutated = {**request, "binding_ref": "binding:DEV-1@different"}
         with pytest.raises(ConflictError, match="другого runtime assignment"):
             TaskService(uow).assign_runtime_task(**mutated)
+
+        changed_ref = {
+            **request,
+            "exact_input_refs": [
+                {**request["exact_input_refs"][0], "sha256": "c" * 64},
+                request["exact_input_refs"][1],
+            ],
+        }
+        with pytest.raises(ConflictError, match="другого runtime assignment"):
+            TaskService(uow).assign_runtime_task(**changed_ref)
 
 
 @pytest.mark.parametrize(
@@ -206,4 +237,20 @@ def test_runtime_assignment_refuses_legacy_mode_without_backend_policy(tmp_path)
                 expected_revision=0,
                 expected_status="missing",
                 **_binding(),
+            )
+
+
+def test_catalog_and_assignment_share_strict_runtime_role_keys(tmp_path):
+    with prepared_sqlite_uow(tmp_path, "role-keys.db") as uow:
+        workflow_id = uow.workflows.create({"name": "Roles"})
+        with pytest.raises(ValueError, match="role_key"):
+            WorkflowService(uow).create_mode(
+                workflow_id,
+                {
+                    "key": "invalid",
+                    "name": "Invalid",
+                    "role_key": "developer.v2",
+                    "execution_scope": "delivery",
+                    "tech_workspace_policy": "required",
+                },
             )

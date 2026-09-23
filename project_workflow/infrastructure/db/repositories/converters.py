@@ -161,6 +161,7 @@ def _row_to_runtime_assignment(row: m.TaskRuntimeAssignment) -> TaskRuntimeAssig
         workspace_generation=row.workspace_generation,
         lease_generation=row.lease_generation,
         exact_input_refs=exact_input_refs,
+        payload_sha256=row.payload_sha256,
         payload=payload,
         created_at=_iso(row.created_at),
     )

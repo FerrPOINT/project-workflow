@@ -247,6 +247,77 @@ class TestPostgresInitialMigration:
             assert conn.execute(text("SELECT count(*) FROM project_workflow.task_step_history")).scalar_one() == 2
             assert conn.execute(text("SELECT count(*) FROM project_workflow.task_phase_events")).scalar_one() == 2
 
+    def test_populated_0002_upgrade_preserves_nullable_legacy_assignment(self, pg_url):
+        engine = get_engine(pg_url)
+        run_alembic_command("upgrade", engine, "0001_initial")
+        with engine.begin() as conn:
+            workflow_id = conn.execute(
+                text(
+                    "INSERT INTO project_workflow.workflows (name, description, is_default) "
+                    "VALUES ('Legacy 0002', '', 0) RETURNING id"
+                )
+            ).scalar_one()
+            phase_id = conn.execute(
+                text(
+                    "INSERT INTO project_workflow.phases "
+                    "(workflow_id, code, name, phase_order, execution_type) "
+                    "VALUES (:workflow_id, 'legacy', 'Legacy', 1, 'sync') RETURNING id"
+                ),
+                {"workflow_id": workflow_id},
+            ).scalar_one()
+            project_id = conn.execute(
+                text(
+                    "INSERT INTO project_workflow.projects "
+                    "(workflow_id, code, name, description, theme_icon, theme_color, cli_command, key_prefixes) "
+                    "VALUES (:workflow_id, 'L2', 'Legacy', '', 'folder', '#5E6AD2', 'legacy-2', '[]') "
+                    "RETURNING id"
+                ),
+                {"workflow_id": workflow_id},
+            ).scalar_one()
+            task_id = conn.execute(
+                text(
+                    "INSERT INTO project_workflow.tasks "
+                    "(project_id, workflow_id, task_key, current_phase_id, status) "
+                    "VALUES (:project_id, :workflow_id, 'L2-1', :phase_id, 'active') RETURNING id"
+                ),
+                {"project_id": project_id, "workflow_id": workflow_id, "phase_id": phase_id},
+            ).scalar_one()
+
+        run_alembic_command("upgrade", engine, "0002_workflow_modes")
+        with engine.begin() as conn:
+            mode_id = conn.execute(
+                text(
+                    "SELECT id FROM project_workflow.workflow_modes "
+                    "WHERE workflow_id = :workflow_id AND key = 'default'"
+                ),
+                {"workflow_id": workflow_id},
+            ).scalar_one()
+            conn.execute(
+                text(
+                    "INSERT INTO project_workflow.task_runtime_assignments "
+                    "(operation_key, task_id, project_id, workflow_id, mode_id, cycle_number, "
+                    "assignment_revision, payload) VALUES "
+                    "('legacy-0002-op', :task_id, :project_id, :workflow_id, :mode_id, 0, 1, '{\"legacy\":true}')"
+                ),
+                {
+                    "task_id": task_id,
+                    "project_id": project_id,
+                    "workflow_id": workflow_id,
+                    "mode_id": mode_id,
+                },
+            )
+
+        run_alembic_command("upgrade", engine)
+        with engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    "SELECT payload, role_key, execution_scope, business_task_ref, exact_input_refs, "
+                    "payload_sha256 FROM project_workflow.task_runtime_assignments "
+                    "WHERE operation_key = 'legacy-0002-op'"
+                )
+            ).one()
+        assert row == ('{"legacy":true}', None, None, None, None, None)
+
     def test_legacy_revision_is_refused_without_mutation(self, pg_url):
         from project_workflow.infrastructure.db.session import (
             DatabaseRecreateRequired,

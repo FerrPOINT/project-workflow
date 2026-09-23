@@ -498,7 +498,7 @@ def test_delete_workflow_clears_self_references_in_every_mode(modes_db):
     assert moved is not None and moved.workflow_id == fallback.id
 
 
-def test_supervisor_context_switch_keeps_current_path_and_full_history(modes_db):
+def test_supervisor_context_switch_filters_prompt_history_but_keeps_audit(modes_db):
     from project_workflow.supervisor.core import SupervisorEngine
 
     workflow_id = modes_db.workflows.create({"name": "Context"})
@@ -552,8 +552,11 @@ def test_supervisor_context_switch_keeps_current_path_and_full_history(modes_db)
     assert context["mode_key"] == "rework"
     assert context["cycle_number"] == 1
     assert context["current_phase_code"] == "p"
-    assert len(context["phase_history"]) == 2
-    assert {entry["cycle_number"] for entry in context["phase_history"]} == {0, 1}
+    assert len(context["phase_history"]) == 1
+    assert context["phase_history"][0]["cycle_number"] == 1
+    audit = modes_db.list_phase_events(initial["id"])
+    assert len(audit) == 2
+    assert {entry["cycle_number"] for entry in audit} == {0, 1}
     assert engine.format_current_phase_instructions()
     assert default_phase != rework_phase
 
@@ -620,6 +623,8 @@ def test_old_cycle_feedback_never_leaks_into_current_cycle_contract(modes_db, ol
     task = TaskService(modes_db).create_task(
         {"project_id": project_id, "task_key": "FDB-1", "current_phase_id": initial_phase}
     )
+    modes_db.tasks.record_phase_event(task["id"], initial_phase, "blocked")
+    modes_db.tasks.record_phase_event(task["id"], initial_phase, "completed")
     modes_db.step_history.create(
         {
             "task_id": task["id"],
@@ -650,7 +655,17 @@ def test_old_cycle_feedback_never_leaks_into_current_cycle_contract(modes_db, ol
 
     assert contract is not None and "evaluation_feedback" not in contract
     assert context["recent_verdicts"] == []
-    assert context["phase_history"][0]["cycle_number"] == 0
+    assert len(context["phase_history"]) == 1
+    assert context["phase_history"][0]["cycle_number"] == 1
+    audit = modes_db.list_phase_events(task["id"])
+    assert {row["event_type"] for row in audit if row["cycle_number"] == 0} >= {
+        "blocked",
+        "completed",
+    }
+    prompt = engine.get_phase_prompt()
+    assert "Initial: blocked" not in prompt
+    assert "Initial: completed" not in prompt
+    assert "Rework: entered" in prompt
     assert _history_rows(modes_db, "FDB-1", project_id, None) == []
 
 

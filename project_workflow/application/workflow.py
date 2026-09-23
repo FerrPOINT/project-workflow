@@ -6,6 +6,7 @@ from typing import Any
 
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import UnitOfWork
+from project_workflow.domain.runtime_assignment import normalize_role_key
 
 
 class WorkflowService:
@@ -64,6 +65,8 @@ class WorkflowService:
             raise NotFoundError(f"Воркфлоу {workflow_id} не найден")
         payload = dict(data)
         payload["workflow_id"] = workflow_id
+        if payload.get("role_key") is not None:
+            payload["role_key"] = normalize_role_key(payload["role_key"])
         if "mode_order" not in payload:
             payload["mode_order"] = len(self._uow.workflows.list_modes(workflow_id)) + 1
         mode_id = self._uow.workflows.create_mode(payload)

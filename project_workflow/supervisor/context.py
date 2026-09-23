@@ -75,6 +75,20 @@ class SupervisorContextBuilder:
             rollback_target_phase_code=rollback.code if rollback is not None else None,
         )
 
+    def _current_execution_identity(self) -> tuple[int, int]:
+        mode_id = self.task.get("mode_id")
+        cycle_number = self.task.get("cycle_number")
+        if (
+            not isinstance(mode_id, int)
+            or isinstance(mode_id, bool)
+            or mode_id <= 0
+            or not isinstance(cycle_number, int)
+            or isinstance(cycle_number, bool)
+            or cycle_number < 0
+        ):
+            raise ValueError("Для evaluator context требуется exact mode_id и cycle_number")
+        return mode_id, cycle_number
+
     def _phase_status_lookup(self) -> dict[str, str]:
         statuses: dict[str, str] = {}
         event_status = {
@@ -84,10 +98,11 @@ class SupervisorContextBuilder:
             "resumed": "current",
             "rolled_back": "rollback",
         }
+        mode_id, cycle_number = self._current_execution_identity()
         events = self.uow.list_phase_events(
             self.task["id"],
-            mode_id=self.task.get("mode_id"),
-            cycle_number=self.task.get("cycle_number", 0),
+            mode_id=mode_id,
+            cycle_number=cycle_number,
         )
         if not events:
             raise ValueError("Для задачи отсутствует обязательный журнал событий фаз")
@@ -114,8 +129,11 @@ class SupervisorContextBuilder:
         return path
 
     def _build_phase_history(self) -> list[dict[str, Any]]:
+        mode_id, cycle_number = self._current_execution_identity()
         history: list[dict] = []
-        for row in self.uow.list_phase_events(self.task["id"]):
+        for row in self.uow.list_phase_events(
+            self.task["id"], mode_id=mode_id, cycle_number=cycle_number
+        ):
             phase = self._historical_phase_by_id(row["phase_id"])
             if not phase:
                 raise ValueError(f"Событие ссылается на неизвестную фазу {row['phase_id']}")
@@ -133,11 +151,12 @@ class SupervisorContextBuilder:
         return history
 
     def _build_recent_verdicts(self, limit: int = 5) -> list[dict[str, Any]]:
+        mode_id, cycle_number = self._current_execution_identity()
         verdicts: list[dict] = []
         for row in self.uow.list_step_history(
             task_id=self.task["id"],
-            mode_id=self.task.get("mode_id"),
-            cycle_number=self.task.get("cycle_number", 0),
+            mode_id=mode_id,
+            cycle_number=cycle_number,
             limit=limit,
         ):
             phase = self._historical_phase_by_id(row.get("phase_id"))

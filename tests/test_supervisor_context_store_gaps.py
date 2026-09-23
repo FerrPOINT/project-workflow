@@ -45,9 +45,10 @@ class TestSupervisorContextBuilder:
     def test_phase_status_lookup_no_phase(self):
         uow = MagicMock()
         uow.list_phase_events.return_value = [{"phase_id": 99, "event_type": "completed"}]
+        uow.phases.get_by_id.return_value = None
         builder = SupervisorContextBuilder(
             uow=uow,
-            task={"id": 1, "status": "active", "current_phase_id": 1},
+            task={"id": 1, "status": "active", "current_phase_id": 1, "mode_id": 1, "cycle_number": 0},
             all_phases=[self._phase(id=1)],
             current_phase_code="1",
         )
@@ -59,7 +60,10 @@ class TestSupervisorContextBuilder:
         uow.list_phase_events.return_value = [
             {"phase_id": 99, "event_type": "completed", "occurred_at": "2025-01-01"}
         ]
-        builder = SupervisorContextBuilder(uow=uow, task={"id": 1}, all_phases=[self._phase(id=1)])
+        uow.phases.get_by_id.return_value = None
+        builder = SupervisorContextBuilder(
+            uow=uow, task={"id": 1, "mode_id": 1, "cycle_number": 0}, all_phases=[self._phase(id=1)]
+        )
         with pytest.raises(ValueError, match="неизвестную фазу"):
             builder._build_phase_history()
 
@@ -79,7 +83,7 @@ class TestSupervisorContextBuilder:
         ]
         builder = SupervisorContextBuilder(
             uow=uow,
-            task={"id": 1},
+            task={"id": 1, "mode_id": 1, "cycle_number": 0},
             all_phases=[self._phase(code="1", id=1), self._phase(code="2", id=2)],
         )
         verdicts = builder._build_recent_verdicts()
@@ -97,7 +101,7 @@ class TestSupervisorContextBuilder:
         uow.list_step_history.return_value = []
         builder = SupervisorContextBuilder(
             uow=uow,
-            task={"id": 1, "status": "active", "current_phase_id": 1},
+            task={"id": 1, "status": "active", "current_phase_id": 1, "mode_id": 1, "cycle_number": 0},
             project={"code": "PRJ", "name": "Project"},
             workflow={"id": 1, "name": "WF"},
             all_phases=[self._phase(id=1)],
@@ -106,3 +110,17 @@ class TestSupervisorContextBuilder:
         )
         result = builder.build()
         assert "messages" not in result
+
+    @pytest.mark.parametrize(
+        "task",
+        [
+            {"id": 1, "cycle_number": 0},
+            {"id": 1, "mode_id": 1},
+            {"id": 1, "mode_id": 0, "cycle_number": 0},
+            {"id": 1, "mode_id": 1, "cycle_number": -1},
+        ],
+    )
+    def test_evaluator_history_fails_closed_without_exact_execution_identity(self, task):
+        builder = SupervisorContextBuilder(uow=MagicMock(), task=task)
+        with pytest.raises(ValueError, match="exact mode_id и cycle_number"):
+            builder._build_phase_history()

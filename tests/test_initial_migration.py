@@ -301,13 +301,116 @@ def test_sqlite_upgrade_populated_0002_preserves_nullable_legacy_bindings(tmp_pa
                 "work_item_ref, task_workspace_ref, tech_execution_workspace_ref, "
                 "tech_execution_attempt_ref, decomposition_revision_ref, stage_revision, "
                 "assignment_ref, binding_ref, hermes_run_ref, workspace_generation, "
-                "lease_generation, exact_input_refs FROM task_runtime_assignments "
+                "lease_generation, exact_input_refs, payload_sha256 FROM task_runtime_assignments "
                 "WHERE operation_key = 'legacy-op'"
             )
         ).one()
         assert row.payload == '{"legacy":true}'
-        assert tuple(row)[1:] == (None,) * 16
+        assert tuple(row)[1:] == (None,) * 17
     assert database_revisions(engine) == {"0003_runtime_assignment_bindings"}
+
+
+def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path):
+    engine = _sqlite_engine(tmp_path, "binding-constraints.db")
+    ensure_migrated(engine)
+    with engine.begin() as conn:
+        workflow_id = conn.execute(
+            text("INSERT INTO workflows (name, description, is_default) VALUES ('Bindings', '', 0) RETURNING id")
+        ).scalar_one()
+        mode_id = conn.execute(
+            text(
+                "INSERT INTO workflow_modes "
+                "(workflow_id, key, name, mode_order, role_key, execution_scope, tech_workspace_policy) "
+                "VALUES (:workflow_id, 'delivery', 'Delivery', 1, 'developer', 'delivery', 'required') "
+                "RETURNING id"
+            ),
+            {"workflow_id": workflow_id},
+        ).scalar_one()
+        phase_id = conn.execute(
+            text(
+                "INSERT INTO phases (workflow_id, mode_id, code, name, phase_order) "
+                "VALUES (:workflow_id, :mode_id, 'start', 'Start', 1) RETURNING id"
+            ),
+            {"workflow_id": workflow_id, "mode_id": mode_id},
+        ).scalar_one()
+        project_ids = [
+            conn.execute(
+                text(
+                    "INSERT INTO projects (workflow_id, code, name, description, key_prefixes, cli_command) "
+                    "VALUES (:workflow_id, :code, :code, '', '[]', :cli) RETURNING id"
+                ),
+                {"workflow_id": workflow_id, "code": code, "cli": f"binding-{code.lower()}"},
+            ).scalar_one()
+            for code in ("BIND1", "BIND2")
+        ]
+        task_id = conn.execute(
+            text(
+                "INSERT INTO tasks "
+                "(project_id, workflow_id, mode_id, cycle_number, assignment_revision, task_key, "
+                "current_phase_id, status) VALUES "
+                "(:project_id, :workflow_id, :mode_id, 0, 0, 'BIND-1', :phase_id, 'active') RETURNING id"
+            ),
+            {
+                "project_id": project_ids[0],
+                "workflow_id": workflow_id,
+                "mode_id": mode_id,
+                "phase_id": phase_id,
+            },
+        ).scalar_one()
+
+    base = {
+        "operation_key": "valid",
+        "task_id": task_id,
+        "project_id": project_ids[0],
+        "workflow_id": workflow_id,
+        "mode_id": mode_id,
+        "cycle_number": 0,
+        "assignment_revision": 1,
+        "role_key": "developer",
+        "execution_scope": "delivery",
+        "business_task_ref": "business:1",
+        "root_task_ref": "business:root",
+        "work_item_ref": "business:item",
+        "task_workspace_ref": "workspace:task",
+        "tech_execution_workspace_ref": "workspace:tech",
+        "tech_execution_attempt_ref": "attempt:1",
+        "decomposition_revision_ref": "decomposition:1",
+        "stage_revision": "stage:1",
+        "assignment_ref": "assignment:1",
+        "binding_ref": "binding:1",
+        "hermes_run_ref": "run:1",
+        "workspace_generation": 1,
+        "lease_generation": 1,
+        "exact_input_refs": "[]",
+        "payload_sha256": "a" * 64,
+        "payload": "{}",
+    }
+    columns = ", ".join(base)
+    values = ", ".join(f":{column}" for column in base)
+    statement = text(f"INSERT INTO task_runtime_assignments ({columns}) VALUES ({values})")
+    with engine.begin() as conn:
+        conn.execute(statement, base)
+
+    invalid_rows = [
+        {**base, "operation_key": "cross-project", "assignment_revision": 2, "project_id": project_ids[1]},
+        {**base, "operation_key": "partial", "assignment_revision": 2, "binding_ref": None},
+        {
+            **base,
+            "operation_key": "business-with-tech",
+            "assignment_revision": 2,
+            "execution_scope": "business",
+        },
+        {
+            **base,
+            "operation_key": "delivery-without-tech",
+            "assignment_revision": 2,
+            "tech_execution_attempt_ref": None,
+        },
+    ]
+    for invalid in invalid_rows:
+        with pytest.raises(IntegrityError):
+            with engine.begin() as conn:
+                conn.execute(statement, invalid)
 
 
 def test_in_memory_sqlite_migration_keeps_the_schema_alive():

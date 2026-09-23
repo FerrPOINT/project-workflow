@@ -81,7 +81,7 @@ class WorkflowMode(Base):
     key: Mapped[str] = mapped_column(String(128), nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
     mode_order: Mapped[int] = mapped_column(nullable=False)
-    role_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    role_key: Mapped[str | None] = mapped_column(String(32), nullable=True)
     execution_scope: Mapped[str | None] = mapped_column(String(16), nullable=True)
     tech_workspace_policy: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
@@ -102,6 +102,10 @@ class WorkflowMode(Base):
             "(role_key IS NULL AND execution_scope IS NULL AND tech_workspace_policy IS NULL) OR "
             "(role_key IS NOT NULL AND execution_scope IS NOT NULL AND tech_workspace_policy IS NOT NULL)",
             name="ck_workflow_modes_policy_complete",
+        ),
+        CheckConstraint(
+            "role_key IS NULL OR length(role_key) BETWEEN 2 AND 32",
+            name="ck_workflow_modes_role_key_length",
         ),
         CheckConstraint(
             "execution_scope IS NULL OR "
@@ -297,6 +301,7 @@ class Task(Base):
             ondelete="RESTRICT",
         ),
         UniqueConstraint("id", "workflow_id", name="uq_tasks_id_workflow"),
+        UniqueConstraint("id", "project_id", "workflow_id", name="uq_tasks_id_project_workflow"),
         UniqueConstraint("id", "mode_id", "workflow_id", name="uq_tasks_id_mode_workflow"),
         UniqueConstraint("project_id", "task_key", name="uq_tasks_project_task_key"),
         UniqueConstraint(
@@ -337,7 +342,7 @@ class TaskRuntimeAssignment(Base):
     mode_id: Mapped[int] = mapped_column(nullable=False)
     cycle_number: Mapped[int] = mapped_column(nullable=False)
     assignment_revision: Mapped[int] = mapped_column(nullable=False)
-    role_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    role_key: Mapped[str | None] = mapped_column(String(32), nullable=True)
     execution_scope: Mapped[str | None] = mapped_column(String(16), nullable=True)
     business_task_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
     root_task_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
@@ -353,6 +358,7 @@ class TaskRuntimeAssignment(Base):
     workspace_generation: Mapped[int | None] = mapped_column(nullable=True)
     lease_generation: Mapped[int | None] = mapped_column(nullable=True)
     exact_input_refs: Mapped[str | None] = mapped_column(Text, nullable=True)
+    payload_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     payload: Mapped[str] = mapped_column(Text, nullable=False, default="{}", server_default="{}")
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -362,6 +368,12 @@ class TaskRuntimeAssignment(Base):
             ["task_id", "workflow_id"],
             ["tasks.id", "tasks.workflow_id"],
             name="fk_task_runtime_assignments_task_workflow",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["task_id", "project_id", "workflow_id"],
+            ["tasks.id", "tasks.project_id", "tasks.workflow_id"],
+            name="fk_task_runtime_assignments_task_project_workflow",
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
@@ -387,12 +399,42 @@ class TaskRuntimeAssignment(Base):
             name="ck_task_runtime_assignments_execution_scope",
         ),
         CheckConstraint(
+            "role_key IS NULL OR length(role_key) BETWEEN 2 AND 32",
+            name="ck_task_runtime_assignments_role_key_length",
+        ),
+        CheckConstraint(
             "workspace_generation IS NULL OR workspace_generation >= 0",
             name="ck_task_runtime_assignments_workspace_generation",
         ),
         CheckConstraint(
             "lease_generation IS NULL OR lease_generation >= 0",
             name="ck_task_runtime_assignments_lease_generation",
+        ),
+        CheckConstraint(
+            "(role_key IS NULL AND execution_scope IS NULL AND business_task_ref IS NULL AND "
+            "root_task_ref IS NULL AND work_item_ref IS NULL AND task_workspace_ref IS NULL AND "
+            "tech_execution_workspace_ref IS NULL AND tech_execution_attempt_ref IS NULL AND "
+            "decomposition_revision_ref IS NULL AND stage_revision IS NULL AND assignment_ref IS NULL AND "
+            "binding_ref IS NULL AND hermes_run_ref IS NULL AND workspace_generation IS NULL AND "
+            "lease_generation IS NULL AND exact_input_refs IS NULL AND payload_sha256 IS NULL) OR "
+            "(role_key IS NOT NULL AND execution_scope IS NOT NULL AND business_task_ref IS NOT NULL AND "
+            "root_task_ref IS NOT NULL AND work_item_ref IS NOT NULL AND task_workspace_ref IS NOT NULL AND "
+            "decomposition_revision_ref IS NOT NULL AND stage_revision IS NOT NULL AND assignment_ref IS NOT NULL AND "
+            "binding_ref IS NOT NULL AND hermes_run_ref IS NOT NULL AND workspace_generation IS NOT NULL AND "
+            "lease_generation IS NOT NULL AND exact_input_refs IS NOT NULL AND payload_sha256 IS NOT NULL)",
+            name="ck_task_runtime_assignments_binding_complete",
+        ),
+        CheckConstraint(
+            "execution_scope IS NULL OR "
+            "(execution_scope = 'business' AND tech_execution_workspace_ref IS NULL AND "
+            "tech_execution_attempt_ref IS NULL) OR "
+            "(execution_scope IN ('delivery', 'aggregate') AND tech_execution_workspace_ref IS NOT NULL AND "
+            "tech_execution_attempt_ref IS NOT NULL)",
+            name="ck_task_runtime_assignments_scope_tech_refs",
+        ),
+        CheckConstraint(
+            "payload_sha256 IS NULL OR length(payload_sha256) = 64",
+            name="ck_task_runtime_assignments_payload_sha256",
         ),
         Index("ix_task_runtime_assignments_task_id", "task_id"),
         Index("ix_task_runtime_assignments_business_task_ref", "business_task_ref"),

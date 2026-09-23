@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from project_workflow.application.execution_mode import resolve_execution_selection
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import UnitOfWork
+from project_workflow.domain.runtime_assignment import normalize_role_key, payload_sha256
 from project_workflow.domain.validation import TaskKeyValidator, get_project_for_task_key
 
 
@@ -138,13 +139,11 @@ class TaskService:
         """Persist one authorized Business assignment atomically and idempotently."""
         operation_key = operation_key.strip()
         mode_key = mode_key.strip()
-        role_key = role_key.strip()
+        role_key = normalize_role_key(role_key)
         if not operation_key or len(operation_key) > 128:
             raise ValueError("operation_key должен быть непустой строкой длиной до 128 символов")
         if not mode_key or len(mode_key) > 128:
             raise ValueError("mode_key должен быть непустой строкой длиной до 128 символов")
-        if not role_key or len(role_key) > 128:
-            raise ValueError("role_key должен быть непустой строкой длиной до 128 символов")
         validated_key = TaskKeyValidator.from_projects([]).validate(task_key)
         if not validated_key.is_valid:
             raise ConflictError(validated_key.error_message or f"Недопустимый ключ задачи {task_key!r}")
@@ -338,7 +337,7 @@ class TaskService:
             "business_task", "comment", "attachment", "link", "artifact", "decomposition", "stage"
         }
         normalized: list[dict[str, Any]] = []
-        identities: set[tuple[str, str, str]] = set()
+        identities: set[tuple[str, str, str, str]] = set()
         for raw in value:
             if not isinstance(raw, dict) or set(raw) - {"kind", "ref", "revision", "sha256"}:
                 raise ValueError("Каждый exact input snapshot должен иметь только kind/ref/revision/sha256")
@@ -354,12 +353,20 @@ class TaskService:
                 or any(char not in "0123456789abcdef" for char in sha256)
             ):
                 raise ValueError("exact_input_refs.sha256 должен быть lowercase SHA-256")
-            identity = (kind, ref, revision)
+            identity = (kind, ref, revision, sha256 or "")
             if identity in identities:
                 raise ValueError("exact_input_refs не должен содержать дубликаты")
             identities.add(identity)
             normalized.append({"kind": kind, "ref": ref, "revision": revision, "sha256": sha256})
-        return normalized
+        return sorted(
+            normalized,
+            key=lambda item: (
+                str(item["kind"]),
+                str(item["ref"]),
+                str(item["revision"]),
+                str(item["sha256"] or ""),
+            ),
+        )
 
     @staticmethod
     def _validate_mode_policy(
@@ -411,6 +418,7 @@ class TaskService:
                 )
             },
             "payload": payload,
+            "payload_sha256": payload_sha256(payload),
         }
 
     @staticmethod
@@ -451,7 +459,8 @@ class TaskService:
         payload: dict[str, Any],
         cause: Exception | None = None,
     ) -> dict[str, Any]:
-        if assignment.get("payload") != payload:
+        expected_digest = payload_sha256(payload)
+        if assignment.get("payload_sha256") != expected_digest or assignment.get("payload") != payload:
             raise ConflictError("operation_key уже использован для другого runtime assignment") from cause
         task = self._uow.tasks.get_by_id(int(assignment["task_id"]))
         if task is None:

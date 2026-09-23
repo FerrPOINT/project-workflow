@@ -14,6 +14,7 @@ from project_workflow.domain.project_theme import (
     normalize_theme_color,
     normalize_theme_icon,
 )
+from project_workflow.domain.runtime_assignment import normalize_role_key
 
 
 class StrictRequest(BaseModel):
@@ -81,7 +82,7 @@ class RuntimeAssignmentRequest(StrictRequest):
     """Business-owned persisted assignment accepted only on the role-token bridge."""
 
     task: str = Field(min_length=1, max_length=128)
-    role_key: str = Field(min_length=1, max_length=128)
+    role_key: str = Field(min_length=2, max_length=32)
     mode_key: str = Field(min_length=1, max_length=128)
     execution_scope: Literal["business", "delivery", "aggregate"]
     cycle_number: int = Field(ge=0, strict=True)
@@ -107,7 +108,6 @@ class RuntimeAssignmentRequest(StrictRequest):
 
     @field_validator(
         "task",
-        "role_key",
         "mode_key",
         "operation_key",
         "business_task_ref",
@@ -129,16 +129,24 @@ class RuntimeAssignmentRequest(StrictRequest):
             return None
         return _strip_nonblank(value, info.field_name)
 
-    @field_validator("role_key", "mode_key")
+    @field_validator("role_key")
+    @classmethod
+    def _assignment_role_key_valid(cls, value: str) -> str:
+        return normalize_role_key(value)
+
+    @field_validator("mode_key")
     @classmethod
     def _assignment_key_valid(cls, value: str) -> str:
         if re.fullmatch(r"[a-z0-9][a-z0-9._-]*", value) is None:
-            raise ValueError("role_key и mode_key должны соответствовать [a-z0-9][a-z0-9._-]*")
+            raise ValueError("mode_key должен соответствовать [a-z0-9][a-z0-9._-]*")
         return value
 
     @model_validator(mode="after")
     def _unique_input_refs(self) -> RuntimeAssignmentRequest:
-        identities = [(item.kind, item.ref, item.revision) for item in self.exact_input_refs]
+        identities = [
+            (item.kind, item.ref, item.revision, item.sha256 or "")
+            for item in self.exact_input_refs
+        ]
         if len(identities) != len(set(identities)):
             raise ValueError("exact_input_refs не должен содержать дубликаты")
         return self
@@ -282,21 +290,26 @@ class WorkflowModeCreate(StrictRequest):
     key: str = Field(min_length=1, max_length=128)
     name: str = Field(min_length=1)
     mode_order: int | None = Field(default=None, gt=0, strict=True)
-    role_key: str | None = Field(default=None, min_length=1, max_length=128)
+    role_key: str | None = Field(default=None, min_length=2, max_length=32)
     execution_scope: Literal["business", "delivery", "aggregate"] | None = None
     tech_workspace_policy: Literal["forbidden", "required"] | None = None
 
-    @field_validator("key", "name", "role_key")
+    @field_validator("key", "name")
     @classmethod
     def _mode_text_not_blank(cls, value: str | None, info: Any) -> str | None:
         if value is None:
             return None
         normalized = _strip_nonblank(value, info.field_name)
-        if info.field_name in {"key", "role_key"} and re.fullmatch(
+        if info.field_name == "key" and re.fullmatch(
             r"[a-z0-9][a-z0-9._-]*", normalized
         ) is None:
-            raise ValueError("Ключ режима и role_key должны соответствовать [a-z0-9][a-z0-9._-]*")
+            raise ValueError("Ключ режима должен соответствовать [a-z0-9][a-z0-9._-]*")
         return normalized
+
+    @field_validator("role_key")
+    @classmethod
+    def _mode_role_key_valid(cls, value: str | None) -> str | None:
+        return normalize_role_key(value) if value is not None else None
 
     @model_validator(mode="after")
     def _policy_is_complete_and_consistent(self) -> WorkflowModeCreate:

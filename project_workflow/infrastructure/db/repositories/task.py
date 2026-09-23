@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime
-import json
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -13,6 +12,7 @@ from sqlalchemy.orm import Session, joinedload
 from project_workflow.domain import Task, TaskPhaseEvent, TaskRuntimeAssignment
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import TaskRepository
+from project_workflow.domain.runtime_assignment import canonical_json
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.repositories.converters import (
     _row_to_phase_event,
@@ -169,10 +169,9 @@ class SATaskRepository(TaskRepository):
             hermes_run_ref=data["hermes_run_ref"],
             workspace_generation=data["workspace_generation"],
             lease_generation=data["lease_generation"],
-            exact_input_refs=json.dumps(
-                data["exact_input_refs"], ensure_ascii=False, sort_keys=True, separators=(",", ":")
-            ),
-            payload=json.dumps(data["payload"], ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+            exact_input_refs=canonical_json(data["exact_input_refs"]),
+            payload_sha256=data["payload_sha256"],
+            payload=canonical_json(data["payload"]),
         )
         self._session.add(item)
         self._session.flush()

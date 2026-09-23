@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hmac
 import json
-import re
 from typing import Any
 
 from fastapi import Header, Query
@@ -13,12 +12,12 @@ from fastapi.responses import JSONResponse
 from project_workflow import config, supervisor
 from project_workflow.application.task import TaskService
 from project_workflow.domain.exceptions import ConflictError
+from project_workflow.domain.runtime_assignment import normalize_role_key
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.cli.core import _require_valid_key, _resolve_namespace_id
 from project_workflow.interfaces.ui.schemas import RuntimeAssignmentRequest, RuntimeStepRequest
 from project_workflow.supervisor import format_result
 
-_ROLE_RE = re.compile(r"^[a-z][a-z0-9-]{1,31}$")
 _CATALOG_ROLE = "fleet-control"
 
 
@@ -38,14 +37,13 @@ def _configured_tokens(setting_name: str) -> dict[str, str]:
         raise RuntimeError("Некорректная конфигурация runtime tokens")
     result: dict[str, str] = {}
     for role, token in value.items():
-        if (
-            not isinstance(role, str)
-            or _ROLE_RE.fullmatch(role) is None
-            or not isinstance(token, str)
-            or len(token) < 32
-        ):
+        try:
+            normalized_role = normalize_role_key(role)
+        except ValueError as exc:
+            raise RuntimeError("Некорректная конфигурация runtime tokens") from exc
+        if not isinstance(token, str) or len(token) < 32 or normalized_role in result:
             raise RuntimeError("Некорректная конфигурация runtime tokens")
-        result[role] = token
+        result[normalized_role] = token
     if len(result.values()) != len(set(result.values())):
         raise RuntimeError("Runtime tokens должны быть уникальными")
     return result

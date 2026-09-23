@@ -233,6 +233,7 @@ class TaskRuntimeAssignment:
     workspace_generation: int | None = None
     lease_generation: int | None = None
     exact_input_refs: list[dict[str, Any]] = field(default_factory=list)
+    payload_sha256: str | None = None
     payload: dict[str, Any] = field(default_factory=dict)
     created_at: str | None = None
 
@@ -263,6 +264,7 @@ class TaskRuntimeAssignment:
             "workspace_generation": self.workspace_generation,
             "lease_generation": self.lease_generation,
             "exact_input_refs": [dict(item) for item in self.exact_input_refs],
+            "payload_sha256": self.payload_sha256,
             "payload": dict(self.payload),
             "created_at": self.created_at,
         }

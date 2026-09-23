@@ -136,6 +136,7 @@ def test_runtime_step_is_unavailable_for_malformed_or_duplicate_tokens(monkeypat
     for value in (
         "not-json",
         json.dumps({"analyst": "short"}),
+        json.dumps({"analyst.v2": "x" * 32}),
         json.dumps({"analyst": "x" * 32, "architect": "x" * 32}),
     ):
         monkeypatch.setenv("PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON", value)

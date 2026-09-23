@@ -17,6 +17,9 @@ Dispatch разрешён только в mode с полным policy:
 Legacy `default` modes после миграции не получают выдуманный policy. Попытка
 нового assignment в такой mode завершается fail-closed.
 
+`role_key` имеет один общий runtime-safe формат для каталога, assignment API и
+token configuration: lowercase `[a-z][a-z0-9-]{1,31}`.
+
 ## Immutable binding
 
 Каждая новая assignment revision хранит:
@@ -34,6 +37,10 @@ Legacy `default` modes после миграции не получают выд�
 Business mode обязан явно не иметь Tech workspace refs. Delivery и aggregate
 mode требуют оба Tech refs. Активную assignment нельзя заменить; повтор того же
 `operation_key` принимается только при полном совпадении canonical payload.
+`exact_input_refs` канонически сортируются по tuple
+`(kind, ref, revision, sha256)`. Canonical JSON всего replay payload хранится
+вместе с его SHA-256 digest; перестановка refs и JSON keys сохраняет replay,
+изменение любого значимого значения даёт conflict.
 
 Миграция `0003_runtime_assignment_bindings` оставляет эти поля nullable только
 для исторических строк и не создаёт вымышленные внешние refs.
