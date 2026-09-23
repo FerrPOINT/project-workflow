@@ -7,6 +7,8 @@ from typing import Any, cast
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import UnitOfWork
 
+from .workflow_mode_policy import require_workflow_mode_mutable_after_lock
+
 
 class InstructionService:
     """Use cases for phase instructions."""
@@ -27,11 +29,21 @@ class InstructionService:
         workflow = self._uow.workflows.lock(phase.workflow_id)
         if workflow is None:
             raise NotFoundError(f"Воркфлоу {phase.workflow_id} не найден")
-        if not any(
-            item.id == phase_id
-            for item in self._uow.phases.list(phase.workflow_id, mode_id=phase.mode_id)
-        ):
+        fresh = next(
+            (
+                item
+                for item in self._uow.phases.list(
+                    phase.workflow_id, mode_id=phase.mode_id
+                )
+                if item.id == phase_id
+            ),
+            None,
+        )
+        if fresh is None:
             raise NotFoundError(f"Фаза {phase_id} не найдена")
+        require_workflow_mode_mutable_after_lock(
+            self._uow, workflow_id=phase.workflow_id, mode_id=fresh.mode_id
+        )
 
     def _lock_instruction(self, instruction_id: int) -> dict[str, Any]:
         initial = self._uow.phase_instructions.get_by_id(instruction_id)

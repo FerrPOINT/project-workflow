@@ -9,6 +9,8 @@ from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.phase_graph import PhaseGraphNode, validate_phase_graph
 from project_workflow.domain.repositories import UnitOfWork
 
+from .workflow_mode_policy import require_workflow_mode_mutable_after_lock
+
 
 class PhaseServiceApp:
     """Use cases for phases."""
@@ -96,6 +98,9 @@ class PhaseServiceApp:
                 mode_id = default_mode.id
             elif self._uow.workflows.get_mode(int(mode_id), workflow_id) is None:
                 raise ConflictError("mode_id не принадлежит указанному воркфлоу")
+            require_workflow_mode_mutable_after_lock(
+                self._uow, workflow_id=workflow_id, mode_id=mode_id
+            )
             existing = list(self._uow.phases.list(workflow_id, mode_id=mode_id))
             order = data.get("phase_order")
             if order is None:
@@ -181,6 +186,9 @@ class PhaseServiceApp:
         if "agent_id" in updates:
             self._validate_agent(updates["agent_id"])
         self._lock_workflow(workflow_id)
+        require_workflow_mode_mutable_after_lock(
+            self._uow, workflow_id=workflow_id, mode_id=phase.mode_id
+        )
         self._normalize_links(updates)
         phases = list(self._uow.phases.list(workflow_id, mode_id=phase.mode_id))
         phase = next((item for item in phases if item.id == phase_id), None)
@@ -229,6 +237,9 @@ class PhaseServiceApp:
                 raise ConflictError("Для фазы не найден владеющий воркфлоу")
             workflow_id = phase.workflow_id
             self._lock_workflow(workflow_id)
+            require_workflow_mode_mutable_after_lock(
+                self._uow, workflow_id=workflow_id, mode_id=phase.mode_id
+            )
             references = self._uow.phases.reference_kinds(phase_id)
             if references:
                 raise ConflictError(f"На фазу ссылаются: {', '.join(sorted(references))}")
@@ -267,6 +278,9 @@ class PhaseServiceApp:
                 raise ConflictError("Все перемещаемые фазы должны принадлежать одному режиму")
             mode_id = mode_ids.pop()
             self._lock_workflow(workflow_id)
+            require_workflow_mode_mutable_after_lock(
+                self._uow, workflow_id=workflow_id, mode_id=mode_id
+            )
 
             locked_phases = list(self._uow.phases.list(workflow_id, mode_id=mode_id))
             current_ids = {phase.id for phase in locked_phases}

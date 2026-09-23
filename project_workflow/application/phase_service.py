@@ -8,6 +8,8 @@ from uuid import uuid4
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import UnitOfWork
 
+from .workflow_mode_policy import require_workflow_mode_mutable_after_lock
+
 
 class PhaseService:
     """CRUD operations for phases, instructions, checks, evidence."""
@@ -47,6 +49,9 @@ class PhaseService:
         )
         if fresh is None or fresh.id is None:
             raise NotFoundError(f"Фаза {phase_id} не найдена")
+        require_workflow_mode_mutable_after_lock(
+            self._uow, workflow_id=initial.workflow_id, mode_id=fresh.mode_id
+        )
         return fresh.id
 
     @staticmethod

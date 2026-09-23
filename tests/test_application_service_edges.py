@@ -13,6 +13,7 @@ from project_workflow.application.phase import PhaseServiceApp
 from project_workflow.application.project import ProjectService
 from project_workflow.application.task import TaskService
 from project_workflow.application.workflow import WorkflowService
+from project_workflow.domain import WorkflowMode
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 
 pytestmark = [pytest.mark.unit]
@@ -86,6 +87,7 @@ def test_workflow_delete_reassigns_empty_namespaces_and_removes_phase_links():
     uow = MagicMock()
     uow.workflows.lock.return_value = SimpleNamespace(id=7, is_default=False)
     uow.workflows.get_default.return_value = SimpleNamespace(id=1, is_default=True)
+    uow.workflows.list_modes.return_value = [SimpleNamespace(id=2)]
     uow.projects.list.return_value = [SimpleNamespace(id=4, workflow_id=7)]
     uow.tasks.list_by_project.return_value = []
     uow.phases.list.return_value = [
@@ -209,10 +211,12 @@ def test_phase_update_rolls_back_when_direct_write_fails():
         execution_type="sync",
         parallel_with_phase_id=None,
         rollback_target_phase_id=None,
+        mode_id=2,
     )
     uow = MagicMock()
     uow.phases.get_by_id.return_value = phase
     uow.workflows.lock.return_value = SimpleNamespace(id=3)
+    uow.workflows.get_mode.return_value = _dispatchable_mode(workflow_id=3)
     uow.phases.list.return_value = [phase]
     uow.phases.update.side_effect = RuntimeError("phase update failed")
 
@@ -224,10 +228,11 @@ def test_phase_update_rolls_back_when_direct_write_fails():
 
 
 def test_phase_delete_rolls_back_when_direct_delete_fails():
-    phase = SimpleNamespace(id=7, workflow_id=3)
+    phase = SimpleNamespace(id=7, workflow_id=3, mode_id=2)
     uow = MagicMock()
     uow.phases.get_by_id.return_value = phase
     uow.workflows.lock.return_value = SimpleNamespace(id=3)
+    uow.workflows.get_mode.return_value = _dispatchable_mode(workflow_id=3)
     uow.phases.reference_kinds.return_value = []
     uow.phases.delete.side_effect = RuntimeError("phase delete failed")
 
@@ -247,6 +252,7 @@ def test_phase_reorder_rolls_back_when_direct_reorder_fails():
         execution_type="sync",
         parallel_with_phase_id=None,
         rollback_target_phase_id=None,
+        mode_id=2,
     )
     second = SimpleNamespace(
         id=8,
@@ -256,10 +262,12 @@ def test_phase_reorder_rolls_back_when_direct_reorder_fails():
         execution_type="sync",
         parallel_with_phase_id=None,
         rollback_target_phase_id=None,
+        mode_id=2,
     )
     uow = MagicMock()
     uow.phases.get_by_id.side_effect = lambda phase_id: {7: first, 8: second}.get(phase_id)
     uow.workflows.lock.return_value = SimpleNamespace(id=3)
+    uow.workflows.get_mode.return_value = _dispatchable_mode(workflow_id=3)
     uow.phases.list.return_value = [first, second]
     uow.phases.reorder.side_effect = RuntimeError("phase reorder failed")
 
@@ -348,7 +356,7 @@ def test_project_delete_rolls_back_when_delete_fails():
 
 def test_instruction_lock_rejects_phase_removed_after_workflow_lock():
     instruction = {"id": 5, "phase_id": 9, "description": "Step"}
-    phase = SimpleNamespace(id=9, workflow_id=3)
+    phase = SimpleNamespace(id=9, workflow_id=3, mode_id=2)
     uow = MagicMock()
     uow.phase_instructions.get_by_id.return_value = instruction
     uow.phases.get_by_id.return_value = phase
@@ -384,9 +392,22 @@ def test_phase_agent_validation_rejects_non_positive_or_non_integer_values(agent
     uow.agents.lock.assert_not_called()
 
 
+def _dispatchable_mode(*, workflow_id: int = 1) -> WorkflowMode:
+    return WorkflowMode(
+        id=2,
+        workflow_id=workflow_id,
+        key="delivery",
+        role_key="developer",
+        execution_scope="delivery",
+        tech_workspace_policy="required",
+    )
+
+
 def _phase_create_uow() -> MagicMock:
     uow = MagicMock()
     uow.workflows.lock.return_value = SimpleNamespace(id=1)
+    uow.workflows.get_mode_by_key.return_value = _dispatchable_mode()
+    uow.workflows.get_mode.return_value = _dispatchable_mode()
     uow.phases.list.return_value = []
     uow.phases.create.return_value = 7
     created = SimpleNamespace(to_dict=lambda: {"id": 7})

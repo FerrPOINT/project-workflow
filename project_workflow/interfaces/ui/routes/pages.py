@@ -11,7 +11,10 @@ from fastapi.responses import HTMLResponse
 from project_workflow.application.phase_service import PhaseService
 from project_workflow.config import get_settings
 from project_workflow.domain.exceptions import ConflictError
-from project_workflow.domain.runtime_assignment import normalize_role_key
+from project_workflow.domain.workflow_mode_policy import (
+    WorkflowModePolicyStatus,
+    evaluate_workflow_mode_policy,
+)
 from project_workflow.interfaces.ui.platform_services import load_service_catalog
 from project_workflow.interfaces.ui.services import (
     _build_parallel_phase_blocks,
@@ -349,54 +352,34 @@ def _load_mode_phases(workflow_id: int, mode_id: int) -> list[dict[str, Any]]:
 
 
 def _workflow_mode_ui_state(mode: dict[str, Any]) -> dict[str, Any]:
-    """Expose backend-owned dispatch policy without making UI routing decisions."""
-    key = mode.get("key")
-    role_key = mode.get("role_key")
-    execution_scope = mode.get("execution_scope")
-    tech_workspace_policy = mode.get("tech_workspace_policy")
-    role_is_valid = False
-    try:
-        role_is_valid = normalize_role_key(role_key) == role_key
-    except ValueError:
-        pass
-    policy_is_complete = (
-        role_is_valid
-        and execution_scope in {"business", "delivery", "aggregate"}
-        and tech_workspace_policy in {"forbidden", "required"}
-    )
-    policy_is_consistent = (
-        execution_scope == "business" and tech_workspace_policy == "forbidden"
-    ) or (
-        execution_scope in {"delivery", "aggregate"}
-        and tech_workspace_policy == "required"
-    )
-    is_legacy_default = key == "default"
-    is_dispatchable = not is_legacy_default and policy_is_complete and policy_is_consistent
-    if is_legacy_default:
-        status_label = "Legacy compatibility · только чтение"
+    """Map backend-owned policy status to localized presentation text."""
+    policy = evaluate_workflow_mode_policy(mode)
+    if policy.status is WorkflowModePolicyStatus.LEGACY:
+        status_label = "Режим совместимости · только чтение"
         status_message = (
-            "Default mode сохранён только для совместимости. Назначение и изменение фаз отключены."
+            "Системный режим сохранён для чтения перенесённых данных. "
+            "Новые назначения и изменение фаз отключены."
         )
-    elif not policy_is_complete:
+    elif policy.status is WorkflowModePolicyStatus.INCOMPLETE:
         status_label = "Конфигурация неполна · только чтение"
         status_message = (
-            "Режим нельзя назначать: требуется полная backend-политика role, scope и Tech workspace. "
-            "Редактор доступен только для чтения."
+            "Для назначения требуются роль, область выполнения и правило "
+            "TechExecutionWorkspace. Редактор доступен только для чтения."
         )
-    elif not policy_is_consistent:
+    elif policy.status is WorkflowModePolicyStatus.INCONSISTENT:
         status_label = "Конфигурация некорректна · только чтение"
         status_message = (
-            "Режим нельзя назначать: Business scope запрещает Tech workspace, а delivery/aggregate "
-            "требуют его. Редактор доступен только для чтения."
+            "Серверная политика режима противоречива. Редактор доступен только для чтения."
         )
     else:
-        status_label = f"{role_key} · {execution_scope}"
-        status_message = "Режим полностью настроен и доступен для backend assignment."
+        status_label = f"{policy.role_key} · {policy.execution_scope}"
+        status_message = "Режим полностью настроен и доступен для назначения."
     return {
         **mode,
-        "is_legacy_default": is_legacy_default,
-        "is_dispatchable": is_dispatchable,
-        "is_read_only": not is_dispatchable,
+        "policy_status": policy.status.value,
+        "is_legacy_default": policy.status is WorkflowModePolicyStatus.LEGACY,
+        "is_dispatchable": policy.is_dispatchable,
+        "is_read_only": policy.is_read_only,
         "status_label": status_label,
         "status_message": status_message,
     }

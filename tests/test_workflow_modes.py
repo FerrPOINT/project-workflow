@@ -402,7 +402,15 @@ def test_assignment_ledger_reconciles_delayed_replay_and_rejects_cross_task_reus
 def test_non_default_mode_phase_content_can_be_edited_and_deleted(modes_db):
     workflow_id = modes_db.workflows.create({"name": "Mode content"})
     rework_id = modes_db.workflows.create_mode(
-        {"workflow_id": workflow_id, "key": "rework", "name": "Rework", "mode_order": 2}
+        {
+            "workflow_id": workflow_id,
+            "key": "rework",
+            "name": "Rework",
+            "mode_order": 2,
+            "role_key": "developer",
+            "execution_scope": "delivery",
+            "tech_workspace_policy": "required",
+        }
     )
     phase_id = modes_db.phases.create(
         {

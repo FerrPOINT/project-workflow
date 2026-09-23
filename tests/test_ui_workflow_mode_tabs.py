@@ -8,7 +8,7 @@ from collections.abc import Iterator
 import pytest
 from fastapi.testclient import TestClient
 
-from project_workflow.interfaces.ui import app
+from project_workflow.interfaces.ui import _app_state, app
 
 pytestmark = [pytest.mark.ui]
 
@@ -58,10 +58,15 @@ def _mode_ui_fixture(client: TestClient, *, rework_order: int = 2) -> dict[str, 
     ).json()["phases"]
     assert len(default_phases) == 1
     default_phase_id = default_phases[0]["id"]
-    assert client.put(
-        f"/api/phases/{default_phase_id}",
-        json={"name": "Default-only phase"},
-    ).status_code == 200
+    uow = _app_state.get_db()
+    try:
+        uow.phases.update(default_phase_id, {"name": "Default-only phase"})
+        uow.phase_instructions.create(
+            default_phase_id, {"description": "Default-only instruction"}
+        )
+        uow.commit()
+    finally:
+        uow.close()
 
     rework_phase_ids = []
     for order, name in enumerate(("Rework phase one", "Rework phase two"), 1):
@@ -77,15 +82,11 @@ def _mode_ui_fixture(client: TestClient, *, rework_order: int = 2) -> dict[str, 
         assert response.status_code == 200
         rework_phase_ids.append(response.json()["phase_id"])
 
-    default_instruction = client.post(
-        "/api/instructions",
-        json={"phase_id": default_phase_id, "description": "Default-only instruction"},
-    )
     rework_instruction = client.post(
         "/api/instructions",
         json={"phase_id": rework_phase_ids[0], "description": "Rework-only instruction"},
     )
-    assert default_instruction.status_code == rework_instruction.status_code == 200
+    assert rework_instruction.status_code == 200
 
     return {
         "workflow_id": workflow_id,
@@ -107,22 +108,24 @@ def test_phases_selects_first_dispatchable_mode_and_separates_legacy_default(
     assert response.status_code == 200
     assert "Default-only phase" not in response.text
     assert "Rework phase one" in response.text
-    assert 'role="tablist" aria-label="Режим воркфлоу" data-testid="workflow-mode-tabs"' in response.text
-    assert 'aria-selected="true" tabindex="0" aria-current="page"' in response.text
+    assert 'aria-label="Режимы воркфлоу" data-testid="workflow-mode-tabs"' in response.text
+    assert 'aria-current="page"' in response.text
+    assert 'role="tab"' not in response.text
+    assert 'aria-selected=' not in response.text
     assert 'data-testid="workflow-mode-tab-active"' in response.text
     assert 'data-mode-key="default"' not in response.text
     assert 'data-testid="legacy-default-mode"' in response.text
-    assert "Legacy default" in response.text
+    assert "Системный режим" in response.text
+    assert "<code>default</code>" in response.text
     assert 'data-testid="mode-policy-notice" data-read-only="false"' in response.text
     assert 'data-mode-key="rework"' in response.text
-    assert 'tabindex="0"' in response.text
     assert (
         f'href="/phases?workflow_id={fixture["workflow_id"]}'
         f'&namespace_id={fixture["namespace_id"]}&mode=rework"'
     ) in response.text
     assert ".workflow-mode-tabs{display:flex" in response.text
     assert "overflow-x:auto" in response.text
-    assert "event.key==='ArrowRight'" in response.text
+    assert "event.key==='ArrowRight'" not in response.text
 
 
 def test_mode_switch_filters_disjoint_phases_and_preserves_create_scope(client: TestClient) -> None:
@@ -206,7 +209,7 @@ def test_default_only_workflow_is_explicitly_legacy_and_read_only(client: TestCl
     assert 'data-testid="workflow-mode-tabs"' not in response.text
     assert 'data-testid="legacy-default-mode"' in response.text
     assert 'data-testid="mode-policy-notice" data-read-only="true"' in response.text
-    assert "Default mode сохранён только для совместимости" in response.text
+    assert "Системный режим сохранён для чтения перенесённых данных" in response.text
     assert "const modeReadOnly=true;" in response.text
     assert 'onclick="addPhaseAfter(this)"' in response.text
     assert 'disabled title="Режим доступен только для чтения"' in response.text
@@ -230,16 +233,22 @@ def test_incomplete_mode_is_visible_but_never_selected_over_dispatchable_mode(
     )
     assert incomplete.status_code == 200
     draft_mode = incomplete.json()["mode"]
-    draft_phase = client.post(
-        "/api/phases",
-        json={
-            "workflow_id": fixture["workflow_id"],
-            "mode_id": draft_mode["id"],
-            "phase_order": 1,
-            "name": "Draft-only phase",
-        },
-    )
-    assert draft_phase.status_code == 200
+    uow = _app_state.get_db()
+    try:
+        uow.phases.create(
+            {
+                "workflow_id": fixture["workflow_id"],
+                "mode_id": draft_mode["id"],
+                "phase_order": 1,
+                "code": f"draft-{uuid.uuid4().hex[:8]}",
+                "name": "Draft-only phase",
+                "description": "",
+                "execution_type": "sync",
+            }
+        )
+        uow.commit()
+    finally:
+        uow.close()
 
     automatic = client.get(f"/phases?namespace_id={fixture['namespace_id']}")
     assert automatic.status_code == 200

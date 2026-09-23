@@ -11,6 +11,7 @@ from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import UnitOfWork
 from project_workflow.domain.runtime_assignment import normalize_role_key, payload_sha256
 from project_workflow.domain.validation import TaskKeyValidator, get_project_for_task_key
+from project_workflow.domain.workflow_mode_policy import require_dispatchable_workflow_mode
 
 
 class TaskService:
@@ -377,17 +378,16 @@ class TaskService:
         tech_execution_workspace_ref: str | None,
         tech_execution_attempt_ref: str | None,
     ) -> None:
-        if not mode.role_key or not mode.execution_scope or not mode.tech_workspace_policy:
-            raise ConflictError("Режим не содержит полный backend-owned assignment policy")
-        if mode.role_key != role_key:
+        policy = require_dispatchable_workflow_mode(mode)
+        if policy.role_key != role_key:
             raise ConflictError("Backend-owned policy не разрешает указанную роль")
-        if mode.execution_scope != execution_scope:
+        if policy.execution_scope != execution_scope:
             raise ConflictError("Backend-owned mode policy не разрешает указанный execution scope")
-        if mode.tech_workspace_policy == "required" and (
+        if policy.tech_workspace_policy == "required" and (
             tech_execution_workspace_ref is None or tech_execution_attempt_ref is None
         ):
             raise ConflictError("Mode policy требует TechExecutionWorkspace и attempt ref")
-        if mode.tech_workspace_policy == "forbidden" and (
+        if policy.tech_workspace_policy == "forbidden" and (
             tech_execution_workspace_ref is not None or tech_execution_attempt_ref is not None
         ):
             raise ConflictError("Mode policy запрещает TechExecutionWorkspace")

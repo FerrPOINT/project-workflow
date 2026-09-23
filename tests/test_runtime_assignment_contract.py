@@ -227,7 +227,7 @@ def test_runtime_assignment_refuses_legacy_mode_without_backend_policy(tmp_path)
                 "key_prefixes": ["LEG"],
             }
         )
-        with pytest.raises(ConflictError, match="policy"):
+        with pytest.raises(ConflictError, match="только для совместимости"):
             TaskService(uow).assign_runtime_task(
                 project_id=project_id,
                 task_key="LEG-1",

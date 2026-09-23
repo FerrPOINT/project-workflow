@@ -21,7 +21,7 @@
 .workflow-mode-tabs{display:flex;gap:6px;max-width:100%;overflow-x:auto;padding:2px 2px 6px;scrollbar-width:thin}
 .workflow-mode-tab{display:inline-flex;align-items:center;gap:7px;min-height:40px;flex:0 0 auto;padding:7px 12px;border:1px solid var(--border-strong);border-radius:7px;background:var(--surface);color:var(--text-secondary);text-decoration:none}
 .workflow-mode-tab:hover{text-decoration:none;border-color:var(--accent);background:var(--surface-hover);color:var(--text)}
-.workflow-mode-tab[aria-selected="true"]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-readable);font-weight:600}
+.workflow-mode-tab[aria-current="page"]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-readable);font-weight:600}
 .workflow-mode-tab.is-invalid{border-style:dashed;color:var(--text-muted)}
 .workflow-mode-tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .workflow-mode-key{font:11px/1.4 'JetBrains Mono',monospace;color:var(--text-dim)}
@@ -162,10 +162,10 @@
     </div>
 
     {% if configured_modes %}
-    <nav class="workflow-mode-tabs" role="tablist" aria-label="Режим воркфлоу" data-testid="workflow-mode-tabs">
+    <nav class="workflow-mode-tabs" aria-label="Режимы воркфлоу" data-testid="workflow-mode-tabs">
       {% for mode in configured_modes %}
       {% set mode_active = selected_mode and selected_mode.id == mode.id %}
-      <a class="workflow-mode-tab{% if not mode.is_dispatchable %} is-invalid{% endif %}" role="tab" aria-selected="{{ 'true' if mode_active else 'false' }}" tabindex="{{ '0' if mode_active or (selected_mode.is_legacy_default and loop.first) else '-1' }}"{% if mode_active %} aria-current="page" data-testid="workflow-mode-tab-active"{% else %} data-testid="workflow-mode-tab"{% endif %} data-mode-key="{{ mode.key }}" href="/phases?workflow_id={{ selected_workflow_id }}{% if selected_namespace %}&namespace_id={{ selected_namespace.id }}{% endif %}&mode={{ mode.key | urlencode }}">
+      <a class="workflow-mode-tab{% if not mode.is_dispatchable %} is-invalid{% endif %}"{% if mode_active %} aria-current="page" data-testid="workflow-mode-tab-active"{% else %} data-testid="workflow-mode-tab"{% endif %} data-mode-key="{{ mode.key }}" href="/phases?workflow_id={{ selected_workflow_id }}{% if selected_namespace %}&namespace_id={{ selected_namespace.id }}{% endif %}&mode={{ mode.key | urlencode }}">
         <span>{{ mode.name }}</span><code class="workflow-mode-key">{{ mode.key }}</code>{% if not mode.is_dispatchable %}<span class="workflow-mode-state">только чтение</span>{% endif %}
       </a>
       {% endfor %}
@@ -174,7 +174,7 @@
 
     {% if legacy_mode %}
     <div class="legacy-mode-panel" data-testid="legacy-default-mode">
-      <span><b>Legacy default</b> · режим совместимости, не используется для новых назначений.</span>
+      <span><b>Системный режим <code>default</code></b> · только для чтения перенесённых данных, не используется для новых назначений.</span>
       <a class="legacy-mode-link" href="/phases?workflow_id={{ selected_workflow_id }}{% if selected_namespace %}&namespace_id={{ selected_namespace.id }}{% endif %}&mode=default"{% if selected_mode and selected_mode.id == legacy_mode.id %} aria-current="page"{% endif %}>Открыть только для чтения</a>
     </div>
     {% endif %}
@@ -315,17 +315,6 @@ document.addEventListener('DOMContentLoaded',()=>{
     if(up)up.disabled=modeReadOnly||index===0;
     if(down)down.disabled=modeReadOnly||index===items.length-1;
   });
-  const modeTabs=Array.from(document.querySelectorAll('[role="tab"][data-mode-key]'));
-  modeTabs.forEach((tab,index)=>tab.addEventListener('keydown',event=>{
-    let targetIndex=null;
-    if(event.key==='ArrowRight')targetIndex=(index+1)%modeTabs.length;
-    if(event.key==='ArrowLeft')targetIndex=(index-1+modeTabs.length)%modeTabs.length;
-    if(event.key==='Home')targetIndex=0;
-    if(event.key==='End')targetIndex=modeTabs.length-1;
-    if(targetIndex===null)return;
-    event.preventDefault();
-    modeTabs[targetIndex]?.focus();
-  }));
   const menus=Array.from(document.querySelectorAll('.phase-card-actions'));
   const confirmationDialog=document.getElementById('confirmDialog');
   menus.forEach(menu=>menu.addEventListener('toggle',()=>{

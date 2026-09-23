@@ -11,6 +11,7 @@ import pytest
 from project_workflow.application.instruction_service import InstructionService
 from project_workflow.application.project import ProjectService
 from project_workflow.application.workflow import WorkflowService
+from project_workflow.domain import WorkflowMode
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import UnitOfWork
 
@@ -48,6 +49,14 @@ def _make_uow() -> UnitOfWork:
     uow.tasks = MagicMock()
     uow.workflows = MagicMock()
     uow.phases = MagicMock()
+    uow.workflows.get_mode.return_value = WorkflowMode(
+        id=2,
+        workflow_id=7,
+        key="delivery",
+        role_key="developer",
+        execution_scope="delivery",
+        tech_workspace_policy="required",
+    )
     uow.projects.get_by_code.return_value = None
     uow.projects.list.return_value = []
     return uow
@@ -68,7 +77,7 @@ class TestInstructionService:
 
     def test_create_instruction_success(self):
         uow = _make_uow()
-        phase = MagicMock(id=3, workflow_id=7)
+        phase = MagicMock(id=3, workflow_id=7, mode_id=2)
         uow.phases.get_by_id.return_value = phase
         uow.phases.list.return_value = [phase]
         uow.phase_instructions.create.return_value = 5
@@ -80,7 +89,7 @@ class TestInstructionService:
 
     def test_create_instruction_inserts_at_requested_step(self):
         uow = _make_uow()
-        phase = MagicMock(id=3, workflow_id=7)
+        phase = MagicMock(id=3, workflow_id=7, mode_id=2)
         uow.phases.get_by_id.return_value = phase
         uow.phases.list.return_value = [phase]
         uow.phase_instructions.list.return_value = [{"id": 10}, {"id": 20}]
@@ -98,7 +107,7 @@ class TestInstructionService:
 
     def test_create_instruction_failure(self):
         uow = _make_uow()
-        phase = MagicMock(id=1, workflow_id=7)
+        phase = MagicMock(id=1, workflow_id=7, mode_id=2)
         uow.phases.get_by_id.return_value = phase
         uow.phases.list.return_value = [phase]
         uow.phase_instructions.create.return_value = 1
@@ -111,8 +120,8 @@ class TestInstructionService:
         ("phase", "locked_workflow", "listed_phases", "message"),
         [
             (None, MagicMock(), [], "Фаза 3 не найдена"),
-            (MagicMock(id=3, workflow_id=7), None, [], "Воркфлоу 7 не найден"),
-            (MagicMock(id=3, workflow_id=7), MagicMock(), [], "Фаза 3 не найдена"),
+            (MagicMock(id=3, workflow_id=7, mode_id=2), None, [], "Воркфлоу 7 не найден"),
+            (MagicMock(id=3, workflow_id=7, mode_id=2), MagicMock(), [], "Фаза 3 не найдена"),
         ],
     )
     def test_create_instruction_rechecks_locked_owners(
@@ -132,7 +141,7 @@ class TestInstructionService:
     @pytest.mark.parametrize("step_num", ["2", True, 1.5, "second"])
     def test_create_instruction_rejects_non_numeric_internal_step(self, step_num):
         uow = _make_uow()
-        phase = MagicMock(id=3, workflow_id=7)
+        phase = MagicMock(id=3, workflow_id=7, mode_id=2)
         uow.phases.get_by_id.return_value = phase
         uow.phases.list.return_value = [phase]
 
@@ -146,7 +155,7 @@ class TestInstructionService:
 
     def test_update_and_delete_instruction(self):
         uow = _make_uow()
-        phase = MagicMock(id=10, workflow_id=7)
+        phase = MagicMock(id=10, workflow_id=7, mode_id=2)
         uow.phases.get_by_id.return_value = phase
         uow.phases.list.return_value = [phase]
         uow.phase_instructions.get_by_id.return_value = {"id": 2, "phase_id": 10}
@@ -161,7 +170,7 @@ class TestInstructionService:
 
     def test_reorder_instructions(self):
         uow = _make_uow()
-        phase = MagicMock(id=10, workflow_id=7)
+        phase = MagicMock(id=10, workflow_id=7, mode_id=2)
         uow.phases.get_by_id.return_value = phase
         uow.phases.list.return_value = [phase]
         uow.phase_instructions.list.return_value = [{"id": 3}, {"id": 1}, {"id": 2}]
@@ -172,7 +181,7 @@ class TestInstructionService:
 
     def test_reorder_instructions_rejects_partial_set(self):
         uow = _make_uow()
-        phase = MagicMock(id=10, workflow_id=7)
+        phase = MagicMock(id=10, workflow_id=7, mode_id=2)
         uow.phases.get_by_id.return_value = phase
         uow.phases.list.return_value = [phase]
         uow.phase_instructions.list.return_value = [{"id": 3}, {"id": 1}, {"id": 2}]
@@ -186,7 +195,7 @@ class TestInstructionService:
     @pytest.mark.parametrize("instruction_ids", [[True, 2, 3], ["1", 2, 3], [0, 2, 3]])
     def test_reorder_instructions_rejects_non_strict_ids(self, instruction_ids):
         uow = _make_uow()
-        phase = MagicMock(id=10, workflow_id=7)
+        phase = MagicMock(id=10, workflow_id=7, mode_id=2)
         uow.phases.get_by_id.return_value = phase
         uow.phases.list.return_value = [phase]
         uow.phase_instructions.list.return_value = [{"id": 3}, {"id": 1}, {"id": 2}]
