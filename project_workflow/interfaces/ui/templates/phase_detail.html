@@ -82,11 +82,20 @@
 .wiki-page .phase-order-controls{width:100%;flex-direction:row;flex-wrap:nowrap;justify-content:flex-start;gap:4px;padding-top:0}
 .wiki-page .phase-order-controls .phase-move-btn,.wiki-page .phase-order-controls .phase-add-btn,.wiki-page .phase-order-controls .phase-delete-btn{width:40px;height:40px;flex:0 0 40px}
 .wiki-page .timeline-card button.badge{min-height:40px}
+.mode-policy-notice{margin-bottom:18px;padding:10px 12px;border:1px solid var(--border-strong);border-radius:7px;background:var(--panel);color:var(--text-secondary);font-size:13px;line-height:1.5}
+.mode-policy-notice[data-read-only="true"]{border-color:var(--orange);background:var(--orange-soft);color:var(--text)}
+.mode-editor-surface{min-width:0;margin:0;padding:0;border:0}
+.mode-editor-surface:disabled{opacity:.78}
+.mode-editor-surface:disabled input,.mode-editor-surface:disabled textarea,.mode-editor-surface:disabled select,.mode-editor-surface:disabled button{cursor:not-allowed}
 
 {% endblock %}
 
 {% block content %}
 <div class="wiki-page">
+  <div class="mode-policy-notice" data-testid="mode-policy-notice" data-read-only="{{ 'true' if mode_read_only else 'false' }}" role="status">
+    <b>{{ selected_mode.status_label }}</b> — {{ selected_mode.status_message }}
+  </div>
+  <fieldset class="mode-editor-surface"{% if mode_read_only %} disabled data-testid="mode-editor-read-only"{% endif %}>
 
   <!-- Header -->
   <div class="wiki-header">
@@ -230,6 +239,7 @@
     <button class="wiki-add-btn" onclick="addEvidence()">+ Добавить подтверждение</button>
   </div>
 
+  </fieldset>
 </div>
 {% endblock %}
 

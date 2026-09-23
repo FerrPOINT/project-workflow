@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse
 from project_workflow.application.phase_service import PhaseService
 from project_workflow.config import get_settings
 from project_workflow.domain.exceptions import ConflictError
+from project_workflow.domain.runtime_assignment import normalize_role_key
 from project_workflow.interfaces.ui.platform_services import load_service_catalog
 from project_workflow.interfaces.ui.services import (
     _build_parallel_phase_blocks,
@@ -347,6 +348,77 @@ def _load_mode_phases(workflow_id: int, mode_id: int) -> list[dict[str, Any]]:
     return rows
 
 
+def _workflow_mode_ui_state(mode: dict[str, Any]) -> dict[str, Any]:
+    """Expose backend-owned dispatch policy without making UI routing decisions."""
+    key = mode.get("key")
+    role_key = mode.get("role_key")
+    execution_scope = mode.get("execution_scope")
+    tech_workspace_policy = mode.get("tech_workspace_policy")
+    role_is_valid = False
+    try:
+        role_is_valid = normalize_role_key(role_key) == role_key
+    except ValueError:
+        pass
+    policy_is_complete = (
+        role_is_valid
+        and execution_scope in {"business", "delivery", "aggregate"}
+        and tech_workspace_policy in {"forbidden", "required"}
+    )
+    policy_is_consistent = (
+        execution_scope == "business" and tech_workspace_policy == "forbidden"
+    ) or (
+        execution_scope in {"delivery", "aggregate"}
+        and tech_workspace_policy == "required"
+    )
+    is_legacy_default = key == "default"
+    is_dispatchable = not is_legacy_default and policy_is_complete and policy_is_consistent
+    if is_legacy_default:
+        status_label = "Legacy compatibility · только чтение"
+        status_message = (
+            "Default mode сохранён только для совместимости. Назначение и изменение фаз отключены."
+        )
+    elif not policy_is_complete:
+        status_label = "Конфигурация неполна · только чтение"
+        status_message = (
+            "Режим нельзя назначать: требуется полная backend-политика role, scope и Tech workspace. "
+            "Редактор доступен только для чтения."
+        )
+    elif not policy_is_consistent:
+        status_label = "Конфигурация некорректна · только чтение"
+        status_message = (
+            "Режим нельзя назначать: Business scope запрещает Tech workspace, а delivery/aggregate "
+            "требуют его. Редактор доступен только для чтения."
+        )
+    else:
+        status_label = f"{role_key} · {execution_scope}"
+        status_message = "Режим полностью настроен и доступен для backend assignment."
+    return {
+        **mode,
+        "is_legacy_default": is_legacy_default,
+        "is_dispatchable": is_dispatchable,
+        "is_read_only": not is_dispatchable,
+        "status_label": status_label,
+        "status_message": status_message,
+    }
+
+
+def _workflow_mode_sort_key(mode: dict[str, Any]) -> tuple[int, int, str]:
+    raw_order = mode.get("mode_order")
+    order = raw_order if isinstance(raw_order, int) and not isinstance(raw_order, bool) else 2**31
+    raw_id = mode.get("id")
+    mode_id = raw_id if isinstance(raw_id, int) and not isinstance(raw_id, bool) else 2**31
+    return order, mode_id, str(mode.get("key") or "")
+
+
+def _workflow_mode_context(
+    raw_modes: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any] | None]:
+    modes = sorted((_workflow_mode_ui_state(mode) for mode in raw_modes), key=_workflow_mode_sort_key)
+    configured_modes = [mode for mode in modes if not mode["is_legacy_default"]]
+    legacy_mode = next((mode for mode in modes if mode["is_legacy_default"]), None)
+    return modes, configured_modes, legacy_mode
+
+
 def _resolve_phase_mode(
     request: Request,
     phase: dict[str, Any],
@@ -356,7 +428,7 @@ def _resolve_phase_mode(
     mode_id = phase.get("mode_id")
     if not isinstance(workflow_id, int) or not isinstance(mode_id, int):
         return _phase_not_in_selected_mode_page(request, context)
-    modes = _app_state.workflow_service().list_modes(workflow_id)
+    modes, _, _ = _workflow_mode_context(_app_state.workflow_service().list_modes(workflow_id))
     owning_mode = next((mode for mode in modes if mode.get("id") == mode_id), None)
     if owning_mode is None:
         return _phase_not_in_selected_mode_page(request, context)
@@ -509,12 +581,25 @@ async def phases_page(request: Request) -> HTMLResponse:
     )
     visible_workflows = [selected_workflow] if namespace_scoped_view and selected_workflow else workflows
     workflow_modes: list[dict[str, Any]] = []
+    configured_modes: list[dict[str, Any]] = []
+    legacy_mode: dict[str, Any] | None = None
     selected_mode: dict[str, Any] | None = None
     phases: list[dict[str, Any]] = []
     if selected_workflow_id is not None:
-        workflow_modes = _app_state.workflow_service().list_modes(int(selected_workflow_id))
+        workflow_modes, configured_modes, legacy_mode = _workflow_mode_context(
+            _app_state.workflow_service().list_modes(int(selected_workflow_id))
+        )
         requested_mode_key = request.query_params.get("mode")
-        selected_mode_key = requested_mode_key if requested_mode_key is not None else "default"
+        if requested_mode_key is not None:
+            selected_mode_key = requested_mode_key
+        else:
+            first_dispatchable = next(
+                (mode for mode in configured_modes if mode["is_dispatchable"]),
+                None,
+            )
+            first_configured = configured_modes[0] if configured_modes else None
+            fallback_mode = first_dispatchable or first_configured or legacy_mode
+            selected_mode_key = str(fallback_mode.get("key")) if fallback_mode is not None else ""
         selected_mode = next(
             (mode for mode in workflow_modes if mode.get("key") == selected_mode_key),
             None,
@@ -545,7 +630,10 @@ async def phases_page(request: Request) -> HTMLResponse:
             "selected_workflow": selected_workflow,
             "selected_workflow_id": selected_workflow_id,
             "workflow_modes": workflow_modes,
+            "configured_modes": configured_modes,
+            "legacy_mode": legacy_mode,
             "selected_mode": selected_mode,
+            "mode_read_only": bool(selected_mode and selected_mode["is_read_only"]),
         }
     )
     return _template_response(
@@ -619,6 +707,7 @@ async def phase_detail(request: Request, phase_id: PositivePathId) -> HTMLRespon
             "rollback_target_phase": rollback_target_phase,
             "workflow_modes": workflow_modes,
             "selected_mode": selected_mode,
+            "mode_read_only": bool(selected_mode["is_read_only"]),
         }
     )
     return _template_response(
@@ -853,6 +942,7 @@ async def instructions_page(request: Request) -> HTMLResponse:
             "instruction_groups": instruction_groups,
             "workflow_modes": workflow_modes,
             "selected_mode": selected_mode,
+            "mode_read_only": bool(selected_mode["is_read_only"]),
         }
     )
     return _template_response(

@@ -19,7 +19,7 @@ def client() -> Iterator[TestClient]:
         yield test_client
 
 
-def _mode_ui_fixture(client: TestClient) -> dict[str, int]:
+def _mode_ui_fixture(client: TestClient, *, rework_order: int = 2) -> dict[str, int]:
     workflow_response = client.post(
         "/api/workflows",
         json={"name": "Mode tabs workflow", "description": "UI mode isolation"},
@@ -30,7 +30,14 @@ def _mode_ui_fixture(client: TestClient) -> dict[str, int]:
     default_mode = client.get(f"/api/workflows/{workflow_id}/modes").json()["modes"][0]
     rework_response = client.post(
         f"/api/workflows/{workflow_id}/modes",
-        json={"key": "rework", "name": "Rework", "mode_order": 2},
+        json={
+            "key": "rework",
+            "name": "Rework",
+            "mode_order": rework_order,
+            "role_key": "developer",
+            "execution_scope": "delivery",
+            "tech_workspace_policy": "required",
+        },
     )
     assert rework_response.status_code == 200
     rework_mode = rework_response.json()["mode"]
@@ -91,16 +98,24 @@ def _mode_ui_fixture(client: TestClient) -> dict[str, int]:
     }
 
 
-def test_phases_defaults_to_default_mode_and_renders_ordered_accessible_tabs(client: TestClient) -> None:
+def test_phases_selects_first_dispatchable_mode_and_separates_legacy_default(
+    client: TestClient,
+) -> None:
     fixture = _mode_ui_fixture(client)
     response = client.get(f"/phases?namespace_id={fixture['namespace_id']}")
 
     assert response.status_code == 200
-    assert "Default-only phase" in response.text
-    assert "Rework phase one" not in response.text
+    assert "Default-only phase" not in response.text
+    assert "Rework phase one" in response.text
     assert 'role="tablist" aria-label="Режим воркфлоу" data-testid="workflow-mode-tabs"' in response.text
-    assert 'aria-selected="true" aria-current="page" data-testid="workflow-mode-tab-active"' in response.text
-    assert response.text.index(">Default<") < response.text.index(">Rework<")
+    assert 'aria-selected="true" tabindex="0" aria-current="page"' in response.text
+    assert 'data-testid="workflow-mode-tab-active"' in response.text
+    assert 'data-mode-key="default"' not in response.text
+    assert 'data-testid="legacy-default-mode"' in response.text
+    assert "Legacy default" in response.text
+    assert 'data-testid="mode-policy-notice" data-read-only="false"' in response.text
+    assert 'data-mode-key="rework"' in response.text
+    assert 'tabindex="0"' in response.text
     assert (
         f'href="/phases?workflow_id={fixture["workflow_id"]}'
         f'&namespace_id={fixture["namespace_id"]}&mode=rework"'
@@ -123,6 +138,7 @@ def test_mode_switch_filters_disjoint_phases_and_preserves_create_scope(client: 
     assert f'data-mode-id="{fixture["rework_mode_id"]}" data-mode-key="rework"' in response.text
     assert "mode_id:parseInt(modeId,10)" in response.text
     assert f'/phase/{fixture["rework_phase_one_id"]}?mode=rework' in response.text
+    assert "const modeReadOnly=false;" in response.text
 
     reorder = client.put(
         "/api/phases/order",
@@ -141,6 +157,11 @@ def test_mode_switch_filters_disjoint_phases_and_preserves_create_scope(client: 
         (fixture["default_phase_id"], 1)
     ]
 
+    refreshed = client.get(str(response.request.url))
+    assert refreshed.status_code == 200
+    assert f'data-mode-id="{fixture["rework_mode_id"]}" data-mode-key="rework"' in refreshed.text
+    assert "Default-only phase" not in refreshed.text
+
 
 def test_unknown_and_foreign_modes_fail_closed(client: TestClient) -> None:
     fixture = _mode_ui_fixture(client)
@@ -151,7 +172,7 @@ def test_unknown_and_foreign_modes_fail_closed(client: TestClient) -> None:
     )
     assert foreign_mode.status_code == 200
 
-    for mode_key in ("missing", "foreign-only"):
+    for mode_key in ("missing", "foreign-only", "%20"):
         response = client.get(
             f"/phases?workflow_id={fixture['workflow_id']}"
             f"&namespace_id={fixture['namespace_id']}&mode={mode_key}"
@@ -161,6 +182,96 @@ def test_unknown_and_foreign_modes_fail_closed(client: TestClient) -> None:
         assert "Default-only phase" not in response.text
         assert "Rework phase one" not in response.text
         assert 'href="/phase/' not in response.text
+
+
+def test_default_only_workflow_is_explicitly_legacy_and_read_only(client: TestClient) -> None:
+    workflow_id = client.post(
+        "/api/workflows",
+        json={"name": "Legacy-only workflow"},
+    ).json()["workflow_id"]
+    namespace_id = client.post(
+        "/api/namespaces",
+        json={
+            "name": "Legacy-only namespace",
+            "workflow_id": workflow_id,
+            "cli_command": f"legacy-only-{uuid.uuid4().hex[:8]}",
+        },
+    ).json()["namespace_id"]
+    phase = client.get(f"/api/phases?workflow_id={workflow_id}").json()["phases"][0]
+
+    response = client.get(f"/phases?namespace_id={namespace_id}")
+
+    assert response.status_code == 200
+    assert phase["name"] in response.text
+    assert 'data-testid="workflow-mode-tabs"' not in response.text
+    assert 'data-testid="legacy-default-mode"' in response.text
+    assert 'data-testid="mode-policy-notice" data-read-only="true"' in response.text
+    assert "Default mode сохранён только для совместимости" in response.text
+    assert "const modeReadOnly=true;" in response.text
+    assert 'onclick="addPhaseAfter(this)"' in response.text
+    assert 'disabled title="Режим доступен только для чтения"' in response.text
+
+    detail = client.get(f"/phase/{phase['id']}?mode=default&namespace_id={namespace_id}")
+    instructions = client.get(
+        f"/instructions?phase_id={phase['id']}&mode=default&namespace_id={namespace_id}"
+    )
+    assert detail.status_code == instructions.status_code == 200
+    assert 'disabled data-testid="mode-editor-read-only"' in detail.text
+    assert 'disabled data-testid="mode-editor-read-only"' in instructions.text
+
+
+def test_incomplete_mode_is_visible_but_never_selected_over_dispatchable_mode(
+    client: TestClient,
+) -> None:
+    fixture = _mode_ui_fixture(client, rework_order=3)
+    incomplete = client.post(
+        f"/api/workflows/{fixture['workflow_id']}/modes",
+        json={"key": "draft", "name": "Draft", "mode_order": 2},
+    )
+    assert incomplete.status_code == 200
+    draft_mode = incomplete.json()["mode"]
+    draft_phase = client.post(
+        "/api/phases",
+        json={
+            "workflow_id": fixture["workflow_id"],
+            "mode_id": draft_mode["id"],
+            "phase_order": 1,
+            "name": "Draft-only phase",
+        },
+    )
+    assert draft_phase.status_code == 200
+
+    automatic = client.get(f"/phases?namespace_id={fixture['namespace_id']}")
+    assert automatic.status_code == 200
+    assert "Rework phase one" in automatic.text
+    assert "Draft-only phase" not in automatic.text
+
+    direct = client.get(
+        f"/phases?workflow_id={fixture['workflow_id']}"
+        f"&namespace_id={fixture['namespace_id']}&mode=draft"
+    )
+    assert direct.status_code == 200
+    assert "Draft-only phase" in direct.text
+    assert "Rework phase one" not in direct.text
+    assert 'class="workflow-mode-tab is-invalid"' in direct.text
+    assert "Конфигурация неполна · только чтение" in direct.text
+    assert 'data-read-only="true"' in direct.text
+    assert "const modeReadOnly=true;" in direct.text
+
+
+def test_explicit_legacy_deep_link_never_implies_dispatchability(client: TestClient) -> None:
+    fixture = _mode_ui_fixture(client)
+    response = client.get(
+        f"/phases?workflow_id={fixture['workflow_id']}"
+        f"&namespace_id={fixture['namespace_id']}&mode=default"
+    )
+
+    assert response.status_code == 200
+    assert "Default-only phase" in response.text
+    assert "Rework phase one" not in response.text
+    assert 'data-testid="legacy-default-mode"' in response.text
+    assert "не используется для новых назначений" in response.text
+    assert 'data-read-only="true"' in response.text
 
 
 def test_detail_and_instruction_navigation_keep_owning_mode_without_cross_mode_content(
@@ -173,6 +284,8 @@ def test_detail_and_instruction_navigation_keep_owning_mode_without_cross_mode_c
     assert detail.status_code == 200
     assert "Rework-only instruction" in detail.text
     assert "Default-only instruction" not in detail.text
+    assert 'data-testid="mode-policy-notice" data-read-only="false"' in detail.text
+    assert 'data-testid="mode-editor-read-only"' not in detail.text
     assert (
         f'href="/phases?workflow_id={fixture["workflow_id"]}&mode=rework'
         f'&namespace_id={fixture["namespace_id"]}"'
@@ -184,6 +297,7 @@ def test_detail_and_instruction_navigation_keep_owning_mode_without_cross_mode_c
     assert instructions.status_code == 200
     assert "Rework-only instruction" in instructions.text
     assert "Default-only instruction" not in instructions.text
+    assert 'data-testid="mode-editor-read-only"' not in instructions.text
     assert (
         f'href="/phase/{phase_id}?mode=rework&namespace_id={fixture["namespace_id"]}"'
     ) in instructions.text
