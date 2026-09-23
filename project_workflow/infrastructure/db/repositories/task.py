@@ -154,6 +154,24 @@ class SATaskRepository(TaskRepository):
             mode_id=data["mode_id"],
             cycle_number=data["cycle_number"],
             assignment_revision=data["assignment_revision"],
+            role_key=data["role_key"],
+            execution_scope=data["execution_scope"],
+            business_task_ref=data["business_task_ref"],
+            root_task_ref=data["root_task_ref"],
+            work_item_ref=data["work_item_ref"],
+            task_workspace_ref=data["task_workspace_ref"],
+            tech_execution_workspace_ref=data.get("tech_execution_workspace_ref"),
+            tech_execution_attempt_ref=data.get("tech_execution_attempt_ref"),
+            decomposition_revision_ref=data.get("decomposition_revision_ref"),
+            stage_revision=data["stage_revision"],
+            assignment_ref=data["assignment_ref"],
+            binding_ref=data["binding_ref"],
+            hermes_run_ref=data["hermes_run_ref"],
+            workspace_generation=data["workspace_generation"],
+            lease_generation=data["lease_generation"],
+            exact_input_refs=json.dumps(
+                data["exact_input_refs"], ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            ),
             payload=json.dumps(data["payload"], ensure_ascii=False, sort_keys=True, separators=(",", ":")),
         )
         self._session.add(item)

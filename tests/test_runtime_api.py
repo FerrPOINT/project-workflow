@@ -12,32 +12,76 @@ from project_workflow.interfaces.ui.app import create_app
 
 
 def _namespace(code: str, cli_command: str, prefix: str) -> None:
+    role = cli_command.removeprefix("workflow-")
+    scope = "delivery" if role == "developer" else "business"
     with SAUnitOfWork() as uow:
-        workflow = uow.workflows.list()[0]
+        workflow_id = uow.workflows.create({"name": f"Runtime {role}"})
+        mode_id = uow.workflows.create_mode(
+            {
+                "workflow_id": workflow_id,
+                "key": "assigned",
+                "name": "Assigned",
+                "mode_order": 2,
+                "role_key": role,
+                "execution_scope": scope,
+                "tech_workspace_policy": "required" if scope != "business" else "forbidden",
+            }
+        )
+        uow.phases.create(
+            {
+                "workflow_id": workflow_id,
+                "mode_id": mode_id,
+                "code": "assigned",
+                "name": "Assigned",
+                "phase_order": 1,
+            }
+        )
         uow.projects.create(
             {
                 "code": code,
                 "name": code,
-                "workflow_id": workflow.id,
+                "workflow_id": workflow_id,
                 "cli_command": cli_command,
                 "key_prefixes": [prefix],
             }
         )
+        uow.commit()
 
 
 def _headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _assignment(task: str, operation_key: str) -> dict[str, object]:
-    return {
+def _assignment(task: str, operation_key: str, role: str) -> dict[str, object]:
+    scope = "delivery" if role == "developer" else "business"
+    payload: dict[str, object] = {
         "task": task,
-        "mode_key": "default",
+        "role_key": role,
+        "mode_key": "assigned",
+        "execution_scope": scope,
         "cycle_number": 0,
         "operation_key": operation_key,
+        "business_task_ref": f"business-task:{task}@1",
+        "root_task_ref": f"business-task:{task}@1",
+        "work_item_ref": f"business-task:{task}@1",
+        "task_workspace_ref": f"task-workspace:{task}",
+        "decomposition_revision_ref": f"decomposition:{task}@1",
+        "stage_revision": f"stage:{role}@1",
+        "assignment_ref": f"assignment:{operation_key}",
+        "binding_ref": f"binding:{operation_key}",
+        "hermes_run_ref": f"hermes-run:{operation_key}",
+        "workspace_generation": 1,
+        "lease_generation": 1,
+        "exact_input_refs": [
+            {"kind": "business_task", "ref": f"business-task:{task}", "revision": "1"}
+        ],
         "expected_revision": 0,
         "expected_status": "missing",
     }
+    if scope == "delivery":
+        payload["tech_execution_workspace_ref"] = f"tech-workspace:{task}"
+        payload["tech_execution_attempt_ref"] = f"tech-attempt:{task}"
+    return payload
 
 
 def test_runtime_step_is_fail_closed_without_configured_token():
@@ -131,17 +175,24 @@ def test_runtime_token_is_bound_to_one_namespace(monkeypatch, supervisor_llm):
         assigned = client.post(
             "/internal/runtime/assign",
             headers=_headers(assignment_token),
-            json=_assignment("ANA-1", "assign-ana-1"),
+            json=_assignment("ANA-1", "assign-ana-1", "analyst"),
         )
         operation_collision = client.post(
             "/internal/runtime/assign",
             headers=_headers(assignment_token),
-            json=_assignment("ANA-2", "assign-ana-1"),
+            json=_assignment("ANA-2", "assign-ana-1", "analyst"),
+        )
+        wrong_role_payload = _assignment("ANA-2", "assign-ana-role-mismatch", "analyst")
+        wrong_role_payload["role_key"] = "developer"
+        wrong_role_assignment = client.post(
+            "/internal/runtime/assign",
+            headers=_headers(assignment_token),
+            json=wrong_role_payload,
         )
         forbidden_assignment = client.post(
             "/internal/runtime/assign",
             headers=_headers(analyst_token),
-            json=_assignment("ANA-2", "assign-ana-2"),
+            json=_assignment("ANA-2", "assign-ana-2", "analyst"),
         )
         forbidden_step = client.post(
             "/internal/runtime/step",
@@ -172,8 +223,22 @@ def test_runtime_token_is_bound_to_one_namespace(monkeypatch, supervisor_llm):
 
     assert unassigned.status_code == 409
     assert assigned.status_code == 200
-    assert assigned.json()["result"]["task_key"] == "ANA-1"
+    assignment_result = assigned.json()["result"]
+    assert assignment_result["task_key"] == "ANA-1"
+    assert assignment_result["role_key"] == "analyst"
+    assert assignment_result["execution_scope"] == "business"
+    assert assignment_result["business_task_ref"] == "business-task:ANA-1@1"
+    assert assignment_result["tech_execution_workspace_ref"] is None
+    assert assignment_result["exact_input_refs"] == [
+        {
+            "kind": "business_task",
+            "ref": "business-task:ANA-1",
+            "revision": "1",
+            "sha256": None,
+        }
+    ]
     assert operation_collision.status_code == 409
+    assert wrong_role_assignment.status_code == 403
     assert forbidden_assignment.status_code == 403
     assert forbidden_step.status_code == 401
     assert current.status_code == 200
@@ -206,7 +271,7 @@ def test_runtime_history_exposes_retryable_supervisor_failure(monkeypatch):
         assigned = client.post(
             "/internal/runtime/assign",
             headers=_headers(assignment_token),
-            json=_assignment("DEV-1", "assign-dev-1"),
+            json=_assignment("DEV-1", "assign-dev-1", "developer"),
         )
         current = client.post(
             "/internal/runtime/step",
@@ -256,7 +321,7 @@ def test_token_collision_closes_runtime_and_assignment_endpoints(monkeypatch):
         assignment = client.post(
             "/internal/runtime/assign",
             headers=_headers(shared),
-            json=_assignment("ANA-1", "collision"),
+            json=_assignment("ANA-1", "collision", "analyst"),
         )
 
     assert step.status_code == 503

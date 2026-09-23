@@ -1,11 +1,18 @@
 # Сброс базы project-workflow
 
-Этот runbook предназначен для оператора, который обновляет окружение на версию с
-baseline migration `0001_initial`.
+Этот runbook предназначен для оператора project-workflow с последовательностью
+миграций `0001_initial` → `0002_workflow_modes` →
+`0003_runtime_assignment_bindings`.
 
-Любая база с revision, отличной от `0001_initial`, несовместима с этой версией.
-После необходимого внешнего backup её настроенную schema или Compose volume нужно
-удалить полностью; upgrade, stamp и импорт прежних данных не поддерживаются.
+Обычное обновление поддерживается командой Alembic `upgrade head`. Миграции
+сохраняют legacy tasks/history в `default` mode, а `0003` оставляет новые
+внешние binding refs nullable у существующих строк и ничего не выдумывает при
+backfill. Новые runtime assignments после обновления принимаются только с
+полным backend-owned mode policy и immutable binding contract.
+
+Полный reset нужен только для явно выбранного disposable окружения либо если
+текущая revision отсутствует в этой линейной истории. `stamp` не заменяет
+upgrade и не должен использоваться для обхода миграций.
 
 > **Внимание:** операции ниже безвозвратно удаляют все данные project-workflow в
 > выбранной схеме или Compose volume. Автоматический импорт старых данных не
@@ -25,6 +32,20 @@ baseline migration `0001_initial`.
 
 4. Остановите API и активных CLI-исполнителей, чтобы они не писали в БД во время
    сброса.
+
+## Поддерживаемое обновление
+
+1. Сохраните внешний backup и остановите writers.
+2. Проверьте текущую revision: `alembic current`.
+3. Выполните `alembic upgrade head` тем же образом, которым стартует штатный
+   project-workflow runtime.
+4. Убедитесь, что `alembic current` показывает
+   `0003_runtime_assignment_bindings` и `/health` подтверждает migration head.
+5. Перечитайте legacy task/history и новый mode catalog до возврата writers.
+
+SQLite разрешён только в изолированных тестах. Regression path обязан отдельно
+проверять upgrade populated `0001` → head и populated `0002` → head; runtime
+PostgreSQL проверяется соответствующим integration gate.
 
 ## Сброс только настроенной схемы
 
@@ -71,7 +92,7 @@ curl --fail --silent http://127.0.0.1:8812/health
 - сервис `migrate` завершился с exit code `0`;
 - API запущен только после `migrate`;
 - `/health` возвращает HTTP `200`, `database=ok` и `schema=ok`;
-- в `alembic_version` находится `0001_initial`;
+- в `alembic_version` находится `0003_runtime_assignment_bindings`;
 - packaged-каталог, агенты и default project созданы без дубликатов.
 
 PostgreSQL и API в стандартном Compose опубликованы только на `127.0.0.1`.

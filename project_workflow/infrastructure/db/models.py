@@ -81,12 +81,34 @@ class WorkflowMode(Base):
     key: Mapped[str] = mapped_column(String(128), nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
     mode_order: Mapped[int] = mapped_column(nullable=False)
+    role_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    execution_scope: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    tech_workspace_policy: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     __table_args__ = (
         UniqueConstraint("id", "workflow_id", name="uq_workflow_modes_id_workflow"),
         UniqueConstraint("workflow_id", "key", name="uq_workflow_modes_workflow_key"),
         UniqueConstraint("workflow_id", "mode_order", name="uq_workflow_modes_workflow_order"),
         CheckConstraint("mode_order > 0", name="ck_workflow_modes_order_positive"),
+        CheckConstraint(
+            "execution_scope IS NULL OR execution_scope IN ('business', 'delivery', 'aggregate')",
+            name="ck_workflow_modes_execution_scope",
+        ),
+        CheckConstraint(
+            "tech_workspace_policy IS NULL OR tech_workspace_policy IN ('forbidden', 'required')",
+            name="ck_workflow_modes_tech_policy",
+        ),
+        CheckConstraint(
+            "(role_key IS NULL AND execution_scope IS NULL AND tech_workspace_policy IS NULL) OR "
+            "(role_key IS NOT NULL AND execution_scope IS NOT NULL AND tech_workspace_policy IS NOT NULL)",
+            name="ck_workflow_modes_policy_complete",
+        ),
+        CheckConstraint(
+            "execution_scope IS NULL OR "
+            "(execution_scope = 'business' AND tech_workspace_policy = 'forbidden') OR "
+            "(execution_scope IN ('delivery', 'aggregate') AND tech_workspace_policy = 'required')",
+            name="ck_workflow_modes_policy_consistent",
+        ),
     )
 
     workflow: Mapped[Workflow] = relationship("Workflow", back_populates="modes")
@@ -315,6 +337,22 @@ class TaskRuntimeAssignment(Base):
     mode_id: Mapped[int] = mapped_column(nullable=False)
     cycle_number: Mapped[int] = mapped_column(nullable=False)
     assignment_revision: Mapped[int] = mapped_column(nullable=False)
+    role_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    execution_scope: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    business_task_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    root_task_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    work_item_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    task_workspace_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    tech_execution_workspace_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    tech_execution_attempt_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    decomposition_revision_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    stage_revision: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    assignment_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    binding_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    hermes_run_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    workspace_generation: Mapped[int | None] = mapped_column(nullable=True)
+    lease_generation: Mapped[int | None] = mapped_column(nullable=True)
+    exact_input_refs: Mapped[str | None] = mapped_column(Text, nullable=True)
     payload: Mapped[str] = mapped_column(Text, nullable=False, default="{}", server_default="{}")
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -344,7 +382,21 @@ class TaskRuntimeAssignment(Base):
         ),
         CheckConstraint("cycle_number >= 0", name="ck_task_runtime_assignments_cycle_nonnegative"),
         CheckConstraint("assignment_revision > 0", name="ck_task_runtime_assignments_revision_positive"),
+        CheckConstraint(
+            "execution_scope IS NULL OR execution_scope IN ('business', 'delivery', 'aggregate')",
+            name="ck_task_runtime_assignments_execution_scope",
+        ),
+        CheckConstraint(
+            "workspace_generation IS NULL OR workspace_generation >= 0",
+            name="ck_task_runtime_assignments_workspace_generation",
+        ),
+        CheckConstraint(
+            "lease_generation IS NULL OR lease_generation >= 0",
+            name="ck_task_runtime_assignments_lease_generation",
+        ),
         Index("ix_task_runtime_assignments_task_id", "task_id"),
+        Index("ix_task_runtime_assignments_business_task_ref", "business_task_ref"),
+        Index("ix_task_runtime_assignments_task_workspace_ref", "task_workspace_ref"),
     )
     mode: Mapped[WorkflowMode] = relationship(
         "WorkflowMode",

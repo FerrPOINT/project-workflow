@@ -55,18 +55,24 @@ class SupervisorContextBuilder:
         historical = self.uow.phases.get_by_id(int(phase_id))
         if historical is None:
             return None
+        parallel = (
+            self.uow.phases.get_by_id(int(historical.parallel_with_phase_id))
+            if historical.parallel_with_phase_id is not None
+            else None
+        )
+        rollback = (
+            self.uow.phases.get_by_id(int(historical.rollback_target_phase_id))
+            if historical.rollback_target_phase_id is not None
+            else None
+        )
         return Phase(
             id=historical.id,
             code=historical.code,
             name=historical.name,
             description=historical.description,
-            phase_order=historical.phase_order,
-            agent_id=historical.agent_id,
-            parallel_with_phase_id=historical.parallel_with_phase_id,
-            rollback_target_phase_id=historical.rollback_target_phase_id,
             execution_type=historical.execution_type,
-            parallel_with_phase_code=historical.parallel_with_phase_code,
-            rollback_target_phase_code=historical.rollback_target_phase_code,
+            parallel_with_phase_code=parallel.code if parallel is not None else None,
+            rollback_target_phase_code=rollback.code if rollback is not None else None,
         )
 
     def _phase_status_lookup(self) -> dict[str, str]:
@@ -128,7 +134,12 @@ class SupervisorContextBuilder:
 
     def _build_recent_verdicts(self, limit: int = 5) -> list[dict[str, Any]]:
         verdicts: list[dict] = []
-        for row in self.uow.list_step_history(task_id=self.task["id"], limit=limit):
+        for row in self.uow.list_step_history(
+            task_id=self.task["id"],
+            mode_id=self.task.get("mode_id"),
+            cycle_number=self.task.get("cycle_number", 0),
+            limit=limit,
+        ):
             phase = self._historical_phase_by_id(row.get("phase_id"))
             next_phase = self._historical_phase_by_id(row.get("next_phase_id"))
             rollback_phase = self._historical_phase_by_id(row.get("rollback_phase_id"))

@@ -113,6 +113,9 @@ class WorkflowMode:
     key: str = "default"
     name: str = "Default"
     mode_order: int = 1
+    role_key: str | None = None
+    execution_scope: str | None = None
+    tech_workspace_policy: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -121,6 +124,9 @@ class WorkflowMode:
             "key": self.key,
             "name": self.name,
             "mode_order": self.mode_order,
+            "role_key": self.role_key,
+            "execution_scope": self.execution_scope,
+            "tech_workspace_policy": self.tech_workspace_policy,
         }
 
 
@@ -211,6 +217,22 @@ class TaskRuntimeAssignment:
     mode_key: str = "default"
     cycle_number: int = 0
     assignment_revision: int = 0
+    role_key: str | None = None
+    execution_scope: str | None = None
+    business_task_ref: str | None = None
+    root_task_ref: str | None = None
+    work_item_ref: str | None = None
+    task_workspace_ref: str | None = None
+    tech_execution_workspace_ref: str | None = None
+    tech_execution_attempt_ref: str | None = None
+    decomposition_revision_ref: str | None = None
+    stage_revision: str | None = None
+    assignment_ref: str | None = None
+    binding_ref: str | None = None
+    hermes_run_ref: str | None = None
+    workspace_generation: int | None = None
+    lease_generation: int | None = None
+    exact_input_refs: list[dict[str, Any]] = field(default_factory=list)
     payload: dict[str, Any] = field(default_factory=dict)
     created_at: str | None = None
 
@@ -225,6 +247,22 @@ class TaskRuntimeAssignment:
             "mode_key": self.mode_key,
             "cycle_number": self.cycle_number,
             "assignment_revision": self.assignment_revision,
+            "role_key": self.role_key,
+            "execution_scope": self.execution_scope,
+            "business_task_ref": self.business_task_ref,
+            "root_task_ref": self.root_task_ref,
+            "work_item_ref": self.work_item_ref,
+            "task_workspace_ref": self.task_workspace_ref,
+            "tech_execution_workspace_ref": self.tech_execution_workspace_ref,
+            "tech_execution_attempt_ref": self.tech_execution_attempt_ref,
+            "decomposition_revision_ref": self.decomposition_revision_ref,
+            "stage_revision": self.stage_revision,
+            "assignment_ref": self.assignment_ref,
+            "binding_ref": self.binding_ref,
+            "hermes_run_ref": self.hermes_run_ref,
+            "workspace_generation": self.workspace_generation,
+            "lease_generation": self.lease_generation,
+            "exact_input_refs": [dict(item) for item in self.exact_input_refs],
             "payload": dict(self.payload),
             "created_at": self.created_at,
         }

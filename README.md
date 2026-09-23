@@ -36,6 +36,9 @@
 
 Для изолированных контейнеров исполнителей сохранён private runtime bridge `/internal/runtime/step` и `/internal/runtime/history`: это отдельный service-to-service контракт с role tokens, не пользовательский UI API. Он включается только при `PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON` и должен быть доступен лишь во внутренней сети или на host loopback.
 
+Business-owned assignment binding, mode policy и граница terminal outcome
+описаны в [runtime assignment contract](docs/runtime-assignment-contract.md).
+
 Business/Fleet adapter назначает точный mode/cycle через
 `POST /internal/runtime/assign` и отдельный
 `PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON`. Assignment token не является runtime

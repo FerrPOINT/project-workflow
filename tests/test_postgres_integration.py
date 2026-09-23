@@ -41,6 +41,7 @@ from project_workflow.infrastructure.db.session import (
     get_engine,
     reset_engine,
     run_alembic_command,
+    schema_is_ready,
 )
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
@@ -52,6 +53,29 @@ PG_USER = os.environ.get("PGUSER", "project_workflow")
 PG_PASSWORD = os.environ.get("PGPASSWORD", "project_workflow")
 PG_ADMIN_DB = os.environ.get("PGDATABASE", "project_workflow")
 PG_CONNECT_TIMEOUT = int(os.environ.get("PGCONNECT_TIMEOUT", "10"))
+
+
+def _runtime_binding(operation_key: str) -> dict[str, object]:
+    return {
+        "role_key": "developer",
+        "execution_scope": "delivery",
+        "business_task_ref": f"business-task:{operation_key}",
+        "root_task_ref": "business-task:root",
+        "work_item_ref": f"work-item:{operation_key}",
+        "task_workspace_ref": "task-workspace:root",
+        "tech_execution_workspace_ref": f"tech-workspace:{operation_key}",
+        "tech_execution_attempt_ref": f"tech-attempt:{operation_key}",
+        "decomposition_revision_ref": "decomposition:1",
+        "stage_revision": "developer:1",
+        "assignment_ref": f"assignment:{operation_key}",
+        "binding_ref": f"binding:{operation_key}",
+        "hermes_run_ref": f"hermes-run:{operation_key}",
+        "workspace_generation": 1,
+        "lease_generation": 1,
+        "exact_input_refs": [
+            {"kind": "business_task", "ref": f"business-task:{operation_key}", "revision": "1"}
+        ],
+    }
 
 
 @pytest.fixture(scope="function")
@@ -134,13 +158,13 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0002_workflow_modes"
+        assert version == migration_head() == "0003_runtime_assignment_bindings"
         assert schema_is_ready(engine) is True
 
     def test_downgrade_refuses_lossy_mode_collapse(self, pg_url):
         engine = get_engine(pg_url)
         ensure_migrated(engine)
-        with pytest.raises(RuntimeError, match="Downgrade from workflow modes"):
+        with pytest.raises(RuntimeError, match="Downgrade from immutable runtime assignment bindings"):
             run_alembic_command("downgrade", engine, "base")
         assert schema_is_ready(engine) is True
 
@@ -594,6 +618,17 @@ class TestPostgresInitialMigration:
         ensure_migrated(get_engine(pg_url))
         setup = SAUnitOfWork(pg_url)
         workflow_id = setup.workflows.create({"name": "Runtime assignment race"})
+        initial_mode = setup.workflows.create_mode(
+            {
+                "workflow_id": workflow_id,
+                "key": "initial",
+                "name": "Initial",
+                "mode_order": 2,
+                "role_key": "developer",
+                "execution_scope": "delivery",
+                "tech_workspace_policy": "required",
+            }
+        )
         project_id = setup.projects.create(
             {
                 "workflow_id": workflow_id,
@@ -604,7 +639,13 @@ class TestPostgresInitialMigration:
             }
         )
         setup.phases.create(
-            {"workflow_id": workflow_id, "code": "start", "name": "Start", "phase_order": 1}
+            {
+                "workflow_id": workflow_id,
+                "mode_id": initial_mode,
+                "code": "start",
+                "name": "Start",
+                "phase_order": 1,
+            }
         )
         setup.commit()
         setup.close()
@@ -617,11 +658,12 @@ class TestPostgresInitialMigration:
                 return TaskService(uow).assign_runtime_task(
                     project_id=project_id,
                     task_key="RACE-1",
-                    mode_key="default",
+                    mode_key="initial",
                     cycle_number=0,
                     operation_key="runtime-race-operation",
                     expected_revision=0,
                     expected_status="missing",
+                    **_runtime_binding("runtime-race-operation"),
                 )
             finally:
                 uow.close()
@@ -645,13 +687,36 @@ class TestPostgresInitialMigration:
         ensure_migrated(get_engine(pg_url))
         setup = SAUnitOfWork(pg_url)
         workflow_id = setup.workflows.create({"name": "Existing assignment race"})
-        default = setup.workflows.get_mode_by_key(workflow_id, "default")
-        assert default is not None and default.id is not None
+        initial_mode = setup.workflows.create_mode(
+            {
+                "workflow_id": workflow_id,
+                "key": "initial",
+                "name": "Initial",
+                "mode_order": 2,
+                "role_key": "developer",
+                "execution_scope": "delivery",
+                "tech_workspace_policy": "required",
+            }
+        )
         rework_id = setup.workflows.create_mode(
-            {"workflow_id": workflow_id, "key": "rework", "name": "Rework", "mode_order": 2}
+            {
+                "workflow_id": workflow_id,
+                "key": "rework",
+                "name": "Rework",
+                "mode_order": 3,
+                "role_key": "developer",
+                "execution_scope": "delivery",
+                "tech_workspace_policy": "required",
+            }
         )
         setup.phases.create(
-            {"workflow_id": workflow_id, "mode_id": default.id, "code": "start", "name": "Start", "phase_order": 1}
+            {
+                "workflow_id": workflow_id,
+                "mode_id": initial_mode,
+                "code": "start",
+                "name": "Start",
+                "phase_order": 1,
+            }
         )
         setup.phases.create(
             {"workflow_id": workflow_id, "mode_id": rework_id, "code": "fix", "name": "Fix", "phase_order": 1}
@@ -668,11 +733,12 @@ class TestPostgresInitialMigration:
         initial = TaskService(setup).assign_runtime_task(
             project_id=project_id,
             task_key="EXISTING-1",
-            mode_key="default",
+            mode_key="initial",
             cycle_number=0,
             operation_key="existing-race-a",
             expected_revision=0,
             expected_status="missing",
+            **_runtime_binding("existing-race-a"),
         )
         setup.tasks.update(initial["id"], {"status": "done"})
         setup.commit()
@@ -707,8 +773,9 @@ class TestPostgresInitialMigration:
                     operation_key="existing-race-b",
                     expected_revision=1,
                     expected_status="done",
-                    expected_mode_key="default",
+                    expected_mode_key="initial",
                     expected_cycle_number=0,
+                    **_runtime_binding("existing-race-b"),
                 )
             finally:
                 uow.close()

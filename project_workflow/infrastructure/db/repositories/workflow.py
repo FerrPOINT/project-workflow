@@ -110,6 +110,9 @@ class SAWorkflowRepository(WorkflowRepository):
             key=data["key"],
             name=data.get("name", data["key"]),
             mode_order=data["mode_order"],
+            role_key=data.get("role_key"),
+            execution_scope=data.get("execution_scope"),
+            tech_workspace_policy=data.get("tech_workspace_policy"),
         )
         self._session.add(item)
         try:

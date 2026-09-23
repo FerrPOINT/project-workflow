@@ -112,8 +112,24 @@ class TaskService:
         project_id: int,
         task_key: str,
         mode_key: str,
+        role_key: str,
+        execution_scope: str,
         cycle_number: int,
         operation_key: str,
+        business_task_ref: str,
+        root_task_ref: str,
+        work_item_ref: str,
+        task_workspace_ref: str,
+        tech_execution_workspace_ref: str | None,
+        tech_execution_attempt_ref: str | None,
+        decomposition_revision_ref: str,
+        stage_revision: str,
+        assignment_ref: str,
+        binding_ref: str,
+        hermes_run_ref: str,
+        workspace_generation: int,
+        lease_generation: int,
+        exact_input_refs: list[dict[str, Any]],
         expected_revision: int,
         expected_status: str,
         expected_mode_key: str | None = None,
@@ -122,10 +138,13 @@ class TaskService:
         """Persist one authorized Business assignment atomically and idempotently."""
         operation_key = operation_key.strip()
         mode_key = mode_key.strip()
+        role_key = role_key.strip()
         if not operation_key or len(operation_key) > 128:
             raise ValueError("operation_key должен быть непустой строкой длиной до 128 символов")
         if not mode_key or len(mode_key) > 128:
             raise ValueError("mode_key должен быть непустой строкой длиной до 128 символов")
+        if not role_key or len(role_key) > 128:
+            raise ValueError("role_key должен быть непустой строкой длиной до 128 символов")
         validated_key = TaskKeyValidator.from_projects([]).validate(task_key)
         if not validated_key.is_valid:
             raise ConflictError(validated_key.error_message or f"Недопустимый ключ задачи {task_key!r}")
@@ -136,15 +155,58 @@ class TaskService:
         mode = self._uow.workflows.get_mode_by_key(project.workflow_id, mode_key)
         if mode is None or mode.id is None:
             raise ConflictError(f"Режим {mode_key!r} не найден в воркфлоу {project.workflow_id}")
+        self._validate_mode_policy(
+            mode=mode,
+            role_key=role_key,
+            execution_scope=execution_scope,
+            tech_execution_workspace_ref=tech_execution_workspace_ref,
+            tech_execution_attempt_ref=tech_execution_attempt_ref,
+        )
         if cycle_number < 0 or expected_revision < 0:
             raise ValueError("cycle_number и expected_revision должны быть неотрицательными")
+        if workspace_generation < 0 or lease_generation < 0:
+            raise ValueError("workspace_generation и lease_generation должны быть неотрицательными")
+        external_refs = {
+            "business_task_ref": business_task_ref,
+            "root_task_ref": root_task_ref,
+            "work_item_ref": work_item_ref,
+            "task_workspace_ref": task_workspace_ref,
+            "decomposition_revision_ref": decomposition_revision_ref,
+            "stage_revision": stage_revision,
+            "assignment_ref": assignment_ref,
+            "binding_ref": binding_ref,
+            "hermes_run_ref": hermes_run_ref,
+        }
+        normalized_refs = {
+            key: self._bounded_ref(value, key, 128 if key == "stage_revision" else 512)
+            for key, value in external_refs.items()
+        }
+        normalized_tech_workspace_ref = (
+            self._bounded_ref(tech_execution_workspace_ref, "tech_execution_workspace_ref", 512)
+            if tech_execution_workspace_ref is not None
+            else None
+        )
+        normalized_tech_attempt_ref = (
+            self._bounded_ref(tech_execution_attempt_ref, "tech_execution_attempt_ref", 512)
+            if tech_execution_attempt_ref is not None
+            else None
+        )
+        normalized_input_refs = self._normalize_exact_input_refs(exact_input_refs)
         payload = {
             "project_id": project_id,
             "task_key": task_key,
             "workflow_id": project.workflow_id,
             "mode_key": mode.key,
+            "role_key": role_key,
+            "execution_scope": execution_scope,
             "cycle_number": cycle_number,
             "operation_key": operation_key,
+            **normalized_refs,
+            "tech_execution_workspace_ref": normalized_tech_workspace_ref,
+            "tech_execution_attempt_ref": normalized_tech_attempt_ref,
+            "workspace_generation": workspace_generation,
+            "lease_generation": lease_generation,
+            "exact_input_refs": normalized_input_refs,
             "expected_revision": expected_revision,
             "expected_status": expected_status,
             "expected_mode_key": expected_mode_key,
@@ -179,16 +241,16 @@ class TaskService:
                     }
                 )
                 self._uow.tasks.create_assignment(
-                    {
-                        "operation_key": operation_key,
-                        "task_id": tid,
-                        "project_id": project_id,
-                        "workflow_id": project.workflow_id,
-                        "mode_id": mode.id,
-                        "cycle_number": cycle_number,
-                        "assignment_revision": 1,
-                        "payload": payload,
-                    }
+                    self._assignment_record(
+                        payload,
+                        operation_key=operation_key,
+                        task_id=tid,
+                        project_id=project_id,
+                        workflow_id=project.workflow_id,
+                        mode_id=mode.id,
+                        cycle_number=cycle_number,
+                        assignment_revision=1,
+                    )
                 )
                 self._uow.commit()
             except IntegrityError as exc:
@@ -197,7 +259,10 @@ class TaskService:
             created = self._uow.tasks.get_by_id(tid)
             if created is None:
                 raise RuntimeError("Не удалось сохранить runtime assignment")
-            return created.to_dict()
+            persisted = self._uow.tasks.get_assignment_by_operation_key(operation_key)
+            if persisted is None:
+                raise RuntimeError("Не удалось перечитать runtime assignment")
+            return self._assignment_result(created.to_dict(), persisted.to_dict())
 
         locked = self._uow.tasks.lock(int(current.id or 0))
         if locked is None:
@@ -236,16 +301,16 @@ class TaskService:
             )
             self._uow.tasks.record_phase_event(int(locked.id or 0), int(phases[0].id), "entered")
             self._uow.tasks.create_assignment(
-                {
-                    "operation_key": operation_key,
-                    "task_id": int(locked.id or 0),
-                    "project_id": project_id,
-                    "workflow_id": project.workflow_id,
-                    "mode_id": mode.id,
-                    "cycle_number": cycle_number,
-                    "assignment_revision": next_revision,
-                    "payload": payload,
-                }
+                self._assignment_record(
+                    payload,
+                    operation_key=operation_key,
+                    task_id=int(locked.id or 0),
+                    project_id=project_id,
+                    workflow_id=project.workflow_id,
+                    mode_id=mode.id,
+                    cycle_number=cycle_number,
+                    assignment_revision=next_revision,
+                )
             )
             self._uow.commit()
         except IntegrityError as exc:
@@ -254,7 +319,123 @@ class TaskService:
         assigned = self._uow.tasks.get_by_id(int(locked.id or 0))
         if assigned is None:
             raise RuntimeError("Не удалось обновить runtime assignment")
-        return assigned.to_dict()
+        persisted = self._uow.tasks.get_assignment_by_operation_key(operation_key)
+        if persisted is None:
+            raise RuntimeError("Не удалось перечитать runtime assignment")
+        return self._assignment_result(assigned.to_dict(), persisted.to_dict())
+
+    @staticmethod
+    def _bounded_ref(value: Any, field_name: str, max_length: int) -> str:
+        if not isinstance(value, str) or not value.strip() or len(value.strip()) > max_length:
+            raise ValueError(f"{field_name} должен быть непустой строкой длиной до {max_length} символов")
+        return value.strip()
+
+    @classmethod
+    def _normalize_exact_input_refs(cls, value: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if not isinstance(value, list) or not 1 <= len(value) <= 100:
+            raise ValueError("exact_input_refs должен содержать от 1 до 100 snapshot-объектов")
+        allowed_kinds = {
+            "business_task", "comment", "attachment", "link", "artifact", "decomposition", "stage"
+        }
+        normalized: list[dict[str, Any]] = []
+        identities: set[tuple[str, str, str]] = set()
+        for raw in value:
+            if not isinstance(raw, dict) or set(raw) - {"kind", "ref", "revision", "sha256"}:
+                raise ValueError("Каждый exact input snapshot должен иметь только kind/ref/revision/sha256")
+            kind = raw.get("kind")
+            if kind not in allowed_kinds:
+                raise ValueError("Неизвестный kind в exact_input_refs")
+            ref = cls._bounded_ref(raw.get("ref"), "exact_input_refs.ref", 512)
+            revision = cls._bounded_ref(raw.get("revision"), "exact_input_refs.revision", 128)
+            sha256 = raw.get("sha256")
+            if sha256 is not None and (
+                not isinstance(sha256, str)
+                or len(sha256) != 64
+                or any(char not in "0123456789abcdef" for char in sha256)
+            ):
+                raise ValueError("exact_input_refs.sha256 должен быть lowercase SHA-256")
+            identity = (kind, ref, revision)
+            if identity in identities:
+                raise ValueError("exact_input_refs не должен содержать дубликаты")
+            identities.add(identity)
+            normalized.append({"kind": kind, "ref": ref, "revision": revision, "sha256": sha256})
+        return normalized
+
+    @staticmethod
+    def _validate_mode_policy(
+        *,
+        mode: Any,
+        role_key: str,
+        execution_scope: str,
+        tech_execution_workspace_ref: str | None,
+        tech_execution_attempt_ref: str | None,
+    ) -> None:
+        if not mode.role_key or not mode.execution_scope or not mode.tech_workspace_policy:
+            raise ConflictError("Режим не содержит полный backend-owned assignment policy")
+        if mode.role_key != role_key:
+            raise ConflictError("Backend-owned policy не разрешает указанную роль")
+        if mode.execution_scope != execution_scope:
+            raise ConflictError("Backend-owned mode policy не разрешает указанный execution scope")
+        if mode.tech_workspace_policy == "required" and (
+            tech_execution_workspace_ref is None or tech_execution_attempt_ref is None
+        ):
+            raise ConflictError("Mode policy требует TechExecutionWorkspace и attempt ref")
+        if mode.tech_workspace_policy == "forbidden" and (
+            tech_execution_workspace_ref is not None or tech_execution_attempt_ref is not None
+        ):
+            raise ConflictError("Mode policy запрещает TechExecutionWorkspace")
+
+    @staticmethod
+    def _assignment_record(payload: dict[str, Any], **identity: Any) -> dict[str, Any]:
+        return {
+            **identity,
+            **{
+                key: payload[key]
+                for key in (
+                    "role_key",
+                    "execution_scope",
+                    "business_task_ref",
+                    "root_task_ref",
+                    "work_item_ref",
+                    "task_workspace_ref",
+                    "tech_execution_workspace_ref",
+                    "tech_execution_attempt_ref",
+                    "decomposition_revision_ref",
+                    "stage_revision",
+                    "assignment_ref",
+                    "binding_ref",
+                    "hermes_run_ref",
+                    "workspace_generation",
+                    "lease_generation",
+                    "exact_input_refs",
+                )
+            },
+            "payload": payload,
+        }
+
+    @staticmethod
+    def _assignment_result(task: dict[str, Any], assignment: dict[str, Any]) -> dict[str, Any]:
+        result = dict(task)
+        for key in (
+            "role_key",
+            "execution_scope",
+            "business_task_ref",
+            "root_task_ref",
+            "work_item_ref",
+            "task_workspace_ref",
+            "tech_execution_workspace_ref",
+            "tech_execution_attempt_ref",
+            "decomposition_revision_ref",
+            "stage_revision",
+            "assignment_ref",
+            "binding_ref",
+            "hermes_run_ref",
+            "workspace_generation",
+            "lease_generation",
+            "exact_input_refs",
+        ):
+            result[key] = assignment.get(key)
+        return result
 
     def _reconcile_after_integrity_error(
         self, operation_key: str, payload: dict[str, Any], cause: IntegrityError
@@ -281,7 +462,7 @@ class TaskService:
             or task.task_key != payload.get("task_key")
         ):
             raise ConflictError("operation_key уже использован для другой задачи") from cause
-        result = task.to_dict()
+        result = self._assignment_result(task.to_dict(), assignment)
         phases = list(
             self._uow.phases.list(
                 workflow_id=int(assignment["workflow_id"]), mode_id=int(assignment["mode_id"])

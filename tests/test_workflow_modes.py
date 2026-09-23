@@ -23,6 +23,29 @@ def modes_db(tmp_path):
         yield uow
 
 
+def _binding(operation_key: str, *, scope: str = "delivery") -> dict[str, object]:
+    return {
+        "role_key": "developer",
+        "execution_scope": scope,
+        "business_task_ref": f"business-task:{operation_key}",
+        "root_task_ref": "business-task:root",
+        "work_item_ref": f"work-item:{operation_key}",
+        "task_workspace_ref": "task-workspace:root",
+        "tech_execution_workspace_ref": f"tech-workspace:{operation_key}",
+        "tech_execution_attempt_ref": f"tech-attempt:{operation_key}",
+        "decomposition_revision_ref": "decomposition:1",
+        "stage_revision": "developer:1",
+        "assignment_ref": f"assignment:{operation_key}",
+        "binding_ref": f"binding:{operation_key}",
+        "hermes_run_ref": f"hermes-run:{operation_key}",
+        "workspace_generation": 1,
+        "lease_generation": 1,
+        "exact_input_refs": [
+            {"kind": "business_task", "ref": f"business-task:{operation_key}", "revision": "1"}
+        ],
+    }
+
+
 def test_new_workflow_has_default_mode_and_catalogs_are_scoped(modes_db):
     workflow_id = modes_db.workflows.create({"name": "Modes"})
     default = modes_db.workflows.get_mode_by_key(workflow_id, "default")
@@ -37,7 +60,7 @@ def test_new_workflow_has_default_mode_and_catalogs_are_scoped(modes_db):
         {"workflow_id": workflow_id, "mode_id": alternate_id, "code": "start", "name": "Rework start", "phase_order": 1}
     )
     assert first != second
-    with pytest.raises(IntegrityError):
+    with pytest.raises(ConflictError):
         modes_db.phases.create(
             {
                 "workflow_id": workflow_id,
@@ -53,6 +76,7 @@ def test_new_workflow_has_default_mode_and_catalogs_are_scoped(modes_db):
 
 def test_duplicate_mode_key_or_order_is_domain_conflict(modes_db):
     workflow_id = modes_db.workflows.create({"name": "Mode conflicts"})
+    modes_db.commit()
     with pytest.raises(ConflictError):
         modes_db.workflows.create_mode(
             {"workflow_id": workflow_id, "key": "default", "name": "Duplicate", "mode_order": 2}
@@ -208,12 +232,30 @@ def test_event_history_link_cannot_cross_mode_or_cycle(modes_db):
 
 def test_runtime_assignment_persists_cycles_only_after_terminal(modes_db):
     workflow_id = modes_db.workflows.create({"name": "Runtime"})
-    default = modes_db.workflows.get_mode_by_key(workflow_id, "default")
+    initial_mode = modes_db.workflows.create_mode(
+        {
+            "workflow_id": workflow_id,
+            "key": "initial",
+            "name": "Initial",
+            "mode_order": 2,
+            "role_key": "developer",
+            "execution_scope": "delivery",
+            "tech_workspace_policy": "required",
+        }
+    )
     rework = modes_db.workflows.create_mode(
-        {"workflow_id": workflow_id, "key": "rework", "name": "Rework", "mode_order": 2}
+        {
+            "workflow_id": workflow_id,
+            "key": "rework",
+            "name": "Rework",
+            "mode_order": 3,
+            "role_key": "developer",
+            "execution_scope": "delivery",
+            "tech_workspace_policy": "required",
+        }
     )
     default_phase = modes_db.phases.create(
-        {"workflow_id": workflow_id, "mode_id": default.id, "code": "p", "name": "P", "phase_order": 1}
+        {"workflow_id": workflow_id, "mode_id": initial_mode, "code": "p", "name": "P", "phase_order": 1}
     )
     rework_phase = modes_db.phases.create(
         {"workflow_id": workflow_id, "mode_id": rework, "code": "p", "name": "P2", "phase_order": 1}
@@ -221,51 +263,52 @@ def test_runtime_assignment_persists_cycles_only_after_terminal(modes_db):
     project_id = modes_db.projects.create(
         {
             "workflow_id": workflow_id,
-            "code": "RUN",
+            "code": "RTM",
             "name": "Run",
-            "cli_command": "run",
-            "key_prefixes": ["RUN"],
+            "cli_command": "runtime-modes",
+            "key_prefixes": ["RTM"],
         }
     )
     service = TaskService(modes_db)
     initial = service.assign_runtime_task(
         project_id=project_id,
-        task_key="RUN-1",
-        mode_key="default",
+        task_key="RTM-1",
+        mode_key="initial",
         cycle_number=0,
         operation_key="initial",
         expected_revision=0,
         expected_status="missing",
+        **_binding("initial"),
     )
     assert initial["current_phase_id"] == default_phase
     modes_db.tasks.update(initial["id"], {"status": "active"})
     modes_db.commit()
-    with pytest.raises(ConflictError, match="активной задачи"):
+    with pytest.raises(ConflictError, match="assignment уже активен"):
         service.assign_runtime_task(
-            project_id=project_id, task_key="RUN-1", mode_key="rework", cycle_number=1,
+            project_id=project_id, task_key="RTM-1", mode_key="rework", cycle_number=1,
             operation_key="rework-1", expected_revision=1, expected_status="active",
-            expected_mode_key="default", expected_cycle_number=0,
+            expected_mode_key="initial", expected_cycle_number=0, **_binding("rework-1"),
         )
     modes_db.tasks.update(initial["id"], {"status": "done"})
     modes_db.commit()
     assigned = service.assign_runtime_task(
-        project_id=project_id, task_key="RUN-1", mode_key="rework", cycle_number=1,
+        project_id=project_id, task_key="RTM-1", mode_key="rework", cycle_number=1,
         operation_key="rework-1", expected_revision=1, expected_status="done",
-        expected_mode_key="default", expected_cycle_number=0,
+        expected_mode_key="initial", expected_cycle_number=0, **_binding("rework-1"),
     )
     assert assigned["mode_id"] == rework and assigned["cycle_number"] == 1
     assert assigned["current_phase_id"] == rework_phase
     assert service.assign_runtime_task(
-        project_id=project_id, task_key="RUN-1", mode_key="rework", cycle_number=1,
+        project_id=project_id, task_key="RTM-1", mode_key="rework", cycle_number=1,
         operation_key="rework-1", expected_revision=1, expected_status="done",
-        expected_mode_key="default", expected_cycle_number=0,
+        expected_mode_key="initial", expected_cycle_number=0, **_binding("rework-1"),
     )["assignment_revision"] == assigned["assignment_revision"]
     modes_db.tasks.update(initial["id"], {"status": "done"})
     modes_db.commit()
     next_assigned = service.assign_runtime_task(
-        project_id=project_id, task_key="RUN-1", mode_key="rework", cycle_number=2,
+        project_id=project_id, task_key="RTM-1", mode_key="rework", cycle_number=2,
         operation_key="rework-2", expected_revision=2, expected_status="done",
-        expected_mode_key="rework", expected_cycle_number=1,
+        expected_mode_key="rework", expected_cycle_number=1, **_binding("rework-2"),
     )
     assert next_assigned["cycle_number"] == 2
     assert default_phase != rework_phase
@@ -273,12 +316,30 @@ def test_runtime_assignment_persists_cycles_only_after_terminal(modes_db):
 
 def test_assignment_ledger_reconciles_delayed_replay_and_rejects_cross_task_reuse(modes_db):
     workflow_id = modes_db.workflows.create({"name": "Assignment ledger"})
-    default = modes_db.workflows.get_mode_by_key(workflow_id, "default")
+    initial_mode = modes_db.workflows.create_mode(
+        {
+            "workflow_id": workflow_id,
+            "key": "initial",
+            "name": "Initial",
+            "mode_order": 2,
+            "role_key": "developer",
+            "execution_scope": "delivery",
+            "tech_workspace_policy": "required",
+        }
+    )
     rework = modes_db.workflows.create_mode(
-        {"workflow_id": workflow_id, "key": "rework", "name": "Rework", "mode_order": 2}
+        {
+            "workflow_id": workflow_id,
+            "key": "rework",
+            "name": "Rework",
+            "mode_order": 3,
+            "role_key": "developer",
+            "execution_scope": "delivery",
+            "tech_workspace_policy": "required",
+        }
     )
     default_phase = modes_db.phases.create(
-        {"workflow_id": workflow_id, "mode_id": default.id, "code": "start", "name": "Start", "phase_order": 1}
+        {"workflow_id": workflow_id, "mode_id": initial_mode, "code": "start", "name": "Start", "phase_order": 1}
     )
     modes_db.phases.create(
         {"workflow_id": workflow_id, "mode_id": rework, "code": "fix", "name": "Fix", "phase_order": 1}
@@ -290,11 +351,12 @@ def test_assignment_ledger_reconciles_delayed_replay_and_rejects_cross_task_reus
     first_request = {
         "project_id": project_id,
         "task_key": "LED-1",
-        "mode_key": "default",
+        "mode_key": "initial",
         "cycle_number": 0,
         "operation_key": "business-operation-a",
         "expected_revision": 0,
         "expected_status": "missing",
+        **_binding("business-operation-a"),
     }
     first = service.assign_runtime_task(**first_request)
     modes_db.tasks.update(first["id"], {"status": "done"})
@@ -307,14 +369,15 @@ def test_assignment_ledger_reconciles_delayed_replay_and_rejects_cross_task_reus
         operation_key="business-operation-b",
         expected_revision=1,
         expected_status="done",
-        expected_mode_key="default",
+        expected_mode_key="initial",
         expected_cycle_number=0,
+        **_binding("business-operation-b"),
     )
 
     delayed = service.assign_runtime_task(**first_request)
     assert delayed["assignment_operation_key"] == "business-operation-a"
     assert delayed["assignment_revision"] == 1
-    assert delayed["mode_key"] == "default"
+    assert delayed["mode_key"] == "initial"
     assert delayed["cycle_number"] == 0
     assert delayed["current_phase_id"] == default_phase
     assert second["assignment_operation_key"] == "business-operation-b"
@@ -323,15 +386,16 @@ def test_assignment_ledger_reconciles_delayed_replay_and_rejects_cross_task_reus
         "business-operation-b",
     ]
 
-    with pytest.raises(ConflictError, match="другой runtime assignment"):
+    with pytest.raises(ConflictError, match="другого runtime assignment"):
         service.assign_runtime_task(
             project_id=project_id,
             task_key="LED-2",
-            mode_key="default",
+            mode_key="initial",
             cycle_number=0,
             operation_key="business-operation-a",
             expected_revision=0,
             expected_status="missing",
+            **_binding("business-operation-a"),
         )
 
 
@@ -438,12 +502,30 @@ def test_supervisor_context_switch_keeps_current_path_and_full_history(modes_db)
     from project_workflow.supervisor.core import SupervisorEngine
 
     workflow_id = modes_db.workflows.create({"name": "Context"})
-    default = modes_db.workflows.get_mode_by_key(workflow_id, "default")
+    initial_mode = modes_db.workflows.create_mode(
+        {
+            "workflow_id": workflow_id,
+            "key": "initial",
+            "name": "Initial",
+            "mode_order": 2,
+            "role_key": "developer",
+            "execution_scope": "delivery",
+            "tech_workspace_policy": "required",
+        }
+    )
     rework = modes_db.workflows.create_mode(
-        {"workflow_id": workflow_id, "key": "rework", "name": "Rework", "mode_order": 2}
+        {
+            "workflow_id": workflow_id,
+            "key": "rework",
+            "name": "Rework",
+            "mode_order": 3,
+            "role_key": "developer",
+            "execution_scope": "delivery",
+            "tech_workspace_policy": "required",
+        }
     )
     default_phase = modes_db.phases.create(
-        {"workflow_id": workflow_id, "mode_id": default.id, "code": "p", "name": "Initial", "phase_order": 1}
+        {"workflow_id": workflow_id, "mode_id": initial_mode, "code": "p", "name": "Initial", "phase_order": 1}
     )
     rework_phase = modes_db.phases.create(
         {"workflow_id": workflow_id, "mode_id": rework, "code": "p", "name": "Rework", "phase_order": 1}
@@ -453,15 +535,16 @@ def test_supervisor_context_switch_keeps_current_path_and_full_history(modes_db)
     )
     service = TaskService(modes_db)
     initial = service.assign_runtime_task(
-        project_id=project_id, task_key="CTX-1", mode_key="default", cycle_number=0,
+        project_id=project_id, task_key="CTX-1", mode_key="initial", cycle_number=0,
         operation_key="ctx-initial", expected_revision=0, expected_status="missing",
+        **_binding("ctx-initial"),
     )
     modes_db.tasks.update(initial["id"], {"status": "done"})
     modes_db.commit()
     assigned = service.assign_runtime_task(
         project_id=project_id, task_key="CTX-1", mode_key="rework", cycle_number=1,
         operation_key="ctx-rework", expected_revision=1, expected_status="done",
-        expected_mode_key="default", expected_cycle_number=0,
+        expected_mode_key="initial", expected_cycle_number=0, **_binding("ctx-rework"),
     )
     assert assigned["current_phase_id"] == rework_phase
     engine = SupervisorEngine("CTX-1", uow=modes_db, create_if_missing=False, project_id=project_id)
@@ -486,3 +569,103 @@ def test_cli_surface_remains_step_and_history_only():
     from project_workflow.interfaces.cli.core import cli
 
     assert set(cli.commands) == {"step", "history"}
+
+
+@pytest.mark.parametrize("old_verdict", ["blocked", "partial", "rollback"])
+def test_old_cycle_feedback_never_leaks_into_current_cycle_contract(modes_db, old_verdict):
+    from project_workflow.interfaces.ui.routes.runtime_api import _history_rows
+    from project_workflow.supervisor.core import SupervisorEngine
+
+    workflow_id = modes_db.workflows.create({"name": f"Feedback {old_verdict}"})
+    default = modes_db.workflows.get_mode_by_key(workflow_id, "default")
+    assert default is not None and default.id is not None
+    rework = modes_db.workflows.create_mode(
+        {
+            "workflow_id": workflow_id,
+            "key": "rework",
+            "name": "Rework",
+            "mode_order": 2,
+            "role_key": "developer",
+            "execution_scope": "delivery",
+            "tech_workspace_policy": "required",
+        }
+    )
+    initial_phase = modes_db.phases.create(
+        {
+            "workflow_id": workflow_id,
+            "mode_id": default.id,
+            "code": "same",
+            "name": "Initial",
+            "phase_order": 1,
+        }
+    )
+    rework_phase = modes_db.phases.create(
+        {
+            "workflow_id": workflow_id,
+            "mode_id": rework,
+            "code": "same",
+            "name": "Rework",
+            "phase_order": 1,
+        }
+    )
+    project_id = modes_db.projects.create(
+        {
+            "workflow_id": workflow_id,
+            "code": "FDB",
+            "name": "Feedback",
+            "cli_command": "feedback",
+            "key_prefixes": ["FDB"],
+        }
+    )
+    task = TaskService(modes_db).create_task(
+        {"project_id": project_id, "task_key": "FDB-1", "current_phase_id": initial_phase}
+    )
+    modes_db.step_history.create(
+        {
+            "task_id": task["id"],
+            "phase_id": initial_phase,
+            "mode_id": default.id,
+            "cycle_number": 0,
+            "verdict": old_verdict,
+            "worker_report": "old feedback",
+            "covered_item_ids": [],
+            "missing_item_ids": ["old"],
+            "blocker_messages": ["old blocker"],
+            "evaluation_snapshot": {},
+            "supervisor_response": {"message": "old feedback"},
+            "replay_fingerprint": f"old-{old_verdict}",
+            "rollback_phase_id": initial_phase if old_verdict == "rollback" else None,
+        }
+    )
+    modes_db.tasks.update(
+        task["id"],
+        {"mode_id": rework, "current_phase_id": rework_phase, "cycle_number": 1},
+    )
+    modes_db.tasks.record_phase_event(task["id"], rework_phase, "entered")
+    modes_db.commit()
+
+    engine = SupervisorEngine("FDB-1", uow=modes_db, create_if_missing=False, project_id=project_id)
+    contract = engine.get_phase_contract()
+    context = engine.get_full_context(use_cache=False)
+
+    assert contract is not None and "evaluation_feedback" not in contract
+    assert context["recent_verdicts"] == []
+    assert context["phase_history"][0]["cycle_number"] == 0
+    assert _history_rows(modes_db, "FDB-1", project_id, None) == []
+
+
+def test_business_terminal_outcomes_are_not_project_workflow_verdicts():
+    from project_workflow.application.terminal_outcome import (
+        BUSINESS_STAGE_COMPLETION_OPERATION,
+        BUSINESS_STAGE_OUTCOMES,
+        INTERNAL_PHASE_COMPLETION_VERDICT,
+        NON_TERMINAL_INTERNAL_VERDICTS,
+    )
+
+    assert INTERNAL_PHASE_COMPLETION_VERDICT == "PASS"
+    assert BUSINESS_STAGE_COMPLETION_OPERATION == "completeAssignedStage"
+    assert BUSINESS_STAGE_OUTCOMES == frozenset({"passed", "needs_rework"})
+    assert BUSINESS_STAGE_OUTCOMES.isdisjoint({INTERNAL_PHASE_COMPLETION_VERDICT.lower()})
+    assert NON_TERMINAL_INTERNAL_VERDICTS == frozenset(
+        {"BLOCKED", "PARTIAL", "ROLLBACK", "DELEGATE"}
+    )

@@ -130,6 +130,8 @@ def _history_rows(uow: SAUnitOfWork, task_key: str, namespace_id: int, limit: in
         task_id=task_id,
         task_key=task_key,
         project_id=namespace_id,
+        mode_id=task.mode_id if task else None,
+        cycle_number=task.cycle_number if task else None,
         limit=limit,
     ):
         item = entry.to_dict()
@@ -229,6 +231,8 @@ def runtime_assign(
         except RuntimeError as exc:
             return _error(str(exc), 503)
         return _error("Недействительный runtime token", 401)
+    if payload.role_key != role:
+        return _error("role_key не совпадает с ролью assignment token", 403)
     try:
         with SAUnitOfWork() as uow:
             namespace_id = _namespace_id(uow, role)
@@ -237,9 +241,25 @@ def runtime_assign(
             task = TaskService(uow).assign_runtime_task(
                 project_id=namespace_id,
                 task_key=task_key,
+                role_key=payload.role_key,
                 mode_key=payload.mode_key,
+                execution_scope=payload.execution_scope,
                 cycle_number=payload.cycle_number,
                 operation_key=payload.operation_key,
+                business_task_ref=payload.business_task_ref,
+                root_task_ref=payload.root_task_ref,
+                work_item_ref=payload.work_item_ref,
+                task_workspace_ref=payload.task_workspace_ref,
+                tech_execution_workspace_ref=payload.tech_execution_workspace_ref,
+                tech_execution_attempt_ref=payload.tech_execution_attempt_ref,
+                decomposition_revision_ref=payload.decomposition_revision_ref,
+                stage_revision=payload.stage_revision,
+                assignment_ref=payload.assignment_ref,
+                binding_ref=payload.binding_ref,
+                hermes_run_ref=payload.hermes_run_ref,
+                workspace_generation=payload.workspace_generation,
+                lease_generation=payload.lease_generation,
+                exact_input_refs=[item.model_dump() for item in payload.exact_input_refs],
                 expected_revision=payload.expected_revision,
                 expected_status=payload.expected_status,
                 expected_mode_key=payload.expected_mode_key,
@@ -256,6 +276,22 @@ def runtime_assign(
                     "cycle_number": task["cycle_number"],
                     "assignment_operation_key": task["assignment_operation_key"],
                     "assignment_revision": task["assignment_revision"],
+                    "role_key": task["role_key"],
+                    "execution_scope": task["execution_scope"],
+                    "business_task_ref": task["business_task_ref"],
+                    "root_task_ref": task["root_task_ref"],
+                    "work_item_ref": task["work_item_ref"],
+                    "task_workspace_ref": task["task_workspace_ref"],
+                    "tech_execution_workspace_ref": task["tech_execution_workspace_ref"],
+                    "tech_execution_attempt_ref": task["tech_execution_attempt_ref"],
+                    "decomposition_revision_ref": task["decomposition_revision_ref"],
+                    "stage_revision": task["stage_revision"],
+                    "assignment_ref": task["assignment_ref"],
+                    "binding_ref": task["binding_ref"],
+                    "hermes_run_ref": task["hermes_run_ref"],
+                    "workspace_generation": task["workspace_generation"],
+                    "lease_generation": task["lease_generation"],
+                    "exact_input_refs": task["exact_input_refs"],
                     "status": task["status"],
                 },
             }
