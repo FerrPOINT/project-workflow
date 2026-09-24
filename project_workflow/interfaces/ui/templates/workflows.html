@@ -98,7 +98,7 @@
 {% block extra_script %}
 const workflowStore = {{ workflows | tojson }};
 let selectedWorkflowId = {{ selected_workflow.id if selected_workflow else 'null' }};
-const initialWorkflowId = selectedWorkflowId;
+const defaultWorkflowId = {{ default_workflow_id if default_workflow_id else 'null' }};
 let previousWorkflowId = selectedWorkflowId;
 let workflowFormMode = selectedWorkflowId == null ? 'create' : 'edit';
 
@@ -118,7 +118,7 @@ function syncWorkflowUrl(workflowId, mode){
 function workflowIdFromUrl(){
   var raw = new URL(window.location.href).searchParams.get('workflow_id');
   if(raw == null){
-    return workflowById(initialWorkflowId) ? initialWorkflowId : (workflowStore[0] ? workflowStore[0].id : null);
+    return workflowById(defaultWorkflowId) ? defaultWorkflowId : (workflowStore[0] ? workflowStore[0].id : null);
   }
   var parsed = Number(raw);
   return Number.isInteger(parsed) && parsed > 0 && workflowById(parsed) ? parsed : null;

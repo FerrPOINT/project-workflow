@@ -2489,6 +2489,7 @@ class TestWorkflowsPage:
         assert "window.addEventListener('popstate'" in response.text
         assert "selectWorkflow(workflowId, {updateUrl:false});" in response.text
         assert "syncWorkflowUrl(selectedWorkflowId, 'replace');" in response.text
+        assert "return workflowById(defaultWorkflowId) ? defaultWorkflowId" in response.text
 
     def test_workflows_page_defaults_to_active_namespace_workflow(self):
         workflow = client.post("/api/workflows", json={"name": "Namespace selected workflow"})
@@ -2509,11 +2510,41 @@ class TestWorkflowsPage:
 
             assert response.status_code == 200
             assert f"let selectedWorkflowId = {workflow_id};" in response.text
+            assert f"const defaultWorkflowId = {workflow_id};" in response.text
             assert 'value="Namespace selected workflow"' in response.text
         finally:
             deleted_namespace = client.delete(f"/api/namespaces/{namespace_id}")
             assert deleted_namespace.status_code == 200
             deleted_workflow = client.delete(f"/api/workflows/{workflow_id}")
+            assert deleted_workflow.status_code == 200
+
+    def test_workflows_page_keeps_namespace_default_separate_from_explicit_selection(self):
+        existing_workflow_id = client.get("/api/workflows").json()["workflows"][0]["id"]
+        workflow = client.post("/api/workflows", json={"name": "Namespace history default"})
+        assert workflow.status_code == 200
+        namespace_workflow_id = workflow.json()["workflow_id"]
+        namespace = client.post(
+            "/api/namespaces",
+            json={
+                "name": "Workflow history namespace",
+                "cli_command": f"workflow-history-{namespace_workflow_id}",
+                "workflow_id": namespace_workflow_id,
+            },
+        )
+        assert namespace.status_code == 200
+        namespace_id = namespace.json()["namespace_id"]
+        try:
+            response = client.get(
+                f"/workflows?namespace_id={namespace_id}&workflow_id={existing_workflow_id}"
+            )
+
+            assert response.status_code == 200
+            assert f"let selectedWorkflowId = {existing_workflow_id};" in response.text
+            assert f"const defaultWorkflowId = {namespace_workflow_id};" in response.text
+        finally:
+            deleted_namespace = client.delete(f"/api/namespaces/{namespace_id}")
+            assert deleted_namespace.status_code == 200
+            deleted_workflow = client.delete(f"/api/workflows/{namespace_workflow_id}")
             assert deleted_workflow.status_code == 200
 
     def test_workflows_page_hides_removed_intro_cleanup_block(self):
