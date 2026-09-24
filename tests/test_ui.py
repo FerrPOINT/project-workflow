@@ -1981,6 +1981,14 @@ class TestTaskDetail:
         assert ".phase-card.current .phase-status{color:var(--accent-readable)}" in response.text
         assert "rgba(59,130,246" not in response.text
 
+    def test_task_detail_blocked_verdict_uses_readable_text_and_semantic_border(self):
+        response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
+
+        assert response.status_code == 200
+        assert ".verdict-blocked{color:var(--text);background:var(--red-soft)}" in response.text
+        assert ".verdict-chip.verdict-blocked{border-color:var(--red)}" in response.text
+        assert ".chip.blocked,.verdict-blocked{color:var(--red)" not in response.text
+
     def test_task_detail_mobile_navigation_keeps_links_accessible(self):
         namespace_id = self._default_namespace_id()
         response = client.get(f"/task/RUN-247?namespace_id={namespace_id}")
