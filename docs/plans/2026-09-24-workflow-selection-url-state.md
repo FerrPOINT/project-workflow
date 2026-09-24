@@ -45,6 +45,26 @@
 - временные namespace/workflow после проверки удалены, контрольный остаток:
   `0 / 0`.
 
+## Post-merge follow-up
+
+Post-merge smoke выявил отдельный history edge case: после reload страницы с
+явным `workflow_id` возврат Back к URL без параметра использовал выбранный при
+reload воркфлоу вместо дефолта активного namespace. Исправление хранит
+`defaultWorkflowId` отдельно от `selectedWorkflowId`; URL без параметра снова
+восстанавливает namespace context, даже если текущий документ был загружен по
+явной deep link.
+
+Проверка follow-up:
+
+- focused workflow route suite: `15 passed`;
+- полный non-integration suite: `1489 passed, 38 deselected`;
+- PostgreSQL integration: `38 passed`;
+- coverage: `94.26%` при пороге `94%`;
+- `ruff` и `mypy`: без ошибок;
+- production candidate: контейнер healthy;
+- read-only Chromium smoke: namespace default -> explicit selection -> reload
+  -> Back -> Forward, `1 passed`, неожиданных API writes нет.
+
 ## Вне объёма
 
 - изменение API CRUD;
