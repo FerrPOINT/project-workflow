@@ -1320,6 +1320,20 @@ class TestPhaseDetail:
         assert "section.scrollIntoView({behavior: 'auto', block: 'start'});" in response.text
         assert "@media(max-width:960px)" in response.text
 
+    def test_phase_detail_outline_uses_restorable_browser_history(self):
+        response = client.get(_phase_detail_path("4.START"))
+
+        assert response.status_code == 200
+        assert "function syncPhaseSectionUrl(sectionId, historyMode)" in response.text
+        assert "const method = historyMode === 'replace' ? 'replaceState' : 'pushState';" in response.text
+        assert "window.history[method](null, '', nextUrl);" in response.text
+        assert "function jumpToPhaseSection(sectionId, historyMode = 'push')" in response.text
+        assert "function releasePhaseSectionNavigationLock()" in response.text
+        assert "jumpToPhaseSection(sectionId, 'none');" in response.text
+        assert "jumpToPhaseSection(requestedSection, 'replace')" in response.text
+        assert "window.addEventListener('popstate', restorePhaseSectionFromLocation);" in response.text
+        assert "window.addEventListener('wheel', releasePhaseSectionNavigationLock" in response.text
+
     def test_phase_detail_empty_name_is_sent_to_backend_validation(self):
         response = client.get(_phase_detail_path("4.START"))
         assert response.status_code == 200
