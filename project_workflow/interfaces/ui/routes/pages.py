@@ -571,8 +571,29 @@ async def workflows_page(request: Request) -> HTMLResponse:
     context = _namespace_context(request, page="workflows")
     if error_response := _namespace_error_page(request, context, page="workflows"):
         return error_response
+    raw_workflow_id = request.query_params.get("workflow_id")
+    workflow_id = _parse_positive_int(raw_workflow_id)
+    if raw_workflow_id is not None and workflow_id is None:
+        return _query_id_error_page(
+            request,
+            context,
+            field_name="workflow_id",
+            back_url="/workflows",
+            back_label="К воркфлоу",
+            page="workflows",
+        )
     workflows = _load_workflows()
-    context.update({"workflows": workflows, "selected_workflow": workflows[0] if workflows else None})
+    selected_namespace = context.get("selected_namespace")
+    if workflow_id is None and isinstance(selected_namespace, dict):
+        namespace_workflow_id = selected_namespace.get("workflow_id")
+        if isinstance(namespace_workflow_id, int):
+            workflow_id = namespace_workflow_id
+    selected_workflow = next((item for item in workflows if item["id"] == workflow_id), None)
+    if workflow_id is not None and selected_workflow is None:
+        return _workflow_error_page(request, context, workflow_id, page="workflows")
+    if selected_workflow is None and workflows:
+        selected_workflow = workflows[0]
+    context.update({"workflows": workflows, "selected_workflow": selected_workflow})
     return _template_response(
         request=request,
         name="workflows.html",
