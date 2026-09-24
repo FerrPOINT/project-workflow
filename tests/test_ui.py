@@ -2224,20 +2224,41 @@ class TestProjectsPage:
     def test_namespace_card_selection_updates_global_selection_state(self):
         response = client.get("/namespaces")
         assert response.status_code == 200
-        assert "function rememberNamespaceSelection(id)" in response.text
+        assert "function rememberNamespaceSelection(id, historyMode)" in response.text
         assert (
             "document.cookie='workflow_namespace_id='+encodeURIComponent(id)+'; path=/; SameSite=Lax';"
             in response.text
         )
         assert "if(selector){ selector.value = String(id); }" in response.text
         assert "url.pathname = '/namespaces';" in response.text
-        assert "window.history.replaceState(null, '', url.toString());" in response.text
+        assert "var method = historyMode === 'push' ? 'pushState' : 'replaceState';" in response.text
+        assert "window.history[method](null, '', url.toString());" in response.text
         assert re.search(
-            r"function selectNamespace\(id\)\{\s*selectedNamespaceId = id;\s*"
-            r"previousNamespaceId = id;\s*setNamespaceFormMode\('edit'\);\s*"
-            r"fillNamespaceForm\(namespaceById\(id\)\);",
+            r"function selectNamespace\(id, historyMode\)\{\s*"
+            r"var namespace = namespaceById\(Number\(id\)\);\s*if\(!namespace\)\{ return; \}\s*"
+            r"selectedNamespaceId = namespace.id;\s*previousNamespaceId = namespace.id;",
             response.text,
         )
+
+    def test_namespace_selection_restores_edit_state_from_browser_history(self):
+        response = client.get("/namespaces")
+        assert response.status_code == 200
+        assert "function namespaceIdFromUrl(url)" in response.text
+        assert "rememberNamespaceSelection(namespace.id, historyMode || 'push');" in response.text
+        assert "rememberNamespaceSelection(selectedNamespaceId, 'replace');" in response.text
+        assert "window.addEventListener('popstate', restoreNamespaceLocation);" in response.text
+        assert "if(namespaceId != null){ selectNamespace(namespaceId, 'none'); }" in response.text
+
+    def test_namespace_history_restores_create_mode_and_cancel_context(self):
+        uow = ui_app_state.get_db()
+        namespace_id = _as_dict(uow.projects.get_by_code("UITEST"))["id"]
+        response = client.get(f"/namespaces/new?namespace_id={namespace_id}")
+        assert response.status_code == 200
+        assert "if(url.pathname === '/namespaces/new'){" in response.text
+        assert "selectedNamespaceId = null;" in response.text
+        assert "previousNamespaceId = contextId;" in response.text
+        assert "setNamespaceFormMode('create');" in response.text
+        assert "renderNamespaceSelector();" in response.text
 
     def test_namespace_card_selection_updates_header_action_links(self):
         response = client.get("/namespaces")
