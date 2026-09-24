@@ -275,7 +275,6 @@ const phaseId = {{ phase.id }};
 const selectedNamespaceId = {{ selected_namespace.id if selected_namespace else 'null' }};
 const phaseSectionIds = ['phase-overview', 'phase-instructions', 'phase-checks', 'phase-evidence'];
 let phaseSectionNavigationLock = null;
-let phaseSectionNavigationTimer = null;
 
 function setActivePhaseSection(sectionId) {
   if (!phaseSectionIds.includes(sectionId)) return;
@@ -287,20 +286,37 @@ function setActivePhaseSection(sectionId) {
   if (select && select.value !== sectionId) select.value = sectionId;
 }
 
-function jumpToPhaseSection(sectionId) {
+function syncPhaseSectionUrl(sectionId, historyMode) {
+  if (historyMode === 'none') return;
+  const url = new URL(window.location.href);
+  url.hash = sectionId;
+  const nextUrl = url.pathname + url.search + url.hash;
+  const currentUrl = window.location.pathname + window.location.search + window.location.hash;
+  if (nextUrl === currentUrl) return;
+  const method = historyMode === 'replace' ? 'replaceState' : 'pushState';
+  window.history[method](null, '', nextUrl);
+}
+
+function jumpToPhaseSection(sectionId, historyMode = 'push') {
   if (!phaseSectionIds.includes(sectionId)) return;
   const section = document.getElementById(sectionId);
   if (!section) return;
   phaseSectionNavigationLock = sectionId;
-  window.clearTimeout(phaseSectionNavigationTimer);
-  phaseSectionNavigationTimer = window.setTimeout(() => {
-    phaseSectionNavigationLock = null;
-  }, 400);
   section.scrollIntoView({behavior: 'auto', block: 'start'});
   setActivePhaseSection(sectionId);
-  const url = new URL(window.location.href);
-  url.hash = sectionId;
-  window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+  syncPhaseSectionUrl(sectionId, historyMode);
+}
+
+function releasePhaseSectionNavigationLock() {
+  phaseSectionNavigationLock = null;
+}
+
+function restorePhaseSectionFromLocation() {
+  const requestedSection = window.location.hash.slice(1);
+  const sectionId = phaseSectionIds.includes(requestedSection)
+    ? requestedSection
+    : 'phase-overview';
+  jumpToPhaseSection(sectionId, 'none');
 }
 
 function initializePhaseOutline() {
@@ -331,8 +347,13 @@ function initializePhaseOutline() {
   sections.forEach((section) => observer.observe(section));
   const requestedSection = window.location.hash.slice(1);
   if (phaseSectionIds.includes(requestedSection)) {
-    requestAnimationFrame(() => jumpToPhaseSection(requestedSection));
+    requestAnimationFrame(() => jumpToPhaseSection(requestedSection, 'replace'));
   }
+  window.addEventListener('popstate', restorePhaseSectionFromLocation);
+  window.addEventListener('wheel', releasePhaseSectionNavigationLock, {passive: true});
+  window.addEventListener('touchstart', releasePhaseSectionNavigationLock, {passive: true});
+  window.addEventListener('pointerdown', releasePhaseSectionNavigationLock, {passive: true});
+  window.addEventListener('keydown', releasePhaseSectionNavigationLock);
 }
 
 function escapeHtml(value) {
