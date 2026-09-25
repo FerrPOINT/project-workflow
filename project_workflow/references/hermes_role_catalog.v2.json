@@ -3,7 +3,9 @@
   "sourceOfTruth": "configuration-only; Business taskWorkspaceExecutionRoutingRegistry pins literal mode and profile at runtime",
   "businessRoutingRegistry": "taskWorkspaceExecutionRoutingRegistry",
   "skillsCatalogRevision": "be9839364d5037a28ab791a591cf6eef690c93bc",
+  "skillsManifestSha256": "2ca3740f7c5c1f23551689aa3b86dc217c26a3405dbfc2273fd3b4c80c8a1d1a",
   "phaseSetsFrom": "hermes_role_catalog.json",
+  "phaseSetsSha256": "579e073e103d979c0080d7a3bddf0a1557035ec4114646d777cd7e562675b4f0",
   "roles": {
     "project_manager": {
       "profile": "hermes-sdlc-project-manager",

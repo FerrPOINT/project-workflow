@@ -5,7 +5,18 @@ from pathlib import Path
 
 import pytest
 
-from project_workflow.workflow_contract import load_role_catalog, validate_pinned_contract
+from project_workflow.workflow_contract import CATALOG_PATH, load_role_catalog, validate_pinned_contract
+
+
+def _catalog_pair(tmp_path: Path) -> tuple[dict[str, object], dict[str, object], Path]:
+    v2 = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+    v1_path = CATALOG_PATH.with_name("hermes_role_catalog.json")
+    v1 = json.loads(v1_path.read_text(encoding="utf-8"))
+    target_v1 = tmp_path / v1_path.name
+    target_v2 = tmp_path / CATALOG_PATH.name
+    target_v1.write_text(json.dumps(v1, ensure_ascii=False), encoding="utf-8")
+    target_v2.write_text(json.dumps(v2, ensure_ascii=False), encoding="utf-8")
+    return v1, v2, target_v2
 
 
 def test_developer_catalog_has_all_backend_selected_modes_and_canonical_skills() -> None:
@@ -85,6 +96,45 @@ def test_catalog_matches_the_accepted_role_skill_manifest() -> None:
     }
     assert {role: config["skills"] for role, config in catalog["roles"].items()} == expected
     assert sum(len(config["modes"]) for config in catalog["roles"].values()) == 13
+
+
+def test_v2_catalog_fails_closed_on_phase_set_or_skills_manifest_drift(tmp_path: Path) -> None:
+    v1, v2, target_v2 = _catalog_pair(tmp_path)
+    phase_sets = v1["phase_sets"]
+    assert isinstance(phase_sets, dict)
+    analyst = phase_sets["analyst"]
+    assert isinstance(analyst, list) and isinstance(analyst[0], dict)
+    analyst[0]["name"] = "drift"
+    (tmp_path / "hermes_role_catalog.json").write_text(
+        json.dumps(v1, ensure_ascii=False), encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="phase-set digest"):
+        load_role_catalog(target_v2)
+
+    v1, v2, target_v2 = _catalog_pair(tmp_path)
+    v2["skillsManifestSha256"] = "0" * 64
+    target_v2.write_text(json.dumps(v2, ensure_ascii=False), encoding="utf-8")
+    with pytest.raises(ValueError, match="Skills manifest"):
+        load_role_catalog(target_v2)
+
+
+def test_v2_catalog_rejects_legacy_project_manager_role_and_workflow_aliases(tmp_path: Path) -> None:
+    _v1, v2, target_v2 = _catalog_pair(tmp_path)
+    roles = v2["roles"]
+    assert isinstance(roles, dict)
+    project_manager = roles.pop("project_manager")
+    roles["project-manager"] = project_manager
+    target_v2.write_text(json.dumps(v2, ensure_ascii=False), encoding="utf-8")
+    with pytest.raises(ValueError, match="legacy role alias"):
+        load_role_catalog(target_v2)
+
+    _v1, v2, target_v2 = _catalog_pair(tmp_path)
+    roles = v2["roles"]
+    assert isinstance(roles, dict) and isinstance(roles["project_manager"], dict)
+    roles["project_manager"]["workflow"] = "hermes-sdlc:project-manager"
+    target_v2.write_text(json.dumps(v2, ensure_ascii=False), encoding="utf-8")
+    with pytest.raises(ValueError, match="workflow identity"):
+        load_role_catalog(target_v2)
 
 
 def test_catalog_has_exact_modes_and_distinct_substantive_mode_contracts() -> None:
@@ -195,7 +245,9 @@ def test_role_catalog_is_configuration_not_installed_skill_content() -> None:
 
 
 def test_legacy_project_manager_role_is_migrated_but_ambiguous_keys_fail(tmp_path: Path) -> None:
-    base = load_role_catalog()
+    base = json.loads(
+        CATALOG_PATH.with_name("hermes_role_catalog.json").read_text(encoding="utf-8")
+    )
     legacy = dict(base)
     legacy_roles = dict(base["roles"])
     pm = dict(legacy_roles.pop("project_manager"))

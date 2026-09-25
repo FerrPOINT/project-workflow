@@ -945,3 +945,45 @@ def test_literal_mode_revision_idempotent_rerun_rejects_v2_drift(
                 "WHERE w.name = 'hermes-sdlc:architect'"
             )
         ).scalar_one() == "decomposition"
+
+
+@pytest.mark.parametrize("drift", ["phase-sets", "skills-manifest"])
+def test_literal_mode_revision_rejects_catalog_provenance_drift_before_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    drift: str,
+) -> None:
+    engine = create_engine(f"sqlite:///{tmp_path / f'literal-provenance-{drift}.db'}")
+    _create_current_schema_with_nullable_mode(engine)
+    legacy = import_module(
+        "project_workflow.infrastructure.db.migrations.versions.8a4c1e7d2f90_add_workflow_modes"
+    )
+    literal = import_module(
+        "project_workflow.infrastructure.db.migrations.versions.c5e9a1b3d7f2_literal_business_modes"
+    )
+    with engine.begin() as conn:
+        monkeypatch.setattr(legacy, "op", Operations(MigrationContext.configure(conn)))
+        legacy.upgrade()
+        v1 = json.loads(literal.V1_PATH.read_text(encoding="utf-8"))
+        v2 = json.loads(literal.V2_PATH.read_text(encoding="utf-8"))
+        if drift == "phase-sets":
+            v1["phase_sets"]["analyst"][0]["name"] = "drift"
+        else:
+            v2["skillsManifestSha256"] = "0" * 64
+        catalog_dir = tmp_path / drift
+        catalog_dir.mkdir()
+        v1_path = catalog_dir / "hermes_role_catalog.json"
+        v2_path = catalog_dir / "hermes_role_catalog.v2.json"
+        v1_path.write_text(json.dumps(v1, ensure_ascii=False), encoding="utf-8")
+        v2_path.write_text(json.dumps(v2, ensure_ascii=False), encoding="utf-8")
+        monkeypatch.setattr(literal, "V1_PATH", v1_path)
+        monkeypatch.setattr(literal, "V2_PATH", v2_path)
+        monkeypatch.setattr(literal, "op", Operations(MigrationContext.configure(conn)))
+        with pytest.raises(RuntimeError, match="phase-set digest|Skills manifest"):
+            literal.upgrade()
+        assert conn.execute(
+            text(
+                "SELECT m.key FROM workflow_modes m JOIN workflows w ON w.id = m.workflow_id "
+                "WHERE w.name = 'hermes-sdlc:architect'"
+            )
+        ).scalar_one() == "architecture"

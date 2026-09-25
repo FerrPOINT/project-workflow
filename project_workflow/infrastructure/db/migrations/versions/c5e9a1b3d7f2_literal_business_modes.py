@@ -6,6 +6,7 @@ Revises: 8a4c1e7d2f90
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Sequence
 from pathlib import Path
@@ -27,6 +28,9 @@ V1_MARKER = "Canonical Hermes role workflow v1 [8a4c1e7d2f90]"
 V2_MARKER = "Canonical Hermes literal mode workflow v2 [c5e9a1b3d7f2]"
 V1_LEGACY_PM = f"{V1_MARKER} [legacy-project-manager] "
 V2_LEGACY_PM = f"{V2_MARKER} [legacy-project-manager] "
+ACCEPTED_SKILLS_REVISION = "be9839364d5037a28ab791a591cf6eef690c93bc"
+ACCEPTED_SKILLS_MANIFEST_SHA256 = "2ca3740f7c5c1f23551689aa3b86dc217c26a3405dbfc2273fd3b4c80c8a1d1a"
+ACCEPTED_PHASE_SETS_SHA256 = "579e073e103d979c0080d7a3bddf0a1557035ec4114646d777cd7e562675b4f0"
 
 
 def _schema(conn: sa.Connection) -> str | None:
@@ -37,10 +41,17 @@ def _table(conn: sa.Connection, name: str) -> str:
     return f"{SCHEMA}.{name}" if _schema(conn) else name
 
 
+def _canonical_sha256(value: object) -> str:
+    payload = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
 def _load_v1() -> dict[str, Any]:
     catalog = json.loads(V1_PATH.read_text(encoding="utf-8"))
     if catalog.get("schema") != "relevanter-hermes-workflow-catalog/v1":
         raise RuntimeError("Unexpected Hermes workflow catalog v1 schema")
+    if _canonical_sha256(catalog.get("phase_sets")) != ACCEPTED_PHASE_SETS_SHA256:
+        raise RuntimeError("Hermes workflow catalog phase-set digest mismatch")
     return catalog
 
 
@@ -48,12 +59,28 @@ def _load_v2() -> dict[str, Any]:
     catalog = json.loads(V2_PATH.read_text(encoding="utf-8"))
     if catalog.get("schema") != "relevanter-hermes-workflow-catalog/v2":
         raise RuntimeError("Unexpected Hermes workflow catalog v2 schema")
+    if (
+        catalog.get("skillsCatalogRevision") != ACCEPTED_SKILLS_REVISION
+        or catalog.get("skillsManifestSha256") != ACCEPTED_SKILLS_MANIFEST_SHA256
+    ):
+        raise RuntimeError("Hermes Skills manifest pin is invalid")
     phase_source = catalog.get("phaseSetsFrom")
     if phase_source != V1_PATH.name:
         raise RuntimeError("Hermes workflow catalog v2 phase-set source is not pinned")
     phase_sets = _load_v1().get("phase_sets")
     if not isinstance(phase_sets, dict):
         raise RuntimeError("Hermes workflow catalog v1 phase sets are invalid")
+    if (
+        catalog.get("phaseSetsSha256") != ACCEPTED_PHASE_SETS_SHA256
+        or _canonical_sha256(phase_sets) != ACCEPTED_PHASE_SETS_SHA256
+    ):
+        raise RuntimeError("Hermes workflow catalog phase-set digest mismatch")
+    roles = catalog.get("roles")
+    if not isinstance(roles, dict) or "project-manager" in roles:
+        raise RuntimeError("Hermes workflow catalog v2 rejects the legacy role alias")
+    for role, config in roles.items():
+        if not isinstance(config, dict) or config.get("workflow") != f"hermes-sdlc:{role}":
+            raise RuntimeError("Hermes workflow catalog v2 workflow identity is not canonical")
     return {**catalog, "phase_sets": phase_sets}
 
 
