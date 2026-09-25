@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-CATALOG_PATH = Path(__file__).with_name("references") / "hermes_role_catalog.json"
+CATALOG_PATH = Path(__file__).with_name("references") / "hermes_role_catalog.v2.json"
 
 
 @dataclass(frozen=True)
@@ -26,8 +26,25 @@ class PinnedWorkflowContract:
 
 def load_role_catalog(path: Path = CATALOG_PATH) -> dict[str, Any]:
     raw = json.loads(path.read_text(encoding="utf-8"))
-    if raw.get("schema") != "relevanter-hermes-workflow-catalog/v1":
+    schema = raw.get("schema")
+    if schema not in {
+        "relevanter-hermes-workflow-catalog/v1",
+        "relevanter-hermes-workflow-catalog/v2",
+    }:
         raise ValueError("Unsupported Hermes workflow catalog schema")
+    if schema == "relevanter-hermes-workflow-catalog/v2":
+        phase_sets = raw.get("phase_sets")
+        if not isinstance(phase_sets, dict) or not phase_sets:
+            phase_sets_from = raw.get("phaseSetsFrom")
+            if phase_sets_from != "hermes_role_catalog.json":
+                raise ValueError("Hermes workflow catalog v2 has no phase-set source")
+            phase_source = json.loads((path.parent / phase_sets_from).read_text(encoding="utf-8"))
+            if phase_source.get("schema") != "relevanter-hermes-workflow-catalog/v1":
+                raise ValueError("Hermes workflow catalog phase-set source is invalid")
+            phase_sets = phase_source.get("phase_sets")
+            if not isinstance(phase_sets, dict) or not phase_sets:
+                raise ValueError("Hermes workflow catalog phase-set source is empty")
+            raw = {**raw, "phase_sets": phase_sets}
     roles = raw.get("roles")
     if not isinstance(roles, dict) or not roles:
         raise ValueError("Hermes workflow catalog has no roles")
@@ -58,6 +75,8 @@ def _mode_keys(role_config: dict[str, Any]) -> list[str]:
         if not isinstance(mode, dict) or not isinstance(mode.get("key"), str):
             raise ValueError("Hermes role mode definition is invalid")
         keys.append(mode["key"])
+    if len(keys) != len(set(keys)):
+        raise ValueError("Hermes workflow mode keys must be unique within a workflow")
     return keys
 
 

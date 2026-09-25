@@ -29,16 +29,74 @@ def test_developer_catalog_has_all_backend_selected_modes_and_canonical_skills()
     assert "project-manager" not in roles
 
 
+def test_catalog_matches_the_accepted_role_skill_manifest() -> None:
+    catalog = load_role_catalog()
+    assert catalog["businessRoutingRegistry"] == "taskWorkspaceExecutionRoutingRegistry"
+    assert catalog["skillsCatalogRevision"] == "be9839364d5037a28ab791a591cf6eef690c93bc"
+    expected = {
+        "project_manager": ["project-workflow-executor", "relevanter-business-operator"],
+        "analyst": [
+            "domain-modeling",
+            "immutable-evidence-reporting",
+            "project-workflow-executor",
+            "relevanter-business-operator",
+            "requirements-analysis",
+            "workflow-writing-plans",
+        ],
+        "architect": [
+            "domain-modeling",
+            "immutable-evidence-reporting",
+            "project-workflow-executor",
+            "relevanter-business-operator",
+            "solution-architecture",
+            "workflow-writing-plans",
+        ],
+        "developer": [
+            "immutable-evidence-reporting",
+            "project-workflow-executor",
+            "relevanter-business-operator",
+            "relevanter-tech-operator",
+            "repo-workflow",
+            "test-driven-development",
+            "workflow-systematic-debugging",
+        ],
+        "reviewer": [
+            "exact-code-review",
+            "immutable-evidence-reporting",
+            "project-workflow-executor",
+            "relevanter-business-operator",
+            "relevanter-tech-operator",
+        ],
+        "tester": [
+            "deployed-acceptance",
+            "immutable-evidence-reporting",
+            "project-workflow-executor",
+            "relevanter-business-operator",
+            "workflow-systematic-debugging",
+        ],
+        "devops": [
+            "exact-sha-deployment",
+            "immutable-evidence-reporting",
+            "project-workflow-executor",
+            "relevanter-business-operator",
+            "relevanter-tech-operator",
+            "workflow-systematic-debugging",
+        ],
+    }
+    assert {role: config["skills"] for role, config in catalog["roles"].items()} == expected
+    assert sum(len(config["modes"]) for config in catalog["roles"].values()) == 13
+
+
 def test_catalog_has_exact_modes_and_distinct_substantive_mode_contracts() -> None:
     catalog = load_role_catalog()
     expected = {
         "project_manager": ["draft"],
         "analyst": ["analysis"],
-        "architect": ["architecture"],
+        "architect": ["decomposition"],
         "developer": ["initial", "rework", "integration", "integration_rework"],
-        "reviewer": ["review", "aggregate_review"],
-        "tester": ["testing", "aggregate_testing"],
-        "devops": ["deploy", "aggregate_deploy"],
+        "reviewer": ["delivery", "integration"],
+        "tester": ["delivery", "integration"],
+        "devops": ["delivery", "integration"],
     }
     definitions: list[str] = []
     for role, expected_keys in expected.items():
@@ -53,6 +111,33 @@ def test_catalog_has_exact_modes_and_distinct_substantive_mode_contracts() -> No
             definitions.append(json.dumps({"mode": mode, "phases": phases}, ensure_ascii=False, sort_keys=True))
 
     assert len(definitions) == len(set(definitions))
+
+
+@pytest.mark.parametrize(
+    ("role", "profile", "workflow", "legacy_mode"),
+    [
+        ("architect", "hermes-sdlc-architect", "hermes-sdlc:architect", "architecture"),
+        ("reviewer", "hermes-sdlc-reviewer", "hermes-sdlc:reviewer", "review"),
+        ("reviewer", "hermes-sdlc-reviewer", "hermes-sdlc:reviewer", "aggregate_review"),
+        ("tester", "hermes-sdlc-quality", "hermes-sdlc:tester", "testing"),
+        ("tester", "hermes-sdlc-quality", "hermes-sdlc:tester", "aggregate_testing"),
+        ("devops", "hermes-sdlc-operations", "hermes-sdlc:devops", "deploy"),
+        ("devops", "hermes-sdlc-operations", "hermes-sdlc:devops", "aggregate_deploy"),
+    ],
+)
+def test_literal_contract_rejects_every_superseded_mode(
+    role: str,
+    profile: str,
+    workflow: str,
+    legacy_mode: str,
+) -> None:
+    with pytest.raises(ValueError, match="mode"):
+        validate_pinned_contract(
+            role=role,
+            profile=profile,
+            workflow=workflow,
+            mode=legacy_mode,
+        )
 
 
 def test_pinned_contract_has_no_mode_fallback_or_profile_override() -> None:

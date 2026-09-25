@@ -745,3 +745,203 @@ def test_migration_reconciles_precreated_mode_table_and_missing_cursor_columns(
         assert len(phase_mode_fks) == 1
         assert phase_mode_fks[0]["constrained_columns"] == ["mode_id", "workflow_id"]
         assert phase_mode_fks[0]["referred_columns"] == ["id", "workflow_id"]
+
+
+def test_literal_mode_revision_preserves_cursor_history_and_roundtrips(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = create_engine(f"sqlite:///{tmp_path / 'literal-modes.db'}")
+    _create_current_schema_with_nullable_mode(engine)
+    legacy = import_module(
+        "project_workflow.infrastructure.db.migrations.versions.8a4c1e7d2f90_add_workflow_modes"
+    )
+    literal = import_module(
+        "project_workflow.infrastructure.db.migrations.versions.c5e9a1b3d7f2_literal_business_modes"
+    )
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO workflows (name, description, is_default) "
+                "VALUES ('hermes-sdlc:custom', 'user-owned', 0)"
+            )
+        )
+        monkeypatch.setattr(legacy, "op", Operations(MigrationContext.configure(conn)))
+        legacy.upgrade()
+        architect_mode_id, phase_id, phase_code = conn.execute(
+            text(
+                "SELECT m.id, p.id, p.code FROM workflow_modes m "
+                "JOIN workflows w ON w.id = m.workflow_id "
+                "JOIN phases p ON p.mode_id = m.id "
+                "WHERE w.name = 'hermes-sdlc:architect' AND m.key = 'architecture' "
+                "ORDER BY p.phase_order LIMIT 1"
+            )
+        ).one()
+        workflow_id = conn.execute(
+            text("SELECT id FROM workflows WHERE name = 'hermes-sdlc:architect'")
+        ).scalar_one()
+        conn.execute(
+            text(
+                "INSERT INTO projects (workflow_id, code, name, key_prefixes) "
+                "VALUES (:workflow_id, 'ARC', 'Architecture', '[\"ARC\"]')"
+            ),
+            {"workflow_id": workflow_id},
+        )
+        project_id = conn.execute(text("SELECT id FROM projects WHERE code = 'ARC'")).scalar_one()
+        conn.execute(
+            text(
+                "INSERT INTO tasks "
+                "(project_id, mode_id, cycle_number, task_key, current_phase, status) "
+                "VALUES (:project_id, :mode_id, 4, 'ARC-1', :phase, 'active')"
+            ),
+            {"project_id": project_id, "mode_id": architect_mode_id, "phase": phase_code},
+        )
+        task_id = conn.execute(text("SELECT id FROM tasks WHERE task_key = 'ARC-1'")).scalar_one()
+        conn.execute(
+            text(
+                "INSERT INTO task_history (task_id, phase_id, mode_id, cycle_number, status) "
+                "VALUES (:task_id, :phase_id, :mode_id, 4, 'done')"
+            ),
+            {"task_id": task_id, "phase_id": phase_id, "mode_id": architect_mode_id},
+        )
+
+        monkeypatch.setattr(literal, "op", Operations(MigrationContext.configure(conn)))
+        literal.upgrade()
+
+        expected = {
+            "hermes-sdlc:project_manager": ["draft"],
+            "hermes-sdlc:analyst": ["analysis"],
+            "hermes-sdlc:architect": ["decomposition"],
+            "hermes-sdlc:developer": ["initial", "rework", "integration", "integration_rework"],
+            "hermes-sdlc:reviewer": ["delivery", "integration"],
+            "hermes-sdlc:tester": ["delivery", "integration"],
+            "hermes-sdlc:devops": ["delivery", "integration"],
+        }
+        actual: dict[str, list[str]] = {}
+        for workflow, key in conn.execute(
+            text(
+                "SELECT w.name, m.key FROM workflows w "
+                "JOIN workflow_modes m ON m.workflow_id = w.id "
+                "WHERE w.name LIKE 'hermes-sdlc:%' ORDER BY w.id, m.mode_order, m.id"
+            )
+        ).all():
+            if workflow in expected:
+                actual.setdefault(workflow, []).append(key)
+        assert actual == expected
+        assert sum(len(keys) for keys in actual.values()) == 13
+        assert conn.execute(
+            text(
+                "SELECT m.id FROM workflow_modes m JOIN workflows w ON w.id = m.workflow_id "
+                "WHERE w.name = 'hermes-sdlc:architect' AND m.key = 'decomposition'"
+            )
+        ).scalar_one() == architect_mode_id
+        assert conn.execute(
+            text("SELECT mode_id, cycle_number, phase_id FROM task_history WHERE task_id = :task_id"),
+            {"task_id": task_id},
+        ).one() == (architect_mode_id, 4, phase_id)
+
+        literal.upgrade()
+        assert conn.execute(
+            text(
+                "SELECT count(*) FROM workflow_modes m JOIN workflows w ON w.id = m.workflow_id "
+                "WHERE w.name <> 'hermes-sdlc:custom'"
+            )
+        ).scalar_one() == 13
+        assert conn.execute(
+            text(
+                "SELECT m.key FROM workflow_modes m JOIN workflows w ON w.id = m.workflow_id "
+                "WHERE w.name = 'hermes-sdlc:custom'"
+            )
+        ).scalar_one() == "default"
+        literal.downgrade()
+        assert conn.execute(
+            text(
+                "SELECT m.key FROM workflow_modes m JOIN workflows w ON w.id = m.workflow_id "
+                "WHERE w.name = 'hermes-sdlc:architect' AND m.id = :mode_id"
+            ),
+            {"mode_id": architect_mode_id},
+        ).scalar_one() == "architecture"
+        assert conn.execute(
+            text("SELECT mode_id, cycle_number, phase_id FROM task_history WHERE task_id = :task_id"),
+            {"task_id": task_id},
+        ).one() == (architect_mode_id, 4, phase_id)
+        literal.upgrade()
+        assert conn.execute(
+            text(
+                "SELECT m.key FROM workflow_modes m JOIN workflows w ON w.id = m.workflow_id "
+                "WHERE w.name = 'hermes-sdlc:architect' AND m.id = :mode_id"
+            ),
+            {"mode_id": architect_mode_id},
+        ).scalar_one() == "decomposition"
+
+
+def test_literal_mode_revision_fails_closed_before_mutation_on_catalog_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = create_engine(f"sqlite:///{tmp_path / 'literal-mode-drift.db'}")
+    _create_current_schema_with_nullable_mode(engine)
+    legacy = import_module(
+        "project_workflow.infrastructure.db.migrations.versions.8a4c1e7d2f90_add_workflow_modes"
+    )
+    literal = import_module(
+        "project_workflow.infrastructure.db.migrations.versions.c5e9a1b3d7f2_literal_business_modes"
+    )
+    with engine.begin() as conn:
+        monkeypatch.setattr(legacy, "op", Operations(MigrationContext.configure(conn)))
+        legacy.upgrade()
+        phase_id = conn.execute(
+            text(
+                "SELECT p.id FROM phases p JOIN workflow_modes m ON m.id = p.mode_id "
+                "JOIN workflows w ON w.id = p.workflow_id "
+                "WHERE w.name = 'hermes-sdlc:reviewer' AND m.key = 'review' "
+                "ORDER BY p.phase_order LIMIT 1"
+            )
+        ).scalar_one()
+        conn.execute(
+            text("UPDATE instructions SET description = 'drift' WHERE phase_id = :phase_id"),
+            {"phase_id": phase_id},
+        )
+        monkeypatch.setattr(literal, "op", Operations(MigrationContext.configure(conn)))
+        with pytest.raises(RuntimeError, match="Conflicting literal mode catalog"):
+            literal.upgrade()
+        assert conn.execute(
+            text(
+                "SELECT m.key FROM workflow_modes m JOIN workflows w ON w.id = m.workflow_id "
+                "WHERE w.name = 'hermes-sdlc:architect'"
+            )
+        ).scalar_one() == "architecture"
+
+
+def test_literal_mode_revision_idempotent_rerun_rejects_v2_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = create_engine(f"sqlite:///{tmp_path / 'literal-mode-v2-drift.db'}")
+    _create_current_schema_with_nullable_mode(engine)
+    legacy = import_module(
+        "project_workflow.infrastructure.db.migrations.versions.8a4c1e7d2f90_add_workflow_modes"
+    )
+    literal = import_module(
+        "project_workflow.infrastructure.db.migrations.versions.c5e9a1b3d7f2_literal_business_modes"
+    )
+    with engine.begin() as conn:
+        monkeypatch.setattr(legacy, "op", Operations(MigrationContext.configure(conn)))
+        legacy.upgrade()
+        monkeypatch.setattr(literal, "op", Operations(MigrationContext.configure(conn)))
+        literal.upgrade()
+        conn.execute(
+            text(
+                "UPDATE workflow_modes SET name = 'drift' WHERE id = ("
+                "SELECT m.id FROM workflow_modes m JOIN workflows w ON w.id = m.workflow_id "
+                "WHERE w.name = 'hermes-sdlc:reviewer' AND m.key = 'delivery')"
+            )
+        )
+        with pytest.raises(RuntimeError, match="Conflicting literal mode catalog"):
+            literal.upgrade()
+        assert conn.execute(
+            text(
+                "SELECT m.key FROM workflow_modes m JOIN workflows w ON w.id = m.workflow_id "
+                "WHERE w.name = 'hermes-sdlc:architect'"
+            )
+        ).scalar_one() == "decomposition"
