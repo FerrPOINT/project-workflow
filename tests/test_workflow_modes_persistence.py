@@ -947,7 +947,7 @@ def test_literal_mode_revision_idempotent_rerun_rejects_v2_drift(
         ).scalar_one() == "decomposition"
 
 
-@pytest.mark.parametrize("drift", ["phase-sets", "skills-manifest"])
+@pytest.mark.parametrize("drift", ["phase-sets", "skills-manifest", "embedded-phase-sets"])
 def test_literal_mode_revision_rejects_catalog_provenance_drift_before_mutation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -968,6 +968,8 @@ def test_literal_mode_revision_rejects_catalog_provenance_drift_before_mutation(
         v2 = json.loads(literal.V2_PATH.read_text(encoding="utf-8"))
         if drift == "phase-sets":
             v1["phase_sets"]["analyst"][0]["name"] = "drift"
+        elif drift == "embedded-phase-sets":
+            v2["phase_sets"] = v1["phase_sets"]
         else:
             v2["skillsManifestSha256"] = "0" * 64
         catalog_dir = tmp_path / drift
@@ -979,7 +981,10 @@ def test_literal_mode_revision_rejects_catalog_provenance_drift_before_mutation(
         monkeypatch.setattr(literal, "V1_PATH", v1_path)
         monkeypatch.setattr(literal, "V2_PATH", v2_path)
         monkeypatch.setattr(literal, "op", Operations(MigrationContext.configure(conn)))
-        with pytest.raises(RuntimeError, match="phase-set digest|Skills manifest"):
+        with pytest.raises(
+            RuntimeError,
+            match="phase-set digest|Skills manifest|exact external phase-set source",
+        ):
             literal.upgrade()
         assert conn.execute(
             text(

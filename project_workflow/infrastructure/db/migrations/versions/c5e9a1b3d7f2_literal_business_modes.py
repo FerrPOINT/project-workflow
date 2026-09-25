@@ -59,6 +59,8 @@ def _load_v2() -> dict[str, Any]:
     catalog = json.loads(V2_PATH.read_text(encoding="utf-8"))
     if catalog.get("schema") != "relevanter-hermes-workflow-catalog/v2":
         raise RuntimeError("Unexpected Hermes workflow catalog v2 schema")
+    if "phase_sets" in catalog:
+        raise RuntimeError("Hermes workflow catalog v2 requires the exact external phase-set source")
     if (
         catalog.get("skillsCatalogRevision") != ACCEPTED_SKILLS_REVISION
         or catalog.get("skillsManifestSha256") != ACCEPTED_SKILLS_MANIFEST_SHA256
