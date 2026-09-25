@@ -64,13 +64,26 @@ async def index(request: Request) -> HTMLResponse:
     )
 
 
-async def phases_page(request: Request, workflow_id: int | None = Query(default=None)) -> HTMLResponse:
+async def phases_page(
+    request: Request,
+    workflow_id: int | None = Query(default=None),
+    mode_id: int | None = Query(default=None),
+) -> HTMLResponse:
     workflows = _load_workflows()
     selected_workflow = next((item for item in workflows if item["id"] == workflow_id), None)
     if selected_workflow is None and workflows:
         selected_workflow = workflows[0]
     selected_workflow_id = selected_workflow["id"] if selected_workflow else None
-    phases = _load_phases(selected_workflow_id)
+    modes = (
+        list(_app_state.get_uow().workflows.list_modes(selected_workflow_id))
+        if selected_workflow_id is not None
+        else []
+    )
+    selected_mode = next((item for item in modes if item.id == mode_id), None)
+    if selected_mode is None:
+        selected_mode = next((item for item in modes if item.key == "default"), modes[0] if modes else None)
+    selected_mode_id = selected_mode.id if selected_mode else None
+    phases = _load_phases(selected_workflow_id, selected_mode_id)
     phase_blocks = _build_parallel_phase_blocks(phases)
     return templates.TemplateResponse(
         request=request,
@@ -83,6 +96,9 @@ async def phases_page(request: Request, workflow_id: int | None = Query(default=
             "workflows": workflows,
             "selected_workflow": selected_workflow,
             "selected_workflow_id": selected_workflow_id,
+            "modes": [item.to_dict() for item in modes],
+            "selected_mode": selected_mode.to_dict() if selected_mode else None,
+            "selected_mode_id": selected_mode_id,
             "page": "phases",
             "ui_port": get_settings().UI_PORT,
         },
@@ -113,6 +129,7 @@ async def phase_detail(request: Request, phase_id: str) -> HTMLResponse:
             "ui_port": get_settings().UI_PORT,
             "phase": phase,
             "agents": agents,
+            "back_url": f"/phases?workflow_id={phase['workflow_id']}&mode_id={phase['mode_id']}",
         },
     )
 

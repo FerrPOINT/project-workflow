@@ -165,7 +165,9 @@ def setup_db():
         uow.commit()
     sample_task = uow.tasks.get_by_key("RUN-247")
     assert sample_task is not None
-    with sqlite3.connect(str(uow._session.bind.url).replace("sqlite:///", "")) as conn:
+    database_path = uow._session.bind.url.database
+    assert database_path is not None
+    with sqlite3.connect(database_path) as conn:
         conn.execute("DELETE FROM task_history WHERE task_id = ?", (sample_task.id,))
         conn.commit()
     project = uow.projects.get_by_code("UITEST")

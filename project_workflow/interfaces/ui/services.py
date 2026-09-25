@@ -48,9 +48,12 @@ def _load_workflows() -> list[dict[str, Any]]:
     return _ui_data_service()._load_workflows()
 
 
-def _load_phases(workflow_id: int | None = None) -> list[dict[str, Any]]:
+def _load_phases(
+    workflow_id: int | None = None,
+    mode_id: int | None = None,
+) -> list[dict[str, Any]]:
     """Load phases for UI pages/API."""
-    return _ui_data_service()._load_phases(workflow_id)
+    return _ui_data_service()._load_phases(workflow_id, mode_id)
 
 
 def _load_phase_detail(phase_id: int | str) -> dict[str, Any] | None:
@@ -87,12 +90,13 @@ def _resolve_task_phase(
     current_phase: str | int | None,
     _db: Any | None = None,
     workflow_id: int | None = None,
+    mode_id: int | None = None,
 ) -> tuple[str, dict[str, Any] | None]:
     """Resolve a phase token to (phase_id, phase_dict)."""
     from .helpers import _resolve_task_phase as _impl
 
     db = _db if _db is not None else _get_db()
-    return _impl(current_phase, _db=db, workflow_id=workflow_id)
+    return _impl(current_phase, _db=db, workflow_id=workflow_id, mode_id=mode_id)
 
 
 def _resolve_task_phase_local(

@@ -74,10 +74,15 @@ def test_valid_report_is_replayed_once(verdict, supervisor_llm):
     assert first["verdict"] == verdict
     assert first["replayed"] is False
     assert second["verdict"] == verdict
-    assert second["replayed"] is True
-    assert chat.call_count == 1
-    assert len(engine.db.get_supervisor_runs(task_key=engine.task_key, limit=10)) == 1
-    assert engine.db.get_task_history(engine.task["id"]) == history_after_first
+    assert second["replayed"] is (verdict != "PASS")
+    assert chat.call_count == (2 if verdict == "PASS" else 1)
+    assert len(engine.db.get_supervisor_runs(task_key=engine.task_key, limit=10)) == (
+        2 if verdict == "PASS" else 1
+    )
+    if verdict == "PASS":
+        assert engine.db.get_task_history(engine.task["id"]) != history_after_first
+    else:
+        assert engine.db.get_task_history(engine.task["id"]) == history_after_first
 
 
 def test_retryable_provider_error_has_no_fingerprint_or_transition():

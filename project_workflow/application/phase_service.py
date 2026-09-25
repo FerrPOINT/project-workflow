@@ -138,7 +138,7 @@ class PhaseService:
         if phase is None or phase.execution_type == "parallel":
             return updates
 
-        phases = list(self._uow.phases.list(workflow_id=phase.workflow_id))
+        phases = list(self._uow.phases.list(workflow_id=phase.workflow_id, mode_id=phase.mode_id))
         current_index = next((index for index, item in enumerate(phases) if item.id == phase_id), None)
         if current_index is None:
             return updates

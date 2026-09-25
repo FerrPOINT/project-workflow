@@ -23,10 +23,34 @@ class SAPhaseRepository(PhaseRepository):
     def __init__(self, session: Session):
         self._session = session
 
-    def list(self, workflow_id: int | None = None) -> Sequence[Phase]:
-        stmt = select(m.Phase).options(joinedload(m.Phase.workflow)).order_by(m.Phase.workflow_id, m.Phase.phase_order)
+    def _find_default_mode_id(self, workflow_id: int) -> int | None:
+        mode_id = self._session.execute(
+            select(m.WorkflowMode.id).where(
+                m.WorkflowMode.workflow_id == workflow_id,
+                m.WorkflowMode.key == "default",
+            )
+        ).scalar_one_or_none()
+        return int(mode_id) if mode_id is not None else None
+
+    def _default_mode_id(self, workflow_id: int) -> int:
+        mode_id = self._find_default_mode_id(workflow_id)
+        if mode_id is None:
+            raise RuntimeError(f"Workflow {workflow_id} has no default mode")
+        return mode_id
+
+    def list(self, workflow_id: int | None = None, mode_id: int | None = None) -> Sequence[Phase]:
+        stmt = (
+            select(m.Phase)
+            .options(joinedload(m.Phase.workflow), joinedload(m.Phase.mode))
+            .order_by(m.Phase.workflow_id, m.Phase.phase_order)
+        )
         if workflow_id is not None:
             stmt = stmt.where(m.Phase.workflow_id == workflow_id)
+            mode_id = mode_id if mode_id is not None else self._find_default_mode_id(workflow_id)
+            if mode_id is None:
+                return []
+        if mode_id is not None:
+            stmt = stmt.where(m.Phase.mode_id == mode_id)
         rows = self._session.execute(stmt).scalars().all()
         return [_row_to_phase(r) for r in rows]
 
@@ -34,13 +58,36 @@ class SAPhaseRepository(PhaseRepository):
         row = self._session.get(m.Phase, phase_id)
         return _row_to_phase(row) if row else None
 
-    def get_by_code(self, code: str) -> Phase | None:
-        row = self._session.execute(select(m.Phase).where(m.Phase.code == code)).scalar_one_or_none()
+    def get_by_code(
+        self,
+        code: str,
+        workflow_id: int | None = None,
+        mode_id: int | None = None,
+    ) -> Phase | None:
+        stmt = select(m.Phase).where(m.Phase.code == code)
+        if workflow_id is not None:
+            stmt = stmt.where(m.Phase.workflow_id == workflow_id)
+            mode_id = mode_id if mode_id is not None else self._find_default_mode_id(workflow_id)
+            if mode_id is None:
+                return None
+        elif mode_id is None:
+            stmt = stmt.join(m.WorkflowMode, m.Phase.mode_id == m.WorkflowMode.id).where(
+                m.WorkflowMode.key == "default"
+            )
+        if mode_id is not None:
+            stmt = stmt.where(m.Phase.mode_id == mode_id)
+        row = self._session.execute(stmt).scalars().first()
         return _row_to_phase(row) if row else None
 
     def create(self, data: dict[str, Any]) -> int:
+        workflow_id = int(data["workflow_id"])
+        mode_id = int(data.get("mode_id") or self._default_mode_id(workflow_id))
+        mode = self._session.get(m.WorkflowMode, mode_id)
+        if mode is None or mode.workflow_id != workflow_id:
+            raise ValueError("Phase mode must belong to its workflow")
         item = m.Phase(
-            workflow_id=data["workflow_id"],
+            workflow_id=workflow_id,
+            mode_id=mode_id,
             code=data["code"],
             name=data["name"],
             description=data.get("description"),
@@ -65,7 +112,7 @@ class SAPhaseRepository(PhaseRepository):
         if row is None:
             raise NotFoundError(f"Phase {phase_id} not found")
         for key, val in data.items():
-            if key in {"id", "workflow_id"}:
+            if key in {"id", "workflow_id", "mode_id"}:
                 continue
             if key in {"is_seed_managed", "is_blocker", "is_delegated", "is_critic"}:
                 val = 1 if val else 0
@@ -80,6 +127,7 @@ class SAPhaseRepository(PhaseRepository):
             self._session.execute(
                 select(m.Phase).where(
                     m.Phase.workflow_id == row.workflow_id,
+                    m.Phase.mode_id == row.mode_id,
                     m.Phase.id != phase_id,
                 )
             )
@@ -96,18 +144,28 @@ class SAPhaseRepository(PhaseRepository):
             )
         self._session.delete(row)
 
-    def shift_orders(self, workflow_id: int, start_order: int, delta: int = 1) -> None:
+    def shift_orders(
+        self,
+        workflow_id: int,
+        start_order: int,
+        delta: int = 1,
+        mode_id: int | None = None,
+    ) -> None:
+        mode_id = mode_id if mode_id is not None else self._default_mode_id(workflow_id)
         self._session.execute(
             text(
                 "UPDATE phases SET phase_order = phase_order + :delta "
-                "WHERE workflow_id = :wid AND phase_order >= :start"
+                "WHERE workflow_id = :wid AND mode_id = :mid AND phase_order >= :start"
             ),
-            {"delta": delta, "wid": workflow_id, "start": start_order},
+            {"delta": delta, "wid": workflow_id, "mid": mode_id, "start": start_order},
         )
 
-    def get_next_order(self, workflow_id: int) -> int:
+    def get_next_order(self, workflow_id: int, mode_id: int | None = None) -> int:
+        mode_id = mode_id if mode_id is not None else self._default_mode_id(workflow_id)
         max_order = self._session.execute(
-            select(m.Phase.phase_order).where(m.Phase.workflow_id == workflow_id).order_by(m.Phase.phase_order.desc())
+            select(m.Phase.phase_order)
+            .where(m.Phase.workflow_id == workflow_id, m.Phase.mode_id == mode_id)
+            .order_by(m.Phase.phase_order.desc())
         ).scalar()
         return (max_order or 0) + 1
 
@@ -128,5 +186,3 @@ class SAPhaseRepository(PhaseRepository):
         self._session.execute(sa_delete(m.Evidence).where(m.Evidence.phase_id == phase_id))
         for item in items:
             self._session.add(m.Evidence(phase_id=phase_id, description=item.get("description", "")))
-
-

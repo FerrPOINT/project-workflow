@@ -96,7 +96,11 @@ class SupervisorEngine:
     @property
     def all_phases(self) -> list[Phase]:
         if self._all_phases is None:
-            self._all_phases = schema.load_phases_from_db(self._uow, workflow_id=self.workflow_id)
+            self._all_phases = schema.load_phases_from_db(
+                self._uow,
+                workflow_id=self.workflow_id,
+                mode_id=(self.task or {}).get("mode_id"),
+            )
         return self._all_phases
 
     @all_phases.setter
@@ -181,13 +185,20 @@ class SupervisorEngine:
         task_id = int(self.task.get("id", 0))
         if not task_id:
             return previously
+        current_mode_id = int(self.task.get("mode_id", 0))
+        current_cycle = int(self.task.get("cycle_number", 0))
+        current_phase = self.phase_map.get(str(phase_code))
+        if current_phase is None or current_phase.id is None:
+            return previously
         runs = [r.to_dict() for r in self._uow.supervisor_runs.list(task_id=task_id, limit=200)]
         for run in runs:
             run_phase_id = run.get("phase_id")
-            if run_phase_id is None:
-                continue
-            phase = self._uow.phases.get_by_id(int(run_phase_id))
-            if phase is None or str(phase.code) != str(phase_code):
+            if (
+                run_phase_id is None
+                or int(run_phase_id) != int(current_phase.id)
+                or int(run.get("mode_id", 0)) != current_mode_id
+                or int(run.get("cycle_number", 0)) != current_cycle
+            ):
                 continue
             covered = run.get("covered", [])
             for item in covered:

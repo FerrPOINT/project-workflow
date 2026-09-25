@@ -56,9 +56,17 @@ class UIDataService:
             )
         return result
 
-    def _load_phases(self, workflow_id: int | None = None) -> list[dict[str, Any]]:
+    def _load_phases(
+        self,
+        workflow_id: int | None = None,
+        mode_id: int | None = None,
+    ) -> list[dict[str, Any]]:
         wdb = self._app_state.get_db()
-        rows = wdb.get_phases(workflow_id=workflow_id)
+        rows = (
+            wdb.get_phases(workflow_id=workflow_id, mode_id=mode_id)
+            if mode_id is not None
+            else wdb.get_phases(workflow_id=workflow_id)
+        )
         agents_by_id = {agent["id"]: agent for agent in wdb.get_agents()}
         result = []
         for p in rows:
@@ -70,6 +78,8 @@ class UIDataService:
                     "code": p["code"],
                     "workflow_id": p.get("workflow_id"),
                     "workflow_name": p.get("workflow_name"),
+                    "mode_id": p.get("mode_id"),
+                    "mode_key": p.get("mode_key", "default"),
                     "workflow_is_default": bool(p.get("workflow_is_default")),
                     "phase_num": p["phase_order"],
                     "name": p["name"],
@@ -109,19 +119,6 @@ class UIDataService:
         """Load tasks for the UI with batched history/supervisor lookups."""
         wdb = self._app_state.get_db()
         tasks = wdb.get_tasks()
-        workflows = wdb.get_workflows()
-
-        # Batch phase counts and phase lookup maps per workflow.
-        phase_counts_by_workflow: dict[int, int] = {}
-        phases_by_workflow: dict[int | None, list[dict[str, Any]]] = {}
-        all_phases: list[dict[str, Any]] = []
-        for workflow in workflows:
-            wid = workflow["id"]
-            phases = wdb.get_phases(workflow_id=wid)
-            phases_by_workflow[wid] = phases
-            all_phases.extend(phases)
-            phase_counts_by_workflow[wid] = len(phases)
-        phases_by_workflow[None] = all_phases
 
         # Batch load history and latest supervisor runs for all tasks in one go.
         task_ids = [t["id"] for t in tasks if isinstance(t.get("id"), int)]
@@ -142,6 +139,28 @@ class UIDataService:
             if isinstance(pid, int):
                 projects_by_id[pid] = project
 
+        # A task's immutable cursor owns the mode. Canonical workflows do not
+        # need a synthetic default mode, so phase lookup is keyed by both ids.
+        phases_by_execution: dict[tuple[int, int | None], list[dict[str, Any]]] = {}
+        execution_key: tuple[int, int | None]
+        for task in tasks:
+            project = projects_by_id.get(task.get("project_id"), {})
+            pinned_workflow_id = project.get("workflow_id")
+            pinned_mode_id = task.get("mode_id")
+            if isinstance(pinned_workflow_id, int) and isinstance(pinned_mode_id, int):
+                execution_key = (pinned_workflow_id, pinned_mode_id)
+                if execution_key not in phases_by_execution:
+                    phases_by_execution[execution_key] = wdb.get_phases(
+                        workflow_id=pinned_workflow_id,
+                        mode_id=pinned_mode_id,
+                    )
+            elif isinstance(pinned_workflow_id, int):
+                # Compatibility for legacy task fixtures/rows created before
+                # the pinned cursor existed. Canonical tasks always carry mode_id.
+                execution_key = (pinned_workflow_id, None)
+                if execution_key not in phases_by_execution:
+                    phases_by_execution[execution_key] = wdb.get_phases(workflow_id=pinned_workflow_id)
+
         result = []
         for t in tasks:
             task_id = t["id"]
@@ -152,11 +171,10 @@ class UIDataService:
             project_name = project.get("name") or ""
             workflow_id_raw = project.get("workflow_id")
             workflow_id: int | None = int(workflow_id_raw) if isinstance(workflow_id_raw, int) else None
-            workflow_phase_count = (
-                phase_counts_by_workflow.get(workflow_id, 0)
-                if workflow_id is not None
-                else 0
-            )
+            mode_id_raw = t.get("mode_id")
+            mode_id: int | None = int(mode_id_raw) if isinstance(mode_id_raw, int) else None
+            execution_phases = phases_by_execution.get((workflow_id, mode_id), []) if workflow_id is not None else []
+            workflow_phase_count = len(execution_phases)
             completed, total_phases = _task_progress_counts(
                 status=str(t.get("status", "active")),
                 completed=completed,
@@ -166,7 +184,7 @@ class UIDataService:
 
             current_phase_id, current = _resolve_task_phase_local(
                 t.get("current_phase", "-1"),
-                phases_by_workflow.get(workflow_id, []),
+                execution_phases,
             )
             current = current or {}
 
@@ -275,7 +293,8 @@ class UIDataService:
                 if proj_row is not None:
                     workflow_id = getattr(proj_row, "workflow_id", None) or row_to_dict(proj_row).get("workflow_id")
         if workflow_id is not None:
-            phases = wdb.get_phases(workflow_id=workflow_id)
+            mode_id = task.get("mode_id")
+            phases = wdb.get_phases(workflow_id=workflow_id, mode_id=mode_id)
         else:
             phases = wdb.get_phases()
         return workflow_id, phases
@@ -380,7 +399,10 @@ class UIDataService:
         )
 
         current_phase_id, current_phase = _resolve_task_phase(
-            task.get("current_phase", "-1"), wdb, workflow_id=task.get("workflow_id")
+            task.get("current_phase", "-1"),
+            wdb,
+            workflow_id=task.get("workflow_id"),
+            mode_id=task.get("mode_id"),
         )
         task["current_phase_name"] = current_phase["name"] if current_phase else task.get("current_phase", "")
         task["current_phase_order"] = current_phase["phase_order"] if current_phase else 0

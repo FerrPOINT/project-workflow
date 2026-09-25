@@ -86,3 +86,48 @@ class TestSupervisorContextBuilder:
         )
         result = builder.build()
         assert "messages" not in result
+
+    def test_prompt_history_excludes_other_mode_cycle_and_phase(self):
+        current = self._phase(code="DV-02", id=2)
+        uow = MagicMock()
+        uow.get_task_history.return_value = [
+            {"phase_id": 2, "mode_id": 11, "cycle_number": 1, "status": "done", "completed_at": "now"},
+            {"phase_id": 2, "mode_id": 11, "cycle_number": 0, "status": "done", "completed_at": "old"},
+            {"phase_id": 2, "mode_id": 12, "cycle_number": 1, "status": "done", "completed_at": "mode"},
+            {"phase_id": 1, "mode_id": 11, "cycle_number": 1, "status": "done", "completed_at": "phase"},
+        ]
+        uow.get_supervisor_runs.return_value = [
+            {"phase_id": 2, "mode_id": 11, "cycle_number": 1, "verdict": "pass", "blockers": ["current"]},
+            {"phase_id": 2, "mode_id": 11, "cycle_number": 0, "verdict": "blocked", "blockers": ["old-cycle"]},
+            {"phase_id": 2, "mode_id": 12, "cycle_number": 1, "verdict": "blocked", "blockers": ["old-mode"]},
+            {"phase_id": 1, "mode_id": 11, "cycle_number": 1, "verdict": "blocked", "blockers": ["old-phase"]},
+        ]
+        builder = SupervisorContextBuilder(
+            uow=uow,
+            task={
+                "id": 7,
+                "mode_id": 11,
+                "mode_key": "rework",
+                "cycle_number": 1,
+                "status": "active",
+                "current_phase": "DV-02",
+            },
+            all_phases=[current],
+            current_phase="DV-02",
+        )
+
+        context = builder.build()
+
+        assert context["phase_history"] == [
+            {"phase_code": "DV-02", "phase_name": "One", "status": "done", "completed_at": "now"}
+        ]
+        assert [item["blockers"] for item in context["recent_verdicts"]] == [["current"]]
+        assert context["workflow_path"] == [
+            {
+                "code": "DV-02",
+                "name": "One",
+                "status": "done",
+                "parallel_with": None,
+                "rollback_target": None,
+            }
+        ]

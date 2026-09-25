@@ -110,7 +110,7 @@ class TestPostgresSession:
         inspector = inspect(engine)
         columns = {column["name"] for column in inspector.get_columns("agents", schema="project_workflow")}
         indexes = {index["name"] for index in inspector.get_indexes("agents", schema="project_workflow")}
-        assert version == "e6a4c2d8b901"
+        assert version == "8a4c1e7d2f90"
         assert "hermes_profile" in columns
         assert "uq_agents_hermes_profile" in indexes
 
@@ -226,7 +226,7 @@ class TestPostgresSession:
                 )
             ).scalar_one()
 
-        assert revision == "e6a4c2d8b901"
+        assert revision == "8a4c1e7d2f90"
         assert [(row.name, row.is_default) for row in workflows] == [
             ("legacy-27-phase", 0),
             ("sdlc-business-tech-v1", 1),
@@ -239,7 +239,7 @@ class TestPostgresSession:
         assert run_project.name == "sdlc-business-tech-v1"
         assert json.loads(run_project.key_prefixes) == ["RUN"]
         assert "rtech" not in catalog_skills
-        assert catalog_skills.count("using-rtech") == 5
+        assert catalog_skills.count("relevanter-tech-operator") == 5
         assert pr_instruction == (
             "Подтвердить, что Business-задача остаётся In Progress, и проверить activity"
         )
@@ -522,7 +522,7 @@ class TestPostgresSession:
             version = conn.execute(text("SELECT version_num FROM project_workflow.alembic_version")).scalar_one()
         tables = set(inspect(engine).get_table_names(schema="project_workflow"))
 
-        assert version == "e6a4c2d8b901"
+        assert version == "8a4c1e7d2f90"
         assert not any(table.endswith("_v2") for table in tables)
 
     def test_catalog_upgrade_replaces_legacy_contracts_and_preserves_audit(self, pg_url):
@@ -631,7 +631,7 @@ class TestPostgresSession:
                 ),
                 {"workflow_id": workflow_id},
             ).scalar_one()
-        assert revision == "e6a4c2d8b901"
+        assert revision == "8a4c1e7d2f90"
         assert upgraded.id == phase_id
         assert upgraded.name == "Runtime Readiness"
         active_contract = upgraded.string_agg.casefold()
@@ -762,7 +762,7 @@ class TestPostgresSession:
                 {"instruction_id": custom_instruction_id},
             ).scalar_one()
 
-        assert revision == "e6a4c2d8b901"
+        assert revision == "8a4c1e7d2f90"
         assert [json.loads(row.skills) for row in migrated] == [
             ["project-workflow-executor", "agent-workflow-patterns"],
             ["workflow-systematic-debugging"],
@@ -1094,9 +1094,19 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
         try:
             workflows = list(bootstrap_uow.workflows.list())
             projects = list(bootstrap_uow.projects.list())
-            assert [workflow.name for workflow in workflows] == [config_module.DEFAULT_WORKFLOW_NAME]
+            default_workflows = [workflow for workflow in workflows if workflow.is_default]
+            assert [workflow.name for workflow in default_workflows] == [config_module.DEFAULT_WORKFLOW_NAME]
+            assert {workflow.name for workflow in workflows if workflow.name.startswith("hermes-sdlc:")} == {
+                "hermes-sdlc:project_manager",
+                "hermes-sdlc:analyst",
+                "hermes-sdlc:architect",
+                "hermes-sdlc:developer",
+                "hermes-sdlc:reviewer",
+                "hermes-sdlc:tester",
+                "hermes-sdlc:devops",
+            }
             assert [project.code for project in projects] == ["RUN"]
-            assert len(bootstrap_uow.phases.list(workflow_id=workflows[0].id)) == 19
+            assert len(bootstrap_uow.phases.list(workflow_id=default_workflows[0].id)) == 19
         finally:
             bootstrap_uow.close()
 

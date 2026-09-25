@@ -34,6 +34,8 @@ class Phase:
 
     id: int | None = None
     workflow_id: int | None = None
+    mode_id: int | None = None
+    mode_key: str = "default"
     code: str = ""
     name: str = ""
     description: str = ""
@@ -54,6 +56,8 @@ class Phase:
         return {
             "id": self.id,
             "workflow_id": self.workflow_id,
+            "mode_id": self.mode_id,
+            "mode_key": self.mode_key,
             "code": self.code,
             "name": self.name,
             "description": self.description,
@@ -109,6 +113,26 @@ class Workflow:
 
 
 @dataclass
+class WorkflowMode:
+    """Named phase catalog owned by a workflow."""
+
+    id: int | None = None
+    workflow_id: int = 0
+    key: str = "default"
+    name: str = "Default"
+    mode_order: int = 1
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "workflow_id": self.workflow_id,
+            "key": self.key,
+            "name": self.name,
+            "mode_order": self.mode_order,
+        }
+
+
+@dataclass
 class Project:
     """Domain project with task key prefixes."""
 
@@ -136,6 +160,9 @@ class Task:
 
     id: int | None = None
     project_id: int = 0
+    mode_id: int | None = None
+    mode_key: str = "default"
+    cycle_number: int = 0
     task_key: str = ""
     title: str = ""
     description: str = ""
@@ -149,6 +176,9 @@ class Task:
         return {
             "id": self.id,
             "project_id": self.project_id,
+            "mode_id": self.mode_id,
+            "mode_key": self.mode_key,
+            "cycle_number": self.cycle_number,
             "task_key": self.task_key,
             "title": self.title,
             "description": self.description,
@@ -167,6 +197,11 @@ class SupervisorRun:
     id: int | None = None
     task_id: int = 0
     phase_id: int = 0
+    phase_code: str = ""
+    phase_name: str = ""
+    mode_id: int | None = None
+    mode_key: str = "default"
+    cycle_number: int = 0
     verdict: str = ""
     report: str = ""
     covered: list[str] = field(default_factory=list)
@@ -184,6 +219,11 @@ class SupervisorRun:
             "id": self.id,
             "task_id": self.task_id,
             "phase_id": self.phase_id,
+            "phase_code": self.phase_code,
+            "phase_name": self.phase_name,
+            "mode_id": self.mode_id,
+            "mode_key": self.mode_key,
+            "cycle_number": self.cycle_number,
             "verdict": self.verdict,
             "report": self.report,
             "covered": self.covered,

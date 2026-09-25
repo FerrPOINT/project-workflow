@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
-from project_workflow.domain import Agent, Phase, Project, SupervisorRun, Task, Workflow
+from project_workflow.domain import Agent, Phase, Project, SupervisorRun, Task, Workflow, WorkflowMode
 
 
 class WorkflowRepository(ABC):
@@ -37,18 +37,38 @@ class WorkflowRepository(ABC):
     @abstractmethod
     def ensure_default_exists(self, name: str) -> Workflow: ...
 
+    @abstractmethod
+    def list_modes(self, workflow_id: int) -> Sequence[WorkflowMode]: ...
+
+    @abstractmethod
+    def get_mode(self, mode_id: int) -> WorkflowMode | None: ...
+
+    @abstractmethod
+    def get_mode_by_key(self, workflow_id: int, key: str) -> WorkflowMode | None: ...
+
+    @abstractmethod
+    def create_mode(self, data: dict[str, Any]) -> int: ...
+
+    @abstractmethod
+    def ensure_default_mode(self, workflow_id: int) -> WorkflowMode: ...
+
 
 class PhaseRepository(ABC):
     """Persistence contract for phases."""
 
     @abstractmethod
-    def list(self, workflow_id: int | None = None) -> Sequence[Phase]: ...
+    def list(self, workflow_id: int | None = None, mode_id: int | None = None) -> Sequence[Phase]: ...
 
     @abstractmethod
     def get_by_id(self, phase_id: int) -> Phase | None: ...
 
     @abstractmethod
-    def get_by_code(self, code: str) -> Phase | None: ...
+    def get_by_code(
+        self,
+        code: str,
+        workflow_id: int | None = None,
+        mode_id: int | None = None,
+    ) -> Phase | None: ...
 
     @abstractmethod
     def create(self, data: dict[str, Any]) -> int: ...
@@ -60,10 +80,16 @@ class PhaseRepository(ABC):
     def delete(self, phase_id: int) -> None: ...
 
     @abstractmethod
-    def shift_orders(self, workflow_id: int, start_order: int, delta: int = 1) -> None: ...
+    def shift_orders(
+        self,
+        workflow_id: int,
+        start_order: int,
+        delta: int = 1,
+        mode_id: int | None = None,
+    ) -> None: ...
 
     @abstractmethod
-    def get_next_order(self, workflow_id: int) -> int: ...
+    def get_next_order(self, workflow_id: int, mode_id: int | None = None) -> int: ...
 
     @abstractmethod
     def get_checks(self, phase_id: int) -> Sequence[dict[str, Any]]: ...
@@ -153,7 +179,17 @@ class TaskRepository(ABC):
     ) -> bool: ...
 
     @abstractmethod
-    def add_history(self, task_id: int, phase_id: int, status: str) -> None: ...
+    def pin_execution_cursor(
+        self,
+        task_id: int,
+        *,
+        mode_id: int,
+        cycle_number: int,
+        current_phase: str,
+    ) -> None: ...
+
+    @abstractmethod
+    def add_history(self, task_id: int, phase_id: int | str, status: str) -> None: ...
 
     @abstractmethod
     def get_history(self, task_id: int) -> Sequence[dict[str, Any]]: ...
@@ -205,7 +241,14 @@ class SupervisorRunRepository(ABC):
     def latest_for_tasks(self, task_ids: Sequence[int]) -> Sequence[SupervisorRun]: ...
 
     @abstractmethod
-    def get_by_fingerprint(self, task_id: int, report_fingerprint: str) -> SupervisorRun | None: ...
+    def get_by_fingerprint(
+        self,
+        task_id: int,
+        phase_id: int,
+        mode_id: int,
+        cycle_number: int,
+        report_fingerprint: str,
+    ) -> SupervisorRun | None: ...
 
     @abstractmethod
     def create(self, data: dict[str, Any]) -> int: ...
@@ -312,4 +355,3 @@ class UnitOfWork(ABC):
 
     @abstractmethod
     def get_phase_by_code(self, code: str) -> Phase | None: ...
-

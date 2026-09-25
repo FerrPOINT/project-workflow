@@ -121,7 +121,7 @@ class SAUnitOfWork(UnitOfWork):
         return self._session
 
     def add_task_history(self, task_id: int, phase_id: int | str, status: str) -> None:
-        self.tasks.add_history(task_id, int(phase_id), status)
+        self.tasks.add_history(task_id, phase_id, status)
         self.commit()
 
     def create_supervisor_run(self, *args: Any, **kwargs: Any) -> int:
@@ -220,13 +220,13 @@ class SAUnitOfWork(UnitOfWork):
         result = TaskService(self).create_task(data)
         return result["id"]
 
-    def get_phases(self, workflow_id: int | None = None) -> list[Any]:
+    def get_phases(self, workflow_id: int | None = None, mode_id: int | None = None) -> list[Any]:
         if workflow_id is None:
             default_wf = self.workflows.get_default()
             if default_wf is None:
                 return []
             workflow_id = default_wf.id
-        return rows_to_dicts(self.phases.list(workflow_id=workflow_id))
+        return rows_to_dicts(self.phases.list(workflow_id=workflow_id, mode_id=mode_id))
 
     def get_all_phases(self) -> list[Any]:
         """Return phases across every workflow (used by dashboard aggregation)."""

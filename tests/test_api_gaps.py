@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 pytestmark = [pytest.mark.ui]
 
+from project_workflow.domain import WorkflowMode
 from project_workflow.interfaces.ui import app
 
 client = TestClient(app)
@@ -61,6 +62,57 @@ class TestApiPhaseCreate:
             )
         assert response.status_code == 200
         assert response.json()["phase_id"] == 10
+
+    def test_explicit_editor_mode_scopes_phase_ordering(self):
+        with patch("project_workflow.interfaces.ui.routes.api._app_state") as state:
+            state.workflow_service.return_value.get_workflow.return_value = {"id": 1}
+            state.phase_service.return_value.list_phases.return_value = []
+            state.phase_service.return_value.create_phase.return_value = {"id": 11}
+            response = client.post(
+                "/api/phases",
+                json={"name": "Rework", "phase_order": 1, "workflow_id": 1, "mode_id": 7},
+            )
+
+        assert response.status_code == 200
+        state.phase_service.return_value.list_phases.assert_called_once_with(1, 7)
+        payload = state.phase_service.return_value.create_phase.call_args.args[0]
+        assert payload["mode_id"] == 7
+
+
+class TestApiWorkflowModes:
+    def test_list_modes_returns_catalog_only(self):
+        with patch("project_workflow.interfaces.ui.routes.api._app_state") as state:
+            state.workflow_service.return_value.get_workflow.return_value = {"id": 1, "name": "Developer"}
+            state.get_uow.return_value.workflows.list_modes.return_value = [
+                WorkflowMode(id=7, workflow_id=1, key="rework", name="Rework", mode_order=2)
+            ]
+            response = client.get("/api/workflows/1/modes")
+
+        assert response.status_code == 200
+        assert response.json()["modes"] == [
+            {"id": 7, "workflow_id": 1, "key": "rework", "name": "Rework", "mode_order": 2}
+        ]
+
+    def test_create_mode_does_not_create_runtime_assignment_state(self):
+        with patch("project_workflow.interfaces.ui.routes.api._app_state") as state:
+            state.workflow_service.return_value.get_workflow.return_value = {"id": 1, "name": "Developer"}
+            repo = state.get_uow.return_value.workflows
+            repo.get_mode_by_key.return_value = None
+            repo.create_mode.return_value = 7
+            repo.get_mode.return_value = WorkflowMode(
+                id=7,
+                workflow_id=1,
+                key="rework",
+                name="Rework",
+                mode_order=2,
+            )
+            response = client.post(
+                "/api/workflows/1/modes",
+                json={"key": "rework", "name": "Rework", "mode_order": 2},
+            )
+
+        assert response.status_code == 200
+        repo.create_mode.assert_called_once_with({"workflow_id": 1, "key": "rework", "name": "Rework", "mode_order": 2})
 
 
 class TestApiPhaseUpdate:

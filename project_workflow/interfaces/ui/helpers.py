@@ -62,13 +62,20 @@ def _build_parallel_phase_blocks(phases: list[dict[str, Any]]) -> list[dict[str,
 
 
 def _resolve_task_phase(
-    current_phase: Any, _db: Any | None = None, workflow_id: int | None = None
+    current_phase: Any,
+    _db: Any | None = None,
+    workflow_id: int | None = None,
+    mode_id: int | None = None,
 ) -> tuple[str, dict[str, Any] | None]:
     assert _db is not None
     token = str(current_phase if current_phase is not None else "-1")
     wdb: Any = _db
 
-    workflow_phases = wdb.get_phases(workflow_id=workflow_id) if workflow_id is not None else wdb.get_phases()
+    workflow_phases = (
+        wdb.get_phases(workflow_id=workflow_id, mode_id=mode_id)
+        if workflow_id is not None and mode_id is not None
+        else (wdb.get_phases(workflow_id=workflow_id) if workflow_id is not None else wdb.get_phases())
+    )
     for phase in workflow_phases:
         if str(phase.get("code", phase.get("id"))) == token:
             return token, phase
@@ -77,6 +84,8 @@ def _resolve_task_phase(
         if str(phase.get("id")) == token:
             return token, phase
 
+    if workflow_id is not None and mode_id is not None:
+        return token, None
     found_phase = wdb.get_phase(token)
     if found_phase:
         return token, dict(found_phase)

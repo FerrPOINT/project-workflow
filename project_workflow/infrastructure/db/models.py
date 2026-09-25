@@ -13,6 +13,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     String,
     Text,
@@ -57,7 +58,30 @@ class Workflow(Base):
     phases: Mapped[list[Phase]] = relationship(
         "Phase", back_populates="workflow", cascade="all, delete-orphan", passive_deletes=True
     )
+    modes: Mapped[list[WorkflowMode]] = relationship(
+        "WorkflowMode", back_populates="workflow", cascade="all, delete-orphan", passive_deletes=True
+    )
     projects: Mapped[list[Project]] = relationship("Project", back_populates="workflow", cascade="all, delete-orphan")
+
+
+class WorkflowMode(Base):
+    __tablename__ = "workflow_modes"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    workflow_id: Mapped[int] = mapped_column(ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False)
+    key: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    mode_order: Mapped[int] = mapped_column(nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("id", "workflow_id", name="uq_workflow_modes_id_workflow"),
+        UniqueConstraint("workflow_id", "key", name="uq_workflow_modes_workflow_key"),
+        UniqueConstraint("workflow_id", "mode_order", name="uq_workflow_modes_workflow_order"),
+        CheckConstraint("mode_order > 0", name="ck_workflow_modes_order_positive"),
+    )
+
+    workflow: Mapped[Workflow] = relationship("Workflow", back_populates="modes")
+    phases: Mapped[list[Phase]] = relationship("Phase", back_populates="mode", overlaps="phases,workflow")
 
 
 class Phase(Base):
@@ -65,6 +89,7 @@ class Phase(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     workflow_id: Mapped[int] = mapped_column(ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False)
+    mode_id: Mapped[int] = mapped_column(nullable=False)
     code: Mapped[str] = mapped_column(String, nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -100,7 +125,13 @@ class Phase(Base):
         server_default="0",
     )
     __table_args__ = (
-        UniqueConstraint("workflow_id", "code", name="uq_phases_workflow_code"),
+        UniqueConstraint("workflow_id", "mode_id", "code", name="uq_phases_workflow_mode_code"),
+        ForeignKeyConstraint(
+            ["mode_id", "workflow_id"],
+            ["workflow_modes.id", "workflow_modes.workflow_id"],
+            name="fk_phases_mode_workflow",
+            ondelete="CASCADE",
+        ),
         CheckConstraint(
             "execution_type IN ('sync', 'parallel')",
             name="ck_phases_execution_type",
@@ -111,7 +142,8 @@ class Phase(Base):
         CheckConstraint("is_critic IN (0, 1)", name="ck_phases_is_critic"),
     )
 
-    workflow: Mapped[Workflow] = relationship("Workflow", back_populates="phases")
+    workflow: Mapped[Workflow] = relationship("Workflow", back_populates="phases", overlaps="mode,phases")
+    mode: Mapped[WorkflowMode] = relationship("WorkflowMode", back_populates="phases", overlaps="phases,workflow")
     agent: Mapped[Agent | None] = relationship("Agent", back_populates="phases")
     instructions: Mapped[list[Instruction]] = relationship(
         "Instruction", back_populates="phase", cascade="all, delete-orphan"
@@ -193,6 +225,8 @@ class Task(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), nullable=False)
+    mode_id: Mapped[int] = mapped_column(ForeignKey("workflow_modes.id", ondelete="RESTRICT"), nullable=False)
+    cycle_number: Mapped[int] = mapped_column(nullable=False, default=0, server_default="0")
     task_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     title: Mapped[str | None] = mapped_column(String, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -211,9 +245,13 @@ class Task(Base):
     updated_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
-    __table_args__ = (CheckConstraint("status IN ('active', 'done', 'blocked')", name="ck_tasks_status"),)
+    __table_args__ = (
+        CheckConstraint("status IN ('active', 'done', 'blocked')", name="ck_tasks_status"),
+        CheckConstraint("cycle_number >= 0", name="ck_tasks_cycle_number_nonnegative"),
+    )
 
     project: Mapped[Project] = relationship("Project", back_populates="tasks")
+    mode: Mapped[WorkflowMode] = relationship("WorkflowMode", foreign_keys=[mode_id])
 
 
 class TaskHistory(Base):
@@ -225,6 +263,8 @@ class TaskHistory(Base):
         nullable=False,
     )
     phase_id: Mapped[int] = mapped_column(ForeignKey("phases.id"), nullable=False)
+    mode_id: Mapped[int] = mapped_column(ForeignKey("workflow_modes.id", ondelete="RESTRICT"), nullable=False)
+    cycle_number: Mapped[int] = mapped_column(nullable=False, default=0, server_default="0")
     status: Mapped[str] = mapped_column(
         String,
         default="pending",
@@ -232,7 +272,14 @@ class TaskHistory(Base):
     )
     completed_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     __table_args__ = (
-        UniqueConstraint("task_id", "phase_id", name="uq_task_history_task_phase"),
+        UniqueConstraint(
+            "task_id",
+            "mode_id",
+            "cycle_number",
+            "phase_id",
+            name="uq_task_history_execution_phase",
+        ),
+        CheckConstraint("cycle_number >= 0", name="ck_task_history_cycle_nonnegative"),
         CheckConstraint(
             "status IN ('pending', 'done', 'partial', 'blocked', 'rollback', 'delegated')",
             name="ck_task_history_status",
@@ -249,6 +296,8 @@ class SupervisorRun(Base):
         nullable=False,
     )
     phase_id: Mapped[int] = mapped_column(ForeignKey("phases.id"), nullable=False)
+    mode_id: Mapped[int] = mapped_column(ForeignKey("workflow_modes.id", ondelete="RESTRICT"), nullable=False)
+    cycle_number: Mapped[int] = mapped_column(nullable=False, default=0, server_default="0")
     verdict: Mapped[str] = mapped_column(String, nullable=False)
     report: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     covered: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
@@ -264,14 +313,21 @@ class SupervisorRun(Base):
         Index(
             "uq_supervisor_runs_task_report_fingerprint",
             "task_id",
+            "phase_id",
+            "mode_id",
+            "cycle_number",
             "report_fingerprint",
             unique=True,
         ),
+        CheckConstraint("cycle_number >= 0", name="ck_supervisor_runs_cycle_nonnegative"),
         CheckConstraint(
             "verdict IN ('pass', 'partial', 'blocked', 'rollback', 'delegate')",
             name="ck_supervisor_runs_verdict",
         ),
     )
+
+    mode: Mapped[WorkflowMode] = relationship("WorkflowMode", foreign_keys=[mode_id])
+    phase: Mapped[Phase] = relationship("Phase", foreign_keys=[phase_id])
 
 
 # Runtime helper used by repository layer to extract a plain dict from a model.

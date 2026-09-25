@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session, aliased, joinedload
 
 from project_workflow.domain import SupervisorRun
 from project_workflow.domain.repositories import SupervisorRunRepository
@@ -27,7 +27,12 @@ class SASupervisorRunRepository(SupervisorRunRepository):
         task_key: str | None = None,
         limit: int = 200,
     ) -> Sequence[SupervisorRun]:
-        stmt = select(m.SupervisorRun).order_by(m.SupervisorRun.id.desc()).limit(limit)
+        stmt = (
+            select(m.SupervisorRun)
+            .options(joinedload(m.SupervisorRun.mode), joinedload(m.SupervisorRun.phase))
+            .order_by(m.SupervisorRun.id.desc())
+            .limit(limit)
+        )
         if task_id is not None:
             stmt = stmt.where(m.SupervisorRun.task_id == task_id)
         if task_key is not None:
@@ -50,23 +55,51 @@ class SASupervisorRunRepository(SupervisorRunRepository):
             .cte("latest_runs")
         )
         aliased_run = aliased(m.SupervisorRun, cte)
-        stmt = select(aliased_run).where(cte.c.rn == 1)
+        stmt = (
+            select(aliased_run)
+            .options(joinedload(aliased_run.mode), joinedload(aliased_run.phase))
+            .where(cte.c.rn == 1)
+        )
         rows = self._session.execute(stmt).scalars().all()
         return [_row_to_supervisor_run(r) for r in rows]
 
-    def get_by_fingerprint(self, task_id: int, report_fingerprint: str) -> SupervisorRun | None:
+    def get_by_fingerprint(
+        self,
+        task_id: int,
+        phase_id: int,
+        mode_id: int,
+        cycle_number: int,
+        report_fingerprint: str,
+    ) -> SupervisorRun | None:
         row = self._session.execute(
             select(m.SupervisorRun).where(
                 m.SupervisorRun.task_id == task_id,
+                m.SupervisorRun.phase_id == phase_id,
+                m.SupervisorRun.mode_id == mode_id,
+                m.SupervisorRun.cycle_number == cycle_number,
                 m.SupervisorRun.report_fingerprint == report_fingerprint,
             )
         ).scalar_one_or_none()
         return _row_to_supervisor_run(row) if row is not None else None
 
     def create(self, data: dict[str, Any]) -> int:
+        task = self._session.get(m.Task, int(data["task_id"]))
+        phase = self._session.get(m.Phase, int(data["phase_id"]))
+        if task is None or phase is None:
+            raise ValueError("Supervisor run requires a persisted task and phase")
+        mode_id = int(task.mode_id)
+        cycle_number = int(task.cycle_number)
+        if phase.mode_id != mode_id:
+            raise ValueError("Supervisor phase must belong to the task's pinned mode")
+        if "mode_id" in data and int(data["mode_id"]) != mode_id:
+            raise ValueError("Supervisor mode is backend-pinned by the task cursor")
+        if "cycle_number" in data and int(data["cycle_number"]) != cycle_number:
+            raise ValueError("Supervisor cycle is backend-pinned by the task cursor")
         item = m.SupervisorRun(
             task_id=data["task_id"],
             phase_id=data["phase_id"],
+            mode_id=mode_id,
+            cycle_number=cycle_number,
             verdict=data["verdict"],
             report=data.get("report", ""),
             covered=json.dumps(data.get("covered", []), ensure_ascii=False),
@@ -81,5 +114,3 @@ class SASupervisorRunRepository(SupervisorRunRepository):
         self._session.add(item)
         self._session.flush()
         return int(item.id)
-
-

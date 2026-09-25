@@ -20,9 +20,11 @@ class WorkflowService:
     def create_workflow(self, data: dict[str, Any]) -> dict[str, Any]:
         payload = dict(data)
         wid = self._uow.workflows.create(payload)
+        default_mode = self._uow.workflows.ensure_default_mode(wid)
         if not payload.get("_skip_default_phase"):
             default_phase = {
                 "workflow_id": wid,
+                "mode_id": default_mode.id,
                 "code": f"wf-{wid}-default",
                 "name": self.DEFAULT_PHASE_NAME,
                 "description": "",

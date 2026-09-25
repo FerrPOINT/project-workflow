@@ -47,9 +47,24 @@ class SupervisorContextBuilder:
                 return phase
         return None
 
+    def _matches_execution(self, row: dict[str, Any], *, current_phase_only: bool = False) -> bool:
+        mode_id = self.task.get("mode_id")
+        cycle_number = self.task.get("cycle_number")
+        if mode_id is not None and row.get("mode_id") != mode_id:
+            return False
+        if cycle_number is not None and row.get("cycle_number") != cycle_number:
+            return False
+        if current_phase_only:
+            current = self.phase_map.get(self.current_phase)
+            if current is not None and current.id is not None and row.get("phase_id") != current.id:
+                return False
+        return True
+
     def _phase_status_lookup(self) -> dict[str, str]:
         statuses: dict[str, str] = {}
         for row in self.uow.get_task_history(self.task["id"]):
+            if not self._matches_execution(row):
+                continue
             phase = self._phase_by_id(row["phase_id"])
             if phase:
                 statuses[phase.code] = str(row["status"])
@@ -76,6 +91,8 @@ class SupervisorContextBuilder:
     def _build_phase_history(self) -> list[dict[str, Any]]:
         history: list[dict] = []
         for row in self.uow.get_task_history(self.task["id"]):
+            if not self._matches_execution(row):
+                continue
             phase = self._phase_by_id(row["phase_id"])
             if not phase:
                 continue
@@ -91,7 +108,10 @@ class SupervisorContextBuilder:
 
     def _build_recent_verdicts(self, limit: int = 5) -> list[dict[str, Any]]:
         verdicts: list[dict] = []
-        for row in self.uow.get_supervisor_runs(task_id=self.task["id"], limit=limit):
+        rows = self.uow.get_supervisor_runs(task_id=self.task["id"], limit=max(limit * 5, limit))
+        for row in rows:
+            if not self._matches_execution(row, current_phase_only=True):
+                continue
             verdicts.append(
                 {
                     "phase_code": row.get("phase_code"),
@@ -103,6 +123,8 @@ class SupervisorContextBuilder:
                     "created_at": row.get("created_at"),
                 }
             )
+            if len(verdicts) >= limit:
+                break
         return verdicts
 
     def build(self) -> dict[str, Any]:
@@ -120,6 +142,9 @@ class SupervisorContextBuilder:
             "project_name": self.project.get("name") if self.project else None,
             "workflow_name": self.workflow.get("name") if self.workflow else None,
             "workflow_id": self.workflow.get("id") if self.workflow else None,
+            "mode_id": self.task.get("mode_id"),
+            "mode_key": self.task.get("mode_key", "default"),
+            "cycle_number": self.task.get("cycle_number", 0),
             "task_status": self.task.get("status"),
             "current_phase": self.current_phase,
             "current_phase_name": phase.name if phase else "Unknown phase",

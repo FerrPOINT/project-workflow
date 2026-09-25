@@ -38,12 +38,11 @@ def _table(name: str) -> str:
 def _seed() -> list[dict[str, Any]]:
     seed_path = Path(__file__).resolve().parents[4] / "references" / "seed.json"
     raw = seed_path.read_bytes()
-    # ``using-rtech`` is the canonical public skill name.  Revision 9b71 was
-    # already released with the old ``rtech`` spelling, so this historical
-    # migration must keep consuming that exact snapshot.  The following
-    # migration performs the explicit forward rename.
+    # Revision 9b71 was released with the old ``rtech`` spelling.  Keep
+    # reconstructing that exact historical snapshot even when the active seed
+    # advances to the role-scoped ``relevanter-tech-operator`` skill.
     historical_raw = (
-        raw.replace(b'"using-rtech"', b'"rtech"')
+        raw.replace(b'"relevanter-tech-operator"', b'"rtech"')
         .replace(
             "Подтвердить, что Business-задача остаётся In Progress, и проверить activity".encode(),
             "Перевести Business-задачу в In Review и проверить activity".encode(),

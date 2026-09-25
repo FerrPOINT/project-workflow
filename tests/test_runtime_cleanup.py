@@ -142,20 +142,20 @@ def test_business_status_contract_matches_default_project_catalog():
     assert "Business status равен In Review" not in catalog
 
 
-def test_tech_phases_reference_the_canonical_using_rtech_skill():
+def test_tech_phases_reference_the_canonical_relevanter_tech_operator_skill():
     phases = _items()
     skill_phases = {
         phase["code"]
         for phase in phases
         if any(
-            "using-rtech" in (instruction.get("skills") or [])
+            "relevanter-tech-operator" in (instruction.get("skills") or [])
             for instruction in phase["instructions"]
         )
     }
 
     assert skill_phases == {"4.START", "9.PR", "11.RUNTIME", "12.RELEASE_GATE", "13.DELIVERY"}
     assert all(
-        "rtech" not in (instruction.get("skills") or [])
+        "using-rtech" not in (instruction.get("skills") or [])
         for phase in phases
         for instruction in phase["instructions"]
     )
@@ -171,7 +171,7 @@ def test_business_tech_migration_reconstructs_immutable_seed_on_any_line_endings
 
     assert len(migrated) == 19
     assert all(
-        "using-rtech" not in (instruction.get("skills") or [])
+        "relevanter-tech-operator" not in (instruction.get("skills") or [])
         for phase in migrated
         for instruction in phase["instructions"]
     )

@@ -8,11 +8,11 @@ from typing import Any
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from project_workflow.domain import Workflow
+from project_workflow.domain import Workflow, WorkflowMode
 from project_workflow.domain.exceptions import NotFoundError
 from project_workflow.domain.repositories import WorkflowRepository
 from project_workflow.infrastructure.db import models as m
-from project_workflow.infrastructure.db.repositories.converters import _row_to_workflow
+from project_workflow.infrastructure.db.repositories.converters import _row_to_workflow, _row_to_workflow_mode
 
 
 class SAWorkflowRepository(WorkflowRepository):
@@ -47,7 +47,57 @@ class SAWorkflowRepository(WorkflowRepository):
         )
         self._session.add(item)
         self._session.flush()
+        workflow_id = int(item.id)
+        self.ensure_default_mode(workflow_id)
+        return workflow_id
+
+    def list_modes(self, workflow_id: int) -> Sequence[WorkflowMode]:
+        rows = (
+            self._session.execute(
+                select(m.WorkflowMode)
+                .where(m.WorkflowMode.workflow_id == workflow_id)
+                .order_by(m.WorkflowMode.mode_order, m.WorkflowMode.id)
+            )
+            .scalars()
+            .all()
+        )
+        return [_row_to_workflow_mode(row) for row in rows]
+
+    def get_mode(self, mode_id: int) -> WorkflowMode | None:
+        row = self._session.get(m.WorkflowMode, mode_id)
+        return _row_to_workflow_mode(row) if row else None
+
+    def get_mode_by_key(self, workflow_id: int, key: str) -> WorkflowMode | None:
+        row = self._session.execute(
+            select(m.WorkflowMode).where(
+                m.WorkflowMode.workflow_id == workflow_id,
+                m.WorkflowMode.key == key,
+            )
+        ).scalar_one_or_none()
+        return _row_to_workflow_mode(row) if row else None
+
+    def create_mode(self, data: dict[str, Any]) -> int:
+        item = m.WorkflowMode(
+            workflow_id=int(data["workflow_id"]),
+            key=str(data["key"]),
+            name=str(data.get("name") or data["key"]),
+            mode_order=int(data["mode_order"]),
+        )
+        self._session.add(item)
+        self._session.flush()
         return int(item.id)
+
+    def ensure_default_mode(self, workflow_id: int) -> WorkflowMode:
+        existing = self.get_mode_by_key(workflow_id, "default")
+        if existing is not None:
+            return existing
+        mode_id = self.create_mode(
+            {"workflow_id": workflow_id, "key": "default", "name": "Default", "mode_order": 1}
+        )
+        created = self.get_mode(mode_id)
+        if created is None:
+            raise RuntimeError(f"Failed to create default mode for workflow {workflow_id}")
+        return created
 
     def update(self, workflow_id: int, data: dict[str, Any]) -> None:
         row = self._session.get(m.Workflow, workflow_id)
@@ -86,5 +136,3 @@ class SAWorkflowRepository(WorkflowRepository):
         if created is None:
             raise RuntimeError(f"Failed to create default workflow {name}")
         return created
-
-

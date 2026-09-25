@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from sqlalchemy.engine import make_url
 
 from project_workflow.domain.repositories import UnitOfWork
 
@@ -27,31 +28,27 @@ from ...supervisor.models import (
 _CATALOG_ENSURED_URLS: set[str] = set()
 
 
+def _catalog_url_key(url: str) -> str:
+    parsed = make_url(url)
+    if parsed.drivername.startswith("sqlite") and parsed.database and parsed.database != ":memory:":
+        return f"sqlite:///{Path(parsed.database).resolve().as_posix()}"
+    return str(parsed)
+
+
 def _normalized_url(uow: UnitOfWork) -> str:
     """Return the database URL this UoW is bound to (best-effort)."""
     engine = getattr(uow, "_session", None)
     if engine is not None:
         engine = getattr(engine, "bind", None)
     if engine is not None:
-        url = str(engine.url)
-        if url.startswith("sqlite:///"):
-            from pathlib import Path as _Path
-
-            target = str(_Path(url[10:]).resolve())
-            url = f"sqlite:///{target}"
-        return url
+        return _catalog_url_key(str(engine.url))
     return ""
 
 
 def mark_catalog_not_ensured(url: str | None = None) -> None:
     """Drop a URL from the catalog guard (used by tests that mutate the DB directly)."""
     if url:
-        if url.startswith("sqlite:///"):
-            from pathlib import Path as _Path
-
-            target = str(_Path(url[10:]).resolve())
-            url = f"sqlite:///{target}"
-        _CATALOG_ENSURED_URLS.discard(url)
+        _CATALOG_ENSURED_URLS.discard(_catalog_url_key(url))
     else:
         _CATALOG_ENSURED_URLS.clear()
 
@@ -132,11 +129,14 @@ def _build_phase_from_db(
 def load_phases_from_db(
     uow: UnitOfWork,
     workflow_id: int | str | None = None,
+    mode_id: int | str | None = None,
 ) -> list[Phase]:
     """Load all supervisor phases from a UnitOfWork instance."""
     if isinstance(workflow_id, str):
         workflow_id = int(workflow_id) if workflow_id.isdigit() else None
-    rows = uow.phases.list(workflow_id)
+    if isinstance(mode_id, str):
+        mode_id = int(mode_id) if mode_id.isdigit() else None
+    rows = uow.phases.list(workflow_id, mode_id)
     return [_build_phase_from_db(r, uow) for r in rows]
 
 
@@ -256,6 +256,8 @@ def ensure_phase_catalog(
         default_workflow = uow.workflows.ensure_default_exists(config.DEFAULT_WORKFLOW_NAME)
         workflow_id = default_workflow.id
         assert workflow_id is not None
+        default_mode = uow.workflows.ensure_default_mode(workflow_id)
+        assert default_mode.id is not None
         if uow.phases.list(workflow_id):
             if url:
                 _CATALOG_ENSURED_URLS.add(url)
@@ -285,6 +287,7 @@ def ensure_phase_catalog(
                         break
             data = {
                 "workflow_id": workflow_id,
+                "mode_id": default_mode.id,
                 "code": phase.code,
                 "name": phase.name,
                 "description": phase.description,

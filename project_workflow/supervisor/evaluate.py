@@ -15,9 +15,9 @@ from .models import Phase
 from .types import VERDICT_LABELS
 
 
-def _report_fingerprint(task_id: int, report: str) -> str:
+def _report_fingerprint(task_id: int, phase_id: int, report: str) -> str:
     normalized = normalize_text(report)
-    return hashlib.sha256(f"{task_id}\0{normalized}".encode()).hexdigest()
+    return hashlib.sha256(f"{task_id}\0{phase_id}\0{normalized}".encode()).hexdigest()
 
 
 def _blocked(exc: Exception, raw: dict[str, Any] | None = None) -> LlmVerdict:
@@ -34,8 +34,19 @@ def _blocked(exc: Exception, raw: dict[str, Any] | None = None) -> LlmVerdict:
     )
 
 
-def _replay(engine: Any, task_id: int, fingerprint: str) -> dict[str, Any] | None:
-    run = engine.db.supervisor_runs.get_by_fingerprint(task_id, fingerprint)
+def _replay(engine: Any, task_id: int, phase_id: int, fingerprint: str) -> dict[str, Any] | None:
+    mode_id = engine.task.get("mode_id")
+    if mode_id is None:
+        # Legacy synthetic evaluator callers have no persisted execution cursor.
+        # Real runs are always pinned and replay-safe through task+phase+mode+cycle.
+        return None
+    run = engine.db.supervisor_runs.get_by_fingerprint(
+        task_id,
+        phase_id,
+        int(mode_id),
+        int(engine.task.get("cycle_number", 0)),
+        fingerprint,
+    )
     response = getattr(run, "response", None) if run is not None else None
     if not isinstance(response, dict):
         return None
@@ -82,8 +93,11 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         )
 
     task_id = int(engine.task["id"])
-    fingerprint = _report_fingerprint(task_id, report)
-    replayed = _replay(engine, task_id, fingerprint)
+    if phase.id is None:
+        raise ValueError("Supervisor phase must have a persisted identity")
+    phase_id = int(phase.id)
+    fingerprint = _report_fingerprint(task_id, phase_id, report)
+    replayed = _replay(engine, task_id, phase_id, fingerprint)
     if replayed is not None:
         return replayed
 
@@ -176,7 +190,8 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     raw_evaluator = raw if raw is not None else llm.raw
     run_data = {
         "task_id": task_id,
-        "phase_id": phase.id,
+        "phase_id": phase_id,
+        "cycle_number": engine.task.get("cycle_number", 0),
         "verdict": verdict_key,
         "report": report,
         "covered": covered,
@@ -200,6 +215,8 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         },
         "response": result,
     }
+    if engine.task.get("mode_id") is not None:
+        run_data["mode_id"] = engine.task["mode_id"]
 
     try:
         engine.db.create_supervisor_run(run_data)
@@ -208,7 +225,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         engine.db.commit()
     except IntegrityError:
         engine.db.rollback()
-        replayed = _replay(engine, task_id, fingerprint)
+        replayed = _replay(engine, task_id, phase_id, fingerprint)
         if replayed is not None:
             return replayed
         raise

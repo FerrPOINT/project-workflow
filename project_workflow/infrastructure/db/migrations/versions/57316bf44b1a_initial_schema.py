@@ -26,7 +26,24 @@ def upgrade() -> None:
     from project_workflow.infrastructure.db.models import Base
 
     bind = op.get_bind()
-    Base.metadata.create_all(bind)
+    # This historical revision imports current metadata. Keep newly introduced
+    # mode foreign keys nullable only while reconstructing the legacy schema so
+    # older seed migrations can insert rows before the mode backfill revision.
+    # Restore metadata immediately; the head migration makes the DB columns
+    # non-null after backfill.
+    mode_columns = [
+        Base.metadata.tables[table_name].c.mode_id
+        for table_name in ("phases", "tasks", "task_history", "supervisor_runs")
+        if "mode_id" in Base.metadata.tables[table_name].c
+    ]
+    previous_nullable = [column.nullable for column in mode_columns]
+    try:
+        for column in mode_columns:
+            column.nullable = True
+        Base.metadata.create_all(bind)
+    finally:
+        for column, nullable in zip(mode_columns, previous_nullable, strict=True):
+            column.nullable = nullable
 
 
 def downgrade() -> None:

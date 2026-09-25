@@ -84,6 +84,37 @@ class TestIndex:
         resp = client.get("/phases")
         assert resp.status_code == 200
 
+    def test_phases_page_has_stable_mode_tabs_and_selected_mode_catalog(self, client):
+        from project_workflow.interfaces.ui import _app_state
+
+        uow = _app_state.get_db()
+        workflow = uow.workflows.get_default()
+        assert workflow is not None and workflow.id is not None
+        mode_id = uow.workflows.create_mode(
+            {"workflow_id": workflow.id, "key": "rework", "name": "Rework", "mode_order": 2}
+        )
+        phase_id = uow.phases.create(
+            {
+                "workflow_id": workflow.id,
+                "mode_id": mode_id,
+                "code": "RW-01",
+                "name": "Rework intake",
+                "phase_order": 1,
+            }
+        )
+        uow.commit()
+
+        response = client.get(f"/phases?workflow_id={workflow.id}&mode_id={mode_id}")
+
+        assert response.status_code == 200
+        assert 'data-testid="workflow-mode-tabs"' in response.text
+        assert f'data-mode-id="{mode_id}"' in response.text
+        assert "Rework intake" in response.text
+        assert f'href="/phase/{phase_id}"' in response.text
+        detail = client.get(f"/phase/{phase_id}")
+        assert detail.status_code == 200
+        assert f'href="/phases?workflow_id={workflow.id}&amp;mode_id={mode_id}"' in detail.text
+
     def test_phase_detail_page(self, client):
         resp = client.get(f"/phase/{_phase_id(client, '1.INTAKE')}")
         assert resp.status_code == 200
@@ -780,11 +811,47 @@ class TestApiPhaseUpdate:
         updated = next(phase for phase in phases if phase["code"] == "7.PLAN_GATE")
         assert updated["execution_type"] == "parallel"
         assert updated["parallel_with"] == "6.TEST_PLAN"
-        groups = [
-            [phase["code"] for phase in block["phases"]]
-            for block in _build_parallel_phase_blocks(phases)
-        ]
+        groups = [[phase["code"] for phase in block["phases"]] for block in _build_parallel_phase_blocks(phases)]
         assert ["6.SOLUTION", "6.TEST_PLAN", "7.PLAN_GATE"] in groups
+
+    def test_sync_to_parallel_uses_neighbors_from_selected_non_default_mode(self, client):
+        from project_workflow.interfaces.ui import _app_state
+
+        uow = _app_state.get_db()
+        workflow = uow.workflows.get_default()
+        assert workflow is not None and workflow.id is not None
+        mode_id = uow.workflows.create_mode(
+            {"workflow_id": workflow.id, "key": "isolated-rework", "name": "Isolated rework", "mode_order": 2}
+        )
+        uow.commit()
+        neighbor = _app_state.phase_service().create_phase(
+            {
+                "workflow_id": workflow.id,
+                "mode_id": mode_id,
+                "code": "RW-01",
+                "name": "Reproduce",
+                "phase_order": 1,
+                "execution_type": "parallel",
+            }
+        )
+        target = _app_state.phase_service().create_phase(
+            {
+                "workflow_id": workflow.id,
+                "mode_id": mode_id,
+                "code": "RW-02",
+                "name": "Repair",
+                "phase_order": 2,
+                "execution_type": "sync",
+            }
+        )
+        uow.commit()
+
+        response = client.put(f"/api/phases/{target['id']}", json={"execution_type": "parallel"})
+
+        assert response.status_code == 200
+        updated = _app_state.phase_service().get_phase(target["id"])
+        assert updated["parallel_with"] == neighbor["code"]
+        assert updated["mode_id"] == mode_id
 
     def test_parallel_round_trip_keeps_original_component(self, client):
         phase_id = _phase_id(client, "5.RESEARCH")

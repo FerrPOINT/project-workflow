@@ -20,6 +20,7 @@ from project_workflow.interfaces.ui.schemas import (
     ProjectCreate,
     ProjectUpdate,
     WorkflowCreate,
+    WorkflowModeCreate,
     WorkflowUpdate,
 )
 from project_workflow.interfaces.ui.services import (
@@ -57,13 +58,16 @@ async def api_settings_get() -> dict[str, Any] | JSONResponse:
     return {"ok": True, "commands": _load_cli_reference()}
 
 
-async def api_phases(workflow_id: int | None = Query(default=None)) -> dict[str, Any] | JSONResponse:
+async def api_phases(
+    workflow_id: int | None = Query(default=None),
+    mode_id: int | None = Query(default=None),
+) -> dict[str, Any] | JSONResponse:
     workflows = _app_state.workflow_service().list_workflows()
     selected_workflow = next((item for item in workflows if item["id"] == workflow_id), None)
     if selected_workflow is None and workflow_id is None and workflows:
         selected_workflow = workflows[0]
     selected_workflow_id = selected_workflow["id"] if selected_workflow else workflow_id
-    phases = _app_state.phase_service().list_phases(selected_workflow_id)
+    phases = _app_state.phase_service().list_phases(selected_workflow_id, mode_id)
     agents = {a["id"]: a for a in _app_state.agent_service().list_agents()}
 
     rows = []
@@ -76,6 +80,8 @@ async def api_phases(workflow_id: int | None = Query(default=None)) -> dict[str,
                 "description": phase.get("description", ""),
                 "code": phase.get("code", ""),
                 "workflow_id": phase.get("workflow_id"),
+                "mode_id": phase.get("mode_id"),
+                "mode_key": phase.get("mode_key", "default"),
                 "phase_num": phase.get("phase_num", phase.get("phase_order", 0)),
                 "phase_order": phase.get("phase_order", 0),
                 "execution_type": phase.get("execution_type", "sync"),
@@ -121,6 +127,37 @@ async def api_workflows() -> dict[str, Any] | JSONResponse:
     return {"ok": True, "workflows": _load_workflows()}
 
 
+async def api_workflow_modes(workflow_id: int) -> dict[str, Any] | JSONResponse:
+    workflow = _app_state.workflow_service().get_workflow(workflow_id)
+    if workflow is None:
+        return _error(f"Workflow {workflow_id} не найден", 404)
+    modes = [mode.to_dict() for mode in _app_state.get_uow().workflows.list_modes(workflow_id)]
+    return {"ok": True, "workflow": workflow, "modes": modes}
+
+
+async def api_workflow_mode_create(
+    workflow_id: int,
+    payload: WorkflowModeCreate,
+) -> dict[str, Any] | JSONResponse:
+    workflow = _app_state.workflow_service().get_workflow(workflow_id)
+    if workflow is None:
+        return _error(f"Workflow {workflow_id} не найден", 404)
+    repo = _app_state.get_uow().workflows
+    if repo.get_mode_by_key(workflow_id, payload.key) is not None:
+        return _error(f"Mode {payload.key!r} уже существует", 409)
+    mode_id = repo.create_mode(
+        {
+            "workflow_id": workflow_id,
+            "key": payload.key,
+            "name": payload.name,
+            "mode_order": payload.mode_order,
+        }
+    )
+    _app_state.get_uow().commit()
+    mode = repo.get_mode(mode_id)
+    return {"ok": True, "mode": mode.to_dict() if mode else None}
+
+
 async def api_agents() -> dict[str, Any] | JSONResponse:
     rows = _app_state.agent_service().list_agents()
     return {
@@ -152,7 +189,7 @@ async def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONRespons
         return _error(f"Workflow {resolved_workflow_id} не найден", 400)
     workflow_id = resolved_workflow_id
 
-    workflow_phases = _app_state.phase_service().list_phases(workflow_id)
+    workflow_phases = _app_state.phase_service().list_phases(workflow_id, payload.mode_id)
     order_list = sorted([p["phase_order"] for p in workflow_phases if isinstance(p.get("phase_order"), int)])
     new_order = payload.phase_order
     if new_order > (max(order_list, default=0) + 1):
@@ -170,6 +207,7 @@ async def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONRespons
         "name": payload.name,
         "description": payload.description or "",
         "workflow_id": workflow_id,
+        "mode_id": payload.mode_id,
         "phase_order": new_order,
         "execution_type": payload.execution_type or "sync",
         "parallel_with": payload.parallel_with,
@@ -234,7 +272,7 @@ async def api_phase_delete(phase_id: int) -> dict[str, Any] | JSONResponse:
     if not phase:
         return _error(f"Фаза {phase_id} не найдена", 404)
     workflow_id = phase.get("workflow_id")
-    workflow_phases = _app_state.phase_service().list_phases(workflow_id)
+    workflow_phases = _app_state.phase_service().list_phases(workflow_id, phase.get("mode_id"))
     if len(workflow_phases) <= 1:
         return _error("Нельзя удалить единственную фазу workflow", 409)
     _app_state.phase_service().delete_phase(phase_id)
@@ -246,6 +284,7 @@ async def api_phase_batch_order(payload: PhaseOrderUpdate) -> dict[str, Any] | J
         return _error("Список order пуст", 400)
 
     workflow_id: int | None = None
+    mode_id: int | None = None
     for item in payload.orders:
         if item.workflow_id is not None:
             workflow_id = item.workflow_id
@@ -257,6 +296,7 @@ async def api_phase_batch_order(payload: PhaseOrderUpdate) -> dict[str, Any] | J
             phase = _app_state.phase_service().get_phase(first_id)
             if phase:
                 workflow_id = phase.get("workflow_id")
+                mode_id = phase.get("mode_id")
 
     batch: list[tuple[int, int]] = []
     ordered_phase_ids: list[int] = []
@@ -264,10 +304,19 @@ async def api_phase_batch_order(payload: PhaseOrderUpdate) -> dict[str, Any] | J
         resolved_phase_id = _coerce_phase_db_id(item.phase_id)
         if resolved_phase_id is None:
             return _error(f"Некорректный phase_id: {item.phase_id!r}", 400)
+        phase = _app_state.phase_service().get_phase(resolved_phase_id)
+        if phase is None:
+            return _error(f"Фаза {resolved_phase_id} не найдена", 404)
+        if workflow_id is None:
+            workflow_id = phase.get("workflow_id")
+        if mode_id is None:
+            mode_id = phase.get("mode_id")
+        if phase.get("workflow_id") != workflow_id or phase.get("mode_id") != mode_id:
+            return _error("Порядок можно менять только внутри одного workflow mode", 400)
         batch.append((resolved_phase_id, item.phase_order))
         ordered_phase_ids.append(resolved_phase_id)
 
-    workflow_phases = _app_state.phase_service().list_phases(workflow_id)
+    workflow_phases = _app_state.phase_service().list_phases(workflow_id, mode_id)
     for phase in workflow_phases:
         if phase["id"] not in ordered_phase_ids:
             batch.append((phase["id"], phase.get("phase_order", 0)))
@@ -309,7 +358,8 @@ async def api_workflow_delete(workflow_id: int) -> dict[str, Any] | JSONResponse
     existing = service.get_workflow(workflow_id)
     if not existing:
         return _error(f"Workflow {workflow_id} не найден", 404)
-    phases = _app_state.phase_service().list_phases(workflow_id)
+    modes = _app_state.get_uow().workflows.list_modes(workflow_id)
+    phases = [phase for mode in modes for phase in _app_state.phase_service().list_phases(workflow_id, mode.id)]
     projects = [p for p in _app_state.project_service().list_projects() if p.get("workflow_id") == workflow_id]
     starter_code = f"wf-{workflow_id}-default"
     non_starter_phases = [p for p in phases if p.get("code") != starter_code]

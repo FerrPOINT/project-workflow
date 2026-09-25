@@ -28,8 +28,15 @@ class _PhaseOrderItem(BaseModel):
     workflow_id: int | None = Field(default=None)
 
 
+class WorkflowModeCreate(BaseModel):
+    key: str = Field(..., min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_]*$")
+    name: str = Field(..., min_length=1)
+    mode_order: int = Field(..., gt=0)
+
+
 class PhaseCreate(BaseModel, OptionalIntMixin):
     workflow_id: int | str | None = Field(default=None, description="Parent workflow id or code")
+    mode_id: int | None = Field(default=None, description="Workflow mode id; omitted means default")
     phase_order: int | None = Field(default=None, description="1-based insertion position")
     insert_after: int | None = Field(default=None, description="Insert after this 0-based index")
     name: str = Field(default="Новая фаза")

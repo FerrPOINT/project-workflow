@@ -7,7 +7,7 @@ import json
 import logging
 from typing import Any
 
-from project_workflow.domain import Agent, Phase, Project, SupervisorRun, Task, Workflow
+from project_workflow.domain import Agent, Phase, Project, SupervisorRun, Task, Workflow, WorkflowMode
 from project_workflow.infrastructure.db import models as m
 
 logger = logging.getLogger(__name__)
@@ -25,6 +25,8 @@ def _row_to_phase(row: m.Phase) -> Phase:
     return Phase(
         id=row.id,
         workflow_id=row.workflow_id,
+        mode_id=row.mode_id,
+        mode_key=row.mode.key if row.mode else "default",
         code=row.code,
         name=row.name,
         description=row.description or "",
@@ -52,6 +54,16 @@ def _row_to_workflow(row: m.Workflow) -> Workflow:
     )
 
 
+def _row_to_workflow_mode(row: m.WorkflowMode) -> WorkflowMode:
+    return WorkflowMode(
+        id=row.id,
+        workflow_id=row.workflow_id,
+        key=row.key,
+        name=row.name,
+        mode_order=row.mode_order,
+    )
+
+
 def _row_to_project(row: m.Project) -> Project:
     raw = row.key_prefixes or "[]"
     try:
@@ -75,7 +87,11 @@ def _row_to_task(row: m.Task) -> Task:
     try:
         if current_phase and current_phase != "-1":
             phase = next(
-                (p for p in row.project.workflow.phases if str(p.id) == current_phase or p.code == current_phase),
+                (
+                    p
+                    for p in row.project.workflow.phases
+                    if p.mode_id == row.mode_id and (str(p.id) == current_phase or p.code == current_phase)
+                ),
                 None,
             )
             phase_name = phase.name if phase else current_phase
@@ -85,6 +101,9 @@ def _row_to_task(row: m.Task) -> Task:
     return Task(
         id=getattr(row, "id", None),
         project_id=row.project_id,
+        mode_id=row.mode_id,
+        mode_key=row.mode.key if row.mode else "default",
+        cycle_number=row.cycle_number,
         task_key=row.task_key,
         title=row.title or "",
         description=row.description or "",
@@ -130,6 +149,11 @@ def _row_to_supervisor_run(row: m.SupervisorRun) -> SupervisorRun:
         id=row.id,
         task_id=row.task_id,
         phase_id=row.phase_id,
+        phase_code=row.phase.code if row.phase else "",
+        phase_name=row.phase.name if row.phase else "",
+        mode_id=row.mode_id,
+        mode_key=row.mode.key if row.mode else "default",
+        cycle_number=row.cycle_number,
         verdict=row.verdict,
         report=row.report or "",
         covered=_parse(row.covered),

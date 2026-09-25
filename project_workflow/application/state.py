@@ -38,7 +38,7 @@ class _AppState:
     def _database_url_normalized(self) -> str:
         target = self._database_url or get_settings().DATABASE_URL
         if target.startswith("sqlite:///"):
-            target = str(Path(target[10:]).resolve())
+            target = Path(target[10:]).resolve().as_posix()
             target = f"sqlite:///{target}"
         return target
 
