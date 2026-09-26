@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -50,15 +51,46 @@ def normalized_bytes(path: Path) -> bytes:
     return path.read_text(encoding="utf-8").replace("\r\n", "\n").encode("utf-8")
 
 
+def _git(repository_root: Path, *arguments: str, text: bool = True) -> str | bytes:
+    completed = subprocess.run(
+        ["git", "-C", str(repository_root), *arguments],
+        check=True,
+        capture_output=True,
+        text=text,
+    )
+    return completed.stdout
+
+
+def verify_source_revision(repository_root: Path, workflow_revision: str) -> Path:
+    repository_root = repository_root.resolve()
+    if REVISION_PATTERN.fullmatch(workflow_revision) is None:
+        raise ValueError("workflow revision must be an exact 40-character SHA")
+    top_level = Path(str(_git(repository_root, "rev-parse", "--show-toplevel")).strip()).resolve()
+    if top_level != repository_root:
+        raise ValueError("repository root must be the exact Git top level")
+    head = str(_git(repository_root, "rev-parse", "HEAD")).strip()
+    if head != workflow_revision:
+        raise ValueError(f"workflow revision does not match repository HEAD: {head}")
+    if str(_git(repository_root, "status", "--porcelain", "--untracked-files=all")).strip():
+        raise ValueError("workflow repository tree must be clean")
+    config_root = repository_root / "configs" / "hermes"
+    for role in ROLE_ORDER:
+        relative = f"configs/hermes/{role}.json"
+        worktree_bytes = (config_root / f"{role}.json").read_bytes()
+        blob_bytes = _git(repository_root, "show", f"{workflow_revision}:{relative}", text=False)
+        if worktree_bytes != blob_bytes:
+            raise ValueError(f"workflow bundle differs from pinned Git blob: {relative}")
+    return config_root
+
+
 def build_catalog(
     *,
-    config_root: Path,
+    repository_root: Path,
     skills_manifest_path: Path,
     workflow_revision: str,
     skills_revision: str,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    if REVISION_PATTERN.fullmatch(workflow_revision) is None:
-        raise ValueError("workflow revision must be an exact 40-character SHA")
+    config_root = verify_source_revision(repository_root, workflow_revision)
     if REVISION_PATTERN.fullmatch(skills_revision) is None:
         raise ValueError("skills revision must be an exact 40-character SHA")
     manifest_raw = normalized_bytes(skills_manifest_path)
@@ -90,7 +122,15 @@ def build_catalog(
                         "code": item["code"],
                         "name": item["name"],
                         "description": item["description"],
-                        "instructions": item["instructions"],
+                        "execution_type": item["execution_type"],
+                        "instructions": [
+                            {
+                                "text": instruction["text"],
+                                "skills": instruction["skills"],
+                                "execution_type": instruction["execution_type"],
+                            }
+                            for instruction in item["instructions"]
+                        ],
                         "checks": item["checks"],
                         "evidence": item["evidence"],
                     }
@@ -142,14 +182,14 @@ def write_json(path: Path, value: dict[str, Any]) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config-root", type=Path, default=Path(__file__).resolve().parents[1] / "configs" / "hermes")
+    parser.add_argument("--repository-root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--skills-manifest", type=Path, required=True)
     parser.add_argument("--workflow-revision", required=True)
     parser.add_argument("--skills-revision", required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
     catalog, phase_sets = build_catalog(
-        config_root=args.config_root,
+        repository_root=args.repository_root,
         skills_manifest_path=args.skills_manifest,
         workflow_revision=args.workflow_revision,
         skills_revision=args.skills_revision,

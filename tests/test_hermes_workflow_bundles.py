@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -17,6 +19,27 @@ from scripts.install_hermes_workflow import (
 )
 
 CONFIG_ROOT = Path(__file__).resolve().parents[1] / "configs" / "hermes"
+
+
+def _source_repository(tmp_path: Path) -> tuple[Path, str]:
+    repository = tmp_path / "source"
+    shutil.copytree(CONFIG_ROOT, repository / "configs" / "hermes")
+    subprocess.run(["git", "init", "-q", str(repository)], check=True)
+    subprocess.run(["git", "-C", str(repository), "add", "configs/hermes"], check=True)
+    subprocess.run(
+        [
+            "git", "-C", str(repository), "-c", "user.name=Workflow Tests",
+            "-c", "user.email=workflow-tests@example.invalid", "commit", "-qm", "fixture",
+        ],
+        check=True,
+    )
+    revision = subprocess.run(
+        ["git", "-C", str(repository), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    return repository, revision
 
 
 def _skills_manifest(tmp_path: Path) -> Path:
@@ -69,10 +92,10 @@ def test_seven_clean_role_namespace_bundles_are_complete() -> None:
 
 
 def test_business_export_is_exact_full_registry_with_phase_instructions(tmp_path: Path) -> None:
-    workflow_revision = "a" * 40
+    repository, workflow_revision = _source_repository(tmp_path)
     skills_revision = "b" * 40
     catalog, phase_source = build_catalog(
-        config_root=CONFIG_ROOT,
+        repository_root=repository,
         skills_manifest_path=_skills_manifest(tmp_path),
         workflow_revision=workflow_revision,
         skills_revision=skills_revision,
@@ -87,7 +110,10 @@ def test_business_export_is_exact_full_registry_with_phase_instructions(tmp_path
     } == {role: f"hermes-sdlc:{role}" for role in ROLE_ORDER}
     assert catalog["roles"]["developer"]["workflowName"] == "Hermes Developer"
     assert all(
-        phase["instructions"] and phase["checks"] and phase["evidence"]
+        phase["execution_type"] == "sync"
+        and phase["instructions"]
+        and all(item["execution_type"] == "sync" for item in phase["instructions"])
+        and phase["checks"] and phase["evidence"]
         for phases in phase_source["phase_sets"].values()
         for phase in phases
     )
@@ -103,6 +129,21 @@ def test_business_export_is_exact_full_registry_with_phase_instructions(tmp_path
     digest = write_json(output, catalog)
     assert len(digest) == 64
     assert b"\r\n" not in output.read_bytes()
+
+
+def test_business_export_rejects_unproven_revision_and_dirty_tree(tmp_path: Path) -> None:
+    repository, workflow_revision = _source_repository(tmp_path)
+    arguments = {
+        "repository_root": repository,
+        "skills_manifest_path": _skills_manifest(tmp_path),
+        "skills_revision": "b" * 40,
+    }
+    with pytest.raises(ValueError, match="does not match repository HEAD"):
+        build_catalog(workflow_revision="a" * 40, **arguments)
+
+    (repository / "configs" / "hermes" / "analyst.json").write_text("{}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="tree must be clean"):
+        build_catalog(workflow_revision=workflow_revision, **arguments)
 
 
 def test_delivery_and_aggregate_modes_are_distinct_and_not_aliased() -> None:
@@ -143,6 +184,28 @@ def test_project_manager_publication_hands_backlog_to_analyst_automatically() ->
     assert "complete=true" in text
     assert "workflow_phase" not in text
     assert "terminal action не вызывать" in text
+    draft = json.dumps(bundle["workflow"]["modes"][0], ensure_ascii=False).lower()
+    for forbidden in ("parent", "зависим", "подзадач", "техническ"):
+        assert forbidden not in draft
+
+
+def test_integration_rework_is_strictly_frozen_finding_driven() -> None:
+    bundle = load_bundle(CONFIG_ROOT / "developer.json")
+    mode = next(item for item in bundle["workflow"]["modes"] if item["key"] == "integration_rework")
+    assert [phase["code"] for phase in mode["phases"]] == [
+        "integration_rework.context",
+        "integration_rework.reproduce",
+        "integration_rework.regression",
+        "integration_rework.fix",
+        "integration_rework.closure",
+        "integration_rework.retest",
+        "integration_rework.handoff",
+    ]
+    text = json.dumps(mode, ensure_ascii=False).lower()
+    for required in ("frozen finding", "воспроиз", "regression", "closure", "aggregate retest"):
+        assert required in text
+    assert "initial integration" not in text
+    assert "обнаруженные gaps" not in text
 
 
 def test_every_instruction_skill_is_pinned_or_supplied_by_the_runtime() -> None:
@@ -222,7 +285,7 @@ def test_installer_applies_and_verifies_exact_bundle(tmp_path: Path) -> None:
     assert checked["checked"] is True
 
     with SAUnitOfWork(database_url) as uow:
-        workflow = uow.workflows.get_by_name("Hermes Analyst")
+        workflow = uow.workflows.get_by_name(bundle["businessWorkflowKey"])
         assert workflow is not None and workflow.id is not None
         uow.workflows.update(workflow.id, {"description": "drift"})
         uow.commit()
@@ -231,33 +294,112 @@ def test_installer_applies_and_verifies_exact_bundle(tmp_path: Path) -> None:
         install(bundle, check_only=True, database_url=database_url)
 
 
-@pytest.mark.parametrize("role", sorted(LEGACY_MODE_ALIASES))
-def test_installer_migrates_known_legacy_mode_without_losing_phases(tmp_path: Path, role: str) -> None:
-    database_url = f"sqlite:///{(tmp_path / f'{role}.db').as_posix()}"
-    bundle = load_bundle(CONFIG_ROOT / f"{role}.json")
+def test_installer_refuses_in_place_legacy_mode_reuse(tmp_path: Path) -> None:
+    role = "architect"
+    database_url = f"sqlite:///{(tmp_path / 'legacy-populated.db').as_posix()}"
+    bundle = load_bundle(CONFIG_ROOT / "architect.json")
     install(bundle, check_only=False, database_url=database_url)
     legacy_key, canonical_key = next(iter(LEGACY_MODE_ALIASES[role].items()))
 
     with SAUnitOfWork(database_url) as uow:
-        workflow = uow.workflows.get_by_name(bundle["workflow"]["name"])
+        workflow = uow.workflows.get_by_name(bundle["businessWorkflowKey"])
         assert workflow is not None and workflow.id is not None
         canonical = next(
             mode for mode in uow.workflow_modes.list(workflow.id) if mode.key == canonical_key
         )
         assert canonical.id is not None
-        phase_ids = [phase.id for phase in uow.phases.list(workflow.id, canonical.id)]
         uow.workflow_modes.update(canonical.id, {"key": legacy_key})
         uow.commit()
 
+    with pytest.raises(RuntimeError, match="requires audited migration.*phases"):
+        install(bundle, check_only=False, database_url=database_url)
+
+
+def _add_empty_legacy_mode(database_url: str) -> tuple[dict, int, int, int, int]:
+    bundle = load_bundle(CONFIG_ROOT / "reviewer.json")
     install(bundle, check_only=False, database_url=database_url)
     with SAUnitOfWork(database_url) as uow:
-        workflow = uow.workflows.get_by_name(bundle["workflow"]["name"])
+        workflow = uow.workflows.get_by_name(bundle["businessWorkflowKey"])
         assert workflow is not None and workflow.id is not None
-        migrated = next(
-            mode for mode in uow.workflow_modes.list(workflow.id) if mode.key == canonical_key
+        delivery = uow.workflow_modes.get_by_key(workflow.id, "delivery")
+        assert delivery is not None and delivery.id is not None
+        legacy_id = uow.workflow_modes.create(
+            {"workflow_id": workflow.id, "key": "review", "name": "Legacy Review"}
         )
-        assert migrated.id is not None
-        assert [phase.id for phase in uow.phases.list(workflow.id, migrated.id)] == phase_ids
+        project_id = uow.projects.create(
+            {"workflow_id": workflow.id, "code": "LEGACY", "name": "Legacy audit", "key_prefixes": []}
+        )
+        uow.commit()
+    return bundle, int(workflow.id), int(delivery.id), legacy_id, project_id
+
+
+def test_installer_replaces_only_empty_unreferenced_legacy_mode_with_fresh_id(tmp_path: Path) -> None:
+    database_url = f"sqlite:///{(tmp_path / 'legacy-empty.db').as_posix()}"
+    bundle, workflow_id, delivery_id, legacy_id, _project_id = _add_empty_legacy_mode(database_url)
+
+    install(bundle, check_only=False, database_url=database_url)
+    with SAUnitOfWork(database_url) as uow:
+        assert uow.workflow_modes.get_by_id(legacy_id) is None
+        delivery = uow.workflow_modes.get_by_key(workflow_id, "delivery")
+        assert delivery is not None and delivery.id == delivery_id
+
+
+def test_installer_creates_fresh_canonical_id_after_auditing_empty_legacy_mode(tmp_path: Path) -> None:
+    from project_workflow.application.workflow import WorkflowService
+    from project_workflow.infrastructure.db.session import ensure_schema, get_engine
+
+    database_url = f"sqlite:///{(tmp_path / 'legacy-only.db').as_posix()}"
+    ensure_schema(get_engine(database_url))
+    bundle = load_bundle(CONFIG_ROOT / "architect.json")
+    with SAUnitOfWork(database_url) as uow:
+        created = WorkflowService(uow).create_workflow(
+            {
+                "name": bundle["businessWorkflowKey"],
+                "description": bundle["workflow"]["description"],
+                "_skip_default_phase": True,
+                "_default_mode_key": "architecture",
+                "_default_mode_name": "Legacy Architecture",
+            }
+        )
+        legacy = uow.workflow_modes.get_by_key(int(created["id"]), "architecture")
+        assert legacy is not None and legacy.id is not None
+        workflow_id, legacy_id = int(created["id"]), int(legacy.id)
+
+    install(bundle, check_only=False, database_url=database_url)
+    with SAUnitOfWork(database_url) as uow:
+        assert uow.workflow_modes.get_by_id(legacy_id) is None
+        canonical = uow.workflow_modes.get_by_key(workflow_id, "decomposition")
+        assert canonical is not None and canonical.id is not None and canonical.id != legacy_id
+
+
+@pytest.mark.parametrize("reference", ["tasks", "task_history", "supervisor_runs"])
+def test_installer_fails_closed_for_every_legacy_mode_reference(tmp_path: Path, reference: str) -> None:
+    from project_workflow.infrastructure.db import models as m
+
+    database_url = f"sqlite:///{(tmp_path / f'legacy-{reference}.db').as_posix()}"
+    bundle, workflow_id, delivery_id, legacy_id, project_id = _add_empty_legacy_mode(database_url)
+    with SAUnitOfWork(database_url) as uow:
+        phase = uow.phases.list(workflow_id, delivery_id)[0]
+        assert phase.id is not None
+        task_id = uow.tasks.create(
+            {"project_id": project_id, "task_key": f"LEGACY-{reference}", "current_mode_id": delivery_id}
+        )
+        if reference == "tasks":
+            uow.tasks.update(task_id, {"current_mode_id": legacy_id})
+        elif reference == "task_history":
+            uow.session.add(m.TaskHistory(
+                task_id=task_id, phase_id=phase.id, mode_id=legacy_id, cycle_number=0, status="pending"
+            ))
+        else:
+            uow.session.add(m.SupervisorRun(
+                task_id=task_id, phase_id=phase.id, mode_id=legacy_id, cycle_number=0,
+                attempt_number=1, verdict="pass", report="", covered="[]", missing="[]",
+                blockers="[]", context_snapshot="{}", response="{}",
+            ))
+        uow.commit()
+
+    with pytest.raises(RuntimeError, match=rf"requires audited migration.*'{reference}': 1"):
+        install(bundle, check_only=False, database_url=database_url)
 
 
 def test_managed_installer_removes_only_empty_bootstrap_workflows(tmp_path: Path, monkeypatch) -> None:
@@ -270,6 +412,6 @@ def test_managed_installer_removes_only_empty_bootstrap_workflows(tmp_path: Path
     install(bundle, check_only=False, database_url=database_url)
 
     with SAUnitOfWork(database_url) as uow:
-        assert [workflow.name for workflow in uow.workflows.list()] == ["Hermes Analyst"]
+        assert [workflow.name for workflow in uow.workflows.list()] == [bundle["businessWorkflowKey"]]
         assert list(uow.projects.list()) == []
         assert list(uow.agents.list()) == []

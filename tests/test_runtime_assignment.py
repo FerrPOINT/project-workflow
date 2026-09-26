@@ -12,7 +12,7 @@ def _payload(**updates):
         "title": "Исправить обработку повтора",
         "role": "developer",
         "namespace": "hermes-developer",
-        "workflow": "Hermes Developer",
+        "workflow": "hermes-sdlc:developer",
         "mode": "initial",
         "cycleNumber": 0,
         "attempt": 1,
@@ -69,7 +69,7 @@ def _install_developer_workflow():
 
     workflow = _app_state.workflow_service().create_workflow(
         {
-            "name": "Hermes Developer",
+            "name": "hermes-sdlc:developer",
             "_skip_default_phase": True,
             "_default_mode_key": "initial",
             "_default_mode_name": "Первичная разработка",

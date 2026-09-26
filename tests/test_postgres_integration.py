@@ -175,9 +175,10 @@ class TestPostgresUoW:
         assert installed == {
             "namespace": "hermes-developer",
             "role": "developer",
-            "workflow": "Hermes Developer",
-            "modes": 2,
-            "phases": 14,
+            "workflow": "hermes-sdlc:developer",
+            "workflowName": "Hermes Developer",
+            "modes": 4,
+            "phases": 28,
             "checked": False,
         }
         assert checked == {**installed, "checked": True}

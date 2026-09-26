@@ -85,7 +85,8 @@ def load_bundle(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError("workflow bundle must be an object")
     required = {
-        "schemaVersion", "namespace", "role", "businessWorkflowKey", "workflow", "skillsHub"
+        "schemaVersion", "namespace", "role", "businessWorkflowKey", "executionPolicy",
+        "workflow", "skillsHub"
     }
     if set(data) != required or data["schemaVersion"] != 1:
         raise ValueError("unsupported workflow bundle shape")
@@ -97,6 +98,8 @@ def load_bundle(path: Path) -> dict[str, Any]:
         raise ValueError("namespace does not match role")
     if data["businessWorkflowKey"] != f"hermes-sdlc:{role}":
         raise ValueError("Business workflow key does not match role")
+    if data["executionPolicy"] != {"phase": "sync", "instruction": "sync"}:
+        raise ValueError("Hermes execution policy must be serial sync")
     skills_hub = data["skillsHub"]
     if not isinstance(skills_hub, dict) or set(skills_hub) != {"commit", "hashes"}:
         raise ValueError("invalid Skills Hub lock")
@@ -157,6 +160,8 @@ def load_bundle(path: Path) -> dict[str, Any]:
                 if unknown:
                     raise ValueError(f"unpinned skills in {key}/{code}/{step_num}: {sorted(unknown)}")
                 referenced_hub_skills.update(set(skills) & set(hashes))
+                instruction["execution_type"] = data["executionPolicy"]["instruction"]
+            phase["execution_type"] = data["executionPolicy"]["phase"]
             phase["phase_order"] = phase_order
         first_instruction = phases[0]["instructions"][0]["text"].lower()
         if "комментар" not in first_instruction or "вложен" not in first_instruction:
@@ -192,6 +197,70 @@ def load_bundle(path: Path) -> dict[str, Any]:
     return data
 
 
+def _mode_reference_audit(uow: Any, mode_id: int) -> dict[str, int]:
+    """Count every durable owner reference before removing a legacy mode id."""
+    from sqlalchemy import func, select
+
+    from project_workflow.infrastructure.db import models as m
+
+    session = uow.session
+    return {
+        "phases": int(session.execute(
+            select(func.count()).select_from(m.Phase).where(m.Phase.mode_id == mode_id)
+        ).scalar_one()),
+        "tasks": int(session.execute(
+            select(func.count()).select_from(m.Task).where(m.Task.current_mode_id == mode_id)
+        ).scalar_one()),
+        "task_history": int(session.execute(
+            select(func.count()).select_from(m.TaskHistory).where(m.TaskHistory.mode_id == mode_id)
+        ).scalar_one()),
+        "supervisor_runs": int(session.execute(
+            select(func.count()).select_from(m.SupervisorRun).where(m.SupervisorRun.mode_id == mode_id)
+        ).scalar_one()),
+    }
+
+
+def _replace_empty_legacy_mode(
+    uow: Any,
+    *,
+    workflow_id: int,
+    legacy_mode: Any,
+    canonical_spec: dict[str, Any],
+    canonical_exists: bool,
+    check_only: bool,
+) -> None:
+    if legacy_mode.id is None:
+        raise RuntimeError(f"legacy mode has no id: {legacy_mode.key}")
+    audit = _mode_reference_audit(uow, int(legacy_mode.id))
+    if any(audit.values()):
+        raise RuntimeError(
+            f"legacy mode requires audited migration: {legacy_mode.key}; references={audit}"
+        )
+    if check_only:
+        raise RuntimeError(
+            f"empty legacy mode requires replacement: {legacy_mode.key} -> {canonical_spec['key']}"
+        )
+    if not canonical_exists:
+        canonical_id = uow.workflow_modes.create(
+            {
+                "workflow_id": workflow_id,
+                "key": canonical_spec["key"],
+                "name": canonical_spec["name"],
+            }
+        )
+        if canonical_id == legacy_mode.id:
+            raise RuntimeError("legacy mode id reuse is forbidden")
+    uow.workflow_modes.delete(int(legacy_mode.id))
+    if not canonical_exists:
+        uow.workflow_modes.update(
+            canonical_id,
+            {
+                "name": canonical_spec["name"],
+                "mode_order": canonical_spec["mode_order"],
+            },
+        )
+
+
 def install(
     bundle: dict[str, Any], *, check_only: bool, database_url: str | None = None
 ) -> dict[str, Any]:
@@ -211,8 +280,9 @@ def install(
     uow = SAUnitOfWork(database_url)
     try:
         workflow_spec = bundle["workflow"]
+        workflow_key = bundle["businessWorkflowKey"]
         existing_workflows = list(uow.workflows.list())
-        foreign = [item.name for item in existing_workflows if item.name != workflow_spec["name"]]
+        foreign = [item.name for item in existing_workflows if item.name != workflow_key]
         if foreign and not check_only and os.environ.get("PROJECT_WORKFLOW_MANAGED_CONFIGURATION") == "1":
             removable = {"Default Workflow", "Smoke Test Workflow"}
             unknown = sorted(set(foreign) - removable)
@@ -244,16 +314,16 @@ def install(
                 uow.agents.delete(agent_id)
             uow.commit()
             existing_workflows = list(uow.workflows.list())
-            foreign = [item.name for item in existing_workflows if item.name != workflow_spec["name"]]
+            foreign = [item.name for item in existing_workflows if item.name != workflow_key]
         if foreign:
             raise RuntimeError(f"namespace contains undeclared workflows: {foreign}")
-        workflow = uow.workflows.get_by_name(workflow_spec["name"])
+        workflow = uow.workflows.get_by_name(workflow_key)
         if workflow is None:
             if check_only:
                 raise RuntimeError("workflow is not installed")
             created = WorkflowService(uow).create_workflow(
                 {
-                    "name": workflow_spec["name"],
+                    "name": workflow_key,
                     "description": workflow_spec["description"],
                     "_skip_default_phase": True,
                     "_default_mode_key": workflow_spec["modes"][0]["key"],
@@ -273,23 +343,15 @@ def install(
         mode_specs = {mode["key"]: mode for mode in workflow_spec["modes"]}
         for legacy_key, canonical_key in LEGACY_MODE_ALIASES.get(bundle["role"], {}).items():
             legacy_mode = existing_modes.get(legacy_key)
-            if legacy_mode is None or canonical_key in existing_modes:
+            if legacy_mode is None:
                 continue
-            if legacy_mode.id is None:
-                raise RuntimeError(f"legacy mode has no id: {legacy_key}")
-            legacy_codes = {phase.code for phase in uow.phases.list(workflow_id, legacy_mode.id)}
-            declared_codes = {phase["code"] for phase in mode_specs[canonical_key]["phases"]}
-            if not legacy_codes.issubset(declared_codes):
-                raise RuntimeError(f"legacy mode contains undeclared phases: {legacy_key}")
-            if check_only:
-                raise RuntimeError(f"legacy mode must be migrated: {legacy_key} -> {canonical_key}")
-            uow.workflow_modes.update(
-                legacy_mode.id,
-                {
-                    "key": canonical_key,
-                    "name": mode_specs[canonical_key]["name"],
-                    "mode_order": mode_specs[canonical_key]["mode_order"],
-                },
+            _replace_empty_legacy_mode(
+                uow,
+                workflow_id=workflow_id,
+                legacy_mode=legacy_mode,
+                canonical_spec=mode_specs[canonical_key],
+                canonical_exists=canonical_key in existing_modes,
+                check_only=check_only,
             )
             existing_modes = {mode.key: mode for mode in uow.workflow_modes.list(workflow_id)}
         first_mode_spec = workflow_spec["modes"][0]
@@ -297,23 +359,14 @@ def install(
         if (
             legacy_default is not None
             and first_mode_spec["key"] != "default"
-            and first_mode_spec["key"] not in existing_modes
         ):
-            if legacy_default.id is None:
-                raise RuntimeError("legacy default mode has no id")
-            legacy_codes = {phase.code for phase in uow.phases.list(workflow_id, legacy_default.id)}
-            declared_first_codes = {phase["code"] for phase in first_mode_spec["phases"]}
-            if not legacy_codes.issubset(declared_first_codes):
-                raise RuntimeError("legacy default mode contains undeclared phases")
-            if check_only:
-                raise RuntimeError(f"legacy default mode must be migrated to {first_mode_spec['key']}")
-            uow.workflow_modes.update(
-                legacy_default.id,
-                {
-                    "key": first_mode_spec["key"],
-                    "name": first_mode_spec["name"],
-                    "mode_order": first_mode_spec["mode_order"],
-                },
+            _replace_empty_legacy_mode(
+                uow,
+                workflow_id=workflow_id,
+                legacy_mode=legacy_default,
+                canonical_spec=first_mode_spec,
+                canonical_exists=first_mode_spec["key"] in existing_modes,
+                check_only=check_only,
             )
             existing_modes = {mode.key: mode for mode in uow.workflow_modes.list(workflow_id)}
         extras = sorted(set(existing_modes) - declared_mode_keys)
@@ -359,7 +412,7 @@ def install(
                     "name": phase_spec["name"],
                     "description": phase_spec["description"],
                     "phase_order": phase_spec["phase_order"],
-                    "execution_type": "sync",
+                    "execution_type": phase_spec["execution_type"],
                     "is_seed_managed": True,
                 }
                 if phase is None:
@@ -386,7 +439,7 @@ def install(
                         {
                             "step_num": step_num,
                             "description": instruction["text"],
-                            "execution_type": "sync",
+                            "execution_type": instruction["execution_type"],
                             "skills": instruction["skills"],
                         }
                         for step_num, instruction in enumerate(phase_spec["instructions"], start=1)
@@ -422,7 +475,7 @@ def install(
                             {
                                 "step_num": step_num,
                                 "description": instruction["text"],
-                                "execution_type": "sync",
+                                "execution_type": instruction["execution_type"],
                                 "skills": instruction["skills"],
                             },
                         )
@@ -440,7 +493,8 @@ def install(
         return {
             "namespace": bundle["namespace"],
             "role": bundle["role"],
-            "workflow": workflow_spec["name"],
+            "workflow": workflow_key,
+            "workflowName": workflow_spec["name"],
             "modes": len(workflow_spec["modes"]),
             "phases": phase_count,
             "checked": check_only,

@@ -3,6 +3,7 @@
   "namespace": "hermes-analyst",
   "role": "analyst",
   "businessWorkflowKey": "hermes-sdlc:analyst",
+  "executionPolicy": {"phase": "sync", "instruction": "sync"},
   "skillsHub": {
     "commit": "50b92c54e0e04c510c9669dfb52dab0d4632d028",
     "hashes": {

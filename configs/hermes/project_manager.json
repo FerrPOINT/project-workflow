@@ -3,6 +3,7 @@
   "namespace": "hermes-project-manager",
   "role": "project_manager",
   "businessWorkflowKey": "hermes-sdlc:project_manager",
+  "executionPolicy": {"phase": "sync", "instruction": "sync"},
   "skillsHub": {
     "commit": "50b92c54e0e04c510c9669dfb52dab0d4632d028",
     "hashes": {}
@@ -48,7 +49,7 @@
             "description": "Найти только существенные пробелы.",
             "instructions": [
               {
-                "text": "Проверить результат, пользователя, сценарий, границы, критерии, ограничения и зависимости.",
+                "text": "Проверить результат, пользователя, сценарий, границы, критерии, ограничения и подтверждённые бизнесовые допущения.",
                 "skills": [
                   "relevanter-business-operator"
                 ]
@@ -71,8 +72,8 @@
           },
           {
             "code": "draft.structure",
-            "name": "Структура Task",
-            "description": "Сохранить согласованные поля и связи.",
+            "name": "Бизнесовая постановка",
+            "description": "Сохранить только согласованную бизнесовую часть Драфта.",
             "instructions": [
               {
                 "text": "Обновить только подтверждённые название, описание, приоритет, оценку, даты, component, milestone, labels и assignee.",
@@ -81,7 +82,7 @@
                 ]
               },
               {
-                "text": "Проверить same-project parent, зависимости, связи и подзадачи; применять expectedModifiedOn и останавливаться при конфликте.",
+                "text": "Перечитать сохранённую бизнесовую постановку с expectedModifiedOn; при конфликте остановиться и запросить актуальный контекст, не проектировать решение или декомпозицию.",
                 "skills": [
                   "relevanter-business-operator"
                 ]
@@ -89,11 +90,11 @@
             ],
             "checks": [
               "Patch не меняет project, kind, stage или status",
-              "Все ссылки принадлежат тому же проекту"
+              "В Драфт сохранены только согласованные бизнесовые поля"
             ],
             "evidence": [
               "Readback сохранённых полей",
-              "Новая Task revision"
+              "Новая revision бизнесовых полей Task"
             ]
           },
           {
@@ -156,7 +157,7 @@
             "description": "Атомарно завершить PM workflow и передать Бэклог в очередь Analyst.",
             "instructions": [
               {
-                "text": "Подготовить итоговый пользовательский Markdown: согласованная цель, границы, критерии, ограничения, зависимости и факт подтверждения.",
+                "text": "Подготовить итоговый пользовательский Markdown: согласованная цель, границы, критерии, ограничения, бизнесовые допущения и факт подтверждения.",
                 "skills": [
                   "relevanter-business-operator"
                 ]

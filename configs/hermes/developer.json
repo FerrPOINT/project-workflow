@@ -3,6 +3,7 @@
   "namespace": "hermes-developer",
   "role": "developer",
   "businessWorkflowKey": "hermes-sdlc:developer",
+  "executionPolicy": {"phase": "sync", "instruction": "sync"},
   "skillsHub": {
     "commit": "50b92c54e0e04c510c9669dfb52dab0d4632d028",
     "hashes": {}
@@ -659,19 +660,19 @@
             ]
           },
           {
-            "code": "integration_rework.compatibility",
-            "name": "Проверка совместимости",
-            "description": "Проверить стыки контрактов, данных, миграций и версий всех подзадач.",
+            "code": "integration_rework.reproduce",
+            "name": "Воспроизведение findings",
+            "description": "Воспроизвести каждый frozen aggregate finding без расширения scope.",
             "instructions": [
               {
-                "text": "Построить child-to-contract matrix и проверить совместимость public contracts, migrations, configuration и dataflow.",
+                "text": "Для каждого frozen finding выполнить указанные шаги воспроизведения на pinned aggregate candidate и записать observed/expected result.",
                 "skills": [
                   "repo-workflow",
                   "workflow-systematic-debugging"
                 ]
               },
               {
-                "text": "Для aggregate rework связать каждый frozen finding с конкретным стыком; для initial integration зафиксировать обнаруженные gaps до изменения кода.",
+                "text": "Связать каждый воспроизведённый finding с конкретным public contract, child receipt и затрагиваемым owner; новые несвязанные дефекты не добавлять в текущий scope.",
                 "skills": [
                   "workflow-systematic-debugging",
                   "immutable-evidence-reporting"
@@ -679,27 +680,27 @@
               }
             ],
             "checks": [
-              "Каждый child result связан с aggregate contract",
-              "Несовместимости локализованы до изменения кода"
+              "Каждый frozen finding воспроизведён либо имеет проверяемое объяснение невоспроизводимости",
+              "Finding локализован до конкретной aggregate boundary"
             ],
             "evidence": [
-              "Compatibility matrix",
-              "Gap или finding mapping"
+              "Per-finding reproduction log",
+              "Finding-to-boundary mapping"
             ]
           },
           {
             "code": "integration_rework.regression",
-            "name": "Сквозная красная проверка",
-            "description": "Зафиксировать интеграционный разрыв на публичной границе до исправления.",
+            "name": "Регрессия на каждый finding",
+            "description": "Зафиксировать отдельную красную проверку для каждого воспроизведённого finding.",
             "instructions": [
               {
-                "text": "Добавить или уточнить минимальную сквозную regression-проверку, которая падает по причине интеграционного разрыва или frozen finding.",
+                "text": "Для каждого frozen finding добавить или уточнить минимальную regression-проверку, падающую по причине именно этого finding.",
                 "skills": [
                   "test-driven-development"
                 ]
               },
               {
-                "text": "Если изменение кода не требуется, зафиксировать проверяемую причину и существующий GREEN evidence без пустого commit.",
+                "text": "Не объединять findings в одну непрозрачную проверку; для невоспроизводимого finding сохранить отдельное проверяемое disposition без пустого commit.",
                 "skills": [
                   "test-driven-development",
                   "immutable-evidence-reporting"
@@ -707,28 +708,28 @@
               }
             ],
             "checks": [
-              "Проверка относится к aggregate public boundary",
-              "RED либо обоснованный no-code path подтверждён"
+              "Каждый воспроизведённый finding имеет собственный RED",
+              "Каждый невоспроизводимый finding имеет отдельное evidence-backed disposition"
             ],
             "evidence": [
-              "RED/characterization command",
-              "Finding-to-test mapping"
+              "Per-finding RED commands",
+              "One-to-one finding-to-test matrix"
             ]
           },
           {
-            "code": "integration_rework.implementation",
-            "name": "Сборка integration candidate",
-            "description": "Создать минимальный согласованный parent integration candidate.",
+            "code": "integration_rework.fix",
+            "name": "Ограниченное исправление",
+            "description": "Исправить только frozen findings текущего aggregate rework cycle.",
             "instructions": [
               {
-                "text": "Собрать результаты подзадач на pinned revisions и внести только необходимые интеграционные изменения без переписывания child history.",
+                "text": "Внести минимальные изменения только в boundaries, связанные с frozen findings; не пересобирать заново принятые child results и не расширять scope.",
                 "skills": [
                   "repo-workflow",
                   "relevanter-tech-operator"
                 ]
               },
               {
-                "text": "Сохранить owner boundaries, idempotency, permissions, restart/reconcile и rollback контракты.",
+                "text": "Сохранить owner boundaries, idempotency, permissions, restart/reconcile и rollback контракты; каждое изменение связать с finding ID.",
                 "skills": [
                   "repo-workflow",
                   "workflow-systematic-debugging"
@@ -736,56 +737,56 @@
               }
             ],
             "checks": [
-              "Candidate содержит только aggregate-scope изменения",
-              "Child receipts и исторические revisions не переписаны"
+              "Diff содержит только изменения, необходимые для frozen findings",
+              "Child receipts и принятые historical revisions не переписаны"
             ],
             "evidence": [
-              "Scoped aggregate diff",
-              "Integration manifest draft"
+              "Finding-scoped diff",
+              "Finding-to-change mapping"
             ]
           },
           {
-            "code": "integration_rework.validation",
-            "name": "Целевая интеграционная проверка",
-            "description": "Подтвердить сквозную совместимость быстрыми проверками.",
+            "code": "integration_rework.closure",
+            "name": "Закрытие каждого finding",
+            "description": "Доказать закрытие каждого frozen finding отдельно.",
             "instructions": [
               {
-                "text": "Запустить changed-file и package-scoped проверки всех затронутых стыков; полный workspace build оставить общему gate.",
+                "text": "Повторить reproduction и regression для каждого finding на исправленном candidate; записать GREEN и exact evidence ref отдельно по каждому finding.",
                 "skills": [
                   "test-driven-development",
                   "repo-workflow"
                 ]
               },
               {
-                "text": "Проверить negative, permission, duplicate, stale, restart и partial-failure сценарии aggregate flow.",
+                "text": "Сформировать closure matrix без пропусков: reproduced, regression, fix ref, GREEN и остаточный риск для каждого frozen finding.",
                 "skills": [
                   "workflow-systematic-debugging"
                 ]
               }
             ],
             "checks": [
-              "Targeted aggregate checks GREEN",
-              "Каждый finding/gap имеет disposition"
+              "Каждый frozen finding имеет отдельный GREEN либо обоснованный rejected disposition",
+              "Closure matrix не содержит незакрытых findings"
             ],
             "evidence": [
-              "Terminal check results",
-              "Aggregate closure matrix"
+              "Per-finding GREEN evidence",
+              "Frozen finding closure matrix"
             ]
           },
           {
-            "code": "integration_rework.delivery",
-            "name": "Commit, push и MR",
-            "description": "Поставить exact integration candidate в разрешённую ветку и MR.",
+            "code": "integration_rework.retest",
+            "name": "Повторная aggregate-проверка",
+            "description": "Проверить исправленный aggregate candidate как единое целое.",
             "instructions": [
               {
-                "text": "Проверить diff, исключить secrets/cache/runtime output, создать непустой commit только при наличии изменений и push без force.",
+                "text": "Запустить changed-file и package-scoped aggregate checks, включая negative, permission, duplicate, stale, restart и partial-failure сценарии затронутого flow.",
                 "skills": [
                   "repo-workflow",
                   "relevanter-tech-operator"
                 ]
               },
               {
-                "text": "Перечитать exact remote SHA, MR head/base/status и подтвердить чистый workspace; неопределённый push сначала reconcile.",
+                "text": "Подтвердить, что совокупный candidate не нарушил совместимость pinned child receipts и что все per-finding GREEN остаются воспроизводимыми.",
                 "skills": [
                   "repo-workflow",
                   "relevanter-tech-operator"
@@ -793,28 +794,28 @@
               }
             ],
             "checks": [
-              "Все aggregate изменения закоммичены и отправлены",
-              "Remote SHA и clean workspace подтверждены"
+              "Targeted aggregate retest GREEN",
+              "Исправления не создали новых расхождений с pinned child receipts"
             ],
             "evidence": [
-              "Commit/MR ref",
-              "Exact remote SHA readback"
+              "Aggregate retest results",
+              "Post-fix compatibility readback"
             ]
           },
           {
             "code": "integration_rework.handoff",
-            "name": "Передача aggregate candidate",
-            "description": "Зафиксировать проверяемый parent integration handoff.",
+            "name": "Поставка и handoff исправления",
+            "description": "Поставить exact исправленный candidate и передать полное finding closure evidence.",
             "instructions": [
               {
-                "text": "Подготовить итоговый Markdown: root scope, child manifest, совместимость, изменения, проверки, commit/MR, ограничения и Reviewer focus.",
+                "text": "Проверить diff, исключить secrets/cache/runtime output, создать непустой commit только при изменениях, push без force и перечитать exact remote SHA, MR head/base/status и clean workspace; неопределённый push сначала reconcile.",
                 "skills": [
-                  "relevanter-business-operator",
-                  "immutable-evidence-reporting"
+                  "repo-workflow",
+                  "relevanter-tech-operator"
                 ]
               },
               {
-                "text": "После exact SHA и clean-workspace readback отправить через project-workflow step --report полный отчёт, покрывающий все checks/evidence; terminal action не вызывать до complete=true.",
+                "text": "Подготовить итоговый Markdown с frozen findings, reproduction, per-finding regression/closure, scoped diff, aggregate retest, exact SHA/MR и рисками; после readback отправить через project-workflow step --report полный отчёт и terminal action не вызывать до complete=true.",
                 "skills": [
                   "immutable-evidence-reporting",
                   "relevanter-business-operator",
@@ -824,12 +825,12 @@
               }
             ],
             "checks": [
-              "Aggregate handoff связывает все child receipts",
+              "Handoff закрывает каждый frozen finding и связывает pinned child receipts",
               "Terminal action ожидает complete=true"
             ],
             "evidence": [
               "Итоговый Markdown",
-              "Exact SHA, MR и integration manifest"
+              "Exact SHA, MR и frozen finding closure matrix"
             ]
           }
         ]
