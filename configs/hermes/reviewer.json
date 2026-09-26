@@ -4,82 +4,358 @@
   "role": "reviewer",
   "skillsHub": {
     "commit": "50b92c54e0e04c510c9669dfb52dab0d4632d028",
-    "hashes": {"code-review": "c9d1742d124032c8eb358ddc6815a32187a2a23cee39e429f5b56bf8d0e283f0"}
+    "hashes": {}
   },
   "workflow": {
     "name": "Hermes Reviewer",
     "description": "Evidence-backed review с backend-governed passed или needs_rework.",
-    "modes": [{
-      "key": "review",
-      "name": "Ревью",
-      "phases": [
-        {
-          "code": "review.context",
-          "name": "Изучение задачи",
-          "description": "Сопоставить требования, архитектуру и реализацию.",
-          "instructions": [
-            {"text": "Прочитать Business Task целиком, все комментарии, историю и список вложений; изучить handoff Analyst, Architect, Developer и доступные вложения.", "skills": ["relevanter-project-context"]},
-            {"text": "Перечитать MR exact head/base, commits, diff и targeted check evidence; не ревьюить приблизительный или устаревший SHA.", "skills": ["code-review", "relevanter-project-context"]}
-          ],
-          "checks": ["Business и Git evidence относятся к одному Task", "MR exact head подтверждён"],
-          "evidence": ["Business refs", "MR head/base/status"]
-        },
-        {
-          "code": "review.scope",
-          "name": "Scope и архитектура",
-          "description": "Проверить соответствие согласованному решению.",
-          "instructions": [
-            {"text": "Сопоставить каждый изменённый файл с требованиями, архитектурными контрактами и owner boundaries.", "skills": ["code-review"]},
-            {"text": "Найти лишний diff, дублирование, вторую систему истины, нарушение совместимости или несогласованную миграцию.", "skills": ["code-review"]}
-          ],
-          "checks": ["Каждое изменение имеет основание", "Архитектурные инварианты сохранены"],
-          "evidence": ["File-to-requirement mapping", "Перечень архитектурных проверок"]
-        },
-        {
-          "code": "review.correctness",
-          "name": "Корректность и надёжность",
-          "description": "Проверить реальные dataflow и failure paths.",
-          "instructions": [
-            {"text": "Проследить state/dataflow, транзакции, idempotency, concurrency, retry, restart и stale-result protection.", "skills": ["code-review"]},
-            {"text": "Проверить permission, tenant, secret handling, error redaction и отсутствие опасных cleanup/deploy действий.", "skills": ["code-review"]}
-          ],
-          "checks": ["Happy и failure paths подтверждены кодом", "Права и секреты не расширены"],
-          "evidence": ["Code references findings", "Negative-path audit"]
-        },
-        {
-          "code": "review.tests",
-          "name": "Тесты и поставка",
-          "description": "Оценить достаточность проверок и поставляемость.",
-          "instructions": [
-            {"text": "Проверить regression tests, targeted results, миграции и соответствие тестов публичному контракту.", "skills": ["code-review"]},
-            {"text": "Не требовать полный CI до общей вехи, но явно отметить отсутствующий обязательный gate и риски.", "skills": ["code-review"]}
-          ],
-          "checks": ["Критичные сценарии имеют проверки", "Ни один pending check не назван PASS"],
-          "evidence": ["Test coverage mapping", "Список оставшихся release gates"]
-        },
-        {
-          "code": "review.findings",
-          "name": "Disposition findings",
-          "description": "Каждому доказанному замечанию дать явную судьбу.",
-          "instructions": [
-            {"text": "Для каждого finding указать severity, точное место, reproduction, expected, actual и evidence refs; объединить дубли.", "skills": ["code-review"]},
-            {"text": "Если изменение реализации не требуется, доказать finding invalid/not applicable; если данных мало, задать один конкретный вопрос и не завершать стадию.", "skills": ["code-review", "relevanter-business-operator"]}
-          ],
-          "checks": ["Каждый finding доказан и actionable", "Нет скрытых non-blocking замечаний без disposition"],
-          "evidence": ["Final findings list", "Disposition каждого кандидата"]
-        },
-        {
-          "code": "review.outcome",
-          "name": "Результат ревью",
-          "description": "Опубликовать результат и выбрать только разрешённый outcome.",
-          "instructions": [
-            {"text": "Подготовить итоговый комментарий: exact SHA, проверенный scope, findings/dispositions, тесты, риски и вывод.", "skills": ["relevanter-business-operator"]},
-            {"text": "Подготовить outcome passed либо needs_rework и полный findings JSON для подтверждённых дефектов. Затем отправить через project-workflow step --report содержательный итоговый отчёт, явно покрывающий все checks и evidence этой фазы; не отвечать `Cannot proceed` простым перечислением missing. На этой фазе terminal action не вызывать до ответа complete=true. Следующую stage, agent и mode не выбирать.", "skills": ["relevanter-business-operator", "code-review", "project-workflow-executor"]}
-          ],
-          "checks": ["Подготовленный комментарий и outcome согласованы", "needs_rework содержит хотя бы один полный finding"],
-          "evidence": ["Подготовленный итоговый Markdown", "Подготовленный outcome и findings"]
-        }
-      ]
-    }]
+    "modes": [
+      {
+        "key": "delivery",
+        "name": "Ревью подзадачи",
+        "phases": [
+          {
+            "code": "review.context",
+            "name": "Изучение подзадачи",
+            "description": "Сопоставить требования, архитектуру и реализацию.",
+            "instructions": [
+              {
+                "text": "Прочитать Business Task целиком, все комментарии, историю и список вложений; изучить handoff Analyst, Architect, Developer и доступные вложения.",
+                "skills": [
+                  "relevanter-business-operator",
+                  "relevanter-tech-operator"
+                ]
+              },
+              {
+                "text": "Перечитать MR exact head/base, commits, diff и targeted check evidence; не ревьюить приблизительный или устаревший SHA.",
+                "skills": [
+                  "exact-code-review",
+                  "relevanter-business-operator"
+                ]
+              }
+            ],
+            "checks": [
+              "Business и Git evidence относятся к одному Task",
+              "MR exact head подтверждён"
+            ],
+            "evidence": [
+              "Business refs",
+              "MR head/base/status"
+            ]
+          },
+          {
+            "code": "review.scope",
+            "name": "Scope и архитектура",
+            "description": "Проверить соответствие согласованному решению.",
+            "instructions": [
+              {
+                "text": "Сопоставить каждый изменённый файл с требованиями, архитектурными контрактами и owner boundaries.",
+                "skills": [
+                  "exact-code-review"
+                ]
+              },
+              {
+                "text": "Найти лишний diff, дублирование, вторую систему истины, нарушение совместимости или несогласованную миграцию.",
+                "skills": [
+                  "exact-code-review"
+                ]
+              }
+            ],
+            "checks": [
+              "Каждое изменение имеет основание",
+              "Архитектурные инварианты сохранены"
+            ],
+            "evidence": [
+              "File-to-requirement mapping",
+              "Перечень архитектурных проверок"
+            ]
+          },
+          {
+            "code": "review.correctness",
+            "name": "Корректность и надёжность",
+            "description": "Проверить реальные dataflow и failure paths.",
+            "instructions": [
+              {
+                "text": "Проследить state/dataflow, транзакции, idempotency, concurrency, retry, restart и stale-result protection.",
+                "skills": [
+                  "exact-code-review"
+                ]
+              },
+              {
+                "text": "Проверить permission, tenant, secret handling, error redaction и отсутствие опасных cleanup/deploy действий.",
+                "skills": [
+                  "exact-code-review"
+                ]
+              }
+            ],
+            "checks": [
+              "Happy и failure paths подтверждены кодом",
+              "Права и секреты не расширены"
+            ],
+            "evidence": [
+              "Code references findings",
+              "Negative-path audit"
+            ]
+          },
+          {
+            "code": "review.tests",
+            "name": "Тесты и поставка",
+            "description": "Оценить достаточность проверок и поставляемость.",
+            "instructions": [
+              {
+                "text": "Проверить regression tests, targeted results, миграции и соответствие тестов публичному контракту.",
+                "skills": [
+                  "exact-code-review"
+                ]
+              },
+              {
+                "text": "Не требовать полный CI до общей вехи, но явно отметить отсутствующий обязательный gate и риски.",
+                "skills": [
+                  "exact-code-review"
+                ]
+              }
+            ],
+            "checks": [
+              "Критичные сценарии имеют проверки",
+              "Ни один pending check не назван PASS"
+            ],
+            "evidence": [
+              "Test coverage mapping",
+              "Список оставшихся release gates"
+            ]
+          },
+          {
+            "code": "review.findings",
+            "name": "Disposition findings",
+            "description": "Каждому доказанному замечанию дать явную судьбу.",
+            "instructions": [
+              {
+                "text": "Для каждого finding указать severity, точное место, reproduction, expected, actual и evidence refs; объединить дубли.",
+                "skills": [
+                  "exact-code-review"
+                ]
+              },
+              {
+                "text": "Если изменение реализации не требуется, доказать finding invalid/not applicable; если данных мало, задать один конкретный вопрос и не завершать стадию.",
+                "skills": [
+                  "exact-code-review",
+                  "relevanter-business-operator"
+                ]
+              }
+            ],
+            "checks": [
+              "Каждый finding доказан и actionable",
+              "Нет скрытых non-blocking замечаний без disposition"
+            ],
+            "evidence": [
+              "Final findings list",
+              "Disposition каждого кандидата"
+            ]
+          },
+          {
+            "code": "review.outcome",
+            "name": "Результат ревью",
+            "description": "Опубликовать результат и выбрать только разрешённый outcome.",
+            "instructions": [
+              {
+                "text": "Подготовить итоговый комментарий: exact SHA, проверенный scope, findings/dispositions, тесты, риски и вывод.",
+                "skills": [
+                  "relevanter-business-operator"
+                ]
+              },
+              {
+                "text": "Подготовить outcome passed либо needs_rework и полный findings JSON для подтверждённых дефектов. Затем отправить через project-workflow step --report содержательный итоговый отчёт, явно покрывающий все checks и evidence этой фазы; не отвечать `Cannot proceed` простым перечислением missing. На этой фазе terminal action не вызывать до ответа complete=true. Следующую stage, agent и mode не выбирать.",
+                "skills": [
+                  "relevanter-business-operator",
+                  "exact-code-review",
+                  "project-workflow-executor"
+                ]
+              }
+            ],
+            "checks": [
+              "Подготовленный комментарий и outcome согласованы",
+              "needs_rework содержит хотя бы один полный finding"
+            ],
+            "evidence": [
+              "Подготовленный итоговый Markdown",
+              "Подготовленный outcome и findings"
+            ]
+          }
+        ]
+      },
+      {
+        "key": "integration",
+        "name": "Ревью интеграции",
+        "phases": [
+          {
+            "code": "integration.context",
+            "name": "Изучение integration candidate головной Task",
+            "description": "Сопоставить требования, архитектуру и интеграцию.",
+            "instructions": [
+              {
+                "text": "Прочитать головную Business Task целиком, все комментарии, связи и вложения; изучить active decomposition revision, все child DevOps receipts и Developer integration handoff.",
+                "skills": [
+                  "relevanter-business-operator"
+                ]
+              },
+              {
+                "text": "Перечитать MR exact head/base, commits, diff и targeted check evidence; не ревьюить приблизительный или устаревший SHA.",
+                "skills": [
+                  "exact-code-review",
+                  "relevanter-business-operator"
+                ]
+              }
+            ],
+            "checks": [
+              "Business и Git evidence относятся к одному Task",
+              "MR exact head подтверждён"
+            ],
+            "evidence": [
+              "Business refs",
+              "MR head/base/status"
+            ]
+          },
+          {
+            "code": "integration.scope",
+            "name": "Scope и архитектура",
+            "description": "Проверить соответствие согласованному решению.",
+            "instructions": [
+              {
+                "text": "Сопоставить каждый изменённый файл с требованиями, архитектурными контрактами и owner boundaries.",
+                "skills": [
+                  "exact-code-review"
+                ]
+              },
+              {
+                "text": "Найти лишний diff, дублирование, вторую систему истины, нарушение совместимости или несогласованную миграцию.",
+                "skills": [
+                  "exact-code-review"
+                ]
+              }
+            ],
+            "checks": [
+              "Каждое изменение имеет основание",
+              "Архитектурные инварианты сохранены"
+            ],
+            "evidence": [
+              "File-to-requirement mapping",
+              "Перечень архитектурных проверок"
+            ]
+          },
+          {
+            "code": "integration.correctness",
+            "name": "Корректность и надёжность",
+            "description": "Проверить реальные dataflow и failure paths.",
+            "instructions": [
+              {
+                "text": "Проследить state/dataflow, транзакции, idempotency, concurrency, retry, restart и stale-result protection.",
+                "skills": [
+                  "exact-code-review"
+                ]
+              },
+              {
+                "text": "Проверить permission, tenant, secret handling, error redaction и отсутствие опасных cleanup/deploy действий.",
+                "skills": [
+                  "exact-code-review"
+                ]
+              }
+            ],
+            "checks": [
+              "Happy и failure paths подтверждены кодом",
+              "Права и секреты не расширены"
+            ],
+            "evidence": [
+              "Code references findings",
+              "Negative-path audit"
+            ]
+          },
+          {
+            "code": "integration.tests",
+            "name": "Тесты и поставка",
+            "description": "Оценить достаточность проверок и поставляемость.",
+            "instructions": [
+              {
+                "text": "Проверить regression tests, targeted results, миграции и соответствие тестов публичному контракту.",
+                "skills": [
+                  "exact-code-review"
+                ]
+              },
+              {
+                "text": "Не требовать полный CI до общей вехи, но явно отметить отсутствующий обязательный gate и риски.",
+                "skills": [
+                  "exact-code-review"
+                ]
+              }
+            ],
+            "checks": [
+              "Критичные сценарии имеют проверки",
+              "Ни один pending check не назван PASS"
+            ],
+            "evidence": [
+              "Test coverage mapping",
+              "Список оставшихся release gates"
+            ]
+          },
+          {
+            "code": "integration.findings",
+            "name": "Disposition findings",
+            "description": "Каждому доказанному замечанию дать явную судьбу.",
+            "instructions": [
+              {
+                "text": "Для каждого finding указать severity, точное место, reproduction, expected, actual и evidence refs; объединить дубли.",
+                "skills": [
+                  "exact-code-review"
+                ]
+              },
+              {
+                "text": "Если изменение интеграции не требуется, доказать finding invalid/not applicable; если данных мало, задать один конкретный вопрос и не завершать стадию.",
+                "skills": [
+                  "exact-code-review",
+                  "relevanter-business-operator"
+                ]
+              }
+            ],
+            "checks": [
+              "Каждый finding доказан и actionable",
+              "Нет скрытых non-blocking замечаний без disposition"
+            ],
+            "evidence": [
+              "Final findings list",
+              "Disposition каждого кандидата"
+            ]
+          },
+          {
+            "code": "integration.outcome",
+            "name": "Результат ревью",
+            "description": "Опубликовать результат и выбрать только разрешённый outcome.",
+            "instructions": [
+              {
+                "text": "Подготовить итоговый комментарий: exact SHA, проверенный scope, findings/dispositions, тесты, риски и вывод.",
+                "skills": [
+                  "relevanter-business-operator"
+                ]
+              },
+              {
+                "text": "Подготовить outcome passed либо needs_rework и полный findings JSON для подтверждённых дефектов. Затем отправить через project-workflow step --report содержательный итоговый отчёт, явно покрывающий все checks и evidence этой фазы; не отвечать `Cannot proceed` простым перечислением missing. На этой фазе terminal action не вызывать до ответа complete=true. Следующую stage, agent и mode не выбирать.",
+                "skills": [
+                  "immutable-evidence-reporting",
+                  "relevanter-business-operator",
+                  "exact-code-review",
+                  "project-workflow-executor"
+                ]
+              }
+            ],
+            "checks": [
+              "Подготовленный комментарий и outcome согласованы",
+              "needs_rework содержит хотя бы один полный finding"
+            ],
+            "evidence": [
+              "Подготовленный итоговый Markdown",
+              "Подготовленный outcome и findings"
+            ]
+          }
+        ]
+      }
+    ]
   }
 }

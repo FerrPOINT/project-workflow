@@ -5,84 +5,195 @@
   "skillsHub": {
     "commit": "50b92c54e0e04c510c9669dfb52dab0d4632d028",
     "hashes": {
-      "architect": "8c9cca46a6bef502aa086aa6808416c4ddefb17b1bcf2265a71f85451ed43e0b",
       "domain-modeling": "c4c376cfb67e9eadd2e456edc9126a13dc30f20245bb7ea56b7d8be532f8cee5"
     }
   },
   "workflow": {
     "name": "Hermes Architect",
     "description": "Проектирование минимального реализуемого решения на подтверждённых требованиях.",
-    "modes": [{
-      "key": "architecture",
-      "name": "Архитектура",
-      "phases": [
-        {
-          "code": "architecture.context",
-          "name": "Изучение задачи",
-          "description": "Проверить входной анализ и проектный контекст.",
-          "instructions": [
-            {"text": "Прочитать Business Task целиком, все комментарии, историю и список вложений; изучить доступные вложения и handoff Analyst.", "skills": ["relevanter-project-context"]},
-            {"text": "Проверить требования, критерии приёмки, ограничения и владельцев данных; при существенном пробеле задать один вопрос и не проектировать на догадке.", "skills": ["architect", "domain-modeling"]}
-          ],
-          "checks": ["Handoff Analyst найден и прочитан", "Входные требования непротиворечивы"],
-          "evidence": ["Список входных refs", "Перечень подтверждённых ограничений"]
-        },
-        {
-          "code": "architecture.ownership",
-          "name": "Границы и владельцы",
-          "description": "Определить owner каждого изменения.",
-          "instructions": [
-            {"text": "Проследить текущий dataflow и capability ownership затрагиваемых объектов и операций.", "skills": ["architect", "relevanter-project-context"]},
-            {"text": "Исключить дублирование готовых возможностей и зафиксировать изменения по компонентам и контрактам.", "skills": ["architect", "domain-modeling"]}
-          ],
-          "checks": ["Каждое изменение имеет одного владельца", "Нет скрытой второй системы истины"],
-          "evidence": ["Карта компонентов", "Карта source-of-truth"]
-        },
-        {
-          "code": "architecture.options",
-          "name": "Варианты решения",
-          "description": "Сравнить реалистичные варианты без лишней архитектуры.",
-          "instructions": [
-            {"text": "Сформировать минимум два варианта там, где есть реальный trade-off, и сравнить сложность, риски, совместимость и откат.", "skills": ["architect"]},
-            {"text": "Выбрать минимальный вариант, полностью закрывающий критерии, и явно отклонить ненужные расширения.", "skills": ["architect"]}
-          ],
-          "checks": ["Выбор обоснован критериями задачи", "Решение не расширяет scope"],
-          "evidence": ["Таблица вариантов", "Зафиксированный выбор"]
-        },
-        {
-          "code": "architecture.design",
-          "name": "Контракты и dataflow",
-          "description": "Описать реализацию до уровня файлов, API и данных.",
-          "instructions": [
-            {"text": "Описать компоненты, публичные контракты, состояния, транзакционные границы, idempotency и права.", "skills": ["architect", "domain-modeling"]},
-            {"text": "Описать миграцию, совместимость, failure/restart flow, наблюдаемость и rollback без ручного переписывания истории.", "skills": ["architect"]}
-          ],
-          "checks": ["Happy path и failure path прослеживаются end-to-end", "Миграция обратимо поставляема"],
-          "evidence": ["Текстовый dataflow", "Перечень контрактов и миграций"]
-        },
-        {
-          "code": "architecture.plan",
-          "name": "План реализации",
-          "description": "Сформировать выполнимую последовательность изменений.",
-          "instructions": [
-            {"text": "Разбить реализацию на короткие проверяемые срезы с точными владельцами файлов, зависимостями и targeted checks.", "skills": ["architect"]},
-            {"text": "Отделить быстрые проверки от единственного финального полного gate и определить evidence для каждого риска.", "skills": ["architect"]}
-          ],
-          "checks": ["Каждый срез даёт проверяемый результат", "Нет конкурирующих write scopes"],
-          "evidence": ["Порядок реализации", "Матрица риск-проверка"]
-        },
-        {
-          "code": "architecture.handoff",
-          "name": "Передача разработке",
-          "description": "Опубликовать самодостаточное архитектурное решение.",
-          "instructions": [
-            {"text": "Подготовить итоговый комментарий: выбранное решение, компоненты, контракты, dataflow, миграции, права, риски, rollback, план файлов и проверки.", "skills": ["relevanter-business-operator"]},
-            {"text": "Проверить ссылки на evidence и отсутствие незакрытых P0-вопросов. Затем отправить через project-workflow step --report сам подготовленный архитектурный handoff, явно покрывающий все checks и evidence этой фазы; ответ вида `Cannot proceed` или простое перечисление missing недопустимы. На этой фазе terminal action не вызывать до ответа complete=true.", "skills": ["relevanter-business-operator", "project-workflow-executor"]}
-          ],
-          "checks": ["Архитектурный комментарий подготовлен", "Developer может начать без выбора архитектуры"],
-          "evidence": ["Подготовленный итоговый Markdown", "Ссылки на evidence"]
-        }
-      ]
-    }]
+    "modes": [
+      {
+        "key": "decomposition",
+        "name": "Декомпозиция",
+        "phases": [
+          {
+            "code": "architecture.context",
+            "name": "Изучение задачи",
+            "description": "Проверить входной анализ и проектный контекст.",
+            "instructions": [
+              {
+                "text": "Прочитать Business Task целиком, все комментарии, историю и список вложений; изучить доступные вложения и handoff Analyst.",
+                "skills": [
+                  "relevanter-business-operator",
+                  "workflow-writing-plans"
+                ]
+              },
+              {
+                "text": "Проверить требования, критерии приёмки, ограничения и владельцев данных; при существенном пробеле задать один вопрос и не проектировать на догадке.",
+                "skills": [
+                  "solution-architecture",
+                  "domain-modeling"
+                ]
+              }
+            ],
+            "checks": [
+              "Handoff Analyst найден и прочитан",
+              "Входные требования непротиворечивы"
+            ],
+            "evidence": [
+              "Список входных refs",
+              "Перечень подтверждённых ограничений"
+            ]
+          },
+          {
+            "code": "architecture.ownership",
+            "name": "Границы и владельцы",
+            "description": "Определить owner каждого изменения.",
+            "instructions": [
+              {
+                "text": "Проследить текущий dataflow и capability ownership затрагиваемых объектов и операций.",
+                "skills": [
+                  "solution-architecture",
+                  "relevanter-business-operator"
+                ]
+              },
+              {
+                "text": "Исключить дублирование готовых возможностей и зафиксировать изменения по компонентам и контрактам.",
+                "skills": [
+                  "solution-architecture",
+                  "domain-modeling"
+                ]
+              }
+            ],
+            "checks": [
+              "Каждое изменение имеет одного владельца",
+              "Нет скрытой второй системы истины"
+            ],
+            "evidence": [
+              "Карта компонентов",
+              "Карта source-of-truth"
+            ]
+          },
+          {
+            "code": "architecture.options",
+            "name": "Варианты решения",
+            "description": "Сравнить реалистичные варианты без лишней архитектуры.",
+            "instructions": [
+              {
+                "text": "Сформировать минимум два варианта там, где есть реальный trade-off, и сравнить сложность, риски, совместимость и откат.",
+                "skills": [
+                  "solution-architecture"
+                ]
+              },
+              {
+                "text": "Выбрать минимальный вариант, полностью закрывающий критерии, и явно отклонить ненужные расширения.",
+                "skills": [
+                  "solution-architecture"
+                ]
+              }
+            ],
+            "checks": [
+              "Выбор обоснован критериями задачи",
+              "Решение не расширяет scope"
+            ],
+            "evidence": [
+              "Таблица вариантов",
+              "Зафиксированный выбор"
+            ]
+          },
+          {
+            "code": "architecture.design",
+            "name": "Контракты и dataflow",
+            "description": "Описать реализацию до уровня файлов, API и данных.",
+            "instructions": [
+              {
+                "text": "Описать компоненты, публичные контракты, состояния, транзакционные границы, idempotency и права.",
+                "skills": [
+                  "solution-architecture",
+                  "domain-modeling"
+                ]
+              },
+              {
+                "text": "Описать миграцию, совместимость, failure/restart flow, наблюдаемость и rollback без ручного переписывания истории.",
+                "skills": [
+                  "solution-architecture"
+                ]
+              }
+            ],
+            "checks": [
+              "Happy path и failure path прослеживаются end-to-end",
+              "Миграция обратимо поставляема"
+            ],
+            "evidence": [
+              "Текстовый dataflow",
+              "Перечень контрактов и миграций"
+            ]
+          },
+          {
+            "code": "architecture.plan",
+            "name": "План реализации",
+            "description": "Сформировать выполнимую последовательность изменений.",
+            "instructions": [
+              {
+                "text": "Разбить реализацию на короткие проверяемые срезы с точными владельцами файлов, зависимостями и targeted checks.",
+                "skills": [
+                  "solution-architecture"
+                ]
+              },
+              {
+                "text": "Отделить быстрые проверки от единственного финального полного gate и определить evidence для каждого риска.",
+                "skills": [
+                  "solution-architecture"
+                ]
+              },
+              {
+                "text": "Сформировать непустую versioned DecompositionRevision: штатные Business-подзадачи, parent/blocked-by links, стабильный queue order, frozen scope и acceptance coverage.",
+                "skills": [
+                  "solution-architecture",
+                  "relevanter-business-operator"
+                ]
+              }
+            ],
+            "checks": [
+              "Каждый срез даёт проверяемый результат",
+              "Нет конкурирующих write scopes"
+            ],
+            "evidence": [
+              "Порядок реализации",
+              "Матрица риск-проверка"
+            ]
+          },
+          {
+            "code": "architecture.handoff",
+            "name": "Передача очереди подзадач",
+            "description": "Опубликовать самодостаточную техническую декомпозицию.",
+            "instructions": [
+              {
+                "text": "Подготовить итоговый Markdown handoff: решение, ownership, dataflow, decomposition DAG, каждая подзадача, frozen scope, acceptance coverage, риски и проверки.",
+                "skills": [
+                  "relevanter-business-operator"
+                ]
+              },
+              {
+                "text": "Проверить ссылки на evidence и отсутствие незакрытых P0-вопросов. Затем отправить через project-workflow step --report сам подготовленный декомпозиционный handoff, явно покрывающий все checks и evidence этой фазы; ответ вида `Cannot proceed` или простое перечисление missing недопустимы. На этой фазе terminal action не вызывать до ответа complete=true.",
+                "skills": [
+                  "immutable-evidence-reporting",
+                  "relevanter-business-operator",
+                  "project-workflow-executor"
+                ]
+              }
+            ],
+            "checks": [
+              "Декомпозиционный комментарий подготовлен",
+              "Developer может начать по принятой декомпозиции без выбора архитектуры"
+            ],
+            "evidence": [
+              "Подготовленный итоговый Markdown",
+              "Ссылки на evidence"
+            ]
+          }
+        ]
+      }
+    ]
   }
 }

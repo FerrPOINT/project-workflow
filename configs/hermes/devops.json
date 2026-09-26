@@ -4,107 +4,469 @@
   "role": "devops",
   "skillsHub": {
     "commit": "50b92c54e0e04c510c9669dfb52dab0d4632d028",
-    "hashes": {
-      "devops-service-health-checks": "96c3fc9ebe42e69b50d763c831896998f6712a2f8218070d61734d6eb59def70",
-      "git-workflow": "8800fe48cba52585861330187ddf4495cc0b3470fdb9fc3bd72000a30a17d626"
-    }
+    "hashes": {}
   },
   "workflow": {
     "name": "Hermes DevOps",
     "description": "Управляемый выпуск exact candidate с backup, health/readback и проверяемым rollback.",
-    "modes": [{
-      "key": "deploy",
-      "name": "Деплой",
-      "phases": [
-        {
-          "code": "deploy.context",
-          "name": "Изучение задачи",
-          "description": "Собрать полный контекст выпуска и ограничения среды.",
-          "instructions": [
-            {"text": "Прочитать Business Task целиком, все комментарии, историю и список вложений; изучить требования, handoff всех стадий, approvals и доступные вложения.", "skills": ["relevanter-project-context"]},
-            {"text": "Подтвердить exact source SHA, terminal CI, immutable artifacts/images и целевую изолированную среду; не смешивать кандидаты.", "skills": ["git-workflow", "devops-service-health-checks"]}
-          ],
-          "checks": ["Полный контекст и approvals прочитаны", "Candidate identity однозначна"],
-          "evidence": ["Business refs", "SHA, pipeline и artifact refs"]
-        },
-        {
-          "code": "deploy.preflight",
-          "name": "Preflight выпуска",
-          "description": "Проверить условия безопасного изменения среды.",
-          "instructions": [
-            {"text": "Проверить разрешённый environment scope, текущие health/model versions, свободное место, зависимости и отсутствие конкурирующего deploy.", "skills": ["devops-service-health-checks"]},
-            {"text": "Проверить, что exact images доступны локально или из разрешённого registry и что deploy не требует пересборки на сервере.", "skills": ["devops-service-health-checks"]}
-          ],
-          "checks": ["Scope и зависимости подтверждены", "Конкурирующий deploy отсутствует"],
-          "evidence": ["Preflight readback", "Image digest refs"]
-        },
-        {
-          "code": "deploy.backup",
-          "name": "Backup и rollback",
-          "description": "Зафиксировать обратимый путь до изменения runtime.",
-          "instructions": [
-            {"text": "Сохранить текущие exact image refs, release manifest, состояние сервисов и предусмотренный backup namespace-data.", "skills": ["devops-service-health-checks"]},
-            {"text": "Проверить rollback-команды и критерии его запуска; не планировать ручное переписывание Business Task, Thread, audit или Git history.", "skills": ["devops-service-health-checks"]}
-          ],
-          "checks": ["Rollback target существует", "Backup/readback завершены до deploy"],
-          "evidence": ["Previous release manifest", "Backup ref и rollback checklist"]
-        },
-        {
-          "code": "deploy.apply",
-          "name": "Установка candidate",
-          "description": "Изменить только назначенный изолированный runtime.",
-          "instructions": [
-            {"text": "Из Developer handoff взять точный PR ref и вызвать release_candidate <sessionId> <PR-ref>. Не выполнять merge, build, HTTP или host-команды напрямую: trusted command сама проверяет связь PR с этой Task, required Verify, exact remote SHA и integration ancestry, затем запускает или reconciles только штатный Deploy main. При pending=true не завершать фазу и повторять reconcile того же gate до ok=true.", "skills": ["exact-sha-deployment", "devops-service-health-checks"]},
-            {"text": "Использовать terminal build и его immutable artifacts как receipt штатных backup, model/workspace upgrade, exact image switch и rollback boundary; не изменять основной DEV, общие БД, volumes или соседние сервисы.", "skills": ["exact-sha-deployment", "devops-service-health-checks"]}
-          ],
-          "checks": ["Установлены exact versions", "Изменён только разрешённый runtime scope"],
-          "evidence": ["Deploy command transcript ref", "Upgrade result ref"]
-        },
-        {
-          "code": "deploy.health",
-          "name": "Health и восстановление",
-          "description": "Убедиться, что runtime полностью поднялся.",
-          "instructions": [
-            {"text": "Перечитать результат release_candidate: Deploy build обязан быть SUCCESSFUL на merge SHA, а публичный HTTP readback изолированного target — отвечать успешно. Exact version/image/model/backup проверять по immutable artifacts terminal build, не по HTML.", "skills": ["exact-sha-deployment", "devops-service-health-checks"]},
-            {"text": "При провале health или upgrade остановиться и использовать terminal job evidence; повтор release_candidate разрешён только для reconcile того же PR/SHA/build и не создаёт слепой повтор.", "skills": ["exact-sha-deployment", "devops-service-health-checks"]}
-          ],
-          "checks": ["Все обязательные readiness checks зелёные", "Partial failure отсутствует или выполнен rollback"],
-          "evidence": ["Health/readiness snapshot", "Rollback result при необходимости"]
-        },
-        {
-          "code": "deploy.acceptance",
-          "name": "Runtime acceptance",
-          "description": "Проверить поставленный пользовательский поток.",
-          "instructions": [
-            {"text": "Проверить публичный smoke exact deployed candidate и автоматизированное acceptance evidence из terminal job; не подменять Tester acceptance одним health-check и не ждать внешнего оператора.", "skills": ["devops-service-health-checks", "deployed-acceptance"]},
-            {"text": "Проверить сохранность прежних данных и отсутствие утечки secrets, raw IDs и технического мусора; restart/recovery считать доказанным только при наличии immutable job evidence.", "skills": ["devops-service-health-checks", "deployed-acceptance"]}
-          ],
-          "checks": ["Основной пользовательский путь работает", "Restart и данные выдержали проверку"],
-          "evidence": ["Automated smoke refs", "Restart/recovery refs"]
-        },
-        {
-          "code": "deploy.readback",
-          "name": "Exact readback",
-          "description": "Доказать идентичность работающего релиза.",
-          "instructions": [
-            {"text": "Перечитать из runtime exact Business SHA, image digests, workflow configuration, role skill hashes и model version.", "skills": ["exact-sha-deployment", "git-workflow", "devops-service-health-checks"]},
-            {"text": "Сопоставить readback с candidate manifest; при расхождении не объявлять выпуск успешным.", "skills": ["devops-service-health-checks"]}
-          ],
-          "checks": ["Runtime совпадает с candidate manifest", "Evidence относится к текущему выпуску"],
-          "evidence": ["Exact runtime readback", "Candidate comparison"]
-        },
-        {
-          "code": "deploy.outcome",
-          "name": "Завершение деплоя",
-          "description": "Опубликовать итог и завершить процесс.",
-          "instructions": [
-            {"text": "Подготовить итоговый комментарий: exact release, изменённый scope, backup, health, acceptance, readback, rollback status и evidence refs.", "skills": ["relevanter-business-operator"]},
-            {"text": "После подтверждения успешного runtime отправить через project-workflow step --report содержательный отчёт с exact release refs, health/readback и ссылками на evidence, явно покрывающий все checks и evidence этой фазы; не отвечать `Cannot proceed` простым перечислением missing. На этой фазе terminal action не вызывать до ответа complete=true; stage, agent и mode не выбирать.", "skills": ["relevanter-business-operator", "devops-service-health-checks", "project-workflow-executor"]}
-          ],
-          "checks": ["Подготовленный комментарий содержит проверяемый release record", "Runtime readback завершён до закрытия фазы"],
-          "evidence": ["Подготовленный итоговый Markdown", "Exact runtime readback"]
-        }
-      ]
-    }]
+    "modes": [
+      {
+        "key": "delivery",
+        "name": "Деплой подзадачи",
+        "phases": [
+          {
+            "code": "deploy.context",
+            "name": "Изучение подзадачи",
+            "description": "Собрать полный контекст выпуска и ограничения среды.",
+            "instructions": [
+              {
+                "text": "Прочитать Business Task целиком, все комментарии, историю и список вложений; изучить требования, handoff всех стадий, approvals и доступные вложения.",
+                "skills": [
+                  "relevanter-business-operator"
+                ]
+              },
+              {
+                "text": "Подтвердить exact source SHA, terminal CI, immutable artifacts/images и целевую изолированную среду; не смешивать кандидаты.",
+                "skills": [
+                  "relevanter-tech-operator",
+                  "exact-sha-deployment"
+                ]
+              }
+            ],
+            "checks": [
+              "Полный контекст и approvals прочитаны",
+              "Candidate identity однозначна"
+            ],
+            "evidence": [
+              "Business refs",
+              "SHA, pipeline и artifact refs"
+            ]
+          },
+          {
+            "code": "deploy.preflight",
+            "name": "Preflight выпуска",
+            "description": "Проверить условия безопасного изменения среды.",
+            "instructions": [
+              {
+                "text": "Проверить разрешённый environment scope, текущие health/model versions, свободное место, зависимости и отсутствие конкурирующего deploy.",
+                "skills": [
+                  "exact-sha-deployment"
+                ]
+              },
+              {
+                "text": "Проверить, что exact images доступны локально или из разрешённого registry и что deploy не требует пересборки на сервере.",
+                "skills": [
+                  "exact-sha-deployment"
+                ]
+              }
+            ],
+            "checks": [
+              "Scope и зависимости подтверждены",
+              "Конкурирующий deploy отсутствует"
+            ],
+            "evidence": [
+              "Preflight readback",
+              "Image digest refs"
+            ]
+          },
+          {
+            "code": "deploy.backup",
+            "name": "Backup и rollback",
+            "description": "Зафиксировать обратимый путь до изменения runtime.",
+            "instructions": [
+              {
+                "text": "Сохранить текущие exact image refs, release manifest, состояние сервисов и предусмотренный backup namespace-data.",
+                "skills": [
+                  "exact-sha-deployment"
+                ]
+              },
+              {
+                "text": "Проверить rollback-команды и критерии его запуска; не планировать ручное переписывание Business Task, Thread, audit или Git history.",
+                "skills": [
+                  "exact-sha-deployment"
+                ]
+              }
+            ],
+            "checks": [
+              "Rollback target существует",
+              "Backup/readback завершены до deploy"
+            ],
+            "evidence": [
+              "Previous release manifest",
+              "Backup ref и rollback checklist"
+            ]
+          },
+          {
+            "code": "deploy.apply",
+            "name": "Установка candidate",
+            "description": "Изменить только назначенный изолированный runtime.",
+            "instructions": [
+              {
+                "text": "Из Developer handoff взять точный PR ref и вызвать release_candidate <sessionId> <PR-ref>. Не выполнять merge, build, HTTP или host-команды напрямую: trusted command сама проверяет связь PR с этой Task, required Verify, exact remote SHA и integration ancestry, затем запускает или reconciles только штатный Deploy main. При pending=true не завершать фазу и повторять reconcile того же gate до ok=true.",
+                "skills": [
+                  "exact-sha-deployment"
+                ]
+              },
+              {
+                "text": "Использовать terminal build и его immutable artifacts как receipt штатных backup, model/workspace upgrade, exact image switch и rollback boundary; не изменять основной DEV, общие БД, volumes или соседние сервисы.",
+                "skills": [
+                  "exact-sha-deployment"
+                ]
+              }
+            ],
+            "checks": [
+              "Установлены exact versions",
+              "Изменён только разрешённый runtime scope"
+            ],
+            "evidence": [
+              "Deploy command transcript ref",
+              "Upgrade result ref"
+            ]
+          },
+          {
+            "code": "deploy.health",
+            "name": "Health и восстановление",
+            "description": "Убедиться, что runtime полностью поднялся.",
+            "instructions": [
+              {
+                "text": "Перечитать результат release_candidate: Deploy build обязан быть SUCCESSFUL на merge SHA, а публичный HTTP readback изолированного target — отвечать успешно. Exact version/image/model/backup проверять по immutable artifacts terminal build, не по HTML.",
+                "skills": [
+                  "exact-sha-deployment"
+                ]
+              },
+              {
+                "text": "При провале health или upgrade остановиться и использовать terminal job evidence; повтор release_candidate разрешён только для reconcile того же PR/SHA/build и не создаёт слепой повтор.",
+                "skills": [
+                  "exact-sha-deployment"
+                ]
+              }
+            ],
+            "checks": [
+              "Все обязательные readiness checks зелёные",
+              "Partial failure отсутствует или выполнен rollback"
+            ],
+            "evidence": [
+              "Health/readiness snapshot",
+              "Rollback result при необходимости"
+            ]
+          },
+          {
+            "code": "deploy.acceptance",
+            "name": "Runtime acceptance",
+            "description": "Проверить поставленный пользовательский поток.",
+            "instructions": [
+              {
+                "text": "Проверить публичный smoke exact deployed candidate и автоматизированное acceptance evidence из terminal job; не подменять Tester acceptance одним health-check и не ждать внешнего оператора.",
+                "skills": [
+                  "exact-sha-deployment",
+                  "workflow-systematic-debugging"
+                ]
+              },
+              {
+                "text": "Проверить сохранность прежних данных и отсутствие утечки secrets, raw IDs и технического мусора; restart/recovery считать доказанным только при наличии immutable job evidence.",
+                "skills": [
+                  "exact-sha-deployment",
+                  "workflow-systematic-debugging"
+                ]
+              }
+            ],
+            "checks": [
+              "Основной пользовательский путь работает",
+              "Restart и данные выдержали проверку"
+            ],
+            "evidence": [
+              "Automated smoke refs",
+              "Restart/recovery refs"
+            ]
+          },
+          {
+            "code": "deploy.readback",
+            "name": "Exact readback",
+            "description": "Доказать идентичность работающего релиза.",
+            "instructions": [
+              {
+                "text": "Перечитать из runtime exact Business SHA, image digests, workflow configuration, role skill hashes и model version.",
+                "skills": [
+                  "exact-sha-deployment",
+                  "relevanter-tech-operator"
+                ]
+              },
+              {
+                "text": "Сопоставить readback с candidate manifest; при расхождении не объявлять выпуск успешным.",
+                "skills": [
+                  "exact-sha-deployment"
+                ]
+              }
+            ],
+            "checks": [
+              "Runtime совпадает с candidate manifest",
+              "Evidence относится к текущему выпуску"
+            ],
+            "evidence": [
+              "Exact runtime readback",
+              "Candidate comparison"
+            ]
+          },
+          {
+            "code": "deploy.outcome",
+            "name": "Завершение деплоя",
+            "description": "Опубликовать итог и завершить процесс.",
+            "instructions": [
+              {
+                "text": "Подготовить итоговый комментарий: exact release, изменённый scope, backup, health, acceptance, readback, rollback status и evidence refs.",
+                "skills": [
+                  "relevanter-business-operator"
+                ]
+              },
+              {
+                "text": "После подтверждения успешного runtime отправить через project-workflow step --report содержательный отчёт с exact release refs, health/readback и ссылками на evidence, явно покрывающий все checks и evidence этой фазы; не отвечать `Cannot proceed` простым перечислением missing. На этой фазе terminal action не вызывать до ответа complete=true; stage, agent и mode не выбирать.",
+                "skills": [
+                  "relevanter-business-operator",
+                  "exact-sha-deployment",
+                  "project-workflow-executor"
+                ]
+              }
+            ],
+            "checks": [
+              "Подготовленный комментарий содержит проверяемый release record",
+              "Runtime readback завершён до закрытия фазы"
+            ],
+            "evidence": [
+              "Подготовленный итоговый Markdown",
+              "Exact runtime readback"
+            ]
+          }
+        ]
+      },
+      {
+        "key": "integration",
+        "name": "Деплой интеграции",
+        "phases": [
+          {
+            "code": "integration.context",
+            "name": "Изучение головной Taskи",
+            "description": "Собрать полный контекст выпуска и ограничения среды.",
+            "instructions": [
+              {
+                "text": "Прочитать головную Business Task целиком, все комментарии, связи и вложения; изучить active decomposition revision, child deployment receipts, aggregate handoff и approvals.",
+                "skills": [
+                  "relevanter-business-operator"
+                ]
+              },
+              {
+                "text": "Подтвердить exact source SHA, terminal CI, immutable artifacts/images и целевую изолированную среду; не смешивать кандидаты.",
+                "skills": [
+                  "relevanter-tech-operator",
+                  "exact-sha-deployment"
+                ]
+              }
+            ],
+            "checks": [
+              "Полный контекст и approvals прочитаны",
+              "Aggregate release candidate identity однозначна"
+            ],
+            "evidence": [
+              "Business refs",
+              "SHA, pipeline и artifact refs"
+            ]
+          },
+          {
+            "code": "integration.preflight",
+            "name": "Preflight выпуска",
+            "description": "Проверить условия безопасного изменения среды.",
+            "instructions": [
+              {
+                "text": "Проверить разрешённый environment scope, текущие health/model versions, свободное место, зависимости и отсутствие конкурирующего deploy.",
+                "skills": [
+                  "exact-sha-deployment"
+                ]
+              },
+              {
+                "text": "Проверить, что exact images доступны локально или из разрешённого registry и что deploy не требует пересборки на сервере.",
+                "skills": [
+                  "exact-sha-deployment"
+                ]
+              }
+            ],
+            "checks": [
+              "Scope и зависимости подтверждены",
+              "Конкурирующий deploy отсутствует"
+            ],
+            "evidence": [
+              "Preflight readback",
+              "Image digest refs"
+            ]
+          },
+          {
+            "code": "integration.backup",
+            "name": "Backup и rollback",
+            "description": "Зафиксировать обратимый путь до изменения runtime.",
+            "instructions": [
+              {
+                "text": "Сохранить текущие exact image refs, release manifest, состояние сервисов и предусмотренный backup namespace-data.",
+                "skills": [
+                  "exact-sha-deployment"
+                ]
+              },
+              {
+                "text": "Проверить rollback-команды и критерии его запуска; не планировать ручное переписывание Business Task, Thread, audit или Git history.",
+                "skills": [
+                  "exact-sha-deployment"
+                ]
+              }
+            ],
+            "checks": [
+              "Rollback target существует",
+              "Backup/readback завершены до deploy"
+            ],
+            "evidence": [
+              "Previous release manifest",
+              "Backup ref и rollback checklist"
+            ]
+          },
+          {
+            "code": "integration.apply",
+            "name": "Установка aggregate release candidate",
+            "description": "Изменить только назначенный изолированный runtime.",
+            "instructions": [
+              {
+                "text": "Из Developer handoff взять точный PR ref и вызвать release_aggregate release candidate <sessionId> <PR-ref>. Не выполнять merge, build, HTTP или host-команды напрямую: trusted command сама проверяет связь PR с этой Task, required Verify, exact remote SHA и integration ancestry, затем запускает или reconciles только штатный Deploy main. При pending=true не завершать фазу и повторять reconcile того же gate до ok=true.",
+                "skills": [
+                  "exact-sha-deployment"
+                ]
+              },
+              {
+                "text": "Использовать terminal build и его immutable artifacts как receipt штатных backup, model/workspace upgrade, exact image switch и rollback boundary; не изменять основной DEV, общие БД, volumes или соседние сервисы.",
+                "skills": [
+                  "exact-sha-deployment"
+                ]
+              }
+            ],
+            "checks": [
+              "Установлены exact versions",
+              "Изменён только разрешённый runtime scope"
+            ],
+            "evidence": [
+              "Deploy command transcript ref",
+              "Upgrade result ref"
+            ]
+          },
+          {
+            "code": "integration.health",
+            "name": "Health и восстановление",
+            "description": "Убедиться, что runtime полностью поднялся.",
+            "instructions": [
+              {
+                "text": "Перечитать результат release_aggregate release candidate: Deploy build обязан быть SUCCESSFUL на merge SHA, а публичный HTTP readback изолированного target — отвечать успешно. Exact version/image/model/backup проверять по immutable artifacts terminal build, не по HTML.",
+                "skills": [
+                  "exact-sha-deployment"
+                ]
+              },
+              {
+                "text": "При провале health или upgrade остановиться и использовать terminal job evidence; повтор release_aggregate release candidate разрешён только для reconcile того же PR/SHA/build и не создаёт слепой повтор.",
+                "skills": [
+                  "exact-sha-deployment"
+                ]
+              }
+            ],
+            "checks": [
+              "Все обязательные readiness checks зелёные",
+              "Partial failure отсутствует или выполнен rollback"
+            ],
+            "evidence": [
+              "Health/readiness snapshot",
+              "Rollback result при необходимости"
+            ]
+          },
+          {
+            "code": "integration.acceptance",
+            "name": "Runtime acceptance",
+            "description": "Проверить поставленный пользовательский поток.",
+            "instructions": [
+              {
+                "text": "Проверить публичный smoke exact deployed aggregate release candidate и автоматизированное acceptance evidence из terminal job; не подменять Tester acceptance одним health-check и не ждать внешнего оператора.",
+                "skills": [
+                  "exact-sha-deployment",
+                  "workflow-systematic-debugging"
+                ]
+              },
+              {
+                "text": "Проверить сохранность прежних данных и отсутствие утечки secrets, raw IDs и технического мусора; restart/recovery считать доказанным только при наличии immutable job evidence.",
+                "skills": [
+                  "exact-sha-deployment",
+                  "workflow-systematic-debugging"
+                ]
+              }
+            ],
+            "checks": [
+              "Основной пользовательский путь работает",
+              "Restart и данные выдержали проверку"
+            ],
+            "evidence": [
+              "Automated smoke refs",
+              "Restart/recovery refs"
+            ]
+          },
+          {
+            "code": "integration.readback",
+            "name": "Exact readback",
+            "description": "Доказать идентичность работающего релиза.",
+            "instructions": [
+              {
+                "text": "Перечитать из runtime exact Business SHA, image digests, workflow configuration, role skill hashes и model version.",
+                "skills": [
+                  "exact-sha-deployment",
+                  "relevanter-tech-operator"
+                ]
+              },
+              {
+                "text": "Сопоставить readback с aggregate release candidate manifest; при расхождении не объявлять выпуск успешным.",
+                "skills": [
+                  "exact-sha-deployment"
+                ]
+              }
+            ],
+            "checks": [
+              "Runtime совпадает с aggregate release candidate manifest",
+              "Evidence относится к текущему выпуску"
+            ],
+            "evidence": [
+              "Exact runtime readback",
+              "Aggregate release candidate comparison"
+            ]
+          },
+          {
+            "code": "integration.outcome",
+            "name": "Завершение деплоя",
+            "description": "Опубликовать итог и завершить процесс.",
+            "instructions": [
+              {
+                "text": "Подготовить итоговый комментарий: exact release, изменённый scope, backup, health, acceptance, readback, rollback status и evidence refs.",
+                "skills": [
+                  "relevanter-business-operator"
+                ]
+              },
+              {
+                "text": "После подтверждения успешного runtime отправить через project-workflow step --report содержательный отчёт с exact release refs, health/readback и ссылками на evidence, явно покрывающий все checks и evidence этой фазы; не отвечать `Cannot proceed` простым перечислением missing. На этой фазе terminal action не вызывать до ответа complete=true; stage, agent и mode не выбирать.",
+                "skills": [
+                  "immutable-evidence-reporting",
+                  "relevanter-business-operator",
+                  "exact-sha-deployment",
+                  "project-workflow-executor"
+                ]
+              }
+            ],
+            "checks": [
+              "Подготовленный комментарий содержит проверяемый release record",
+              "Runtime readback завершён до закрытия фазы"
+            ],
+            "evidence": [
+              "Подготовленный итоговый Markdown",
+              "Exact runtime readback"
+            ]
+          }
+        ]
+      }
+    ]
   }
 }

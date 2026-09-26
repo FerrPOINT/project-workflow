@@ -18,11 +18,62 @@ from typing import Any
 
 LOCAL_RUNTIME_SKILLS = {
     "relevanter-business-operator",
-    "relevanter-project-context",
     "project-workflow-executor",
     "relevanter-tech-operator",
     "exact-sha-deployment",
     "deployed-acceptance",
+    "exact-code-review",
+    "immutable-evidence-reporting",
+    "repo-workflow",
+    "requirements-analysis",
+    "solution-architecture",
+    "test-driven-development",
+    "workflow-systematic-debugging",
+    "workflow-writing-plans",
+}
+ROLE_MODES = {
+    "project_manager": ["draft"],
+    "analyst": ["analysis"],
+    "architect": ["decomposition"],
+    "developer": ["initial", "rework", "integration", "integration_rework"],
+    "reviewer": ["delivery", "integration"],
+    "tester": ["delivery", "integration"],
+    "devops": ["delivery", "integration"],
+}
+LEGACY_MODE_ALIASES = {
+    "architect": {"architecture": "decomposition"},
+    "reviewer": {"review": "delivery"},
+    "tester": {"testing": "delivery"},
+    "devops": {"deploy": "delivery"},
+}
+ROLE_PHYSICAL_SKILLS = {
+    "project_manager": {"project-workflow-executor", "relevanter-business-operator"},
+    "analyst": {
+        "domain-modeling", "immutable-evidence-reporting", "project-workflow-executor",
+        "relevanter-business-operator", "requirements-analysis", "workflow-writing-plans",
+    },
+    "architect": {
+        "domain-modeling", "immutable-evidence-reporting", "project-workflow-executor",
+        "relevanter-business-operator", "solution-architecture", "workflow-writing-plans",
+    },
+    "developer": {
+        "immutable-evidence-reporting", "project-workflow-executor",
+        "relevanter-business-operator", "relevanter-tech-operator", "repo-workflow",
+        "test-driven-development", "workflow-systematic-debugging",
+    },
+    "reviewer": {
+        "exact-code-review", "immutable-evidence-reporting", "project-workflow-executor",
+        "relevanter-business-operator", "relevanter-tech-operator",
+    },
+    "tester": {
+        "deployed-acceptance", "immutable-evidence-reporting", "project-workflow-executor",
+        "relevanter-business-operator", "workflow-systematic-debugging",
+    },
+    "devops": {
+        "exact-sha-deployment", "immutable-evidence-reporting", "project-workflow-executor",
+        "relevanter-business-operator", "relevanter-tech-operator",
+        "workflow-systematic-debugging",
+    },
 }
 ROLE_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
 COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
@@ -48,7 +99,7 @@ def load_bundle(path: Path) -> dict[str, Any]:
     if not isinstance(skills_hub["commit"], str) or COMMIT_PATTERN.fullmatch(skills_hub["commit"]) is None:
         raise ValueError("invalid Skills Hub commit")
     hashes = skills_hub["hashes"]
-    if not isinstance(hashes, dict) or not hashes or any(
+    if not isinstance(hashes, dict) or any(
         not isinstance(name, str)
         or not name
         or not isinstance(digest, str)
@@ -120,6 +171,17 @@ def load_bundle(path: Path) -> dict[str, Any]:
                 f"mode {key} must prepare its handoff and complete the workflow before terminal action"
             )
         mode["mode_order"] = mode_order
+    if role not in ROLE_MODES or [str(mode["key"]) for mode in modes] != ROLE_MODES[role]:
+        raise ValueError(f"unexpected mode registry for role {role}")
+    referenced_skills = {
+        skill
+        for mode in modes
+        for phase in mode["phases"]
+        for instruction in phase["instructions"]
+        for skill in instruction["skills"]
+    }
+    if referenced_skills != ROLE_PHYSICAL_SKILLS[role]:
+        raise ValueError(f"physical skill allowlist mismatch for role {role}")
     unused_hub_skills = set(hashes) - referenced_hub_skills
     if unused_hub_skills:
         raise ValueError(f"unused Skills Hub skills: {sorted(unused_hub_skills)}")
@@ -204,6 +266,28 @@ def install(
             uow.workflows.update(workflow_id, {"description": workflow_spec["description"]})
         declared_mode_keys = {mode["key"] for mode in workflow_spec["modes"]}
         existing_modes = {mode.key: mode for mode in uow.workflow_modes.list(workflow_id)}
+        mode_specs = {mode["key"]: mode for mode in workflow_spec["modes"]}
+        for legacy_key, canonical_key in LEGACY_MODE_ALIASES.get(bundle["role"], {}).items():
+            legacy_mode = existing_modes.get(legacy_key)
+            if legacy_mode is None or canonical_key in existing_modes:
+                continue
+            if legacy_mode.id is None:
+                raise RuntimeError(f"legacy mode has no id: {legacy_key}")
+            legacy_codes = {phase.code for phase in uow.phases.list(workflow_id, legacy_mode.id)}
+            declared_codes = {phase["code"] for phase in mode_specs[canonical_key]["phases"]}
+            if not legacy_codes.issubset(declared_codes):
+                raise RuntimeError(f"legacy mode contains undeclared phases: {legacy_key}")
+            if check_only:
+                raise RuntimeError(f"legacy mode must be migrated: {legacy_key} -> {canonical_key}")
+            uow.workflow_modes.update(
+                legacy_mode.id,
+                {
+                    "key": canonical_key,
+                    "name": mode_specs[canonical_key]["name"],
+                    "mode_order": mode_specs[canonical_key]["mode_order"],
+                },
+            )
+            existing_modes = {mode.key: mode for mode in uow.workflow_modes.list(workflow_id)}
         first_mode_spec = workflow_spec["modes"][0]
         legacy_default = existing_modes.get("default")
         if (

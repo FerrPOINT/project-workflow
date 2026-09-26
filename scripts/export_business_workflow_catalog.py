@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""Export the canonical Hermes bundles for the Business namespace reconciler."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import re
+from pathlib import Path
+from typing import Any
+
+from scripts.install_hermes_workflow import ROLE_MODES, ROLE_PHYSICAL_SKILLS, load_bundle
+
+REVISION_PATTERN = re.compile(r"^[0-9a-f]{40}$")
+ROLE_ORDER = [
+    "project_manager",
+    "analyst",
+    "architect",
+    "developer",
+    "reviewer",
+    "tester",
+    "devops",
+]
+PHASE_SET_KEYS = {
+    ("project_manager", "draft"): "project_manager",
+    ("analyst", "analysis"): "analyst",
+    ("architect", "decomposition"): "architect",
+    ("developer", "initial"): "developer",
+    ("developer", "rework"): "developer_rework",
+    ("developer", "integration"): "developer_integration",
+    ("developer", "integration_rework"): "developer_integration_rework",
+    ("reviewer", "delivery"): "reviewer",
+    ("reviewer", "integration"): "reviewer_aggregate",
+    ("tester", "delivery"): "tester",
+    ("tester", "integration"): "tester_aggregate",
+    ("devops", "delivery"): "devops",
+    ("devops", "integration"): "devops_aggregate",
+}
+
+
+def canonical_hash(value: object) -> str:
+    encoded = json.dumps(
+        value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def normalized_bytes(path: Path) -> bytes:
+    return path.read_text(encoding="utf-8").replace("\r\n", "\n").encode("utf-8")
+
+
+def build_catalog(
+    *,
+    config_root: Path,
+    skills_manifest_path: Path,
+    workflow_revision: str,
+    skills_revision: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    if REVISION_PATTERN.fullmatch(workflow_revision) is None:
+        raise ValueError("workflow revision must be an exact 40-character SHA")
+    if REVISION_PATTERN.fullmatch(skills_revision) is None:
+        raise ValueError("skills revision must be an exact 40-character SHA")
+    manifest_raw = normalized_bytes(skills_manifest_path)
+    manifest = json.loads(manifest_raw)
+    if manifest.get("schema") != "relevanter-hermes-role-skills/v3":
+        raise ValueError("unexpected skills manifest schema")
+    manifest_roles = manifest.get("roles")
+    if not isinstance(manifest_roles, dict) or list(manifest_roles) != ROLE_ORDER:
+        raise ValueError("skills manifest roles/order mismatch")
+
+    roles: dict[str, Any] = {}
+    phase_sets: dict[str, Any] = {}
+    for role in ROLE_ORDER:
+        bundle = load_bundle(config_root / f"{role}.json")
+        workflow = bundle["workflow"]
+        role_manifest = manifest_roles[role]
+        expected_modes = ROLE_MODES[role]
+        if role_manifest.get("modes") != expected_modes:
+            raise ValueError(f"skills manifest mode mismatch: {role}")
+        if set(role_manifest.get("physicalSkills") or []) != ROLE_PHYSICAL_SKILLS[role]:
+            raise ValueError(f"skills manifest physical allowlist mismatch: {role}")
+        modes = []
+        for mode in workflow["modes"]:
+            phase_set = PHASE_SET_KEYS[(role, mode["key"])]
+            phases = []
+            for item in mode["phases"]:
+                phases.append(
+                    {
+                        "code": item["code"],
+                        "name": item["name"],
+                        "description": item["description"],
+                        "instructions": item["instructions"],
+                        "checks": item["checks"],
+                        "evidence": item["evidence"],
+                    }
+                )
+            phase_sets[phase_set] = phases
+            modes.append({"key": mode["key"], "name": mode["name"], "phase_set": phase_set})
+        roles[role] = {
+            "profile": role_manifest["profile"],
+            "workflow": workflow["name"],
+            "description": workflow["description"],
+            "modes": modes,
+            "skills": role_manifest["physicalSkills"],
+        }
+
+    phase_source = {
+        "schema": "relevanter-hermes-workflow-phase-sets/v1",
+        "sourceOfTruth": (
+            "project-workflow canonical role bundles; "
+            "Relevanter Business owns assignment and mode selection"
+        ),
+        "workflowCatalogRevision": workflow_revision,
+        "phase_sets": phase_sets,
+    }
+    catalog = {
+        "schema": "relevanter-hermes-workflow-catalog/v2",
+        "sourceOfTruth": "project-workflow canonical role bundles; Business routing pins role and mode",
+        "businessRoutingRegistry": "taskWorkspaceExecutionRoutingRegistry",
+        "workflowCatalogRepository": "git@github.com:FerrPOINT/project-workflow.git",
+        "workflowCatalogRevision": workflow_revision,
+        "skillsCatalogRepository": "https://gt.wmtgroup.ru/relevanter/agent-skills.git",
+        "skillsCatalogRevision": skills_revision,
+        "skillsManifestPath": "manifests/hermes-workflow-role-skills.v1.json",
+        "skillsManifestSchema": manifest["schema"],
+        "skillsManifestSha256": hashlib.sha256(manifest_raw).hexdigest(),
+        "rolesSha256": canonical_hash(roles),
+        "phaseSetsFrom": "hermes_workflow_phase_sets.v1.json",
+        "phaseSetsSha256": canonical_hash(phase_sets),
+        "roles": roles,
+    }
+    return catalog, phase_source
+
+
+def write_json(path: Path, value: dict[str, Any]) -> str:
+    payload = json.dumps(value, ensure_ascii=False, indent=2) + "\n"
+    path.write_text(payload, encoding="utf-8", newline="\n")
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config-root", type=Path, default=Path(__file__).resolve().parents[1] / "configs" / "hermes")
+    parser.add_argument("--skills-manifest", type=Path, required=True)
+    parser.add_argument("--workflow-revision", required=True)
+    parser.add_argument("--skills-revision", required=True)
+    parser.add_argument("--output-dir", type=Path, required=True)
+    args = parser.parse_args()
+    catalog, phase_sets = build_catalog(
+        config_root=args.config_root,
+        skills_manifest_path=args.skills_manifest,
+        workflow_revision=args.workflow_revision,
+        skills_revision=args.skills_revision,
+    )
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    catalog_hash = write_json(args.output_dir / "hermes_role_catalog.v2.json", catalog)
+    phase_hash = write_json(args.output_dir / "hermes_workflow_phase_sets.v1.json", phase_sets)
+    print(
+        json.dumps(
+            {
+                "workflowRevision": args.workflow_revision,
+                "catalogSha256": catalog_hash,
+                "phaseSetsSha256": phase_hash,
+                "roles": len(catalog["roles"]),
+                "modes": sum(len(role["modes"]) for role in catalog["roles"].values()),
+            },
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
