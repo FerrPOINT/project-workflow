@@ -88,7 +88,7 @@ def verify_skills_revision(
     repository_root: Path,
     skills_revision: str,
     manifest_relative_path: str = SKILLS_MANIFEST_PATH,
-) -> Path:
+) -> bytes:
     repository_root = repository_root.resolve()
     relative = PurePosixPath(manifest_relative_path)
     if (relative.is_absolute()
@@ -108,11 +108,17 @@ def verify_skills_revision(
     if str(_git(repository_root, "status", "--porcelain", "--untracked-files=all")).strip():
         raise ValueError("skills repository tree must be clean")
     manifest_path = repository_root.joinpath(*relative.parts)
-    worktree_bytes = manifest_path.read_bytes()
-    blob_bytes = _git(repository_root, "show", f"{skills_revision}:{manifest_relative_path}", text=False)
-    if worktree_bytes != blob_bytes:
+    blob_object = str(_git(
+        repository_root, "rev-parse", f"{skills_revision}:{manifest_relative_path}"
+    )).strip()
+    worktree_object = str(_git(
+        repository_root, "hash-object", f"--path={manifest_relative_path}", str(manifest_path)
+    )).strip()
+    if worktree_object != blob_object:
         raise ValueError("skills manifest differs from pinned Git blob")
-    return manifest_path
+    blob_bytes = _git(repository_root, "show", f"{skills_revision}:{manifest_relative_path}", text=False)
+    assert isinstance(blob_bytes, bytes)
+    return blob_bytes
 
 
 def build_catalog(
@@ -124,10 +130,10 @@ def build_catalog(
     skills_manifest_relative_path: str = SKILLS_MANIFEST_PATH,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     config_root = verify_source_revision(repository_root, workflow_revision)
-    skills_manifest_path = verify_skills_revision(
+    manifest_blob = verify_skills_revision(
         skills_repository_root, skills_revision, skills_manifest_relative_path
     )
-    manifest_raw = normalized_bytes(skills_manifest_path)
+    manifest_raw = manifest_blob.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
     manifest = json.loads(manifest_raw)
     if manifest.get("schema") != "relevanter-hermes-role-skills/v3":
         raise ValueError("unexpected skills manifest schema")
