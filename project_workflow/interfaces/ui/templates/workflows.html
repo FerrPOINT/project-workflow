@@ -98,10 +98,31 @@
 {% block extra_script %}
 const workflowStore = {{ workflows | tojson }};
 let selectedWorkflowId = {{ selected_workflow.id if selected_workflow else 'null' }};
+const defaultWorkflowId = {{ default_workflow_id if default_workflow_id else 'null' }};
 let previousWorkflowId = selectedWorkflowId;
 let workflowFormMode = selectedWorkflowId == null ? 'create' : 'edit';
 
 function workflowById(id){ return workflowStore.find(function(workflow){ return workflow.id === id; }); }
+function workflowSelectionUrl(workflowId){
+  var url = new URL(window.location.href);
+  if(workflowId == null){ url.searchParams.delete('workflow_id'); }
+  else { url.searchParams.set('workflow_id', String(workflowId)); }
+  return url.pathname + url.search + url.hash;
+}
+function syncWorkflowUrl(workflowId, mode){
+  var nextUrl = workflowSelectionUrl(workflowId);
+  var currentUrl = window.location.pathname + window.location.search + window.location.hash;
+  if(nextUrl === currentUrl)return;
+  window.history[mode === 'replace' ? 'replaceState' : 'pushState']({workflowId:workflowId},'',nextUrl);
+}
+function workflowIdFromUrl(){
+  var raw = new URL(window.location.href).searchParams.get('workflow_id');
+  if(raw == null){
+    return workflowById(defaultWorkflowId) ? defaultWorkflowId : (workflowStore[0] ? workflowStore[0].id : null);
+  }
+  var parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed > 0 && workflowById(parsed) ? parsed : null;
+}
 function phaseUrlForWorkflow(workflowId){
   var url = new URL('/phases', window.location.origin);
   url.searchParams.set('workflow_id', String(workflowId));
@@ -163,12 +184,16 @@ function cancelCreateWorkflow(){
   selectWorkflow(fallbackId);
   document.getElementById('workflowName').focus();
 }
-function selectWorkflow(id){
+function selectWorkflow(id, options){
+  if(!workflowById(id))return;
   selectedWorkflowId = id;
   previousWorkflowId = id;
   fillWorkflowForm(workflowById(id));
   setWorkflowFormMode('edit');
   syncWorkflowNav();
+  if(!options || options.updateUrl !== false){
+    syncWorkflowUrl(id, options && options.replaceUrl ? 'replace' : 'push');
+  }
 }
 function renderWorkflowNav(){
   var nav = document.getElementById('workflowNav');
@@ -233,6 +258,7 @@ function reloadWorkflows(nextId){
         setWorkflowFormMode('create');
         renderWorkflowNav();
         syncWorkflowNav();
+        syncWorkflowUrl(null, 'replace');
         return;
       }
       selectedWorkflowId = nextId || selectedWorkflowId || previousWorkflowId || workflowStore[0].id;
@@ -242,6 +268,7 @@ function reloadWorkflows(nextId){
       fillWorkflowForm(workflowById(selectedWorkflowId));
       setWorkflowFormMode('edit');
       syncWorkflowNav();
+      syncWorkflowUrl(selectedWorkflowId, 'replace');
     })
     .catch(showRequestError);
 }
@@ -315,4 +342,9 @@ if(selectedWorkflowId == null){
   setWorkflowFormMode('edit');
 }
 syncWorkflowNav();
+window.addEventListener('popstate', function(){
+  var workflowId = workflowIdFromUrl();
+  if(workflowId == null)return;
+  selectWorkflow(workflowId, {updateUrl:false});
+});
 {% endblock %}

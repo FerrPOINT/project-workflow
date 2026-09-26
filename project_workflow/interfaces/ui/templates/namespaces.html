@@ -165,6 +165,15 @@ function applyPageTheme(color){
   document.documentElement.style.setProperty('--accent-foreground', foreground);
   document.documentElement.style.setProperty('--accent-hover-foreground', foreground);
 }
+function applyNamespaceIdentity(name, command, icon, color){
+  applyPageTheme(color);
+  var brandName = document.querySelector('.brand-name');
+  var brandSubname = document.querySelector('.brand-subname');
+  var brandMark = document.querySelector('.brand-mark');
+  if(brandName){ brandName.textContent = name; }
+  if(brandSubname){ brandSubname.textContent = command; }
+  if(brandMark){ brandMark.innerHTML = namespaceIconSvg(icon); }
+}
 function updateNamespaceThemePreview(){
   var icon = document.getElementById('namespaceThemeIcon').value || defaultNamespaceThemeIcon;
   var color = document.getElementById('namespaceThemeColor').value || defaultNamespaceThemeColor;
@@ -176,13 +185,7 @@ function updateNamespaceThemePreview(){
   previewIcon.innerHTML = namespaceIconSvg(icon);
   document.getElementById('namespaceThemePreviewName').textContent = name;
   if(namespaceFormMode === 'create'){ return; }
-  applyPageTheme(color);
-  var brandName = document.querySelector('.brand-name');
-  var brandSubname = document.querySelector('.brand-subname');
-  var brandMark = document.querySelector('.brand-mark');
-  if(brandName){ brandName.textContent = name; }
-  if(brandSubname){ brandSubname.textContent = command; }
-  if(brandMark){ brandMark.innerHTML = namespaceIconSvg(icon); }
+  applyNamespaceIdentity(name, command, icon, color);
 }
 function currentPayload(){
   return {
@@ -204,18 +207,29 @@ function syncNav(){
   picker.options[0].textContent = namespaceFormMode === 'create' ? 'Новый неймспейс' : 'Выберите неймспейс';
   picker.value = selectedNamespaceId == null ? '' : String(selectedNamespaceId);
 }
-function rememberNamespaceSelection(id){
+function namespaceIdFromUrl(url){
+  var rawId = url.searchParams.get('namespace_id');
+  if(!rawId || !/^[1-9]\d*$/.test(rawId)){ return null; }
+  var id = Number(rawId);
+  return namespaceById(id) ? id : null;
+}
+function syncNamespaceUrl(id, historyMode){
+  if(id == null || historyMode === 'none'){ return; }
+  var url = new URL(window.location.href);
+  if(url.pathname !== '/namespaces' && url.pathname !== '/namespaces/new'){ return; }
+  url.pathname = '/namespaces';
+  url.searchParams.set('namespace_id', id);
+  if(url.toString() === window.location.href){ return; }
+  var method = historyMode === 'push' ? 'pushState' : 'replaceState';
+  window.history[method](null, '', url.toString());
+}
+function rememberNamespaceSelection(id, historyMode){
   if(id == null){ return; }
   document.cookie='workflow_namespace_id='+encodeURIComponent(id)+'; path=/; SameSite=Lax';
   var selector = document.getElementById('namespaceSelector');
   if(selector){ selector.value = String(id); }
   updateNamespaceHeaderLinks(id);
-  var url = new URL(window.location.href);
-  if(url.pathname === '/namespaces' || url.pathname === '/namespaces/new'){
-    url.pathname = '/namespaces';
-    url.searchParams.set('namespace_id', id);
-    window.history.replaceState(null, '', url.toString());
-  }
+  syncNamespaceUrl(id, historyMode || 'replace');
 }
 function fillNamespaceForm(namespace){
   document.getElementById('namespaceName').value = namespace ? namespace.name : '';
@@ -263,13 +277,43 @@ function cancelCreateNamespace(){
   selectNamespace(fallbackId);
   document.getElementById('namespaceName').focus();
 }
-function selectNamespace(id){
-  selectedNamespaceId = id;
-  previousNamespaceId = id;
+function selectNamespace(id, historyMode){
+  var namespace = namespaceById(Number(id));
+  if(!namespace){ return; }
+  selectedNamespaceId = namespace.id;
+  previousNamespaceId = namespace.id;
   setNamespaceFormMode('edit');
-  fillNamespaceForm(namespaceById(id));
+  fillNamespaceForm(namespace);
   syncNav();
-  rememberNamespaceSelection(id);
+  rememberNamespaceSelection(namespace.id, historyMode || 'push');
+}
+function restoreNamespaceLocation(){
+  var url = new URL(window.location.href);
+  if(url.pathname === '/namespaces/new'){
+    var contextId = namespaceIdFromUrl(url);
+    if(contextId == null && namespaceById(previousNamespaceId)){ contextId = previousNamespaceId; }
+    if(contextId == null && namespaceStore[0]){ contextId = namespaceStore[0].id; }
+    selectedNamespaceId = null;
+    previousNamespaceId = contextId;
+    setNamespaceFormMode('create');
+    fillNamespaceForm(null);
+    syncNav();
+    renderNamespaceSelector();
+    var contextNamespace = namespaceById(contextId);
+    if(contextNamespace){
+      applyNamespaceIdentity(
+        contextNamespace.name,
+        contextNamespace.cli_command,
+        contextNamespace.theme_icon,
+        contextNamespace.theme_color
+      );
+    }
+    return;
+  }
+  var namespaceId = namespaceIdFromUrl(url);
+  if(namespaceId == null && namespaceById(previousNamespaceId)){ namespaceId = previousNamespaceId; }
+  if(namespaceId == null && namespaceStore[0]){ namespaceId = namespaceStore[0].id; }
+  if(namespaceId != null){ selectNamespace(namespaceId, 'none'); }
 }
 function reloadNamespaces(nextId){
   return fetch('/api/namespaces')
@@ -298,7 +342,7 @@ function reloadNamespaces(nextId){
       setNamespaceFormMode('edit');
       fillNamespaceForm(namespaceById(selectedNamespaceId));
       syncNav();
-      rememberNamespaceSelection(selectedNamespaceId);
+      rememberNamespaceSelection(selectedNamespaceId, 'replace');
     })
     .catch(showRequestError);
 }
@@ -459,8 +503,10 @@ if(selectedNamespaceId == null){
   document.getElementById('namespaceName').focus();
 } else {
   setNamespaceFormMode('edit');
+  rememberNamespaceSelection(selectedNamespaceId, 'replace');
 }
 syncNav();
+window.addEventListener('popstate', restoreNamespaceLocation);
 document.getElementById('namespaceName').addEventListener('input', updateNamespaceThemePreview);
 document.getElementById('namespaceCliCommand').addEventListener('input', updateNamespaceThemePreview);
 {% endblock %}

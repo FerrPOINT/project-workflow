@@ -16,7 +16,8 @@
 .chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border-strong);background:var(--surface);border-radius:999px;padding:3px 9px;font-size:11px;font-weight:600;color:var(--text-secondary);white-space:nowrap}
 .chip.done,.verdict-pass{color:var(--green);background:var(--green-soft)}
 .chip.active,.verdict-delegate{color:var(--accent-readable);background:var(--accent-soft)}
-.chip.blocked,.verdict-blocked{color:var(--red);background:var(--red-soft)}
+.chip.blocked{color:var(--red);background:var(--red-soft)}
+.verdict-blocked{color:var(--text);background:var(--red-soft)}
 .verdict-partial{color:var(--yellow);background:var(--yellow-soft)}
 .verdict-rollback{color:var(--orange);background:var(--orange-soft)}
 
@@ -80,6 +81,7 @@
 .activity-title{font-size:14px;font-weight:600;color:var(--text)}
 .activity-time{margin-left:auto;font-size:11px;color:var(--text-dim)}
 .verdict-chip{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;border:1px solid currentColor;border-radius:999px;padding:2px 7px}
+.verdict-chip.verdict-blocked{border-color:var(--red)}
 .dialog-part{padding:12px 0;border-top:1px solid var(--border);min-width:0}
 .dialog-part:first-of-type{border-top:0;padding-top:0}
 .dialog-label{font-size:11px;font-weight:650;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:7px}

@@ -1300,6 +1300,40 @@ class TestPhaseDetail:
         assert "fetch(phaseApiUrl('/api/phases/' + phaseId)" in response.text
         assert "fetch('/api/phases/4.START'" not in response.text
 
+    def test_phase_detail_has_responsive_structured_outline(self):
+        response = client.get(_phase_detail_path("4.START"))
+
+        assert response.status_code == 200
+        assert 'class="phase-editor-layout"' in response.text
+        assert 'aria-labelledby="phase-outline-title"' in response.text
+        assert 'data-phase-section-link="phase-overview" aria-current="location"' in response.text
+        assert 'data-phase-section-link="phase-instructions"' in response.text
+        assert 'data-phase-section-link="phase-checks"' in response.text
+        assert 'data-phase-section-link="phase-evidence"' in response.text
+        assert 'id="phaseSectionSelect"' in response.text
+        assert 'id="phase-overview" data-phase-section tabindex="-1"' in response.text
+        assert 'id="phase-instructions" data-phase-section tabindex="-1"' in response.text
+        assert 'id="phase-checks" data-phase-section tabindex="-1"' in response.text
+        assert 'id="phase-evidence" data-phase-section tabindex="-1"' in response.text
+        assert "function initializePhaseOutline()" in response.text
+        assert "phaseSectionNavigationLock = sectionId" in response.text
+        assert "section.scrollIntoView({behavior: 'auto', block: 'start'});" in response.text
+        assert "@media(max-width:960px)" in response.text
+
+    def test_phase_detail_outline_uses_restorable_browser_history(self):
+        response = client.get(_phase_detail_path("4.START"))
+
+        assert response.status_code == 200
+        assert "function syncPhaseSectionUrl(sectionId, historyMode)" in response.text
+        assert "const method = historyMode === 'replace' ? 'replaceState' : 'pushState';" in response.text
+        assert "window.history[method](null, '', nextUrl);" in response.text
+        assert "function jumpToPhaseSection(sectionId, historyMode = 'push')" in response.text
+        assert "function releasePhaseSectionNavigationLock()" in response.text
+        assert "jumpToPhaseSection(sectionId, 'none');" in response.text
+        assert "jumpToPhaseSection(requestedSection, 'replace')" in response.text
+        assert "window.addEventListener('popstate', restorePhaseSectionFromLocation);" in response.text
+        assert "window.addEventListener('wheel', releasePhaseSectionNavigationLock" in response.text
+
     def test_phase_detail_empty_name_is_sent_to_backend_validation(self):
         response = client.get(_phase_detail_path("4.START"))
         assert response.status_code == 200
@@ -1961,6 +1995,14 @@ class TestTaskDetail:
         assert ".phase-card.current .phase-status{color:var(--accent-readable)}" in response.text
         assert "rgba(59,130,246" not in response.text
 
+    def test_task_detail_blocked_verdict_uses_readable_text_and_semantic_border(self):
+        response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
+
+        assert response.status_code == 200
+        assert ".verdict-blocked{color:var(--text);background:var(--red-soft)}" in response.text
+        assert ".verdict-chip.verdict-blocked{border-color:var(--red)}" in response.text
+        assert ".chip.blocked,.verdict-blocked{color:var(--red)" not in response.text
+
     def test_task_detail_mobile_navigation_keeps_links_accessible(self):
         namespace_id = self._default_namespace_id()
         response = client.get(f"/task/RUN-247?namespace_id={namespace_id}")
@@ -2204,20 +2246,41 @@ class TestProjectsPage:
     def test_namespace_card_selection_updates_global_selection_state(self):
         response = client.get("/namespaces")
         assert response.status_code == 200
-        assert "function rememberNamespaceSelection(id)" in response.text
+        assert "function rememberNamespaceSelection(id, historyMode)" in response.text
         assert (
             "document.cookie='workflow_namespace_id='+encodeURIComponent(id)+'; path=/; SameSite=Lax';"
             in response.text
         )
         assert "if(selector){ selector.value = String(id); }" in response.text
         assert "url.pathname = '/namespaces';" in response.text
-        assert "window.history.replaceState(null, '', url.toString());" in response.text
+        assert "var method = historyMode === 'push' ? 'pushState' : 'replaceState';" in response.text
+        assert "window.history[method](null, '', url.toString());" in response.text
         assert re.search(
-            r"function selectNamespace\(id\)\{\s*selectedNamespaceId = id;\s*"
-            r"previousNamespaceId = id;\s*setNamespaceFormMode\('edit'\);\s*"
-            r"fillNamespaceForm\(namespaceById\(id\)\);",
+            r"function selectNamespace\(id, historyMode\)\{\s*"
+            r"var namespace = namespaceById\(Number\(id\)\);\s*if\(!namespace\)\{ return; \}\s*"
+            r"selectedNamespaceId = namespace.id;\s*previousNamespaceId = namespace.id;",
             response.text,
         )
+
+    def test_namespace_selection_restores_edit_state_from_browser_history(self):
+        response = client.get("/namespaces")
+        assert response.status_code == 200
+        assert "function namespaceIdFromUrl(url)" in response.text
+        assert "rememberNamespaceSelection(namespace.id, historyMode || 'push');" in response.text
+        assert "rememberNamespaceSelection(selectedNamespaceId, 'replace');" in response.text
+        assert "window.addEventListener('popstate', restoreNamespaceLocation);" in response.text
+        assert "if(namespaceId != null){ selectNamespace(namespaceId, 'none'); }" in response.text
+
+    def test_namespace_history_restores_create_mode_and_cancel_context(self):
+        uow = ui_app_state.get_db()
+        namespace_id = _as_dict(uow.projects.get_by_code("UITEST"))["id"]
+        response = client.get(f"/namespaces/new?namespace_id={namespace_id}")
+        assert response.status_code == 200
+        assert "if(url.pathname === '/namespaces/new'){" in response.text
+        assert "selectedNamespaceId = null;" in response.text
+        assert "previousNamespaceId = contextId;" in response.text
+        assert "setNamespaceFormMode('create');" in response.text
+        assert "renderNamespaceSelector();" in response.text
 
     def test_namespace_card_selection_updates_header_action_links(self):
         response = client.get("/namespaces")
@@ -2385,6 +2448,17 @@ class TestWorkflowsPage:
         assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
         assert "workflowForm" not in response.text
 
+    def test_workflows_page_rejects_invalid_or_unknown_workflow(self):
+        invalid = client.get("/workflows?workflow_id=abc")
+        assert invalid.status_code == 422
+        assert "Некорректный workflow_id" in invalid.text
+        assert "workflowForm" not in invalid.text
+
+        missing = client.get(f"/workflows?workflow_id={UNKNOWN_WORKFLOW_ID}")
+        assert missing.status_code == 404
+        assert f"Воркфлоу {UNKNOWN_WORKFLOW_ID} не найден" in missing.text
+        assert "workflowForm" not in missing.text
+
     def test_workflows_page_uses_single_editor_without_redundant_nav(self):
         response = client.get("/workflows")
         assert response.status_code == 200
@@ -2427,11 +2501,13 @@ class TestWorkflowsPage:
         assert created.status_code == 200
         workflow_id = created.json()["workflow_id"]
         try:
-            response = client.get("/workflows")
+            response = client.get(f"/workflows?workflow_id={workflow_id}")
             assert response.status_code == 200
             assert 'class="workflow-crud "' in response.text
-            assert f'<option value="{workflow_id}"' in response.text
+            assert f'<option value="{workflow_id}" selected' in response.text
             assert "Secondary UI workflow</option>" in response.text
+            assert f"let selectedWorkflowId = {workflow_id};" in response.text
+            assert 'value="Secondary UI workflow"' in response.text
             assert ".workflow-picker{display:block}" in response.text
             assert ".workflow-nav{display:none}" in response.text
             assert "classList.toggle('is-single', workflowStore.length <= 1)" in response.text
@@ -2444,6 +2520,75 @@ class TestWorkflowsPage:
         assert response.status_code == 200
         assert "workflowCode" not in response.text
         assert ">Код<" not in response.text
+
+    def test_workflows_page_persists_selection_in_browser_history(self):
+        response = client.get("/workflows")
+
+        assert response.status_code == 200
+        assert "function workflowSelectionUrl(workflowId)" in response.text
+        assert "url.searchParams.set('workflow_id', String(workflowId));" in response.text
+        assert "url.searchParams.delete('workflow_id');" in response.text
+        assert "window.history[mode === 'replace' ? 'replaceState' : 'pushState']" in response.text
+        assert "window.addEventListener('popstate'" in response.text
+        assert "selectWorkflow(workflowId, {updateUrl:false});" in response.text
+        assert "syncWorkflowUrl(selectedWorkflowId, 'replace');" in response.text
+        assert "return workflowById(defaultWorkflowId) ? defaultWorkflowId" in response.text
+
+    def test_workflows_page_defaults_to_active_namespace_workflow(self):
+        workflow = client.post("/api/workflows", json={"name": "Namespace selected workflow"})
+        assert workflow.status_code == 200
+        workflow_id = workflow.json()["workflow_id"]
+        namespace = client.post(
+            "/api/namespaces",
+            json={
+                "name": "Workflow selection namespace",
+                "cli_command": f"workflow-selection-{workflow_id}",
+                "workflow_id": workflow_id,
+            },
+        )
+        assert namespace.status_code == 200
+        namespace_id = namespace.json()["namespace_id"]
+        try:
+            response = client.get(f"/workflows?namespace_id={namespace_id}")
+
+            assert response.status_code == 200
+            assert f"let selectedWorkflowId = {workflow_id};" in response.text
+            assert f"const defaultWorkflowId = {workflow_id};" in response.text
+            assert 'value="Namespace selected workflow"' in response.text
+        finally:
+            deleted_namespace = client.delete(f"/api/namespaces/{namespace_id}")
+            assert deleted_namespace.status_code == 200
+            deleted_workflow = client.delete(f"/api/workflows/{workflow_id}")
+            assert deleted_workflow.status_code == 200
+
+    def test_workflows_page_keeps_namespace_default_separate_from_explicit_selection(self):
+        existing_workflow_id = client.get("/api/workflows").json()["workflows"][0]["id"]
+        workflow = client.post("/api/workflows", json={"name": "Namespace history default"})
+        assert workflow.status_code == 200
+        namespace_workflow_id = workflow.json()["workflow_id"]
+        namespace = client.post(
+            "/api/namespaces",
+            json={
+                "name": "Workflow history namespace",
+                "cli_command": f"workflow-history-{namespace_workflow_id}",
+                "workflow_id": namespace_workflow_id,
+            },
+        )
+        assert namespace.status_code == 200
+        namespace_id = namespace.json()["namespace_id"]
+        try:
+            response = client.get(
+                f"/workflows?namespace_id={namespace_id}&workflow_id={existing_workflow_id}"
+            )
+
+            assert response.status_code == 200
+            assert f"let selectedWorkflowId = {existing_workflow_id};" in response.text
+            assert f"const defaultWorkflowId = {namespace_workflow_id};" in response.text
+        finally:
+            deleted_namespace = client.delete(f"/api/namespaces/{namespace_id}")
+            assert deleted_namespace.status_code == 200
+            deleted_workflow = client.delete(f"/api/workflows/{namespace_workflow_id}")
+            assert deleted_workflow.status_code == 200
 
     def test_workflows_page_hides_removed_intro_cleanup_block(self):
         response = client.get("/workflows")
