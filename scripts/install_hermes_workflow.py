@@ -109,8 +109,10 @@ def load_bundle(path: Path) -> dict[str, Any]:
         terminal_text = " ".join(item["text"] for item in phases[-1]["instructions"]).lower()
         if (
             ("комментар" not in terminal_text and "markdown" not in terminal_text)
-            or "workflow_phase complete" not in terminal_text
+            or "project-workflow step --report" not in terminal_text
+            or "complete=true" not in terminal_text
             or "terminal action не вызывать" not in terminal_text
+            or "workflow_phase" in terminal_text
             or "publish_task_draft" in terminal_text
             or "complete_assigned_stage" in terminal_text
         ):

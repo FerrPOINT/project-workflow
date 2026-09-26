@@ -99,7 +99,7 @@
           "description": "Опубликовать итог и завершить процесс.",
           "instructions": [
             {"text": "Подготовить итоговый комментарий: exact release, изменённый scope, backup, health, acceptance, readback, rollback status и evidence refs.", "skills": ["relevanter-business-operator"]},
-            {"text": "После подтверждения успешного runtime завершить фазу через workflow_phase complete. На этой фазе terminal action не вызывать; stage, agent и mode не выбирать.", "skills": ["relevanter-business-operator", "devops-service-health-checks", "project-workflow-executor"]}
+            {"text": "После подтверждения успешного runtime отправить через project-workflow step --report содержательный отчёт с exact release refs, health/readback и ссылками на evidence, явно покрывающий все checks и evidence этой фазы; не отвечать `Cannot proceed` простым перечислением missing. На этой фазе terminal action не вызывать до ответа complete=true; stage, agent и mode не выбирать.", "skills": ["relevanter-business-operator", "devops-service-health-checks", "project-workflow-executor"]}
           ],
           "checks": ["Подготовленный комментарий содержит проверяемый release record", "Runtime readback завершён до закрытия фазы"],
           "evidence": ["Подготовленный итоговый Markdown", "Exact runtime readback"]

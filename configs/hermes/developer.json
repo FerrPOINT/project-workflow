@@ -91,7 +91,7 @@
             "description": "Зафиксировать проверяемый результат разработки.",
             "instructions": [
               {"text": "Подготовить итоговый комментарий: что изменено, файлы и контракты, проверки, commit/MR, известные ограничения и что должен проверить Reviewer.", "skills": ["relevanter-business-operator"]},
-              {"text": "После exact SHA readback и проверки чистого workspace завершить фазу через workflow_phase complete. На этой фазе terminal action не вызывать.", "skills": ["relevanter-business-operator", "relevanter-tech-operator", "project-workflow-executor"]}
+              {"text": "После exact SHA readback и проверки чистого workspace отправить через project-workflow step --report содержательный отчёт с exact remote SHA, результатом push, clean-workspace readback и ссылками на evidence, явно покрывающий все checks и evidence этой фазы; не отвечать `Cannot proceed` простым перечислением missing. На этой фазе terminal action не вызывать до ответа complete=true.", "skills": ["relevanter-business-operator", "relevanter-tech-operator", "project-workflow-executor"]}
             ],
             "checks": ["Итоговый комментарий подготовлен", "Commit, push и clean workspace подтверждены до завершения фазы"],
             "evidence": ["Подготовленный итоговый Markdown", "Exact remote SHA и MR ref"]
@@ -174,7 +174,7 @@
             "description": "Передать доказательства закрытия findings.",
             "instructions": [
               {"text": "Подготовить итоговый комментарий: cycle, каждый finding и исправление, regression evidence, commit/MR и что повторно проверить Reviewer.", "skills": ["relevanter-business-operator"]},
-              {"text": "После exact SHA readback и проверки чистого workspace завершить фазу через workflow_phase complete. На этой фазе terminal action не вызывать; следующую stage выбирает только backend.", "skills": ["relevanter-business-operator", "relevanter-tech-operator", "project-workflow-executor"]}
+              {"text": "После exact SHA readback и проверки чистого workspace отправить через project-workflow step --report содержательный отчёт с exact remote SHA, результатом push, clean-workspace readback и ссылками на evidence, явно покрывающий все checks и evidence этой фазы; не отвечать `Cannot proceed` простым перечислением missing. На этой фазе terminal action не вызывать до ответа complete=true; следующую stage выбирает только backend.", "skills": ["relevanter-business-operator", "relevanter-tech-operator", "project-workflow-executor"]}
             ],
             "checks": ["Каждый finding имеет disposition", "Итоговый handoff подготовлен для Review"],
             "evidence": ["Подготовленный итоговый Markdown", "Exact remote SHA и MR ref"]

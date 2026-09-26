@@ -88,7 +88,7 @@
           "description": "Опубликовать evidence и разрешённый outcome.",
           "instructions": [
             {"text": "Подготовить итоговый комментарий: candidate, покрытие, результаты сценариев, defects/blockers, evidence и вывод о готовности.", "skills": ["relevanter-business-operator"]},
-            {"text": "Подготовить outcome passed либо needs_rework и полный findings JSON для подтверждённых дефектов. На этой фазе terminal action не вызывать: сначала завершить фазу через workflow_phase complete. Stage, agent и mode не выбирать.", "skills": ["relevanter-business-operator", "testing-workflow", "project-workflow-executor"]}
+            {"text": "Подготовить outcome passed либо needs_rework и полный findings JSON для подтверждённых дефектов. Затем отправить через project-workflow step --report содержательный итоговый отчёт, явно покрывающий все checks и evidence этой фазы; не отвечать `Cannot proceed` простым перечислением missing. На этой фазе terminal action не вызывать до ответа complete=true. Stage, agent и mode не выбирать.", "skills": ["relevanter-business-operator", "testing-workflow", "project-workflow-executor"]}
           ],
           "checks": ["Подготовленный комментарий соответствует evidence", "Outcome не скрывает defects или blockers"],
           "evidence": ["Подготовленный итоговый Markdown", "Подготовленный outcome и findings"]

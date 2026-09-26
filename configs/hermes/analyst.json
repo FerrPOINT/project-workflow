@@ -77,7 +77,7 @@
           "description": "Зафиксировать полный результат анализа в Business.",
           "instructions": [
             {"text": "Подготовить итоговый комментарий с разделами: результат анализа, требования, критерии приёмки, ограничения, зависимости, риски и вопросы со статусом.", "skills": ["relevanter-business-operator"]},
-            {"text": "Проверить, что подготовленный комментарий содержит ссылки на evidence и не содержит внутренних логов. На этой фазе terminal action не вызывать: сначала завершить фазу через workflow_phase complete.", "skills": ["relevanter-business-operator", "project-workflow-executor"]}
+            {"text": "Проверить, что подготовленный комментарий содержит ссылки на evidence и не содержит внутренних логов. Затем отправить через project-workflow step --report сам подготовленный итоговый Markdown, явно покрывающий оба checks и оба evidence этой фазы; ответ вида `Cannot proceed` или простое перечисление missing недопустимы. На этой фазе terminal action не вызывать до ответа complete=true.", "skills": ["relevanter-business-operator", "project-workflow-executor"]}
           ],
           "checks": ["Итоговый комментарий подготовлен", "Архитектор получает самодостаточный handoff"],
           "evidence": ["Подготовленный итоговый Markdown", "Ссылки на evidence"]
