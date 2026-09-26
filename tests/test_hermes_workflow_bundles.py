@@ -42,8 +42,10 @@ def _source_repository(tmp_path: Path) -> tuple[Path, str]:
     return repository, revision
 
 
-def _skills_manifest(tmp_path: Path) -> Path:
-    path = tmp_path / "skills.json"
+def _skills_repository(tmp_path: Path) -> tuple[Path, str]:
+    repository = tmp_path / "skills-source"
+    path = repository / "manifests" / "hermes-workflow-role-skills.v1.json"
+    path.parent.mkdir(parents=True)
     path.write_text(
         json.dumps(
             {
@@ -62,7 +64,22 @@ def _skills_manifest(tmp_path: Path) -> Path:
         ),
         encoding="utf-8",
     )
-    return path
+    subprocess.run(["git", "init", "-q", str(repository)], check=True)
+    subprocess.run(["git", "-C", str(repository), "add", "manifests"], check=True)
+    subprocess.run(
+        [
+            "git", "-C", str(repository), "-c", "user.name=Skills Tests",
+            "-c", "user.email=skills-tests@example.invalid", "commit", "-qm", "fixture",
+        ],
+        check=True,
+    )
+    revision = subprocess.run(
+        ["git", "-C", str(repository), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    return repository, revision
 
 
 def test_seven_clean_role_namespace_bundles_are_complete() -> None:
@@ -93,10 +110,10 @@ def test_seven_clean_role_namespace_bundles_are_complete() -> None:
 
 def test_business_export_is_exact_full_registry_with_phase_instructions(tmp_path: Path) -> None:
     repository, workflow_revision = _source_repository(tmp_path)
-    skills_revision = "b" * 40
+    skills_repository, skills_revision = _skills_repository(tmp_path)
     catalog, phase_source = build_catalog(
         repository_root=repository,
-        skills_manifest_path=_skills_manifest(tmp_path),
+        skills_repository_root=skills_repository,
         workflow_revision=workflow_revision,
         skills_revision=skills_revision,
     )
@@ -133,10 +150,11 @@ def test_business_export_is_exact_full_registry_with_phase_instructions(tmp_path
 
 def test_business_export_rejects_unproven_revision_and_dirty_tree(tmp_path: Path) -> None:
     repository, workflow_revision = _source_repository(tmp_path)
+    skills_repository, skills_revision = _skills_repository(tmp_path)
     arguments = {
         "repository_root": repository,
-        "skills_manifest_path": _skills_manifest(tmp_path),
-        "skills_revision": "b" * 40,
+        "skills_repository_root": skills_repository,
+        "skills_revision": skills_revision,
     }
     with pytest.raises(ValueError, match="does not match repository HEAD"):
         build_catalog(workflow_revision="a" * 40, **arguments)
@@ -144,6 +162,45 @@ def test_business_export_rejects_unproven_revision_and_dirty_tree(tmp_path: Path
     (repository / "configs" / "hermes" / "analyst.json").write_text("{}\n", encoding="utf-8")
     with pytest.raises(ValueError, match="tree must be clean"):
         build_catalog(workflow_revision=workflow_revision, **arguments)
+
+
+def test_business_export_rejects_unproven_skills_manifest(tmp_path: Path) -> None:
+    workflow_repository, workflow_revision = _source_repository(tmp_path)
+    skills_repository, skills_revision = _skills_repository(tmp_path)
+    arguments = {
+        "repository_root": workflow_repository,
+        "workflow_revision": workflow_revision,
+    }
+    with pytest.raises(ValueError, match="does not match repository HEAD"):
+        build_catalog(
+            skills_repository_root=skills_repository,
+            skills_revision="b" * 40,
+            **arguments,
+        )
+
+    manifest = skills_repository / "manifests" / "hermes-workflow-role-skills.v1.json"
+    manifest.write_text("{}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="skills repository tree must be clean"):
+        build_catalog(
+            skills_repository_root=skills_repository,
+            skills_revision=skills_revision,
+            **arguments,
+        )
+
+    clean_repository, clean_revision = _skills_repository(tmp_path / "outside")
+    with pytest.raises(ValueError, match="exact Git top level"):
+        build_catalog(
+            skills_repository_root=clean_repository / "manifests",
+            skills_revision=clean_revision,
+            **arguments,
+        )
+    with pytest.raises(ValueError, match="normalized repo-relative"):
+        build_catalog(
+            skills_repository_root=clean_repository,
+            skills_revision=clean_revision,
+            skills_manifest_relative_path=str(manifest.resolve()),
+            **arguments,
+        )
 
 
 def test_delivery_and_aggregate_modes_are_distinct_and_not_aliased() -> None:
@@ -184,6 +241,11 @@ def test_project_manager_publication_hands_backlog_to_analyst_automatically() ->
     assert "complete=true" in text
     assert "workflow_phase" not in text
     assert "terminal action не вызывать" in text
+    publish = bundle["workflow"]["modes"][0]["phases"][-1]
+    publish_text = json.dumps(publish, ensure_ascii=False).lower()
+    assert "бэклог/waiting" in publish_text
+    assert "durable scanner" in publish_text
+    assert "прямой запуск analyst" in publish_text
     draft = json.dumps(bundle["workflow"]["modes"][0], ensure_ascii=False).lower()
     for forbidden in ("parent", "зависим", "подзадач", "техническ"):
         assert forbidden not in draft

@@ -8,7 +8,7 @@ import hashlib
 import json
 import re
 import subprocess
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from scripts.install_hermes_workflow import ROLE_MODES, ROLE_PHYSICAL_SKILLS, load_bundle
@@ -38,6 +38,7 @@ PHASE_SET_KEYS = {
     ("devops", "delivery"): "devops",
     ("devops", "integration"): "devops_aggregate",
 }
+SKILLS_MANIFEST_PATH = "manifests/hermes-workflow-role-skills.v1.json"
 
 
 def canonical_hash(value: object) -> str:
@@ -83,16 +84,49 @@ def verify_source_revision(repository_root: Path, workflow_revision: str) -> Pat
     return config_root
 
 
+def verify_skills_revision(
+    repository_root: Path,
+    skills_revision: str,
+    manifest_relative_path: str = SKILLS_MANIFEST_PATH,
+) -> Path:
+    repository_root = repository_root.resolve()
+    relative = PurePosixPath(manifest_relative_path)
+    if (relative.is_absolute()
+            or ".." in relative.parts
+            or "\\" in manifest_relative_path
+            or ":" in manifest_relative_path
+            or str(relative) != manifest_relative_path):
+        raise ValueError("skills manifest path must be a normalized repo-relative path")
+    if REVISION_PATTERN.fullmatch(skills_revision) is None:
+        raise ValueError("skills revision must be an exact 40-character SHA")
+    top_level = Path(str(_git(repository_root, "rev-parse", "--show-toplevel")).strip()).resolve()
+    if top_level != repository_root:
+        raise ValueError("skills repository root must be the exact Git top level")
+    head = str(_git(repository_root, "rev-parse", "HEAD")).strip()
+    if head != skills_revision:
+        raise ValueError(f"skills revision does not match repository HEAD: {head}")
+    if str(_git(repository_root, "status", "--porcelain", "--untracked-files=all")).strip():
+        raise ValueError("skills repository tree must be clean")
+    manifest_path = repository_root.joinpath(*relative.parts)
+    worktree_bytes = manifest_path.read_bytes()
+    blob_bytes = _git(repository_root, "show", f"{skills_revision}:{manifest_relative_path}", text=False)
+    if worktree_bytes != blob_bytes:
+        raise ValueError("skills manifest differs from pinned Git blob")
+    return manifest_path
+
+
 def build_catalog(
     *,
     repository_root: Path,
-    skills_manifest_path: Path,
+    skills_repository_root: Path,
     workflow_revision: str,
     skills_revision: str,
+    skills_manifest_relative_path: str = SKILLS_MANIFEST_PATH,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     config_root = verify_source_revision(repository_root, workflow_revision)
-    if REVISION_PATTERN.fullmatch(skills_revision) is None:
-        raise ValueError("skills revision must be an exact 40-character SHA")
+    skills_manifest_path = verify_skills_revision(
+        skills_repository_root, skills_revision, skills_manifest_relative_path
+    )
     manifest_raw = normalized_bytes(skills_manifest_path)
     manifest = json.loads(manifest_raw)
     if manifest.get("schema") != "relevanter-hermes-role-skills/v3":
@@ -163,7 +197,7 @@ def build_catalog(
         "workflowCatalogRevision": workflow_revision,
         "skillsCatalogRepository": "https://gt.wmtgroup.ru/relevanter/agent-skills.git",
         "skillsCatalogRevision": skills_revision,
-        "skillsManifestPath": "manifests/hermes-workflow-role-skills.v1.json",
+        "skillsManifestPath": skills_manifest_relative_path,
         "skillsManifestSchema": manifest["schema"],
         "skillsManifestSha256": hashlib.sha256(manifest_raw).hexdigest(),
         "rolesSha256": canonical_hash(roles),
@@ -183,16 +217,18 @@ def write_json(path: Path, value: dict[str, Any]) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repository-root", type=Path, default=Path(__file__).resolve().parents[1])
-    parser.add_argument("--skills-manifest", type=Path, required=True)
+    parser.add_argument("--skills-repository-root", type=Path, required=True)
+    parser.add_argument("--skills-manifest-path", default=SKILLS_MANIFEST_PATH)
     parser.add_argument("--workflow-revision", required=True)
     parser.add_argument("--skills-revision", required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
     catalog, phase_sets = build_catalog(
         repository_root=args.repository_root,
-        skills_manifest_path=args.skills_manifest,
+        skills_repository_root=args.skills_repository_root,
         workflow_revision=args.workflow_revision,
         skills_revision=args.skills_revision,
+        skills_manifest_relative_path=args.skills_manifest_path,
     )
     args.output_dir.mkdir(parents=True, exist_ok=True)
     catalog_hash = write_json(args.output_dir / "hermes_role_catalog.v2.json", catalog)
