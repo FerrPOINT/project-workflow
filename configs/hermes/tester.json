@@ -2,6 +2,7 @@
   "schemaVersion": 1,
   "namespace": "hermes-tester",
   "role": "tester",
+  "businessWorkflowKey": "hermes-sdlc:tester",
   "skillsHub": {
     "commit": "50b92c54e0e04c510c9669dfb52dab0d4632d028",
     "hashes": {}

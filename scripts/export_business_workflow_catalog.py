@@ -99,7 +99,8 @@ def build_catalog(
             modes.append({"key": mode["key"], "name": mode["name"], "phase_set": phase_set})
         roles[role] = {
             "profile": role_manifest["profile"],
-            "workflow": workflow["name"],
+            "workflow": bundle["businessWorkflowKey"],
+            "workflowName": workflow["name"],
             "description": workflow["description"],
             "modes": modes,
             "skills": role_manifest["physicalSkills"],

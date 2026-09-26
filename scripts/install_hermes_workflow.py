@@ -84,7 +84,9 @@ def load_bundle(path: Path) -> dict[str, Any]:
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ValueError("workflow bundle must be an object")
-    required = {"schemaVersion", "namespace", "role", "workflow", "skillsHub"}
+    required = {
+        "schemaVersion", "namespace", "role", "businessWorkflowKey", "workflow", "skillsHub"
+    }
     if set(data) != required or data["schemaVersion"] != 1:
         raise ValueError("unsupported workflow bundle shape")
     role = data["role"]
@@ -93,6 +95,8 @@ def load_bundle(path: Path) -> dict[str, Any]:
     expected_namespace = f"hermes-{role.replace('_', '-')}"
     if data["namespace"] != expected_namespace:
         raise ValueError("namespace does not match role")
+    if data["businessWorkflowKey"] != f"hermes-sdlc:{role}":
+        raise ValueError("Business workflow key does not match role")
     skills_hub = data["skillsHub"]
     if not isinstance(skills_hub, dict) or set(skills_hub) != {"commit", "hashes"}:
         raise ValueError("invalid Skills Hub lock")

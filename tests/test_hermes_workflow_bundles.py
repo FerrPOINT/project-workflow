@@ -61,6 +61,10 @@ def test_seven_clean_role_namespace_bundles_are_complete() -> None:
         bundle["role"]: [mode["key"] for mode in bundle["workflow"]["modes"]]
         for bundle in bundles
     } == ROLE_MODES
+    assert all(
+        bundle["businessWorkflowKey"] == f"hermes-sdlc:{bundle['role']}"
+        for bundle in bundles
+    )
     assert all(mode["key"] != "default" for bundle in bundles for mode in bundle["workflow"]["modes"])
 
 
@@ -78,6 +82,10 @@ def test_business_export_is_exact_full_registry_with_phase_instructions(tmp_path
     assert sum(len(role["modes"]) for role in catalog["roles"].values()) == 13
     assert catalog["workflowCatalogRevision"] == workflow_revision
     assert phase_source["workflowCatalogRevision"] == workflow_revision
+    assert {
+        role: definition["workflow"] for role, definition in catalog["roles"].items()
+    } == {role: f"hermes-sdlc:{role}" for role in ROLE_ORDER}
+    assert catalog["roles"]["developer"]["workflowName"] == "Hermes Developer"
     assert all(
         phase["instructions"] and phase["checks"] and phase["evidence"]
         for phases in phase_source["phase_sets"].values()
@@ -172,6 +180,12 @@ def test_bundle_loader_rejects_mode_without_task_intake_and_unused_skill(tmp_pat
     bundle["skillsHub"]["hashes"]["unused-skill"] = "a" * 64
     broken.write_text(json.dumps(bundle, ensure_ascii=False), encoding="utf-8")
     with pytest.raises(ValueError, match="unused Skills Hub"):
+        load_bundle(broken)
+
+    bundle = json.loads((CONFIG_ROOT / "analyst.json").read_text(encoding="utf-8"))
+    bundle["businessWorkflowKey"] = "Hermes Analyst"
+    broken.write_text(json.dumps(bundle, ensure_ascii=False), encoding="utf-8")
+    with pytest.raises(ValueError, match="Business workflow key"):
         load_bundle(broken)
 
 
