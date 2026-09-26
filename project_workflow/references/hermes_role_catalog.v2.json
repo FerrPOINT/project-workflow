@@ -1,0 +1,71 @@
+{
+  "schema": "relevanter-hermes-workflow-catalog/v2",
+  "sourceOfTruth": "configuration-only; Business taskWorkspaceExecutionRoutingRegistry pins literal mode and profile at runtime",
+  "businessRoutingRegistry": "taskWorkspaceExecutionRoutingRegistry",
+  "skillsCatalogRepository": "https://gt.wmtgroup.ru/relevanter/agent-skills.git",
+  "skillsCatalogRevision": "f52b4b1be04b88a43dbece384dc407e0b3621eaf",
+  "skillsManifestPath": "manifests/hermes-workflow-role-skills.v1.json",
+  "skillsManifestSchema": "relevanter-hermes-role-skills/v3",
+  "skillsManifestSha256": "2ca3740f7c5c1f23551689aa3b86dc217c26a3405dbfc2273fd3b4c80c8a1d1a",
+  "rolesSha256": "f8dac615cfc837ad57fbcde9c91db7e3267aea4711d321a4ecc6323a16a0757e",
+  "phaseSetsFrom": "hermes_workflow_phase_sets.v1.json",
+  "phaseSetsSha256": "579e073e103d979c0080d7a3bddf0a1557035ec4114646d777cd7e562675b4f0",
+  "roles": {
+    "project_manager": {
+      "profile": "hermes-sdlc-project-manager",
+      "workflow": "hermes-sdlc:project_manager",
+      "modes": [{"key":"draft","name":"Draft","description":"Business discovery and guarded Draft-to-Backlog publication.","phase_set":"project_manager","instruction":"Выполнить текущий шаг подготовки бизнесового Draft и не переходить к анализу или архитектуре.","check":"Проверить полноту подтверждённой бизнесовой постановки текущего Draft.","evidence":"Сохранить readback Draft, подтверждения пользователя и terminal receipt публикации."}],
+      "skills": ["project-workflow-executor", "relevanter-business-operator"]
+    },
+    "analyst": {
+      "profile": "hermes-sdlc-analyst",
+      "workflow": "hermes-sdlc:analyst",
+      "modes": [{"key":"analysis","name":"Analysis","description":"Requirements discovery, validation and immutable analyst handoff.","phase_set":"analyst","instruction":"Выполнить текущий аналитический шаг на frozen источниках без выбора реализации.","check":"Проверить traceability требования и отсутствие неподтверждённых допущений.","evidence":"Сохранить requirements evidence, source refs и analyst terminal receipt."}],
+      "skills": ["domain-modeling", "immutable-evidence-reporting", "project-workflow-executor", "relevanter-business-operator", "requirements-analysis", "workflow-writing-plans"]
+    },
+    "architect": {
+      "profile": "hermes-sdlc-architect",
+      "workflow": "hermes-sdlc:architect",
+      "modes": [{"key":"decomposition","name":"Decomposition","description":"Solution architecture and executable decomposition into linked subtasks.","phase_set":"architect","instruction":"Выполнить текущий шаг decomposition и не подменять реализацию Developer.","check":"Проверить ownership, dataflow, failure model и связность decomposition.","evidence":"Сохранить architecture revision, dependency links и architect terminal receipt."}],
+      "skills": ["domain-modeling", "immutable-evidence-reporting", "project-workflow-executor", "relevanter-business-operator", "solution-architecture", "workflow-writing-plans"]
+    },
+    "developer": {
+      "profile": "hermes-sdlc-developer",
+      "workflow": "hermes-sdlc:developer",
+      "modes": [
+        {"key":"initial","name":"Initial","description":"Initial implementation of one architected delivery subtask.","phase_set":"developer","instruction":"Реализовать текущий шаг первичной разработки в пределах frozen subtask scope.","check":"Проверить соответствие реализации исходной architecture revision и public contract.","evidence":"Сохранить RED/GREEN evidence, exact Git refs и Developer terminal receipt."},
+        {"key":"rework","name":"Rework","description":"Targeted correction of frozen Reviewer or Tester findings.","phase_set":"developer_rework","instruction":"Исправить только подтверждённые findings текущего rework cycle с regression-first подходом.","check":"Проверить закрытие каждого frozen finding без регрессии принятого поведения.","evidence":"Сохранить reproduction, corrected evidence и exact rework Git refs."},
+        {"key":"integration","name":"Integration","description":"Integration of completed DevOps subtasks on the parent task.","phase_set":"developer_integration","instruction":"Собрать завершённые подзадачи в единый parent integration candidate.","check":"Проверить совместимость контрактов, данных и версий между всеми подзадачами.","evidence":"Сохранить integration manifest, combined checks и exact aggregate Git refs."},
+        {"key":"integration_rework","name":"Integration Rework","description":"Correction of findings against the integrated parent candidate.","phase_set":"developer_integration_rework","instruction":"Исправить frozen aggregate findings без повторного открытия завершённых подзадач.","check":"Проверить целостность parent candidate и закрытие каждого aggregate finding.","evidence":"Сохранить aggregate reproduction, corrected manifest и exact integration rework refs."}
+      ],
+      "skills": ["immutable-evidence-reporting", "project-workflow-executor", "relevanter-business-operator", "relevanter-tech-operator", "repo-workflow", "test-driven-development", "workflow-systematic-debugging"]
+    },
+    "reviewer": {
+      "profile": "hermes-sdlc-reviewer",
+      "workflow": "hermes-sdlc:reviewer",
+      "modes": [
+        {"key":"delivery","name":"Delivery","description":"Independent review of one implementation subtask.","phase_set":"reviewer","instruction":"Провести независимый delivery review текущей подзадачи на frozen exact head.","check":"Проверить correctness, scope, security и тестовое покрытие одной подзадачи.","evidence":"Сохранить finding dispositions и независимый subtask review verdict."},
+        {"key":"integration","name":"Integration","description":"Independent review of the integrated parent candidate.","phase_set":"reviewer_aggregate","instruction":"Проверить parent integration candidate и стыки всех завершённых подзадач на frozen aggregate head.","check":"Проверить сквозную traceability, совместимость и отсутствие интеграционных разрывов.","evidence":"Сохранить aggregate findings, corrected-head readback и parent review verdict."}
+      ],
+      "skills": ["exact-code-review", "immutable-evidence-reporting", "project-workflow-executor", "relevanter-business-operator", "relevanter-tech-operator"]
+    },
+    "tester": {
+      "profile": "hermes-sdlc-quality",
+      "workflow": "hermes-sdlc:tester",
+      "modes": [
+        {"key":"delivery","name":"Delivery","description":"Acceptance testing of one reviewed implementation subtask.","phase_set":"tester","instruction":"Проверить delivery текущей подзадачи на exact deployed target по её acceptance matrix.","check":"Проверить positive, negative, permission, stale и recovery сценарии подзадачи.","evidence":"Сохранить test run evidence и точный subtask release decision."},
+        {"key":"integration","name":"Integration","description":"End-to-end acceptance of the integrated parent candidate.","phase_set":"tester_aggregate","instruction":"Проверить сквозной parent integration flow и взаимодействие всех завершённых подзадач.","check":"Проверить E2E, cross-subtask dataflow, regression и recovery на exact aggregate target.","evidence":"Сохранить aggregate acceptance evidence и parent release decision."}
+      ],
+      "skills": ["deployed-acceptance", "immutable-evidence-reporting", "project-workflow-executor", "relevanter-business-operator", "workflow-systematic-debugging"]
+    },
+    "devops": {
+      "profile": "hermes-sdlc-operations",
+      "workflow": "hermes-sdlc:devops",
+      "modes": [
+        {"key":"delivery","name":"Delivery","description":"Controlled deployment of one reviewed subtask candidate.","phase_set":"devops","instruction":"Развернуть exact delivery artifact только в разрешённой deployment boundary.","check":"Проверить digest, migration, health, smoke и rollback готовность подзадачи.","evidence":"Сохранить release manifest, runtime readback и subtask deployment receipt."},
+        {"key":"integration","name":"Integration","description":"Controlled deployment of the integrated parent release.","phase_set":"devops_aggregate","instruction":"Развернуть exact integration release после успешного parent acceptance.","check":"Проверить согласованность всех artifacts, migrations, health и release baseline.","evidence":"Сохранить aggregate manifest, exact environment readback и parent deployment receipt."}
+      ],
+      "skills": ["exact-sha-deployment", "immutable-evidence-reporting", "project-workflow-executor", "relevanter-business-operator", "relevanter-tech-operator", "workflow-systematic-debugging"]
+    }
+  }
+}

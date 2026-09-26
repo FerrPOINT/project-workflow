@@ -54,3 +54,18 @@ Project-workflow `step` с внутренним verdict `PASS` закрывае�
 `needs_rework` никогда не кодируется как project-workflow verdict. Внутренние
 `BLOCKED`, `PARTIAL`, `ROLLBACK` и `DELEGATE` не вызывают Business transition.
 Agent-facing CLI по-прежнему содержит только `step` и `history`.
+
+## Канонический Hermes catalogue
+
+`project_workflow/references/hermes_role_catalog.v2.json` хранит только
+конфигурацию семи ролей: profile, разрешённые Business mode keys, allowlist
+skills и ссылки на подробные phase sets. Он не выбирает route и не является
+fallback для assignment: единственный runtime owner выбора остаётся
+`taskWorkspaceExecutionRoutingRegistry` в Relevanter Business.
+
+Подробные фазы вынесены в
+`project_workflow/references/hermes_workflow_phase_sets.v1.json`. Role catalogue
+фиксирует digest phase sets, exact revision и digest manifest из
+`relevanter/agent-skills`. `project_workflow.workflow_contract` отклоняет
+изменение profile/mode/skills, подмену provenance и попытку встроить phase sets
+или второй role catalogue в обход этих файлов.

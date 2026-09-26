@@ -1,0 +1,707 @@
+{
+  "schema": "relevanter-hermes-workflow-phase-sets/v1",
+  "sourceOfTruth": "configuration-only phase definitions; Relevanter Business owns assignment and mode selection",
+  "phase_sets": {
+    "project_manager": [
+      {
+        "code": "PM-00",
+        "name": "Assignment и business intake",
+        "description": "Проверить Project Manager identity, прочитать Task, комментарии, связи и вложения, зафиксировать business context."
+      },
+      {
+        "code": "PM-01",
+        "name": "Проблема и ожидаемый результат",
+        "description": "Уточнить бизнесовую проблему, заинтересованных лиц и измеримый ожидаемый результат."
+      },
+      {
+        "code": "PM-02",
+        "name": "Scope и ограничения",
+        "description": "Зафиксировать scope, out-of-scope, приоритет, сроки и известные бизнес-ограничения."
+      },
+      {
+        "code": "PM-03",
+        "name": "Структура Task",
+        "description": "Заполнить название, описание, component, milestone, labels, assignee, parent и существующие связи без архитектурной декомпозиции."
+      },
+      {
+        "code": "PM-04",
+        "name": "Уточняющий диалог",
+        "description": "Задать по одному значимому вопросу и применить подтверждённые ответы через guarded draft commands."
+      },
+      {
+        "code": "PM-05",
+        "name": "Business readiness gate",
+        "description": "Проверить достаточность общей бизнесовой постановки без подмены работы Analyst или Architect."
+      },
+      {
+        "code": "PM-06",
+        "name": "Итоговый Драфт",
+        "description": "Показать пользователю полный читаемый Draft и запросить явное подтверждение публикации."
+      },
+      {
+        "code": "PM-07",
+        "name": "Публикация в Бэклог",
+        "description": "Выполнить guarded Draft-to-Backlog publish, перечитать Task и опубликовать terminal receipt без запуска Analyst."
+      }
+    ],
+    "analyst": [
+      {
+        "code": "AN-00",
+        "name": "Assignment и identity preflight",
+        "description": "Подтвердить роль, bindings и выполнить полный task intake."
+      },
+      {
+        "code": "AN-01",
+        "name": "Freeze источников",
+        "description": "Зафиксировать immutable input manifest и provenance всех используемых источников."
+      },
+      {
+        "code": "AN-02",
+        "name": "Stakeholders, actors и glossary",
+        "description": "Собрать actor, stakeholder и glossary matrix без выбора архитектуры."
+      },
+      {
+        "code": "AN-03",
+        "name": "Problem и measurable outcome",
+        "description": "Сформулировать проверяемую проблему и измеримый outcome."
+      },
+      {
+        "code": "AN-04",
+        "name": "Scope, out-of-scope и ограничения",
+        "description": "Определить точные границы требований и ограничения."
+      },
+      {
+        "code": "AN-05",
+        "name": "Functional requirements",
+        "description": "Сформировать атомарный каталог функциональных требований."
+      },
+      {
+        "code": "AN-06",
+        "name": "NFR и неизменяемые инварианты",
+        "description": "Зафиксировать NFR, ownership и неизменяемые инварианты."
+      },
+      {
+        "code": "AN-07",
+        "name": "Acceptance и failure scenarios",
+        "description": "Подготовить positive, negative, permission, versioning и partial-failure acceptance matrix."
+      },
+      {
+        "code": "AN-08",
+        "name": "Assumptions, risks и P0 questions",
+        "description": "Закрыть либо явно зафиксировать assumptions, risks и P0 questions."
+      },
+      {
+        "code": "AN-09",
+        "name": "Traceability, публикация и handoff",
+        "description": "Опубликовать immutable requirements package, traceability и terminal receipt для Architect."
+      }
+    ],
+    "architect": [
+      {
+        "code": "AR-00",
+        "name": "Identity и intake snapshot",
+        "description": "Проверить bindings и сохранить полный inventory входов Architect."
+      },
+      {
+        "code": "AR-01",
+        "name": "Requirements readiness",
+        "description": "Проверить полноту и непротиворечивость Analyst package."
+      },
+      {
+        "code": "AR-02",
+        "name": "Reuse и source audit",
+        "description": "Сформировать reuse/gap matrix и точные source refs."
+      },
+      {
+        "code": "AR-03",
+        "name": "Contexts и ownership",
+        "description": "Определить bounded contexts, owners и authority matrix."
+      },
+      {
+        "code": "AR-04",
+        "name": "Domain/data model",
+        "description": "Определить entities, identities, lifecycle и invariants."
+      },
+      {
+        "code": "AR-05",
+        "name": "Dataflow и dependency DAG",
+        "description": "Спроектировать happy, negative и partial-failure dataflows и dependency DAG."
+      },
+      {
+        "code": "AR-06",
+        "name": "Internal query/UI contract",
+        "description": "Зафиксировать owner, inputs, outputs, validation и UI mapping контрактов."
+      },
+      {
+        "code": "AR-07",
+        "name": "State, versioning, concurrency",
+        "description": "Определить state transitions, idempotency, revisions и concurrency model."
+      },
+      {
+        "code": "AR-08",
+        "name": "Security, tenant, audit",
+        "description": "Определить permission, tenant isolation, non-disclosure и audit matrix."
+      },
+      {
+        "code": "AR-09",
+        "name": "Failure, reconcile, delivery design",
+        "description": "Завершить failure/reconcile design и создать полную decomposition revision с подзадачами и links."
+      },
+      {
+        "code": "AR-10",
+        "name": "Preflight и однократная публикация",
+        "description": "Перечитать decomposition links, опубликовать immutable architecture evidence и terminal receipt."
+      }
+    ],
+    "developer": [
+      {
+        "code": "DV-00",
+        "name": "Task и identity intake",
+        "description": "Прочитать exact Task, assignment, predecessors, comments, attachments и links."
+      },
+      {
+        "code": "DV-01",
+        "name": "Predecessor и scope gate",
+        "description": "Проверить requirements, architecture, allowed paths и frozen input refs."
+      },
+      {
+        "code": "DV-02",
+        "name": "Repository/worktree preflight",
+        "description": "Подтвердить owner repository, exact base, isolated workspace и write allowlist."
+      },
+      {
+        "code": "DV-03",
+        "name": "RED characterization",
+        "description": "Получить воспроизводимый product RED через согласованный public boundary."
+      },
+      {
+        "code": "DV-04",
+        "name": "Minimal change design",
+        "description": "Подготовить минимальный file, contract, data и test plan без unrelated refactor."
+      },
+      {
+        "code": "DV-05",
+        "name": "Core implementation",
+        "description": "Выполнить scoped implementation строго в разрешённых путях."
+      },
+      {
+        "code": "DV-06",
+        "name": "Data/contract compatibility",
+        "description": "Проверить schemas, migrations, API, events, versioning, tenant и rollback compatibility."
+      },
+      {
+        "code": "DV-07",
+        "name": "Unit/component tests",
+        "description": "Запустить focused unit/component tests с ненулевым count."
+      },
+      {
+        "code": "DV-08",
+        "name": "Integration/public-boundary tests",
+        "description": "Проверить positive, unauthorized, stale, duplicate и partial-failure scenarios."
+      },
+      {
+        "code": "DV-09",
+        "name": "Build, lint, security и diff polish",
+        "description": "Выполнить обязательные scoped gates и удалить noise/debug/generated trash."
+      },
+      {
+        "code": "DV-10",
+        "name": "Commit, MR и exact-head CI",
+        "description": "Закоммитить и push-нуть изменения, создать MR и перечитать exact remote head/CI evidence."
+      },
+      {
+        "code": "DV-11",
+        "name": "Publication и Reviewer handoff",
+        "description": "Опубликовать immutable report и terminal receipt без merge, deploy или Reviewer verdict."
+      }
+    ],
+    "reviewer": [
+      {
+        "code": "RV-00",
+        "name": "Task, attachments и identity intake",
+        "description": "Прочитать Task, assignment, full review input, comments, links и attachments."
+      },
+      {
+        "code": "RV-01",
+        "name": "Exact-head/provenance freeze",
+        "description": "Заморозить review target, exact head/base/build и immutable provenance."
+      },
+      {
+        "code": "RV-02",
+        "name": "Requirements/architecture trace",
+        "description": "Проверить coverage требований, архитектуры и acceptance."
+      },
+      {
+        "code": "RV-03",
+        "name": "Scope и diff hygiene",
+        "description": "Проверить allowed scope, unrelated changes, noise и generated trash."
+      },
+      {
+        "code": "RV-04",
+        "name": "Correctness, dataflow и contracts",
+        "description": "Проверить correctness, owners, dataflow, migrations и public contracts."
+      },
+      {
+        "code": "RV-05",
+        "name": "Security, tenant, ACL и audit",
+        "description": "Проверить permissions, tenant isolation, non-disclosure и audit."
+      },
+      {
+        "code": "RV-06",
+        "name": "Failure, versioning и concurrency",
+        "description": "Проверить error, retry, partial failure, versioning, stale и concurrency behavior."
+      },
+      {
+        "code": "RV-07",
+        "name": "Tests, build, CI, UI/localization",
+        "description": "Проверить exact tests/build/CI и применимые UI/localization evidence."
+      },
+      {
+        "code": "RV-08",
+        "name": "Finding closure и corrected-head review",
+        "description": "Получить disposition каждого finding и повторно проверить corrected exact head."
+      },
+      {
+        "code": "RV-09",
+        "name": "Publication и handoff",
+        "description": "Опубликовать независимый verdict, findings/evidence и terminal receipt."
+      }
+    ],
+    "tester": [
+      {
+        "code": "TS-00",
+        "name": "Task и identity intake",
+        "description": "Прочитать Task, assignment, test target, comments, links и attachments."
+      },
+      {
+        "code": "TS-01",
+        "name": "Deployed provenance gate",
+        "description": "Заморозить exact deployed artifact, environment и version readback."
+      },
+      {
+        "code": "TS-02",
+        "name": "Requirements/test traceability",
+        "description": "Построить coverage plan требований и acceptance."
+      },
+      {
+        "code": "TS-03",
+        "name": "Environment, identities и data setup",
+        "description": "Проверить безопасные preconditions, identities и bounded test data."
+      },
+      {
+        "code": "TS-04",
+        "name": "Happy-path execution",
+        "description": "Выполнить полный positive user path на exact target."
+      },
+      {
+        "code": "TS-05",
+        "name": "Validation и negative paths",
+        "description": "Проверить validation и negative scenarios."
+      },
+      {
+        "code": "TS-06",
+        "name": "ACL, tenant и non-disclosure",
+        "description": "Проверить permission denial, tenant isolation и отсутствие metadata leaks."
+      },
+      {
+        "code": "TS-07",
+        "name": "Stale, idempotency и concurrency",
+        "description": "Проверить stale revision, duplicate retry, idempotency и concurrency."
+      },
+      {
+        "code": "TS-08",
+        "name": "Partial failure, recovery и regression",
+        "description": "Проверить partial failure, recovery, restart и regression boundaries."
+      },
+      {
+        "code": "TS-09",
+        "name": "Defect и release decision",
+        "description": "Выдать exact PASS либо needs_rework с содержательными findings и reproduction."
+      },
+      {
+        "code": "TS-10",
+        "name": "Publication и coordinator handoff",
+        "description": "Опубликовать evidence, defect refs и terminal receipt без исправления продукта."
+      }
+    ],
+    "devops": [
+      {
+        "code": "DO-00",
+        "name": "Task и identity intake",
+        "description": "Прочитать Task, assignment, candidate, comments, links и attachments."
+      },
+      {
+        "code": "DO-01",
+        "name": "Predecessor/provenance gate",
+        "description": "Проверить reviewed exact candidate и immutable predecessor evidence."
+      },
+      {
+        "code": "DO-02",
+        "name": "Target inventory и allowlist",
+        "description": "Зафиксировать exact deployment target и разрешённую mutation boundary."
+      },
+      {
+        "code": "DO-03",
+        "name": "Backup и rollback design",
+        "description": "Снять recoverable baseline и проверить rollback procedure."
+      },
+      {
+        "code": "DO-04",
+        "name": "Authorization и no-mutation gate",
+        "description": "Проверить explicit deployment authority до любой mutation."
+      },
+      {
+        "code": "DO-05",
+        "name": "Immutable artifact/release gate",
+        "description": "Проверить exact artifact digest, source SHA и release manifest."
+      },
+      {
+        "code": "DO-06",
+        "name": "Change/deploy procedure",
+        "description": "Подготовить детерминированный bounded deployment plan."
+      },
+      {
+        "code": "DO-07",
+        "name": "Exact deployment",
+        "description": "Развернуть только frozen exact artifact в разрешённой boundary."
+      },
+      {
+        "code": "DO-08",
+        "name": "Model/data/version verification",
+        "description": "Проверить schema/model upgrade, data compatibility и exact version."
+      },
+      {
+        "code": "DO-09",
+        "name": "Health, smoke и rollback readiness",
+        "description": "Проверить health, smoke, dependencies и готовность rollback."
+      },
+      {
+        "code": "DO-10",
+        "name": "Publication и Tester handoff",
+        "description": "Опубликовать deployment evidence и terminal receipt для Tester."
+      }
+    ],
+    "developer_rework": [
+      {
+        "code": "RW-00",
+        "name": "Rework assignment intake",
+        "description": "Прочитать frozen ReworkRequest, findings, reproduction, evidence refs и границы текущего cycle."
+      },
+      {
+        "code": "RW-01",
+        "name": "Finding reproduction",
+        "description": "Воспроизвести каждый finding на exact rejected head и сохранить наблюдаемое RED."
+      },
+      {
+        "code": "RW-02",
+        "name": "Root cause isolation",
+        "description": "Локализовать причину каждого дефекта в пределах разрешённого subtask scope."
+      },
+      {
+        "code": "RW-03",
+        "name": "Regression contract",
+        "description": "Добавить public-boundary regression, который падает по подтверждённой причине."
+      },
+      {
+        "code": "RW-04",
+        "name": "Minimal correction",
+        "description": "Внести минимальное исправление без unrelated refactor и расширения scope."
+      },
+      {
+        "code": "RW-05",
+        "name": "Finding-by-finding verification",
+        "description": "Подтвердить закрытие каждого frozen finding и отсутствие ложного PASS."
+      },
+      {
+        "code": "RW-06",
+        "name": "Focused regression gate",
+        "description": "Запустить связанные unit, integration, permission и stale проверки."
+      },
+      {
+        "code": "RW-07",
+        "name": "Diff and secret hygiene",
+        "description": "Удалить debug, generated trash, secrets и изменения вне разрешённых файлов."
+      },
+      {
+        "code": "RW-08",
+        "name": "Corrected commit and push",
+        "description": "Создать corrected commit, push и перечитать exact remote SHA без blind retry."
+      },
+      {
+        "code": "RW-09",
+        "name": "Rework publication",
+        "description": "Опубликовать mapping finding-to-fix, evidence и terminal receipt для повторного Review."
+      }
+    ],
+    "developer_integration": [
+      {
+        "code": "IN-00",
+        "name": "Parent assignment intake",
+        "description": "Прочитать parent Task, completion gates и список DevOps-complete подзадач."
+      },
+      {
+        "code": "IN-01",
+        "name": "Subtask provenance freeze",
+        "description": "Заморозить exact artifacts, commits, migrations и receipts каждой подзадачи."
+      },
+      {
+        "code": "IN-02",
+        "name": "Contract compatibility matrix",
+        "description": "Сопоставить API, events, schemas, versions и ownership между подзадачами."
+      },
+      {
+        "code": "IN-03",
+        "name": "Integration workspace preflight",
+        "description": "Подготовить чистый parent workspace на pinned aggregate base и write allowlist."
+      },
+      {
+        "code": "IN-04",
+        "name": "Aggregate RED baseline",
+        "description": "Получить воспроизводимый RED сквозного parent flow до интеграционных изменений."
+      },
+      {
+        "code": "IN-05",
+        "name": "Deterministic composition",
+        "description": "Собрать изменения подзадач в dependency order без переписывания их evidence."
+      },
+      {
+        "code": "IN-06",
+        "name": "Conflict and migration resolution",
+        "description": "Разрешить кодовые, schema и migration конфликты с сохранением owner contracts."
+      },
+      {
+        "code": "IN-07",
+        "name": "Cross-subtask verification",
+        "description": "Проверить E2E dataflow, permissions, versioning и partial failure между подзадачами."
+      },
+      {
+        "code": "IN-08",
+        "name": "Aggregate diff polish",
+        "description": "Проверить manifest, scope, generated artifacts, secrets и чистоту workspace."
+      },
+      {
+        "code": "IN-09",
+        "name": "Integration commit and publication",
+        "description": "Закоммитить и push-нуть aggregate candidate, сохранить exact SHA и parent handoff."
+      }
+    ],
+    "developer_integration_rework": [
+      {
+        "code": "IR-00",
+        "name": "Aggregate rework intake",
+        "description": "Прочитать frozen parent findings и exact rejected integration candidate."
+      },
+      {
+        "code": "IR-01",
+        "name": "Cross-subtask reproduction",
+        "description": "Воспроизвести aggregate failure и определить затронутые contract boundaries."
+      },
+      {
+        "code": "IR-02",
+        "name": "Ownership-safe root cause",
+        "description": "Определить integration-owned причину без скрытого изменения завершённых subtask scopes."
+      },
+      {
+        "code": "IR-03",
+        "name": "Aggregate regression",
+        "description": "Добавить сквозной regression для точного parent failure scenario."
+      },
+      {
+        "code": "IR-04",
+        "name": "Integration correction",
+        "description": "Исправить composition, adapter или migration boundary минимальным изменением."
+      },
+      {
+        "code": "IR-05",
+        "name": "Compatibility revalidation",
+        "description": "Повторно проверить API, event, data и version compatibility всех подзадач."
+      },
+      {
+        "code": "IR-06",
+        "name": "Parent acceptance subset",
+        "description": "Запустить затронутый E2E, permission, stale и recovery набор."
+      },
+      {
+        "code": "IR-07",
+        "name": "Aggregate finding closure",
+        "description": "Сопоставить каждый parent finding с исправлением и проверяемым evidence."
+      },
+      {
+        "code": "IR-08",
+        "name": "Corrected aggregate push",
+        "description": "Закоммитить и push-нуть corrected aggregate head, затем перечитать remote SHA."
+      },
+      {
+        "code": "IR-09",
+        "name": "Integration rework handoff",
+        "description": "Опубликовать corrected manifest и terminal receipt для Aggregate Review."
+      }
+    ],
+    "reviewer_aggregate": [
+      {
+        "code": "ARV-00",
+        "name": "Aggregate review intake",
+        "description": "Прочитать parent Task, subtask receipts, integration manifest и exact aggregate head."
+      },
+      {
+        "code": "ARV-01",
+        "name": "Provenance completeness",
+        "description": "Проверить exact commits, artifacts, migrations и immutable evidence всех подзадач."
+      },
+      {
+        "code": "ARV-02",
+        "name": "End-to-end traceability",
+        "description": "Сопоставить parent requirements с архитектурой, подзадачами и integrated behavior."
+      },
+      {
+        "code": "ARV-03",
+        "name": "Boundary compatibility",
+        "description": "Проверить API, events, schemas, ownership и version compatibility на стыках."
+      },
+      {
+        "code": "ARV-04",
+        "name": "Integration correctness",
+        "description": "Проверить dependency order, composition logic и отсутствие потерянного поведения."
+      },
+      {
+        "code": "ARV-05",
+        "name": "Aggregate security",
+        "description": "Проверить сквозные permission, tenant, secrets, audit и non-disclosure guarantees."
+      },
+      {
+        "code": "ARV-06",
+        "name": "Failure and recovery",
+        "description": "Проверить partial failure, retry, rollback, stale и restart behavior parent flow."
+      },
+      {
+        "code": "ARV-07",
+        "name": "Aggregate test evidence",
+        "description": "Проверить полноту cross-subtask tests, builds и exact-head CI evidence."
+      },
+      {
+        "code": "ARV-08",
+        "name": "Finding closure",
+        "description": "Получить disposition каждого aggregate finding и проверить corrected parent head."
+      },
+      {
+        "code": "ARV-09",
+        "name": "Parent review verdict",
+        "description": "Опубликовать независимый aggregate verdict и terminal receipt для Testing."
+      }
+    ],
+    "tester_aggregate": [
+      {
+        "code": "ATS-00",
+        "name": "Aggregate acceptance intake",
+        "description": "Прочитать parent acceptance, reviewed aggregate head и deployed provenance."
+      },
+      {
+        "code": "ATS-01",
+        "name": "Environment and data freeze",
+        "description": "Заморозить exact environment, identities, datasets и integration version readback."
+      },
+      {
+        "code": "ATS-02",
+        "name": "Parent coverage plan",
+        "description": "Построить E2E coverage по parent requirements и всем subtask boundaries."
+      },
+      {
+        "code": "ATS-03",
+        "name": "Cross-subtask happy path",
+        "description": "Выполнить полный пользовательский путь через все integrated components."
+      },
+      {
+        "code": "ATS-04",
+        "name": "Boundary validation",
+        "description": "Проверить validation и error propagation на каждом межкомпонентном контракте."
+      },
+      {
+        "code": "ATS-05",
+        "name": "Aggregate permissions",
+        "description": "Проверить сквозные ACL, tenant isolation и отсутствие metadata leakage."
+      },
+      {
+        "code": "ATS-06",
+        "name": "Version and concurrency",
+        "description": "Проверить mixed-version denial, stale revisions, duplicate retries и concurrency."
+      },
+      {
+        "code": "ATS-07",
+        "name": "Recovery and rollback",
+        "description": "Проверить partial deploy, restart, reconcile и rollback сквозного процесса."
+      },
+      {
+        "code": "ATS-08",
+        "name": "Parent regression",
+        "description": "Повторить критические subtask regressions на integrated exact target."
+      },
+      {
+        "code": "ATS-09",
+        "name": "Aggregate release decision",
+        "description": "Выдать PASS либо needs_rework с воспроизводимыми parent findings."
+      },
+      {
+        "code": "ATS-10",
+        "name": "Acceptance publication",
+        "description": "Опубликовать aggregate evidence и terminal receipt для Aggregate Deploy."
+      }
+    ],
+    "devops_aggregate": [
+      {
+        "code": "ADO-00",
+        "name": "Parent deploy intake",
+        "description": "Прочитать accepted parent Task, aggregate manifest и exact release candidate."
+      },
+      {
+        "code": "ADO-01",
+        "name": "Artifact closure",
+        "description": "Проверить digests, source SHAs и provenance всех компонентов aggregate release."
+      },
+      {
+        "code": "ADO-02",
+        "name": "Target dependency inventory",
+        "description": "Зафиксировать target services, shared dependencies, data stores и mutation allowlist."
+      },
+      {
+        "code": "ADO-03",
+        "name": "Coordinated backup",
+        "description": "Снять согласованный recoverable baseline компонентов и данных до mutation."
+      },
+      {
+        "code": "ADO-04",
+        "name": "Aggregate authorization",
+        "description": "Проверить deployment authority и обязательные human gates parent release."
+      },
+      {
+        "code": "ADO-05",
+        "name": "Migration ordering",
+        "description": "Проверить dependency-aware порядок schema, model и application upgrades."
+      },
+      {
+        "code": "ADO-06",
+        "name": "Coordinated rollout",
+        "description": "Развернуть frozen artifacts в детерминированном порядке с bounded blast radius."
+      },
+      {
+        "code": "ADO-07",
+        "name": "Version readback",
+        "description": "Перечитать exact versions, digests, configs и migration revisions всех компонентов."
+      },
+      {
+        "code": "ADO-08",
+        "name": "Aggregate health and smoke",
+        "description": "Проверить service health, dependencies и сквозной parent smoke."
+      },
+      {
+        "code": "ADO-09",
+        "name": "Rollback readiness",
+        "description": "Подтвердить согласованный rollback либо выполнить reconcile неопределённого результата."
+      },
+      {
+        "code": "ADO-10",
+        "name": "Parent deployment receipt",
+        "description": "Опубликовать aggregate runtime evidence и terminal receipt завершения parent Task."
+      }
+    ]
+  }
+}
