@@ -195,6 +195,184 @@ def _create_assignment_ledger() -> None:
     )
 
 
+def _add_runtime_assignment_bindings() -> None:
+    """Extend the new mode schema with the immutable Business assignment contract."""
+    sqlite_recreate = "always" if _is_sqlite() else "auto"
+    with op.batch_alter_table("workflow_modes", recreate=sqlite_recreate) as batch:
+        batch.add_column(sa.Column("role_key", sa.String(length=32), nullable=True))
+        batch.add_column(sa.Column("execution_scope", sa.String(length=16), nullable=True))
+        batch.add_column(sa.Column("tech_workspace_policy", sa.String(length=16), nullable=True))
+        batch.create_check_constraint(
+            "ck_workflow_modes_execution_scope",
+            "execution_scope IS NULL OR execution_scope IN ('business', 'delivery', 'aggregate')",
+        )
+        batch.create_check_constraint(
+            "ck_workflow_modes_tech_policy",
+            "tech_workspace_policy IS NULL OR tech_workspace_policy IN ('forbidden', 'required')",
+        )
+        batch.create_check_constraint(
+            "ck_workflow_modes_policy_complete",
+            "(role_key IS NULL AND execution_scope IS NULL AND tech_workspace_policy IS NULL) OR "
+            "(role_key IS NOT NULL AND execution_scope IS NOT NULL AND tech_workspace_policy IS NOT NULL)",
+        )
+        batch.create_check_constraint(
+            "ck_workflow_modes_role_key_length",
+            "role_key IS NULL OR length(role_key) BETWEEN 2 AND 32",
+        )
+        batch.create_check_constraint(
+            "ck_workflow_modes_policy_consistent",
+            "execution_scope IS NULL OR "
+            "(execution_scope = 'business' AND tech_workspace_policy = 'forbidden') OR "
+            "(execution_scope IN ('delivery', 'aggregate') AND tech_workspace_policy = 'required')",
+        )
+
+    with op.batch_alter_table("tasks", recreate=sqlite_recreate) as batch:
+        batch.create_unique_constraint(
+            "uq_tasks_id_project_workflow", ["id", "project_id", "workflow_id"]
+        )
+
+    with op.batch_alter_table("task_runtime_assignments", recreate=sqlite_recreate) as batch:
+        batch.add_column(sa.Column("workflow_key", sa.String(length=128), nullable=True))
+        batch.add_column(sa.Column("role_key", sa.String(length=32), nullable=True))
+        batch.add_column(sa.Column("execution_scope", sa.String(length=16), nullable=True))
+        batch.add_column(sa.Column("stage_key", sa.String(length=64), nullable=True))
+        batch.add_column(sa.Column("attempt_number", sa.Integer(), nullable=True))
+        batch.add_column(sa.Column("business_task_ref", sa.String(length=512), nullable=True))
+        batch.add_column(sa.Column("root_task_ref", sa.String(length=512), nullable=True))
+        batch.add_column(sa.Column("work_item_ref", sa.String(length=512), nullable=True))
+        batch.add_column(sa.Column("work_item_revision", sa.Integer(), nullable=True))
+        batch.add_column(sa.Column("queue_item_ref", sa.String(length=512), nullable=True))
+        batch.add_column(sa.Column("task_workspace_ref", sa.String(length=512), nullable=True))
+        batch.add_column(sa.Column("workspace_revision", sa.Integer(), nullable=True))
+        batch.add_column(sa.Column("tech_execution_workspace_ref", sa.String(length=512), nullable=True))
+        batch.add_column(sa.Column("tech_execution_attempt_ref", sa.String(length=512), nullable=True))
+        batch.add_column(sa.Column("decomposition_revision_ref", sa.String(length=512), nullable=True))
+        batch.add_column(sa.Column("stage_revision", sa.String(length=128), nullable=True))
+        batch.add_column(sa.Column("assignment_ref", sa.String(length=512), nullable=True))
+        batch.add_column(sa.Column("binding_ref", sa.String(length=512), nullable=True))
+        batch.add_column(sa.Column("hermes_run_ref", sa.String(length=512), nullable=True))
+        batch.add_column(sa.Column("workspace_generation", sa.Integer(), nullable=True))
+        batch.add_column(sa.Column("lease_generation", sa.Integer(), nullable=True))
+        batch.add_column(sa.Column("exact_input_refs", sa.Text(), nullable=True))
+        batch.add_column(sa.Column("payload_sha256", sa.String(length=64), nullable=True))
+        batch.create_foreign_key(
+            "fk_task_runtime_assignments_task_project_workflow",
+            "tasks",
+            ["task_id", "project_id", "workflow_id"],
+            ["id", "project_id", "workflow_id"],
+            ondelete="RESTRICT",
+        )
+        batch.create_check_constraint(
+            "ck_task_runtime_assignments_execution_scope",
+            "execution_scope IS NULL OR execution_scope IN ('business', 'delivery', 'aggregate')",
+        )
+        batch.create_check_constraint(
+            "ck_task_runtime_assignments_attempt_positive",
+            "attempt_number IS NULL OR attempt_number > 0",
+        )
+        batch.create_check_constraint(
+            "ck_task_runtime_assignments_work_item_revision",
+            "work_item_revision IS NULL OR work_item_revision >= 0",
+        )
+        batch.create_check_constraint(
+            "ck_task_runtime_assignments_workspace_revision",
+            "workspace_revision IS NULL OR workspace_revision > 0",
+        )
+        batch.create_check_constraint(
+            "ck_task_runtime_assignments_workspace_generation",
+            "workspace_generation IS NULL OR workspace_generation >= 0",
+        )
+        batch.create_check_constraint(
+            "ck_task_runtime_assignments_lease_generation",
+            "lease_generation IS NULL OR lease_generation >= 0",
+        )
+        batch.create_check_constraint(
+            "ck_task_runtime_assignments_role_key_length",
+            "role_key IS NULL OR length(role_key) BETWEEN 2 AND 32",
+        )
+        batch.create_check_constraint(
+            "ck_task_runtime_assignments_binding_complete",
+            "(workflow_key IS NULL AND role_key IS NULL AND execution_scope IS NULL AND stage_key IS NULL AND "
+            "attempt_number IS NULL AND business_task_ref IS NULL AND root_task_ref IS NULL AND "
+            "work_item_ref IS NULL AND work_item_revision IS NULL AND queue_item_ref IS NULL AND "
+            "task_workspace_ref IS NULL AND workspace_revision IS NULL AND "
+            "tech_execution_workspace_ref IS NULL AND tech_execution_attempt_ref IS NULL AND "
+            "decomposition_revision_ref IS NULL AND stage_revision IS NULL AND assignment_ref IS NULL AND "
+            "binding_ref IS NULL AND hermes_run_ref IS NULL AND workspace_generation IS NULL AND "
+            "lease_generation IS NULL AND exact_input_refs IS NULL AND payload_sha256 IS NULL) OR "
+            "(workflow_key IS NOT NULL AND role_key IS NOT NULL AND execution_scope IS NOT NULL AND "
+            "stage_key IS NOT NULL AND attempt_number IS NOT NULL AND business_task_ref IS NOT NULL AND "
+            "root_task_ref IS NOT NULL AND work_item_ref IS NOT NULL AND work_item_revision IS NOT NULL AND "
+            "queue_item_ref IS NOT NULL AND task_workspace_ref IS NOT NULL AND workspace_revision IS NOT NULL AND "
+            "decomposition_revision_ref IS NOT NULL AND stage_revision IS NOT NULL AND assignment_ref IS NOT NULL AND "
+            "binding_ref IS NOT NULL AND hermes_run_ref IS NOT NULL AND workspace_generation IS NOT NULL AND "
+            "lease_generation IS NOT NULL AND exact_input_refs IS NOT NULL AND payload_sha256 IS NOT NULL)",
+        )
+        batch.create_check_constraint(
+            "ck_task_runtime_assignments_scope_tech_refs",
+            "execution_scope IS NULL OR "
+            "(execution_scope = 'business' AND tech_execution_workspace_ref IS NULL AND "
+            "tech_execution_attempt_ref IS NULL) OR "
+            "(execution_scope IN ('delivery', 'aggregate') AND tech_execution_workspace_ref IS NOT NULL AND "
+            "tech_execution_attempt_ref IS NOT NULL)",
+        )
+        batch.create_check_constraint(
+            "ck_task_runtime_assignments_payload_sha256",
+            "payload_sha256 IS NULL OR length(payload_sha256) = 64",
+        )
+        batch.create_index(
+            "ix_task_runtime_assignments_business_task_ref", ["business_task_ref"], unique=False
+        )
+        batch.create_index(
+            "ix_task_runtime_assignments_task_workspace_ref", ["task_workspace_ref"], unique=False
+        )
+
+
+def _add_runtime_step_idempotency() -> None:
+    """Persist the exact response and immutable identity of each runtime step."""
+    with op.batch_alter_table(
+        "task_step_history", recreate="always" if _is_sqlite() else "auto"
+    ) as batch:
+        batch.add_column(sa.Column("step_operation_key", sa.String(length=128), nullable=True))
+        batch.add_column(sa.Column("request_sha256", sa.String(length=64), nullable=True))
+        batch.add_column(sa.Column("assignment_revision", sa.Integer(), nullable=True))
+        batch.add_column(sa.Column("assignment_operation_key", sa.String(length=128), nullable=True))
+        batch.add_column(sa.Column("assignment_ref", sa.String(length=512), nullable=True))
+        batch.add_column(sa.Column("binding_ref", sa.String(length=512), nullable=True))
+        batch.add_column(sa.Column("hermes_run_ref", sa.String(length=512), nullable=True))
+        batch.add_column(sa.Column("attempt_number", sa.Integer(), nullable=True))
+        batch.add_column(sa.Column("role_key", sa.String(length=32), nullable=True))
+        batch.create_index(
+            "uq_task_step_history_step_operation_key", ["step_operation_key"], unique=True
+        )
+        batch.create_index(
+            "ix_task_step_history_task_id_id", ["task_id", "id"], unique=False
+        )
+        batch.create_check_constraint(
+            "ck_task_step_history_assignment_revision_positive",
+            "assignment_revision IS NULL OR assignment_revision > 0",
+        )
+        batch.create_check_constraint(
+            "ck_task_step_history_attempt_positive",
+            "attempt_number IS NULL OR attempt_number > 0",
+        )
+        batch.create_check_constraint(
+            "ck_task_step_history_request_sha256",
+            "request_sha256 IS NULL OR length(request_sha256) = 64",
+        )
+        batch.create_check_constraint(
+            "ck_task_step_history_runtime_identity_complete",
+            "(step_operation_key IS NULL AND request_sha256 IS NULL AND "
+            "assignment_revision IS NULL AND assignment_operation_key IS NULL AND "
+            "assignment_ref IS NULL AND binding_ref IS NULL AND hermes_run_ref IS NULL AND "
+            "attempt_number IS NULL AND role_key IS NULL) OR "
+            "(step_operation_key IS NOT NULL AND request_sha256 IS NOT NULL AND "
+            "assignment_revision IS NOT NULL AND assignment_operation_key IS NOT NULL AND "
+            "assignment_ref IS NOT NULL AND binding_ref IS NOT NULL AND hermes_run_ref IS NOT NULL AND "
+            "attempt_number IS NOT NULL AND role_key IS NOT NULL)",
+        )
+
+
 def upgrade() -> None:
     if _is_sqlite():
         # SQLite needs this disabled while Alembic rebuilds the referenced
@@ -208,6 +386,7 @@ def upgrade() -> None:
     with op.batch_alter_table(
         "workflows", recreate="always" if _is_sqlite() else "auto"
     ) as batch:
+        batch.alter_column("key", nullable=False)
         batch.create_unique_constraint("uq_workflows_key", ["key"])
     op.create_table(
         "workflow_modes",
@@ -278,6 +457,8 @@ def upgrade() -> None:
     if not _is_sqlite():
         _upgrade_postgresql_constraints()
         _create_assignment_ledger()
+        _add_runtime_assignment_bindings()
+        _add_runtime_step_idempotency()
         return
 
     # SQLite cannot rewrite a referenced parent table while foreign-key
@@ -427,6 +608,8 @@ def upgrade() -> None:
             )
         op.execute("PRAGMA foreign_keys=ON")
     _create_assignment_ledger()
+    _add_runtime_assignment_bindings()
+    _add_runtime_step_idempotency()
 
 
 def downgrade() -> None:

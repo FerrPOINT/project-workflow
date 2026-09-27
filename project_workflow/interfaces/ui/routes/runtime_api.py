@@ -8,6 +8,7 @@ from typing import Any
 
 from fastapi import Header, Query
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 
 from project_workflow import config, supervisor
 from project_workflow.application.task import TaskService
@@ -250,6 +251,32 @@ def _runtime_step_replay(
     return _step_response(result)
 
 
+def _reconcile_runtime_step_after_integrity_error(
+    *,
+    payload: RuntimeStepRequest,
+    request_sha256: str,
+    role_key: str,
+) -> dict[str, Any]:
+    """Re-read a globally claimed operation key in a fresh transaction."""
+    with SAUnitOfWork() as uow:
+        namespace_id = _namespace_id(uow, role_key)
+        task_key = _require_valid_key(payload.task, uow, project_id=namespace_id)
+        _assert_task_key_in_namespace(uow, namespace_id, task_key)
+        replay = _runtime_step_replay(
+            uow,
+            payload=payload,
+            request_sha256=request_sha256,
+            role_key=role_key,
+            namespace_id=namespace_id,
+            task_key=task_key,
+        )
+        if replay is None:
+            raise ConflictError(
+                "Runtime step конфликтует с параллельно сохранённым состоянием"
+            )
+        return replay
+
+
 def execute_namespace_step(
     uow: SAUnitOfWork,
     *,
@@ -463,6 +490,15 @@ def runtime_step(
                 if replay is not None:
                     return replay
                 raise
+    except IntegrityError:
+        try:
+            return _reconcile_runtime_step_after_integrity_error(
+                payload=payload,
+                request_sha256=request_digest,
+                role_key=role,
+            )
+        except (ConflictError, RuntimeError, ValueError) as exc:
+            return _error(str(exc), 409)
     except (ConflictError, RuntimeError, ValueError) as exc:
         return _error(str(exc), 409)
 

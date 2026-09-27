@@ -48,7 +48,7 @@ class Workflow(Base):
     __tablename__ = "workflows"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    key: Mapped[str] = mapped_column(String(128), nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str] = mapped_column(String, nullable=False, default="", server_default=text("''"))
     is_default: Mapped[int] = mapped_column(
@@ -549,6 +549,7 @@ class TaskStepHistoryEntry(Base):
             "step_operation_key",
             unique=True,
         ),
+        Index("ix_task_step_history_task_id_id", "task_id", "id"),
         Index("ix_task_step_history_phase_id", "phase_id"),
         Index("ix_task_step_history_next_phase_id", "next_phase_id"),
         Index("ix_task_step_history_rollback_phase_id", "rollback_phase_id"),

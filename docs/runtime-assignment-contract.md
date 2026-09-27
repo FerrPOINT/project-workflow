@@ -58,7 +58,7 @@ lease generations могут измениться. Новый rework entry об�
 `cycle_number` и снова начинается с `attempt_number=1`. Активный attempt,
 пропуск/регресс attempt, изменение frozen tuple и пропуск cycle отклоняются.
 
-Миграция `0003_runtime_assignment_bindings` оставляет эти поля nullable только
+Миграция `0002_workflow_modes` оставляет эти поля nullable только
 для исторических строк и не создаёт вымышленные внешние refs.
 
 ## Terminal owner boundary

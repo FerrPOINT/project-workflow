@@ -23,6 +23,7 @@ import psycopg
 import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
+from fastapi.testclient import TestClient
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 
@@ -44,6 +45,8 @@ from project_workflow.infrastructure.db.session import (
     schema_is_ready,
 )
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from project_workflow.infrastructure.llm import OpenAICompatibleClient
+from project_workflow.interfaces.ui.app import create_app
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -164,13 +167,13 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0004_runtime_step_idempotency"
+        assert version == migration_head() == "0002_workflow_modes"
         assert schema_is_ready(engine) is True
 
     def test_downgrade_refuses_lossy_mode_collapse(self, pg_url):
         engine = get_engine(pg_url)
         ensure_migrated(engine)
-        with pytest.raises(RuntimeError, match="Downgrade from immutable runtime assignment bindings"):
+        with pytest.raises(RuntimeError, match="Downgrade from workflow modes"):
             run_alembic_command("downgrade", engine, "base")
         assert schema_is_ready(engine) is True
 
@@ -253,7 +256,7 @@ class TestPostgresInitialMigration:
             assert conn.execute(text("SELECT count(*) FROM project_workflow.task_step_history")).scalar_one() == 2
             assert conn.execute(text("SELECT count(*) FROM project_workflow.task_phase_events")).scalar_one() == 2
 
-    def test_populated_0002_upgrade_preserves_nullable_legacy_assignment(self, pg_url):
+    def test_head_preserves_nullable_legacy_assignment_shape(self, pg_url):
         engine = get_engine(pg_url)
         run_alembic_command("upgrade", engine, "0001_initial")
         with engine.begin() as conn:
@@ -313,7 +316,6 @@ class TestPostgresInitialMigration:
                 },
             )
 
-        run_alembic_command("upgrade", engine)
         with engine.connect() as conn:
             row = conn.execute(
                 text(
@@ -475,10 +477,10 @@ class TestPostgresInitialMigration:
             for suffix in ("A", "B"):
                 workflow_id = conn.execute(
                     text(
-                        "INSERT INTO project_workflow.workflows (name, description, is_default) "
-                        "VALUES (:name, '', 0) RETURNING id"
+                        "INSERT INTO project_workflow.workflows (key, name, description, is_default) "
+                        "VALUES (:key, :name, '', 0) RETURNING id"
                     ),
-                    {"name": f"Workflow {suffix}"},
+                    {"key": f"workflow-{suffix.lower()}", "name": f"Workflow {suffix}"},
                 ).scalar_one()
                 project_id = conn.execute(
                     text(
@@ -884,6 +886,129 @@ class TestPostgresInitialMigration:
             "existing-race-a",
             "existing-race-b",
         ]
+        verify.close()
+
+    def test_concurrent_runtime_steps_reconcile_global_operation_key(self, pg_url, monkeypatch):
+        """Different task transactions cannot turn one global key race into a 500/503."""
+        ensure_migrated(get_engine(pg_url))
+        runtime_token = "runtime-developer-token-1234567890"
+        monkeypatch.setenv(
+            "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON",
+            json.dumps({"developer": runtime_token}),
+        )
+        config_module.get_settings.cache_clear()
+
+        setup = SAUnitOfWork(pg_url)
+        workflow_id = setup.workflows.create(
+            {"key": "hermes-sdlc:developer", "name": "Runtime step race"}
+        )
+        mode_id = setup.workflows.create_mode(
+            {
+                "workflow_id": workflow_id,
+                "key": "assigned",
+                "name": "Assigned",
+                "mode_order": 2,
+                "role_key": "developer",
+                "execution_scope": "delivery",
+                "tech_workspace_policy": "required",
+            }
+        )
+        setup.phases.create(
+            {
+                "workflow_id": workflow_id,
+                "mode_id": mode_id,
+                "code": "assigned",
+                "name": "Assigned",
+                "phase_order": 1,
+            }
+        )
+        project_id = setup.projects.create(
+            {
+                "workflow_id": workflow_id,
+                "code": "RUNTIME-RACE",
+                "name": "Runtime race",
+                "cli_command": "workflow-developer",
+                "key_prefixes": ["RACE"],
+            }
+        )
+        assignments = []
+        for number in (1, 2):
+            operation_key = f"assign-runtime-race-{number}"
+            assignments.append(
+                TaskService(setup).assign_runtime_task(
+                    project_id=project_id,
+                    task_key=f"RACE-{number}",
+                    mode_key="assigned",
+                    cycle_number=0,
+                    operation_key=operation_key,
+                    expected_revision=0,
+                    expected_status="missing",
+                    **_runtime_binding(operation_key),
+                )
+            )
+        setup.commit()
+        setup.close()
+
+        common_step_key = "step:global-runtime-race"
+        payloads = [
+            {
+                "task": assignment["task_key"],
+                "report": "Готово",
+                "step_operation_key": common_step_key,
+                "assignment_revision": assignment["assignment_revision"],
+                "assignment_ref": assignment["assignment_ref"],
+                "binding_ref": assignment["binding_ref"],
+                "hermes_run_ref": assignment["hermes_run_ref"],
+                "mode_key": assignment["mode_key"],
+                "cycle_number": assignment["cycle_number"],
+                "attempt_number": assignment["attempt_number"],
+                "expected_phase_code": assignment["current_phase_code"],
+                "expected_status": assignment["status"],
+            }
+            for assignment in assignments
+        ]
+        provider_barrier = Barrier(2)
+
+        def pass_after_both_transactions_started(*_args, **_kwargs):
+            provider_barrier.wait(timeout=10)
+            return {
+                "verdict": "PASS",
+                "covered": [],
+                "missing": [],
+                "blockers": [],
+                "message": "concurrent pass",
+                "confidence": 1.0,
+            }
+
+        def submit(payload: dict[str, object]) -> tuple[int, dict[str, object]]:
+            with TestClient(create_app()) as client:
+                response = client.post(
+                    "/internal/runtime/step",
+                    headers={"Authorization": f"Bearer {runtime_token}"},
+                    json=payload,
+                )
+                return response.status_code, response.json()
+
+        with (
+            patch.object(OpenAICompatibleClient, "chat", side_effect=pass_after_both_transactions_started),
+            ThreadPoolExecutor(max_workers=2) as pool,
+        ):
+            responses = list(pool.map(submit, payloads))
+
+        assert sorted(status for status, _ in responses) == [200, 409]
+        assert all(status not in {500, 503} for status, _ in responses)
+        assert any(
+            body.get("error") == "step_operation_key уже использован для другого runtime step"
+            for status, body in responses
+            if status == 409
+        )
+        verify = SAUnitOfWork(pg_url)
+        rows = [
+            row
+            for row in verify.step_history.list(limit=None)
+            if row.step_operation_key == common_step_key
+        ]
+        assert len(rows) == 1
         verify.close()
 
     def test_orm_create_all_is_rejected_for_postgresql(self, pg_url):

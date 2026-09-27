@@ -2,15 +2,18 @@ from __future__ import annotations
 
 import hashlib
 import json
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
 
 from project_workflow import config
 from project_workflow.application.task import TaskService
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.llm import OpenAICompatibleClient
 from project_workflow.interfaces.ui.app import create_app
+from project_workflow.interfaces.ui.routes import runtime_api
+from project_workflow.interfaces.ui.schemas import RuntimeStepRequest
 
 
 def _namespace(code: str, cli_command: str, prefix: str) -> None:
@@ -657,6 +660,52 @@ def test_runtime_step_operation_key_rejects_changed_payload(monkeypatch, supervi
         task = uow.tasks.get_by_key("DEV-21")
         assert task is not None and task.id is not None
         assert len(uow.step_history.list(task_id=task.id, limit=None)) == 1
+
+
+def test_runtime_step_integrity_error_replays_from_fresh_uow(monkeypatch):
+    runtime_token = "fresh-transaction-runtime-token-123"
+    monkeypatch.setenv(
+        "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON",
+        json.dumps({"developer": runtime_token}),
+    )
+    config.get_settings.cache_clear()
+    payload = RuntimeStepRequest.model_validate(
+        {**_unknown_step_payload("DEV-25"), "report": "Готово"}
+    )
+    first_uow = MagicMock()
+    first_uow.__enter__.return_value = first_uow
+    first_uow.__exit__.return_value = False
+    replay_uow = MagicMock()
+    replay_uow.__enter__.return_value = replay_uow
+    replay_uow.__exit__.return_value = False
+    replay_response = {
+        "ok": True,
+        "exit_code": 0,
+        "output": "replayed",
+        "result": {"replayed": True},
+    }
+
+    with (
+        patch.object(runtime_api, "SAUnitOfWork", side_effect=[first_uow, replay_uow]) as factory,
+        patch.object(runtime_api, "_namespace_id", return_value=1),
+        patch.object(runtime_api, "_require_valid_key", return_value="DEV-25"),
+        patch.object(runtime_api, "_assert_task_key_in_namespace"),
+        patch.object(runtime_api, "_runtime_step_replay", side_effect=[None, replay_response]),
+        patch.object(TaskService, "validate_runtime_step", return_value=MagicMock()),
+        patch.object(
+            runtime_api,
+            "execute_namespace_step",
+            side_effect=IntegrityError("duplicate operation key", {}, RuntimeError("race")),
+        ),
+    ):
+        response = runtime_api.runtime_step(
+            payload,
+            authorization=f"Bearer {runtime_token}",
+        )
+
+    assert response == replay_response
+    assert factory.call_count == 2
+    assert first_uow is not replay_uow
 
 
 def test_completed_step_cannot_replay_into_retry_or_new_cycle(monkeypatch, supervisor_llm):

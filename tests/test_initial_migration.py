@@ -75,10 +75,8 @@ def test_repository_has_exactly_one_base_and_head():
     assert sorted(path.name for path in versions.glob("*.py")) == [
         "0001_initial_schema.py",
         "0002_workflow_modes.py",
-        "0003_runtime_assignment_bindings.py",
-        "0004_runtime_step_idempotency.py",
     ]
-    assert migration_head() == "0004_runtime_step_idempotency"
+    assert migration_head() == "0002_workflow_modes"
 
 
 def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
@@ -130,7 +128,7 @@ def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
         }
         assert actual_fks == expected_fks, table_name
 
-    assert database_revisions(engine) == {"0004_runtime_step_idempotency"}
+    assert database_revisions(engine) == {"0002_workflow_modes"}
     assert schema_is_ready(engine) is True
     with engine.connect() as connection:
         context = MigrationContext.configure(
@@ -234,88 +232,12 @@ def test_sqlite_upgrade_populated_legacy_backfills_each_workflow_mode(tmp_path):
             assert conn.execute(
                 text("SELECT mode_id FROM phases WHERE id = :id"), {"id": phase_id}
             ).scalar_one() == mode_id
-
-
-def test_sqlite_upgrade_populated_0002_preserves_nullable_legacy_bindings(tmp_path):
-    engine = _sqlite_engine(tmp_path, "populated-0002.db")
-    run_alembic_command("upgrade", engine, "0001_initial")
-    with engine.begin() as conn:
-        workflow_id = conn.execute(
-            text("INSERT INTO workflows (name, description, is_default) VALUES ('Legacy', '', 0) RETURNING id")
-        ).scalar_one()
-        phase_id = conn.execute(
-            text(
-                "INSERT INTO phases (workflow_id, code, name, phase_order) "
-                "VALUES (:workflow_id, 'legacy', 'Legacy', 1) RETURNING id"
-            ),
-            {"workflow_id": workflow_id},
-        ).scalar_one()
-        project_id = conn.execute(
-            text(
-                "INSERT INTO projects "
-                "(workflow_id, code, name, description, key_prefixes, cli_command) "
-                "VALUES (:workflow_id, 'LG', 'Legacy', '', '[\"LG\"]', 'legacy') RETURNING id"
-            ),
-            {"workflow_id": workflow_id},
-        ).scalar_one()
-        task_id = conn.execute(
-            text(
-                "INSERT INTO tasks (project_id, workflow_id, task_key, current_phase_id, status) "
-                "VALUES (:project_id, :workflow_id, 'LG-1', :phase_id, 'active') RETURNING id"
-            ),
-            {
-                "project_id": project_id,
-                "workflow_id": workflow_id,
-                "phase_id": phase_id,
-            },
-        ).scalar_one()
-
-    run_alembic_command("upgrade", engine, "0002_workflow_modes")
-    with engine.begin() as conn:
-        mode_id = conn.execute(
-            text("SELECT id FROM workflow_modes WHERE workflow_id = :workflow_id AND key = 'default'"),
-            {"workflow_id": workflow_id},
-        ).scalar_one()
-        conn.execute(
-            text(
-                "INSERT INTO task_runtime_assignments "
-                "(operation_key, task_id, project_id, workflow_id, mode_id, cycle_number, "
-                "assignment_revision, payload) VALUES "
-                "('legacy-op', :task_id, :project_id, :workflow_id, :mode_id, 0, 1, :payload)"
-            ),
-            {
-                "task_id": task_id,
-                "project_id": project_id,
-                "workflow_id": workflow_id,
-                "mode_id": mode_id,
-                "payload": '{"legacy":true}',
-            },
-        )
-
-    ensure_migrated(engine)
-    with engine.connect() as conn:
-        assert conn.execute(
-            text(
-                "SELECT role_key, execution_scope, tech_workspace_policy "
-                "FROM workflow_modes WHERE id = :mode_id"
-            ),
-            {"mode_id": mode_id},
-        ).one() == (None, None, None)
-        row = conn.execute(
-            text(
-                "SELECT payload, workflow_key, role_key, stage_key, execution_scope, "
-                "attempt_number, business_task_ref, root_task_ref, work_item_ref, "
-                "work_item_revision, queue_item_ref, task_workspace_ref, workspace_revision, "
-                "tech_execution_workspace_ref, "
-                "tech_execution_attempt_ref, decomposition_revision_ref, stage_revision, "
-                "assignment_ref, binding_ref, hermes_run_ref, workspace_generation, "
-                "lease_generation, exact_input_refs, payload_sha256 FROM task_runtime_assignments "
-                "WHERE operation_key = 'legacy-op'"
+        workflow_key = inspect(engine).get_columns("workflows")
+        assert next(column for column in workflow_key if column["name"] == "key")["nullable"] is False
+        with pytest.raises(IntegrityError):
+            conn.execute(
+                text("INSERT INTO workflows (key, name, description, is_default) VALUES (NULL, 'Invalid', '', 0)")
             )
-        ).one()
-        assert row.payload == '{"legacy":true}'
-        assert tuple(row)[1:] == (None,) * 23
-    assert database_revisions(engine) == {"0004_runtime_step_idempotency"}
 
 
 def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path):
@@ -323,7 +245,10 @@ def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path):
     ensure_migrated(engine)
     with engine.begin() as conn:
         workflow_id = conn.execute(
-            text("INSERT INTO workflows (name, description, is_default) VALUES ('Bindings', '', 0) RETURNING id")
+            text(
+                "INSERT INTO workflows (key, name, description, is_default) "
+                "VALUES ('bindings', 'Bindings', '', 0) RETURNING id"
+            )
         ).scalar_one()
         mode_id = conn.execute(
             text(
@@ -440,9 +365,9 @@ def test_in_memory_sqlite_migration_keeps_the_schema_alive():
 def test_sqlite_downgrade_refuses_lossy_runtime_history(tmp_path):
     engine = _sqlite_engine(tmp_path)
     ensure_migrated(engine)
-    with pytest.raises(RuntimeError, match="Downgrade from durable runtime step idempotency"):
+    with pytest.raises(RuntimeError, match="Downgrade from workflow modes"):
         run_alembic_command("downgrade", engine, "base")
-    assert database_revisions(engine) == {"0004_runtime_step_idempotency"}
+    assert database_revisions(engine) == {"0002_workflow_modes"}
     assert schema_is_ready(engine) is True
 
 
@@ -613,7 +538,7 @@ def test_head_with_damaged_or_polluted_schema_is_refused(tmp_path, mutation):
     assert schema_is_ready(engine) is False
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0004_runtime_step_idempotency"}
+    assert database_revisions(engine) == {"0002_workflow_modes"}
     if mutation == "extra":
         with engine.connect() as connection:
             assert connection.execute(text("SELECT id FROM unexpected_table")).scalar_one() == 42
@@ -649,7 +574,10 @@ def test_sqlite_initial_constraints(tmp_path):
 
     with engine.begin() as conn:
         workflow_id = conn.execute(
-            text("INSERT INTO workflows (name, description, is_default) VALUES ('W', '', 1) RETURNING id")
+            text(
+                "INSERT INTO workflows (key, name, description, is_default) "
+                "VALUES ('w', 'W', '', 1) RETURNING id"
+            )
         ).scalar_one()
         mode_id = conn.execute(
             text(
@@ -685,7 +613,7 @@ def test_sqlite_initial_constraints(tmp_path):
             },
         )
         second_workflow_id = conn.execute(
-            text("INSERT INTO workflows (name, description) VALUES ('W2', '') RETURNING id")
+            text("INSERT INTO workflows (key, name, description) VALUES ('w2', 'W2', '') RETURNING id")
         ).scalar_one()
         second_mode_id = conn.execute(
             text(
