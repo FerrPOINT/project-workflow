@@ -6,6 +6,7 @@ from typing import Any
 
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import UnitOfWork
+from project_workflow.domain.runtime_assignment import normalize_role_key
 
 
 class WorkflowService:
@@ -20,8 +21,13 @@ class WorkflowService:
         payload = dict(data)
         try:
             wid = self._uow.workflows.create(payload)
+            default_mode = self._uow.workflows.get_mode_by_key(wid, "default")
+            if default_mode is None or default_mode.id is None:
+                raise RuntimeError("Не удалось создать режим по умолчанию")
+            mode_id = default_mode.id
             default_phase = {
                 "workflow_id": wid,
+                "mode_id": mode_id,
                 "code": f"wf-{wid}-default",
                 "name": self.DEFAULT_PHASE_NAME,
                 "description": "",
@@ -47,6 +53,28 @@ class WorkflowService:
     def get_workflow(self, workflow_id: int) -> dict[str, Any] | None:
         w = self._uow.workflows.get_by_id(workflow_id)
         return w.to_dict() if w else None
+
+    def list_modes(self, workflow_id: int) -> list[dict[str, Any]]:
+        if self._uow.workflows.get_by_id(workflow_id) is None:
+            raise NotFoundError(f"Воркфлоу {workflow_id} не найден")
+        return [mode.to_dict() for mode in self._uow.workflows.list_modes(workflow_id)]
+
+    def create_mode(self, workflow_id: int, data: dict[str, Any]) -> dict[str, Any]:
+        workflow = self._uow.workflows.lock(workflow_id)
+        if workflow is None:
+            raise NotFoundError(f"Воркфлоу {workflow_id} не найден")
+        payload = dict(data)
+        payload["workflow_id"] = workflow_id
+        if payload.get("role_key") is not None:
+            payload["role_key"] = normalize_role_key(payload["role_key"])
+        if "mode_order" not in payload:
+            payload["mode_order"] = len(self._uow.workflows.list_modes(workflow_id)) + 1
+        mode_id = self._uow.workflows.create_mode(payload)
+        mode = self._uow.workflows.get_mode(mode_id, workflow_id)
+        if mode is None:
+            raise RuntimeError("Не удалось создать режим воркфлоу")
+        self._uow.commit()
+        return mode.to_dict()
 
     def update_workflow(self, workflow_id: int, data: dict[str, Any]) -> None:
         workflow = self._uow.workflows.lock(workflow_id)
@@ -83,7 +111,12 @@ class WorkflowService:
                     raise ConflictError("Воркфлоу содержит задачи; сначала перенесите или удалите их")
                 project_ids.append(project_id)
 
-            phases = list(self._uow.phases.list(workflow_id))
+            phases = [
+                phase
+                for mode in self._uow.workflows.list_modes(workflow_id)
+                if mode.id is not None
+                for phase in self._uow.phases.list(workflow_id, mode_id=mode.id)
+            ]
             for phase in phases:
                 if phase.id is None:
                     raise ConflictError("Фаза воркфлоу повреждена")

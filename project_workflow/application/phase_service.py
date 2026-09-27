@@ -36,7 +36,13 @@ class PhaseService:
         if workflow is None:
             raise NotFoundError(f"Воркфлоу {initial.workflow_id} не найден")
         fresh = next(
-            (phase for phase in self._uow.phases.list(initial.workflow_id) if phase.id == phase_id),
+            (
+                phase
+                for phase in self._uow.phases.list(
+                    initial.workflow_id, mode_id=initial.mode_id
+                )
+                if phase.id == phase_id
+            ),
             None,
         )
         if fresh is None or fresh.id is None:

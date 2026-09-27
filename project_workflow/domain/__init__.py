@@ -36,6 +36,8 @@ class Phase:
 
     id: int | None = None
     workflow_id: int | None = None
+    mode_id: int | None = None
+    mode_key: str | None = None
     code: str = ""
     name: str = ""
     description: str | None = ""
@@ -50,6 +52,8 @@ class Phase:
         return {
             "id": self.id,
             "workflow_id": self.workflow_id,
+            "mode_id": self.mode_id,
+            "mode_key": self.mode_key,
             "code": self.code,
             "name": self.name,
             "description": self.description,
@@ -85,16 +89,46 @@ class Workflow:
     """Domain workflow template."""
 
     id: int | None = None
+    key: str | None = None
     name: str = ""
     description: str = ""
     is_default: bool = False
+    modes: list[WorkflowMode] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
+            "key": self.key,
             "name": self.name,
             "description": self.description,
             "is_default": self.is_default,
+            "modes": [mode.to_dict() for mode in self.modes],
+        }
+
+
+@dataclass
+class WorkflowMode:
+    """Execution mode catalog owned by one workflow."""
+
+    id: int | None = None
+    workflow_id: int | None = None
+    key: str = "default"
+    name: str = "Default"
+    mode_order: int = 1
+    role_key: str | None = None
+    execution_scope: str | None = None
+    tech_workspace_policy: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "workflow_id": self.workflow_id,
+            "key": self.key,
+            "name": self.name,
+            "mode_order": self.mode_order,
+            "role_key": self.role_key,
+            "execution_scope": self.execution_scope,
+            "tech_workspace_policy": self.tech_workspace_policy,
         }
 
 
@@ -135,6 +169,11 @@ class Task:
     id: int | None = None
     project_id: int = 0
     workflow_id: int = 0
+    mode_id: int = 0
+    mode_key: str = "default"
+    cycle_number: int = 0
+    assignment_operation_key: str | None = None
+    assignment_revision: int = 0
     task_key: str = ""
     title: str = ""
     description: str = ""
@@ -150,6 +189,11 @@ class Task:
             "id": self.id,
             "project_id": self.project_id,
             "workflow_id": self.workflow_id,
+            "mode_id": self.mode_id,
+            "mode_key": self.mode_key,
+            "cycle_number": self.cycle_number,
+            "assignment_operation_key": self.assignment_operation_key,
+            "assignment_revision": self.assignment_revision,
             "task_key": self.task_key,
             "title": self.title,
             "description": self.description,
@@ -162,12 +206,94 @@ class Task:
         }
 
 
+@dataclass(frozen=True)
+class TaskRuntimeAssignment:
+    """Immutable adapter acceptance record for one Business operation key."""
+
+    id: int | None = None
+    operation_key: str = ""
+    task_id: int = 0
+    project_id: int = 0
+    workflow_id: int = 0
+    workflow_key: str | None = None
+    mode_id: int = 0
+    mode_key: str = "default"
+    cycle_number: int = 0
+    attempt_number: int | None = None
+    assignment_revision: int = 0
+    role_key: str | None = None
+    execution_scope: str | None = None
+    stage_key: str | None = None
+    business_task_ref: str | None = None
+    root_task_ref: str | None = None
+    work_item_ref: str | None = None
+    work_item_revision: int | None = None
+    queue_item_ref: str | None = None
+    task_workspace_ref: str | None = None
+    workspace_revision: int | None = None
+    tech_execution_workspace_ref: str | None = None
+    tech_execution_attempt_ref: str | None = None
+    decomposition_revision_ref: str | None = None
+    stage_revision: str | None = None
+    assignment_ref: str | None = None
+    binding_ref: str | None = None
+    hermes_run_ref: str | None = None
+    workspace_generation: int | None = None
+    lease_generation: int | None = None
+    exact_input_refs: list[dict[str, Any]] = field(default_factory=list)
+    payload_sha256: str | None = None
+    payload: dict[str, Any] = field(default_factory=dict)
+    created_at: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "operation_key": self.operation_key,
+            "task_id": self.task_id,
+            "project_id": self.project_id,
+            "workflow_id": self.workflow_id,
+            "workflow_key": self.workflow_key,
+            "mode_id": self.mode_id,
+            "mode_key": self.mode_key,
+            "cycle_number": self.cycle_number,
+            "attempt_number": self.attempt_number,
+            "assignment_revision": self.assignment_revision,
+            "role_key": self.role_key,
+            "execution_scope": self.execution_scope,
+            "stage_key": self.stage_key,
+            "business_task_ref": self.business_task_ref,
+            "root_task_ref": self.root_task_ref,
+            "work_item_ref": self.work_item_ref,
+            "work_item_revision": self.work_item_revision,
+            "queue_item_ref": self.queue_item_ref,
+            "task_workspace_ref": self.task_workspace_ref,
+            "workspace_revision": self.workspace_revision,
+            "tech_execution_workspace_ref": self.tech_execution_workspace_ref,
+            "tech_execution_attempt_ref": self.tech_execution_attempt_ref,
+            "decomposition_revision_ref": self.decomposition_revision_ref,
+            "stage_revision": self.stage_revision,
+            "assignment_ref": self.assignment_ref,
+            "binding_ref": self.binding_ref,
+            "hermes_run_ref": self.hermes_run_ref,
+            "workspace_generation": self.workspace_generation,
+            "lease_generation": self.lease_generation,
+            "exact_input_refs": [dict(item) for item in self.exact_input_refs],
+            "payload_sha256": self.payload_sha256,
+            "payload": dict(self.payload),
+            "created_at": self.created_at,
+        }
+
+
 @dataclass
 class TaskStepHistoryEntry:
     """One persisted evaluation produced by the CLI ``step`` flow."""
 
     id: int | None = None
     task_id: int = 0
+    workflow_id: int = 0
+    mode_id: int = 0
+    mode_key: str = "default"
+    cycle_number: int = 0
     phase_id: int = 0
     verdict: str = ""
     worker_report: str = ""
@@ -185,6 +311,10 @@ class TaskStepHistoryEntry:
         return {
             "id": self.id,
             "task_id": self.task_id,
+            "workflow_id": self.workflow_id,
+            "mode_id": self.mode_id,
+            "mode_key": self.mode_key,
+            "cycle_number": self.cycle_number,
             "phase_id": self.phase_id,
             "verdict": self.verdict,
             "worker_report": self.worker_report,
@@ -206,6 +336,10 @@ class TaskPhaseEvent:
 
     id: int | None = None
     task_id: int = 0
+    workflow_id: int = 0
+    mode_id: int = 0
+    mode_key: str = "default"
+    cycle_number: int = 0
     phase_id: int = 0
     step_history_id: int | None = None
     event_type: str = ""
@@ -215,6 +349,10 @@ class TaskPhaseEvent:
         return {
             "id": self.id,
             "task_id": self.task_id,
+            "workflow_id": self.workflow_id,
+            "mode_id": self.mode_id,
+            "mode_key": self.mode_key,
+            "cycle_number": self.cycle_number,
             "phase_id": self.phase_id,
             "step_history_id": self.step_history_id,
             "event_type": self.event_type,

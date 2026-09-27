@@ -137,7 +137,13 @@ def _replay(
     *,
     after_run_id: int | None = None,
 ) -> dict[str, Any] | None:
-    run = engine.db.step_history.get_by_fingerprint(task_id, phase_id, fingerprint)
+    run = engine.db.step_history.get_by_fingerprint(
+        task_id,
+        phase_id,
+        fingerprint,
+        mode_id=int(engine.task.get("mode_id") or 0),
+        cycle_number=int(engine.task.get("cycle_number") or 0),
+    )
     run_id = getattr(run, "id", None) if run is not None else None
     if after_run_id is not None and (run_id is None or int(run_id) <= after_run_id):
         return None
@@ -509,6 +515,8 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     raw_evaluator = llm.raw if technical_error else (raw if raw is not None else llm.raw)
     run_data = {
         "task_id": task_id,
+        "mode_id": int(engine.task.get("mode_id") or 0),
+        "cycle_number": int(engine.task.get("cycle_number") or 0),
         "phase_id": phase.id,
         "verdict": verdict_key,
         "worker_report": report,

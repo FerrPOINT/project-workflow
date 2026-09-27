@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     # Private role-token map for isolated agent containers, not the browser UI.
     # Shape: {"analyst":"<token>", ...}. Empty keeps the bridge fail-closed.
     PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON: str = ""
+    PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON: str = ""
     PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN: str = ""
 
     @field_validator("DATABASE_URL", mode="before")

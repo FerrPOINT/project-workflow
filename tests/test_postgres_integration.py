@@ -41,6 +41,7 @@ from project_workflow.infrastructure.db.session import (
     get_engine,
     reset_engine,
     run_alembic_command,
+    schema_is_ready,
 )
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
@@ -52,6 +53,35 @@ PG_USER = os.environ.get("PGUSER", "project_workflow")
 PG_PASSWORD = os.environ.get("PGPASSWORD", "project_workflow")
 PG_ADMIN_DB = os.environ.get("PGDATABASE", "project_workflow")
 PG_CONNECT_TIMEOUT = int(os.environ.get("PGCONNECT_TIMEOUT", "10"))
+
+
+def _runtime_binding(operation_key: str) -> dict[str, object]:
+    return {
+        "workflow_key": "hermes-sdlc:developer",
+        "role_key": "developer",
+        "stage_key": "development",
+        "execution_scope": "delivery",
+        "attempt_number": 1,
+        "business_task_ref": f"business-task:{operation_key}",
+        "root_task_ref": "business-task:root",
+        "work_item_ref": f"work-item:{operation_key}",
+        "work_item_revision": 1,
+        "queue_item_ref": f"queue-item:{operation_key}",
+        "task_workspace_ref": "task-workspace:root",
+        "workspace_revision": 1,
+        "tech_execution_workspace_ref": f"tech-workspace:{operation_key}",
+        "tech_execution_attempt_ref": f"tech-attempt:{operation_key}",
+        "decomposition_revision_ref": "decomposition:1",
+        "stage_revision": "developer:1",
+        "assignment_ref": f"assignment:{operation_key}",
+        "binding_ref": f"binding:{operation_key}",
+        "hermes_run_ref": f"hermes-run:{operation_key}",
+        "workspace_generation": 1,
+        "lease_generation": 1,
+        "exact_input_refs": [
+            {"kind": "business_task", "ref": f"business-task:{operation_key}", "revision": "1"}
+        ],
+    }
 
 
 @pytest.fixture(scope="function")
@@ -134,27 +164,165 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0001_initial"
+        assert version == migration_head() == "0003_runtime_assignment_bindings"
         assert schema_is_ready(engine) is True
 
-    def test_downgrade_and_reupgrade(self, pg_url):
-        from project_workflow.infrastructure.db.models import Base
-
+    def test_downgrade_refuses_lossy_mode_collapse(self, pg_url):
         engine = get_engine(pg_url)
         ensure_migrated(engine)
-        run_alembic_command("downgrade", engine, "base")
+        with pytest.raises(RuntimeError, match="Downgrade from immutable runtime assignment bindings"):
+            run_alembic_command("downgrade", engine, "base")
+        assert schema_is_ready(engine) is True
 
-        tables_after_downgrade = set(
-            inspect(engine).get_table_names(schema="project_workflow")
-        )
-        assert tables_after_downgrade.isdisjoint(Base.metadata.tables)
-        assert "project_workflow" not in inspect(engine).get_schema_names()
+    def test_populated_0001_upgrade_preserves_rows_and_backfills_per_workflow(self, pg_url):
+        engine = get_engine(pg_url)
+        run_alembic_command("upgrade", engine, "0001_initial")
+        with engine.begin() as conn:
+            workflow_ids = [
+                conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.workflows (name, description, is_default) "
+                        "VALUES (:name, '', 0) RETURNING id"
+                    ),
+                    {"name": f"Legacy PG {suffix}"},
+                ).scalar_one()
+                for suffix in ("A", "B")
+            ]
+            for index, workflow_id in enumerate(workflow_ids, 1):
+                phase_id = conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.phases "
+                        "(workflow_id, code, name, phase_order, execution_type) "
+                        "VALUES (:workflow_id, :code, 'Legacy', 1, 'sync') RETURNING id"
+                    ),
+                    {"workflow_id": workflow_id, "code": f"legacy-{index}"},
+                ).scalar_one()
+                project_id = conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.projects "
+                        "(workflow_id, code, name, description, theme_icon, theme_color, cli_command, key_prefixes) "
+                        "VALUES (:workflow_id, :code, 'Legacy', '', 'folder', '#5E6AD2', :cli, '[]') RETURNING id"
+                    ),
+                    {"workflow_id": workflow_id, "code": f"LPG{index}", "cli": f"legacy-pg-{index}"},
+                ).scalar_one()
+                task_id = conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.tasks "
+                        "(project_id, workflow_id, task_key, title, current_phase_id, status) "
+                        "VALUES (:project_id, :workflow_id, :task_key, 'Legacy', :phase_id, 'active') RETURNING id"
+                    ),
+                    {
+                        "project_id": project_id,
+                        "workflow_id": workflow_id,
+                        "task_key": f"LPG{index}-1",
+                        "phase_id": phase_id,
+                    },
+                ).scalar_one()
+                history_id = conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.task_step_history "
+                        "(task_id, workflow_id, phase_id, verdict, replay_fingerprint) "
+                        "VALUES (:task_id, :workflow_id, :phase_id, 'partial', :fingerprint) RETURNING id"
+                    ),
+                    {
+                        "task_id": task_id,
+                        "workflow_id": workflow_id,
+                        "phase_id": phase_id,
+                        "fingerprint": f"legacy-pg-{index}",
+                    },
+                ).scalar_one()
+                conn.execute(
+                    text(
+                        "INSERT INTO project_workflow.task_phase_events "
+                        "(task_id, workflow_id, phase_id, step_history_id, event_type) "
+                        "VALUES (:task_id, :workflow_id, :phase_id, :history_id, 'entered')"
+                    ),
+                    {"task_id": task_id, "workflow_id": workflow_id, "phase_id": phase_id, "history_id": history_id},
+                )
 
-        ensure_migrated(engine)
-        assert "project_workflow" in inspect(engine).get_schema_names()
-        assert set(Base.metadata.tables).issubset(
-            inspect(engine).get_table_names(schema="project_workflow")
-        )
+        run_alembic_command("upgrade", engine)
+        with engine.connect() as conn:
+            mode_rows = conn.execute(
+                text(
+                    "SELECT workflow_id, id FROM project_workflow.workflow_modes "
+                    "WHERE key = 'default' ORDER BY workflow_id"
+                )
+            ).all()
+            assert len(mode_rows) == 2 and mode_rows[0].id != mode_rows[1].id
+            assert conn.execute(text("SELECT count(*) FROM project_workflow.tasks")).scalar_one() == 2
+            assert conn.execute(text("SELECT count(*) FROM project_workflow.task_step_history")).scalar_one() == 2
+            assert conn.execute(text("SELECT count(*) FROM project_workflow.task_phase_events")).scalar_one() == 2
+
+    def test_populated_0002_upgrade_preserves_nullable_legacy_assignment(self, pg_url):
+        engine = get_engine(pg_url)
+        run_alembic_command("upgrade", engine, "0001_initial")
+        with engine.begin() as conn:
+            workflow_id = conn.execute(
+                text(
+                    "INSERT INTO project_workflow.workflows (name, description, is_default) "
+                    "VALUES ('Legacy 0002', '', 0) RETURNING id"
+                )
+            ).scalar_one()
+            phase_id = conn.execute(
+                text(
+                    "INSERT INTO project_workflow.phases "
+                    "(workflow_id, code, name, phase_order, execution_type) "
+                    "VALUES (:workflow_id, 'legacy', 'Legacy', 1, 'sync') RETURNING id"
+                ),
+                {"workflow_id": workflow_id},
+            ).scalar_one()
+            project_id = conn.execute(
+                text(
+                    "INSERT INTO project_workflow.projects "
+                    "(workflow_id, code, name, description, theme_icon, theme_color, cli_command, key_prefixes) "
+                    "VALUES (:workflow_id, 'L2', 'Legacy', '', 'folder', '#5E6AD2', 'legacy-2', '[]') "
+                    "RETURNING id"
+                ),
+                {"workflow_id": workflow_id},
+            ).scalar_one()
+            task_id = conn.execute(
+                text(
+                    "INSERT INTO project_workflow.tasks "
+                    "(project_id, workflow_id, task_key, current_phase_id, status) "
+                    "VALUES (:project_id, :workflow_id, 'L2-1', :phase_id, 'active') RETURNING id"
+                ),
+                {"project_id": project_id, "workflow_id": workflow_id, "phase_id": phase_id},
+            ).scalar_one()
+
+        run_alembic_command("upgrade", engine, "0002_workflow_modes")
+        with engine.begin() as conn:
+            mode_id = conn.execute(
+                text(
+                    "SELECT id FROM project_workflow.workflow_modes "
+                    "WHERE workflow_id = :workflow_id AND key = 'default'"
+                ),
+                {"workflow_id": workflow_id},
+            ).scalar_one()
+            conn.execute(
+                text(
+                    "INSERT INTO project_workflow.task_runtime_assignments "
+                    "(operation_key, task_id, project_id, workflow_id, mode_id, cycle_number, "
+                    "assignment_revision, payload) VALUES "
+                    "('legacy-0002-op', :task_id, :project_id, :workflow_id, :mode_id, 0, 1, '{\"legacy\":true}')"
+                ),
+                {
+                    "task_id": task_id,
+                    "project_id": project_id,
+                    "workflow_id": workflow_id,
+                    "mode_id": mode_id,
+                },
+            )
+
+        run_alembic_command("upgrade", engine)
+        with engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    "SELECT payload, role_key, execution_scope, business_task_ref, exact_input_refs, "
+                    "payload_sha256 FROM project_workflow.task_runtime_assignments "
+                    "WHERE operation_key = 'legacy-0002-op'"
+                )
+            ).one()
+        assert row == ('{"legacy":true}', None, None, None, None, None)
 
     def test_legacy_revision_is_refused_without_mutation(self, pg_url):
         from project_workflow.infrastructure.db.session import (
@@ -521,6 +689,201 @@ class TestPostgresInitialMigration:
         assert task_ids[0] == task_ids[1]
         verify = SAUnitOfWork(pg_url)
         assert len([task for task in verify.tasks.list() if task.task_key == "RUN-90001"]) == 1
+        verify.close()
+
+    def test_concurrent_runtime_assignment_reconciles_one_ledger_record(self, pg_url):
+        ensure_migrated(get_engine(pg_url))
+        setup = SAUnitOfWork(pg_url)
+        workflow_id = setup.workflows.create(
+            {"key": "hermes-sdlc:developer", "name": "Runtime assignment race"}
+        )
+        initial_mode = setup.workflows.create_mode(
+            {
+                "workflow_id": workflow_id,
+                "key": "initial",
+                "name": "Initial",
+                "mode_order": 2,
+                "role_key": "developer",
+                "execution_scope": "delivery",
+                "tech_workspace_policy": "required",
+            }
+        )
+        project_id = setup.projects.create(
+            {
+                "workflow_id": workflow_id,
+                "code": "RACE",
+                "name": "Race",
+                "cli_command": "race",
+                "key_prefixes": ["RACE"],
+            }
+        )
+        setup.phases.create(
+            {
+                "workflow_id": workflow_id,
+                "mode_id": initial_mode,
+                "code": "start",
+                "name": "Start",
+                "phase_order": 1,
+            }
+        )
+        setup.commit()
+        setup.close()
+        barrier = Barrier(2)
+
+        def assign() -> dict:
+            uow = SAUnitOfWork(pg_url)
+            barrier.wait(timeout=10)
+            try:
+                return TaskService(uow).assign_runtime_task(
+                    project_id=project_id,
+                    task_key="RACE-1",
+                    mode_key="initial",
+                    cycle_number=0,
+                    operation_key="runtime-race-operation",
+                    expected_revision=0,
+                    expected_status="missing",
+                    **_runtime_binding("runtime-race-operation"),
+                )
+            finally:
+                uow.close()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda _: assign(), range(2)))
+
+        assert {result["id"] for result in results} == {results[0]["id"]}
+        verify = SAUnitOfWork(pg_url)
+        task = verify.tasks.get_by_key("RACE-1", project_id=project_id)
+        assert task is not None
+        assert [item.operation_key for item in verify.tasks.list_assignments(task.id)] == [
+            "runtime-race-operation"
+        ]
+        verify.close()
+
+    def test_concurrent_existing_task_assignment_rechecks_ledger_after_row_lock(self, pg_url):
+        from project_workflow.infrastructure.db.repositories.project import SAProjectRepository
+        from project_workflow.infrastructure.db.repositories.task import SATaskRepository
+
+        ensure_migrated(get_engine(pg_url))
+        setup = SAUnitOfWork(pg_url)
+        workflow_id = setup.workflows.create(
+            {"key": "hermes-sdlc:developer", "name": "Existing assignment race"}
+        )
+        initial_mode = setup.workflows.create_mode(
+            {
+                "workflow_id": workflow_id,
+                "key": "initial",
+                "name": "Initial",
+                "mode_order": 2,
+                "role_key": "developer",
+                "execution_scope": "delivery",
+                "tech_workspace_policy": "required",
+            }
+        )
+        rework_id = setup.workflows.create_mode(
+            {
+                "workflow_id": workflow_id,
+                "key": "rework",
+                "name": "Rework",
+                "mode_order": 3,
+                "role_key": "developer",
+                "execution_scope": "delivery",
+                "tech_workspace_policy": "required",
+            }
+        )
+        setup.phases.create(
+            {
+                "workflow_id": workflow_id,
+                "mode_id": initial_mode,
+                "code": "start",
+                "name": "Start",
+                "phase_order": 1,
+            }
+        )
+        setup.phases.create(
+            {"workflow_id": workflow_id, "mode_id": rework_id, "code": "fix", "name": "Fix", "phase_order": 1}
+        )
+        project_id = setup.projects.create(
+            {
+                "workflow_id": workflow_id,
+                "code": "EXISTING-RACE",
+                "name": "Existing race",
+                "cli_command": "existing-race",
+                "key_prefixes": ["EXISTING"],
+            }
+        )
+        initial = TaskService(setup).assign_runtime_task(
+            project_id=project_id,
+            task_key="EXISTING-1",
+            mode_key="initial",
+            cycle_number=0,
+            operation_key="existing-race-a",
+            expected_revision=0,
+            expected_status="missing",
+            **_runtime_binding("existing-race-a"),
+        )
+        setup.tasks.update(initial["id"], {"status": "done"})
+        setup.commit()
+        setup.close()
+
+        lookup_started = Barrier(2)
+        lookup_finished = Barrier(2)
+        thread_state = local()
+        original_project_get = SAProjectRepository.get_by_id
+        original_assignment_get = SATaskRepository.get_assignment_by_operation_key
+
+        def unlocked_project(repo, candidate_project_id):
+            return original_project_get(repo, candidate_project_id)
+
+        def synchronized_initial_lookup(repo, operation_key):
+            if operation_key == "existing-race-b" and not getattr(thread_state, "looked_up", False):
+                thread_state.looked_up = True
+                lookup_started.wait(timeout=10)
+                result = original_assignment_get(repo, operation_key)
+                lookup_finished.wait(timeout=10)
+                return result
+            return original_assignment_get(repo, operation_key)
+
+        def assign() -> dict:
+            uow = SAUnitOfWork(pg_url)
+            try:
+                return TaskService(uow).assign_runtime_task(
+                    project_id=project_id,
+                    task_key="EXISTING-1",
+                    mode_key="rework",
+                    cycle_number=1,
+                    operation_key="existing-race-b",
+                    expected_revision=1,
+                    expected_status="done",
+                    expected_mode_key="initial",
+                    expected_cycle_number=0,
+                    **_runtime_binding("existing-race-b"),
+                )
+            finally:
+                uow.close()
+
+        with (
+            patch.object(SAProjectRepository, "lock", unlocked_project),
+            patch.object(
+                SATaskRepository,
+                "get_assignment_by_operation_key",
+                synchronized_initial_lookup,
+            ),
+            ThreadPoolExecutor(max_workers=2) as pool,
+        ):
+            results = list(pool.map(lambda _: assign(), range(2)))
+
+        assert {result["assignment_revision"] for result in results} == {2}
+        assert {result["assignment_operation_key"] for result in results} == {"existing-race-b"}
+        assert {result["status"] for result in results} == {"active"}
+        verify = SAUnitOfWork(pg_url)
+        task = verify.tasks.get_by_key("EXISTING-1", project_id=project_id)
+        assert task is not None
+        assert task.mode_id == rework_id
+        assert task.cycle_number == 1
+        assert [item.operation_key for item in verify.tasks.list_assignments(task.id)] == [
+            "existing-race-a",
+            "existing-race-b",
+        ]
         verify.close()
 
     def test_orm_create_all_is_rejected_for_postgresql(self, pg_url):

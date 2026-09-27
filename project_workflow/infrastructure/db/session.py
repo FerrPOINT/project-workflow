@@ -225,6 +225,21 @@ def run_alembic_command(
     if isinstance(target, Connection):
         migrate(target)
         return
+    if target.dialect.name == "sqlite":
+        # SQLite ignores PRAGMA foreign_keys changes once a transaction has
+        # started. Alembic batch table rebuilds therefore need enforcement
+        # disabled before the migration transaction, then restored even when
+        # the migration fails.
+        with target.connect() as connection:
+            connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+            connection.commit()
+            try:
+                with connection.begin():
+                    migrate(connection)
+            finally:
+                connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+                connection.commit()
+        return
     with target.begin() as connection:
         migrate(connection)
 
@@ -246,15 +261,17 @@ def _metadata_is_current(target: Engine | Connection) -> bool:
 
 
 def ensure_migrated(engine: Engine | Connection | None = None) -> None:
-    """Apply the baseline only to an empty or exact ``0001_initial`` database."""
+    """Apply migrations to empty, legacy ``0001_initial``, or exact-head databases."""
     target = engine or get_engine()
     bound_engine = target.engine if isinstance(target, Connection) else target
     schema = None if _is_sqlite(str(bound_engine.url)) else get_settings().DB_SCHEMA
     revisions = database_revisions(target)
     existing_tables = set(inspect(target).get_table_names(schema=schema)) - {"alembic_version"}
-    incompatible_revision = bool(revisions) and revisions != {migration_head()}
+    head = migration_head()
+    compatible_upgrade_revisions = {head, "0001_initial", "0002_workflow_modes"}
+    incompatible_revision = bool(revisions) and not revisions.issubset(compatible_upgrade_revisions)
     exact_tables = existing_tables == expected_tables()
-    incompatible_schema = revisions == {migration_head()} and (
+    incompatible_schema = revisions == {head} and (
         not exact_tables or not _metadata_is_current(target)
     )
     unversioned_database = not revisions and bool(existing_tables)
@@ -314,6 +331,17 @@ def schema_is_ready(engine: Engine) -> bool:
 @contextmanager
 def initialization_transaction(engine: Engine) -> Iterator[Connection]:
     """Serialize and atomically run migration plus bootstrap for one schema."""
+    if engine.dialect.name == "sqlite":
+        with engine.connect() as connection:
+            connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+            connection.commit()
+            try:
+                with connection.begin():
+                    yield connection
+            finally:
+                connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+                connection.commit()
+        return
     with engine.begin() as connection:
         if connection.dialect.name == "postgresql":
             connection.execute(

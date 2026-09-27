@@ -72,8 +72,12 @@ def _constraint_names(items: list[dict]) -> set[str]:
 
 def test_repository_has_exactly_one_base_and_head():
     versions = Path(__file__).parents[1] / "project_workflow" / "infrastructure" / "db" / "migrations" / "versions"
-    assert [path.name for path in versions.glob("*.py")] == ["0001_initial_schema.py"]
-    assert migration_head() == "0001_initial"
+    assert sorted(path.name for path in versions.glob("*.py")) == [
+        "0001_initial_schema.py",
+        "0002_workflow_modes.py",
+        "0003_runtime_assignment_bindings.py",
+    ]
+    assert migration_head() == "0003_runtime_assignment_bindings"
 
 
 def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
@@ -125,7 +129,7 @@ def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
         }
         assert actual_fks == expected_fks, table_name
 
-    assert database_revisions(engine) == {"0001_initial"}
+    assert database_revisions(engine) == {"0003_runtime_assignment_bindings"}
     assert schema_is_ready(engine) is True
     with engine.connect() as connection:
         context = MigrationContext.configure(
@@ -133,6 +137,288 @@ def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
             opts={"compare_type": True, "compare_server_default": True},
         )
         assert compare_metadata(context, Base.metadata) == []
+
+
+def test_sqlite_upgrade_populated_legacy_backfills_each_workflow_mode(tmp_path):
+    engine = _sqlite_engine(tmp_path, "legacy-populated.db")
+    run_alembic_command("upgrade", engine, "0001_initial")
+    with engine.begin() as conn:
+        workflow_ids = [
+            conn.execute(
+                text("INSERT INTO workflows (name, description, is_default) VALUES (:name, '', 0) RETURNING id"),
+                {"name": f"Legacy {suffix}"},
+            ).scalar_one()
+            for suffix in ("A", "B")
+        ]
+        rows: list[tuple[int, int, int, int]] = []
+        for index, workflow_id in enumerate(workflow_ids, 1):
+            phase_id = conn.execute(
+                text(
+                    "INSERT INTO phases (workflow_id, code, name, phase_order) "
+                    "VALUES (:workflow_id, :code, :name, 1) RETURNING id"
+                ),
+                {"workflow_id": workflow_id, "code": f"legacy-{index}", "name": "Legacy"},
+            ).scalar_one()
+            project_id = conn.execute(
+                text(
+                    "INSERT INTO projects "
+                    "(workflow_id, code, name, description, key_prefixes, cli_command) "
+                    "VALUES (:workflow_id, :code, :name, '', '[]', :cli) RETURNING id"
+                ),
+                {"workflow_id": workflow_id, "code": f"LP{index}", "name": "Legacy", "cli": f"legacy-{index}"},
+            ).scalar_one()
+            task_id = conn.execute(
+                text(
+                    "INSERT INTO tasks (project_id, workflow_id, task_key, current_phase_id, status) "
+                    "VALUES (:project_id, :workflow_id, :task_key, :phase_id, 'active') RETURNING id"
+                ),
+                {
+                    "project_id": project_id,
+                    "workflow_id": workflow_id,
+                    "task_key": f"LP{index}-1",
+                    "phase_id": phase_id,
+                },
+            ).scalar_one()
+            history_id = conn.execute(
+                text(
+                    "INSERT INTO task_step_history "
+                    "(task_id, workflow_id, phase_id, verdict, replay_fingerprint) "
+                    "VALUES (:task_id, :workflow_id, :phase_id, 'partial', :fingerprint) RETURNING id"
+                ),
+                {
+                    "task_id": task_id,
+                    "workflow_id": workflow_id,
+                    "phase_id": phase_id,
+                    "fingerprint": f"legacy-{index}",
+                },
+            ).scalar_one()
+            conn.execute(
+                text(
+                    "INSERT INTO task_phase_events "
+                    "(task_id, workflow_id, phase_id, step_history_id, event_type) "
+                    "VALUES (:task_id, :workflow_id, :phase_id, :history_id, 'entered')"
+                ),
+                {"task_id": task_id, "workflow_id": workflow_id, "phase_id": phase_id, "history_id": history_id},
+            )
+            rows.append((workflow_id, project_id, task_id, phase_id))
+
+    ensure_migrated(engine)
+    with engine.connect() as conn:
+        mode_rows = conn.execute(
+            text("SELECT workflow_id, id FROM workflow_modes WHERE key = 'default' ORDER BY workflow_id")
+        ).all()
+        assert len(mode_rows) == 2
+        assert mode_rows[0].id != mode_rows[1].id
+        for workflow_id, _project_id, task_id, phase_id in rows:
+            mode_id = conn.execute(
+                text("SELECT id FROM workflow_modes WHERE workflow_id = :workflow_id AND key = 'default'"),
+                {"workflow_id": workflow_id},
+            ).scalar_one()
+            assert conn.execute(
+                text("SELECT mode_id, cycle_number FROM tasks WHERE id = :id"), {"id": task_id}
+            ).one() == (mode_id, 0)
+            assert conn.execute(
+                text("SELECT mode_id, cycle_number FROM task_step_history WHERE task_id = :id"),
+                {"id": task_id},
+            ).one() == (mode_id, 0)
+            assert conn.execute(
+                text("SELECT mode_id, cycle_number FROM task_phase_events WHERE task_id = :id"),
+                {"id": task_id},
+            ).one() == (mode_id, 0)
+            assert conn.execute(
+                text("SELECT mode_id FROM phases WHERE id = :id"), {"id": phase_id}
+            ).scalar_one() == mode_id
+
+
+def test_sqlite_upgrade_populated_0002_preserves_nullable_legacy_bindings(tmp_path):
+    engine = _sqlite_engine(tmp_path, "populated-0002.db")
+    run_alembic_command("upgrade", engine, "0001_initial")
+    with engine.begin() as conn:
+        workflow_id = conn.execute(
+            text("INSERT INTO workflows (name, description, is_default) VALUES ('Legacy', '', 0) RETURNING id")
+        ).scalar_one()
+        phase_id = conn.execute(
+            text(
+                "INSERT INTO phases (workflow_id, code, name, phase_order) "
+                "VALUES (:workflow_id, 'legacy', 'Legacy', 1) RETURNING id"
+            ),
+            {"workflow_id": workflow_id},
+        ).scalar_one()
+        project_id = conn.execute(
+            text(
+                "INSERT INTO projects "
+                "(workflow_id, code, name, description, key_prefixes, cli_command) "
+                "VALUES (:workflow_id, 'LG', 'Legacy', '', '[\"LG\"]', 'legacy') RETURNING id"
+            ),
+            {"workflow_id": workflow_id},
+        ).scalar_one()
+        task_id = conn.execute(
+            text(
+                "INSERT INTO tasks (project_id, workflow_id, task_key, current_phase_id, status) "
+                "VALUES (:project_id, :workflow_id, 'LG-1', :phase_id, 'active') RETURNING id"
+            ),
+            {
+                "project_id": project_id,
+                "workflow_id": workflow_id,
+                "phase_id": phase_id,
+            },
+        ).scalar_one()
+
+    run_alembic_command("upgrade", engine, "0002_workflow_modes")
+    with engine.begin() as conn:
+        mode_id = conn.execute(
+            text("SELECT id FROM workflow_modes WHERE workflow_id = :workflow_id AND key = 'default'"),
+            {"workflow_id": workflow_id},
+        ).scalar_one()
+        conn.execute(
+            text(
+                "INSERT INTO task_runtime_assignments "
+                "(operation_key, task_id, project_id, workflow_id, mode_id, cycle_number, "
+                "assignment_revision, payload) VALUES "
+                "('legacy-op', :task_id, :project_id, :workflow_id, :mode_id, 0, 1, :payload)"
+            ),
+            {
+                "task_id": task_id,
+                "project_id": project_id,
+                "workflow_id": workflow_id,
+                "mode_id": mode_id,
+                "payload": '{"legacy":true}',
+            },
+        )
+
+    ensure_migrated(engine)
+    with engine.connect() as conn:
+        assert conn.execute(
+            text(
+                "SELECT role_key, execution_scope, tech_workspace_policy "
+                "FROM workflow_modes WHERE id = :mode_id"
+            ),
+            {"mode_id": mode_id},
+        ).one() == (None, None, None)
+        row = conn.execute(
+            text(
+                "SELECT payload, workflow_key, role_key, stage_key, execution_scope, "
+                "attempt_number, business_task_ref, root_task_ref, work_item_ref, "
+                "work_item_revision, queue_item_ref, task_workspace_ref, workspace_revision, "
+                "tech_execution_workspace_ref, "
+                "tech_execution_attempt_ref, decomposition_revision_ref, stage_revision, "
+                "assignment_ref, binding_ref, hermes_run_ref, workspace_generation, "
+                "lease_generation, exact_input_refs, payload_sha256 FROM task_runtime_assignments "
+                "WHERE operation_key = 'legacy-op'"
+            )
+        ).one()
+        assert row.payload == '{"legacy":true}'
+        assert tuple(row)[1:] == (None,) * 23
+    assert database_revisions(engine) == {"0003_runtime_assignment_bindings"}
+
+
+def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path):
+    engine = _sqlite_engine(tmp_path, "binding-constraints.db")
+    ensure_migrated(engine)
+    with engine.begin() as conn:
+        workflow_id = conn.execute(
+            text("INSERT INTO workflows (name, description, is_default) VALUES ('Bindings', '', 0) RETURNING id")
+        ).scalar_one()
+        mode_id = conn.execute(
+            text(
+                "INSERT INTO workflow_modes "
+                "(workflow_id, key, name, mode_order, role_key, execution_scope, tech_workspace_policy) "
+                "VALUES (:workflow_id, 'delivery', 'Delivery', 1, 'developer', 'delivery', 'required') "
+                "RETURNING id"
+            ),
+            {"workflow_id": workflow_id},
+        ).scalar_one()
+        phase_id = conn.execute(
+            text(
+                "INSERT INTO phases (workflow_id, mode_id, code, name, phase_order) "
+                "VALUES (:workflow_id, :mode_id, 'start', 'Start', 1) RETURNING id"
+            ),
+            {"workflow_id": workflow_id, "mode_id": mode_id},
+        ).scalar_one()
+        project_ids = [
+            conn.execute(
+                text(
+                    "INSERT INTO projects (workflow_id, code, name, description, key_prefixes, cli_command) "
+                    "VALUES (:workflow_id, :code, :code, '', '[]', :cli) RETURNING id"
+                ),
+                {"workflow_id": workflow_id, "code": code, "cli": f"binding-{code.lower()}"},
+            ).scalar_one()
+            for code in ("BIND1", "BIND2")
+        ]
+        task_id = conn.execute(
+            text(
+                "INSERT INTO tasks "
+                "(project_id, workflow_id, mode_id, cycle_number, assignment_revision, task_key, "
+                "current_phase_id, status) VALUES "
+                "(:project_id, :workflow_id, :mode_id, 0, 0, 'BIND-1', :phase_id, 'active') RETURNING id"
+            ),
+            {
+                "project_id": project_ids[0],
+                "workflow_id": workflow_id,
+                "mode_id": mode_id,
+                "phase_id": phase_id,
+            },
+        ).scalar_one()
+
+    base = {
+        "operation_key": "valid",
+        "task_id": task_id,
+        "project_id": project_ids[0],
+        "workflow_id": workflow_id,
+        "mode_id": mode_id,
+        "cycle_number": 0,
+        "assignment_revision": 1,
+        "workflow_key": "hermes-sdlc:developer",
+        "role_key": "developer",
+        "stage_key": "development",
+        "execution_scope": "delivery",
+        "attempt_number": 1,
+        "business_task_ref": "business:1",
+        "root_task_ref": "business:root",
+        "work_item_ref": "business:item",
+        "work_item_revision": 1,
+        "queue_item_ref": "queue-item:1",
+        "task_workspace_ref": "workspace:task",
+        "workspace_revision": 1,
+        "tech_execution_workspace_ref": "workspace:tech",
+        "tech_execution_attempt_ref": "attempt:1",
+        "decomposition_revision_ref": "decomposition:1",
+        "stage_revision": "stage:1",
+        "assignment_ref": "assignment:1",
+        "binding_ref": "binding:1",
+        "hermes_run_ref": "run:1",
+        "workspace_generation": 1,
+        "lease_generation": 1,
+        "exact_input_refs": "[]",
+        "payload_sha256": "a" * 64,
+        "payload": "{}",
+    }
+    columns = ", ".join(base)
+    values = ", ".join(f":{column}" for column in base)
+    statement = text(f"INSERT INTO task_runtime_assignments ({columns}) VALUES ({values})")
+    with engine.begin() as conn:
+        conn.execute(statement, base)
+
+    invalid_rows = [
+        {**base, "operation_key": "cross-project", "assignment_revision": 2, "project_id": project_ids[1]},
+        {**base, "operation_key": "partial", "assignment_revision": 2, "binding_ref": None},
+        {
+            **base,
+            "operation_key": "business-with-tech",
+            "assignment_revision": 2,
+            "execution_scope": "business",
+        },
+        {
+            **base,
+            "operation_key": "delivery-without-tech",
+            "assignment_revision": 2,
+            "tech_execution_attempt_ref": None,
+        },
+    ]
+    for invalid in invalid_rows:
+        with pytest.raises(IntegrityError):
+            with engine.begin() as conn:
+                conn.execute(statement, invalid)
 
 
 def test_in_memory_sqlite_migration_keeps_the_schema_alive():
@@ -145,13 +431,13 @@ def test_in_memory_sqlite_migration_keeps_the_schema_alive():
         engine.dispose()
 
 
-def test_sqlite_upgrade_downgrade_reupgrade(tmp_path):
+def test_sqlite_downgrade_refuses_lossy_mode_collapse(tmp_path):
     engine = _sqlite_engine(tmp_path)
     ensure_migrated(engine)
-    run_alembic_command("downgrade", engine, "base")
-    assert set(inspect(engine).get_table_names()).isdisjoint(Base.metadata.tables)
-    ensure_migrated(engine)
-    assert set(Base.metadata.tables).issubset(inspect(engine).get_table_names())
+    with pytest.raises(RuntimeError, match="Downgrade from immutable runtime assignment bindings"):
+        run_alembic_command("downgrade", engine, "base")
+    assert database_revisions(engine) == {"0003_runtime_assignment_bindings"}
+    assert schema_is_ready(engine) is True
 
 
 @pytest.mark.parametrize("legacy_revision", LEGACY_REVISIONS)
@@ -321,7 +607,7 @@ def test_head_with_damaged_or_polluted_schema_is_refused(tmp_path, mutation):
     assert schema_is_ready(engine) is False
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0001_initial"}
+    assert database_revisions(engine) == {"0003_runtime_assignment_bindings"}
     if mutation == "extra":
         with engine.connect() as connection:
             assert connection.execute(text("SELECT id FROM unexpected_table")).scalar_one() == 42
@@ -359,12 +645,19 @@ def test_sqlite_initial_constraints(tmp_path):
         workflow_id = conn.execute(
             text("INSERT INTO workflows (name, description, is_default) VALUES ('W', '', 1) RETURNING id")
         ).scalar_one()
-        phase_id = conn.execute(
+        mode_id = conn.execute(
             text(
-                "INSERT INTO phases (workflow_id, code, name, phase_order) "
-                "VALUES (:workflow_id, '1', 'Phase', 1) RETURNING id"
+                "INSERT INTO workflow_modes (workflow_id, key, name, mode_order) "
+                "VALUES (:workflow_id, 'default', 'Default', 1) RETURNING id"
             ),
             {"workflow_id": workflow_id},
+        ).scalar_one()
+        phase_id = conn.execute(
+            text(
+                "INSERT INTO phases (workflow_id, mode_id, code, name, phase_order) "
+                "VALUES (:workflow_id, :mode_id, '1', 'Phase', 1) RETURNING id"
+            ),
+            {"workflow_id": workflow_id, "mode_id": mode_id},
         ).scalar_one()
         project_id = conn.execute(
             text(
@@ -375,20 +668,32 @@ def test_sqlite_initial_constraints(tmp_path):
         ).scalar_one()
         conn.execute(
             text(
-                "INSERT INTO tasks (project_id, workflow_id, task_key, current_phase_id) "
-                "VALUES (:project_id, :workflow_id, 'RUN-42', :phase_id)"
+                "INSERT INTO tasks (project_id, workflow_id, mode_id, task_key, current_phase_id) "
+                "VALUES (:project_id, :workflow_id, :mode_id, 'RUN-42', :phase_id)"
             ),
-            {"project_id": project_id, "workflow_id": workflow_id, "phase_id": phase_id},
+            {
+                "project_id": project_id,
+                "workflow_id": workflow_id,
+                "mode_id": mode_id,
+                "phase_id": phase_id,
+            },
         )
         second_workflow_id = conn.execute(
             text("INSERT INTO workflows (name, description) VALUES ('W2', '') RETURNING id")
         ).scalar_one()
-        second_phase_id = conn.execute(
+        second_mode_id = conn.execute(
             text(
-                "INSERT INTO phases (workflow_id, code, name, phase_order) "
-                "VALUES (:workflow_id, '1', 'Phase', 1) RETURNING id"
+                "INSERT INTO workflow_modes (workflow_id, key, name, mode_order) "
+                "VALUES (:workflow_id, 'default', 'Default', 1) RETURNING id"
             ),
             {"workflow_id": second_workflow_id},
+        ).scalar_one()
+        second_phase_id = conn.execute(
+            text(
+                "INSERT INTO phases (workflow_id, mode_id, code, name, phase_order) "
+                "VALUES (:workflow_id, :mode_id, '1', 'Phase', 1) RETURNING id"
+            ),
+            {"workflow_id": second_workflow_id, "mode_id": second_mode_id},
         ).scalar_one()
         second_project_id = conn.execute(
             text(
@@ -399,12 +704,13 @@ def test_sqlite_initial_constraints(tmp_path):
         ).scalar_one()
         conn.execute(
             text(
-                "INSERT INTO tasks (project_id, workflow_id, task_key, current_phase_id) "
-                "VALUES (:project_id, :workflow_id, 'RUN-42', :phase_id)"
+                "INSERT INTO tasks (project_id, workflow_id, mode_id, task_key, current_phase_id) "
+                "VALUES (:project_id, :workflow_id, :mode_id, 'RUN-42', :phase_id)"
             ),
             {
                 "project_id": second_project_id,
                 "workflow_id": second_workflow_id,
+                "mode_id": second_mode_id,
                 "phase_id": second_phase_id,
             },
         )
@@ -413,10 +719,10 @@ def test_sqlite_initial_constraints(tmp_path):
         with engine.begin() as conn:
             conn.execute(
                 text(
-                    "INSERT INTO phases (workflow_id, code, name, phase_order) "
-                    "VALUES (:workflow_id, '0', 'Bad', 0)"
+                    "INSERT INTO phases (workflow_id, mode_id, code, name, phase_order) "
+                    "VALUES (:workflow_id, :mode_id, '0', 'Bad', 0)"
                 ),
-                {"workflow_id": workflow_id},
+                {"workflow_id": workflow_id, "mode_id": mode_id},
             )
     with pytest.raises(IntegrityError):
         with engine.begin() as conn:
@@ -428,10 +734,15 @@ def test_sqlite_initial_constraints(tmp_path):
         with engine.begin() as conn:
             conn.execute(
                 text(
-                    "INSERT INTO tasks (project_id, workflow_id, task_key, current_phase_id) "
-                    "VALUES (:project_id, :workflow_id, 'RUN-42', :phase_id)"
+                    "INSERT INTO tasks (project_id, workflow_id, mode_id, task_key, current_phase_id) "
+                    "VALUES (:project_id, :workflow_id, :mode_id, 'RUN-42', :phase_id)"
                 ),
-                {"project_id": project_id, "workflow_id": workflow_id, "phase_id": phase_id},
+                {
+                    "project_id": project_id,
+                    "workflow_id": workflow_id,
+                    "mode_id": mode_id,
+                    "phase_id": phase_id,
+                },
             )
 
 

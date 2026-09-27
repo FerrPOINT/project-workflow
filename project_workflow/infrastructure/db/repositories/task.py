@@ -9,11 +9,16 @@ from typing import Any
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session, joinedload
 
-from project_workflow.domain import Task, TaskPhaseEvent
+from project_workflow.domain import Task, TaskPhaseEvent, TaskRuntimeAssignment
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import TaskRepository
+from project_workflow.domain.runtime_assignment import canonical_json
 from project_workflow.infrastructure.db import models as m
-from project_workflow.infrastructure.db.repositories.converters import _row_to_phase_event, _row_to_task
+from project_workflow.infrastructure.db.repositories.converters import (
+    _row_to_phase_event,
+    _row_to_runtime_assignment,
+    _row_to_task,
+)
 
 
 class SATaskRepository(TaskRepository):
@@ -59,7 +64,10 @@ class SATaskRepository(TaskRepository):
     def lock(self, task_id: int) -> Task | None:
         with self._session.no_autoflush:
             row = self._session.execute(
-                select(m.Task).where(m.Task.id == task_id).with_for_update()
+                select(m.Task)
+                .where(m.Task.id == task_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
             ).scalar_one_or_none()
         return _row_to_task(row) if row else None
 
@@ -87,9 +95,23 @@ class SATaskRepository(TaskRepository):
         workflow_id = data.get("workflow_id")
         if not isinstance(workflow_id, int) or isinstance(workflow_id, bool) or workflow_id <= 0:
             raise ValueError("workflow_id задачи должен быть положительным целым числом")
+        mode_id = data.get("mode_id")
+        if mode_id is None:
+            mode_id = self._session.execute(
+                select(m.WorkflowMode.id).where(
+                    m.WorkflowMode.workflow_id == workflow_id,
+                    m.WorkflowMode.key == "default",
+                )
+            ).scalar_one_or_none()
+        if mode_id is None:
+            raise ValueError("mode_id задачи должен указывать режим воркфлоу")
         item = m.Task(
             project_id=data["project_id"],
             workflow_id=workflow_id,
+            mode_id=mode_id,
+            cycle_number=data.get("cycle_number", 0),
+            assignment_operation_key=data.get("assignment_operation_key"),
+            assignment_revision=data.get("assignment_revision", 0),
             task_key=data["task_key"],
             title=data.get("title"),
             description=data.get("description"),
@@ -113,6 +135,63 @@ class SATaskRepository(TaskRepository):
                 setattr(row, key, val)
         if data:
             row.updated_at = datetime.datetime.now(datetime.timezone.utc)
+
+    def get_assignment_by_operation_key(self, operation_key: str) -> TaskRuntimeAssignment | None:
+        with self._session.no_autoflush:
+            row = self._session.execute(
+                select(m.TaskRuntimeAssignment)
+                .options(joinedload(m.TaskRuntimeAssignment.mode))
+                .where(m.TaskRuntimeAssignment.operation_key == operation_key)
+            ).scalar_one_or_none()
+        return _row_to_runtime_assignment(row) if row else None
+
+    def create_assignment(self, data: dict[str, Any]) -> int:
+        item = m.TaskRuntimeAssignment(
+            operation_key=data["operation_key"],
+            task_id=data["task_id"],
+            project_id=data["project_id"],
+            workflow_id=data["workflow_id"],
+            workflow_key=data["workflow_key"],
+            mode_id=data["mode_id"],
+            cycle_number=data["cycle_number"],
+            attempt_number=data["attempt_number"],
+            assignment_revision=data["assignment_revision"],
+            role_key=data["role_key"],
+            execution_scope=data["execution_scope"],
+            stage_key=data["stage_key"],
+            business_task_ref=data["business_task_ref"],
+            root_task_ref=data["root_task_ref"],
+            work_item_ref=data["work_item_ref"],
+            work_item_revision=data["work_item_revision"],
+            queue_item_ref=data["queue_item_ref"],
+            task_workspace_ref=data["task_workspace_ref"],
+            workspace_revision=data["workspace_revision"],
+            tech_execution_workspace_ref=data.get("tech_execution_workspace_ref"),
+            tech_execution_attempt_ref=data.get("tech_execution_attempt_ref"),
+            decomposition_revision_ref=data.get("decomposition_revision_ref"),
+            stage_revision=data["stage_revision"],
+            assignment_ref=data["assignment_ref"],
+            binding_ref=data["binding_ref"],
+            hermes_run_ref=data["hermes_run_ref"],
+            workspace_generation=data["workspace_generation"],
+            lease_generation=data["lease_generation"],
+            exact_input_refs=canonical_json(data["exact_input_refs"]),
+            payload_sha256=data["payload_sha256"],
+            payload=canonical_json(data["payload"]),
+        )
+        self._session.add(item)
+        self._session.flush()
+        return int(item.id)
+
+    def list_assignments(self, task_id: int) -> Sequence[TaskRuntimeAssignment]:
+        with self._session.no_autoflush:
+            rows = self._session.execute(
+                select(m.TaskRuntimeAssignment)
+                .options(joinedload(m.TaskRuntimeAssignment.mode))
+                .where(m.TaskRuntimeAssignment.task_id == task_id)
+                .order_by(m.TaskRuntimeAssignment.assignment_revision)
+            ).scalars().all()
+        return [_row_to_runtime_assignment(row) for row in rows]
 
     def update_if_state(
         self,
@@ -141,16 +220,13 @@ class SATaskRepository(TaskRepository):
         event_type: str,
         step_history_id: int | None = None,
     ) -> None:
-        task_workflow_id = self._session.execute(
-            select(m.Task.workflow_id).where(m.Task.id == task_id)
-        ).scalar_one_or_none()
-        phase_workflow_id = self._session.execute(
-            select(m.Phase.workflow_id).where(m.Phase.id == phase_id)
-        ).scalar_one_or_none()
-        if task_workflow_id is None:
+        task_row = self._session.get(m.Task, task_id)
+        phase_row = self._session.get(m.Phase, phase_id)
+        if task_row is None:
             raise NotFoundError(f"Задача {task_id} не найдена")
-        if phase_workflow_id != task_workflow_id:
-            raise ValueError("Событие фазы должно принадлежать воркфлоу задачи")
+        if phase_row is None or phase_row.workflow_id != task_row.workflow_id or phase_row.mode_id != task_row.mode_id:
+            raise ValueError("Событие фазы должно принадлежать режиму и воркфлоу задачи")
+        task_workflow_id = task_row.workflow_id
         if step_history_id is not None:
             owner_task_id = self._session.execute(
                 select(m.TaskStepHistoryEntry.task_id).where(
@@ -163,19 +239,24 @@ class SATaskRepository(TaskRepository):
             m.TaskPhaseEvent(
                 task_id=task_id,
                 workflow_id=task_workflow_id,
+                mode_id=task_row.mode_id,
+                cycle_number=task_row.cycle_number,
                 phase_id=phase_id,
                 step_history_id=step_history_id,
                 event_type=event_type,
             )
         )
 
-    def list_phase_events(self, task_id: int) -> Sequence[TaskPhaseEvent]:
+    def list_phase_events(
+        self, task_id: int, mode_id: int | None = None, cycle_number: int | None = None
+    ) -> Sequence[TaskPhaseEvent]:
         with self._session.no_autoflush:
-            rows = self._session.execute(
-                select(m.TaskPhaseEvent)
-                .where(m.TaskPhaseEvent.task_id == task_id)
-                .order_by(m.TaskPhaseEvent.id)
-            ).scalars().all()
+            stmt = select(m.TaskPhaseEvent).where(m.TaskPhaseEvent.task_id == task_id)
+            if mode_id is not None:
+                stmt = stmt.where(m.TaskPhaseEvent.mode_id == mode_id)
+            if cycle_number is not None:
+                stmt = stmt.where(m.TaskPhaseEvent.cycle_number == cycle_number)
+            rows = self._session.execute(stmt.order_by(m.TaskPhaseEvent.id)).scalars().all()
         return [_row_to_phase_event(row) for row in rows]
 
     def list_phase_events_batch(self, task_ids: Sequence[int]) -> Mapping[int, Sequence[TaskPhaseEvent]]:

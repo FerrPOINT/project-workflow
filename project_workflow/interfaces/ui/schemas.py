@@ -14,6 +14,7 @@ from project_workflow.domain.project_theme import (
     normalize_theme_color,
     normalize_theme_icon,
 )
+from project_workflow.domain.runtime_assignment import normalize_role_key
 
 
 class StrictRequest(BaseModel):
@@ -53,6 +54,112 @@ class RuntimeStepRequest(StrictRequest):
     @classmethod
     def _report_not_blank(cls, value: str | None) -> str | None:
         return _strip_nonblank(value, "report") if value is not None else None
+
+
+class ExactInputRef(StrictRequest):
+    """One immutable external input snapshot selected by Business."""
+
+    kind: Literal[
+        "business_task",
+        "comment",
+        "attachment",
+        "link",
+        "artifact",
+        "decomposition",
+        "stage",
+    ]
+    ref: str = Field(min_length=1, max_length=512)
+    revision: str = Field(min_length=1, max_length=128)
+    sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+    @field_validator("ref", "revision")
+    @classmethod
+    def _input_ref_text_not_blank(cls, value: str, info: Any) -> str:
+        return _strip_nonblank(value, info.field_name)
+
+
+class RuntimeAssignmentRequest(StrictRequest):
+    """Business-owned persisted assignment accepted only on the role-token bridge."""
+
+    task: str = Field(min_length=1, max_length=128)
+    role_key: str = Field(min_length=2, max_length=32)
+    workflow_key: str = Field(min_length=1, max_length=128)
+    mode_key: str = Field(min_length=1, max_length=128)
+    execution_scope: Literal["business", "delivery", "aggregate"]
+    stage_key: str = Field(min_length=1, max_length=64)
+    cycle_number: int = Field(ge=0, strict=True)
+    attempt_number: int = Field(gt=0, strict=True)
+    operation_key: str = Field(min_length=1, max_length=128)
+    business_task_ref: str = Field(min_length=1, max_length=512)
+    root_task_ref: str = Field(min_length=1, max_length=512)
+    work_item_ref: str = Field(min_length=1, max_length=512)
+    work_item_revision: int = Field(ge=0, strict=True)
+    queue_item_ref: str = Field(min_length=1, max_length=512)
+    task_workspace_ref: str = Field(min_length=1, max_length=512)
+    workspace_revision: int = Field(gt=0, strict=True)
+    tech_execution_workspace_ref: str | None = Field(default=None, min_length=1, max_length=512)
+    tech_execution_attempt_ref: str | None = Field(default=None, min_length=1, max_length=512)
+    decomposition_revision_ref: str = Field(min_length=1, max_length=512)
+    stage_revision: str = Field(min_length=1, max_length=128)
+    assignment_ref: str = Field(min_length=1, max_length=512)
+    binding_ref: str = Field(min_length=1, max_length=512)
+    hermes_run_ref: str = Field(min_length=1, max_length=512)
+    workspace_generation: int = Field(ge=0, strict=True)
+    lease_generation: int = Field(ge=0, strict=True)
+    exact_input_refs: list[ExactInputRef] = Field(min_length=1, max_length=100)
+    expected_revision: int = Field(ge=0, strict=True)
+    expected_status: Literal["missing", "active", "done", "blocked"]
+    expected_mode_key: str | None = Field(default=None, min_length=1, max_length=128)
+    expected_cycle_number: int | None = Field(default=None, ge=0, strict=True)
+
+    @field_validator(
+        "task",
+        "workflow_key",
+        "mode_key",
+        "stage_key",
+        "operation_key",
+        "business_task_ref",
+        "root_task_ref",
+        "work_item_ref",
+        "queue_item_ref",
+        "task_workspace_ref",
+        "tech_execution_workspace_ref",
+        "tech_execution_attempt_ref",
+        "decomposition_revision_ref",
+        "stage_revision",
+        "assignment_ref",
+        "binding_ref",
+        "hermes_run_ref",
+        "expected_mode_key",
+    )
+    @classmethod
+    def _assignment_text_not_blank(cls, value: str | None, info: Any) -> str | None:
+        if value is None:
+            return None
+        return _strip_nonblank(value, info.field_name)
+
+    @field_validator("role_key")
+    @classmethod
+    def _assignment_role_key_valid(cls, value: str) -> str:
+        return normalize_role_key(value)
+
+    @field_validator("mode_key")
+    @classmethod
+    def _assignment_key_valid(cls, value: str) -> str:
+        if re.fullmatch(r"[a-z0-9][a-z0-9._-]*", value) is None:
+            raise ValueError("mode_key должен соответствовать [a-z0-9][a-z0-9._-]*")
+        return value
+
+    @model_validator(mode="after")
+    def _unique_input_refs(self) -> RuntimeAssignmentRequest:
+        identities = [
+            (item.kind, item.ref, item.revision, item.sha256 or "")
+            for item in self.exact_input_refs
+        ]
+        if len(identities) != len(set(identities)):
+            raise ValueError("exact_input_refs не должен содержать дубликаты")
+        return self
+
 
 def _strip_nonblank(value: str, field_name: str) -> str:
     normalized = value.strip()
@@ -185,7 +292,6 @@ class WorkflowCreate(StrictRequest):
     @classmethod
     def _name_not_blank(cls, value: str) -> str:
         return _strip_nonblank(value, "name")
-
 
 class WorkflowUpdate(StrictUpdateRequest):
     non_nullable_fields = frozenset({"name", "description"})

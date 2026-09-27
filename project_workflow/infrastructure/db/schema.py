@@ -95,9 +95,10 @@ def _build_phase_from_db(
 def load_phases_from_db(
     uow: UnitOfWork,
     workflow_id: int | None = None,
+    mode_id: int | None = None,
 ) -> list[Phase]:
     """Load all supervisor phases from a UnitOfWork instance."""
-    rows = list(uow.phases.list(workflow_id))
+    rows = list(uow.phases.list(workflow_id, mode_id=mode_id))
     if not rows:
         return []
     phase_ids = [int(row.id) for row in rows if row.id is not None]

@@ -78,6 +78,14 @@ class SupervisorEngine:
         )
         if self.task is None:
             raise ValueError(f"Задача {task_key} не найдена")
+        self._require_task_workflow_id(self.task)
+        self.execution_mode_id: int | None
+        if isinstance(self.task.get("mode_id"), int) and self.task.get("mode_id", 0) > 0:
+            self.execution_mode_id = int(self.task["mode_id"])
+            self.execution_cycle_number = int(self.task.get("cycle_number") or 0)
+        else:
+            self.execution_mode_id = None
+            self.execution_cycle_number = 0
         self._uow.commit()
         self.project = (
             self._project_service.get_project(self.task["project_id"])
@@ -106,7 +114,9 @@ class SupervisorEngine:
     @property
     def all_phases(self) -> list[Phase]:
         if self._all_phases is None:
-            self._all_phases = schema.load_phases_from_db(self._uow, workflow_id=self.workflow_id)
+            self._all_phases = schema.load_phases_from_db(
+                self._uow, workflow_id=self.workflow_id, mode_id=self.execution_mode_id
+            )
         return self._all_phases
 
     @all_phases.setter
@@ -186,7 +196,12 @@ class SupervisorEngine:
     def _first_phase_id_for_project(self, project_id: int) -> int:
         project = self._project_service.get_project(project_id)
         workflow_id = project["workflow_id"] if project else None
-        phases = schema.load_phases_from_db(self._uow, workflow_id=workflow_id)
+        if not isinstance(workflow_id, int) or isinstance(workflow_id, bool) or workflow_id <= 0:
+            raise ValueError("У неймспейса отсутствует корректный workflow_id")
+        default_mode = self._uow.workflows.get_mode_by_key(workflow_id, "default")
+        if default_mode is None or default_mode.id is None:
+            raise ValueError("У воркфлоу отсутствует режим по умолчанию")
+        phases = schema.load_phases_from_db(self._uow, workflow_id=workflow_id, mode_id=default_mode.id)
         if not phases:
             raise ValueError("Каталог фаз воркфлоу пуст")
         phase_id = phases[0].id
@@ -228,6 +243,8 @@ class SupervisorEngine:
             for r in self._uow.step_history.list(
                 task_id=task_id,
                 phase_id=int(phase.id),
+                mode_id=self.execution_mode_id,
+                cycle_number=self.execution_cycle_number,
                 limit=None,
             )
         ]
@@ -514,7 +531,7 @@ class SupervisorEngine:
         self.workflow_id = self._require_task_workflow_id(self.task) if self.task else None
         self.workflow = self._workflow_service.get_workflow(self.workflow_id) if self.workflow_id else None
         self._all_phases = (
-            schema.load_phases_from_db(self._uow, workflow_id=self.workflow_id)
+            schema.load_phases_from_db(self._uow, workflow_id=self.workflow_id, mode_id=self.execution_mode_id)
             if self.workflow_id
             else []
         )
