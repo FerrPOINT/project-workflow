@@ -58,7 +58,8 @@ mode требуют оба Tech refs. Активную assignment нельзя �
 `operation_key` принимается только при полном совпадении canonical payload.
 `exact_input_refs` может быть пустым, содержит не более 128 Business-owned
 snapshot-объектов и не маршрутизируется по `kind`. `kind` и `ref` обязательны;
-`revision` и lowercase SHA-256 поле `hash` опциональны. Список канонически
+`revision` и непустое поле `hash` длиной до 256 символов
+опциональны. Список канонически
 сортируется по tuple `(kind, ref, revision-or-empty, hash-or-empty)`, при этом
 отсутствующее optional-поле не превращается в синтетическое значение.
 Canonical JSON всего replay payload хранится вместе с его SHA-256 digest;

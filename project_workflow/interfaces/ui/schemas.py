@@ -89,7 +89,7 @@ class ExactInputRef(StrictRequest):
     kind: str = Field(min_length=1, max_length=128)
     ref: str = Field(min_length=1, max_length=1_024)
     revision: str | None = Field(default=None, min_length=1, max_length=256)
-    hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    hash: str | None = Field(default=None, min_length=1, max_length=256)
 
     @field_validator("kind", "ref", "revision", "hash")
     @classmethod

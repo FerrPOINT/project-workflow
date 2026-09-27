@@ -735,14 +735,12 @@ class TaskService:
             revision = raw.get("revision")
             if revision is not None:
                 revision = cls._bounded_ref(revision, "exact_input_refs.revision", 256)
-            digest = raw.get("hash")
-            if digest is not None and (
-                not isinstance(digest, str)
-                or len(digest) != 64
-                or any(char not in "0123456789abcdef" for char in digest)
-            ):
-                raise ValueError("exact_input_refs.hash должен быть lowercase SHA-256")
-            identity = (kind, ref, revision or "", digest or "")
+            snapshot_hash = raw.get("hash")
+            if snapshot_hash is not None:
+                snapshot_hash = cls._bounded_ref(
+                    snapshot_hash, "exact_input_refs.hash", 256
+                )
+            identity = (kind, ref, revision or "", snapshot_hash or "")
             if identity in identities:
                 raise ValueError("exact_input_refs не должен содержать дубликаты")
             identities.add(identity)
@@ -750,7 +748,7 @@ class TaskService:
             if "revision" in raw:
                 item["revision"] = revision
             if "hash" in raw:
-                item["hash"] = digest
+                item["hash"] = snapshot_hash
             normalized.append(item)
         return sorted(
             normalized,

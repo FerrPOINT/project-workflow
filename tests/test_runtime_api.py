@@ -523,7 +523,7 @@ def test_runtime_assignment_accepts_exact_business_snapshot_contract(monkeypatch
             "kind": "tech-execution-terminal-receipt",
             "ref": "terminal-receipt:architecture",
             "revision": "receipt-r1",
-            "hash": "a" * 64,
+            "hash": "etag-v4",
         },
         {"kind": "requirement", "ref": "requirement:business-scope"},
     ]
@@ -544,7 +544,7 @@ def test_runtime_assignment_accepts_exact_business_snapshot_contract(monkeypatch
             json={
                 **snapshots,
                 "exact_input_refs": [
-                    {**snapshots["exact_input_refs"][0], "hash": "b" * 64},
+                    {**snapshots["exact_input_refs"][0], "hash": "etag-v5"},
                     snapshots["exact_input_refs"][1],
                 ],
             },
@@ -571,7 +571,8 @@ def test_runtime_assignment_accepts_exact_business_snapshot_contract(monkeypatch
         for item in (
             {"kind": " ", "ref": "valid"},
             {"kind": "requirement", "ref": " "},
-            {"kind": "requirement", "ref": "valid", "hash": "not-a-sha256"},
+            {"kind": "requirement", "ref": "valid", "hash": " "},
+            {"kind": "requirement", "ref": "valid", "hash": "h" * 257},
         ):
             payload = _assignment("DEV-33", f"invalid-{len(invalid_payloads)}", "developer")
             payload["exact_input_refs"] = [item]
@@ -593,12 +594,12 @@ def test_runtime_assignment_accepts_exact_business_snapshot_contract(monkeypatch
             "kind": "tech-execution-terminal-receipt",
             "ref": "terminal-receipt:architecture",
             "revision": "receipt-r1",
-            "hash": "a" * 64,
+            "hash": "etag-v4",
         },
     ]
     assert changed.status_code == 409
     assert null_changed.status_code == 409
-    assert [response.status_code for response in invalid_payloads] == [422, 422, 422]
+    assert [response.status_code for response in invalid_payloads] == [422, 422, 422, 422]
 
 
 def test_runtime_bind_is_role_scoped_idempotent_and_fenced(monkeypatch):
