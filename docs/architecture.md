@@ -35,6 +35,14 @@ introspection, а также сохраняет отдельный private runti
   fence; history и Supervisor result сохраняются с ними в одной транзакции.
   Exact replay разрешён до cursor-проверки только пока текущий assignment/run
   совпадает, а collision или stale run закрываются с conflict.
+- **Capability/readback boundary** — аутентифицированный
+  `GET /internal/runtime/capabilities`. Он принимает существующий assignment
+  либо runtime role token, возвращает только его роль, тип и разрешённые
+  операции, а также DB/schema readiness и строгий immutable build manifest.
+  Значения provenance не читаются из environment: candidate build вычисляет
+  их из чистого Git HEAD и runtime inputs, Dockerfile проверяет bundle и
+  сохраняет manifest рядом с приложением. Публичный `/health` не является
+  доказательством runtime capability или source revision.
 - **SupervisorEngine** маршрутизирует задачу, строит phase contract, вызывает
   обязательный OpenAI-compatible evaluator и сохраняет результат атомарно.
 - **PostgreSQL** - единственный runtime data store. SQLite допустим только в
@@ -119,6 +127,9 @@ evaluation items, transition routes и накопленное покрытие. 
 
 - стандартный Compose публикует PostgreSQL и API только на `127.0.0.1`;
 - `/health` проверяет DB connectivity, schema readiness и migration head;
+- `/internal/runtime/capabilities` дополнительно и fail-closed проверяет
+  role credential и immutable source provenance перед тем, как Business
+  adapter разрешает dispatch;
 - lifecycle освобождает SQLAlchemy connection pool при graceful shutdown;
 - append-only `task_phase_events` и `task_step_history` образуют audit log
   переходов и evaluator verdicts;

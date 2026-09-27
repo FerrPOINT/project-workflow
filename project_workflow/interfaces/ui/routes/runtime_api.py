@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hmac
 import json
+from dataclasses import dataclass
 from typing import Any
 
 from fastapi import Header, Query
@@ -12,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 
 from project_workflow import config, supervisor
 from project_workflow.application.task import TaskService
+from project_workflow.build_provenance import BuildProvenanceError, load_build_provenance
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.runtime_assignment import (
     RuntimeStepFence,
@@ -28,6 +30,12 @@ from project_workflow.interfaces.ui.schemas import (
 from project_workflow.supervisor import format_result
 
 _CATALOG_ROLE = "fleet-control"
+
+
+@dataclass(frozen=True)
+class _ServiceCredential:
+    role_key: str
+    kind: str
 
 
 def _error(message: str, status: int) -> JSONResponse:
@@ -74,33 +82,100 @@ def _token_configuration() -> tuple[dict[str, str], dict[str, str], str]:
 
 
 def _authorized_role(authorization: str | None) -> str | None:
-    prefix = "Bearer "
-    if not authorization or not authorization.startswith(prefix):
+    credential = _authorized_service_credential(authorization)
+    if credential is None or credential.kind not in {"runtime", "catalog"}:
         return None
-    supplied = authorization[len(prefix) :]
-    matched: str | None = None
-    runtime_tokens, _, catalog_token = _token_configuration()
-    if catalog_token:
-        if hmac.compare_digest(supplied, catalog_token):
-            matched = _CATALOG_ROLE
-    for role, expected in runtime_tokens.items():
-        if hmac.compare_digest(supplied, expected):
-            matched = role
-    return matched
+    return credential.role_key
 
 
 def _authorized_assignment_role(authorization: str | None) -> str | None:
+    credential = _authorized_service_credential(authorization)
+    if credential is None or credential.kind != "assignment":
+        return None
+    return credential.role_key
+
+
+def _authorized_service_credential(
+    authorization: str | None,
+) -> _ServiceCredential | None:
+    """Match all configured service credentials without value-based early exits."""
     prefix = "Bearer "
     if not authorization or not authorization.startswith(prefix):
         return None
     supplied = authorization[len(prefix) :]
     runtime_tokens, assignment_tokens, catalog_token = _token_configuration()
-    if supplied in runtime_tokens.values() or supplied == catalog_token:
-        return None
+    matches: list[_ServiceCredential] = []
+    for role, expected in runtime_tokens.items():
+        if hmac.compare_digest(supplied, expected):
+            matches.append(_ServiceCredential(role_key=role, kind="runtime"))
     for role, expected in assignment_tokens.items():
         if hmac.compare_digest(supplied, expected):
-            return role
-    return None
+            matches.append(_ServiceCredential(role_key=role, kind="assignment"))
+    if catalog_token and hmac.compare_digest(supplied, catalog_token):
+        matches.append(_ServiceCredential(role_key=_CATALOG_ROLE, kind="catalog"))
+    if len(matches) > 1:
+        # _token_configuration normally catches this. Keep the auth boundary
+        # fail-closed if configuration changes between validation and matching.
+        raise RuntimeError("Service token configuration collision")
+    return matches[0] if matches else None
+
+
+def runtime_capabilities(
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any] | JSONResponse:
+    """Return authenticated runtime contract and immutable build provenance."""
+    try:
+        credential = _authorized_service_credential(authorization)
+    except RuntimeError:
+        return _error("Runtime capability configuration unavailable", 503)
+    if credential is None:
+        return _error("Недействительный runtime token", 401)
+    if credential.kind == "catalog":
+        return _error("Токен каталога не разрешает runtime capabilities", 403)
+
+    try:
+        provenance = load_build_provenance()
+        provenance_ready = True
+    except BuildProvenanceError:
+        provenance = None
+        provenance_ready = False
+
+    schema_ready = False
+    try:
+        from project_workflow.infrastructure.db import session as db_session
+
+        engine = db_session.get_engine()
+        with engine.connect() as connection:
+            connection.exec_driver_sql("SELECT 1")
+        schema_ready = db_session.schema_is_ready(engine)
+    except Exception:
+        schema_ready = False
+
+    if not provenance_ready or not schema_ready:
+        return JSONResponse(
+            {
+                "ok": False,
+                "error": "Runtime capabilities временно недоступны",
+                "error_code": "runtime-capabilities-not-ready",
+                "readiness": {
+                    "service": "not_ready",
+                    "schema": "ready" if schema_ready else "not_ready",
+                },
+            },
+            status_code=503,
+        )
+
+    capabilities = (
+        ["assign", "bind"] if credential.kind == "assignment" else ["step", "history"]
+    )
+    return {
+        "ok": True,
+        "role_key": credential.role_key,
+        "credential_kind": credential.kind,
+        "capabilities": capabilities,
+        "readiness": {"service": "ready", "schema": "ready"},
+        "source_provenance": provenance.to_dict() if provenance is not None else {},
+    }
 
 
 def _namespace_id(uow: SAUnitOfWork, role: str) -> int:

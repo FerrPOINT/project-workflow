@@ -1,6 +1,10 @@
 # syntax=docker/dockerfile:1
 FROM python:3.11-slim-bookworm@sha256:0bee7276f83efd4a1ee05bbbf4281d95ed28e079220a9457f25a93e3f1e3c31b AS builder
 
+ARG SOURCE_REVISION=""
+ARG SOURCE_ARCHIVE_SHA256=""
+ARG RUNTIME_BUNDLE_SHA256=""
+
 WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -13,6 +17,15 @@ COPY pyproject.toml constraints.txt README.md LICENSE alembic.ini ./
 COPY scripts/ ./scripts/
 COPY project_workflow/ ./project_workflow/
 
+RUN if [ -n "$SOURCE_REVISION" ] || [ -n "$SOURCE_ARCHIVE_SHA256" ] || [ -n "$RUNTIME_BUNDLE_SHA256" ]; then \
+        python scripts/build_runtime_image.py write-manifest \
+            --root /app \
+            --output /app/runtime-build-manifest.json \
+            --source-revision "$SOURCE_REVISION" \
+            --source-archive-sha256 "$SOURCE_ARCHIVE_SHA256" \
+            --runtime-bundle-sha256 "$RUNTIME_BUNDLE_SHA256"; \
+    fi
+
 ENV PIP_CONSTRAINT=/app/constraints.txt
 
 RUN python -m venv /opt/venv \
@@ -23,8 +36,12 @@ RUN python -m venv /opt/venv \
 
 FROM python:3.11-slim-bookworm@sha256:0bee7276f83efd4a1ee05bbbf4281d95ed28e079220a9457f25a93e3f1e3c31b AS runtime
 
-ARG VCS_REF=unknown
-LABEL org.opencontainers.image.revision=$VCS_REF
+ARG SOURCE_REVISION=""
+ARG SOURCE_ARCHIVE_SHA256=""
+ARG RUNTIME_BUNDLE_SHA256=""
+LABEL org.opencontainers.image.revision=$SOURCE_REVISION \
+      io.relevanter.source.archive-sha256=$SOURCE_ARCHIVE_SHA256 \
+      io.relevanter.runtime.bundle-sha256=$RUNTIME_BUNDLE_SHA256
 
 WORKDIR /app
 
@@ -37,6 +54,10 @@ COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder /app/alembic.ini /app/alembic.ini
 COPY --from=builder /app/scripts /app/scripts
 COPY --from=builder /app/project_workflow/infrastructure/db/migrations /app/project_workflow/infrastructure/db/migrations
+RUN --mount=from=builder,source=/app,target=/build \
+    if [ -f /build/runtime-build-manifest.json ]; then \
+        cp /build/runtime-build-manifest.json /app/runtime-build-manifest.json; \
+    fi
 
 ENV PATH="/opt/venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1

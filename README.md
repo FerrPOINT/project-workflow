@@ -45,6 +45,29 @@ Fleet Control читает каталог через `GET /internal/runtime/cata
 не разрешает `step` и `history` и не меняет `PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON`.
 Маршрут должен оставаться во внутренней сети или на host loopback.
 
+Business adapter проверяет runtime-контракт через аутентифицированный
+`GET /internal/runtime/capabilities`. Assignment token получает только
+`assign`/`bind`, runtime token — только `step`/`history`; catalog token не имеет
+доступа к endpoint. Успешный ответ возвращает роль, тип credential, readiness
+схемы и immutable source provenance. Отсутствующий или некорректный build
+manifest даёт `503`, при этом публичный `/health` по-прежнему проверяет только
+DB/schema и подходит для standalone-разработки.
+
+Поставляемый image собирается только из чистого Git HEAD командой:
+
+```bash
+python scripts/build_runtime_image.py build --image project-workflow:<exact-sha>
+```
+
+Скрипт вычисляет SHA-256 `git archive`, канонический SHA-256 runtime bundle,
+передаёт их вместе с exact revision в Docker build, а Dockerfile повторно
+проверяет bundle до создания `/app/runtime-build-manifest.json`. Те же значения
+записываются в OCI labels `org.opencontainers.image.revision`,
+`io.relevanter.source.archive-sha256` и
+`io.relevanter.runtime.bundle-sha256`. Обычный `docker compose up --build`
+остаётся доступен для локальной разработки, но намеренно не считается
+поставляемым candidate и его capability endpoint остаётся not ready.
+
 Browser UI поддерживает общий Central Auth Authorization Code + PKCE. При
 заданном `AUTH_ISSUER` все UI и human API routes требуют активную центральную
 сессию; локального password fallback нет. Публичный issuer и внутренний адрес

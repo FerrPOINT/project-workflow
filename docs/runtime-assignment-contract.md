@@ -20,6 +20,32 @@ Endpoint принимает только server-owned role credential из
 агента не может создавать или связывать assignment. Синтетические binding/run
 refs запрещены.
 
+Перед dispatch Business adapter вызывает `GET /internal/runtime/capabilities`
+тем же role-scoped assignment token. Успешный ответ имеет точный контракт:
+
+```json
+{
+  "ok": true,
+  "role_key": "developer",
+  "credential_kind": "assignment",
+  "capabilities": ["assign", "bind"],
+  "readiness": {"service": "ready", "schema": "ready"},
+  "source_provenance": {
+    "schema_version": 1,
+    "source_revision": "<40-or-64-lowercase-hex>",
+    "source_archive_sha256": "<64-lowercase-hex>",
+    "runtime_bundle_sha256": "<64-lowercase-hex>"
+  }
+}
+```
+
+Runtime role token возвращает `credential_kind=runtime` и capabilities
+`["step", "history"]`. Missing/unknown credential даёт `401`, catalog
+credential — `403`, collision/config error, неготовая schema либо отсутствующий
+или некорректный immutable manifest — `503`. Ответ не содержит token,
+namespace/task identifiers, counts, titles или внутреннюю конфигурацию.
+`/health` остаётся DB/schema probe и не заменяет этот authenticated preflight.
+
 ## Backend-owned mode policy
 
 Dispatch разрешён только в mode с полным policy:
