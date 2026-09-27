@@ -1222,7 +1222,10 @@ class TestPhaseDetail:
         response = client.get(f"/phase/{phase['id']}?namespace_id={namespace_id}")
 
         assert response.status_code == 200
-        assert f'href="/phases?workflow_id={workflow_id}&namespace_id={namespace_id}"' in response.text
+        assert (
+            f'href="/phases?workflow_id={workflow_id}'
+            f'&mode_id={phase["mode_id"]}&namespace_id={namespace_id}"'
+        ) in response.text
 
     def test_phase_detail_rejects_unknown_query_namespace(self):
         phase = _phase_row("5.PREFLIGHT")

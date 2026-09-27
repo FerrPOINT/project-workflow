@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from project_workflow.domain.exceptions import ConflictError, LastPhaseError, NotFoundError
 from project_workflow.domain.namespace import legacy_code_from_cli_command
 from project_workflow.domain.project_theme import normalize_theme_color, normalize_theme_icon
+from project_workflow.interfaces.ui.helpers import _select_workflow_mode
 from project_workflow.interfaces.ui.schemas import (
     AgentCreate,
     AgentUpdate,
@@ -126,6 +127,7 @@ async def api_settings_get(namespace_id: int | None = Query(default=None, gt=0))
 
 async def api_phases(
     workflow_id: int | None = Query(default=None, gt=0),
+    mode_id: int | None = Query(default=None, gt=0),
     namespace_id: int | None = Query(default=None, gt=0),
 ) -> dict[str, Any] | JSONResponse:
     namespace = _app_state.project_service().get_project(namespace_id) if namespace_id is not None else None
@@ -144,7 +146,13 @@ async def api_phases(
     if selected_workflow is None and workflow_id is None and workflows:
         selected_workflow = workflows[0]
     selected_workflow_id = selected_workflow["id"] if selected_workflow else workflow_id
-    phases = _app_state.phase_service().list_phases(selected_workflow_id)
+    modes, selected_mode = _select_workflow_mode(selected_workflow, mode_id)
+    if mode_id is not None and selected_mode is None:
+        return _error("Режим не найден в выбранном воркфлоу", 404)
+    if selected_workflow is not None and selected_mode is None:
+        return _error("В выбранном воркфлоу не настроен ни один режим", 409)
+    selected_mode_id = selected_mode.get("id") if selected_mode else None
+    phases = _app_state.phase_service().list_phases(selected_workflow_id, mode_id=selected_mode_id)
     agents = {a["id"]: a for a in _app_state.agent_service().list_agents()}
 
     rows = []
@@ -157,6 +165,8 @@ async def api_phases(
                 "description": phase.get("description", ""),
                 "code": phase.get("code", ""),
                 "workflow_id": phase.get("workflow_id"),
+                "mode_id": phase.get("mode_id"),
+                "mode_key": phase.get("mode_key"),
                 "phase_num": phase.get("phase_num", phase.get("phase_order", 0)),
                 "phase_order": phase.get("phase_order", 0),
                 "execution_type": phase.get("execution_type", "sync"),
@@ -170,6 +180,8 @@ async def api_phases(
     result: dict[str, Any] = {"ok": True, "phases": rows}
     if selected_workflow is not None:
         result["workflow"] = selected_workflow
+        result["modes"] = modes
+        result["mode"] = selected_mode
     return result
 
 
@@ -236,6 +248,7 @@ async def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONRespons
         "name": payload.name,
         "description": payload.description,
         "workflow_id": workflow_id,
+        "mode_id": payload.mode_id,
         "phase_order": payload.phase_order,
         "execution_type": payload.execution_type,
         "parallel_with_phase_id": payload.parallel_with_phase_id,

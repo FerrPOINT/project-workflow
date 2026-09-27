@@ -34,6 +34,18 @@ def _build_parallel_phase_blocks(phases: list[dict[str, Any]]) -> list[dict[str,
     return blocks
 
 
+def _select_workflow_mode(
+    workflow: dict[str, Any] | None,
+    requested_mode_id: int | None,
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    """Select one mode without allowing an invalid explicit id to fall back."""
+    modes = list((workflow or {}).get("modes") or [])
+    if requested_mode_id is not None:
+        return modes, next((mode for mode in modes if mode.get("id") == requested_mode_id), None)
+    selected = next((mode for mode in modes if mode.get("key") == "default"), None)
+    return modes, selected or (modes[0] if modes else None)
+
+
 def _resolve_task_phase_id(
     current_phase_id: int, workflow_phases: list[dict[str, Any]]
 ) -> dict[str, Any]:

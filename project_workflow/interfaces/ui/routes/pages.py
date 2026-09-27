@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse
 from project_workflow.application.phase_service import PhaseService
 from project_workflow.config import get_settings
 from project_workflow.domain.exceptions import ConflictError
+from project_workflow.interfaces.ui.helpers import _select_workflow_mode
 from project_workflow.interfaces.ui.platform_services import load_service_catalog
 from project_workflow.interfaces.ui.services import (
     _build_parallel_phase_blocks,
@@ -240,6 +241,38 @@ def _workflow_error_page(request: Request, context: dict[str, Any], workflow_id:
     )
 
 
+def _workflow_mode_error_page(
+    request: Request,
+    context: dict[str, Any],
+    workflow_id: int,
+    mode_id: int | None,
+) -> HTMLResponse:
+    selected_namespace = context.get("selected_namespace")
+    namespace_id = selected_namespace.get("id") if isinstance(selected_namespace, dict) else None
+    back_url = f"/phases?workflow_id={workflow_id}"
+    if isinstance(namespace_id, int):
+        back_url += f"&namespace_id={namespace_id}"
+    context = {
+        **context,
+        "page": "phases",
+        "title": "Режим воркфлоу не найден",
+        "message": (
+            f"Режим {mode_id} не найден в выбранном воркфлоу."
+            if mode_id is not None
+            else "В выбранном воркфлоу не настроен ни один режим."
+        ),
+        "status_code": 404,
+        "back_url": back_url,
+        "back_label": "К режиму по умолчанию",
+    }
+    return _template_response(
+        request=request,
+        name="error.html",
+        status_code=404,
+        context=context,
+    )
+
+
 def _workflow_not_in_selected_namespace_page(request: Request, context: dict[str, Any]) -> HTMLResponse:
     selected_namespace = context.get("selected_namespace")
     namespace_id = selected_namespace.get("id") if isinstance(selected_namespace, dict) else None
@@ -391,6 +424,17 @@ async def phases_page(request: Request) -> HTMLResponse:
             back_label="К фазам",
             page="phases",
         )
+    raw_mode_id = request.query_params.get("mode_id")
+    mode_id = _parse_positive_int(raw_mode_id)
+    if raw_mode_id is not None and mode_id is None:
+        return _query_id_error_page(
+            request,
+            context,
+            field_name="mode_id",
+            back_url="/phases",
+            back_label="К фазам",
+            page="phases",
+        )
     selected_namespace = context.get("selected_namespace")
     selected_namespace_workflow_id = (
         selected_namespace.get("workflow_id") if isinstance(selected_namespace, dict) else None
@@ -420,11 +464,21 @@ async def phases_page(request: Request) -> HTMLResponse:
     if selected_workflow is None and workflows:
         selected_workflow = workflows[0]
     selected_workflow_id = selected_workflow["id"] if selected_workflow else None
+    modes, selected_mode = _select_workflow_mode(selected_workflow, mode_id)
+    if mode_id is not None and selected_mode is None and selected_workflow_id is not None:
+        return _workflow_mode_error_page(request, context, int(selected_workflow_id), mode_id)
+    if selected_workflow_id is not None and selected_mode is None:
+        return _workflow_mode_error_page(request, context, int(selected_workflow_id), None)
+    selected_mode_id = selected_mode.get("id") if selected_mode else None
     namespace_scoped_view = isinstance(selected_namespace, dict) and (
         raw_workflow_id is None or has_explicit_namespace or has_cookie_namespace
     )
     visible_workflows = [selected_workflow] if namespace_scoped_view and selected_workflow else workflows
-    phases = _load_phases(int(selected_workflow_id)) if selected_workflow_id is not None else []
+    phases = (
+        _load_phases(int(selected_workflow_id), mode_id=int(selected_mode_id))
+        if selected_workflow_id is not None and isinstance(selected_mode_id, int)
+        else []
+    )
     phase_blocks = _build_parallel_phase_blocks(phases)
     context.update(
         {
@@ -434,6 +488,9 @@ async def phases_page(request: Request) -> HTMLResponse:
             "workflows": visible_workflows,
             "selected_workflow": selected_workflow,
             "selected_workflow_id": selected_workflow_id,
+            "modes": modes,
+            "selected_mode": selected_mode,
+            "selected_mode_id": selected_mode_id,
         }
     )
     return _template_response(
@@ -461,7 +518,9 @@ async def phase_detail(request: Request, phase_id: PositivePathId) -> HTMLRespon
     if not _phase_matches_selected_namespace(phase, context):
         return _phase_not_in_selected_namespace_page(request, context)
     agents = _app_state.agent_service().list_agents()
-    workflow_phases = _app_state.phase_service().list_phases(phase.get("workflow_id"))
+    workflow_phases = _app_state.phase_service().list_phases(
+        phase.get("workflow_id"), mode_id=phase.get("mode_id")
+    )
     current_index = next(
         (index for index, item in enumerate(workflow_phases) if item.get("id") == phase.get("id")),
         None,
