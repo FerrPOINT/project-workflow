@@ -59,6 +59,7 @@ class StepRequest(StrictRequest):
 class RuntimeStepRequest(StepRequest):
     """One private Supervisor step fenced to an immutable Business assignment."""
 
+    step_operation_key: str = Field(min_length=1, max_length=128)
     assignment_revision: int = Field(gt=0, strict=True)
     assignment_ref: str = Field(min_length=1, max_length=512)
     binding_ref: str = Field(min_length=1, max_length=512)
@@ -73,6 +74,7 @@ class RuntimeStepRequest(StepRequest):
         "assignment_ref",
         "binding_ref",
         "hermes_run_ref",
+        "step_operation_key",
         "mode_key",
         "expected_phase_code",
     )

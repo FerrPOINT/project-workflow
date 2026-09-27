@@ -303,6 +303,15 @@ class TaskStepHistoryEntry:
     next_phase_id: int | None = None
     rollback_phase_id: int | None = None
     replay_fingerprint: str | None = None
+    step_operation_key: str | None = None
+    request_sha256: str | None = None
+    assignment_revision: int | None = None
+    assignment_operation_key: str | None = None
+    assignment_ref: str | None = None
+    binding_ref: str | None = None
+    hermes_run_ref: str | None = None
+    attempt_number: int | None = None
+    role_key: str | None = None
     evaluation_snapshot: dict[str, Any] = field(default_factory=dict)
     supervisor_response: dict[str, Any] = field(default_factory=dict)
     created_at: str | None = None
@@ -324,6 +333,15 @@ class TaskStepHistoryEntry:
             "next_phase_id": self.next_phase_id,
             "rollback_phase_id": self.rollback_phase_id,
             "replay_fingerprint": self.replay_fingerprint,
+            "step_operation_key": self.step_operation_key,
+            "request_sha256": self.request_sha256,
+            "assignment_revision": self.assignment_revision,
+            "assignment_operation_key": self.assignment_operation_key,
+            "assignment_ref": self.assignment_ref,
+            "binding_ref": self.binding_ref,
+            "hermes_run_ref": self.hermes_run_ref,
+            "attempt_number": self.attempt_number,
+            "role_key": self.role_key,
             "evaluation_snapshot": self.evaluation_snapshot,
             "supervisor_response": self.supervisor_response,
             "created_at": self.created_at,

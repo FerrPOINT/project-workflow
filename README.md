@@ -35,6 +35,10 @@
 Центр управления workflow, фазами, namespaces и агентами живёт в Web UI. В UI доступен просмотр задач, а не их создание или продвижение. CLI намеренно остаётся маленьким: `step` и `history`; первое `step` создаёт задачу, последующие передают отчёты и двигают её по workflow. Дополнительные namespace-команды работают как wrappers поверх этих двух операций.
 
 Для изолированных контейнеров исполнителей сохранён private runtime bridge `/internal/runtime/step` и `/internal/runtime/history`: это отдельный service-to-service контракт с role tokens, не пользовательский UI API. Он включается только при `PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON` и должен быть доступен лишь во внутренней сети или на host loopback.
+Каждый изменяющий `runtime/step` привязан к immutable assignment/run и owner-issued
+`step_operation_key`: точный повтор возвращает атомарно сохранённый ответ, а повтор
+ключа с другим payload или после смены assignment отклоняется. Human CLI при этом
+по-прежнему содержит только `step` и `history` и не принимает runtime routing fields.
 
 Fleet Control читает каталог через `GET /internal/runtime/catalog` с отдельным
 `PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN` (не менее 32 символов). Этот токен

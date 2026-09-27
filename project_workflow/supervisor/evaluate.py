@@ -10,6 +10,7 @@ import requests
 from sqlalchemy.exc import IntegrityError
 
 from ..domain.exceptions import ConcurrentTransitionError
+from ..domain.runtime_assignment import RuntimeStepFence
 from ..infrastructure.llm import (
     LlmConfigurationError,
     LlmVerdict,
@@ -137,13 +138,22 @@ def _replay(
     *,
     after_run_id: int | None = None,
 ) -> dict[str, Any] | None:
-    run = engine.db.step_history.get_by_fingerprint(
-        task_id,
-        phase_id,
-        fingerprint,
-        mode_id=int(engine.task.get("mode_id") or 0),
-        cycle_number=int(engine.task.get("cycle_number") or 0),
-    )
+    runtime_fence = getattr(engine, "runtime_fence", None)
+    if isinstance(runtime_fence, RuntimeStepFence):
+        run = engine.db.step_history.get_by_step_operation_key(
+            runtime_fence.step_operation_key
+        )
+        if run is not None:
+            runtime_fence.assert_history(run.to_dict())
+    else:
+        runtime_fence = None
+        run = engine.db.step_history.get_by_fingerprint(
+            task_id,
+            phase_id,
+            fingerprint,
+            mode_id=int(engine.task.get("mode_id") or 0),
+            cycle_number=int(engine.task.get("cycle_number") or 0),
+        )
     run_id = getattr(run, "id", None) if run is not None else None
     if after_run_id is not None and (run_id is None or int(run_id) <= after_run_id):
         return None
@@ -171,6 +181,10 @@ def _replay(
     current_status = str(getattr(task, "status", "") or "")
     if (current_phase_code, current_status) == (expected_phase, expected_status):
         return result
+    if runtime_fence is not None:
+        raise ConcurrentTransitionError(
+            "Сохранённый runtime step не совпадает с текущим cursor задачи"
+        )
     if current_phase_code != evaluated_phase or run_id is None:
         return None
     phase = engine.phase_map.get(evaluated_phase)
@@ -545,6 +559,21 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         },
         "supervisor_response": result,
     }
+    runtime_fence = getattr(engine, "runtime_fence", None)
+    if isinstance(runtime_fence, RuntimeStepFence):
+        run_data.update(
+            {
+                "step_operation_key": runtime_fence.step_operation_key,
+                "request_sha256": runtime_fence.request_sha256,
+                "assignment_revision": runtime_fence.assignment_revision,
+                "assignment_operation_key": runtime_fence.assignment_operation_key,
+                "assignment_ref": runtime_fence.assignment_ref,
+                "binding_ref": runtime_fence.binding_ref,
+                "hermes_run_ref": runtime_fence.hermes_run_ref,
+                "attempt_number": runtime_fence.attempt_number,
+                "role_key": runtime_fence.role_key,
+            }
+        )
 
     try:
         step_history_id = engine.db.record_step(**run_data)
@@ -559,6 +588,8 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         engine.db.commit()
     except IntegrityError:
         engine.db.rollback()
+        if isinstance(getattr(engine, "runtime_fence", None), RuntimeStepFence):
+            raise
         replayed = _replay(engine, task_id, phase_id, fingerprint)
         if replayed is not None:
             return replayed

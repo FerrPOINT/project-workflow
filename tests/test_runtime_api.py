@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from unittest.mock import patch
 
@@ -93,9 +94,22 @@ def _assignment(task: str, operation_key: str, role: str) -> dict[str, object]:
     return payload
 
 
-def _step_payload(assignment: dict[str, object], report: str | None = None) -> dict[str, object]:
+def _step_payload(
+    assignment: dict[str, object],
+    report: str | None = None,
+    *,
+    step_operation_key: str | None = None,
+) -> dict[str, object]:
     payload: dict[str, object] = {
         "task": assignment["task_key"],
+        "step_operation_key": step_operation_key
+        or "step:"
+        + hashlib.sha256(
+            (
+                f"{assignment['task_key']}:{assignment['assignment_revision']}:"
+                f"{report or 'instructions'}"
+            ).encode()
+        ).hexdigest()[:24],
         "assignment_revision": assignment["assignment_revision"],
         "assignment_ref": assignment["assignment_ref"],
         "binding_ref": assignment["binding_ref"],
@@ -124,6 +138,7 @@ def _service_assignment(
 def _unknown_step_payload(task: str) -> dict[str, object]:
     return {
         "task": task,
+        "step_operation_key": f"step:{task}:unknown",
         "assignment_revision": 1,
         "assignment_ref": "assignment:unknown",
         "binding_ref": "binding:unknown",
@@ -547,3 +562,236 @@ def test_runtime_step_rejects_old_run_after_new_cycle_without_writing_history(mo
         assert task.cycle_number == 1
         assert uow.step_history.list(task_id=task.id, limit=None) == []
         assert [event.cycle_number for event in uow.tasks.list_phase_events(task.id)] == [0, 1]
+
+
+def test_runtime_step_replays_committed_response_before_cursor_rejection(
+    monkeypatch, supervisor_llm
+):
+    runtime_token = "m" * 32
+    assignment_token = "n" * 32
+    monkeypatch.setenv(
+        "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON",
+        json.dumps({"developer": runtime_token}),
+    )
+    monkeypatch.setenv(
+        "PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON",
+        json.dumps({"developer": assignment_token}),
+    )
+    config.get_settings.cache_clear()
+    _namespace("DEVELOPER", "workflow-developer", "DEV")
+    supervisor_llm("PASS")
+
+    with TestClient(create_app()) as client:
+        assigned = client.post(
+            "/internal/runtime/assign",
+            headers=_headers(assignment_token),
+            json=_assignment("DEV-20", "assign-dev-20", "developer"),
+        ).json()["result"]
+        payload = _step_payload(
+            assigned,
+            "Готово",
+            step_operation_key="step:DEV-20:complete",
+        )
+        first = client.post(
+            "/internal/runtime/step", headers=_headers(runtime_token), json=payload
+        )
+        replay = client.post(
+            "/internal/runtime/step", headers=_headers(runtime_token), json=payload
+        )
+
+    assert first.status_code == 200
+    assert first.json()["result"]["replayed"] is False
+    assert replay.status_code == 200
+    assert replay.json()["result"]["replayed"] is True
+    assert replay.json()["result"]["message"] == first.json()["result"]["message"]
+    with SAUnitOfWork() as uow:
+        task = uow.tasks.get_by_key("DEV-20")
+        assert task is not None and task.id is not None
+        history = uow.step_history.list(task_id=task.id, limit=None)
+        assert len(history) == 1
+        assert history[0].step_operation_key == "step:DEV-20:complete"
+        assert history[0].request_sha256 is not None
+        assert history[0].assignment_revision == 1
+        assert history[0].hermes_run_ref == assigned["hermes_run_ref"]
+        assert len(uow.tasks.list_phase_events(task.id)) == 2
+
+
+def test_runtime_step_operation_key_rejects_changed_payload(monkeypatch, supervisor_llm):
+    runtime_token = "o" * 32
+    assignment_token = "p" * 32
+    monkeypatch.setenv(
+        "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON",
+        json.dumps({"developer": runtime_token}),
+    )
+    monkeypatch.setenv(
+        "PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON",
+        json.dumps({"developer": assignment_token}),
+    )
+    config.get_settings.cache_clear()
+    _namespace("DEVELOPER", "workflow-developer", "DEV")
+    supervisor_llm("PASS")
+
+    with TestClient(create_app()) as client:
+        assigned = client.post(
+            "/internal/runtime/assign",
+            headers=_headers(assignment_token),
+            json=_assignment("DEV-21", "assign-dev-21", "developer"),
+        ).json()["result"]
+        original = _step_payload(
+            assigned,
+            "Первый отчёт",
+            step_operation_key="step:DEV-21:complete",
+        )
+        first = client.post(
+            "/internal/runtime/step", headers=_headers(runtime_token), json=original
+        )
+        changed = client.post(
+            "/internal/runtime/step",
+            headers=_headers(runtime_token),
+            json={**original, "report": "Другой отчёт"},
+        )
+
+    assert first.status_code == 200
+    assert changed.status_code == 409
+    with SAUnitOfWork() as uow:
+        task = uow.tasks.get_by_key("DEV-21")
+        assert task is not None and task.id is not None
+        assert len(uow.step_history.list(task_id=task.id, limit=None)) == 1
+
+
+def test_completed_step_cannot_replay_into_retry_or_new_cycle(monkeypatch, supervisor_llm):
+    runtime_token = "g" * 32
+    assignment_token = "h" * 32
+    monkeypatch.setenv(
+        "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON",
+        json.dumps({"developer": runtime_token}),
+    )
+    monkeypatch.setenv(
+        "PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON",
+        json.dumps({"developer": assignment_token}),
+    )
+    config.get_settings.cache_clear()
+    _namespace("DEVELOPER", "workflow-developer", "DEV")
+    supervisor_llm("PASS")
+
+    for task_key, next_cycle in (("DEV-22", 0), ("DEV-23", 1)):
+        with TestClient(create_app()) as client:
+            initial = client.post(
+                "/internal/runtime/assign",
+                headers=_headers(assignment_token),
+                json=_assignment(task_key, f"assign-{task_key}-initial", "developer"),
+            ).json()["result"]
+            old_payload = _step_payload(
+                initial,
+                "Готово",
+                step_operation_key=f"step:{task_key}:complete",
+            )
+            completed = client.post(
+                "/internal/runtime/step",
+                headers=_headers(runtime_token),
+                json=old_payload,
+            )
+            assert completed.status_code == 200
+            with SAUnitOfWork() as uow:
+                task = uow.tasks.get_by_key(task_key)
+                assert task is not None and task.id is not None
+                project_id = task.project_id
+                TaskService(uow).assign_runtime_task(
+                    **_service_assignment(
+                        project_id=project_id,
+                        task=task_key,
+                        operation_key=f"assign-{task_key}-next",
+                        role="developer",
+                        cycle_number=next_cycle,
+                        attempt_number=2 if next_cycle == 0 else 1,
+                        assignment_ref=f"assignment:assign-{task_key}-next",
+                        binding_ref=f"binding:assign-{task_key}-next",
+                        hermes_run_ref=f"hermes-run:assign-{task_key}-next",
+                        tech_execution_workspace_ref=f"tech-workspace:{task_key}-next",
+                        tech_execution_attempt_ref=f"tech-attempt:{task_key}-next",
+                        workspace_generation=2,
+                        lease_generation=2,
+                        expected_revision=1,
+                        expected_status="done",
+                        expected_mode_key="assigned",
+                        expected_cycle_number=0,
+                    )
+                )
+            stale = client.post(
+                "/internal/runtime/step",
+                headers=_headers(runtime_token),
+                json=old_payload,
+            )
+            assert stale.status_code == 409
+            with SAUnitOfWork() as uow:
+                task = uow.tasks.get_by_key(task_key)
+                assert task is not None and task.id is not None
+                assert len(uow.step_history.list(task_id=task.id, limit=None)) == 1
+                assert len(uow.tasks.list_phase_events(task.id)) == 3
+
+
+def test_concurrent_identical_runtime_step_has_one_durable_mutation(
+    monkeypatch,
+):
+    runtime_token = "i" * 32
+    assignment_token = "j" * 32
+    monkeypatch.setenv(
+        "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON",
+        json.dumps({"developer": runtime_token}),
+    )
+    monkeypatch.setenv(
+        "PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON",
+        json.dumps({"developer": assignment_token}),
+    )
+    config.get_settings.cache_clear()
+    _namespace("DEVELOPER", "workflow-developer", "DEV")
+    with TestClient(create_app()) as setup_client:
+        assigned = setup_client.post(
+            "/internal/runtime/assign",
+            headers=_headers(assignment_token),
+            json=_assignment("DEV-24", "assign-dev-24", "developer"),
+        ).json()["result"]
+    payload = _step_payload(
+        assigned,
+        "Готово",
+        step_operation_key="step:DEV-24:complete",
+    )
+    nested_responses: list[tuple[int, dict]] = []
+    nested_started = False
+
+    def pass_with_duplicate_arrival(*_args, **_kwargs):
+        nonlocal nested_started
+        if not nested_started:
+            nested_started = True
+            with TestClient(create_app()) as duplicate_client:
+                duplicate = duplicate_client.post(
+                    "/internal/runtime/step",
+                    headers=_headers(runtime_token),
+                    json=payload,
+                )
+                nested_responses.append((duplicate.status_code, duplicate.json()))
+        return {
+            "verdict": "PASS",
+            "covered": [],
+            "missing": [],
+            "blockers": [],
+            "message": "concurrent pass",
+            "confidence": 1.0,
+        }
+
+    with patch.object(OpenAICompatibleClient, "chat", side_effect=pass_with_duplicate_arrival):
+        with TestClient(create_app()) as client:
+            original = client.post(
+                "/internal/runtime/step",
+                headers=_headers(runtime_token),
+                json=payload,
+            )
+            responses = nested_responses + [(original.status_code, original.json())]
+
+    assert [status for status, _body in responses] == [200, 200]
+    assert sorted(body["result"]["replayed"] for _status, body in responses) == [False, True]
+    with SAUnitOfWork() as uow:
+        task = uow.tasks.get_by_key("DEV-24")
+        assert task is not None and task.id is not None
+        assert len(uow.step_history.list(task_id=task.id, limit=None)) == 1
+        assert len(uow.tasks.list_phase_events(task.id)) == 2

@@ -15,6 +15,8 @@ ROLE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9-]{1,31}$")
 class RuntimeStepFence:
     """Exact owner-issued assignment/run snapshot allowed to mutate one task."""
 
+    step_operation_key: str
+    request_sha256: str
     assignment_revision: int
     assignment_operation_key: str
     assignment_ref: str
@@ -24,6 +26,7 @@ class RuntimeStepFence:
     mode_key: str
     cycle_number: int
     attempt_number: int
+    role_key: str
     expected_phase_id: int
     expected_phase_code: str
     expected_status: str
@@ -46,6 +49,28 @@ class RuntimeStepFence:
         if mismatched:
             raise ValueError(
                 "Runtime step относится к устаревшему assignment/run: " + ", ".join(mismatched)
+            )
+
+    def assert_history(self, history: dict[str, Any]) -> None:
+        """Reject an operation-key collision with another request or assignment."""
+        expected = {
+            "step_operation_key": self.step_operation_key,
+            "request_sha256": self.request_sha256,
+            "assignment_revision": self.assignment_revision,
+            "assignment_operation_key": self.assignment_operation_key,
+            "assignment_ref": self.assignment_ref,
+            "binding_ref": self.binding_ref,
+            "hermes_run_ref": self.hermes_run_ref,
+            "mode_id": self.mode_id,
+            "mode_key": self.mode_key,
+            "cycle_number": self.cycle_number,
+            "attempt_number": self.attempt_number,
+            "role_key": self.role_key,
+        }
+        mismatched = [name for name, value in expected.items() if history.get(name) != value]
+        if mismatched:
+            raise ValueError(
+                "step_operation_key уже использован для другого runtime step"
             )
 
 

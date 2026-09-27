@@ -12,7 +12,11 @@ from fastapi.responses import JSONResponse
 from project_workflow import config, supervisor
 from project_workflow.application.task import TaskService
 from project_workflow.domain.exceptions import ConflictError
-from project_workflow.domain.runtime_assignment import RuntimeStepFence, normalize_role_key
+from project_workflow.domain.runtime_assignment import (
+    RuntimeStepFence,
+    normalize_role_key,
+    payload_sha256,
+)
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.cli.core import _require_valid_key, _resolve_namespace_id
 from project_workflow.interfaces.ui.schemas import RuntimeAssignmentRequest, RuntimeStepRequest
@@ -160,6 +164,92 @@ def _history_rows(uow: SAUnitOfWork, task_key: str, namespace_id: int, limit: in
     return rows
 
 
+def _step_response(result: dict[str, Any]) -> dict[str, Any]:
+    exit_code = 1 if result.get("verdict") == "BLOCKED" else 0
+    return {
+        "ok": exit_code == 0,
+        "exit_code": exit_code,
+        "output": format_result(result),
+        "result": result,
+    }
+
+
+def _runtime_step_replay(
+    uow: SAUnitOfWork,
+    *,
+    payload: RuntimeStepRequest,
+    request_sha256: str,
+    role_key: str,
+    namespace_id: int,
+    task_key: str,
+) -> dict[str, Any] | None:
+    """Return one exact committed response or reject an operation-key collision."""
+    entry = uow.step_history.get_by_step_operation_key(payload.step_operation_key)
+    if entry is None:
+        return None
+    history = entry.to_dict()
+    task = uow.tasks.get_by_id(entry.task_id)
+    assignment_operation_key = history.get("assignment_operation_key")
+    assignment = (
+        uow.tasks.get_assignment_by_operation_key(assignment_operation_key)
+        if isinstance(assignment_operation_key, str)
+        else None
+    )
+    assignment_data = assignment.to_dict() if assignment is not None else {}
+    expected_history = {
+        "step_operation_key": payload.step_operation_key,
+        "request_sha256": request_sha256,
+        "assignment_revision": payload.assignment_revision,
+        "assignment_ref": payload.assignment_ref,
+        "binding_ref": payload.binding_ref,
+        "hermes_run_ref": payload.hermes_run_ref,
+        "mode_key": payload.mode_key,
+        "cycle_number": payload.cycle_number,
+        "attempt_number": payload.attempt_number,
+        "role_key": role_key,
+    }
+    mismatched = [
+        name for name, value in expected_history.items() if history.get(name) != value
+    ]
+    invalid_task = (
+        task is None
+        or task.project_id != namespace_id
+        or task.task_key != task_key
+        or task.assignment_revision != history.get("assignment_revision")
+        or task.assignment_operation_key != assignment_operation_key
+        or task.mode_id != history.get("mode_id")
+        or task.mode_key != history.get("mode_key")
+        or task.cycle_number != history.get("cycle_number")
+    )
+    immutable_fields = (
+        "task_id",
+        "workflow_id",
+        "assignment_revision",
+        "assignment_ref",
+        "binding_ref",
+        "hermes_run_ref",
+        "mode_id",
+        "mode_key",
+        "cycle_number",
+        "attempt_number",
+        "role_key",
+    )
+    invalid_assignment = (
+        assignment is None
+        or assignment_data.get("project_id") != namespace_id
+        or assignment_data.get("operation_key") != assignment_operation_key
+        or any(assignment_data.get(name) != history.get(name) for name in immutable_fields)
+    )
+    if mismatched or invalid_task or invalid_assignment:
+        raise ConflictError("step_operation_key уже использован для другого runtime step")
+    response = history.get("supervisor_response")
+    if not isinstance(response, dict):
+        raise ConflictError("Сохранённый runtime step не содержит корректный ответ")
+    result = dict(response)
+    result["replayed"] = True
+    return _step_response(result)
+
+
 def execute_namespace_step(
     uow: SAUnitOfWork,
     *,
@@ -202,13 +292,7 @@ def execute_namespace_step(
         }
         return {"ok": True, "exit_code": 0, "output": result["instructions"], "result": result}
     result = engine.evaluate(report)
-    exit_code = 1 if result["verdict"] == "BLOCKED" else 0
-    return {
-        "ok": exit_code == 0,
-        "exit_code": exit_code,
-        "output": format_result(result),
-        "result": result,
-    }
+    return _step_response(result)
 
 
 def runtime_assign(
@@ -325,15 +409,28 @@ def runtime_step(
         return _error("Недействительный runtime token", 401)
     if role == _CATALOG_ROLE:
         return _error("Токен каталога не разрешает выполнение шагов", 403)
+    request_digest = payload_sha256(payload.model_dump(mode="json"))
     try:
         with SAUnitOfWork() as uow:
             namespace_id = _namespace_id(uow, role)
             task_key = _require_valid_key(payload.task, uow, project_id=namespace_id)
             _assert_task_key_in_namespace(uow, namespace_id, task_key)
+            replay = _runtime_step_replay(
+                uow,
+                payload=payload,
+                request_sha256=request_digest,
+                role_key=role,
+                namespace_id=namespace_id,
+                task_key=task_key,
+            )
+            if replay is not None:
+                return replay
             fence = TaskService(uow).validate_runtime_step(
                 project_id=namespace_id,
                 task_key=task_key,
                 role_key=role,
+                step_operation_key=payload.step_operation_key,
+                request_sha256=request_digest,
                 assignment_revision=payload.assignment_revision,
                 assignment_ref=payload.assignment_ref,
                 binding_ref=payload.binding_ref,
@@ -344,14 +441,28 @@ def runtime_step(
                 expected_phase_code=payload.expected_phase_code,
                 expected_status=payload.expected_status,
             )
-            return execute_namespace_step(
-                uow,
-                namespace_id=namespace_id,
-                task=task_key,
-                report=payload.report,
-                create_if_missing=False,
-                runtime_fence=fence,
-            )
+            try:
+                return execute_namespace_step(
+                    uow,
+                    namespace_id=namespace_id,
+                    task=task_key,
+                    report=payload.report,
+                    create_if_missing=False,
+                    runtime_fence=fence,
+                )
+            except (ConflictError, RuntimeError, ValueError):
+                uow.rollback()
+                replay = _runtime_step_replay(
+                    uow,
+                    payload=payload,
+                    request_sha256=request_digest,
+                    role_key=role,
+                    namespace_id=namespace_id,
+                    task_key=task_key,
+                )
+                if replay is not None:
+                    return replay
+                raise
     except (ConflictError, RuntimeError, ValueError) as exc:
         return _error(str(exc), 409)
 

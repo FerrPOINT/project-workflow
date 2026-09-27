@@ -297,6 +297,11 @@ class TaskStepHistoryRepository(ABC):
     ) -> TaskStepHistoryEntry | None: ...
 
     @abstractmethod
+    def get_by_step_operation_key(
+        self, step_operation_key: str
+    ) -> TaskStepHistoryEntry | None: ...
+
+    @abstractmethod
     def create(self, data: dict[str, Any]) -> int: ...
 
 

@@ -164,7 +164,7 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0003_runtime_assignment_bindings"
+        assert version == migration_head() == "0004_runtime_step_idempotency"
         assert schema_is_ready(engine) is True
 
     def test_downgrade_refuses_lossy_mode_collapse(self, pg_url):

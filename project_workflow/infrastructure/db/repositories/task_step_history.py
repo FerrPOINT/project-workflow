@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session, aliased, joinedload
 
 from project_workflow.domain import TaskStepHistoryEntry
 from project_workflow.domain.exceptions import ConflictError
@@ -115,6 +115,16 @@ class SATaskStepHistoryRepository(TaskStepHistoryRepository):
         row = self._session.execute(stmt).scalar_one_or_none()
         return _row_to_step_history(row) if row is not None else None
 
+    def get_by_step_operation_key(
+        self, step_operation_key: str
+    ) -> TaskStepHistoryEntry | None:
+        row = self._session.execute(
+            select(m.TaskStepHistoryEntry)
+            .options(joinedload(m.TaskStepHistoryEntry.mode))
+            .where(m.TaskStepHistoryEntry.step_operation_key == step_operation_key)
+        ).scalar_one_or_none()
+        return _row_to_step_history(row) if row is not None else None
+
     def create(self, data: dict[str, Any]) -> int:
         task_row = self._session.get(m.Task, data["task_id"])
         if task_row is None:
@@ -151,6 +161,15 @@ class SATaskStepHistoryRepository(TaskStepHistoryRepository):
             next_phase_id=data.get("next_phase_id"),
             rollback_phase_id=data.get("rollback_phase_id"),
             replay_fingerprint=data.get("replay_fingerprint"),
+            step_operation_key=data.get("step_operation_key"),
+            request_sha256=data.get("request_sha256"),
+            assignment_revision=data.get("assignment_revision"),
+            assignment_operation_key=data.get("assignment_operation_key"),
+            assignment_ref=data.get("assignment_ref"),
+            binding_ref=data.get("binding_ref"),
+            hermes_run_ref=data.get("hermes_run_ref"),
+            attempt_number=data.get("attempt_number"),
+            role_key=data.get("role_key"),
             evaluation_snapshot=_json_object(data["evaluation_snapshot"], "evaluation_snapshot"),
             supervisor_response=_json_object(data["supervisor_response"], "supervisor_response"),
         )

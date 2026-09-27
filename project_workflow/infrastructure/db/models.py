@@ -494,6 +494,15 @@ class TaskStepHistoryEntry(Base):
     next_phase_id: Mapped[int | None] = mapped_column(nullable=True)
     rollback_phase_id: Mapped[int | None] = mapped_column(nullable=True)
     replay_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    step_operation_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    request_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    assignment_revision: Mapped[int | None] = mapped_column(nullable=True)
+    assignment_operation_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    assignment_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    binding_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    hermes_run_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    attempt_number: Mapped[int | None] = mapped_column(nullable=True)
+    role_key: Mapped[str | None] = mapped_column(String(32), nullable=True)
     evaluation_snapshot: Mapped[str] = mapped_column(Text, nullable=False, default="{}", server_default="{}")
     supervisor_response: Mapped[str] = mapped_column(Text, nullable=False, default="{}", server_default="{}")
     created_at: Mapped[datetime.datetime] = mapped_column(
@@ -535,6 +544,11 @@ class TaskStepHistoryEntry(Base):
             "replay_fingerprint",
             unique=True,
         ),
+        Index(
+            "uq_task_step_history_step_operation_key",
+            "step_operation_key",
+            unique=True,
+        ),
         Index("ix_task_step_history_phase_id", "phase_id"),
         Index("ix_task_step_history_next_phase_id", "next_phase_id"),
         Index("ix_task_step_history_rollback_phase_id", "rollback_phase_id"),
@@ -543,6 +557,29 @@ class TaskStepHistoryEntry(Base):
             name="ck_task_step_history_verdict",
         ),
         CheckConstraint("cycle_number >= 0", name="ck_task_step_history_cycle_nonnegative"),
+        CheckConstraint(
+            "assignment_revision IS NULL OR assignment_revision > 0",
+            name="ck_task_step_history_assignment_revision_positive",
+        ),
+        CheckConstraint(
+            "attempt_number IS NULL OR attempt_number > 0",
+            name="ck_task_step_history_attempt_positive",
+        ),
+        CheckConstraint(
+            "request_sha256 IS NULL OR length(request_sha256) = 64",
+            name="ck_task_step_history_request_sha256",
+        ),
+        CheckConstraint(
+            "(step_operation_key IS NULL AND request_sha256 IS NULL AND "
+            "assignment_revision IS NULL AND assignment_operation_key IS NULL AND "
+            "assignment_ref IS NULL AND binding_ref IS NULL AND hermes_run_ref IS NULL AND "
+            "attempt_number IS NULL AND role_key IS NULL) OR "
+            "(step_operation_key IS NOT NULL AND request_sha256 IS NOT NULL AND "
+            "assignment_revision IS NOT NULL AND assignment_operation_key IS NOT NULL AND "
+            "assignment_ref IS NOT NULL AND binding_ref IS NOT NULL AND hermes_run_ref IS NOT NULL AND "
+            "attempt_number IS NOT NULL AND role_key IS NOT NULL)",
+            name="ck_task_step_history_runtime_identity_complete",
+        ),
     )
     mode: Mapped[WorkflowMode] = relationship(
         "WorkflowMode",

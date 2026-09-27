@@ -76,8 +76,9 @@ def test_repository_has_exactly_one_base_and_head():
         "0001_initial_schema.py",
         "0002_workflow_modes.py",
         "0003_runtime_assignment_bindings.py",
+        "0004_runtime_step_idempotency.py",
     ]
-    assert migration_head() == "0003_runtime_assignment_bindings"
+    assert migration_head() == "0004_runtime_step_idempotency"
 
 
 def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
@@ -129,7 +130,7 @@ def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
         }
         assert actual_fks == expected_fks, table_name
 
-    assert database_revisions(engine) == {"0003_runtime_assignment_bindings"}
+    assert database_revisions(engine) == {"0004_runtime_step_idempotency"}
     assert schema_is_ready(engine) is True
     with engine.connect() as connection:
         context = MigrationContext.configure(
@@ -218,9 +219,14 @@ def test_sqlite_upgrade_populated_legacy_backfills_each_workflow_mode(tmp_path):
                 text("SELECT mode_id, cycle_number FROM tasks WHERE id = :id"), {"id": task_id}
             ).one() == (mode_id, 0)
             assert conn.execute(
-                text("SELECT mode_id, cycle_number FROM task_step_history WHERE task_id = :id"),
+                text(
+                    "SELECT mode_id, cycle_number, step_operation_key, request_sha256, "
+                    "assignment_revision, assignment_operation_key, assignment_ref, binding_ref, "
+                    "hermes_run_ref, attempt_number, role_key "
+                    "FROM task_step_history WHERE task_id = :id"
+                ),
                 {"id": task_id},
-            ).one() == (mode_id, 0)
+            ).one() == (mode_id, 0, None, None, None, None, None, None, None, None, None)
             assert conn.execute(
                 text("SELECT mode_id, cycle_number FROM task_phase_events WHERE task_id = :id"),
                 {"id": task_id},
@@ -309,7 +315,7 @@ def test_sqlite_upgrade_populated_0002_preserves_nullable_legacy_bindings(tmp_pa
         ).one()
         assert row.payload == '{"legacy":true}'
         assert tuple(row)[1:] == (None,) * 23
-    assert database_revisions(engine) == {"0003_runtime_assignment_bindings"}
+    assert database_revisions(engine) == {"0004_runtime_step_idempotency"}
 
 
 def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path):
@@ -431,12 +437,12 @@ def test_in_memory_sqlite_migration_keeps_the_schema_alive():
         engine.dispose()
 
 
-def test_sqlite_downgrade_refuses_lossy_mode_collapse(tmp_path):
+def test_sqlite_downgrade_refuses_lossy_runtime_history(tmp_path):
     engine = _sqlite_engine(tmp_path)
     ensure_migrated(engine)
-    with pytest.raises(RuntimeError, match="Downgrade from immutable runtime assignment bindings"):
+    with pytest.raises(RuntimeError, match="Downgrade from durable runtime step idempotency"):
         run_alembic_command("downgrade", engine, "base")
-    assert database_revisions(engine) == {"0003_runtime_assignment_bindings"}
+    assert database_revisions(engine) == {"0004_runtime_step_idempotency"}
     assert schema_is_ready(engine) is True
 
 
@@ -607,7 +613,7 @@ def test_head_with_damaged_or_polluted_schema_is_refused(tmp_path, mutation):
     assert schema_is_ready(engine) is False
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0003_runtime_assignment_bindings"}
+    assert database_revisions(engine) == {"0004_runtime_step_idempotency"}
     if mutation == "extra":
         with engine.connect() as connection:
             assert connection.execute(text("SELECT id FROM unexpected_table")).scalar_one() == 42

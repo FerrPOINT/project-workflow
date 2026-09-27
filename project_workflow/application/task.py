@@ -419,6 +419,8 @@ class TaskService:
         project_id: int,
         task_key: str,
         role_key: str,
+        step_operation_key: str,
+        request_sha256: str,
         assignment_revision: int,
         assignment_ref: str,
         binding_ref: str,
@@ -431,6 +433,15 @@ class TaskService:
     ) -> RuntimeStepFence:
         """Lock and validate the exact immutable owner assignment for one step."""
         role_key = normalize_role_key(role_key)
+        step_operation_key = self._bounded_ref(
+            step_operation_key, "step_operation_key", 128
+        )
+        if (
+            not isinstance(request_sha256, str)
+            or len(request_sha256) != 64
+            or any(char not in "0123456789abcdef" for char in request_sha256)
+        ):
+            raise ValueError("request_sha256 должен быть lowercase SHA-256")
         mode_key = self._bounded_ref(mode_key, "mode_key", 128)
         expected_phase_code = self._bounded_ref(
             expected_phase_code, "expected_phase_code", 128
@@ -516,6 +527,8 @@ class TaskService:
         ):
             raise ConflictError("Runtime task не содержит корректный mode/phase cursor")
         return RuntimeStepFence(
+            step_operation_key=step_operation_key,
+            request_sha256=request_sha256,
             assignment_revision=assignment_revision,
             assignment_operation_key=operation_key,
             assignment_ref=refs["assignment_ref"],
@@ -525,6 +538,7 @@ class TaskService:
             mode_key=mode_key,
             cycle_number=cycle_number,
             attempt_number=attempt_number,
+            role_key=role_key,
             expected_phase_id=phase_id,
             expected_phase_code=expected_phase_code,
             expected_status=expected_status,

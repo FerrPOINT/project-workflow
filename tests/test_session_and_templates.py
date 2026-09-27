@@ -268,7 +268,7 @@ class TestSessionHelpers:
 
         monkeypatch.chdir(tmp_path)
 
-        assert migration_head() == "0003_runtime_assignment_bindings"
+        assert migration_head() == "0004_runtime_step_idempotency"
 
     def test_ensure_migrated_postgresql_branch(self, tmp_path):
         from unittest.mock import MagicMock, patch

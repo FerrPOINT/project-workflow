@@ -30,7 +30,11 @@ introspection, а также сохраняет отдельный private runti
   через `POST /internal/runtime/step` и `GET /internal/runtime/history`. Он
   аутентифицируется role token из `PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON`, не
   доступен как browser UI API и должен публиковаться только во внутреннюю сеть
-  или на host loopback.
+  или на host loopback. Изменяющий step содержит owner-issued
+  `step_operation_key`, canonical request digest и immutable assignment/run
+  fence; history и Supervisor result сохраняются с ними в одной транзакции.
+  Exact replay разрешён до cursor-проверки только пока текущий assignment/run
+  совпадает, а collision или stale run закрываются с conflict.
 - **SupervisorEngine** маршрутизирует задачу, строит phase contract, вызывает
   обязательный OpenAI-compatible evaluator и сохраняет результат атомарно.
 - **PostgreSQL** - единственный runtime data store. SQLite допустим только в
