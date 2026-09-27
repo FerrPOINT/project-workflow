@@ -262,7 +262,15 @@ curl --fail http://127.0.0.1:8812/health
 
 ## 🖼️ Визуальные доказательства
 
-Браузерные свидетельства сняты full-page с нейтральной изолированной фикстурой (neutral isolated fixture): generic namespace-имена и UI-testing copy, без credentials, реальных task keys, URL и filesystem-путей. Покрытие — active, blocked и done состояния задач.
+Браузерные свидетельства сняты full-page с нейтральной изолированной фикстурой
+(neutral isolated fixture): generic namespace-имена и UI-testing copy, без
+credentials, реальных task keys, URL и filesystem-путей. Desktop использует
+`1920x1080`; mobile `375x812` подтверждает три режима общей рабочей области.
+Покрытие включает active, blocked и done состояния задач.
+
+| Wide | Reading | Detail with aside |
+|---|---|---|
+| <img src="docs/screenshots/375x812/wide.png" alt="Дашборд mobile" width="100%" /> | <img src="docs/screenshots/375x812/reading.png" alt="CLI-настройки mobile" width="100%" /> | <img src="docs/screenshots/375x812/detail-with-aside.png" alt="Карточка задачи mobile" width="100%" /> |
 
 <figure>
   <figcaption><strong>Дашборд / Разработка</strong></figcaption>
@@ -334,7 +342,8 @@ curl --fail http://127.0.0.1:8812/health
   <img src="docs/screenshots/task-detail-qa.png" alt="Одна задача / Проверка качества full-page evidence" width="100%" />
 </figure>
 
-На мобильных ширинах карточки стекаются, редактор остаётся одноколоночной формой.
+На мобильных ширинах карточки и вторичная колонка стекаются, а читаемые формы
+остаются в одноколоночном ограниченном контейнере без body overflow.
 
 <a name="architecture"></a>
 

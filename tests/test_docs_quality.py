@@ -230,7 +230,10 @@ def test_screenshot_capture_script_replaces_pngs_only_after_success() -> None:
     source = (ROOT / "scripts" / "capture_ui_screenshots.mjs").read_text(encoding="utf-8")
 
     assert "fs.mkdtempSync(path.join(outputDir, \".capture-\"))" in source
-    assert "fs.copyFileSync(path.join(tempOutputDir, name), path.join(outputDir, name))" in source
+    assert "[...screenshotNames, ...responsiveScreenshotNames]" in source
+    assert "const destination = path.join(outputDir, name)" in source
+    assert "fs.mkdirSync(path.dirname(destination), { recursive: true })" in source
+    assert "fs.copyFileSync(path.join(tempOutputDir, name), destination)" in source
     assert "function removeTempOutputDir(tempOutputDir)" in source
     assert "path.relative(outputDir, tempOutputDir)" in source
     assert 'path.basename(tempOutputDir).startsWith(".capture-")' in source
