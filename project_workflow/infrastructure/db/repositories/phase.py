@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import false, or_, select, text
+from sqlalchemy import false, func, or_, select, text
 from sqlalchemy.orm import Session, joinedload
 
 from project_workflow.domain import Phase
@@ -75,6 +75,13 @@ class SAPhaseRepository(PhaseRepository):
             )
         rows = self._session.execute(stmt.execution_options(populate_existing=True)).scalars().all()
         return [_row_to_phase(r) for r in rows]
+
+    def count_all_modes_by_workflow(self) -> dict[int, int]:
+        """Count the complete phase catalog, including every workflow mode."""
+        rows = self._session.execute(
+            select(m.Phase.workflow_id, func.count(m.Phase.id)).group_by(m.Phase.workflow_id)
+        ).all()
+        return {int(workflow_id): int(count) for workflow_id, count in rows}
 
     def get_by_id(self, phase_id: int) -> Phase | None:
         row = self._session.get(m.Phase, phase_id)

@@ -81,7 +81,7 @@ def _developer_catalog() -> dict[str, int]:
         uow.close()
 
 
-def test_existing_workflow_opens_default_mode_with_stable_accessible_controls():
+def test_existing_workflow_opens_default_mode_with_stable_accessible_navigation():
     catalog = _developer_catalog()
 
     response = client.get(f"/phases?workflow_id={catalog['workflow_id']}")
@@ -91,12 +91,25 @@ def test_existing_workflow_opens_default_mode_with_stable_accessible_controls():
     assert 'data-testid="workflow-mode-tabs"' in response.text
     assert 'data-testid="workflow-mode-tab-default"' in response.text
     assert 'data-testid="workflow-mode-select"' in response.text
-    assert 'role="tab"' in response.text
+    assert 'role="tab"' not in response.text
+    assert 'role="tablist"' not in response.text
     default_tab = response.text.split('data-testid="workflow-mode-tab-default"', 1)[0].rsplit("<a", 1)[1]
-    assert 'aria-selected="true"' in default_tab
+    assert 'aria-current="page"' in default_tab
     assert "Default phase" in response.text
     assert "Initial phase" not in response.text
     assert "Rework phase" not in response.text
+
+
+def test_workflow_catalog_phase_count_includes_initial_and_rework_modes():
+    catalog = _developer_catalog()
+
+    response = client.get("/api/workflows")
+
+    assert response.status_code == 200
+    workflow = next(
+        item for item in response.json()["workflows"] if item["id"] == catalog["workflow_id"]
+    )
+    assert workflow["phase_count"] == 3
 
 
 def test_developer_initial_and_rework_tabs_scope_phase_content_and_refresh():

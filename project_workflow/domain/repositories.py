@@ -67,6 +67,9 @@ class PhaseRepository(ABC):
     def list(self, workflow_id: int | None = None, mode_id: int | None = None) -> Sequence[Phase]: ...
 
     @abstractmethod
+    def count_all_modes_by_workflow(self) -> Mapping[int, int]: ...
+
+    @abstractmethod
     def get_by_id(self, phase_id: int) -> Phase | None: ...
 
     @abstractmethod
