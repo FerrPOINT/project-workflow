@@ -37,6 +37,9 @@ class TestUIDataServiceGaps:
                 "title": "t",
                 "project_id": 1,
                 "workflow_id": 1,
+                "mode_id": 10,
+                "mode_key": "default",
+                "cycle_number": 0,
                 "status": status,
                 "current_phase_id": 2,
                 "current_phase_code": "b",
@@ -44,22 +47,33 @@ class TestUIDataServiceGaps:
             }
         ]
         phases = [
-            {"id": 1, "workflow_id": 1, "code": "a", "name": "A"},
-            {"id": 2, "workflow_id": 1, "code": "b", "name": "B"},
-            {"id": 3, "workflow_id": 1, "code": "later", "name": "Added later"},
+            {"id": 1, "workflow_id": 1, "mode_id": 10, "code": "a", "name": "A"},
+            {"id": 2, "workflow_id": 1, "mode_id": 10, "code": "b", "name": "B"},
+            {"id": 3, "workflow_id": 1, "mode_id": 10, "code": "later", "name": "Added later"},
         ]
         wdb.get_workflows.return_value = [{"id": 1}]
         wdb.get_phases.return_value = phases
         wdb.list_phase_events_batch.return_value = {
             1: [
-                {"phase_id": 1, "event_type": "completed", "occurred_at": "2026-01-01"},
-                {"phase_id": 2, "event_type": "completed", "occurred_at": "2026-01-02"},
+                {
+                    "phase_id": 1,
+                    "mode_id": 10,
+                    "cycle_number": 0,
+                    "event_type": "completed",
+                    "occurred_at": "2026-01-01",
+                },
+                {
+                    "phase_id": 2,
+                    "mode_id": 10,
+                    "cycle_number": 0,
+                    "event_type": "completed",
+                    "occurred_at": "2026-01-02",
+                },
             ]
         }
+        wdb.workflows.get_mode.return_value = object()
         wdb.step_history.latest_for_tasks.return_value = []
-        wdb.get_projects.return_value = [
-            {"id": 1, "code": "TASK", "name": "Task", "workflow_id": 1}
-        ]
+        wdb.get_projects.return_value = [{"id": 1, "code": "TASK", "name": "Task", "workflow_id": 1}]
 
         result = _service(wdb)._load_tasks()
 
@@ -75,6 +89,9 @@ class TestUIDataServiceGaps:
                 "title": "old",
                 "project_id": 1,
                 "workflow_id": 1,
+                "mode_id": 10,
+                "mode_key": "default",
+                "cycle_number": 0,
                 "status": "active",
                 "current_phase_id": 11,
                 "current_phase_code": "v1",
@@ -83,13 +100,14 @@ class TestUIDataServiceGaps:
         ]
         wdb.get_workflows.return_value = [{"id": 1}, {"id": 2}]
         phases = {
-            1: [{"id": 11, "workflow_id": 1, "code": "v1", "name": "V1"}],
+            1: [{"id": 11, "workflow_id": 1, "mode_id": 10, "code": "v1", "name": "V1"}],
             2: [
                 {"id": 21, "workflow_id": 2, "code": "wf-two-a", "name": "Workflow two A"},
                 {"id": 22, "workflow_id": 2, "code": "wf-two-b", "name": "Workflow two B"},
             ],
         }
-        wdb.get_phases.side_effect = lambda workflow_id=None: phases.get(workflow_id, [])
+        wdb.get_phases.side_effect = lambda workflow_id=None, mode_id=None: phases.get(workflow_id, [])
+        wdb.workflows.get_mode.return_value = object()
         wdb.list_phase_events_batch.return_value = {1: []}
         wdb.step_history.latest_for_tasks.return_value = []
         wdb.get_projects.return_value = [{"id": 1, "code": "RUN", "name": "Runs", "workflow_id": 2}]
@@ -109,6 +127,9 @@ class TestUIDataServiceGaps:
                 "title": "t",
                 "project_id": 1,
                 "workflow_id": 1,
+                "mode_id": 10,
+                "mode_key": "default",
+                "cycle_number": 0,
                 "status": "active",
                 "current_phase_id": 1,
                 "current_phase_code": "1",
@@ -118,6 +139,7 @@ class TestUIDataServiceGaps:
         wdb.get_workflows.return_value = [{"id": 1}]
         wdb.get_phases.return_value = [{"id": 1, "code": "1", "name": "One"}]
         wdb.list_phase_events_batch.return_value = {1: []}
+        wdb.workflows.get_mode.return_value = object()
 
         class Run:
             task_id = 1
@@ -125,6 +147,8 @@ class TestUIDataServiceGaps:
             def to_dict(self):
                 return {
                     "verdict": "pass",
+                    "mode_id": 10,
+                    "cycle_number": 0,
                     "evaluation_snapshot": {"phase_code": "1"},
                     "supervisor_response": {},
                 }
@@ -145,6 +169,9 @@ class TestUIDataServiceGaps:
                 "task_key": "RUN-1",
                 "project_id": 7,
                 "workflow_id": 1,
+                "mode_id": 10,
+                "mode_key": "default",
+                "cycle_number": 0,
                 "status": "active",
                 "current_phase_id": 1,
                 "current_phase_code": "1",
@@ -154,6 +181,7 @@ class TestUIDataServiceGaps:
         wdb.get_workflows.return_value = [{"id": 1}]
         wdb.get_phases.return_value = [{"id": 1, "code": "1", "name": "One"}]
         wdb.list_phase_events_batch.return_value = {1: []}
+        wdb.workflows.get_mode.return_value = object()
         wdb.step_history.latest_for_tasks.return_value = []
         wdb.get_projects.return_value = []
 
@@ -162,9 +190,7 @@ class TestUIDataServiceGaps:
 
     def test_missing_task_workflow_id_fails_closed_without_project_fallback(self):
         wdb = MagicMock()
-        wid, phases = _service(wdb)._resolve_task_workflow_id(
-            {"workflow_id": None, "project": {"workflow_id": 5}}, wdb
-        )
+        wid, phases = _service(wdb)._resolve_task_workflow_id({"workflow_id": None, "project": {"workflow_id": 5}}, wdb)
         assert wid is None
         assert phases == []
         wdb.get_phases.assert_not_called()
@@ -210,12 +236,14 @@ class TestUIDataServiceGaps:
             "current_phase_code": "-1",
             "current_phase_name": "Start",
             "workflow_id": 1,
+            "mode_id": 10,
+            "mode_key": "default",
+            "cycle_number": 0,
         }
         wdb.list_phase_events.return_value = []
-        wdb.get_phases.return_value = [
-            {"id": 1, "workflow_id": 1, "phase_order": 1, "code": "-1", "name": "Start"}
-        ]
+        wdb.get_phases.return_value = [{"id": 1, "workflow_id": 1, "phase_order": 1, "code": "-1", "name": "Start"}]
         wdb.list_step_history.return_value = []
+        wdb.workflows.get_mode.return_value = object()
         project = MagicMock()
         project.to_dict.return_value = {"id": 1, "code": "RUN", "name": "Runs"}
         wdb.projects.get_by_id.return_value = project
@@ -248,18 +276,30 @@ class TestUIDataServiceGaps:
             "status": status,
             "current_phase_id": current_phase_id,
             "workflow_id": 1,
+            "mode_id": 10,
+            "mode_key": "default",
+            "cycle_number": 0,
         }
         wdb.get_phases.return_value = phases
         wdb.list_phase_events.return_value = [
-            {"phase_id": 1, "event_type": "completed", "occurred_at": "2026-01-01"},
-            {"phase_id": 2, "event_type": "completed", "occurred_at": "2026-01-02"},
+            {"phase_id": 1, "mode_id": 10, "cycle_number": 0, "event_type": "completed", "occurred_at": "2026-01-01"},
+            {"phase_id": 2, "mode_id": 10, "cycle_number": 0, "event_type": "completed", "occurred_at": "2026-01-02"},
             *(
-                [{"phase_id": 3, "event_type": "entered", "occurred_at": "2026-01-03"}]
+                [
+                    {
+                        "phase_id": 3,
+                        "mode_id": 10,
+                        "cycle_number": 0,
+                        "event_type": "entered",
+                        "occurred_at": "2026-01-03",
+                    }
+                ]
                 if status == "active"
                 else []
             ),
         ]
         wdb.list_step_history.return_value = []
+        wdb.workflows.get_mode.return_value = object()
 
         result = _service(wdb)._get_task_detail("RUN-1")
 

@@ -117,6 +117,9 @@ class TestLoadTasks:
                 "current_phase_name": "Start",
                 "project_id": 10,
                 "workflow_id": 1,
+                "mode_id": 10,
+                "mode_key": "default",
+                "cycle_number": 0,
                 "updated_at": "2025-02-01",
             }
         ]
@@ -124,11 +127,24 @@ class TestLoadTasks:
         db.get_phases.return_value = [{"id": 1, "code": "-1", "name": "Start"}]
         db.list_phase_events_batch.return_value = {
             1: [
-                {"phase_id": 1, "event_type": "completed", "occurred_at": "2025-01-15"},
-                {"phase_id": 1, "event_type": "completed", "occurred_at": "2025-01-20"},
+                {
+                    "phase_id": 1,
+                    "mode_id": 10,
+                    "cycle_number": 0,
+                    "event_type": "completed",
+                    "occurred_at": "2025-01-15",
+                },
+                {
+                    "phase_id": 1,
+                    "mode_id": 10,
+                    "cycle_number": 0,
+                    "event_type": "completed",
+                    "occurred_at": "2025-01-20",
+                },
             ]
         }
         db.step_history.latest_for_tasks.return_value = []
+        db.workflows.get_mode.return_value = object()
         db.get_projects.return_value = [{"id": 10, "code": "AAT", "name": "AAT"}]
         monkeypatch.setattr("project_workflow.interfaces.ui._app_state", MagicMock(get_db=lambda: db))
         tasks = _load_tasks()
@@ -146,15 +162,19 @@ class TestLoadTasks:
                 "current_phase_name": "Start",
                 "project_id": 10,
                 "workflow_id": 1,
+                "mode_id": 10,
+                "mode_key": "default",
+                "cycle_number": 0,
                 "updated_at": "2025-02-01",
             }
         ]
         db.get_workflows.return_value = [{"id": 1}]
         db.get_phases.return_value = [{"id": 1, "code": "-1", "name": "Start"}]
         db.list_phase_events_batch.return_value = {
-            1: [{"phase_id": 1, "event_type": "entered", "occurred_at": "2025-01-15"}]
+            1: [{"phase_id": 1, "mode_id": 10, "cycle_number": 0, "event_type": "entered", "occurred_at": "2025-01-15"}]
         }
         db.step_history.latest_for_tasks.return_value = []
+        db.workflows.get_mode.return_value = object()
         db.get_projects.return_value = [{"id": 10, "code": "AAT", "name": "AAT"}]
         monkeypatch.setattr("project_workflow.interfaces.ui._app_state", MagicMock(get_db=lambda: db))
         with pytest.raises(ValueError, match="нет события completed"):
@@ -179,19 +199,34 @@ class TestTaskDetailEdgeCases:
             "title": "T",
             "workflow_id": 1,
             "project_id": 10,
+            "mode_id": 10,
+            "mode_key": "default",
+            "cycle_number": 0,
         }
         db.projects.get_by_id.return_value.to_dict.return_value = {
             "id": 10,
             "code": "AAT",
             "name": "AAT",
         }
-        db.list_phase_events.return_value = [{"phase_id": 1, "event_type": "entered", "occurred_at": "2025-01-01"}]
+        db.list_phase_events.return_value = [
+            {
+                "phase_id": 1,
+                "mode_id": 10,
+                "mode_key": "default",
+                "cycle_number": 0,
+                "event_type": "entered",
+                "occurred_at": "2025-01-01",
+            }
+        ]
         db.get_phases.return_value = [
             {"id": 1, "code": "1", "name": "Current", "phase_order": 1, "execution_type": "sync"}
         ]
         db.list_step_history.return_value = [
             {
                 "verdict": "pass",
+                "mode_id": 10,
+                "mode_key": "default",
+                "cycle_number": 0,
                 "worker_report": "done",
                 "evaluation_snapshot": {"phase_code": "historical.1", "phase_name": "Historical phase"},
                 "supervisor_response": {
@@ -208,6 +243,7 @@ class TestTaskDetailEdgeCases:
                 "created_at": "2025-01-01",
             }
         ]
+        db.workflows.get_mode.return_value = object()
         monkeypatch.setattr("project_workflow.interfaces.ui._app_state", MagicMock(get_db=lambda: db))
         task = _get_task_detail("AAT-1")
         assert task["step_history"][0]["next_contract"] is not None
@@ -227,25 +263,41 @@ class TestTaskDetailEdgeCases:
             "title": "T",
             "workflow_id": 1,
             "project_id": 10,
+            "mode_id": 10,
+            "mode_key": "default",
+            "cycle_number": 0,
         }
         db.projects.get_by_id.return_value.to_dict.return_value = {
             "id": 10,
             "code": "AAT",
             "name": "AAT",
         }
-        db.list_phase_events.return_value = [{"phase_id": 1, "event_type": "entered", "occurred_at": "2025-01-01"}]
+        db.list_phase_events.return_value = [
+            {
+                "phase_id": 1,
+                "mode_id": 10,
+                "mode_key": "default",
+                "cycle_number": 0,
+                "event_type": "entered",
+                "occurred_at": "2025-01-01",
+            }
+        ]
         db.get_phases.return_value = [
             {"id": 1, "code": "1", "name": "Current", "phase_order": 1, "execution_type": "sync"}
         ]
         db.list_step_history.return_value = [
             {
                 "verdict": "pass",
+                "mode_id": 10,
+                "mode_key": "default",
+                "cycle_number": 0,
                 "worker_report": "done",
                 "evaluation_snapshot": {"phase_code": "1", "phase_name": "Current"},
                 "supervisor_response": {"message": "ok"},
                 "created_at": "2025-01-01",
             }
         ]
+        db.workflows.get_mode.return_value = object()
         monkeypatch.setattr("project_workflow.interfaces.ui._app_state", MagicMock(get_db=lambda: db))
         task = _get_task_detail("AAT-1")
         assert task["step_history"][0]["next_contract"] is None

@@ -80,17 +80,30 @@ class TestServicesMoreGaps:
             "project_id": 10,
             "workflow_id": 1,
             "current_phase_id": 1,
+            "mode_id": 10,
+            "mode_key": "default",
+            "cycle_number": 0,
         }
         uow.projects.get_by_id.return_value.to_dict.return_value = {
             "id": 10,
             "code": "A",
             "name": "Project A",
         }
-        uow.list_phase_events.return_value = [{"phase_id": 1, "event_type": "entered", "occurred_at": "2025-01-01"}]
+        uow.list_phase_events.return_value = [
+            {
+                "phase_id": 1,
+                "mode_id": 10,
+                "mode_key": "default",
+                "cycle_number": 0,
+                "event_type": "entered",
+                "occurred_at": "2025-01-01",
+            }
+        ]
         uow.list_step_history.return_value = []
         uow.get_phases.return_value = [
             {"id": 1, "code": "1", "name": "One", "phase_order": 1, "execution_type": "sync"}
         ]
+        uow.workflows.get_mode.return_value = object()
         monkeypatch.setattr("project_workflow.interfaces.ui.services._get_app_state", lambda: _mock_state(uow))
         with pytest.raises(ValueError, match="нет события completed"):
             _get_task_detail("A-1")
@@ -104,6 +117,9 @@ class TestServicesMoreGaps:
             "project_id": 10,
             "current_phase_id": 1,
             "workflow_id": 1,
+            "mode_id": 10,
+            "mode_key": "default",
+            "cycle_number": 0,
         }
         uow.projects.get_by_id.return_value.to_dict.return_value = {
             "id": 10,
@@ -111,13 +127,28 @@ class TestServicesMoreGaps:
             "name": "Project A",
         }
         uow.list_phase_events.return_value = [
-            {"phase_id": 1, "event_type": "entered", "occurred_at": "2025-01-01"},
-            {"phase_id": 99, "event_type": "completed", "occurred_at": "2025-01-02"},
+            {
+                "phase_id": 1,
+                "mode_id": 10,
+                "mode_key": "default",
+                "cycle_number": 0,
+                "event_type": "entered",
+                "occurred_at": "2025-01-01",
+            },
+            {
+                "phase_id": 99,
+                "mode_id": 10,
+                "mode_key": "default",
+                "cycle_number": 0,
+                "event_type": "completed",
+                "occurred_at": "2025-01-02",
+            },
         ]
         uow.list_step_history.return_value = []
         uow.get_phases.return_value = [
             {"id": 1, "code": "1", "name": "One", "phase_order": 1, "execution_type": "sync"}
         ]
+        uow.workflows.get_mode.return_value = object()
         monkeypatch.setattr("project_workflow.interfaces.ui.services._get_app_state", lambda: _mock_state(uow))
         with pytest.raises(ValueError, match="неизвестные фазы: 99"):
             _get_task_detail("A-1")
@@ -131,6 +162,9 @@ class TestServicesMoreGaps:
             "project_id": 10,
             "current_phase_id": 1,
             "workflow_id": 1,
+            "mode_id": 10,
+            "mode_key": "default",
+            "cycle_number": 0,
         }
         uow.get_task_by_key.return_value = task
         uow.projects.get_by_id.return_value.to_dict.return_value = {
@@ -138,10 +172,22 @@ class TestServicesMoreGaps:
             "code": "A",
             "name": "Project A",
         }
-        uow.list_phase_events.return_value = [{"phase_id": 1, "event_type": "entered", "occurred_at": "2025-01-01"}]
+        uow.list_phase_events.return_value = [
+            {
+                "phase_id": 1,
+                "mode_id": 10,
+                "mode_key": "default",
+                "cycle_number": 0,
+                "event_type": "entered",
+                "occurred_at": "2025-01-01",
+            }
+        ]
         uow.list_step_history.return_value = [
             {
                 "verdict": "pass",
+                "mode_id": 10,
+                "mode_key": "default",
+                "cycle_number": 0,
                 "worker_report": "done",
                 "evaluation_snapshot": {"phase_code": "1", "phase_name": "One"},
                 "supervisor_response": {"message": "ok"},
@@ -150,6 +196,7 @@ class TestServicesMoreGaps:
         uow.get_phases.return_value = [
             {"id": 1, "code": "1", "name": "One", "phase_order": 1, "execution_type": "sync"}
         ]
+        uow.workflows.get_mode.return_value = object()
         monkeypatch.setattr("project_workflow.interfaces.ui.services._get_app_state", lambda: _mock_state(uow))
         result = _get_task_detail("A-1")
         assert result["step_history"][0]["next_contract"] is None

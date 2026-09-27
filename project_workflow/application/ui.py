@@ -36,6 +36,44 @@ def _task_progress_counts(*, completed: int, workflow_total: int) -> tuple[int, 
     return completed, workflow_total
 
 
+def _task_execution_identity(task: Mapping[str, Any]) -> tuple[int, int, int]:
+    """Return the persisted workflow execution identity without default fallbacks."""
+    workflow_id = task.get("workflow_id")
+    mode_id = task.get("mode_id")
+    cycle_number = task.get("cycle_number")
+    if not isinstance(workflow_id, int) or isinstance(workflow_id, bool) or workflow_id <= 0:
+        raise ValueError(f"У задачи {task.get('task_key', '')} отсутствует корректный workflow_id")
+    if not isinstance(mode_id, int) or isinstance(mode_id, bool) or mode_id <= 0:
+        raise ValueError(f"У задачи {task.get('task_key', '')} отсутствует корректный mode_id")
+    if not isinstance(cycle_number, int) or isinstance(cycle_number, bool) or cycle_number < 0:
+        raise ValueError(f"У задачи {task.get('task_key', '')} отсутствует корректный cycle_number")
+    return workflow_id, mode_id, cycle_number
+
+
+def _execution_record_groups(records: Sequence[dict[str, Any]], *, records_key: str) -> list[dict[str, Any]]:
+    """Preserve append-only records while grouping them by exact mode and cycle."""
+    groups: dict[tuple[int, int], dict[str, Any]] = {}
+    for record in records:
+        mode_id = record.get("mode_id")
+        cycle_number = record.get("cycle_number")
+        if not isinstance(mode_id, int) or isinstance(mode_id, bool) or mode_id <= 0:
+            raise ValueError("Журнал задачи содержит некорректный mode_id")
+        if not isinstance(cycle_number, int) or isinstance(cycle_number, bool) or cycle_number < 0:
+            raise ValueError("Журнал задачи содержит некорректный cycle_number")
+        key = (mode_id, cycle_number)
+        group = groups.setdefault(
+            key,
+            {
+                "mode_id": mode_id,
+                "mode_key": record.get("mode_key"),
+                "cycle_number": cycle_number,
+                records_key: [],
+            },
+        )
+        group[records_key].append(record)
+    return list(groups.values())
+
+
 def _with_namespace_aliases(project: dict[str, Any]) -> dict[str, Any]:
     """Expose namespace-owned identity for UI payloads."""
     namespace = {
@@ -135,17 +173,22 @@ class UIDataService:
             if isinstance(workflow.get("id"), int)
         }
 
-        # Batch phase counts and phase lookup maps per workflow.
-        phase_counts_by_workflow: dict[int, int] = {}
-        phases_by_workflow: dict[int | None, list[dict[str, Any]]] = {}
-        all_phases: list[dict[str, Any]] = []
-        for workflow in workflows:
-            wid = workflow["id"]
-            phases = wdb.get_phases(workflow_id=wid)
-            phases_by_workflow[wid] = phases
-            all_phases.extend(phases)
-            phase_counts_by_workflow[wid] = len(phases)
-        phases_by_workflow[None] = all_phases
+        # Cache one exact phase catalog per workflow mode used by the task batch.
+        phase_catalogs: dict[tuple[int, int], list[dict[str, Any]]] = {}
+        execution_identities: dict[int, tuple[int, int, int]] = {}
+        for task in tasks:
+            task_id = task.get("id")
+            if not isinstance(task_id, int) or isinstance(task_id, bool) or task_id <= 0:
+                raise ValueError("Задача в UI не содержит корректный id")
+            workflow_id, mode_id, cycle_number = _task_execution_identity(task)
+            execution_identities[task_id] = (workflow_id, mode_id, cycle_number)
+            if workflow_id not in workflows_by_id:
+                raise ValueError(f"Для задачи {task['task_key']} не найден воркфлоу {workflow_id}")
+            catalog_key = (workflow_id, mode_id)
+            if catalog_key not in phase_catalogs:
+                if wdb.workflows.get_mode(mode_id, workflow_id) is None:
+                    raise ValueError(f"Для задачи {task['task_key']} не найден режим {mode_id} воркфлоу {workflow_id}")
+                phase_catalogs[catalog_key] = wdb.get_phases(workflow_id=workflow_id, mode_id=mode_id)
 
         # Batch load history and latest supervisor runs for all tasks in one go.
         task_ids = [t["id"] for t in tasks if isinstance(t.get("id"), int)]
@@ -170,10 +213,22 @@ class UIDataService:
         for t in tasks:
             task_id = t["id"]
             phase_events = list(history_batch.get(task_id, []))
-            latest_event_by_phase = {event["phase_id"]: event for event in phase_events}
-            completed = sum(
-                1 for event in latest_event_by_phase.values() if event.get("event_type") == "completed"
-            )
+            workflow_id, mode_id, cycle_number = execution_identities[task_id]
+            workflow_phases = phase_catalogs[(workflow_id, mode_id)]
+            current_events = [
+                event
+                for event in phase_events
+                if event.get("mode_id") == mode_id and event.get("cycle_number") == cycle_number
+            ]
+            phase_ids = {phase.get("id") for phase in workflow_phases}
+            unknown_phase_ids = {
+                event.get("phase_id") for event in current_events if event.get("phase_id") not in phase_ids
+            }
+            if unknown_phase_ids:
+                unknown = ", ".join(str(item) for item in sorted(unknown_phase_ids, key=str))
+                raise ValueError(f"Текущий цикл задачи {t['task_key']} ссылается на неизвестные фазы: {unknown}")
+            latest_event_by_phase = {event["phase_id"]: event for event in current_events}
+            completed = sum(1 for event in latest_event_by_phase.values() if event.get("event_type") == "completed")
             project_id = t.get("project_id")
             if not isinstance(project_id, int) or isinstance(project_id, bool) or project_id <= 0:
                 raise ValueError(f"У задачи {t['task_key']} отсутствует корректный namespace_id")
@@ -184,28 +239,18 @@ class UIDataService:
             namespace_cli_command = str(task_namespace.get("cli_command") or "")
             namespace_theme_icon = normalize_theme_icon(task_namespace.get("theme_icon"))
             namespace_theme_color = normalize_theme_color(task_namespace.get("theme_color"))
-            workflow_id_raw = t.get("workflow_id")
-            workflow_id: int | None = int(workflow_id_raw) if isinstance(workflow_id_raw, int) else None
-            task_workflow = workflows_by_id.get(workflow_id) if workflow_id is not None else None
-            workflow_phase_count = (
-                phase_counts_by_workflow.get(workflow_id, 0)
-                if workflow_id is not None
-                else 0
-            )
+            task_workflow = workflows_by_id[workflow_id]
+            workflow_phase_count = len(workflow_phases)
             completed, total_phases = _task_progress_counts(
                 completed=completed,
                 workflow_total=workflow_phase_count,
             )
 
-            _resolve_task_phase_id(
-                t["current_phase_id"], phases_by_workflow.get(workflow_id, [])
-            )
+            _resolve_task_phase_id(t["current_phase_id"], workflow_phases)
 
             completed_at = ""
             if t.get("status") == "done":
-                done_entries = [
-                    event for event in phase_events if event.get("event_type") == "completed"
-                ]
+                done_entries = [event for event in current_events if event.get("event_type") == "completed"]
                 if not done_entries:
                     raise ValueError(f"Для завершённой задачи {t['task_key']} нет события completed")
                 completed_at = max(str(event["occurred_at"]) for event in done_entries)
@@ -213,13 +258,11 @@ class UIDataService:
             latest_verdict = None
             latest_verdict_phase = None
             run: dict[str, Any] | None = latest_runs.get(task_id)
-            if run:
+            if run and run.get("mode_id") == mode_id and run.get("cycle_number") == cycle_number:
                 latest_verdict = run.get("verdict")
                 snapshot = run.get("evaluation_snapshot") or {}
                 response = run.get("supervisor_response") or {}
-                latest_verdict_phase = (
-                    snapshot.get("phase_code") or response.get("current_phase_code")
-                )
+                latest_verdict_phase = snapshot.get("phase_code") or response.get("current_phase_code")
 
             result.append(
                 {
@@ -233,6 +276,9 @@ class UIDataService:
                     "namespace_cli_command": namespace_cli_command,
                     "workflow_id": workflow_id,
                     "workflow_name": task_workflow.get("name") if task_workflow else None,
+                    "mode_id": mode_id,
+                    "mode_key": t.get("mode_key"),
+                    "cycle_number": cycle_number,
                     "current_phase_id": t["current_phase_id"],
                     "current_phase_code": t["current_phase_code"],
                     "current_phase_name": t["current_phase_name"],
@@ -316,7 +362,10 @@ class UIDataService:
         workflow_id = task.get("workflow_id")
         if not isinstance(workflow_id, int) or isinstance(workflow_id, bool) or workflow_id <= 0:
             return None, []
-        return workflow_id, wdb.get_phases(workflow_id=workflow_id)
+        _, mode_id, _ = _task_execution_identity(task)
+        if wdb.workflows.get_mode(mode_id, workflow_id) is None:
+            raise ValueError(f"Для задачи {task.get('task_key', '')} не найден режим {mode_id} воркфлоу {workflow_id}")
+        return workflow_id, wdb.get_phases(workflow_id=workflow_id, mode_id=mode_id)
 
     def _compute_completion_time(self, task: dict[str, Any], history: list[dict[str, Any]]) -> str:
         if task.get("status") != "done":
@@ -460,10 +509,24 @@ class UIDataService:
         if not history:
             raise ValueError("Для задачи отсутствует обязательный журнал событий фаз")
         task["phase_events"] = history
-        task["completed_at"] = self._compute_completion_time(task, history)
+        phase_event_groups = _execution_record_groups(history, records_key="events")
+        task["phase_event_groups"] = phase_event_groups
+        _, mode_id, cycle_number = _task_execution_identity(task)
+        current_history: list[dict[str, Any]] = next(
+            (
+                group["events"]
+                for group in phase_event_groups
+                if group["mode_id"] == mode_id and group["cycle_number"] == cycle_number
+            ),
+            [],
+        )
+        if not current_history:
+            raise ValueError("Для текущих mode_id и cycle_number задачи отсутствует журнал событий фаз")
+        task["current_phase_events"] = current_history
+        task["completed_at"] = self._compute_completion_time(task, current_history)
 
         task["phase_history_blocks"] = self._build_phase_history_blocks(
-            history, workflow_phases, current_phase, str(task.get("status", "active"))
+            current_history, workflow_phases, current_phase, str(task.get("status", "active"))
         )
         displayed_history = [
             phase for block in task["phase_history_blocks"] for phase in block["phases"]
@@ -484,10 +547,15 @@ class UIDataService:
             list(reversed(wdb.list_step_history(task_id=task["id"], workflow_id=workflow_id, limit=200)))
         )
         task["step_history"] = step_history
+        task["step_history_groups"] = _execution_record_groups(step_history, records_key="steps")
+        current_step_history = [
+            step for step in step_history if step.get("mode_id") == mode_id and step.get("cycle_number") == cycle_number
+        ]
+        task["current_step_history"] = current_step_history
 
-        if step_history:
-            task["latest_verdict"] = step_history[-1].get("verdict")
-            task["latest_verdict_label"] = step_history[-1].get("verdict_label")
+        if current_step_history:
+            task["latest_verdict"] = current_step_history[-1].get("verdict")
+            task["latest_verdict_label"] = current_step_history[-1].get("verdict_label")
         else:
             task["latest_verdict"] = None
             task["latest_verdict_label"] = None
