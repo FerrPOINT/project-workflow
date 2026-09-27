@@ -89,9 +89,9 @@ class UIDataService:
             )
         return result
 
-    def _load_phases(self, workflow_id: int) -> list[dict[str, Any]]:
+    def _load_phases(self, workflow_id: int, mode_id: int | None = None) -> list[dict[str, Any]]:
         wdb = self._app_state.get_db()
-        rows = wdb.get_phases(workflow_id=workflow_id)
+        rows = wdb.get_phases(workflow_id=workflow_id, mode_id=mode_id)
         agents_by_id = {agent["id"]: agent for agent in wdb.get_agents()}
         result = []
         for p in rows:
@@ -101,6 +101,8 @@ class UIDataService:
                     "id": p["id"],
                     "code": p["code"],
                     "workflow_id": p.get("workflow_id"),
+                    "mode_id": p.get("mode_id"),
+                    "mode_key": p.get("mode_key"),
                     "workflow_name": p.get("workflow_name"),
                     "workflow_is_default": bool(p.get("workflow_is_default")),
                     "phase_num": p["phase_order"],

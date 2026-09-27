@@ -125,7 +125,7 @@
 
   <!-- Header -->
   <div class="wiki-header phase-editor-section" id="phase-overview" data-phase-section tabindex="-1">
-    <div style="margin-bottom:10px"><a href="/phases?workflow_id={{ phase.workflow_id }}{% if selected_namespace %}&namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary">← Назад к фазам</a></div>
+    <div style="margin-bottom:10px"><a href="/phases?workflow_id={{ phase.workflow_id }}{% if phase.mode_id %}&mode_id={{ phase.mode_id }}{% endif %}{% if selected_namespace %}&namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary">← Назад к фазам</a></div>
     <input type="text" class="inline-input" value="{{ phase.name }}" data-field="name" aria-label="Название фазы" onblur="scheduleSave()" style="font-size:26px;font-weight:600;margin:0 0 10px;width:100%">
     <textarea class="inline-input wiki-subtitle" rows="1" data-field="description" aria-label="Описание фазы" onblur="scheduleSave()">{{ phase.description or '' }}</textarea>
 

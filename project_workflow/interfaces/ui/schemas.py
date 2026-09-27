@@ -238,6 +238,7 @@ class _PhaseOrderItem(StrictRequest):
 
 class PhaseCreate(StrictRequest):
     workflow_id: int = Field(gt=0, strict=True, description="Parent workflow id")
+    mode_id: int | None = Field(default=None, gt=0, strict=True, description="Parent workflow mode id")
     phase_order: int | None = Field(default=None, gt=0, strict=True, description="1-based insertion position")
     insert_after: int | None = Field(default=None, ge=0, strict=True, description="Insert after this 0-based index")
     name: str = Field(default="Новая фаза")
