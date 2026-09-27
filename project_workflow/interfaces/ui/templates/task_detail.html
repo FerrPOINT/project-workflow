@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% block page_layout %}detail-with-aside{% endblock %}
 
 {% block title %}{{ task.task_key }} — Workflow Engine{% endblock %}
 {% block header_title %}<span class="task-detail-desktop-title">{{ task.task_key }}</span><span class="task-detail-mobile-title">Задача</span>{% endblock %}
