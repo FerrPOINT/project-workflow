@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
+import os
 import re
+import stat
+import tarfile
 from dataclasses import asdict, dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 MANIFEST_SCHEMA_VERSION = 1
@@ -21,7 +25,7 @@ _BUNDLE_ROOT_FILES = (
     "pyproject.toml",
 )
 _BUNDLE_ROOT_DIRECTORIES = ("project_workflow", "scripts")
-_IGNORED_PARTS = {"__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache"}
+_MANIFEST_CONTEXT_PATH = "runtime-build-manifest.json"
 
 
 class BuildProvenanceError(ValueError):
@@ -85,61 +89,181 @@ def load_build_provenance(path: Path | None = None) -> BuildProvenance:
     return validate_build_provenance(value)
 
 
+def _canonical_digest(records: list[dict[str, str]]) -> str:
+    canonical = json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def _safe_archive_path(name: str) -> str:
+    path = PurePosixPath(name)
+    if not name or path.is_absolute() or ".." in path.parts or "\\" in name:
+        raise BuildProvenanceError("Git archive содержит небезопасный путь")
+    normalized = path.as_posix().removeprefix("./")
+    if not normalized or normalized == ".":
+        raise BuildProvenanceError("Git archive содержит пустой путь")
+    return normalized.rstrip("/")
+
+
+def _is_bundle_path(path: str) -> bool:
+    return path in _BUNDLE_ROOT_FILES or any(
+        path.startswith(f"{directory}/") for directory in _BUNDLE_ROOT_DIRECTORIES
+    )
+
+
+def runtime_bundle_sha256_from_archive(archive: bytes) -> str:
+    """Hash runtime inputs directly from one immutable ``git archive`` snapshot."""
+    records: list[dict[str, str]] = []
+    seen_files: set[str] = set()
+    seen_directories: set[str] = set()
+    try:
+        source = tarfile.open(fileobj=io.BytesIO(archive), mode="r:*")
+    except tarfile.TarError as exc:
+        raise BuildProvenanceError("Git archive повреждён") from exc
+    with source:
+        for member in source.getmembers():
+            path = _safe_archive_path(member.name)
+            if not _is_bundle_path(path):
+                continue
+            if member.isdir():
+                if path in _BUNDLE_ROOT_DIRECTORIES:
+                    seen_directories.add(path)
+                continue
+            if not member.isfile():
+                raise BuildProvenanceError(
+                    f"Runtime bundle содержит недопустимый тип entry: {path}"
+                )
+            if path in seen_files:
+                raise BuildProvenanceError(f"Runtime bundle содержит повторный путь: {path}")
+            fileobj = source.extractfile(member)
+            if fileobj is None:
+                raise BuildProvenanceError(f"Runtime bundle не может прочитать {path}")
+            content_sha256 = hashlib.sha256(fileobj.read()).hexdigest()
+            records.append(
+                {
+                    "type": "file",
+                    "executable_mode": f"{member.mode & 0o111:03o}",
+                    "path": path,
+                    "content_sha256": content_sha256,
+                }
+            )
+            seen_files.add(path)
+            for directory in _BUNDLE_ROOT_DIRECTORIES:
+                if path.startswith(f"{directory}/"):
+                    seen_directories.add(directory)
+    missing_files = set(_BUNDLE_ROOT_FILES) - seen_files
+    missing_directories = set(_BUNDLE_ROOT_DIRECTORIES) - seen_directories
+    if missing_files or missing_directories:
+        missing = sorted(missing_files | missing_directories)
+        raise BuildProvenanceError(f"Runtime bundle не содержит: {', '.join(missing)}")
+    records.sort(key=lambda item: item["path"])
+    return _canonical_digest(records)
+
+
 def _bundle_files(root: Path) -> list[Path]:
     files: list[Path] = []
     for name in _BUNDLE_ROOT_FILES:
         candidate = root / name
-        if not candidate.is_file():
+        try:
+            candidate_stat = candidate.lstat()
+        except OSError as exc:
+            raise BuildProvenanceError(f"Runtime bundle не содержит {name}") from exc
+        if not stat.S_ISREG(candidate_stat.st_mode):
             raise BuildProvenanceError(f"Runtime bundle не содержит {name}")
         files.append(candidate)
     for name in _BUNDLE_ROOT_DIRECTORIES:
         directory = root / name
-        if not directory.is_dir():
+        try:
+            directory_stat = directory.lstat()
+        except OSError as exc:
+            raise BuildProvenanceError(f"Runtime bundle не содержит {name}") from exc
+        if not stat.S_ISDIR(directory_stat.st_mode):
             raise BuildProvenanceError(f"Runtime bundle не содержит {name}")
-        files.extend(
-            path
-            for path in directory.rglob("*")
-            if path.is_file() and not (_IGNORED_PARTS & set(path.relative_to(root).parts))
-        )
+        found_file = False
+        for current_root, directories, filenames in os.walk(directory, followlinks=False):
+            current = Path(current_root)
+            for child_name in directories:
+                child = current / child_name
+                if child.is_symlink():
+                    raise BuildProvenanceError(
+                        f"Runtime bundle содержит недопустимый symlink: {child.relative_to(root).as_posix()}"
+                    )
+            for child_name in filenames:
+                child = current / child_name
+                child_stat = child.lstat()
+                if not stat.S_ISREG(child_stat.st_mode):
+                    raise BuildProvenanceError(
+                        f"Runtime bundle содержит недопустимый тип: {child.relative_to(root).as_posix()}"
+                    )
+                files.append(child)
+                found_file = True
+        if not found_file:
+            raise BuildProvenanceError(f"Runtime bundle не содержит файлы в {name}")
     return sorted(set(files), key=lambda path: path.relative_to(root).as_posix())
 
 
 def runtime_bundle_sha256(root: Path) -> str:
     """Hash the exact source inputs copied by the runtime Dockerfile."""
-    records: list[list[str]] = []
+    records: list[dict[str, str]] = []
     for path in _bundle_files(root):
+        mode = path.lstat().st_mode
         records.append(
-            [
-                path.relative_to(root).as_posix(),
-                hashlib.sha256(path.read_bytes()).hexdigest(),
-            ]
+            {
+                "type": "file",
+                "executable_mode": f"{mode & 0o111:03o}",
+                "path": path.relative_to(root).as_posix(),
+                "content_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            }
         )
-    canonical = json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
-    return hashlib.sha256(canonical).hexdigest()
+    return _canonical_digest(records)
 
 
-def write_build_manifest(
-    output: Path,
-    *,
-    source_revision: str,
-    source_archive_sha256: str,
-    expected_runtime_bundle_sha256: str,
+def verify_build_manifest(
+    path: Path,
     root: Path,
+    *,
+    expected_source_revision: str,
+    expected_source_archive_sha256: str,
+    expected_runtime_bundle_sha256: str,
 ) -> BuildProvenance:
-    """Verify source inputs and write the immutable manifest used at runtime."""
-    actual_bundle_sha256 = runtime_bundle_sha256(root)
-    provenance = validate_build_provenance(
+    """Verify that the immutable manifest describes the copied runtime inputs."""
+    provenance = load_build_provenance(path)
+    if provenance != validate_build_provenance(
         {
             "schema_version": MANIFEST_SCHEMA_VERSION,
-            "source_revision": source_revision,
-            "source_archive_sha256": source_archive_sha256,
+            "source_revision": expected_source_revision,
+            "source_archive_sha256": expected_source_archive_sha256,
             "runtime_bundle_sha256": expected_runtime_bundle_sha256,
         }
-    )
+    ):
+        raise BuildProvenanceError("Build arguments не совпадают с immutable manifest")
+    actual_bundle_sha256 = runtime_bundle_sha256(root)
     if actual_bundle_sha256 != provenance.runtime_bundle_sha256:
         raise BuildProvenanceError("Runtime bundle digest не совпадает с build context")
-    output.write_text(
-        json.dumps(provenance.to_dict(), sort_keys=True, separators=(",", ":")) + "\n",
-        encoding="utf-8",
-    )
     return provenance
+
+
+def docker_context_with_manifest(archive: bytes, provenance: BuildProvenance) -> bytes:
+    """Add the generated manifest to the exact archive used as Docker context."""
+    output = io.BytesIO()
+    try:
+        source = tarfile.open(fileobj=io.BytesIO(archive), mode="r:*")
+    except tarfile.TarError as exc:
+        raise BuildProvenanceError("Git archive повреждён") from exc
+    with source, tarfile.open(fileobj=output, mode="w", format=tarfile.PAX_FORMAT) as target:
+        for member in source.getmembers():
+            path = _safe_archive_path(member.name)
+            if path == _MANIFEST_CONTEXT_PATH:
+                continue
+            fileobj = source.extractfile(member) if member.isfile() else None
+            target.addfile(member, fileobj)
+        manifest = (
+            json.dumps(provenance.to_dict(), sort_keys=True, separators=(",", ":")) + "\n"
+        ).encode("utf-8")
+        manifest_info = tarfile.TarInfo(_MANIFEST_CONTEXT_PATH)
+        manifest_info.size = len(manifest)
+        manifest_info.mode = 0o444
+        manifest_info.mtime = 0
+        manifest_info.uid = 0
+        manifest_info.gid = 0
+        target.addfile(manifest_info, io.BytesIO(manifest))
+    return output.getvalue()

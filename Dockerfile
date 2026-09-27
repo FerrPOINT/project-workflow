@@ -16,11 +16,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY pyproject.toml constraints.txt README.md LICENSE alembic.ini ./
 COPY scripts/ ./scripts/
 COPY project_workflow/ ./project_workflow/
+COPY runtime-build-manifest.json ./runtime-build-manifest.json
 
 RUN if [ -n "$SOURCE_REVISION" ] || [ -n "$SOURCE_ARCHIVE_SHA256" ] || [ -n "$RUNTIME_BUNDLE_SHA256" ]; then \
-        python scripts/build_runtime_image.py write-manifest \
+        python scripts/build_runtime_image.py verify-manifest \
             --root /app \
-            --output /app/runtime-build-manifest.json \
+            --manifest /app/runtime-build-manifest.json \
             --source-revision "$SOURCE_REVISION" \
             --source-archive-sha256 "$SOURCE_ARCHIVE_SHA256" \
             --runtime-bundle-sha256 "$RUNTIME_BUNDLE_SHA256"; \
@@ -54,10 +55,7 @@ COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder /app/alembic.ini /app/alembic.ini
 COPY --from=builder /app/scripts /app/scripts
 COPY --from=builder /app/project_workflow/infrastructure/db/migrations /app/project_workflow/infrastructure/db/migrations
-RUN --mount=from=builder,source=/app,target=/build \
-    if [ -f /build/runtime-build-manifest.json ]; then \
-        cp /build/runtime-build-manifest.json /app/runtime-build-manifest.json; \
-    fi
+COPY --from=builder /app/runtime-build-manifest.json /app/runtime-build-manifest.json
 
 ENV PATH="/opt/venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1

@@ -53,15 +53,22 @@ Business adapter проверяет runtime-контракт через ауте
 manifest даёт `503`, при этом публичный `/health` по-прежнему проверяет только
 DB/schema и подходит для standalone-разработки.
 
-Поставляемый image собирается только из чистого Git HEAD командой:
+Поставляемый image собирается из одного immutable Git snapshot командой:
 
 ```bash
-python scripts/build_runtime_image.py build --image project-workflow:<exact-sha>
+python scripts/build_runtime_image.py build \
+  --revision <exact-sha> \
+  --image project-workflow:<exact-sha>
 ```
 
-Скрипт вычисляет SHA-256 `git archive`, канонический SHA-256 runtime bundle,
-передаёт их вместе с exact revision в Docker build, а Dockerfile повторно
-проверяет bundle до создания `/app/runtime-build-manifest.json`. Те же значения
+Скрипт один раз читает `git archive <exact-sha>`, из этих же bytes вычисляет
+SHA-256 source archive и канонический SHA-256 runtime bundle, добавляет manifest
+в копию archive и передаёт полученный immutable tar как Docker build context.
+Dirty или ignored файлы рабочего каталога в candidate не попадают. Digest
+bundle включает path, regular-file type, executable mode и content hash;
+symlink и другие non-regular runtime inputs отклоняются. Dockerfile повторно
+проверяет bundle и совпадение build args с `/app/runtime-build-manifest.json`.
+Те же значения
 записываются в OCI labels `org.opencontainers.image.revision`,
 `io.relevanter.source.archive-sha256` и
 `io.relevanter.runtime.bundle-sha256`. Обычный `docker compose up --build`

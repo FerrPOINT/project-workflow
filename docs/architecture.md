@@ -39,9 +39,11 @@ introspection, а также сохраняет отдельный private runti
   `GET /internal/runtime/capabilities`. Он принимает существующий assignment
   либо runtime role token, возвращает только его роль, тип и разрешённые
   операции, а также DB/schema readiness и строгий immutable build manifest.
-  Значения provenance не читаются из environment: candidate build вычисляет
-  их из чистого Git HEAD и runtime inputs, Dockerfile проверяет bundle и
-  сохраняет manifest рядом с приложением. Публичный `/health` не является
+  Значения provenance не читаются из environment: candidate build получает
+  revision, оба digest и Docker context из одного `git archive <exact-sha>`.
+  Bundle digest учитывает path, regular-file type, executable mode и content;
+  non-regular runtime inputs отклоняются. Dockerfile проверяет manifest,
+  copied bundle и OCI-label build args. Публичный `/health` не является
   доказательством runtime capability или source revision.
 - **SupervisorEngine** маршрутизирует задачу, строит phase contract, вызывает
   обязательный OpenAI-compatible evaluator и сохраняет результат атомарно.
