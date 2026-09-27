@@ -86,23 +86,15 @@ class RuntimeStepRequest(StepRequest):
 class ExactInputRef(StrictRequest):
     """One immutable external input snapshot selected by Business."""
 
-    kind: Literal[
-        "business_task",
-        "comment",
-        "attachment",
-        "link",
-        "artifact",
-        "decomposition",
-        "stage",
-    ]
-    ref: str = Field(min_length=1, max_length=512)
-    revision: str = Field(min_length=1, max_length=128)
-    sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    kind: str = Field(min_length=1, max_length=128)
+    ref: str = Field(min_length=1, max_length=1_024)
+    revision: str | None = Field(default=None, min_length=1, max_length=256)
+    hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
-    @field_validator("ref", "revision")
+    @field_validator("kind", "ref", "revision", "hash")
     @classmethod
-    def _input_ref_text_not_blank(cls, value: str, info: Any) -> str:
-        return _strip_nonblank(value, info.field_name)
+    def _input_ref_text_not_blank(cls, value: str | None, info: Any) -> str | None:
+        return _strip_nonblank(value, info.field_name) if value is not None else None
 
 
 class RuntimeAssignmentRequest(StrictRequest):
@@ -129,11 +121,9 @@ class RuntimeAssignmentRequest(StrictRequest):
     decomposition_revision_ref: str = Field(min_length=1, max_length=512)
     stage_revision: str = Field(min_length=1, max_length=128)
     assignment_ref: str = Field(min_length=1, max_length=512)
-    binding_ref: str = Field(min_length=1, max_length=512)
-    hermes_run_ref: str = Field(min_length=1, max_length=512)
     workspace_generation: int = Field(ge=0, strict=True)
     lease_generation: int = Field(ge=0, strict=True)
-    exact_input_refs: list[ExactInputRef] = Field(min_length=1, max_length=100)
+    exact_input_refs: list[ExactInputRef] = Field(max_length=128)
     expected_revision: int = Field(ge=0, strict=True)
     expected_status: Literal["missing", "active", "done", "blocked"]
     expected_mode_key: str | None = Field(default=None, min_length=1, max_length=128)
@@ -155,8 +145,6 @@ class RuntimeAssignmentRequest(StrictRequest):
         "decomposition_revision_ref",
         "stage_revision",
         "assignment_ref",
-        "binding_ref",
-        "hermes_run_ref",
         "expected_mode_key",
     )
     @classmethod
@@ -180,12 +168,48 @@ class RuntimeAssignmentRequest(StrictRequest):
     @model_validator(mode="after")
     def _unique_input_refs(self) -> RuntimeAssignmentRequest:
         identities = [
-            (item.kind, item.ref, item.revision, item.sha256 or "")
+            (item.kind, item.ref, item.revision or "", item.hash or "")
             for item in self.exact_input_refs
         ]
         if len(identities) != len(set(identities)):
             raise ValueError("exact_input_refs не должен содержать дубликаты")
         return self
+
+
+class RuntimeBindRequest(StrictRequest):
+    """Attach the real Hermes run to one already accepted Business assignment."""
+
+    task: str = Field(min_length=1, max_length=128)
+    bind_operation_key: str = Field(min_length=1, max_length=128)
+    assignment_operation_key: str = Field(min_length=1, max_length=128)
+    assignment_revision: int = Field(gt=0, strict=True)
+    assignment_ref: str = Field(min_length=1, max_length=512)
+    binding_ref: str = Field(min_length=1, max_length=512)
+    hermes_run_ref: str = Field(min_length=1, max_length=512)
+    mode_key: str = Field(min_length=1, max_length=128)
+    cycle_number: int = Field(ge=0, strict=True)
+    attempt_number: int = Field(gt=0, strict=True)
+    expected_binding_state: Literal["unbound"]
+
+    @field_validator(
+        "task",
+        "bind_operation_key",
+        "assignment_operation_key",
+        "assignment_ref",
+        "binding_ref",
+        "hermes_run_ref",
+        "mode_key",
+    )
+    @classmethod
+    def _bind_text_not_blank(cls, value: str, info: Any) -> str:
+        return _strip_nonblank(value, info.field_name)
+
+    @field_validator("mode_key")
+    @classmethod
+    def _bind_mode_key_valid(cls, value: str) -> str:
+        if re.fullmatch(r"[a-z0-9][a-z0-9._-]*", value) is None:
+            raise ValueError("mode_key должен соответствовать [a-z0-9][a-z0-9._-]*")
+        return value
 
 
 def _strip_nonblank(value: str, field_name: str) -> str:

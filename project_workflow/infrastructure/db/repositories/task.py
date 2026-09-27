@@ -145,6 +145,17 @@ class SATaskRepository(TaskRepository):
             ).scalar_one_or_none()
         return _row_to_runtime_assignment(row) if row else None
 
+    def get_assignment_by_bind_operation_key(
+        self, bind_operation_key: str
+    ) -> TaskRuntimeAssignment | None:
+        with self._session.no_autoflush:
+            row = self._session.execute(
+                select(m.TaskRuntimeAssignment)
+                .options(joinedload(m.TaskRuntimeAssignment.mode))
+                .where(m.TaskRuntimeAssignment.bind_operation_key == bind_operation_key)
+            ).scalar_one_or_none()
+        return _row_to_runtime_assignment(row) if row else None
+
     def create_assignment(self, data: dict[str, Any]) -> int:
         item = m.TaskRuntimeAssignment(
             operation_key=data["operation_key"],
@@ -171,8 +182,10 @@ class SATaskRepository(TaskRepository):
             decomposition_revision_ref=data.get("decomposition_revision_ref"),
             stage_revision=data["stage_revision"],
             assignment_ref=data["assignment_ref"],
-            binding_ref=data["binding_ref"],
-            hermes_run_ref=data["hermes_run_ref"],
+            binding_ref=data.get("binding_ref"),
+            hermes_run_ref=data.get("hermes_run_ref"),
+            bind_operation_key=data.get("bind_operation_key"),
+            bind_request_sha256=data.get("bind_request_sha256"),
             workspace_generation=data["workspace_generation"],
             lease_generation=data["lease_generation"],
             exact_input_refs=canonical_json(data["exact_input_refs"]),
@@ -182,6 +195,47 @@ class SATaskRepository(TaskRepository):
         self._session.add(item)
         self._session.flush()
         return int(item.id)
+
+    def bind_assignment_if_unbound(
+        self,
+        assignment_id: int,
+        *,
+        expected_task_id: int,
+        expected_assignment_revision: int,
+        expected_role_key: str,
+        expected_mode_id: int,
+        expected_cycle_number: int,
+        expected_attempt_number: int,
+        expected_assignment_ref: str,
+        binding_ref: str,
+        hermes_run_ref: str,
+        bind_operation_key: str,
+        bind_request_sha256: str,
+    ) -> bool:
+        result = self._session.execute(
+            update(m.TaskRuntimeAssignment)
+            .where(
+                m.TaskRuntimeAssignment.id == assignment_id,
+                m.TaskRuntimeAssignment.task_id == expected_task_id,
+                m.TaskRuntimeAssignment.assignment_revision == expected_assignment_revision,
+                m.TaskRuntimeAssignment.role_key == expected_role_key,
+                m.TaskRuntimeAssignment.mode_id == expected_mode_id,
+                m.TaskRuntimeAssignment.cycle_number == expected_cycle_number,
+                m.TaskRuntimeAssignment.attempt_number == expected_attempt_number,
+                m.TaskRuntimeAssignment.assignment_ref == expected_assignment_ref,
+                m.TaskRuntimeAssignment.binding_ref.is_(None),
+                m.TaskRuntimeAssignment.hermes_run_ref.is_(None),
+                m.TaskRuntimeAssignment.bind_operation_key.is_(None),
+                m.TaskRuntimeAssignment.bind_request_sha256.is_(None),
+            )
+            .values(
+                binding_ref=binding_ref,
+                hermes_run_ref=hermes_run_ref,
+                bind_operation_key=bind_operation_key,
+                bind_request_sha256=bind_request_sha256,
+            )
+        )
+        return getattr(result, "rowcount", 0) == 1
 
     def list_assignments(self, task_id: int) -> Sequence[TaskRuntimeAssignment]:
         with self._session.no_autoflush:

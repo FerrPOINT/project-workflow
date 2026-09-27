@@ -20,7 +20,11 @@ from project_workflow.domain.runtime_assignment import (
 )
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.cli.core import _require_valid_key, _resolve_namespace_id
-from project_workflow.interfaces.ui.schemas import RuntimeAssignmentRequest, RuntimeStepRequest
+from project_workflow.interfaces.ui.schemas import (
+    RuntimeAssignmentRequest,
+    RuntimeBindRequest,
+    RuntimeStepRequest,
+)
 from project_workflow.supervisor import format_result
 
 _CATALOG_ROLE = "fleet-control"
@@ -322,6 +326,51 @@ def execute_namespace_step(
     return _step_response(result)
 
 
+def _assignment_response(task: dict[str, Any]) -> dict[str, Any]:
+    keys = (
+        "task_key",
+        "workflow_id",
+        "workflow_key",
+        "mode_id",
+        "mode_key",
+        "cycle_number",
+        "attempt_number",
+        "assignment_operation_key",
+        "assignment_revision",
+        "role_key",
+        "execution_scope",
+        "stage_key",
+        "business_task_ref",
+        "root_task_ref",
+        "work_item_ref",
+        "work_item_revision",
+        "queue_item_ref",
+        "task_workspace_ref",
+        "workspace_revision",
+        "tech_execution_workspace_ref",
+        "tech_execution_attempt_ref",
+        "decomposition_revision_ref",
+        "stage_revision",
+        "assignment_ref",
+        "binding_ref",
+        "hermes_run_ref",
+        "bind_operation_key",
+        "workspace_generation",
+        "lease_generation",
+        "exact_input_refs",
+        "binding_state",
+        "status",
+        "current_phase_id",
+        "current_phase_code",
+        "current_phase_name",
+    )
+    return {
+        "ok": True,
+        "exit_code": 0,
+        "result": {key: task.get(key) for key in keys},
+    }
+
+
 def runtime_assign(
     payload: RuntimeAssignmentRequest,
     authorization: str | None = Header(default=None),
@@ -370,55 +419,58 @@ def runtime_assign(
                 decomposition_revision_ref=payload.decomposition_revision_ref,
                 stage_revision=payload.stage_revision,
                 assignment_ref=payload.assignment_ref,
-                binding_ref=payload.binding_ref,
-                hermes_run_ref=payload.hermes_run_ref,
                 workspace_generation=payload.workspace_generation,
                 lease_generation=payload.lease_generation,
-                exact_input_refs=[item.model_dump() for item in payload.exact_input_refs],
+                exact_input_refs=[
+                    item.model_dump(exclude_unset=True) for item in payload.exact_input_refs
+                ],
                 expected_revision=payload.expected_revision,
                 expected_status=payload.expected_status,
                 expected_mode_key=payload.expected_mode_key,
                 expected_cycle_number=payload.expected_cycle_number,
             )
-            return {
-                "ok": True,
-                "exit_code": 0,
-                "result": {
-                    "task_key": task_key,
-                    "workflow_id": task["workflow_id"],
-                    "workflow_key": task["workflow_key"],
-                    "mode_id": task["mode_id"],
-                    "mode_key": task["mode_key"],
-                    "cycle_number": task["cycle_number"],
-                    "attempt_number": task["attempt_number"],
-                    "assignment_operation_key": task["assignment_operation_key"],
-                    "assignment_revision": task["assignment_revision"],
-                    "role_key": task["role_key"],
-                    "execution_scope": task["execution_scope"],
-                    "stage_key": task["stage_key"],
-                    "business_task_ref": task["business_task_ref"],
-                    "root_task_ref": task["root_task_ref"],
-                    "work_item_ref": task["work_item_ref"],
-                    "work_item_revision": task["work_item_revision"],
-                    "queue_item_ref": task["queue_item_ref"],
-                    "task_workspace_ref": task["task_workspace_ref"],
-                    "workspace_revision": task["workspace_revision"],
-                    "tech_execution_workspace_ref": task["tech_execution_workspace_ref"],
-                    "tech_execution_attempt_ref": task["tech_execution_attempt_ref"],
-                    "decomposition_revision_ref": task["decomposition_revision_ref"],
-                    "stage_revision": task["stage_revision"],
-                    "assignment_ref": task["assignment_ref"],
-                    "binding_ref": task["binding_ref"],
-                    "hermes_run_ref": task["hermes_run_ref"],
-                    "workspace_generation": task["workspace_generation"],
-                    "lease_generation": task["lease_generation"],
-                    "exact_input_refs": task["exact_input_refs"],
-                    "status": task["status"],
-                    "current_phase_id": task["current_phase_id"],
-                    "current_phase_code": task["current_phase_code"],
-                    "current_phase_name": task["current_phase_name"],
-                },
-            }
+            return _assignment_response(task)
+    except (ConflictError, RuntimeError, ValueError) as exc:
+        return _error(str(exc), 409)
+
+
+def runtime_bind(
+    payload: RuntimeBindRequest,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any] | JSONResponse:
+    """Attach the adapter's real Hermes binding to one accepted assignment."""
+    try:
+        role = _authorized_assignment_role(authorization)
+    except RuntimeError as exc:
+        return _error(str(exc), 503)
+    if role is None:
+        try:
+            if _authorized_role(authorization) is not None:
+                return _error("Runtime token не разрешает связывание задач", 403)
+        except RuntimeError as exc:
+            return _error(str(exc), 503)
+        return _error("Недействительный runtime token", 401)
+    try:
+        with SAUnitOfWork() as uow:
+            namespace_id = _namespace_id(uow, role)
+            task_key = _require_valid_key(payload.task, uow, project_id=namespace_id)
+            _assert_task_key_in_namespace(uow, namespace_id, task_key)
+            task = TaskService(uow).bind_runtime_assignment(
+                project_id=namespace_id,
+                task_key=task_key,
+                role_key=role,
+                bind_operation_key=payload.bind_operation_key,
+                assignment_operation_key=payload.assignment_operation_key,
+                assignment_revision=payload.assignment_revision,
+                assignment_ref=payload.assignment_ref,
+                binding_ref=payload.binding_ref,
+                hermes_run_ref=payload.hermes_run_ref,
+                mode_key=payload.mode_key,
+                cycle_number=payload.cycle_number,
+                attempt_number=payload.attempt_number,
+                expected_binding_state=payload.expected_binding_state,
+            )
+            return _assignment_response(task)
     except (ConflictError, RuntimeError, ValueError) as exc:
         return _error(str(exc), 409)
 

@@ -32,8 +32,6 @@ def _binding(**overrides: object) -> dict[str, object]:
         "decomposition_revision_ref": "decomposition:ROOT-1@2",
         "stage_revision": "stage:developer@4",
         "assignment_ref": "assignment:DEV-1@1",
-        "binding_ref": "binding:DEV-1@1",
-        "hermes_run_ref": "hermes-run:run-1",
         "workspace_generation": 2,
         "lease_generation": 5,
         "exact_input_refs": [
@@ -41,18 +39,38 @@ def _binding(**overrides: object) -> dict[str, object]:
                 "revision": "2",
                 "ref": "comment:DEV-1:4",
                 "kind": "comment",
-                "sha256": "b" * 64,
+                "hash": "b" * 64,
             },
             {
                 "kind": "business_task",
                 "ref": "business-task:DEV-1",
                 "revision": "7",
-                "sha256": "a" * 64,
+                "hash": "a" * 64,
             }
         ],
     }
     binding.update(overrides)
     return binding
+
+
+def _bind(uow, project_id: int, assignment: dict[str, object], **overrides: object):
+    values: dict[str, object] = {
+        "project_id": project_id,
+        "task_key": assignment["task_key"],
+        "role_key": assignment["role_key"],
+        "bind_operation_key": f"bind:{assignment['assignment_operation_key']}",
+        "assignment_operation_key": assignment["assignment_operation_key"],
+        "assignment_revision": assignment["assignment_revision"],
+        "assignment_ref": assignment["assignment_ref"],
+        "binding_ref": f"binding:{assignment['assignment_operation_key']}",
+        "hermes_run_ref": f"hermes-run:{assignment['assignment_operation_key']}",
+        "mode_key": assignment["mode_key"],
+        "cycle_number": assignment["cycle_number"],
+        "attempt_number": assignment["attempt_number"],
+        "expected_binding_state": "unbound",
+    }
+    values.update(overrides)
+    return TaskService(uow).bind_runtime_assignment(**values)
 
 
 def _runtime_catalog(uow, *, role_key: str, scope: str, tech_policy: str) -> tuple[int, int]:
@@ -91,7 +109,7 @@ def _runtime_catalog(uow, *, role_key: str, scope: str, tech_policy: str) -> tup
     return project_id, mode_id
 
 
-def test_runtime_assignment_persists_and_replays_exact_immutable_binding(tmp_path):
+def test_runtime_assignment_persists_replays_and_binds_exact_identity(tmp_path):
     with prepared_sqlite_uow(tmp_path, "binding.db") as uow:
         project_id, _ = _runtime_catalog(
             uow, role_key="developer", scope="delivery", tech_policy="required"
@@ -116,10 +134,20 @@ def test_runtime_assignment_persists_and_replays_exact_immutable_binding(tmp_pat
             ],
         }
         replay = TaskService(uow).assign_runtime_task(**reordered)
+        bound = _bind(
+            uow,
+            project_id,
+            assigned,
+            binding_ref="binding:DEV-1@1",
+            hermes_run_ref="hermes-run:run-1",
+        )
         ledger = uow.tasks.list_assignments(assigned["id"])
 
         assert assigned["execution_scope"] == "delivery"
-        assert assigned["binding_ref"] == "binding:DEV-1@1"
+        assert assigned["binding_state"] == "unbound"
+        assert assigned["binding_ref"] is None
+        assert bound["binding_state"] == "bound"
+        assert bound["binding_ref"] == "binding:DEV-1@1"
         assert [item["kind"] for item in assigned["exact_input_refs"]] == ["business_task", "comment"]
         assert replay == assigned
         assert len(ledger) == 1
@@ -130,21 +158,25 @@ def test_runtime_assignment_persists_and_replays_exact_immutable_binding(tmp_pat
         assert ledger[0].work_item_revision == 7
         assert ledger[0].workspace_revision == 2
         assert ledger[0].task_workspace_ref == "task-workspace:tw-1"
-        assert ledger[0].exact_input_refs == assigned["exact_input_refs"]
+        assert ledger[0].exact_input_refs == bound["exact_input_refs"]
         assert ledger[0].payload_sha256 is not None and len(ledger[0].payload_sha256) == 64
         stored = uow._session.get(DBTaskRuntimeAssignment, ledger[0].id)
         assert stored is not None
         assert stored.exact_input_refs == canonical_json(ledger[0].exact_input_refs)
         assert stored.payload == canonical_json(ledger[0].payload)
 
-        mutated = {**request, "binding_ref": "binding:DEV-1@different"}
-        with pytest.raises(ConflictError, match="другого runtime assignment"):
-            TaskService(uow).assign_runtime_task(**mutated)
+        with pytest.raises(ConflictError, match="другого runtime bind"):
+            _bind(
+                uow,
+                project_id,
+                assigned,
+                hermes_run_ref="hermes-run:different",
+            )
 
         changed_ref = {
             **request,
             "exact_input_refs": [
-                {**request["exact_input_refs"][0], "sha256": "c" * 64},
+                {**request["exact_input_refs"][0], "hash": "c" * 64},
                 request["exact_input_refs"][1],
             ],
         }
@@ -184,8 +216,6 @@ def test_terminal_assignment_accepts_exact_next_attempt_in_same_cycle_and_replay
             "operation_key": "assign-dev-1-attempt-2",
             "attempt_number": 2,
             "assignment_ref": "assignment:DEV-1@2",
-            "binding_ref": "binding:DEV-1@2",
-            "hermes_run_ref": "hermes-run:run-2",
             "tech_execution_workspace_ref": "tech-workspace:workspace-2",
             "tech_execution_attempt_ref": "tech-attempt:attempt-2",
             "workspace_generation": 3,
@@ -383,8 +413,6 @@ def test_new_cycle_requires_attempt_reset_and_may_select_backend_rework_mode(tmp
             stage_revision="stage:rework@1",
             queue_item_ref="queue-item:DEV-1:rework:1",
             assignment_ref="assignment:DEV-1@2",
-            binding_ref="binding:DEV-1@2",
-            hermes_run_ref="hermes-run:rework-1",
         )
         with pytest.raises(ConflictError, match="attempt_number=1"):
             TaskService(uow).assign_runtime_task(

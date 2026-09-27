@@ -42,8 +42,6 @@ def _binding(operation_key: str, *, scope: str = "delivery") -> dict[str, object
         "decomposition_revision_ref": "decomposition:1",
         "stage_revision": "developer:1",
         "assignment_ref": f"assignment:{operation_key}",
-        "binding_ref": f"binding:{operation_key}",
-        "hermes_run_ref": f"hermes-run:{operation_key}",
         "workspace_generation": 1,
         "lease_generation": 1,
         "exact_input_refs": [{"kind": "business_task", "ref": f"business-task:{operation_key}", "revision": "1"}],

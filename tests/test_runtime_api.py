@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
@@ -81,8 +83,6 @@ def _assignment(task: str, operation_key: str, role: str) -> dict[str, object]:
         "decomposition_revision_ref": f"decomposition:{task}@1",
         "stage_revision": f"stage:{role}@1",
         "assignment_ref": f"assignment:{operation_key}",
-        "binding_ref": f"binding:{operation_key}",
-        "hermes_run_ref": f"hermes-run:{operation_key}",
         "workspace_generation": 1,
         "lease_generation": 1,
         "exact_input_refs": [
@@ -95,6 +95,41 @@ def _assignment(task: str, operation_key: str, role: str) -> dict[str, object]:
         payload["tech_execution_workspace_ref"] = f"tech-workspace:{task}"
         payload["tech_execution_attempt_ref"] = f"tech-attempt:{task}"
     return payload
+
+
+def _bind_payload(
+    assignment: dict[str, object],
+    *,
+    bind_operation_key: str | None = None,
+    binding_ref: str | None = None,
+    hermes_run_ref: str | None = None,
+) -> dict[str, object]:
+    operation_key = str(assignment["assignment_operation_key"])
+    return {
+        "task": assignment["task_key"],
+        "bind_operation_key": bind_operation_key or f"bind:{operation_key}",
+        "assignment_operation_key": operation_key,
+        "assignment_revision": assignment["assignment_revision"],
+        "assignment_ref": assignment["assignment_ref"],
+        "binding_ref": binding_ref or f"binding:{operation_key}",
+        "hermes_run_ref": hermes_run_ref or f"hermes-run:{operation_key}",
+        "mode_key": assignment["mode_key"],
+        "cycle_number": assignment["cycle_number"],
+        "attempt_number": assignment["attempt_number"],
+        "expected_binding_state": "unbound",
+    }
+
+
+def _bind_assignment(
+    client: TestClient, assignment_token: str, assignment: dict[str, object]
+) -> dict[str, object]:
+    response = client.post(
+        "/internal/runtime/bind",
+        headers=_headers(assignment_token),
+        json=_bind_payload(assignment),
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["result"]
 
 
 def _step_payload(
@@ -136,6 +171,31 @@ def _service_assignment(
     payload["project_id"] = project_id
     payload["task_key"] = payload.pop("task")
     return payload
+
+
+def _service_bind(
+    uow: SAUnitOfWork,
+    *,
+    project_id: int,
+    role: str,
+    assignment: dict[str, object],
+) -> dict[str, object]:
+    payload = _bind_payload(assignment)
+    return TaskService(uow).bind_runtime_assignment(
+        project_id=project_id,
+        task_key=str(payload["task"]),
+        role_key=role,
+        bind_operation_key=str(payload["bind_operation_key"]),
+        assignment_operation_key=str(payload["assignment_operation_key"]),
+        assignment_revision=int(payload["assignment_revision"]),
+        assignment_ref=str(payload["assignment_ref"]),
+        binding_ref=str(payload["binding_ref"]),
+        hermes_run_ref=str(payload["hermes_run_ref"]),
+        mode_key=str(payload["mode_key"]),
+        cycle_number=int(payload["cycle_number"]),
+        attempt_number=int(payload["attempt_number"]),
+        expected_binding_state=str(payload["expected_binding_state"]),
+    )
 
 
 def _unknown_step_payload(task: str) -> dict[str, object]:
@@ -266,6 +326,7 @@ def test_runtime_token_is_bound_to_one_namespace(monkeypatch, supervisor_llm):
             headers=_headers(assignment_token),
             json=_assignment("ANA-1", "assign-ana-1", "analyst"),
         )
+        bound = _bind_assignment(client, assignment_token, assigned.json()["result"])
         operation_collision = client.post(
             "/internal/runtime/assign",
             headers=_headers(assignment_token),
@@ -291,7 +352,7 @@ def test_runtime_token_is_bound_to_one_namespace(monkeypatch, supervisor_llm):
         current = client.post(
             "/internal/runtime/step",
             headers=_headers(analyst_token),
-            json=_step_payload(assigned.json()["result"]),
+            json=_step_payload(bound),
         )
         foreign = client.post(
             "/internal/runtime/step",
@@ -302,7 +363,7 @@ def test_runtime_token_is_bound_to_one_namespace(monkeypatch, supervisor_llm):
         completed = client.post(
             "/internal/runtime/step",
             headers=_headers(analyst_token),
-            json=_step_payload(assigned.json()["result"], "Все требования выполнены."),
+            json=_step_payload(bound, "Все требования выполнены."),
         )
         history = client.get(
             "/internal/runtime/history",
@@ -324,12 +385,15 @@ def test_runtime_token_is_bound_to_one_namespace(monkeypatch, supervisor_llm):
     assert assignment_result["queue_item_ref"] == "queue-item:ANA-1:analyst:0"
     assert assignment_result["workspace_revision"] == 1
     assert assignment_result["tech_execution_workspace_ref"] is None
+    assert assignment_result["binding_state"] == "unbound"
+    assert assignment_result["binding_ref"] is None
+    assert assignment_result["hermes_run_ref"] is None
+    assert bound["binding_state"] == "bound"
     assert assignment_result["exact_input_refs"] == [
         {
             "kind": "business_task",
             "ref": "business-task:ANA-1",
             "revision": "1",
-            "sha256": None,
         }
     ]
     assert operation_collision.status_code == 409
@@ -368,10 +432,11 @@ def test_runtime_history_exposes_retryable_supervisor_failure(monkeypatch):
             headers=_headers(assignment_token),
             json=_assignment("DEV-1", "assign-dev-1", "developer"),
         )
+        bound = _bind_assignment(client, assignment_token, assigned.json()["result"])
         current = client.post(
             "/internal/runtime/step",
             headers=_headers(token),
-            json=_step_payload(assigned.json()["result"]),
+            json=_step_payload(bound),
         )
         with patch.object(
             OpenAICompatibleClient,
@@ -381,7 +446,7 @@ def test_runtime_history_exposes_retryable_supervisor_failure(monkeypatch):
             blocked = client.post(
                 "/internal/runtime/step",
                 headers=_headers(token),
-                json=_step_payload(assigned.json()["result"], "Отчёт"),
+                json=_step_payload(bound, "Отчёт"),
             )
         history = client.get(
             "/internal/runtime/history",
@@ -420,9 +485,303 @@ def test_token_collision_closes_runtime_and_assignment_endpoints(monkeypatch):
             headers=_headers(shared),
             json=_assignment("ANA-1", "collision", "analyst"),
         )
+        binding = client.post(
+            "/internal/runtime/bind",
+            headers=_headers(shared),
+            json=_bind_payload(
+                {
+                    "task_key": "ANA-1",
+                    "assignment_operation_key": "collision",
+                    "assignment_revision": 1,
+                    "assignment_ref": "assignment:collision",
+                    "mode_key": "assigned",
+                    "cycle_number": 0,
+                    "attempt_number": 1,
+                }
+            ),
+        )
 
     assert step.status_code == 503
     assert assignment.status_code == 503
+    assert binding.status_code == 503
+
+
+def test_runtime_assignment_accepts_exact_business_snapshot_contract(monkeypatch):
+    assignment_token = "snapshot-assignment-token-1234567"
+    monkeypatch.setenv(
+        "PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON",
+        json.dumps({"developer": assignment_token}),
+    )
+    config.get_settings.cache_clear()
+    _namespace("DEVELOPER", "workflow-developer", "DEV")
+
+    empty = _assignment("DEV-30", "assign-dev-30", "developer")
+    empty["exact_input_refs"] = []
+    snapshots = _assignment("DEV-31", "assign-dev-31", "developer")
+    snapshots["exact_input_refs"] = [
+        {
+            "kind": "tech-execution-terminal-receipt",
+            "ref": "terminal-receipt:architecture",
+            "revision": "receipt-r1",
+            "hash": "a" * 64,
+        },
+        {"kind": "requirement", "ref": "requirement:business-scope"},
+    ]
+
+    with TestClient(create_app()) as client:
+        accepted_empty = client.post(
+            "/internal/runtime/assign", headers=_headers(assignment_token), json=empty
+        )
+        replay_empty = client.post(
+            "/internal/runtime/assign", headers=_headers(assignment_token), json=empty
+        )
+        accepted_snapshots = client.post(
+            "/internal/runtime/assign", headers=_headers(assignment_token), json=snapshots
+        )
+        changed = client.post(
+            "/internal/runtime/assign",
+            headers=_headers(assignment_token),
+            json={
+                **snapshots,
+                "exact_input_refs": [
+                    {**snapshots["exact_input_refs"][0], "hash": "b" * 64},
+                    snapshots["exact_input_refs"][1],
+                ],
+            },
+        )
+        absent_optional = _assignment("DEV-32", "assign-dev-32", "developer")
+        absent_optional["exact_input_refs"] = [{"kind": "requirement", "ref": "req:32"}]
+        assert client.post(
+            "/internal/runtime/assign",
+            headers=_headers(assignment_token),
+            json=absent_optional,
+        ).status_code == 200
+        present_null = {
+            **absent_optional,
+            "exact_input_refs": [
+                {"kind": "requirement", "ref": "req:32", "revision": None}
+            ],
+        }
+        null_changed = client.post(
+            "/internal/runtime/assign",
+            headers=_headers(assignment_token),
+            json=present_null,
+        )
+        invalid_payloads = []
+        for item in (
+            {"kind": " ", "ref": "valid"},
+            {"kind": "requirement", "ref": " "},
+            {"kind": "requirement", "ref": "valid", "hash": "not-a-sha256"},
+        ):
+            payload = _assignment("DEV-33", f"invalid-{len(invalid_payloads)}", "developer")
+            payload["exact_input_refs"] = [item]
+            invalid_payloads.append(
+                client.post(
+                    "/internal/runtime/assign",
+                    headers=_headers(assignment_token),
+                    json=payload,
+                )
+            )
+
+    assert accepted_empty.status_code == 200
+    assert accepted_empty.json()["result"]["exact_input_refs"] == []
+    assert replay_empty.status_code == 200
+    assert accepted_snapshots.status_code == 200
+    assert accepted_snapshots.json()["result"]["exact_input_refs"] == [
+        {"kind": "requirement", "ref": "requirement:business-scope"},
+        {
+            "kind": "tech-execution-terminal-receipt",
+            "ref": "terminal-receipt:architecture",
+            "revision": "receipt-r1",
+            "hash": "a" * 64,
+        },
+    ]
+    assert changed.status_code == 409
+    assert null_changed.status_code == 409
+    assert [response.status_code for response in invalid_payloads] == [422, 422, 422]
+
+
+def test_runtime_bind_is_role_scoped_idempotent_and_fenced(monkeypatch):
+    runtime_token = "developer-runtime-token-123456789"
+    developer_assignment_token = "developer-assignment-token-12345"
+    analyst_assignment_token = "analyst-assignment-token-1234567"
+    monkeypatch.setenv(
+        "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON",
+        json.dumps({"developer": runtime_token}),
+    )
+    monkeypatch.setenv(
+        "PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON",
+        json.dumps(
+            {
+                "developer": developer_assignment_token,
+                "analyst": analyst_assignment_token,
+            }
+        ),
+    )
+    config.get_settings.cache_clear()
+    _namespace("DEVELOPER", "workflow-developer", "DEV")
+    _namespace("ANALYST", "workflow-analyst", "ANA")
+
+    with TestClient(create_app()) as client:
+        accepted_response = client.post(
+            "/internal/runtime/assign",
+            headers=_headers(developer_assignment_token),
+            json=_assignment("DEV-34", "assign-dev-34", "developer"),
+        )
+        assert accepted_response.status_code == 200
+        accepted = accepted_response.json()["result"]
+        assert accepted["binding_state"] == "unbound"
+        assert accepted["binding_ref"] is None
+        assert accepted["hermes_run_ref"] is None
+        assert accepted["bind_operation_key"] is None
+
+        before_bind = {**accepted, "binding_ref": "fake", "hermes_run_ref": "fake"}
+        unbound_history = client.get(
+            "/internal/runtime/history",
+            headers=_headers(runtime_token),
+            params={"task": "DEV-34"},
+        )
+        step_before_bind = client.post(
+            "/internal/runtime/step",
+            headers=_headers(runtime_token),
+            json=_step_payload(before_bind),
+        )
+        bind_payload = _bind_payload(
+            accepted,
+            binding_ref="business-binding:real-34",
+            hermes_run_ref="hermes-session:real-run-34",
+        )
+        execution_token_bind = client.post(
+            "/internal/runtime/bind",
+            headers=_headers(runtime_token),
+            json=bind_payload,
+        )
+        wrong_role_bind = client.post(
+            "/internal/runtime/bind",
+            headers=_headers(analyst_assignment_token),
+            json=bind_payload,
+        )
+        unknown_token_bind = client.post(
+            "/internal/runtime/bind",
+            headers=_headers("unknown-assignment-token-123456"),
+            json=bind_payload,
+        )
+        for field, value in (
+            ("task", "DEV-999"),
+            ("assignment_operation_key", "assign-dev-34-other"),
+            ("assignment_revision", 2),
+            ("assignment_ref", "assignment:other"),
+            ("mode_key", "other"),
+            ("cycle_number", 1),
+            ("attempt_number", 2),
+        ):
+            rejected = client.post(
+                "/internal/runtime/bind",
+                headers=_headers(developer_assignment_token),
+                json={**bind_payload, field: value, "bind_operation_key": f"bad-bind:{field}"},
+            )
+            assert rejected.status_code == 409
+
+        bound = client.post(
+            "/internal/runtime/bind",
+            headers=_headers(developer_assignment_token),
+            json=bind_payload,
+        )
+        replay = client.post(
+            "/internal/runtime/bind",
+            headers=_headers(developer_assignment_token),
+            json=bind_payload,
+        )
+        changed_same_key = client.post(
+            "/internal/runtime/bind",
+            headers=_headers(developer_assignment_token),
+            json={**bind_payload, "hermes_run_ref": "hermes-session:other-run"},
+        )
+        second_binding = client.post(
+            "/internal/runtime/bind",
+            headers=_headers(developer_assignment_token),
+            json={
+                **bind_payload,
+                "bind_operation_key": "bind:assign-dev-34:second",
+                "binding_ref": "business-binding:second",
+                "hermes_run_ref": "hermes-session:second",
+            },
+        )
+
+    with TestClient(create_app()) as restarted_client:
+        after_restart = restarted_client.post(
+            "/internal/runtime/bind",
+            headers=_headers(developer_assignment_token),
+            json=bind_payload,
+        )
+        assignment_replay = restarted_client.post(
+            "/internal/runtime/assign",
+            headers=_headers(developer_assignment_token),
+            json=_assignment("DEV-34", "assign-dev-34", "developer"),
+        )
+
+    assert step_before_bind.status_code == 409
+    assert unbound_history.status_code == 200
+    assert unbound_history.json()["result"]["records"] == []
+    assert execution_token_bind.status_code == 403
+    assert wrong_role_bind.status_code == 409
+    assert unknown_token_bind.status_code == 401
+    assert bound.status_code == 200
+    assert bound.json()["result"]["binding_state"] == "bound"
+    assert bound.json()["result"]["binding_ref"] == "business-binding:real-34"
+    assert bound.json()["result"]["hermes_run_ref"] == "hermes-session:real-run-34"
+    assert replay.status_code == 200
+    assert replay.json()["result"] == bound.json()["result"]
+    assert changed_same_key.status_code == 409
+    assert second_binding.status_code == 409
+    assert after_restart.status_code == 200
+    assert after_restart.json()["result"] == bound.json()["result"]
+    assert assignment_replay.status_code == 200
+    assert assignment_replay.json()["result"]["binding_state"] == "bound"
+    assert assignment_replay.json()["result"]["hermes_run_ref"] == "hermes-session:real-run-34"
+
+
+def test_concurrent_identical_runtime_bind_has_one_durable_binding(monkeypatch):
+    assignment_token = "concurrent-assignment-token-1234"
+    monkeypatch.setenv(
+        "PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON",
+        json.dumps({"developer": assignment_token}),
+    )
+    config.get_settings.cache_clear()
+    _namespace("DEVELOPER", "workflow-developer", "DEV")
+    with TestClient(create_app()) as client:
+        accepted = client.post(
+            "/internal/runtime/assign",
+            headers=_headers(assignment_token),
+            json=_assignment("DEV-35", "assign-dev-35", "developer"),
+        ).json()["result"]
+    payload = _bind_payload(accepted)
+    barrier = Barrier(2)
+
+    def bind_once() -> tuple[int, dict[str, object]]:
+        barrier.wait(timeout=5)
+        with TestClient(create_app()) as client:
+            response = client.post(
+                "/internal/runtime/bind",
+                headers=_headers(assignment_token),
+                json=payload,
+            )
+            return response.status_code, response.json()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        responses = list(executor.map(lambda _index: bind_once(), range(2)))
+
+    assert [status for status, _body in responses] == [200, 200]
+    assert all(body["result"]["binding_state"] == "bound" for _status, body in responses)
+    with SAUnitOfWork() as uow:
+        task = uow.tasks.get_by_key("DEV-35")
+        assert task is not None and task.id is not None
+        assignments = uow.tasks.list_assignments(task.id)
+        assert len(assignments) == 1
+        assert assignments[0].binding_ref == "binding:assign-dev-35"
+        assert assignments[0].hermes_run_ref == "hermes-run:assign-dev-35"
+        assert assignments[0].bind_request_sha256 is not None
+        assert len(assignments[0].bind_request_sha256) == 64
 
 
 def test_runtime_step_rejects_old_run_when_same_cycle_retry_wins_during_evaluation(
@@ -448,7 +807,9 @@ def test_runtime_step_rejects_old_run_when_same_cycle_retry_wins_during_evaluati
             json=_assignment("DEV-7", "assign-dev-7-attempt-1", "developer"),
         )
         assert assigned_response.status_code == 200
-        assigned = assigned_response.json()["result"]
+        assigned = _bind_assignment(
+            client, assignment_token, assigned_response.json()["result"]
+        )
 
         def retry_during_provider_call(*_args, **_kwargs):
             with SAUnitOfWork() as uow:
@@ -457,7 +818,7 @@ def test_runtime_step_rejects_old_run_when_same_cycle_retry_wins_during_evaluati
                 project_id = task.project_id
                 uow.tasks.update(task.id, {"status": "done"})
                 uow.commit()
-                TaskService(uow).assign_runtime_task(
+                retry_assignment = TaskService(uow).assign_runtime_task(
                     **_service_assignment(
                         project_id=project_id,
                         task="DEV-7",
@@ -465,8 +826,6 @@ def test_runtime_step_rejects_old_run_when_same_cycle_retry_wins_during_evaluati
                         role="developer",
                         attempt_number=2,
                         assignment_ref="assignment:assign-dev-7-attempt-2",
-                        binding_ref="binding:assign-dev-7-attempt-2",
-                        hermes_run_ref="hermes-run:assign-dev-7-attempt-2",
                         tech_execution_workspace_ref="tech-workspace:DEV-7-retry",
                         tech_execution_attempt_ref="tech-attempt:DEV-7-retry",
                         workspace_generation=2,
@@ -474,6 +833,12 @@ def test_runtime_step_rejects_old_run_when_same_cycle_retry_wins_during_evaluati
                         expected_revision=1,
                         expected_status="done",
                     )
+                )
+                _service_bind(
+                    uow,
+                    project_id=project_id,
+                    role="developer",
+                    assignment=retry_assignment,
                 )
             return {
                 "verdict": "PASS",
@@ -524,14 +889,16 @@ def test_runtime_step_rejects_old_run_after_new_cycle_without_writing_history(mo
             json=_assignment("DEV-8", "assign-dev-8-cycle-0", "developer"),
         )
         assert assigned_response.status_code == 200
-        old_assignment = assigned_response.json()["result"]
+        old_assignment = _bind_assignment(
+            client, assignment_token, assigned_response.json()["result"]
+        )
         with SAUnitOfWork() as uow:
             task = uow.tasks.get_by_key("DEV-8")
             assert task is not None and task.id is not None
             project_id = task.project_id
             uow.tasks.update(task.id, {"status": "done"})
             uow.commit()
-            TaskService(uow).assign_runtime_task(
+            next_assignment = TaskService(uow).assign_runtime_task(
                 **_service_assignment(
                     project_id=project_id,
                     task="DEV-8",
@@ -539,8 +906,6 @@ def test_runtime_step_rejects_old_run_after_new_cycle_without_writing_history(mo
                     role="developer",
                     cycle_number=1,
                     assignment_ref="assignment:assign-dev-8-cycle-1",
-                    binding_ref="binding:assign-dev-8-cycle-1",
-                    hermes_run_ref="hermes-run:assign-dev-8-cycle-1",
                     tech_execution_workspace_ref="tech-workspace:DEV-8-cycle-1",
                     tech_execution_attempt_ref="tech-attempt:DEV-8-cycle-1",
                     workspace_generation=2,
@@ -550,6 +915,12 @@ def test_runtime_step_rejects_old_run_after_new_cycle_without_writing_history(mo
                     expected_mode_key="assigned",
                     expected_cycle_number=0,
                 )
+            )
+            _service_bind(
+                uow,
+                project_id=project_id,
+                role="developer",
+                assignment=next_assignment,
             )
         stale = client.post(
             "/internal/runtime/step",
@@ -585,11 +956,12 @@ def test_runtime_step_replays_committed_response_before_cursor_rejection(
     supervisor_llm("PASS")
 
     with TestClient(create_app()) as client:
-        assigned = client.post(
+        accepted = client.post(
             "/internal/runtime/assign",
             headers=_headers(assignment_token),
             json=_assignment("DEV-20", "assign-dev-20", "developer"),
         ).json()["result"]
+        assigned = _bind_assignment(client, assignment_token, accepted)
         payload = _step_payload(
             assigned,
             "Готово",
@@ -635,11 +1007,12 @@ def test_runtime_step_operation_key_rejects_changed_payload(monkeypatch, supervi
     supervisor_llm("PASS")
 
     with TestClient(create_app()) as client:
-        assigned = client.post(
+        accepted = client.post(
             "/internal/runtime/assign",
             headers=_headers(assignment_token),
             json=_assignment("DEV-21", "assign-dev-21", "developer"),
         ).json()["result"]
+        assigned = _bind_assignment(client, assignment_token, accepted)
         original = _step_payload(
             assigned,
             "Первый отчёт",
@@ -725,11 +1098,12 @@ def test_completed_step_cannot_replay_into_retry_or_new_cycle(monkeypatch, super
 
     for task_key, next_cycle in (("DEV-22", 0), ("DEV-23", 1)):
         with TestClient(create_app()) as client:
-            initial = client.post(
+            accepted = client.post(
                 "/internal/runtime/assign",
                 headers=_headers(assignment_token),
                 json=_assignment(task_key, f"assign-{task_key}-initial", "developer"),
             ).json()["result"]
+            initial = _bind_assignment(client, assignment_token, accepted)
             old_payload = _step_payload(
                 initial,
                 "Готово",
@@ -745,7 +1119,7 @@ def test_completed_step_cannot_replay_into_retry_or_new_cycle(monkeypatch, super
                 task = uow.tasks.get_by_key(task_key)
                 assert task is not None and task.id is not None
                 project_id = task.project_id
-                TaskService(uow).assign_runtime_task(
+                next_assignment = TaskService(uow).assign_runtime_task(
                     **_service_assignment(
                         project_id=project_id,
                         task=task_key,
@@ -754,8 +1128,6 @@ def test_completed_step_cannot_replay_into_retry_or_new_cycle(monkeypatch, super
                         cycle_number=next_cycle,
                         attempt_number=2 if next_cycle == 0 else 1,
                         assignment_ref=f"assignment:assign-{task_key}-next",
-                        binding_ref=f"binding:assign-{task_key}-next",
-                        hermes_run_ref=f"hermes-run:assign-{task_key}-next",
                         tech_execution_workspace_ref=f"tech-workspace:{task_key}-next",
                         tech_execution_attempt_ref=f"tech-attempt:{task_key}-next",
                         workspace_generation=2,
@@ -765,6 +1137,12 @@ def test_completed_step_cannot_replay_into_retry_or_new_cycle(monkeypatch, super
                         expected_mode_key="assigned",
                         expected_cycle_number=0,
                     )
+                )
+                _service_bind(
+                    uow,
+                    project_id=project_id,
+                    role="developer",
+                    assignment=next_assignment,
                 )
             stale = client.post(
                 "/internal/runtime/step",
@@ -795,11 +1173,12 @@ def test_concurrent_identical_runtime_step_has_one_durable_mutation(
     config.get_settings.cache_clear()
     _namespace("DEVELOPER", "workflow-developer", "DEV")
     with TestClient(create_app()) as setup_client:
-        assigned = setup_client.post(
+        accepted = setup_client.post(
             "/internal/runtime/assign",
             headers=_headers(assignment_token),
             json=_assignment("DEV-24", "assign-dev-24", "developer"),
         ).json()["result"]
+        assigned = _bind_assignment(setup_client, assignment_token, accepted)
     payload = _step_payload(
         assigned,
         "Готово",

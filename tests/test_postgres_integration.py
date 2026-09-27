@@ -77,14 +77,33 @@ def _runtime_binding(operation_key: str) -> dict[str, object]:
         "decomposition_revision_ref": "decomposition:1",
         "stage_revision": "developer:1",
         "assignment_ref": f"assignment:{operation_key}",
-        "binding_ref": f"binding:{operation_key}",
-        "hermes_run_ref": f"hermes-run:{operation_key}",
         "workspace_generation": 1,
         "lease_generation": 1,
         "exact_input_refs": [
             {"kind": "business_task", "ref": f"business-task:{operation_key}", "revision": "1"}
         ],
     }
+
+
+def _bind_runtime_assignment(
+    uow: SAUnitOfWork, project_id: int, assignment: dict[str, object]
+) -> dict[str, object]:
+    operation_key = str(assignment["assignment_operation_key"])
+    return TaskService(uow).bind_runtime_assignment(
+        project_id=project_id,
+        task_key=str(assignment["task_key"]),
+        role_key=str(assignment["role_key"]),
+        bind_operation_key=f"bind:{operation_key}",
+        assignment_operation_key=operation_key,
+        assignment_revision=int(assignment["assignment_revision"]),
+        assignment_ref=str(assignment["assignment_ref"]),
+        binding_ref=f"binding:{operation_key}",
+        hermes_run_ref=f"hermes-run:{operation_key}",
+        mode_key=str(assignment["mode_key"]),
+        cycle_number=int(assignment["cycle_number"]),
+        attempt_number=int(assignment["attempt_number"]),
+        expected_binding_state="unbound",
+    )
 
 
 @pytest.fixture(scope="function")
@@ -761,6 +780,77 @@ class TestPostgresInitialMigration:
         ]
         verify.close()
 
+    def test_concurrent_runtime_bind_reconciles_one_real_binding(self, pg_url):
+        ensure_migrated(get_engine(pg_url))
+        setup = SAUnitOfWork(pg_url)
+        workflow_id = setup.workflows.create(
+            {"key": "hermes-sdlc:developer", "name": "Runtime bind race"}
+        )
+        mode_id = setup.workflows.create_mode(
+            {
+                "workflow_id": workflow_id,
+                "key": "initial",
+                "name": "Initial",
+                "mode_order": 2,
+                "role_key": "developer",
+                "execution_scope": "delivery",
+                "tech_workspace_policy": "required",
+            }
+        )
+        setup.phases.create(
+            {
+                "workflow_id": workflow_id,
+                "mode_id": mode_id,
+                "code": "start",
+                "name": "Start",
+                "phase_order": 1,
+            }
+        )
+        project_id = setup.projects.create(
+            {
+                "workflow_id": workflow_id,
+                "code": "BIND-RACE",
+                "name": "Bind race",
+                "cli_command": "bind-race",
+                "key_prefixes": ["BIND"],
+            }
+        )
+        accepted = TaskService(setup).assign_runtime_task(
+            project_id=project_id,
+            task_key="BIND-1",
+            mode_key="initial",
+            cycle_number=0,
+            operation_key="assign-bind-race",
+            expected_revision=0,
+            expected_status="missing",
+            **_runtime_binding("assign-bind-race"),
+        )
+        setup.close()
+        barrier = Barrier(2)
+
+        def bind() -> dict:
+            uow = SAUnitOfWork(pg_url)
+            barrier.wait(timeout=10)
+            try:
+                return _bind_runtime_assignment(uow, project_id, accepted)
+            finally:
+                uow.close()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda _: bind(), range(2)))
+
+        assert {result["binding_state"] for result in results} == {"bound"}
+        assert {result["binding_ref"] for result in results} == {
+            "binding:assign-bind-race"
+        }
+        verify = SAUnitOfWork(pg_url)
+        task = verify.tasks.get_by_key("BIND-1", project_id=project_id)
+        assert task is not None and task.id is not None
+        assignments = verify.tasks.list_assignments(task.id)
+        assert len(assignments) == 1
+        assert assignments[0].bind_operation_key == "bind:assign-bind-race"
+        verify.close()
+
     def test_concurrent_existing_task_assignment_rechecks_ledger_after_row_lock(self, pg_url):
         from project_workflow.infrastructure.db.repositories.project import SAProjectRepository
         from project_workflow.infrastructure.db.repositories.task import SATaskRepository
@@ -934,8 +1024,7 @@ class TestPostgresInitialMigration:
         assignments = []
         for number in (1, 2):
             operation_key = f"assign-runtime-race-{number}"
-            assignments.append(
-                TaskService(setup).assign_runtime_task(
+            accepted = TaskService(setup).assign_runtime_task(
                     project_id=project_id,
                     task_key=f"RACE-{number}",
                     mode_key="assigned",
@@ -945,7 +1034,7 @@ class TestPostgresInitialMigration:
                     expected_status="missing",
                     **_runtime_binding(operation_key),
                 )
-            )
+            assignments.append(_bind_runtime_assignment(setup, project_id, accepted))
         setup.commit()
         setup.close()
 

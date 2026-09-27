@@ -152,8 +152,6 @@ class TaskService:
         decomposition_revision_ref: str,
         stage_revision: str,
         assignment_ref: str,
-        binding_ref: str,
-        hermes_run_ref: str,
         workspace_generation: int,
         lease_generation: int,
         exact_input_refs: list[dict[str, Any]],
@@ -239,8 +237,6 @@ class TaskService:
             "decomposition_revision_ref": decomposition_revision_ref,
             "stage_revision": stage_revision,
             "assignment_ref": assignment_ref,
-            "binding_ref": binding_ref,
-            "hermes_run_ref": hermes_run_ref,
         }
         normalized_refs = {
             key: self._bounded_ref(value, key, 128 if key == "stage_revision" else 512)
@@ -413,6 +409,149 @@ class TaskService:
             raise RuntimeError("Не удалось перечитать runtime assignment")
         return self._assignment_result(assigned.to_dict(), persisted.to_dict())
 
+    def bind_runtime_assignment(
+        self,
+        *,
+        project_id: int,
+        task_key: str,
+        role_key: str,
+        bind_operation_key: str,
+        assignment_operation_key: str,
+        assignment_revision: int,
+        assignment_ref: str,
+        binding_ref: str,
+        hermes_run_ref: str,
+        mode_key: str,
+        cycle_number: int,
+        attempt_number: int,
+        expected_binding_state: str,
+    ) -> dict[str, Any]:
+        """Atomically attach one real Hermes binding to an accepted assignment."""
+        role_key = normalize_role_key(role_key)
+        refs = {
+            "bind_operation_key": self._bounded_ref(
+                bind_operation_key, "bind_operation_key", 128
+            ),
+            "assignment_operation_key": self._bounded_ref(
+                assignment_operation_key, "assignment_operation_key", 128
+            ),
+            "assignment_ref": self._bounded_ref(assignment_ref, "assignment_ref", 512),
+            "binding_ref": self._bounded_ref(binding_ref, "binding_ref", 512),
+            "hermes_run_ref": self._bounded_ref(hermes_run_ref, "hermes_run_ref", 512),
+            "mode_key": self._bounded_ref(mode_key, "mode_key", 128),
+        }
+        for name, value, minimum in (
+            ("assignment_revision", assignment_revision, 1),
+            ("cycle_number", cycle_number, 0),
+            ("attempt_number", attempt_number, 1),
+        ):
+            if not isinstance(value, int) or isinstance(value, bool) or value < minimum:
+                raise ValueError(f"{name} имеет недопустимое значение")
+        if expected_binding_state != "unbound":
+            raise ConflictError("Bind разрешён только из ожидаемого unbound состояния")
+        validated_key = TaskKeyValidator.from_projects([]).validate(task_key)
+        if not validated_key.is_valid:
+            raise ConflictError(
+                validated_key.error_message or f"Недопустимый ключ задачи {task_key!r}"
+            )
+        task_key = validated_key.normalized or task_key
+        request = {
+            "project_id": project_id,
+            "task_key": task_key,
+            "role_key": role_key,
+            **refs,
+            "assignment_revision": assignment_revision,
+            "cycle_number": cycle_number,
+            "attempt_number": attempt_number,
+            "expected_binding_state": expected_binding_state,
+        }
+        request_digest = payload_sha256(request)
+        replay = self._uow.tasks.get_assignment_by_bind_operation_key(
+            refs["bind_operation_key"]
+        )
+        if replay is not None:
+            return self._reconcile_bind(replay.to_dict(), request, request_digest)
+
+        current = self._uow.tasks.get_by_key(task_key, project_id=project_id)
+        if current is None or current.id is None:
+            raise ConflictError(f"Задача {task_key!r} не найдена в runtime namespace")
+        locked = self._uow.tasks.lock(current.id)
+        if locked is None:
+            raise ConflictError("Задача исчезла во время runtime bind")
+        task = locked.to_dict()
+        if (
+            task.get("project_id") != project_id
+            or task.get("task_key") != task_key
+            or task.get("assignment_operation_key") != refs["assignment_operation_key"]
+            or task.get("assignment_revision") != assignment_revision
+            or task.get("mode_key") != refs["mode_key"]
+            or task.get("cycle_number") != cycle_number
+            or task.get("status") != "active"
+        ):
+            raise ConflictError("Runtime bind относится к устаревшему assignment")
+        assignment = self._uow.tasks.get_assignment_by_operation_key(
+            refs["assignment_operation_key"]
+        )
+        if assignment is None or assignment.id is None:
+            raise ConflictError("Принятый runtime assignment не найден")
+        record = assignment.to_dict()
+        expected = {
+            "task_id": current.id,
+            "project_id": project_id,
+            "assignment_revision": assignment_revision,
+            "assignment_ref": refs["assignment_ref"],
+            "role_key": role_key,
+            "mode_key": refs["mode_key"],
+            "cycle_number": cycle_number,
+            "attempt_number": attempt_number,
+        }
+        mismatched = [name for name, value in expected.items() if record.get(name) != value]
+        if mismatched:
+            raise ConflictError(
+                "Runtime bind не совпадает с принятым assignment: " + ", ".join(mismatched)
+            )
+        if any(
+            record.get(field) is not None
+            for field in (
+                "binding_ref",
+                "hermes_run_ref",
+                "bind_operation_key",
+                "bind_request_sha256",
+            )
+        ):
+            return self._reconcile_bind(record, request, request_digest)
+        try:
+            updated = self._uow.tasks.bind_assignment_if_unbound(
+                int(assignment.id),
+                expected_task_id=int(current.id),
+                expected_assignment_revision=assignment_revision,
+                expected_role_key=role_key,
+                expected_mode_id=int(record["mode_id"]),
+                expected_cycle_number=cycle_number,
+                expected_attempt_number=attempt_number,
+                expected_assignment_ref=refs["assignment_ref"],
+                binding_ref=refs["binding_ref"],
+                hermes_run_ref=refs["hermes_run_ref"],
+                bind_operation_key=refs["bind_operation_key"],
+                bind_request_sha256=request_digest,
+            )
+            if not updated:
+                self._uow.rollback()
+                return self._reconcile_bind_after_race(request, request_digest)
+            self._uow.commit()
+        except IntegrityError as exc:
+            self._uow.rollback()
+            try:
+                return self._reconcile_bind_after_race(request, request_digest)
+            except ConflictError as conflict:
+                raise conflict from exc
+        persisted = self._uow.tasks.get_assignment_by_bind_operation_key(
+            refs["bind_operation_key"]
+        )
+        if persisted is None:
+            raise RuntimeError("Не удалось перечитать связанный runtime assignment")
+        return self._assignment_result(task, persisted.to_dict())
+
     def validate_runtime_step(
         self,
         *,
@@ -483,6 +622,13 @@ class TaskService:
         if assignment is None:
             raise ConflictError("Активный immutable assignment не найден")
         record = assignment.to_dict()
+        if (
+            not isinstance(record.get("binding_ref"), str)
+            or not isinstance(record.get("hermes_run_ref"), str)
+            or not isinstance(record.get("bind_operation_key"), str)
+            or not isinstance(record.get("bind_request_sha256"), str)
+        ):
+            raise ConflictError("Runtime assignment ещё не связан с Hermes run")
         expected_assignment = {
             "task_id": current.id,
             "project_id": project_id,
@@ -577,40 +723,42 @@ class TaskService:
 
     @classmethod
     def _normalize_exact_input_refs(cls, value: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        if not isinstance(value, list) or not 1 <= len(value) <= 100:
-            raise ValueError("exact_input_refs должен содержать от 1 до 100 snapshot-объектов")
-        allowed_kinds = {
-            "business_task", "comment", "attachment", "link", "artifact", "decomposition", "stage"
-        }
+        if not isinstance(value, list) or len(value) > 128:
+            raise ValueError("exact_input_refs должен содержать не более 128 snapshot-объектов")
         normalized: list[dict[str, Any]] = []
         identities: set[tuple[str, str, str, str]] = set()
         for raw in value:
-            if not isinstance(raw, dict) or set(raw) - {"kind", "ref", "revision", "sha256"}:
-                raise ValueError("Каждый exact input snapshot должен иметь только kind/ref/revision/sha256")
-            kind = raw.get("kind")
-            if kind not in allowed_kinds:
-                raise ValueError("Неизвестный kind в exact_input_refs")
-            ref = cls._bounded_ref(raw.get("ref"), "exact_input_refs.ref", 512)
-            revision = cls._bounded_ref(raw.get("revision"), "exact_input_refs.revision", 128)
-            sha256 = raw.get("sha256")
-            if sha256 is not None and (
-                not isinstance(sha256, str)
-                or len(sha256) != 64
-                or any(char not in "0123456789abcdef" for char in sha256)
+            if not isinstance(raw, dict) or set(raw) - {"kind", "ref", "revision", "hash"}:
+                raise ValueError("Каждый exact input snapshot должен иметь только kind/ref/revision/hash")
+            kind = cls._bounded_ref(raw.get("kind"), "exact_input_refs.kind", 128)
+            ref = cls._bounded_ref(raw.get("ref"), "exact_input_refs.ref", 1_024)
+            revision = raw.get("revision")
+            if revision is not None:
+                revision = cls._bounded_ref(revision, "exact_input_refs.revision", 256)
+            digest = raw.get("hash")
+            if digest is not None and (
+                not isinstance(digest, str)
+                or len(digest) != 64
+                or any(char not in "0123456789abcdef" for char in digest)
             ):
-                raise ValueError("exact_input_refs.sha256 должен быть lowercase SHA-256")
-            identity = (kind, ref, revision, sha256 or "")
+                raise ValueError("exact_input_refs.hash должен быть lowercase SHA-256")
+            identity = (kind, ref, revision or "", digest or "")
             if identity in identities:
                 raise ValueError("exact_input_refs не должен содержать дубликаты")
             identities.add(identity)
-            normalized.append({"kind": kind, "ref": ref, "revision": revision, "sha256": sha256})
+            item: dict[str, Any] = {"kind": kind, "ref": ref}
+            if "revision" in raw:
+                item["revision"] = revision
+            if "hash" in raw:
+                item["hash"] = digest
+            normalized.append(item)
         return sorted(
             normalized,
             key=lambda item: (
                 str(item["kind"]),
                 str(item["ref"]),
-                str(item["revision"]),
-                str(item["sha256"] or ""),
+                str(item.get("revision") or ""),
+                str(item.get("hash") or ""),
             ),
         )
 
@@ -662,8 +810,6 @@ class TaskService:
                     "decomposition_revision_ref",
                     "stage_revision",
                     "assignment_ref",
-                    "binding_ref",
-                    "hermes_run_ref",
                     "workspace_generation",
                     "lease_generation",
                     "exact_input_refs",
@@ -696,12 +842,73 @@ class TaskService:
             "assignment_ref",
             "binding_ref",
             "hermes_run_ref",
+            "bind_operation_key",
+            "bind_request_sha256",
             "workspace_generation",
             "lease_generation",
             "exact_input_refs",
         ):
             result[key] = assignment.get(key)
+        result["binding_state"] = (
+            "bound"
+            if assignment.get("binding_ref") is not None
+            and assignment.get("hermes_run_ref") is not None
+            else "unbound"
+        )
         return result
+
+    def _reconcile_bind_after_race(
+        self, request: dict[str, Any], request_digest: str
+    ) -> dict[str, Any]:
+        replay = self._uow.tasks.get_assignment_by_bind_operation_key(
+            str(request["bind_operation_key"])
+        )
+        if replay is not None:
+            return self._reconcile_bind(replay.to_dict(), request, request_digest)
+        assignment = self._uow.tasks.get_assignment_by_operation_key(
+            str(request["assignment_operation_key"])
+        )
+        if assignment is not None and assignment.binding_ref is not None:
+            raise ConflictError("Runtime assignment уже связан другим bind operation")
+        raise ConflictError("Runtime bind конфликтует с параллельно сохранённым состоянием")
+
+    def _reconcile_bind(
+        self,
+        assignment: dict[str, Any],
+        request: dict[str, Any],
+        request_digest: str,
+    ) -> dict[str, Any]:
+        expected = {
+            "operation_key": request["assignment_operation_key"],
+            "assignment_revision": request["assignment_revision"],
+            "assignment_ref": request["assignment_ref"],
+            "binding_ref": request["binding_ref"],
+            "hermes_run_ref": request["hermes_run_ref"],
+            "bind_operation_key": request["bind_operation_key"],
+            "bind_request_sha256": request_digest,
+            "role_key": request["role_key"],
+            "mode_key": request["mode_key"],
+            "cycle_number": request["cycle_number"],
+            "attempt_number": request["attempt_number"],
+            "project_id": request["project_id"],
+        }
+        mismatched = [name for name, value in expected.items() if assignment.get(name) != value]
+        if mismatched:
+            raise ConflictError(
+                "bind_operation_key уже использован для другого runtime bind"
+            )
+        task = self._uow.tasks.get_by_id(int(assignment["task_id"]))
+        if task is None:
+            raise ConflictError("Runtime bind ссылается на отсутствующую задачу")
+        task_data = task.to_dict()
+        if (
+            task_data.get("task_key") != request["task_key"]
+            or task_data.get("project_id") != request["project_id"]
+            or task_data.get("assignment_operation_key") != request["assignment_operation_key"]
+            or task_data.get("assignment_revision") != request["assignment_revision"]
+        ):
+            raise ConflictError("Runtime bind относится к устаревшему assignment")
+        return self._assignment_result(task_data, assignment)
 
     def _reconcile_after_integrity_error(
         self, operation_key: str, payload: dict[str, Any], cause: IntegrityError

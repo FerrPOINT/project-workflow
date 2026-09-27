@@ -318,6 +318,8 @@ def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path):
         "assignment_ref": "assignment:1",
         "binding_ref": "binding:1",
         "hermes_run_ref": "run:1",
+        "bind_operation_key": "bind:1",
+        "bind_request_sha256": "b" * 64,
         "workspace_generation": 1,
         "lease_generation": 1,
         "exact_input_refs": "[]",
@@ -329,20 +331,46 @@ def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path):
     statement = text(f"INSERT INTO task_runtime_assignments ({columns}) VALUES ({values})")
     with engine.begin() as conn:
         conn.execute(statement, base)
+        conn.execute(
+            statement,
+            {
+                **base,
+                "operation_key": "valid-unbound",
+                "assignment_revision": 2,
+                "binding_ref": None,
+                "hermes_run_ref": None,
+                "bind_operation_key": None,
+                "bind_request_sha256": None,
+            },
+        )
 
     invalid_rows = [
-        {**base, "operation_key": "cross-project", "assignment_revision": 2, "project_id": project_ids[1]},
-        {**base, "operation_key": "partial", "assignment_revision": 2, "binding_ref": None},
+        {
+            **base,
+            "operation_key": "cross-project",
+            "bind_operation_key": "bind:cross-project",
+            "assignment_revision": 3,
+            "project_id": project_ids[1],
+        },
+        {
+            **base,
+            "operation_key": "partial",
+            "bind_operation_key": "bind:partial",
+            "assignment_revision": 3,
+            "binding_ref": None,
+        },
         {
             **base,
             "operation_key": "business-with-tech",
-            "assignment_revision": 2,
+            "bind_operation_key": "bind:business-with-tech",
+            "assignment_revision": 3,
             "execution_scope": "business",
         },
         {
             **base,
             "operation_key": "delivery-without-tech",
-            "assignment_revision": 2,
+            "bind_operation_key": "bind:delivery-without-tech",
+            "assignment_revision": 3,
             "tech_execution_attempt_ref": None,
         },
     ]

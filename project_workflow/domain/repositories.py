@@ -204,7 +204,30 @@ class TaskRepository(ABC):
     def get_assignment_by_operation_key(self, operation_key: str) -> TaskRuntimeAssignment | None: ...
 
     @abstractmethod
+    def get_assignment_by_bind_operation_key(
+        self, bind_operation_key: str
+    ) -> TaskRuntimeAssignment | None: ...
+
+    @abstractmethod
     def create_assignment(self, data: dict[str, Any]) -> int: ...
+
+    @abstractmethod
+    def bind_assignment_if_unbound(
+        self,
+        assignment_id: int,
+        *,
+        expected_task_id: int,
+        expected_assignment_revision: int,
+        expected_role_key: str,
+        expected_mode_id: int,
+        expected_cycle_number: int,
+        expected_attempt_number: int,
+        expected_assignment_ref: str,
+        binding_ref: str,
+        hermes_run_ref: str,
+        bind_operation_key: str,
+        bind_request_sha256: str,
+    ) -> bool: ...
 
     @abstractmethod
     def list_assignments(self, task_id: int) -> Sequence[TaskRuntimeAssignment]: ...

@@ -10,6 +10,16 @@ Endpoint принимает только server-owned role credential из
 уникальны и не могут совпадать с Hermes runtime или fleet catalog tokens; они
 не передаются в agent shell.
 
+Принятие и запуск разделены на две идемпотентные операции:
+
+1. `/internal/runtime/assign` сохраняет `unbound` assignment до запуска Hermes;
+2. после успешного `startOrResume` адаптер вызывает `/internal/runtime/bind` и
+   прикрепляет реальные `binding_ref` и `hermes_run_ref`.
+
+Оба endpoint используют один role-scoped assignment token. Runtime token
+агента не может создавать или связывать assignment. Синтетические binding/run
+refs запрещены.
+
 ## Backend-owned mode policy
 
 Dispatch разрешён только в mode с полным policy:
@@ -37,18 +47,34 @@ token configuration: lowercase `[a-z][a-z0-9-]{1,31}`.
 - execution refs: `task_workspace_ref`, `workspace_revision`, применимые
   `tech_execution_workspace_ref`/`tech_execution_attempt_ref`,
   `workspace_generation`, `lease_generation`;
-- provenance: `assignment_ref`, `binding_ref`, `hermes_run_ref`, bounded typed
-  `exact_input_refs`;
+- provenance до запуска: `assignment_ref` и bounded `exact_input_refs`;
+- provenance после запуска: реальные `binding_ref`, `hermes_run_ref`,
+  `bind_operation_key` и digest bind-запроса;
 - technical cursor: project/workflow/mode/cycle/assignment revision и
   idempotent `operation_key`.
 
 Business mode обязан явно не иметь Tech workspace refs. Delivery и aggregate
 mode требуют оба Tech refs. Активную assignment нельзя заменить; повтор того же
 `operation_key` принимается только при полном совпадении canonical payload.
-`exact_input_refs` канонически сортируются по tuple
-`(kind, ref, revision, sha256)`. Canonical JSON всего replay payload хранится
-вместе с его SHA-256 digest; перестановка refs и JSON keys сохраняет replay,
-изменение любого значимого значения даёт conflict.
+`exact_input_refs` может быть пустым, содержит не более 128 Business-owned
+snapshot-объектов и не маршрутизируется по `kind`. `kind` и `ref` обязательны;
+`revision` и lowercase SHA-256 поле `hash` опциональны. Список канонически
+сортируется по tuple `(kind, ref, revision-or-empty, hash-or-empty)`, при этом
+отсутствующее optional-поле не превращается в синтетическое значение.
+Canonical JSON всего replay payload хранится вместе с его SHA-256 digest;
+перестановка refs и JSON keys сохраняет replay, изменение или добавление любого
+значимого значения даёт conflict.
+
+`/internal/runtime/bind` принимает точный task, assignment
+operation/ref/revision, mode/cycle/attempt, ожидаемое `unbound` состояние,
+реальные refs и отдельный `bind_operation_key`. Одна DB CAS-операция переводит
+assignment в `bound`. Точный retry того же ключа возвращает сохранённый cursor;
+изменённый payload, второй ключ, другая роль/задача либо stale revision дают
+детерминированный conflict. Rebind к другим refs запрещён.
+
+`/internal/runtime/step` доступен только для `bound` assignment и сохраняет
+прежний полный fence. History может читаться в `unbound` состоянии, но не
+создаёт binding и не подставляет отсутствующие refs.
 
 После terminal `done` Business может выдать новый `operation_key` в том же
 mode/cycle только как retry: `attempt_number` обязан быть ровно на единицу

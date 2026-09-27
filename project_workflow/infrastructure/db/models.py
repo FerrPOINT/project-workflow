@@ -365,6 +365,8 @@ class TaskRuntimeAssignment(Base):
     assignment_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
     binding_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
     hermes_run_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    bind_operation_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    bind_request_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     workspace_generation: Mapped[int | None] = mapped_column(nullable=True)
     lease_generation: Mapped[int | None] = mapped_column(nullable=True)
     exact_input_refs: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -399,6 +401,9 @@ class TaskRuntimeAssignment(Base):
             ondelete="RESTRICT",
         ),
         UniqueConstraint("operation_key", name="uq_task_runtime_assignments_operation_key"),
+        UniqueConstraint(
+            "bind_operation_key", name="uq_task_runtime_assignments_bind_operation_key"
+        ),
         UniqueConstraint(
             "task_id", "assignment_revision", name="uq_task_runtime_assignments_task_revision"
         ),
@@ -439,15 +444,19 @@ class TaskRuntimeAssignment(Base):
             "task_workspace_ref IS NULL AND workspace_revision IS NULL AND "
             "tech_execution_workspace_ref IS NULL AND tech_execution_attempt_ref IS NULL AND "
             "decomposition_revision_ref IS NULL AND stage_revision IS NULL AND assignment_ref IS NULL AND "
-            "binding_ref IS NULL AND hermes_run_ref IS NULL AND workspace_generation IS NULL AND "
+            "binding_ref IS NULL AND hermes_run_ref IS NULL AND bind_operation_key IS NULL AND "
+            "bind_request_sha256 IS NULL AND workspace_generation IS NULL AND "
             "lease_generation IS NULL AND exact_input_refs IS NULL AND payload_sha256 IS NULL) OR "
             "(workflow_key IS NOT NULL AND role_key IS NOT NULL AND execution_scope IS NOT NULL AND "
             "stage_key IS NOT NULL AND attempt_number IS NOT NULL AND business_task_ref IS NOT NULL AND "
             "root_task_ref IS NOT NULL AND work_item_ref IS NOT NULL AND work_item_revision IS NOT NULL AND "
             "queue_item_ref IS NOT NULL AND task_workspace_ref IS NOT NULL AND workspace_revision IS NOT NULL AND "
             "decomposition_revision_ref IS NOT NULL AND stage_revision IS NOT NULL AND assignment_ref IS NOT NULL AND "
-            "binding_ref IS NOT NULL AND hermes_run_ref IS NOT NULL AND workspace_generation IS NOT NULL AND "
-            "lease_generation IS NOT NULL AND exact_input_refs IS NOT NULL AND payload_sha256 IS NOT NULL)",
+            "workspace_generation IS NOT NULL AND lease_generation IS NOT NULL AND "
+            "exact_input_refs IS NOT NULL AND payload_sha256 IS NOT NULL AND "
+            "((binding_ref IS NULL AND hermes_run_ref IS NULL AND bind_operation_key IS NULL AND "
+            "bind_request_sha256 IS NULL) OR (binding_ref IS NOT NULL AND hermes_run_ref IS NOT NULL AND "
+            "bind_operation_key IS NOT NULL AND bind_request_sha256 IS NOT NULL)))",
             name="ck_task_runtime_assignments_binding_complete",
         ),
         CheckConstraint(
@@ -461,6 +470,10 @@ class TaskRuntimeAssignment(Base):
         CheckConstraint(
             "payload_sha256 IS NULL OR length(payload_sha256) = 64",
             name="ck_task_runtime_assignments_payload_sha256",
+        ),
+        CheckConstraint(
+            "bind_request_sha256 IS NULL OR length(bind_request_sha256) = 64",
+            name="ck_task_runtime_assignments_bind_request_sha256",
         ),
         Index("ix_task_runtime_assignments_task_id", "task_id"),
         Index("ix_task_runtime_assignments_business_task_ref", "business_task_ref"),
