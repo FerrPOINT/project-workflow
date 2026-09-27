@@ -39,8 +39,8 @@ class StrictUpdateRequest(StrictRequest):
         return value
 
 
-class RuntimeStepRequest(StrictRequest):
-    """One private, role-scoped Supervisor step."""
+class StepRequest(StrictRequest):
+    """Legacy human step payload used by the two-command CLI surface."""
 
     task: str = Field(min_length=1, max_length=128)
     report: str | None = Field(default=None, max_length=32_000)
@@ -54,6 +54,31 @@ class RuntimeStepRequest(StrictRequest):
     @classmethod
     def _report_not_blank(cls, value: str | None) -> str | None:
         return _strip_nonblank(value, "report") if value is not None else None
+
+
+class RuntimeStepRequest(StepRequest):
+    """One private Supervisor step fenced to an immutable Business assignment."""
+
+    assignment_revision: int = Field(gt=0, strict=True)
+    assignment_ref: str = Field(min_length=1, max_length=512)
+    binding_ref: str = Field(min_length=1, max_length=512)
+    hermes_run_ref: str = Field(min_length=1, max_length=512)
+    mode_key: str = Field(min_length=1, max_length=128)
+    cycle_number: int = Field(ge=0, strict=True)
+    attempt_number: int = Field(gt=0, strict=True)
+    expected_phase_code: str = Field(min_length=1, max_length=128)
+    expected_status: Literal["active", "blocked"]
+
+    @field_validator(
+        "assignment_ref",
+        "binding_ref",
+        "hermes_run_ref",
+        "mode_key",
+        "expected_phase_code",
+    )
+    @classmethod
+    def _fence_text_not_blank(cls, value: str, info: Any) -> str:
+        return _strip_nonblank(value, info.field_name)
 
 
 class ExactInputRef(StrictRequest):

@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from project_workflow.application.execution_mode import resolve_execution_selection
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import UnitOfWork
-from project_workflow.domain.runtime_assignment import normalize_role_key, payload_sha256
+from project_workflow.domain.runtime_assignment import RuntimeStepFence, normalize_role_key, payload_sha256
 from project_workflow.domain.validation import TaskKeyValidator, get_project_for_task_key
 
 
@@ -412,6 +412,123 @@ class TaskService:
         if persisted is None:
             raise RuntimeError("Не удалось перечитать runtime assignment")
         return self._assignment_result(assigned.to_dict(), persisted.to_dict())
+
+    def validate_runtime_step(
+        self,
+        *,
+        project_id: int,
+        task_key: str,
+        role_key: str,
+        assignment_revision: int,
+        assignment_ref: str,
+        binding_ref: str,
+        hermes_run_ref: str,
+        mode_key: str,
+        cycle_number: int,
+        attempt_number: int,
+        expected_phase_code: str,
+        expected_status: str,
+    ) -> RuntimeStepFence:
+        """Lock and validate the exact immutable owner assignment for one step."""
+        role_key = normalize_role_key(role_key)
+        mode_key = self._bounded_ref(mode_key, "mode_key", 128)
+        expected_phase_code = self._bounded_ref(
+            expected_phase_code, "expected_phase_code", 128
+        )
+        refs = {
+            "assignment_ref": self._bounded_ref(assignment_ref, "assignment_ref", 512),
+            "binding_ref": self._bounded_ref(binding_ref, "binding_ref", 512),
+            "hermes_run_ref": self._bounded_ref(hermes_run_ref, "hermes_run_ref", 512),
+        }
+        if expected_status not in {"active", "blocked"}:
+            raise ConflictError("Runtime step разрешён только для активного assignment")
+        for name, value, minimum in (
+            ("assignment_revision", assignment_revision, 1),
+            ("cycle_number", cycle_number, 0),
+            ("attempt_number", attempt_number, 1),
+        ):
+            if not isinstance(value, int) or isinstance(value, bool) or value < minimum:
+                raise ValueError(f"{name} имеет недопустимое значение")
+
+        current = self._uow.tasks.get_by_key(task_key, project_id=project_id)
+        if current is None or current.id is None:
+            raise ConflictError(f"Задача {task_key!r} не найдена в runtime namespace")
+        locked = self._uow.tasks.lock(current.id)
+        if locked is None:
+            raise ConflictError("Задача исчезла во время проверки runtime step")
+        project = self._uow.projects.get_by_id(project_id)
+        if (
+            locked.project_id != project_id
+            or locked.task_key != task_key
+            or project is None
+            or locked.workflow_id != project.workflow_id
+        ):
+            raise ConflictError("Runtime task больше не принадлежит назначенному namespace")
+        task = locked.to_dict()
+        operation_key = task.get("assignment_operation_key")
+        if not isinstance(operation_key, str) or not operation_key:
+            raise ConflictError("У задачи отсутствует активный immutable assignment")
+        assignment = self._uow.tasks.get_assignment_by_operation_key(operation_key)
+        if assignment is None:
+            raise ConflictError("Активный immutable assignment не найден")
+        record = assignment.to_dict()
+        expected_assignment = {
+            "task_id": current.id,
+            "project_id": project_id,
+            "workflow_id": task.get("workflow_id"),
+            "assignment_revision": assignment_revision,
+            "role_key": role_key,
+            "mode_id": task.get("mode_id"),
+            "mode_key": mode_key,
+            "cycle_number": cycle_number,
+            "attempt_number": attempt_number,
+            **refs,
+        }
+        mismatched = [
+            name for name, value in expected_assignment.items() if record.get(name) != value
+        ]
+        if mismatched:
+            raise ConflictError(
+                "Runtime step не совпадает с immutable assignment/run: "
+                + ", ".join(mismatched)
+            )
+        task_expected = {
+            "assignment_revision": assignment_revision,
+            "mode_key": mode_key,
+            "cycle_number": cycle_number,
+            "current_phase_code": expected_phase_code,
+            "status": expected_status,
+        }
+        stale = [name for name, value in task_expected.items() if task.get(name) != value]
+        if stale:
+            raise ConflictError(
+                "Runtime step относится к устаревшему assignment/run: " + ", ".join(stale)
+            )
+        mode_id = task.get("mode_id")
+        phase_id = task.get("current_phase_id")
+        if (
+            not isinstance(mode_id, int)
+            or isinstance(mode_id, bool)
+            or mode_id <= 0
+            or not isinstance(phase_id, int)
+            or isinstance(phase_id, bool)
+            or phase_id <= 0
+        ):
+            raise ConflictError("Runtime task не содержит корректный mode/phase cursor")
+        return RuntimeStepFence(
+            assignment_revision=assignment_revision,
+            assignment_operation_key=operation_key,
+            assignment_ref=refs["assignment_ref"],
+            binding_ref=refs["binding_ref"],
+            hermes_run_ref=refs["hermes_run_ref"],
+            mode_id=mode_id,
+            mode_key=mode_key,
+            cycle_number=cycle_number,
+            attempt_number=attempt_number,
+            expected_phase_id=phase_id,
+            expected_phase_code=expected_phase_code,
+            expected_status=expected_status,
+        )
 
     @staticmethod
     def _bounded_ref(value: Any, field_name: str, max_length: int) -> str:

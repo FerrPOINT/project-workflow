@@ -10,10 +10,10 @@ from project_workflow.domain.exceptions import ConflictError
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.cli.core import _require_valid_key, _resolve_namespace_id_from_env
 from project_workflow.interfaces.ui.routes.runtime_api import _history_rows, execute_namespace_step
-from project_workflow.interfaces.ui.schemas import RuntimeStepRequest
+from project_workflow.interfaces.ui.schemas import StepRequest
 
 
-class CliStepRequest(RuntimeStepRequest):
+class CliStepRequest(StepRequest):
     namespace_id: int | None = Field(default=None, gt=0)
 
 

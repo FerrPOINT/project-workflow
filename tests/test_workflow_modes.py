@@ -710,4 +710,93 @@ def test_old_cycle_feedback_never_leaks_into_current_cycle_contract(modes_db, ol
     assert "Initial: blocked" not in prompt
     assert "Initial: completed" not in prompt
     assert "Rework: entered" in prompt
-    assert _history_rows(modes_db, "FDB-1", project_id, None) == []
+    assert [row["cycle_number"] for row in _history_rows(modes_db, "FDB-1", project_id, None)] == [0]
+
+
+def test_runtime_history_spans_initial_and_multiple_rework_cycles(modes_db):
+    from project_workflow.interfaces.ui.routes.runtime_api import _history_rows
+
+    workflow_id = modes_db.workflows.create({"name": "Append-only history"})
+    initial = modes_db.workflows.get_mode_by_key(workflow_id, "default")
+    assert initial is not None and initial.id is not None
+    rework_id = modes_db.workflows.create_mode(
+        {
+            "workflow_id": workflow_id,
+            "key": "rework",
+            "name": "Rework",
+            "mode_order": 2,
+            "role_key": "developer",
+            "execution_scope": "delivery",
+            "tech_workspace_policy": "required",
+        }
+    )
+    initial_phase = modes_db.phases.create(
+        {
+            "workflow_id": workflow_id,
+            "mode_id": initial.id,
+            "code": "implement",
+            "name": "Implement",
+            "phase_order": 1,
+        }
+    )
+    rework_phase = modes_db.phases.create(
+        {
+            "workflow_id": workflow_id,
+            "mode_id": rework_id,
+            "code": "fix",
+            "name": "Fix",
+            "phase_order": 1,
+        }
+    )
+    project_id = modes_db.projects.create(
+        {
+            "workflow_id": workflow_id,
+            "code": "HST",
+            "name": "History",
+            "cli_command": "history",
+            "key_prefixes": ["HST"],
+        }
+    )
+    task = TaskService(modes_db).create_task(
+        {"project_id": project_id, "task_key": "HST-1", "current_phase_id": initial_phase}
+    )
+
+    def record(mode_id: int, cycle_number: int, phase_id: int, report: str) -> None:
+        modes_db.tasks.update(
+            task["id"],
+            {
+                "mode_id": mode_id,
+                "cycle_number": cycle_number,
+                "current_phase_id": phase_id,
+                "status": "active",
+            },
+        )
+        modes_db.step_history.create(
+            {
+                "task_id": task["id"],
+                "mode_id": mode_id,
+                "cycle_number": cycle_number,
+                "phase_id": phase_id,
+                "verdict": "pass",
+                "worker_report": report,
+                "covered_item_ids": [],
+                "missing_item_ids": [],
+                "blocker_messages": [],
+                "evaluation_snapshot": {},
+                "supervisor_response": {"message": report},
+            }
+        )
+        modes_db.commit()
+
+    record(initial.id, 0, initial_phase, "initial")
+    record(rework_id, 1, rework_phase, "rework-1")
+    record(rework_id, 2, rework_phase, "rework-2")
+
+    rows = _history_rows(modes_db, "HST-1", project_id, 200)
+
+    assert [(row["mode_key"], row["cycle_number"]) for row in rows] == [
+        ("rework", 2),
+        ("rework", 1),
+        ("default", 0),
+    ]
+    assert [row["worker_report"] for row in rows] == ["rework-2", "rework-1", "initial"]

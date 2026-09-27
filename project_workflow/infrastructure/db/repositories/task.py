@@ -199,16 +199,32 @@ class SATaskRepository(TaskRepository):
         expected_phase_id: int,
         expected_status: str,
         data: dict[str, Any],
+        *,
+        expected_assignment_revision: int | None = None,
+        expected_assignment_operation_key: str | None = None,
+        expected_mode_id: int | None = None,
+        expected_cycle_number: int | None = None,
     ) -> bool:
         values = {key: value for key, value in data.items() if key not in {"id", "project_id", "workflow_id"}}
         values["updated_at"] = datetime.datetime.now(datetime.timezone.utc)
+        predicates = [
+            m.Task.id == task_id,
+            m.Task.current_phase_id == expected_phase_id,
+            m.Task.status == expected_status,
+        ]
+        if expected_assignment_revision is not None:
+            predicates.append(m.Task.assignment_revision == expected_assignment_revision)
+        if expected_assignment_operation_key is not None:
+            predicates.append(
+                m.Task.assignment_operation_key == expected_assignment_operation_key
+            )
+        if expected_mode_id is not None:
+            predicates.append(m.Task.mode_id == expected_mode_id)
+        if expected_cycle_number is not None:
+            predicates.append(m.Task.cycle_number == expected_cycle_number)
         result = self._session.execute(
             update(m.Task)
-            .where(
-                m.Task.id == task_id,
-                m.Task.current_phase_id == expected_phase_id,
-                m.Task.status == expected_status,
-            )
+            .where(*predicates)
             .values(**values)
         )
         return getattr(result, "rowcount", 0) == 1

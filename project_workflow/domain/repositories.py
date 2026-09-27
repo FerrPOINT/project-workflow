@@ -216,6 +216,11 @@ class TaskRepository(ABC):
         expected_phase_id: int,
         expected_status: str,
         data: dict[str, Any],
+        *,
+        expected_assignment_revision: int | None = None,
+        expected_assignment_operation_key: str | None = None,
+        expected_mode_id: int | None = None,
+        expected_cycle_number: int | None = None,
     ) -> bool: ...
 
     @abstractmethod

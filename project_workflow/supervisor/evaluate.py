@@ -260,6 +260,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     if workflow_id is None or engine.db.workflows.lock(workflow_id) is None:
         raise ConcurrentTransitionError("Воркфлоу изменился во время оценки Supervisor")
     engine._reload_evaluation_state()
+    engine._lock_runtime_fence()
     if engine.current_phase_code != evaluated_phase_code:
         engine.db.rollback()
         return _concurrent_result({"task_key": engine.task_key, "phase_code": evaluated_phase_code})
@@ -367,6 +368,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         engine.db.rollback()
         return _concurrent_result({"task_key": engine.task_key, "phase_code": evaluated_phase_code})
     engine._reload_evaluation_state()
+    engine._lock_runtime_fence()
     fresh_phase = engine.phase_map.get(evaluated_phase_code)
     if fresh_phase is None:
         engine.db.rollback()

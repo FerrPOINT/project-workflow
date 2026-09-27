@@ -17,6 +17,7 @@ from ..application.project import ProjectService
 from ..application.task import TaskService
 from ..application.workflow import WorkflowService
 from ..domain.exceptions import ConflictError
+from ..domain.runtime_assignment import RuntimeStepFence
 from ..infrastructure.db import schema
 from ..infrastructure.db.uow import SAUnitOfWork
 from .context import SupervisorContextBuilder
@@ -61,10 +62,12 @@ class SupervisorEngine:
         uow: SAUnitOfWork | None = None,
         create_if_missing: bool = True,
         project_id: int | None = None,
+        runtime_fence: RuntimeStepFence | None = None,
     ):
         self.task_key = task_key
         self.create_if_missing = create_if_missing
         self.requested_project_id = project_id
+        self.runtime_fence = runtime_fence
         self._uow = uow if uow is not None else SAUnitOfWork()
 
         self._workflow_service = WorkflowService(self._uow)
@@ -78,6 +81,7 @@ class SupervisorEngine:
         )
         if self.task is None:
             raise ValueError(f"Задача {task_key} не найдена")
+        self._assert_runtime_fence()
         self._require_task_workflow_id(self.task)
         self.execution_mode_id: int | None
         if isinstance(self.task.get("mode_id"), int) and self.task.get("mode_id", 0) > 0:
@@ -297,6 +301,7 @@ class SupervisorEngine:
             rollback_phase_code=rollback_phase_code,
             phase_map=self.phase_map,
             step_history_id=step_history_id,
+            runtime_fence=self.runtime_fence,
             commit=commit,
         )
 
@@ -320,6 +325,7 @@ class SupervisorEngine:
             next_phase_code=next_phase_code,
             rollback_phase_code=rollback_phase_code,
             step_history_id=step_history_id,
+            runtime_fence=self.runtime_fence,
             commit=commit,
         )
 
@@ -537,6 +543,23 @@ class SupervisorEngine:
         )
         self._phase_map = None
         self.current_phase_code = self._resolve_current_phase_code()
+
+    def _assert_runtime_fence(self) -> None:
+        """Fail closed when the current task no longer matches the owner-issued run."""
+        if self.runtime_fence is not None:
+            self.runtime_fence.assert_task(self.task)
+
+    def _lock_runtime_fence(self) -> None:
+        """Fence replay/persistence against an assignment switch in another transaction."""
+        if self.runtime_fence is None:
+            return
+        task_id = self.task.get("id") if self.task else None
+        if not isinstance(task_id, int) or isinstance(task_id, bool) or task_id <= 0:
+            raise ValueError("Runtime assignment задачи больше не существует")
+        locked = self._uow.tasks.lock(task_id)
+        locked_task = locked.to_dict() if locked is not None else None
+        self.runtime_fence.assert_task(locked_task)
+        self.task = locked_task
 
     def evaluate(self, report: str) -> dict:
         phase = self._get_current_phase_obj()

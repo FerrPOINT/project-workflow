@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from project_workflow import config, supervisor
 from project_workflow.application.task import TaskService
 from project_workflow.domain.exceptions import ConflictError
-from project_workflow.domain.runtime_assignment import normalize_role_key
+from project_workflow.domain.runtime_assignment import RuntimeStepFence, normalize_role_key
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.cli.core import _require_valid_key, _resolve_namespace_id
 from project_workflow.interfaces.ui.schemas import RuntimeAssignmentRequest, RuntimeStepRequest
@@ -128,8 +128,6 @@ def _history_rows(uow: SAUnitOfWork, task_key: str, namespace_id: int, limit: in
         task_id=task_id,
         task_key=task_key,
         project_id=namespace_id,
-        mode_id=task.mode_id if task else None,
-        cycle_number=task.cycle_number if task else None,
         limit=limit,
     ):
         item = entry.to_dict()
@@ -169,6 +167,7 @@ def execute_namespace_step(
     task: str,
     report: str | None,
     create_if_missing: bool,
+    runtime_fence: RuntimeStepFence | None = None,
 ) -> dict[str, Any]:
     """Execute one Supervisor step inside an already-authorized namespace."""
     task_key = _require_valid_key(task, uow, project_id=namespace_id)
@@ -178,6 +177,7 @@ def execute_namespace_step(
         uow=uow,
         create_if_missing=create_if_missing,
         project_id=namespace_id,
+        runtime_fence=runtime_fence,
     )
     if report is None:
         if engine._get_current_phase_obj() is None:
@@ -303,6 +303,9 @@ def runtime_assign(
                     "lease_generation": task["lease_generation"],
                     "exact_input_refs": task["exact_input_refs"],
                     "status": task["status"],
+                    "current_phase_id": task["current_phase_id"],
+                    "current_phase_code": task["current_phase_code"],
+                    "current_phase_name": task["current_phase_name"],
                 },
             }
     except (ConflictError, RuntimeError, ValueError) as exc:
@@ -325,12 +328,29 @@ def runtime_step(
     try:
         with SAUnitOfWork() as uow:
             namespace_id = _namespace_id(uow, role)
+            task_key = _require_valid_key(payload.task, uow, project_id=namespace_id)
+            _assert_task_key_in_namespace(uow, namespace_id, task_key)
+            fence = TaskService(uow).validate_runtime_step(
+                project_id=namespace_id,
+                task_key=task_key,
+                role_key=role,
+                assignment_revision=payload.assignment_revision,
+                assignment_ref=payload.assignment_ref,
+                binding_ref=payload.binding_ref,
+                hermes_run_ref=payload.hermes_run_ref,
+                mode_key=payload.mode_key,
+                cycle_number=payload.cycle_number,
+                attempt_number=payload.attempt_number,
+                expected_phase_code=payload.expected_phase_code,
+                expected_status=payload.expected_status,
+            )
             return execute_namespace_step(
                 uow,
                 namespace_id=namespace_id,
-                task=payload.task,
+                task=task_key,
                 report=payload.report,
                 create_if_missing=False,
+                runtime_fence=fence,
             )
     except (ConflictError, RuntimeError, ValueError) as exc:
         return _error(str(exc), 409)
@@ -338,7 +358,7 @@ def runtime_step(
 
 def runtime_history(
     task: str = Query(...),
-    n: int | None = Query(default=None, ge=1),
+    n: int = Query(default=200, ge=1, le=200),
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any] | JSONResponse:
     """Return history only from the namespace bound to the supplied role token."""

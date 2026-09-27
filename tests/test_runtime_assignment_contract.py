@@ -204,6 +204,40 @@ def test_terminal_assignment_accepts_exact_next_attempt_in_same_cycle_and_replay
         assert len(uow.tasks.list_assignments(initial["id"])) == 2
 
 
+def test_runtime_transition_cas_includes_assignment_and_cycle_identity(tmp_path):
+    with prepared_sqlite_uow(tmp_path, "runtime-transition-cas.db") as uow:
+        project_id, _ = _runtime_catalog(
+            uow, role_key="developer", scope="delivery", tech_policy="required"
+        )
+        assigned = TaskService(uow).assign_runtime_task(
+            project_id=project_id,
+            task_key="DEV-1",
+            mode_key="initial",
+            cycle_number=0,
+            operation_key="assign-dev-1-attempt-1",
+            expected_revision=0,
+            expected_status="missing",
+            **_binding(),
+        )
+
+        updated = uow.tasks.update_if_state(
+            assigned["id"],
+            assigned["current_phase_id"],
+            "active",
+            {"status": "done"},
+            expected_assignment_revision=assigned["assignment_revision"] + 1,
+            expected_assignment_operation_key=assigned["assignment_operation_key"],
+            expected_mode_id=assigned["mode_id"],
+            expected_cycle_number=assigned["cycle_number"],
+        )
+        uow.commit()
+
+        current = uow.tasks.get_by_id(assigned["id"])
+        assert updated is False
+        assert current is not None
+        assert current.status == "active"
+
+
 def test_retry_rejects_active_prior_attempt(tmp_path):
     with prepared_sqlite_uow(tmp_path, "active-retry.db") as uow:
         project_id, _ = _runtime_catalog(

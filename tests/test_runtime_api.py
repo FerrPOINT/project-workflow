@@ -6,6 +6,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from project_workflow import config
+from project_workflow.application.task import TaskService
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.llm import OpenAICompatibleClient
 from project_workflow.interfaces.ui.app import create_app
@@ -92,16 +93,77 @@ def _assignment(task: str, operation_key: str, role: str) -> dict[str, object]:
     return payload
 
 
+def _step_payload(assignment: dict[str, object], report: str | None = None) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "task": assignment["task_key"],
+        "assignment_revision": assignment["assignment_revision"],
+        "assignment_ref": assignment["assignment_ref"],
+        "binding_ref": assignment["binding_ref"],
+        "hermes_run_ref": assignment["hermes_run_ref"],
+        "mode_key": assignment["mode_key"],
+        "cycle_number": assignment["cycle_number"],
+        "attempt_number": assignment["attempt_number"],
+        "expected_phase_code": assignment.get("current_phase_code", "assigned"),
+        "expected_status": assignment["status"],
+    }
+    if report is not None:
+        payload["report"] = report
+    return payload
+
+
+def _service_assignment(
+    *, project_id: int, task: str, operation_key: str, role: str, **overrides: object
+) -> dict[str, object]:
+    payload = _assignment(task, operation_key, role)
+    payload.update(overrides)
+    payload["project_id"] = project_id
+    payload["task_key"] = payload.pop("task")
+    return payload
+
+
+def _unknown_step_payload(task: str) -> dict[str, object]:
+    return {
+        "task": task,
+        "assignment_revision": 1,
+        "assignment_ref": "assignment:unknown",
+        "binding_ref": "binding:unknown",
+        "hermes_run_ref": "hermes-run:unknown",
+        "mode_key": "assigned",
+        "cycle_number": 0,
+        "attempt_number": 1,
+        "expected_phase_code": "assigned",
+        "expected_status": "active",
+    }
+
+
 def test_runtime_step_is_fail_closed_without_configured_token():
     with TestClient(create_app()) as client:
         response = client.post(
             "/internal/runtime/step",
             headers=_headers("x" * 32),
-            json={"task": "RUN-1"},
+            json=_unknown_step_payload("RUN-1"),
         )
 
     assert response.status_code == 401
     assert response.json() == {"ok": False, "error": "Недействительный runtime token"}
+
+
+def test_runtime_step_requires_full_assignment_fence_after_authentication(monkeypatch):
+    token = "z" * 32
+    monkeypatch.setenv(
+        "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON",
+        json.dumps({"developer": token}),
+    )
+    config.get_settings.cache_clear()
+
+    with TestClient(create_app()) as client:
+        response = client.post(
+            "/internal/runtime/step",
+            headers=_headers(token),
+            json={"task": "DEV-1", "report": "Нельзя выполнить без assignment fence"},
+        )
+
+    assert response.status_code == 422
 
 
 def test_fleet_catalog_token_cannot_execute_steps_or_read_history(monkeypatch):
@@ -122,7 +184,7 @@ def test_fleet_catalog_token_cannot_execute_steps_or_read_history(monkeypatch):
         step = client.post(
             "/internal/runtime/step",
             headers=_headers(catalog_token),
-            json={"task": "WRK-1"},
+            json=_unknown_step_payload("WRK-1"),
         )
         history = client.get(
             "/internal/runtime/history",
@@ -153,7 +215,7 @@ def test_runtime_step_is_unavailable_for_malformed_or_duplicate_tokens(monkeypat
             response = client.post(
                 "/internal/runtime/step",
                 headers=_headers("x" * 32),
-                json={"task": "RUN-1"},
+                json=_unknown_step_payload("RUN-1"),
             )
         assert response.status_code == 503
         assert response.json()["ok"] is False
@@ -179,7 +241,7 @@ def test_runtime_token_is_bound_to_one_namespace(monkeypatch, supervisor_llm):
         unassigned = client.post(
             "/internal/runtime/step",
             headers=_headers(analyst_token),
-            json={"task": "ANA-2"},
+            json=_unknown_step_payload("ANA-2"),
         )
         assigned = client.post(
             "/internal/runtime/assign",
@@ -206,23 +268,23 @@ def test_runtime_token_is_bound_to_one_namespace(monkeypatch, supervisor_llm):
         forbidden_step = client.post(
             "/internal/runtime/step",
             headers=_headers(assignment_token),
-            json={"task": "ANA-1"},
+            json=_unknown_step_payload("ANA-1"),
         )
         current = client.post(
             "/internal/runtime/step",
             headers=_headers(analyst_token),
-            json={"task": "ANA-1"},
+            json=_step_payload(assigned.json()["result"]),
         )
         foreign = client.post(
             "/internal/runtime/step",
             headers=_headers(analyst_token),
-            json={"task": "ARC-1"},
+            json=_unknown_step_payload("ARC-1"),
         )
         supervisor_llm("PASS")
         completed = client.post(
             "/internal/runtime/step",
             headers=_headers(analyst_token),
-            json={"task": "ANA-1", "report": "Все требования выполнены."},
+            json=_step_payload(assigned.json()["result"], "Все требования выполнены."),
         )
         history = client.get(
             "/internal/runtime/history",
@@ -291,7 +353,7 @@ def test_runtime_history_exposes_retryable_supervisor_failure(monkeypatch):
         current = client.post(
             "/internal/runtime/step",
             headers=_headers(token),
-            json={"task": "DEV-1"},
+            json=_step_payload(assigned.json()["result"]),
         )
         with patch.object(
             OpenAICompatibleClient,
@@ -301,7 +363,7 @@ def test_runtime_history_exposes_retryable_supervisor_failure(monkeypatch):
             blocked = client.post(
                 "/internal/runtime/step",
                 headers=_headers(token),
-                json={"task": "DEV-1", "report": "Отчёт"},
+                json=_step_payload(assigned.json()["result"], "Отчёт"),
             )
         history = client.get(
             "/internal/runtime/history",
@@ -331,7 +393,9 @@ def test_token_collision_closes_runtime_and_assignment_endpoints(monkeypatch):
 
     with TestClient(create_app()) as client:
         step = client.post(
-            "/internal/runtime/step", headers=_headers(shared), json={"task": "ANA-1"}
+            "/internal/runtime/step",
+            headers=_headers(shared),
+            json=_unknown_step_payload("ANA-1"),
         )
         assignment = client.post(
             "/internal/runtime/assign",
@@ -341,3 +405,145 @@ def test_token_collision_closes_runtime_and_assignment_endpoints(monkeypatch):
 
     assert step.status_code == 503
     assert assignment.status_code == 503
+
+
+def test_runtime_step_rejects_old_run_when_same_cycle_retry_wins_during_evaluation(
+    monkeypatch,
+):
+    runtime_token = "r" * 32
+    assignment_token = "q" * 32
+    monkeypatch.setenv(
+        "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON",
+        json.dumps({"developer": runtime_token}),
+    )
+    monkeypatch.setenv(
+        "PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON",
+        json.dumps({"developer": assignment_token}),
+    )
+    config.get_settings.cache_clear()
+    _namespace("DEVELOPER", "workflow-developer", "DEV")
+
+    with TestClient(create_app()) as client:
+        assigned_response = client.post(
+            "/internal/runtime/assign",
+            headers=_headers(assignment_token),
+            json=_assignment("DEV-7", "assign-dev-7-attempt-1", "developer"),
+        )
+        assert assigned_response.status_code == 200
+        assigned = assigned_response.json()["result"]
+
+        def retry_during_provider_call(*_args, **_kwargs):
+            with SAUnitOfWork() as uow:
+                task = uow.tasks.get_by_key("DEV-7")
+                assert task is not None and task.id is not None
+                project_id = task.project_id
+                uow.tasks.update(task.id, {"status": "done"})
+                uow.commit()
+                TaskService(uow).assign_runtime_task(
+                    **_service_assignment(
+                        project_id=project_id,
+                        task="DEV-7",
+                        operation_key="assign-dev-7-attempt-2",
+                        role="developer",
+                        attempt_number=2,
+                        assignment_ref="assignment:assign-dev-7-attempt-2",
+                        binding_ref="binding:assign-dev-7-attempt-2",
+                        hermes_run_ref="hermes-run:assign-dev-7-attempt-2",
+                        tech_execution_workspace_ref="tech-workspace:DEV-7-retry",
+                        tech_execution_attempt_ref="tech-attempt:DEV-7-retry",
+                        workspace_generation=2,
+                        lease_generation=2,
+                        expected_revision=1,
+                        expected_status="done",
+                    )
+                )
+            return {
+                "verdict": "PASS",
+                "covered": [],
+                "missing": [],
+                "blockers": [],
+                "message": "late result",
+                "confidence": 1.0,
+            }
+
+        with patch.object(OpenAICompatibleClient, "chat", side_effect=retry_during_provider_call):
+            stale = client.post(
+                "/internal/runtime/step",
+                headers=_headers(runtime_token),
+                json=_step_payload(assigned, "Старый run завершился поздно"),
+            )
+
+    assert stale.status_code == 409
+    with SAUnitOfWork() as uow:
+        task = uow.tasks.get_by_key("DEV-7")
+        assert task is not None and task.id is not None
+        assert task.assignment_revision == 2
+        assert task.status == "active"
+        assert uow.step_history.list(task_id=task.id, limit=None) == []
+        events = uow.tasks.list_phase_events(task.id)
+        assert len(events) == 2
+        assert [event.cycle_number for event in events] == [0, 0]
+
+
+def test_runtime_step_rejects_old_run_after_new_cycle_without_writing_history(monkeypatch):
+    runtime_token = "u" * 32
+    assignment_token = "v" * 32
+    monkeypatch.setenv(
+        "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON",
+        json.dumps({"developer": runtime_token}),
+    )
+    monkeypatch.setenv(
+        "PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON",
+        json.dumps({"developer": assignment_token}),
+    )
+    config.get_settings.cache_clear()
+    _namespace("DEVELOPER", "workflow-developer", "DEV")
+
+    with TestClient(create_app()) as client:
+        assigned_response = client.post(
+            "/internal/runtime/assign",
+            headers=_headers(assignment_token),
+            json=_assignment("DEV-8", "assign-dev-8-cycle-0", "developer"),
+        )
+        assert assigned_response.status_code == 200
+        old_assignment = assigned_response.json()["result"]
+        with SAUnitOfWork() as uow:
+            task = uow.tasks.get_by_key("DEV-8")
+            assert task is not None and task.id is not None
+            project_id = task.project_id
+            uow.tasks.update(task.id, {"status": "done"})
+            uow.commit()
+            TaskService(uow).assign_runtime_task(
+                **_service_assignment(
+                    project_id=project_id,
+                    task="DEV-8",
+                    operation_key="assign-dev-8-cycle-1",
+                    role="developer",
+                    cycle_number=1,
+                    assignment_ref="assignment:assign-dev-8-cycle-1",
+                    binding_ref="binding:assign-dev-8-cycle-1",
+                    hermes_run_ref="hermes-run:assign-dev-8-cycle-1",
+                    tech_execution_workspace_ref="tech-workspace:DEV-8-cycle-1",
+                    tech_execution_attempt_ref="tech-attempt:DEV-8-cycle-1",
+                    workspace_generation=2,
+                    lease_generation=2,
+                    expected_revision=1,
+                    expected_status="done",
+                    expected_mode_key="assigned",
+                    expected_cycle_number=0,
+                )
+            )
+        stale = client.post(
+            "/internal/runtime/step",
+            headers=_headers(runtime_token),
+            json=_step_payload(old_assignment, "Поздний результат старого цикла"),
+        )
+
+    assert stale.status_code == 409
+    with SAUnitOfWork() as uow:
+        task = uow.tasks.get_by_key("DEV-8")
+        assert task is not None and task.id is not None
+        assert task.assignment_revision == 2
+        assert task.cycle_number == 1
+        assert uow.step_history.list(task_id=task.id, limit=None) == []
+        assert [event.cycle_number for event in uow.tasks.list_phase_events(task.id)] == [0, 1]
