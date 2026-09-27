@@ -88,6 +88,65 @@ def _report_fingerprint(task_id: int, report: str, contract_fingerprint: str) ->
     return hashlib.sha256(f"{task_id}\0{contract_fingerprint}\0{normalized}".encode()).hexdigest()
 
 
+def _runtime_assignment_cursor(engine: Any, fence: RuntimeStepFence) -> dict[str, Any]:
+    """Read the post-transition cursor from the transaction that will be committed."""
+    engine.db.refresh()
+    task_row = engine.db.tasks.get_by_id(int(engine.task["id"]))
+    assignment_row = engine.db.tasks.get_assignment_by_operation_key(
+        fence.assignment_operation_key
+    )
+    if task_row is None or assignment_row is None:
+        raise ConcurrentTransitionError("Runtime cursor исчез до commit")
+    task = task_row.to_dict()
+    assignment = assignment_row.to_dict()
+    expected_task = {
+        "assignment_revision": fence.assignment_revision,
+        "assignment_operation_key": fence.assignment_operation_key,
+        "mode_id": fence.mode_id,
+        "mode_key": fence.mode_key,
+        "cycle_number": fence.cycle_number,
+    }
+    expected_assignment = {
+        "assignment_revision": fence.assignment_revision,
+        "operation_key": fence.assignment_operation_key,
+        "assignment_ref": fence.assignment_ref,
+        "binding_ref": fence.binding_ref,
+        "hermes_run_ref": fence.hermes_run_ref,
+        "mode_id": fence.mode_id,
+        "mode_key": fence.mode_key,
+        "cycle_number": fence.cycle_number,
+        "attempt_number": fence.attempt_number,
+        "role_key": fence.role_key,
+    }
+    if any(task.get(name) != value for name, value in expected_task.items()) or any(
+        assignment.get(name) != value for name, value in expected_assignment.items()
+    ):
+        raise ConcurrentTransitionError("Runtime cursor изменился до commit")
+    if (
+        assignment.get("bind_operation_key") is None
+        or assignment.get("bind_request_sha256") is None
+    ):
+        raise ConcurrentTransitionError("Runtime cursor не связан с Hermes run")
+    phase_id = task.get("current_phase_id")
+    phase = engine.db.phases.get_by_id(phase_id) if isinstance(phase_id, int) else None
+    if phase is None:
+        raise ConcurrentTransitionError("Runtime cursor ссылается на неизвестную фазу")
+    return {
+        "assignment_operation_key": fence.assignment_operation_key,
+        "assignment_revision": fence.assignment_revision,
+        "assignment_ref": fence.assignment_ref,
+        "binding_ref": fence.binding_ref,
+        "hermes_run_ref": fence.hermes_run_ref,
+        "binding_state": "bound",
+        "mode_key": fence.mode_key,
+        "cycle_number": fence.cycle_number,
+        "attempt_number": fence.attempt_number,
+        "status": task.get("status"),
+        "current_phase_code": phase.code,
+        "current_phase_name": phase.name,
+    }
+
+
 def _blocked(exc: Exception) -> LlmVerdict:
     if isinstance(exc, LlmConfigurationError):
         blocker = "Проверяющий LLM не настроен: для OpenRouter требуется OPENAI_API_KEY."
@@ -585,6 +644,9 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
             step_history_id,
             commit=False,
         )
+        if isinstance(runtime_fence, RuntimeStepFence):
+            result.update(_runtime_assignment_cursor(engine, runtime_fence))
+            engine.db.step_history.update_supervisor_response(step_history_id, result)
         engine.db.commit()
     except IntegrityError:
         engine.db.rollback()

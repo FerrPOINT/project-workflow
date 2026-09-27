@@ -250,18 +250,16 @@ def _runtime_step_replay(
     response = history.get("supervisor_response")
     if not isinstance(response, dict):
         raise ConflictError("Сохранённый runtime step не содержит корректный ответ")
-    result = dict(response)
-    result["replayed"] = True
-    return _step_response(result)
+    return _step_response(dict(response))
 
 
-def _reconcile_runtime_step_after_integrity_error(
+def _read_committed_runtime_step(
     *,
     payload: RuntimeStepRequest,
     request_sha256: str,
     role_key: str,
 ) -> dict[str, Any]:
-    """Re-read a globally claimed operation key in a fresh transaction."""
+    """Read a committed operation response in a fresh transaction."""
     with SAUnitOfWork() as uow:
         namespace_id = _namespace_id(uow, role_key)
         task_key = _require_valid_key(payload.task, uow, project_id=namespace_id)
@@ -490,6 +488,7 @@ def runtime_step(
         return _error("Токен каталога не разрешает выполнение шагов", 403)
     request_digest = payload_sha256(payload.model_dump(mode="json"))
     try:
+        response: dict[str, Any] | None = None
         with SAUnitOfWork() as uow:
             namespace_id = _namespace_id(uow, role)
             task_key = _require_valid_key(payload.task, uow, project_id=namespace_id)
@@ -521,7 +520,7 @@ def runtime_step(
                 expected_status=payload.expected_status,
             )
             try:
-                return execute_namespace_step(
+                response = execute_namespace_step(
                     uow,
                     namespace_id=namespace_id,
                     task=task_key,
@@ -542,9 +541,18 @@ def runtime_step(
                 if replay is not None:
                     return replay
                 raise
+        if payload.report is None:
+            if response is None:
+                raise RuntimeError("Runtime step не вернул ответ")
+            return response
+        return _read_committed_runtime_step(
+            payload=payload,
+            request_sha256=request_digest,
+            role_key=role,
+        )
     except IntegrityError:
         try:
-            return _reconcile_runtime_step_after_integrity_error(
+            return _read_committed_runtime_step(
                 payload=payload,
                 request_sha256=request_digest,
                 role_key=role,

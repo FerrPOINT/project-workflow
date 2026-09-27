@@ -176,3 +176,12 @@ class SATaskStepHistoryRepository(TaskStepHistoryRepository):
         self._session.add(item)
         self._session.flush()
         return int(item.id)
+
+    def update_supervisor_response(
+        self, history_id: int, response: dict[str, Any]
+    ) -> None:
+        item = self._session.get(m.TaskStepHistoryEntry, history_id)
+        if item is None:
+            raise ValueError("Запись step для обновления ответа не найдена")
+        item.supervisor_response = _json_object(response, "supervisor_response")
+        self._session.flush()

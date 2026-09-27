@@ -212,7 +212,7 @@ class TaskRepository(ABC):
     def create_assignment(self, data: dict[str, Any]) -> int: ...
 
     @abstractmethod
-    def bind_assignment_if_unbound(
+    def finalize_assignment_binding(
         self,
         assignment_id: int,
         *,
@@ -223,6 +223,8 @@ class TaskRepository(ABC):
         expected_cycle_number: int,
         expected_attempt_number: int,
         expected_assignment_ref: str,
+        expected_binding_ref: str | None,
+        expected_hermes_run_ref: str | None,
         binding_ref: str,
         hermes_run_ref: str,
         bind_operation_key: str,
@@ -326,6 +328,11 @@ class TaskStepHistoryRepository(ABC):
 
     @abstractmethod
     def create(self, data: dict[str, Any]) -> int: ...
+
+    @abstractmethod
+    def update_supervisor_response(
+        self, history_id: int, response: dict[str, Any]
+    ) -> None: ...
 
 
 class PhaseCheckRepository(ABC):

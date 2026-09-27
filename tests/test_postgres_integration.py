@@ -186,13 +186,13 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0002_workflow_modes"
+        assert version == migration_head() == "0003_runtime_assignment_bind"
         assert schema_is_ready(engine) is True
 
     def test_downgrade_refuses_lossy_mode_collapse(self, pg_url):
         engine = get_engine(pg_url)
         ensure_migrated(engine)
-        with pytest.raises(RuntimeError, match="Downgrade from workflow modes"):
+        with pytest.raises(RuntimeError, match="Downgrade from runtime assignment bind"):
             run_alembic_command("downgrade", engine, "base")
         assert schema_is_ready(engine) is True
 
@@ -325,25 +325,83 @@ class TestPostgresInitialMigration:
                     "INSERT INTO project_workflow.task_runtime_assignments "
                     "(operation_key, task_id, project_id, workflow_id, mode_id, cycle_number, "
                     "assignment_revision, payload) VALUES "
-                    "('legacy-0002-op', :task_id, :project_id, :workflow_id, :mode_id, 0, 1, '{\"legacy\":true}')"
+                    "('legacy-0002-op', :task_id, :project_id, :workflow_id, :mode_id, 0, 1, "
+                    ":legacy_payload)"
                 ),
                 {
                     "task_id": task_id,
                     "project_id": project_id,
                     "workflow_id": workflow_id,
                     "mode_id": mode_id,
+                    "legacy_payload": '{"legacy":true}',
+                },
+            )
+            workflow_key = conn.execute(
+                text(
+                    "SELECT key FROM project_workflow.workflows WHERE id = :workflow_id"
+                ),
+                {"workflow_id": workflow_id},
+            ).scalar_one()
+            conn.execute(
+                text(
+                    "INSERT INTO project_workflow.task_runtime_assignments "
+                    "(operation_key, task_id, project_id, workflow_id, mode_id, cycle_number, "
+                    "assignment_revision, workflow_key, role_key, execution_scope, stage_key, "
+                    "attempt_number, business_task_ref, root_task_ref, work_item_ref, "
+                    "work_item_revision, queue_item_ref, task_workspace_ref, workspace_revision, "
+                    "tech_execution_workspace_ref, tech_execution_attempt_ref, "
+                    "decomposition_revision_ref, stage_revision, assignment_ref, binding_ref, "
+                    "hermes_run_ref, workspace_generation, lease_generation, exact_input_refs, "
+                    "payload_sha256, payload) VALUES "
+                    "('legacy-0002-bound', :task_id, :project_id, :workflow_id, :mode_id, 0, 2, "
+                    ":workflow_key, 'developer', 'delivery', 'development', 1, 'business:1', "
+                    "'business:root', 'business:item', 1, 'queue:1', 'task-workspace:1', 1, "
+                    "'tech-workspace:1', 'tech-attempt:1', 'decomposition:1', 'stage:1', "
+                    "'assignment:1', 'binding:legacy', 'hermes-run:legacy', 1, 1, '[]', "
+                    ":payload_sha256, :bound_payload)"
+                ),
+                {
+                    "task_id": task_id,
+                    "project_id": project_id,
+                    "workflow_id": workflow_id,
+                    "mode_id": mode_id,
+                    "workflow_key": workflow_key,
+                    "payload_sha256": "a" * 64,
+                    "bound_payload": '{"bound":true}',
                 },
             )
 
+        ensure_migrated(engine)
+
         with engine.connect() as conn:
-            row = conn.execute(
+            rows = conn.execute(
                 text(
-                    "SELECT payload, role_key, execution_scope, business_task_ref, exact_input_refs, "
-                    "payload_sha256 FROM project_workflow.task_runtime_assignments "
-                    "WHERE operation_key = 'legacy-0002-op'"
+                    "SELECT operation_key, binding_ref, hermes_run_ref, bind_operation_key, "
+                    "bind_request_sha256, payload FROM project_workflow.task_runtime_assignments "
+                    "WHERE operation_key IN ('legacy-0002-op', 'legacy-0002-bound') "
+                    "ORDER BY operation_key"
                 )
-            ).one()
-        assert row == ('{"legacy":true}', None, None, None, None, None)
+            ).all()
+        assert rows == [
+            (
+                "legacy-0002-bound",
+                "binding:legacy",
+                "hermes-run:legacy",
+                None,
+                None,
+                '{"bound":true}',
+            ),
+            ("legacy-0002-op", None, None, None, None, '{"legacy":true}'),
+        ]
+        with pytest.raises(IntegrityError):
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "UPDATE project_workflow.task_runtime_assignments "
+                        "SET bind_operation_key = 'partial-bind' "
+                        "WHERE operation_key = 'legacy-0002-bound'"
+                    )
+                )
 
     def test_legacy_revision_is_refused_without_mutation(self, pg_url):
         from project_workflow.infrastructure.db.session import (

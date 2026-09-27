@@ -196,7 +196,7 @@ class SATaskRepository(TaskRepository):
         self._session.flush()
         return int(item.id)
 
-    def bind_assignment_if_unbound(
+    def finalize_assignment_binding(
         self,
         assignment_id: int,
         *,
@@ -207,6 +207,8 @@ class SATaskRepository(TaskRepository):
         expected_cycle_number: int,
         expected_attempt_number: int,
         expected_assignment_ref: str,
+        expected_binding_ref: str | None,
+        expected_hermes_run_ref: str | None,
         binding_ref: str,
         hermes_run_ref: str,
         bind_operation_key: str,
@@ -223,8 +225,12 @@ class SATaskRepository(TaskRepository):
                 m.TaskRuntimeAssignment.cycle_number == expected_cycle_number,
                 m.TaskRuntimeAssignment.attempt_number == expected_attempt_number,
                 m.TaskRuntimeAssignment.assignment_ref == expected_assignment_ref,
-                m.TaskRuntimeAssignment.binding_ref.is_(None),
-                m.TaskRuntimeAssignment.hermes_run_ref.is_(None),
+                m.TaskRuntimeAssignment.binding_ref.is_(expected_binding_ref)
+                if expected_binding_ref is None
+                else m.TaskRuntimeAssignment.binding_ref == expected_binding_ref,
+                m.TaskRuntimeAssignment.hermes_run_ref.is_(expected_hermes_run_ref)
+                if expected_hermes_run_ref is None
+                else m.TaskRuntimeAssignment.hermes_run_ref == expected_hermes_run_ref,
                 m.TaskRuntimeAssignment.bind_operation_key.is_(None),
                 m.TaskRuntimeAssignment.bind_request_sha256.is_(None),
             )

@@ -456,7 +456,8 @@ class TaskRuntimeAssignment(Base):
             "exact_input_refs IS NOT NULL AND payload_sha256 IS NOT NULL AND "
             "((binding_ref IS NULL AND hermes_run_ref IS NULL AND bind_operation_key IS NULL AND "
             "bind_request_sha256 IS NULL) OR (binding_ref IS NOT NULL AND hermes_run_ref IS NOT NULL AND "
-            "bind_operation_key IS NOT NULL AND bind_request_sha256 IS NOT NULL)))",
+            "((bind_operation_key IS NULL AND bind_request_sha256 IS NULL) OR "
+            "(bind_operation_key IS NOT NULL AND bind_request_sha256 IS NOT NULL)))))",
             name="ck_task_runtime_assignments_binding_complete",
         ),
         CheckConstraint(

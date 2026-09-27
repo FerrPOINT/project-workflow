@@ -192,6 +192,73 @@ def test_runtime_assignment_persists_replays_and_binds_exact_identity(tmp_path):
             TaskService(uow).assign_runtime_task(**changed_attempt)
 
 
+def test_legacy_bound_assignment_finalizes_only_matching_real_refs(tmp_path):
+    with prepared_sqlite_uow(tmp_path, "legacy-binding.db") as uow:
+        project_id, _ = _runtime_catalog(
+            uow, role_key="developer", scope="delivery", tech_policy="required"
+        )
+        request = {
+            "project_id": project_id,
+            "task_key": "DEV-1",
+            "mode_key": "initial",
+            "cycle_number": 0,
+            "operation_key": "assign-dev-legacy",
+            "expected_revision": 0,
+            "expected_status": "missing",
+            **_binding(),
+        }
+        assigned = TaskService(uow).assign_runtime_task(**request)
+        ledger = uow.tasks.get_assignment_by_operation_key("assign-dev-legacy")
+        assert ledger is not None and ledger.id is not None
+        stored = uow._session.get(DBTaskRuntimeAssignment, ledger.id)
+        assert stored is not None
+        stored.binding_ref = "binding:legacy-real"
+        stored.hermes_run_ref = "hermes-run:legacy-real"
+        uow.commit()
+
+        legacy_replay = TaskService(uow).assign_runtime_task(**request)
+        assert legacy_replay["binding_state"] == "legacy_bound"
+        assert legacy_replay["bind_operation_key"] is None
+        with pytest.raises(ConflictError, match="bind состояние устарело"):
+            _bind(
+                uow,
+                project_id,
+                assigned,
+                binding_ref="binding:legacy-real",
+                hermes_run_ref="hermes-run:legacy-real",
+            )
+        with pytest.raises(ConflictError, match="Legacy Hermes binding"):
+            _bind(
+                uow,
+                project_id,
+                assigned,
+                binding_ref="binding:different",
+                hermes_run_ref="hermes-run:different",
+                expected_binding_state="legacy_bound",
+            )
+
+        finalized = _bind(
+            uow,
+            project_id,
+            assigned,
+            binding_ref="binding:legacy-real",
+            hermes_run_ref="hermes-run:legacy-real",
+            expected_binding_state="legacy_bound",
+        )
+        replay = _bind(
+            uow,
+            project_id,
+            assigned,
+            binding_ref="binding:legacy-real",
+            hermes_run_ref="hermes-run:legacy-real",
+            expected_binding_state="legacy_bound",
+        )
+
+        assert finalized["binding_state"] == "bound"
+        assert finalized["bind_operation_key"] == "bind:assign-dev-legacy"
+        assert replay == finalized
+
+
 def test_terminal_assignment_accepts_exact_next_attempt_in_same_cycle_and_replays(tmp_path):
     with prepared_sqlite_uow(tmp_path, "retry-binding.db") as uow:
         project_id, _ = _runtime_catalog(

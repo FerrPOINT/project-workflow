@@ -447,8 +447,8 @@ class TaskService:
         ):
             if not isinstance(value, int) or isinstance(value, bool) or value < minimum:
                 raise ValueError(f"{name} имеет недопустимое значение")
-        if expected_binding_state != "unbound":
-            raise ConflictError("Bind разрешён только из ожидаемого unbound состояния")
+        if expected_binding_state not in {"unbound", "legacy_bound"}:
+            raise ConflictError("Недопустимое ожидаемое bind состояние")
         validated_key = TaskKeyValidator.from_projects([]).validate(task_key)
         if not validated_key.is_valid:
             raise ConflictError(
@@ -510,18 +510,26 @@ class TaskService:
             raise ConflictError(
                 "Runtime bind не совпадает с принятым assignment: " + ", ".join(mismatched)
             )
-        if any(
-            record.get(field) is not None
-            for field in (
-                "binding_ref",
-                "hermes_run_ref",
-                "bind_operation_key",
-                "bind_request_sha256",
-            )
-        ):
+        stored_binding_ref = record.get("binding_ref")
+        stored_hermes_run_ref = record.get("hermes_run_ref")
+        stored_bind_operation_key = record.get("bind_operation_key")
+        stored_bind_request_sha256 = record.get("bind_request_sha256")
+        if stored_bind_operation_key is not None or stored_bind_request_sha256 is not None:
             return self._reconcile_bind(record, request, request_digest)
+        if (stored_binding_ref is None) != (stored_hermes_run_ref is None):
+            raise ConflictError("Runtime assignment содержит неполный legacy Hermes binding")
+        current_binding_state = (
+            "legacy_bound" if stored_binding_ref is not None else "unbound"
+        )
+        if expected_binding_state != current_binding_state:
+            raise ConflictError("Ожидаемое bind состояние устарело")
+        if stored_binding_ref is not None and (
+            stored_binding_ref != refs["binding_ref"]
+            or stored_hermes_run_ref != refs["hermes_run_ref"]
+        ):
+            raise ConflictError("Legacy Hermes binding не совпадает с runtime bind")
         try:
-            updated = self._uow.tasks.bind_assignment_if_unbound(
+            updated = self._uow.tasks.finalize_assignment_binding(
                 int(assignment.id),
                 expected_task_id=int(current.id),
                 expected_assignment_revision=assignment_revision,
@@ -530,6 +538,14 @@ class TaskService:
                 expected_cycle_number=cycle_number,
                 expected_attempt_number=attempt_number,
                 expected_assignment_ref=refs["assignment_ref"],
+                expected_binding_ref=(
+                    str(stored_binding_ref) if stored_binding_ref is not None else None
+                ),
+                expected_hermes_run_ref=(
+                    str(stored_hermes_run_ref)
+                    if stored_hermes_run_ref is not None
+                    else None
+                ),
                 binding_ref=refs["binding_ref"],
                 hermes_run_ref=refs["hermes_run_ref"],
                 bind_operation_key=refs["bind_operation_key"],
@@ -847,10 +863,17 @@ class TaskService:
             "exact_input_refs",
         ):
             result[key] = assignment.get(key)
-        result["binding_state"] = (
-            "bound"
-            if assignment.get("binding_ref") is not None
+        has_real_refs = (
+            assignment.get("binding_ref") is not None
             and assignment.get("hermes_run_ref") is not None
+        )
+        has_bind_metadata = (
+            assignment.get("bind_operation_key") is not None
+            and assignment.get("bind_request_sha256") is not None
+        )
+        result["binding_state"] = (
+            "bound" if has_real_refs and has_bind_metadata
+            else "legacy_bound" if has_real_refs
             else "unbound"
         )
         return result

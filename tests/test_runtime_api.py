@@ -458,6 +458,10 @@ def test_runtime_history_exposes_retryable_supervisor_failure(monkeypatch):
     assert current.status_code == 200
     assert blocked.status_code == 200
     assert blocked.json()["result"]["retryable"] is True
+    assert blocked.json()["result"]["binding_state"] == "bound"
+    assert blocked.json()["result"]["status"] == "blocked"
+    assert blocked.json()["result"]["current_phase_code"] == "assigned"
+    assert blocked.json()["result"]["current_phase_name"] == "Assigned"
     assert history.status_code == 200
     assert history.json()["result"]["records"][0]["retryable"] is True
 
@@ -976,10 +980,21 @@ def test_runtime_step_replays_committed_response_before_cursor_rejection(
         )
 
     assert first.status_code == 200
-    assert first.json()["result"]["replayed"] is False
     assert replay.status_code == 200
-    assert replay.json()["result"]["replayed"] is True
-    assert replay.json()["result"]["message"] == first.json()["result"]["message"]
+    assert replay.json() == first.json()
+    result = first.json()["result"]
+    assert result["replayed"] is False
+    assert result["binding_state"] == "bound"
+    assert result["assignment_revision"] == 1
+    assert result["assignment_ref"] == assigned["assignment_ref"]
+    assert result["binding_ref"] == assigned["binding_ref"]
+    assert result["hermes_run_ref"] == assigned["hermes_run_ref"]
+    assert result["mode_key"] == "assigned"
+    assert result["cycle_number"] == 0
+    assert result["attempt_number"] == 1
+    assert result["status"] == "done"
+    assert result["current_phase_code"] == "assigned"
+    assert result["current_phase_name"] == "Assigned"
     with SAUnitOfWork() as uow:
         task = uow.tasks.get_by_key("DEV-20")
         assert task is not None and task.id is not None
@@ -989,7 +1004,68 @@ def test_runtime_step_replays_committed_response_before_cursor_rejection(
         assert history[0].request_sha256 is not None
         assert history[0].assignment_revision == 1
         assert history[0].hermes_run_ref == assigned["hermes_run_ref"]
+        assert history[0].supervisor_response == result
         assert len(uow.tasks.list_phase_events(task.id)) == 2
+
+
+def test_runtime_step_returns_fresh_next_phase_cursor(monkeypatch, supervisor_llm):
+    runtime_token = "next-phase-runtime-token-1234567"
+    assignment_token = "next-phase-assignment-token-1234"
+    monkeypatch.setenv(
+        "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON",
+        json.dumps({"developer": runtime_token}),
+    )
+    monkeypatch.setenv(
+        "PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON",
+        json.dumps({"developer": assignment_token}),
+    )
+    config.get_settings.cache_clear()
+    _namespace("DEVELOPER", "workflow-developer", "DEV")
+    with SAUnitOfWork() as uow:
+        project = next(
+            item for item in uow.projects.list() if item.cli_command == "workflow-developer"
+        )
+        assert project.workflow_id is not None
+        mode = uow.workflows.get_mode_by_key(project.workflow_id, "assigned")
+        assert mode is not None and mode.id is not None
+        uow.phases.create(
+            {
+                "workflow_id": project.workflow_id,
+                "mode_id": mode.id,
+                "code": "review",
+                "name": "Review",
+                "phase_order": 2,
+            }
+        )
+        uow.commit()
+    supervisor_llm("PASS")
+
+    with TestClient(create_app()) as client:
+        accepted = client.post(
+            "/internal/runtime/assign",
+            headers=_headers(assignment_token),
+            json=_assignment("DEV-26", "assign-dev-26", "developer"),
+        ).json()["result"]
+        assigned = _bind_assignment(client, assignment_token, accepted)
+        payload = _step_payload(
+            assigned,
+            "Первая фаза завершена",
+            step_operation_key="step:DEV-26:assigned",
+        )
+        first = client.post(
+            "/internal/runtime/step", headers=_headers(runtime_token), json=payload
+        )
+        replay = client.post(
+            "/internal/runtime/step", headers=_headers(runtime_token), json=payload
+        )
+
+    assert first.status_code == 200
+    assert replay.json() == first.json()
+    result = first.json()["result"]
+    assert result["phase_code"] == "assigned"
+    assert result["current_phase_code"] == "review"
+    assert result["current_phase_name"] == "Review"
+    assert result["status"] == "active"
 
 
 def test_runtime_step_operation_key_rejects_changed_payload(monkeypatch, supervisor_llm):
@@ -1218,7 +1294,8 @@ def test_concurrent_identical_runtime_step_has_one_durable_mutation(
             responses = nested_responses + [(original.status_code, original.json())]
 
     assert [status for status, _body in responses] == [200, 200]
-    assert sorted(body["result"]["replayed"] for _status, body in responses) == [False, True]
+    assert responses[0][1] == responses[1][1]
+    assert responses[0][1]["result"]["replayed"] is False
     with SAUnitOfWork() as uow:
         task = uow.tasks.get_by_key("DEV-24")
         assert task is not None and task.id is not None

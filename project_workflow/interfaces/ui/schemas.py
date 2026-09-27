@@ -189,7 +189,7 @@ class RuntimeBindRequest(StrictRequest):
     mode_key: str = Field(min_length=1, max_length=128)
     cycle_number: int = Field(ge=0, strict=True)
     attempt_number: int = Field(gt=0, strict=True)
-    expected_binding_state: Literal["unbound"]
+    expected_binding_state: Literal["unbound", "legacy_bound"]
 
     @field_validator(
         "task",

@@ -251,8 +251,6 @@ def _add_runtime_assignment_bindings() -> None:
         batch.add_column(sa.Column("assignment_ref", sa.String(length=512), nullable=True))
         batch.add_column(sa.Column("binding_ref", sa.String(length=512), nullable=True))
         batch.add_column(sa.Column("hermes_run_ref", sa.String(length=512), nullable=True))
-        batch.add_column(sa.Column("bind_operation_key", sa.String(length=128), nullable=True))
-        batch.add_column(sa.Column("bind_request_sha256", sa.String(length=64), nullable=True))
         batch.add_column(sa.Column("workspace_generation", sa.Integer(), nullable=True))
         batch.add_column(sa.Column("lease_generation", sa.Integer(), nullable=True))
         batch.add_column(sa.Column("exact_input_refs", sa.Text(), nullable=True))
@@ -263,9 +261,6 @@ def _add_runtime_assignment_bindings() -> None:
             ["task_id", "project_id", "workflow_id"],
             ["id", "project_id", "workflow_id"],
             ondelete="RESTRICT",
-        )
-        batch.create_unique_constraint(
-            "uq_task_runtime_assignments_bind_operation_key", ["bind_operation_key"]
         )
         batch.create_check_constraint(
             "ck_task_runtime_assignments_execution_scope",
@@ -303,19 +298,15 @@ def _add_runtime_assignment_bindings() -> None:
             "task_workspace_ref IS NULL AND workspace_revision IS NULL AND "
             "tech_execution_workspace_ref IS NULL AND tech_execution_attempt_ref IS NULL AND "
             "decomposition_revision_ref IS NULL AND stage_revision IS NULL AND assignment_ref IS NULL AND "
-            "binding_ref IS NULL AND hermes_run_ref IS NULL AND bind_operation_key IS NULL AND "
-            "bind_request_sha256 IS NULL AND workspace_generation IS NULL AND "
+            "binding_ref IS NULL AND hermes_run_ref IS NULL AND workspace_generation IS NULL AND "
             "lease_generation IS NULL AND exact_input_refs IS NULL AND payload_sha256 IS NULL) OR "
             "(workflow_key IS NOT NULL AND role_key IS NOT NULL AND execution_scope IS NOT NULL AND "
             "stage_key IS NOT NULL AND attempt_number IS NOT NULL AND business_task_ref IS NOT NULL AND "
             "root_task_ref IS NOT NULL AND work_item_ref IS NOT NULL AND work_item_revision IS NOT NULL AND "
             "queue_item_ref IS NOT NULL AND task_workspace_ref IS NOT NULL AND workspace_revision IS NOT NULL AND "
             "decomposition_revision_ref IS NOT NULL AND stage_revision IS NOT NULL AND assignment_ref IS NOT NULL AND "
-            "workspace_generation IS NOT NULL AND lease_generation IS NOT NULL AND "
-            "exact_input_refs IS NOT NULL AND payload_sha256 IS NOT NULL AND "
-            "((binding_ref IS NULL AND hermes_run_ref IS NULL AND bind_operation_key IS NULL AND "
-            "bind_request_sha256 IS NULL) OR (binding_ref IS NOT NULL AND hermes_run_ref IS NOT NULL AND "
-            "bind_operation_key IS NOT NULL AND bind_request_sha256 IS NOT NULL)))",
+            "binding_ref IS NOT NULL AND hermes_run_ref IS NOT NULL AND workspace_generation IS NOT NULL AND "
+            "lease_generation IS NOT NULL AND exact_input_refs IS NOT NULL AND payload_sha256 IS NOT NULL)",
         )
         batch.create_check_constraint(
             "ck_task_runtime_assignments_scope_tech_refs",
@@ -328,10 +319,6 @@ def _add_runtime_assignment_bindings() -> None:
         batch.create_check_constraint(
             "ck_task_runtime_assignments_payload_sha256",
             "payload_sha256 IS NULL OR length(payload_sha256) = 64",
-        )
-        batch.create_check_constraint(
-            "ck_task_runtime_assignments_bind_request_sha256",
-            "bind_request_sha256 IS NULL OR length(bind_request_sha256) = 64",
         )
         batch.create_index(
             "ix_task_runtime_assignments_business_task_ref", ["business_task_ref"], unique=False

@@ -70,13 +70,14 @@ def _constraint_names(items: list[dict]) -> set[str]:
     return {str(item["name"]) for item in items if item.get("name")}
 
 
-def test_repository_has_exactly_one_base_and_head():
+def test_repository_has_one_linear_migration_head():
     versions = Path(__file__).parents[1] / "project_workflow" / "infrastructure" / "db" / "migrations" / "versions"
     assert sorted(path.name for path in versions.glob("*.py")) == [
         "0001_initial_schema.py",
         "0002_workflow_modes.py",
+        "0003_runtime_assignment_bind.py",
     ]
-    assert migration_head() == "0002_workflow_modes"
+    assert migration_head() == "0003_runtime_assignment_bind"
 
 
 def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
@@ -128,7 +129,7 @@ def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
         }
         assert actual_fks == expected_fks, table_name
 
-    assert database_revisions(engine) == {"0002_workflow_modes"}
+    assert database_revisions(engine) == {"0003_runtime_assignment_bind"}
     assert schema_is_ready(engine) is True
     with engine.connect() as connection:
         context = MigrationContext.configure(
@@ -242,7 +243,7 @@ def test_sqlite_upgrade_populated_legacy_backfills_each_workflow_mode(tmp_path):
 
 def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path):
     engine = _sqlite_engine(tmp_path, "binding-constraints.db")
-    ensure_migrated(engine)
+    run_alembic_command("upgrade", engine, "0002_workflow_modes")
     with engine.begin() as conn:
         workflow_id = conn.execute(
             text(
@@ -291,8 +292,8 @@ def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path):
             },
         ).scalar_one()
 
-    base = {
-        "operation_key": "valid",
+    base_0002 = {
+        "operation_key": "legacy-bound",
         "task_id": task_id,
         "project_id": project_ids[0],
         "workflow_id": workflow_id,
@@ -318,13 +319,57 @@ def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path):
         "assignment_ref": "assignment:1",
         "binding_ref": "binding:1",
         "hermes_run_ref": "run:1",
-        "bind_operation_key": "bind:1",
-        "bind_request_sha256": "b" * 64,
         "workspace_generation": 1,
         "lease_generation": 1,
         "exact_input_refs": "[]",
         "payload_sha256": "a" * 64,
         "payload": "{}",
+    }
+    old_columns = ", ".join(base_0002)
+    old_values = ", ".join(f":{column}" for column in base_0002)
+    old_statement = text(
+        f"INSERT INTO task_runtime_assignments ({old_columns}) VALUES ({old_values})"
+    )
+    with engine.begin() as conn:
+        conn.execute(old_statement, base_0002)
+        conn.execute(
+            text(
+                "INSERT INTO task_runtime_assignments "
+                "(operation_key, task_id, project_id, workflow_id, mode_id, cycle_number, "
+                "assignment_revision, payload) VALUES "
+                "('legacy-unbound', :task_id, :project_id, :workflow_id, :mode_id, 0, 2, "
+                ":legacy_payload)"
+            ),
+            {
+                "task_id": task_id,
+                "project_id": project_ids[0],
+                "workflow_id": workflow_id,
+                "mode_id": mode_id,
+                "legacy_payload": '{"legacy":true}',
+            },
+        )
+
+    ensure_migrated(engine)
+    assert database_revisions(engine) == {"0003_runtime_assignment_bind"}
+    with engine.connect() as conn:
+        preserved = conn.execute(
+            text(
+                "SELECT operation_key, binding_ref, hermes_run_ref, bind_operation_key, "
+                "bind_request_sha256, payload FROM task_runtime_assignments "
+                "WHERE operation_key IN ('legacy-bound', 'legacy-unbound') ORDER BY operation_key"
+            )
+        ).all()
+    assert preserved == [
+        ("legacy-bound", "binding:1", "run:1", None, None, "{}"),
+        ("legacy-unbound", None, None, None, None, '{"legacy":true}'),
+    ]
+
+    base = {
+        **base_0002,
+        "operation_key": "valid",
+        "assignment_revision": 3,
+        "bind_operation_key": "bind:1",
+        "bind_request_sha256": "b" * 64,
     }
     columns = ", ".join(base)
     values = ", ".join(f":{column}" for column in base)
@@ -336,7 +381,7 @@ def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path):
             {
                 **base,
                 "operation_key": "valid-unbound",
-                "assignment_revision": 2,
+                "assignment_revision": 4,
                 "binding_ref": None,
                 "hermes_run_ref": None,
                 "bind_operation_key": None,
@@ -349,28 +394,35 @@ def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path):
             **base,
             "operation_key": "cross-project",
             "bind_operation_key": "bind:cross-project",
-            "assignment_revision": 3,
+            "assignment_revision": 5,
             "project_id": project_ids[1],
         },
         {
             **base,
             "operation_key": "partial",
             "bind_operation_key": "bind:partial",
-            "assignment_revision": 3,
+            "assignment_revision": 5,
             "binding_ref": None,
+        },
+        {
+            **base,
+            "operation_key": "partial-bind-metadata",
+            "bind_operation_key": "bind:partial-metadata",
+            "bind_request_sha256": None,
+            "assignment_revision": 5,
         },
         {
             **base,
             "operation_key": "business-with-tech",
             "bind_operation_key": "bind:business-with-tech",
-            "assignment_revision": 3,
+            "assignment_revision": 5,
             "execution_scope": "business",
         },
         {
             **base,
             "operation_key": "delivery-without-tech",
             "bind_operation_key": "bind:delivery-without-tech",
-            "assignment_revision": 3,
+            "assignment_revision": 5,
             "tech_execution_attempt_ref": None,
         },
     ]
@@ -393,9 +445,9 @@ def test_in_memory_sqlite_migration_keeps_the_schema_alive():
 def test_sqlite_downgrade_refuses_lossy_runtime_history(tmp_path):
     engine = _sqlite_engine(tmp_path)
     ensure_migrated(engine)
-    with pytest.raises(RuntimeError, match="Downgrade from workflow modes"):
+    with pytest.raises(RuntimeError, match="Downgrade from runtime assignment bind"):
         run_alembic_command("downgrade", engine, "base")
-    assert database_revisions(engine) == {"0002_workflow_modes"}
+    assert database_revisions(engine) == {"0003_runtime_assignment_bind"}
     assert schema_is_ready(engine) is True
 
 
@@ -566,7 +618,7 @@ def test_head_with_damaged_or_polluted_schema_is_refused(tmp_path, mutation):
     assert schema_is_ready(engine) is False
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0002_workflow_modes"}
+    assert database_revisions(engine) == {"0003_runtime_assignment_bind"}
     if mutation == "extra":
         with engine.connect() as connection:
             assert connection.execute(text("SELECT id FROM unexpected_table")).scalar_one() == 42

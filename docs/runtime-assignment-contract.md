@@ -66,8 +66,16 @@ Canonical JSON всего replay payload хранится вместе с его
 перестановка refs и JSON keys сохраняет replay, изменение или добавление любого
 значимого значения даёт conflict.
 
+Записи из опубликованной migration `0002`, у которых уже есть реальные
+`binding_ref`/`hermes_run_ref`, но ещё нет bind metadata, читаются как
+`legacy_bound`. Точный bind с `expected_binding_state=legacy_bound` и теми же refs
+однократно дописывает `bind_operation_key` и digest; другие refs
+отклоняются. Миграция не изобретает для старых записей operation key или
+digest.
+
 `/internal/runtime/bind` принимает точный task, assignment
-operation/ref/revision, mode/cycle/attempt, ожидаемое `unbound` состояние,
+operation/ref/revision, mode/cycle/attempt, ожидаемое `unbound` или
+`legacy_bound` состояние,
 реальные refs и отдельный `bind_operation_key`. Одна DB CAS-операция переводит
 assignment в `bound`. Точный retry того же ключа возвращает сохранённый cursor;
 изменённый payload, второй ключ, другая роль/задача либо stale revision дают
@@ -76,6 +84,13 @@ assignment в `bound`. Точный retry того же ключа возвра�
 `/internal/runtime/step` доступен только для `bound` assignment и сохраняет
 прежний полный fence. History может читаться в `unbound` состоянии, но не
 создаёт binding и не подставляет отсутствующие refs.
+Успешный report-step и его exact replay возвращают один сохранённый result,
+дополненный прочитанным после transition cursor:
+`assignment_operation_key`, `assignment_revision`, `assignment_ref`, `binding_ref`,
+`hermes_run_ref`, `binding_state`, `mode_key`, `cycle_number`, `attempt_number`,
+`status`, `current_phase_code`, `current_phase_name`. Cursor записывается в
+одной transaction с phase transition, а ответ перечитывается из fresh UoW.
+Следующая фаза и terminal/blocked status не выводятся из verdict.
 
 После terminal `done` Business может выдать новый `operation_key` в том же
 mode/cycle только как retry: `attempt_number` обязан быть ровно на единицу
@@ -85,8 +100,10 @@ lease generations могут измениться. Новый rework entry об�
 `cycle_number` и снова начинается с `attempt_number=1`. Активный attempt,
 пропуск/регресс attempt, изменение frozen tuple и пропуск cycle отклоняются.
 
-Миграция `0002_workflow_modes` оставляет эти поля nullable только
-для исторических строк и не создаёт вымышленные внешние refs.
+Опубликованная migration `0002_workflow_modes` не изменяется. Forward migration
+`0003_runtime_assignment_bind` добавляет nullable bind metadata, сохраняет
+исторические ledger rows и не создаёт вымышленные внешние refs,
+operation keys или digests.
 
 ## Terminal owner boundary
 
