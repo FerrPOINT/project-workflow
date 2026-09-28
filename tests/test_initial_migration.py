@@ -570,7 +570,7 @@ def test_init_db_configures_output_encoding(monkeypatch):
     assert stderr.calls == [{"encoding": "utf-8", "errors": "replace"}]
 
 
-def test_init_db_reports_invalid_seed_without_traceback(tmp_path, monkeypatch, capsys):
+def test_init_db_reports_invalid_managed_catalog_without_traceback(tmp_path, monkeypatch, capsys):
     from project_workflow import config
     from project_workflow.infrastructure.db.session import reset_engine
     from scripts import init_db
@@ -587,16 +587,16 @@ def test_init_db_reports_invalid_seed_without_traceback(tmp_path, monkeypatch, c
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'invalid-seed.db'}")
     monkeypatch.setattr(init_db, "SAUnitOfWork", TrackingUoW)
     monkeypatch.setattr(
-        init_db.schema,
-        "ensure_phase_catalog",
-        lambda _uow: (_ for _ in ()).throw(ValueError("Некорректный начальный каталог: phase.code")),
+        init_db,
+        "ensure_managed_catalog",
+        lambda _uow: (_ for _ in ()).throw(ValueError("Некорректный managed каталог: phase.code")),
     )
     config.get_settings.cache_clear()
     reset_engine()
     try:
         assert init_db.main() == 1
         stderr = capsys.readouterr().err
-        assert "Некорректный начальный каталог: phase.code" in stderr
+        assert "Некорректный managed каталог: phase.code" in stderr
         assert "Traceback" not in stderr
         assert closed is True
     finally:

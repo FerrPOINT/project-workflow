@@ -53,6 +53,15 @@ Business adapter проверяет runtime-контракт через ауте
 manifest даёт `503`, при этом публичный `/health` по-прежнему проверяет только
 DB/schema и подходит для standalone-разработки.
 
+Managed DEV bootstrap загружает только versioned-каталог
+[`hermes_sdlc_catalog_v1.json`](project_workflow/references/hermes_sdlc_catalog_v1.json):
+семь workflow и тринадцать backend-selected modes. Каноническая роль Project
+Manager записывается как `project_manager`; произвольные underscore aliases не
+нормализуются. У managed workflow нет `default` mode: отсутствие или
+несовпадение assigned mode закрывает запуск до Supervisor/model call. Старый
+single-workflow каталог сохранён как явно unmanaged compatibility artifact и
+не используется `scripts/init_db.py` как fallback.
+
 Поставляемый image собирается из одного immutable Git snapshot командой:
 
 ```bash
@@ -172,7 +181,7 @@ bridge `/internal/runtime/*` не использует browser SSO и защищ
 | Append-only history | История фаз и `step`-проверок не затирается. |
 | CLI freeze | Публичный CLI остаётся управляемым и предсказуемым: `step` / `history`. |
 | Wrapper commands | `workflow-qa`, `workflow-dev` и другие команды генерируются из записей PostgreSQL. |
-| Automatic baseline | `docker compose up` поднимает Postgres, применяет миграции и загружает стартовый каталог. |
+| Automatic baseline | `docker compose up` поднимает Postgres, применяет миграции и загружает versioned managed-каталог 7 workflow / 13 modes. |
 
 ## 🔧 Стек
 
@@ -280,7 +289,10 @@ python -m project_workflow.interfaces.ui --host 127.0.0.1 --port 8812
 curl --fail http://127.0.0.1:8812/health
 ```
 
-При старте приложение проверяет connectivity БД; Compose `migrate`-сервис применяет миграции схемы и загружает дефолтный workflow-каталог.
+При старте приложение проверяет connectivity БД; Compose `migrate`-сервис
+применяет миграции схемы и загружает канонический managed workflow-каталог.
+Существующая divergent managed-конфигурация не перезаписывается: init
+завершается fail-closed и требует операторского reconcile.
 
 | Area | Route |
 |---|---|

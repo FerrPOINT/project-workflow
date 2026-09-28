@@ -17,7 +17,7 @@ from tests._db_helpers import prepare_sqlite_uow
 pytestmark = [pytest.mark.unit]
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SEED_PATH = REPO_ROOT / "project_workflow" / "references" / "seed.json"
+SEED_PATH = REPO_ROOT / "project_workflow" / "references" / "legacy_unmanaged_seed.json"
 COMPOSE_PATH = REPO_ROOT / "docker-compose.yml"
 AGENTS_PATH = REPO_ROOT / "AGENTS.md"
 DOCKERFILE_PATH = REPO_ROOT / "Dockerfile"

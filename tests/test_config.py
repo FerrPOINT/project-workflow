@@ -38,8 +38,9 @@ def test_local_ui_defaults_to_loopback(monkeypatch):
 
 
 def test_bootstrap_constants_are_minimal():
-    assert config.SEED_PATH.name == "seed.json"
-    assert config.DEFAULT_WORKFLOW_NAME == "sdlc-business-tech-v1"
+    assert config.MANAGED_CATALOG_PATH.name == "hermes_sdlc_catalog_v1.json"
+    assert config.LEGACY_UNMANAGED_SEED_PATH.name == "legacy_unmanaged_seed.json"
+    assert config.LEGACY_UNMANAGED_WORKFLOW_NAME == "sdlc-business-tech-v1"
     assert config.DEFAULT_PROJECT_CODE == "RUN"
     assert config.DEFAULT_PROJECT_NAME == "Основной"
     assert config.DEFAULT_TASK_KEY_PREFIXES == []

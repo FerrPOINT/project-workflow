@@ -594,11 +594,11 @@ def test_runtime_assignment_rejects_binding_that_disagrees_with_mode_policy(
 def test_business_mode_explicitly_forbids_tech_workspace_refs(tmp_path):
     with prepared_sqlite_uow(tmp_path, "business-binding.db") as uow:
         project_id, _ = _runtime_catalog(
-            uow, role_key="project-manager", scope="business", tech_policy="forbidden"
+            uow, role_key="project_manager", scope="business", tech_policy="forbidden"
         )
         business_binding = _binding(
-            workflow_key="hermes-sdlc:project-manager",
-            role_key="project-manager",
+            workflow_key="hermes-sdlc:project_manager",
+            role_key="project_manager",
             execution_scope="business",
             tech_execution_workspace_ref=None,
             tech_execution_attempt_ref=None,
@@ -626,8 +626,8 @@ def test_business_mode_explicitly_forbids_tech_workspace_refs(tmp_path):
                 expected_revision=0,
                 expected_status="missing",
                 **_binding(
-                    workflow_key="hermes-sdlc:project-manager",
-                    role_key="project-manager",
+                    workflow_key="hermes-sdlc:project_manager",
+                    role_key="project_manager",
                     execution_scope="business",
                 ),
             )

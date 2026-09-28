@@ -60,7 +60,7 @@ def _valid_manifest() -> dict[str, str | int]:
 @pytest.mark.parametrize(
     "role",
     [
-        "project-manager",
+        "project_manager",
         "analyst",
         "architect",
         "developer",

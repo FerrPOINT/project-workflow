@@ -9,6 +9,24 @@ from dataclasses import dataclass
 from typing import Any
 
 ROLE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9-]{1,31}$")
+CANONICAL_UNDERSCORE_ROLE_KEYS = frozenset({"project_manager"})
+MANAGED_ROLE_MODE_SCOPES: dict[str, dict[str, str]] = {
+    "project_manager": {"draft": "business"},
+    "analyst": {"analysis": "business"},
+    "architect": {"decomposition": "business"},
+    "developer": {
+        "initial": "delivery",
+        "rework": "delivery",
+        "integration": "aggregate",
+        "integration_rework": "aggregate",
+    },
+    "reviewer": {"delivery": "delivery", "integration": "aggregate"},
+    "tester": {"delivery": "delivery", "integration": "aggregate"},
+    "devops": {"delivery": "delivery", "integration": "aggregate"},
+}
+MANAGED_WORKFLOW_KEYS = frozenset(
+    f"hermes-sdlc:{role_key}" for role_key in MANAGED_ROLE_MODE_SCOPES
+)
 
 
 @dataclass(frozen=True)
@@ -79,8 +97,11 @@ def normalize_role_key(value: Any) -> str:
     if not isinstance(value, str):
         raise ValueError("role_key должен быть строкой")
     normalized = value.strip()
-    if ROLE_KEY_PATTERN.fullmatch(normalized) is None:
-        raise ValueError("role_key должен соответствовать [a-z][a-z0-9-]{1,31}")
+    if ROLE_KEY_PATTERN.fullmatch(normalized) is None and normalized not in CANONICAL_UNDERSCORE_ROLE_KEYS:
+        raise ValueError(
+            "role_key должен соответствовать [a-z][a-z0-9-]{1,31} "
+            "или быть каноническим project_manager"
+        )
     return normalized
 
 

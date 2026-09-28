@@ -28,8 +28,13 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
     runtime_dir = tmp_path / ".project-workflow"
     runtime_dir.mkdir(parents=True, exist_ok=True)
     test_db = runtime_dir / "workflow.db"
-    seed_path = runtime_dir / "seed.json"
-    repo_seed = Path(__file__).resolve().parents[1] / "project_workflow" / "references" / "seed.json"
+    seed_path = runtime_dir / "legacy_unmanaged_seed.json"
+    repo_seed = (
+        Path(__file__).resolve().parents[1]
+        / "project_workflow"
+        / "references"
+        / "legacy_unmanaged_seed.json"
+    )
     seed_path.write_text(repo_seed.read_text(encoding="utf-8"), encoding="utf-8")
 
     database_url = f"sqlite:///{test_db}"
@@ -37,7 +42,7 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
     monkeypatch.setenv("PLATFORM_SERVICES_URL", "")
     config.get_settings.cache_clear()
 
-    monkeypatch.setattr(config, "SEED_PATH", seed_path)
+    monkeypatch.setattr(config, "LEGACY_UNMANAGED_SEED_PATH", seed_path)
 
     from project_workflow.application import state as app_state
     from project_workflow.infrastructure.db.session import reset_engine

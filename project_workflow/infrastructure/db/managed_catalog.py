@@ -1,0 +1,545 @@
+"""Versioned managed Hermes workflow catalog bootstrap.
+
+The catalog is declarative input owned by project-workflow.  It describes
+workflow/mode/phase configuration only: Business remains the owner of routing,
+stage/status transitions, queue priority and workspace assignments.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+
+from project_workflow import config
+from project_workflow.domain import Workflow
+from project_workflow.domain.namespace import legacy_code_from_cli_command
+from project_workflow.domain.phase_graph import PhaseGraphNode, validate_phase_graph
+from project_workflow.domain.repositories import UnitOfWork
+from project_workflow.domain.runtime_assignment import MANAGED_ROLE_MODE_SCOPES, normalize_role_key
+
+from .schema import _phase_item_to_supervisor, _SeedPhase
+
+CATALOG_SCHEMA = "relevanter-project-workflow-catalog/v1"
+
+FORBIDDEN_LEGACY_IDENTITIES = frozenset(
+    {"orchestrator", "codex-operator", "ops", "researcher", "critic", "coder"}
+)
+FORBIDDEN_LEGACY_SKILLS = frozenset({"using-rtech"})
+
+
+class _CatalogModel(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+
+class CatalogSource(_CatalogModel):
+    repository: str
+    revision: str
+    manifest_path: str
+    manifest_schema: str
+
+    @field_validator("repository", "revision", "manifest_path", "manifest_schema")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Catalog source fields cannot be blank")
+        return normalized
+
+
+class ManagedMode(_CatalogModel):
+    key: str
+    name: str
+    mode_order: int = Field(gt=0)
+    execution_scope: Literal["business", "delivery", "aggregate"]
+    phases: list[_SeedPhase] = Field(min_length=2)
+
+    @field_validator("key", "name")
+    @classmethod
+    def _identity_not_blank(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Managed mode identity cannot be blank")
+        return normalized
+
+    @model_validator(mode="after")
+    def _ordered_phases(self) -> ManagedMode:
+        expected = list(range(1, len(self.phases) + 1))
+        actual = [phase.phase_order for phase in self.phases]
+        if actual != expected:
+            raise ValueError(f"Mode {self.key!r} phase_order must be contiguous from 1")
+        if len({phase.code for phase in self.phases}) != len(self.phases):
+            raise ValueError(f"Mode {self.key!r} contains duplicate phase codes")
+        try:
+            validate_phase_graph(
+                [
+                    PhaseGraphNode(
+                        code=phase.code,
+                        graph_id=phase.code,
+                        phase_order=phase.phase_order,
+                        execution_type=phase.execution_type,
+                        parallel_with_phase_id=phase.parallel_with_phase_code,
+                        rollback_target_phase_id=phase.rollback_target_phase_code,
+                    )
+                    for phase in self.phases
+                ]
+            )
+        except ValueError as exc:
+            raise ValueError(f"Mode {self.key!r} has an invalid phase graph: {exc}") from exc
+        return self
+
+
+class ManagedWorkflow(_CatalogModel):
+    key: str
+    name: str
+    description: str
+    workflow_order: int = Field(gt=0)
+    role_key: str
+    hermes_namespace: str
+    hermes_profile: str
+    skill_allowlist: list[str] = Field(min_length=2)
+    modes: list[ManagedMode] = Field(min_length=1)
+
+    @field_validator("key", "name", "description", "hermes_namespace", "hermes_profile")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Managed workflow identity fields cannot be blank")
+        return normalized
+
+    @field_validator("role_key")
+    @classmethod
+    def _valid_role(cls, value: str) -> str:
+        return normalize_role_key(value)
+
+    @field_validator("skill_allowlist")
+    @classmethod
+    def _unique_skills(cls, value: list[str]) -> list[str]:
+        normalized = [skill.strip() for skill in value]
+        if any(not skill for skill in normalized) or len(set(normalized)) != len(normalized):
+            raise ValueError("skill_allowlist must contain unique non-empty names")
+        return normalized
+
+    @model_validator(mode="after")
+    def _validate_workflow_contract(self) -> ManagedWorkflow:
+        expected_key = f"hermes-sdlc:{self.role_key}"
+        if self.key != expected_key:
+            raise ValueError(f"Workflow {self.role_key!r} must use key {expected_key!r}")
+        expected_modes = MANAGED_ROLE_MODE_SCOPES.get(self.role_key)
+        if expected_modes is None:
+            raise ValueError(f"Unknown managed role {self.role_key!r}")
+        actual_modes = {mode.key: mode.execution_scope for mode in self.modes}
+        if actual_modes != expected_modes:
+            raise ValueError(
+                f"Workflow {self.role_key!r} modes differ from the canonical registry"
+            )
+        if [mode.mode_order for mode in self.modes] != list(range(1, len(self.modes) + 1)):
+            raise ValueError(f"Workflow {self.role_key!r} mode_order must be contiguous from 1")
+        if "project-workflow-executor" not in self.skill_allowlist:
+            raise ValueError(f"Workflow {self.role_key!r} must allow project-workflow-executor")
+        allowed = set(self.skill_allowlist)
+        for mode in self.modes:
+            for phase in mode.phases:
+                if (
+                    phase.execution_type != "sync"
+                    or phase.parallel_with_phase_code is not None
+                    or phase.rollback_target_phase_code is not None
+                ):
+                    raise ValueError("Managed canonical phases must be ordered and synchronous")
+                if phase.delegate is not None:
+                    raise ValueError("Managed phase delegate is derived from workflow identity")
+                if not phase.instructions or not phase.checks or not phase.evidence:
+                    raise ValueError(
+                        f"Managed phase {phase.code!r} requires instructions, checks and evidence"
+                    )
+                for instruction in phase.instructions:
+                    skills = set(instruction.skills)
+                    if "project-workflow-executor" not in skills:
+                        raise ValueError(
+                            f"Managed phase {phase.code!r} instruction must attach project-workflow-executor"
+                        )
+                    unknown = skills - allowed
+                    if unknown:
+                        raise ValueError(
+                            f"Managed phase {phase.code!r} uses skills outside role allowlist: {sorted(unknown)}"
+                        )
+        for mode in self.modes:
+            first_instruction = mode.phases[0].instructions[0].description.casefold()
+            for marker in ("task", "comment", "attachment"):
+                if marker not in first_instruction:
+                    raise ValueError(
+                        f"Mode {self.role_key!r}/{mode.key!r} must begin by reading "
+                        "Task, comments and attachments"
+                    )
+            terminal_instruction = mode.phases[-1].instructions[-1].description.casefold()
+            if "business markdown comment" not in terminal_instruction:
+                raise ValueError(
+                    f"Mode {self.role_key!r}/{mode.key!r} must end with a precise Business Markdown comment"
+                )
+            allowed_terminal = (
+                "publishdraft" if self.role_key == "project_manager" else "completeassignedstage"
+            )
+            if allowed_terminal not in terminal_instruction:
+                raise ValueError(
+                    f"Mode {self.role_key!r}/{mode.key!r} must end with {allowed_terminal}"
+                )
+            if self.role_key in {"reviewer", "tester"}:
+                if "outcome passed" not in terminal_instruction or "needs_rework" not in terminal_instruction:
+                    raise ValueError(
+                        f"Mode {self.role_key!r}/{mode.key!r} must allow only passed or needs_rework"
+                    )
+            elif "needs_rework" in terminal_instruction:
+                raise ValueError(
+                    f"Mode {self.role_key!r}/{mode.key!r} cannot emit needs_rework"
+                )
+            if "one concrete question" not in terminal_instruction:
+                raise ValueError(
+                    f"Mode {self.role_key!r}/{mode.key!r} must keep insufficient input non-terminal"
+                )
+        return self
+
+
+class ManagedCatalog(_CatalogModel):
+    schema_name: str = Field(alias="schema")
+    catalog_version: int = Field(gt=0)
+    skills_source: CatalogSource
+    workflows: list[ManagedWorkflow]
+
+    @model_validator(mode="after")
+    def _canonical_inventory(self) -> ManagedCatalog:
+        if self.schema_name != CATALOG_SCHEMA:
+            raise ValueError(f"Unsupported managed catalog schema {self.schema_name!r}")
+        if len(self.workflows) != 7:
+            raise ValueError("Managed catalog must contain exactly seven workflows")
+        if [workflow.workflow_order for workflow in self.workflows] != list(range(1, 8)):
+            raise ValueError("workflow_order must be contiguous from 1")
+        roles = [workflow.role_key for workflow in self.workflows]
+        if roles != list(MANAGED_ROLE_MODE_SCOPES):
+            raise ValueError("Managed workflows must follow the canonical seven-role order")
+        mode_count = sum(len(workflow.modes) for workflow in self.workflows)
+        if mode_count != 13:
+            raise ValueError("Managed catalog must contain exactly thirteen modes")
+        serialized = self.model_dump_json().casefold()
+        if '"repeatable"' in serialized:
+            raise ValueError("Managed catalog must model repeat work as a new cycle, not repeatable")
+        foreign_roles = sorted(
+            role for role in FORBIDDEN_LEGACY_IDENTITIES if f'"{role}"' in serialized
+        )
+        foreign_skills = sorted(
+            skill for skill in FORBIDDEN_LEGACY_SKILLS if f'"{skill}"' in serialized
+        )
+        if foreign_roles or foreign_skills:
+            raise ValueError(
+                f"Managed catalog contains legacy identities/skills: {foreign_roles + foreign_skills}"
+            )
+        return self
+
+
+def load_managed_catalog(path: Path | str | None = None) -> ManagedCatalog:
+    """Load and strictly validate the versioned managed catalog."""
+    catalog_path = Path(path) if path is not None else config.MANAGED_CATALOG_PATH
+    if not catalog_path.exists():
+        raise FileNotFoundError(f"Managed workflow catalog not found: {catalog_path}")
+    if catalog_path.suffix.casefold() != ".json":
+        raise ValueError("Managed workflow catalog must be JSON")
+    try:
+        raw = json.loads(catalog_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid managed workflow catalog: {catalog_path}") from exc
+    try:
+        return ManagedCatalog.model_validate(raw)
+    except ValidationError as exc:
+        raise ValueError(f"Invalid managed workflow catalog {catalog_path}: {exc}") from exc
+
+
+def _ensure_agent(uow: UnitOfWork, workflow: ManagedWorkflow) -> int:
+    expected_description = f"Managed Hermes role: {workflow.name}"
+    existing = uow.agents.get_by_name(workflow.role_key)
+    if existing is None:
+        agent_id = uow.agents.create(
+            {
+                "name": workflow.role_key,
+                "description": expected_description,
+                "hermes_profile": workflow.hermes_profile,
+            }
+        )
+        return int(agent_id)
+    if (
+        existing.id is None
+        or existing.description != expected_description
+        or existing.hermes_profile != workflow.hermes_profile
+    ):
+        raise ValueError(
+            f"Managed agent {workflow.role_key!r} exists with another identity"
+        )
+    return int(existing.id)
+
+
+def _persist_mode(
+    uow: UnitOfWork,
+    *,
+    workflow_id: int,
+    role_key: str,
+    agent_id: int,
+    mode: ManagedMode,
+) -> None:
+    tech_policy = "forbidden" if mode.execution_scope == "business" else "required"
+    mode_id = uow.workflows.create_mode(
+        {
+            "workflow_id": workflow_id,
+            "key": mode.key,
+            "name": mode.name,
+            "mode_order": mode.mode_order,
+            "role_key": role_key,
+            "execution_scope": mode.execution_scope,
+            "tech_workspace_policy": tech_policy,
+        }
+    )
+    phase_ids: dict[str, int] = {}
+    phases = [_phase_item_to_supervisor(item) for item in mode.phases]
+    for phase_order, phase in enumerate(phases, start=1):
+        phase_id = int(
+            uow.phases.create(
+                {
+                    "workflow_id": workflow_id,
+                    "mode_id": mode_id,
+                    "code": phase.code,
+                    "name": phase.name,
+                    "description": phase.description,
+                    "phase_order": phase_order,
+                    "execution_type": "sync",
+                    "agent_id": agent_id,
+                }
+            )
+        )
+        phase_ids[phase.code] = phase_id
+        for step_num, instruction in enumerate(phase.instructions, start=1):
+            uow.phase_instructions.create(
+                phase_id,
+                {
+                    "step_num": step_num,
+                    "description": instruction.step,
+                    "execution_type": "sync",
+                    "skills": instruction.skills,
+                },
+            )
+        uow.phases.set_checks(
+            phase_id,
+            [{"description": check.description} for check in phase.checks],
+        )
+        uow.phases.set_evidence(
+            phase_id,
+            [{"description": item.item} for item in phase.evidence],
+        )
+    for phase in phases:
+        if phase.rollback_target_phase_code is None:
+            continue
+        uow.phases.update(
+            phase_ids[phase.code],
+            {"rollback_target_phase_id": phase_ids[phase.rollback_target_phase_code]},
+        )
+
+
+def _ensure_namespace(uow: UnitOfWork, workflow: ManagedWorkflow, workflow_id: int) -> None:
+    cli_command = f"workflow-{workflow.role_key}"
+    code = legacy_code_from_cli_command(cli_command)
+    description = f"Managed namespace for {workflow.key}"
+    existing = uow.projects.get_by_cli_command(cli_command)
+    if existing is None:
+        code_owner = uow.projects.get_by_code(code)
+        if code_owner is not None:
+            raise ValueError(
+                f"Managed namespace code {code!r} is already owned by another namespace"
+            )
+        uow.projects.create(
+            {
+                "workflow_id": workflow_id,
+                "code": code,
+                "name": workflow.hermes_namespace,
+                "description": description,
+                "cli_command": cli_command,
+                "key_prefixes": [],
+            }
+        )
+        return
+    if (
+        existing.workflow_id != workflow_id
+        or existing.code != code
+        or existing.name != workflow.hermes_namespace
+        or existing.description != description
+        or existing.key_prefixes
+    ):
+        raise ValueError(
+            f"Managed namespace {workflow.hermes_namespace!r} already exists with another identity"
+        )
+
+
+def _assert_existing_workflow(
+    uow: UnitOfWork,
+    actual_workflow: Workflow,
+    expected: ManagedWorkflow,
+    *,
+    agent_id: int,
+) -> None:
+    if actual_workflow.id is None:
+        raise ValueError(f"Managed workflow {expected.key!r} has no id")
+    workflow_id = int(actual_workflow.id)
+    if (
+        actual_workflow.key != expected.key
+        or actual_workflow.name != expected.name
+        or actual_workflow.description != expected.description
+    ):
+        raise ValueError(
+            f"Managed workflow {expected.key!r} already exists with a different identity"
+        )
+    modes = list(uow.workflows.list_modes(workflow_id))
+    actual_modes = [
+        (
+            mode.key,
+            mode.name,
+            mode.mode_order,
+            mode.role_key,
+            mode.execution_scope,
+            mode.tech_workspace_policy,
+        )
+        for mode in modes
+    ]
+    expected_modes = [
+        (
+            mode.key,
+            mode.name,
+            mode.mode_order,
+            expected.role_key,
+            mode.execution_scope,
+            "forbidden" if mode.execution_scope == "business" else "required",
+        )
+        for mode in expected.modes
+    ]
+    if actual_modes != expected_modes:
+        raise ValueError(
+            f"Managed workflow {expected.key!r} already exists with a different mode registry"
+        )
+    for actual_mode, expected_mode in zip(modes, expected.modes, strict=True):
+        if actual_mode.id is None:
+            raise ValueError(f"Managed workflow {expected.key!r} has a mode without id")
+        phases = list(uow.phases.list(workflow_id, mode_id=actual_mode.id))
+        expected_phases = expected_mode.phases
+        expected_phase_codes = [phase.code for phase in expected_phases]
+        if [phase.code for phase in phases] != expected_phase_codes:
+            raise ValueError(
+                f"Managed workflow {expected.key!r}/{expected_mode.key!r} has a different phase registry"
+            )
+        for phase, expected_phase in zip(phases, expected_phases, strict=True):
+            if phase.id is None:
+                raise ValueError(f"Managed phase {expected_phase.code!r} has no id")
+            actual_identity = (
+                phase.name,
+                phase.description or "",
+                phase.phase_order,
+                phase.execution_type,
+                phase.agent_id,
+                phase.parallel_with_phase_id,
+                phase.rollback_target_phase_id,
+            )
+            expected_identity = (
+                expected_phase.name,
+                expected_phase.description,
+                expected_phase.phase_order,
+                "sync",
+                agent_id,
+                None,
+                None,
+            )
+            if actual_identity != expected_identity:
+                raise ValueError(
+                    f"Managed phase {expected.key!r}/{expected_mode.key!r}/{expected_phase.code!r} "
+                    "has a different identity"
+                )
+            actual_instructions = [
+                (
+                    item["step_num"],
+                    item["description"],
+                    item["execution_type"],
+                    item.get("skills") or [],
+                )
+                for item in uow.phase_instructions.list(phase.id)
+            ]
+            expected_instructions = [
+                (index, item.description, "sync", item.skills)
+                for index, item in enumerate(expected_phase.instructions, start=1)
+            ]
+            actual_checks = [item["description"] for item in uow.phases.get_checks(phase.id)]
+            actual_evidence = [item["description"] for item in uow.phases.get_evidence(phase.id)]
+            expected_checks = [
+                str(item) if isinstance(item, str) else item.description
+                for item in expected_phase.checks
+            ]
+            expected_evidence = [
+                str(item) if isinstance(item, str) else item.description
+                for item in expected_phase.evidence
+            ]
+            if (
+                actual_instructions != expected_instructions
+                or actual_checks != expected_checks
+                or actual_evidence != expected_evidence
+            ):
+                raise ValueError(
+                    f"Managed phase {expected.key!r}/{expected_mode.key!r}/{expected_phase.code!r} "
+                    "has different instructions/checks/evidence"
+                )
+
+
+def ensure_managed_catalog(
+    uow: UnitOfWork,
+    catalog_path: Path | str | None = None,
+) -> ManagedCatalog:
+    """Create the canonical managed catalog once, then verify it fail-closed.
+
+    Existing managed workflows are never overwritten.  A partial or divergent
+    registry is rejected so operator reconciliation cannot silently mutate a
+    live execution catalog.
+    """
+    catalog = load_managed_catalog(catalog_path)
+    workflows_by_key = {workflow.key: workflow for workflow in uow.workflows.list()}
+    has_default = uow.workflows.get_default() is not None
+
+    for definition in catalog.workflows:
+        agent_id = _ensure_agent(uow, definition)
+        existing = workflows_by_key.get(definition.key)
+        if existing is not None:
+            if existing.id is None:
+                raise ValueError(f"Managed workflow {definition.key!r} has no id")
+            workflow_id = int(existing.id)
+            _assert_existing_workflow(
+                uow,
+                existing,
+                definition,
+                agent_id=agent_id,
+            )
+        else:
+            workflow_id = int(
+                uow.workflows.create(
+                    {
+                        "key": definition.key,
+                        "name": definition.name,
+                        "description": definition.description,
+                        "is_default": not has_default and definition.role_key == "project_manager",
+                        "create_default_mode": False,
+                    }
+                )
+            )
+            if definition.role_key == "project_manager" and not has_default:
+                has_default = True
+            for mode in definition.modes:
+                _persist_mode(
+                    uow,
+                    workflow_id=workflow_id,
+                    role_key=definition.role_key,
+                    agent_id=agent_id,
+                    mode=mode,
+                )
+        _ensure_namespace(uow, definition, workflow_id)
+    return catalog

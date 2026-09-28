@@ -47,6 +47,13 @@ introspection, а также сохраняет отдельный private runti
   доказательством runtime capability или source revision.
 - **SupervisorEngine** маршрутизирует задачу, строит phase contract, вызывает
   обязательный OpenAI-compatible evaluator и сохраняет результат атомарно.
+- **Managed workflow catalog** — versioned source
+  `project_workflow/references/hermes_sdlc_catalog_v1.json`. Он содержит ровно
+  семь role workflows и тринадцать modes, ordered phases, checks, evidence и
+  instruction-level skills. Bootstrap создаёт каталог один раз и затем только
+  сверяет identity/mode/phase registry; divergent live catalog не
+  перезаписывается. Routing, stage/status, priority, workspace, cycle и next
+  stage в каталог фаз не входят и поступают только из backend assignment.
 - **PostgreSQL** - единственный runtime data store. SQLite допустим только в
   изолированных тестах с явным test DSN.
 - **Внешний исполнитель** находится за границей приложения. Здесь хранится

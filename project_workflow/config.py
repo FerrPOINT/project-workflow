@@ -64,9 +64,15 @@ def get_settings() -> Settings:
     return Settings()  # type: ignore[call-arg]
 
 
-# Bootstrap-only constants.
-SEED_PATH = _pkg_dir / "references" / "seed.json"
-DEFAULT_WORKFLOW_NAME = "sdlc-business-tech-v1"
+# Bootstrap-only constants.  The managed Hermes catalog is the only source used
+# by application startup.  The legacy single-workflow seed is retained solely
+# for explicit unmanaged compatibility/tests and is never an automatic fallback.
+MANAGED_CATALOG_PATH = _pkg_dir / "references" / "hermes_sdlc_catalog_v1.json"
+LEGACY_UNMANAGED_SEED_PATH = _pkg_dir / "references" / "legacy_unmanaged_seed.json"
+LEGACY_UNMANAGED_WORKFLOW_NAME = "sdlc-business-tech-v1"
+# Compatibility alias for legacy unmanaged editor/tests. Managed startup does
+# not consume this value.
+DEFAULT_WORKFLOW_NAME = LEGACY_UNMANAGED_WORKFLOW_NAME
 DEFAULT_PROJECT_CODE = "RUN"
 DEFAULT_PROJECT_NAME = "Основной"
 DEFAULT_NAMESPACE_CLI_COMMAND = "workflow-run"

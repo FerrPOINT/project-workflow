@@ -4,6 +4,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from project_workflow import config
 from project_workflow.infrastructure.db.schema import ensure_phase_catalog
 from project_workflow.infrastructure.db.session import ensure_schema
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
@@ -13,7 +14,7 @@ from project_workflow.infrastructure.db.uow_bootstrap import bootstrap_default_p
 def prepare_sqlite_uow(uow: SAUnitOfWork) -> None:
     bind = uow.session.get_bind()
     ensure_schema(bind)
-    ensure_phase_catalog(uow)
+    ensure_phase_catalog(uow, seed_path=config.LEGACY_UNMANAGED_SEED_PATH)
     bootstrap_default_project(uow)
     uow.commit()
 

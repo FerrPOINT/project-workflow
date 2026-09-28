@@ -217,7 +217,7 @@ def _seed_text(value: str | _SeedTextItem) -> str:
 
 
 def _load_seed(path: Path | str | None = None) -> list[_SeedPhase]:
-    seed_path = Path(path) if path else config.SEED_PATH
+    seed_path = Path(path) if path else config.LEGACY_UNMANAGED_SEED_PATH
     if not seed_path.exists():
         raise FileNotFoundError(f"Файл начального каталога не найден: {seed_path}")
     if seed_path.suffix.lower() != ".json":
@@ -343,8 +343,13 @@ def ensure_phase_catalog(
     uow: UnitOfWork,
     seed_path: Path | str | None = None,
 ) -> None:
-    """Bootstrap the packaged catalog when the default workflow has no phases."""
-    seed_path = Path(seed_path) if seed_path else config.SEED_PATH
+    """Bootstrap the legacy unmanaged single-workflow catalog.
+
+    Managed startup must use ``ensure_managed_catalog`` and never calls this
+    compatibility helper.  ``seed_path`` exists for isolated unmanaged editors
+    and legacy test fixtures only.
+    """
+    seed_path = Path(seed_path) if seed_path else config.LEGACY_UNMANAGED_SEED_PATH
     seed_items = _load_seed(seed_path)
     seed_phases = [_phase_item_to_supervisor(item) for item in seed_items]
     default_workflow = uow.workflows.get_default()
@@ -365,7 +370,9 @@ def ensure_phase_catalog(
             if profile_owner is not None and profile_owner.name != agent_name:
                 raise ValueError(f"Профиль запуска {hermes_profile!r} уже назначен агенту {profile_owner.name!r}")
 
-    default_workflow = default_workflow or uow.workflows.ensure_default_exists(config.DEFAULT_WORKFLOW_NAME)
+    default_workflow = default_workflow or uow.workflows.ensure_default_exists(
+        config.LEGACY_UNMANAGED_WORKFLOW_NAME
+    )
     workflow_id = default_workflow.id
     assert workflow_id is not None
 

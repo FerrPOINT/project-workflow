@@ -48,6 +48,23 @@ namespace/task identifiers, counts, titles или внутреннюю конф�
 
 ## Backend-owned mode policy
 
+Канонический managed registry:
+
+| Role key | Workflow | Modes | Scope |
+| --- | --- | --- | --- |
+| `project_manager` | `hermes-sdlc:project_manager` | `draft` | `business` |
+| `analyst` | `hermes-sdlc:analyst` | `analysis` | `business` |
+| `architect` | `hermes-sdlc:architect` | `decomposition` | `business` |
+| `developer` | `hermes-sdlc:developer` | `initial`, `rework`, `integration`, `integration_rework` | `delivery` / `aggregate` |
+| `reviewer` | `hermes-sdlc:reviewer` | `delivery`, `integration` | `delivery` / `aggregate` |
+| `tester` | `hermes-sdlc:tester` | `delivery`, `integration` | `delivery` / `aggregate` |
+| `devops` | `hermes-sdlc:devops` | `delivery`, `integration` | `delivery` / `aggregate` |
+
+`project_manager` — единственный допустимый underscore role key; произвольные
+aliases не транслируются. Повторная доработка получает новый backend-owned
+cycle/assignment, а не `repeatable` flag. Managed workflow без explicit
+`mode_key` не использует legacy `default` fallback.
+
 Dispatch разрешён только в mode с полным policy:
 
 - `role_key`;
@@ -59,7 +76,8 @@ Legacy `default` modes после миграции не получают выд�
 нового assignment в такой mode завершается fail-closed.
 
 `role_key` имеет один общий runtime-safe формат для каталога, assignment API и
-token configuration: lowercase `[a-z][a-z0-9-]{1,31}`.
+token configuration: lowercase `[a-z][a-z0-9-]{1,31}` плюс единственный
+канонический underscore key `project_manager`.
 
 ## Immutable binding
 

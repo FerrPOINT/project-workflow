@@ -711,11 +711,7 @@ class TestPostgresInitialMigration:
                 ).scalar_one()
                 for table in ("workflows", "projects", "agents", "phases")
             }
-            default_projects = conn.execute(
-                text("SELECT count(*) FROM project_workflow.projects WHERE code = 'RUN'")
-            ).scalar_one()
-        assert all(count > 0 for count in counts.values())
-        assert default_projects == 1
+        assert counts == {"workflows": 7, "projects": 7, "agents": 7, "phases": 39}
 
     def test_two_concurrent_init_processes_are_idempotent(self, pg_url):
         env = os.environ.copy()
@@ -733,7 +729,15 @@ class TestPostgresInitialMigration:
         ]
 
         uow = SAUnitOfWork(pg_url)
-        assert [project.code for project in uow.projects.list()].count("RUN") == 1
+        assert {project.cli_command for project in uow.projects.list()} == {
+            "workflow-project_manager",
+            "workflow-analyst",
+            "workflow-architect",
+            "workflow-developer",
+            "workflow-reviewer",
+            "workflow-tester",
+            "workflow-devops",
+        }
         assert len([workflow for workflow in uow.workflows.list() if workflow.is_default]) == 1
         uow.close()
 
@@ -2335,11 +2339,20 @@ def _run_cli(env: dict[str, str], *args: str) -> tuple[subprocess.CompletedProce
 
 
 def _initialize_cli_database(env: dict[str, str]) -> None:
-    # Module execution keeps the checkout root first on sys.path.  This matters
-    # when the test reuses a dependency environment whose editable install may
-    # point at another worktree.
-    result = _run_process(["-m", "scripts.init_db"], env)
-    assert result.returncode == 0, result.stderr or result.stdout
+    # This test exercises the explicitly unmanaged legacy CLI/Supervisor flow.
+    # Production init_db bootstraps the managed Hermes catalog instead.
+    from project_workflow.infrastructure.db import schema
+    from project_workflow.infrastructure.db.uow_bootstrap import bootstrap_default_project
+
+    engine = get_engine(env["DATABASE_URL"])
+    ensure_migrated(engine)
+    with SAUnitOfWork(engine) as uow:
+        schema.ensure_phase_catalog(
+            uow,
+            seed_path=config_module.LEGACY_UNMANAGED_SEED_PATH,
+        )
+        bootstrap_default_project(uow)
+        uow.commit()
 
 
 def _step(env: dict[str, str], task_key: str, report: str) -> tuple[subprocess.CompletedProcess[str], dict]:

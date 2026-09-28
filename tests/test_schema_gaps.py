@@ -27,7 +27,12 @@ def _phase_by_code(uow, code: str, workflow_id: int):
 
 
 def _seed_path(tmp_path: Path) -> Path:
-    src = Path(__file__).resolve().parents[1] / "project_workflow" / "references" / "seed.json"
+    src = (
+        Path(__file__).resolve().parents[1]
+        / "project_workflow"
+        / "references"
+        / "legacy_unmanaged_seed.json"
+    )
     dst = tmp_path / "seed.json"
     dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
     return dst
@@ -36,7 +41,7 @@ def _seed_path(tmp_path: Path) -> Path:
 def _bootstrapped_uow(tmp_path: Path, monkeypatch) -> SAUnitOfWork:
     uow = SAUnitOfWork(f"sqlite:///{tmp_path / 'catalog.db'}")
     ensure_schema(uow.session.get_bind())
-    monkeypatch.setattr(config, "SEED_PATH", _seed_path(tmp_path))
+    monkeypatch.setattr(config, "LEGACY_UNMANAGED_SEED_PATH", _seed_path(tmp_path))
     ensure_phase_catalog(uow)
     uow.commit()
     return uow

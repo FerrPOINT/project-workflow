@@ -987,7 +987,7 @@ class TestPhasesPage:
         original_codes = [phase["code"] for phase in default_phases]
         original_batch = [(phase["id"], phase["phase_order"]) for phase in default_phases]
 
-        original_seed = config.SEED_PATH.read_text(encoding="utf-8")
+        original_seed = config.LEGACY_UNMANAGED_SEED_PATH.read_text(encoding="utf-8")
 
         reordered_codes = original_codes.copy()
         moved_code = "2.REQUIREMENTS"
@@ -1030,7 +1030,7 @@ class TestPhasesPage:
             ]
             assert refreshed_codes[:6] == reordered_codes[:6]
 
-            assert config.SEED_PATH.read_text(encoding="utf-8") == original_seed
+            assert config.LEGACY_UNMANAGED_SEED_PATH.read_text(encoding="utf-8") == original_seed
         finally:
             _batch_update_orders(uow, original_batch)
 

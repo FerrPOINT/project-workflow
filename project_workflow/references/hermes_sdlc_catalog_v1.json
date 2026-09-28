@@ -1,0 +1,320 @@
+{
+  "schema": "relevanter-project-workflow-catalog/v1",
+  "catalog_version": 1,
+  "skills_source": {
+    "repository": "https://gt.wmtgroup.ru/relevanter/agent-skills.git",
+    "revision": "8b6e2c25c12abfe0dcf1d84c5278b5cf30b87c0a",
+    "manifest_path": "manifests/hermes-workflow-role-skills.v1.json",
+    "manifest_schema": "relevanter-hermes-role-skills/v3"
+  },
+  "workflows": [
+    {
+      "key": "hermes-sdlc:project_manager",
+      "name": "PM",
+      "description": "Business framing and guarded Draft publication without Tech workspace access.",
+      "workflow_order": 1,
+      "role_key": "project_manager",
+      "hermes_namespace": "hermes-project-manager",
+      "hermes_profile": "hermes-sdlc-project-manager",
+      "skill_allowlist": ["project-workflow-executor", "relevanter-business-operator"],
+      "modes": [
+        {
+          "key": "draft",
+          "name": "Draft",
+          "mode_order": 1,
+          "execution_scope": "business",
+          "phases": [
+            {
+              "phase_order": 1,
+              "code": "PM-DRAFT-01",
+              "name": "Business intake",
+              "description": "Freeze the assigned root Draft and identify the business outcome.",
+              "instructions": [
+                {"description": "Read the assigned Task, every Business comment and every available attachment before asking or changing anything; use only backend-provided task, mode and scope.", "skills": ["project-workflow-executor", "relevanter-business-operator"]},
+                {"description": "Record actors, problem, desired outcome, constraints and already answered questions; do not design architecture or create technical subtasks.", "skills": ["project-workflow-executor", "relevanter-business-operator"]}
+              ],
+              "checks": ["Task, comments and attachments were read from the assigned Business context.", "The draft describes a business problem and measurable outcome without architecture."],
+              "evidence": ["Frozen Business intake summary with source references.", "List of unresolved business questions, if any."]
+            },
+            {
+              "phase_order": 2,
+              "code": "PM-DRAFT-02",
+              "name": "Draft refinement",
+              "description": "Refine the complete Business Draft through one meaningful question at a time.",
+              "instructions": [
+                {"description": "Re-read the assigned Task, all new comments and attachments; compare them with the frozen intake and identify the single highest-impact missing business fact.", "skills": ["project-workflow-executor", "relevanter-business-operator"]},
+                {"description": "Update only allowed Draft fields with CAS. If information is insufficient, ask one concrete question in the same Business Thread and do not publish or complete the assignment.", "skills": ["project-workflow-executor", "relevanter-business-operator"]}
+              ],
+              "checks": ["Title contains three or four meaningful words and no more than 80 characters.", "Draft fields, links and relations stay inside the assigned Business project."],
+              "evidence": ["Readback of the current Draft revision.", "Answered-question ledger or one pending concrete question."]
+            },
+            {
+              "phase_order": 3,
+              "code": "PM-DRAFT-03",
+              "name": "Draft publication",
+              "description": "Publish a sufficient Draft to Backlog exactly once.",
+              "instructions": [
+                {"description": "Re-read the assigned Task, all comments and attachments, then verify the final title, description, scope, acceptance, backend-provided priority, dates, ownership, links and revision before terminal publication.", "skills": ["project-workflow-executor", "relevanter-business-operator"]},
+                {"description": "Post one precise final Business Markdown comment summarizing outcome, scope, acceptance and remaining assumptions, read it back, then call only publishDraft. If the Draft is insufficient, ask one concrete question and do not call a terminal action.", "skills": ["project-workflow-executor", "relevanter-business-operator"]}
+              ],
+              "checks": ["Draft is internally consistent and publication uses the expected revision.", "No routing, mode, stage, workspace or priority choice is performed by this workflow."],
+              "evidence": ["Readback of the final Business comment.", "publishDraft receipt or a single pending question."]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "hermes-sdlc:analyst",
+      "name": "Analyst",
+      "description": "Business analysis and testable requirements without architecture selection.",
+      "workflow_order": 2,
+      "role_key": "analyst",
+      "hermes_namespace": "hermes-analyst",
+      "hermes_profile": "hermes-sdlc-analyst",
+      "skill_allowlist": ["project-workflow-executor", "immutable-evidence-reporting", "relevanter-business-operator", "requirements-analysis", "workflow-writing-plans", "domain-modeling"],
+      "modes": [
+        {
+          "key": "analysis",
+          "name": "Analysis",
+          "mode_order": 1,
+          "execution_scope": "business",
+          "phases": [
+            {
+              "phase_order": 1,
+              "code": "AN-ANALYSIS-01",
+              "name": "Requirements intake",
+              "description": "Freeze all assigned Business inputs and establish the analysis boundary.",
+              "instructions": [
+                {"description": "Read the assigned Task, every Business comment and every attachment; verify backend-assigned role, analysis mode, revision and root scope before analysis.", "skills": ["project-workflow-executor", "relevanter-business-operator"]},
+                {"description": "Build a source-indexed glossary, actor map, problem statement, constraints and assumption ledger without selecting architecture.", "skills": ["project-workflow-executor", "requirements-analysis", "domain-modeling"]}
+              ],
+              "checks": ["Every assertion is tied to an assigned source or marked as an assumption.", "No architecture, next stage, workspace or priority is chosen."],
+              "evidence": ["Frozen source inventory.", "Glossary, actors and assumptions."]
+            },
+            {
+              "phase_order": 2,
+              "code": "AN-ANALYSIS-02",
+              "name": "Testable requirements",
+              "description": "Produce complete functional, non-functional and failure requirements.",
+              "instructions": [
+                {"description": "Re-read the assigned Task, all comments and attachments, then derive in-scope, out-of-scope, functional and non-functional requirements from the frozen sources.", "skills": ["project-workflow-executor", "requirements-analysis", "workflow-writing-plans"]},
+                {"description": "Define measurable acceptance plus positive, negative, permission, tenant, idempotency, concurrency, restart and partial-failure scenarios. If a P0 fact is missing, ask one concrete question and do not complete.", "skills": ["project-workflow-executor", "requirements-analysis"]}
+              ],
+              "checks": ["Requirements are independently testable and non-duplicated.", "P0 gaps block completion and are expressed as one concrete question."],
+              "evidence": ["Requirements and acceptance matrix.", "Risk and P0-question ledger."]
+            },
+            {
+              "phase_order": 3,
+              "code": "AN-ANALYSIS-03",
+              "name": "Analysis handoff",
+              "description": "Publish a traceable analysis result for architecture.",
+              "instructions": [
+                {"description": "Re-read the assigned Task, all comments and attachments and verify that the final analysis remains current against the latest Business revision.", "skills": ["project-workflow-executor", "relevanter-business-operator"]},
+                {"description": "Post one precise final Business Markdown comment with problem, scope, requirements, acceptance, risks and source references, read it back, persist immutable evidence, then call only completeAssignedStage with outcome passed. If evidence is insufficient, ask one concrete question and do not complete.", "skills": ["project-workflow-executor", "immutable-evidence-reporting", "relevanter-business-operator"]}
+              ],
+              "checks": ["Final report contains no architecture decision or technical implementation.", "Business comment and immutable evidence were read back before completion."],
+              "evidence": ["Immutable analysis report reference.", "Business comment reference and passed receipt."]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "hermes-sdlc:architect",
+      "name": "Architect",
+      "description": "Architecture, dependency DAG and complete child-task decomposition.",
+      "workflow_order": 3,
+      "role_key": "architect",
+      "hermes_namespace": "hermes-architect",
+      "hermes_profile": "hermes-sdlc-architect",
+      "skill_allowlist": ["project-workflow-executor", "immutable-evidence-reporting", "relevanter-business-operator", "solution-architecture", "workflow-writing-plans", "domain-modeling"],
+      "modes": [
+        {
+          "key": "decomposition",
+          "name": "Decomposition",
+          "mode_order": 1,
+          "execution_scope": "business",
+          "phases": [
+            {
+              "phase_order": 1,
+              "code": "AR-DECOMP-01",
+              "name": "Architecture intake",
+              "description": "Freeze approved requirements and establish ownership boundaries.",
+              "instructions": [
+                {"description": "Read the assigned Task, every Business comment and every attachment; verify the backend-provided decomposition mode, root revision and predecessor analysis evidence.", "skills": ["project-workflow-executor", "relevanter-business-operator"]},
+                {"description": "Audit existing capabilities, bounded contexts, systems of record and immutable invariants before proposing any new component.", "skills": ["project-workflow-executor", "solution-architecture", "domain-modeling"]}
+              ],
+              "checks": ["Analysis evidence is complete enough for architecture.", "Capability ownership and reuse were checked before new design."],
+              "evidence": ["Pinned requirements and source manifest.", "Ownership and reuse matrix."]
+            },
+            {
+              "phase_order": 2,
+              "code": "AR-DECOMP-02",
+              "name": "Architecture and DAG",
+              "description": "Design dataflow, contracts, states and failure behavior.",
+              "instructions": [
+                {"description": "Re-read the assigned Task, all comments and attachments, then define data ownership, boundaries, state machine, APIs/events, permissions, audit and recovery behavior.", "skills": ["project-workflow-executor", "solution-architecture", "domain-modeling"]},
+                {"description": "Build an acyclic dependency DAG with explicit interfaces, acceptance and integration points; do not choose runtime queue order, workspace slot or next stage.", "skills": ["project-workflow-executor", "solution-architecture", "workflow-writing-plans"]}
+              ],
+              "checks": ["DAG has no cycle and each dependency direction is explicit.", "Design covers versioning, idempotency, concurrency, tenant and partial failure."],
+              "evidence": ["Architecture decision and dataflow.", "Dependency DAG and integration contract."]
+            },
+            {
+              "phase_order": 3,
+              "code": "AR-DECOMP-03",
+              "name": "Subtasks and handoff",
+              "description": "Create and verify the complete active decomposition revision.",
+              "instructions": [
+                {"description": "Re-read the assigned Task, all comments and attachments, then create or update scoped child Tasks with acceptance, dependencies and parent links through guarded Business commands.", "skills": ["project-workflow-executor", "relevanter-business-operator", "workflow-writing-plans"]},
+                {"description": "Read back every child and link, post one precise final Business Markdown comment with architecture, decomposition revision, DAG and integration criteria, persist immutable evidence, then call only completeAssignedStage with outcome passed. If decomposition is incomplete, ask one concrete question and do not complete.", "skills": ["project-workflow-executor", "immutable-evidence-reporting", "relevanter-business-operator"]}
+              ],
+              "checks": ["Every required delivery item is represented by a linked child Task.", "Readback proves the frozen decomposition revision and all dependency links."],
+              "evidence": ["Immutable architecture/decomposition report.", "Business comment, child/link readback and passed receipt."]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "hermes-sdlc:developer",
+      "name": "Developer",
+      "description": "Initial, rework and aggregate integration implementation on backend-assigned workspaces.",
+      "workflow_order": 4,
+      "role_key": "developer",
+      "hermes_namespace": "hermes-developer",
+      "hermes_profile": "hermes-sdlc-developer",
+      "skill_allowlist": ["project-workflow-executor", "immutable-evidence-reporting", "relevanter-business-operator", "relevanter-tech-operator", "repo-workflow", "test-driven-development", "workflow-systematic-debugging"],
+      "modes": [
+        {
+          "key": "initial",
+          "name": "Initial delivery",
+          "mode_order": 1,
+          "execution_scope": "delivery",
+          "phases": [
+            {"phase_order": 1, "code": "DV-INITIAL-01", "name": "Delivery preflight", "description": "Freeze child scope and validate the assigned workspace.", "instructions": [{"description": "Read the assigned Task, every Business comment and every attachment; verify child scope, exact input refs, branch, workspace lease and initial mode without changing parent lifecycle.", "skills": ["project-workflow-executor", "relevanter-business-operator", "relevanter-tech-operator"]}, {"description": "Inspect only the assigned repositories and define the smallest testable change against the child acceptance.", "skills": ["project-workflow-executor", "repo-workflow"]}], "checks": ["Workspace, branch and pinned inputs match the immutable assignment.", "Planned diff is limited to child acceptance."], "evidence": ["Assignment/workspace preflight.", "Change and test plan."]},
+            {"phase_order": 2, "code": "DV-INITIAL-02", "name": "Test-driven implementation", "description": "Implement the initial child delivery through focused tests.", "instructions": [{"description": "Re-read the assigned Task, all comments and attachments, then create a red public-boundary test for the required behavior.", "skills": ["project-workflow-executor", "test-driven-development"]}, {"description": "Implement the minimal change, run focused tests and use systematic debugging only after a reproducible failure.", "skills": ["project-workflow-executor", "test-driven-development", "workflow-systematic-debugging"]}], "checks": ["The regression test was red before the implementation and green after it.", "No unrelated files, secrets, caches or generated trash are included."], "evidence": ["Focused test output.", "Scoped diff summary."]},
+            {"phase_order": 3, "code": "DV-INITIAL-03", "name": "Commit and handoff", "description": "Publish exact delivery evidence and complete the assigned stage.", "instructions": [{"description": "Re-read the assigned Task, all comments and attachments, verify focused checks, commit and push all allowed changes, then read back the exact remote SHA and clean workspace.", "skills": ["project-workflow-executor", "repo-workflow", "relevanter-tech-operator"]}, {"description": "Post one precise final Business Markdown comment with changed behavior, tests, commit/MR, exact SHA and residual risks, persist immutable evidence, then call only completeAssignedStage with outcome passed. If blocked, ask one concrete question and do not complete.", "skills": ["project-workflow-executor", "immutable-evidence-reporting", "relevanter-business-operator"]}], "checks": ["Remote SHA matches the pushed commit and workspace is clean.", "No empty commit is created when no source change was required."], "evidence": ["Commit/MR and exact remote SHA.", "Business comment and passed receipt."]}
+          ]
+        },
+        {
+          "key": "rework",
+          "name": "Delivery rework",
+          "mode_order": 2,
+          "execution_scope": "delivery",
+          "phases": [
+            {"phase_order": 1, "code": "DV-REWORK-01", "name": "Finding intake", "description": "Freeze the new rework cycle and reproduce its findings.", "instructions": [{"description": "Read the assigned Task, every Business comment and every attachment, including the frozen ReworkRequest; verify cycle, findings, evidence and backend-assigned rework mode.", "skills": ["project-workflow-executor", "relevanter-business-operator"]}, {"description": "Reproduce each substantive finding against the exact rejected candidate before changing code; reconcile non-reproducible evidence instead of guessing.", "skills": ["project-workflow-executor", "workflow-systematic-debugging"]}], "checks": ["Cycle and ReworkRequest match the assignment.", "Every accepted finding has a reproducer."], "evidence": ["Frozen findings matrix.", "Reproduction output."]},
+            {"phase_order": 2, "code": "DV-REWORK-02", "name": "Focused correction", "description": "Correct only reproduced findings and protect against regression.", "instructions": [{"description": "Re-read the assigned Task, all comments and attachments, then add or refine regression tests for reproduced findings.", "skills": ["project-workflow-executor", "test-driven-development"]}, {"description": "Apply the smallest correction, run focused tests and verify that unrelated accepted behavior remains unchanged.", "skills": ["project-workflow-executor", "test-driven-development", "workflow-systematic-debugging"]}], "checks": ["Every code change maps to a finding or required regression guard.", "All reproduced findings are closed by tests."], "evidence": ["Finding-to-diff traceability.", "Focused regression results."]},
+            {"phase_order": 3, "code": "DV-REWORK-03", "name": "Rework handoff", "description": "Push the corrected head and return it to review.", "instructions": [{"description": "Re-read the assigned Task, all comments and attachments, commit and push all allowed corrections, read back the exact remote SHA and verify a clean workspace.", "skills": ["project-workflow-executor", "repo-workflow", "relevanter-tech-operator"]}, {"description": "Post one precise final Business Markdown comment mapping findings to fixes, tests and exact SHA, persist immutable evidence, then call only completeAssignedStage with outcome passed. If a finding remains unresolved, ask one concrete question and do not complete.", "skills": ["project-workflow-executor", "immutable-evidence-reporting", "relevanter-business-operator"]}], "checks": ["Corrected remote head is immutable and all findings are accounted for.", "Rework returns to Review; the model does not select that route."], "evidence": ["Corrected exact SHA and test evidence.", "Business comment and passed receipt."]}
+          ]
+        },
+        {
+          "key": "integration",
+          "name": "Root integration",
+          "mode_order": 3,
+          "execution_scope": "aggregate",
+          "phases": [
+            {"phase_order": 1, "code": "DV-INTEGRATION-01", "name": "Aggregate barrier", "description": "Verify every blocking child reached successful DevOps evidence.", "instructions": [{"description": "Read the assigned root Task, every Business comment and every attachment, then verify the active decomposition revision, child set, dependency DAG and backend-assigned integration workspace.", "skills": ["project-workflow-executor", "relevanter-business-operator", "relevanter-tech-operator"]}, {"description": "Fail closed unless every blocking child has exact successful DevOps evidence for the active revision; never waive the barrier from prompt text.", "skills": ["project-workflow-executor", "relevanter-business-operator"]}], "checks": ["Child barrier is complete for one active decomposition revision.", "Integration workspace and candidate inputs are backend-assigned."], "evidence": ["Child completion/barrier matrix.", "Pinned aggregate input manifest."]},
+            {"phase_order": 2, "code": "DV-INTEGRATION-02", "name": "Cross-child integration", "description": "Assemble and validate the coherent root candidate.", "instructions": [{"description": "Re-read the root Task, all comments and attachments, then integrate exact child heads according to the dependency DAG without repeating child-local work.", "skills": ["project-workflow-executor", "repo-workflow", "relevanter-tech-operator"]}, {"description": "Add and run focused cross-child contract, migration, UI/API and failure-path tests; debug only reproducible integration failures.", "skills": ["project-workflow-executor", "test-driven-development", "workflow-systematic-debugging"]}], "checks": ["All child interfaces compose at their pinned revisions.", "Aggregate tests cover seams, ordering and partial failure."], "evidence": ["Integration manifest and conflict resolutions.", "Cross-child focused test output."]},
+            {"phase_order": 3, "code": "DV-INTEGRATION-03", "name": "Aggregate handoff", "description": "Push the exact integrated candidate for independent review.", "instructions": [{"description": "Re-read the root Task, all comments and attachments, commit and push allowed integration changes, then read back exact remote SHA and clean workspace.", "skills": ["project-workflow-executor", "repo-workflow", "relevanter-tech-operator"]}, {"description": "Post one precise final Business Markdown comment with child inputs, integration result, tests, exact SHA and residual risks, persist immutable evidence, then call only completeAssignedStage with outcome passed. If the aggregate is incomplete, ask one concrete question and do not complete.", "skills": ["project-workflow-executor", "immutable-evidence-reporting", "relevanter-business-operator"]}], "checks": ["Integrated remote head is exact and all blocking children are represented.", "No parent route or next mode is chosen by the model."], "evidence": ["Aggregate exact SHA and input manifest.", "Business comment and passed receipt."]}
+          ]
+        },
+        {
+          "key": "integration_rework",
+          "name": "Root integration rework",
+          "mode_order": 4,
+          "execution_scope": "aggregate",
+          "phases": [
+            {"phase_order": 1, "code": "DV-INTREWORK-01", "name": "Aggregate finding intake", "description": "Freeze integration findings and the rejected aggregate head.", "instructions": [{"description": "Read the assigned root Task, every Business comment and every attachment, including the aggregate ReworkRequest; verify cycle, exact rejected head and integration_rework mode.", "skills": ["project-workflow-executor", "relevanter-business-operator", "relevanter-tech-operator"]}, {"description": "Reproduce findings at cross-child seams and classify them without reopening unrelated completed child work.", "skills": ["project-workflow-executor", "workflow-systematic-debugging"]}], "checks": ["Findings belong to the aggregate candidate and current cycle.", "Each accepted finding has a reproducible seam-level failure."], "evidence": ["Aggregate findings matrix.", "Reproduction evidence."]},
+            {"phase_order": 2, "code": "DV-INTREWORK-02", "name": "Aggregate correction", "description": "Correct integration findings and rerun seam-level tests.", "instructions": [{"description": "Re-read the root Task, all comments and attachments, then add regression coverage for every reproduced integration finding.", "skills": ["project-workflow-executor", "test-driven-development"]}, {"description": "Apply the smallest aggregate correction and rerun focused cross-child, compatibility and partial-failure checks.", "skills": ["project-workflow-executor", "test-driven-development", "workflow-systematic-debugging"]}], "checks": ["Corrections do not rewrite successful child evidence.", "Regression tests prove each aggregate finding closed."], "evidence": ["Finding-to-change traceability.", "Aggregate regression output."]},
+            {"phase_order": 3, "code": "DV-INTREWORK-03", "name": "Corrected aggregate handoff", "description": "Push and publish the corrected integrated candidate.", "instructions": [{"description": "Re-read the root Task, all comments and attachments, commit and push the allowed correction, then read back exact remote SHA and clean workspace.", "skills": ["project-workflow-executor", "repo-workflow", "relevanter-tech-operator"]}, {"description": "Post one precise final Business Markdown comment mapping aggregate findings to fixes, tests and exact SHA, persist immutable evidence, then call only completeAssignedStage with outcome passed. If unresolved, ask one concrete question and do not complete.", "skills": ["project-workflow-executor", "immutable-evidence-reporting", "relevanter-business-operator"]}], "checks": ["Corrected aggregate head is exact and traceable.", "Backend, not the model, routes the candidate back to integration review."], "evidence": ["Corrected aggregate SHA and tests.", "Business comment and passed receipt."]}
+          ]
+        }
+      ]
+    },
+    {
+      "key": "hermes-sdlc:reviewer",
+      "name": "Reviewer",
+      "description": "Independent exact-head review for delivery and aggregate candidates.",
+      "workflow_order": 5,
+      "role_key": "reviewer",
+      "hermes_namespace": "hermes-reviewer",
+      "hermes_profile": "hermes-sdlc-reviewer",
+      "skill_allowlist": ["project-workflow-executor", "immutable-evidence-reporting", "relevanter-business-operator", "relevanter-tech-operator", "exact-code-review"],
+      "modes": [
+        {
+          "key": "delivery", "name": "Delivery review", "mode_order": 1, "execution_scope": "delivery",
+          "phases": [
+            {"phase_order": 1, "code": "RV-REVIEW-01", "name": "Exact candidate intake", "description": "Freeze the child candidate and review scope.", "instructions": [{"description": "Read the assigned Task, every Business comment and every attachment; verify exact head/base/build, child acceptance, delivery mode and read-only workspace.", "skills": ["project-workflow-executor", "relevanter-business-operator", "relevanter-tech-operator"]}, {"description": "Reconcile candidate provenance before review; an ambiguous or moving head blocks review instead of being guessed.", "skills": ["project-workflow-executor", "exact-code-review"]}], "checks": ["Head, base, build and assignment refs are immutable and consistent.", "Review is independent and read-only."], "evidence": ["Exact candidate manifest.", "Review scope matrix."]},
+            {"phase_order": 2, "code": "RV-REVIEW-02", "name": "Delivery review", "description": "Review correctness, contracts, security and test sufficiency.", "instructions": [{"description": "Re-read the assigned Task, all comments and attachments, then trace the exact diff to requirements, architecture and child acceptance.", "skills": ["project-workflow-executor", "exact-code-review"]}, {"description": "Classify only reproducible, actionable findings with severity, location, expected/actual behavior and evidence; do not modify source.", "skills": ["project-workflow-executor", "exact-code-review"]}], "checks": ["Correctness, compatibility, tenant, permission, audit and failure paths were reviewed.", "Every blocking finding is substantive and reproducible."], "evidence": ["Exact-head review report.", "Finding list with source locations and reproduction evidence."]},
+            {"phase_order": 3, "code": "RV-REVIEW-03", "name": "Review decision", "description": "Publish passed or needs_rework without choosing routing.", "instructions": [{"description": "Re-read the assigned Task, all comments and attachments and verify the decision against the same exact candidate head.", "skills": ["project-workflow-executor", "exact-code-review", "relevanter-business-operator"]}, {"description": "Post one precise final Business Markdown comment with exact head, review coverage and decision, persist immutable evidence, then call only completeAssignedStage with outcome passed, or needs_rework with substantive findings. If data is insufficient, ask one concrete question and do not complete.", "skills": ["project-workflow-executor", "immutable-evidence-reporting", "relevanter-business-operator"]}], "checks": ["needs_rework contains at least one substantive frozen finding.", "The model does not select Developer mode, cycle or next stage."], "evidence": ["Immutable review report.", "Business comment and terminal receipt."]}
+          ]
+        },
+        {
+          "key": "integration", "name": "Integration review", "mode_order": 2, "execution_scope": "aggregate",
+          "phases": [
+            {"phase_order": 1, "code": "RV-INT-01", "name": "Aggregate provenance", "description": "Freeze root candidate and child evidence set.", "instructions": [{"description": "Read the assigned root Task, every Business comment and every attachment; verify active decomposition, all child DevOps evidence, aggregate head/base/build and integration mode.", "skills": ["project-workflow-executor", "relevanter-business-operator", "relevanter-tech-operator"]}, {"description": "Reject incomplete barriers or ambiguous child revisions before inspecting the aggregate diff.", "skills": ["project-workflow-executor", "exact-code-review"]}], "checks": ["Aggregate candidate contains every blocking child at pinned revisions.", "Review input is immutable and complete."], "evidence": ["Aggregate/child provenance manifest.", "Barrier readback."]},
+            {"phase_order": 2, "code": "RV-INT-02", "name": "Cross-child review", "description": "Review integrated behavior and seam correctness.", "instructions": [{"description": "Re-read the root Task, all comments and attachments, then review dataflow, contracts, migrations, permissions, ordering and recovery across child boundaries.", "skills": ["project-workflow-executor", "exact-code-review"]}, {"description": "Record only aggregate or seam findings with exact location, reproduction and impact; do not relitigate accepted child-local work without new evidence.", "skills": ["project-workflow-executor", "exact-code-review"]}], "checks": ["Integration acceptance and cross-child failure paths were reviewed.", "Findings distinguish aggregate defects from child evidence."], "evidence": ["Aggregate exact-head review.", "Seam finding matrix."]},
+            {"phase_order": 3, "code": "RV-INT-03", "name": "Aggregate review decision", "description": "Publish the independent root decision.", "instructions": [{"description": "Re-read the root Task, all comments and attachments and verify the final decision against the unchanged aggregate head.", "skills": ["project-workflow-executor", "exact-code-review", "relevanter-business-operator"]}, {"description": "Post one precise final Business Markdown comment with child set, aggregate coverage and decision, persist immutable evidence, then call only completeAssignedStage with outcome passed, or needs_rework with substantive findings. If insufficient, ask one concrete question and do not complete.", "skills": ["project-workflow-executor", "immutable-evidence-reporting", "relevanter-business-operator"]}], "checks": ["Decision covers the whole root candidate, not one child.", "No route, mode or workspace is selected by the model."], "evidence": ["Immutable aggregate review report.", "Business comment and terminal receipt."]}
+          ]
+        }
+      ]
+    },
+    {
+      "key": "hermes-sdlc:tester",
+      "name": "Tester",
+      "description": "Independent delivery and aggregate acceptance with evidence-backed rework findings.",
+      "workflow_order": 6,
+      "role_key": "tester",
+      "hermes_namespace": "hermes-tester",
+      "hermes_profile": "hermes-sdlc-quality",
+      "skill_allowlist": ["project-workflow-executor", "immutable-evidence-reporting", "relevanter-business-operator", "deployed-acceptance", "workflow-systematic-debugging"],
+      "modes": [
+        {
+          "key": "delivery", "name": "Delivery testing", "mode_order": 1, "execution_scope": "delivery",
+          "phases": [
+            {"phase_order": 1, "code": "TS-TEST-01", "name": "Acceptance intake", "description": "Freeze deployed child candidate and test matrix.", "instructions": [{"description": "Read the assigned Task, every Business comment and every attachment; verify exact deployed SHA, environment, identities, child acceptance and delivery mode.", "skills": ["project-workflow-executor", "relevanter-business-operator"]}, {"description": "Reconcile deployment provenance and map acceptance to positive, negative, permission, tenant, versioning and recovery scenarios.", "skills": ["project-workflow-executor", "deployed-acceptance"]}], "checks": ["Deployed revision matches the reviewed candidate.", "Test matrix covers all child acceptance and critical failures."], "evidence": ["Deployment provenance readback.", "Acceptance traceability matrix."]},
+            {"phase_order": 2, "code": "TS-TEST-02", "name": "Delivery execution", "description": "Execute acceptance without repairing the product.", "instructions": [{"description": "Re-read the assigned Task, all comments and attachments, then execute happy, validation, ACL, tenant, stale, idempotency, concurrency, restart and partial-failure paths.", "skills": ["project-workflow-executor", "deployed-acceptance"]}, {"description": "For each failure, capture reproducible expected/actual behavior and evidence; use systematic debugging only to localize, never to change source or runtime.", "skills": ["project-workflow-executor", "workflow-systematic-debugging"]}], "checks": ["Observed results are tied to exact environment and identity.", "No source, configuration or deployment mutation was performed."], "evidence": ["Scenario execution log.", "Reproducible defect evidence."]},
+            {"phase_order": 3, "code": "TS-TEST-03", "name": "Acceptance decision", "description": "Publish passed or needs_rework for the child candidate.", "instructions": [{"description": "Re-read the assigned Task, all comments and attachments and reconcile defects against the unchanged deployed candidate.", "skills": ["project-workflow-executor", "deployed-acceptance", "relevanter-business-operator"]}, {"description": "Post one precise final Business Markdown comment with environment, coverage, observed results and decision, persist immutable evidence, then call only completeAssignedStage with outcome passed, or needs_rework with substantive findings. If data is insufficient, ask one concrete question and do not complete.", "skills": ["project-workflow-executor", "immutable-evidence-reporting", "relevanter-business-operator"]}], "checks": ["needs_rework findings include reproduction, expected/actual and evidence refs.", "The model does not choose rework cycle, mode or next stage."], "evidence": ["Immutable child acceptance report.", "Business comment and terminal receipt."]}
+          ]
+        },
+        {
+          "key": "integration", "name": "Integration testing", "mode_order": 2, "execution_scope": "aggregate",
+          "phases": [
+            {"phase_order": 1, "code": "TS-INT-01", "name": "Aggregate acceptance intake", "description": "Freeze integrated deployment and root acceptance.", "instructions": [{"description": "Read the assigned root Task, every Business comment and every attachment; verify deployed aggregate SHA, child set, active decomposition and integration mode.", "skills": ["project-workflow-executor", "relevanter-business-operator"]}, {"description": "Build a root test matrix covering business journey, cross-child contracts, permissions, data consistency and recovery.", "skills": ["project-workflow-executor", "deployed-acceptance"]}], "checks": ["Aggregate deployment contains all pinned children.", "Root matrix tests composition rather than repeating isolated child checks."], "evidence": ["Aggregate deployment provenance.", "Root acceptance matrix."]},
+            {"phase_order": 2, "code": "TS-INT-02", "name": "End-to-end execution", "description": "Execute complete root journeys and failure recovery.", "instructions": [{"description": "Re-read the root Task, all comments and attachments, then execute end-to-end happy, negative, tenant, concurrency, restart and partial-failure scenarios across child seams.", "skills": ["project-workflow-executor", "deployed-acceptance"]}, {"description": "Capture reproducible aggregate findings without product changes; localize only with read-only systematic debugging.", "skills": ["project-workflow-executor", "workflow-systematic-debugging"]}], "checks": ["All critical root journeys and seams were exercised.", "Evidence distinguishes environment failure from product defect."], "evidence": ["End-to-end execution log.", "Aggregate defect evidence."]},
+            {"phase_order": 3, "code": "TS-INT-03", "name": "Root acceptance decision", "description": "Publish aggregate passed or needs_rework.", "instructions": [{"description": "Re-read the root Task, all comments and attachments and verify the decision against the same aggregate deployment.", "skills": ["project-workflow-executor", "deployed-acceptance", "relevanter-business-operator"]}, {"description": "Post one precise final Business Markdown comment with aggregate environment, journeys, seam results and decision, persist immutable evidence, then call only completeAssignedStage with outcome passed, or needs_rework with substantive findings. If insufficient, ask one concrete question and do not complete.", "skills": ["project-workflow-executor", "immutable-evidence-reporting", "relevanter-business-operator"]}], "checks": ["Decision covers root composition and all blocking children.", "No route, rework mode or cycle is selected by the model."], "evidence": ["Immutable aggregate acceptance report.", "Business comment and terminal receipt."]}
+          ]
+        }
+      ]
+    },
+    {
+      "key": "hermes-sdlc:devops",
+      "name": "DevOps",
+      "description": "Exact-SHA delivery and aggregate deployment with rollback evidence.",
+      "workflow_order": 7,
+      "role_key": "devops",
+      "hermes_namespace": "hermes-devops",
+      "hermes_profile": "hermes-sdlc-operations",
+      "skill_allowlist": ["project-workflow-executor", "immutable-evidence-reporting", "relevanter-business-operator", "relevanter-tech-operator", "exact-sha-deployment", "workflow-systematic-debugging"],
+      "modes": [
+        {
+          "key": "delivery", "name": "Delivery deploy", "mode_order": 1, "execution_scope": "delivery",
+          "phases": [
+            {"phase_order": 1, "code": "DO-DEPLOY-01", "name": "Release preflight", "description": "Freeze reviewed/tested child candidate and target inventory.", "instructions": [{"description": "Read the assigned Task, every Business comment and every attachment; verify exact source/artifact SHA, approvals, target, lease, delivery mode and rollback boundary.", "skills": ["project-workflow-executor", "relevanter-business-operator", "relevanter-tech-operator"]}, {"description": "Capture target inventory, current release and backup/rollback plan before mutation; ambiguous state must be reconciled, not retried blindly.", "skills": ["project-workflow-executor", "exact-sha-deployment"]}], "checks": ["Candidate is frozen and all required human gates are present.", "Backup and rollback target are exact and restorable."], "evidence": ["Pre-deploy inventory and candidate manifest.", "Backup/rollback reference."]},
+            {"phase_order": 2, "code": "DO-DEPLOY-02", "name": "Exact deployment", "description": "Deploy only the assigned immutable child candidate.", "instructions": [{"description": "Re-read the assigned Task, all comments and attachments, then deploy the pinned artifact only to the assigned target using the approved procedure.", "skills": ["project-workflow-executor", "exact-sha-deployment", "relevanter-tech-operator"]}, {"description": "Read back source/image/model versions and run scoped health/smoke checks; on failure follow the approved rollback and reconcile before retry.", "skills": ["project-workflow-executor", "exact-sha-deployment", "workflow-systematic-debugging"]}], "checks": ["Runtime readback equals the assigned exact candidate.", "Health, smoke and rollback readiness are recorded."], "evidence": ["Deployment receipt and exact readback.", "Health/smoke or rollback evidence."]},
+            {"phase_order": 3, "code": "DO-DEPLOY-03", "name": "Deployment handoff", "description": "Publish immutable deployment result.", "instructions": [{"description": "Re-read the assigned Task, all comments and attachments and verify final runtime state, health and evidence against the same candidate.", "skills": ["project-workflow-executor", "exact-sha-deployment", "relevanter-business-operator"]}, {"description": "Post one precise final Business Markdown comment with candidate, target, readback, health and rollback refs, persist immutable evidence, then call only completeAssignedStage with outcome passed. If state is ambiguous or unhealthy, ask one concrete question or reconcile and do not complete.", "skills": ["project-workflow-executor", "immutable-evidence-reporting", "relevanter-business-operator"]}], "checks": ["Published result is based on runtime readback, not command exit alone.", "The model does not choose next stage or mark parent complete."], "evidence": ["Immutable deployment report.", "Business comment and passed receipt."]}
+          ]
+        },
+        {
+          "key": "integration", "name": "Integration deploy", "mode_order": 2, "execution_scope": "aggregate",
+          "phases": [
+            {"phase_order": 1, "code": "DO-INT-01", "name": "Aggregate release preflight", "description": "Freeze root candidate, child manifests and target state.", "instructions": [{"description": "Read the assigned root Task, every Business comment and every attachment; verify aggregate exact SHA, child inputs, approvals, target and integration mode.", "skills": ["project-workflow-executor", "relevanter-business-operator", "relevanter-tech-operator"]}, {"description": "Capture complete target inventory plus coordinated backup and rollback plan for all affected components before mutation.", "skills": ["project-workflow-executor", "exact-sha-deployment"]}], "checks": ["Aggregate manifest matches reviewed and tested root candidate.", "Rollback preserves component compatibility and data boundaries."], "evidence": ["Aggregate release manifest.", "Coordinated backup/rollback references."]},
+            {"phase_order": 2, "code": "DO-INT-02", "name": "Aggregate deployment", "description": "Deploy and verify the complete integrated release.", "instructions": [{"description": "Re-read the root Task, all comments and attachments, then deploy only pinned aggregate artifacts in the approved dependency order.", "skills": ["project-workflow-executor", "exact-sha-deployment", "relevanter-tech-operator"]}, {"description": "Read back every component revision and run aggregate health, migration, connectivity and smoke checks; reconcile or roll back ambiguous partial failure.", "skills": ["project-workflow-executor", "exact-sha-deployment", "workflow-systematic-debugging"]}], "checks": ["All deployed components match the aggregate manifest.", "Partial deployment and recovery behavior is verified."], "evidence": ["Per-component deployment/readback receipts.", "Aggregate health and recovery evidence."]},
+            {"phase_order": 3, "code": "DO-INT-03", "name": "Root deployment result", "description": "Publish final aggregate deployment evidence.", "instructions": [{"description": "Re-read the root Task, all comments and attachments and verify complete runtime state and root smoke evidence against the same aggregate candidate.", "skills": ["project-workflow-executor", "exact-sha-deployment", "relevanter-business-operator"]}, {"description": "Post one precise final Business Markdown comment with aggregate candidate, component readbacks, health and rollback refs, persist immutable evidence, then call only completeAssignedStage with outcome passed. If incomplete or unhealthy, ask one concrete question or reconcile and do not complete.", "skills": ["project-workflow-executor", "immutable-evidence-reporting", "relevanter-business-operator"]}], "checks": ["Final result covers the whole root release and every blocking child.", "Completion is evidence-backed; the model does not invent routing or status."], "evidence": ["Immutable aggregate deployment report.", "Business comment and passed receipt."]}
+          ]
+        }
+      ]
+    }
+  ]
+}

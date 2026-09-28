@@ -6,7 +6,7 @@ import sys
 from sqlalchemy.exc import SQLAlchemyError
 
 from project_workflow.config import get_settings
-from project_workflow.infrastructure.db import schema
+from project_workflow.infrastructure.db.managed_catalog import ensure_managed_catalog
 from project_workflow.infrastructure.db.session import (
     DatabaseRecreateRequired,
     DatabaseUnavailable,
@@ -15,7 +15,6 @@ from project_workflow.infrastructure.db.session import (
     initialization_transaction,
 )
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
-from project_workflow.infrastructure.db.uow_bootstrap import bootstrap_default_project
 
 __doc__ = """Upgrade the database and bootstrap packaged catalogs once."""
 
@@ -35,8 +34,7 @@ def main() -> int:
         with initialization_transaction(engine) as connection:
             ensure_migrated(connection)
             with SAUnitOfWork(connection) as uow:
-                schema.ensure_phase_catalog(uow)
-                bootstrap_default_project(uow)
+                ensure_managed_catalog(uow)
     except DatabaseRecreateRequired as exc:
         print(str(exc), file=sys.stderr)
         return exc.exit_code

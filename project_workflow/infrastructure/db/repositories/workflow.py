@@ -52,7 +52,8 @@ class SAWorkflowRepository(WorkflowRepository):
         )
         self._session.add(item)
         self._session.flush()
-        self.create_mode({"workflow_id": int(item.id), "key": "default", "name": "Default", "mode_order": 1})
+        if data.get("create_default_mode", True):
+            self.create_mode({"workflow_id": int(item.id), "key": "default", "name": "Default", "mode_order": 1})
         return int(item.id)
 
     def update(self, workflow_id: int, data: dict[str, Any]) -> None:

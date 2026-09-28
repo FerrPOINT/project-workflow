@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import UnitOfWork
+from project_workflow.domain.runtime_assignment import MANAGED_WORKFLOW_KEYS
 
 
 @dataclass(frozen=True)
@@ -23,6 +24,11 @@ def resolve_execution_selection(
     cycle_number: int | None = None,
 ) -> ExecutionSelection:
     """Resolve a persisted/default technical selection; never inspect process env."""
+    workflow = uow.workflows.get_by_id(workflow_id)
+    if workflow is None:
+        raise NotFoundError(f"Воркфлоу {workflow_id} не найден")
+    if mode_key is None and workflow.key in MANAGED_WORKFLOW_KEYS:
+        raise ConflictError("Managed Hermes workflow требует backend-assigned mode_key")
     selected_key = mode_key or "default"
     mode = uow.workflows.get_mode_by_key(workflow_id, selected_key)
     if mode is None or mode.id is None:
