@@ -36,6 +36,10 @@ from project_workflow.application.project import ProjectService
 from project_workflow.application.task import TaskService
 from project_workflow.application.workflow import WorkflowService
 from project_workflow.domain.exceptions import ConflictError
+from project_workflow.infrastructure.db.managed_catalog import (
+    ensure_managed_catalog,
+    validate_managed_catalog_state,
+)
 from project_workflow.infrastructure.db.session import (
     ensure_migrated,
     ensure_schema,
@@ -188,6 +192,45 @@ class TestPostgresInitialMigration:
             ).scalar_one()
         assert version == migration_head() == "0003_runtime_assignment_bind"
         assert schema_is_ready(engine) is True
+
+    def test_managed_bootstrap_lock_closes_public_mutation_race(self, pg_url):
+        engine = get_engine(pg_url)
+        ensure_migrated(engine)
+        bootstrap_locked = Event()
+        mutation_started = Event()
+
+        def bootstrap() -> None:
+            with SAUnitOfWork(engine) as uow:
+                uow.lock_catalog_state()
+                bootstrap_locked.set()
+                assert mutation_started.wait(timeout=10)
+                ensure_managed_catalog(uow)
+
+        def create_foreign_workflow() -> str:
+            assert bootstrap_locked.wait(timeout=10)
+            mutation_started.set()
+            with SAUnitOfWork(engine) as uow:
+                try:
+                    WorkflowService(uow).create_workflow(
+                        {"name": "TEST TRASH WORKFLOW"}
+                    )
+                except ConflictError as exc:
+                    return str(exc)
+            return "unexpected-success"
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            bootstrap_future = pool.submit(bootstrap)
+            mutation_future = pool.submit(create_foreign_workflow)
+            bootstrap_future.result(timeout=30)
+            mutation_result = mutation_future.result(timeout=30)
+
+        assert "Managed workflow catalog is immutable" in mutation_result
+        with SAUnitOfWork(engine) as uow:
+            assert validate_managed_catalog_state(uow) is True
+            assert all(
+                workflow.name != "TEST TRASH WORKFLOW"
+                for workflow in uow.workflows.list()
+            )
 
     def test_downgrade_refuses_lossy_mode_collapse(self, pg_url):
         engine = get_engine(pg_url)

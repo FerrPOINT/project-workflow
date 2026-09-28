@@ -9,6 +9,8 @@ from fastapi.testclient import TestClient
 
 from project_workflow import build_provenance, config
 from project_workflow.infrastructure.db import session as db_session
+from project_workflow.infrastructure.db.managed_catalog import ensure_managed_catalog
+from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui.app import create_app
 
 REVISION = "d9ebcff84068406ba4b09ae037dac53b5b6296ba"
@@ -19,6 +21,12 @@ BUNDLE_SHA256 = "b" * 64
 @pytest.fixture(autouse=True)
 def _ready_schema(monkeypatch):
     monkeypatch.setattr(db_session, "schema_is_ready", lambda _engine: True)
+
+
+@pytest.fixture(autouse=True)
+def _managed_catalog():
+    with SAUnitOfWork() as uow:
+        ensure_managed_catalog(uow)
 
 
 def _token(name: str) -> str:
@@ -96,7 +104,7 @@ def test_runtime_capabilities_are_exact_and_role_scoped(
         "role_key": role,
         "credential_kind": credential_kind,
         "capabilities": capabilities,
-        "readiness": {"service": "ready", "schema": "ready"},
+        "readiness": {"service": "ready", "schema": "ready", "catalog": "ready"},
         "source_provenance": _valid_manifest(),
     }
 
@@ -238,27 +246,29 @@ def test_runtime_capabilities_require_valid_immutable_provenance(
         "ok": False,
         "error": "Runtime capabilities временно недоступны",
         "error_code": "runtime-capabilities-not-ready",
-        "readiness": {"service": "not_ready", "schema": "ready"},
+        "readiness": {
+            "service": "not_ready",
+            "schema": "ready",
+            "catalog": "ready",
+        },
     }
 
 
-def test_runtime_capabilities_do_not_open_unit_of_work_or_mutate_data(
+def test_runtime_capabilities_validate_catalog_without_mutating_data(
     monkeypatch, tmp_path: Path
 ):
     assignment_token = _token("analyst-assignment")
     _configure_tokens(monkeypatch, assignment={"analyst": assignment_token})
     _install_manifest(monkeypatch, tmp_path, _valid_manifest())
 
-    with patch(
-        "project_workflow.application.state._AppState.create_uow",
-        side_effect=AssertionError("capability readback must not create a UoW"),
-    ), TestClient(create_app()) as client:
+    with TestClient(create_app()) as client:
         response = client.get(
             "/internal/runtime/capabilities",
             headers={"Authorization": f"Bearer {assignment_token}"},
         )
 
     assert response.status_code == 200
+    assert response.json()["readiness"]["catalog"] == "ready"
 
 
 def test_runtime_capabilities_report_schema_not_ready_without_details(
@@ -280,4 +290,5 @@ def test_runtime_capabilities_report_schema_not_ready_without_details(
     assert response.json()["readiness"] == {
         "service": "not_ready",
         "schema": "not_ready",
+        "catalog": "not_ready",
     }

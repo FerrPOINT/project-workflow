@@ -617,6 +617,23 @@ def _assert_exact_persisted_inventory(
         raise ValueError(f"Managed catalog persisted inventory is not canonical: {counts}")
 
 
+def _assert_existing_agent(
+    uow: UnitOfWork, workflow: ManagedWorkflow
+) -> int:
+    expected_description = f"Managed Hermes role: {workflow.name}"
+    existing = uow.agents.get_by_name(workflow.role_key)
+    if (
+        existing is None
+        or existing.id is None
+        or existing.description != expected_description
+        or existing.hermes_profile != workflow.hermes_profile
+    ):
+        raise ValueError(
+            f"Managed agent {workflow.role_key!r} is missing or has another identity"
+        )
+    return int(existing.id)
+
+
 def _ensure_agent(uow: UnitOfWork, workflow: ManagedWorkflow) -> int:
     expected_description = f"Managed Hermes role: {workflow.name}"
     existing = uow.agents.get_by_name(workflow.role_key)
@@ -739,6 +756,26 @@ def _ensure_namespace(uow: UnitOfWork, workflow: ManagedWorkflow, workflow_id: i
         )
 
 
+def _assert_existing_namespace(
+    uow: UnitOfWork, workflow: ManagedWorkflow, workflow_id: int
+) -> None:
+    cli_command = f"workflow-{workflow.role_key}"
+    code = legacy_code_from_cli_command(cli_command)
+    description = f"Managed namespace for {workflow.key}"
+    existing = uow.projects.get_by_cli_command(cli_command)
+    if (
+        existing is None
+        or existing.workflow_id != workflow_id
+        or existing.code != code
+        or existing.name != workflow.hermes_namespace
+        or existing.description != description
+        or existing.key_prefixes
+    ):
+        raise ValueError(
+            f"Managed namespace {workflow.hermes_namespace!r} is missing or has another identity"
+        )
+
+
 def _assert_existing_workflow(
     uow: UnitOfWork,
     actual_workflow: Workflow,
@@ -854,6 +891,42 @@ def _assert_existing_workflow(
                 )
 
 
+def validate_managed_catalog_state(
+    uow: UnitOfWork,
+    catalog: ManagedCatalog | None = None,
+) -> bool:
+    """Read and validate the complete installed managed catalog.
+
+    ``False`` means the database is an unmanaged compatibility database.  Once
+    any managed workflow key exists, partial, foreign, or drifted state raises
+    instead of being treated as an unmanaged fallback.
+    """
+
+    resolved_catalog = catalog or load_managed_catalog()
+    uow.lock_catalog_state()
+    workflows = list(uow.workflows.list())
+    expected_keys = {workflow.key for workflow in resolved_catalog.workflows}
+    if not any(workflow.key in expected_keys for workflow in workflows):
+        return False
+
+    _assert_no_foreign_catalog_objects(uow, resolved_catalog)
+    workflows_by_key = {workflow.key: workflow for workflow in workflows}
+    for definition in resolved_catalog.workflows:
+        existing = workflows_by_key.get(definition.key)
+        if existing is None or existing.id is None:
+            raise ValueError(f"Managed workflow {definition.key!r} is missing")
+        agent_id = _assert_existing_agent(uow, definition)
+        _assert_existing_workflow(
+            uow,
+            existing,
+            definition,
+            agent_id=agent_id,
+        )
+        _assert_existing_namespace(uow, definition, int(existing.id))
+    _assert_exact_persisted_inventory(uow, resolved_catalog)
+    return True
+
+
 def ensure_managed_catalog(
     uow: UnitOfWork,
     catalog_path: Path | str | None = None,
@@ -865,6 +938,7 @@ def ensure_managed_catalog(
     live execution catalog.
     """
     catalog = load_managed_catalog(catalog_path)
+    uow.lock_catalog_state()
     legacy = _assert_no_foreign_catalog_objects(uow, catalog)
     if legacy is not None:
         for agent_id, alias in legacy.agent_renames:
@@ -908,5 +982,5 @@ def ensure_managed_catalog(
                     mode=mode,
                 )
         _ensure_namespace(uow, definition, workflow_id)
-    _assert_exact_persisted_inventory(uow, catalog)
+    validate_managed_catalog_state(uow, catalog)
     return catalog

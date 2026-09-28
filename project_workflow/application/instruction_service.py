@@ -7,6 +7,8 @@ from typing import Any, cast
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import UnitOfWork
 
+from .managed_catalog_policy import assert_catalog_mutation_allowed
+
 
 class InstructionService:
     """Use cases for phase instructions."""
@@ -45,6 +47,7 @@ class InstructionService:
         return fresh
 
     def create_instruction(self, phase_id: int, data: dict[str, Any]) -> dict[str, Any]:
+        assert_catalog_mutation_allowed(self._uow)
         self._lock_phase(phase_id)
 
         existing_rows = list(self._uow.phase_instructions.list(phase_id))
@@ -77,6 +80,7 @@ class InstructionService:
             raise
 
     def update_instruction(self, instruction_id: int, data: dict[str, Any]) -> None:
+        assert_catalog_mutation_allowed(self._uow)
         self._lock_instruction(instruction_id)
         try:
             self._uow.phase_instructions.update(instruction_id, data)
@@ -87,6 +91,7 @@ class InstructionService:
         return None
 
     def delete_instruction(self, instruction_id: int) -> None:
+        assert_catalog_mutation_allowed(self._uow)
         item = self._lock_instruction(instruction_id)
         phase_id = cast(int, item["phase_id"])
         try:
@@ -109,6 +114,7 @@ class InstructionService:
 
     def reorder_instructions(self, phase_id: int, instruction_ids: list[int]) -> None:
         """Persist a complete, unique instruction order for one locked phase."""
+        assert_catalog_mutation_allowed(self._uow)
         self._lock_phase(phase_id)
         existing_rows = list(self._uow.phase_instructions.list(phase_id))
         existing_ids = [cast(int, row["id"]) for row in existing_rows]

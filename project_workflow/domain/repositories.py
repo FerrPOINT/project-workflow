@@ -391,6 +391,15 @@ class UnitOfWork(ABC):
     @abstractmethod
     def rollback(self) -> None: ...
 
+    def lock_catalog_state(self) -> None:
+        """Serialize managed catalog bootstrap and public catalog mutations.
+
+        Non-SQL test doubles may keep the default no-op. Production persistence
+        overrides this with a transaction-scoped database lock.
+        """
+
+        return None
+
     @property
     @abstractmethod
     def workflows(self) -> WorkflowRepository: ...

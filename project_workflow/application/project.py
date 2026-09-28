@@ -12,6 +12,8 @@ from project_workflow.domain.namespace import (
 from project_workflow.domain.project_theme import normalize_theme_color, normalize_theme_icon
 from project_workflow.domain.repositories import UnitOfWork
 
+from .managed_catalog_policy import assert_catalog_mutation_allowed
+
 
 class ProjectService:
     """Use cases for namespaces stored in the projects table."""
@@ -58,6 +60,7 @@ class ProjectService:
         return None
 
     def create_project(self, data: dict[str, Any]) -> dict[str, Any]:
+        assert_catalog_mutation_allowed(self._uow)
         payload = self._normalize_cli_payload(self._normalize_theme_payload(data))
         try:
             self._uow.projects.lock_prefix_namespace()
@@ -100,6 +103,7 @@ class ProjectService:
         return p.to_dict() if p else None
 
     def update_project(self, project_id: int, data: dict[str, Any]) -> None:
+        assert_catalog_mutation_allowed(self._uow)
         payload = self._normalize_cli_payload(self._normalize_theme_payload(data, partial=True), partial=True)
         try:
             self._uow.projects.lock_prefix_namespace()
@@ -152,6 +156,7 @@ class ProjectService:
         return None
 
     def delete_project(self, project_id: int) -> None:
+        assert_catalog_mutation_allowed(self._uow)
         try:
             self._uow.projects.lock_prefix_namespace()
             snapshot = self._uow.projects.get_by_id(project_id)

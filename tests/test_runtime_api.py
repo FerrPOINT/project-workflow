@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 
 from project_workflow import config
 from project_workflow.application.task import TaskService
+from project_workflow.infrastructure.db.managed_catalog import ensure_managed_catalog
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.llm import OpenAICompatibleClient
 from project_workflow.interfaces.ui.app import create_app
@@ -277,6 +278,8 @@ def test_fleet_catalog_token_cannot_execute_steps_or_read_history(monkeypatch):
             "devops",
         )
     ]
+    with SAUnitOfWork() as uow:
+        ensure_managed_catalog(uow)
 
     with patch(
         "project_workflow.interfaces.ui.routes.api.api_namespaces",

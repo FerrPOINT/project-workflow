@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import Session
 
+from project_workflow import config
 from project_workflow.domain.repositories import (
     AgentRepository,
     PhaseCheckRepository,
@@ -78,6 +80,20 @@ class SAUnitOfWork(UnitOfWork):
 
     def rollback(self) -> None:
         self._session.rollback()
+
+    def lock_catalog_state(self) -> None:
+        """Hold the schema-scoped managed-catalog lock until transaction end."""
+
+        bind = self._session.get_bind()
+        if bind.dialect.name != "postgresql":
+            return
+        self._session.execute(
+            text(
+                "SELECT pg_advisory_xact_lock("
+                "hashtextextended(current_database() || ':' || :schema, 0))"
+            ),
+            {"schema": config.get_settings().DB_SCHEMA},
+        )
 
     def refresh(self) -> None:
         """Expire cached ORM rows so subsequent repository reads hit the database."""

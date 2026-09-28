@@ -9,6 +9,8 @@ from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.phase_graph import PhaseGraphNode, validate_phase_graph
 from project_workflow.domain.repositories import UnitOfWork
 
+from .managed_catalog_policy import assert_catalog_mutation_allowed
+
 
 class PhaseServiceApp:
     """Use cases for phases."""
@@ -81,6 +83,7 @@ class PhaseServiceApp:
             self._uow.rollback()
 
     def create_phase(self, data: dict[str, Any], *, commit: bool = True) -> dict[str, Any]:
+        assert_catalog_mutation_allowed(self._uow)
         workflow_id_raw = data.get("workflow_id")
         if not isinstance(workflow_id_raw, int) or isinstance(workflow_id_raw, bool) or workflow_id_raw <= 0:
             raise ValueError("workflow_id должен быть положительным целым числом")
@@ -208,6 +211,7 @@ class PhaseServiceApp:
         return updates, detached_ids
 
     def update_phase(self, phase_id: int, data: dict[str, Any], *, commit: bool = True) -> None:
+        assert_catalog_mutation_allowed(self._uow)
         try:
             updates, detached_ids = self.prepare_update(phase_id, data)
             for detached_id in detached_ids:
@@ -221,6 +225,7 @@ class PhaseServiceApp:
         return None
 
     def delete_phase(self, phase_id: int, *, commit: bool = True) -> None:
+        assert_catalog_mutation_allowed(self._uow)
         try:
             phase = self._uow.phases.get_by_id(phase_id)
             if phase is None:
@@ -242,6 +247,7 @@ class PhaseServiceApp:
         return None
 
     def reorder_phases(self, orders: list[tuple[int, int]], *, commit: bool = True) -> int:
+        assert_catalog_mutation_allowed(self._uow)
         try:
             if not orders:
                 raise ValueError("Список порядка фаз пуст")

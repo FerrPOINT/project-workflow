@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 
 from project_workflow import config, supervisor
+from project_workflow.application.state import _app_state
 from project_workflow.application.task import TaskService
 from project_workflow.build_provenance import BuildProvenanceError, load_build_provenance
 from project_workflow.domain.exceptions import ConflictError
@@ -22,6 +23,7 @@ from project_workflow.domain.runtime_assignment import (
     normalize_role_key,
     payload_sha256,
 )
+from project_workflow.infrastructure.db.managed_catalog import validate_managed_catalog_state
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.cli.core import _require_valid_key, _resolve_namespace_id
 from project_workflow.interfaces.ui.schemas import (
@@ -136,6 +138,7 @@ def runtime_capabilities(
         provenance_ready = False
 
     schema_ready = False
+    catalog_ready = False
     try:
         from project_workflow.infrastructure.db import session as db_session
 
@@ -145,8 +148,14 @@ def runtime_capabilities(
         schema_ready = db_session.schema_is_ready(engine)
     except Exception:
         schema_ready = False
+    if schema_ready:
+        try:
+            with SAUnitOfWork(engine) as uow:
+                catalog_ready = validate_managed_catalog_state(uow)
+        except Exception:
+            catalog_ready = False
 
-    if not provenance_ready or not schema_ready:
+    if not provenance_ready or not schema_ready or not catalog_ready:
         return JSONResponse(
             {
                 "ok": False,
@@ -155,6 +164,7 @@ def runtime_capabilities(
                 "readiness": {
                     "service": "not_ready",
                     "schema": "ready" if schema_ready else "not_ready",
+                    "catalog": "ready" if catalog_ready else "not_ready",
                 },
             },
             status_code=503,
@@ -168,7 +178,7 @@ def runtime_capabilities(
         "role_key": credential.role_key,
         "credential_kind": credential.kind,
         "capabilities": capabilities,
-        "readiness": {"service": "ready", "schema": "ready"},
+        "readiness": {"service": "ready", "schema": "ready", "catalog": "ready"},
         "source_provenance": provenance.to_dict() if provenance is not None else {},
     }
 
@@ -677,6 +687,11 @@ async def runtime_catalog(
         return _error("Недействительный runtime token", 401)
     if credential.kind != "catalog" or credential.role_key != _CATALOG_ROLE:
         return _error("Токен не разрешает чтение каталога", 403)
+    try:
+        if not validate_managed_catalog_state(_app_state.get_uow()):
+            return _error("Managed каталог временно недоступен", 503)
+    except (FileNotFoundError, ValueError):
+        return _error("Managed каталог временно недоступен", 503)
     from . import api
 
     namespaces = await api.api_namespaces()

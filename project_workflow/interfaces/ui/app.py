@@ -17,7 +17,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from ... import __version__
+from ...infrastructure.db.managed_catalog import validate_managed_catalog_state
 from ...infrastructure.db.session import DatabaseUnavailable, get_engine, reset_engine
+from ...infrastructure.db.uow import SAUnitOfWork
 from .routes import api, cli_api, pages, runtime_api
 from .sso import install_sso
 
@@ -121,7 +123,13 @@ async def _health() -> JSONResponse:
     """Readiness probe for connectivity, schema presence, and migration head."""
     from ...infrastructure.db import session as _session
 
-    health = {"ok": True, "version": __version__, "database": "unknown", "schema": "unknown"}
+    health = {
+        "ok": True,
+        "version": __version__,
+        "database": "unknown",
+        "schema": "unknown",
+        "catalog": "unknown",
+    }
     status = 200
     start = time.perf_counter()
     try:
@@ -132,15 +140,21 @@ async def _health() -> JSONResponse:
         if not _session.schema_is_ready(engine):
             raise RuntimeError("schema-not-ready")
         health["schema"] = "ok"
+        with SAUnitOfWork(engine) as uow:
+            validate_managed_catalog_state(uow)
+        health["catalog"] = "ok"
     except Exception:
         logger.error("Health readiness check failed")
         health["ok"] = False
         if health["database"] != "ok":
             health["database"] = "error"
             health["error_code"] = "database-unavailable"
-        else:
+        elif health["schema"] != "ok":
             health["schema"] = "error"
             health["error_code"] = "schema-not-ready"
+        else:
+            health["catalog"] = "error"
+            health["error_code"] = "managed-catalog-not-ready"
         status = 503
     health["db_latency_ms"] = round((time.perf_counter() - start) * 1000, 2)
     return JSONResponse(health, status_code=status)
@@ -148,13 +162,22 @@ async def _health() -> JSONResponse:
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Graceful startup: verify DB is reachable before accepting traffic."""
+    """Verify reachable managed state before accepting traffic."""
     try:
         engine = get_engine()
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
     except Exception:
         logger.warning("База данных недоступна при запуске приложения")
+    else:
+        from ...infrastructure.db import session as _session
+
+        if _session.schema_is_ready(engine):
+            try:
+                with SAUnitOfWork(engine) as uow:
+                    validate_managed_catalog_state(uow)
+            except (FileNotFoundError, ValueError) as exc:
+                raise RuntimeError("Managed catalog is not ready") from exc
     yield
     # Shutdown: dispose and clear the cached engine pool.
     try:

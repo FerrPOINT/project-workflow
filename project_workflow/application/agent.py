@@ -8,6 +8,8 @@ from typing import Any
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import UnitOfWork
 
+from .managed_catalog_policy import assert_catalog_mutation_allowed
+
 
 class AgentService:
     """Use cases for agents."""
@@ -59,6 +61,7 @@ class AgentService:
                 raise NotFoundError(f"Воркфлоу {workflow_id} не найден")
 
     def create_agent(self, data: dict[str, Any]) -> dict[str, Any]:
+        assert_catalog_mutation_allowed(self._uow)
         payload = dict(data)
         payload["name"] = self._normalize_name(payload.get("name"))
         self._validate_name_owner(payload["name"])
@@ -84,6 +87,7 @@ class AgentService:
         return a.to_dict() if a else None
 
     def update_agent(self, agent_id: int, data: dict[str, Any]) -> None:
+        assert_catalog_mutation_allowed(self._uow)
         payload = dict(data)
         if "name" in payload:
             payload["name"] = self._normalize_name(payload["name"])
@@ -104,6 +108,7 @@ class AgentService:
         return None
 
     def delete_agent(self, agent_id: int) -> None:
+        assert_catalog_mutation_allowed(self._uow)
         if self._uow.agents.lock(agent_id) is None:
             raise NotFoundError(f"Агент {agent_id} не найден")
         self._lock_assigned_workflows(agent_id)
