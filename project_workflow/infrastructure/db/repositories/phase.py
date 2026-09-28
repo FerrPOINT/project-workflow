@@ -55,7 +55,11 @@ class SAPhaseRepository(PhaseRepository):
                 raise ConflictError(f"{field} должна ссылаться на фазу того же воркфлоу и режима")
 
     def list(self, workflow_id: int | None = None, mode_id: int | None = None) -> Sequence[Phase]:
-        stmt = select(m.Phase).options(joinedload(m.Phase.workflow)).order_by(m.Phase.workflow_id, m.Phase.phase_order)
+        stmt = (
+            select(m.Phase)
+            .options(joinedload(m.Phase.workflow), joinedload(m.Phase.mode))
+            .order_by(m.Phase.workflow_id, m.Phase.phase_order)
+        )
         if workflow_id is not None:
             stmt = stmt.where(m.Phase.workflow_id == workflow_id)
         if mode_id is not None:

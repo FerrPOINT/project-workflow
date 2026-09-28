@@ -327,7 +327,7 @@ def test_explicit_project_task_validates_key_shape_and_scoped_phase_before_write
     assert created["task_key"] == "WRONG-1"
     with pytest.raises(ConflictError, match="должен соответствовать"):
         service.create_task({"project_id": project["id"], "task_key": "BAD-KEY"})
-    with pytest.raises(ValueError, match="не найдена в воркфлоу"):
+    with pytest.raises(ValueError, match="не найдена в режиме"):
         service.create_task(
             {
                 "project_id": project["id"],

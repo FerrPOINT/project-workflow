@@ -36,14 +36,22 @@ class SATaskRepository(TaskRepository):
         with self._session.no_autoflush:
             stmt = (
                 select(m.Task)
-                .options(joinedload(m.Task.workflow).selectinload(m.Workflow.phases))
+                .options(
+                    joinedload(m.Task.workflow).joinedload(m.Workflow.phases),
+                    joinedload(m.Task.workflow).joinedload(m.Workflow.modes),
+                )
                 .where(m.Task.task_key == task_key)
             )
             if project_id is not None:
                 stmt = stmt.where(m.Task.project_id == project_id)
             if workflow_id is not None:
                 stmt = stmt.where(m.Task.workflow_id == workflow_id)
-            rows = self._session.execute(stmt.order_by(m.Task.project_id, m.Task.id)).scalars().all()
+            rows = (
+                self._session.execute(stmt.order_by(m.Task.project_id, m.Task.id))
+                .unique()
+                .scalars()
+                .all()
+            )
         if not rows:
             return None
         if project_id is None and len(rows) > 1:
@@ -54,9 +62,12 @@ class SATaskRepository(TaskRepository):
         with self._session.no_autoflush:
             row = self._session.execute(
                 select(m.Task)
-                .options(joinedload(m.Task.workflow).selectinload(m.Workflow.phases))
+                .options(
+                    joinedload(m.Task.workflow).joinedload(m.Workflow.phases),
+                    joinedload(m.Task.workflow).joinedload(m.Workflow.modes),
+                )
                 .where(m.Task.id == task_id)
-            ).scalar_one_or_none()
+            ).unique().scalar_one_or_none()
         if row is None:
             return None
         return _row_to_task(row)
@@ -75,20 +86,26 @@ class SATaskRepository(TaskRepository):
         with self._session.no_autoflush:
             stmt = (
                 select(m.Task)
-                .options(joinedload(m.Task.workflow).selectinload(m.Workflow.phases))
+                .options(
+                    joinedload(m.Task.workflow).joinedload(m.Workflow.phases),
+                    joinedload(m.Task.workflow).joinedload(m.Workflow.modes),
+                )
                 .order_by(m.Task.id.desc())
             )
-            rows = self._session.execute(stmt).scalars().all()
+            rows = self._session.execute(stmt).unique().scalars().all()
         return [_row_to_task(r) for r in rows]
 
     def list_by_project(self, project_id: int) -> Sequence[Task]:
         with self._session.no_autoflush:
             rows = self._session.execute(
                 select(m.Task)
-                .options(joinedload(m.Task.workflow).selectinload(m.Workflow.phases))
+                .options(
+                    joinedload(m.Task.workflow).joinedload(m.Workflow.phases),
+                    joinedload(m.Task.workflow).joinedload(m.Workflow.modes),
+                )
                 .where(m.Task.project_id == project_id)
                 .order_by(m.Task.id)
-            ).scalars().all()
+            ).unique().scalars().all()
         return [_row_to_task(row) for row in rows]
 
     def create(self, data: dict[str, Any]) -> int:

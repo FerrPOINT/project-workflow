@@ -86,6 +86,7 @@ def test_workflow_delete_reassigns_empty_namespaces_and_removes_phase_links():
     uow = MagicMock()
     uow.workflows.lock.return_value = SimpleNamespace(id=7, is_default=False)
     uow.workflows.get_default.return_value = SimpleNamespace(id=1, is_default=True)
+    uow.workflows.list_modes.return_value = [SimpleNamespace(id=70)]
     uow.projects.list.return_value = [SimpleNamespace(id=4, workflow_id=7)]
     uow.tasks.list_by_project.return_value = []
     uow.phases.list.return_value = [
@@ -204,6 +205,7 @@ def test_phase_update_rolls_back_when_direct_write_fails():
     phase = SimpleNamespace(
         id=7,
         workflow_id=3,
+        mode_id=30,
         code="P1",
         phase_order=1,
         execution_type="sync",
@@ -242,6 +244,7 @@ def test_phase_reorder_rolls_back_when_direct_reorder_fails():
     first = SimpleNamespace(
         id=7,
         workflow_id=3,
+        mode_id=30,
         code="P1",
         phase_order=1,
         execution_type="sync",
@@ -251,6 +254,7 @@ def test_phase_reorder_rolls_back_when_direct_reorder_fails():
     second = SimpleNamespace(
         id=8,
         workflow_id=3,
+        mode_id=30,
         code="P2",
         phase_order=2,
         execution_type="sync",
@@ -348,7 +352,7 @@ def test_project_delete_rolls_back_when_delete_fails():
 
 def test_instruction_lock_rejects_phase_removed_after_workflow_lock():
     instruction = {"id": 5, "phase_id": 9, "description": "Step"}
-    phase = SimpleNamespace(id=9, workflow_id=3)
+    phase = SimpleNamespace(id=9, workflow_id=3, mode_id=30)
     uow = MagicMock()
     uow.phase_instructions.get_by_id.return_value = instruction
     uow.phases.get_by_id.return_value = phase

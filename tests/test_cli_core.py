@@ -25,14 +25,17 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 def test_cli_group_sets_json_mode():
     runner = CliRunner()
 
-    @cli.command()
-    @click.pass_context
-    def probe(ctx):
-        click.echo(f"json={ctx.obj.get('json_mode')}")
+    try:
+        @cli.command()
+        @click.pass_context
+        def probe(ctx):
+            click.echo(f"json={ctx.obj.get('json_mode')}")
 
-    result = runner.invoke(cli, ["--json", "probe"])
-    assert result.exit_code == 0
-    assert "json=True" in result.output
+        result = runner.invoke(cli, ["--json", "probe"])
+        assert result.exit_code == 0
+        assert "json=True" in result.output
+    finally:
+        cli.commands.pop("probe", None)
 
 
 @pytest.mark.parametrize("args", [["--help"], ["step", "--help"], ["history", "--help"]])

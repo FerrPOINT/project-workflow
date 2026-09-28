@@ -34,6 +34,7 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
 
     database_url = f"sqlite:///{test_db}"
     monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("PLATFORM_SERVICES_URL", "")
     config.get_settings.cache_clear()
 
     monkeypatch.setattr(config, "SEED_PATH", seed_path)

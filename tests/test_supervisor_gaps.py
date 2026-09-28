@@ -28,7 +28,13 @@ class TestSupervisorContextBuilder:
         uow.list_phase_events.return_value = []
         builder = SupervisorContextBuilder(
             uow=uow,
-            task={"id": 1, "status": "done", "current_phase_id": 1},
+            task={
+                "id": 1,
+                "status": "done",
+                "current_phase_id": 1,
+                "mode_id": 10,
+                "cycle_number": 0,
+            },
             all_phases=[Phase(id=1, code="0.0a", name="Setup")],
             current_phase_code="0.0a",
         )
