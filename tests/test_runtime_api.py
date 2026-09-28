@@ -4,7 +4,7 @@ import hashlib
 import json
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import IntegrityError
@@ -253,9 +253,51 @@ def test_fleet_catalog_token_cannot_execute_steps_or_read_history(monkeypatch):
     )
     monkeypatch.setenv("PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN", catalog_token)
     config.get_settings.cache_clear()
-    _namespace("WORKER", "workflow-worker", "WRK")
+    managed_namespaces = [
+        {"name": role.upper(), "cli_command": f"workflow-{role}"}
+        for role in (
+            "project_manager",
+            "analyst",
+            "architect",
+            "developer",
+            "reviewer",
+            "tester",
+            "devops",
+        )
+    ]
+    managed_workflows = [
+        {"key": f"hermes-sdlc:{role}"}
+        for role in (
+            "project_manager",
+            "analyst",
+            "architect",
+            "developer",
+            "reviewer",
+            "tester",
+            "devops",
+        )
+    ]
 
-    with TestClient(create_app()) as client:
+    with patch(
+        "project_workflow.interfaces.ui.routes.api.api_namespaces",
+        new=AsyncMock(
+            return_value={
+                "ok": True,
+                "namespaces": [
+                    {"name": "LEGACY", "cli_command": "workflow-run"},
+                    *managed_namespaces,
+                ],
+            }
+        ),
+    ), patch(
+        "project_workflow.interfaces.ui.routes.api.api_workflows",
+        new=AsyncMock(
+            return_value={
+                "ok": True,
+                "workflows": [{"key": "legacy:1"}, *managed_workflows],
+            }
+        ),
+    ), TestClient(create_app()) as client:
         catalog = client.get("/internal/runtime/catalog", headers=_headers(catalog_token))
         missing = client.get("/internal/runtime/catalog")
         wrong_role = client.get("/internal/runtime/catalog", headers=_headers(worker_token))
@@ -272,12 +314,67 @@ def test_fleet_catalog_token_cannot_execute_steps_or_read_history(monkeypatch):
 
     assert catalog.status_code == 200
     assert catalog.json()["ok"] is True
-    assert any(item["name"] == "WORKER" for item in catalog.json()["namespaces"])
-    assert catalog.json()["workflows"]
+    assert catalog.json()["namespaces"] == managed_namespaces
+    assert catalog.json()["workflows"] == managed_workflows
     assert missing.status_code == 401
     assert wrong_role.status_code == 403
     assert step.status_code == 403
     assert history.status_code == 403
+
+
+def test_runtime_credential_named_fleet_control_cannot_read_control_catalog(monkeypatch):
+    runtime_token = "r" * 32
+    monkeypatch.setenv(
+        "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON",
+        json.dumps({"fleet-control": runtime_token}),
+    )
+    config.get_settings.cache_clear()
+
+    with TestClient(create_app()) as client:
+        runtime_catalog = client.get(
+            "/internal/runtime/catalog", headers=_headers(runtime_token)
+        )
+
+    assert runtime_catalog.status_code == 403
+    assert runtime_catalog.json() == {
+        "ok": False,
+        "error": "Токен не разрешает чтение каталога",
+    }
+
+
+def test_fleet_catalog_fails_closed_on_partial_managed_inventory(monkeypatch):
+    control_token = "c" * 32
+    monkeypatch.setenv("PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN", control_token)
+    config.get_settings.cache_clear()
+
+    with patch(
+        "project_workflow.interfaces.ui.routes.api.api_namespaces",
+        new=AsyncMock(
+            return_value={
+                "ok": True,
+                "namespaces": [
+                    {"cli_command": "workflow-project_manager"},
+                ],
+            }
+        ),
+    ), patch(
+        "project_workflow.interfaces.ui.routes.api.api_workflows",
+        new=AsyncMock(
+            return_value={
+                "ok": True,
+                "workflows": [{"key": "hermes-sdlc:project_manager"}],
+            }
+        ),
+    ), TestClient(create_app()) as client:
+        response = client.get(
+            "/internal/runtime/catalog", headers=_headers(control_token)
+        )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "ok": False,
+        "error": "Managed каталог временно недоступен",
+    }
 
 
 def test_runtime_step_is_unavailable_for_malformed_or_duplicate_tokens(monkeypatch):
@@ -399,7 +496,7 @@ def test_runtime_token_is_bound_to_one_namespace(monkeypatch, supervisor_llm):
     assert operation_collision.status_code == 409
     assert wrong_role_assignment.status_code == 403
     assert forbidden_assignment.status_code == 403
-    assert forbidden_step.status_code == 401
+    assert forbidden_step.status_code == 403
     assert current.status_code == 200
     assert current.json()["result"]["task_key"] == "ANA-1"
     assert foreign.status_code == 409

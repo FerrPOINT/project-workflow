@@ -16,6 +16,8 @@ from project_workflow.application.task import TaskService
 from project_workflow.build_provenance import BuildProvenanceError, load_build_provenance
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.runtime_assignment import (
+    MANAGED_ROLE_MODE_SCOPES,
+    MANAGED_WORKFLOW_KEYS,
     RuntimeStepFence,
     normalize_role_key,
     payload_sha256,
@@ -79,13 +81,6 @@ def _token_configuration() -> tuple[dict[str, str], dict[str, str], str]:
     if catalog_token and catalog_token in runtime_values | assignment_values:
         raise RuntimeError("Service tokens разных ролей должны быть уникальными")
     return runtime_tokens, assignment_tokens, catalog_token
-
-
-def _authorized_role(authorization: str | None) -> str | None:
-    credential = _authorized_service_credential(authorization)
-    if credential is None or credential.kind not in {"runtime", "catalog"}:
-        return None
-    return credential.role_key
 
 
 def _authorized_assignment_role(authorization: str | None) -> str | None:
@@ -457,7 +452,7 @@ def runtime_assign(
         try:
             # A valid execution/catalog credential is deliberately distinguishable
             # from an unknown credential: only the adapter credential may assign.
-            if _authorized_role(authorization) is not None:
+            if _authorized_service_credential(authorization) is not None:
                 return _error("Runtime token не разрешает назначение задач", 403)
         except RuntimeError as exc:
             return _error(str(exc), 503)
@@ -518,7 +513,7 @@ def runtime_bind(
         return _error(str(exc), 503)
     if role is None:
         try:
-            if _authorized_role(authorization) is not None:
+            if _authorized_service_credential(authorization) is not None:
                 return _error("Runtime token не разрешает связывание задач", 403)
         except RuntimeError as exc:
             return _error(str(exc), 503)
@@ -554,13 +549,14 @@ def runtime_step(
 ) -> dict[str, Any] | JSONResponse:
     """Execute one role-scoped step in the trusted workflow service."""
     try:
-        role = _authorized_role(authorization)
+        credential = _authorized_service_credential(authorization)
     except RuntimeError as exc:
         return _error(str(exc), 503)
-    if role is None:
+    if credential is None:
         return _error("Недействительный runtime token", 401)
-    if role == _CATALOG_ROLE:
-        return _error("Токен каталога не разрешает выполнение шагов", 403)
+    if credential.kind != "runtime":
+        return _error("Токен не разрешает выполнение шагов", 403)
+    role = credential.role_key
     request_digest = payload_sha256(payload.model_dump(mode="json"))
     try:
         response: dict[str, Any] | None = None
@@ -645,13 +641,14 @@ def runtime_history(
 ) -> dict[str, Any] | JSONResponse:
     """Return history only from the namespace bound to the supplied role token."""
     try:
-        role = _authorized_role(authorization)
+        credential = _authorized_service_credential(authorization)
     except RuntimeError as exc:
         return _error(str(exc), 503)
-    if role is None:
+    if credential is None:
         return _error("Недействительный runtime token", 401)
-    if role == _CATALOG_ROLE:
-        return _error("Токен каталога не разрешает чтение истории", 403)
+    if credential.kind != "runtime":
+        return _error("Токен не разрешает чтение истории", 403)
+    role = credential.role_key
     try:
         with SAUnitOfWork() as uow:
             namespace_id = _namespace_id(uow, role)
@@ -673,21 +670,45 @@ async def runtime_catalog(
 ) -> dict[str, Any] | JSONResponse:
     """Expose only the namespace/workflow directory to Fleet Control."""
     try:
-        role = _authorized_role(authorization)
+        credential = _authorized_service_credential(authorization)
     except RuntimeError as exc:
         return _error(str(exc), 503)
-    if role is None:
+    if credential is None:
         return _error("Недействительный runtime token", 401)
-    if role != _CATALOG_ROLE:
+    if credential.kind != "catalog" or credential.role_key != _CATALOG_ROLE:
         return _error("Токен не разрешает чтение каталога", 403)
     from . import api
 
     namespaces = await api.api_namespaces()
     workflows = await api.api_workflows()
-    if not isinstance(namespaces, dict) or not isinstance(workflows, dict):
+    namespace_items = namespaces.get("namespaces") if isinstance(namespaces, dict) else None
+    workflow_items = workflows.get("workflows") if isinstance(workflows, dict) else None
+    if not isinstance(namespace_items, list) or not isinstance(workflow_items, list):
         return _error("Каталог временно недоступен", 503)
+    managed_namespace_commands = {
+        f"workflow-{role_key}" for role_key in MANAGED_ROLE_MODE_SCOPES
+    }
+    managed_namespaces = [
+        item
+        for item in namespace_items
+        if isinstance(item, dict)
+        and item.get("cli_command") in managed_namespace_commands
+    ]
+    managed_workflows = [
+        item
+        for item in workflow_items
+        if isinstance(item, dict) and item.get("key") in MANAGED_WORKFLOW_KEYS
+    ]
+    if (
+        len(managed_namespaces) != len(managed_namespace_commands)
+        or {item.get("cli_command") for item in managed_namespaces}
+        != managed_namespace_commands
+        or len(managed_workflows) != len(MANAGED_WORKFLOW_KEYS)
+        or {item.get("key") for item in managed_workflows} != MANAGED_WORKFLOW_KEYS
+    ):
+        return _error("Managed каталог временно недоступен", 503)
     return {
         "ok": True,
-        "namespaces": namespaces["namespaces"],
-        "workflows": workflows["workflows"],
+        "namespaces": managed_namespaces,
+        "workflows": managed_workflows,
     }

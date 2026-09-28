@@ -45,6 +45,10 @@ credential — `403`, collision/config error, неготовая schema либо
 или некорректный immutable manifest — `503`. Ответ не содержит token,
 namespace/task identifiers, counts, titles или внутреннюю конфигурацию.
 `/health` остаётся DB/schema probe и не заменяет этот authenticated preflight.
+Capability определяется сохранённым типом credential. Совпадение role key с
+зарезервированным именем `fleet-control` не превращает runtime token в catalog
+token; `/internal/runtime/catalog` принимает только точный catalog credential,
+а catalog credential не принимается `step`, `history` и `capabilities`.
 
 ## Backend-owned mode policy
 

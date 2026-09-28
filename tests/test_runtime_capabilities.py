@@ -134,6 +134,35 @@ def test_runtime_capabilities_reject_missing_wrong_and_catalog_credentials(
         assert catalog_token not in response.text
 
 
+def test_runtime_role_text_cannot_change_the_credential_capability_matrix(
+    monkeypatch, tmp_path: Path
+):
+    runtime_token = _token("fleet-control-runtime")
+    control_token = _token("fleet-control-catalog")
+    _configure_tokens(
+        monkeypatch,
+        runtime={"fleet-control": runtime_token},
+        catalog=control_token,
+    )
+    _install_manifest(monkeypatch, tmp_path, _valid_manifest())
+
+    with TestClient(create_app()) as client:
+        runtime = client.get(
+            "/internal/runtime/capabilities",
+            headers={"Authorization": f"Bearer {runtime_token}"},
+        )
+        control = client.get(
+            "/internal/runtime/capabilities",
+            headers={"Authorization": f"Bearer {control_token}"},
+        )
+
+    assert runtime.status_code == 200
+    assert runtime.json()["credential_kind"] == "runtime"
+    assert runtime.json()["role_key"] == "fleet-control"
+    assert runtime.json()["capabilities"] == ["step", "history"]
+    assert control.status_code == 403
+
+
 def test_runtime_capabilities_fail_closed_on_cross_kind_token_collision(
     monkeypatch, tmp_path: Path
 ):
