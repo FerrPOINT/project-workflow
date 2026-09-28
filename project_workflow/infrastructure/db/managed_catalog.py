@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
@@ -54,7 +54,7 @@ class ManagedMode(_CatalogModel):
     name: str
     mode_order: int = Field(gt=0)
     execution_scope: Literal["business", "delivery", "aggregate"]
-    phases: list[_SeedPhase] = Field(min_length=2)
+    phases: list[_SeedPhase] = Field(min_length=3, max_length=3)
 
     @field_validator("key", "name")
     @classmethod
@@ -167,6 +167,11 @@ class ManagedWorkflow(_CatalogModel):
                             f"Managed phase {phase.code!r} uses skills outside role allowlist: {sorted(unknown)}"
                         )
         for mode in self.modes:
+            all_instruction_text = "\n".join(
+                instruction.description.casefold()
+                for phase in mode.phases
+                for instruction in phase.instructions
+            )
             first_instruction = mode.phases[0].instructions[0].description.casefold()
             for marker in ("task", "comment", "attachment"):
                 if marker not in first_instruction:
@@ -182,6 +187,19 @@ class ManagedWorkflow(_CatalogModel):
             allowed_terminal = (
                 "publishdraft" if self.role_key == "project_manager" else "completeassignedstage"
             )
+            disallowed_terminal = (
+                "completeassignedstage" if self.role_key == "project_manager" else "publishdraft"
+            )
+            if all_instruction_text.count(allowed_terminal) != 1:
+                raise ValueError(
+                    f"Mode {self.role_key!r}/{mode.key!r} must mention exactly one "
+                    f"{allowed_terminal} terminal action"
+                )
+            if disallowed_terminal in all_instruction_text:
+                raise ValueError(
+                    f"Mode {self.role_key!r}/{mode.key!r} cannot mention terminal action "
+                    f"{disallowed_terminal}"
+                )
             if allowed_terminal not in terminal_instruction:
                 raise ValueError(
                     f"Mode {self.role_key!r}/{mode.key!r} must end with {allowed_terminal}"
@@ -222,6 +240,13 @@ class ManagedCatalog(_CatalogModel):
         mode_count = sum(len(workflow.modes) for workflow in self.workflows)
         if mode_count != 13:
             raise ValueError("Managed catalog must contain exactly thirteen modes")
+        phase_count = sum(
+            len(mode.phases)
+            for workflow in self.workflows
+            for mode in workflow.modes
+        )
+        if phase_count != 39:
+            raise ValueError("Managed catalog must contain exactly thirty-nine phases")
         serialized = self.model_dump_json().casefold()
         if '"repeatable"' in serialized:
             raise ValueError("Managed catalog must model repeat work as a new cycle, not repeatable")
@@ -253,6 +278,131 @@ def load_managed_catalog(path: Path | str | None = None) -> ManagedCatalog:
         return ManagedCatalog.model_validate(raw)
     except ValidationError as exc:
         raise ValueError(f"Invalid managed workflow catalog {catalog_path}: {exc}") from exc
+
+
+def _reference_summary(references: list[tuple[str, int]]) -> str:
+    populated = [f"{kind}:{count}" for kind, count in references if count]
+    return ",".join(populated) if populated else "zero"
+
+
+def _assert_no_foreign_catalog_objects(uow: UnitOfWork, catalog: ManagedCatalog) -> None:
+    """Reject unmanaged rows before bootstrap can create or modify catalog rows.
+
+    Managed DEV cleanup is intentionally operator-owned: this audit reports the
+    exact objects and their direct references, but never guesses whether legacy
+    rows are safe to delete or migrate.
+    """
+    workflows = list(uow.workflows.list())
+    agents = list(uow.agents.list())
+    namespaces = list(uow.projects.list())
+    expected_workflow_keys = {workflow.key for workflow in catalog.workflows}
+    expected_agent_names = {workflow.role_key for workflow in catalog.workflows}
+    expected_namespace_commands = {
+        f"workflow-{workflow.role_key}" for workflow in catalog.workflows
+    }
+    foreign_workflows = [
+        workflow for workflow in workflows if workflow.key not in expected_workflow_keys
+    ]
+    foreign_agents = [agent for agent in agents if agent.name not in expected_agent_names]
+    foreign_namespaces = [
+        namespace
+        for namespace in namespaces
+        if namespace.cli_command not in expected_namespace_commands
+    ]
+    if not foreign_workflows and not foreign_agents and not foreign_namespaces:
+        return
+
+    tasks = list(uow.tasks.list())
+    phases_by_workflow: dict[int, list[Any]] = {}
+    for workflow in workflows:
+        if workflow.id is None:
+            continue
+        phases_by_workflow[int(workflow.id)] = [
+            phase
+            for mode in uow.workflows.list_modes(int(workflow.id))
+            if mode.id is not None
+            for phase in uow.phases.list(int(workflow.id), mode_id=int(mode.id))
+        ]
+
+    details: list[str] = []
+    for workflow in foreign_workflows:
+        workflow_id = int(workflow.id or 0)
+        workflow_namespaces = sum(
+            namespace.workflow_id == workflow_id for namespace in namespaces
+        )
+        workflow_tasks = sum(task.workflow_id == workflow_id for task in tasks)
+        details.append(
+            "workflow("
+            f"id={workflow_id}, key={workflow.key!r}, name={workflow.name!r}, "
+            f"default={'true' if workflow.is_default else 'false'}, "
+            "references="
+            f"{_reference_summary([('namespaces', workflow_namespaces), ('tasks', workflow_tasks)])}, "
+            f"owned_modes={len(uow.workflows.list_modes(workflow_id))}, "
+            f"owned_phases={len(phases_by_workflow.get(workflow_id, []))}"
+            ")"
+        )
+    for agent in foreign_agents:
+        agent_id = int(agent.id or 0)
+        phase_references = sum(
+            phase.agent_id == agent_id
+            for phases in phases_by_workflow.values()
+            for phase in phases
+        )
+        details.append(
+            "agent("
+            f"id={agent_id}, name={agent.name!r}, profile={agent.hermes_profile!r}, "
+            f"references={_reference_summary([('phases', phase_references)])}"
+            ")"
+        )
+    for namespace in foreign_namespaces:
+        namespace_id = int(namespace.id or 0)
+        task_references = sum(task.project_id == namespace_id for task in tasks)
+        details.append(
+            "namespace("
+            f"id={namespace_id}, code={namespace.code!r}, "
+            f"cli_command={namespace.cli_command!r}, name={namespace.name!r}, "
+            f"workflow_id={namespace.workflow_id}, "
+            f"references={_reference_summary([('tasks', task_references)])}"
+            ")"
+        )
+    raise ValueError(
+        "Managed catalog contains foreign objects; catalog bootstrap made no changes. "
+        "Reconcile these objects explicitly before retrying: "
+        + "; ".join(details)
+    )
+
+
+def _assert_exact_persisted_inventory(uow: UnitOfWork) -> None:
+    workflows = list(uow.workflows.list())
+    modes = [
+        mode
+        for workflow in workflows
+        if workflow.id is not None
+        for mode in uow.workflows.list_modes(int(workflow.id))
+    ]
+    phases = [
+        phase
+        for workflow in workflows
+        if workflow.id is not None
+        for mode in uow.workflows.list_modes(int(workflow.id))
+        if mode.id is not None
+        for phase in uow.phases.list(int(workflow.id), mode_id=int(mode.id))
+    ]
+    counts = {
+        "workflows": len(workflows),
+        "agents": len(uow.agents.list()),
+        "namespaces": len(uow.projects.list()),
+        "modes": len(modes),
+        "phases": len(phases),
+    }
+    if counts != {
+        "workflows": 7,
+        "agents": 7,
+        "namespaces": 7,
+        "modes": 13,
+        "phases": 39,
+    }:
+        raise ValueError(f"Managed catalog persisted inventory is not canonical: {counts}")
 
 
 def _ensure_agent(uow: UnitOfWork, workflow: ManagedWorkflow) -> int:
@@ -503,6 +653,7 @@ def ensure_managed_catalog(
     live execution catalog.
     """
     catalog = load_managed_catalog(catalog_path)
+    _assert_no_foreign_catalog_objects(uow, catalog)
     workflows_by_key = {workflow.key: workflow for workflow in uow.workflows.list()}
     has_default = uow.workflows.get_default() is not None
 
@@ -542,4 +693,5 @@ def ensure_managed_catalog(
                     mode=mode,
                 )
         _ensure_namespace(uow, definition, workflow_id)
+    _assert_exact_persisted_inventory(uow)
     return catalog

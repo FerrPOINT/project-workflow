@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 
@@ -34,6 +35,12 @@ def empty_uow(tmp_path: Path):
         yield uow
     finally:
         uow.close()
+
+
+def _write_catalog(tmp_path: Path, raw: dict) -> Path:
+    path = tmp_path / "managed-catalog.json"
+    path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+    return path
 
 
 def test_source_catalog_has_exact_canonical_inventory_and_phase_contracts():
@@ -149,6 +156,158 @@ def test_managed_bootstrap_persists_exact_catalog_and_is_idempotent(empty_uow):
     ) == instruction_count
 
 
+def test_managed_bootstrap_rejects_zero_reference_foreign_default_workflow_without_mutation(
+    empty_uow,
+):
+    foreign_id = empty_uow.workflows.create(
+        {
+            "key": "legacy:foreign-default",
+            "name": "Foreign default",
+            "is_default": True,
+        }
+    )
+    empty_uow.commit()
+
+    with pytest.raises(ValueError) as exc_info:
+        ensure_managed_catalog(empty_uow)
+
+    message = str(exc_info.value)
+    assert (
+        f"workflow(id={foreign_id}, key='legacy:foreign-default', name='Foreign default', "
+        "default=true, references=zero, owned_modes=1, owned_phases=0)"
+    ) in message
+    assert [workflow.key for workflow in empty_uow.workflows.list()] == [
+        "legacy:foreign-default"
+    ]
+    assert empty_uow.workflows.get_default().id == foreign_id
+    assert not empty_uow.agents.list()
+    assert not empty_uow.projects.list()
+
+
+def test_managed_bootstrap_rejects_zero_reference_foreign_agent_without_mutation(empty_uow):
+    foreign_id = empty_uow.agents.create(
+        {
+            "name": "coder",
+            "description": "Legacy test agent",
+            "hermes_profile": "legacy-test-profile",
+        }
+    )
+    empty_uow.commit()
+
+    with pytest.raises(ValueError) as exc_info:
+        ensure_managed_catalog(empty_uow)
+
+    assert (
+        f"agent(id={foreign_id}, name='coder', profile='legacy-test-profile', references=zero)"
+        in str(exc_info.value)
+    )
+    assert [agent.name for agent in empty_uow.agents.list()] == ["coder"]
+    assert not empty_uow.workflows.list()
+    assert not empty_uow.projects.list()
+
+
+def test_managed_bootstrap_rejects_foreign_namespace_without_mutating_managed_catalog(empty_uow):
+    ensure_managed_catalog(empty_uow)
+    empty_uow.commit()
+    project_manager = next(
+        workflow
+        for workflow in empty_uow.workflows.list()
+        if workflow.key == "hermes-sdlc:project_manager"
+    )
+    foreign_id = empty_uow.projects.create(
+        {
+            "workflow_id": project_manager.id,
+            "code": "TMP",
+            "name": "Temporary namespace",
+            "cli_command": "workflow-temporary",
+            "key_prefixes": [],
+        }
+    )
+    empty_uow.commit()
+
+    with pytest.raises(ValueError) as exc_info:
+        ensure_managed_catalog(empty_uow)
+
+    assert (
+        f"namespace(id={foreign_id}, code='TMP', cli_command='workflow-temporary', "
+        f"name='Temporary namespace', workflow_id={project_manager.id}, references=zero)"
+        in str(exc_info.value)
+    )
+    assert len(empty_uow.workflows.list()) == 7
+    assert len(empty_uow.agents.list()) == 7
+    assert len(empty_uow.projects.list()) == 8
+
+
+def test_managed_bootstrap_reports_reference_bearing_foreign_objects_without_mutation(empty_uow):
+    agent_id = empty_uow.agents.create(
+        {
+            "name": "coder",
+            "description": "Legacy test agent",
+            "hermes_profile": "legacy-test-profile",
+        }
+    )
+    workflow_id = empty_uow.workflows.create(
+        {"key": "legacy:referenced", "name": "Referenced legacy workflow"}
+    )
+    mode = empty_uow.workflows.get_mode_by_key(workflow_id, "default")
+    assert mode is not None and mode.id is not None
+    phase_id = empty_uow.phases.create(
+        {
+            "workflow_id": workflow_id,
+            "mode_id": mode.id,
+            "code": "legacy-phase",
+            "name": "Legacy phase",
+            "phase_order": 1,
+            "execution_type": "sync",
+            "agent_id": agent_id,
+        }
+    )
+    namespace_id = empty_uow.projects.create(
+        {
+            "workflow_id": workflow_id,
+            "code": "LEG",
+            "name": "Legacy namespace",
+            "cli_command": "workflow-legacy",
+            "key_prefixes": ["LEG"],
+        }
+    )
+    empty_uow.tasks.create(
+        {
+            "project_id": namespace_id,
+            "workflow_id": workflow_id,
+            "mode_id": mode.id,
+            "cycle_number": 0,
+            "task_key": "LEG-1",
+            "title": "Referenced legacy task",
+            "current_phase_id": phase_id,
+            "status": "active",
+        }
+    )
+    empty_uow.commit()
+
+    with pytest.raises(ValueError) as exc_info:
+        ensure_managed_catalog(empty_uow)
+
+    message = str(exc_info.value)
+    assert (
+        f"workflow(id={workflow_id}, key='legacy:referenced', "
+        "name='Referenced legacy workflow', default=false, "
+        "references=namespaces:1,tasks:1, owned_modes=1, owned_phases=1)"
+    ) in message
+    assert (
+        f"agent(id={agent_id}, name='coder', profile='legacy-test-profile', "
+        "references=phases:1)"
+    ) in message
+    assert (
+        f"namespace(id={namespace_id}, code='LEG', cli_command='workflow-legacy', "
+        f"name='Legacy namespace', workflow_id={workflow_id}, references=tasks:1)"
+    ) in message
+    assert len(empty_uow.workflows.list()) == 1
+    assert len(empty_uow.agents.list()) == 1
+    assert len(empty_uow.projects.list()) == 1
+    assert len(empty_uow.tasks.list()) == 1
+
+
 def test_managed_bootstrap_rejects_divergent_existing_registry(empty_uow):
     definition = load_managed_catalog().workflows[0]
     empty_uow.workflows.create(
@@ -214,6 +373,41 @@ def test_managed_bootstrap_rejects_namespace_identity_drift(empty_uow):
 
     with pytest.raises(ValueError, match="another identity"):
         ensure_managed_catalog(empty_uow)
+
+
+def test_catalog_rejects_a_fortieth_phase(tmp_path: Path):
+    raw = json.loads(config.MANAGED_CATALOG_PATH.read_text(encoding="utf-8"))
+    mode = raw["workflows"][0]["modes"][0]
+    extra_phase = copy.deepcopy(mode["phases"][-1])
+    extra_phase.update(
+        {
+            "code": "pm-extra-terminal",
+            "name": "Extra terminal phase",
+            "phase_order": 4,
+        }
+    )
+    mode["phases"].append(extra_phase)
+
+    with pytest.raises(ValueError, match="at most 3"):
+        load_managed_catalog(_write_catalog(tmp_path, raw))
+
+
+def test_catalog_rejects_duplicate_allowed_terminal_action(tmp_path: Path):
+    raw = json.loads(config.MANAGED_CATALOG_PATH.read_text(encoding="utf-8"))
+    first_instruction = raw["workflows"][0]["modes"][0]["phases"][0]["instructions"][0]
+    first_instruction["description"] += " Then call publishDraft early."
+
+    with pytest.raises(ValueError, match="exactly one publishdraft"):
+        load_managed_catalog(_write_catalog(tmp_path, raw))
+
+
+def test_catalog_rejects_disallowed_terminal_action(tmp_path: Path):
+    raw = json.loads(config.MANAGED_CATALOG_PATH.read_text(encoding="utf-8"))
+    first_instruction = raw["workflows"][0]["modes"][0]["phases"][0]["instructions"][0]
+    first_instruction["description"] += " Never call completeAssignedStage here."
+
+    with pytest.raises(ValueError, match="cannot mention terminal action completeassignedstage"):
+        load_managed_catalog(_write_catalog(tmp_path, raw))
 
 
 def test_managed_workflow_requires_explicit_assigned_mode(empty_uow):
