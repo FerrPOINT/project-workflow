@@ -159,6 +159,11 @@ class ProjectRepository(ABC):
     def get_by_cli_command(self, cli_command: str) -> Project | None: ...
 
     @abstractmethod
+    def get_persisted_identity(self, project_id: int) -> Mapping[str, Any] | None:
+        """Return exact stored namespace identity fields for catalog validation."""
+        ...
+
+    @abstractmethod
     def lock(self, project_id: int) -> Project | None: ...
 
     @abstractmethod

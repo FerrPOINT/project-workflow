@@ -151,6 +151,8 @@ def test_managed_bootstrap_persists_exact_catalog_and_is_idempotent(empty_uow):
         f"workflow-{role_key}" for role_key in MANAGED_ROLE_MODE_SCOPES
     }
     assert all(namespace.key_prefixes == [] for namespace in namespaces)
+    assert all(namespace.theme_icon == "folder" for namespace in namespaces)
+    assert all(namespace.theme_color == "#5E6AD2" for namespace in namespaces)
     assert sum(len(empty_uow.workflows.list_modes(workflow.id)) for workflow in workflows) == 13
     assert all(
         mode.key != "default"
@@ -195,6 +197,20 @@ def test_managed_bootstrap_preserves_exact_legacy_catalog_task_and_history(
     workflow_id, mode_id, phase_id, namespace_id = _bootstrap_versioned_legacy_catalog(
         empty_uow, migrated_key=migrated_key
     )
+    legacy_namespace = empty_uow.projects.get_by_id(namespace_id)
+    assert legacy_namespace is not None
+    assert legacy_namespace.to_dict() == {
+        "id": namespace_id,
+        "workflow_id": workflow_id,
+        "code": config.DEFAULT_PROJECT_CODE,
+        "name": config.DEFAULT_PROJECT_NAME,
+        "description": "",
+        "theme_icon": "folder",
+        "theme_color": "#5E6AD2",
+        "cli_command": config.DEFAULT_NAMESPACE_CLI_COMMAND,
+        "key_prefixes": config.DEFAULT_TASK_KEY_PREFIXES,
+        "workflow_name": config.LEGACY_UNMANAGED_WORKFLOW_NAME,
+    }
     task_id = empty_uow.tasks.create(
         {
             "project_id": namespace_id,
@@ -482,14 +498,55 @@ def test_managed_bootstrap_rejects_agent_identity_drift(empty_uow):
         ensure_managed_catalog(empty_uow)
 
 
-def test_managed_bootstrap_rejects_namespace_identity_drift(empty_uow):
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("code", "DRIFT"),
+        ("name", "Drifted managed namespace"),
+        ("description", "Drifted managed description"),
+        ("theme_icon", "rocket"),
+        ("theme_icon", "project"),
+        ("theme_color", "#22C55E"),
+        ("theme_color", "#5e6ad2"),
+        ("cli_command", "workflow-drift"),
+        ("key_prefixes", ["DRIFT"]),
+    ],
+)
+def test_managed_bootstrap_rejects_namespace_identity_drift(empty_uow, field, value):
     ensure_managed_catalog(empty_uow)
     namespace = empty_uow.projects.get_by_cli_command("workflow-project_manager")
     assert namespace is not None and namespace.id is not None
-    empty_uow.projects.update(namespace.id, {"description": "Drifted managed namespace"})
+    empty_uow.projects.update(namespace.id, {field: value})
     empty_uow.commit()
 
-    with pytest.raises(ValueError, match="another identity"):
+    with pytest.raises(ValueError):
+        ensure_managed_catalog(empty_uow)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("code", "DRIFT"),
+        ("name", "Drifted legacy namespace"),
+        ("description", "Drifted legacy description"),
+        ("theme_icon", "rocket"),
+        ("theme_icon", "project"),
+        ("theme_color", "#22C55E"),
+        ("theme_color", "#5e6ad2"),
+        ("cli_command", "workflow-drift"),
+        ("key_prefixes", ["DRIFT"]),
+    ],
+)
+def test_managed_bootstrap_rejects_legacy_namespace_identity_drift(
+    empty_uow, field, value
+):
+    _workflow_id, _mode_id, _phase_id, namespace_id = (
+        _bootstrap_versioned_legacy_catalog(empty_uow)
+    )
+    empty_uow.projects.update(namespace_id, {field: value})
+    empty_uow.commit()
+
+    with pytest.raises(ValueError, match="legacy namespace identity differs"):
         ensure_managed_catalog(empty_uow)
 
 
@@ -627,15 +684,39 @@ def test_project_manager_is_the_only_accepted_underscore_role_key():
         normalize_role_key("project-manager_extra")
 
 
-def test_managed_startup_has_no_legacy_seed_fallback():
-    root = Path(__file__).resolve().parents[1]
-    init_source = (root / "scripts" / "init_db.py").read_text(encoding="utf-8")
+def test_init_db_executes_managed_catalog_validation_and_fails_closed_on_drift(
+    tmp_path, monkeypatch
+):
+    from project_workflow.config import get_settings
+    from project_workflow.infrastructure.db.session import reset_engine
+    from scripts.init_db import main
 
-    assert "ensure_managed_catalog" in init_source
-    assert "ensure_phase_catalog" not in init_source
-    assert not (root / "project_workflow" / "references" / "seed.json").exists()
-    assert config.MANAGED_CATALOG_PATH.name == "hermes_sdlc_catalog_v1.json"
-    assert config.LEGACY_UNMANAGED_SEED_PATH.name == "legacy_unmanaged_seed.json"
+    database_url = f"sqlite:///{tmp_path / 'managed-init-drift.db'}"
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    get_settings.cache_clear()
+    reset_engine()
+    try:
+        assert main() == 0
+        with SAUnitOfWork(database_url) as uow:
+            namespace = uow.projects.get_by_cli_command("workflow-project_manager")
+            assert namespace is not None and namespace.id is not None
+            uow.projects.update(namespace.id, {"theme_color": "#22C55E"})
+
+        assert main() == 1
+        with SAUnitOfWork(database_url) as uow:
+            namespace = uow.projects.get_by_cli_command("workflow-project_manager")
+            assert namespace is not None
+            assert namespace.theme_color == "#22C55E"
+            assert len(
+                [
+                    workflow
+                    for workflow in uow.workflows.list()
+                    if workflow.key in MANAGED_WORKFLOW_KEYS
+                ]
+            ) == 7
+    finally:
+        get_settings.cache_clear()
+        reset_engine()
 
 
 def test_agent_cli_surface_is_still_step_and_history_only():

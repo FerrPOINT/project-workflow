@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from sqlalchemy import select, text
@@ -51,6 +51,22 @@ class SAProjectRepository(ProjectRepository):
             select(m.Project).where(m.Project.cli_command == cli_command)
         ).scalar_one_or_none()
         return _row_to_project(row) if row else None
+
+    def get_persisted_identity(self, project_id: int) -> Mapping[str, Any] | None:
+        row = self._session.get(m.Project, project_id)
+        if row is None:
+            return None
+        project = _row_to_project(row)
+        return {
+            "workflow_id": row.workflow_id,
+            "code": row.code,
+            "name": row.name,
+            "description": row.description,
+            "theme_icon": row.theme_icon,
+            "theme_color": row.theme_color,
+            "cli_command": row.cli_command,
+            "key_prefixes": project.key_prefixes,
+        }
 
     def lock(self, project_id: int) -> Project | None:
         row = self._session.execute(

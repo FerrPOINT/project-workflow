@@ -372,12 +372,12 @@ def test_live_catalog_drift_closes_health_capabilities_and_catalog(
 
     with TestClient(create_app()) as client:
         with SAUnitOfWork() as drift:
-            workflow, _mode, _phases, phase, _instruction, _agent, _namespace = (
+            _workflow, _mode, _phases, _phase, _instruction, _agent, namespace = (
                 _managed_objects(drift)
             )
-            row = drift.session.get(db_models.Phase, int(phase.id))
+            row = drift.session.get(db_models.Project, int(namespace.id))
             assert row is not None
-            row.name = "TEST TRASH MUTATION"
+            row.theme_color = "#22C55E"
 
         health = client.get("/health")
         capabilities = client.get(
@@ -404,12 +404,12 @@ def test_startup_fails_closed_when_managed_catalog_drifted(monkeypatch):
         "project_workflow.infrastructure.db.session.schema_is_ready", lambda _engine: True
     )
     with SAUnitOfWork() as drift:
-        _workflow, _mode, _phases, phase, _instruction, _agent, _namespace = _managed_objects(
-            drift
+        _workflow, _mode, _phases, _phase, _instruction, _agent, namespace = (
+            _managed_objects(drift)
         )
-        row = drift.session.get(db_models.Phase, int(phase.id))
+        row = drift.session.get(db_models.Project, int(namespace.id))
         assert row is not None
-        row.name = "TEST TRASH MUTATION"
+        row.theme_icon = "rocket"
 
     with pytest.raises(RuntimeError, match="Managed catalog is not ready"):
         with TestClient(create_app()):

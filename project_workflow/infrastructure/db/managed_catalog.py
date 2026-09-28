@@ -8,6 +8,7 @@ stage/status transitions, queue priority and workspace assignments.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -19,6 +20,12 @@ from project_workflow import config
 from project_workflow.domain import Workflow
 from project_workflow.domain.namespace import legacy_code_from_cli_command
 from project_workflow.domain.phase_graph import PhaseGraphNode, validate_phase_graph
+from project_workflow.domain.project_theme import (
+    DEFAULT_PROJECT_COLOR,
+    DEFAULT_PROJECT_ICON,
+    normalize_theme_color,
+    normalize_theme_icon,
+)
 from project_workflow.domain.repositories import UnitOfWork
 from project_workflow.domain.runtime_assignment import MANAGED_ROLE_MODE_SCOPES, normalize_role_key
 
@@ -314,6 +321,50 @@ class _LegacyCompatibilityCatalog:
     agent_renames: tuple[tuple[int, str], ...]
 
 
+def _normalized_key_prefixes(raw: Any) -> tuple[str, ...]:
+    if not isinstance(raw, list) or any(not isinstance(prefix, str) for prefix in raw):
+        raise ValueError("Namespace key_prefixes must be a list of strings")
+    normalized = tuple(prefix.strip().upper() for prefix in raw)
+    if any(not prefix for prefix in normalized) or len(normalized) != len(set(normalized)):
+        raise ValueError("Namespace key_prefixes must be non-blank and unique")
+    return normalized
+
+
+def _namespace_has_identity(
+    identity: Mapping[str, Any] | None,
+    *,
+    workflow_id: int,
+    code: str,
+    name: str,
+    description: str,
+    cli_command: str,
+    key_prefixes: list[str],
+    theme_icon: str = DEFAULT_PROJECT_ICON,
+    theme_color: str = DEFAULT_PROJECT_COLOR,
+) -> bool:
+    """Compare every persisted namespace identity field in canonical form."""
+
+    if identity is None:
+        return False
+    try:
+        actual_prefixes = _normalized_key_prefixes(identity.get("key_prefixes"))
+        expected_prefixes = _normalized_key_prefixes(key_prefixes)
+        expected_icon = normalize_theme_icon(theme_icon)
+        expected_color = normalize_theme_color(theme_color)
+    except (TypeError, ValueError):
+        return False
+    return (
+        identity.get("workflow_id") == workflow_id
+        and identity.get("code") == code
+        and identity.get("name") == name
+        and identity.get("description") == description
+        and identity.get("theme_icon") == expected_icon
+        and identity.get("theme_color") == expected_color
+        and identity.get("cli_command") == cli_command
+        and actual_prefixes == expected_prefixes
+    )
+
+
 def _is_legacy_compatibility_key(workflow: Workflow) -> bool:
     if workflow.id is not None and workflow.key == f"legacy:{workflow.id}":
         return True
@@ -418,12 +469,19 @@ def _find_legacy_compatibility_catalog(
     namespace = owned_namespaces[0]
     if (
         namespace.id is None
-        or namespace.code != config.DEFAULT_PROJECT_CODE
-        or namespace.cli_command != config.DEFAULT_NAMESPACE_CLI_COMMAND
+        or not _namespace_has_identity(
+            uow.projects.get_persisted_identity(int(namespace.id)),
+            workflow_id=workflow_id,
+            code=config.DEFAULT_PROJECT_CODE,
+            name=config.DEFAULT_PROJECT_NAME,
+            description="",
+            cli_command=config.DEFAULT_NAMESPACE_CLI_COMMAND,
+            key_prefixes=config.DEFAULT_TASK_KEY_PREFIXES,
+        )
     ):
         raise ValueError(
             "Legacy compatibility catalog is divergent; no changes were made: "
-            "the legacy namespace identity is not RUN/workflow-run"
+            "the legacy namespace identity differs from the packaged compatibility catalog"
         )
     phase_rows = list(uow.phases.list(workflow_id, mode_id=int(mode.id)))
     agent_ids = frozenset(
@@ -739,17 +797,21 @@ def _ensure_namespace(uow: UnitOfWork, workflow: ManagedWorkflow, workflow_id: i
                 "code": code,
                 "name": workflow.hermes_namespace,
                 "description": description,
+                "theme_icon": DEFAULT_PROJECT_ICON,
+                "theme_color": DEFAULT_PROJECT_COLOR,
                 "cli_command": cli_command,
                 "key_prefixes": [],
             }
         )
         return
-    if (
-        existing.workflow_id != workflow_id
-        or existing.code != code
-        or existing.name != workflow.hermes_namespace
-        or existing.description != description
-        or existing.key_prefixes
+    if not _namespace_has_identity(
+        uow.projects.get_persisted_identity(int(existing.id or 0)),
+        workflow_id=workflow_id,
+        code=code,
+        name=workflow.hermes_namespace,
+        description=description,
+        cli_command=cli_command,
+        key_prefixes=[],
     ):
         raise ValueError(
             f"Managed namespace {workflow.hermes_namespace!r} already exists with another identity"
@@ -763,13 +825,14 @@ def _assert_existing_namespace(
     code = legacy_code_from_cli_command(cli_command)
     description = f"Managed namespace for {workflow.key}"
     existing = uow.projects.get_by_cli_command(cli_command)
-    if (
-        existing is None
-        or existing.workflow_id != workflow_id
-        or existing.code != code
-        or existing.name != workflow.hermes_namespace
-        or existing.description != description
-        or existing.key_prefixes
+    if existing is None or not _namespace_has_identity(
+        uow.projects.get_persisted_identity(int(existing.id or 0)),
+        workflow_id=workflow_id,
+        code=code,
+        name=workflow.hermes_namespace,
+        description=description,
+        cli_command=cli_command,
+        key_prefixes=[],
     ):
         raise ValueError(
             f"Managed namespace {workflow.hermes_namespace!r} is missing or has another identity"
