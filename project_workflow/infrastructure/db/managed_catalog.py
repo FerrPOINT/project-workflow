@@ -8,8 +8,10 @@ stage/status transitions, queue priority and workspace assignments.
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
@@ -20,7 +22,12 @@ from project_workflow.domain.phase_graph import PhaseGraphNode, validate_phase_g
 from project_workflow.domain.repositories import UnitOfWork
 from project_workflow.domain.runtime_assignment import MANAGED_ROLE_MODE_SCOPES, normalize_role_key
 
-from .schema import _phase_item_to_supervisor, _SeedPhase
+from .schema import (
+    _phase_item_to_supervisor,
+    _SeedPhase,
+    load_phases_from_db,
+    load_phases_from_seed,
+)
 
 CATALOG_SCHEMA = "relevanter-project-workflow-catalog/v1"
 
@@ -28,6 +35,7 @@ FORBIDDEN_LEGACY_IDENTITIES = frozenset(
     {"orchestrator", "codex-operator", "ops", "researcher", "critic", "coder"}
 )
 FORBIDDEN_LEGACY_SKILLS = frozenset({"using-rtech"})
+LEGACY_AGENT_ALIASES = {"reviewer": "legacy-reviewer"}
 
 
 class _CatalogModel(BaseModel):
@@ -184,6 +192,12 @@ class ManagedWorkflow(_CatalogModel):
                 raise ValueError(
                     f"Mode {self.role_key!r}/{mode.key!r} must end with a precise Business Markdown comment"
                 )
+            for marker in ("workflow_phase", "complete=true", "outcome", "evidence"):
+                if marker not in terminal_instruction:
+                    raise ValueError(
+                        f"Mode {self.role_key!r}/{mode.key!r} terminal instruction "
+                        f"must contain {marker!r}"
+                    )
             allowed_terminal = (
                 "publishdraft" if self.role_key == "project_manager" else "completeassignedstage"
             )
@@ -203,6 +217,13 @@ class ManagedWorkflow(_CatalogModel):
             if allowed_terminal not in terminal_instruction:
                 raise ValueError(
                     f"Mode {self.role_key!r}/{mode.key!r} must end with {allowed_terminal}"
+                )
+            if terminal_instruction.index("complete=true") > terminal_instruction.index(
+                allowed_terminal
+            ):
+                raise ValueError(
+                    f"Mode {self.role_key!r}/{mode.key!r} can call {allowed_terminal} "
+                    "only after workflow_phase complete=true"
                 )
             if self.role_key in {"reviewer", "tester"}:
                 if "outcome passed" not in terminal_instruction or "needs_rework" not in terminal_instruction:
@@ -285,12 +306,168 @@ def _reference_summary(references: list[tuple[str, int]]) -> str:
     return ",".join(populated) if populated else "zero"
 
 
-def _assert_no_foreign_catalog_objects(uow: UnitOfWork, catalog: ManagedCatalog) -> None:
+@dataclass(frozen=True)
+class _LegacyCompatibilityCatalog:
+    workflow_id: int
+    namespace_id: int
+    agent_ids: frozenset[int]
+    agent_renames: tuple[tuple[int, str], ...]
+
+
+def _is_legacy_compatibility_key(workflow: Workflow) -> bool:
+    if workflow.id is not None and workflow.key == f"legacy:{workflow.id}":
+        return True
+    if not isinstance(workflow.key, str) or not workflow.key.startswith("local:"):
+        return False
+    try:
+        return str(UUID(workflow.key.removeprefix("local:"))) == workflow.key.removeprefix(
+            "local:"
+        )
+    except ValueError:
+        return False
+
+
+def _legacy_phase_signature(phase: Any) -> tuple[Any, ...]:
+    delegate = phase.delegate
+    delegate_name = delegate.agent if delegate is not None else None
+    reverse_aliases = {alias: name for name, alias in LEGACY_AGENT_ALIASES.items()}
+    if delegate_name is not None:
+        delegate_name = reverse_aliases.get(delegate_name, delegate_name)
+    return (
+        phase.code,
+        phase.name,
+        phase.description,
+        phase.execution_type,
+        delegate_name,
+        delegate.hermes_profile if delegate is not None else None,
+        phase.parallel_with_phase_code,
+        phase.rollback_target_phase_code,
+        tuple(
+            (instruction.step, instruction.execution_type, tuple(instruction.skills))
+            for instruction in phase.instructions
+        ),
+        tuple(check.description for check in phase.checks),
+        tuple(item.item for item in phase.evidence),
+    )
+
+
+def _find_legacy_compatibility_catalog(
+    uow: UnitOfWork,
+    *,
+    workflows: list[Workflow],
+    namespaces: list[Any],
+) -> _LegacyCompatibilityCatalog | None:
+    candidates = [
+        workflow
+        for workflow in workflows
+        if workflow.id is not None
+        and _is_legacy_compatibility_key(workflow)
+        and workflow.name == config.LEGACY_UNMANAGED_WORKFLOW_NAME
+    ]
+    if not candidates:
+        return None
+    if len(candidates) != 1:
+        raise ValueError(
+            "Legacy compatibility catalog is ambiguous; no changes were made: "
+            f"expected one {config.LEGACY_UNMANAGED_WORKFLOW_NAME!r} workflow, "
+            f"found {len(candidates)}"
+        )
+    workflow = candidates[0]
+    workflow_id = int(workflow.id or 0)
+    modes = list(uow.workflows.list_modes(workflow_id))
+    mode_identity = [
+        (
+            mode.key,
+            mode.name,
+            mode.mode_order,
+            mode.role_key,
+            mode.execution_scope,
+            mode.tech_workspace_policy,
+        )
+        for mode in modes
+    ]
+    if not workflow.is_default or mode_identity != [
+        ("default", "Default", 1, None, None, None)
+    ]:
+        raise ValueError(
+            "Legacy compatibility catalog is divergent; no changes were made: "
+            f"workflow {workflow_id} must remain the default workflow with one neutral default mode"
+        )
+    mode = modes[0]
+    if mode.id is None:
+        raise ValueError(
+            "Legacy compatibility catalog is divergent; no changes were made: default mode has no id"
+        )
+    expected_phases = load_phases_from_seed(config.LEGACY_UNMANAGED_SEED_PATH)
+    actual_phases = load_phases_from_db(uow, workflow_id, mode_id=int(mode.id))
+    if [_legacy_phase_signature(phase) for phase in actual_phases] != [
+        _legacy_phase_signature(phase) for phase in expected_phases
+    ]:
+        raise ValueError(
+            "Legacy compatibility catalog is divergent; no changes were made: "
+            "phase, instruction, check, evidence or delegate contract differs from the packaged legacy catalog"
+        )
+    owned_namespaces = [
+        namespace for namespace in namespaces if namespace.workflow_id == workflow_id
+    ]
+    if len(owned_namespaces) != 1:
+        raise ValueError(
+            "Legacy compatibility catalog is ambiguous; no changes were made: "
+            f"workflow {workflow_id} owns {len(owned_namespaces)} namespaces"
+        )
+    namespace = owned_namespaces[0]
+    if (
+        namespace.id is None
+        or namespace.code != config.DEFAULT_PROJECT_CODE
+        or namespace.cli_command != config.DEFAULT_NAMESPACE_CLI_COMMAND
+    ):
+        raise ValueError(
+            "Legacy compatibility catalog is divergent; no changes were made: "
+            "the legacy namespace identity is not RUN/workflow-run"
+        )
+    phase_rows = list(uow.phases.list(workflow_id, mode_id=int(mode.id)))
+    agent_ids = frozenset(
+        int(phase.agent_id) for phase in phase_rows if phase.agent_id is not None
+    )
+    agent_renames: list[tuple[int, str]] = []
+    for old_name, alias in LEGACY_AGENT_ALIASES.items():
+        legacy_agent = next(
+            (
+                agent
+                for agent in uow.agents.list()
+                if agent.id in agent_ids and agent.name in {old_name, alias}
+            ),
+            None,
+        )
+        if legacy_agent is None or legacy_agent.id is None:
+            raise ValueError(
+                "Legacy compatibility catalog is divergent; no changes were made: "
+                f"legacy agent {old_name!r} is missing"
+            )
+        alias_owner = uow.agents.get_by_name(alias)
+        if alias_owner is not None and alias_owner.id != legacy_agent.id:
+            raise ValueError(
+                "Legacy compatibility catalog is ambiguous; no changes were made: "
+                f"agent alias {alias!r} is already occupied"
+            )
+        if legacy_agent.name == old_name:
+            agent_renames.append((int(legacy_agent.id), alias))
+    return _LegacyCompatibilityCatalog(
+        workflow_id=workflow_id,
+        namespace_id=int(namespace.id),
+        agent_ids=agent_ids,
+        agent_renames=tuple(agent_renames),
+    )
+
+
+def _assert_no_foreign_catalog_objects(
+    uow: UnitOfWork, catalog: ManagedCatalog
+) -> _LegacyCompatibilityCatalog | None:
     """Reject unmanaged rows before bootstrap can create or modify catalog rows.
 
-    Managed DEV cleanup is intentionally operator-owned: this audit reports the
-    exact objects and their direct references, but never guesses whether legacy
-    rows are safe to delete or migrate.
+    The one packaged legacy catalog is recognized by its full immutable shape;
+    its identifiers and references stay in place. Everything else remains an
+    operator-owned reconciliation and is reported without mutation.
     """
     workflows = list(uow.workflows.list())
     agents = list(uow.agents.list())
@@ -300,17 +477,33 @@ def _assert_no_foreign_catalog_objects(uow: UnitOfWork, catalog: ManagedCatalog)
     expected_namespace_commands = {
         f"workflow-{workflow.role_key}" for workflow in catalog.workflows
     }
+    legacy = _find_legacy_compatibility_catalog(
+        uow,
+        workflows=workflows,
+        namespaces=namespaces,
+    )
+    legacy_workflow_id = legacy.workflow_id if legacy is not None else None
+    legacy_namespace_id = legacy.namespace_id if legacy is not None else None
+    legacy_agent_ids = legacy.agent_ids if legacy is not None else frozenset()
     foreign_workflows = [
-        workflow for workflow in workflows if workflow.key not in expected_workflow_keys
+        workflow
+        for workflow in workflows
+        if workflow.key not in expected_workflow_keys
+        and workflow.id != legacy_workflow_id
     ]
-    foreign_agents = [agent for agent in agents if agent.name not in expected_agent_names]
+    foreign_agents = [
+        agent
+        for agent in agents
+        if agent.name not in expected_agent_names and agent.id not in legacy_agent_ids
+    ]
     foreign_namespaces = [
         namespace
         for namespace in namespaces
         if namespace.cli_command not in expected_namespace_commands
+        and namespace.id != legacy_namespace_id
     ]
     if not foreign_workflows and not foreign_agents and not foreign_namespaces:
-        return
+        return legacy
 
     tasks = list(uow.tasks.list())
     phases_by_workflow: dict[int, list[Any]] = {}
@@ -372,8 +565,19 @@ def _assert_no_foreign_catalog_objects(uow: UnitOfWork, catalog: ManagedCatalog)
     )
 
 
-def _assert_exact_persisted_inventory(uow: UnitOfWork) -> None:
-    workflows = list(uow.workflows.list())
+def _assert_exact_persisted_inventory(
+    uow: UnitOfWork, catalog: ManagedCatalog
+) -> None:
+    expected_workflow_keys = {workflow.key for workflow in catalog.workflows}
+    expected_agent_names = {workflow.role_key for workflow in catalog.workflows}
+    expected_namespace_commands = {
+        f"workflow-{workflow.role_key}" for workflow in catalog.workflows
+    }
+    workflows = [
+        workflow
+        for workflow in uow.workflows.list()
+        if workflow.key in expected_workflow_keys
+    ]
     modes = [
         mode
         for workflow in workflows
@@ -390,8 +594,16 @@ def _assert_exact_persisted_inventory(uow: UnitOfWork) -> None:
     ]
     counts = {
         "workflows": len(workflows),
-        "agents": len(uow.agents.list()),
-        "namespaces": len(uow.projects.list()),
+        "agents": len(
+            [agent for agent in uow.agents.list() if agent.name in expected_agent_names]
+        ),
+        "namespaces": len(
+            [
+                namespace
+                for namespace in uow.projects.list()
+                if namespace.cli_command in expected_namespace_commands
+            ]
+        ),
         "modes": len(modes),
         "phases": len(phases),
     }
@@ -653,7 +865,10 @@ def ensure_managed_catalog(
     live execution catalog.
     """
     catalog = load_managed_catalog(catalog_path)
-    _assert_no_foreign_catalog_objects(uow, catalog)
+    legacy = _assert_no_foreign_catalog_objects(uow, catalog)
+    if legacy is not None:
+        for agent_id, alias in legacy.agent_renames:
+            uow.agents.update(agent_id, {"name": alias})
     workflows_by_key = {workflow.key: workflow for workflow in uow.workflows.list()}
     has_default = uow.workflows.get_default() is not None
 
@@ -693,5 +908,5 @@ def ensure_managed_catalog(
                     mode=mode,
                 )
         _ensure_namespace(uow, definition, workflow_id)
-    _assert_exact_persisted_inventory(uow)
+    _assert_exact_persisted_inventory(uow, catalog)
     return catalog

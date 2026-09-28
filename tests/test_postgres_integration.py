@@ -743,9 +743,8 @@ class TestPostgresInitialMigration:
 
     def test_supervisor_concurrent_get_or_create_returns_one_task(self, pg_url):
         from project_workflow.supervisor import SupervisorEngine
-        from scripts.init_db import main
 
-        assert main() == 0
+        _initialize_legacy_database(pg_url)
         barrier = Barrier(2)
         thread_state = local()
         original_get = TaskService.get_task_by_key
@@ -1205,7 +1204,7 @@ class TestPostgresUoW:
         uow = SAUnitOfWork(pg_url)
         workflow = uow.workflows.get_default()
         assert workflow is not None and workflow.id is not None
-        phase = uow.phases.get_by_code(int(workflow.id), "1.INTAKE")
+        phase = uow.phases.get_by_code(int(workflow.id), "PM-DRAFT-01")
         assert phase is not None and phase.id is not None
         project = uow.projects.list()[0]
         uow.projects.create(
@@ -1308,9 +1307,7 @@ class TestPostgresUoW:
             assert wf_id not in ids
 
     def test_concurrent_task_and_legacy_prefix_update_can_both_commit(self, pg_url):
-        from scripts.init_db import main
-
-        assert main() == 0
+        _initialize_legacy_database(pg_url)
         setup = SAUnitOfWork(pg_url)
         workflow_id = setup.workflows.get_default().id
         project = ProjectService(setup).create_project(
@@ -1771,9 +1768,8 @@ class TestPostgresUoW:
     def test_catalog_mutation_during_supervisor_provider_call_fails_closed(self, pg_url):
         from project_workflow.infrastructure.llm import OpenAICompatibleClient
         from project_workflow.supervisor import SupervisorEngine
-        from scripts.init_db import main
 
-        assert main() == 0
+        _initialize_legacy_database(pg_url)
         provider_started = Event()
         release_provider = Event()
 
@@ -1824,7 +1820,7 @@ class TestPostgresUoW:
         uow = SAUnitOfWork(pg_url)
         workflow = uow.workflows.get_default()
         assert workflow is not None and workflow.id is not None
-        phase = uow.phases.get_by_code(int(workflow.id), "2.REQUIREMENTS")
+        phase = uow.phases.get_by_code(int(workflow.id), "PM-DRAFT-02")
         assert phase is not None and phase.id is not None
         service = PhaseService(uow)
         before = service.get_phase_detail(int(phase.id))[field]
@@ -1850,9 +1846,8 @@ class TestPostgresUoW:
     def test_noop_catalog_save_during_provider_call_keeps_verdict_and_replay(self, pg_url):
         from project_workflow.infrastructure.llm import OpenAICompatibleClient
         from project_workflow.supervisor import SupervisorEngine
-        from scripts.init_db import main
 
-        assert main() == 0
+        _initialize_legacy_database(pg_url)
         provider_started = Event()
         release_provider = Event()
 
@@ -1921,9 +1916,8 @@ class TestPostgresUoW:
     def test_assigned_agent_update_waits_for_supervisor_commit(self, pg_url):
         from project_workflow.infrastructure.llm import OpenAICompatibleClient
         from project_workflow.supervisor import SupervisorEngine
-        from scripts.init_db import main
 
-        assert main() == 0
+        _initialize_legacy_database(pg_url)
         setup = SAUnitOfWork(pg_url)
         workflow = setup.workflows.get_default()
         assert workflow is not None and workflow.id is not None
@@ -2088,6 +2082,22 @@ def _partial_response(user_prompt: str) -> dict:
         }
     )
     return response
+
+
+def _initialize_legacy_database(pg_url: str) -> None:
+    """Create the explicit unmanaged compatibility catalog for legacy CLI tests."""
+    from project_workflow.infrastructure.db import schema
+    from project_workflow.infrastructure.db.uow_bootstrap import bootstrap_default_project
+
+    engine = get_engine(pg_url)
+    ensure_migrated(engine)
+    with SAUnitOfWork(engine) as uow:
+        schema.ensure_phase_catalog(
+            uow,
+            seed_path=config_module.LEGACY_UNMANAGED_SEED_PATH,
+        )
+        bootstrap_default_project(uow)
+        uow.commit()
 
 
 def _prepare_concurrent_task(pg_url: str, task_key: str) -> None:

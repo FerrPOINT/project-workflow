@@ -17,12 +17,15 @@ from project_workflow.domain.runtime_assignment import (
     MANAGED_WORKFLOW_KEYS,
     normalize_role_key,
 )
+from project_workflow.infrastructure.db import models as db_models
+from project_workflow.infrastructure.db import schema
 from project_workflow.infrastructure.db.managed_catalog import (
     ensure_managed_catalog,
     load_managed_catalog,
 )
 from project_workflow.infrastructure.db.session import ensure_schema
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from project_workflow.infrastructure.db.uow_bootstrap import bootstrap_default_project
 
 pytestmark = [pytest.mark.unit]
 
@@ -41,6 +44,27 @@ def _write_catalog(tmp_path: Path, raw: dict) -> Path:
     path = tmp_path / "managed-catalog.json"
     path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
     return path
+
+
+def _bootstrap_versioned_legacy_catalog(
+    uow: SAUnitOfWork, *, migrated_key: bool = True
+) -> tuple[int, int, int, int]:
+    schema.ensure_phase_catalog(uow, seed_path=config.LEGACY_UNMANAGED_SEED_PATH)
+    bootstrap_default_project(uow)
+    workflow = uow.workflows.get_default()
+    namespace = uow.projects.get_by_code(config.DEFAULT_PROJECT_CODE)
+    assert workflow is not None and workflow.id is not None
+    assert namespace is not None and namespace.id is not None
+    mode = uow.workflows.get_mode_by_key(workflow.id, "default")
+    assert mode is not None and mode.id is not None
+    phase = uow.phases.get_by_code(workflow.id, "1.INTAKE", mode_id=mode.id)
+    assert phase is not None and phase.id is not None
+    workflow_row = uow.session.get(db_models.Workflow, workflow.id)
+    assert workflow_row is not None
+    if migrated_key:
+        workflow_row.key = f"legacy:{workflow.id}"
+    uow.session.flush()
+    return workflow.id, mode.id, phase.id, namespace.id
 
 
 def test_source_catalog_has_exact_canonical_inventory_and_phase_contracts():
@@ -73,11 +97,19 @@ def test_source_catalog_has_exact_canonical_inventory_and_phase_contracts():
             assert all(marker in first for marker in ("task", "comment", "attachment"))
             terminal = mode.phases[-1].instructions[-1].description.casefold()
             assert "business markdown comment" in terminal
+            assert all(
+                marker in terminal
+                for marker in ("workflow_phase", "complete=true", "outcome", "evidence")
+            )
             assert "one concrete question" in terminal
             if workflow.role_key == "project_manager":
                 assert "publishdraft" in terminal
+                assert terminal.index("complete=true") < terminal.index("publishdraft")
             else:
                 assert "completeassignedstage" in terminal
+                assert terminal.index("complete=true") < terminal.index(
+                    "completeassignedstage"
+                )
             for phase in mode.phases:
                 assert phase.instructions and phase.checks and phase.evidence
                 for instruction in phase.instructions:
@@ -154,6 +186,92 @@ def test_managed_bootstrap_persists_exact_catalog_and_is_idempotent(empty_uow):
         len(empty_uow.phase_instructions.list(phase.id))
         for phase in phases_after
     ) == instruction_count
+
+
+@pytest.mark.parametrize("migrated_key", [True, False])
+def test_managed_bootstrap_preserves_exact_legacy_catalog_task_and_history(
+    empty_uow, migrated_key
+):
+    workflow_id, mode_id, phase_id, namespace_id = _bootstrap_versioned_legacy_catalog(
+        empty_uow, migrated_key=migrated_key
+    )
+    task_id = empty_uow.tasks.create(
+        {
+            "project_id": namespace_id,
+            "workflow_id": workflow_id,
+            "mode_id": mode_id,
+            "task_key": "RUN-LEGACY-1",
+            "title": "Legacy task",
+            "current_phase_id": phase_id,
+            "status": "active",
+        }
+    )
+    history_id = empty_uow.record_step(
+        task_id=task_id,
+        phase_id=phase_id,
+        verdict="pass",
+        worker_report="preserve this report",
+        covered_item_ids=[],
+        missing_item_ids=[],
+        blocker_messages=[],
+        evaluation_snapshot={"legacy": True},
+        supervisor_response={"verdict": "PASS"},
+    )
+    empty_uow.tasks.record_phase_event(
+        task_id, phase_id, "completed", step_history_id=history_id
+    )
+    empty_uow.commit()
+    before_task = empty_uow.tasks.get_by_id(task_id).to_dict()
+    before_history = empty_uow.step_history.list(task_id=task_id, limit=None)[0].to_dict()
+    before_events = [item.to_dict() for item in empty_uow.tasks.list_phase_events(task_id)]
+    legacy_reviewer = empty_uow.agents.get_by_name("reviewer")
+    assert legacy_reviewer is not None and legacy_reviewer.id is not None
+
+    ensure_managed_catalog(empty_uow)
+    empty_uow.commit()
+    ensure_managed_catalog(empty_uow)
+    empty_uow.commit()
+
+    assert empty_uow.tasks.get_by_id(task_id).to_dict() == before_task
+    assert empty_uow.step_history.list(task_id=task_id, limit=None)[0].to_dict() == before_history
+    assert [item.to_dict() for item in empty_uow.tasks.list_phase_events(task_id)] == before_events
+    assert empty_uow.workflows.get_default().id == workflow_id
+    assert empty_uow.agents.get_by_id(legacy_reviewer.id).name == "legacy-reviewer"
+    managed_reviewer = empty_uow.agents.get_by_name("reviewer")
+    assert managed_reviewer is not None and managed_reviewer.id != legacy_reviewer.id
+    assert managed_reviewer.hermes_profile == "hermes-sdlc-reviewer"
+    assert len(
+        [
+            workflow
+            for workflow in empty_uow.workflows.list()
+            if workflow.key in MANAGED_WORKFLOW_KEYS
+        ]
+    ) == 7
+
+
+def test_legacy_reconcile_rejects_foreign_trash_before_renaming_or_bootstrap(empty_uow):
+    _bootstrap_versioned_legacy_catalog(empty_uow)
+    trash_id = empty_uow.agents.create(
+        {
+            "name": "test-trash-agent",
+            "description": "Must not survive managed reconciliation",
+            "hermes_profile": "test-trash-profile",
+        }
+    )
+    empty_uow.commit()
+    legacy_reviewer = empty_uow.agents.get_by_name("reviewer")
+    assert legacy_reviewer is not None and legacy_reviewer.id is not None
+
+    with pytest.raises(ValueError, match="test-trash-agent"):
+        ensure_managed_catalog(empty_uow)
+
+    assert empty_uow.agents.get_by_id(legacy_reviewer.id).name == "reviewer"
+    assert empty_uow.agents.get_by_id(trash_id).name == "test-trash-agent"
+    assert not [
+        workflow
+        for workflow in empty_uow.workflows.list()
+        if workflow.key in MANAGED_WORKFLOW_KEYS
+    ]
 
 
 def test_managed_bootstrap_rejects_zero_reference_foreign_default_workflow_without_mutation(
@@ -407,6 +525,19 @@ def test_catalog_rejects_disallowed_terminal_action(tmp_path: Path):
     first_instruction["description"] += " Never call completeAssignedStage here."
 
     with pytest.raises(ValueError, match="cannot mention terminal action completeassignedstage"):
+        load_managed_catalog(_write_catalog(tmp_path, raw))
+
+
+def test_catalog_rejects_terminal_action_before_workflow_phase_completion(tmp_path: Path):
+    raw = json.loads(config.MANAGED_CATALOG_PATH.read_text(encoding="utf-8"))
+    terminal = raw["workflows"][0]["modes"][0]["phases"][-1]["instructions"][-1]
+    terminal["description"] = (
+        "Prepare one precise final Business Markdown comment with outcome and evidence, "
+        "then call only publishDraft before workflow_phase returns complete=true. "
+        "If input is insufficient, ask one concrete question and do not complete."
+    )
+
+    with pytest.raises(ValueError, match="only after workflow_phase complete=true"):
         load_managed_catalog(_write_catalog(tmp_path, raw))
 
 

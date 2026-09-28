@@ -43,6 +43,8 @@
 Fleet Control читает каталог через `GET /internal/runtime/catalog` с отдельным
 `PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN` (не менее 32 символов). Этот токен
 не разрешает `step` и `history` и не меняет `PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON`.
+Доступ определяется типом credential, а не текстом role key: runtime credential
+с role key `fleet-control` остаётся runtime credential и не получает каталог.
 Маршрут должен оставаться во внутренней сети или на host loopback.
 
 Business adapter проверяет runtime-контракт через аутентифицированный
@@ -60,7 +62,15 @@ Manager записывается как `project_manager`; произвольн�
 нормализуются. У managed workflow нет `default` mode: отсутствие или
 несовпадение assigned mode закрывает запуск до Supervisor/model call. Старый
 single-workflow каталог сохранён как явно unmanaged compatibility artifact и
-не используется `scripts/init_db.py` как fallback.
+не используется `scripts/init_db.py` как fallback. При обновлении существующей
+versioned БД `init_db` распознаёт только точное прежнее содержимое этого
+каталога, сохраняет его workflow/mode/phase/task/history identifiers и добавляет
+managed registry в той же транзакции. Старый конфликтующий agent `reviewer`
+получает детерминированный alias `legacy-reviewer`, не меняя phase references.
+Любой drift, неоднозначный alias или посторонний test/foreign object блокирует
+bootstrap до записи. Fleet catalog endpoint при этом возвращает только семь
+managed workflow/namespaces; legacy Task остаются доступны прежнему unmanaged
+CLI/UI compatibility flow.
 
 Поставляемый image собирается из одного immutable Git snapshot командой:
 

@@ -142,6 +142,9 @@ evaluation items, transition routes и накопленное покрытие. 
 - lifecycle освобождает SQLAlchemy connection pool при graceful shutdown;
 - append-only `task_phase_events` и `task_step_history` образуют audit log
   переходов и evaluator verdicts;
+- startup распознаёт только точный versioned legacy unmanaged catalog,
+  сохраняет его identifiers и audit references и атомарно добавляет managed
+  registry; неоднозначный или изменённый legacy catalog остаётся fail-closed;
 - HTTP API не публикует OpenAPI/Swagger как внешний контракт: это private UI/CLI
   surface, а не third-party integration API;
 - CORS не включается: browser UI и API работают с одного origin. Для cookie SSO

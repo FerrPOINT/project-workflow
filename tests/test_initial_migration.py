@@ -12,6 +12,10 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.pool import NullPool, StaticPool
 
+from project_workflow import config
+from project_workflow.domain.runtime_assignment import MANAGED_WORKFLOW_KEYS
+from project_workflow.infrastructure.db import models as db_models
+from project_workflow.infrastructure.db import schema
 from project_workflow.infrastructure.db.models import Base
 from project_workflow.infrastructure.db.session import (
     DatabaseRecreateRequired,
@@ -22,6 +26,8 @@ from project_workflow.infrastructure.db.session import (
     run_alembic_command,
     schema_is_ready,
 )
+from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from project_workflow.infrastructure.db.uow_bootstrap import bootstrap_default_project
 
 LEGACY_REVISIONS = [
     "0002_sdlc_v2",
@@ -481,6 +487,90 @@ def test_sqlite_unversioned_nonempty_database_is_refused(tmp_path):
     assert inspect(engine).has_table("keep_me")
     with engine.connect() as conn:
         assert conn.execute(text("SELECT value FROM keep_me WHERE id = 1")).scalar_one() == "сохранить"
+
+
+def test_init_db_restarts_populated_versioned_legacy_catalog_without_rewriting_history(
+    tmp_path, monkeypatch
+):
+    from project_workflow.config import get_settings
+    from project_workflow.infrastructure.db.session import reset_engine
+    from scripts.init_db import main
+
+    database_url = f"sqlite:///{tmp_path / 'legacy-restart.db'}"
+    engine = create_engine(database_url, poolclass=NullPool)
+    _SQLITE_ENGINES.append(engine)
+    ensure_migrated(engine)
+    with SAUnitOfWork(engine) as uow:
+        schema.ensure_phase_catalog(
+            uow, seed_path=config.LEGACY_UNMANAGED_SEED_PATH
+        )
+        bootstrap_default_project(uow)
+        workflow = uow.workflows.get_default()
+        namespace = uow.projects.get_by_code(config.DEFAULT_PROJECT_CODE)
+        assert workflow is not None and workflow.id is not None
+        assert namespace is not None and namespace.id is not None
+        mode = uow.workflows.get_mode_by_key(workflow.id, "default")
+        assert mode is not None and mode.id is not None
+        phase = uow.phases.get_by_code(workflow.id, "1.INTAKE", mode_id=mode.id)
+        assert phase is not None and phase.id is not None
+        workflow_row = uow.session.get(db_models.Workflow, workflow.id)
+        assert workflow_row is not None
+        workflow_row.key = f"legacy:{workflow.id}"
+        task_id = uow.tasks.create(
+            {
+                "project_id": namespace.id,
+                "workflow_id": workflow.id,
+                "mode_id": mode.id,
+                "task_key": "RUN-RESTART-1",
+                "title": "Restart compatibility",
+                "current_phase_id": phase.id,
+                "status": "active",
+            }
+        )
+        history_id = uow.record_step(
+            task_id=task_id,
+            phase_id=phase.id,
+            verdict="pass",
+            worker_report="immutable legacy report",
+            covered_item_ids=[],
+            missing_item_ids=[],
+            blocker_messages=[],
+            evaluation_snapshot={"legacy": True},
+            supervisor_response={"verdict": "PASS"},
+        )
+        uow.tasks.record_phase_event(
+            task_id, phase.id, "completed", step_history_id=history_id
+        )
+        uow.commit()
+        legacy_workflow_id = workflow.id
+        original_task = uow.tasks.get_by_id(task_id).to_dict()
+        original_history = uow.step_history.list(task_id=task_id, limit=None)[0].to_dict()
+        original_events = [item.to_dict() for item in uow.tasks.list_phase_events(task_id)]
+
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    get_settings.cache_clear()
+    reset_engine()
+    try:
+        assert main() == 0
+        assert main() == 0
+        with SAUnitOfWork(database_url) as restarted:
+            assert restarted.tasks.get_by_id(task_id).to_dict() == original_task
+            assert (
+                restarted.step_history.list(task_id=task_id, limit=None)[0].to_dict()
+                == original_history
+            )
+            assert [
+                item.to_dict() for item in restarted.tasks.list_phase_events(task_id)
+            ] == original_events
+            assert restarted.workflows.get_default().id == legacy_workflow_id
+            assert {
+                workflow.key
+                for workflow in restarted.workflows.list()
+                if workflow.key in MANAGED_WORKFLOW_KEYS
+            } == MANAGED_WORKFLOW_KEYS
+    finally:
+        get_settings.cache_clear()
+        reset_engine()
 
 
 @pytest.mark.parametrize("shape", ["legacy", "v2", "unversioned", "damaged-head"])
