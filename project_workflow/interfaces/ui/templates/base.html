@@ -113,7 +113,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .service-menu summary:hover,.service-menu[open] summary{background:var(--surface-hover);color:var(--text);border-color:var(--accent)}
 .service-menu-chevron{font-size:11px;color:var(--text-muted);transition:transform .15s}
 .service-menu[open] .service-menu-chevron{transform:rotate(180deg)}
-.service-menu-popover{position:absolute;right:0;top:calc(100% + 8px);z-index:250;width:260px;max-width:calc(100vw - 24px);padding:6px;background:var(--surface);border:1px solid var(--border-strong);border-radius:8px;box-shadow:0 16px 40px rgba(0,0,0,.45)}
+.service-menu-popover{position:absolute;left:0;right:auto;top:calc(100% + 8px);z-index:250;width:260px;max-width:calc(100vw - 24px);max-height:calc(100dvh - var(--header-height) - 16px);overflow-y:auto;overscroll-behavior:contain;padding:6px;background:var(--surface);border:1px solid var(--border-strong);border-radius:8px;box-shadow:0 16px 40px rgba(0,0,0,.45)}
 .service-menu-item{min-height:40px;padding:8px 10px;border-radius:6px;display:flex;align-items:center;gap:10px;color:var(--text-secondary);text-decoration:none}
 .service-menu-item:hover,.service-menu-item:focus-visible{background:var(--surface-hover);color:var(--text);text-decoration:none}
 .service-menu-item[aria-current="page"]{background:var(--accent-soft);color:var(--text);font-weight:600}
@@ -301,7 +301,6 @@ textarea{resize:vertical;min-height:60px}
   .namespace-switcher{min-width:200px}
   .namespace-select{max-width:38vw}
   .namespace-switcher .namespace-select{flex:1 1 128px}
-  .service-menu-popover{left:0;right:auto}
 }
 @media(max-width:350px){.header-actions{width:100%;flex:none}}
 

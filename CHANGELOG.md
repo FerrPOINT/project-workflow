@@ -13,6 +13,10 @@
 - Standalone-режим: репозиторий собирается и запускается без соседнего `services-base` (убраны extra `cli-platform`, uv source, Docker additional_context и CI checkout). Token-режим CLI без `sdlc-cli-core` выдаёт понятную ошибку; запуск без `AUTH_ISSUER` работает без авторизации.
 
 ### Fixed
+- Меню сервисов не перекрывается sidebar и помещается на низком экране;
+  локальные переходы сохраняют канонический `localhost` для общей SSO-сессии.
+- Standalone Compose получает runtime-каталог через `host.docker.internal`,
+  а пример `.env` больше не подменяет этот адрес контейнерным `localhost`.
 - Workflow shell синхронизирован с документированным контрактом: header 60 px,
   desktop sidebar 264 px, tablet rail 72 px и mobile drawer только ниже 768 px.
 - Workflow shell доступен с touch и клавиатуры (#49); улучшены phase controls и accessibility (#48).
