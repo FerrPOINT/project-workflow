@@ -3,6 +3,8 @@ import io
 import json
 from pathlib import Path
 
+import pytest
+
 from project_workflow.interfaces.ui.platform_services import (
     _normalize,
     load_other_services,
@@ -46,6 +48,19 @@ def test_fallback_preserves_localhost_without_request_url():
     assert all("localhost" in str(service["url"]) for service in services)
 
 
+@pytest.mark.parametrize("request_url", [
+    "http://localhost:8812/",
+    "http://127.0.0.1:8812/",
+    "http://[::1]:8812/",
+])
+def test_local_browsing_preserves_canonical_service_origins(request_url):
+    services = load_other_services(None, request_url=request_url)
+
+    assert {service["url"] for service in services} == {
+        service["url"] for service in load_other_services(None)
+    }
+
+
 def test_service_switcher_is_accessible_and_localizes_health():
     template = (Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/base.html").read_text(
         encoding="utf-8"
@@ -56,7 +71,7 @@ def test_service_switcher_is_accessible_and_localizes_health():
     assert "Project Workflow" in template
     assert "Состояние неизвестно" in template
     assert "event.key==='Escape'" in template
-    assert ".service-menu-popover{left:0;right:auto}" in template
+    assert ".service-menu-popover{position:absolute;left:0;right:auto;" in template
 
 
 def test_shell_controls_have_mobile_touch_targets_and_sidebar_focus_management():
@@ -106,9 +121,12 @@ def test_runtime_catalog_order_and_source(monkeypatch):
     ]}
     monkeypatch.setattr(ps, "_cached_services", [], raising=False)
     monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: Response(json.dumps(payload).encode()))
-    catalog = load_service_catalog("http://admin/api")
+    catalog = load_service_catalog("http://admin/api", request_url="http://127.0.0.1:8812/tasks")
     assert catalog.source == "runtime"
     assert [service["key"] for service in catalog.services] == ["admin-panel", "wiki"]
+    assert [service["url"] for service in catalog.services] == [
+        "http://localhost:7772", "http://localhost:7732",
+    ]
 
 
 def test_malformed_runtime_catalog_uses_invalid_fallback(monkeypatch):

@@ -91,7 +91,9 @@ def test_compose_forwards_configurable_evaluator_and_runtime_configuration_to_ap
     assert "OPENAI_MAX_TOKENS: ${OPENAI_MAX_TOKENS:-4000}" in compose
     assert "OPENAI_API_KEY: ${OPENAI_API_KEY:-}" in compose
     assert "OPENAI_REASONING_EFFORT: ${OPENAI_REASONING_EFFORT:-none}" in compose
-    assert "PLATFORM_SERVICES_URL: ${PLATFORM_SERVICES_URL:-http://localhost:7771/api/v1/runtime/services}" in compose
+    assert (
+        "PLATFORM_SERVICES_URL: ${PLATFORM_SERVICES_URL:-http://host.docker.internal:7771/api/v1/runtime/services}"
+    ) in compose
     assert "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON: ${PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON:-}" in compose
 
 
