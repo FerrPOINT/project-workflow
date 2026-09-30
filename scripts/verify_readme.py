@@ -18,7 +18,9 @@ REQUIRED_ANCHORS = {
     "license",
 }
 REQUIRED_PROOF = {
-    "docs/screenshots/namespaces.png",
+    "docs/screenshots/dashboard.png",
+    "docs/screenshots/settings.png",
+    "docs/screenshots/task-detail-dev.png",
 }
 MD_IMAGE_RE = re.compile(r"!\[[^]]*\]\(([^)]+)\)")
 HTML_IMAGE_RE = re.compile(r"<img\b[^>]*\bsrc=[\"']([^\"']+)[\"']", re.IGNORECASE)
@@ -48,6 +50,8 @@ def validate(root: Path) -> list[str]:
 
     for image in images:
         image = unquote(image)
+        if re.search(r"(?:^|/)(?:\d+x\d+|mobile)(?:/|[-_.])", image, re.IGNORECASE) and "1920x1080" not in image:
+            findings.append("RMD007: README.md: mobile screenshot included in README gallery")
         if image.startswith(("http://", "https://", "data:", "#")):
             continue
         if not (root / image).is_file():
