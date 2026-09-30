@@ -113,3 +113,4 @@ def test_task_detail_renders_group_markers_and_chronological_supervisor_dialog()
     assert "Воркфлоу завершён" in html
     assert "Время в работе" not in html
     assert "СЛЕДУЮЩИЙ ШАГ" not in html
+    assert 'data-page-layout="detail-with-aside"' in html

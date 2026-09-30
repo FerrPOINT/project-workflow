@@ -500,9 +500,12 @@ class TestPhasesPage:
     def test_shared_shell_uses_desktop_rail_and_mobile_drawer_contract(self):
         response = client.get("/workflows")
         assert response.status_code == 200
-        assert "--sidebar-width:264px;--header-height:60px" in response.text
+        assert (
+            "--sidebar-width:var(--shell-sidebar-expanded);"
+            "--header-height:var(--shell-header-height)"
+        ) in response.text
         assert "@media(max-width:1279px) and (min-width:768px)" in response.text
-        assert ":root{--sidebar-width:72px}" in response.text
+        assert ":root{--sidebar-width:var(--shell-sidebar-compact)}" in response.text
         assert "@media(max-width:767px)" in response.text
         assert "window.matchMedia('(max-width: 767px)')" in response.text
         assert 'class="sidebar-logout" href="/logout"' in response.text
@@ -513,6 +516,8 @@ class TestPhasesPage:
         assert "color:var(--accent-foreground);border-color:var(--accent)" in response.text
         assert "color:var(--accent-hover-foreground)" in response.text
         assert "--accent-foreground:" in response.text
+        assert "--shell-page-gutter:clamp(16px,2vw,32px)" in response.text
+        assert 'data-page-layout="wide"' in response.text
 
     def test_mobile_shell_keeps_theme_and_services_in_drawer(self):
         response = client.get("/agents")
