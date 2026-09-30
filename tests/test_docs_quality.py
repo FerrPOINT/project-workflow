@@ -138,10 +138,16 @@ def test_readme_screenshots_are_real_full_size_pngs() -> None:
         assert height >= 844, f"{name} height {height} is below 844"
 
 
-def test_readme_presents_reviewed_namespace_evidence() -> None:
+def test_readme_presents_one_desktop_example_per_layout_mode() -> None:
     section = _readme_screenshots_section()
 
-    assert 'src="docs/screenshots/namespaces.png"' in section
+    assert '](docs/screenshots/dashboard.png)' in section
+    assert '](docs/screenshots/settings.png)' in section
+    assert '](docs/screenshots/task-detail-dev.png)' in section
+    assert "docs/screenshots/375x812/" not in section
+    assert "(`wide`)" in section
+    assert "(`reading/form`)" in section
+    assert "(`detail-with-aside`)" in section
     assert "neutral isolated fixture" in section
     assert "RUN-42" not in section
 
