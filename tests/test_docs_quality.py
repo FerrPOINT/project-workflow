@@ -99,7 +99,9 @@ def test_compose_and_env_example_forward_runtime_settings() -> None:
     env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
 
     assert "OPENAI_MODEL: ${OPENAI_MODEL:-app-test}" in compose
-    assert "PLATFORM_SERVICES_URL: ${PLATFORM_SERVICES_URL:-http://localhost:7771/api/v1/runtime/services}" in compose
+    assert (
+        "PLATFORM_SERVICES_URL: ${PLATFORM_SERVICES_URL:-http://host.docker.internal:7771/api/v1/runtime/services}"
+    ) in compose
     assert "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON: ${PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON:-}" in compose
     assert "AUTH_ISSUER: ${AUTH_ISSUER:-}" in compose
     assert "AUTH_INTERNAL_BASE_URL: ${AUTH_INTERNAL_BASE_URL:-}" in compose
@@ -107,6 +109,7 @@ def test_compose_and_env_example_forward_runtime_settings() -> None:
     assert "AUTH_SESSION_SECRET: ${AUTH_SESSION_SECRET:-}" in compose
     assert "AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}" in compose
     assert "PLATFORM_SERVICES_URL=http://localhost:7771/api/v1/runtime/services" in env_example
+    assert "\nPLATFORM_SERVICES_URL=" not in env_example
     assert "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON=" in env_example
     assert "AUTH_ISSUER=" in env_example
     assert "AUTH_INTERNAL_BASE_URL=" in env_example
@@ -138,10 +141,16 @@ def test_readme_screenshots_are_real_full_size_pngs() -> None:
         assert height >= 844, f"{name} height {height} is below 844"
 
 
-def test_readme_presents_reviewed_namespace_evidence() -> None:
+def test_readme_presents_one_desktop_example_per_layout_mode() -> None:
     section = _readme_screenshots_section()
 
-    assert 'src="docs/screenshots/namespaces.png"' in section
+    assert '](docs/screenshots/dashboard.png)' in section
+    assert '](docs/screenshots/settings.png)' in section
+    assert '](docs/screenshots/task-detail-dev.png)' in section
+    assert "docs/screenshots/375x812/" not in section
+    assert "(`wide`)" in section
+    assert "(`reading/form`)" in section
+    assert "(`detail-with-aside`)" in section
     assert "neutral isolated fixture" in section
     assert "RUN-42" not in section
 
@@ -230,7 +239,10 @@ def test_screenshot_capture_script_replaces_pngs_only_after_success() -> None:
     source = (ROOT / "scripts" / "capture_ui_screenshots.mjs").read_text(encoding="utf-8")
 
     assert "fs.mkdtempSync(path.join(outputDir, \".capture-\"))" in source
-    assert "fs.copyFileSync(path.join(tempOutputDir, name), path.join(outputDir, name))" in source
+    assert "[...screenshotNames, ...responsiveScreenshotNames]" in source
+    assert "const destination = path.join(outputDir, name)" in source
+    assert "fs.mkdirSync(path.dirname(destination), { recursive: true })" in source
+    assert "fs.copyFileSync(path.join(tempOutputDir, name), destination)" in source
     assert "function removeTempOutputDir(tempOutputDir)" in source
     assert "path.relative(outputDir, tempOutputDir)" in source
     assert 'path.basename(tempOutputDir).startsWith(".capture-")' in source

@@ -318,79 +318,28 @@ curl --fail http://127.0.0.1:8812/health
 
 ## 🖼️ Визуальные доказательства
 
-Браузерные свидетельства сняты full-page с нейтральной изолированной фикстурой (neutral isolated fixture): generic namespace-имена и UI-testing copy, без credentials, реальных task keys, URL и filesystem-путей. Покрытие — active, blocked и done состояния задач.
+Браузерные свидетельства сняты full-page с нейтральной изолированной фикстурой
+(neutral isolated fixture): generic namespace-имена и UI-testing copy, без
+credentials, реальных task keys, URL и filesystem-путей. README показывает
+репрезентативные desktop-примеры используемых режимов на default theme.
+Responsive QA, включая `375px`, ведётся отдельно; детали захватов находятся в
+тестах и screenshot manifest. Покрытие включает active, blocked и done
+состояния задач.
 
-<figure>
-  <figcaption><strong>Дашборд / Разработка</strong></figcaption>
-  <img src="docs/screenshots/dashboard.png" alt="Дашборд / Разработка full-page evidence" width="100%" />
-</figure>
+### Дашборд / Разработка (`wide`)
 
-<figure>
-  <figcaption><strong>Дашборд / Проверка качества</strong></figcaption>
-  <img src="docs/screenshots/dashboard-qa.png" alt="Дашборд / Проверка качества full-page evidence" width="100%" />
-</figure>
+![Дашборд / Разработка](docs/screenshots/dashboard.png)
 
-<figure>
-  <figcaption><strong>Неймспейсы</strong></figcaption>
-  <img src="docs/screenshots/namespaces.png" alt="Неймспейсы full-page evidence" width="100%" />
-</figure>
+### CLI-настройки (`reading/form`)
 
-<figure>
-  <figcaption><strong>Создание неймспейса</strong></figcaption>
-  <img src="docs/screenshots/namespace-new.png" alt="Создание неймспейса full-page evidence" width="100%" />
-</figure>
+![CLI-настройки](docs/screenshots/settings.png)
 
-<figure>
-  <figcaption><strong>Задачи / Разработка</strong></figcaption>
-  <img src="docs/screenshots/tasks.png" alt="Задачи / Разработка full-page evidence" width="100%" />
-</figure>
+### Одна задача / Разработка (`detail-with-aside`)
 
-<figure>
-  <figcaption><strong>Задачи / Проверка качества</strong></figcaption>
-  <img src="docs/screenshots/tasks-qa.png" alt="Задачи / Проверка качества full-page evidence" width="100%" />
-</figure>
+![Одна задача / Разработка](docs/screenshots/task-detail-dev.png)
 
-<figure>
-  <figcaption><strong>Воркфлоу</strong></figcaption>
-  <img src="docs/screenshots/workflows.png" alt="Воркфлоу full-page evidence" width="100%" />
-</figure>
-
-<figure>
-  <figcaption><strong>Фазы / Разработка</strong></figcaption>
-  <img src="docs/screenshots/phases.png" alt="Фазы / Разработка full-page evidence" width="100%" />
-</figure>
-
-<figure>
-  <figcaption><strong>Фазы / Проверка качества</strong></figcaption>
-  <img src="docs/screenshots/phases-qa.png" alt="Фазы / Проверка качества full-page evidence" width="100%" />
-</figure>
-
-<figure>
-  <figcaption><strong>Инструкции</strong></figcaption>
-  <img src="docs/screenshots/instructions.png" alt="Инструкции full-page evidence" width="100%" />
-</figure>
-
-<figure>
-  <figcaption><strong>Агенты</strong></figcaption>
-  <img src="docs/screenshots/agents.png" alt="Агенты full-page evidence" width="100%" />
-</figure>
-
-<figure>
-  <figcaption><strong>CLI-настройки</strong></figcaption>
-  <img src="docs/screenshots/settings.png" alt="CLI-настройки full-page evidence" width="100%" />
-</figure>
-
-<figure>
-  <figcaption><strong>Одна задача / Разработка</strong></figcaption>
-  <img src="docs/screenshots/task-detail-dev.png" alt="Одна задача / Разработка full-page evidence" width="100%" />
-</figure>
-
-<figure>
-  <figcaption><strong>Одна задача / Проверка качества</strong></figcaption>
-  <img src="docs/screenshots/task-detail-qa.png" alt="Одна задача / Проверка качества full-page evidence" width="100%" />
-</figure>
-
-На мобильных ширинах карточки стекаются, редактор остаётся одноколоночной формой.
+Полная карта representative captures и responsive QA:
+[screenshot manifest](docs/screenshots/manifest.md).
 
 <a name="architecture"></a>
 

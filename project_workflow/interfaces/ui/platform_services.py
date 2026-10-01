@@ -52,11 +52,11 @@ def _normalize(entry: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _with_request_host(services: list[dict[str, Any]], request_url: str | None) -> list[dict[str, Any]]:
-    """Make localhost fallback targets usable from a remote UI session."""
+    """Rewrite loopback targets for remote browsers, preserving local SSO origins."""
     if not request_url:
         return services
     request_host = urlsplit(request_url).hostname
-    if not request_host:
+    if not request_host or request_host in {"localhost", "127.0.0.1", "::1"}:
         return services
 
     adjusted: list[dict[str, Any]] = []

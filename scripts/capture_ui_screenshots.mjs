@@ -11,6 +11,7 @@ const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const baseUrl = process.env.SMOKE_BASE_URL || "http://127.0.0.1:8812";
 const outputDir = path.resolve(rootDir, process.env.SMOKE_SCREENSHOT_DIR || "docs/screenshots");
 const desktopViewport = { width: 1920, height: 1080 };
+const mobileViewport = { width: 375, height: 812 };
 const forbiddenVisibleText = [
   /Hermes/i,
   /Гермес/i,
@@ -49,6 +50,11 @@ const screenshotNames = [
   "agents.png",
   "settings.png",
 ];
+const responsiveScreenshotNames = [
+  "375x812/wide.png",
+  "375x812/reading.png",
+  "375x812/detail-with-aside.png",
+];
 const taskKeys = [
   "RUN-42",
   "RUN-77",
@@ -71,6 +77,7 @@ const taskKeys = [
 ];
 const doneTaskKeys = new Set(["RUN-88", "RUN-160", "RUN-270"]);
 const openTaskKeys = taskKeys.filter((key) => !doneTaskKeys.has(key));
+const dashboardTaskKeys = openTaskKeys.slice(-8);
 const expectedNamespaceCommands = ["workflow-dev", "workflow-qa"];
 
 function loadPlaywright() {
@@ -359,14 +366,16 @@ async function main() {
   const tempOutputDir = fs.mkdtempSync(path.join(outputDir, ".capture-"));
   try {
     await captureAll(tempOutputDir);
-    for (const name of screenshotNames) {
+    for (const name of [...screenshotNames, ...responsiveScreenshotNames]) {
       const source = path.join(tempOutputDir, name);
       if (!fs.existsSync(source)) {
         throw new Error(`${name} was not captured`);
       }
     }
-    for (const name of screenshotNames) {
-      fs.copyFileSync(path.join(tempOutputDir, name), path.join(outputDir, name));
+    for (const name of [...screenshotNames, ...responsiveScreenshotNames]) {
+      const destination = path.join(outputDir, name);
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      fs.copyFileSync(path.join(tempOutputDir, name), destination);
     }
   } finally {
     removeTempOutputDir(tempOutputDir);
@@ -386,18 +395,18 @@ async function captureAll(outputRoot) {
     await capture(page, outputRoot, {
       name: "dashboard.png",
       url: `/?namespace_id=${dev.id}`,
-      expected: ["Разработка", "Проверка качества", ...openTaskKeys],
+      expected: ["Разработка", "Проверка качества", ...dashboardTaskKeys],
       assertions: [
-        (targetPage, name) => assertDashboardTasks(targetPage, name, openTaskKeys),
+        (targetPage, name) => assertDashboardTasks(targetPage, name, dashboardTaskKeys),
         assertDashboardNamespaceCards,
       ],
     });
     await capture(page, outputRoot, {
       name: "dashboard-qa.png",
       url: `/?namespace_id=${qa.id}`,
-      expected: ["Проверка качества", "Разработка", ...openTaskKeys],
+      expected: ["Проверка качества", "Разработка", ...dashboardTaskKeys],
       assertions: [
-        (targetPage, name) => assertDashboardTasks(targetPage, name, openTaskKeys),
+        (targetPage, name) => assertDashboardTasks(targetPage, name, dashboardTaskKeys),
         assertDashboardNamespaceCards,
       ],
     });
@@ -410,7 +419,7 @@ async function captureAll(outputRoot) {
     await capture(page, outputRoot, {
       name: "namespace-new.png",
       url: `/namespaces/new?namespace_id=${dev.id}`,
-      expected: ["СОЗДАНИЕ", "Разработка", "Проверка качества", "CLI-КОМАНДА"],
+      expected: ["Новый неймспейс", "Разработка", "Проверка качества", "CLI-КОМАНДА"],
       prepare: (targetPage) => fillNamespaceDraft(targetPage, qa.workflow_id),
       assertions: [(targetPage, name) => assertLocatorCount(targetPage, name, ".namespace-nav-item", 2, "namespace list")],
     });
@@ -494,12 +503,39 @@ async function captureAll(outputRoot) {
         "run-dev",
         "run-review",
       ],
-      assertions: [(targetPage, name) => assertLocatorCount(targetPage, name, "#agentsTable tr", 7, "agent table")],
+      assertions: [(targetPage, name) => assertLocatorCount(targetPage, name, "#agentsList .agent-entry", 6, "agent list")],
     });
     await capture(page, outputRoot, {
       name: "settings.png",
       url: `/settings?namespace_id=${dev.id}`,
       expected: ["CLI", "workflow-dev step", "workflow-dev history", "--report", "--n"],
+    });
+
+    await page.setViewportSize(mobileViewport);
+    const mobileOutputRoot = path.join(outputRoot, "375x812");
+    fs.mkdirSync(mobileOutputRoot, { recursive: true });
+    await capture(page, mobileOutputRoot, {
+      name: "wide.png",
+      url: `/?namespace_id=${dev.id}`,
+      expected: ["Разработка", "Проверка качества", ...dashboardTaskKeys],
+      assertions: [
+        (targetPage, name) => assertDashboardTasks(targetPage, name, dashboardTaskKeys),
+        assertDashboardNamespaceCards,
+      ],
+    });
+    await capture(page, mobileOutputRoot, {
+      name: "reading.png",
+      url: `/settings?namespace_id=${dev.id}`,
+      expected: ["CLI", "workflow-dev step", "workflow-dev history", "--report", "--n"],
+    });
+    await capture(page, mobileOutputRoot, {
+      name: "detail-with-aside.png",
+      url: `/task/RUN-42?namespace_id=${dev.id}`,
+      expected: ["RUN-42", "Реализовать проверяемое изменение", "workflow-dev", "История проверок"],
+      assertions: [
+        (targetPage, name) => assertTaskDetailHistory(targetPage, name, 4),
+        assertReadOnlyTaskUi,
+      ],
     });
   } finally {
     await context.close();
