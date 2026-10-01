@@ -9,7 +9,12 @@ from sqlalchemy.exc import IntegrityError
 from project_workflow.application.execution_mode import resolve_execution_selection
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import UnitOfWork
-from project_workflow.domain.runtime_assignment import RuntimeStepFence, normalize_role_key, payload_sha256
+from project_workflow.domain.runtime_assignment import (
+    MAX_WORK_ITEM_REVISION,
+    RuntimeStepFence,
+    normalize_role_key,
+    payload_sha256,
+)
 from project_workflow.domain.validation import TaskKeyValidator, get_project_for_task_key
 
 
@@ -211,8 +216,9 @@ class TaskService:
             not isinstance(work_item_revision, int)
             or isinstance(work_item_revision, bool)
             or work_item_revision < 0
+            or work_item_revision > MAX_WORK_ITEM_REVISION
         ):
-            raise ValueError("work_item_revision должен быть неотрицательным целым числом")
+            raise ValueError("work_item_revision должен быть неотрицательным 64-битным целым числом")
         if (
             not isinstance(workspace_revision, int)
             or isinstance(workspace_revision, bool)

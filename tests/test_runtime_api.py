@@ -645,7 +645,8 @@ def test_token_collision_closes_runtime_and_assignment_endpoints(monkeypatch):
     assert binding.status_code == 503
 
 
-def test_runtime_assignment_accepts_exact_business_snapshot_contract(monkeypatch):
+@pytest.mark.parametrize("work_item_revision", [1, 1790840000123])
+def test_runtime_assignment_accepts_exact_business_snapshot_contract(monkeypatch, work_item_revision):
     assignment_token = "snapshot-assignment-token-1234567"
     monkeypatch.setenv(
         "PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON",
@@ -655,6 +656,7 @@ def test_runtime_assignment_accepts_exact_business_snapshot_contract(monkeypatch
     _namespace("DEVELOPER", "workflow-developer", "DEV")
 
     empty = _assignment("DEV-30", "assign-dev-30", "developer")
+    empty["work_item_revision"] = work_item_revision
     empty["exact_input_refs"] = []
     snapshots = _assignment("DEV-31", "assign-dev-31", "developer")
     snapshots["exact_input_refs"] = [
@@ -668,6 +670,10 @@ def test_runtime_assignment_accepts_exact_business_snapshot_contract(monkeypatch
     ]
 
     with TestClient(create_app()) as client:
+        oversized = client.post(
+            "/internal/runtime/assign", headers=_headers(assignment_token),
+            json={**empty, "work_item_revision": 1 << 63},
+        )
         accepted_empty = client.post(
             "/internal/runtime/assign", headers=_headers(assignment_token), json=empty
         )
@@ -723,7 +729,9 @@ def test_runtime_assignment_accepts_exact_business_snapshot_contract(monkeypatch
                 )
             )
 
+    assert oversized.status_code == 422
     assert accepted_empty.status_code == 200
+    assert accepted_empty.json()["result"]["work_item_revision"] == work_item_revision
     assert accepted_empty.json()["result"]["exact_input_refs"] == []
     assert replay_empty.status_code == 200
     assert accepted_snapshots.status_code == 200

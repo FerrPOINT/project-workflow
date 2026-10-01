@@ -14,7 +14,7 @@ from project_workflow.domain.project_theme import (
     normalize_theme_color,
     normalize_theme_icon,
 )
-from project_workflow.domain.runtime_assignment import normalize_role_key
+from project_workflow.domain.runtime_assignment import MAX_WORK_ITEM_REVISION, normalize_role_key
 
 
 class StrictRequest(BaseModel):
@@ -112,7 +112,7 @@ class RuntimeAssignmentRequest(StrictRequest):
     business_task_ref: str = Field(min_length=1, max_length=512)
     root_task_ref: str = Field(min_length=1, max_length=512)
     work_item_ref: str = Field(min_length=1, max_length=512)
-    work_item_revision: int = Field(ge=0, strict=True)
+    work_item_revision: int = Field(ge=0, le=MAX_WORK_ITEM_REVISION, strict=True)
     queue_item_ref: str = Field(min_length=1, max_length=512)
     task_workspace_ref: str = Field(min_length=1, max_length=512)
     workspace_revision: int = Field(gt=0, strict=True)

@@ -10,6 +10,7 @@ from typing import Any
 
 ROLE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9-]{1,31}$")
 CANONICAL_UNDERSCORE_ROLE_KEYS = frozenset({"project_manager"})
+MAX_WORK_ITEM_REVISION = (1 << 63) - 1
 MANAGED_ROLE_MODE_SCOPES: dict[str, dict[str, str]] = {
     "project_manager": {"draft": "business"},
     "analyst": {"analysis": "business"},
