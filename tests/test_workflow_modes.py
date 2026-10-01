@@ -116,43 +116,50 @@ def test_legacy_task_creation_uses_workflow_default_mode(modes_db):
 
 def test_legacy_migration_backfills_each_workflow_default_independently():
     engine = create_engine("sqlite:///:memory:")
-    run_alembic_command("upgrade", engine, "0001_initial")
-    with engine.begin() as connection:
-        connection.execute(text("insert into workflows(name,is_default) values ('one',1),('two',0)"))
-        connection.execute(
-            text(
-                "insert into phases(workflow_id,code,name,phase_order,execution_type) "
-                "values (1,'p','P',1,'sync'),(2,'p','P',1,'sync')"
+    try:
+        run_alembic_command("upgrade", engine, "0001_initial")
+        with engine.begin() as connection:
+            connection.execute(text("insert into workflows(name,is_default) values ('one',1),('two',0)"))
+            connection.execute(
+                text(
+                    "insert into phases(workflow_id,code,name,phase_order,execution_type) "
+                    "values (1,'p','P',1,'sync'),(2,'p','P',1,'sync')"
+                )
             )
-        )
-        connection.execute(
-            text(
-                "insert into projects(workflow_id,code,name,cli_command,key_prefixes) "
-                "values (1,'ONE','One','one','[]'),(2,'TWO','Two','two','[]')"
+            connection.execute(
+                text(
+                    "insert into projects(workflow_id,code,name,cli_command,key_prefixes) "
+                    "values (1,'ONE','One','one','[]'),(2,'TWO','Two','two','[]')"
+                )
             )
-        )
-        connection.execute(
-            text(
-                "insert into tasks(project_id,workflow_id,task_key,current_phase_id,status) "
-                "values (1,1,'ONE-1',1,'active'),(2,2,'TWO-1',2,'active')"
+            connection.execute(
+                text(
+                    "insert into tasks(project_id,workflow_id,task_key,current_phase_id,status) "
+                    "values (1,1,'ONE-1',1,'active'),(2,2,'TWO-1',2,'active')"
+                )
             )
-        )
-    run_alembic_command("upgrade", engine)
-    with engine.connect() as connection:
-        modes = connection.execute(text("select workflow_id,id from workflow_modes order by workflow_id")).all()
-        tasks = connection.execute(
-            text("select workflow_id,mode_id,cycle_number from tasks order by workflow_id")
-        ).all()
-    assert modes[0][0] == 1 and modes[1][0] == 2 and modes[0][1] != modes[1][1]
-    assert tasks == [(1, modes[0][1], 0), (2, modes[1][1], 0)]
-    upgraded = SAUnitOfWork(engine)
-    alternate = upgraded.workflows.create_mode({"workflow_id": 1, "key": "rework", "name": "Rework", "mode_order": 2})
-    upgraded.phases.create({"workflow_id": 1, "mode_id": alternate, "code": "p", "name": "Rework P", "phase_order": 1})
-    with pytest.raises(IntegrityError):
-        upgraded.phases.create(
-            {"workflow_id": 1, "mode_id": alternate, "code": "p", "name": "Duplicate", "phase_order": 1}
-        )
-    upgraded.rollback()
+        run_alembic_command("upgrade", engine)
+        with engine.connect() as connection:
+            modes = connection.execute(text("select workflow_id,id from workflow_modes order by workflow_id")).all()
+            tasks = connection.execute(
+                text("select workflow_id,mode_id,cycle_number from tasks order by workflow_id")
+            ).all()
+        assert modes[0][0] == 1 and modes[1][0] == 2 and modes[0][1] != modes[1][1]
+        assert tasks == [(1, modes[0][1], 0), (2, modes[1][1], 0)]
+        with SAUnitOfWork(engine) as upgraded:
+            alternate = upgraded.workflows.create_mode(
+                {"workflow_id": 1, "key": "rework", "name": "Rework", "mode_order": 2}
+            )
+            upgraded.phases.create(
+                {"workflow_id": 1, "mode_id": alternate, "code": "p", "name": "Rework P", "phase_order": 1}
+            )
+            with pytest.raises(IntegrityError):
+                upgraded.phases.create(
+                    {"workflow_id": 1, "mode_id": alternate, "code": "p", "name": "Duplicate", "phase_order": 1}
+                )
+            upgraded.rollback()
+    finally:
+        engine.dispose()
 
 
 def test_history_replay_identity_includes_mode_and_cycle(modes_db):

@@ -13,6 +13,11 @@
 - Standalone-режим: репозиторий собирается и запускается без соседнего `services-base` (убраны extra `cli-platform`, uv source, Docker additional_context и CI checkout). Token-режим CLI без `sdlc-cli-core` выдаёт понятную ошибку; запуск без `AUTH_ISSUER` работает без авторизации.
 
 ### Fixed
+- Immutable image builder передаёт PAX-first tar через deterministic gzip;
+  Docker распознаёт stdin как context, а не Dockerfile. Source/bundle digests
+  и manifest contract не меняются.
+- SQLite migration test закрывает UoW и гарантированно освобождает собственный
+  engine; строгий ResourceWarning gate не зависит от момента garbage collection.
 - Меню сервисов не перекрывается sidebar и помещается на низком экране;
   локальные переходы сохраняют канонический `localhost` для общей SSO-сессии.
 - Standalone Compose получает runtime-каталог через `host.docker.internal`,

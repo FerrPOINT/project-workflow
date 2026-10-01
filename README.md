@@ -83,6 +83,9 @@ python scripts/build_runtime_image.py build \
 Скрипт один раз читает `git archive <exact-sha>`, из этих же bytes вычисляет
 SHA-256 source archive и канонический SHA-256 runtime bundle, добавляет manifest
 в копию archive и передаёт полученный immutable tar как Docker build context.
+Transport использует детерминированный gzip (`mtime=0`), чтобы Docker не
+принимал PAX-first tar на stdin за Dockerfile. Сжатие не меняет исходный
+archive digest, runtime bundle digest или содержимое immutable manifest.
 Dirty или ignored файлы рабочего каталога в candidate не попадают. Digest
 bundle включает path, regular-file type, executable mode и content hash;
 symlink и другие non-regular runtime inputs отклоняются. Dockerfile повторно
