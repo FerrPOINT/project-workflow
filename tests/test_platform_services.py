@@ -12,17 +12,25 @@ from project_workflow.interfaces.ui.platform_services import (
 )
 
 
-def test_normalize_skips_api_only_and_current():
-    assert _normalize({"key": "project-workflow", "label": "PW", "url": "http://x", "ui_url": "http://x"}) is None
+def test_normalize_skips_only_api_services_and_keeps_current_health():
+    assert _normalize({"key": "project-workflow", "label": "PW", "ui_url": "http://x", "health": "unreachable"}) == {
+        "key": "project-workflow", "label": "PW", "url": "http://x", "health": "unreachable",
+    }
     assert _normalize({"key": "java-agent", "label": "JA", "url": "http://x:7761", "ui_url": None}) is None
     assert _normalize(
         {"key": "wiki", "label": "Wiki", "url": "http://x", "ui_url": "http://x:7732", "health": "healthy"}
     ) == {"key": "wiki", "label": "Wiki", "url": "http://x:7732", "health": "healthy"}
 
 
-def test_normalize_degrades_unknown_health():
-    entry = _normalize({"key": "a", "label": "A", "url": "http://a", "ui_url": "http://a", "health": "weird"})
+@pytest.mark.parametrize("health", ["weird", None, [], {}])
+def test_normalize_degrades_unknown_health(health):
+    entry = _normalize({"key": "a", "label": "A", "url": "http://a", "ui_url": "http://a", "health": health})
     assert entry is not None and entry["health"] == "unknown"
+
+
+@pytest.mark.parametrize("url", ["http://", "http://user:password@host", "http://host:bad", "javascript:alert(1)"])
+def test_normalize_rejects_invalid_or_credential_bearing_navigation_targets(url):
+    assert _normalize({"key": "wiki", "label": "Wiki", "ui_url": url}) is None
 
 
 def test_fallback_without_catalog_url():
@@ -66,7 +74,8 @@ def test_service_switcher_is_accessible_and_localizes_health():
         encoding="utf-8"
     )
 
-    assert 'class="service-menu-popover" role="menu"' in template
+    assert '<div role="menu" aria-label="Сервисы платформы">' in template
+    assert '{% endfor %}\n          </div>\n          {% set catalog_source' in template
     assert 'aria-current="page"' in template
     assert "Project Workflow" in template
     assert "Состояние неизвестно" in template
@@ -144,7 +153,123 @@ def test_malformed_runtime_catalog_uses_invalid_fallback(monkeypatch):
         monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: Response(body))
         catalog = load_service_catalog("http://admin/api")
         assert catalog.source == "fallback-invalid"
-        assert len(catalog.services) == 5
+        assert len(catalog.services) == 6
 
     monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: Response(b'{"services": []}'))
     assert load_service_catalog("http://admin/api").source == "fallback-empty"
+
+
+@pytest.fixture(autouse=True)
+def isolated_catalog_cache(monkeypatch):
+    from project_workflow.interfaces.ui import platform_services as ps
+
+    monkeypatch.setattr(ps, "_cached_services", [])
+    monkeypatch.setattr(ps, "_cached_at", 0.0)
+    monkeypatch.setattr(ps, "_cached_url", None)
+
+
+def test_catalog_fallback_contains_six_ordered_ui_with_unknown_current_health():
+    catalog = load_service_catalog(None)
+    assert catalog.source == "fallback-unreachable"
+    assert [service["key"] for service in catalog.services] == [
+        "admin-panel", "ci-cd", "task-tracker", "wiki", "fleet-control", "project-workflow",
+    ]
+    assert {service["health"] for service in catalog.services} == {"unknown"}
+    assert catalog.services[-1]["url"] == "http://localhost:7752"
+    assert len(load_other_services(None)) == 5
+
+
+def _response(services):
+    return io.BytesIO(json.dumps({"services": services}).encode())
+
+
+def _runtime_services():
+    return [
+        {"key": "project-workflow", "label": "PW", "ui_url": "http://localhost:7752", "health": "unreachable"},
+        {"key": "wiki", "label": "Wiki", "ui_url": "http://localhost:7732", "health": "healthy"},
+        {"key": "central-auth", "label": "Auth", "ui_url": None},
+    ]
+
+
+@pytest.mark.parametrize("failure,expected_source", [
+    (None, "fallback-unreachable"),
+    ([], "fallback-empty"),
+    ([{"key": "bad"}], "fallback-invalid"),
+])
+def test_expired_runtime_failure_uses_unknown_fallback_and_recovers(monkeypatch, failure, expected_source):
+    from project_workflow.interfaces.ui import platform_services as ps
+
+    now = [100.0]
+    monkeypatch.setattr(ps.time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: _response(_runtime_services()))
+    first = load_service_catalog("http://admin/api")
+    assert first.source == "runtime"
+    assert first.services[-1]["key"] == "project-workflow"
+    assert first.services[-1]["health"] == "unreachable"
+    now[0] += 61
+
+    def failed(*_args, **_kwargs):
+        if failure is None:
+            raise OSError("catalog unavailable")
+        return _response(failure)
+
+    monkeypatch.setattr(ps, "urlopen", failed)
+    fallback = load_service_catalog("http://admin/api")
+    assert fallback.source == expected_source
+    assert len(fallback.services) == 6
+    assert {service["health"] for service in fallback.services} == {"unknown"}
+    monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: _response(_runtime_services()))
+    restored = load_service_catalog("http://admin/api")
+    assert restored == first
+
+
+def test_catalog_cache_is_scoped_to_url_and_respects_ttl(monkeypatch):
+    from project_workflow.interfaces.ui import platform_services as ps
+
+    calls = []
+    now = [100.0]
+    monkeypatch.setattr(ps.time, "monotonic", lambda: now[0])
+
+    def response(url, **_kwargs):
+        calls.append(url)
+        return _response(_runtime_services())
+
+    monkeypatch.setattr(ps, "urlopen", response)
+    load_service_catalog("http://admin-a/api")
+    load_service_catalog("http://admin-a/api")
+    assert calls == ["http://admin-a/api"]
+    load_service_catalog("http://admin-b/api")
+    assert calls[-1] == "http://admin-b/api"
+    now[0] += 61
+    load_service_catalog("http://admin-b/api")
+    assert len(calls) == 3
+
+
+@pytest.mark.parametrize("invalid", [None, {"key": "wiki", "label": "Duplicate", "ui_url": "http://x"},
+                                     {"key": "broken", "label": "Broken", "ui_url": "javascript:alert(1)"}])
+def test_mixed_invalid_catalog_does_not_silently_drop_bad_rows(monkeypatch, invalid):
+    from project_workflow.interfaces.ui import platform_services as ps
+
+    monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: _response([*_runtime_services(), invalid]))
+    catalog = load_service_catalog("http://admin/api")
+    assert catalog.source == "fallback-invalid"
+    assert len(catalog.services) == 6
+
+
+def test_rendered_switcher_uses_current_runtime_health_without_duplicate(monkeypatch):
+    from project_workflow.interfaces.ui import platform_services as ps
+    from project_workflow.interfaces.ui.templates import templates
+
+    monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: _response(_runtime_services()))
+    catalog = load_service_catalog("http://admin/api")
+    html = templates.get_template("base.html").render(
+        page="tasks", other_services=catalog.services, services_source=catalog.source,
+    )
+    menu = html.split('id="serviceMenu"', 1)[1].split("</details>", 1)[0]
+    assert menu.count('aria-current="page"') == 1
+    assert 'service-health unreachable' in menu
+    assert 'service-health healthy' in menu
+    assert 'service-health unknown' not in menu
+    assert 'Project Workflow' not in menu  # runtime label is PW, not a fabricated replacement
+    assert 'Central Auth' not in menu
+    assert 'href="/" role="menuitem" aria-current="page"' in menu

@@ -381,15 +381,11 @@ textarea{resize:vertical;min-height:60px}
         <summary class="sidebar-link"><span class="sidebar-label">Сервисы</span></summary>
         <div class="sidebar-service-links">
           {% for service in other_services %}
-          <a class="sidebar-service-link" href="{{ service.url }}">
+          <a class="sidebar-service-link" href="{{ '/' if service.key == 'project-workflow' else service.url }}" {% if service.key == 'project-workflow' %}aria-current="page"{% endif %}>
             <span class="service-health {{ service.health }}" role="img" aria-label="{% if service.health == 'healthy' %}Работает{% elif service.health == 'unreachable' %}Недоступен{% else %}Состояние неизвестно{% endif %}"></span>
             <span>{{ service.label }}</span>
           </a>
           {% endfor %}
-          <a class="sidebar-service-link" href="/" aria-current="page">
-            <span class="service-health healthy" role="img" aria-label="Работает"></span>
-            <span>Project Workflow</span>
-          </a>
         </div>
       </details>
     </div>
@@ -416,18 +412,16 @@ textarea{resize:vertical;min-height:60px}
       </select>
       <details class="service-menu" id="serviceMenu">
         <summary aria-label="Открыть список сервисов платформы">Сервисы <span class="service-menu-chevron" aria-hidden="true">▾</span></summary>
-        <div class="service-menu-popover" role="menu" aria-label="Сервисы платформы">
+        <div class="service-menu-popover">
+          <div role="menu" aria-label="Сервисы платформы">
         {% for service in other_services %}
-          <a class="service-menu-item" href="{{ service.url }}" role="menuitem">
+          <a class="service-menu-item" href="{{ '/' if service.key == 'project-workflow' else service.url }}" role="menuitem" {% if service.key == 'project-workflow' %}aria-current="page"{% endif %}>
             <span class="service-health {{ service.health }}" role="img" aria-label="{% if service.health == 'healthy' %}Работает{% elif service.health == 'unreachable' %}Недоступен{% else %}Состояние неизвестно{% endif %}"></span>
             <span>{{ service.label }}</span>
+            {% if service.key == 'project-workflow' %}<span class="service-menu-current">Текущий</span>{% endif %}
           </a>
         {% endfor %}
-          <a class="service-menu-item" href="/" role="menuitem" aria-current="page">
-            <span class="service-health healthy" role="img" aria-label="Работает"></span>
-            <span>Project Workflow</span>
-            <span class="service-menu-current">Текущий</span>
-          </a>
+          </div>
           {% set catalog_source = services_source|default('fallback-unreachable') %}
           <div class="service-menu-source" role="status">Источник: {{ 'каталог' if catalog_source == 'runtime' else 'резервный список' if catalog_source.startswith('fallback') else 'сохранённый каталог' }}</div>
         </div>

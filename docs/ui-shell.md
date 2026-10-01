@@ -38,6 +38,18 @@ drawer semantics and keyboard behavior.
 
 ## Evidence
 
+The native service catalog includes the current Workflow record and preserves
+its runtime health. A failed, empty or invalid catalog returns the six-entry
+unknown-health fallback, never expired health presented as current. Cache entries
+are scoped to the catalog URL. API-only entries have `ui_url=null` and are not
+navigation targets. The compatibility `load_other_services` helper still omits
+Workflow; the UI uses the full `load_service_catalog` result.
+
+The [catalog regression evidence](assets/screens/2026-10-01-service-catalog/README.md)
+covers runtime and real network refusal. This narrow correction does not replace
+the native header/sidebar with the shared Base SSR Header or accept full SSO and
+page geometry. Those integration gates remain separate.
+
 Any shell, header, sidebar or content-geometry change is verified in a real
 browser at 375, 1440 and 2560 px. Evidence covers direct-route active navigation,
 mobile drawer keyboard behavior, one intended header row, no document-level

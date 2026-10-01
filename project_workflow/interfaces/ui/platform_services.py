@@ -20,11 +20,13 @@ _FALLBACK_SERVICES: list[dict[str, Any]] = [
     {"key": "task-tracker", "label": "Task Tracker", "url": "http://localhost:7722", "health": "unknown"},
     {"key": "wiki", "label": "Wiki", "url": "http://localhost:7732", "health": "unknown"},
     {"key": "fleet-control", "label": "Fleet Control", "url": "http://localhost:7742", "health": "unknown"},
+    {"key": "project-workflow", "label": "Project Workflow", "url": "http://localhost:7752", "health": "unknown"},
 ]
 _CURRENT_KEY = "project-workflow"
 _CACHE_TTL_SECONDS = 60.0
 _cached_at = 0.0
 _cached_services: list[dict[str, Any]] = []
+_cached_url: str | None = None
 _VALID_HEALTH = {"healthy", "unreachable", "unknown"}
 _ORDER = {service["key"]: index for index, service in enumerate(_FALLBACK_SERVICES)}
 
@@ -39,14 +41,20 @@ def _normalize(entry: dict[str, Any]) -> dict[str, Any] | None:
     key = entry.get("key")
     label = entry.get("label")
     ui_url = entry.get("ui_url", entry.get("url"))
-    if not isinstance(key, str) or key == _CURRENT_KEY:
+    if not isinstance(key, str) or not key.strip():
         return None
-    if not isinstance(label, str) or not isinstance(ui_url, str):
+    if not isinstance(label, str) or not label.strip() or not isinstance(ui_url, str):
         return None
-    if not ui_url.startswith(("http://", "https://")):
+    try:
+        target = urlsplit(ui_url)
+        if target.scheme not in {"http", "https"} or not target.hostname or target.username or target.password:
+            return None
+        # urlsplit validates malformed/out-of-range ports when accessed.
+        target.port
+    except ValueError:
         return None
     health = entry.get("health", "unknown")
-    if health not in _VALID_HEALTH:
+    if not isinstance(health, str) or health not in _VALID_HEALTH:
         health = "unknown"
     return {"key": key, "label": label, "url": ui_url, "health": health}
 
@@ -72,48 +80,61 @@ def _with_request_host(services: list[dict[str, Any]], request_url: str | None) 
 
 
 def load_service_catalog(catalog_url: str | None, *, request_url: str | None = None) -> ServiceCatalog:
-    """Return other UI services and the source used to render them."""
-    global _cached_at, _cached_services
+    """Return UI services, including current health, and the diagnostic source."""
+    global _cached_at, _cached_services, _cached_url
     if not catalog_url:
         return ServiceCatalog(_with_request_host(_FALLBACK_SERVICES, request_url), "fallback-unreachable")
     now = time.monotonic()
-    if _cached_services and now - _cached_at < _CACHE_TTL_SECONDS:
+    if _cached_url == catalog_url and _cached_services and now - _cached_at < _CACHE_TTL_SECONDS:
         return ServiceCatalog(_with_request_host(_cached_services, request_url), "runtime")
     try:
         with urlopen(catalog_url, timeout=2.0) as response:  # nosec B310: configured internal URL
             body = response.read()
     except Exception:
         return ServiceCatalog(
-            _with_request_host(_cached_services or _FALLBACK_SERVICES, request_url),
-            "runtime-cached" if _cached_services else "fallback-unreachable",
+            _with_request_host(_FALLBACK_SERVICES, request_url), "fallback-unreachable",
         )
     try:
         payload = json.loads(body.decode("utf-8"))
         if not isinstance(payload, dict) or not isinstance(payload.get("services"), list):
             raise ValueError("invalid catalog")
         raw_entries = payload["services"]
-        services = [
-            normalized
-            for entry in raw_entries
-            if isinstance(entry, dict)
-            and (normalized := _normalize(entry)) is not None
-        ]
+        services = []
+        keys: set[str] = set()
+        for entry in raw_entries:
+            if not isinstance(entry, dict):
+                raise ValueError("invalid catalog entry")
+            key, label = entry.get("key"), entry.get("label")
+            if not isinstance(key, str) or not key.strip() or key in keys:
+                raise ValueError("invalid or duplicate service key")
+            if not isinstance(label, str) or not label.strip():
+                raise ValueError("invalid service label")
+            keys.add(key)
+            if "ui_url" in entry and entry["ui_url"] is None:
+                continue
+            normalized = _normalize(entry)
+            if normalized is None:
+                raise ValueError("invalid UI URL")
+            services.append(normalized)
     except Exception:
         return ServiceCatalog(
-            _with_request_host(_cached_services or _FALLBACK_SERVICES, request_url),
-            "runtime-cached" if _cached_services else "fallback-invalid",
+            _with_request_host(_FALLBACK_SERVICES, request_url), "fallback-invalid",
         )
     if not services:
         return ServiceCatalog(
-            _with_request_host(_cached_services or _FALLBACK_SERVICES, request_url),
-            "runtime-cached" if _cached_services else ("fallback-empty" if not raw_entries else "fallback-invalid"),
+            _with_request_host(_FALLBACK_SERVICES, request_url),
+            "fallback-empty" if not raw_entries else "fallback-invalid",
         )
     services.sort(key=lambda service: (_ORDER.get(service["key"], len(_ORDER)), service["key"]))
     _cached_services = services
     _cached_at = now
+    _cached_url = catalog_url
     return ServiceCatalog(_with_request_host(services, request_url), "runtime")
 
 
 def load_other_services(catalog_url: str | None, *, request_url: str | None = None) -> list[dict[str, Any]]:
-    """Compatibility helper for callers that only need the navigation links."""
-    return load_service_catalog(catalog_url, request_url=request_url).services
+    """Compatibility helper retaining the historical other-services-only list."""
+    return [
+        service for service in load_service_catalog(catalog_url, request_url=request_url).services
+        if service["key"] != _CURRENT_KEY
+    ]
