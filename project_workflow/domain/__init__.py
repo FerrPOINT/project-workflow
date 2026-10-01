@@ -93,6 +93,7 @@ class Workflow:
     name: str = ""
     description: str = ""
     is_default: bool = False
+    active_catalog_version: int = 1
     modes: list[WorkflowMode] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -102,6 +103,7 @@ class Workflow:
             "name": self.name,
             "description": self.description,
             "is_default": self.is_default,
+            "active_catalog_version": self.active_catalog_version,
             "modes": [mode.to_dict() for mode in self.modes],
         }
 
@@ -115,8 +117,10 @@ class WorkflowMode:
     key: str = "default"
     name: str = "Default"
     mode_order: int = 1
+    catalog_version: int = 1
     role_key: str | None = None
     execution_scope: str | None = None
+    execution_scopes: list[str] | None = None
     tech_workspace_policy: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -126,8 +130,10 @@ class WorkflowMode:
             "key": self.key,
             "name": self.name,
             "mode_order": self.mode_order,
+            "catalog_version": self.catalog_version,
             "role_key": self.role_key,
             "execution_scope": self.execution_scope,
+            "execution_scopes": self.execution_scopes,
             "tech_workspace_policy": self.tech_workspace_policy,
         }
 

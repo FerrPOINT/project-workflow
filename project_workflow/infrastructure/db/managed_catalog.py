@@ -7,6 +7,7 @@ stage/status transitions, queue priority and workspace assignments.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -27,7 +28,11 @@ from project_workflow.domain.project_theme import (
     normalize_theme_icon,
 )
 from project_workflow.domain.repositories import UnitOfWork
-from project_workflow.domain.runtime_assignment import MANAGED_ROLE_MODE_SCOPES, normalize_role_key
+from project_workflow.domain.runtime_assignment import (
+    MANAGED_ROLE_MODE_SCOPES,
+    normalize_role_key,
+    phase_allowed_tools,
+)
 
 from .schema import (
     _phase_item_to_supervisor,
@@ -68,7 +73,7 @@ class ManagedMode(_CatalogModel):
     key: str
     name: str
     mode_order: int = Field(gt=0)
-    execution_scope: Literal["business", "delivery", "aggregate"]
+    execution_scopes: list[Literal["business", "delivery", "aggregate"]] = Field(min_length=1)
     phases: list[_SeedPhase] = Field(min_length=3, max_length=3)
 
     @field_validator("key", "name")
@@ -146,7 +151,7 @@ class ManagedWorkflow(_CatalogModel):
         expected_modes = MANAGED_ROLE_MODE_SCOPES.get(self.role_key)
         if expected_modes is None:
             raise ValueError(f"Unknown managed role {self.role_key!r}")
-        actual_modes = {mode.key: mode.execution_scope for mode in self.modes}
+        actual_modes = {mode.key: tuple(mode.execution_scopes) for mode in self.modes}
         if actual_modes != expected_modes:
             raise ValueError(
                 f"Workflow {self.role_key!r} modes differ from the canonical registry"
@@ -201,7 +206,7 @@ class ManagedWorkflow(_CatalogModel):
                 raise ValueError(
                     f"Mode {self.role_key!r}/{mode.key!r} must end with a precise Business Markdown comment"
                 )
-            for marker in ("workflow_phase", "complete=true", "outcome", "evidence"):
+            for marker in ("project-workflow", "complete=true", "outcome", "evidence"):
                 if marker not in terminal_instruction:
                     raise ValueError(
                         f"Mode {self.role_key!r}/{mode.key!r} terminal instruction "
@@ -232,7 +237,7 @@ class ManagedWorkflow(_CatalogModel):
             ):
                 raise ValueError(
                     f"Mode {self.role_key!r}/{mode.key!r} can call {allowed_terminal} "
-                    "only after workflow_phase complete=true"
+                    "only after project-workflow complete=true"
                 )
             if self.role_key in {"reviewer", "tester"}:
                 if "outcome passed" not in terminal_instruction or "needs_rework" not in terminal_instruction:
@@ -268,15 +273,15 @@ class ManagedCatalog(_CatalogModel):
         if roles != list(MANAGED_ROLE_MODE_SCOPES):
             raise ValueError("Managed workflows must follow the canonical seven-role order")
         mode_count = sum(len(workflow.modes) for workflow in self.workflows)
-        if mode_count != 13:
-            raise ValueError("Managed catalog must contain exactly thirteen modes")
+        if mode_count != 11:
+            raise ValueError("Managed catalog must contain exactly eleven modes")
         phase_count = sum(
             len(mode.phases)
             for workflow in self.workflows
             for mode in workflow.modes
         )
-        if phase_count != 39:
-            raise ValueError("Managed catalog must contain exactly thirty-nine phases")
+        if phase_count != 33:
+            raise ValueError("Managed catalog must contain exactly thirty-three phases")
         serialized = self.model_dump_json().casefold()
         if '"repeatable"' in serialized:
             raise ValueError("Managed catalog must model repeat work as a new cycle, not repeatable")
@@ -310,9 +315,110 @@ def load_managed_catalog(path: Path | str | None = None) -> ManagedCatalog:
         raise ValueError(f"Invalid managed workflow catalog {catalog_path}: {exc}") from exc
 
 
+def export_runtime_catalog(
+    catalog: ManagedCatalog,
+    *,
+    manifest: Mapping[str, Any],
+    workflow_revision: str,
+    skills_revision: str,
+    source_artifacts: Mapping[str, str],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Generate runtime derivatives from the native catalog, never a second executor.
+
+    Exact committed revisions/artifact hashes are supplied by the release owner
+    after source commit; authoring must not fabricate a future Git identity.
+    """
+    if any(len(ref) != 40 or any(ch not in "0123456789abcdef" for ch in ref)
+           for ref in (workflow_revision, skills_revision)):
+        raise ValueError("Runtime export requires exact committed source revisions")
+    if skills_revision != catalog.skills_source.revision:
+        raise ValueError("Runtime skills revision differs from the canonical source pin")
+    roles: dict[str, Any] = {}
+    phase_sets: dict[str, Any] = {}
+    for workflow in catalog.workflows:
+        physical = manifest["roles"][workflow.role_key]["physicalSkills"]
+        if set(physical) != set(workflow.skill_allowlist):
+            raise ValueError(f"Native skill inventory differs: {workflow.role_key}")
+        modes = []
+        for mode in workflow.modes:
+            phase_set = f"{workflow.role_key}:{mode.key}"
+            modes.append({"key": mode.key, "name": mode.name, "phase_set": phase_set,
+                          "execution_scopes": mode.execution_scopes})
+            phase_sets[phase_set] = [
+                {"code": phase.code, "name": phase.name, "description": phase.description,
+                 "execution_type": "sync",
+                 "instructions": [{"text": item.description, "skills": item.skills,
+                                   "execution_type": "sync"} for item in phase.instructions],
+                 "checks": [item if isinstance(item, str) else item.description
+                            for item in phase.checks],
+                 "evidence": [item if isinstance(item, str) else item.description
+                              for item in phase.evidence]}
+                for phase in mode.phases
+            ]
+        roles[workflow.role_key] = {
+            "profile": workflow.hermes_profile, "workflow": workflow.key,
+            "workflowName": workflow.name, "description": workflow.description,
+            "modes": modes, "skills": physical,
+        }
+    def digest(value: Any) -> str:
+        return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True,
+                                         separators=(",", ":")).encode()).hexdigest()
+    phases = {"schema": "relevanter-hermes-workflow-phase-sets/v1",
+              "sourceOfTruth": "project-workflow canonical managed catalog",
+              "workflowCatalogRevision": workflow_revision, "phase_sets": phase_sets}
+    result = {
+        "schema": "relevanter-hermes-workflow-catalog/v2",
+        "sourceOfTruth": "project-workflow canonical managed catalog; Business owns assignments",
+        "businessRoutingRegistry": "taskWorkspaceExecutionRoutingRegistry",
+        "workflowCatalogRepository": "git@github.com:FerrPOINT/project-workflow.git",
+        "workflowCatalogRevision": workflow_revision,
+        "workflowCatalogSourceArtifacts": dict(source_artifacts),
+        "skillsCatalogRepository": catalog.skills_source.repository,
+        "skillsCatalogRevision": skills_revision,
+        "skillsManifestPath": catalog.skills_source.manifest_path,
+        "skillsManifestSchema": catalog.skills_source.manifest_schema,
+        "skillsManifestSha256": hashlib.sha256((json.dumps(manifest, ensure_ascii=False,
+                                                          indent=2) + "\n").encode()).hexdigest(),
+        "rolesSha256": digest(roles), "phaseSetsFrom": "hermes_workflow_phase_sets.v1.json",
+        "phaseSetsSha256": digest(phase_sets), "roles": roles,
+    }
+    capabilities = {
+        "revision": "hermes-sdlc-runtime/v2",
+        "firstStep": "owner-bound-exact-run-reportless-query",
+        "gatewayFence": "native-run-header-checked-before-owner-CAS-or-command-reservation",
+        "question": "durable-business-question-before-core-terminal-ack",
+        "candidatePublish": "owner-scoped-tech-verified-source-build-artifact-receipt",
+        "testerBrowser": (
+            "phase02-owner-active-sandbox-native-run-fenced-cdp-"
+            "isolated-candidate-network-fixed-helper-whitelist"
+        ),
+        "phaseTools": {phase.code: phase_allowed_tools(workflow.role_key, phase.code)
+                       for workflow in catalog.workflows for mode in workflow.modes for phase in mode.phases},
+    }
+    result["runtimeCapabilities"] = capabilities
+    result["runtimeCompatibility"] = {
+        "catalogVersion": catalog.catalog_version, "catalogRevision": workflow_revision,
+        "catalogSha256": digest({"roles": roles, "phase_sets": phase_sets}),
+        "skillsRevision": skills_revision, "skillsManifestSha256": result["skillsManifestSha256"],
+        "capabilityRevision": capabilities["revision"], "capabilitySha256": digest(capabilities),
+    }
+    return result, phases
+
+
 def _reference_summary(references: list[tuple[str, int]]) -> str:
     populated = [f"{kind}:{count}" for kind, count in references if count]
     return ",".join(populated) if populated else "zero"
+
+
+@dataclass(frozen=True)
+class _ArchivedWorkflowDefinition:
+    """Frozen v1 configuration for comparison, never eligible for v2 dispatch."""
+
+    key: str
+    name: str
+    description: str
+    role_key: str
+    modes: list[ManagedMode]
 
 
 @dataclass(frozen=True)
@@ -671,8 +777,8 @@ def _assert_exact_persisted_inventory(
         "workflows": 7,
         "agents": 7,
         "namespaces": 7,
-        "modes": 13,
-        "phases": 39,
+        "modes": 11,
+        "phases": 33,
     }:
         raise ValueError(f"Managed catalog persisted inventory is not canonical: {counts}")
 
@@ -724,16 +830,18 @@ def _persist_mode(
     role_key: str,
     agent_id: int,
     mode: ManagedMode,
+    catalog_version: int,
 ) -> None:
-    tech_policy = "forbidden" if mode.execution_scope == "business" else "required"
+    tech_policy = "forbidden" if role_key in {"project_manager", "analyst", "architect"} else "required"
     mode_id = uow.workflows.create_mode(
         {
             "workflow_id": workflow_id,
+            "catalog_version": catalog_version,
             "key": mode.key,
             "name": mode.name,
             "mode_order": mode.mode_order,
             "role_key": role_key,
-            "execution_scope": mode.execution_scope,
+            "execution_scopes": mode.execution_scopes,
             "tech_workspace_policy": tech_policy,
         }
     )
@@ -844,9 +952,10 @@ def _assert_existing_namespace(
 def _assert_existing_workflow(
     uow: UnitOfWork,
     actual_workflow: Workflow,
-    expected: ManagedWorkflow,
+    expected: ManagedWorkflow | _ArchivedWorkflowDefinition,
     *,
     agent_id: int,
+    catalog_version: int | None = None,
 ) -> None:
     if actual_workflow.id is None:
         raise ValueError(f"Managed workflow {expected.key!r} has no id")
@@ -859,14 +968,14 @@ def _assert_existing_workflow(
         raise ValueError(
             f"Managed workflow {expected.key!r} already exists with a different identity"
         )
-    modes = list(uow.workflows.list_modes(workflow_id))
+    modes = list(uow.workflows.list_modes(workflow_id, catalog_version=catalog_version))
     actual_modes = [
         (
             mode.key,
             mode.name,
             mode.mode_order,
             mode.role_key,
-            mode.execution_scope,
+            tuple(mode.execution_scopes or ([mode.execution_scope] if mode.execution_scope else [])),
             mode.tech_workspace_policy,
         )
         for mode in modes
@@ -877,8 +986,8 @@ def _assert_existing_workflow(
             mode.name,
             mode.mode_order,
             expected.role_key,
-            mode.execution_scope,
-            "forbidden" if mode.execution_scope == "business" else "required",
+            tuple(mode.execution_scopes or []),
+            "forbidden" if expected.role_key in {"project_manager", "analyst", "architect"} else "required",
         )
         for mode in expected.modes
     ]
@@ -998,9 +1107,9 @@ def ensure_managed_catalog(
 ) -> ManagedCatalog:
     """Create the canonical managed catalog once, then verify it fail-closed.
 
-    Existing managed workflows are never overwritten.  A partial or divergent
-    registry is rejected so operator reconciliation cannot silently mutate a
-    live execution catalog.
+    Append a new mode/phase version and atomically select it for new dispatch.
+    Historical tasks continue to address immutable mode/phase IDs. A divergent
+    legacy catalog is rejected before any append; no existing phase is edited.
     """
     catalog = load_managed_catalog(catalog_path)
     uow.lock_catalog_state()
@@ -1018,6 +1127,21 @@ def ensure_managed_catalog(
             if existing.id is None:
                 raise ValueError(f"Managed workflow {definition.key!r} has no id")
             workflow_id = int(existing.id)
+            active_version = existing.active_catalog_version
+            if active_version < catalog.catalog_version:
+                if active_version != 1 or catalog.catalog_version != 2:
+                    raise ValueError("Unsupported managed catalog adoption path")
+                _assert_frozen_legacy_workflow(uow, existing, agent_id=agent_id)
+                if uow.workflows.list_modes(workflow_id, catalog_version=catalog.catalog_version):
+                    raise ValueError("Partial managed catalog adoption; transaction was not committed")
+                for mode in definition.modes:
+                    _persist_mode(uow, workflow_id=workflow_id, role_key=definition.role_key,
+                                  agent_id=agent_id, mode=mode, catalog_version=catalog.catalog_version)
+                # This is the sole dispatch switch. Pinned task/history mode IDs
+                # stay on the old rows, including active and completed bindings.
+                uow.workflows.update(workflow_id, {"active_catalog_version": catalog.catalog_version})
+                existing = uow.workflows.get_by_id(workflow_id)
+                assert existing is not None
             _assert_existing_workflow(
                 uow,
                 existing,
@@ -1033,6 +1157,7 @@ def ensure_managed_catalog(
                         "description": definition.description,
                         "is_default": not has_default and definition.role_key == "project_manager",
                         "create_default_mode": False,
+                        "active_catalog_version": catalog.catalog_version,
                     }
                 )
             )
@@ -1045,7 +1170,23 @@ def ensure_managed_catalog(
                     role_key=definition.role_key,
                     agent_id=agent_id,
                     mode=mode,
+                    catalog_version=catalog.catalog_version,
                 )
         _ensure_namespace(uow, definition, workflow_id)
     validate_managed_catalog_state(uow, catalog)
     return catalog
+
+
+def _assert_frozen_legacy_workflow(uow: UnitOfWork, workflow: Workflow, *, agent_id: int) -> None:
+    """Validate the archived accepted v1 before an append-only v2 adoption."""
+    legacy_path = config.MANAGED_CATALOG_PATH.with_name("hermes_sdlc_catalog_v1_legacy.json")
+    legacy = json.loads(legacy_path.read_text(encoding="utf-8"))
+    raw = next((item for item in legacy["workflows"] if item["key"] == workflow.key), None)
+    if raw is None or legacy.get("catalog_version") != 1:
+        raise ValueError("Frozen managed v1 source is missing")
+    modes = [ManagedMode.model_validate({**{key: value for key, value in mode.items() if key != "execution_scope"},
+                                        "execution_scopes": [mode["execution_scope"]]})
+             for mode in raw["modes"]]
+    expected = _ArchivedWorkflowDefinition(key=raw["key"], name=raw["name"], description=raw["description"],
+                                           role_key=raw["role_key"], modes=modes)
+    _assert_existing_workflow(uow, workflow, expected, agent_id=agent_id, catalog_version=1)

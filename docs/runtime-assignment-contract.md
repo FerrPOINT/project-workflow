@@ -16,7 +16,7 @@ Endpoint принимает только server-owned role credential из
 2. после успешного `startOrResume` адаптер вызывает `/internal/runtime/bind` и
    прикрепляет реальные `binding_ref` и `hermes_run_ref`.
 
-Оба endpoint используют один role-scoped assignment token. Runtime token
+Эти endpoint и continuation `/internal/runtime/rebind` используют один role-scoped assignment token. Runtime token
 агента не может создавать или связывать assignment. Синтетические binding/run
 refs запрещены.
 
@@ -28,8 +28,17 @@ refs запрещены.
   "ok": true,
   "role_key": "developer",
   "credential_kind": "assignment",
-  "capabilities": ["assign", "bind"],
-  "readiness": {"service": "ready", "schema": "ready"},
+  "capabilities": ["assign", "bind", "rebind"],
+  "readiness": {"service": "ready", "schema": "ready", "catalog": "ready"},
+  "runtimeCompatibility": {
+    "catalogVersion": 2,
+    "catalogRevision": "<40-lowercase-hex>",
+    "catalogSha256": "<64-lowercase-hex>",
+    "skillsRevision": "<40-lowercase-hex>",
+    "skillsManifestSha256": "<64-lowercase-hex>",
+    "capabilityRevision": "hermes-sdlc-runtime/v2",
+    "capabilitySha256": "<64-lowercase-hex>"
+  },
   "source_provenance": {
     "schema_version": 1,
     "source_revision": "<40-or-64-lowercase-hex>",
@@ -42,7 +51,7 @@ refs запрещены.
 Runtime role token возвращает `credential_kind=runtime` и capabilities
 `["step", "history"]`. Missing/unknown credential даёт `401`, catalog
 credential — `403`, collision/config error, неготовая schema либо отсутствующий
-или некорректный immutable manifest — `503`. Ответ не содержит token,
+или некорректный immutable manifest/release compatibility descriptor — `503`. Ответ не содержит token,
 namespace/task identifiers, counts, titles или внутреннюю конфигурацию.
 `/health` остаётся DB/schema probe и не заменяет этот authenticated preflight.
 Capability определяется сохранённым типом credential. Совпадение role key с
@@ -59,7 +68,7 @@ token; `/internal/runtime/catalog` принимает только точный 
 | `project_manager` | `hermes-sdlc:project_manager` | `draft` | `business` |
 | `analyst` | `hermes-sdlc:analyst` | `analysis` | `business` |
 | `architect` | `hermes-sdlc:architect` | `decomposition` | `business` |
-| `developer` | `hermes-sdlc:developer` | `initial`, `rework`, `integration`, `integration_rework` | `delivery` / `aggregate` |
+| `developer` | `hermes-sdlc:developer` | `initial`, `rework` | Каждый mode: `delivery` / `aggregate` |
 | `reviewer` | `hermes-sdlc:reviewer` | `delivery`, `integration` | `delivery` / `aggregate` |
 | `tester` | `hermes-sdlc:tester` | `delivery`, `integration` | `delivery` / `aggregate` |
 | `devops` | `hermes-sdlc:devops` | `delivery`, `integration` | `delivery` / `aggregate` |
@@ -72,7 +81,7 @@ cycle/assignment, а не `repeatable` flag. Managed workflow без explicit
 Dispatch разрешён только в mode с полным policy:
 
 - `role_key`;
-- `execution_scope`: `business`, `delivery` или `aggregate`;
+- `execution_scopes`: допустимый набор `business`, `delivery` или `aggregate`; assignment закрепляет один выбранный Business `execution_scope`;
 - `tech_workspace_policy`: `forbidden` для business mode, `required` для
   delivery/aggregate mode.
 
@@ -134,7 +143,31 @@ operation/ref/revision, mode/cycle/attempt, ожидаемое `unbound` или
 реальные refs и отдельный `bind_operation_key`. Одна DB CAS-операция переводит
 assignment в `bound`. Точный retry того же ключа возвращает сохранённый cursor;
 изменённый payload, второй ключ, другая роль/задача либо stale revision дают
-детерминированный conflict. Rebind к другим refs запрещён.
+детерминированный conflict. Этот endpoint не переписывает refs существующего
+assignment. Continuation создаёт отдельный assignment по контракту ниже.
+
+## Question continuation
+
+После durable owner checkpoint и terminal acknowledgement старого run Business
+подготавливает новый assignment через `/internal/runtime/rebind`. Request
+закрепляет old/new assignment и binding identity, checkpoint owner/run/ref/revision,
+workspace/stage/decomposition revisions, operation key и новый `run_sequence`.
+Checkpoint input должен совпадать с frozen provenance; изменённые входные refs,
+повторное использование immutable IDs или stale cursor отклоняются без записи.
+
+Новая запись начинается `unbound`, сохраняет текущую незавершённую фазу,
+Task/Thread/cycle и Business attempt. Новые binding/run refs закрепляются
+owner-confirmed `bind`; до него effects запрещены. Same-key retry возвращает
+сохранённую подготовку, collision и старый run не продвигают новый cursor.
+Ранний/повторный ответ на question сохраняется Business по актуальному reference
+и сам по себе не запускает второй run. Git checkpoint не означает PASS,
+candidate или закрытие стадии; business-only checkpoint не требует Tech workspace.
+
+Catalog v2, skills и capabilities закреплены в immutable assignment. Runtime
+повторно проверяет packaged descriptor; drift между prepare и bind блокирует
+исполнение. V1 catalog/history сохраняются без переименования mode/phase refs;
+legacy Developer `integration|integration_rework` не выдаются новым dispatch.
+Owner cleanup v1 ограничен GET/ACK `RECONCILE_ONLY`.
 
 `/internal/runtime/step` доступен только для `bound` assignment и сохраняет
 прежний полный fence. History может читаться в `unbound` состоянии, но не

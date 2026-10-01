@@ -10,6 +10,7 @@ import datetime
 from typing import Any
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     CheckConstraint,
     DateTime,
@@ -57,9 +58,11 @@ class Workflow(Base):
         default=0,
         server_default="0",
     )
+    active_catalog_version: Mapped[int] = mapped_column(default=1, server_default="1", nullable=False)
     __table_args__ = (
         UniqueConstraint("key", name="uq_workflows_key"),
         CheckConstraint("is_default IN (0, 1)", name="ck_workflows_is_default"),
+        CheckConstraint("active_catalog_version > 0", name="ck_workflows_catalog_version"),
     )
 
     phases: Mapped[list[Phase]] = relationship(
@@ -86,14 +89,17 @@ class WorkflowMode(Base):
     key: Mapped[str] = mapped_column(String(128), nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
     mode_order: Mapped[int] = mapped_column(nullable=False)
+    catalog_version: Mapped[int] = mapped_column(default=1, server_default="1", nullable=False)
     role_key: Mapped[str | None] = mapped_column(String(32), nullable=True)
     execution_scope: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    execution_scopes: Mapped[list[str] | None] = mapped_column(JSON(none_as_null=True), nullable=True)
     tech_workspace_policy: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     __table_args__ = (
         UniqueConstraint("id", "workflow_id", name="uq_workflow_modes_id_workflow"),
-        UniqueConstraint("workflow_id", "key", name="uq_workflow_modes_workflow_key"),
-        UniqueConstraint("workflow_id", "mode_order", name="uq_workflow_modes_workflow_order"),
+        UniqueConstraint("workflow_id", "key", "catalog_version", name="uq_workflow_modes_workflow_key"),
+        UniqueConstraint("workflow_id", "mode_order", "catalog_version", name="uq_workflow_modes_workflow_order"),
+        CheckConstraint("catalog_version > 0", name="ck_workflow_modes_catalog_version"),
         CheckConstraint("mode_order > 0", name="ck_workflow_modes_order_positive"),
         CheckConstraint(
             "execution_scope IS NULL OR execution_scope IN ('business', 'delivery', 'aggregate')",
@@ -104,8 +110,10 @@ class WorkflowMode(Base):
             name="ck_workflow_modes_tech_policy",
         ),
         CheckConstraint(
-            "(role_key IS NULL AND execution_scope IS NULL AND tech_workspace_policy IS NULL) OR "
-            "(role_key IS NOT NULL AND execution_scope IS NOT NULL AND tech_workspace_policy IS NOT NULL)",
+            "(role_key IS NULL AND execution_scope IS NULL AND execution_scopes IS NULL "
+            "AND tech_workspace_policy IS NULL) OR "
+            "(role_key IS NOT NULL AND (execution_scope IS NOT NULL OR execution_scopes IS NOT NULL) "
+            "AND tech_workspace_policy IS NOT NULL)",
             name="ck_workflow_modes_policy_complete",
         ),
         CheckConstraint(
@@ -178,9 +186,7 @@ class Phase(Base):
     instructions: Mapped[list[PhaseInstruction]] = relationship(
         "PhaseInstruction", back_populates="phase", cascade="all, delete-orphan"
     )
-    checks: Mapped[list[PhaseCheck]] = relationship(
-        "PhaseCheck", back_populates="phase", cascade="all, delete-orphan"
-    )
+    checks: Mapped[list[PhaseCheck]] = relationship("PhaseCheck", back_populates="phase", cascade="all, delete-orphan")
     evidence: Mapped[list[PhaseEvidenceRequirement]] = relationship(
         "PhaseEvidenceRequirement", back_populates="phase", cascade="all, delete-orphan"
     )
@@ -237,9 +243,7 @@ class PhaseEvidenceRequirement(Base):
         nullable=False,
     )
     description: Mapped[str] = mapped_column(String, nullable=False)
-    __table_args__ = (
-        UniqueConstraint("phase_id", "description", name="uq_phase_evidence_requirements_description"),
-    )
+    __table_args__ = (UniqueConstraint("phase_id", "description", name="uq_phase_evidence_requirements_description"),)
 
     phase: Mapped[Phase] = relationship("Phase", back_populates="evidence")
 
@@ -257,9 +261,7 @@ class Project(Base):
     cli_command: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     key_prefixes: Mapped[str] = mapped_column(String, nullable=False, default="[]", server_default="[]")
 
-    __table_args__ = (
-        UniqueConstraint("id", "workflow_id", name="uq_projects_id_workflow"),
-    )
+    __table_args__ = (UniqueConstraint("id", "workflow_id", name="uq_projects_id_workflow"),)
 
     workflow: Mapped[Workflow] = relationship("Workflow", back_populates="projects")
     tasks: Mapped[list[Task]] = relationship(
@@ -309,9 +311,7 @@ class Task(Base):
         UniqueConstraint("id", "project_id", "workflow_id", name="uq_tasks_id_project_workflow"),
         UniqueConstraint("id", "mode_id", "workflow_id", name="uq_tasks_id_mode_workflow"),
         UniqueConstraint("project_id", "task_key", name="uq_tasks_project_task_key"),
-        UniqueConstraint(
-            "project_id", "assignment_operation_key", name="uq_tasks_project_assignment_operation"
-        ),
+        UniqueConstraint("project_id", "assignment_operation_key", name="uq_tasks_project_assignment_operation"),
         CheckConstraint("status IN ('active', 'done', 'blocked')", name="ck_tasks_status"),
         CheckConstraint("cycle_number >= 0", name="ck_tasks_cycle_number_nonnegative"),
         CheckConstraint("assignment_revision >= 0", name="ck_tasks_assignment_revision_nonnegative"),
@@ -402,12 +402,8 @@ class TaskRuntimeAssignment(Base):
             ondelete="RESTRICT",
         ),
         UniqueConstraint("operation_key", name="uq_task_runtime_assignments_operation_key"),
-        UniqueConstraint(
-            "bind_operation_key", name="uq_task_runtime_assignments_bind_operation_key"
-        ),
-        UniqueConstraint(
-            "task_id", "assignment_revision", name="uq_task_runtime_assignments_task_revision"
-        ),
+        UniqueConstraint("bind_operation_key", name="uq_task_runtime_assignments_bind_operation_key"),
+        UniqueConstraint("task_id", "assignment_revision", name="uq_task_runtime_assignments_task_revision"),
         CheckConstraint("cycle_number >= 0", name="ck_task_runtime_assignments_cycle_nonnegative"),
         CheckConstraint(
             "attempt_number IS NULL OR attempt_number > 0",
@@ -658,8 +654,7 @@ class TaskPhaseEvent(Base):
     mode: Mapped[WorkflowMode] = relationship(
         "WorkflowMode",
         primaryjoin=(
-            "and_(TaskPhaseEvent.mode_id == WorkflowMode.id, "
-            "TaskPhaseEvent.workflow_id == WorkflowMode.workflow_id)"
+            "and_(TaskPhaseEvent.mode_id == WorkflowMode.id, TaskPhaseEvent.workflow_id == WorkflowMode.workflow_id)"
         ),
         foreign_keys="[TaskPhaseEvent.mode_id, TaskPhaseEvent.workflow_id]",
         viewonly=True,

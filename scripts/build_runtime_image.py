@@ -5,16 +5,22 @@ from __future__ import annotations
 import argparse
 import gzip
 import hashlib
+import io
+import json
+import os
 import subprocess
 import sys
+import tarfile
+import tempfile
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from project_workflow.build_provenance import (
     MANIFEST_SCHEMA_VERSION,
     BuildProvenance,
     BuildProvenanceError,
     docker_context_with_manifest,
+    load_build_provenance,
     runtime_bundle_sha256_from_archive,
     validate_build_provenance,
     verify_build_manifest,
@@ -61,10 +67,111 @@ def immutable_git_snapshot(root: Path, revision: str) -> GitSourceSnapshot:
     )
 
 
-def build_image(root: Path, image: str, docker: str, revision: str = "HEAD") -> None:
+CATALOG_PATH = "project_workflow/references/hermes_sdlc_catalog_v1.json"
+COMPATIBILITY_PATH = "runtime-compatibility.json"
+SKILLS_MANIFEST_PATH = "runtime-skills-manifest.json"
+
+
+def _json_bytes(value: object) -> bytes:
+    return (json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
+
+
+def derive_compatibility(root: Path) -> dict[str, object]:
+    # Imported only after package installation; verify-manifest stays stdlib-only.
+    from project_workflow.infrastructure.db.managed_catalog import (
+        export_runtime_catalog,
+        load_managed_catalog,
+    )
+
+    catalog = load_managed_catalog(root / CATALOG_PATH)
+    if catalog.catalog_version != 2:
+        raise BuildProvenanceError("Compatible image requires canonical catalog version 2")
+    manifest = json.loads((root / SKILLS_MANIFEST_PATH).read_bytes())
+    if manifest.get("schema") != catalog.skills_source.manifest_schema:
+        raise BuildProvenanceError("Native skills manifest schema differs from canonical pin")
+    provenance = load_build_provenance(root / "runtime-build-manifest.json")
+    exported, _ = export_runtime_catalog(
+        catalog, manifest=manifest, workflow_revision=provenance.source_revision,
+        skills_revision=catalog.skills_source.revision, source_artifacts={},
+    )
+    return exported["runtimeCompatibility"]
+
+
+def verify_compatibility(root: Path) -> None:
+    actual = json.loads((root / COMPATIBILITY_PATH).read_bytes())
+    if actual != derive_compatibility(root):
+        raise BuildProvenanceError("Runtime compatibility differs from immutable source inputs")
+
+
+def _add_context_files(context: bytes, files: dict[str, bytes]) -> bytes:
+    output = io.BytesIO()
+    with (tarfile.open(fileobj=io.BytesIO(context)) as source,
+          tarfile.open(fileobj=output, mode="w", format=tarfile.PAX_FORMAT) as target):
+        for member in source.getmembers():
+            if member.name not in files:
+                target.addfile(member, source.extractfile(member) if member.isfile() else None)
+        for name, content in sorted(files.items()):
+            member = tarfile.TarInfo(name)
+            member.size = len(content)
+            member.mode = 0o444
+            target.addfile(member, io.BytesIO(content))
+    return output.getvalue()
+
+
+def compatible_build_context(snapshot: GitSourceSnapshot, skills_root: Path) -> bytes:
+    context = docker_context_with_manifest(snapshot.archive, snapshot.provenance)
+    with tarfile.open(fileobj=io.BytesIO(context)) as source:
+        catalog_file = source.extractfile(CATALOG_PATH)
+        if catalog_file is None:
+            raise BuildProvenanceError("Canonical catalog missing from immutable archive")
+        catalog = json.load(catalog_file)
+    pin = catalog["skills_source"]
+    revision = pin["revision"]
+    manifest_path = pin["manifest_path"]
+    path = PurePosixPath(manifest_path)
+    if (len(revision) != 40 or any(ch not in "0123456789abcdef" for ch in revision)
+            or path.is_absolute() or ".." in path.parts
+            or str(path) != manifest_path or "\\" in manifest_path):
+        raise BuildProvenanceError("Invalid canonical skills source pin")
+    entry = str(_run_git(skills_root, "ls-tree", revision, "--", manifest_path)).strip()
+    if not entry.startswith(("100644 blob ", "100755 blob ")) or "\n" in entry:
+        raise BuildProvenanceError("Pinned native skills manifest must be a regular Git blob")
+    manifest = _run_git(skills_root, "show", f"{revision}:{manifest_path}", text=False)
+    if not isinstance(manifest, bytes):
+        raise BuildProvenanceError("Native skills manifest is unavailable")
+    context = _add_context_files(context, {SKILLS_MANIFEST_PATH: manifest})
+    # Execute the exporter from the same archived source that Docker will install.
+    # Neither a dirty builder checkout nor its installed policy can change pins.
+    with tempfile.TemporaryDirectory(prefix="workflow-compatibility-") as directory:
+        root = Path(directory)
+        with tarfile.open(fileobj=io.BytesIO(context)) as source:
+            for member in source.getmembers():
+                if not member.isfile():
+                    continue
+                relative = PurePosixPath(member.name)
+                if relative.is_absolute() or ".." in relative.parts or "\\" in member.name:
+                    raise BuildProvenanceError("Invalid context path")
+                target = root.joinpath(*relative.parts)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                fileobj = source.extractfile(member)
+                assert fileobj is not None
+                target.write_bytes(fileobj.read())
+        environment = dict(os.environ)
+        environment.pop("PYTHONPATH", None)
+        environment["PYTHONDONTWRITEBYTECODE"] = "1"
+        subprocess.run(
+            [sys.executable, "-m", "scripts.build_runtime_image", "derive-compatibility",
+             "--root", str(root)], cwd=root, env=environment, check=True,
+        )
+        descriptor = (root / COMPATIBILITY_PATH).read_bytes()
+    return _add_context_files(context, {COMPATIBILITY_PATH: descriptor})
+
+
+def build_image(root: Path, image: str, docker: str, revision: str = "HEAD",
+                *, skills_root: Path) -> None:
     snapshot = immutable_git_snapshot(root, revision)
     provenance = snapshot.provenance
-    context = docker_context_with_manifest(snapshot.archive, provenance)
+    context = compatible_build_context(snapshot, skills_root)
     # A PAX-first plain tar can be mistaken for a Dockerfile on stdin.
     transport = gzip.compress(context, mtime=0)
     subprocess.run(
@@ -101,6 +208,10 @@ def main(argv: list[str] | None = None) -> int:
     build.add_argument("--docker", default="docker")
     build.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     build.add_argument("--revision", default="HEAD")
+    build.add_argument("--skills-root", type=Path, required=True)
+
+    for name in ("derive-compatibility", "verify-compatibility"):
+        subparsers.add_parser(name).add_argument("--root", type=Path, required=True)
 
     verify = subparsers.add_parser("verify-manifest")
     verify.add_argument("--manifest", type=Path, required=True)
@@ -112,7 +223,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "build":
-            build_image(args.root.resolve(), args.image, args.docker, args.revision)
+            build_image(args.root.resolve(), args.image, args.docker, args.revision,
+                        skills_root=args.skills_root.resolve())
+        elif args.command == "derive-compatibility":
+            (args.root / COMPATIBILITY_PATH).write_bytes(_json_bytes(derive_compatibility(args.root)))
+        elif args.command == "verify-compatibility":
+            verify_compatibility(args.root)
         else:
             verify_build_manifest(
                 args.manifest,
@@ -121,7 +237,8 @@ def main(argv: list[str] | None = None) -> int:
                 expected_source_archive_sha256=args.source_archive_sha256,
                 expected_runtime_bundle_sha256=args.runtime_bundle_sha256,
             )
-    except (BuildProvenanceError, OSError, subprocess.CalledProcessError) as exc:
+    except (BuildProvenanceError, OSError, ValueError, KeyError, tarfile.TarError,
+            subprocess.CalledProcessError) as exc:
         print(f"provenance build failed: {exc}", file=sys.stderr)
         return 2
     return 0

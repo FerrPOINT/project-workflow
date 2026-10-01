@@ -12,6 +12,8 @@ from project_workflow.infrastructure.db import session as db_session
 from project_workflow.infrastructure.db.managed_catalog import ensure_managed_catalog
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui.app import create_app
+from project_workflow.interfaces.ui.routes import runtime_api
+from tests.test_runtime_assignment_contract import TEST_RUNTIME_COMPATIBILITY
 
 REVISION = "d9ebcff84068406ba4b09ae037dac53b5b6296ba"
 ARCHIVE_SHA256 = "a" * 64
@@ -53,7 +55,18 @@ def _install_manifest(monkeypatch, tmp_path: Path, value: object | None = None) 
     if value is not None:
         path.write_text(json.dumps(value), encoding="utf-8")
     monkeypatch.setattr(build_provenance, "DEFAULT_BUILD_MANIFEST_PATH", path)
+    descriptor_path = tmp_path / "runtime-compatibility.json"
+    descriptor_path.write_text(json.dumps(_valid_compatibility()), encoding="utf-8")
+    reader = build_provenance.runtime_compatibility_descriptor
+    def packaged_reader(**kwargs):
+        return reader(descriptor_path, **kwargs)
+    monkeypatch.setattr(runtime_api, "runtime_compatibility_descriptor", packaged_reader)
+    monkeypatch.setattr(build_provenance, "runtime_compatibility_descriptor", packaged_reader)
     return path
+
+
+def _valid_compatibility() -> dict:
+    return {**TEST_RUNTIME_COMPATIBILITY, "catalogRevision": REVISION}
 
 
 def _valid_manifest() -> dict[str, str | int]:
@@ -79,7 +92,7 @@ def _valid_manifest() -> dict[str, str | int]:
 )
 @pytest.mark.parametrize(
     ("credential_kind", "capabilities"),
-    [("assignment", ["assign", "bind"]), ("runtime", ["step", "history"])],
+    [("assignment", ["assign", "bind", "rebind"]), ("runtime", ["step", "history"])],
 )
 def test_runtime_capabilities_are_exact_and_role_scoped(
     monkeypatch, tmp_path: Path, role: str, credential_kind: str, capabilities: list[str]
@@ -106,6 +119,7 @@ def test_runtime_capabilities_are_exact_and_role_scoped(
         "capabilities": capabilities,
         "readiness": {"service": "ready", "schema": "ready", "catalog": "ready"},
         "source_provenance": _valid_manifest(),
+        "runtimeCompatibility": _valid_compatibility(),
     }
 
 
@@ -309,3 +323,20 @@ def test_runtime_capabilities_fail_closed_on_schema_probe_exception(monkeypatch,
     assert response.json()["readiness"] == {"service": "not_ready", "schema": "not_ready", "catalog": "not_ready"}
     assert "private-connection-detail" not in response.text
     assert credential not in response.text
+
+
+@pytest.mark.parametrize("descriptor", [None, {}, {**_valid_compatibility(), "catalogRevision": "f" * 40}])
+def test_runtime_capabilities_require_packaged_matching_compatibility(monkeypatch, tmp_path, descriptor):
+    credential = _token("developer-runtime")
+    _configure_tokens(monkeypatch, runtime={"developer": credential})
+    _install_manifest(monkeypatch, tmp_path, _valid_manifest())
+    descriptor_path = tmp_path / "runtime-compatibility.json"
+    if descriptor is None:
+        descriptor_path.unlink()
+    else:
+        descriptor_path.write_text(json.dumps(descriptor), encoding="utf-8")
+    with TestClient(create_app()) as client:
+        response = client.get("/internal/runtime/capabilities", headers={"Authorization": f"Bearer {credential}"})
+    assert response.status_code == 503
+    assert response.json()["readiness"] == {"service": "not_ready", "schema": "ready", "catalog": "ready"}
+    assert "runtimeCompatibility" not in response.json()

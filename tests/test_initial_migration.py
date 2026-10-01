@@ -83,8 +83,10 @@ def test_repository_has_one_linear_migration_head():
         "0002_workflow_modes.py",
         "0003_runtime_assignment_bind.py",
         "0004_wide_work_item_revision.py",
+        "0005_mode_execution_scopes.py",
+        "0006_versioned_mode_catalog.py",
     ]
-    assert migration_head() == "0004_wide_work_item_revision"
+    assert migration_head() == "0006_versioned_mode_catalog"
 
 
 def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
@@ -136,7 +138,7 @@ def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
         }
         assert actual_fks == expected_fks, table_name
 
-    assert database_revisions(engine) == {"0004_wide_work_item_revision"}
+    assert database_revisions(engine) == {"0006_versioned_mode_catalog"}
     assert schema_is_ready(engine) is True
     with engine.connect() as connection:
         context = MigrationContext.configure(
@@ -248,6 +250,97 @@ def test_sqlite_upgrade_populated_legacy_backfills_each_workflow_mode(tmp_path):
             )
 
 
+@pytest.mark.parametrize("predecessor", ["0004_wide_work_item_revision", "0005_mode_execution_scopes"])
+def test_sqlite_supported_additive_upgrade_preserves_legacy_catalog_and_assignment_history(tmp_path, predecessor):
+    engine = _sqlite_engine(tmp_path, f"{predecessor}.db")
+    run_alembic_command("upgrade", engine, predecessor)
+    with engine.begin() as conn:
+        workflow_id = conn.execute(text(
+            "INSERT INTO workflows (key, name, description, is_default) "
+            "VALUES ('hermes-sdlc:developer', 'Historical Developer', '', 0) RETURNING id"
+        )).scalar_one()
+        mode_ids = [conn.execute(text(
+            "INSERT INTO workflow_modes "
+            "(workflow_id, key, name, mode_order, role_key, execution_scope, tech_workspace_policy) "
+            "VALUES (:workflow_id, :key, :key, :position, :role, :scope, :policy) RETURNING id"
+        ), {"workflow_id": workflow_id, "key": key, "position": position,
+            "role": role, "scope": scope, "policy": policy}).scalar_one()
+            for position, (key, role, scope, policy) in enumerate([
+                ("default", None, None, None), ("integration", "developer", "aggregate", "required")
+            ], 1)]
+        project_id = conn.execute(text(
+            "INSERT INTO projects (workflow_id, code, name, description, key_prefixes, cli_command) "
+            "VALUES (:workflow_id, 'LEGACY', 'Historical namespace', '', '[]', 'legacy') RETURNING id"
+        ), {"workflow_id": workflow_id}).scalar_one()
+        task_ids = []
+        for index, mode_id in enumerate(mode_ids):
+            phase_id = conn.execute(text(
+                "INSERT INTO phases (workflow_id, mode_id, code, name, phase_order) "
+                "VALUES (:workflow_id, :mode_id, :code, 'Frozen phase', 1) RETURNING id"
+            ), {"workflow_id": workflow_id, "mode_id": mode_id, "code": f"legacy-{index}"}).scalar_one()
+            task_id = conn.execute(text(
+                "INSERT INTO tasks (project_id, workflow_id, mode_id, task_key, current_phase_id, status) "
+                "VALUES (:project_id, :workflow_id, :mode_id, :task_key, :phase_id, 'active') RETURNING id"
+            ), {"project_id": project_id, "workflow_id": workflow_id, "mode_id": mode_id,
+                "task_key": f"LEGACY-{index}", "phase_id": phase_id}).scalar_one()
+            task_ids.append(task_id)
+            history_id = conn.execute(text(
+                "INSERT INTO task_step_history (task_id, workflow_id, mode_id, phase_id, verdict, worker_report) "
+                "VALUES (:task_id, :workflow_id, :mode_id, :phase_id, 'partial', :report) RETURNING id"
+            ), {"task_id": task_id, "workflow_id": workflow_id, "mode_id": mode_id,
+                "phase_id": phase_id, "report": f"Frozen legacy catalog {index} report"}).scalar_one()
+            conn.execute(text(
+                "INSERT INTO task_phase_events (task_id, workflow_id, mode_id, phase_id, step_history_id, event_type) "
+                "VALUES (:task_id, :workflow_id, :mode_id, :phase_id, :history_id, 'entered')"
+            ), {"task_id": task_id, "workflow_id": workflow_id, "mode_id": mode_id,
+                "phase_id": phase_id, "history_id": history_id})
+            assignment = {"operation_key": f"legacy-catalog-{index}", "task_id": task_id,
+                "project_id": project_id, "workflow_id": workflow_id, "mode_id": mode_id,
+                "cycle_number": 0, "assignment_revision": 1, "payload": f'{{"catalogVersion":{index}}}'}
+            if index == 1:
+                assignment.update({"workflow_key": "hermes-sdlc:developer", "role_key": "developer",
+                    "stage_key": "development", "execution_scope": "aggregate", "attempt_number": 1,
+                    "business_task_ref": "business:1", "root_task_ref": "root:1", "work_item_ref": "root:1",
+                    "work_item_revision": 1759300000000, "queue_item_ref": "queue:1",
+                    "task_workspace_ref": "workspace:1", "workspace_revision": 2,
+                    "tech_execution_workspace_ref": "tech:1", "tech_execution_attempt_ref": "attempt:1",
+                    "decomposition_revision_ref": "decomposition:1", "stage_revision": "development:1",
+                    "assignment_ref": "assignment:1", "binding_ref": "binding:1", "hermes_run_ref": "run:1",
+                    "workspace_generation": 1, "lease_generation": 1, "exact_input_refs": "[]",
+                    "payload_sha256": "a" * 64, "bind_operation_key": "bind:1", "bind_request_sha256": "b" * 64})
+            conn.execute(text(
+                f"INSERT INTO task_runtime_assignments ({', '.join(assignment)}) "
+                f"VALUES ({', '.join(f':{column}' for column in assignment)})"
+            ), assignment)
+        frozen = {table: conn.execute(text(f"SELECT * FROM {table} ORDER BY id")).all()
+            for table in ("tasks", "task_runtime_assignments", "task_step_history", "task_phase_events")}
+
+    assert database_revisions(engine) == {predecessor}
+    ensure_migrated(engine)
+    ensure_migrated(engine)  # Restart is idempotent and cannot reinterpret historical payloads.
+    assert database_revisions(engine) == {"0006_versioned_mode_catalog"}
+    assert schema_is_ready(engine)
+    with engine.connect() as conn:
+        for table, original in frozen.items():
+            assert conn.execute(text(f"SELECT * FROM {table} ORDER BY id")).all() == original, table
+        assert conn.execute(text("SELECT active_catalog_version FROM workflows WHERE id = :id"),
+                            {"id": workflow_id}).scalar_one() == 1
+    with SAUnitOfWork(engine) as uow:
+        unmanaged, managed = [uow.workflows.get_mode(mode_id) for mode_id in mode_ids]
+        assert unmanaged is not None and managed is not None
+        assert unmanaged.key == "default" and unmanaged.catalog_version == 1 and unmanaged.role_key is None
+        assert managed.key == "integration" and managed.catalog_version == 1
+        assert managed.execution_scope == "aggregate" and managed.execution_scopes is None
+        for index, task_id in enumerate(task_ids):
+            assignment = uow.tasks.get_assignment_by_operation_key(f"legacy-catalog-{index}")
+            assert assignment is not None and assignment.mode_id == mode_ids[index]
+            assert assignment.payload == {"catalogVersion": index}
+            assert uow.step_history.list(task_id=task_id, limit=None)[0].worker_report == (
+                f"Frozen legacy catalog {index} report"
+            )
+        assert uow.tasks.get_assignment_by_operation_key("legacy-catalog-1").hermes_run_ref == "run:1"
+
+
 def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path):
     engine = _sqlite_engine(tmp_path, "binding-constraints.db")
     run_alembic_command("upgrade", engine, "0002_workflow_modes")
@@ -357,7 +450,7 @@ def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path):
         )
 
     ensure_migrated(engine)
-    assert database_revisions(engine) == {"0004_wide_work_item_revision"}
+    assert database_revisions(engine) == {"0006_versioned_mode_catalog"}
     with engine.connect() as conn:
         preserved = conn.execute(
             text(
@@ -741,7 +834,7 @@ def test_head_with_damaged_or_polluted_schema_is_refused(tmp_path, mutation):
     assert schema_is_ready(engine) is False
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0004_wide_work_item_revision"}
+    assert database_revisions(engine) == {"0006_versioned_mode_catalog"}
     if mutation == "extra":
         with engine.connect() as connection:
             assert connection.execute(text("SELECT id FROM unexpected_table")).scalar_one() == 42

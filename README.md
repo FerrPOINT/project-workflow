@@ -49,15 +49,19 @@ Fleet Control читает каталог через `GET /internal/runtime/cata
 
 Business adapter проверяет runtime-контракт через аутентифицированный
 `GET /internal/runtime/capabilities`. Assignment token получает только
-`assign`/`bind`, runtime token — только `step`/`history`; catalog token не имеет
+`assign`/`bind`/`rebind`, runtime token — только `step`/`history`; catalog token не имеет
 доступа к endpoint. Успешный ответ возвращает роль, тип credential, readiness
 схемы и immutable source provenance. Отсутствующий или некорректный build
 manifest даёт `503`, при этом публичный `/health` по-прежнему проверяет только
 DB/schema и подходит для standalone-разработки.
 
-Managed DEV bootstrap загружает только versioned-каталог
+Managed DEV bootstrap загружает versioned-каталог v2 из исторически именованного
 [`hermes_sdlc_catalog_v1.json`](project_workflow/references/hermes_sdlc_catalog_v1.json):
-семь workflow и тринадцать backend-selected modes. Каноническая роль Project
+семь workflow и одиннадцать backend-selected modes. Developer имеет `initial`
+и `rework`; каждый допускает независимый scope `delivery` или `aggregate`.
+Scope выбирает Business, а workflow проверяет допустимый набор. Reviewer,
+Tester и DevOps используют `delivery` для delivery и `integration` для aggregate.
+Каноническая роль Project
 Manager записывается как `project_manager`; произвольные underscore aliases не
 нормализуются. У managed workflow нет `default` mode: отсутствие или
 несовпадение assigned mode закрывает запуск до Supervisor/model call. Старый
@@ -70,13 +74,34 @@ managed registry в той же транзакции. Старый конфли�
 Любой drift, неоднозначный alias или посторонний test/foreign object блокирует
 bootstrap до записи. Fleet catalog endpoint при этом возвращает только семь
 managed workflow/namespaces; legacy Task остаются доступны прежнему unmanaged
-CLI/UI compatibility flow.
+CLI/UI compatibility flow. Каталог v1 сохранён отдельно в
+[`hermes_sdlc_catalog_v1_legacy.json`](project_workflow/references/hermes_sdlc_catalog_v1_legacy.json).
+Adoption v2 не изменяет frozen assignments, phases или историю v1. Bound v1
+assignment не исполняется несовместимым runtime: dispatch получает
+`VERSION_INCOMPATIBLE`. Исторический cleanup разрешает только owner-confirmed
+GET/ACK в `RECONCILE_ONLY`, без новых product effects.
+
+Continuation использует внутренний `rebind`: новый immutable assignment
+сохраняет Task/Thread/cycle/Business attempt и незавершённую фазу, увеличивает
+runSequence и проверяет old/new binding, checkpoint provenance, входные
+revisions и operation key. CAS и повтор одинаковой операции не создают
+двойной run. До owner confirmation новый binding не допускает `step`.
+Git checkpoint сохраняет работу, но не является stage PASS или candidate.
+Business-only роли сохраняют phase/context без Tech workspace.
+
+Compatible image закрепляет catalog/skills/capabilities и exact source
+provenance. Canonical exporter исполняется из того же Git archive, который
+устанавливает Docker; native skills manifest читается по закреплённому Git
+revision. Отсутствующий или расходящийся release descriptor блокирует runtime
+capabilities/dispatch. Успешный `/health` сам по себе не доказывает эту
+совместимость, автономный SDLC или human acceptance.
 
 Поставляемый image собирается из одного immutable Git snapshot командой:
 
 ```bash
 python scripts/build_runtime_image.py build \
   --revision <exact-sha> \
+  --skills-root <agent-skills-checkout> \
   --image project-workflow:<exact-sha>
 ```
 
@@ -194,7 +219,7 @@ bridge `/internal/runtime/*` не использует browser SSO и защищ
 | Append-only history | История фаз и `step`-проверок не затирается. |
 | CLI freeze | Публичный CLI остаётся управляемым и предсказуемым: `step` / `history`. |
 | Wrapper commands | `workflow-qa`, `workflow-dev` и другие команды генерируются из записей PostgreSQL. |
-| Automatic baseline | `docker compose up` поднимает Postgres, применяет миграции и загружает versioned managed-каталог 7 workflow / 13 modes. |
+| Automatic baseline | `docker compose up` поднимает Postgres, применяет миграции и загружает versioned managed-каталог v2: 7 workflow / 11 modes с независимыми scope sets. |
 
 ## 🔧 Стек
 

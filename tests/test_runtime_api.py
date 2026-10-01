@@ -19,22 +19,46 @@ from project_workflow.interfaces.ui.app import create_app
 from project_workflow.interfaces.ui.routes import runtime_api
 from project_workflow.interfaces.ui.schemas import RuntimeStepRequest
 
+TEST_RUNTIME_COMPATIBILITY = {
+    "catalogVersion": 2,
+    "catalogRevision": "a" * 40,
+    "catalogSha256": "b" * 64,
+    "skillsRevision": "c" * 40,
+    "skillsManifestSha256": "d" * 64,
+    "capabilityRevision": "hermes-sdlc-runtime/v2",
+    "capabilitySha256": "e" * 64,
+}
+
+
+@pytest.fixture(autouse=True)
+def packaged_runtime_api_test_image(monkeypatch):
+    """The synthetic API namespace uses a compatible packaged v2 test image."""
+    from project_workflow import build_provenance
+
+    def descriptor(**_kwargs):
+        return dict(TEST_RUNTIME_COMPATIBILITY)
+
+    monkeypatch.setattr(build_provenance, "runtime_compatibility_descriptor", descriptor)
+    monkeypatch.setattr(runtime_api, "runtime_compatibility_descriptor", descriptor)
+
 
 def _namespace(code: str, cli_command: str, prefix: str) -> None:
     role = cli_command.removeprefix("workflow-")
     scope = "delivery" if role == "developer" else "business"
     with SAUnitOfWork() as uow:
         workflow_id = uow.workflows.create(
-            {"key": f"hermes-sdlc:{role}", "name": f"Runtime {role}"}
+            {"key": f"hermes-sdlc:{role}", "name": f"Runtime {role}", "active_catalog_version": 2}
         )
         mode_id = uow.workflows.create_mode(
             {
                 "workflow_id": workflow_id,
                 "key": "assigned",
+                "catalog_version": 2,
                 "name": "Assigned",
                 "mode_order": 2,
                 "role_key": role,
                 "execution_scope": scope,
+                "execution_scopes": [scope],
                 "tech_workspace_policy": "required" if scope != "business" else "forbidden",
             }
         )
@@ -67,6 +91,7 @@ def _assignment(task: str, operation_key: str, role: str) -> dict[str, object]:
     scope = "delivery" if role == "developer" else "business"
     payload: dict[str, object] = {
         "task": task,
+        "runtime_compatibility": dict(TEST_RUNTIME_COMPATIBILITY),
         "workflow_key": f"hermes-sdlc:{role}",
         "role_key": role,
         "mode_key": "assigned",
@@ -1444,3 +1469,19 @@ def test_concurrent_identical_runtime_step_has_one_durable_mutation(
         assert task is not None and task.id is not None
         assert len(uow.step_history.list(task_id=task.id, limit=None)) == 1
         assert len(uow.tasks.list_phase_events(task.id)) == 2
+
+
+@pytest.mark.parametrize("descriptor", [None, {**TEST_RUNTIME_COMPATIBILITY, "capabilitySha256": "f" * 64}])
+def test_current_catalog_assignment_refuses_missing_or_mismatched_image_pins(monkeypatch, descriptor):
+    assignment_token = "catalog-v2-owner-assignment-token-1234"
+    monkeypatch.setenv("PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON", json.dumps({"developer": assignment_token}))
+    config.get_settings.cache_clear()
+    _namespace("DEVELOPER", "workflow-developer", "DEV")
+    payload = _assignment("DEV-902", "assign-current-image-pins", "developer")
+    payload["runtime_compatibility"] = descriptor
+    with TestClient(create_app()) as client:
+        response = client.post("/internal/runtime/assign", headers=_headers(assignment_token), json=payload)
+    assert response.status_code == 409, response.text
+    with SAUnitOfWork() as uow:
+        assert uow.tasks.get_by_key("DEV-902") is None
+        assert uow.tasks.get_assignment_by_operation_key("assign-current-image-pins") is None

@@ -15,6 +15,7 @@ from project_workflow.domain.exceptions import ConflictError
 from project_workflow.infrastructure.db.session import run_alembic_command
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from tests._db_helpers import prepared_sqlite_uow
+from tests.test_runtime_assignment_contract import TEST_RUNTIME_COMPATIBILITY
 
 
 @pytest.fixture
@@ -25,6 +26,7 @@ def modes_db(tmp_path):
 
 def _binding(operation_key: str, *, scope: str = "delivery") -> dict[str, object]:
     return {
+        "runtime_compatibility": dict(TEST_RUNTIME_COMPATIBILITY),
         "role_key": "developer",
         "workflow_key": "hermes-sdlc:developer",
         "execution_scope": scope,
@@ -239,15 +241,19 @@ def test_event_history_link_cannot_cross_mode_or_cycle(modes_db):
 
 
 def test_runtime_assignment_persists_cycles_only_after_terminal(modes_db):
-    workflow_id = modes_db.workflows.create({"key": "hermes-sdlc:developer", "name": "Runtime"})
+    workflow_id = modes_db.workflows.create(
+        {"key": "hermes-sdlc:developer", "name": "Runtime",
+         "active_catalog_version": 2, "create_default_mode": False}
+    )
     initial_mode = modes_db.workflows.create_mode(
         {
             "workflow_id": workflow_id,
             "key": "initial",
             "name": "Initial",
-            "mode_order": 2,
+            "mode_order": 1,
             "role_key": "developer",
-            "execution_scope": "delivery",
+            "catalog_version": 2,
+            "execution_scopes": ["delivery", "aggregate"],
             "tech_workspace_policy": "required",
         }
     )
@@ -256,9 +262,10 @@ def test_runtime_assignment_persists_cycles_only_after_terminal(modes_db):
             "workflow_id": workflow_id,
             "key": "rework",
             "name": "Rework",
-            "mode_order": 3,
+            "mode_order": 2,
             "role_key": "developer",
-            "execution_scope": "delivery",
+            "catalog_version": 2,
+            "execution_scopes": ["delivery", "aggregate"],
             "tech_workspace_policy": "required",
         }
     )
@@ -354,15 +361,19 @@ def test_runtime_assignment_persists_cycles_only_after_terminal(modes_db):
 
 
 def test_assignment_ledger_reconciles_delayed_replay_and_rejects_cross_task_reuse(modes_db):
-    workflow_id = modes_db.workflows.create({"key": "hermes-sdlc:developer", "name": "Assignment ledger"})
+    workflow_id = modes_db.workflows.create(
+        {"key": "hermes-sdlc:developer", "name": "Assignment ledger",
+         "active_catalog_version": 2, "create_default_mode": False}
+    )
     initial_mode = modes_db.workflows.create_mode(
         {
             "workflow_id": workflow_id,
             "key": "initial",
             "name": "Initial",
-            "mode_order": 2,
+            "mode_order": 1,
             "role_key": "developer",
-            "execution_scope": "delivery",
+            "catalog_version": 2,
+            "execution_scopes": ["delivery", "aggregate"],
             "tech_workspace_policy": "required",
         }
     )
@@ -371,9 +382,10 @@ def test_assignment_ledger_reconciles_delayed_replay_and_rejects_cross_task_reus
             "workflow_id": workflow_id,
             "key": "rework",
             "name": "Rework",
-            "mode_order": 3,
+            "mode_order": 2,
             "role_key": "developer",
-            "execution_scope": "delivery",
+            "catalog_version": 2,
+            "execution_scopes": ["delivery", "aggregate"],
             "tech_workspace_policy": "required",
         }
     )
@@ -538,15 +550,19 @@ def test_delete_workflow_clears_self_references_in_every_mode(modes_db):
 def test_supervisor_context_switch_filters_prompt_history_but_keeps_audit(modes_db):
     from project_workflow.supervisor.core import SupervisorEngine
 
-    workflow_id = modes_db.workflows.create({"key": "hermes-sdlc:developer", "name": "Context"})
+    workflow_id = modes_db.workflows.create(
+        {"key": "hermes-sdlc:developer", "name": "Context",
+         "active_catalog_version": 2, "create_default_mode": False}
+    )
     initial_mode = modes_db.workflows.create_mode(
         {
             "workflow_id": workflow_id,
             "key": "initial",
             "name": "Initial",
-            "mode_order": 2,
+            "mode_order": 1,
             "role_key": "developer",
-            "execution_scope": "delivery",
+            "catalog_version": 2,
+            "execution_scopes": ["delivery", "aggregate"],
             "tech_workspace_policy": "required",
         }
     )
@@ -555,9 +571,10 @@ def test_supervisor_context_switch_filters_prompt_history_but_keeps_audit(modes_
             "workflow_id": workflow_id,
             "key": "rework",
             "name": "Rework",
-            "mode_order": 3,
+            "mode_order": 2,
             "role_key": "developer",
-            "execution_scope": "delivery",
+            "catalog_version": 2,
+            "execution_scopes": ["delivery", "aggregate"],
             "tech_workspace_policy": "required",
         }
     )

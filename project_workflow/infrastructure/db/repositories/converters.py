@@ -54,7 +54,9 @@ def _row_to_workflow(row: m.Workflow) -> Workflow:
         name=row.name,
         description=row.description or "",
         is_default=bool(row.is_default),
-        modes=[_row_to_mode(mode) for mode in sorted(row.modes, key=lambda item: item.mode_order)]
+        active_catalog_version=row.active_catalog_version,
+        modes=[_row_to_mode(mode) for mode in sorted(row.modes, key=lambda item: item.mode_order)
+               if mode.catalog_version == row.active_catalog_version]
     )
 
 
@@ -65,8 +67,10 @@ def _row_to_mode(row: m.WorkflowMode) -> WorkflowMode:
         key=row.key,
         name=row.name,
         mode_order=row.mode_order,
+        catalog_version=row.catalog_version,
         role_key=row.role_key,
         execution_scope=row.execution_scope,
+        execution_scopes=row.execution_scopes,
         tech_workspace_policy=row.tech_workspace_policy,
     )
 

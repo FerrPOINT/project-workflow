@@ -249,6 +249,7 @@ def create_app() -> FastAPI:
     app.post("/internal/runtime/step", response_model=None)(runtime_api.runtime_step)
     app.post("/internal/runtime/assign", response_model=None)(runtime_api.runtime_assign)
     app.post("/internal/runtime/bind", response_model=None)(runtime_api.runtime_bind)
+    app.post("/internal/runtime/rebind", response_model=None)(runtime_api.runtime_rebind)
     app.get("/internal/runtime/history", response_model=None)(runtime_api.runtime_history)
     app.get("/internal/runtime/catalog", response_model=None)(runtime_api.runtime_catalog)
 

@@ -13,9 +13,28 @@ from project_workflow.infrastructure.db.models import TaskRuntimeAssignment as D
 from project_workflow.interfaces.ui.schemas import RuntimeAssignmentRequest
 from tests._db_helpers import prepared_sqlite_uow
 
+TEST_RUNTIME_COMPATIBILITY = {
+    "catalogVersion": 2,
+    "catalogRevision": "a" * 40,
+    "catalogSha256": "b" * 64,
+    "skillsRevision": "c" * 40,
+    "skillsManifestSha256": "d" * 64,
+    "capabilityRevision": "hermes-sdlc-runtime/v2",
+    "capabilitySha256": "e" * 64,
+}
+
+
+@pytest.fixture(autouse=True)
+def packaged_test_runtime(monkeypatch):
+    """Scoped test image identity; production still requires the packaged release artifact."""
+    from project_workflow import build_provenance
+
+    monkeypatch.setattr(build_provenance, "runtime_compatibility_descriptor", lambda: dict(TEST_RUNTIME_COMPATIBILITY))
+
 
 def _binding(**overrides: object) -> dict[str, object]:
     binding: dict[str, object] = {
+        "runtime_compatibility": dict(TEST_RUNTIME_COMPATIBILITY),
         "role_key": "developer",
         "workflow_key": "hermes-sdlc:developer",
         "execution_scope": "delivery",
@@ -47,7 +66,7 @@ def _binding(**overrides: object) -> dict[str, object]:
                 "ref": "business-task:DEV-1",
                 "revision": "7",
                 "hash": "a" * 64,
-            }
+            },
         ],
     }
     binding.update(overrides)
@@ -74,9 +93,144 @@ def _bind(uow, project_id: int, assignment: dict[str, object], **overrides: obje
     return TaskService(uow).bind_runtime_assignment(**values)
 
 
+def _continuation(bound: dict[str, object], **overrides: object) -> dict[str, object]:
+    values: dict[str, object] = {
+        "task": bound["task_key"],
+        "operation_key": "continue:DEV-1:1",
+        "expected_assignment_revision": bound["assignment_revision"],
+        "expected_assignment_ref": bound["assignment_ref"],
+        "expected_binding_ref": bound["binding_ref"],
+        "expected_hermes_run_ref": bound["hermes_run_ref"],
+        "expected_phase_code": bound["current_phase_code"],
+        "expected_status": bound["status"],
+        "mode_key": bound["mode_key"],
+        "execution_scope": bound["execution_scope"],
+        "cycle_number": bound["cycle_number"],
+        "attempt_number": bound["attempt_number"],
+        "run_sequence": 1,
+        "next_assignment_ref": "assignment:DEV-1:continued",
+        "next_binding_ref": "binding:continued",
+        "next_hermes_run_ref": "run:continued",
+        "checkpoint_ref": "receipt:DEV-1:oldrun",
+        "checkpoint_revision": "a" * 64,
+        "checkpoint_owner_assignment_ref": bound["assignment_ref"],
+        "checkpoint_hermes_run_ref": bound["hermes_run_ref"],
+        "expected_work_item_revision": bound["work_item_revision"],
+        "work_item_revision": bound["work_item_revision"],
+        "expected_workspace_revision": bound["workspace_revision"],
+        "expected_decomposition_revision_ref": bound["decomposition_revision_ref"],
+        "expected_stage_revision": bound["stage_revision"],
+        "expected_workspace_generation": bound["workspace_generation"],
+        "expected_lease_generation": bound["lease_generation"],
+        "exact_input_refs": [
+            *bound["exact_input_refs"],
+            {
+                "kind": "tech-execution-terminal-receipt",
+                "ref": "receipt:DEV-1:oldrun",
+                "revision": "oldrun",
+                "hash": "a" * 64,
+            },
+        ],
+        "workspace_generation": 3,
+        "lease_generation": 6,
+        "tech_execution_workspace_ref": "workspace:continued",
+        "tech_execution_attempt_ref": "attempt:continued",
+    }
+    values.update(overrides)
+    return values
+
+
+def test_continuation_preserves_phase_history_and_requires_fresh_bind(accepted_runtime_assignment):
+    uow, project_id, assigned = accepted_runtime_assignment
+    bound = _bind(uow, project_id, assigned)
+    history_before = [entry.to_dict() for entry in uow.tasks.list_phase_events(assigned["id"])]
+    service = TaskService(uow)
+    request = _continuation(bound)
+    prepared = service.rebind_runtime_assignment(project_id=project_id, role_key="developer", request=request)
+    assert prepared["binding_state"] == "unbound"
+    assert prepared["current_phase_code"] == bound["current_phase_code"]
+    assert prepared["assignment_revision"] == bound["assignment_revision"] + 1
+    assert prepared["attempt_number"] == bound["attempt_number"]
+    assert [entry.to_dict() for entry in uow.tasks.list_phase_events(assigned["id"])] == history_before
+    assert service.rebind_runtime_assignment(project_id=project_id, role_key="developer", request=request) == prepared
+    with pytest.raises(ConflictError, match="payload conflict"):
+        service.rebind_runtime_assignment(
+            project_id=project_id, role_key="developer", request={**request, "checkpoint_revision": "b" * 64}
+        )
+    confirmed = _bind(uow, project_id, prepared, binding_ref="binding:continued", hermes_run_ref="run:continued")
+    assert confirmed["binding_state"] == "bound"
+    prior = uow.tasks.get_assignment_by_operation_key(bound["assignment_operation_key"])
+    assert prior is not None and prior.binding_ref == bound["binding_ref"]
+
+
+def test_continuation_reconciles_receipt_committed_while_waiting_for_lock(accepted_runtime_assignment, monkeypatch):
+    uow, project_id, assigned = accepted_runtime_assignment
+    bound = _bind(uow, project_id, assigned)
+    request = _continuation(bound)
+    service = TaskService(uow)
+    prepared = service.rebind_runtime_assignment(project_id=project_id, role_key="developer", request=request)
+    lookup = uow.tasks.get_assignment_by_operation_key
+    missed_initial_read = False
+
+    def delayed_receipt(operation_key):
+        nonlocal missed_initial_read
+        if operation_key == request["operation_key"] and not missed_initial_read:
+            missed_initial_read = True
+            return None
+        return lookup(operation_key)
+
+    monkeypatch.setattr(uow.tasks, "get_assignment_by_operation_key", delayed_receipt)
+    assert service.rebind_runtime_assignment(project_id=project_id, role_key="developer", request=request) == prepared
+    assert uow.tasks.get_by_id(bound["id"]).assignment_revision == prepared["assignment_revision"]
+
+
+def test_continuation_rolls_back_owner_cursor_on_assignment_integrity_conflict(
+    accepted_runtime_assignment, monkeypatch
+):
+    uow, project_id, assigned = accepted_runtime_assignment
+    bound = _bind(uow, project_id, assigned)
+    history = [entry.to_dict() for entry in uow.tasks.list_phase_events(bound["id"])]
+
+    def conflicting_insert(_record):
+        raise IntegrityError("insert", {}, ValueError("competing assignment"))
+
+    monkeypatch.setattr(uow.tasks, "create_assignment", conflicting_insert)
+    with pytest.raises(ConflictError, match="persisted owner state"):
+        TaskService(uow).rebind_runtime_assignment(
+            project_id=project_id, role_key="developer", request=_continuation(bound)
+        )
+    current = uow.tasks.get_by_id(bound["id"])
+    assert current.assignment_revision == bound["assignment_revision"]
+    assert current.assignment_operation_key == bound["assignment_operation_key"]
+    assert uow.tasks.get_assignment_by_operation_key("continue:DEV-1:1") is None
+    assert [entry.to_dict() for entry in uow.tasks.list_phase_events(bound["id"])] == history
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("expected_phase_code", "stale"),
+        ("expected_assignment_revision", 99),
+        ("expected_binding_ref", "other"),
+        ("expected_hermes_run_ref", "other"),
+        ("execution_scope", "aggregate"),
+        ("cycle_number", 1),
+        ("run_sequence", 2),
+    ],
+)
+def test_continuation_rejects_stale_cursor_and_cross_run_without_mutation(accepted_runtime_assignment, field, value):
+    uow, project_id, assigned = accepted_runtime_assignment
+    bound = _bind(uow, project_id, assigned)
+    with pytest.raises(ConflictError):
+        TaskService(uow).rebind_runtime_assignment(
+            project_id=project_id, role_key="developer", request=_continuation(bound, **{field: value})
+        )
+    assert uow.tasks.get_by_id(bound["id"]).assignment_revision == bound["assignment_revision"]
+
+
 def _runtime_catalog(uow, *, role_key: str, scope: str, tech_policy: str) -> tuple[int, int]:
     workflow_id = uow.workflows.create(
-        {"key": f"hermes-sdlc:{role_key}", "name": f"{role_key}-{scope}"}
+        {"key": f"hermes-sdlc:{role_key}", "name": f"{role_key}-{scope}", "active_catalog_version": 2}
     )
     mode_id = uow.workflows.create_mode(
         {
@@ -86,6 +240,8 @@ def _runtime_catalog(uow, *, role_key: str, scope: str, tech_policy: str) -> tup
             "mode_order": 2,
             "role_key": role_key,
             "execution_scope": scope,
+            "execution_scopes": [scope],
+            "catalog_version": 2,
             "tech_workspace_policy": tech_policy,
         }
     )
@@ -269,12 +425,27 @@ def test_assignment_write_conflict_recovers_durable_owner_receipt_only(
         project_id, mode_id = _runtime_catalog(uow, role_key="developer", scope="delivery", tech_policy="required")
         if preexisting:
             phase = list(uow.phases.list(mode_id=mode_id))[0]
-            uow.tasks.create({"project_id": project_id, "workflow_id": phase.workflow_id, "mode_id": mode_id,
-                              "task_key": "DEV-1", "current_phase_id": phase.id, "status": "active"})
+            uow.tasks.create(
+                {
+                    "project_id": project_id,
+                    "workflow_id": phase.workflow_id,
+                    "mode_id": mode_id,
+                    "task_key": "DEV-1",
+                    "current_phase_id": phase.id,
+                    "status": "active",
+                }
+            )
         uow.commit()
-        request = {"project_id": project_id, "task_key": "DEV-1", "mode_key": "initial", "cycle_number": 0,
-                   "operation_key": "assign:write-conflict", "expected_revision": 0,
-                   "expected_status": "active" if preexisting else "missing", **_binding()}
+        request = {
+            "project_id": project_id,
+            "task_key": "DEV-1",
+            "mode_key": "initial",
+            "cycle_number": 0,
+            "operation_key": "assign:write-conflict",
+            "expected_revision": 0,
+            "expected_status": "active" if preexisting else "missing",
+            **_binding(),
+        }
         original = uow.tasks.create_assignment
 
         def write_conflict(data):
@@ -302,9 +473,7 @@ def test_assignment_write_conflict_recovers_durable_owner_receipt_only(
 
 def test_runtime_assignment_persists_replays_and_binds_exact_identity(tmp_path):
     with prepared_sqlite_uow(tmp_path, "binding.db") as uow:
-        project_id, _ = _runtime_catalog(
-            uow, role_key="developer", scope="delivery", tech_policy="required"
-        )
+        project_id, _ = _runtime_catalog(uow, role_key="developer", scope="delivery", tech_policy="required")
         request = {
             "project_id": project_id,
             "task_key": "DEV-1",
@@ -319,10 +488,7 @@ def test_runtime_assignment_persists_replays_and_binds_exact_identity(tmp_path):
         assigned = TaskService(uow).assign_runtime_task(**request)
         reordered = {
             **request,
-            "exact_input_refs": [
-                dict(reversed(list(item.items())))
-                for item in reversed(request["exact_input_refs"])
-            ],
+            "exact_input_refs": [dict(reversed(list(item.items()))) for item in reversed(request["exact_input_refs"])],
         }
         replay = TaskService(uow).assign_runtime_task(**reordered)
         bound = _bind(
@@ -385,9 +551,7 @@ def test_runtime_assignment_persists_replays_and_binds_exact_identity(tmp_path):
 
 def test_legacy_bound_assignment_finalizes_only_matching_real_refs(tmp_path):
     with prepared_sqlite_uow(tmp_path, "legacy-binding.db") as uow:
-        project_id, _ = _runtime_catalog(
-            uow, role_key="developer", scope="delivery", tech_policy="required"
-        )
+        project_id, _ = _runtime_catalog(uow, role_key="developer", scope="delivery", tech_policy="required")
         request = {
             "project_id": project_id,
             "task_key": "DEV-1",
@@ -452,9 +616,7 @@ def test_legacy_bound_assignment_finalizes_only_matching_real_refs(tmp_path):
 
 def test_terminal_assignment_accepts_exact_next_attempt_in_same_cycle_and_replays(tmp_path):
     with prepared_sqlite_uow(tmp_path, "retry-binding.db") as uow:
-        project_id, _ = _runtime_catalog(
-            uow, role_key="developer", scope="delivery", tech_policy="required"
-        )
+        project_id, _ = _runtime_catalog(uow, role_key="developer", scope="delivery", tech_policy="required")
         initial_request = {
             "project_id": project_id,
             "task_key": "DEV-1",
@@ -494,9 +656,7 @@ def test_terminal_assignment_accepts_exact_next_attempt_in_same_cycle_and_replay
 
 def test_runtime_transition_cas_includes_assignment_and_cycle_identity(tmp_path):
     with prepared_sqlite_uow(tmp_path, "runtime-transition-cas.db") as uow:
-        project_id, _ = _runtime_catalog(
-            uow, role_key="developer", scope="delivery", tech_policy="required"
-        )
+        project_id, _ = _runtime_catalog(uow, role_key="developer", scope="delivery", tech_policy="required")
         assigned = TaskService(uow).assign_runtime_task(
             project_id=project_id,
             task_key="DEV-1",
@@ -528,9 +688,7 @@ def test_runtime_transition_cas_includes_assignment_and_cycle_identity(tmp_path)
 
 def test_retry_rejects_active_prior_attempt(tmp_path):
     with prepared_sqlite_uow(tmp_path, "active-retry.db") as uow:
-        project_id, _ = _runtime_catalog(
-            uow, role_key="developer", scope="delivery", tech_policy="required"
-        )
+        project_id, _ = _runtime_catalog(uow, role_key="developer", scope="delivery", tech_policy="required")
         initial = TaskService(uow).assign_runtime_task(
             project_id=project_id,
             task_key="DEV-1",
@@ -558,9 +716,7 @@ def test_retry_rejects_active_prior_attempt(tmp_path):
 @pytest.mark.parametrize("attempt_number", [1, 3])
 def test_retry_rejects_attempt_regression_or_skip(tmp_path, attempt_number):
     with prepared_sqlite_uow(tmp_path, f"retry-attempt-{attempt_number}.db") as uow:
-        project_id, _ = _runtime_catalog(
-            uow, role_key="developer", scope="delivery", tech_policy="required"
-        )
+        project_id, _ = _runtime_catalog(uow, role_key="developer", scope="delivery", tech_policy="required")
         initial = TaskService(uow).assign_runtime_task(
             project_id=project_id,
             task_key="DEV-1",
@@ -597,9 +753,7 @@ def test_retry_rejects_attempt_regression_or_skip(tmp_path, attempt_number):
 )
 def test_retry_rejects_changed_frozen_owner_tuple(tmp_path, override):
     with prepared_sqlite_uow(tmp_path, "retry-frozen-tuple.db") as uow:
-        project_id, _ = _runtime_catalog(
-            uow, role_key="developer", scope="delivery", tech_policy="required"
-        )
+        project_id, _ = _runtime_catalog(uow, role_key="developer", scope="delivery", tech_policy="required")
         initial = TaskService(uow).assign_runtime_task(
             project_id=project_id,
             task_key="DEV-1",
@@ -628,9 +782,7 @@ def test_retry_rejects_changed_frozen_owner_tuple(tmp_path, override):
 
 def test_new_cycle_requires_attempt_reset_and_may_select_backend_rework_mode(tmp_path):
     with prepared_sqlite_uow(tmp_path, "new-cycle.db") as uow:
-        project_id, _ = _runtime_catalog(
-            uow, role_key="developer", scope="delivery", tech_policy="required"
-        )
+        project_id, _ = _runtime_catalog(uow, role_key="developer", scope="delivery", tech_policy="required")
         project = uow.projects.get_by_id(project_id)
         assert project is not None
         rework_mode = uow.workflows.create_mode(
@@ -641,6 +793,7 @@ def test_new_cycle_requires_attempt_reset_and_may_select_backend_rework_mode(tmp
                 "mode_order": 3,
                 "role_key": "developer",
                 "execution_scope": "delivery",
+                "execution_scopes": ["delivery", "aggregate"],
                 "tech_workspace_policy": "required",
             }
         )
@@ -737,9 +890,7 @@ def test_runtime_assignment_requires_complete_business_execution_identity():
 
 def test_runtime_assignment_rejects_business_workflow_key_mismatch(tmp_path):
     with prepared_sqlite_uow(tmp_path, "workflow-key-mismatch.db") as uow:
-        project_id, _ = _runtime_catalog(
-            uow, role_key="developer", scope="delivery", tech_policy="required"
-        )
+        project_id, _ = _runtime_catalog(uow, role_key="developer", scope="delivery", tech_policy="required")
         with pytest.raises(ConflictError, match="workflow"):
             TaskService(uow).assign_runtime_task(
                 project_id=project_id,
@@ -762,13 +913,9 @@ def test_runtime_assignment_rejects_business_workflow_key_mismatch(tmp_path):
         ({"tech_execution_attempt_ref": None}, "TechExecutionWorkspace"),
     ],
 )
-def test_runtime_assignment_rejects_binding_that_disagrees_with_mode_policy(
-    tmp_path, override, message
-):
+def test_runtime_assignment_rejects_binding_that_disagrees_with_mode_policy(tmp_path, override, message):
     with prepared_sqlite_uow(tmp_path, "binding-policy.db") as uow:
-        project_id, _ = _runtime_catalog(
-            uow, role_key="developer", scope="delivery", tech_policy="required"
-        )
+        project_id, _ = _runtime_catalog(uow, role_key="developer", scope="delivery", tech_policy="required")
         with pytest.raises(ConflictError, match=message):
             TaskService(uow).assign_runtime_task(
                 project_id=project_id,
@@ -784,9 +931,7 @@ def test_runtime_assignment_rejects_binding_that_disagrees_with_mode_policy(
 
 def test_business_mode_explicitly_forbids_tech_workspace_refs(tmp_path):
     with prepared_sqlite_uow(tmp_path, "business-binding.db") as uow:
-        project_id, _ = _runtime_catalog(
-            uow, role_key="project_manager", scope="business", tech_policy="forbidden"
-        )
+        project_id, _ = _runtime_catalog(uow, role_key="project_manager", scope="business", tech_policy="forbidden")
         business_binding = _binding(
             workflow_key="hermes-sdlc:project_manager",
             role_key="project_manager",
@@ -876,3 +1021,27 @@ def test_catalog_and_assignment_share_strict_runtime_role_keys(tmp_path):
                     "tech_workspace_policy": "required",
                 },
             )
+
+
+def test_bound_legacy_mode_stays_readable_but_v2_image_refuses_next_step(accepted_runtime_assignment):
+    from project_workflow.infrastructure.db.models import WorkflowMode as DBWorkflowMode
+
+    uow, project_id, assigned = accepted_runtime_assignment
+    bound = _bind(uow, project_id, assigned)
+    mode = uow.session.get(DBWorkflowMode, bound["mode_id"])
+    mode.execution_scopes = None
+    mode.catalog_version = 1
+    mode.key = "integration"
+    prior = uow.session.get(
+        DBTaskRuntimeAssignment, uow.tasks.get_assignment_by_operation_key(bound["assignment_operation_key"]).id
+    )
+    prior.mode_key = "integration"
+    bound["mode_key"] = "integration"
+    uow.session.commit()
+    before = uow.tasks.get_by_id(bound["id"]).to_dict()
+    history = [entry.to_dict() for entry in uow.tasks.list_phase_events(bound["id"])]
+    with pytest.raises(ConflictError, match="RUNTIME_VERSION_INCOMPATIBLE"):
+        TaskService(uow).validate_runtime_step(**_step_request(project_id, bound))
+    assert uow.tasks.get_by_id(bound["id"]).to_dict() == before
+    assert [entry.to_dict() for entry in uow.tasks.list_phase_events(bound["id"])] == history
+    assert uow.workflows.get_mode(bound["mode_id"]).catalog_version == 1

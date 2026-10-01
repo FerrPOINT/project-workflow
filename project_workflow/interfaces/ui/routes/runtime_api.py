@@ -14,7 +14,11 @@ from sqlalchemy.exc import IntegrityError
 from project_workflow import config, supervisor
 from project_workflow.application.state import _app_state
 from project_workflow.application.task import TaskService
-from project_workflow.build_provenance import BuildProvenanceError, load_build_provenance
+from project_workflow.build_provenance import (
+    BuildProvenanceError,
+    load_build_provenance,
+    runtime_compatibility_descriptor,
+)
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.runtime_assignment import (
     MANAGED_ROLE_MODE_SCOPES,
@@ -22,6 +26,7 @@ from project_workflow.domain.runtime_assignment import (
     RuntimeStepFence,
     normalize_role_key,
     payload_sha256,
+    phase_allowed_tools,
 )
 from project_workflow.infrastructure.db.managed_catalog import validate_managed_catalog_state
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
@@ -29,6 +34,7 @@ from project_workflow.interfaces.cli.core import _require_valid_key, _resolve_na
 from project_workflow.interfaces.ui.schemas import (
     RuntimeAssignmentRequest,
     RuntimeBindRequest,
+    RuntimeRebindRequest,
     RuntimeStepRequest,
 )
 from project_workflow.supervisor import format_result
@@ -132,6 +138,7 @@ def runtime_capabilities(
 
     try:
         provenance = load_build_provenance()
+        compatibility = runtime_compatibility_descriptor(provenance=provenance)
         provenance_ready = True
     except BuildProvenanceError:
         provenance = None
@@ -170,9 +177,7 @@ def runtime_capabilities(
             status_code=503,
         )
 
-    capabilities = (
-        ["assign", "bind"] if credential.kind == "assignment" else ["step", "history"]
-    )
+    capabilities = ["assign", "bind", "rebind"] if credential.kind == "assignment" else ["step", "history"]
     return {
         "ok": True,
         "role_key": credential.role_key,
@@ -180,6 +185,7 @@ def runtime_capabilities(
         "capabilities": capabilities,
         "readiness": {"service": "ready", "schema": "ready", "catalog": "ready"},
         "source_provenance": provenance.to_dict() if provenance is not None else {},
+        "runtimeCompatibility": compatibility,
     }
 
 
@@ -204,9 +210,7 @@ def _assert_task_key_in_namespace(uow: SAUnitOfWork, namespace_id: int, task_key
     if not prefixes:
         return
     if not any(task_key == prefix or task_key.startswith(f"{prefix}-") for prefix in prefixes):
-        raise ValueError(
-            f"Ключ задачи {task_key!r} не соответствует префиксам неймспейса роли"
-        )
+        raise ValueError(f"Ключ задачи {task_key!r} не соответствует префиксам неймспейса роли")
 
 
 def _history_rows(uow: SAUnitOfWork, task_key: str, namespace_id: int, limit: int | None) -> list[dict[str, Any]]:
@@ -293,9 +297,7 @@ def _runtime_step_replay(
         "attempt_number": payload.attempt_number,
         "role_key": role_key,
     }
-    mismatched = [
-        name for name, value in expected_history.items() if history.get(name) != value
-    ]
+    mismatched = [name for name, value in expected_history.items() if history.get(name) != value]
     invalid_task = (
         task is None
         or task.project_id != namespace_id
@@ -353,9 +355,7 @@ def _read_committed_runtime_step(
             task_key=task_key,
         )
         if replay is None:
-            raise ConflictError(
-                "Runtime step конфликтует с параллельно сохранённым состоянием"
-            )
+            raise ConflictError("Runtime step конфликтует с параллельно сохранённым состоянием")
         return replay
 
 
@@ -387,13 +387,19 @@ def execute_namespace_step(
                 "output": format_result(result),
                 "result": result,
             }
+        contract = engine.get_phase_contract()
+        if contract is not None:
+            contract["allowed_tools"] = phase_allowed_tools(
+                runtime_fence.role_key if runtime_fence is not None else "",
+                engine.current_phase_code or "",
+            )
         result = {
             "ok": True,
             "task_key": task_key,
             "phase_code": engine.current_phase_code,
             "status": engine.task.get("status") if engine.task else None,
             "instructions": engine.format_current_phase_instructions(),
-            "phase_contract": engine.get_phase_contract(),
+            "phase_contract": contract,
             "workflow_id": engine.task.get("workflow_id") if engine.task else None,
             "mode_id": engine.task.get("mode_id") if engine.task else None,
             "mode_key": engine.task.get("mode_key") if engine.task else None,
@@ -470,6 +476,11 @@ def runtime_assign(
     if payload.role_key != role:
         return _error("role_key не совпадает с ролью assignment token", 403)
     try:
+        if (
+            payload.runtime_compatibility is not None
+            and payload.runtime_compatibility != runtime_compatibility_descriptor()
+        ):
+            return _error("Runtime compatibility mismatch", 409)
         with SAUnitOfWork() as uow:
             namespace_id = _namespace_id(uow, role)
             task_key = _require_valid_key(payload.task, uow, project_id=namespace_id)
@@ -499,17 +510,43 @@ def runtime_assign(
                 assignment_ref=payload.assignment_ref,
                 workspace_generation=payload.workspace_generation,
                 lease_generation=payload.lease_generation,
-                exact_input_refs=[
-                    item.model_dump(exclude_unset=True) for item in payload.exact_input_refs
-                ],
+                exact_input_refs=[item.model_dump(exclude_unset=True) for item in payload.exact_input_refs],
                 expected_revision=payload.expected_revision,
                 expected_status=payload.expected_status,
                 expected_mode_key=payload.expected_mode_key,
                 expected_cycle_number=payload.expected_cycle_number,
+                runtime_compatibility=payload.runtime_compatibility,
             )
             return _assignment_response(task)
     except (ConflictError, RuntimeError, ValueError) as exc:
         return _error(str(exc), 409)
+
+
+def runtime_rebind(
+    payload: RuntimeRebindRequest,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any] | JSONResponse:
+    """Role assignment credentials alone may prepare a fenced continuation."""
+    try:
+        role = _authorized_assignment_role(authorization)
+        if role is None:
+            return _error("Недействительный assignment token", 401)
+        with SAUnitOfWork() as uow:
+            namespace_id = _namespace_id(uow, role)
+            task_key = _require_valid_key(payload.task, uow, project_id=namespace_id)
+            _assert_task_key_in_namespace(uow, namespace_id, task_key)
+            values = payload.model_dump()
+            values["task"] = task_key
+            task = TaskService(uow).rebind_runtime_assignment(
+                project_id=namespace_id,
+                role_key=role,
+                request=values,
+            )
+            return _assignment_response(task)
+    except (ConflictError, ValueError) as exc:
+        return _error(str(exc), 409)
+    except RuntimeError as exc:
+        return _error(str(exc), 503)
 
 
 def runtime_bind(
@@ -700,24 +737,18 @@ async def runtime_catalog(
     workflow_items = workflows.get("workflows") if isinstance(workflows, dict) else None
     if not isinstance(namespace_items, list) or not isinstance(workflow_items, list):
         return _error("Каталог временно недоступен", 503)
-    managed_namespace_commands = {
-        f"workflow-{role_key}" for role_key in MANAGED_ROLE_MODE_SCOPES
-    }
+    managed_namespace_commands = {f"workflow-{role_key}" for role_key in MANAGED_ROLE_MODE_SCOPES}
     managed_namespaces = [
         item
         for item in namespace_items
-        if isinstance(item, dict)
-        and item.get("cli_command") in managed_namespace_commands
+        if isinstance(item, dict) and item.get("cli_command") in managed_namespace_commands
     ]
     managed_workflows = [
-        item
-        for item in workflow_items
-        if isinstance(item, dict) and item.get("key") in MANAGED_WORKFLOW_KEYS
+        item for item in workflow_items if isinstance(item, dict) and item.get("key") in MANAGED_WORKFLOW_KEYS
     ]
     if (
         len(managed_namespaces) != len(managed_namespace_commands)
-        or {item.get("cli_command") for item in managed_namespaces}
-        != managed_namespace_commands
+        or {item.get("cli_command") for item in managed_namespaces} != managed_namespace_commands
         or len(managed_workflows) != len(MANAGED_WORKFLOW_KEYS)
         or {item.get("key") for item in managed_workflows} != MANAGED_WORKFLOW_KEYS
     ):

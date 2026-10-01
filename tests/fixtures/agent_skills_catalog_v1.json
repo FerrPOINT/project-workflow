@@ -1,50 +1,112 @@
 {
   "source_repository": "https://gt.wmtgroup.ru/relevanter/agent-skills.git",
-  "source_revision": "8b6e2c25c12abfe0dcf1d84c5278b5cf30b87c0a",
+  "source_revision": "46eb27f70b68cbefbf53903090f0c7f0fa68b748",
   "source_manifest": "manifests/hermes-workflow-role-skills.v1.json",
   "source_schema": "relevanter-hermes-role-skills/v3",
   "roles": {
     "project_manager": {
       "namespace": "hermes-project-manager",
       "profile": "hermes-sdlc-project-manager",
-      "modes": ["draft"],
-      "skills": ["project-workflow-executor", "relevanter-business-operator"]
+      "modes": [
+        "draft"
+      ],
+      "skills": [
+        "project-workflow-executor",
+        "relevanter-business-operator"
+      ]
     },
     "analyst": {
       "namespace": "hermes-analyst",
       "profile": "hermes-sdlc-analyst",
-      "modes": ["analysis"],
-      "skills": ["domain-modeling", "immutable-evidence-reporting", "project-workflow-executor", "relevanter-business-operator", "requirements-analysis", "workflow-writing-plans"]
+      "modes": [
+        "analysis"
+      ],
+      "skills": [
+        "domain-modeling",
+        "immutable-evidence-reporting",
+        "project-workflow-executor",
+        "relevanter-business-operator",
+        "requirements-analysis",
+        "workflow-writing-plans"
+      ]
     },
     "architect": {
       "namespace": "hermes-architect",
       "profile": "hermes-sdlc-architect",
-      "modes": ["decomposition"],
-      "skills": ["domain-modeling", "immutable-evidence-reporting", "project-workflow-executor", "relevanter-business-operator", "solution-architecture", "workflow-writing-plans"]
+      "modes": [
+        "decomposition"
+      ],
+      "skills": [
+        "domain-modeling",
+        "immutable-evidence-reporting",
+        "project-workflow-executor",
+        "relevanter-business-operator",
+        "solution-architecture",
+        "workflow-writing-plans"
+      ]
     },
     "developer": {
       "namespace": "hermes-developer",
       "profile": "hermes-sdlc-developer",
-      "modes": ["initial", "rework", "integration", "integration_rework"],
-      "skills": ["immutable-evidence-reporting", "project-workflow-executor", "relevanter-business-operator", "relevanter-tech-operator", "repo-workflow", "test-driven-development", "workflow-systematic-debugging"]
+      "modes": [
+        "initial",
+        "rework"
+      ],
+      "skills": [
+        "immutable-evidence-reporting",
+        "project-workflow-executor",
+        "relevanter-business-operator",
+        "relevanter-tech-operator",
+        "repo-workflow",
+        "test-driven-development",
+        "workflow-systematic-debugging"
+      ]
     },
     "reviewer": {
       "namespace": "hermes-reviewer",
       "profile": "hermes-sdlc-reviewer",
-      "modes": ["delivery", "integration"],
-      "skills": ["exact-code-review", "immutable-evidence-reporting", "project-workflow-executor", "relevanter-business-operator", "relevanter-tech-operator"]
+      "modes": [
+        "delivery",
+        "integration"
+      ],
+      "skills": [
+        "exact-code-review",
+        "immutable-evidence-reporting",
+        "project-workflow-executor",
+        "relevanter-business-operator",
+        "relevanter-tech-operator"
+      ]
     },
     "tester": {
       "namespace": "hermes-tester",
       "profile": "hermes-sdlc-quality",
-      "modes": ["delivery", "integration"],
-      "skills": ["deployed-acceptance", "immutable-evidence-reporting", "project-workflow-executor", "relevanter-business-operator", "workflow-systematic-debugging"]
+      "modes": [
+        "delivery",
+        "integration"
+      ],
+      "skills": [
+        "deployed-acceptance",
+        "immutable-evidence-reporting",
+        "project-workflow-executor",
+        "relevanter-business-operator",
+        "workflow-systematic-debugging"
+      ]
     },
     "devops": {
       "namespace": "hermes-devops",
       "profile": "hermes-sdlc-operations",
-      "modes": ["delivery", "integration"],
-      "skills": ["exact-sha-deployment", "immutable-evidence-reporting", "project-workflow-executor", "relevanter-business-operator", "relevanter-tech-operator", "workflow-systematic-debugging"]
+      "modes": [
+        "delivery",
+        "integration"
+      ],
+      "skills": [
+        "exact-sha-deployment",
+        "immutable-evidence-reporting",
+        "project-workflow-executor",
+        "relevanter-business-operator",
+        "relevanter-tech-operator",
+        "workflow-systematic-debugging"
+      ]
     }
   }
 }
