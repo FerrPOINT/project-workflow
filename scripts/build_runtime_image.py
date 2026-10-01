@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import subprocess
 import sys
@@ -64,6 +65,8 @@ def build_image(root: Path, image: str, docker: str, revision: str = "HEAD") -> 
     snapshot = immutable_git_snapshot(root, revision)
     provenance = snapshot.provenance
     context = docker_context_with_manifest(snapshot.archive, provenance)
+    # A PAX-first plain tar can be mistaken for a Dockerfile on stdin.
+    transport = gzip.compress(context, mtime=0)
     subprocess.run(
         [
             docker,
@@ -85,7 +88,7 @@ def build_image(root: Path, image: str, docker: str, revision: str = "HEAD") -> 
             "-",
         ],
         check=True,
-        input=context,
+        input=transport,
     )
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import hashlib
 import importlib.util
 import io
@@ -325,6 +326,29 @@ def test_image_builder_passes_one_snapshot_to_docker(git_source: Path):
     assert command[-1] == "-"
     manifest = json.loads(_member_bytes(context, "runtime-build-manifest.json"))
     assert manifest == snapshot.provenance.to_dict()
+
+
+def test_pax_context_uses_deterministic_gzip_transport(git_source: Path):
+    builder = _builder_module()
+    snapshot = builder.immutable_git_snapshot(git_source, "HEAD")
+    context = docker_context_with_manifest(snapshot.archive, snapshot.provenance)
+    assert context[156:157] == b"x"
+    docker_run = MagicMock()
+    with (
+        patch.object(builder, "immutable_git_snapshot", return_value=snapshot),
+        patch.object(builder.subprocess, "run", docker_run),
+    ):
+        builder.build_image(git_source, "project-workflow:test", "docker")
+        builder.build_image(git_source, "project-workflow:test", "docker")
+
+    first = docker_run.call_args_list[0].kwargs["input"]
+    second = docker_run.call_args_list[1].kwargs["input"]
+    assert first[:2] == b"\x1f\x8b"
+    assert first[4:8] == b"\x00\x00\x00\x00"
+    assert first == second
+    assert gzip.decompress(first) == context
+    assert runtime_bundle_sha256_from_archive(first) == snapshot.provenance.runtime_bundle_sha256
+    assert json.loads(_member_bytes(first, "runtime-build-manifest.json")) == snapshot.provenance.to_dict()
 
 
 @pytest.mark.parametrize(
