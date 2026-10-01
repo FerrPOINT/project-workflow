@@ -19,7 +19,7 @@ COPY project_workflow/ ./project_workflow/
 COPY runtime-build-manifest.json ./runtime-build-manifest.json
 
 RUN if [ -n "$SOURCE_REVISION" ] || [ -n "$SOURCE_ARCHIVE_SHA256" ] || [ -n "$RUNTIME_BUNDLE_SHA256" ]; then \
-        python scripts/build_runtime_image.py verify-manifest \
+        python -m scripts.build_runtime_image verify-manifest \
             --root /app \
             --manifest /app/runtime-build-manifest.json \
             --source-revision "$SOURCE_REVISION" \

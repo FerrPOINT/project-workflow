@@ -4,6 +4,10 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
+import re
+import shlex
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -436,3 +440,30 @@ def test_generated_manifest_rejects_modified_extracted_inputs(git_source, tmp_pa
             expected_source_archive_sha256=snapshot.provenance.source_archive_sha256,
             expected_runtime_bundle_sha256=snapshot.provenance.runtime_bundle_sha256,
         )
+
+
+def test_dockerfile_verifies_manifest_before_package_install(git_source, tmp_path):
+    """Exercise the real Dockerfile command with site packages unavailable."""
+    root = Path(__file__).resolve().parents[1]
+    shutil.copyfile(root / "scripts/build_runtime_image.py", git_source / "scripts/build_runtime_image.py")
+    shutil.copyfile(root / "project_workflow/build_provenance.py", git_source / "project_workflow/build_provenance.py")
+    _run_git(git_source, "add", ".")
+    _run_git(git_source, "commit", "-m", "include the uninstalled manifest verifier")
+    snapshot = _builder_module().immutable_git_snapshot(git_source, "HEAD")
+    extracted = tmp_path / "uninstalled-context"
+    extracted.mkdir()
+    _extract_regular_context(docker_context_with_manifest(snapshot.archive, snapshot.provenance), extracted)
+    dockerfile = (root / "Dockerfile").read_text(encoding="utf-8")
+    command = re.search(r"python (.+?) verify-manifest", dockerfile)
+    assert command is not None
+    environment = {key: value for key, value in os.environ.items() if key not in {"PYTHONPATH", "PYTHONHOME"}}
+    environment["PYTHONDONTWRITEBYTECODE"] = "1"  # Dockerfile builder ENV: hash only source inputs.
+    result = subprocess.run(
+        [sys.executable, "-S", *shlex.split(command.group(1)), "verify-manifest",
+         "--root", str(extracted), "--manifest", str(extracted / "runtime-build-manifest.json"),
+         "--source-revision", snapshot.provenance.source_revision,
+         "--source-archive-sha256", snapshot.provenance.source_archive_sha256,
+         "--runtime-bundle-sha256", snapshot.provenance.runtime_bundle_sha256],
+        cwd=extracted, env=environment, capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
