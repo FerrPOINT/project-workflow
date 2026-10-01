@@ -69,6 +69,9 @@ class RuntimeStepRequest(StepRequest):
     attempt_number: int = Field(gt=0, strict=True)
     expected_phase_code: str = Field(min_length=1, max_length=128)
     expected_status: Literal["active", "blocked"]
+    session_run_id: str | None = Field(
+        default=None, strict=True, min_length=36, max_length=36, exclude_if=lambda value: value is None,
+    )
 
     @field_validator(
         "assignment_ref",

@@ -145,8 +145,9 @@ evaluation items, transition routes и накопленное покрытие. 
 - startup распознаёт только точный versioned legacy unmanaged catalog,
   сохраняет его identifiers и audit references и атомарно добавляет managed
   registry; неоднозначный или изменённый legacy catalog остаётся fail-closed;
-- HTTP API не публикует OpenAPI/Swagger как внешний контракт: это private UI/CLI
-  surface, а не third-party integration API;
+- `/openapi.json` describes private machine contracts, including the opt-in PM
+  continuation request, response and trusted runtime observation schemas;
+  keep runtime endpoints inside the protected service network;
 - CORS не включается: browser UI и API работают с одного origin. Для cookie SSO
   unsafe requests дополнительно требуют точный `Origin == AUTH_PUBLIC_ORIGIN`;
   это CSRF boundary, а не замена security review для публичного доступа;
@@ -155,6 +156,11 @@ evaluation items, transition routes и накопленное покрытие. 
   внешним многопользовательским сервисом.
 
 ## References
+
+- [PM Continuation](pm-continuation-contract.md) — execution identity, persistent
+  checkpoint/resume, Fleet UUID mapping and trusted runtime proof.
+- [PM Verification](pm-continuation-verification.md) — local evidence and missing
+  Fleet callback/orchestration and live acceptance.
 
 - [UI Shell Contract](ui-shell.md) — sidebar/header/work-area behavior and page width classes.
 - [README](../README.md) — deployment modes and local launch.

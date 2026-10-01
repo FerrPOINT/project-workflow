@@ -650,6 +650,16 @@ class TaskService:
             or not isinstance(record.get("bind_request_sha256"), str)
         ):
             raise ConflictError("Runtime assignment ещё не связан с Hermes run")
+        from project_workflow.application.pm_execution import PMExecutionService
+        from project_workflow.infrastructure.db.uow import SAUnitOfWork
+
+        pm_execution = None
+        if isinstance(self._uow, SAUnitOfWork):
+            pm_service = PMExecutionService(self._uow)
+            pm_execution = pm_service.supervisor_binding(int(current.id))
+            if pm_execution is not None:
+                pm_run = pm_service.run(pm_execution)
+                record = {**record, "binding_ref": pm_run.binding_ref, "hermes_run_ref": pm_run.run_ref}
         expected_assignment = {
             "task_id": current.id,
             "project_id": project_id,
@@ -709,6 +719,8 @@ class TaskService:
             expected_phase_id=phase_id,
             expected_phase_code=expected_phase_code,
             expected_status=expected_status,
+            pm_version=pm_execution.version if pm_execution is not None else None,
+            pm_fence=pm_execution.fence if pm_execution is not None else None,
         )
 
     @staticmethod

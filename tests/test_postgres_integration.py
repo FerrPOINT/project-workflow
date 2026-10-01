@@ -51,9 +51,108 @@ from project_workflow.infrastructure.db.session import (
 )
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.llm import OpenAICompatibleClient
+from project_workflow.infrastructure.pm_readback import observe_run as http_observe_pm_run
 from project_workflow.interfaces.ui.app import create_app
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.fixture
+def pm_postgres(pg_url, monkeypatch):
+    from tests.test_pm_execution import prepare_pm
+
+    ensure_migrated(get_engine(pg_url))
+    yield from prepare_pm(monkeypatch)
+
+
+@pytest.mark.integration
+def test_pm_postgres_concurrent_replay_and_restart_readback(pm_postgres):
+    from project_workflow.infrastructure.db import models as m
+    from tests.test_pm_execution import ADAPTER, BASE, NEW_RUN, OLD_RUN, bind_pm
+
+    client, runtime, checkpoint, observations, _ = bind_pm(pm_postgres)
+    barrier = Barrier(2)
+
+    def send_checkpoint():
+        barrier.wait(timeout=10)
+        return client.post(BASE + "/checkpoint", headers=runtime, json=checkpoint)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(lambda _: send_checkpoint(), range(2)))
+    assert [response.status_code for response in responses] == [200, 200]
+    assert responses[0].json() == responses[1].json()
+    resume = {
+        **checkpoint, "operation_key": "resume:1", "expected_version": 2,
+        "answer_event_ref": "answer:one", "new_session_run_id": NEW_RUN,
+    }
+    observations[OLD_RUN]["status"] = "stopped"
+    barrier = Barrier(2)
+
+    def send_resume():
+        barrier.wait(timeout=10)
+        return client.post(BASE + "/resume", headers=ADAPTER, json=resume)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(lambda _: send_resume(), range(2)))
+    assert [response.status_code for response in responses] == [200, 200]
+    assert responses[0].json() == responses[1].json()
+    # Recreate the HTTP application and DB connections; acceptance lives in PostgreSQL.
+    restarted = TestClient(create_app())
+    try:
+        read = restarted.post(BASE + "/readback", headers=ADAPTER,
+                              json={**pm_postgres[1], "operation_key": "resume:1"})
+        assert read.status_code == 200, read.text
+        assert read.json()["result"]["state"] == "resume_pending"
+        assert read.json()["result"]["operation"]["result"] == responses[0].json()["result"]
+    finally:
+        restarted.close()
+    with SAUnitOfWork() as uow:
+        assert len(list(uow.session.query(m.PMOperation))) == 3
+        assert len(list(uow.session.query(m.PMRun))) == 1
+
+
+@pytest.mark.integration
+def test_pm_postgres_actual_http_callback_and_new_run_binding(pm_postgres, monkeypatch):
+    from project_workflow.infrastructure import pm_readback
+    from tests.test_pm_execution import (
+        NEW_RUN,
+        OLD_RUN,
+        test_wait_resume_new_run_survives_sessions_and_replays,
+    )
+
+    probes: list[str] = []
+    observations = pm_postgres[3]
+
+    class Callback(BaseHTTPRequestHandler):
+        def do_GET(self):
+            probes.append(self.path)
+            run_uuid = self.path.removeprefix("/runs/")
+            if self.headers.get("Authorization") != "Bearer " + "p" * 40 or run_uuid not in observations:
+                self.send_error(503)
+                return
+            body = json.dumps(observations[run_uuid]).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Callback)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    monkeypatch.setenv("PROJECT_WORKFLOW_PM_READBACK_URL", f"http://127.0.0.1:{server.server_port}/runs")
+    config_module.get_settings.cache_clear()
+    monkeypatch.setattr(pm_readback, "observe_run", http_observe_pm_run)
+    try:
+        test_wait_resume_new_run_survives_sessions_and_replays(pm_postgres)
+        assert probes == ["/runs/" + OLD_RUN] * 3 + ["/runs/" + NEW_RUN]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
 
 PG_HOST = os.environ.get("PGHOST", "127.0.0.1")
 PG_PORT = int(os.environ.get("PGPORT", "5432"))
@@ -209,7 +308,7 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0004_wide_work_item_revision"
+        assert version == migration_head() == "0005_pm_execution"
         assert schema_is_ready(engine) is True
 
     def test_managed_bootstrap_lock_closes_public_mutation_race(self, pg_url):
@@ -309,13 +408,14 @@ class TestPostgresInitialMigration:
     @pytest.mark.parametrize("revision,message", [
         ("0003_runtime_assignment_bind", "Downgrade from runtime assignment bind"),
         ("0004_wide_work_item_revision", "Downgrade from wide Business revisions"),
+        ("0005_pm_execution", "PM execution downgrade refused"),
     ])
     def test_downgrade_refuses_lossy_mode_collapse(self, pg_url, revision, message):
         engine = get_engine(pg_url)
         run_alembic_command("upgrade", engine, revision)
         with pytest.raises(RuntimeError, match=message):
             run_alembic_command("downgrade", engine, "base")
-        assert schema_is_ready(engine) is (revision == "0004_wide_work_item_revision")
+        assert schema_is_ready(engine) is (revision == "0005_pm_execution")
 
     def test_populated_0001_upgrade_preserves_rows_and_backfills_per_workflow(self, pg_url):
         engine = get_engine(pg_url)

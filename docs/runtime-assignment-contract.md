@@ -1,5 +1,10 @@
 # Runtime assignment binding contract
 
+The opt-in PM clarification continuation contract is documented separately in
+[PM continuation v1](pm-continuation-contract.md), with
+[verification limits](pm-continuation-verification.md). Ordinary assignment,
+bind, Supervisor step and history remain the default path.
+
 Project-workflow — технический sink и cursor. Он не определяет роль, workflow
 mode, execution scope, порядок очереди или следующий stage. Эти значения
 вычисляет Relevanter Business из persisted Task/stage/decomposition state и
