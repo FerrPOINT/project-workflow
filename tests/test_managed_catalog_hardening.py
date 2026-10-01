@@ -328,6 +328,7 @@ def test_managed_catalog_keeps_runtime_step_and_history_available(monkeypatch):
                 "cycle_number": assigned["cycle_number"],
                 "attempt_number": assigned["attempt_number"],
                 "expected_binding_state": "unbound",
+                "concrete_agent_ref": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
             },
         )
         assert bind_response.status_code == 200, bind_response.text

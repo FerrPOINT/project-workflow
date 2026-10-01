@@ -167,6 +167,7 @@ def _row_to_runtime_assignment(row: m.TaskRuntimeAssignment) -> TaskRuntimeAssig
         hermes_run_ref=row.hermes_run_ref,
         bind_operation_key=row.bind_operation_key,
         bind_request_sha256=row.bind_request_sha256,
+        concrete_agent_ref=row.concrete_agent_ref,
         workspace_generation=row.workspace_generation,
         lease_generation=row.lease_generation,
         exact_input_refs=exact_input_refs,

@@ -273,6 +273,7 @@ def ensure_migrated(engine: Engine | Connection | None = None) -> None:
         "0001_initial",
         "0002_workflow_modes",
         "0003_runtime_assignment_bind",
+        "0004_wide_work_item_revision",
     }
     incompatible_revision = bool(revisions) and not revisions.issubset(compatible_upgrade_revisions)
     exact_tables = existing_tables == expected_tables()

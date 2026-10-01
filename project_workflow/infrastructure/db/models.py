@@ -432,6 +432,7 @@ class TaskRuntimeAssignment(Base):
     hermes_run_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
     bind_operation_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
     bind_request_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    concrete_agent_ref: Mapped[str | None] = mapped_column(String(36), nullable=True)
     workspace_generation: Mapped[int | None] = mapped_column(nullable=True)
     lease_generation: Mapped[int | None] = mapped_column(nullable=True)
     exact_input_refs: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -540,6 +541,12 @@ class TaskRuntimeAssignment(Base):
         CheckConstraint(
             "bind_request_sha256 IS NULL OR length(bind_request_sha256) = 64",
             name="ck_task_runtime_assignments_bind_request_sha256",
+        ),
+        CheckConstraint(
+            "concrete_agent_ref IS NULL OR (length(concrete_agent_ref) = 36 AND "
+            "concrete_agent_ref = lower(concrete_agent_ref) AND binding_ref IS NOT NULL AND "
+            "hermes_run_ref IS NOT NULL AND bind_operation_key IS NOT NULL AND bind_request_sha256 IS NOT NULL)",
+            name="ck_task_runtime_assignments_concrete_agent_binding",
         ),
         Index("ix_task_runtime_assignments_task_id", "task_id"),
         Index("ix_task_runtime_assignments_business_task_ref", "business_task_ref"),

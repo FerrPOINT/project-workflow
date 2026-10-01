@@ -240,6 +240,7 @@ class TaskRuntimeAssignment:
     hermes_run_ref: str | None = None
     bind_operation_key: str | None = None
     bind_request_sha256: str | None = None
+    concrete_agent_ref: str | None = None
     workspace_generation: int | None = None
     lease_generation: int | None = None
     exact_input_refs: list[dict[str, Any]] = field(default_factory=list)
@@ -279,6 +280,7 @@ class TaskRuntimeAssignment:
             "hermes_run_ref": self.hermes_run_ref,
             "bind_operation_key": self.bind_operation_key,
             "bind_request_sha256": self.bind_request_sha256,
+            "concrete_agent_ref": self.concrete_agent_ref,
             "workspace_generation": self.workspace_generation,
             "lease_generation": self.lease_generation,
             "exact_input_refs": [dict(item) for item in self.exact_input_refs],

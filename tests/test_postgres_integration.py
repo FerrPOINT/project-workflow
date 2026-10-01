@@ -24,7 +24,7 @@ import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from fastapi.testclient import TestClient
-from sqlalchemy import inspect, text
+from sqlalchemy import MetaData, Table, inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import close_all_sessions
 
@@ -109,6 +109,53 @@ def test_pm_postgres_concurrent_replay_and_restart_readback(pm_postgres):
     with SAUnitOfWork() as uow:
         assert len(list(uow.session.query(m.PMOperation))) == 3
         assert len(list(uow.session.query(m.PMRun))) == 1
+
+
+@pytest.mark.integration
+def test_pm_postgres_concurrent_concrete_binding_has_one_immutable_winner(pm_postgres):
+    from sqlalchemy import select
+
+    from project_workflow.infrastructure.db import models as m
+    from tests.test_pm_execution import ADAPTER, AGENT_REF, OTHER_AGENT_REF
+    from tests.test_runtime_api import _assignment, _bind_payload
+
+    client = pm_postgres[0]
+    assigned = client.post("/internal/runtime/assign", headers=ADAPTER,
+                           json=_assignment("PM-2", "assign:pm:2", "project_manager")).json()["result"]
+    barrier = Barrier(2)
+
+    def bind(agent_ref):
+        barrier.wait(timeout=10)
+        return client.post("/internal/runtime/bind", headers=ADAPTER, json={
+            **_bind_payload(assigned), "concrete_agent_ref": agent_ref,
+        })
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(bind, [AGENT_REF, OTHER_AGENT_REF]))
+    assert sorted(response.status_code for response in responses) == [200, 409]
+    winner = next(response for response in responses if response.status_code == 200).json()["result"]
+    with SAUnitOfWork() as uow:
+        row = uow.session.scalar(select(m.TaskRuntimeAssignment).where(
+            m.TaskRuntimeAssignment.operation_key == "assign:pm:2",
+        ))
+        assert row.concrete_agent_ref == winner["concrete_agent_ref"]
+    replay = client.post("/internal/runtime/bind", headers=ADAPTER, json={
+        **_bind_payload(assigned), "concrete_agent_ref": winner["concrete_agent_ref"],
+    })
+    assert replay.status_code == 200
+    assert replay.json()["result"] == winner
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("mapping", [
+    None, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "00000000-0000-0000-0000-000000000000",
+])
+def test_pm_postgres_missing_or_tampered_mapping_fences_continuation(pm_postgres, mapping):
+    from tests.test_concrete_agent_mapping import (
+        test_resume_rechecks_mapping_before_trusted_terminal_probe as verify_mapping,
+    )
+
+    verify_mapping(pm_postgres, mapping)
 
 
 @pytest.mark.integration
@@ -1375,8 +1422,24 @@ class TestPostgresInitialMigration:
             request = {"project_id": project_id, "task_key": "WIDE-1", "mode_key": "initial", "cycle_number": 0,
                        "operation_key": "wide-old-assignment", "expected_revision": 0, "expected_status": "missing",
                        **_runtime_binding("wide-old-assignment")}
-            old = TaskService(uow).assign_runtime_task(**request)
-            _bind_runtime_assignment(uow, project_id, old)
+            mode = uow.workflows.get_mode_by_key(namespace.workflow_id, "initial")
+            phase = uow.phases.list(workflow_id=namespace.workflow_id, mode_id=mode.id)[0]
+            task_id = uow.tasks.create({
+                "project_id": project_id, "workflow_id": namespace.workflow_id, "mode_id": mode.id,
+                "task_key": "WIDE-1", "current_phase_id": phase.id, "status": "active",
+                "assignment_operation_key": request["operation_key"], "assignment_revision": 1,
+            })
+            uow.commit()
+        # Reflect the published old schema: current ORM columns must not seed old migrations.
+        old_table = Table("task_runtime_assignments", MetaData(), schema="project_workflow", autoload_with=engine)
+        with engine.begin() as connection:
+            connection.execute(old_table.insert().values(
+                **_runtime_binding("wide-old-assignment"), operation_key="wide-old-assignment",
+                task_id=task_id, project_id=project_id, workflow_id=namespace.workflow_id, mode_id=mode.id,
+                cycle_number=0, assignment_revision=1, binding_ref="binding:wide-old-assignment",
+                hermes_run_ref="hermes-run:wide-old-assignment", bind_operation_key="bind:wide-old-assignment",
+                bind_request_sha256="b" * 64, payload_sha256="a" * 64, payload='{"legacy":true}',
+            ).values(exact_input_refs=json.dumps(_runtime_binding("wide-old-assignment")["exact_input_refs"])))
         with engine.connect() as connection:
             before = connection.execute(text(
                 "SELECT to_jsonb(t)::text FROM project_workflow.task_runtime_assignments t ORDER BY id"
@@ -1386,7 +1449,9 @@ class TestPostgresInitialMigration:
             after = connection.execute(text(
                 "SELECT to_jsonb(t)::text FROM project_workflow.task_runtime_assignments t ORDER BY id"
             )).scalars().all()
-        assert before == after
+        assert [json.loads(row) for row in after] == [
+            {**json.loads(row), "concrete_agent_ref": None} for row in before
+        ]
         with SAUnitOfWork(engine) as uow:
             request.update(task_key="WIDE-2", operation_key="wide-native-assignment",
                            **_runtime_binding("wide-native-assignment"))

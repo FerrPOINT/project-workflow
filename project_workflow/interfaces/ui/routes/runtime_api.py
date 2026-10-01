@@ -462,6 +462,7 @@ def _assignment_response(task: dict[str, Any]) -> dict[str, Any]:
         "binding_ref",
         "hermes_run_ref",
         "bind_operation_key",
+        "concrete_agent_ref",
         "workspace_generation",
         "lease_generation",
         "exact_input_refs",
@@ -576,6 +577,7 @@ def runtime_bind(
                 cycle_number=payload.cycle_number,
                 attempt_number=payload.attempt_number,
                 expected_binding_state=payload.expected_binding_state,
+                concrete_agent_ref=payload.concrete_agent_ref,
             )
             return _assignment_response(task)
     except (ConflictError, RuntimeError, ValueError) as exc:
@@ -620,6 +622,8 @@ def runtime_step(
                         return _error("Current PM execution/run credential required", 403)
                     if payload.session_run_id != snapshot["session_run_id"]:
                         return _error("Current Fleet session_run_id required", 409)
+                else:
+                    PMExecutionService(uow).supervisor_binding(int(task_row.id or 0))
             replay = _runtime_step_replay(
                 uow,
                 payload=payload,
@@ -730,6 +734,8 @@ def runtime_history(
                         return _error("Current PM execution/run credential required", 403)
                     if session_run_id != snapshot["session_run_id"]:
                         return _error("Current Fleet session_run_id required", 409)
+                elif task_row is not None:
+                    PMExecutionService(uow).supervisor_binding(int(task_row.id or 0))
             rows = _history_rows(uow, task_key, namespace_id, n)
             return {
                 "ok": True,

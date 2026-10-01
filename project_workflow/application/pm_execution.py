@@ -19,7 +19,12 @@ from project_workflow.domain.pm_execution import (
     PMResume,
     RuntimeObservation,
 )
-from project_workflow.domain.runtime_assignment import RuntimeStepFence, canonical_json, payload_sha256
+from project_workflow.domain.runtime_assignment import (
+    RuntimeStepFence,
+    canonical_json,
+    payload_sha256,
+    validate_concrete_agent_ref,
+)
 from project_workflow.infrastructure import pm_readback
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
@@ -29,6 +34,35 @@ class PMExecutionService:
     def __init__(self, uow: SAUnitOfWork):
         self.uow = uow
         self.session = uow.session
+
+    def concrete_agent_ref(self, assignment: m.TaskRuntimeAssignment) -> str:
+        try:
+            agent_ref = validate_concrete_agent_ref(assignment.concrete_agent_ref)
+        except ValueError as exc:
+            raise ConflictError("PM assignment has no canonical concrete Fleet agent mapping") from exc
+        if (
+            not assignment.binding_ref or not assignment.hermes_run_ref
+            or not assignment.bind_operation_key or not assignment.bind_request_sha256
+        ):
+            raise ConflictError("PM concrete agent mapping requires a finalized runtime binding")
+        task = self.session.get(m.Task, assignment.task_id)
+        if task is None:
+            raise ConflictError("PM mapping no longer belongs to a task")
+        request = {
+            "project_id": assignment.project_id, "task_key": task.task_key,
+            **{key: getattr(assignment, key) for key in (
+                "role_key", "bind_operation_key", "assignment_revision", "assignment_ref",
+                "binding_ref", "hermes_run_ref", "cycle_number", "attempt_number", "concrete_agent_ref",
+            )},
+            "assignment_operation_key": assignment.operation_key, "mode_key": assignment.mode.key,
+        }
+        # Legacy adoption and first binding are the two authorized CAS origins.
+        if assignment.bind_request_sha256 not in {
+            payload_sha256({**request, "expected_binding_state": state})
+            for state in ("unbound", "legacy_bound")
+        }:
+            raise ConflictError("PM concrete mapping does not match persisted bind provenance")
+        return agent_ref
 
     def _lock_identity(self, identity: PMIdentity, project_id: int) -> tuple[m.Task, m.TaskRuntimeAssignment]:
         task = self.session.execute(
@@ -40,7 +74,7 @@ class PMExecutionService:
         assignment = self.session.execute(select(m.TaskRuntimeAssignment).where(
             m.TaskRuntimeAssignment.operation_key == identity.assignment_operation_key,
             m.TaskRuntimeAssignment.task_id == task.id,
-        )).scalar_one_or_none()
+        ).execution_options(populate_existing=True)).scalar_one_or_none()
         if assignment is None or (
             task.assignment_operation_key != identity.assignment_operation_key
             or task.assignment_revision != identity.assignment_revision
@@ -53,6 +87,8 @@ class PMExecutionService:
             or assignment.cycle_number != task.cycle_number
         ):
             raise ConflictError("Stale or foreign PM assignment identity")
+        if self.concrete_agent_ref(assignment) != identity.agent_ref:
+            raise ConflictError("PM identity does not match the persisted concrete Fleet agent")
         return task, assignment
 
     def execution(self, identity: PMIdentity, project_id: int) -> tuple[m.PMExecution, m.Task]:
@@ -63,7 +99,10 @@ class PMExecutionService:
         ).execution_options(populate_existing=True)).scalar_one_or_none()
         if execution is None:
             raise NotFoundError("PM execution not found")
-        if execution.identity_json != canonical_json(identity.model_dump()) or execution.assignment_id != assignment.id:
+        if (
+            execution.identity_json != canonical_json(identity.model_dump())
+            or execution.assignment_id != assignment.id or execution.agent_ref != identity.agent_ref
+        ):
             raise ConflictError("Execution identity is immutable")
         return execution, task
 
@@ -89,8 +128,11 @@ class PMExecutionService:
         return json.loads(operation.result_json)
 
     def snapshot(self, execution: m.PMExecution) -> dict[str, Any]:
-        run = self.run(execution)
         task = self.session.get(m.Task, execution.task_id)
+        if task is None:
+            raise ConflictError("PM task no longer exists")
+        self.execution(PMIdentity.model_validate_json(execution.identity_json), task.project_id)
+        run = self.run(execution)
         return {
             "contract_version": 1, "identity": json.loads(execution.identity_json),
             "state": execution.state, "version": execution.version, "fence": execution.fence,
@@ -101,7 +143,7 @@ class PMExecutionService:
             "resume_session_run_id": execution.resume_session_run_id,
             "terminal_readback": json.loads(run.terminal_json) if run.terminal_json else None,
             "workflow_step_allowed": (
-                execution.state == "active" and task is not None and task.status in {"active", "blocked"}
+                execution.state == "active" and task.status in {"active", "blocked"}
             ),
             "resume_delivered": execution.state == "active" and execution.resume_operation_key is not None,
         }
@@ -142,7 +184,7 @@ class PMExecutionService:
         phase = self.session.get(m.Phase, task.current_phase_id)
         agent = self.session.get(m.Agent, phase.agent_id) if phase and phase.agent_id else None
         if (
-            agent is None or agent.name != identity.agent_ref or task.status != "active"
+            agent is None or agent.name != assignment.role_key or task.status != "active"
             or assignment.binding_ref != command.binding_ref or assignment.hermes_run_ref != command.hermes_run_ref
             or not assignment.bind_operation_key or not assignment.bind_request_sha256
         ):
@@ -190,7 +232,7 @@ class PMExecutionService:
         self._validate(command, execution, task, "active")
         phase = self.session.get(m.Phase, task.current_phase_id)
         if phase is None or phase.agent_id != execution.agent_id:
-            raise ConflictError("Checkpoint no longer belongs to the bound concrete agent")
+            raise ConflictError("Checkpoint no longer belongs to the bound catalog agent")
         checkpoint = command.model_dump(include={
             "checkpoint_ref", "clarification_request_ref", "clarification_version", "requirements_revision",
         })
@@ -309,6 +351,7 @@ class PMExecutionService:
                 or task.assignment_operation_key != assignment.operation_key
             ):
                 raise ConflictError("PM execution is waiting, pending or assigned elsewhere")
+            self.execution(PMIdentity.model_validate_json(execution.identity_json), task.project_id)
             if fence is not None:
                 run = self.run(execution)
                 if (
@@ -316,4 +359,13 @@ class PMExecutionService:
                     or fence.hermes_run_ref != run.run_ref or fence.binding_ref != run.binding_ref
                 ):
                     raise ConflictError("Supervisor step belongs to a stale PM execution/run")
+        else:
+            task = self.session.get(m.Task, task_id, populate_existing=True)
+            if task is not None and task.assignment_operation_key is not None:
+                assignment = self.session.scalar(select(m.TaskRuntimeAssignment).where(
+                    m.TaskRuntimeAssignment.operation_key == task.assignment_operation_key,
+                    m.TaskRuntimeAssignment.task_id == task.id,
+                ).execution_options(populate_existing=True))
+                if assignment is not None and assignment.role_key == "project_manager":
+                    self.concrete_agent_ref(assignment)
         return execution

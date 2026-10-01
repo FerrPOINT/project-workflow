@@ -230,6 +230,7 @@ class SATaskRepository(TaskRepository):
         hermes_run_ref: str,
         bind_operation_key: str,
         bind_request_sha256: str,
+        concrete_agent_ref: str | None,
     ) -> bool:
         result = self._session.execute(
             update(m.TaskRuntimeAssignment)
@@ -250,12 +251,14 @@ class SATaskRepository(TaskRepository):
                 else m.TaskRuntimeAssignment.hermes_run_ref == expected_hermes_run_ref,
                 m.TaskRuntimeAssignment.bind_operation_key.is_(None),
                 m.TaskRuntimeAssignment.bind_request_sha256.is_(None),
+                m.TaskRuntimeAssignment.concrete_agent_ref.is_(None),
             )
             .values(
                 binding_ref=binding_ref,
                 hermes_run_ref=hermes_run_ref,
                 bind_operation_key=bind_operation_key,
                 bind_request_sha256=bind_request_sha256,
+                concrete_agent_ref=concrete_agent_ref,
             )
         )
         return getattr(result, "rowcount", 0) == 1

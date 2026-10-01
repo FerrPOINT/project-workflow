@@ -4,6 +4,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
+from project_workflow.domain.runtime_assignment import FleetAgentRef
+
 Ref = Annotated[str, StringConstraints(strict=True, strip_whitespace=True, min_length=1, max_length=512)]
 Key = Annotated[str, StringConstraints(strict=True, strip_whitespace=True, min_length=1, max_length=128)]
 Version = Annotated[int, Field(strict=True, ge=1, le=(1 << 63) - 1)]
@@ -21,7 +23,7 @@ class PMIdentity(BaseModel):
     tracker_project_ref: Ref
     task_ref: Ref
     root_ref: Ref
-    agent_ref: Ref
+    agent_ref: FleetAgentRef
     assignment_operation_key: Key
     assignment_ref: Ref
     assignment_revision: Version

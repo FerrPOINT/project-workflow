@@ -249,9 +249,10 @@ def test_sqlite_upgrade_populated_legacy_backfills_each_workflow_mode(tmp_path):
             )
 
 
-def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path):
+@pytest.mark.parametrize("prior_revision", ["0002_workflow_modes", "0004_wide_work_item_revision"])
+def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path, prior_revision):
     engine = _sqlite_engine(tmp_path, "binding-constraints.db")
-    run_alembic_command("upgrade", engine, "0002_workflow_modes")
+    run_alembic_command("upgrade", engine, prior_revision)
     with engine.begin() as conn:
         workflow_id = conn.execute(
             text(
@@ -363,13 +364,13 @@ def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path):
         preserved = conn.execute(
             text(
                 "SELECT operation_key, binding_ref, hermes_run_ref, bind_operation_key, "
-                "bind_request_sha256, payload FROM task_runtime_assignments "
+                "bind_request_sha256, payload, concrete_agent_ref FROM task_runtime_assignments "
                 "WHERE operation_key IN ('legacy-bound', 'legacy-unbound') ORDER BY operation_key"
             )
         ).all()
     assert preserved == [
-        ("legacy-bound", "binding:1", "run:1", None, None, "{}"),
-        ("legacy-unbound", None, None, None, None, '{"legacy":true}'),
+        ("legacy-bound", "binding:1", "run:1", None, None, "{}", None),
+        ("legacy-unbound", None, None, None, None, '{"legacy":true}', None),
     ]
 
     base = {
@@ -378,6 +379,7 @@ def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path):
         "assignment_revision": 3,
         "bind_operation_key": "bind:1",
         "bind_request_sha256": "b" * 64,
+        "concrete_agent_ref": None,
     }
     columns = ", ".join(base)
     values = ", ".join(f":{column}" for column in base)
@@ -398,6 +400,15 @@ def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path):
         )
 
     invalid_rows = [
+        {
+            **base, "operation_key": "mapping-without-binding", "assignment_revision": 5,
+            "binding_ref": None, "hermes_run_ref": None, "bind_operation_key": None,
+            "bind_request_sha256": None, "concrete_agent_ref": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        },
+        {
+            **base, "operation_key": "mapping-role-name", "assignment_revision": 5,
+            "bind_operation_key": "bind:mapping-role-name", "concrete_agent_ref": "project_manager",
+        },
         {
             **base,
             "operation_key": "cross-project",

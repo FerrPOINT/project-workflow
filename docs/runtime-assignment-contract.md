@@ -102,7 +102,8 @@ token configuration: lowercase `[a-z][a-z0-9-]{1,31}` плюс единстве�
   `workspace_generation`, `lease_generation`;
 - provenance до запуска: `assignment_ref` и bounded `exact_input_refs`;
 - provenance после запуска: реальные `binding_ref`, `hermes_run_ref`,
-  `bind_operation_key` и digest bind-запроса;
+  `bind_operation_key` и digest bind-запроса; отдельный immutable
+  `concrete_agent_ref` (canonical non-nil lowercase Fleet UUID), обязательный для PM;
 - technical cursor: project/workflow/mode/cycle/assignment revision и
   idempotent `operation_key`.
 
@@ -140,6 +141,15 @@ operation/ref/revision, mode/cycle/attempt, ожидаемое `unbound` или
 assignment в `bound`. Точный retry того же ключа возвращает сохранённый cursor;
 изменённый payload, второй ключ, другая роль/задача либо stale revision дают
 детерминированный conflict. Rebind к другим refs запрещён.
+
+`concrete_agent_ref` записывается только этим защищённым bind, вместе с refs и
+digest. Он не заменяет каталожное имя агента или `role_key=project_manager`.
+PM identity/callback используют тот же UUID в `agent_ref` и сверяются с
+сохранённым mapping и bind provenance. PM без mapping закрывается fail-closed.
+Для non-PM поле optional/nullable; отсутствие или null сохраняет прежний
+canonical bind digest. Finalized bind нельзя дополнить UUID задним числом.
+Pending migration `0005_pm_execution` оставляет mapping старых строк null,
+не меняя опубликованные `0001`–`0004` и не выдумывая Fleet identity.
 
 `/internal/runtime/step` доступен только для `bound` assignment и сохраняет
 прежний полный fence. History может читаться в `unbound` состоянии, но не

@@ -237,6 +237,7 @@ class TaskRepository(ABC):
         hermes_run_ref: str,
         bind_operation_key: str,
         bind_request_sha256: str,
+        concrete_agent_ref: str | None,
     ) -> bool: ...
 
     @abstractmethod

@@ -14,6 +14,7 @@ from project_workflow.domain.runtime_assignment import (
     RuntimeStepFence,
     normalize_role_key,
     payload_sha256,
+    validate_concrete_agent_ref,
 )
 from project_workflow.domain.validation import TaskKeyValidator, get_project_for_task_key
 
@@ -430,9 +431,14 @@ class TaskService:
         cycle_number: int,
         attempt_number: int,
         expected_binding_state: str,
+        concrete_agent_ref: str | None = None,
     ) -> dict[str, Any]:
         """Atomically attach one real Hermes binding to an accepted assignment."""
         role_key = normalize_role_key(role_key)
+        if concrete_agent_ref is not None:
+            concrete_agent_ref = validate_concrete_agent_ref(concrete_agent_ref)
+        elif role_key == "project_manager":
+            raise ConflictError("PM runtime binding requires a concrete Fleet agent UUID")
         refs = {
             "bind_operation_key": self._bounded_ref(
                 bind_operation_key, "bind_operation_key", 128
@@ -470,6 +476,9 @@ class TaskService:
             "attempt_number": attempt_number,
             "expected_binding_state": expected_binding_state,
         }
+        # Omitted mappings keep the published non-PM bind replay digest unchanged.
+        if concrete_agent_ref is not None:
+            request["concrete_agent_ref"] = concrete_agent_ref
         request_digest = payload_sha256(request)
         replay = self._uow.tasks.get_assignment_by_bind_operation_key(
             refs["bind_operation_key"]
@@ -555,6 +564,7 @@ class TaskService:
                 hermes_run_ref=refs["hermes_run_ref"],
                 bind_operation_key=refs["bind_operation_key"],
                 bind_request_sha256=request_digest,
+                concrete_agent_ref=concrete_agent_ref,
             )
             if not updated:
                 self._uow.rollback()
@@ -875,6 +885,7 @@ class TaskService:
             "hermes_run_ref",
             "bind_operation_key",
             "bind_request_sha256",
+            "concrete_agent_ref",
             "workspace_generation",
             "lease_generation",
             "exact_input_refs",
@@ -924,6 +935,7 @@ class TaskService:
             "hermes_run_ref": request["hermes_run_ref"],
             "bind_operation_key": request["bind_operation_key"],
             "bind_request_sha256": request_digest,
+            "concrete_agent_ref": request.get("concrete_agent_ref"),
             "role_key": request["role_key"],
             "mode_key": request["mode_key"],
             "cycle_number": request["cycle_number"],

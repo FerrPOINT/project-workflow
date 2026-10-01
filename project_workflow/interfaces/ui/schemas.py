@@ -14,7 +14,7 @@ from project_workflow.domain.project_theme import (
     normalize_theme_color,
     normalize_theme_icon,
 )
-from project_workflow.domain.runtime_assignment import MAX_WORK_ITEM_REVISION, normalize_role_key
+from project_workflow.domain.runtime_assignment import MAX_WORK_ITEM_REVISION, FleetAgentRef, normalize_role_key
 
 
 class StrictRequest(BaseModel):
@@ -193,6 +193,9 @@ class RuntimeBindRequest(StrictRequest):
     cycle_number: int = Field(ge=0, strict=True)
     attempt_number: int = Field(gt=0, strict=True)
     expected_binding_state: Literal["unbound", "legacy_bound"]
+    concrete_agent_ref: FleetAgentRef | None = Field(
+        default=None, description="Immutable Fleet agent UUID; required for project_manager bindings",
+    )
 
     @field_validator(
         "task",

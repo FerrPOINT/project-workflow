@@ -7,6 +7,39 @@ live resume acceptance claim.
 OpenAPI: `/openapi.json`, schemas `PMIdentity`, `PMBind`, `PMCheckpoint`,
 `PMResume`, `PMRebind`, `PMReadback`. Runtime callback schema is
 `RuntimeObservation` (also included in Workflow OpenAPI).
+The checked-in [generated OpenAPI](pm-continuation-openapi.json) contains these
+PM paths and the ordinary assignment/bind paths. Regenerate it with
+`python -m scripts.export_pm_openapi`; a contract test checks it against the
+application's generated schema.
+
+## Concrete agent boundary
+
+The catalog/phase agent name and assignment `role_key` remain `project_manager`.
+They select a role, not a Fleet agent. The server-owned assignment adapter sends
+`concrete_agent_ref` to ordinary `/internal/runtime/bind`: a strict canonical
+non-nil lowercase Fleet agent UUID, for example `aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`.
+Workflow persists it separately on `task_runtime_assignments` in the same CAS
+and bind digest as the real binding/run refs. Only the role-scoped assignment
+credential may write this mapping. PM commands and callback data cannot create
+or replace it. Runtime bind responses expose the saved `concrete_agent_ref`.
+
+`PMIdentity.agent_ref` is required to be that exact UUID on every command and
+callback. Workflow compares it with the persisted mapping and verifies the
+mapping against the original bind digest, before consulting Fleet. It never
+compares a UUID with the phase agent name or trusts a caller-only agent claim.
+The callback still has exactly the same 18 fields; no mapping field is added.
+Missing mapping, altered provenance, stale assignment or another agent UUID
+fails closed, including command replay, readback and Supervisor access.
+Resume preserves this UUID while allocating a new session-run UUID and run refs.
+
+Ordinary PM bind also requires the concrete UUID. Non-PM binds may omit it or
+send null; their existing bind digest/replay and step/history remain compatible.
+Published historical rows are migrated with null mapping, with no guessed
+identity. An authorized `legacy_bound` adoption can set it once alongside bind
+metadata; a finalized binding cannot later be enriched or rebound. Existing PM
+records without mapping need an explicit owner-controlled rollout decision.
+The single pending `0005_pm_execution` migration adds the nullable column and
+constraint; no additional pending migration is introduced.
 
 ## Fleet runtime callback (implement this first)
 
@@ -45,7 +78,7 @@ Example exact `RuntimeObservation` JSON (no envelope or extra fields):
   "tracker_project_ref": "project:one",
   "task_ref": "business-task:PM-1@1",
   "root_ref": "business-task:PM-1@1",
-  "agent_ref": "concrete-pm",
+  "agent_ref": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   "assignment_operation_key": "assign:one",
   "assignment_ref": "assignment:one",
   "assignment_revision": 1,
@@ -60,7 +93,10 @@ Example exact `RuntimeObservation` JSON (no envelope or extra fields):
 }
 ```
 
-All refs are nonblank strings, at most 512 characters; `task`, operation keys
+`agent_ref` and `session_run_id` are canonical lowercase UUID strings.
+Nil `agent_ref` (`00000000-0000-0000-0000-000000000000`) and nil
+`concrete_agent_ref` are rejected, matching Fleet's concrete-agent validator.
+Other refs are nonblank strings, at most 512 characters; `task`, operation keys
 are at most 128. Integers are strict positive signed-64-bit values. Extra
 fields/coerced integers are rejected. Status is exactly one of `running`,
 `completed`, `failed`, `cancelled`, `stopped`. `observation_ref` identifies the
@@ -105,7 +141,8 @@ its display/runtime role to the canonical role at the adapter boundary.
    Accept the ordinary `/internal/runtime/assign` assignment, then persist a
    Fleet session-run UUID and PM bind operation key before initial dispatch.
 2. Dispatch initial run using that stable key; persist real runtime mapping.
-   Finalize ordinary `/internal/runtime/bind` with actual binding/raw run refs.
+   Finalize ordinary `/internal/runtime/bind` with actual binding/raw run refs
+   and `concrete_agent_ref` from Fleet's persisted concrete-agent binding.
    PM `/bind` verifies the callback (`running`, initial key, fence=1). Success
    returns version=1, fence=1 and execution token.
 3. Runtime calls `/checkpoint` with current cursor and structured Tracker

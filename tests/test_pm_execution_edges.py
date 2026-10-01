@@ -7,6 +7,7 @@ from tests.test_pm_execution import (
     BASE,
     NEW_RUN,
     OLD_RUN,
+    OTHER_AGENT_REF,
     RUNTIME,
     bind_pm,
     prepare_pm,
@@ -102,7 +103,7 @@ def test_initial_binding_requires_live_concrete_agent_and_unique_execution(pm):
     client, identity, command, observations, _ = pm
     assert client.post(BASE + "/bind", headers=RUNTIME, json=command).status_code == 403
     assert client.post(BASE + "/bind", headers=ADAPTER,
-                       json={**command, "agent_ref": "another-agent"}).status_code == 409
+                       json={**command, "agent_ref": OTHER_AGENT_REF}).status_code == 409
     observations[OLD_RUN]["status"] = "completed"
     assert client.post(BASE + "/bind", headers=ADAPTER, json=command).status_code == 409
     observations[OLD_RUN]["status"] = "running"

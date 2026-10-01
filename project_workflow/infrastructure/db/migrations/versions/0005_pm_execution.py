@@ -10,6 +10,14 @@ depends_on = None
 
 
 def upgrade() -> None:
+    with op.batch_alter_table("task_runtime_assignments") as batch:
+        batch.add_column(sa.Column("concrete_agent_ref", sa.String(36), nullable=True))
+        batch.create_check_constraint(
+            "ck_task_runtime_assignments_concrete_agent_binding",
+            "concrete_agent_ref IS NULL OR (length(concrete_agent_ref) = 36 AND "
+            "concrete_agent_ref = lower(concrete_agent_ref) AND binding_ref IS NOT NULL AND "
+            "hermes_run_ref IS NOT NULL AND bind_operation_key IS NOT NULL AND bind_request_sha256 IS NOT NULL)",
+        )
     op.create_table(
         "pm_executions",
         sa.Column("execution_ref", sa.String(512), primary_key=True),

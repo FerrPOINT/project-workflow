@@ -1,6 +1,7 @@
 """Persistent PM contract tests through the real namespace runtime API."""
 
 import json
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -12,10 +13,12 @@ from project_workflow.application.pm_execution import PMExecutionService
 from project_workflow.application.task import TaskService
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.pm_execution import PMIdentity, RuntimeObservation
+from project_workflow.domain.runtime_assignment import NIL_FLEET_AGENT_REF
 from project_workflow.infrastructure import pm_readback
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui.app import create_app
+from scripts.export_pm_openapi import OUTPUT, pm_openapi
 from tests.test_runtime_api import _assignment, _bind_payload, _namespace, _step_payload
 
 BASE = "/internal/runtime/v1/pm"
@@ -23,6 +26,8 @@ ADAPTER = {"Authorization": "Bearer " + "a" * 40}
 RUNTIME = {"Authorization": "Bearer " + "r" * 40}
 OLD_RUN = "11111111-1111-4111-8111-111111111111"
 NEW_RUN = "22222222-2222-4222-8222-222222222222"
+AGENT_REF = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+OTHER_AGENT_REF = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 
 
 @pytest.fixture
@@ -40,19 +45,20 @@ def prepare_pm(monkeypatch):
     _namespace("PM", "workflow-project_manager", "PM")
     with SAUnitOfWork() as uow:
         phase = uow.session.scalar(select(m.Phase).where(m.Phase.code == "assigned"))
-        agent_id = uow.agents.create({"name": "concrete-pm", "description": ""})
+        agent_id = uow.agents.create({"name": "project_manager", "description": ""})
         phase.agent_id = agent_id
     client = TestClient(create_app())
     assignment = client.post("/internal/runtime/assign", headers=ADAPTER,
                              json=_assignment("PM-1", "assign:pm:1", "project_manager")).json()["result"]
     binding = _bind_payload(assignment)
+    binding["concrete_agent_ref"] = AGENT_REF
     result = client.post("/internal/runtime/bind", headers=ADAPTER, json=binding)
     assert result.status_code == 200
     bound = result.json()["result"]
     identity = {
         "task": "PM-1", "execution_ref": "execution:pm:1", "tracker_instance_ref": "tracker:one",
         "tracker_project_ref": "project:one", "task_ref": assignment["business_task_ref"],
-        "root_ref": assignment["root_task_ref"], "agent_ref": "concrete-pm",
+        "root_ref": assignment["root_task_ref"], "agent_ref": AGENT_REF,
         "assignment_operation_key": assignment["assignment_operation_key"],
         "assignment_ref": assignment["assignment_ref"], "assignment_revision": assignment["assignment_revision"],
     }
@@ -160,7 +166,7 @@ def test_wait_resume_new_run_survives_sessions_and_replays(pm):
 
 @pytest.mark.parametrize("field,value", [
     ("execution_ref", "foreign"), ("task_ref", "foreign"), ("root_ref", "foreign"),
-    ("tracker_instance_ref", "foreign"), ("tracker_project_ref", "foreign"), ("agent_ref", "foreign"),
+    ("tracker_instance_ref", "foreign"), ("tracker_project_ref", "foreign"), ("agent_ref", OTHER_AGENT_REF),
     ("assignment_ref", "foreign"), ("assignment_revision", 2), ("assignment_operation_key", "foreign"),
     ("expected_version", 2), ("expected_fence", 2), ("hermes_run_ref", "foreign"), ("binding_ref", "foreign"),
 ])
@@ -218,7 +224,7 @@ def test_payload_conflict_unknown_proof_and_missing_capability(pm, monkeypatch):
     assert changed.status_code == 409
     with patch.object(pm_readback, "observe_run", side_effect=pm_readback.ReadbackUnavailable("unknown")):
         assert client.post(BASE + "/resume", headers=ADAPTER, json=resume).status_code == 503
-    observations[OLD_RUN].update(status="stopped", agent_ref="another-agent")
+    observations[OLD_RUN].update(status="stopped", agent_ref=OTHER_AGENT_REF)
     assert client.post(BASE + "/resume", headers=ADAPTER, json=resume).status_code == 409
     read = client.post(BASE + "/readback", headers=ADAPTER, json={**pm[1], "operation_key": resume["operation_key"]})
     assert read.json()["result"]["operation"] is None
@@ -263,6 +269,29 @@ def test_openapi_exposes_pm_wire_and_callback_schema(pm):
     for route in ("bind", "checkpoint", "resume", "rebind", "readback"):
         assert "post" in schema["paths"][BASE + "/" + route]
     assert "new_session_run_id" in schema["components"]["schemas"]["PMRebind"]["required"]
+    callback = schema["components"]["schemas"]["RuntimeObservation"]
+    assert set(callback["properties"]) == {
+        "task", "execution_ref", "tracker_instance_ref", "tracker_project_ref", "task_ref", "root_ref", "agent_ref",
+        "assignment_operation_key", "assignment_ref", "assignment_revision", "observation_ref", "binding_ref",
+        "hermes_run_ref", "session_run_id", "status", "dispatch_operation_key", "checkpoint_ref", "fence",
+    }
+    assert callback["additionalProperties"] is False
+    for name in ("PMIdentity", "PMBind", "PMCheckpoint", "PMResume", "PMRebind", "PMReadback", "RuntimeObservation"):
+        assert schema["components"]["schemas"][name]["properties"]["agent_ref"]["pattern"] == (
+            r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        )
+        assert schema["components"]["schemas"][name]["properties"]["agent_ref"]["not"] == {
+            "const": NIL_FLEET_AGENT_REF,
+        }
+    runtime_bind = schema["components"]["schemas"]["RuntimeBindRequest"]
+    assert "concrete_agent_ref" not in runtime_bind["required"]
+    assert runtime_bind["properties"]["concrete_agent_ref"]["anyOf"][0]["pattern"] == (
+        callback["properties"]["agent_ref"]["pattern"]
+    )
+    assert runtime_bind["properties"]["concrete_agent_ref"]["anyOf"][0]["not"] == {
+        "const": NIL_FLEET_AGENT_REF,
+    }
+    assert json.loads(Path(OUTPUT).read_text(encoding="utf-8")) == pm_openapi()
 
 
 @pytest.mark.parametrize("field,value", [
