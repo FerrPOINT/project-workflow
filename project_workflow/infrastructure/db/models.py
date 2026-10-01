@@ -10,6 +10,7 @@ import datetime
 from typing import Any
 
 from sqlalchemy import (
+    BigInteger,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -354,7 +355,7 @@ class TaskRuntimeAssignment(Base):
     business_task_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
     root_task_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
     work_item_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    work_item_revision: Mapped[int | None] = mapped_column(nullable=True)
+    work_item_revision: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     queue_item_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
     task_workspace_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
     workspace_revision: Mapped[int | None] = mapped_column(nullable=True)

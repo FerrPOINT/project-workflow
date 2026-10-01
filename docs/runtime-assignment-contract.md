@@ -160,6 +160,13 @@ lease generations могут измениться. Новый rework entry об�
 исторические ledger rows и не создаёт вымышленные внешние refs,
 operation keys или digests.
 
+Business `work_item_revision` может быть 41-битной временной отметкой изменения
+задачи. Поле хранится как `BIGINT` и принимает целые значения от 0 до
+`2^63−1`; API и application service отклоняют значения вне этого диапазона.
+Forward migration `0004_wide_work_item_revision` расширяет существующее поле
+без изменения ledger rows, binding refs, hashes и pinned history. Lossy
+downgrade на 32-битное поле запрещён.
+
 ## Terminal owner boundary
 
 Project-workflow `step` с внутренним verdict `PASS` закрывает только текущую

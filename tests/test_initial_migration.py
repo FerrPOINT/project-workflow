@@ -82,8 +82,9 @@ def test_repository_has_one_linear_migration_head():
         "0001_initial_schema.py",
         "0002_workflow_modes.py",
         "0003_runtime_assignment_bind.py",
+        "0004_wide_work_item_revision.py",
     ]
-    assert migration_head() == "0003_runtime_assignment_bind"
+    assert migration_head() == "0004_wide_work_item_revision"
 
 
 def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
@@ -135,7 +136,7 @@ def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
         }
         assert actual_fks == expected_fks, table_name
 
-    assert database_revisions(engine) == {"0003_runtime_assignment_bind"}
+    assert database_revisions(engine) == {"0004_wide_work_item_revision"}
     assert schema_is_ready(engine) is True
     with engine.connect() as connection:
         context = MigrationContext.configure(
@@ -356,7 +357,7 @@ def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path):
         )
 
     ensure_migrated(engine)
-    assert database_revisions(engine) == {"0003_runtime_assignment_bind"}
+    assert database_revisions(engine) == {"0004_wide_work_item_revision"}
     with engine.connect() as conn:
         preserved = conn.execute(
             text(
@@ -448,13 +449,17 @@ def test_in_memory_sqlite_migration_keeps_the_schema_alive():
         engine.dispose()
 
 
-def test_sqlite_downgrade_refuses_lossy_runtime_history(tmp_path):
+@pytest.mark.parametrize("revision,message", [
+    ("0003_runtime_assignment_bind", "Downgrade from runtime assignment bind"),
+    ("0004_wide_work_item_revision", "Downgrade from wide Business revisions"),
+])
+def test_sqlite_downgrade_refuses_lossy_runtime_history(tmp_path, revision, message):
     engine = _sqlite_engine(tmp_path)
-    ensure_migrated(engine)
-    with pytest.raises(RuntimeError, match="Downgrade from runtime assignment bind"):
+    run_alembic_command("upgrade", engine, revision)
+    with pytest.raises(RuntimeError, match=message):
         run_alembic_command("downgrade", engine, "base")
-    assert database_revisions(engine) == {"0003_runtime_assignment_bind"}
-    assert schema_is_ready(engine) is True
+    assert database_revisions(engine) == {revision}
+    assert schema_is_ready(engine) is (revision == migration_head())
 
 
 def test_empty_initial_schema_can_be_recreated_through_supported_migrations(tmp_path):
@@ -736,7 +741,7 @@ def test_head_with_damaged_or_polluted_schema_is_refused(tmp_path, mutation):
     assert schema_is_ready(engine) is False
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0003_runtime_assignment_bind"}
+    assert database_revisions(engine) == {"0004_wide_work_item_revision"}
     if mutation == "extra":
         with engine.connect() as connection:
             assert connection.execute(text("SELECT id FROM unexpected_table")).scalar_one() == 42

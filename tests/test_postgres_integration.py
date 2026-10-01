@@ -209,7 +209,7 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0003_runtime_assignment_bind"
+        assert version == migration_head() == "0004_wide_work_item_revision"
         assert schema_is_ready(engine) is True
 
     def test_managed_bootstrap_lock_closes_public_mutation_race(self, pg_url):
@@ -306,12 +306,16 @@ class TestPostgresInitialMigration:
             assert [workflow.name for workflow in uow.workflows.list()] == ["Existing unmanaged workflow"]
             assert validate_managed_catalog_state(uow) is False
 
-    def test_downgrade_refuses_lossy_mode_collapse(self, pg_url):
+    @pytest.mark.parametrize("revision,message", [
+        ("0003_runtime_assignment_bind", "Downgrade from runtime assignment bind"),
+        ("0004_wide_work_item_revision", "Downgrade from wide Business revisions"),
+    ])
+    def test_downgrade_refuses_lossy_mode_collapse(self, pg_url, revision, message):
         engine = get_engine(pg_url)
-        ensure_migrated(engine)
-        with pytest.raises(RuntimeError, match="Downgrade from runtime assignment bind"):
+        run_alembic_command("upgrade", engine, revision)
+        with pytest.raises(RuntimeError, match=message):
             run_alembic_command("downgrade", engine, "base")
-        assert schema_is_ready(engine) is True
+        assert schema_is_ready(engine) is (revision == "0004_wide_work_item_revision")
 
     def test_populated_0001_upgrade_preserves_rows_and_backfills_per_workflow(self, pg_url):
         engine = get_engine(pg_url)
@@ -1227,15 +1231,17 @@ class TestPostgresInitialMigration:
             return _pass_response(kwargs["user_prompt"])
 
         def submit(payload: dict[str, object]) -> tuple[int, dict[str, object]]:
-            with TestClient(create_app()) as client:
-                response = client.post(
-                    "/internal/runtime/step",
-                    headers={"Authorization": f"Bearer {runtime_token}"},
-                    json=payload,
-                )
-                return response.status_code, response.json()
+            response = client.post(
+                "/internal/runtime/step",
+                headers={"Authorization": f"Bearer {runtime_token}"},
+                json=payload,
+            )
+            return response.status_code, response.json()
 
+        # Concurrent requests share one application lifetime, as in the server.
+        # Separate clients would reset the shared engine during another request.
         with (
+            TestClient(create_app()) as client,
             patch.object(OpenAICompatibleClient, "chat", side_effect=pass_after_both_transactions_started),
             ThreadPoolExecutor(max_workers=2) as pool,
         ):
@@ -1257,6 +1263,47 @@ class TestPostgresInitialMigration:
         engine = get_engine(pg_url)
         with pytest.raises(RuntimeError, match="изолированных тестах SQLite"):
             ensure_schema(engine)
+    @pytest.mark.parametrize("work_item_revision", [1790840000123, (1 << 63) - 1])
+    def test_upgrade_bound_assignment_preserves_rows_and_accepts_native_wide_revision(self, pg_url, work_item_revision):
+        engine = get_engine(pg_url)
+        run_alembic_command("upgrade", engine, "0003_runtime_assignment_bind")
+        with SAUnitOfWork(engine) as uow:
+            ensure_managed_catalog(uow)
+            namespace = uow.projects.get_by_cli_command("workflow-developer")
+            assert namespace is not None and namespace.id is not None
+            project_id = namespace.id
+            request = {"project_id": project_id, "task_key": "WIDE-1", "mode_key": "initial", "cycle_number": 0,
+                       "operation_key": "wide-old-assignment", "expected_revision": 0, "expected_status": "missing",
+                       **_runtime_binding("wide-old-assignment")}
+            old = TaskService(uow).assign_runtime_task(**request)
+            _bind_runtime_assignment(uow, project_id, old)
+        with engine.connect() as connection:
+            before = connection.execute(text(
+                "SELECT to_jsonb(t)::text FROM project_workflow.task_runtime_assignments t ORDER BY id"
+            )).scalars().all()
+        ensure_migrated(engine)
+        with engine.connect() as connection:
+            after = connection.execute(text(
+                "SELECT to_jsonb(t)::text FROM project_workflow.task_runtime_assignments t ORDER BY id"
+            )).scalars().all()
+        assert before == after
+        with SAUnitOfWork(engine) as uow:
+            request.update(task_key="WIDE-2", operation_key="wide-native-assignment",
+                           **_runtime_binding("wide-native-assignment"))
+            request["work_item_revision"] = work_item_revision
+            accepted = TaskService(uow).assign_runtime_task(**request)
+            assert accepted["work_item_revision"] == work_item_revision
+            assert TaskService(uow).assign_runtime_task(**request) == accepted
+            bound = _bind_runtime_assignment(uow, project_id, accepted)
+            assert bound["work_item_revision"] == work_item_revision
+        ensure_migrated(engine)
+        assert schema_is_ready(engine)
+        with SAUnitOfWork(engine) as uow:
+            assert uow.tasks.get_assignment_by_operation_key("wide-native-assignment").work_item_revision == (
+                work_item_revision
+            )
+
+
 @pytest.mark.integration
 class TestPostgresUoW:
     def test_create_and_read_workflow_project_task(self, pg_url):

@@ -726,6 +726,7 @@ def test_project_manager_assignment_uses_canonical_identity_and_slotless_busines
         {"attempt_number": True},
         {"attempt_number": 1.5},
         {"work_item_revision": -1},
+        {"work_item_revision": 1 << 63},
         {"work_item_revision": True},
         {"workspace_revision": 0},
         {"workspace_revision": True},
